@@ -26,13 +26,13 @@ Three-package monorepo, no shared build. The only non-trivial logic is in `clien
 **Data flow:** `OutputNode.onGenerate` → `buildRequest(nodes, edges, outputId)` (pure, in `resolve.js`) → `POST /api/generate` (via `client/src/api.js`) → server's single `/api/generate` handler → OpenRouter `POST /api/v1/images` → image written to disk + returned as a data URL to the browser.
 
 **Key design decisions:**
-- **Only the output node consumes edges.** Wiring is always "sources → output." Prompt-to-prompt composition happens through `{{label}}` tokens in prompt text, *not* edges. `resolveText` in `resolve.js` recursively substitutes `{{label}}` references and throws on cycles; missing labels resolve to empty string.
+- **Only the output node consumes edges.** Wiring is always "sources → output." Prompt-to-prompt composition happens through `@id` tokens in prompt text, *not* edges. `resolveText` in `resolve.js` recursively substitutes `@id` references (`TOKEN_RE = /@([\w-]+)/g`) and throws on cycles; unknown ids resolve to empty string.
 - **Source ordering is by node Y position** (top-to-bottom), so canvas layout determines prompt concatenation order. Prompt parts are joined with `\n\n`; reference images become `input_references` (base64 data URLs).
 - **The API key never reaches the browser** — it stays in the server process; the client only talks to `/api`.
 - **Reference images are base64 data URLs** carried in `node.data.dataUrl`, which is why the server sets a 30mb JSON body limit.
 - **Server is a single file** (`server/index.js`, ~145 lines): two routes (`/api/health`, `/api/generate`), extensive error branching around the OpenRouter call, and filename slugify. Each successful generation writes `<timestamp>-<slug>.<ext>` + a `.json` sidecar (prompt, params, cost) to `OUTPUT_DIR`.
 
-**Node types** (`client/src/nodes/`): `PromptNode` (labeled free text), `ImageNode` (reference image picker), `OutputNode` (resolution/quality/ratio controls + Generate button and result display). Registered in `App.jsx`'s `nodeTypes`; `App.jsx` also holds the starter graph demonstrating the `{{subject}}` embed.
+**Node types** (`client/src/nodes/`): `PromptNode` (labeled free text), `ImageNode` (reference image picker), `OutputNode` (resolution/quality/ratio controls + Generate button and result display). Registered in `App.jsx`'s `nodeTypes`; `App.jsx` also holds the starter graph demonstrating the `@p-subject` embed.
 
 ## Switching models
 

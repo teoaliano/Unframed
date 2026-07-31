@@ -2,8 +2,6 @@
 
 A tiny, local, node-based image generator. Wire prompt and reference-image nodes into an output node, hit **Generate**, and it calls **GPT Image 2 through OpenRouter** and writes the result to a folder on your machine. No hosting, pay-per-generation.
 
-![nodes: prompt + reference -> output -> gpt-image-2 -> disk]
-
 ## What's inside
 
 - **client/** — React + React Flow (`@xyflow/react`) canvas with three node types: `prompt`, `reference`, `output`.
@@ -12,34 +10,105 @@ A tiny, local, node-based image generator. Wire prompt and reference-image nodes
 
 ## Requirements
 
-- **Node.js 18 or newer** (the server uses the built-in `fetch`).
-- An **OpenRouter API key**: https://openrouter.ai/keys
+- **Node.js 18 or newer** — the server relies on the built-in `fetch`. Check with `node -v`.
+- **npm** (ships with Node).
+- An **OpenRouter API key** — create one at https://openrouter.ai/keys and put a few dollars of credit on the account. You are billed per generated image, so nothing is charged until you press Generate.
 
-## Setup
+## Install and run
+
+### 1. Get the code
 
 ```bash
-# 1. install everything (root + client + server)
+git clone https://github.com/teoaliano/Unframed.git
+cd Unframed
+```
+
+### 2. Install dependencies
+
+```bash
 npm run install:all
+```
 
-# 2. add your key
+This is three installs in one: the repo root, `server/`, and `client/` each have their own `package.json`. Running plain `npm install` only does the root and the app will not start.
+
+### 3. Add your API key
+
+```bash
 cp .env.example .env
-#    then open .env and paste your OPENROUTER_API_KEY
+```
 
-# 3. run the server and the canvas together
+Open `.env` and set your key:
+
+```
+OPENROUTER_API_KEY=sk-or-v1-...
+```
+
+`.env` is gitignored, and the key is only ever read by the server process — the browser never receives it. The other three values in the file are optional and already have sensible defaults:
+
+| Variable | Default | What it does |
+| --- | --- | --- |
+| `OPENROUTER_API_KEY` | — | Required. Your key. |
+| `OPENROUTER_MODEL` | `openai/gpt-image-2` | Any image model slug OpenRouter lists. |
+| `OUTPUT_DIR` | `./output` | Where images, sidecars, and saved graphs are written. Created automatically. |
+| `PORT` | `8787` | Backend port. The client dev server proxies `/api` here. |
+
+On Windows, `cp` may not exist in your shell — copy `.env.example` to `.env` in Explorer instead.
+
+### 4. Start it
+
+```bash
 npm run dev
 ```
 
-Open **http://localhost:5173**. The server logs the exact output folder on startup. Generated images land in `./output/` next to a `.json` sidecar recording the prompt, params, and cost.
+This runs both processes together — the backend on **8787** and the canvas on **5173**. Both must be running; the client proxies `/api` to the server. You should see the server print its configuration:
 
-> On Windows, `cp` may not exist in your shell — just copy `.env.example` to `.env` manually.
+```
+  Unframed server  →  http://localhost:8787
+  model:    openai/gpt-image-2
+  api key:  loaded
+  output:   /path/to/Unframed/output
+```
+
+If that last line reads `api key:  MISSING — add it to .env`, step 3 didn't take.
+
+### 5. Open the app
+
+Go to **http://localhost:5173**. You get a starter graph: two prompt nodes wired into an output node. Press **Generate** on the output node and the image appears in the node and lands in `output/<project>/` alongside a `.json` sidecar recording the prompt, parameters, and what OpenRouter charged.
+
+### Running the halves separately
+
+Useful when you only want to restart one:
+
+```bash
+npm run server   # backend only, on 8787
+npm run client   # canvas only, on 5173
+```
+
+## Troubleshooting
+
+| Symptom | Cause and fix |
+| --- | --- |
+| `api key:  MISSING` on startup | No `.env`, or the variable is misspelled. It must be `OPENROUTER_API_KEY` in a `.env` at the repo root, not inside `server/`. |
+| `EADDRINUSE` on 8787 or 5173 | Something else holds the port. Find it with `lsof -ti tcp:8787` (macOS/Linux) and stop it, or set a different `PORT` in `.env`. |
+| Generate returns a 401 | The key is wrong or revoked. Test it: `curl -H "Authorization: Bearer $OPENROUTER_API_KEY" https://openrouter.ai/api/v1/key` |
+| Generate returns a 402 | No credit on the OpenRouter account. |
+| The canvas loads but Generate does nothing | The backend isn't up. Check http://localhost:8787/api/health — it returns the model, whether the key loaded, and the output folder. |
+| A parameter seems ignored | The chosen model doesn't support it. See [Switching models](#switching-models). |
+| `SyntaxError` / unsupported syntax on startup | Node is older than 18. `node -v` to confirm. |
 
 ## How the graph works
 
-- **Prompt node** — free text. Embed another prompt node's text inline with `{{its-label}}`. Labels should be unique. Circular references (`A -> B -> A`) are caught and reported instead of looping forever.
-- **Reference node** — an image handed to the model as image-to-image guidance (GPT Image 2 accepts several).
+- **Prompt node** — free text. Embed another prompt node's text inline by typing `@` and picking it from the menu; each node shows its own id in its header. Circular references (`A -> B -> A`) are caught and reported instead of looping forever.
+- **Reference node** — an image handed to the model as image-to-image guidance (GPT Image 2 accepts several). Connect it to the output node and it gets a number; refer to it in a prompt as "image 1".
 - **Output node** — collects everything wired into it, resolves the prompts top-to-bottom, sends the lot to OpenRouter, then shows the image plus the exact cost OpenRouter reports.
 
-Only the output node consumes edges, so wiring is always "sources → output." Prompt composition happens through `{{label}}` tokens, not edges. The starter graph shows this: the `scene` prompt embeds the `subject` prompt.
+Only the output node consumes edges, so wiring is always "sources → output." Prompt composition happens through `@id` tokens, not edges. The starter graph shows this: the `scene` prompt embeds the `subject` prompt.
+
+Source order is decided by vertical position on the canvas — prompts are concatenated top to bottom, so move a node up or down to reorder it.
+
+## Projects
+
+The project menu in the top bar switches between graphs. Each is a folder under `output/`, holding its images, their sidecars, and a `graph.json` of the canvas. Edits save automatically about half a second after you stop, so there's no save button.
 
 ## Switching models
 
@@ -53,7 +122,6 @@ These are the obvious next steps if you want to grow it, each small:
 
 - **Read references from a watched local folder** instead of the browser picker: add a `GET /api/references?dir=` endpoint that reads files and base64-encodes them, then a node that lists them.
 - **Streaming previews**: the Image API supports SSE (`stream: true`) and emits partial images. Swap the server's `fetch` for a streaming read and forward chunks to the client.
-- **Save / load a workflow**: the graph is just `{ nodes, edges }` JSON. Write it to a file and read it back on load.
 - **Package as a desktop app**: wrap the client in Tauri or Electron for a double-clickable app with native file access (and drop the separate dev server).
 
 ## Notes
