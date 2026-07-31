@@ -14,6 +14,8 @@ import { DropdownMenu, DropdownMenuItem } from '@astryxdesign/core/DropdownMenu'
 import { Button } from '@astryxdesign/core/Button';
 import { TextInput } from '@astryxdesign/core/TextInput';
 import { Dialog, DialogHeader } from '@astryxdesign/core/Dialog';
+import { Text } from '@astryxdesign/core/Text';
+import { Link } from '@astryxdesign/core/Link';
 import { AlertDialog } from '@astryxdesign/core/AlertDialog';
 import { HStack, VStack } from '@astryxdesign/core/Stack';
 import Logo from './Logo.jsx';
@@ -151,11 +153,16 @@ function Canvas() {
     return () => clearTimeout(t);
   }, [nodes, edges, project]);
 
-  // Ask the server whether it has a key, so the toolbar can flag a missing one
-  // before you waste a click on Generate.
+  // Ask the server whether it has a key. With none, open the dialog straight away:
+  // nothing on the canvas can produce an image yet, so setup is the only useful
+  // first action. keyState starts optimistic so the dialog doesn't flash for
+  // everyone else while this request is in flight.
   useEffect(() => {
     getHealth()
-      .then((h) => setKeyState({ hasKey: Boolean(h.hasKey), keyHint: h.keyHint || '' }))
+      .then((h) => {
+        setKeyState({ hasKey: Boolean(h.hasKey), keyHint: h.keyHint || '' });
+        if (!h.hasKey) setKeyDlg({ value: '' });
+      })
       .catch(() => {});
   }, []);
 
@@ -466,8 +473,37 @@ function Canvas() {
         purpose="form"
         width={420}
       >
-        <DialogHeader title="OpenRouter API key" />
+        <DialogHeader
+          title={keyState.hasKey ? 'OpenRouter API key' : 'Add your OpenRouter key to start'}
+        />
         <VStack gap={3} padding={4}>
+          {!keyState.hasKey && (
+            <VStack gap={2}>
+              <Text type="supporting" as="p">
+                Unframed has no image model of its own — it sends your prompts to{' '}
+                <Link href="https://openrouter.ai" isExternalLink>
+                  OpenRouter
+                </Link>
+                , which runs the model and bills your account per image (a few cents for most
+                models). It needs your own key to do that.
+              </Text>
+              <Text type="supporting" as="p">
+                To get one: sign in at{' '}
+                <Link href="https://openrouter.ai/keys" isExternalLink>
+                  openrouter.ai/keys
+                </Link>
+                , press <strong>Create key</strong>, and copy it. Add a few dollars of credit under{' '}
+                <Link href="https://openrouter.ai/credits" isExternalLink>
+                  Credits
+                </Link>{' '}
+                or generating will fail with "insufficient credits".
+              </Text>
+              <Text type="supporting" as="p">
+                The key is saved to a <code>.env</code> file on this machine, is used only by your
+                local server to call OpenRouter, and is never sent anywhere else.
+              </Text>
+            </VStack>
+          )}
           <TextInput
             label="API key"
             type="password"
@@ -476,7 +512,7 @@ function Canvas() {
             description={
               keyState.hasKey
                 ? `A key is already saved${keyState.keyHint ? ` (…${keyState.keyHint})` : ''}. Entering a new one replaces it.`
-                : 'Create one at openrouter.ai/keys. It is stored in .env on this machine and only ever used by the local server.'
+                : 'Paste it here — it starts with sk-or-'
             }
             value={keyDlg?.value ?? ''}
             status={
