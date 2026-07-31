@@ -89,7 +89,9 @@ export default function OutputNode({ id, data }) {
           label="Model"
           size="sm"
           hasSearch
-          options={models.map((m) => ({ value: m.id, label: m.name }))}
+          // Labelled by slug, not OpenRouter's display name: the slug is what you
+          // put in OPENROUTER_MODEL, and it keeps every row in one format.
+          options={models.map((m) => ({ value: m.id, label: m.id }))}
           value={model}
           placeholder="Loading models…"
           onChange={(v) => updateNodeData(id, { model: v })}
