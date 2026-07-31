@@ -1,4 +1,4 @@
-# weave-lite
+# Unframed
 
 A tiny, local, node-based image generator. Wire prompt and reference-image nodes into an output node, hit **Generate**, and it calls **GPT Image 2 through OpenRouter** and writes the result to a folder on your machine. No hosting, pay-per-generation.
 

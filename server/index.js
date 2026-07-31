@@ -210,7 +210,7 @@ app.post('/api/generate', async (req, res) => {
 });
 
 app.listen(PORT, () => {
-  console.log(`\n  weave-lite server  →  http://localhost:${PORT}`);
+  console.log(`\n  Unframed server  →  http://localhost:${PORT}`);
   console.log(`  model:    ${MODEL}`);
   console.log(`  api key:  ${API_KEY ? 'loaded' : 'MISSING — add it to .env'}`);
   console.log(`  output:   ${OUTPUT_DIR}\n`);

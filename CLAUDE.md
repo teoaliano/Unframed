@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-weave-lite: a local, node-based image generator. A React Flow canvas lets you wire `prompt` and `reference` nodes into an `output` node; clicking Generate calls an image model (GPT Image 2 by default) through OpenRouter and writes the result plus a `.json` sidecar to disk. No hosting, pay-per-generation.
+Unframed: a local, node-based image generator. A React Flow canvas lets you wire `prompt` and `reference` nodes into an `output` node; clicking Generate calls an image model (GPT Image 2 by default) through OpenRouter and writes the result plus a `.json` sidecar to disk. No hosting, pay-per-generation.
 
 ## Commands
 

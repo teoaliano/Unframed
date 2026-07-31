@@ -1,5 +1,5 @@
 /*
-  weave-lite — app structure + the chrome React Flow renders itself. All content
+  Unframed — app structure + the chrome React Flow renders itself. All content
   styling now comes from Astryx components; this file only covers layout, the
   canvas, node drag-handles, and the @-mention menu.
   ponytail: a few raw px remain for structural sizing (handle, header height)
