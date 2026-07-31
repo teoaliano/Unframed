@@ -59,16 +59,18 @@ const HELP_TEXT =
   'Reference a prompt with @id. Connect images to number them, then type “image 1”.';
 
 // React Flow drags a node only from this handle, so the inputs inside stay usable.
-// nowheel goes on prompts only: scrolling a long prompt should scroll the textarea,
-// not the canvas. Everything else has nothing to scroll, so the wheel keeps panning
-// the canvas there instead of hitting a dead zone.
+// nowheel = "the wheel belongs to whatever is under the cursor, not the canvas".
+// Prompts need it for long text. Output nodes need it too: the model Selector renders
+// its scrollable list *inside* the node, so without nowheel React Flow swallows the
+// wheel and pans instead of scrolling the list. Reference nodes hold nothing
+// scrollable, so they keep scroll-to-pan.
 const DRAG = '.xnode-head';
 // Both keys are derived, so they go after the spread — a className saved into an
 // older graph must not stick around and shadow the current rule.
 const withDrag = (n) => ({
   ...n,
   dragHandle: DRAG,
-  className: n.type === 'prompt' ? 'nowheel' : undefined,
+  className: n.type === 'image' ? undefined : 'nowheel',
 });
 
 let counter = 100;
