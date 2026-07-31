@@ -43,6 +43,8 @@ This runs both processes together — the backend on **8787** and the canvas on 
 
 Open **http://localhost:5173** and click the **key icon** in the top right. Paste your OpenRouter key and save — that's it. The key is sent to the local server, which writes it to a `.env` file next to the code so it survives a restart, and keeps it server-side from then on. The browser never stores it.
 
+The same dialog replaces the key later, or removes it with **Remove key** (two clicks, since the key can't be read back out).
+
 <details>
 <summary>Prefer to configure by file instead?</summary>
 

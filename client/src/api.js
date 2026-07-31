@@ -31,6 +31,13 @@ export const saveKey = (key) =>
     return d;
   });
 
+export const clearKey = () =>
+  fetch('/api/key', { method: 'DELETE' }).then(async (r) => {
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(d.error || `Could not remove the key (${r.status})`);
+    return d;
+  });
+
 export const listProjects = () =>
   fetch('/api/projects')
     .then((r) => r.json())

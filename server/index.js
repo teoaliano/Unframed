@@ -76,6 +76,23 @@ app.post('/api/key', async (req, res) => {
   res.json({ ok: true, hasKey: true, keyHint: key.slice(-4) });
 });
 
+app.delete('/api/key', async (req, res) => {
+  const envPath = path.join(ROOT, '.env');
+  const text = await fs.readFile(envPath, 'utf8').catch(() => '');
+  // Drop the whole line rather than blanking the value, so a shell-provided
+  // OPENROUTER_API_KEY isn't overridden with an empty string on the next load.
+  const next = text.replace(/^OPENROUTER_API_KEY=.*\r?\n?/m, '');
+  if (next !== text) {
+    try {
+      await fs.writeFile(envPath, next);
+    } catch (err) {
+      return res.status(500).json({ error: `Could not write .env: ${err.message}` });
+    }
+  }
+  API_KEY = '';
+  res.json({ ok: true, hasKey: false });
+});
+
 // Image-capable models OpenRouter currently lists, for the output node's picker.
 // The configured MODEL is always included (some working slugs aren't listed).
 app.get('/api/models', async (req, res) => {

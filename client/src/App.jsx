@@ -30,6 +30,7 @@ import {
   deleteProject,
   getHealth,
   saveKey,
+  clearKey,
 } from './api.js';
 
 const nodeTypes = { prompt: PromptNode, image: ImageNode, output: OutputNode };
@@ -167,6 +168,23 @@ function Canvas() {
       setKeyDlg({ value: '', saved: true });
     } catch (err) {
       setKeyDlg((d) => ({ ...d, saving: false, error: err.message }));
+    }
+  }
+
+  // Two clicks to remove: the key isn't recoverable from here, so a stray click
+  // shouldn't send you back to openrouter.ai for a new one.
+  async function removeKey() {
+    if (!keyDlg.confirmRemove) {
+      setKeyDlg((d) => ({ ...d, confirmRemove: true, error: undefined, saved: false }));
+      return;
+    }
+    setKeyDlg((d) => ({ ...d, saving: true }));
+    try {
+      await clearKey();
+      setKeyState({ hasKey: false, keyHint: '' });
+      setKeyDlg({ value: '', removed: true });
+    } catch (err) {
+      setKeyDlg((d) => ({ ...d, saving: false, confirmRemove: false, error: err.message }));
     }
   }
 
@@ -466,19 +484,46 @@ function Canvas() {
                 ? { type: 'error', message: keyDlg.error }
                 : keyDlg?.saved
                   ? { type: 'success', message: 'Key saved — Generate is ready to use.' }
-                  : undefined
+                  : keyDlg?.removed
+                    ? { type: 'warning', message: 'Key removed. Generate is disabled until you add one.' }
+                    : keyDlg?.confirmRemove
+                      ? {
+                          type: 'warning',
+                          message:
+                            'This deletes the key from .env. You will need to paste it again, or make a new one at openrouter.ai/keys.',
+                        }
+                      : undefined
             }
-            onChange={(v) => setKeyDlg((d) => ({ ...d, value: v, error: undefined, saved: false }))}
+            onChange={(v) =>
+              setKeyDlg((d) => ({
+                ...d,
+                value: v,
+                error: undefined,
+                saved: false,
+                removed: false,
+                confirmRemove: false,
+              }))
+            }
           />
-          <HStack gap={2} justify="end">
-            <Button label="Close" variant="ghost" onClick={() => setKeyDlg(null)} />
-            <Button
-              label="Save key"
-              variant="primary"
-              isDisabled={!keyDlg?.value?.trim() || keyDlg?.saving}
-              isLoading={keyDlg?.saving}
-              onClick={confirmKey}
-            />
+          <HStack gap={2} justify={keyState.hasKey ? 'between' : 'end'}>
+            {keyState.hasKey && (
+              <Button
+                label={keyDlg?.confirmRemove ? 'Yes, remove it' : 'Remove key'}
+                variant={keyDlg?.confirmRemove ? 'destructive' : 'ghost'}
+                isDisabled={keyDlg?.saving}
+                onClick={removeKey}
+              />
+            )}
+            <HStack gap={2} justify="end">
+              <Button label="Close" variant="ghost" onClick={() => setKeyDlg(null)} />
+              <Button
+                label="Save key"
+                variant="primary"
+                isDisabled={!keyDlg?.value?.trim() || keyDlg?.saving}
+                isLoading={keyDlg?.saving}
+                onClick={confirmKey}
+              />
+            </HStack>
           </HStack>
         </VStack>
       </Dialog>
