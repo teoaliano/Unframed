@@ -13,7 +13,9 @@ dotenv.config({ path: path.join(ROOT, '.env'), override: true });
 
 const PORT = process.env.PORT || 8787;
 const MODEL = process.env.OPENROUTER_MODEL || 'openai/gpt-image-2';
-const API_KEY = process.env.OPENROUTER_API_KEY;
+// Not const: POST /api/key can replace it at runtime so a key entered in the UI
+// works immediately, without a restart.
+let API_KEY = process.env.OPENROUTER_API_KEY;
 const OUTPUT_DIR = path.resolve(ROOT, process.env.OUTPUT_DIR || './output');
 
 const app = express();
@@ -32,7 +34,46 @@ function slugify(text) {
 }
 
 app.get('/api/health', (req, res) => {
-  res.json({ ok: true, model: MODEL, hasKey: Boolean(API_KEY), outputDir: OUTPUT_DIR });
+  res.json({
+    ok: true,
+    model: MODEL,
+    hasKey: Boolean(API_KEY),
+    // Last 4 only, so the settings dialog can show which key is in use without
+    // ever handing the key itself back to the browser.
+    keyHint: API_KEY ? API_KEY.slice(-4) : '',
+    outputDir: OUTPUT_DIR,
+  });
+});
+
+// Save a key typed into the UI, so a fresh clone doesn't have to hand-edit .env.
+// It lands in .env exactly where the manual instructions put it, which is also
+// what makes it survive a restart.
+app.post('/api/key', async (req, res) => {
+  const key = String(req.body?.key ?? '').trim();
+  // Trust boundary: this string gets written into .env and sent as an HTTP header,
+  // so only a single clean token is accepted. Whitespace, quotes and newlines --
+  // which could corrupt .env or inject a second header -- are rejected here.
+  if (!/^sk-or-[\w.-]{8,200}$/.test(key)) {
+    return res.status(400).json({
+      error: 'That does not look like an OpenRouter key. Keys start with "sk-or-".',
+    });
+  }
+
+  const envPath = path.join(ROOT, '.env');
+  let text = await fs.readFile(envPath, 'utf8').catch(() => '');
+  const line = `OPENROUTER_API_KEY=${key}`;
+  // Replace the existing assignment if there is one, so the rest of .env survives.
+  text = /^OPENROUTER_API_KEY=.*$/m.test(text)
+    ? text.replace(/^OPENROUTER_API_KEY=.*$/m, line)
+    : `${text}${text && !text.endsWith('\n') ? '\n' : ''}${line}\n`;
+
+  try {
+    await fs.writeFile(envPath, text);
+  } catch (err) {
+    return res.status(500).json({ error: `Could not write .env: ${err.message}` });
+  }
+  API_KEY = key;
+  res.json({ ok: true, hasKey: true, keyHint: key.slice(-4) });
 });
 
 // Image-capable models OpenRouter currently lists, for the output node's picker.
@@ -106,7 +147,7 @@ app.delete('/api/projects/:name', async (req, res) => {
 app.post('/api/generate', async (req, res) => {
   if (!API_KEY) {
     return res.status(400).json({
-      error: 'Missing OPENROUTER_API_KEY. Copy .env.example to .env and paste your key.',
+      error: 'No OpenRouter key yet. Add one with the key icon in the top right.',
     });
   }
 
@@ -212,6 +253,8 @@ app.post('/api/generate', async (req, res) => {
 app.listen(PORT, () => {
   console.log(`\n  Unframed server  →  http://localhost:${PORT}`);
   console.log(`  model:    ${MODEL}`);
-  console.log(`  api key:  ${API_KEY ? 'loaded' : 'MISSING — add it to .env'}`);
+  console.log(
+    `  api key:  ${API_KEY ? 'loaded' : 'MISSING — add one in the app (key icon, top right)'}`,
+  );
   console.log(`  output:   ${OUTPUT_DIR}\n`);
 });

@@ -16,6 +16,21 @@ export async function generate(body) {
   return data;
 }
 
+// { ok, model, hasKey, keyHint, outputDir } — keyHint is the last 4 chars; the key
+// itself never leaves the server.
+export const getHealth = () => fetch('/api/health').then((r) => r.json());
+
+export const saveKey = (key) =>
+  fetch('/api/key', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ key }),
+  }).then(async (r) => {
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(d.error || `Could not save the key (${r.status})`);
+    return d;
+  });
+
 export const listProjects = () =>
   fetch('/api/projects')
     .then((r) => r.json())

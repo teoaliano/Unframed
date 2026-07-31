@@ -21,7 +21,16 @@ import PromptNode from './nodes/PromptNode.jsx';
 import ImageNode from './nodes/ImageNode.jsx';
 import OutputNode from './nodes/OutputNode.jsx';
 import ProjectMenu from './ProjectMenu.jsx';
-import { setProject, listProjects, loadProject, saveProject, renameProject, deleteProject } from './api.js';
+import {
+  setProject,
+  listProjects,
+  loadProject,
+  saveProject,
+  renameProject,
+  deleteProject,
+  getHealth,
+  saveKey,
+} from './api.js';
 
 const nodeTypes = { prompt: PromptNode, image: ImageNode, output: OutputNode };
 
@@ -41,6 +50,7 @@ const FitIcon = svg(<path d="M4 8V4h4M16 4h4v4M20 16v4h-4M8 20H4v-4" />);
 const PromptIcon = svg(<path d="M4 6h16M4 12h16M4 18h10" />);
 const ReferenceIcon = svg(<><rect x="3" y="4" width="18" height="16" rx="2" /><circle cx="8.5" cy="9.5" r="1.5" /><path d="M21 16l-5-5-8 8" /></>);
 const OutputIcon = svg(<path d="M12 3l2 5 5 2-5 2-2 5-2-5-5-2 5-2 2-5z" />);
+const KeyIcon = svg(<><circle cx="8" cy="15" r="4" /><path d="M10.8 12.2L20 3m-3 0 3 3m-5 2 2.5 2.5" /></>);
 
 const HELP_TEXT =
   'Reference a prompt with @id. Connect images to number them, then type “image 1”.';
@@ -110,6 +120,9 @@ function Canvas() {
   // nameDlg drives both "rename" and "create" via one name-entry dialog.
   const [nameDlg, setNameDlg] = useState(null); // { mode:'rename'|'create', name, value, error } | null
   const [deleting, setDeleting] = useState(null); // project name | null
+  // API key dialog. keyState mirrors the server: { hasKey, keyHint }.
+  const [keyState, setKeyState] = useState({ hasKey: true, keyHint: '' });
+  const [keyDlg, setKeyDlg] = useState(null); // { value, error, saving, saved } | null
   // Gate auto-save until the initial load finishes, so we don't overwrite a saved
   // project with the starter graph on first render.
   const ready = useRef(false);
@@ -136,6 +149,26 @@ function Canvas() {
     const t = setTimeout(() => saveProject(project, { nodes, edges }), 500);
     return () => clearTimeout(t);
   }, [nodes, edges, project]);
+
+  // Ask the server whether it has a key, so the toolbar can flag a missing one
+  // before you waste a click on Generate.
+  useEffect(() => {
+    getHealth()
+      .then((h) => setKeyState({ hasKey: Boolean(h.hasKey), keyHint: h.keyHint || '' }))
+      .catch(() => {});
+  }, []);
+
+  async function confirmKey() {
+    const value = (keyDlg.value || '').trim();
+    setKeyDlg((d) => ({ ...d, saving: true, error: undefined }));
+    try {
+      const r = await saveKey(value);
+      setKeyState({ hasKey: true, keyHint: r.keyHint || '' });
+      setKeyDlg({ value: '', saved: true });
+    } catch (err) {
+      setKeyDlg((d) => ({ ...d, saving: false, error: err.message }));
+    }
+  }
 
   async function switchProject(name) {
     if (name === project) return;
@@ -316,6 +349,18 @@ function Canvas() {
         </div>
         <div className="toolbar-group toolbar-right">
           <IconButton
+            variant={keyState.hasKey ? 'ghost' : 'primary'}
+            size="sm"
+            label="API key"
+            tooltip={
+              keyState.hasKey
+                ? `OpenRouter key set${keyState.keyHint ? ` (…${keyState.keyHint})` : ''} — click to replace`
+                : 'No OpenRouter key yet — click to add one'
+            }
+            icon={<Icon icon={KeyIcon} />}
+            onClick={() => setKeyDlg({ value: '' })}
+          />
+          <IconButton
             variant="ghost"
             size="sm"
             label="Help"
@@ -396,6 +441,47 @@ function Canvas() {
           </DropdownMenu>
         </div>
       </div>
+
+      <Dialog
+        isOpen={!!keyDlg}
+        onOpenChange={(open) => !open && setKeyDlg(null)}
+        purpose="form"
+        width={420}
+      >
+        <DialogHeader title="OpenRouter API key" />
+        <VStack gap={3} padding={4}>
+          <TextInput
+            label="API key"
+            type="password"
+            hasAutoFocus
+            placeholder="sk-or-v1-…"
+            description={
+              keyState.hasKey
+                ? `A key is already saved${keyState.keyHint ? ` (…${keyState.keyHint})` : ''}. Entering a new one replaces it.`
+                : 'Create one at openrouter.ai/keys. It is stored in .env on this machine and only ever used by the local server.'
+            }
+            value={keyDlg?.value ?? ''}
+            status={
+              keyDlg?.error
+                ? { type: 'error', message: keyDlg.error }
+                : keyDlg?.saved
+                  ? { type: 'success', message: 'Key saved — Generate is ready to use.' }
+                  : undefined
+            }
+            onChange={(v) => setKeyDlg((d) => ({ ...d, value: v, error: undefined, saved: false }))}
+          />
+          <HStack gap={2} justify="end">
+            <Button label="Close" variant="ghost" onClick={() => setKeyDlg(null)} />
+            <Button
+              label="Save key"
+              variant="primary"
+              isDisabled={!keyDlg?.value?.trim() || keyDlg?.saving}
+              isLoading={keyDlg?.saving}
+              onClick={confirmKey}
+            />
+          </HStack>
+        </VStack>
+      </Dialog>
 
       <Dialog
         isOpen={!!nameDlg}

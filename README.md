@@ -31,36 +31,42 @@ npm run install:all
 
 This is three installs in one: the repo root, `server/`, and `client/` each have their own `package.json`. Running plain `npm install` only does the root and the app will not start.
 
-### 3. Add your API key
-
-```bash
-cp .env.example .env
-```
-
-Open `.env` and set your key:
-
-```
-OPENROUTER_API_KEY=sk-or-v1-...
-```
-
-`.env` is gitignored, and the key is only ever read by the server process — the browser never receives it. The other three values in the file are optional and already have sensible defaults:
-
-| Variable | Default | What it does |
-| --- | --- | --- |
-| `OPENROUTER_API_KEY` | — | Required. Your key. |
-| `OPENROUTER_MODEL` | `openai/gpt-image-2` | Any image model slug OpenRouter lists. |
-| `OUTPUT_DIR` | `./output` | Where images, sidecars, and saved graphs are written. Created automatically. |
-| `PORT` | `8787` | Backend port. The client dev server proxies `/api` here. |
-
-On Windows, `cp` may not exist in your shell — copy `.env.example` to `.env` in Explorer instead.
-
-### 4. Start it
+### 3. Start it
 
 ```bash
 npm run dev
 ```
 
-This runs both processes together — the backend on **8787** and the canvas on **5173**. Both must be running; the client proxies `/api` to the server. You should see the server print its configuration:
+This runs both processes together — the backend on **8787** and the canvas on **5173**. Both must be running; the client proxies `/api` to the server.
+
+### 4. Add your API key
+
+Open **http://localhost:5173** and click the **key icon** in the top right. Paste your OpenRouter key and save — that's it. The key is sent to the local server, which writes it to a `.env` file next to the code so it survives a restart, and keeps it server-side from then on. The browser never stores it.
+
+<details>
+<summary>Prefer to configure by file instead?</summary>
+
+```bash
+cp .env.example .env
+```
+
+Then set `OPENROUTER_API_KEY=sk-or-v1-...` in it and restart. Same result — the UI writes to this file.
+</details>
+
+`.env` is gitignored, so your key is never committed. Nothing else needs configuring, but three more variables are available if you want them — set them in `.env`, they have no UI:
+
+| Variable | Default | What it does |
+| --- | --- | --- |
+| `OPENROUTER_API_KEY` | — | Required. Set it in the app, or here. |
+| `OPENROUTER_MODEL` | `openai/gpt-image-2` | Any image model slug OpenRouter lists. |
+| `OUTPUT_DIR` | `./output` | Where images, sidecars, and saved graphs are written. Created automatically. |
+| `PORT` | `8787` | Backend port. The client dev server proxies `/api` here. |
+
+### 5. Generate
+
+The starter graph gives you two prompt nodes wired into an output node. Press **Generate** and the image appears in the node and lands in `output/<project>/` alongside a `.json` sidecar recording the prompt, parameters, and what OpenRouter charged.
+
+At startup the server prints what it resolved, which is the quickest way to confirm the key took:
 
 ```
   Unframed server  →  http://localhost:8787
@@ -68,12 +74,6 @@ This runs both processes together — the backend on **8787** and the canvas on 
   api key:  loaded
   output:   /path/to/Unframed/output
 ```
-
-If that last line reads `api key:  MISSING — add it to .env`, step 3 didn't take.
-
-### 5. Open the app
-
-Go to **http://localhost:5173**. You get a starter graph: two prompt nodes wired into an output node. Press **Generate** on the output node and the image appears in the node and lands in `output/<project>/` alongside a `.json` sidecar recording the prompt, parameters, and what OpenRouter charged.
 
 ### Running the halves separately
 
@@ -88,7 +88,8 @@ npm run client   # canvas only, on 5173
 
 | Symptom | Cause and fix |
 | --- | --- |
-| `api key:  MISSING` on startup | No `.env`, or the variable is misspelled. It must be `OPENROUTER_API_KEY` in a `.env` at the repo root, not inside `server/`. |
+| `api key:  MISSING` on startup | No key saved yet — add one with the key icon in the top right. If you set it by hand, it must be `OPENROUTER_API_KEY` in a `.env` at the repo root, not inside `server/`. |
+| "That does not look like an OpenRouter key" | The key must start with `sk-or-`, with no spaces or line breaks. Copy it again from openrouter.ai/keys. |
 | `EADDRINUSE` on 8787 or 5173 | Something else holds the port. Find it with `lsof -ti tcp:8787` (macOS/Linux) and stop it, or set a different `PORT` in `.env`. |
 | Generate returns a 401 | The key is wrong or revoked. Test it: `curl -H "Authorization: Bearer $OPENROUTER_API_KEY" https://openrouter.ai/api/v1/key` |
 | Generate returns a 402 | No credit on the OpenRouter account. |
@@ -126,6 +127,6 @@ These are the obvious next steps if you want to grow it, each small:
 
 ## Notes
 
-- Your key stays server-side; the browser never sees it.
+- Your key lives server-side. If you set it in `.env` the browser never sees it at all; if you paste it into the dialog it is POSTed once to the local server over loopback and never stored in the browser or sent back to it — the app only ever receives the last 4 characters, to show you which key is in use.
 - OpenRouter bills per completed image (a failed generation isn't charged), so each output-node run maps to one billable image.
 - Verify current per-image pricing on the model's OpenRouter page before running large batches.

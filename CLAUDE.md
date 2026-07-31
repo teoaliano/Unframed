@@ -28,9 +28,9 @@ Three-package monorepo, no shared build. The only non-trivial logic is in `clien
 **Key design decisions:**
 - **Only the output node consumes edges.** Wiring is always "sources → output." Prompt-to-prompt composition happens through `@id` tokens in prompt text, *not* edges. `resolveText` in `resolve.js` recursively substitutes `@id` references (`TOKEN_RE = /@([\w-]+)/g`) and throws on cycles; unknown ids resolve to empty string.
 - **Source ordering is by node Y position** (top-to-bottom), so canvas layout determines prompt concatenation order. Prompt parts are joined with `\n\n`; reference images become `input_references` (base64 data URLs).
-- **The API key never reaches the browser** — it stays in the server process; the client only talks to `/api`.
+- **The API key lives in the server process** — the client only talks to `/api`, and the only key material sent back is the last 4 chars (`keyHint` on `/api/health`). `POST /api/key` accepts a key typed in the UI, validates it against `/^sk-or-[\w.-]{8,200}$/` (rejecting whitespace and newlines, which would corrupt `.env` or inject a header), upserts the `OPENROUTER_API_KEY` line in `.env`, and reassigns the module-level `API_KEY` so no restart is needed. `.env` is therefore generated, not a prerequisite.
 - **Reference images are base64 data URLs** carried in `node.data.dataUrl`, which is why the server sets a 30mb JSON body limit.
-- **Server is a single file** (`server/index.js`, ~145 lines): two routes (`/api/health`, `/api/generate`), extensive error branching around the OpenRouter call, and filename slugify. Each successful generation writes `<timestamp>-<slug>.<ext>` + a `.json` sidecar (prompt, params, cost) to `OUTPUT_DIR`.
+- **Server is a single file** (`server/index.js`): health, models, key, the project CRUD routes, and `/api/generate` — plus extensive error branching around the OpenRouter call, and filename slugify. Each successful generation writes `<timestamp>-<slug>.<ext>` + a `.json` sidecar (prompt, params, cost) to `OUTPUT_DIR`.
 
 **Node types** (`client/src/nodes/`): `PromptNode` (labeled free text), `ImageNode` (reference image picker), `OutputNode` (resolution/quality/ratio controls + Generate button and result display). Registered in `App.jsx`'s `nodeTypes`; `App.jsx` also holds the starter graph demonstrating the `@p-subject` embed.
 
