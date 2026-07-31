@@ -55,13 +55,22 @@ export default function OutputNode({ id, data }) {
       setStatus('done');
 
       // Drop the generated image onto the canvas as a reference node so it can be
-      // wired back in as input for the next generation.
-      const pos = getNode(id)?.position ?? { x: 0, y: 0 };
+      // wired back in as input for the next generation. It goes to the right of the
+      // output node, top-aligned, clear of the result thumbnail below the button.
+      const self = getNode(id);
+      const pos = self?.position ?? { x: 0, y: 0 };
+      const width = self?.measured?.width ?? 300;
+      const spot = { x: pos.x + width + 40, y: pos.y };
+      // Generating repeatedly would park every result on the same spot, hiding all
+      // but the last, so step down past whatever is already there.
+      while (getNodes().some((n) => Math.hypot(n.position.x - spot.x, n.position.y - spot.y) < 24)) {
+        spot.y += 48;
+      }
       addNodes({
         id: `gen-${Date.now()}`,
         type: 'image',
         dragHandle: '.xnode-head',
-        position: { x: pos.x, y: pos.y + 420 },
+        position: spot,
         data: { fileName: resp.savedPath?.split('/').pop() || 'generated', dataUrl: resp.image },
       });
     } catch (err) {
