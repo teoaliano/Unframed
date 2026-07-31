@@ -1,0 +1,237 @@
+/*
+  weave-lite — app structure + the chrome React Flow renders itself. All content
+  styling now comes from Astryx components; this file only covers layout, the
+  canvas, node drag-handles, and the @-mention menu.
+  ponytail: a few raw px remain for structural sizing (handle, header height)
+  where a token adds nothing; colors all use Astryx tokens.
+*/
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+body {
+  background: var(--color-background-body);
+}
+
+.app {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+/* ---- toolbar ---- */
+.toolbar {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: 16px;
+  padding: 0 16px;
+  height: 52px;
+  flex: none;
+  border-bottom: 1px solid var(--color-border);
+  background: var(--color-background-surface);
+}
+.toolbar-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.toolbar-center {
+  justify-content: center;
+}
+.toolbar-right {
+  justify-content: flex-end;
+}
+
+/* project / add-node dropdown menus */
+.astryx-dropdown-menu {
+  min-width: 200px;
+}
+/* add-node menu: narrower than the default, and nudged left of the + button so
+   it doesn't crowd the trigger (placement="start", no offset prop available).
+   The nudge goes on the wrapper that paints the surface — shifting the inner
+   role=menu made the items hang outside the panel. Library gap is 4px. */
+.add-node-menu {
+  min-width: 0;
+}
+div:has(> .add-node-menu) {
+  transform: translateX(-4px);
+}
+
+/* ---- canvas ---- */
+.canvas {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+}
+
+/* floating "add node" button, bottom-right over the canvas */
+.fab {
+  position: absolute;
+  right: 20px;
+  bottom: 20px;
+  z-index: 5;
+}
+.fab .astryx-button {
+  border-radius: 12px;
+  box-shadow: 0 8px 24px var(--color-shadow);
+}
+
+/* tool toolbar, stacked above the add-node FAB */
+.tools {
+  position: absolute;
+  right: 20px;
+  bottom: 72px; /* FAB bottom(20) + FAB height(36) + 16px gap */
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 4px;
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  background: var(--color-background-surface);
+  box-shadow: 0 8px 24px var(--color-shadow);
+}
+.tools-sep {
+  height: 1px;
+  margin: 2px 4px;
+  background: var(--color-border);
+}
+/* hand cursor while the pan tool is active */
+.react-flow.tool-pan .react-flow__pane {
+  cursor: grab;
+}
+.react-flow.tool-pan .react-flow__pane.dragging {
+  cursor: grabbing;
+}
+.react-flow {
+  background: var(--color-background-body);
+}
+
+/* strip React Flow's default node chrome; the Astryx Card draws its own */
+.react-flow__node {
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  padding: 0;
+  width: auto;
+}
+
+.react-flow__edge-path {
+  stroke: var(--color-accent);
+  stroke-width: 1.5;
+}
+.react-flow__handle {
+  width: 9px;
+  height: 9px;
+  background: var(--color-accent);
+  border: 2px solid var(--color-background-surface);
+}
+
+/* ---- node chrome ---- */
+/* .xnode-head is the drag handle (App.jsx sets dragHandle to this selector). */
+.xnode-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 10px;
+  cursor: grab;
+  border-bottom: 1px solid var(--color-border);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.xnode-body {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px;
+}
+/* Square by default (output results); reference nodes override aspect-ratio
+   inline with the image's own. Thumbnail's inner box is square and min-height:auto
+   would pin the height to it, so it has to follow the outer box. */
+.xnode-thumb {
+  width: 100%;
+  height: auto;
+  aspect-ratio: 1;
+  min-height: 0;
+}
+.xnode-thumb > * {
+  aspect-ratio: auto;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+}
+
+/* Prompt node: drag the field's corner to resize in both axes. The handle can't
+   live on the textarea — it's a flex item with basis 0, so an inline width from a
+   horizontal drag would be ignored. It goes on the field wrapper instead, and the
+   card (width: fit-content) tracks it. */
+.xnode-prompt .astryx-textarea {
+  resize: both;
+  overflow: auto;
+  align-items: stretch;
+  width: 220px; /* = old 240px card minus body padding */
+  min-width: 160px;
+  min-height: 64px;
+}
+.xnode-prompt .astryx-textarea textarea {
+  resize: none;
+}
+
+/* ---- @ mention menu ---- */
+.mention-menu {
+  position: absolute;
+  left: 10px;
+  right: 10px;
+  top: 100%;
+  margin: -4px 0 0;
+  padding: 4px;
+  list-style: none;
+  z-index: 10;
+  max-height: 168px;
+  overflow-y: auto;
+  background: var(--color-background-popover);
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  box-shadow: 0 8px 24px var(--color-shadow);
+}
+.mention-menu li {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 5px 8px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 12px;
+  color: var(--color-text-primary);
+}
+.mention-menu li.active,
+.mention-menu li:hover {
+  background: var(--color-overlay-hover);
+}
+.mention-id {
+  flex: none;
+  color: var(--color-text-accent);
+}
+.mention-preview {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--color-text-secondary);
+}
+.xnode-head--copy {
+  cursor: pointer;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .react-flow__edge-path {
+    animation: none !important;
+  }
+}
