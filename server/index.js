@@ -102,7 +102,9 @@ app.get('/api/models', async (req, res) => {
     const models = (d.data || [])
       .filter((m) => (m.architecture?.output_modalities || []).includes('image'))
       .map((m) => ({ id: m.id, name: m.name || m.id }));
-    if (!models.some((m) => m.id === MODEL)) models.unshift({ id: MODEL, name: MODEL });
+    if (!models.some((m) => m.id === MODEL)) models.push({ id: MODEL, name: MODEL });
+    // Sorted by slug, which also groups them by provider.
+    models.sort((a, b) => a.id.localeCompare(b.id));
     res.json({ models, default: MODEL });
   } catch {
     res.json({ models: [{ id: MODEL, name: MODEL }], default: MODEL });
