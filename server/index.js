@@ -97,7 +97,10 @@ app.delete('/api/key', async (req, res) => {
 // The configured MODEL is always included (some working slugs aren't listed).
 app.get('/api/models', async (req, res) => {
   try {
-    const r = await fetch('https://openrouter.ai/api/v1/models');
+    // output_modalities=image is load-bearing: the unfiltered endpoint returns only
+    // the text-output catalogue, which holds a handful of image models at most.
+    // With it, the full image catalogue comes back (40 at the time of writing).
+    const r = await fetch('https://openrouter.ai/api/v1/models?output_modalities=image');
     const d = await r.json();
     const models = (d.data || [])
       .filter((m) => (m.architecture?.output_modalities || []).includes('image'))
