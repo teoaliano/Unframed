@@ -10,7 +10,7 @@ import {
 } from '@xyflow/react';
 import { Icon } from '@astryxdesign/core/Icon';
 import { IconButton } from '@astryxdesign/core/IconButton';
-import { DropdownMenu, DropdownMenuItem } from '@astryxdesign/core/DropdownMenu';
+import { DropdownMenu } from '@astryxdesign/core/DropdownMenu';
 import { Button } from '@astryxdesign/core/Button';
 import { TextInput } from '@astryxdesign/core/TextInput';
 import { Dialog, DialogHeader } from '@astryxdesign/core/Dialog';
@@ -22,6 +22,7 @@ import Logo from './Logo.jsx';
 import PromptNode from './nodes/PromptNode.jsx';
 import ImageNode from './nodes/ImageNode.jsx';
 import OutputNode from './nodes/OutputNode.jsx';
+import TextNode from './nodes/TextNode.jsx';
 import ProjectMenu from './ProjectMenu.jsx';
 import {
   setProject,
@@ -35,7 +36,7 @@ import {
   clearKey,
 } from './api.js';
 
-const nodeTypes = { prompt: PromptNode, image: ImageNode, output: OutputNode };
+const nodeTypes = { prompt: PromptNode, image: ImageNode, output: OutputNode, text: TextNode };
 
 const svg = (path) => (p) => (
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...p}>
@@ -53,10 +54,11 @@ const FitIcon = svg(<path d="M4 8V4h4M16 4h4v4M20 16v4h-4M8 20H4v-4" />);
 const PromptIcon = svg(<path d="M4 6h16M4 12h16M4 18h10" />);
 const ReferenceIcon = svg(<><rect x="3" y="4" width="18" height="16" rx="2" /><circle cx="8.5" cy="9.5" r="1.5" /><path d="M21 16l-5-5-8 8" /></>);
 const OutputIcon = svg(<path d="M12 3l2 5 5 2-5 2-2 5-2-5-5-2 5-2 2-5z" />);
+const TextIcon = svg(<><path d="M4 7V5h16v2M12 5v14M9 19h6" /></>);
 const KeyIcon = svg(<><circle cx="8" cy="15" r="4" /><path d="M10.8 12.2L20 3m-3 0 3 3m-5 2 2.5 2.5" /></>);
 
 const HELP_TEXT =
-  'Reference a prompt with @id. Connect images to number them, then type “image 1”.';
+  'Reference a prompt or text node with @id. Connect images to number them, then type “image 1”.';
 
 // React Flow drags a node only from this handle, so the inputs inside stay usable.
 // nowheel = "the wheel belongs to whatever is under the cursor, not the canvas".
@@ -280,7 +282,15 @@ function Canvas() {
     setDeleting(null);
   }
 
-  const onConnect = useCallback((conn) => setEdges((eds) => addEdge(conn, eds)), [setEdges]);
+  const onConnect = useCallback(
+    (conn) => {
+      // Text nodes have both handles, so without this a node could wire into
+      // itself and silently self-amplify its own prompt on every run.
+      if (conn.source === conn.target) return;
+      setEdges((eds) => addEdge(conn, eds));
+    },
+    [setEdges],
+  );
 
   const addNode = useCallback(
     (type, data, screenPos) =>
@@ -304,6 +314,7 @@ function Canvas() {
   const addPrompt = () => addNode('prompt', { text: '' });
   const addImage = () => addNode('image', { fileName: '', dataUrl: '' });
   const addOutput = () => addNode('output', { resolution: '1K', quality: 'low', aspect_ratio: '1:1' });
+  const addText = () => addNode('text', { text: '', result: '' });
 
   // Drag image files from Finder/Explorer onto the canvas -> reference nodes at
   // the drop point (offset a little when dropping several at once).
@@ -454,6 +465,24 @@ function Canvas() {
             placement="start"
             className="add-node-menu"
             menuWidth={152}
+            items={[
+              {
+                type: 'section',
+                title: 'Inputs',
+                items: [
+                  { label: 'Prompt', icon: PromptIcon, onClick: addPrompt },
+                  { label: 'Image', icon: ReferenceIcon, onClick: addImage },
+                ],
+              },
+              {
+                type: 'section',
+                title: 'Outputs',
+                items: [
+                  { label: 'Output', icon: OutputIcon, onClick: addOutput },
+                  { label: 'Text', icon: TextIcon, onClick: addText },
+                ],
+              },
+            ]}
             button={{
               label: 'Add node',
               isIconOnly: true,
@@ -461,11 +490,7 @@ function Canvas() {
               variant: 'primary',
               size: 'lg',
             }}
-          >
-            <DropdownMenuItem label="Prompt" icon={PromptIcon} onClick={addPrompt} />
-            <DropdownMenuItem label="Reference" icon={ReferenceIcon} onClick={addImage} />
-            <DropdownMenuItem label="Output" icon={OutputIcon} onClick={addOutput} />
-          </DropdownMenu>
+          />
         </div>
       </div>
 

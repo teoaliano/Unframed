@@ -30,20 +30,25 @@ export default function ImageNode({ id, data }) {
     img.src = data.dataUrl;
   }, [data.dataUrl, data.aspect, id, updateNodeData]);
 
-  const status = num != null ? `image ${num}` : data.dataUrl ? 'not connected' : undefined;
+  const status = num != null ? String(num) : data.dataUrl ? 'not connected' : undefined;
 
   return (
     <Card width={240} padding={0}>
       <Handle type="source" position={Position.Right} />
-      <NodeHeader kind="reference" right={status} rightTone={num != null ? 'accent' : 'secondary'} />
+      <NodeHeader
+        kind="image"
+        family="input"
+        right={status}
+        rightTone={num != null ? 'accent' : 'secondary'}
+      />
       <div className="xnode-body">
         {data.dataUrl ? (
           <Thumbnail
             className="xnode-thumb"
             style={{ aspectRatio: data.aspect || 1 }}
             src={data.dataUrl}
-            alt={data.fileName || 'reference'}
-            label={data.fileName || 'reference'}
+            alt={data.fileName || 'image'}
+            label={data.fileName || 'image'}
             onRemove={() => updateNodeData(id, { dataUrl: '', fileName: '', aspect: null })}
           />
         ) : (

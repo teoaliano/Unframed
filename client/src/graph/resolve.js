@@ -2,33 +2,39 @@
 // a single generation request. This is the only part with real logic; everything
 // else is UI wiring.
 
-// @ref references another PROMPT node by its id (word chars + hyphens). Images
-// are not referenced this way — they are sent as an ordered array and named
+// @ref references another PROMPT or TEXT node by its id (word chars + hyphens).
+// Images are not referenced this way — they are sent as an ordered array and named
 // positionally ("image 1", "image 2") which the user types as plain text.
 const TOKEN_RE = /@([\w-]+)/g;
 
-function substitute(text, promptsById, stack) {
+function substitute(text, refs, stack) {
   return (text || '').replace(TOKEN_RE, (_, raw) => {
     const ref = raw.trim();
-    if (promptsById.has(ref)) return resolvePrompt(ref, promptsById, stack);
+    if (refs.has(ref)) return resolveRef(ref, refs, stack);
     return ''; // unknown ref -> nothing
   });
 }
 
-// Resolve one prompt node's text. Throws on circular references (A -> B -> A).
-function resolvePrompt(id, promptsById, stack) {
+// Resolve one referenced node to text. Prompt nodes substitute recursively; a text
+// node's model output is inserted literally — re-scanning it for @tokens would let
+// model output pull in arbitrary prompts, and makes cycles unresolvable.
+// Throws on circular prompt references (A -> B -> A).
+function resolveRef(id, refs, stack) {
+  const node = refs.get(id);
+  if (node.type === 'text') return node.data?.result || '';
   if (stack.includes(id)) {
     throw new Error(`Circular reference: ${[...stack, id].join(' -> ')}`);
   }
-  return substitute(promptsById.get(id).data.text, promptsById, [...stack, id]);
+  return substitute(node.data?.text, refs, [...stack, id]);
 }
 
 // Build the generation request for a given output node id.
 // Returns { prompt, input_references }.
 export function buildRequest(nodes, edges, outputId) {
   const byId = new Map(nodes.map((n) => [n.id, n]));
-  const promptsById = new Map(
-    nodes.filter((n) => n.type === 'prompt').map((n) => [n.id, n]),
+  // Both prompt and text nodes can be pulled in with @id.
+  const refs = new Map(
+    nodes.filter((n) => n.type === 'prompt' || n.type === 'text').map((n) => [n.id, n]),
   );
 
   // Every node wired into this output node, top-to-bottom for predictable order.
@@ -46,10 +52,9 @@ export function buildRequest(nodes, edges, outputId) {
 
   const promptParts = [];
   for (const node of sources) {
-    if (node.type === 'prompt') {
-      const text = resolvePrompt(node.id, promptsById, []).trim();
-      if (text) promptParts.push(text);
-    }
+    if (node.type !== 'prompt' && node.type !== 'text') continue;
+    const text = resolveRef(node.id, refs, []).trim();
+    if (text) promptParts.push(text);
   }
 
   return { prompt: promptParts.join('\n\n'), input_references: references };
@@ -58,8 +63,12 @@ export function buildRequest(nodes, edges, outputId) {
 // The reference number an image node will have when sent (1-based), or null if
 // it isn't connected to an output / has no image. Kept here so the node badge and
 // buildRequest agree on ordering. `nodes`/`edges` are the live React Flow arrays.
+// Both output-family types (`output` and `text`) consume edges, so an image wired
+// only into a text node still counts as connected.
 export function imageRefNumber(nodes, edges, imageId) {
-  const outputIds = new Set(nodes.filter((n) => n.type === 'output').map((n) => n.id));
+  const outputIds = new Set(
+    nodes.filter((n) => n.type === 'output' || n.type === 'text').map((n) => n.id),
+  );
   if (!outputIds.size) return null;
   const byId = new Map(nodes.map((n) => [n.id, n]));
   const connected = new Map();

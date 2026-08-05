@@ -144,6 +144,11 @@ div:has(> .add-node-menu) {
   text-transform: uppercase;
   letter-spacing: 0.06em;
 }
+/* Output nodes (output, text) consume edges; inputs (prompt, image) only feed them.
+   The accent border makes that difference visible at a glance. */
+.xnode-head--output {
+  border-bottom-color: var(--color-border-accent, var(--color-accent));
+}
 .xnode-body {
   position: relative;
   display: flex;
@@ -180,6 +185,17 @@ div:has(> .add-node-menu) {
   min-height: 64px;
 }
 .xnode-prompt .astryx-textarea textarea {
+  resize: none;
+}
+
+/* The text node's result is editable and often long, so let it grow vertically.
+   Not resize: both — TextNode's Card is a fixed 300px, and a horizontal drag
+   would push the box outside it. */
+.xnode-text-result {
+  resize: vertical;
+  overflow: auto;
+}
+.xnode-text-result textarea {
   resize: none;
 }
 

@@ -16,6 +16,17 @@ export async function generate(body) {
   return data;
 }
 
+export async function runText(body) {
+  const res = await fetch('/api/text', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || `Request failed (${res.status})`);
+  return data;
+}
+
 // { ok, model, hasKey, keyHint, outputDir } — keyHint is the last 4 chars; the key
 // itself never leaves the server.
 export const getHealth = () => fetch('/api/health').then((r) => r.json());
@@ -43,12 +54,21 @@ export const listProjects = () =>
     .then((r) => r.json())
     .then((d) => d.projects || []);
 
-// { models: [{id,name}], default } — cached; the model list rarely changes.
-let modelsCache;
-export const listModels = () =>
-  (modelsCache ??= fetch('/api/models')
-    .then((r) => r.json())
-    .catch(() => ({ models: [], default: '' })));
+// { models: [{id,name}], default } per catalogue — cached, since the lists rarely
+// change within a session. Keyed by type so the two catalogues can't overwrite
+// each other.
+const modelsCache = new Map();
+export const listModels = (type = 'image') => {
+  if (!modelsCache.has(type)) {
+    modelsCache.set(
+      type,
+      fetch(`/api/models?type=${encodeURIComponent(type)}`)
+        .then((r) => r.json())
+        .catch(() => ({ models: [], default: '' })),
+    );
+  }
+  return modelsCache.get(type);
+};
 
 export const loadProject = (name) =>
   fetch(`/api/projects/${encodeURIComponent(name)}`).then((r) => r.json());

@@ -13,6 +13,9 @@ dotenv.config({ path: path.join(ROOT, '.env'), override: true });
 
 const PORT = process.env.PORT || 8787;
 const MODEL = process.env.OPENROUTER_MODEL || 'openai/gpt-image-2';
+// Vision-capable so a text node can describe images wired into it. Verified live
+// on OpenRouter; qwen/qwen3.7-flash is the cheaper fallback if this slug retires.
+const TEXT_MODEL = process.env.OPENROUTER_TEXT_MODEL || 'google/gemini-3.5-flash-lite';
 // Not const: POST /api/key can replace it at runtime so a key entered in the UI
 // works immediately, without a restart.
 let API_KEY = process.env.OPENROUTER_API_KEY;
@@ -93,25 +96,107 @@ app.delete('/api/key', async (req, res) => {
   res.json({ ok: true, hasKey: false });
 });
 
-// Image-capable models OpenRouter currently lists, for the output node's picker.
-// The configured MODEL is always included (some working slugs aren't listed).
+// Models for the node pickers. Two catalogues:
+//   image — OpenRouter's default listing is the TEXT catalogue, so the
+//           output_modalities filter is load-bearing: without it the image models
+//           are simply absent from the payload.
+//   text  — the default listing, narrowed to vision-capable models, because a text
+//           node can always have images wired into it and a text-only model would
+//           silently ignore them.
 app.get('/api/models', async (req, res) => {
+  const wantText = req.query.type === 'text';
+  const fallback = wantText ? TEXT_MODEL : MODEL;
   try {
-    // output_modalities=image is load-bearing: the unfiltered endpoint returns only
-    // the text-output catalogue, which holds a handful of image models at most.
-    // With it, the full image catalogue comes back (40 at the time of writing).
-    const r = await fetch('https://openrouter.ai/api/v1/models?output_modalities=image');
+    const url = wantText
+      ? 'https://openrouter.ai/api/v1/models'
+      : 'https://openrouter.ai/api/v1/models?output_modalities=image';
+    const r = await fetch(url);
     const d = await r.json();
     const models = (d.data || [])
-      .filter((m) => (m.architecture?.output_modalities || []).includes('image'))
+      .filter((m) => {
+        const out = m.architecture?.output_modalities || [];
+        const inp = m.architecture?.input_modalities || [];
+        return wantText ? out.includes('text') && inp.includes('image') : out.includes('image');
+      })
       .map((m) => ({ id: m.id, name: m.name || m.id }));
-    if (!models.some((m) => m.id === MODEL)) models.push({ id: MODEL, name: MODEL });
+    if (!models.some((m) => m.id === fallback)) models.push({ id: fallback, name: fallback });
     // Sorted by slug, which also groups them by provider.
     models.sort((a, b) => a.id.localeCompare(b.id));
-    res.json({ models, default: MODEL });
+    res.json({ models, default: fallback });
   } catch {
-    res.json({ models: [{ id: MODEL, name: MODEL }], default: MODEL });
+    res.json({ models: [{ id: fallback, name: fallback }], default: fallback });
   }
+});
+
+// Run a prompt through a text model. Images wired into a text node are passed as
+// content parts so the model can actually see them — that is what lets a text node
+// plan work from a picture.
+app.post('/api/text', async (req, res) => {
+  if (!API_KEY) {
+    return res
+      .status(400)
+      .json({ error: 'No OpenRouter key yet. Add one with the key icon in the top right.' });
+  }
+
+  const { prompt, input_references, model } = req.body || {};
+  // Coerce so a non-string prompt (e.g. a number) can't throw on .trim() inside
+  // this async handler, which would otherwise hang the request.
+  const p = typeof prompt === 'string' ? prompt : '';
+  if (!p.trim()) {
+    return res
+      .status(400)
+      .json({ error: 'Prompt is empty. Wire a prompt node into this text node, or type one in.' });
+  }
+  const refs = Array.isArray(input_references) ? input_references : [];
+
+  const content = [{ type: 'text', text: p }];
+  for (const ref of refs) {
+    const url = ref?.image_url?.url;
+    if (url) content.push({ type: 'image_url', image_url: { url } });
+  }
+
+  let orRes;
+  try {
+    orRes = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${API_KEY}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: model || TEXT_MODEL,
+        messages: [{ role: 'user', content }],
+        // Ask for cost in the usage block so the node can show what the call cost.
+        usage: { include: true },
+      }),
+    });
+  } catch (err) {
+    return res.status(502).json({ error: `Could not reach OpenRouter: ${err.message}` });
+  }
+
+  const raw = await orRes.text();
+  let data;
+  try {
+    data = JSON.parse(raw);
+  } catch {
+    return res
+      .status(502)
+      .json({ error: `Unexpected response from OpenRouter: ${raw.slice(0, 300)}` });
+  }
+
+  if (!orRes.ok) {
+    const msg = data?.error?.message || data?.error || raw.slice(0, 300);
+    return res.status(orRes.status).json({ error: `OpenRouter (${orRes.status}): ${msg}` });
+  }
+
+  const text = data?.choices?.[0]?.message?.content;
+  if (!text || !String(text).trim()) {
+    return res.status(502).json({ error: 'The model returned no text.' });
+  }
+
+  const cost = data?.usage?.cost ?? null;
+  console.log(`  text →  ${String(text).length} chars${cost != null ? `  ($${Number(cost).toFixed(4)})` : ''}`);
+  res.json({ text: String(text), cost });
 });
 
 // A project is just a subfolder of OUTPUT_DIR holding its images, sidecars, and a
@@ -275,6 +360,7 @@ app.post('/api/generate', async (req, res) => {
 app.listen(PORT, () => {
   console.log(`\n  Unframed server  →  http://localhost:${PORT}`);
   console.log(`  model:    ${MODEL}`);
+  console.log(`  text:     ${TEXT_MODEL}`);
   console.log(
     `  api key:  ${API_KEY ? 'loaded' : 'MISSING — add one in the app (key icon, top right)'}`,
   );

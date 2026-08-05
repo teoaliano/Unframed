@@ -14,15 +14,20 @@ export default function PromptNode({ id, data }) {
   const [query, setQuery] = useState(null); // null = menu closed; string = open
   const [sel, setSel] = useState(0);
 
-  // Other prompt nodes whose id starts with the current @query, with a text
+  // Other prompt and text nodes whose id starts with the current @query, with a
   // preview so opaque ids stay identifiable. (Images aren't @-referenced — they
   // are typed as "image N", see the number on each connected reference node.)
   function candidates(q) {
     if (q == null) return [];
     const lower = q.toLowerCase();
     return getNodes()
-      .filter((n) => n.type === 'prompt' && n.id !== id && n.id.toLowerCase().startsWith(lower))
-      .map((n) => ({ id: n.id, preview: (n.data.text || '').replace(/\s+/g, ' ').slice(0, 24) }));
+      .filter(
+        (n) => (n.type === 'prompt' || n.type === 'text') && n.id !== id && n.id.toLowerCase().startsWith(lower),
+      )
+      .map((n) => ({
+        id: n.id,
+        preview: (n.data.result || n.data.text || '').replace(/\s+/g, ' ').slice(0, 24),
+      }));
   }
 
   function syncMenu(el) {
@@ -66,7 +71,7 @@ export default function PromptNode({ id, data }) {
   return (
     <Card width="fit-content" padding={0} className="xnode-prompt">
       <Handle type="source" position={Position.Right} />
-      <NodeHeader kind="prompt" copyId={id} />
+      <NodeHeader kind="prompt" family="input" copyId={id} />
       <div className="xnode-body" onKeyDown={onKeyDown} onClick={() => syncMenu(ref.current)}>
         <TextArea
           ref={ref}
