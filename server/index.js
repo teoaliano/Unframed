@@ -138,15 +138,19 @@ app.post('/api/text', async (req, res) => {
       .json({ error: 'No OpenRouter key yet. Add one with the key icon in the top right.' });
   }
 
-  const { prompt, input_references = [], model } = req.body || {};
-  if (!prompt || !prompt.trim()) {
+  const { prompt, input_references, model } = req.body || {};
+  // Coerce so a non-string prompt (e.g. a number) can't throw on .trim() inside
+  // this async handler, which would otherwise hang the request.
+  const p = typeof prompt === 'string' ? prompt : '';
+  if (!p.trim()) {
     return res
       .status(400)
       .json({ error: 'Prompt is empty. Wire a prompt node into this text node, or type one in.' });
   }
+  const refs = Array.isArray(input_references) ? input_references : [];
 
-  const content = [{ type: 'text', text: prompt }];
-  for (const ref of input_references) {
+  const content = [{ type: 'text', text: p }];
+  for (const ref of refs) {
     const url = ref?.image_url?.url;
     if (url) content.push({ type: 'image_url', image_url: { url } });
   }
