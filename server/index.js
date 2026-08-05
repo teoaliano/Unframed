@@ -13,6 +13,9 @@ dotenv.config({ path: path.join(ROOT, '.env'), override: true });
 
 const PORT = process.env.PORT || 8787;
 const MODEL = process.env.OPENROUTER_MODEL || 'openai/gpt-image-2';
+// Vision-capable so a text node can describe images wired into it. Verified live
+// on OpenRouter; qwen/qwen3.7-flash is the cheaper fallback if this slug retires.
+const TEXT_MODEL = process.env.OPENROUTER_TEXT_MODEL || 'google/gemini-3.5-flash-lite';
 // Not const: POST /api/key can replace it at runtime so a key entered in the UI
 // works immediately, without a restart.
 let API_KEY = process.env.OPENROUTER_API_KEY;
@@ -112,6 +115,73 @@ app.get('/api/models', async (req, res) => {
   } catch {
     res.json({ models: [{ id: MODEL, name: MODEL }], default: MODEL });
   }
+});
+
+// Run a prompt through a text model. Images wired into a text node are passed as
+// content parts so the model can actually see them — that is what lets a text node
+// plan work from a picture.
+app.post('/api/text', async (req, res) => {
+  if (!API_KEY) {
+    return res
+      .status(400)
+      .json({ error: 'No OpenRouter key yet. Add one with the key icon in the top right.' });
+  }
+
+  const { prompt, input_references = [], model } = req.body || {};
+  if (!prompt || !prompt.trim()) {
+    return res
+      .status(400)
+      .json({ error: 'Prompt is empty. Wire a prompt node into this text node, or type one in.' });
+  }
+
+  const content = [{ type: 'text', text: prompt }];
+  for (const ref of input_references) {
+    const url = ref?.image_url?.url;
+    if (url) content.push({ type: 'image_url', image_url: { url } });
+  }
+
+  let orRes;
+  try {
+    orRes = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${API_KEY}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: model || TEXT_MODEL,
+        messages: [{ role: 'user', content }],
+        // Ask for cost in the usage block so the node can show what the call cost.
+        usage: { include: true },
+      }),
+    });
+  } catch (err) {
+    return res.status(502).json({ error: `Could not reach OpenRouter: ${err.message}` });
+  }
+
+  const raw = await orRes.text();
+  let data;
+  try {
+    data = JSON.parse(raw);
+  } catch {
+    return res
+      .status(502)
+      .json({ error: `Unexpected response from OpenRouter: ${raw.slice(0, 300)}` });
+  }
+
+  if (!orRes.ok) {
+    const msg = data?.error?.message || data?.error || raw.slice(0, 300);
+    return res.status(orRes.status).json({ error: `OpenRouter (${orRes.status}): ${msg}` });
+  }
+
+  const text = data?.choices?.[0]?.message?.content;
+  if (!text || !String(text).trim()) {
+    return res.status(502).json({ error: 'The model returned no text.' });
+  }
+
+  const cost = data?.usage?.cost ?? null;
+  console.log(`  text →  ${String(text).length} chars${cost != null ? `  ($${Number(cost).toFixed(4)})` : ''}`);
+  res.json({ text: String(text), cost });
 });
 
 // A project is just a subfolder of OUTPUT_DIR holding its images, sidecars, and a
@@ -275,6 +345,7 @@ app.post('/api/generate', async (req, res) => {
 app.listen(PORT, () => {
   console.log(`\n  Unframed server  →  http://localhost:${PORT}`);
   console.log(`  model:    ${MODEL}`);
+  console.log(`  text:     ${TEXT_MODEL}`);
   console.log(
     `  api key:  ${API_KEY ? 'loaded' : 'MISSING — add one in the app (key icon, top right)'}`,
   );
