@@ -188,12 +188,12 @@ div:has(> .add-node-menu) {
   resize: none;
 }
 
-/* The text node's result is editable and often long, so give it the same two-axis
-   resize handle the prompt node has. */
+/* The text node's result is editable and often long, so let it grow vertically.
+   Not resize: both — TextNode's Card is a fixed 300px, and a horizontal drag
+   would push the box outside it. */
 .xnode-text-result {
-  resize: both;
+  resize: vertical;
   overflow: auto;
-  min-width: 160px;
 }
 .xnode-text-result textarea {
   resize: none;

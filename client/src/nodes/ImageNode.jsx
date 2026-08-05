@@ -47,8 +47,8 @@ export default function ImageNode({ id, data }) {
             className="xnode-thumb"
             style={{ aspectRatio: data.aspect || 1 }}
             src={data.dataUrl}
-            alt={data.fileName || 'reference'}
-            label={data.fileName || 'reference'}
+            alt={data.fileName || 'image'}
+            label={data.fileName || 'image'}
             onRemove={() => updateNodeData(id, { dataUrl: '', fileName: '', aspect: null })}
           />
         ) : (

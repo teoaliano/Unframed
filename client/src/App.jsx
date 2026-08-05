@@ -58,7 +58,7 @@ const TextIcon = svg(<><path d="M4 7V5h16v2M12 5v14M9 19h6" /></>);
 const KeyIcon = svg(<><circle cx="8" cy="15" r="4" /><path d="M10.8 12.2L20 3m-3 0 3 3m-5 2 2.5 2.5" /></>);
 
 const HELP_TEXT =
-  'Reference a prompt with @id. Connect images to number them, then type “image 1”.';
+  'Reference a prompt or text node with @id. Connect images to number them, then type “image 1”.';
 
 // React Flow drags a node only from this handle, so the inputs inside stay usable.
 // nowheel = "the wheel belongs to whatever is under the cursor, not the canvas".
@@ -282,7 +282,15 @@ function Canvas() {
     setDeleting(null);
   }
 
-  const onConnect = useCallback((conn) => setEdges((eds) => addEdge(conn, eds)), [setEdges]);
+  const onConnect = useCallback(
+    (conn) => {
+      // Text nodes have both handles, so without this a node could wire into
+      // itself and silently self-amplify its own prompt on every run.
+      if (conn.source === conn.target) return;
+      setEdges((eds) => addEdge(conn, eds));
+    },
+    [setEdges],
+  );
 
   const addNode = useCallback(
     (type, data, screenPos) =>
