@@ -195,6 +195,9 @@ div:has(> .add-node-menu) {
   overflow: auto;
   min-width: 160px;
 }
+.xnode-text-result textarea {
+  resize: none;
+}
 
 /* ---- @ mention menu ---- */
 .mention-menu {
