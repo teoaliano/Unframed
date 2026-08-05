@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-Unframed: a local, node-based image generator. A React Flow canvas lets you wire `prompt` and `reference` nodes into an `output` node; clicking Generate calls an image model (GPT Image 2 by default) through OpenRouter and writes the result plus a `.json` sidecar to disk. No hosting, pay-per-generation.
+Unframed: a local, node-based image generator. A React Flow canvas lets you wire `prompt` and `image` nodes into an `output` node, or wire prompts into a `text` node to run them through a text model first; clicking Generate calls an image model (GPT Image 2 by default) through OpenRouter and writes the result plus a `.json` sidecar to disk. No hosting, pay-per-generation.
 
 ## Commands
 
@@ -26,7 +26,7 @@ Three-package monorepo, no shared build. The only non-trivial logic is in `clien
 **Data flow:** `OutputNode.onGenerate` → `buildRequest(nodes, edges, outputId)` (pure, in `resolve.js`) → `POST /api/generate` (via `client/src/api.js`) → server's single `/api/generate` handler → OpenRouter `POST /api/v1/images` → image written to disk + returned as a data URL to the browser.
 
 **Key design decisions:**
-- **Only the output node consumes edges.** Wiring is always "sources → output." Prompt-to-prompt composition happens through `@id` tokens in prompt text, *not* edges. `resolveText` in `resolve.js` recursively substitutes `@id` references (`TOKEN_RE = /@([\w-]+)/g`) and throws on cycles; unknown ids resolve to empty string.
+- **Only output nodes consume edges** (both of them — `output` and `text`). Wiring is always "sources → output." Prompt-to-prompt composition happens through `@id` tokens in prompt text, *not* edges. `resolveRef` in `resolve.js` recursively substitutes `@id` references (`TOKEN_RE = /@([\w-]+)/g`) and throws on cycles; unknown ids resolve to empty string.
 - **Source ordering is by node Y position** (top-to-bottom), so canvas layout determines prompt concatenation order. Prompt parts are joined with `\n\n`; reference images become `input_references` (base64 data URLs).
 - **The API key lives in the server process** — the client only talks to `/api`, and the only key material sent back is the last 4 chars (`keyHint` on `/api/health`). `POST /api/key` accepts a key typed in the UI, validates it against `/^sk-or-[\w.-]{8,200}$/` (rejecting whitespace and newlines, which would corrupt `.env` or inject a header), upserts the `OPENROUTER_API_KEY` line in `.env`, and reassigns the module-level `API_KEY` so no restart is needed. `DELETE /api/key` drops the line entirely (not blanks it, so a shell-provided value isn't shadowed by an empty string). `.env` is therefore generated, not a prerequisite.
 - **Reference images are base64 data URLs** carried in `node.data.dataUrl`, which is why the server sets a 30mb JSON body limit.

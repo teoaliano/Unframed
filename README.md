@@ -1,10 +1,10 @@
 # Unframed
 
-A tiny, local, node-based image generator. Wire prompt and reference-image nodes into an output node, hit **Generate**, and it calls **GPT Image 2 through OpenRouter** and writes the result to a folder on your machine. No hosting, pay-per-generation.
+A tiny, local, node-based image generator. Wire prompt and image nodes into an output node, hit **Generate**, and it calls **GPT Image 2 through OpenRouter** and writes the result to a folder on your machine. No hosting, pay-per-generation.
 
 ## What's inside
 
-- **client/** — React + React Flow (`@xyflow/react`) canvas with three node types: `prompt`, `reference`, `output`.
+- **client/** — React + React Flow (`@xyflow/react`) canvas with four node types: `prompt` and `image` inputs, `output` (image) and `text` outputs.
 - **server/** — a small Express server that holds your OpenRouter key, calls the Image API, and writes files to disk.
 - **client/src/graph/resolve.js** — the only part with real logic: prompt-to-prompt reference substitution, cycle detection, and building the request. Worth reading first.
 
