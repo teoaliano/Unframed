@@ -96,24 +96,35 @@ app.delete('/api/key', async (req, res) => {
   res.json({ ok: true, hasKey: false });
 });
 
-// Image-capable models OpenRouter currently lists, for the output node's picker.
-// The configured MODEL is always included (some working slugs aren't listed).
+// Models for the node pickers. Two catalogues:
+//   image — OpenRouter's default listing is the TEXT catalogue, so the
+//           output_modalities filter is load-bearing: without it the image models
+//           are simply absent from the payload.
+//   text  — the default listing, narrowed to vision-capable models, because a text
+//           node can always have images wired into it and a text-only model would
+//           silently ignore them.
 app.get('/api/models', async (req, res) => {
+  const wantText = req.query.type === 'text';
+  const fallback = wantText ? TEXT_MODEL : MODEL;
   try {
-    // output_modalities=image is load-bearing: the unfiltered endpoint returns only
-    // the text-output catalogue, which holds a handful of image models at most.
-    // With it, the full image catalogue comes back (40 at the time of writing).
-    const r = await fetch('https://openrouter.ai/api/v1/models?output_modalities=image');
+    const url = wantText
+      ? 'https://openrouter.ai/api/v1/models'
+      : 'https://openrouter.ai/api/v1/models?output_modalities=image';
+    const r = await fetch(url);
     const d = await r.json();
     const models = (d.data || [])
-      .filter((m) => (m.architecture?.output_modalities || []).includes('image'))
+      .filter((m) => {
+        const out = m.architecture?.output_modalities || [];
+        const inp = m.architecture?.input_modalities || [];
+        return wantText ? out.includes('text') && inp.includes('image') : out.includes('image');
+      })
       .map((m) => ({ id: m.id, name: m.name || m.id }));
-    if (!models.some((m) => m.id === MODEL)) models.push({ id: MODEL, name: MODEL });
+    if (!models.some((m) => m.id === fallback)) models.push({ id: fallback, name: fallback });
     // Sorted by slug, which also groups them by provider.
     models.sort((a, b) => a.id.localeCompare(b.id));
-    res.json({ models, default: MODEL });
+    res.json({ models, default: fallback });
   } catch {
-    res.json({ models: [{ id: MODEL, name: MODEL }], default: MODEL });
+    res.json({ models: [{ id: fallback, name: fallback }], default: fallback });
   }
 });
 
