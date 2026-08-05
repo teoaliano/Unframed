@@ -82,7 +82,7 @@ export default function OutputNode({ id, data }) {
   return (
     <Card width={300} padding={0}>
       <Handle type="target" position={Position.Left} />
-      <NodeHeader kind="output" />
+      <NodeHeader kind="output" family="output" />
 
       <VStack gap={3} padding={3}>
         <Selector

@@ -144,6 +144,11 @@ div:has(> .add-node-menu) {
   text-transform: uppercase;
   letter-spacing: 0.06em;
 }
+/* Output nodes (output, text) consume edges; inputs (prompt, image) only feed them.
+   The accent border makes that difference visible at a glance. */
+.xnode-head--output {
+  border-bottom-color: var(--color-border-accent, var(--color-accent));
+}
 .xnode-body {
   position: relative;
   display: flex;

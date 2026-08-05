@@ -66,7 +66,7 @@ export default function PromptNode({ id, data }) {
   return (
     <Card width="fit-content" padding={0} className="xnode-prompt">
       <Handle type="source" position={Position.Right} />
-      <NodeHeader kind="prompt" copyId={id} />
+      <NodeHeader kind="prompt" family="input" copyId={id} />
       <div className="xnode-body" onKeyDown={onKeyDown} onClick={() => syncMenu(ref.current)}>
         <TextArea
           ref={ref}
