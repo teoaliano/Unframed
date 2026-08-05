@@ -31,8 +31,14 @@ Three-package monorepo, no shared build. The only non-trivial logic is in `clien
 - **The API key lives in the server process** — the client only talks to `/api`, and the only key material sent back is the last 4 chars (`keyHint` on `/api/health`). `POST /api/key` accepts a key typed in the UI, validates it against `/^sk-or-[\w.-]{8,200}$/` (rejecting whitespace and newlines, which would corrupt `.env` or inject a header), upserts the `OPENROUTER_API_KEY` line in `.env`, and reassigns the module-level `API_KEY` so no restart is needed. `DELETE /api/key` drops the line entirely (not blanks it, so a shell-provided value isn't shadowed by an empty string). `.env` is therefore generated, not a prerequisite.
 - **Reference images are base64 data URLs** carried in `node.data.dataUrl`, which is why the server sets a 30mb JSON body limit.
 - **Server is a single file** (`server/index.js`): health, models, key, the project CRUD routes, and `/api/generate` — plus extensive error branching around the OpenRouter call, and filename slugify. Each successful generation writes `<timestamp>-<slug>.<ext>` + a `.json` sidecar (prompt, params, cost) to `OUTPUT_DIR`.
+- **`@id` resolves prompts *and* text nodes.** A text node's `data.result` is substituted literally — never re-scanned for `@` tokens, which would let model output pull in arbitrary prompts, and which makes reference cycles terminate with a stale string instead of hanging.
+- **Two model catalogues.** `/api/models` returns image models (via the load-bearing `?output_modalities=image` upstream filter); `/api/models?type=text` returns vision-capable text models, because a text node can always have images wired in.
 
-**Node types** (`client/src/nodes/`): `PromptNode` (labeled free text), `ImageNode` (reference image picker), `OutputNode` (resolution/quality/ratio controls + Generate button and result display). Registered in `App.jsx`'s `nodeTypes`; `App.jsx` also holds the starter graph demonstrating the `@p-subject` embed.
+**Node types** (`client/src/nodes/`), in two families. Inputs only feed edges; outputs consume them — the engine's one rule, made visible by `NodeHeader`'s `family` prop:
+- **Inputs:** `PromptNode` (type `prompt`, labelled free text), `ImageNode` (type `image`, a picture you supply; connected ones are numbered so prompts can say "image 1").
+- **Outputs:** `OutputNode` (type `output`, image generation — will gain a video format later, which is why it isn't called "image"), `TextNode` (type `text`, runs a prompt through a text model and keeps the answer in `data.result`).
+
+Labels match type ids. Registered in `App.jsx`'s `nodeTypes`; `App.jsx` also holds the starter graph demonstrating the `@p-subject` embed.
 
 ## Switching models
 
