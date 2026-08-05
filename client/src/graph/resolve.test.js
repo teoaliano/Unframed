@@ -1,6 +1,6 @@
 // Assert-based self-check. Run with: node client/src/graph/resolve.test.js
 import assert from 'node:assert/strict';
-import { buildRequest } from './resolve.js';
+import { buildRequest, imageRefNumber } from './resolve.js';
 
 const out = { id: 'out', type: 'output', position: { x: 400, y: 0 }, data: {} };
 
@@ -97,6 +97,34 @@ function graph(nodes, edges) {
   assert.equal(prompt, 'draw a fox');
   assert.equal(input_references.length, 1);
   assert.equal(input_references[0].image_url.url, 'data:image/png;base64,AAA');
+}
+
+// A prompt-to-prompt cycle throws instead of recursing forever.
+{
+  const { nodes, edges } = graph(
+    [
+      { id: 'p1', type: 'prompt', position: { x: 0, y: 0 }, data: { text: 'a @p2' } },
+      { id: 'p2', type: 'prompt', position: { x: 0, y: 10 }, data: { text: 'b @p1' } },
+    ],
+    [{ id: 'e1', source: 'p1', target: 'out' }],
+  );
+  assert.throws(() => buildRequest(nodes, edges, 'out'), /Circular reference/);
+}
+
+// imageRefNumber: an image wired only into a text node (not the image output)
+// still counts as connected, since text nodes consume edges too. An unwired
+// image is null.
+{
+  const { nodes, edges } = graph(
+    [
+      { id: 't1', type: 'text', position: { x: 0, y: 0 }, data: {} },
+      { id: 'i1', type: 'image', position: { x: 0, y: 10 }, data: { dataUrl: 'data:image/png;base64,AAA' } },
+      { id: 'i2', type: 'image', position: { x: 0, y: 20 }, data: { dataUrl: 'data:image/png;base64,BBB' } },
+    ],
+    [{ id: 'e1', source: 'i1', target: 't1' }],
+  );
+  assert.equal(imageRefNumber(nodes, edges, 'i1'), 1);
+  assert.equal(imageRefNumber(nodes, edges, 'i2'), null);
 }
 
 console.log('resolve.js: all checks passed');

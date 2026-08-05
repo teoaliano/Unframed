@@ -25,7 +25,7 @@ function resolveRef(id, refs, stack) {
   if (stack.includes(id)) {
     throw new Error(`Circular reference: ${[...stack, id].join(' -> ')}`);
   }
-  return substitute(node.data.text, refs, [...stack, id]);
+  return substitute(node.data?.text, refs, [...stack, id]);
 }
 
 // Build the generation request for a given output node id.
@@ -52,13 +52,9 @@ export function buildRequest(nodes, edges, outputId) {
 
   const promptParts = [];
   for (const node of sources) {
-    if (node.type === 'prompt') {
-      const text = resolveRef(node.id, refs, []).trim();
-      if (text) promptParts.push(text);
-    } else if (node.type === 'text') {
-      const text = (node.data?.result || '').trim();
-      if (text) promptParts.push(text);
-    }
+    if (node.type !== 'prompt' && node.type !== 'text') continue;
+    const text = resolveRef(node.id, refs, []).trim();
+    if (text) promptParts.push(text);
   }
 
   return { prompt: promptParts.join('\n\n'), input_references: references };
@@ -67,8 +63,12 @@ export function buildRequest(nodes, edges, outputId) {
 // The reference number an image node will have when sent (1-based), or null if
 // it isn't connected to an output / has no image. Kept here so the node badge and
 // buildRequest agree on ordering. `nodes`/`edges` are the live React Flow arrays.
+// Both output-family types (`output` and `text`) consume edges, so an image wired
+// only into a text node still counts as connected.
 export function imageRefNumber(nodes, edges, imageId) {
-  const outputIds = new Set(nodes.filter((n) => n.type === 'output').map((n) => n.id));
+  const outputIds = new Set(
+    nodes.filter((n) => n.type === 'output' || n.type === 'text').map((n) => n.id),
+  );
   if (!outputIds.size) return null;
   const byId = new Map(nodes.map((n) => [n.id, n]));
   const connected = new Map();
