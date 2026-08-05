@@ -188,6 +188,14 @@ div:has(> .add-node-menu) {
   resize: none;
 }
 
+/* The text node's result is editable and often long, so give it the same two-axis
+   resize handle the prompt node has. */
+.xnode-text-result {
+  resize: both;
+  overflow: auto;
+  min-width: 160px;
+}
+
 /* ---- @ mention menu ---- */
 .mention-menu {
   position: absolute;
