@@ -13,16 +13,16 @@ and build the two engine capabilities its first preset needs:
 2. **Multi-run generation** — one output node producing N images, where N is either
    typed by the user or decided by the flow.
 
-The first preset is **Layerize**: given a reference image, it plans the image's
-distinct parts, then generates each part as its own image so parts can be reworked
-or recombined.
+The first preset is **Layerize**: given an input image, it plans the image's distinct
+parts, then generates each part as its own image so parts can be reworked or recombined.
 
 ## Non-goals
 
 - No typed edges or port system. The engine keeps its single rule (below).
 - No user-authored library folder. Presets ship with the app.
 - No versioned presets, no "update all instances", no origin tracking.
-- No video node. The node families are arranged so it can be added later.
+- No video generation yet. The `output` node is named and structured so video becomes a
+  format selector inside it rather than a new node type.
 - No transparent-PNG layer extraction. See "Layer output contract".
 
 ## The one invariant
@@ -35,29 +35,42 @@ an image. Prompt-to-prompt composition still happens through `@id` tokens, not e
 
 Two families. The visual difference is the invariant made visible.
 
-| Family | Nodes | Handles | Consumes edges |
-| --- | --- | --- | --- |
-| Input | Prompt, Reference | source only (right) | never |
-| Output | Image, Text (Video later) | target (left) + source (right) | yes |
+| Family | Nodes | Type id | Label | Handles | Consumes edges |
+| --- | --- | --- | --- | --- | --- |
+| Input | Prompt | `prompt` | `PROMPT` | source only (right) | never |
+| Input | Image | `image` | `IMAGE` | source only (right) | never |
+| Output | Output | `output` | `OUTPUT` | target (left) + source (right) | yes |
+| Output | Text | `text` | `TEXT` | target (left) + source (right) | yes |
 
 Output nodes are chromed differently from inputs: accent-tinted header rule and the
 kind label in accent, against the inputs' quiet grey. `NodeHeader` takes a new
 `family` prop (`'input' | 'output'`) which adds `.xnode-head--output`.
 
-The add-node menu splits into two labelled groups: **Inputs** (Prompt, Reference) and
-**Outputs** (Image, Text).
+The add-node menu splits into two labelled groups: **Inputs** (Prompt, Image) and
+**Outputs** (Output, Text).
 
-### Type ids do not change
+### Labels match type ids
 
-The existing image-output node is registered as type `output` and the reference node
-as type `image`. Both ids stay exactly as they are:
+Every label matches its type id, so nothing needs a translation table and no saved
+`graph.json` is invalidated:
 
-- Renaming `output` → `image` would collide with the reference node's id.
-- Renaming either would invalidate every saved `output/<project>/graph.json`.
+- The reference node is relabelled `REFERENCE` → **`IMAGE`**, matching its `image` id.
+- The generator node keeps **`OUTPUT`** rather than becoming `IMAGE` — which would
+  collide anyway. The generic name is correct because that node is planned to produce
+  **image or video**, chosen by a format selector inside the node (see "Future: video").
 
-So the display labels change (`OUTPUT` becomes `IMAGE`) while the ids do not. The
-mismatch is documented in CLAUDE.md: **`image` = reference input, `output` = image
-output, `text` = text output.**
+One consequence: the reference node's header currently reads `REFERENCE` on the left and
+`IMAGE 1` on the right, which would become `IMAGE … IMAGE 1`. The right-hand badge
+therefore reduces to the ordinal alone — `IMAGE   1`, and `IMAGE   NOT CONNECTED` when
+unwired. The `"image 1"` prompt syntax stays discoverable through the help tooltip, which
+already explains it.
+
+### Future: video
+
+The `output` node gains a **Format** selector (`image` | `video`) which switches the
+model list and the parameter controls, reusing the same node, the same edges, and the same
+`buildRequest`. Out of scope here; the naming above is what keeps it from needing a rename
+later.
 
 ## B. Text output node
 
@@ -124,8 +137,8 @@ yet contributes nothing.
 
 ### The Runs control
 
-On the image output node: a number input (default `1`) plus a `Free` toggle. Enabling
-Free disables and dims the number input.
+On the `output` node: a number input (default `1`) plus a `Free` toggle. Enabling Free
+disables and dims the number input.
 
 Tooltip on Free: *"The number of runs comes from the flow — a connected Text node lists
 what to generate, and each item becomes one image."*
@@ -140,7 +153,7 @@ the per-image price from the model list where available.
 ### Fixed N
 
 The same resolved prompt, N times, requests concurrent. Each run writes its own file and
-`.json` sidecar. Results land as reference nodes cascading right of the output node using
+`.json` sidecar. Results land as image nodes cascading right of the output node using
 the existing placement (40px right, 48px steps down). Reported cost is the sum.
 
 ### Free
@@ -187,7 +200,7 @@ file in that directory:
   name: 'Layerize',
   category: 'flows',            // 'flows' | 'styles' | 'templates'
   summary: 'Split an image into its parts as separate generations',
-  needs: 'One reference image wired into both the text and image nodes',
+  needs: 'One image node wired into both the text and output nodes',
   fragment: { nodes: [...], edges: [...] },
 }
 ```
@@ -234,16 +247,16 @@ Three nodes and two edges, nothing bespoke:
    each part, output one section separated by a line containing only `---`. Each section
    describes that part alone, isolated on a plain neutral background, in the same aspect
    ratio as the source, matching its original style and colours. No preamble, no numbering."*
-2. **Text** (output) — the prompt wired in. The user also wires their reference image in,
+2. **Text** (output) — the prompt wired in. The user also wires their image node in,
    so the planner can see it.
-3. **Image** (output) — `Runs = Free`, with the text node wired in.
+3. **Output** — `Runs = Free`, with the text node wired in.
 
-Shipped edges: prompt → text, text → image. The user adds two more by hand — their
-reference into the text node (so the planner can see the image) and into the image node
-(so each layer matches the source's style). This is what `needs` tells them to do; the
-preset cannot pre-wire a node the user has not created yet.
+Shipped edges: prompt → text, text → output. The user adds two more by hand — their image
+node into the text node (so the planner can see the picture) and into the output node (so
+each layer matches the source's style). This is what `needs` tells them to do; the preset
+cannot pre-wire a node the user has not created yet.
 
-Flow: drop in a reference → wire it into both output nodes → Run the text node → read and
+Flow: drop in an image → wire it into both output nodes → Run the text node → read and
 optionally edit the plan → Generate. The review step is deliberate; layer plans are worth
 reading before spending on them.
 
@@ -253,7 +266,7 @@ Each layer is **the isolated part on a plain neutral backdrop**, same aspect rat
 source — not a transparent PNG and not an in-place crop. Transparency is honoured by only
 some models, and in-place crops drift badly. Reassembly means feeding layers back in as
 references for a follow-up generation, or compositing outside the app. Generated layers
-arrive as reference nodes, so the loop closes without extra work.
+arrive as image nodes, so the loop closes without extra work.
 
 ## E. Data flow, errors, testing
 
@@ -267,7 +280,7 @@ reference + prompt ─→ buildRequest ─→ POST /api/text ─→ result on te
                                                             │
                                           N × POST /api/generate
                                                             │
-                                   N files + sidecars ─→ N reference nodes
+                                   N files + sidecars ─→ N image nodes
 ```
 
 The loop closes: generated layers are inputs to the next generation.
@@ -307,7 +320,8 @@ placement fix, so implementation costs no generation spend.
 Three sub-projects, each useful alone, built in order. Layerize is the integration test of
 all three.
 
-1. **Text output node** — families/chrome, `TextNode`, `/api/text`, `?type=text`, `@id` resolution.
+1. **Text output node** — families/chrome, the `REFERENCE` → `IMAGE` relabel, `TextNode`,
+   `/api/text`, `?type=text`, `@id` resolution.
 2. **Multi-run** — Runs control, `splitSections` + repair, concurrent runs, progress, partial failure.
 3. **Library + Layerize** — registry, insertion, FAB and dialog, the Layerize fragment.
 
