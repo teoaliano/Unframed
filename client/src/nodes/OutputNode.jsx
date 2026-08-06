@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Handle, Position, useReactFlow } from '@xyflow/react';
+import { Handle, Position, useReactFlow, useNodes, useEdges } from '@xyflow/react';
 import { Card } from '@astryxdesign/core/Card';
 import { Text } from '@astryxdesign/core/Text';
 import { Button } from '@astryxdesign/core/Button';
@@ -8,8 +8,8 @@ import { Thumbnail } from '@astryxdesign/core/Thumbnail';
 import { TextInput } from '@astryxdesign/core/TextInput';
 import { HStack, VStack } from '@astryxdesign/core/Stack';
 import NodeHeader from './NodeHeader.jsx';
-import { buildRequest } from '../graph/resolve.js';
-import { generate, listModels } from '../api.js';
+import { buildRequest, splitSections } from '../graph/resolve.js';
+import { generate, runText, listModels } from '../api.js';
 
 const RESOLUTIONS = ['512', '1K', '2K', '4K'];
 const QUALITIES = ['auto', 'low', 'medium', 'high'];
@@ -30,9 +30,12 @@ export default function OutputNode({ id, data }) {
   const [done, setDone] = useState(0);
   const [total, setTotal] = useState(1);
   const [error, setError] = useState(null);
+  const [note, setNote] = useState(null);
   const [models, setModels] = useState([]);
   const [defaultModel, setDefaultModel] = useState('');
   const [runsDraft, setRunsDraft] = useState(null); // null = show the stored value
+  const liveNodes = useNodes();
+  const liveEdges = useEdges();
 
   useEffect(() => {
     listModels().then((d) => {
@@ -82,20 +85,78 @@ export default function OutputNode({ id, data }) {
     });
   }
 
+  // The text node feeding this output, if any — Free mode needs its result to know
+  // what to generate. Y order matches buildRequest, so "the first one" is stable.
+  function wiredTextNode() {
+    const edges = getEdges().filter((e) => e.target === id);
+    const nodes = getNodes();
+    return edges
+      .map((e) => nodes.find((n) => n.id === e.source))
+      .filter((n) => n && n.type === 'text')
+      .sort((a, b) => (a.position?.y ?? 0) - (b.position?.y ?? 0))[0];
+  }
+
+  // Render-time twin of wiredTextNode() above: getNodes()/getEdges() are stable
+  // function references, so React has no way to know an edge changed and won't
+  // re-render this warning on its own. useNodes()/useEdges() subscribe to canvas
+  // state, so the warning appears and disappears live as wiring changes.
+  const liveWiredTextNode = liveEdges
+    .filter((e) => e.target === id)
+    .map((e) => liveNodes.find((n) => n.id === e.source))
+    .filter((n) => n && n.type === 'text')
+    .sort((a, b) => (a.position?.y ?? 0) - (b.position?.y ?? 0))[0];
+
   async function onGenerate() {
     setStatus('running');
     setError(null);
     setResults([]);
     setDone(0);
+    setNote(null);
     try {
       const { prompt, input_references } = buildRequest(getNodes(), getEdges(), id);
       if (!prompt.trim()) {
         throw new Error('Nothing connected. Wire a prompt node into this output node.');
       }
 
-      // Free mode arrives in the next task; until then it always resolves to a
-      // single run. The fixed-count case fans out to `runs` identical prompts.
-      const prompts = freeRuns ? [prompt] : Array.from({ length: runs }, () => prompt);
+      let prompts;
+      let note = null;
+      if (freeRuns) {
+        const textNode = wiredTextNode();
+        if (!textNode) {
+          throw new Error('Free needs a text node wired in — it lists what to generate.');
+        }
+        if (!textNode.data?.result?.trim()) {
+          throw new Error('The text node has no result yet. Run it first.');
+        }
+
+        // The text node's own result is a prompt part too, so strip it from the shared
+        // context: each run gets the shared context plus its own section, never the
+        // whole list.
+        const shared = prompt.split('\n\n').filter((part) => part !== textNode.data.result.trim());
+
+        let { blocks, truncated } = splitSections(textNode.data.result);
+        if (blocks.length < 2) {
+          // The model ignored the format. One repair call, using its own model.
+          const repaired = await runText({
+            prompt: `Rewrite the following as sections separated by a line containing only ---, one section per item, no preamble.\n\n${textNode.data.result}`,
+            model: textNode.data.model || undefined,
+          });
+          const again = splitSections(repaired.text);
+          if (again.blocks.length > 1) {
+            blocks = again.blocks;
+            truncated = again.truncated;
+            note = `re-split into ${blocks.length} sections`;
+          } else {
+            note = 'no sections found — running as a single generation';
+          }
+        }
+        if (truncated) note = `list had ${blocks.length + truncated} items, running the first ${blocks.length}`;
+
+        prompts = blocks.map((b) => [...shared, b].filter(Boolean).join('\n\n'));
+      } else {
+        prompts = Array.from({ length: runs }, () => prompt);
+      }
+      setNote(note);
       setTotal(prompts.length);
 
       // One id per Generate click, so a batch's sidecars can be summed later.
@@ -207,6 +268,12 @@ export default function OutputNode({ id, data }) {
           />
         </HStack>
 
+        {freeRuns && !liveWiredTextNode && (
+          <Text type="supporting" color="warning">
+            Wire a text node in — Free takes the number of runs from its list.
+          </Text>
+        )}
+
         <Button
           label={
             status === 'running'
@@ -222,6 +289,10 @@ export default function OutputNode({ id, data }) {
 
         {(status === 'error' || status === 'partial') && (
           <Text type="supporting" color={status === 'partial' ? 'warning' : 'error'}>{error}</Text>
+        )}
+
+        {note && (
+          <Text type="supporting" color="secondary">{note}</Text>
         )}
 
         {results.length > 0 && (
