@@ -50,7 +50,7 @@ export default function TextNode({ id, data }) {
   }
 
   return (
-    <Card width={300} padding={0}>
+    <Card width="fit-content" padding={0} className="xnode-text">
       <Handle type="target" position={Position.Left} />
       <Handle type="source" position={Position.Right} />
       <NodeHeader kind="text" family="output" copyId={id} />
@@ -67,6 +67,7 @@ export default function TextNode({ id, data }) {
         />
 
         <TextArea
+          className="xnode-text-field"
           label="Instructions"
           rows={3}
           hasSpellCheck={false}
@@ -87,7 +88,7 @@ export default function TextNode({ id, data }) {
         {data.result && (
           <VStack gap={1}>
             <TextArea
-              className="xnode-text-result"
+              className="xnode-text-field xnode-text-result"
               label="Result"
               rows={6}
               hasSpellCheck={false}

@@ -5,26 +5,17 @@ import { Text } from '@astryxdesign/core/Text';
 import { Button } from '@astryxdesign/core/Button';
 import { Selector } from '@astryxdesign/core/Selector';
 import { Thumbnail } from '@astryxdesign/core/Thumbnail';
-import { TextInput } from '@astryxdesign/core/TextInput';
 import { StatusDot } from '@astryxdesign/core/StatusDot';
-import { ToggleButton } from '@astryxdesign/core/ToggleButton';
 import { Icon } from '@astryxdesign/core/Icon';
-import { HStack, VStack, StackItem } from '@astryxdesign/core/Stack';
+import { HStack, VStack } from '@astryxdesign/core/Stack';
 import NodeHeader from './NodeHeader.jsx';
+import RunsControl, { clampRuns } from './RunsControl.jsx';
 import { buildRequest, splitSections, findWiredTextNode, freeRunPrompts } from '../graph/resolve.js';
 import { generate, runText, listModels } from '../api.js';
 
 const RESOLUTIONS = ['512', '1K', '2K', '4K'];
 const QUALITIES = ['auto', 'low', 'medium', 'high'];
 const RATIOS = ['1:1', '16:9', '9:16', '4:3', '3:4', '3:2', '2:3'];
-
-const MAX_RUNS = 10;
-// Typed input is clamped rather than rejected: 15 becomes 10, 0 or empty becomes 1.
-const clampRuns = (v) => {
-  const n = Math.round(Number(v));
-  if (!Number.isFinite(n)) return 1;
-  return Math.min(MAX_RUNS, Math.max(1, n));
-};
 
 export default function OutputNode({ id, data }) {
   const { getNodes, getEdges, updateNodeData, getNode, addNodes } = useReactFlow();
@@ -37,7 +28,6 @@ export default function OutputNode({ id, data }) {
   const [note, setNote] = useState(null);
   const [models, setModels] = useState([]);
   const [defaultModel, setDefaultModel] = useState('');
-  const [runsDraft, setRunsDraft] = useState(null); // null = show the stored value
   const liveNodes = useNodes();
   const liveEdges = useEdges();
 
@@ -248,56 +238,13 @@ export default function OutputNode({ id, data }) {
 
         <VStack gap={1}>
           <Text type="supporting" color="secondary">Runs</Text>
-          {/* Segmented pair: the two halves are equal because .xruns gives each
-              StackItem flex-basis 0 — StackItem's own `fill` is flex-grow only,
-              which would leave the button at its intrinsic width. */}
-          <HStack gap={1} className="xruns">
-            <StackItem size="fill">
-              <TextInput
-                label="Runs"
-                isLabelHidden
-                size="sm"
-                value={freeRuns ? '' : (runsDraft ?? String(runs))}
-                isDisabled={freeRuns}
-                disabledMessage="Free mode decides the number from the flow"
-                onChange={(v) => {
-                  // TextInput has no onBlur, so a local draft holds exactly what
-                  // was typed (including "" or "0" mid-edit) for display, while
-                  // node data always stores a clamped number: data.runs is read
-                  // directly as a count and needs a number, not a string that
-                  // merely looks numeric.
-                  const digits = v.replace(/[^\d]/g, '').slice(0, 2);
-                  setRunsDraft(digits);
-                  updateNodeData(id, { runs: clampRuns(digits) });
-                }}
-              />
-            </StackItem>
-            <StackItem size="fill">
-              <ToggleButton
-                label="Free"
-                size="sm"
-                isPressed={freeRuns}
-                tooltip="Free takes the number of runs from the flow. Wire in a Text node whose result is a list of items separated by lines containing only ---, and each item becomes one image."
-                onPressedChange={(pressed) => {
-                  updateNodeData(id, { freeRuns: pressed });
-                  // Clear the draft so a stale typed value can't linger across the
-                  // mode switch and display once Runs becomes editable again.
-                  setRunsDraft(null);
-                }}
-              />
-            </StackItem>
-          </HStack>
+          <RunsControl
+            runs={runs}
+            freeRuns={freeRuns}
+            onRunsChange={(n) => updateNodeData(id, { runs: n })}
+            onModeChange={(free) => updateNodeData(id, { freeRuns: free })}
+          />
         </VStack>
-
-        {freeRuns && !liveWiredTextNode && (
-          <HStack gap={1} align="start">
-            <Icon icon="info" size="sm" color="secondary" />
-            <Text type="supporting">
-              Wire in a Text node whose result lists the items to generate, separated by
-              lines containing only ---. Each item becomes one image.
-            </Text>
-          </HStack>
-        )}
 
         <Button
           label={
@@ -311,8 +258,23 @@ export default function OutputNode({ id, data }) {
           }
           variant="primary"
           isLoading={status === 'running'}
+          // Free with nothing wired in has no list to work from, so there is
+          // nothing to generate. Disabled rather than clickable-then-failing: the
+          // hint below already says what to wire, and an error saying the same
+          // thing would just be the hint again in red.
+          isDisabled={freeRuns && !liveWiredTextNode}
           onClick={onGenerate}
         />
+
+        {freeRuns && !liveWiredTextNode && (
+          <HStack gap={1} align="start">
+            <Icon icon="info" size="sm" color="secondary" />
+            <Text type="supporting">
+              Wire in a Text node whose result lists the items to generate, separated by
+              lines containing only ---. Each item becomes one image.
+            </Text>
+          </HStack>
+        )}
 
         {(status === 'error' || status === 'partial') && (
           <HStack gap={2} align="center">
