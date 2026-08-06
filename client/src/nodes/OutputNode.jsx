@@ -47,29 +47,37 @@ export default function OutputNode({ id, data }) {
   const freeRuns = Boolean(data.freeRuns);
   const runs = clampRuns(data.runs ?? 1);
 
-  // Drop a finished image onto the canvas as an image node so it can be wired back in
-  // as input for the next generation. It goes to the right of the output node,
-  // top-aligned; repeat results step down instead of stacking invisibly.
-  // `index` is this run's position within its own batch (0-based). Concurrent runs
-  // in the same batch settle near-simultaneously and each reads a getNodes() snapshot
-  // that doesn't yet include the others' nodes, so the collision scan alone can't tell
-  // them apart — the index offsets their starting spot and salts their id so same-batch
-  // runs can never collapse onto one node. Earlier batches' nodes are already in the
-  // node list by the time this batch runs, so the while loop below still steps clear
-  // of those the ordinary way.
-  function placeResult(resp, index) {
+  // Where this batch's results should start landing: to the right of the output
+  // node, top-aligned, stepped past whatever is already on the canvas. Computed
+  // ONCE per batch, before any run finishes, and passed into placeResult — a scan
+  // done inside placeResult would race its own siblings, because concurrent runs
+  // in the same batch settle near-simultaneously and each would read a getNodes()
+  // snapshot that doesn't yet include the others' nodes, landing them on top of
+  // each other. One scan against a snapshot that (correctly) contains nothing from
+  // this batch yet has no such race; every run in the batch then places itself by
+  // pure arithmetic off that shared base.
+  function batchBase() {
     const self = getNode(id);
     const pos = self?.position ?? { x: 0, y: 0 };
     const width = self?.measured?.width ?? 300;
-    const spot = { x: pos.x + width + 40, y: pos.y + 48 * index };
+    const spot = { x: pos.x + width + 40, y: pos.y };
     while (getNodes().some((n) => Math.hypot(n.position.x - spot.x, n.position.y - spot.y) < 24)) {
       spot.y += 48;
     }
+    return spot;
+  }
+
+  // Drop a finished image onto the canvas as an image node so it can be wired back in
+  // as input for the next generation. `index` is this run's position within its own
+  // batch (0-based); `base` is the batch's shared, already-clear starting spot from
+  // batchBase(). No scanning here — every run's position is base.y + 48 * index, so
+  // same-batch runs can never collapse onto one another regardless of finish order.
+  function placeResult(resp, index, base) {
     addNodes({
       id: `gen-${Date.now()}-${index}`,
       type: 'image',
       dragHandle: '.xnode-head',
-      position: spot,
+      position: { x: base.x, y: base.y + 48 * index },
       data: { fileName: resp.savedPath?.split('/').pop() || 'generated', dataUrl: resp.image },
     });
   }
@@ -92,6 +100,9 @@ export default function OutputNode({ id, data }) {
 
       // One id per Generate click, so a batch's sidecars can be summed later.
       const batchId = `b-${Date.now()}`;
+      // Claimed once, before any run starts, so the runs place themselves by pure
+      // arithmetic instead of racing each other for a free spot (see batchBase).
+      const base = batchBase();
       const settled = await Promise.allSettled(
         prompts.map((p, i) =>
           generate({
@@ -107,7 +118,7 @@ export default function OutputNode({ id, data }) {
           }).then((resp) => {
             setDone((d) => d + 1);
             setResults((r) => [...r, resp]);
-            placeResult(resp, i);
+            placeResult(resp, i, base);
             return resp;
           }),
         ),
