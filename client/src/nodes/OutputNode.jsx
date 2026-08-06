@@ -270,7 +270,7 @@ export default function OutputNode({ id, data }) {
           <HStack gap={1} align="start">
             <Icon icon="info" size="sm" color="secondary" />
             <Text type="supporting">
-              {'Wire in a text node with a "---" separated list'}
+              {'Wire a text node with a "---" separated list'}
               <br />
               Each item turns into one generation.
             </Text>
