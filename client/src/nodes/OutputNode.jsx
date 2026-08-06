@@ -21,10 +21,6 @@ const AddToCanvasIcon = (p) => (
   </svg>
 );
 
-const RESOLUTIONS = ['512', '1K', '2K', '4K'];
-const QUALITIES = ['auto', 'low', 'medium', 'high'];
-const RATIOS = ['1:1', '16:9', '9:16', '4:3', '3:4', '3:2', '2:3'];
-
 export default function OutputNode({ id, data }) {
   const { getNodes, getEdges, updateNodeData, getNode, addNodes } = useReactFlow();
   const [status, setStatus] = useState('idle'); // idle | running | done | error | partial
@@ -51,6 +47,23 @@ export default function OutputNode({ id, data }) {
   const model = data.model || defaultModel;
   const freeRuns = Boolean(data.freeRuns);
   const runs = clampRuns(data.runs ?? 1);
+
+  // What THIS model actually honours, straight from OpenRouter's image catalogue.
+  // A control is shown only when its parameter exists for the model, and offers
+  // exactly that model's values: gpt-image-2 takes no resolution at all, Gemini
+  // takes only "1K", and both accept ratios (21:9, 4:1) the old fixed list never
+  // offered. Sending an unsupported param was silent — the knob simply did nothing.
+  const params = models.find((m) => m.id === model)?.params;
+  const enumOf = (name) => {
+    const p = params?.[name];
+    return p?.type === 'enum' && p.values?.length ? p.values : undefined;
+  };
+  const sizes = enumOf('resolution');
+  const qualities = enumOf('quality');
+  const ratios = enumOf('aspect_ratio');
+  // Only send a value the model declares, so a graph saved against another model
+  // can't smuggle a stale param into the request.
+  const supported = (values, value) => (values?.includes(value) ? value : undefined);
 
   // A free spot to the right of the output node, stepped down past whatever is
   // already there. Scanned once per add so a batch added together cannot land its
@@ -196,9 +209,9 @@ export default function OutputNode({ id, data }) {
             prompt: p,
             input_references,
             model,
-            resolution: data.resolution,
-            quality: data.quality,
-            aspect_ratio: data.aspect_ratio,
+            resolution: supported(sizes, data.resolution),
+            quality: supported(qualities, data.quality),
+            aspect_ratio: supported(ratios, data.aspect_ratio),
             batchId,
             runIndex: i + 1,
             runCount: prompts.length,
@@ -246,27 +259,36 @@ export default function OutputNode({ id, data }) {
           onChange={(v) => updateNodeData(id, { model: v })}
         />
         <HStack gap={2}>
-          <Selector
-            label="Size"
-            size="sm"
-            options={RESOLUTIONS}
-            value={data.resolution}
-            onChange={(v) => updateNodeData(id, { resolution: v })}
-          />
-          <Selector
-            label="Quality"
-            size="sm"
-            options={QUALITIES}
-            value={data.quality}
-            onChange={(v) => updateNodeData(id, { quality: v })}
-          />
-          <Selector
-            label="Ratio"
-            size="sm"
-            options={RATIOS}
-            value={data.aspect_ratio}
-            onChange={(v) => updateNodeData(id, { aspect_ratio: v })}
-          />
+          {sizes && (
+            <Selector
+              label="Size"
+              size="sm"
+              options={sizes}
+              value={sizes.includes(data.resolution) ? data.resolution : undefined}
+              placeholder="—"
+              onChange={(v) => updateNodeData(id, { resolution: v })}
+            />
+          )}
+          {qualities && (
+            <Selector
+              label="Quality"
+              size="sm"
+              options={qualities}
+              value={qualities.includes(data.quality) ? data.quality : undefined}
+              placeholder="—"
+              onChange={(v) => updateNodeData(id, { quality: v })}
+            />
+          )}
+          {ratios && (
+            <Selector
+              label="Ratio"
+              size="sm"
+              options={ratios}
+              value={ratios.includes(data.aspect_ratio) ? data.aspect_ratio : undefined}
+              placeholder="—"
+              onChange={(v) => updateNodeData(id, { aspect_ratio: v })}
+            />
+          )}
         </HStack>
 
         <VStack gap={1}>

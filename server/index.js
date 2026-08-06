@@ -96,10 +96,15 @@ app.delete('/api/key', async (req, res) => {
   res.json({ ok: true, hasKey: false });
 });
 
-// Models for the node pickers. Two catalogues:
-//   image — OpenRouter's default listing is the TEXT catalogue, so the
-//           output_modalities filter is load-bearing: without it the image models
-//           are simply absent from the payload.
+// Models for the node pickers. Two catalogues, two upstream endpoints:
+//   image — /images/models is the image catalogue AND the only place that says
+//           which generation params each model actually honours. Its
+//           `supported_parameters` is a typed map ({aspect_ratio: {type:'enum',
+//           values:[...]}, n: {type:'range',min,max}}), which is what lets the
+//           output node offer a model's real options instead of a fixed list.
+//           The general /models listing has a `supported_parameters` too, but it
+//           is the chat one — temperature, top_p — and never mentions an image
+//           param, which is why the controls used to be guesswork.
 //   text  — the default listing, narrowed to vision-capable models, because a text
 //           node can always have images wired into it and a text-only model would
 //           silently ignore them.
@@ -109,16 +114,22 @@ app.get('/api/models', async (req, res) => {
   try {
     const url = wantText
       ? 'https://openrouter.ai/api/v1/models'
-      : 'https://openrouter.ai/api/v1/models?output_modalities=image';
+      : 'https://openrouter.ai/api/v1/images/models';
     const r = await fetch(url);
     const d = await r.json();
     const models = (d.data || [])
       .filter((m) => {
+        if (!wantText) return true; // the image endpoint is already only image models
         const out = m.architecture?.output_modalities || [];
         const inp = m.architecture?.input_modalities || [];
-        return wantText ? out.includes('text') && inp.includes('image') : out.includes('image');
+        return out.includes('text') && inp.includes('image');
       })
-      .map((m) => ({ id: m.id, name: m.name || m.id }));
+      .map((m) => ({
+        id: m.id,
+        name: m.name || m.id,
+        // Passed through as-is; the client reads the enums to build its controls.
+        ...(wantText ? {} : { params: m.supported_parameters || null }),
+      }));
     if (!models.some((m) => m.id === fallback)) models.push({ id: fallback, name: fallback });
     // Sorted by slug, which also groups them by provider.
     models.sort((a, b) => a.id.localeCompare(b.id));
