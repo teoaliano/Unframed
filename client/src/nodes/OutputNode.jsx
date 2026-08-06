@@ -120,8 +120,27 @@ export default function OutputNode({ id, data }) {
         let { blocks, truncated } = splitSections(textNode.data.result);
         if (blocks.length < 2) {
           // The model ignored the format. One repair call, using its own model.
+          //
+          // The instruction has to say what a section is FOR, not just how to
+          // punctuate one. Asked merely to "split into sections", models copy the
+          // whole text N times: a real batch came back as three identical prompts,
+          // each still reading "3 versions of ...", so every image rendered three
+          // subjects and the run cost triple for one result. Two clauses earn their
+          // place here — each section is a whole prompt for one image, and a text
+          // that isn't a list comes back untouched rather than being chopped into
+          // fragments that each bill as a generation.
           const repaired = await runText({
-            prompt: `Rewrite the following as sections separated by a line containing only ---, one section per item, no preamble.\n\n${textNode.data.result}`,
+            prompt: [
+              'Rewrite the text below as image prompts, one per image, separated by lines containing only ---.',
+              '',
+              'Each section must read as a complete prompt on its own: repeat the shared subject and style rather than referring back to another section.',
+              'If the text asks for several versions or variations of one subject, write that many sections, each describing a different specific variation, and drop the count itself ("3 versions of a fox" becomes three sections, each describing one fox).',
+              'Never emit the same section twice.',
+              'If the text describes a single image with no variations implied, return it unchanged.',
+              'No preamble, no numbering, no commentary.',
+              '',
+              textNode.data.result,
+            ].join('\n'),
             model: textNode.data.model || undefined,
             batchId,
           });
