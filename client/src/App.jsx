@@ -106,7 +106,7 @@ const initialNodes = [
     id: 'out',
     type: 'output',
     position: { x: 460, y: 120 },
-    data: { resolution: '1K', quality: 'low', aspect_ratio: '1:1' },
+    data: { resolution: '1K', quality: 'low', aspect_ratio: '1:1', runs: 1 },
   },
 ].map(withDrag);
 

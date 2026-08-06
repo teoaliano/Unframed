@@ -5,6 +5,7 @@ import { Text } from '@astryxdesign/core/Text';
 import { Button } from '@astryxdesign/core/Button';
 import { Selector } from '@astryxdesign/core/Selector';
 import { Thumbnail } from '@astryxdesign/core/Thumbnail';
+import { TextInput } from '@astryxdesign/core/TextInput';
 import { HStack, VStack } from '@astryxdesign/core/Stack';
 import NodeHeader from './NodeHeader.jsx';
 import { buildRequest } from '../graph/resolve.js';
@@ -13,6 +14,14 @@ import { generate, listModels } from '../api.js';
 const RESOLUTIONS = ['512', '1K', '2K', '4K'];
 const QUALITIES = ['auto', 'low', 'medium', 'high'];
 const RATIOS = ['1:1', '16:9', '9:16', '4:3', '3:4', '3:2', '2:3'];
+
+const MAX_RUNS = 10;
+// Typed input is clamped rather than rejected: 15 becomes 10, 0 or empty becomes 1.
+const clampRuns = (v) => {
+  const n = Math.round(Number(v));
+  if (!Number.isFinite(n)) return 1;
+  return Math.min(MAX_RUNS, Math.max(1, n));
+};
 
 export default function OutputNode({ id, data }) {
   const { getNodes, getEdges, updateNodeData, getNode, addNodes } = useReactFlow();
@@ -33,6 +42,8 @@ export default function OutputNode({ id, data }) {
   // Fall back to the server's configured model until the user picks one, so this
   // keeps tracking OPENROUTER_MODEL unless explicitly overridden.
   const model = data.model || defaultModel;
+  const freeRuns = Boolean(data.freeRuns);
+  const runs = clampRuns(data.runs ?? 1);
 
   async function onGenerate() {
     setStatus('running');
@@ -117,6 +128,30 @@ export default function OutputNode({ id, data }) {
             options={RATIOS}
             value={data.aspect_ratio}
             onChange={(v) => updateNodeData(id, { aspect_ratio: v })}
+          />
+        </HStack>
+
+        <HStack gap={2} align="end">
+          <TextInput
+            label="Runs"
+            size="sm"
+            value={freeRuns ? '' : String(runs)}
+            isDisabled={freeRuns}
+            disabledMessage="Free mode decides the number from the flow"
+            onChange={(v) => {
+              const digits = v.replace(/[^\d]/g, '');
+              // TextInput has no onBlur, so clamp as soon as there are enough
+              // digits to know the typed value is out of range (e.g. "15"),
+              // rather than waiting for the field to lose focus.
+              updateNodeData(id, { runs: digits.length >= 2 ? clampRuns(digits) : digits });
+            }}
+          />
+          <Button
+            label="Free"
+            size="sm"
+            variant={freeRuns ? 'primary' : 'ghost'}
+            tooltip="Free: the number of runs comes from the flow — a connected Text node lists what to generate, and each item becomes one image."
+            onClick={() => updateNodeData(id, { freeRuns: !freeRuns })}
           />
         </HStack>
 
