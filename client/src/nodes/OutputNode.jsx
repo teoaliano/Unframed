@@ -253,7 +253,7 @@ export default function OutputNode({ id, data }) {
                 ? `Generating ${done} / ${total}…`
                 : 'Generating…'
               : runs > 1 && !freeRuns
-                ? `Generate ${runs} ×`
+                ? `Generate ${runs}×`
                 : 'Generate'
           }
           variant="primary"
