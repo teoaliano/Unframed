@@ -369,3 +369,11 @@ div:has(> .add-node-menu) {
     transition: none;
   }
 }
+
+/* Selection: React Flow marks the wrapper, so the ring goes on the card inside it.
+   Offset rather than flush, because an output node's own border is already this
+   colour and a flush ring would just read as a thicker border. */
+.react-flow__node.selected > .astryx-card {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
