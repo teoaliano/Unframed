@@ -138,7 +138,7 @@ app.post('/api/text', async (req, res) => {
       .json({ error: 'No OpenRouter key yet. Add one with the key icon in the top right.' });
   }
 
-  const { prompt, input_references, model, project } = req.body || {};
+  const { prompt, input_references, model, project, batchId } = req.body || {};
   // Coerce so a non-string prompt (e.g. a number) can't throw on .trim() inside
   // this async handler, which would otherwise hang the request.
   const p = typeof prompt === 'string' ? prompt : '';
@@ -212,6 +212,7 @@ app.post('/api/text', async (req, res) => {
           model: model || TEXT_MODEL,
           result: String(text),
           referenceCount: refs.length,
+          batchId: batchId || null,
           cost,
           createdAt: new Date().toISOString(),
         },
@@ -356,33 +357,63 @@ app.post('/api/generate', async (req, res) => {
     const dir = project ? projectDir(project) : OUTPUT_DIR;
     await fs.mkdir(dir, { recursive: true });
     const stamp = new Date().toISOString().replace(/[:.]/g, '-');
-    const base = `${stamp}-${slugify(prompt)}`;
-    const imgPath = path.join(dir, `${base}.${ext}`);
-    const metaPath = path.join(dir, `${base}.json`);
+    // Fixed-N runs share a byte-identical prompt, and Free mode's slug is truncated
+    // to 40 chars of shared context — either way, concurrent runs in one batch can
+    // collide on the same base name. Folding the run index in spreads them out; the
+    // wx-and-retry loop below still catches two different batches landing in the
+    // same millisecond.
+    const suffix = runCount > 1 ? `-${runIndex || 1}` : '';
+    let base = `${stamp}-${slugify(prompt)}${suffix}`;
+    const buffer = Buffer.from(first.b64_json, 'base64');
 
-    await fs.writeFile(imgPath, Buffer.from(first.b64_json, 'base64'));
-    await fs.writeFile(
-      metaPath,
-      JSON.stringify(
-        {
-          prompt,
-          model: payload.model,
-          resolution,
-          quality,
-          aspect_ratio,
-          output_format,
-          referenceCount: input_references.length,
-          batchId: batchId || null,
-          runIndex: runIndex || 1,
-          runCount: runCount || 1,
-          cost,
-          createdAt: new Date().toISOString(),
-          file: path.basename(imgPath),
-        },
-        null,
-        2,
-      ),
-    );
+    let imgPath;
+    let attempt = 1;
+    let candidate = base;
+    for (;;) {
+      imgPath = path.join(dir, `${candidate}.${ext}`);
+      try {
+        await fs.writeFile(imgPath, buffer, { flag: 'wx' });
+        base = candidate;
+        break;
+      } catch (err) {
+        // wx refuses to clobber an existing file. Retry under a numeric suffix
+        // instead of silently overwriting someone else's paid-for image.
+        if (err.code !== 'EEXIST' || attempt >= 5) throw err;
+        attempt += 1;
+        candidate = `${base}-${attempt}`;
+      }
+    }
+
+    // The sidecar uses the same final base name so image and metadata stay paired,
+    // but a sidecar write failure must not turn an already-saved image into a 500 —
+    // the /api/text handler already treats its sidecar this way.
+    try {
+      const metaPath = path.join(dir, `${base}.json`);
+      await fs.writeFile(
+        metaPath,
+        JSON.stringify(
+          {
+            prompt,
+            model: payload.model,
+            resolution,
+            quality,
+            aspect_ratio,
+            output_format,
+            referenceCount: input_references.length,
+            batchId: batchId || null,
+            runIndex: runIndex || 1,
+            runCount: runCount || 1,
+            cost,
+            createdAt: new Date().toISOString(),
+            file: path.basename(imgPath),
+          },
+          null,
+          2,
+        ),
+      );
+    } catch (err) {
+      console.log(`  sidecar failed: ${err.message}`);
+    }
 
     console.log(`  generated → ${imgPath}${cost != null ? `  ($${Number(cost).toFixed(4)})` : ''}`);
 
