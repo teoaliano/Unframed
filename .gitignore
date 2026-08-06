@@ -4,3 +4,6 @@ output/
 dist/
 *.log
 .DS_Store
+
+# Working notes, not for the repo
+status.md

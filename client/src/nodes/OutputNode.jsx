@@ -12,7 +12,7 @@ import { SegmentedControl, SegmentedControlItem } from '@astryxdesign/core/Segme
 import { HStack, VStack } from '@astryxdesign/core/Stack';
 import NodeHeader from './NodeHeader.jsx';
 import RunsControl, { clampRuns } from './RunsControl.jsx';
-import { OutputIcon } from './nodeIcons.jsx';
+import { ImageIcon } from './nodeIcons.jsx';
 import { buildRequest, splitSections, findWiredTextNode, freeRunPrompts } from '../graph/resolve.js';
 import { generate, generateVideo, runText, listModels } from '../api.js';
 
@@ -324,7 +324,7 @@ export default function OutputNode({ id, data }) {
             updateNodeData(id, { kind: v });
           }}
         >
-          <SegmentedControlItem value="image" label="Image" icon={<Icon icon={OutputIcon} />} />
+          <SegmentedControlItem value="image" label="Image" icon={<Icon icon={ImageIcon} />} />
           <SegmentedControlItem value="video" label="Video" icon={<Icon icon={VideoIcon} />} />
         </SegmentedControl>
 
@@ -418,9 +418,7 @@ export default function OutputNode({ id, data }) {
                   ? `Generating ${done} / ${total}…`
                   : 'Generating…'
               : kind === 'video'
-                ? estimate
-                  ? `Generate · ~$${estimate.toFixed(2)}`
-                  : 'Generate'
+                ? 'Generate'
                 : runs > 1 && !freeRuns
                   ? `Generate ${runs}×`
                   : 'Generate'
@@ -514,8 +512,16 @@ export default function OutputNode({ id, data }) {
           reports on the node as a whole, so it reads better banded off against the
           same rule as the title than stacked under the last result. Clear belongs
           here too — it acts on the whole strip, not on the last image above it. */}
-      {(results.length > 0 || repairCost > 0) && (
+      {(results.length > 0 || repairCost > 0 || estimate) && (
         <div className="xnode-foot">
+          {!results.length && repairCost === 0 && estimate && (
+            // The upcoming click's price, from the model's per-second rate. Images
+            // get no estimate: their pricing is per token, and a guess dressed as
+            // a number would be worse than silence.
+            <Text type="supporting" color="secondary" hasTabularNumbers>
+              est. ~${estimate.toFixed(2)}
+            </Text>
+          )}
           {(results.some((r) => r.cost != null) || repairCost > 0) && (
             <>
               <Text type="supporting" color="accent" hasTabularNumbers>
@@ -526,6 +532,7 @@ export default function OutputNode({ id, data }) {
               )}
             </>
           )}
+          {(results.length > 0 || repairCost > 0) && (
           <span className="xnode-foot-end">
             <Button
               label="Clear"
@@ -535,6 +542,7 @@ export default function OutputNode({ id, data }) {
               onClick={clearResults}
             />
           </span>
+          )}
         </div>
       )}
     </Card>

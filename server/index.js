@@ -18,7 +18,7 @@ const MODEL = process.env.OPENROUTER_MODEL || 'openai/gpt-image-2';
 const TEXT_MODEL = process.env.OPENROUTER_TEXT_MODEL || 'google/gemini-3.5-flash-lite';
 // Video is priced per second of output, so the default is a mid-tier model rather
 // than the most capable one.
-const VIDEO_MODEL = process.env.OPENROUTER_VIDEO_MODEL || 'minimax/hailuo-3';
+const VIDEO_MODEL = process.env.OPENROUTER_VIDEO_MODEL || 'bytedance/seedance-2.0';
 // Not const: POST /api/key can replace it at runtime so a key entered in the UI
 // works immediately, without a restart.
 let API_KEY = process.env.OPENROUTER_API_KEY;
