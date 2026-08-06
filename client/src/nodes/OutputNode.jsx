@@ -270,7 +270,9 @@ export default function OutputNode({ id, data }) {
         </HStack>
 
         <VStack gap={1}>
-          <Text type="supporting" color="secondary">Runs</Text>
+          {/* type="label" is what the Selectors above render for Size and Quality,
+              so the four labels stay one size instead of Runs sitting a step down. */}
+          <Text type="label" as="label" color="secondary">Runs</Text>
           <RunsControl
             runs={runs}
             freeRuns={freeRuns}
