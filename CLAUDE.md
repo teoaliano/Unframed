@@ -17,7 +17,7 @@ npm run client        # client only (vite)
 
 Requires Node 18+ (server relies on built-in `fetch`). No lint setup exists; `npm test` runs the assert-based self-check in `client/src/graph/resolve.test.js` (plain `node`, no test framework).
 
-Config lives in `.env` at the project root (copy from `.env.example`): `OPENROUTER_API_KEY`, `OPENROUTER_MODEL`, `OPENROUTER_TEXT_MODEL`, `OUTPUT_DIR`, `PORT`. The server prints the resolved image model, text model, key status, and output dir on startup. The client dev server proxies `/api` → `http://localhost:8787` (see `client/vite.config.js`), so both must be running.
+Config lives in `.env` at the project root (copy from `.env.example`): `OPENROUTER_API_KEY`, `OPENROUTER_MODEL`, `OPENROUTER_TEXT_MODEL`, `OPENROUTER_VIDEO_MODEL`, `OUTPUT_DIR`, `PORT`. The server prints the resolved image model, text model, key status, and output dir on startup. The client dev server proxies `/api` → `http://localhost:8787` (see `client/vite.config.js`), so both must be running.
 
 ## Architecture
 
@@ -39,7 +39,7 @@ Three-package monorepo, no shared build. The only non-trivial logic is in `clien
 
 **Node types** (`client/src/nodes/`), in two families. Inputs only feed edges; outputs consume them — the engine's one rule, made visible by `NodeHeader`'s `family` prop:
 - **Inputs:** `PromptNode` (type `prompt`, labelled free text), `ImageNode` (type `image`, a picture you supply; connected ones are numbered so prompts can say "image 1").
-- **Outputs:** `OutputNode` (type `output`, image generation — will gain a video format later, which is why it isn't called "image"), `TextNode` (type `text`, runs a prompt through a text model and keeps the answer in `data.result`).
+- **Outputs:** `OutputNode` (type `output`, image or video per its Image/Video tabs — `data.kind` picks the catalogue, the controls and the money; video runs once per click, polls `/api/video/:id` until the server has downloaded the finished file, and plays it from `/api/file/...` instead of carrying bytes in node data), `TextNode` (type `text`, runs a prompt through a text model and keeps the answer in `data.result`).
 
 Labels match type ids. Registered in `App.jsx`'s `nodeTypes`; `App.jsx` also holds the starter graph, whose scene prompt embeds the subject prompt by `@id`. Its ids come from the same counter as user-added nodes, so nothing in a fresh graph carries a hand-written id.
 

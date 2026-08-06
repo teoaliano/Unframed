@@ -62,6 +62,7 @@ Then set `OPENROUTER_API_KEY=sk-or-v1-...` in it and restart. Same result — th
 | `OPENROUTER_API_KEY` | — | Required. Set it in the app, or here. |
 | `OPENROUTER_MODEL` | `openai/gpt-image-2` | Any image model slug OpenRouter lists. |
 | `OPENROUTER_TEXT_MODEL` | `google/gemini-3.5-flash-lite` | Model for text nodes. Must accept image input. |
+| `OPENROUTER_VIDEO_MODEL` | `minimax/hailuo-3` | Model for the output node's Video tab. Billed per second. |
 | `OUTPUT_DIR` | `./output` | Where images, sidecars, and saved graphs are written. Created automatically. |
 | `PORT` | `8787` | Backend port. The client dev server proxies `/api` here. |
 

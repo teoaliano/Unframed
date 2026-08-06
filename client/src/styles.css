@@ -391,3 +391,11 @@ div:has(> .add-node-menu) {
   outline: 2px solid var(--color-accent);
   outline-offset: 2px;
 }
+
+/* Generated video, played from disk. Same width as the result thumbnails; height
+   follows the clip's own ratio rather than being forced square. */
+.xnode-video {
+  width: 100%;
+  border-radius: var(--radius-element);
+  display: block;
+}

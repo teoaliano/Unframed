@@ -8,11 +8,20 @@ import { Thumbnail } from '@astryxdesign/core/Thumbnail';
 import { IconButton } from '@astryxdesign/core/IconButton';
 import { StatusDot } from '@astryxdesign/core/StatusDot';
 import { Icon } from '@astryxdesign/core/Icon';
+import { SegmentedControl, SegmentedControlItem } from '@astryxdesign/core/SegmentedControl';
 import { HStack, VStack } from '@astryxdesign/core/Stack';
 import NodeHeader from './NodeHeader.jsx';
 import RunsControl, { clampRuns } from './RunsControl.jsx';
+import { OutputIcon } from './nodeIcons.jsx';
 import { buildRequest, splitSections, findWiredTextNode, freeRunPrompts } from '../graph/resolve.js';
-import { generate, runText, listModels } from '../api.js';
+import { generate, generateVideo, runText, listModels } from '../api.js';
+
+// Play triangle in a frame: the video tab.
+const VideoIcon = (p) => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...p}>
+    <rect x="3" y="5" width="18" height="14" rx="2" /><path d="M10 9.5l5 2.5-5 2.5z" />
+  </svg>
+);
 
 // Arrow leaving a frame: "send this out onto the canvas".
 const AddToCanvasIcon = (p) => (
@@ -32,19 +41,29 @@ export default function OutputNode({ id, data }) {
   const [note, setNote] = useState(null);
   const [models, setModels] = useState([]);
   const [defaultModel, setDefaultModel] = useState('');
+  const [videoUrl, setVideoUrl] = useState(null);
   const liveNodes = useNodes();
   const liveEdges = useEdges();
 
+  // An output node makes an image or a video; they are different catalogues, with
+  // different parameters and different money per click, so the tab decides both.
+  const kind = data.kind === 'video' ? 'video' : 'image';
+
   useEffect(() => {
-    listModels().then((d) => {
+    let live = true;
+    listModels(kind).then((d) => {
+      if (!live) return;
       setModels(d.models || []);
       setDefaultModel(d.default || '');
     });
-  }, []);
+    return () => {
+      live = false;
+    };
+  }, [kind]);
 
   // Fall back to the server's configured model until the user picks one, so this
   // keeps tracking OPENROUTER_MODEL unless explicitly overridden.
-  const model = data.model || defaultModel;
+  const model = (kind === 'video' ? data.videoModel : data.model) || defaultModel;
   const freeRuns = Boolean(data.freeRuns);
   const runs = clampRuns(data.runs ?? 1);
 
@@ -53,14 +72,35 @@ export default function OutputNode({ id, data }) {
   // exactly that model's values: gpt-image-2 takes no resolution at all, Gemini
   // takes only "1K", and both accept ratios (21:9, 4:1) the old fixed list never
   // offered. Sending an unsupported param was silent — the knob simply did nothing.
-  const params = models.find((m) => m.id === model)?.params;
+  const entry = models.find((m) => m.id === model);
+  const params = entry?.params;
+  // Two catalogues, two shapes: images give a typed map ({type:'enum',values}),
+  // video gives plain arrays. Both reduce to "the values this model takes".
   const enumOf = (name) => {
     const p = params?.[name];
+    if (Array.isArray(p)) return p.length ? p.map(String) : undefined;
     return p?.type === 'enum' && p.values?.length ? p.values : undefined;
   };
   const sizes = enumOf('resolution');
   const qualities = enumOf('quality');
   const ratios = enumOf('aspect_ratio');
+  const durations = kind === 'video' ? enumOf('duration') : undefined;
+  const canAudio = kind === 'video' && Boolean(params?.generate_audio);
+  const duration = Number(durations?.includes(String(data.duration)) ? data.duration : durations?.[0]);
+
+  // Video is sold by the second, so the price of a click is knowable before it is
+  // spent — and worth showing, at a dollar a clip rather than three cents.
+  const perSecond = (() => {
+    const skus = entry?.pricing;
+    if (!skus) return null;
+    const key =
+      (data.resolution && skus[`cents_per_second_output_${String(data.resolution).toLowerCase()}`]) ||
+      skus.cents_per_second_output;
+    if (key) return Number(key) / 100;
+    // Some models price in dollars per second under a different key.
+    return skus.duration_seconds ? Number(skus.duration_seconds) : null;
+  })();
+  const estimate = kind === 'video' && perSecond && duration ? perSecond * duration : null;
   // Only send a value the model declares, so a graph saved against another model
   // can't smuggle a stale param into the request.
   const supported = (values, value) => (values?.includes(value) ? value : undefined);
@@ -131,6 +171,30 @@ export default function OutputNode({ id, data }) {
       const { prompt, input_references } = buildRequest(getNodes(), getEdges(), id);
       if (!prompt.trim()) {
         throw new Error('Nothing connected. Wire a prompt node into this output node.');
+      }
+
+      // Video takes minutes and is billed by the second, so it runs once per click
+      // and reports the job's own status rather than a run counter.
+      if (kind === 'video') {
+        setTotal(1);
+        const resp = await generateVideo(
+          {
+            prompt,
+            input_references,
+            model,
+            duration,
+            resolution: supported(sizes, data.resolution),
+            aspect_ratio: supported(ratios, data.aspect_ratio),
+            ...(canAudio ? { generate_audio: Boolean(data.generateAudio) } : {}),
+          },
+          (jobStatus) => setNote(jobStatus === 'in_progress' ? 'rendering…' : 'queued…'),
+        );
+        setVideoUrl(resp.url);
+        setResults([{ ...resp, runIndex: 0 }]);
+        setDone(1);
+        setNote(null);
+        setStatus('done');
+        return;
       }
 
       // One id per Generate click, so a batch's sidecars — including a Free repair
@@ -247,6 +311,23 @@ export default function OutputNode({ id, data }) {
       <NodeHeader kind="output" family="output" />
 
       <VStack gap={3} padding={3}>
+        {/* Image or video is the node's first decision: it picks the catalogue, the
+            controls, and the order of magnitude of the bill. */}
+        <SegmentedControl
+          label="Output kind"
+          size="sm"
+          layout="fill"
+          value={kind}
+          onChange={(v) => {
+            clearResults();
+            setVideoUrl(null);
+            updateNodeData(id, { kind: v });
+          }}
+        >
+          <SegmentedControlItem value="image" label="Image" icon={<Icon icon={OutputIcon} />} />
+          <SegmentedControlItem value="video" label="Video" icon={<Icon icon={VideoIcon} />} />
+        </SegmentedControl>
+
         <Selector
           label="Model"
           size="sm"
@@ -256,7 +337,7 @@ export default function OutputNode({ id, data }) {
           options={models.map((m) => ({ value: m.id, label: m.id }))}
           value={model}
           placeholder="Loading models…"
-          onChange={(v) => updateNodeData(id, { model: v })}
+          onChange={(v) => updateNodeData(id, kind === 'video' ? { videoModel: v } : { model: v })}
         />
         <HStack gap={2}>
           {sizes && (
@@ -291,6 +372,30 @@ export default function OutputNode({ id, data }) {
           )}
         </HStack>
 
+        {kind === 'video' && (durations || canAudio) && (
+          <HStack gap={2} align="end">
+            {durations && (
+              <Selector
+                label="Seconds"
+                size="sm"
+                options={durations}
+                value={String(duration)}
+                onChange={(v) => updateNodeData(id, { duration: Number(v) })}
+              />
+            )}
+            {canAudio && (
+              <Button
+                label="Audio"
+                size="sm"
+                variant={data.generateAudio ? 'primary' : 'ghost'}
+                tooltip="Generate a soundtrack with the video"
+                onClick={() => updateNodeData(id, { generateAudio: !data.generateAudio })}
+              />
+            )}
+          </HStack>
+        )}
+
+        {kind === 'image' && (
         <VStack gap={1}>
           {/* type="label" is what the Selectors above render for Size and Quality,
               so the four labels stay one size instead of Runs sitting a step down. */}
@@ -302,16 +407,23 @@ export default function OutputNode({ id, data }) {
             onModeChange={(free) => updateNodeData(id, { freeRuns: free })}
           />
         </VStack>
+        )}
 
         <Button
           label={
             status === 'running'
-              ? total
-                ? `Generating ${done} / ${total}…`
-                : 'Generating…'
-              : runs > 1 && !freeRuns
-                ? `Generate ${runs}×`
-                : 'Generate'
+              ? kind === 'video'
+                ? 'Rendering…'
+                : total
+                  ? `Generating ${done} / ${total}…`
+                  : 'Generating…'
+              : kind === 'video'
+                ? estimate
+                  ? `Generate · ~$${estimate.toFixed(2)}`
+                  : 'Generate'
+                : runs > 1 && !freeRuns
+                  ? `Generate ${runs}×`
+                  : 'Generate'
           }
           variant="primary"
           isLoading={status === 'running'}
@@ -319,11 +431,11 @@ export default function OutputNode({ id, data }) {
           // nothing to generate. Disabled rather than clickable-then-failing: the
           // hint below already says what to wire, and an error saying the same
           // thing would just be the hint again in red.
-          isDisabled={freeRuns && !liveWiredTextNode}
+          isDisabled={kind === 'image' && freeRuns && !liveWiredTextNode}
           onClick={onGenerate}
         />
 
-        {freeRuns && !liveWiredTextNode && (
+        {kind === 'image' && freeRuns && !liveWiredTextNode && (
           <HStack gap={1} align="start">
             <Icon icon="info" size="sm" color="secondary" />
             <Text type="supporting">
@@ -348,7 +460,13 @@ export default function OutputNode({ id, data }) {
           <Text type="supporting" color="secondary">{note}</Text>
         )}
 
-        {(results.length > 0 || repairCost > 0) && (
+        {kind === 'video' && videoUrl && (
+          // Played from the file on disk, not from node data: a clip inlined into
+          // the graph would be written back to graph.json on every edit.
+          <video className="xnode-video" src={videoUrl} controls preload="metadata" />
+        )}
+
+        {kind === 'image' && (results.length > 0 || repairCost > 0) && (
           <VStack gap={1}>
             {[...results]
               .sort((a, b) => a.runIndex - b.runIndex)

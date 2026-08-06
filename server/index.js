@@ -16,6 +16,9 @@ const MODEL = process.env.OPENROUTER_MODEL || 'openai/gpt-image-2';
 // Vision-capable so a text node can describe images wired into it. Verified live
 // on OpenRouter; qwen/qwen3.7-flash is the cheaper fallback if this slug retires.
 const TEXT_MODEL = process.env.OPENROUTER_TEXT_MODEL || 'google/gemini-3.5-flash-lite';
+// Video is priced per second of output, so the default is a mid-tier model rather
+// than the most capable one.
+const VIDEO_MODEL = process.env.OPENROUTER_VIDEO_MODEL || 'minimax/hailuo-3';
 // Not const: POST /api/key can replace it at runtime so a key entered in the UI
 // works immediately, without a restart.
 let API_KEY = process.env.OPENROUTER_API_KEY;
@@ -108,18 +111,25 @@ app.delete('/api/key', async (req, res) => {
 //   text  — the default listing, narrowed to vision-capable models, because a text
 //           node can always have images wired into it and a text-only model would
 //           silently ignore them.
+//   video — a third catalogue with a schema of its own: flat supported_durations /
+//           supported_resolutions / supported_aspect_ratios arrays instead of the
+//           images endpoint's typed map, plus per-second pricing, which is what
+//           makes a spend estimate possible before the click.
 app.get('/api/models', async (req, res) => {
   const wantText = req.query.type === 'text';
-  const fallback = wantText ? TEXT_MODEL : MODEL;
+  const wantVideo = req.query.type === 'video';
+  const fallback = wantText ? TEXT_MODEL : wantVideo ? VIDEO_MODEL : MODEL;
   try {
     const url = wantText
       ? 'https://openrouter.ai/api/v1/models'
-      : 'https://openrouter.ai/api/v1/images/models';
+      : wantVideo
+        ? 'https://openrouter.ai/api/v1/videos/models'
+        : 'https://openrouter.ai/api/v1/images/models';
     const r = await fetch(url);
     const d = await r.json();
     const models = (d.data || [])
       .filter((m) => {
-        if (!wantText) return true; // the image endpoint is already only image models
+        if (!wantText) return true; // the image/video endpoints are already filtered
         const out = m.architecture?.output_modalities || [];
         const inp = m.architecture?.input_modalities || [];
         return out.includes('text') && inp.includes('image');
@@ -127,8 +137,24 @@ app.get('/api/models', async (req, res) => {
       .map((m) => ({
         id: m.id,
         name: m.name || m.id,
-        // Passed through as-is; the client reads the enums to build its controls.
-        ...(wantText ? {} : { params: m.supported_parameters || null }),
+        // Passed through as-is; the client reads these to build its controls.
+        ...(wantText ? {} : {}),
+        ...(wantVideo
+          ? {
+              params: {
+                duration: m.supported_durations || null,
+                resolution: m.supported_resolutions || null,
+                aspect_ratio: m.supported_aspect_ratios || null,
+                frame_images: m.supported_frame_images || null,
+                generate_audio: Boolean(m.generate_audio),
+                seed: Boolean(m.seed),
+              },
+              // cents per second, by resolution where the model prices them apart.
+              pricing: m.pricing_skus || null,
+            }
+          : wantText
+            ? {}
+            : { params: m.supported_parameters || null }),
       }));
     if (!models.some((m) => m.id === fallback)) models.push({ id: fallback, name: fallback });
     // Sorted by slug, which also groups them by provider.
@@ -290,6 +316,165 @@ app.post('/api/projects/:name/rename', async (req, res) => {
 app.delete('/api/projects/:name', async (req, res) => {
   await fs.rm(projectDir(req.params.name), { recursive: true, force: true });
   res.json({ ok: true });
+});
+
+// ---- video ----
+// Video generation is asynchronous upstream: the create call returns a job, and the
+// file only exists minutes later. So this is two routes, not one. The client starts
+// a job and then polls; the server keeps the key and, on completion, pulls the
+// finished file down and writes it next to the images with the same sidecar shape.
+app.post('/api/video', async (req, res) => {
+  if (!API_KEY) {
+    return res.status(400).json({
+      error: 'No OpenRouter key yet. Add one with the key icon in the top right.',
+    });
+  }
+
+  const {
+    prompt,
+    input_references = [],
+    duration,
+    resolution,
+    aspect_ratio,
+    generate_audio,
+    model,
+  } = req.body || {};
+
+  if (!prompt || !prompt.trim()) {
+    return res
+      .status(400)
+      .json({ error: 'Prompt is empty. Wire at least one prompt node into the output node.' });
+  }
+
+  const payload = { model: model || VIDEO_MODEL, prompt };
+  if (duration) payload.duration = duration;
+  if (resolution) payload.resolution = resolution;
+  if (aspect_ratio) payload.aspect_ratio = aspect_ratio;
+  if (generate_audio != null) payload.generate_audio = generate_audio;
+  if (input_references.length) payload.input_references = input_references;
+
+  let orRes;
+  try {
+    orRes = await fetch('https://openrouter.ai/api/v1/videos', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${API_KEY}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+  } catch (err) {
+    return res.status(502).json({ error: `Could not reach OpenRouter: ${err.message}` });
+  }
+
+  const raw = await orRes.text();
+  let data;
+  try {
+    data = JSON.parse(raw);
+  } catch {
+    return res.status(502).json({ error: `Unexpected response from OpenRouter: ${raw.slice(0, 300)}` });
+  }
+  if (!orRes.ok) {
+    const msg = data?.error?.message || data?.error || raw.slice(0, 300);
+    return res.status(orRes.status).json({ error: `OpenRouter (${orRes.status}): ${msg}` });
+  }
+  if (!data?.id) {
+    return res.status(502).json({ error: 'OpenRouter did not return a video job id.' });
+  }
+  res.json({ id: data.id, status: data.status || 'pending' });
+});
+
+// Poll one job. While it runs this just forwards the status; once it completes the
+// file is fetched and written to disk, and the response points at the saved copy
+// rather than carrying the bytes — a video inlined into node data would be saved
+// into graph.json on every keystroke.
+app.get('/api/video/:id', async (req, res) => {
+  if (!API_KEY) return res.status(400).json({ error: 'No OpenRouter key yet.' });
+  const { project, prompt = '', model = '', duration, resolution } = req.query;
+
+  let data;
+  try {
+    const r = await fetch(`https://openrouter.ai/api/v1/videos/${encodeURIComponent(req.params.id)}`, {
+      headers: { Authorization: `Bearer ${API_KEY}` },
+    });
+    const raw = await r.text();
+    try {
+      data = JSON.parse(raw);
+    } catch {
+      return res.status(502).json({ error: `Unexpected response from OpenRouter: ${raw.slice(0, 300)}` });
+    }
+    if (!r.ok) {
+      const msg = data?.error?.message || data?.error || raw.slice(0, 300);
+      return res.status(r.status).json({ error: `OpenRouter (${r.status}): ${msg}` });
+    }
+  } catch (err) {
+    return res.status(502).json({ error: `Could not reach OpenRouter: ${err.message}` });
+  }
+
+  const status = data.status || 'pending';
+  if (status !== 'completed') {
+    if (status === 'failed') {
+      return res.json({ status, error: data.error?.message || data.error || 'Generation failed.' });
+    }
+    return res.json({ status, progress: data.progress ?? null });
+  }
+
+  const url = data.unsigned_urls?.[0] || data.urls?.[0];
+  if (!url) return res.status(502).json({ error: 'Job completed without a video URL.' });
+
+  let buf;
+  try {
+    const f = await fetch(url, { headers: { Authorization: `Bearer ${API_KEY}` } });
+    if (!f.ok) return res.status(502).json({ error: `Could not download the video (${f.status}).` });
+    buf = Buffer.from(await f.arrayBuffer());
+  } catch (err) {
+    return res.status(502).json({ error: `Could not download the video: ${err.message}` });
+  }
+
+  const dir = project ? projectDir(project) : OUTPUT_DIR;
+  await fs.mkdir(dir, { recursive: true });
+  const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+  const base = `${stamp}-${slugify(prompt)}`;
+  const videoPath = path.join(dir, `${base}.mp4`);
+  await fs.writeFile(videoPath, buf);
+
+  const cost = data.usage?.cost ?? data.cost ?? null;
+  try {
+    await fs.writeFile(
+      path.join(dir, `${base}.json`),
+      JSON.stringify(
+        {
+          kind: 'video',
+          prompt,
+          model,
+          duration: duration ? Number(duration) : null,
+          resolution: resolution || null,
+          cost,
+          createdAt: new Date().toISOString(),
+        },
+        null,
+        2,
+      ),
+    );
+  } catch (err) {
+    console.log(`  sidecar not written: ${err.message}`);
+  }
+
+  res.json({
+    status,
+    cost,
+    savedPath: videoPath,
+    // Served from disk rather than inlined, so the graph stays small.
+    url: `/api/file/${encodeURIComponent(project || '')}/${encodeURIComponent(`${base}.mp4`)}`,
+  });
+});
+
+// Generated files on disk, for the browser to play without the bytes ever going
+// through node data.
+app.get('/api/file/:project/:name', (req, res) => {
+  const dir = req.params.project ? projectDir(req.params.project) : OUTPUT_DIR;
+  // Basename only: the name comes from a URL, and a path in it must not escape.
+  const file = path.join(dir, path.basename(req.params.name));
+  res.sendFile(file, (err) => {
+    if (err && !res.headersSent) res.status(404).json({ error: 'File not found.' });
+  });
 });
 
 app.post('/api/generate', async (req, res) => {
