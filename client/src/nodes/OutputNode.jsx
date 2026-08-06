@@ -119,7 +119,7 @@ export default function OutputNode({ id, data }) {
       }
 
       let prompts;
-      let note = null;
+      const notes = [];
       if (freeRuns) {
         const textNode = wiredTextNode();
         if (!textNode) {
@@ -129,10 +129,15 @@ export default function OutputNode({ id, data }) {
           throw new Error('The text node has no result yet. Run it first.');
         }
 
-        // The text node's own result is a prompt part too, so strip it from the shared
-        // context: each run gets the shared context plus its own section, never the
-        // whole list.
-        const shared = prompt.split('\n\n').filter((part) => part !== textNode.data.result.trim());
+        // Shared context is everything wired in EXCEPT the list itself. Ask buildRequest for
+        // the graph minus the text node rather than subtracting its result from the joined
+        // prompt: a result containing a blank line survives that filter, and an @id reference
+        // to the list smuggles it in whole.
+        const shared = buildRequest(
+          getNodes().filter((n) => n.id !== textNode.id),
+          getEdges(),
+          id,
+        ).prompt;
 
         let { blocks, truncated } = splitSections(textNode.data.result);
         if (blocks.length < 2) {
@@ -145,18 +150,18 @@ export default function OutputNode({ id, data }) {
           if (again.blocks.length > 1) {
             blocks = again.blocks;
             truncated = again.truncated;
-            note = `re-split into ${blocks.length} sections`;
+            notes.push(`re-split into ${blocks.length} sections`);
           } else {
-            note = 'no sections found — running as a single generation';
+            notes.push('no sections found — running as a single generation');
           }
         }
-        if (truncated) note = `list had ${blocks.length + truncated} items, running the first ${blocks.length}`;
+        if (truncated) notes.push(`list had ${blocks.length + truncated} items, running the first ${blocks.length}`);
 
-        prompts = blocks.map((b) => [...shared, b].filter(Boolean).join('\n\n'));
+        prompts = blocks.map((b) => [shared, b].filter(Boolean).join('\n\n'));
       } else {
         prompts = Array.from({ length: runs }, () => prompt);
       }
-      setNote(note);
+      setNote(notes.length ? notes.join(' · ') : null);
       setTotal(prompts.length);
 
       // One id per Generate click, so a batch's sidecars can be summed later.
