@@ -138,7 +138,7 @@ app.post('/api/text', async (req, res) => {
       .json({ error: 'No OpenRouter key yet. Add one with the key icon in the top right.' });
   }
 
-  const { prompt, input_references, model } = req.body || {};
+  const { prompt, input_references, model, project } = req.body || {};
   // Coerce so a non-string prompt (e.g. a number) can't throw on .trim() inside
   // this async handler, which would otherwise hang the request.
   const p = typeof prompt === 'string' ? prompt : '';
@@ -195,6 +195,35 @@ app.post('/api/text', async (req, res) => {
   }
 
   const cost = data?.usage?.cost ?? null;
+
+  // Same treatment as a generation: the project folder should be a complete record
+  // of what was spent in it, and a Free batch is one repair call plus N generations.
+  try {
+    const dir = project ? projectDir(project) : OUTPUT_DIR;
+    await fs.mkdir(dir, { recursive: true });
+    const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+    const metaPath = path.join(dir, `${stamp}-text-${slugify(p)}.json`);
+    await fs.writeFile(
+      metaPath,
+      JSON.stringify(
+        {
+          kind: 'text',
+          prompt: p,
+          model: model || TEXT_MODEL,
+          result: String(text),
+          referenceCount: refs.length,
+          cost,
+          createdAt: new Date().toISOString(),
+        },
+        null,
+        2,
+      ),
+    );
+  } catch (err) {
+    // A missing cost record must not fail the run the user is waiting on.
+    console.log(`  text sidecar failed: ${err.message}`);
+  }
+
   console.log(`  text →  ${String(text).length} chars${cost != null ? `  ($${Number(cost).toFixed(4)})` : ''}`);
   res.json({ text: String(text), cost });
 });
@@ -267,6 +296,9 @@ app.post('/api/generate', async (req, res) => {
     output_format = 'png',
     model,
     project,
+    batchId,
+    runIndex,
+    runCount,
   } = req.body || {};
 
   if (!prompt || !prompt.trim()) {
@@ -340,6 +372,9 @@ app.post('/api/generate', async (req, res) => {
           aspect_ratio,
           output_format,
           referenceCount: input_references.length,
+          batchId: batchId || null,
+          runIndex: runIndex || 1,
+          runCount: runCount || 1,
           cost,
           createdAt: new Date().toISOString(),
           file: path.basename(imgPath),
