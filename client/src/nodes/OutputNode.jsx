@@ -121,7 +121,7 @@ export default function OutputNode({ id, data }) {
       if (freeRuns) {
         const textNode = findWiredTextNode(getNodes(), getEdges(), id);
         if (!textNode) {
-          throw new Error('Free needs a text node wired in — it lists what to generate.');
+          throw new Error('Free needs a text node wired in. It lists what to generate.');
         }
         if (!textNode.data?.result?.trim()) {
           throw new Error('The text node has no result yet. Run it first.');
@@ -142,7 +142,7 @@ export default function OutputNode({ id, data }) {
             truncated = again.truncated;
             notes.push(`re-split into ${blocks.length} sections`);
           } else {
-            notes.push('no sections found — running as a single generation');
+            notes.push('no sections found, running as a single generation');
           }
         }
 

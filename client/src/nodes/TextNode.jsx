@@ -70,7 +70,7 @@ export default function TextNode({ id, data }) {
           label="Instructions"
           rows={3}
           hasSpellCheck={false}
-          placeholder="Optional — added after anything wired in"
+          placeholder="Optional: added after anything wired in"
           value={data.text || ''}
           onChange={(v) => updateNodeData(id, { text: v })}
         />

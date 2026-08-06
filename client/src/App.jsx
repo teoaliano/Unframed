@@ -392,8 +392,8 @@ function Canvas() {
             label="API key"
             tooltip={
               keyState.hasKey
-                ? `OpenRouter key set${keyState.keyHint ? ` (…${keyState.keyHint})` : ''} — click to replace`
-                : 'No OpenRouter key yet — click to add one'
+                ? `OpenRouter key set${keyState.keyHint ? ` (…${keyState.keyHint})` : ''}. Click to replace`
+                : 'No OpenRouter key yet. Click to add one'
             }
             icon={<Icon icon={KeyIcon} />}
             onClick={() => setKeyDlg({ value: '' })}
@@ -441,7 +441,7 @@ function Canvas() {
             variant={tool === 'select' ? 'primary' : 'ghost'}
             size="sm"
             label="Select"
-            tooltip="Select — drag to box-select nodes"
+            tooltip="Select: drag to box-select nodes"
             icon={<Icon icon={SelectIcon} />}
             onClick={() => setTool('select')}
           />
@@ -449,7 +449,7 @@ function Canvas() {
             variant={tool === 'pan' ? 'primary' : 'ghost'}
             size="sm"
             label="Pan"
-            tooltip="Pan — drag to move the canvas"
+            tooltip="Pan: drag to move the canvas"
             icon={<Icon icon={HandIcon} />}
             onClick={() => setTool('pan')}
           />
@@ -507,7 +507,7 @@ function Canvas() {
           {!keyState.hasKey && (
             <VStack gap={2}>
               <Text type="supporting" as="p">
-                Unframed has no image model of its own — it sends your prompts to{' '}
+                Unframed has no image model of its own. It sends your prompts to{' '}
                 <Link href="https://openrouter.ai" isExternalLink>
                   OpenRouter
                 </Link>
@@ -539,14 +539,14 @@ function Canvas() {
             description={
               keyState.hasKey
                 ? `A key is already saved${keyState.keyHint ? ` (…${keyState.keyHint})` : ''}. Entering a new one replaces it.`
-                : 'Paste it here — it starts with sk-or-'
+                : 'Paste it here. It starts with sk-or-'
             }
             value={keyDlg?.value ?? ''}
             status={
               keyDlg?.error
                 ? { type: 'error', message: keyDlg.error }
                 : keyDlg?.saved
-                  ? { type: 'success', message: 'Key saved — Generate is ready to use.' }
+                  ? { type: 'success', message: 'Key saved. Generate is ready to use.' }
                   : keyDlg?.removed
                     ? { type: 'warning', message: 'Key removed. Generate is disabled until you add one.' }
                     : keyDlg?.confirmRemove
