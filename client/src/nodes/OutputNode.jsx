@@ -25,10 +25,11 @@ const clampRuns = (v) => {
 
 export default function OutputNode({ id, data }) {
   const { getNodes, getEdges, updateNodeData, getNode, addNodes } = useReactFlow();
-  const [status, setStatus] = useState('idle'); // idle | running | done | error
-  const [result, setResult] = useState(null);
+  const [status, setStatus] = useState('idle'); // idle | running | done | error | partial
+  const [results, setResults] = useState([]); // [{ image, cost, savedPath }]
+  const [done, setDone] = useState(0);
+  const [total, setTotal] = useState(1);
   const [error, setError] = useState(null);
-  const [cost, setCost] = useState(null);
   const [models, setModels] = useState([]);
   const [defaultModel, setDefaultModel] = useState('');
   const [runsDraft, setRunsDraft] = useState(null); // null = show the stored value
@@ -46,45 +47,74 @@ export default function OutputNode({ id, data }) {
   const freeRuns = Boolean(data.freeRuns);
   const runs = clampRuns(data.runs ?? 1);
 
+  // Drop a finished image onto the canvas as an image node so it can be wired back in
+  // as input for the next generation. It goes to the right of the output node,
+  // top-aligned; repeat results step down instead of stacking invisibly.
+  function placeResult(resp) {
+    const self = getNode(id);
+    const pos = self?.position ?? { x: 0, y: 0 };
+    const width = self?.measured?.width ?? 300;
+    const spot = { x: pos.x + width + 40, y: pos.y };
+    while (getNodes().some((n) => Math.hypot(n.position.x - spot.x, n.position.y - spot.y) < 24)) {
+      spot.y += 48;
+    }
+    addNodes({
+      id: `gen-${Date.now()}-${Math.round(spot.y)}`,
+      type: 'image',
+      dragHandle: '.xnode-head',
+      position: spot,
+      data: { fileName: resp.savedPath?.split('/').pop() || 'generated', dataUrl: resp.image },
+    });
+  }
+
   async function onGenerate() {
     setStatus('running');
     setError(null);
+    setResults([]);
+    setDone(0);
     try {
       const { prompt, input_references } = buildRequest(getNodes(), getEdges(), id);
       if (!prompt.trim()) {
         throw new Error('Nothing connected. Wire a prompt node into this output node.');
       }
-      const resp = await generate({
-        prompt,
-        input_references,
-        model,
-        resolution: data.resolution,
-        quality: data.quality,
-        aspect_ratio: data.aspect_ratio,
-      });
-      setResult(resp.image);
-      setCost(resp.cost);
-      setStatus('done');
 
-      // Drop the generated image onto the canvas as a reference node so it can be
-      // wired back in as input for the next generation. It goes to the right of the
-      // output node, top-aligned, clear of the result thumbnail below the button.
-      const self = getNode(id);
-      const pos = self?.position ?? { x: 0, y: 0 };
-      const width = self?.measured?.width ?? 300;
-      const spot = { x: pos.x + width + 40, y: pos.y };
-      // Generating repeatedly would park every result on the same spot, hiding all
-      // but the last, so step down past whatever is already there.
-      while (getNodes().some((n) => Math.hypot(n.position.x - spot.x, n.position.y - spot.y) < 24)) {
-        spot.y += 48;
+      // Free mode arrives in the next task; until then it means a single run.
+      const prompts = [prompt];
+      setTotal(prompts.length);
+
+      // One id per Generate click, so a batch's sidecars can be summed later.
+      const batchId = `b-${Date.now()}`;
+      const settled = await Promise.allSettled(
+        prompts.map((p, i) =>
+          generate({
+            prompt: p,
+            input_references,
+            model,
+            resolution: data.resolution,
+            quality: data.quality,
+            aspect_ratio: data.aspect_ratio,
+            batchId,
+            runIndex: i + 1,
+            runCount: prompts.length,
+          }).then((resp) => {
+            setDone((d) => d + 1);
+            setResults((r) => [...r, resp]);
+            placeResult(resp);
+            return resp;
+          }),
+        ),
+      );
+
+      const failures = settled.filter((s) => s.status === 'rejected').map((s) => s.reason?.message || 'failed');
+      const ok = settled.length - failures.length;
+      if (failures.length) {
+        setError(
+          `${ok} of ${settled.length} succeeded. ${[...new Set(failures)].join('; ')}`,
+        );
+        setStatus(ok ? 'partial' : 'error');
+      } else {
+        setStatus('done');
       }
-      addNodes({
-        id: `gen-${Date.now()}`,
-        type: 'image',
-        dragHandle: '.xnode-head',
-        position: spot,
-        data: { fileName: resp.savedPath?.split('/').pop() || 'generated', dataUrl: resp.image },
-      });
     } catch (err) {
       setError(err.message);
       setStatus('error');
@@ -159,22 +189,37 @@ export default function OutputNode({ id, data }) {
         </HStack>
 
         <Button
-          label={status === 'running' ? 'Generating…' : 'Generate'}
+          label={
+            status === 'running'
+              ? `Generating ${done} / ${total}…`
+              : runs > 1 && !freeRuns
+                ? `Generate ${runs} ×`
+                : 'Generate'
+          }
           variant="primary"
           isLoading={status === 'running'}
           onClick={onGenerate}
         />
 
-        {status === 'error' && (
-          <Text type="supporting" color="error">{error}</Text>
+        {(status === 'error' || status === 'partial') && (
+          <Text type="supporting" color={status === 'partial' ? 'warning' : 'error'}>{error}</Text>
         )}
 
-        {result && (
+        {results.length > 0 && (
           <VStack gap={1}>
-            <Thumbnail className="xnode-thumb" src={result} alt="generated result" label="result" />
-            {cost != null && (
+            {results.map((r, i) => (
+              <Thumbnail
+                key={r.savedPath || i}
+                className="xnode-thumb"
+                src={r.image}
+                alt={`generated result ${i + 1}`}
+                label={`result ${i + 1}`}
+              />
+            ))}
+            {results.some((r) => r.cost != null) && (
               <Text type="supporting" color="accent" hasTabularNumbers>
-                ${Number(cost).toFixed(4)}
+                ${results.reduce((sum, r) => sum + (Number(r.cost) || 0), 0).toFixed(4)}
+                {results.length > 1 ? ` · ${results.length} images` : ''}
               </Text>
             )}
           </VStack>
