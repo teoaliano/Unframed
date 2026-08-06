@@ -78,8 +78,9 @@ export default function OutputNode({ id, data }) {
         throw new Error('Nothing connected. Wire a prompt node into this output node.');
       }
 
-      // Free mode arrives in the next task; until then it means a single run.
-      const prompts = [prompt];
+      // Free mode arrives in the next task; until then it always resolves to a
+      // single run. The fixed-count case fans out to `runs` identical prompts.
+      const prompts = freeRuns ? [prompt] : Array.from({ length: runs }, () => prompt);
       setTotal(prompts.length);
 
       // One id per Generate click, so a batch's sidecars can be summed later.
