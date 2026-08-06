@@ -6,9 +6,10 @@ import { Button } from '@astryxdesign/core/Button';
 import { Selector } from '@astryxdesign/core/Selector';
 import { Thumbnail } from '@astryxdesign/core/Thumbnail';
 import { TextInput } from '@astryxdesign/core/TextInput';
+import { StatusDot } from '@astryxdesign/core/StatusDot';
 import { HStack, VStack } from '@astryxdesign/core/Stack';
 import NodeHeader from './NodeHeader.jsx';
-import { buildRequest, splitSections } from '../graph/resolve.js';
+import { buildRequest, splitSections, findWiredTextNode, freeRunPrompts } from '../graph/resolve.js';
 import { generate, runText, listModels } from '../api.js';
 
 const RESOLUTIONS = ['512', '1K', '2K', '4K'];
@@ -26,9 +27,10 @@ const clampRuns = (v) => {
 export default function OutputNode({ id, data }) {
   const { getNodes, getEdges, updateNodeData, getNode, addNodes } = useReactFlow();
   const [status, setStatus] = useState('idle'); // idle | running | done | error | partial
-  const [results, setResults] = useState([]); // [{ image, cost, savedPath }]
+  const [results, setResults] = useState([]); // [{ image, cost, savedPath, runIndex }]
   const [done, setDone] = useState(0);
-  const [total, setTotal] = useState(1);
+  const [total, setTotal] = useState(null); // null while the run count isn't known yet
+  const [repairCost, setRepairCost] = useState(0); // Free mode's re-split call, if any
   const [error, setError] = useState(null);
   const [note, setNote] = useState(null);
   const [models, setModels] = useState([]);
@@ -85,26 +87,11 @@ export default function OutputNode({ id, data }) {
     });
   }
 
-  // The text node feeding this output, if any — Free mode needs its result to know
-  // what to generate. Y order matches buildRequest, so "the first one" is stable.
-  function wiredTextNode() {
-    const edges = getEdges().filter((e) => e.target === id);
-    const nodes = getNodes();
-    return edges
-      .map((e) => nodes.find((n) => n.id === e.source))
-      .filter((n) => n && n.type === 'text')
-      .sort((a, b) => (a.position?.y ?? 0) - (b.position?.y ?? 0))[0];
-  }
-
-  // Render-time twin of wiredTextNode() above: getNodes()/getEdges() are stable
+  // Render-time twin of findWiredTextNode() below: getNodes()/getEdges() are stable
   // function references, so React has no way to know an edge changed and won't
   // re-render this warning on its own. useNodes()/useEdges() subscribe to canvas
   // state, so the warning appears and disappears live as wiring changes.
-  const liveWiredTextNode = liveEdges
-    .filter((e) => e.target === id)
-    .map((e) => liveNodes.find((n) => n.id === e.source))
-    .filter((n) => n && n.type === 'text')
-    .sort((a, b) => (a.position?.y ?? 0) - (b.position?.y ?? 0))[0];
+  const liveWiredTextNode = findWiredTextNode(liveNodes, liveEdges, id);
 
   async function onGenerate() {
     setStatus('running');
@@ -112,16 +99,25 @@ export default function OutputNode({ id, data }) {
     setResults([]);
     setDone(0);
     setNote(null);
+    setRepairCost(0);
+    // Unknown until the run count is worked out below (which, in Free mode, needs
+    // an await) — showing the previous batch's total in the meantime would read as
+    // "Generating 0 / <stale total>…".
+    setTotal(null);
     try {
       const { prompt, input_references } = buildRequest(getNodes(), getEdges(), id);
       if (!prompt.trim()) {
         throw new Error('Nothing connected. Wire a prompt node into this output node.');
       }
 
+      // One id per Generate click, so a batch's sidecars — including a Free repair
+      // call's text sidecar — can be summed later by one field.
+      const batchId = `b-${Date.now()}`;
+
       let prompts;
       const notes = [];
       if (freeRuns) {
-        const textNode = wiredTextNode();
+        const textNode = findWiredTextNode(getNodes(), getEdges(), id);
         if (!textNode) {
           throw new Error('Free needs a text node wired in — it lists what to generate.');
         }
@@ -129,23 +125,15 @@ export default function OutputNode({ id, data }) {
           throw new Error('The text node has no result yet. Run it first.');
         }
 
-        // Shared context is everything wired in EXCEPT the list itself. Ask buildRequest for
-        // the graph minus the text node rather than subtracting its result from the joined
-        // prompt: a result containing a blank line survives that filter, and an @id reference
-        // to the list smuggles it in whole.
-        const shared = buildRequest(
-          getNodes().filter((n) => n.id !== textNode.id),
-          getEdges(),
-          id,
-        ).prompt;
-
         let { blocks, truncated } = splitSections(textNode.data.result);
         if (blocks.length < 2) {
           // The model ignored the format. One repair call, using its own model.
           const repaired = await runText({
             prompt: `Rewrite the following as sections separated by a line containing only ---, one section per item, no preamble.\n\n${textNode.data.result}`,
             model: textNode.data.model || undefined,
+            batchId,
           });
+          setRepairCost(Number(repaired.cost) || 0);
           const again = splitSections(repaired.text);
           if (again.blocks.length > 1) {
             blocks = again.blocks;
@@ -155,17 +143,24 @@ export default function OutputNode({ id, data }) {
             notes.push('no sections found — running as a single generation');
           }
         }
+
+        if (blocks.length === 0) {
+          // Nothing survived splitting or repair. Fall back to the whole result as
+          // one block so the "single generation" note above stays true instead of
+          // reporting success after zero runs.
+          const fallback = textNode.data.result.trim();
+          if (!fallback) throw new Error('The text node has no result yet. Run it first.');
+          blocks = [fallback];
+        }
         if (truncated) notes.push(`list had ${blocks.length + truncated} items, running the first ${blocks.length}`);
 
-        prompts = blocks.map((b) => [shared, b].filter(Boolean).join('\n\n'));
+        prompts = freeRunPrompts(getNodes(), getEdges(), id, textNode.id, blocks);
       } else {
         prompts = Array.from({ length: runs }, () => prompt);
       }
       setNote(notes.length ? notes.join(' · ') : null);
       setTotal(prompts.length);
 
-      // One id per Generate click, so a batch's sidecars can be summed later.
-      const batchId = `b-${Date.now()}`;
       // Claimed once, before any run starts, so the runs place themselves by pure
       // arithmetic instead of racing each other for a free spot (see batchBase).
       const base = batchBase();
@@ -183,7 +178,9 @@ export default function OutputNode({ id, data }) {
             runCount: prompts.length,
           }).then((resp) => {
             setDone((d) => d + 1);
-            setResults((r) => [...r, resp]);
+            // runIndex travels with the result so thumbnails, canvas placement, and
+            // labels all agree on run order regardless of completion order.
+            setResults((r) => [...r, { ...resp, runIndex: i }]);
             placeResult(resp, i, base);
             return resp;
           }),
@@ -269,20 +266,30 @@ export default function OutputNode({ id, data }) {
             size="sm"
             variant={freeRuns ? 'primary' : 'ghost'}
             tooltip="Free: the number of runs comes from the flow — a connected Text node lists what to generate, and each item becomes one image."
-            onClick={() => updateNodeData(id, { freeRuns: !freeRuns })}
+            onClick={() => {
+              updateNodeData(id, { freeRuns: !freeRuns });
+              // Clear the draft so a stale typed value can't linger across the mode
+              // switch and display once Runs becomes visible/editable again.
+              setRunsDraft(null);
+            }}
           />
         </HStack>
 
         {freeRuns && !liveWiredTextNode && (
-          <Text type="supporting" color="warning">
-            Wire a text node in — Free takes the number of runs from its list.
-          </Text>
+          <HStack gap={2} align="center">
+            <StatusDot variant="warning" label="No text node wired in" />
+            <Text type="supporting">
+              Wire a text node in — Free takes the number of runs from its list.
+            </Text>
+          </HStack>
         )}
 
         <Button
           label={
             status === 'running'
-              ? `Generating ${done} / ${total}…`
+              ? total
+                ? `Generating ${done} / ${total}…`
+                : 'Generating…'
               : runs > 1 && !freeRuns
                 ? `Generate ${runs} ×`
                 : 'Generate'
@@ -293,27 +300,35 @@ export default function OutputNode({ id, data }) {
         />
 
         {(status === 'error' || status === 'partial') && (
-          <Text type="supporting" color={status === 'partial' ? 'warning' : 'error'}>{error}</Text>
+          <HStack gap={2} align="center">
+            <StatusDot
+              variant={status === 'partial' ? 'warning' : 'error'}
+              label={status === 'partial' ? 'Partial success' : 'Generation failed'}
+            />
+            <Text type="supporting">{error}</Text>
+          </HStack>
         )}
 
         {note && (
           <Text type="supporting" color="secondary">{note}</Text>
         )}
 
-        {results.length > 0 && (
+        {(results.length > 0 || repairCost > 0) && (
           <VStack gap={1}>
-            {results.map((r, i) => (
-              <Thumbnail
-                key={r.savedPath || i}
-                className="xnode-thumb"
-                src={r.image}
-                alt={`generated result ${i + 1}`}
-                label={`result ${i + 1}`}
-              />
-            ))}
-            {results.some((r) => r.cost != null) && (
+            {[...results]
+              .sort((a, b) => a.runIndex - b.runIndex)
+              .map((r) => (
+                <Thumbnail
+                  key={r.runIndex}
+                  className="xnode-thumb"
+                  src={r.image}
+                  alt={`generated result ${r.runIndex + 1}`}
+                  label={`result ${r.runIndex + 1}`}
+                />
+              ))}
+            {(results.some((r) => r.cost != null) || repairCost > 0) && (
               <Text type="supporting" color="accent" hasTabularNumbers>
-                ${results.reduce((sum, r) => sum + (Number(r.cost) || 0), 0).toFixed(4)}
+                ${(results.reduce((sum, r) => sum + (Number(r.cost) || 0), 0) + repairCost).toFixed(4)}
                 {results.length > 1 ? ` · ${results.length} images` : ''}
               </Text>
             )}
