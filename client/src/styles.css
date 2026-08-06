@@ -251,3 +251,20 @@ div:has(> .add-node-menu) {
     animation: none !important;
   }
 }
+
+/* React Flow centers node text by default, which centers any plain Text we put
+   in a node body. Nothing here wants centered prose. */
+.react-flow__node {
+  text-align: left;
+}
+
+/* Runs / Free segmented pair. StackItem's `fill` is flex-grow only, so without a
+   zero basis the input keeps its intrinsic width and the two halves differ. */
+.xruns > * {
+  flex-basis: 0;
+  min-width: 0;
+}
+.xruns .astryx-text-input,
+.xruns .astryx-toggle-button {
+  width: 100%;
+}

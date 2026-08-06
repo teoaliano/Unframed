@@ -7,7 +7,9 @@ import { Selector } from '@astryxdesign/core/Selector';
 import { Thumbnail } from '@astryxdesign/core/Thumbnail';
 import { TextInput } from '@astryxdesign/core/TextInput';
 import { StatusDot } from '@astryxdesign/core/StatusDot';
-import { HStack, VStack } from '@astryxdesign/core/Stack';
+import { ToggleButton } from '@astryxdesign/core/ToggleButton';
+import { Icon } from '@astryxdesign/core/Icon';
+import { HStack, VStack, StackItem } from '@astryxdesign/core/Stack';
 import NodeHeader from './NodeHeader.jsx';
 import { buildRequest, splitSections, findWiredTextNode, freeRunPrompts } from '../graph/resolve.js';
 import { generate, runText, listModels } from '../api.js';
@@ -244,42 +246,55 @@ export default function OutputNode({ id, data }) {
           />
         </HStack>
 
-        <HStack gap={2} align="end">
-          <TextInput
-            label="Runs"
-            size="sm"
-            value={freeRuns ? '' : (runsDraft ?? String(runs))}
-            isDisabled={freeRuns}
-            disabledMessage="Free mode decides the number from the flow"
-            onChange={(v) => {
-              // TextInput has no onBlur, so a local draft holds exactly what was
-              // typed (including "" or "0" mid-edit) for display, while node data
-              // always stores a clamped number — Task 4 reads data.runs directly
-              // and needs a number, not a string that merely looks numeric.
-              const digits = v.replace(/[^\d]/g, '').slice(0, 2);
-              setRunsDraft(digits);
-              updateNodeData(id, { runs: clampRuns(digits) });
-            }}
-          />
-          <Button
-            label="Free"
-            size="sm"
-            variant={freeRuns ? 'primary' : 'ghost'}
-            tooltip="Free: the number of runs comes from the flow — a connected Text node lists what to generate, and each item becomes one image."
-            onClick={() => {
-              updateNodeData(id, { freeRuns: !freeRuns });
-              // Clear the draft so a stale typed value can't linger across the mode
-              // switch and display once Runs becomes visible/editable again.
-              setRunsDraft(null);
-            }}
-          />
-        </HStack>
+        <VStack gap={1}>
+          <Text type="supporting" color="secondary">Runs</Text>
+          {/* Segmented pair: the two halves are equal because .xruns gives each
+              StackItem flex-basis 0 — StackItem's own `fill` is flex-grow only,
+              which would leave the button at its intrinsic width. */}
+          <HStack gap={1} className="xruns">
+            <StackItem size="fill">
+              <TextInput
+                label="Runs"
+                isLabelHidden
+                size="sm"
+                value={freeRuns ? '' : (runsDraft ?? String(runs))}
+                isDisabled={freeRuns}
+                disabledMessage="Free mode decides the number from the flow"
+                onChange={(v) => {
+                  // TextInput has no onBlur, so a local draft holds exactly what
+                  // was typed (including "" or "0" mid-edit) for display, while
+                  // node data always stores a clamped number: data.runs is read
+                  // directly as a count and needs a number, not a string that
+                  // merely looks numeric.
+                  const digits = v.replace(/[^\d]/g, '').slice(0, 2);
+                  setRunsDraft(digits);
+                  updateNodeData(id, { runs: clampRuns(digits) });
+                }}
+              />
+            </StackItem>
+            <StackItem size="fill">
+              <ToggleButton
+                label="Free"
+                size="sm"
+                isPressed={freeRuns}
+                tooltip="Free takes the number of runs from the flow. Wire in a Text node whose result is a list of items separated by lines containing only ---, and each item becomes one image."
+                onPressedChange={(pressed) => {
+                  updateNodeData(id, { freeRuns: pressed });
+                  // Clear the draft so a stale typed value can't linger across the
+                  // mode switch and display once Runs becomes editable again.
+                  setRunsDraft(null);
+                }}
+              />
+            </StackItem>
+          </HStack>
+        </VStack>
 
         {freeRuns && !liveWiredTextNode && (
-          <HStack gap={2} align="center">
-            <StatusDot variant="warning" label="No text node wired in" />
+          <HStack gap={1} align="start">
+            <Icon icon="info" size="sm" color="secondary" />
             <Text type="supporting">
-              Wire a text node in — Free takes the number of runs from its list.
+              Wire in a Text node whose result lists the items to generate, separated by
+              lines containing only ---. Each item becomes one image.
             </Text>
           </HStack>
         )}
