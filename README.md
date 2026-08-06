@@ -105,7 +105,7 @@ npm run client   # canvas only, on 5173
 Nodes come in two families. **Inputs** feed edges; **outputs** consume them.
 
 - **Prompt** (input) — free text. Embed another prompt or text node's content inline by typing `@` and picking it from the menu; each node shows its own id in its header. Circular references (`A -> B -> A`) are caught and reported instead of looping forever.
-- **Image** (input) — a picture handed to the model as image-to-image guidance (GPT Image 2 accepts several). Connect it to an output node and it gets a number; refer to it in a prompt as "image 1".
+- **Image** (input) — a picture handed to the model as image-to-image guidance (GPT Image 2 accepts several). Connect it to an output node and it gets a number; refer to it in a prompt as "image 1". Numbering is per consumer: an image feeding both a text node and an output node shows both ranks at once, e.g. "1 / 2", one per node it's wired into.
 - **Output** — collects everything wired into it, resolves the prompts top-to-bottom, sends the lot to OpenRouter, then shows the image plus the exact cost OpenRouter reports. **Runs** generates the same prompt up to 10 times at once; switch it to **Free** and the number comes from a wired-in text node instead — each `---`-separated item in its result becomes one image, which is how one prompt turns into a set.
 - **Text** (output) — same wiring, but runs the prompt through a *text* model and keeps the answer. Any images wired in are sent along, so it can describe or plan from a picture. The answer is editable, and downstream prompts pull it in with `@id`. Use it to have one model write the prompt for another.
 
