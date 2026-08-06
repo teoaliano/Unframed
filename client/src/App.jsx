@@ -11,6 +11,7 @@ import {
 import { Icon } from '@astryxdesign/core/Icon';
 import { IconButton } from '@astryxdesign/core/IconButton';
 import { DropdownMenu } from '@astryxdesign/core/DropdownMenu';
+import { ContextMenu } from '@astryxdesign/core/ContextMenu';
 import { Button } from '@astryxdesign/core/Button';
 import { TextInput } from '@astryxdesign/core/TextInput';
 import { Dialog, DialogHeader } from '@astryxdesign/core/Dialog';
@@ -24,6 +25,7 @@ import ImageNode from './nodes/ImageNode.jsx';
 import OutputNode from './nodes/OutputNode.jsx';
 import TextNode from './nodes/TextNode.jsx';
 import ProjectMenu from './ProjectMenu.jsx';
+import { PromptIcon, ImageIcon, OutputIcon, TextIcon } from './nodes/nodeIcons.jsx';
 import {
   setProject,
   listProjects,
@@ -50,11 +52,6 @@ const HandIcon = svg(
   <path d="M8 13V5.5a1.5 1.5 0 013 0V11m0-1V4.5a1.5 1.5 0 013 0V11m0-.5V6a1.5 1.5 0 013 0v7a6 6 0 01-6 6h-1a6 6 0 01-5.5-3.6L7 14c-.5-1-.2-1.8.6-2.2.7-.3 1.5 0 2 .7l-1.6-1.5" />,
 );
 const FitIcon = svg(<path d="M4 8V4h4M16 4h4v4M20 16v4h-4M8 20H4v-4" />);
-// node-type icons for the add menu
-const PromptIcon = svg(<path d="M4 6h16M4 12h16M4 18h10" />);
-const ReferenceIcon = svg(<><rect x="3" y="4" width="18" height="16" rx="2" /><circle cx="8.5" cy="9.5" r="1.5" /><path d="M21 16l-5-5-8 8" /></>);
-const OutputIcon = svg(<path d="M12 3l2 5 5 2-5 2-2 5-2-5-5-2 5-2 2-5z" />);
-const TextIcon = svg(<><path d="M4 7V5h16v2M12 5v14M9 19h6" /></>);
 const KeyIcon = svg(<><circle cx="8" cy="15" r="4" /><path d="M10.8 12.2L20 3m-3 0 3 3m-5 2 2.5 2.5" /></>);
 
 const HELP_TEXT =
@@ -87,30 +84,36 @@ const bumpCounter = (nodes) => {
 // folder the server writes. ponytail: kept in sync by hand; two call sites.
 const slug = (s) => s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '').slice(0, 40);
 
-// A small starter graph that demonstrates the @id reference:
-// the "scene" prompt embeds the "p-subject" prompt.
+// A small starter graph that demonstrates the @id reference: the scene prompt
+// embeds the subject prompt. The ids come from the same counter every other node
+// draws from, so a starter node looks like one you added yourself — hand-written
+// ids like "p-scene" implied a naming scheme the app doesn't actually have.
+const SCENE_ID = nextId();
+const SUBJECT_ID = nextId();
+const OUTPUT_ID = nextId();
+
 const initialNodes = [
   {
-    id: 'p-scene',
+    id: SCENE_ID,
     type: 'prompt',
     position: { x: 40, y: 60 },
-    data: { text: 'A @p-subject on a windswept cliff at golden hour, cinematic, 35mm' },
+    data: { text: `A @${SUBJECT_ID} on a windswept cliff at golden hour, cinematic, 35mm` },
   },
   {
-    id: 'p-subject',
+    id: SUBJECT_ID,
     type: 'prompt',
     position: { x: 40, y: 320 },
     data: { text: 'lone red fox' },
   },
   {
-    id: 'out',
+    id: OUTPUT_ID,
     type: 'output',
     position: { x: 460, y: 120 },
-    data: { resolution: '1K', quality: 'low', aspect_ratio: '1:1' },
+    data: { resolution: '1K', quality: 'low', aspect_ratio: '1:1', runs: 1 },
   },
 ].map(withDrag);
 
-const initialEdges = [{ id: 'e-scene', source: 'p-scene', target: 'out' }];
+const initialEdges = [{ id: `e-${SCENE_ID}`, source: SCENE_ID, target: OUTPUT_ID }];
 
 function Canvas() {
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
@@ -156,6 +159,75 @@ function Canvas() {
     const t = setTimeout(() => saveProject(project, { nodes, edges }), 500);
     return () => clearTimeout(t);
   }, [nodes, edges, project]);
+
+  // ---- undo / redo ----
+  // A stack of settled graph states with a cursor, rather than one entry per
+  // change: a drag emits a state per pixel and typing one per keystroke, so
+  // recording every change would make undo a frame-by-frame rewind. The 400ms
+  // pause is the unit of work — one drag, one word, one delete.
+  //
+  // Entries hold the arrays as they are, no deep copy: React Flow replaces them
+  // on every change instead of mutating, and a project's nodes can carry megabytes
+  // of base64 image data that would be ruinous to clone (or to compare with
+  // JSON.stringify) several times a minute.
+  const history = useRef({ stack: [], at: -1 });
+  const restoring = useRef(false);
+
+  useEffect(() => {
+    if (!ready.current) return;
+    const t = setTimeout(() => {
+      // An undo/redo applied its own state; recording it would bury the entry we
+      // just moved off, and the next undo would land back where we started.
+      if (restoring.current) {
+        restoring.current = false;
+        return;
+      }
+      const h = history.current;
+      const current = h.stack[h.at];
+      if (current && current.nodes === nodes && current.edges === edges) return;
+      h.stack = h.stack.slice(0, h.at + 1);
+      h.stack.push({ nodes, edges });
+      // Far more than anyone reaches for, and cheap: entries share the node
+      // objects they point at.
+      if (h.stack.length > 100) h.stack.shift();
+      h.at = h.stack.length - 1;
+    }, 400);
+    return () => clearTimeout(t);
+  }, [nodes, edges]);
+
+  // Switching projects starts a new timeline: undoing across a switch would paste
+  // one project's graph into another.
+  useEffect(() => {
+    history.current = { stack: [], at: -1 };
+  }, [project]);
+
+  useEffect(() => {
+    function onKeyDown(e) {
+      const undo = (e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'z';
+      const redoY = (e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'y';
+      if (!undo && !redoY) return;
+      // Inside a text field the browser's own undo is the right one: it steps
+      // through what you typed, and stealing it would rewind the whole canvas
+      // mid-sentence.
+      const el = e.target;
+      const typing =
+        el instanceof HTMLElement &&
+        (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable);
+      if (typing) return;
+
+      const h = history.current;
+      const forward = redoY || e.shiftKey;
+      const to = forward ? h.at + 1 : h.at - 1;
+      if (to < 0 || to >= h.stack.length) return;
+      e.preventDefault();
+      h.at = to;
+      restoring.current = true;
+      setNodes(h.stack[to].nodes);
+      setEdges(h.stack[to].edges);
+    }
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [setNodes, setEdges]);
 
   // Ask the server whether it has a key. With none, open the dialog straight away:
   // nothing on the canvas can produce an image yet, so setup is the only useful
@@ -293,7 +365,10 @@ function Canvas() {
   );
 
   const addNode = useCallback(
-    (type, data, screenPos) =>
+    (type, data, screenPos) => {
+      // Minted out here, not inside the updater: React runs updaters twice under
+      // StrictMode, which would burn an id every time.
+      const id = nextId();
       setNodes((ns) => {
         // No explicit point (toolbar button) -> center of what you're looking at.
         const r = canvasRef.current.getBoundingClientRect();
@@ -306,8 +381,10 @@ function Canvas() {
           position.x -= 120;
           position.y -= 75;
         }
-        return [...ns, withDrag({ id: nextId(), type, position, data })];
-      }),
+        return [...ns, withDrag({ id, type, position, data })];
+      });
+      return id;
+    },
     [setNodes, screenToFlowPosition],
   );
 
@@ -315,6 +392,54 @@ function Canvas() {
   const addImage = () => addNode('image', { fileName: '', dataUrl: '' });
   const addOutput = () => addNode('output', { resolution: '1K', quality: 'low', aspect_ratio: '1:1' });
   const addText = () => addNode('text', { text: '', result: '' });
+
+  // Where the last right-click landed, so the context menu's items can drop their
+  // node on that spot. The menu component reports the click by opening, not by
+  // handing the event to each item, so the point is caught on the way past.
+  const menuPoint = useRef(null);
+
+  // One definition, two menus: the toolbar's + button and the canvas context menu
+  // offer the same nodes in the same order. `at` is undefined for the toolbar,
+  // which then falls back to the centre of the view.
+  const addMenuItems = (at) => [
+    {
+      type: 'section',
+      title: 'Inputs',
+      items: [
+        { label: 'Prompt', icon: PromptIcon, onClick: () => addNode('prompt', { text: '' }, at?.()) },
+        { label: 'Image', icon: ImageIcon, onClick: () => addNode('image', { fileName: '', dataUrl: '' }, at?.()) },
+      ],
+    },
+    {
+      type: 'section',
+      title: 'Outputs',
+      items: [
+        {
+          label: 'Output',
+          icon: OutputIcon,
+          onClick: () => addNode('output', { resolution: '1K', quality: 'low', aspect_ratio: '1:1' }, at?.()),
+        },
+        { label: 'Text', icon: TextIcon, onClick: () => addNode('text', { text: '', result: '' }, at?.()) },
+      ],
+    },
+  ];
+
+  // Double-click on empty canvas: the most common node, ready to type into. Only
+  // on the pane itself — double-clicking inside a node is how you select a word.
+  function onCanvasDoubleClick(e) {
+    if (!e.target.classList?.contains('react-flow__pane')) return;
+    focusField(addNode('prompt', { text: '' }, { x: e.clientX, y: e.clientY }));
+  }
+
+  // React Flow keeps a freshly added node hidden until it has measured it, and
+  // focus() does nothing inside a hidden subtree — so the first attempt lands on
+  // an element that cannot take it. Retry briefly, stopping the moment it sticks.
+  const focusField = useCallback((id, tries = 12) => {
+    const field = canvasRef.current?.querySelector(`.react-flow__node[data-id="${id}"] textarea`);
+    field?.focus();
+    if (field && document.activeElement === field) return;
+    if (tries > 0) setTimeout(() => focusField(id, tries - 1), 40);
+  }, []);
 
   // Drag image files from Finder/Explorer onto the canvas -> reference nodes at
   // the drop point (offset a little when dropping several at once).
@@ -392,8 +517,8 @@ function Canvas() {
             label="API key"
             tooltip={
               keyState.hasKey
-                ? `OpenRouter key set${keyState.keyHint ? ` (…${keyState.keyHint})` : ''} — click to replace`
-                : 'No OpenRouter key yet — click to add one'
+                ? `OpenRouter key set${keyState.keyHint ? ` (…${keyState.keyHint})` : ''}. Click to replace`
+                : 'No OpenRouter key yet. Click to add one'
             }
             icon={<Icon icon={KeyIcon} />}
             onClick={() => setKeyDlg({ value: '' })}
@@ -408,7 +533,19 @@ function Canvas() {
         </div>
       </header>
 
-      <div className="canvas" ref={canvasRef} onDragOver={(e) => e.preventDefault()} onDrop={onDrop}>
+      <ContextMenu items={addMenuItems(() => menuPoint.current)} menuWidth={152}>
+      <div
+        className="canvas"
+        ref={canvasRef}
+        onDragOver={(e) => e.preventDefault()}
+        onDrop={onDrop}
+        onDoubleClick={onCanvasDoubleClick}
+        // Caught on the way to the menu, which opens itself without telling its
+        // items where the click was.
+        onContextMenuCapture={(e) => {
+          menuPoint.current = { x: e.clientX, y: e.clientY };
+        }}
+      >
         <ReactFlow
           nodes={nodes}
           edges={edges}
@@ -441,7 +578,7 @@ function Canvas() {
             variant={tool === 'select' ? 'primary' : 'ghost'}
             size="sm"
             label="Select"
-            tooltip="Select — drag to box-select nodes"
+            tooltip="Select: drag to box-select nodes"
             icon={<Icon icon={SelectIcon} />}
             onClick={() => setTool('select')}
           />
@@ -449,7 +586,7 @@ function Canvas() {
             variant={tool === 'pan' ? 'primary' : 'ghost'}
             size="sm"
             label="Pan"
-            tooltip="Pan — drag to move the canvas"
+            tooltip="Pan: drag to move the canvas"
             icon={<Icon icon={HandIcon} />}
             onClick={() => setTool('pan')}
           />
@@ -465,24 +602,7 @@ function Canvas() {
             placement="start"
             className="add-node-menu"
             menuWidth={152}
-            items={[
-              {
-                type: 'section',
-                title: 'Inputs',
-                items: [
-                  { label: 'Prompt', icon: PromptIcon, onClick: addPrompt },
-                  { label: 'Image', icon: ReferenceIcon, onClick: addImage },
-                ],
-              },
-              {
-                type: 'section',
-                title: 'Outputs',
-                items: [
-                  { label: 'Output', icon: OutputIcon, onClick: addOutput },
-                  { label: 'Text', icon: TextIcon, onClick: addText },
-                ],
-              },
-            ]}
+            items={addMenuItems()}
             button={{
               label: 'Add node',
               isIconOnly: true,
@@ -493,6 +613,7 @@ function Canvas() {
           />
         </div>
       </div>
+      </ContextMenu>
 
       <Dialog
         isOpen={!!keyDlg}
@@ -507,7 +628,7 @@ function Canvas() {
           {!keyState.hasKey && (
             <VStack gap={2}>
               <Text type="supporting" as="p">
-                Unframed has no image model of its own — it sends your prompts to{' '}
+                Unframed has no image model of its own. It sends your prompts to{' '}
                 <Link href="https://openrouter.ai" isExternalLink>
                   OpenRouter
                 </Link>
@@ -539,14 +660,14 @@ function Canvas() {
             description={
               keyState.hasKey
                 ? `A key is already saved${keyState.keyHint ? ` (…${keyState.keyHint})` : ''}. Entering a new one replaces it.`
-                : 'Paste it here — it starts with sk-or-'
+                : 'Paste it here. It starts with sk-or-'
             }
             value={keyDlg?.value ?? ''}
             status={
               keyDlg?.error
                 ? { type: 'error', message: keyDlg.error }
                 : keyDlg?.saved
-                  ? { type: 'success', message: 'Key saved — Generate is ready to use.' }
+                  ? { type: 'success', message: 'Key saved. Generate is ready to use.' }
                   : keyDlg?.removed
                     ? { type: 'warning', message: 'Key removed. Generate is disabled until you add one.' }
                     : keyDlg?.confirmRemove

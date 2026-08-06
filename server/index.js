@@ -16,6 +16,9 @@ const MODEL = process.env.OPENROUTER_MODEL || 'openai/gpt-image-2';
 // Vision-capable so a text node can describe images wired into it. Verified live
 // on OpenRouter; qwen/qwen3.7-flash is the cheaper fallback if this slug retires.
 const TEXT_MODEL = process.env.OPENROUTER_TEXT_MODEL || 'google/gemini-3.5-flash-lite';
+// Video is priced per second of output, so the default is a mid-tier model rather
+// than the most capable one.
+const VIDEO_MODEL = process.env.OPENROUTER_VIDEO_MODEL || 'bytedance/seedance-2.0';
 // Not const: POST /api/key can replace it at runtime so a key entered in the UI
 // works immediately, without a restart.
 let API_KEY = process.env.OPENROUTER_API_KEY;
@@ -96,29 +99,63 @@ app.delete('/api/key', async (req, res) => {
   res.json({ ok: true, hasKey: false });
 });
 
-// Models for the node pickers. Two catalogues:
-//   image — OpenRouter's default listing is the TEXT catalogue, so the
-//           output_modalities filter is load-bearing: without it the image models
-//           are simply absent from the payload.
+// Models for the node pickers. Two catalogues, two upstream endpoints:
+//   image — /images/models is the image catalogue AND the only place that says
+//           which generation params each model actually honours. Its
+//           `supported_parameters` is a typed map ({aspect_ratio: {type:'enum',
+//           values:[...]}, n: {type:'range',min,max}}), which is what lets the
+//           output node offer a model's real options instead of a fixed list.
+//           The general /models listing has a `supported_parameters` too, but it
+//           is the chat one — temperature, top_p — and never mentions an image
+//           param, which is why the controls used to be guesswork.
 //   text  — the default listing, narrowed to vision-capable models, because a text
 //           node can always have images wired into it and a text-only model would
 //           silently ignore them.
+//   video — a third catalogue with a schema of its own: flat supported_durations /
+//           supported_resolutions / supported_aspect_ratios arrays instead of the
+//           images endpoint's typed map, plus per-second pricing, which is what
+//           makes a spend estimate possible before the click.
 app.get('/api/models', async (req, res) => {
   const wantText = req.query.type === 'text';
-  const fallback = wantText ? TEXT_MODEL : MODEL;
+  const wantVideo = req.query.type === 'video';
+  const fallback = wantText ? TEXT_MODEL : wantVideo ? VIDEO_MODEL : MODEL;
   try {
     const url = wantText
       ? 'https://openrouter.ai/api/v1/models'
-      : 'https://openrouter.ai/api/v1/models?output_modalities=image';
+      : wantVideo
+        ? 'https://openrouter.ai/api/v1/videos/models'
+        : 'https://openrouter.ai/api/v1/images/models';
     const r = await fetch(url);
     const d = await r.json();
     const models = (d.data || [])
       .filter((m) => {
+        if (!wantText) return true; // the image/video endpoints are already filtered
         const out = m.architecture?.output_modalities || [];
         const inp = m.architecture?.input_modalities || [];
-        return wantText ? out.includes('text') && inp.includes('image') : out.includes('image');
+        return out.includes('text') && inp.includes('image');
       })
-      .map((m) => ({ id: m.id, name: m.name || m.id }));
+      .map((m) => ({
+        id: m.id,
+        name: m.name || m.id,
+        // Passed through as-is; the client reads these to build its controls.
+        ...(wantText ? {} : {}),
+        ...(wantVideo
+          ? {
+              params: {
+                duration: m.supported_durations || null,
+                resolution: m.supported_resolutions || null,
+                aspect_ratio: m.supported_aspect_ratios || null,
+                frame_images: m.supported_frame_images || null,
+                generate_audio: Boolean(m.generate_audio),
+                seed: Boolean(m.seed),
+              },
+              // cents per second, by resolution where the model prices them apart.
+              pricing: m.pricing_skus || null,
+            }
+          : wantText
+            ? {}
+            : { params: m.supported_parameters || null }),
+      }));
     if (!models.some((m) => m.id === fallback)) models.push({ id: fallback, name: fallback });
     // Sorted by slug, which also groups them by provider.
     models.sort((a, b) => a.id.localeCompare(b.id));
@@ -138,7 +175,7 @@ app.post('/api/text', async (req, res) => {
       .json({ error: 'No OpenRouter key yet. Add one with the key icon in the top right.' });
   }
 
-  const { prompt, input_references, model } = req.body || {};
+  const { prompt, input_references, model, project, batchId } = req.body || {};
   // Coerce so a non-string prompt (e.g. a number) can't throw on .trim() inside
   // this async handler, which would otherwise hang the request.
   const p = typeof prompt === 'string' ? prompt : '';
@@ -195,6 +232,36 @@ app.post('/api/text', async (req, res) => {
   }
 
   const cost = data?.usage?.cost ?? null;
+
+  // Same treatment as a generation: the project folder should be a complete record
+  // of what was spent in it, and a Free batch is one repair call plus N generations.
+  try {
+    const dir = project ? projectDir(project) : OUTPUT_DIR;
+    await fs.mkdir(dir, { recursive: true });
+    const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+    const metaPath = path.join(dir, `${stamp}-text-${slugify(p)}.json`);
+    await fs.writeFile(
+      metaPath,
+      JSON.stringify(
+        {
+          kind: 'text',
+          prompt: p,
+          model: model || TEXT_MODEL,
+          result: String(text),
+          referenceCount: refs.length,
+          batchId: batchId || null,
+          cost,
+          createdAt: new Date().toISOString(),
+        },
+        null,
+        2,
+      ),
+    );
+  } catch (err) {
+    // A missing cost record must not fail the run the user is waiting on.
+    console.log(`  text sidecar failed: ${err.message}`);
+  }
+
   console.log(`  text →  ${String(text).length} chars${cost != null ? `  ($${Number(cost).toFixed(4)})` : ''}`);
   res.json({ text: String(text), cost });
 });
@@ -251,6 +318,165 @@ app.delete('/api/projects/:name', async (req, res) => {
   res.json({ ok: true });
 });
 
+// ---- video ----
+// Video generation is asynchronous upstream: the create call returns a job, and the
+// file only exists minutes later. So this is two routes, not one. The client starts
+// a job and then polls; the server keeps the key and, on completion, pulls the
+// finished file down and writes it next to the images with the same sidecar shape.
+app.post('/api/video', async (req, res) => {
+  if (!API_KEY) {
+    return res.status(400).json({
+      error: 'No OpenRouter key yet. Add one with the key icon in the top right.',
+    });
+  }
+
+  const {
+    prompt,
+    input_references = [],
+    duration,
+    resolution,
+    aspect_ratio,
+    generate_audio,
+    model,
+  } = req.body || {};
+
+  if (!prompt || !prompt.trim()) {
+    return res
+      .status(400)
+      .json({ error: 'Prompt is empty. Wire at least one prompt node into the output node.' });
+  }
+
+  const payload = { model: model || VIDEO_MODEL, prompt };
+  if (duration) payload.duration = duration;
+  if (resolution) payload.resolution = resolution;
+  if (aspect_ratio) payload.aspect_ratio = aspect_ratio;
+  if (generate_audio != null) payload.generate_audio = generate_audio;
+  if (input_references.length) payload.input_references = input_references;
+
+  let orRes;
+  try {
+    orRes = await fetch('https://openrouter.ai/api/v1/videos', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${API_KEY}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+  } catch (err) {
+    return res.status(502).json({ error: `Could not reach OpenRouter: ${err.message}` });
+  }
+
+  const raw = await orRes.text();
+  let data;
+  try {
+    data = JSON.parse(raw);
+  } catch {
+    return res.status(502).json({ error: `Unexpected response from OpenRouter: ${raw.slice(0, 300)}` });
+  }
+  if (!orRes.ok) {
+    const msg = data?.error?.message || data?.error || raw.slice(0, 300);
+    return res.status(orRes.status).json({ error: `OpenRouter (${orRes.status}): ${msg}` });
+  }
+  if (!data?.id) {
+    return res.status(502).json({ error: 'OpenRouter did not return a video job id.' });
+  }
+  res.json({ id: data.id, status: data.status || 'pending' });
+});
+
+// Poll one job. While it runs this just forwards the status; once it completes the
+// file is fetched and written to disk, and the response points at the saved copy
+// rather than carrying the bytes — a video inlined into node data would be saved
+// into graph.json on every keystroke.
+app.get('/api/video/:id', async (req, res) => {
+  if (!API_KEY) return res.status(400).json({ error: 'No OpenRouter key yet.' });
+  const { project, prompt = '', model = '', duration, resolution } = req.query;
+
+  let data;
+  try {
+    const r = await fetch(`https://openrouter.ai/api/v1/videos/${encodeURIComponent(req.params.id)}`, {
+      headers: { Authorization: `Bearer ${API_KEY}` },
+    });
+    const raw = await r.text();
+    try {
+      data = JSON.parse(raw);
+    } catch {
+      return res.status(502).json({ error: `Unexpected response from OpenRouter: ${raw.slice(0, 300)}` });
+    }
+    if (!r.ok) {
+      const msg = data?.error?.message || data?.error || raw.slice(0, 300);
+      return res.status(r.status).json({ error: `OpenRouter (${r.status}): ${msg}` });
+    }
+  } catch (err) {
+    return res.status(502).json({ error: `Could not reach OpenRouter: ${err.message}` });
+  }
+
+  const status = data.status || 'pending';
+  if (status !== 'completed') {
+    if (status === 'failed') {
+      return res.json({ status, error: data.error?.message || data.error || 'Generation failed.' });
+    }
+    return res.json({ status, progress: data.progress ?? null });
+  }
+
+  const url = data.unsigned_urls?.[0] || data.urls?.[0];
+  if (!url) return res.status(502).json({ error: 'Job completed without a video URL.' });
+
+  let buf;
+  try {
+    const f = await fetch(url, { headers: { Authorization: `Bearer ${API_KEY}` } });
+    if (!f.ok) return res.status(502).json({ error: `Could not download the video (${f.status}).` });
+    buf = Buffer.from(await f.arrayBuffer());
+  } catch (err) {
+    return res.status(502).json({ error: `Could not download the video: ${err.message}` });
+  }
+
+  const dir = project ? projectDir(project) : OUTPUT_DIR;
+  await fs.mkdir(dir, { recursive: true });
+  const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+  const base = `${stamp}-${slugify(prompt)}`;
+  const videoPath = path.join(dir, `${base}.mp4`);
+  await fs.writeFile(videoPath, buf);
+
+  const cost = data.usage?.cost ?? data.cost ?? null;
+  try {
+    await fs.writeFile(
+      path.join(dir, `${base}.json`),
+      JSON.stringify(
+        {
+          kind: 'video',
+          prompt,
+          model,
+          duration: duration ? Number(duration) : null,
+          resolution: resolution || null,
+          cost,
+          createdAt: new Date().toISOString(),
+        },
+        null,
+        2,
+      ),
+    );
+  } catch (err) {
+    console.log(`  sidecar not written: ${err.message}`);
+  }
+
+  res.json({
+    status,
+    cost,
+    savedPath: videoPath,
+    // Served from disk rather than inlined, so the graph stays small.
+    url: `/api/file/${encodeURIComponent(project || '')}/${encodeURIComponent(`${base}.mp4`)}`,
+  });
+});
+
+// Generated files on disk, for the browser to play without the bytes ever going
+// through node data.
+app.get('/api/file/:project/:name', (req, res) => {
+  const dir = req.params.project ? projectDir(req.params.project) : OUTPUT_DIR;
+  // Basename only: the name comes from a URL, and a path in it must not escape.
+  const file = path.join(dir, path.basename(req.params.name));
+  res.sendFile(file, (err) => {
+    if (err && !res.headersSent) res.status(404).json({ error: 'File not found.' });
+  });
+});
+
 app.post('/api/generate', async (req, res) => {
   if (!API_KEY) {
     return res.status(400).json({
@@ -267,6 +493,9 @@ app.post('/api/generate', async (req, res) => {
     output_format = 'png',
     model,
     project,
+    batchId,
+    runIndex,
+    runCount,
   } = req.body || {};
 
   if (!prompt || !prompt.trim()) {
@@ -324,30 +553,63 @@ app.post('/api/generate', async (req, res) => {
     const dir = project ? projectDir(project) : OUTPUT_DIR;
     await fs.mkdir(dir, { recursive: true });
     const stamp = new Date().toISOString().replace(/[:.]/g, '-');
-    const base = `${stamp}-${slugify(prompt)}`;
-    const imgPath = path.join(dir, `${base}.${ext}`);
-    const metaPath = path.join(dir, `${base}.json`);
+    // Fixed-N runs share a byte-identical prompt, and Free mode's slug is truncated
+    // to 40 chars of shared context — either way, concurrent runs in one batch can
+    // collide on the same base name. Folding the run index in spreads them out; the
+    // wx-and-retry loop below still catches two different batches landing in the
+    // same millisecond.
+    const suffix = runCount > 1 ? `-${runIndex || 1}` : '';
+    let base = `${stamp}-${slugify(prompt)}${suffix}`;
+    const buffer = Buffer.from(first.b64_json, 'base64');
 
-    await fs.writeFile(imgPath, Buffer.from(first.b64_json, 'base64'));
-    await fs.writeFile(
-      metaPath,
-      JSON.stringify(
-        {
-          prompt,
-          model: payload.model,
-          resolution,
-          quality,
-          aspect_ratio,
-          output_format,
-          referenceCount: input_references.length,
-          cost,
-          createdAt: new Date().toISOString(),
-          file: path.basename(imgPath),
-        },
-        null,
-        2,
-      ),
-    );
+    let imgPath;
+    let attempt = 1;
+    let candidate = base;
+    for (;;) {
+      imgPath = path.join(dir, `${candidate}.${ext}`);
+      try {
+        await fs.writeFile(imgPath, buffer, { flag: 'wx' });
+        base = candidate;
+        break;
+      } catch (err) {
+        // wx refuses to clobber an existing file. Retry under a numeric suffix
+        // instead of silently overwriting someone else's paid-for image.
+        if (err.code !== 'EEXIST' || attempt >= 5) throw err;
+        attempt += 1;
+        candidate = `${base}-${attempt}`;
+      }
+    }
+
+    // The sidecar uses the same final base name so image and metadata stay paired,
+    // but a sidecar write failure must not turn an already-saved image into a 500 —
+    // the /api/text handler already treats its sidecar this way.
+    try {
+      const metaPath = path.join(dir, `${base}.json`);
+      await fs.writeFile(
+        metaPath,
+        JSON.stringify(
+          {
+            prompt,
+            model: payload.model,
+            resolution,
+            quality,
+            aspect_ratio,
+            output_format,
+            referenceCount: input_references.length,
+            batchId: batchId || null,
+            runIndex: runIndex || 1,
+            runCount: runCount || 1,
+            cost,
+            createdAt: new Date().toISOString(),
+            file: path.basename(imgPath),
+          },
+          null,
+          2,
+        ),
+      );
+    } catch (err) {
+      console.log(`  sidecar failed: ${err.message}`);
+    }
 
     console.log(`  generated → ${imgPath}${cost != null ? `  ($${Number(cost).toFixed(4)})` : ''}`);
 

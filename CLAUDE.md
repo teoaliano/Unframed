@@ -17,7 +17,7 @@ npm run client        # client only (vite)
 
 Requires Node 18+ (server relies on built-in `fetch`). No lint setup exists; `npm test` runs the assert-based self-check in `client/src/graph/resolve.test.js` (plain `node`, no test framework).
 
-Config lives in `.env` at the project root (copy from `.env.example`): `OPENROUTER_API_KEY`, `OPENROUTER_MODEL`, `OPENROUTER_TEXT_MODEL`, `OUTPUT_DIR`, `PORT`. The server prints the resolved image model, text model, key status, and output dir on startup. The client dev server proxies `/api` → `http://localhost:8787` (see `client/vite.config.js`), so both must be running.
+Config lives in `.env` at the project root (copy from `.env.example`): `OPENROUTER_API_KEY`, `OPENROUTER_MODEL`, `OPENROUTER_TEXT_MODEL`, `OPENROUTER_VIDEO_MODEL`, `OUTPUT_DIR`, `PORT`. The server prints the resolved image model, text model, key status, and output dir on startup. The client dev server proxies `/api` → `http://localhost:8787` (see `client/vite.config.js`), so both must be running.
 
 ## Architecture
 
@@ -33,13 +33,16 @@ Three-package monorepo, no shared build. The only non-trivial logic is in `clien
 - **Server is a single file** (`server/index.js`): health, models, key, the project CRUD routes, `/api/generate`, and `/api/text` — plus extensive error branching around the OpenRouter call, and filename slugify. Each successful generation writes `<timestamp>-<slug>.<ext>` + a `.json` sidecar (prompt, params, cost) to `OUTPUT_DIR`.
 - **`@id` resolves prompts *and* text nodes.** A text node's `data.result` is substituted literally — never re-scanned for `@` tokens, which would let model output pull in arbitrary prompts, and which makes reference cycles terminate with a stale string instead of hanging.
 - **Two model catalogues.** `/api/models` returns image models (via the load-bearing `?output_modalities=image` upstream filter); `/api/models?type=text` returns vision-capable text models, because a text node can always have images wired in.
+- **Multi-run is client-side.** N runs are N ordinary `/api/generate` calls fired with `Promise.allSettled`, so a partial batch keeps its successes (`2 of 3 succeeded`). `splitSections` in `resolve.js` cuts a text node's result on standalone `---` lines; fewer than two blocks triggers one repair call through `/api/text` before falling back to a single run. Cap is 10 everywhere.
+- **Image numbering is per consumer.** `imageRefNumbers` returns one rank per consuming node, because an image can be image 1 to a text node and image 2 to an output node at once. The badge shows `1 / 2` when they diverge.
+- **Every run leaves a sidecar.** Generations and text runs both write `<timestamp>-*.json` next to the output; batch runs share a `batchId` with `runIndex`/`runCount`, so a batch's spend is a sum over one field.
 
 **Node types** (`client/src/nodes/`), in two families. Inputs only feed edges; outputs consume them — the engine's one rule, made visible by `NodeHeader`'s `family` prop:
 - **Inputs:** `PromptNode` (type `prompt`, labelled free text), `ImageNode` (type `image`, a picture you supply; connected ones are numbered so prompts can say "image 1").
-- **Outputs:** `OutputNode` (type `output`, image generation — will gain a video format later, which is why it isn't called "image"), `TextNode` (type `text`, runs a prompt through a text model and keeps the answer in `data.result`).
+- **Outputs:** `OutputNode` (type `output`, image or video per its Image/Video tabs — `data.kind` picks the catalogue, the controls and the money; video runs once per click, polls `/api/video/:id` until the server has downloaded the finished file, and plays it from `/api/file/...` instead of carrying bytes in node data), `TextNode` (type `text`, runs a prompt through a text model and keeps the answer in `data.result`).
 
-Labels match type ids. Registered in `App.jsx`'s `nodeTypes`; `App.jsx` also holds the starter graph demonstrating the `@p-subject` embed.
+Labels match type ids. Registered in `App.jsx`'s `nodeTypes`; `App.jsx` also holds the starter graph, whose scene prompt embeds the subject prompt by `@id`. Its ids come from the same counter as user-added nodes, so nothing in a fresh graph carries a hand-written id.
 
 ## Switching models
 
-`OPENROUTER_MODEL` accepts any image slug OpenRouter lists. Different models honor different params (resolution tiers, aspect ratios, whether `quality` applies); the output node exposes the common ones and the server only forwards params that are set (`quality: 'auto'` is treated as unset). A param that seems ignored is likely unsupported by the chosen model.
+`OPENROUTER_MODEL` accepts any image slug OpenRouter lists. The output node's Size/Quality/Ratio controls are **driven by the selected model**, not a fixed list: `/api/models` proxies OpenRouter's `/api/v1/images/models`, whose `supported_parameters` is a typed map per model, and the node renders a control only when that model declares the param, offering exactly its values. A value the model doesn't declare is never sent. (The general `/api/v1/models` listing also has a `supported_parameters`, but it is the chat one — temperature, top_p — and never mentions an image param; that is why these controls were guesswork before.) The server still forwards only params that are set, and treats `quality: 'auto'` as unset.

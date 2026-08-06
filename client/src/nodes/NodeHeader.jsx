@@ -1,5 +1,7 @@
 import { useState } from 'react';
 import { Text } from '@astryxdesign/core/Text';
+import { Icon } from '@astryxdesign/core/Icon';
+import { NODE_ICONS } from './nodeIcons.jsx';
 
 // The node title bar. Doubles as the React Flow drag handle (.xnode-head).
 // `family` distinguishes inputs (prompt, image — they only feed edges) from outputs
@@ -21,9 +23,14 @@ export default function NodeHeader({ kind, family = 'input', copyId, right, righ
       onClick={copyId != null ? copy : undefined}
       title={copyId != null ? 'Click to copy this reference' : undefined}
     >
-      <Text type="supporting" weight="medium" color={family === 'output' ? 'accent' : undefined}>
-        {kind}
-      </Text>
+      <span className="xnode-head-title">
+        {NODE_ICONS[kind] && (
+          <Icon icon={NODE_ICONS[kind]} size="xsm" color={family === 'output' ? 'accent' : 'secondary'} />
+        )}
+        <Text type="supporting" weight="medium" color={family === 'output' ? 'accent' : undefined}>
+          {kind}
+        </Text>
+      </span>
       {copyId != null && (
         <Text type="supporting" color={copied ? 'accent' : 'secondary'}>
           {copied ? 'copied!' : `@${copyId}`}

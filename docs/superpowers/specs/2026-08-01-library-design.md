@@ -187,6 +187,43 @@ The node shows `Generating 3 / 7`, and each image appears as it lands rather tha
 the end. A failed run does not abort the batch: the node reports `5 of 7 succeeded` and
 lists the errors, keeping the successes. A partial layer set is still useful.
 
+### Image numbering, per consumer
+
+`imageRefNumber` in `resolve.js` currently ranks an image against every image feeding any
+output-family node, so one badge number is claimed to hold for all consumers. It does not:
+wire image A into an output node only, and image B into both that output and a text node,
+and B's badge reads `2` while the text node sees B as its image 1. `buildRequest` is
+already correct — it filters edges per `outputId` — so this is a badge lie, not a wrong
+request. Layerize makes it load-bearing, since its prompt says "Look at image 1" about an
+image wired into a text node.
+
+Replaced by `imageRefNumbers(nodes, edges, imageId) -> number[]`, one rank per consuming
+node, deduplicated and sorted. The badge shows:
+
+| Ranks | Badge |
+| --- | --- |
+| `[]`, image loaded | `not connected` |
+| `[1]` | `1` |
+| `[1, 2]` | `1 / 2`, tooltip: "image 1 to one target, image 2 to another" |
+
+The single-number case covers everything except genuinely divergent wiring, and that case
+now tells the truth instead of picking one silently.
+
+### A cost trail on disk
+
+Image generations write a `.json` sidecar; text runs report cost only on the node and in
+the server log, so a Free batch — one repair call plus up to ten generations — leaves no
+record of what it cost.
+
+`POST /api/text` gains the same treatment: it writes `<timestamp>-text-<slug>.json` into
+the project folder with `{ kind: 'text', prompt, model, result, cost, createdAt }`. The
+client's `runText` starts sending `project`, exactly as `generate` already does.
+
+Multi-run generations additionally carry `batchId` (one id per Generate click) and
+`runIndex` / `runCount` in their sidecars, so a batch's total spend is a sum over one
+field rather than a guess from timestamps. Sidecars stay per-run — no aggregate file, no
+new format, and a project folder remains a complete record of itself.
+
 ## D. The Library
 
 ### Storage
@@ -322,7 +359,8 @@ all three.
 
 1. **Text output node** — families/chrome, the `REFERENCE` → `IMAGE` relabel, `TextNode`,
    `/api/text`, `?type=text`, `@id` resolution.
-2. **Multi-run** — Runs control, `splitSections` + repair, concurrent runs, progress, partial failure.
+2. **Multi-run** — Runs control, `splitSections` + repair, concurrent runs, progress, partial
+   failure, per-consumer image numbering, and the on-disk cost trail.
 3. **Library + Layerize** — registry, insertion, FAB and dialog, the Layerize fragment.
 
 ## Risks

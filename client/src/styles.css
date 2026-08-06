@@ -67,6 +67,15 @@ div:has(> .add-node-menu) {
   flex: 1;
   min-height: 0;
 }
+/* The canvas is wrapped by the context-menu trigger, which renders a plain div of
+   its own. Without this the wrapper is the flex child, the canvas inside it has no
+   height to fill, and the whole graph collapses to nothing. */
+.app > *:has(> .canvas) {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
 
 /* floating "add node" button, bottom-right over the canvas */
 .fab {
@@ -147,7 +156,42 @@ div:has(> .add-node-menu) {
 /* Output nodes (output, text) consume edges; inputs (prompt, image) only feed them.
    The accent border makes that difference visible at a glance. */
 .xnode-head--output {
-  border-bottom-color: var(--color-border-accent, var(--color-accent));
+  border-bottom-color: var(--color-accent);
+}
+/* A node's outline matches its own header rule, so the two never disagree: accent
+   all the way around an output, the quieter emphasized grey around an input. That
+   keeps the two families apart at a glance and keeps one border colour per node. */
+.react-flow__node:has(.xnode-head--output) > .astryx-card {
+  border-color: var(--color-accent);
+}
+.react-flow__node:has(.xnode-head--input) > .astryx-card {
+  border-color: var(--color-border-emphasized);
+}
+.xnode-head--input {
+  border-bottom-color: var(--color-border-emphasized);
+}
+/* Footer: mirrors the header's rule so a node reads as banded top and bottom. */
+.xnode-foot {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border-top: 1px solid var(--color-border-emphasized);
+}
+/* Pushed right rather than the footer being space-between: the cost and the image
+   count are two separate texts, and space-between would fling them apart. */
+.xnode-foot-end {
+  margin-inline-start: auto;
+}
+.react-flow__node:has(.xnode-head--output) .xnode-foot {
+  border-top-color: var(--color-accent);
+}
+
+/* Icon and label travel together on the left; the id or badge stays right. */
+.xnode-head-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
 }
 .xnode-body {
   position: relative;
@@ -188,14 +232,18 @@ div:has(> .add-node-menu) {
   resize: none;
 }
 
-/* The text node's result is editable and often long, so let it grow vertically.
-   Not resize: both — TextNode's Card is a fixed 300px, and a horizontal drag
-   would push the box outside it. */
-.xnode-text-result {
-  resize: vertical;
+/* Text node fields resize in both axes, same as the prompt node's: the handle
+   goes on the field wrapper (a flex item with basis 0 ignores an inline width)
+   and the card, now fit-content, tracks whichever field is widest. */
+.xnode-text .astryx-textarea {
+  resize: both;
   overflow: auto;
+  align-items: stretch;
+  width: 260px; /* = old 300px card minus body padding */
+  min-width: 180px;
+  min-height: 64px;
 }
-.xnode-text-result textarea {
+.xnode-text .astryx-textarea textarea {
   resize: none;
 }
 
@@ -250,4 +298,104 @@ div:has(> .add-node-menu) {
   .react-flow__edge-path {
     animation: none !important;
   }
+}
+
+/* React Flow centers node text by default, which centers any plain Text we put
+   in a node body. Nothing here wants centered prose. */
+.react-flow__node {
+  text-align: left;
+}
+
+/* Runs / Free segmented control: one pill, two halves, sized to its content.
+   Built from a plain input + button (see RunsControl.jsx) so the shared border
+   and the divider are ours to draw. */
+.xruns {
+  --xruns-radius: calc(var(--radius-element) - 1px); /* inside the 1px border */
+  display: inline-flex;
+  align-items: stretch;
+  width: fit-content;
+  border: 1px solid var(--color-border-emphasized);
+  border-radius: var(--radius-element);
+}
+.xruns-num,
+.xruns-free {
+  border: none;
+  background: none;
+  font: inherit;
+  font-size: var(--font-size-body-sm, 0.8125rem);
+  color: var(--color-text-secondary);
+  padding: var(--spacing-1) var(--spacing-2);
+  cursor: pointer;
+  /* Both halves are as wide as the wider label ("Free"), so the pill reads as
+     two equal segments without either one stretching across the card. */
+  width: 4.5em;
+  text-align: center;
+}
+/* Each half carries the container's corner radii on its own outer side, so the
+   selected fill and the focus ring both follow the pill instead of cutting
+   square corners across it. */
+.xruns-num {
+  appearance: auto; /* keep the native up/down arrows */
+  border-start-start-radius: var(--xruns-radius);
+  border-end-start-radius: var(--xruns-radius);
+}
+.xruns-free {
+  appearance: none;
+  border-inline-start: 1px solid var(--color-border-emphasized);
+  border-start-end-radius: var(--xruns-radius);
+  border-end-end-radius: var(--xruns-radius);
+  white-space: nowrap;
+}
+/* The selected half is filled. --color-accent-muted is translucent enough to
+   vanish against the node's dark card, which left neither half looking chosen. */
+.xruns-num[data-active='true'],
+.xruns-free[data-active='true'] {
+  background: var(--color-background-gray);
+  color: var(--color-text-primary);
+  font-weight: var(--font-weight-medium, 500);
+}
+.xruns-num:focus-visible,
+.xruns-free:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: -2px;
+}
+
+/* Generated results: the add-to-canvas button rides on the thumbnail and only
+   shows on hover, so a column of results stays a column of images. Kept visible
+   on focus-within too, or the button would be unreachable by keyboard. */
+.xnode-result {
+  position: relative;
+  display: block;
+}
+.xnode-result-add {
+  position: absolute;
+  top: var(--spacing-1);
+  right: var(--spacing-1);
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+.xnode-result:hover .xnode-result-add,
+.xnode-result:focus-within .xnode-result-add {
+  opacity: 1;
+}
+@media (prefers-reduced-motion: reduce) {
+  .xnode-result-add {
+    transition: none;
+  }
+}
+
+/* Selection: React Flow marks the wrapper, so the ring goes on the card inside it.
+   Offset rather than flush, because an output node's own border is already this
+   colour and a flush ring would just read as a thicker border. */
+.react-flow__node.selected > .astryx-card {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+/* Generated video, played from disk. Same width as the result thumbnails; height
+   follows the clip's own ratio rather than being forced square. */
+.xnode-video {
+  width: 100%;
+  border-radius: var(--radius-element);
+  display: block;
 }

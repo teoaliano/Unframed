@@ -60,26 +60,77 @@ export function buildRequest(nodes, edges, outputId) {
   return { prompt: promptParts.join('\n\n'), input_references: references };
 }
 
-// The reference number an image node will have when sent (1-based), or null if
-// it isn't connected to an output / has no image. Kept here so the node badge and
-// buildRequest agree on ordering. `nodes`/`edges` are the live React Flow arrays.
-// Both output-family types (`output` and `text`) consume edges, so an image wired
-// only into a text node still counts as connected.
-export function imageRefNumber(nodes, edges, imageId) {
-  const outputIds = new Set(
-    nodes.filter((n) => n.type === 'output' || n.type === 'text').map((n) => n.id),
-  );
-  if (!outputIds.size) return null;
+// The reference numbers an image node will be sent as, one per node consuming it
+// (1-based, ascending, deduplicated). Empty when it has no picture or feeds nothing.
+// Numbering is per consumer because that is how buildRequest sends them: an image can
+// be image 1 to a text node and image 2 to an output node at the same time. Kept here
+// so the node badge and buildRequest cannot disagree. `nodes`/`edges` are the live
+// React Flow arrays.
+export function imageRefNumbers(nodes, edges, imageId) {
+  const self = nodes.find((n) => n.id === imageId);
+  if (!self || self.type !== 'image' || !self.data?.dataUrl) return [];
+
   const byId = new Map(nodes.map((n) => [n.id, n]));
-  const connected = new Map();
-  for (const e of edges) {
-    if (!outputIds.has(e.target)) continue;
-    const n = byId.get(e.source);
-    if (n && n.type === 'image' && n.data?.dataUrl) connected.set(n.id, n);
+  const consumers = nodes.filter((n) => n.type === 'output' || n.type === 'text');
+  const ranks = new Set();
+
+  for (const consumer of consumers) {
+    const images = edges
+      .filter((e) => e.target === consumer.id)
+      .map((e) => byId.get(e.source))
+      .filter((n) => n && n.type === 'image' && n.data?.dataUrl)
+      .sort((a, b) => (a.position?.y ?? 0) - (b.position?.y ?? 0));
+    const idx = images.findIndex((n) => n.id === imageId);
+    if (idx !== -1) ranks.add(idx + 1);
   }
-  const ordered = [...connected.values()].sort(
-    (a, b) => (a.position?.y ?? 0) - (b.position?.y ?? 0),
-  );
-  const idx = ordered.findIndex((n) => n.id === imageId);
-  return idx === -1 ? null : idx + 1;
+
+  return [...ranks].sort((a, b) => a - b);
+}
+
+// The text node feeding this output, if any — Free mode needs its result to know
+// what to generate. Lowest Y wins, matching buildRequest's ordering, so "the text
+// node" is a stable choice when several are wired in. Returns undefined when none
+// are wired in.
+export function findWiredTextNode(nodes, edges, outputId) {
+  const byId = new Map(nodes.map((n) => [n.id, n]));
+  return edges
+    .filter((e) => e.target === outputId)
+    .map((e) => byId.get(e.source))
+    .filter((n) => n && n.type === 'text')
+    .sort((a, b) => (a.position?.y ?? 0) - (b.position?.y ?? 0))[0];
+}
+
+// One prompt per Free-mode block. The shared context is everything wired into the
+// output EXCEPT the text node supplying the list — asking buildRequest for the graph
+// minus that node (rather than subtracting its result from the joined prompt) is what
+// keeps a blank line inside the result, or an @id reference to the list itself, from
+// smuggling the whole list back in. Each block is appended after a blank line.
+export function freeRunPrompts(nodes, edges, outputId, textNodeId, blocks) {
+  const shared = buildRequest(
+    nodes.filter((n) => n.id !== textNodeId),
+    edges,
+    outputId,
+  ).prompt;
+  return blocks.map((b) => [shared, b].filter(Boolean).join('\n\n'));
+}
+
+// Split a text node's result into one block per run. The separator is a line that
+// contains only "---", so a --- inside prose is left alone. `max` is the run cap;
+// `truncated` lets the caller say "list had 14 items, running the first 10" instead
+// of silently dropping the tail.
+export function splitSections(text, max = 10) {
+  const all = String(text || '')
+    .split('\n')
+    .reduce(
+      (acc, line) => {
+        if (line.trim() === '---') acc.push([]);
+        else acc[acc.length - 1].push(line);
+        return acc;
+      },
+      [[]],
+    )
+    .map((lines) => lines.join('\n').trim())
+    .filter(Boolean);
+
+  return { blocks: all.slice(0, max), truncated: Math.max(0, all.length - max) };
 }

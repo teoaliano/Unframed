@@ -20,11 +20,46 @@ export async function runText(body) {
   const res = await fetch('/api/text', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
+    body: JSON.stringify({ ...body, project: currentProject }),
   });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(data.error || `Request failed (${res.status})`);
   return data;
+}
+
+// Video is a job, not a call: this starts one and resolves when the file exists,
+// reporting progress along the way. The upstream job can run for minutes, so the
+// polling lives here rather than in one long request that a proxy would time out.
+export async function generateVideo(body, onStatus) {
+  const res = await fetch('/api/video', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ ...body, project: currentProject }),
+  });
+  const started = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(started.error || `Request failed (${res.status})`);
+
+  // Everything the server needs to name the file and its sidecar once the job lands.
+  const q = new URLSearchParams({
+    project: currentProject,
+    prompt: body.prompt || '',
+    model: body.model || '',
+    duration: body.duration ?? '',
+    resolution: body.resolution || '',
+  });
+
+  // Every 4s: fast enough to feel live, slow enough that a three-minute render is
+  // ~45 requests rather than hundreds.
+  for (let waited = 0; waited < 15 * 60 * 1000; waited += 4000) {
+    await new Promise((r) => setTimeout(r, 4000));
+    const p = await fetch(`/api/video/${encodeURIComponent(started.id)}?${q}`);
+    const d = await p.json().catch(() => ({}));
+    if (!p.ok) throw new Error(d.error || `Request failed (${p.status})`);
+    if (d.status === 'failed') throw new Error(d.error || 'Generation failed.');
+    if (d.status === 'completed') return d;
+    onStatus?.(d.status, d.progress);
+  }
+  throw new Error('Gave up waiting for the video after 15 minutes. It may still finish on OpenRouter.');
 }
 
 // { ok, model, hasKey, keyHint, outputDir } — keyHint is the last 4 chars; the key
