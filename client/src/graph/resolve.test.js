@@ -1,6 +1,6 @@
 // Assert-based self-check. Run with: node client/src/graph/resolve.test.js
 import assert from 'node:assert/strict';
-import { buildRequest, imageRefNumber } from './resolve.js';
+import { buildRequest, imageRefNumber, splitSections } from './resolve.js';
 
 const out = { id: 'out', type: 'output', position: { x: 400, y: 0 }, data: {} };
 
@@ -125,6 +125,55 @@ function graph(nodes, edges) {
   );
   assert.equal(imageRefNumber(nodes, edges, 'i1'), 1);
   assert.equal(imageRefNumber(nodes, edges, 'i2'), null);
+}
+
+// --- splitSections ---
+
+// Splits on standalone --- lines, trimming each block.
+{
+  const { blocks, truncated } = splitSections('one\n---\ntwo\n---\nthree');
+  assert.deepEqual(blocks, ['one', 'two', 'three']);
+  assert.equal(truncated, 0);
+}
+
+// Surrounding whitespace on the separator line is tolerated; empty blocks drop out.
+{
+  const { blocks } = splitSections('one\n  ---  \n\n---\n\ntwo\n');
+  assert.deepEqual(blocks, ['one', 'two']);
+}
+
+// A --- inside a line of prose is not a separator.
+{
+  const { blocks } = splitSections('a --- b\n---\nc');
+  assert.deepEqual(blocks, ['a --- b', 'c']);
+}
+
+// Text with no separator yields exactly one block — the caller decides what to do.
+{
+  const { blocks } = splitSections('just one long description');
+  assert.deepEqual(blocks, ['just one long description']);
+}
+
+// Empty or whitespace-only input yields no blocks.
+{
+  assert.deepEqual(splitSections('').blocks, []);
+  assert.deepEqual(splitSections('   \n\n  ').blocks, []);
+}
+
+// The cap truncates and reports how many were dropped.
+{
+  const many = Array.from({ length: 14 }, (_, i) => `layer ${i + 1}`).join('\n---\n');
+  const { blocks, truncated } = splitSections(many);
+  assert.equal(blocks.length, 10);
+  assert.equal(blocks[9], 'layer 10');
+  assert.equal(truncated, 4);
+}
+
+// A smaller cap is honoured (the caller passes 10 in production).
+{
+  const { blocks, truncated } = splitSections('a\n---\nb\n---\nc', 2);
+  assert.deepEqual(blocks, ['a', 'b']);
+  assert.equal(truncated, 1);
 }
 
 console.log('resolve.js: all checks passed');

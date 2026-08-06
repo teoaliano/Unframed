@@ -83,3 +83,24 @@ export function imageRefNumber(nodes, edges, imageId) {
   const idx = ordered.findIndex((n) => n.id === imageId);
   return idx === -1 ? null : idx + 1;
 }
+
+// Split a text node's result into one block per run. The separator is a line that
+// contains only "---", so a --- inside prose is left alone. `max` is the run cap;
+// `truncated` lets the caller say "list had 14 items, running the first 10" instead
+// of silently dropping the tail.
+export function splitSections(text, max = 10) {
+  const all = String(text || '')
+    .split('\n')
+    .reduce(
+      (acc, line) => {
+        if (line.trim() === '---') acc.push([]);
+        else acc[acc.length - 1].push(line);
+        return acc;
+      },
+      [[]],
+    )
+    .map((lines) => lines.join('\n').trim())
+    .filter(Boolean);
+
+  return { blocks: all.slice(0, max), truncated: Math.max(0, all.length - max) };
+}
