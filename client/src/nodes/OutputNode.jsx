@@ -50,16 +50,23 @@ export default function OutputNode({ id, data }) {
   // Drop a finished image onto the canvas as an image node so it can be wired back in
   // as input for the next generation. It goes to the right of the output node,
   // top-aligned; repeat results step down instead of stacking invisibly.
-  function placeResult(resp) {
+  // `index` is this run's position within its own batch (0-based). Concurrent runs
+  // in the same batch settle near-simultaneously and each reads a getNodes() snapshot
+  // that doesn't yet include the others' nodes, so the collision scan alone can't tell
+  // them apart — the index offsets their starting spot and salts their id so same-batch
+  // runs can never collapse onto one node. Earlier batches' nodes are already in the
+  // node list by the time this batch runs, so the while loop below still steps clear
+  // of those the ordinary way.
+  function placeResult(resp, index) {
     const self = getNode(id);
     const pos = self?.position ?? { x: 0, y: 0 };
     const width = self?.measured?.width ?? 300;
-    const spot = { x: pos.x + width + 40, y: pos.y };
+    const spot = { x: pos.x + width + 40, y: pos.y + 48 * index };
     while (getNodes().some((n) => Math.hypot(n.position.x - spot.x, n.position.y - spot.y) < 24)) {
       spot.y += 48;
     }
     addNodes({
-      id: `gen-${Date.now()}-${Math.round(spot.y)}`,
+      id: `gen-${Date.now()}-${index}`,
       type: 'image',
       dragHandle: '.xnode-head',
       position: spot,
@@ -100,7 +107,7 @@ export default function OutputNode({ id, data }) {
           }).then((resp) => {
             setDone((d) => d + 1);
             setResults((r) => [...r, resp]);
-            placeResult(resp);
+            placeResult(resp, i);
             return resp;
           }),
         ),
