@@ -31,6 +31,7 @@ export default function OutputNode({ id, data }) {
   const [cost, setCost] = useState(null);
   const [models, setModels] = useState([]);
   const [defaultModel, setDefaultModel] = useState('');
+  const [runsDraft, setRunsDraft] = useState(null); // null = show the stored value
 
   useEffect(() => {
     listModels().then((d) => {
@@ -135,15 +136,17 @@ export default function OutputNode({ id, data }) {
           <TextInput
             label="Runs"
             size="sm"
-            value={freeRuns ? '' : String(runs)}
+            value={freeRuns ? '' : (runsDraft ?? String(runs))}
             isDisabled={freeRuns}
             disabledMessage="Free mode decides the number from the flow"
             onChange={(v) => {
-              const digits = v.replace(/[^\d]/g, '');
-              // TextInput has no onBlur, so clamp as soon as there are enough
-              // digits to know the typed value is out of range (e.g. "15"),
-              // rather than waiting for the field to lose focus.
-              updateNodeData(id, { runs: digits.length >= 2 ? clampRuns(digits) : digits });
+              // TextInput has no onBlur, so a local draft holds exactly what was
+              // typed (including "" or "0" mid-edit) for display, while node data
+              // always stores a clamped number — Task 4 reads data.runs directly
+              // and needs a number, not a string that merely looks numeric.
+              const digits = v.replace(/[^\d]/g, '').slice(0, 2);
+              setRunsDraft(digits);
+              updateNodeData(id, { runs: clampRuns(digits) });
             }}
           />
           <Button
