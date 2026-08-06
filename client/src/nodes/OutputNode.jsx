@@ -270,8 +270,9 @@ export default function OutputNode({ id, data }) {
           <HStack gap={1} align="start">
             <Icon icon="info" size="sm" color="secondary" />
             <Text type="supporting">
-              Wire in a Text node whose result lists the items to generate, separated by
-              lines containing only ---. Each item becomes one image.
+              Wire in a text node with a list separated by ---
+              <br />
+              Each item turns into one generation.
             </Text>
           </HStack>
         )}
