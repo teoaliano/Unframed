@@ -67,6 +67,15 @@ div:has(> .add-node-menu) {
   flex: 1;
   min-height: 0;
 }
+/* The canvas is wrapped by the context-menu trigger, which renders a plain div of
+   its own. Without this the wrapper is the flex child, the canvas inside it has no
+   height to fill, and the whole graph collapses to nothing. */
+.app > *:has(> .canvas) {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
 
 /* floating "add node" button, bottom-right over the canvas */
 .fab {

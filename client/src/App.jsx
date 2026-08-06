@@ -11,6 +11,7 @@ import {
 import { Icon } from '@astryxdesign/core/Icon';
 import { IconButton } from '@astryxdesign/core/IconButton';
 import { DropdownMenu } from '@astryxdesign/core/DropdownMenu';
+import { ContextMenu } from '@astryxdesign/core/ContextMenu';
 import { Button } from '@astryxdesign/core/Button';
 import { TextInput } from '@astryxdesign/core/TextInput';
 import { Dialog, DialogHeader } from '@astryxdesign/core/Dialog';
@@ -364,7 +365,10 @@ function Canvas() {
   );
 
   const addNode = useCallback(
-    (type, data, screenPos) =>
+    (type, data, screenPos) => {
+      // Minted out here, not inside the updater: React runs updaters twice under
+      // StrictMode, which would burn an id every time.
+      const id = nextId();
       setNodes((ns) => {
         // No explicit point (toolbar button) -> center of what you're looking at.
         const r = canvasRef.current.getBoundingClientRect();
@@ -377,8 +381,10 @@ function Canvas() {
           position.x -= 120;
           position.y -= 75;
         }
-        return [...ns, withDrag({ id: nextId(), type, position, data })];
-      }),
+        return [...ns, withDrag({ id, type, position, data })];
+      });
+      return id;
+    },
     [setNodes, screenToFlowPosition],
   );
 
@@ -386,6 +392,54 @@ function Canvas() {
   const addImage = () => addNode('image', { fileName: '', dataUrl: '' });
   const addOutput = () => addNode('output', { resolution: '1K', quality: 'low', aspect_ratio: '1:1' });
   const addText = () => addNode('text', { text: '', result: '' });
+
+  // Where the last right-click landed, so the context menu's items can drop their
+  // node on that spot. The menu component reports the click by opening, not by
+  // handing the event to each item, so the point is caught on the way past.
+  const menuPoint = useRef(null);
+
+  // One definition, two menus: the toolbar's + button and the canvas context menu
+  // offer the same nodes in the same order. `at` is undefined for the toolbar,
+  // which then falls back to the centre of the view.
+  const addMenuItems = (at) => [
+    {
+      type: 'section',
+      title: 'Inputs',
+      items: [
+        { label: 'Prompt', icon: PromptIcon, onClick: () => addNode('prompt', { text: '' }, at?.()) },
+        { label: 'Image', icon: ImageIcon, onClick: () => addNode('image', { fileName: '', dataUrl: '' }, at?.()) },
+      ],
+    },
+    {
+      type: 'section',
+      title: 'Outputs',
+      items: [
+        {
+          label: 'Output',
+          icon: OutputIcon,
+          onClick: () => addNode('output', { resolution: '1K', quality: 'low', aspect_ratio: '1:1' }, at?.()),
+        },
+        { label: 'Text', icon: TextIcon, onClick: () => addNode('text', { text: '', result: '' }, at?.()) },
+      ],
+    },
+  ];
+
+  // Double-click on empty canvas: the most common node, ready to type into. Only
+  // on the pane itself — double-clicking inside a node is how you select a word.
+  function onCanvasDoubleClick(e) {
+    if (!e.target.classList?.contains('react-flow__pane')) return;
+    focusField(addNode('prompt', { text: '' }, { x: e.clientX, y: e.clientY }));
+  }
+
+  // React Flow keeps a freshly added node hidden until it has measured it, and
+  // focus() does nothing inside a hidden subtree — so the first attempt lands on
+  // an element that cannot take it. Retry briefly, stopping the moment it sticks.
+  const focusField = useCallback((id, tries = 12) => {
+    const field = canvasRef.current?.querySelector(`.react-flow__node[data-id="${id}"] textarea`);
+    field?.focus();
+    if (field && document.activeElement === field) return;
+    if (tries > 0) setTimeout(() => focusField(id, tries - 1), 40);
+  }, []);
 
   // Drag image files from Finder/Explorer onto the canvas -> reference nodes at
   // the drop point (offset a little when dropping several at once).
@@ -479,7 +533,19 @@ function Canvas() {
         </div>
       </header>
 
-      <div className="canvas" ref={canvasRef} onDragOver={(e) => e.preventDefault()} onDrop={onDrop}>
+      <ContextMenu items={addMenuItems(() => menuPoint.current)} menuWidth={152}>
+      <div
+        className="canvas"
+        ref={canvasRef}
+        onDragOver={(e) => e.preventDefault()}
+        onDrop={onDrop}
+        onDoubleClick={onCanvasDoubleClick}
+        // Caught on the way to the menu, which opens itself without telling its
+        // items where the click was.
+        onContextMenuCapture={(e) => {
+          menuPoint.current = { x: e.clientX, y: e.clientY };
+        }}
+      >
         <ReactFlow
           nodes={nodes}
           edges={edges}
@@ -536,24 +602,7 @@ function Canvas() {
             placement="start"
             className="add-node-menu"
             menuWidth={152}
-            items={[
-              {
-                type: 'section',
-                title: 'Inputs',
-                items: [
-                  { label: 'Prompt', icon: PromptIcon, onClick: addPrompt },
-                  { label: 'Image', icon: ImageIcon, onClick: addImage },
-                ],
-              },
-              {
-                type: 'section',
-                title: 'Outputs',
-                items: [
-                  { label: 'Output', icon: OutputIcon, onClick: addOutput },
-                  { label: 'Text', icon: TextIcon, onClick: addText },
-                ],
-              },
-            ]}
+            items={addMenuItems()}
             button={{
               label: 'Add node',
               isIconOnly: true,
@@ -564,6 +613,7 @@ function Canvas() {
           />
         </div>
       </div>
+      </ContextMenu>
 
       <Dialog
         isOpen={!!keyDlg}
