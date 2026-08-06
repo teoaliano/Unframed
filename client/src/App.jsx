@@ -24,6 +24,7 @@ import ImageNode from './nodes/ImageNode.jsx';
 import OutputNode from './nodes/OutputNode.jsx';
 import TextNode from './nodes/TextNode.jsx';
 import ProjectMenu from './ProjectMenu.jsx';
+import { PromptIcon, ImageIcon, OutputIcon, TextIcon } from './nodes/nodeIcons.jsx';
 import {
   setProject,
   listProjects,
@@ -50,11 +51,6 @@ const HandIcon = svg(
   <path d="M8 13V5.5a1.5 1.5 0 013 0V11m0-1V4.5a1.5 1.5 0 013 0V11m0-.5V6a1.5 1.5 0 013 0v7a6 6 0 01-6 6h-1a6 6 0 01-5.5-3.6L7 14c-.5-1-.2-1.8.6-2.2.7-.3 1.5 0 2 .7l-1.6-1.5" />,
 );
 const FitIcon = svg(<path d="M4 8V4h4M16 4h4v4M20 16v4h-4M8 20H4v-4" />);
-// node-type icons for the add menu
-const PromptIcon = svg(<path d="M4 6h16M4 12h16M4 18h10" />);
-const ReferenceIcon = svg(<><rect x="3" y="4" width="18" height="16" rx="2" /><circle cx="8.5" cy="9.5" r="1.5" /><path d="M21 16l-5-5-8 8" /></>);
-const OutputIcon = svg(<path d="M12 3l2 5 5 2-5 2-2 5-2-5-5-2 5-2 2-5z" />);
-const TextIcon = svg(<><path d="M4 7V5h16v2M12 5v14M9 19h6" /></>);
 const KeyIcon = svg(<><circle cx="8" cy="15" r="4" /><path d="M10.8 12.2L20 3m-3 0 3 3m-5 2 2.5 2.5" /></>);
 
 const HELP_TEXT =
@@ -471,7 +467,7 @@ function Canvas() {
                 title: 'Inputs',
                 items: [
                   { label: 'Prompt', icon: PromptIcon, onClick: addPrompt },
-                  { label: 'Image', icon: ReferenceIcon, onClick: addImage },
+                  { label: 'Image', icon: ImageIcon, onClick: addImage },
                 ],
               },
               {

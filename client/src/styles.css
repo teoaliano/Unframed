@@ -147,7 +147,37 @@ div:has(> .add-node-menu) {
 /* Output nodes (output, text) consume edges; inputs (prompt, image) only feed them.
    The accent border makes that difference visible at a glance. */
 .xnode-head--output {
-  border-bottom-color: var(--color-border-accent, var(--color-accent));
+  border-bottom-color: var(--color-accent);
+}
+/* A node's outline matches its own header rule, so the two never disagree: accent
+   all the way around an output, the quieter emphasized grey around an input. That
+   keeps the two families apart at a glance and keeps one border colour per node. */
+.react-flow__node:has(.xnode-head--output) > .astryx-card {
+  border-color: var(--color-accent);
+}
+.react-flow__node:has(.xnode-head--input) > .astryx-card {
+  border-color: var(--color-border-emphasized);
+}
+.xnode-head--input {
+  border-bottom-color: var(--color-border-emphasized);
+}
+/* Footer: mirrors the header's rule so a node reads as banded top and bottom. */
+.xnode-foot {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border-top: 1px solid var(--color-border-emphasized);
+}
+.react-flow__node:has(.xnode-head--output) .xnode-foot {
+  border-top-color: var(--color-accent);
+}
+
+/* Icon and label travel together on the left; the id or badge stays right. */
+.xnode-head-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
 }
 .xnode-body {
   position: relative;
@@ -314,4 +344,28 @@ div:has(> .add-node-menu) {
 .xruns-free:focus-visible {
   outline: 2px solid var(--color-accent);
   outline-offset: -2px;
+}
+
+/* Generated results: the add-to-canvas button rides on the thumbnail and only
+   shows on hover, so a column of results stays a column of images. Kept visible
+   on focus-within too, or the button would be unreachable by keyboard. */
+.xnode-result {
+  position: relative;
+  display: block;
+}
+.xnode-result-add {
+  position: absolute;
+  top: var(--spacing-1);
+  right: var(--spacing-1);
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+.xnode-result:hover .xnode-result-add,
+.xnode-result:focus-within .xnode-result-add {
+  opacity: 1;
+}
+@media (prefers-reduced-motion: reduce) {
+  .xnode-result-add {
+    transition: none;
+  }
 }

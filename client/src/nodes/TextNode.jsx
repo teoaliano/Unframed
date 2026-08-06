@@ -14,7 +14,7 @@ import { runText, listModels } from '../api.js';
 // the image output node — same buildRequest — and its answer lives in data.result so
 // prompts downstream can pull it in with @id.
 export default function TextNode({ id, data }) {
-  const { getNodes, getEdges, updateNodeData } = useReactFlow();
+  const { getNodes, getEdges, updateNodeData, getNode, addNodes } = useReactFlow();
   const [status, setStatus] = useState('idle'); // idle | running | error
   const [error, setError] = useState(null);
   const [models, setModels] = useState([]);
@@ -47,6 +47,27 @@ export default function TextNode({ id, data }) {
       setError(err.message);
       setStatus('error');
     }
+  }
+
+  // Copy, not move: the result stays on this node so anything referencing it by
+  // @id keeps resolving, and the new node is a plain prompt you can edit without
+  // re-running the model.
+  function addResultAsPrompt() {
+    const self = getNode(id);
+    const pos = self?.position ?? { x: 0, y: 0 };
+    const width = self?.measured?.width ?? 300;
+    const spot = { x: pos.x + width + 40, y: pos.y };
+    while (getNodes().some((n) => Math.hypot(n.position.x - spot.x, n.position.y - spot.y) < 24)) {
+      spot.y += 48;
+    }
+    addNodes({
+      id: `p-${Date.now()}`,
+      type: 'prompt',
+      dragHandle: '.xnode-head',
+      className: 'nowheel',
+      position: spot,
+      data: { text: data.result },
+    });
   }
 
   return (
@@ -95,14 +116,24 @@ export default function TextNode({ id, data }) {
               value={data.result}
               onChange={(v) => updateNodeData(id, { result: v })}
             />
-            {data.cost != null && (
-              <Text type="supporting" color="accent" hasTabularNumbers>
-                ${Number(data.cost).toFixed(4)}
-              </Text>
-            )}
+            <Button
+              label="Add as prompt node"
+              variant="secondary"
+              size="sm"
+              tooltip="Copy this result onto the canvas as a prompt node"
+              onClick={addResultAsPrompt}
+            />
           </VStack>
         )}
       </VStack>
+
+      {data.cost != null && (
+        <div className="xnode-foot">
+          <Text type="supporting" color="accent" hasTabularNumbers>
+            ${Number(data.cost).toFixed(4)}
+          </Text>
+        </div>
+      )}
     </Card>
   );
 }

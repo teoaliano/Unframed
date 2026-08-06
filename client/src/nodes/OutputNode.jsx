@@ -5,6 +5,7 @@ import { Text } from '@astryxdesign/core/Text';
 import { Button } from '@astryxdesign/core/Button';
 import { Selector } from '@astryxdesign/core/Selector';
 import { Thumbnail } from '@astryxdesign/core/Thumbnail';
+import { IconButton } from '@astryxdesign/core/IconButton';
 import { StatusDot } from '@astryxdesign/core/StatusDot';
 import { Icon } from '@astryxdesign/core/Icon';
 import { HStack, VStack } from '@astryxdesign/core/Stack';
@@ -12,6 +13,13 @@ import NodeHeader from './NodeHeader.jsx';
 import RunsControl, { clampRuns } from './RunsControl.jsx';
 import { buildRequest, splitSections, findWiredTextNode, freeRunPrompts } from '../graph/resolve.js';
 import { generate, runText, listModels } from '../api.js';
+
+// Arrow leaving a frame: "send this out onto the canvas".
+const AddToCanvasIcon = (p) => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...p}>
+    <path d="M14 4h6v6M20 4l-8 8M18 14v5a1 1 0 01-1 1H5a1 1 0 01-1-1V7a1 1 0 011-1h5" />
+  </svg>
+);
 
 const RESOLUTIONS = ['512', '1K', '2K', '4K'];
 const QUALITIES = ['auto', 'low', 'medium', 'high'];
@@ -44,16 +52,12 @@ export default function OutputNode({ id, data }) {
   const freeRuns = Boolean(data.freeRuns);
   const runs = clampRuns(data.runs ?? 1);
 
-  // Where this batch's results should start landing: to the right of the output
-  // node, top-aligned, stepped past whatever is already on the canvas. Computed
-  // ONCE per batch, before any run finishes, and passed into placeResult — a scan
-  // done inside placeResult would race its own siblings, because concurrent runs
-  // in the same batch settle near-simultaneously and each would read a getNodes()
-  // snapshot that doesn't yet include the others' nodes, landing them on top of
-  // each other. One scan against a snapshot that (correctly) contains nothing from
-  // this batch yet has no such race; every run in the batch then places itself by
-  // pure arithmetic off that shared base.
-  function batchBase() {
+  // A free spot to the right of the output node, stepped down past whatever is
+  // already there. Scanned once per add so a batch added together cannot land its
+  // images on top of each other: addNodes is async to getNodes(), so N scans in one
+  // tick would each read a snapshot without the others' nodes. Callers scan once
+  // and offset by index instead.
+  function freeSpot() {
     const self = getNode(id);
     const pos = self?.position ?? { x: 0, y: 0 };
     const width = self?.measured?.width ?? 300;
@@ -64,19 +68,33 @@ export default function OutputNode({ id, data }) {
     return spot;
   }
 
-  // Drop a finished image onto the canvas as an image node so it can be wired back in
-  // as input for the next generation. `index` is this run's position within its own
-  // batch (0-based); `base` is the batch's shared, already-clear starting spot from
-  // batchBase(). No scanning here — every run's position is base.y + 48 * index, so
-  // same-batch runs can never collapse onto one another regardless of finish order.
-  function placeResult(resp, index, base) {
+  // Put a generated image on the canvas as an image node, so it can be wired back
+  // in as a reference for the next generation. Results no longer land here on their
+  // own: a ten-run batch used to bury the canvas in nodes nobody asked for, so this
+  // is now driven by the add buttons on the results below.
+  function addToCanvas(result, index, base) {
     addNodes({
       id: `gen-${Date.now()}-${index}`,
       type: 'image',
       dragHandle: '.xnode-head',
       position: { x: base.x, y: base.y + 48 * index },
-      data: { fileName: resp.savedPath?.split('/').pop() || 'generated', dataUrl: resp.image },
+      data: {
+        fileName: result.savedPath?.split('/').pop() || 'generated',
+        dataUrl: result.image,
+      },
     });
+  }
+
+  // Empty the node's result strip. Only this node's display: the files and their
+  // sidecars are already on disk, and anything added to the canvas stays there.
+  function clearResults() {
+    setResults([]);
+    setRepairCost(0);
+    setNote(null);
+    setError(null);
+    setDone(0);
+    setTotal(null);
+    setStatus('idle');
   }
 
   // Render-time twin of findWiredTextNode() below: getNodes()/getEdges() are stable
@@ -172,9 +190,6 @@ export default function OutputNode({ id, data }) {
       setNote(notes.length ? notes.join(' · ') : null);
       setTotal(prompts.length);
 
-      // Claimed once, before any run starts, so the runs place themselves by pure
-      // arithmetic instead of racing each other for a free spot (see batchBase).
-      const base = batchBase();
       const settled = await Promise.allSettled(
         prompts.map((p, i) =>
           generate({
@@ -192,7 +207,6 @@ export default function OutputNode({ id, data }) {
             // runIndex travels with the result so thumbnails, canvas placement, and
             // labels all agree on run order regardless of completion order.
             setResults((r) => [...r, { ...resp, runIndex: i }]);
-            placeResult(resp, i, base);
             return resp;
           }),
         ),
@@ -315,23 +329,67 @@ export default function OutputNode({ id, data }) {
             {[...results]
               .sort((a, b) => a.runIndex - b.runIndex)
               .map((r) => (
-                <Thumbnail
-                  key={r.runIndex}
-                  className="xnode-thumb"
-                  src={r.image}
-                  alt={`generated result ${r.runIndex + 1}`}
-                  label={`result ${r.runIndex + 1}`}
-                />
+                <span className="xnode-result" key={r.runIndex}>
+                  <Thumbnail
+                    className="xnode-thumb"
+                    src={r.image}
+                    alt={`generated result ${r.runIndex + 1}`}
+                    label={`result ${r.runIndex + 1}`}
+                  />
+                  <span className="xnode-result-add">
+                    <IconButton
+                      label={`Add result ${r.runIndex + 1} to the canvas`}
+                      tooltip="Add to canvas as an image node"
+                      icon={<AddToCanvasIcon />}
+                      size="sm"
+                      onClick={() => addToCanvas(r, 0, freeSpot())}
+                    />
+                  </span>
+                </span>
               ))}
-            {(results.some((r) => r.cost != null) || repairCost > 0) && (
-              <Text type="supporting" color="accent" hasTabularNumbers>
-                ${(results.reduce((sum, r) => sum + (Number(r.cost) || 0), 0) + repairCost).toFixed(4)}
-                {results.length > 1 ? ` · ${results.length} images` : ''}
-              </Text>
-            )}
+            <HStack gap={1}>
+              {results.length > 1 && (
+                <Button
+                  label="Add all to canvas"
+                  icon={<AddToCanvasIcon />}
+                  variant="secondary"
+                  size="sm"
+                  // One scan, then an index offset per image: freeSpot() reads
+                  // getNodes(), which will not show the nodes added a line earlier in
+                  // this same tick, so scanning per image would stack them.
+                  onClick={() => {
+                    const base = freeSpot();
+                    [...results]
+                      .sort((a, b) => a.runIndex - b.runIndex)
+                      .forEach((r, i) => addToCanvas(r, i, base));
+                  }}
+                />
+              )}
+              <Button
+                label="Clear"
+                variant="ghost"
+                size="sm"
+                tooltip="Remove these results from the node. Files already written to disk stay, and images added to the canvas stay."
+                onClick={clearResults}
+              />
+            </HStack>
           </VStack>
         )}
       </VStack>
+
+      {/* What the run cost sits in a footer rather than in the body's flow: it
+          reports on the node as a whole, so it reads better banded off against the
+          same rule as the title than stacked under the last result. */}
+      {(results.some((r) => r.cost != null) || repairCost > 0) && (
+        <div className="xnode-foot">
+          <Text type="supporting" color="accent" hasTabularNumbers>
+            ${(results.reduce((sum, r) => sum + (Number(r.cost) || 0), 0) + repairCost).toFixed(4)}
+          </Text>
+          {results.length > 1 && (
+            <Text type="supporting" color="secondary">{results.length} images</Text>
+          )}
+        </div>
+      )}
     </Card>
   );
 }
