@@ -32,8 +32,10 @@ export default function RunsControl({ runs, freeRuns, onRunsChange, onModeChange
     <span className="xruns" role="group" aria-label="Runs">
       <input
         className="xruns-num"
-        type="text"
-        inputMode="numeric"
+        type="number"
+        min={1}
+        max={MAX_RUNS}
+        step={1}
         aria-label="Number of runs"
         data-active={!freeRuns}
         value={draft ?? String(runs)}

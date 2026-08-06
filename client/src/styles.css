@@ -266,16 +266,15 @@ div:has(> .add-node-menu) {
    Built from a plain input + button (see RunsControl.jsx) so the shared border
    and the divider are ours to draw. */
 .xruns {
+  --xruns-radius: calc(var(--radius-element) - 1px); /* inside the 1px border */
   display: inline-flex;
   align-items: stretch;
   width: fit-content;
   border: 1px solid var(--color-border-emphasized);
   border-radius: var(--radius-element);
-  overflow: hidden;
 }
 .xruns-num,
 .xruns-free {
-  appearance: none;
   border: none;
   background: none;
   font: inherit;
@@ -283,14 +282,24 @@ div:has(> .add-node-menu) {
   color: var(--color-text-secondary);
   padding: var(--spacing-1) var(--spacing-2);
   cursor: pointer;
-}
-/* Wide enough for two digits and no wider: the cap is 10. */
-.xruns-num {
-  width: 3.5ch;
+  /* Both halves are as wide as the wider label ("Free"), so the pill reads as
+     two equal segments without either one stretching across the card. */
+  width: 4.5em;
   text-align: center;
 }
+/* Each half carries the container's corner radii on its own outer side, so the
+   selected fill and the focus ring both follow the pill instead of cutting
+   square corners across it. */
+.xruns-num {
+  appearance: auto; /* keep the native up/down arrows */
+  border-start-start-radius: var(--xruns-radius);
+  border-end-start-radius: var(--xruns-radius);
+}
 .xruns-free {
+  appearance: none;
   border-inline-start: 1px solid var(--color-border-emphasized);
+  border-start-end-radius: var(--xruns-radius);
+  border-end-end-radius: var(--xruns-radius);
   white-space: nowrap;
 }
 /* The selected half is filled. --color-accent-muted is translucent enough to
