@@ -347,47 +347,52 @@ export default function OutputNode({ id, data }) {
                   </span>
                 </span>
               ))}
-            <HStack gap={1}>
-              {results.length > 1 && (
-                <Button
-                  label="Add all to canvas"
-                  icon={<AddToCanvasIcon />}
-                  variant="secondary"
-                  size="sm"
-                  // One scan, then an index offset per image: freeSpot() reads
-                  // getNodes(), which will not show the nodes added a line earlier in
-                  // this same tick, so scanning per image would stack them.
-                  onClick={() => {
-                    const base = freeSpot();
-                    [...results]
-                      .sort((a, b) => a.runIndex - b.runIndex)
-                      .forEach((r, i) => addToCanvas(r, i, base));
-                  }}
-                />
-              )}
+            {results.length > 1 && (
               <Button
-                label="Clear"
-                variant="ghost"
+                label="Add all to canvas"
+                icon={<AddToCanvasIcon />}
+                variant="secondary"
                 size="sm"
-                tooltip="Remove these results from the node. Files already written to disk stay, and images added to the canvas stay."
-                onClick={clearResults}
+                // One scan, then an index offset per image: freeSpot() reads
+                // getNodes(), which will not show the nodes added a line earlier in
+                // this same tick, so scanning per image would stack them.
+                onClick={() => {
+                  const base = freeSpot();
+                  [...results]
+                    .sort((a, b) => a.runIndex - b.runIndex)
+                    .forEach((r, i) => addToCanvas(r, i, base));
+                }}
               />
-            </HStack>
+            )}
           </VStack>
         )}
       </VStack>
 
       {/* What the run cost sits in a footer rather than in the body's flow: it
           reports on the node as a whole, so it reads better banded off against the
-          same rule as the title than stacked under the last result. */}
-      {(results.some((r) => r.cost != null) || repairCost > 0) && (
+          same rule as the title than stacked under the last result. Clear belongs
+          here too — it acts on the whole strip, not on the last image above it. */}
+      {(results.length > 0 || repairCost > 0) && (
         <div className="xnode-foot">
-          <Text type="supporting" color="accent" hasTabularNumbers>
-            ${(results.reduce((sum, r) => sum + (Number(r.cost) || 0), 0) + repairCost).toFixed(4)}
-          </Text>
-          {results.length > 1 && (
-            <Text type="supporting" color="secondary">{results.length} images</Text>
+          {(results.some((r) => r.cost != null) || repairCost > 0) && (
+            <>
+              <Text type="supporting" color="accent" hasTabularNumbers>
+                ${(results.reduce((sum, r) => sum + (Number(r.cost) || 0), 0) + repairCost).toFixed(4)}
+              </Text>
+              {results.length > 1 && (
+                <Text type="supporting" color="secondary">{results.length} images</Text>
+              )}
+            </>
           )}
+          <span className="xnode-foot-end">
+            <Button
+              label="Clear"
+              variant="ghost"
+              size="sm"
+              tooltip="Remove these results from the node. Files already written to disk stay, and images added to the canvas stay."
+              onClick={clearResults}
+            />
+          </span>
         </div>
       )}
     </Card>

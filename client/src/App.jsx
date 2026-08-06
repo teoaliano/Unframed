@@ -83,30 +83,36 @@ const bumpCounter = (nodes) => {
 // folder the server writes. ponytail: kept in sync by hand; two call sites.
 const slug = (s) => s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '').slice(0, 40);
 
-// A small starter graph that demonstrates the @id reference:
-// the "scene" prompt embeds the "p-subject" prompt.
+// A small starter graph that demonstrates the @id reference: the scene prompt
+// embeds the subject prompt. The ids come from the same counter every other node
+// draws from, so a starter node looks like one you added yourself — hand-written
+// ids like "p-scene" implied a naming scheme the app doesn't actually have.
+const SCENE_ID = nextId();
+const SUBJECT_ID = nextId();
+const OUTPUT_ID = nextId();
+
 const initialNodes = [
   {
-    id: 'p-scene',
+    id: SCENE_ID,
     type: 'prompt',
     position: { x: 40, y: 60 },
-    data: { text: 'A @p-subject on a windswept cliff at golden hour, cinematic, 35mm' },
+    data: { text: `A @${SUBJECT_ID} on a windswept cliff at golden hour, cinematic, 35mm` },
   },
   {
-    id: 'p-subject',
+    id: SUBJECT_ID,
     type: 'prompt',
     position: { x: 40, y: 320 },
     data: { text: 'lone red fox' },
   },
   {
-    id: 'out',
+    id: OUTPUT_ID,
     type: 'output',
     position: { x: 460, y: 120 },
     data: { resolution: '1K', quality: 'low', aspect_ratio: '1:1', runs: 1 },
   },
 ].map(withDrag);
 
-const initialEdges = [{ id: 'e-scene', source: 'p-scene', target: 'out' }];
+const initialEdges = [{ id: `e-${SCENE_ID}`, source: SCENE_ID, target: OUTPUT_ID }];
 
 function Canvas() {
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);

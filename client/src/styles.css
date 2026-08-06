@@ -169,6 +169,11 @@ div:has(> .add-node-menu) {
   padding: 6px 10px;
   border-top: 1px solid var(--color-border-emphasized);
 }
+/* Pushed right rather than the footer being space-between: the cost and the image
+   count are two separate texts, and space-between would fling them apart. */
+.xnode-foot-end {
+  margin-inline-start: auto;
+}
 .react-flow__node:has(.xnode-head--output) .xnode-foot {
   border-top-color: var(--color-accent);
 }

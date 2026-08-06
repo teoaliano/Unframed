@@ -41,7 +41,7 @@ Three-package monorepo, no shared build. The only non-trivial logic is in `clien
 - **Inputs:** `PromptNode` (type `prompt`, labelled free text), `ImageNode` (type `image`, a picture you supply; connected ones are numbered so prompts can say "image 1").
 - **Outputs:** `OutputNode` (type `output`, image generation — will gain a video format later, which is why it isn't called "image"), `TextNode` (type `text`, runs a prompt through a text model and keeps the answer in `data.result`).
 
-Labels match type ids. Registered in `App.jsx`'s `nodeTypes`; `App.jsx` also holds the starter graph demonstrating the `@p-subject` embed.
+Labels match type ids. Registered in `App.jsx`'s `nodeTypes`; `App.jsx` also holds the starter graph, whose scene prompt embeds the subject prompt by `@id`. Its ids come from the same counter as user-added nodes, so nothing in a fresh graph carries a hand-written id.
 
 ## Switching models
 
