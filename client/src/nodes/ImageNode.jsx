@@ -4,13 +4,14 @@ import { Card } from '@astryxdesign/core/Card';
 import { FileInput } from '@astryxdesign/core/FileInput';
 import { Thumbnail } from '@astryxdesign/core/Thumbnail';
 import NodeHeader from './NodeHeader.jsx';
-import { imageRefNumber } from '../graph/resolve.js';
+import { imageRefNumbers } from '../graph/resolve.js';
 
 export default function ImageNode({ id, data }) {
   const { updateNodeData } = useReactFlow();
-  // Live number this image will be sent as, recomputed as connections/positions
-  // change. null = not wired to the output (so it won't be sent).
-  const num = imageRefNumber(useNodes(), useEdges(), id);
+  // Live numbers this image will be sent as, recomputed as connections/positions
+  // change. One entry per consuming node — usually one, two when the same image is
+  // image 1 to one target and image 2 to another. Empty = not wired anywhere.
+  const nums = imageRefNumbers(useNodes(), useEdges(), id);
 
   function onFile(file) {
     if (!file) return;
@@ -30,7 +31,7 @@ export default function ImageNode({ id, data }) {
     img.src = data.dataUrl;
   }, [data.dataUrl, data.aspect, id, updateNodeData]);
 
-  const status = num != null ? String(num) : data.dataUrl ? 'not connected' : undefined;
+  const status = nums.length ? nums.join(' / ') : data.dataUrl ? 'not connected' : undefined;
 
   return (
     <Card width={240} padding={0}>
@@ -39,7 +40,7 @@ export default function ImageNode({ id, data }) {
         kind="image"
         family="input"
         right={status}
-        rightTone={num != null ? 'accent' : 'secondary'}
+        rightTone={nums.length ? 'accent' : 'secondary'}
       />
       <div className="xnode-body">
         {data.dataUrl ? (

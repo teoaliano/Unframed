@@ -1,6 +1,6 @@
 // Assert-based self-check. Run with: node client/src/graph/resolve.test.js
 import assert from 'node:assert/strict';
-import { buildRequest, imageRefNumber, splitSections } from './resolve.js';
+import { buildRequest, imageRefNumbers, splitSections } from './resolve.js';
 
 const out = { id: 'out', type: 'output', position: { x: 400, y: 0 }, data: {} };
 
@@ -111,20 +111,55 @@ function graph(nodes, edges) {
   assert.throws(() => buildRequest(nodes, edges, 'out'), /Circular reference/);
 }
 
-// imageRefNumber: an image wired only into a text node (not the image output)
-// still counts as connected, since text nodes consume edges too. An unwired
-// image is null.
+// --- imageRefNumbers ---
+
+// An image wired only into a text node is rank 1 there.
 {
-  const { nodes, edges } = graph(
-    [
-      { id: 't1', type: 'text', position: { x: 0, y: 0 }, data: {} },
-      { id: 'i1', type: 'image', position: { x: 0, y: 10 }, data: { dataUrl: 'data:image/png;base64,AAA' } },
-      { id: 'i2', type: 'image', position: { x: 0, y: 20 }, data: { dataUrl: 'data:image/png;base64,BBB' } },
-    ],
-    [{ id: 'e1', source: 'i1', target: 't1' }],
-  );
-  assert.equal(imageRefNumber(nodes, edges, 'i1'), 1);
-  assert.equal(imageRefNumber(nodes, edges, 'i2'), null);
+  const t = { id: 't1', type: 'text', position: { x: 200, y: 0 }, data: { result: 'x' } };
+  const i1 = { id: 'i1', type: 'image', position: { x: 0, y: 0 }, data: { dataUrl: 'data:,a' } };
+  const nodes = [out, t, i1];
+  const edges = [{ id: 'e1', source: 'i1', target: 't1' }];
+  assert.deepEqual(imageRefNumbers(nodes, edges, 'i1'), [1]);
+}
+
+// An unwired image, and an image with no picture, have no ranks.
+{
+  const i1 = { id: 'i1', type: 'image', position: { x: 0, y: 0 }, data: { dataUrl: 'data:,a' } };
+  const i2 = { id: 'i2', type: 'image', position: { x: 0, y: 10 }, data: {} };
+  const nodes = [out, i1, i2];
+  const edges = [{ id: 'e1', source: 'i2', target: 'out' }];
+  assert.deepEqual(imageRefNumbers(nodes, edges, 'i1'), []);
+  assert.deepEqual(imageRefNumbers(nodes, edges, 'i2'), []);
+}
+
+// Ranks are per consumer: A (y=0) and B (y=100) both feed the output, so B is 2 there;
+// B alone feeds the text node, so it is 1 there. B's ranks are [1, 2].
+{
+  const t = { id: 't1', type: 'text', position: { x: 200, y: 0 }, data: { result: 'x' } };
+  const a = { id: 'a', type: 'image', position: { x: 0, y: 0 }, data: { dataUrl: 'data:,a' } };
+  const b = { id: 'b', type: 'image', position: { x: 0, y: 100 }, data: { dataUrl: 'data:,b' } };
+  const nodes = [out, t, a, b];
+  const edges = [
+    { id: 'e1', source: 'a', target: 'out' },
+    { id: 'e2', source: 'b', target: 'out' },
+    { id: 'e3', source: 'b', target: 't1' },
+  ];
+  assert.deepEqual(imageRefNumbers(nodes, edges, 'a'), [1]);
+  assert.deepEqual(imageRefNumbers(nodes, edges, 'b'), [1, 2]);
+}
+
+// The rank a consumer sees matches the order buildRequest sends for that same consumer.
+{
+  const t = { id: 't1', type: 'text', position: { x: 200, y: 0 }, data: { result: 'x' } };
+  const a = { id: 'a', type: 'image', position: { x: 0, y: 0 }, data: { dataUrl: 'data:,a' } };
+  const b = { id: 'b', type: 'image', position: { x: 0, y: 100 }, data: { dataUrl: 'data:,b' } };
+  const nodes = [out, t, a, b];
+  const edges = [{ id: 'e1', source: 'b', target: 't1' }, { id: 'e2', source: 'a', target: 't1' }];
+  const { input_references } = buildRequest(nodes, edges, 't1');
+  // a is above b, so a is image 1 for the text node
+  assert.equal(input_references[0].image_url.url, 'data:,a');
+  assert.deepEqual(imageRefNumbers(nodes, edges, 'a'), [1]);
+  assert.deepEqual(imageRefNumbers(nodes, edges, 'b'), [2]);
 }
 
 // --- splitSections ---
