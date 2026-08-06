@@ -1,6 +1,6 @@
 // Assert-based self-check. Run with: node client/src/graph/resolve.test.js
 import assert from 'node:assert/strict';
-import { buildRequest, imageRefNumbers, splitSections } from './resolve.js';
+import { buildRequest, imageRefNumbers, splitSections, findWiredTextNode, freeRunPrompts } from './resolve.js';
 
 const out = { id: 'out', type: 'output', position: { x: 400, y: 0 }, data: {} };
 
@@ -209,6 +209,67 @@ function graph(nodes, edges) {
   const { blocks, truncated } = splitSections('a\n---\nb\n---\nc', 2);
   assert.deepEqual(blocks, ['a', 'b']);
   assert.equal(truncated, 1);
+}
+
+// --- findWiredTextNode / freeRunPrompts ---
+
+// No text node wired in -> undefined.
+{
+  const { nodes, edges } = graph(
+    [{ id: 'p1', type: 'prompt', position: { x: 0, y: 0 }, data: { text: 'hello' } }],
+    [{ id: 'e1', source: 'p1', target: 'out' }],
+  );
+  assert.equal(findWiredTextNode(nodes, edges, 'out'), undefined);
+}
+
+// Several text nodes wired in -> the lowest-Y one wins.
+{
+  const { nodes, edges } = graph(
+    [
+      { id: 't-lo', type: 'text', position: { x: 0, y: 50 }, data: { result: 'a\n---\nb' } },
+      { id: 't-hi', type: 'text', position: { x: 0, y: 10 }, data: { result: 'c\n---\nd' } },
+    ],
+    [
+      { id: 'e1', source: 't-lo', target: 'out' },
+      { id: 'e2', source: 't-hi', target: 'out' },
+    ],
+  );
+  assert.equal(findWiredTextNode(nodes, edges, 'out').id, 't-hi');
+}
+
+// freeRunPrompts: the shared context (everything wired in except the text node) is
+// included in every prompt, the raw list and its --- separators never leak in, each
+// prompt carries exactly one block, and a sibling prompt's @textNodeId reference
+// resolves to empty instead of smuggling the whole list back in.
+{
+  const textNode = { id: 't1', type: 'text', position: { x: 0, y: 50 }, data: { result: 'one\n---\ntwo' } };
+  const shared = { id: 'p-shared', type: 'prompt', position: { x: 0, y: 0 }, data: { text: 'a shared subject' } };
+  const sibling = { id: 'p-sib', type: 'prompt', position: { x: 0, y: 90 }, data: { text: 'ref: @t1' } };
+  const { nodes, edges } = graph(
+    [shared, textNode, sibling],
+    [
+      { id: 'e1', source: 'p-shared', target: 'out' },
+      { id: 'e2', source: 't1', target: 'out' },
+      { id: 'e3', source: 'p-sib', target: 'out' },
+    ],
+  );
+  const found = findWiredTextNode(nodes, edges, 'out');
+  assert.equal(found.id, 't1');
+
+  const { blocks } = splitSections(textNode.data.result);
+  const prompts = freeRunPrompts(nodes, edges, 'out', found.id, blocks);
+
+  assert.equal(prompts.length, 2);
+  for (const p of prompts) {
+    assert.ok(p.includes('a shared subject'), 'shared context missing');
+    assert.ok(!p.includes('---'), 'separator leaked');
+    assert.ok(!p.includes('one\n---\ntwo'), 'raw list leaked');
+    assert.ok(!p.includes('@t1'), 'unresolved @token leaked');
+  }
+  assert.ok(prompts[0].includes('one') && !prompts[0].includes('two'), 'block 0 should carry exactly one item');
+  assert.ok(prompts[1].includes('two') && !prompts[1].includes('one'), 'block 1 should carry exactly one item');
+  // The sibling's own text still comes through — only its @t1 token resolves to empty.
+  assert.ok(prompts[0].includes('ref:'), 'sibling prompt should still contribute its own text');
 }
 
 console.log('resolve.js: all checks passed');
