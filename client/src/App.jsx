@@ -159,6 +159,75 @@ function Canvas() {
     return () => clearTimeout(t);
   }, [nodes, edges, project]);
 
+  // ---- undo / redo ----
+  // A stack of settled graph states with a cursor, rather than one entry per
+  // change: a drag emits a state per pixel and typing one per keystroke, so
+  // recording every change would make undo a frame-by-frame rewind. The 400ms
+  // pause is the unit of work — one drag, one word, one delete.
+  //
+  // Entries hold the arrays as they are, no deep copy: React Flow replaces them
+  // on every change instead of mutating, and a project's nodes can carry megabytes
+  // of base64 image data that would be ruinous to clone (or to compare with
+  // JSON.stringify) several times a minute.
+  const history = useRef({ stack: [], at: -1 });
+  const restoring = useRef(false);
+
+  useEffect(() => {
+    if (!ready.current) return;
+    const t = setTimeout(() => {
+      // An undo/redo applied its own state; recording it would bury the entry we
+      // just moved off, and the next undo would land back where we started.
+      if (restoring.current) {
+        restoring.current = false;
+        return;
+      }
+      const h = history.current;
+      const current = h.stack[h.at];
+      if (current && current.nodes === nodes && current.edges === edges) return;
+      h.stack = h.stack.slice(0, h.at + 1);
+      h.stack.push({ nodes, edges });
+      // Far more than anyone reaches for, and cheap: entries share the node
+      // objects they point at.
+      if (h.stack.length > 100) h.stack.shift();
+      h.at = h.stack.length - 1;
+    }, 400);
+    return () => clearTimeout(t);
+  }, [nodes, edges]);
+
+  // Switching projects starts a new timeline: undoing across a switch would paste
+  // one project's graph into another.
+  useEffect(() => {
+    history.current = { stack: [], at: -1 };
+  }, [project]);
+
+  useEffect(() => {
+    function onKeyDown(e) {
+      const undo = (e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'z';
+      const redoY = (e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'y';
+      if (!undo && !redoY) return;
+      // Inside a text field the browser's own undo is the right one: it steps
+      // through what you typed, and stealing it would rewind the whole canvas
+      // mid-sentence.
+      const el = e.target;
+      const typing =
+        el instanceof HTMLElement &&
+        (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable);
+      if (typing) return;
+
+      const h = history.current;
+      const forward = redoY || e.shiftKey;
+      const to = forward ? h.at + 1 : h.at - 1;
+      if (to < 0 || to >= h.stack.length) return;
+      e.preventDefault();
+      h.at = to;
+      restoring.current = true;
+      setNodes(h.stack[to].nodes);
+      setEdges(h.stack[to].edges);
+    }
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [setNodes, setEdges]);
+
   // Ask the server whether it has a key. With none, open the dialog straight away:
   // nothing on the canvas can produce an image yet, so setup is the only useful
   // first action. keyState starts optimistic so the dialog doesn't flash for
