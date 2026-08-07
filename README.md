@@ -114,6 +114,15 @@ Only output nodes (Output, Text) consume edges, so wiring is always "sources →
 
 Source order is decided by vertical position on the canvas — prompts are concatenated top to bottom, so move a node up or down to reorder it.
 
+## The Library
+
+The book button above **+** opens a small library of ready-made fragments. Adding one
+drops plain copies onto the canvas — fresh ids, nothing linking back to the preset, so
+edit them like anything you built by hand. Each entry says what it still **needs** wired
+in. The first preset is **Layerize**: a planner prompt, a text node, and a Free-mode
+output; wire one image node into both the text and output nodes, Run the planner, read
+its plan, then Generate one image per part.
+
 ## Projects
 
 The project menu in the top bar switches between graphs. Each is a folder under `output/`, holding its images, their sidecars, and a `graph.json` of the canvas. Edits save automatically about half a second after you stop, so there's no save button.

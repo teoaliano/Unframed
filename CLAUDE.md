@@ -37,6 +37,8 @@ Three-package monorepo, no shared build. The only non-trivial logic is in `clien
 - **Image numbering is per consumer.** `imageRefNumbers` returns one rank per consuming node, because an image can be image 1 to a text node and image 2 to an output node at once. The badge shows `1 / 2` when they diverge.
 - **Every run leaves a sidecar.** Generations and text runs both write `<timestamp>-*.json` next to the output; batch runs share a `batchId` with `runIndex`/`runCount`, so a batch's spend is a sum over one field.
 
+- **The Library is data, not code.** `client/src/library/` holds presets (`{id, name, category, summary, needs, fragment}`); `instantiateFragment` in `library/insert.js` mints fresh ids via the shared counter and rewrites edge endpoints *and* `@oldid` tokens (whole tokens only — `@p1` never clips `@p10`). Inserted nodes are plain copies with no link back to their preset. Tested in `resolve.test.js`.
+
 **Node types** (`client/src/nodes/`), in two families. Inputs only feed edges; outputs consume them — the engine's one rule, made visible by `NodeHeader`'s `family` prop:
 - **Inputs:** `PromptNode` (type `prompt`, labelled free text), `ImageNode` (type `image`, a picture you supply; connected ones are numbered so prompts can say "image 1").
 - **Outputs:** `OutputNode` (type `output`, image or video per its Image/Video tabs — `data.kind` picks the catalogue, the controls and the money; video runs once per click, polls `/api/video/:id` until the server has downloaded the finished file, and plays it from `/api/file/...` instead of carrying bytes in node data), `TextNode` (type `text`, runs a prompt through a text model and keeps the answer in `data.result`).

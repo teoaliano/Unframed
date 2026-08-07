@@ -26,6 +26,8 @@ import OutputNode from './nodes/OutputNode.jsx';
 import TextNode from './nodes/TextNode.jsx';
 import ProjectMenu from './ProjectMenu.jsx';
 import { PromptIcon, ImageIcon, OutputIcon, TextIcon } from './nodes/nodeIcons.jsx';
+import { PRESETS, CATEGORIES } from './library/index.js';
+import { instantiateFragment, centerOffset } from './library/insert.js';
 import {
   setProject,
   listProjects,
@@ -52,6 +54,7 @@ const HandIcon = svg(
   <path d="M8 13V5.5a1.5 1.5 0 013 0V11m0-1V4.5a1.5 1.5 0 013 0V11m0-.5V6a1.5 1.5 0 013 0v7a6 6 0 01-6 6h-1a6 6 0 01-5.5-3.6L7 14c-.5-1-.2-1.8.6-2.2.7-.3 1.5 0 2 .7l-1.6-1.5" />,
 );
 const FitIcon = svg(<path d="M4 8V4h4M16 4h4v4M20 16v4h-4M8 20H4v-4" />);
+const LibraryIcon = svg(<><path d="M4 19.5A2.5 2.5 0 016.5 17H20V4H6.5A2.5 2.5 0 004 6.5v13z" /><path d="M4 19.5A2.5 2.5 0 006.5 22H20v-2.5" /></>);
 const KeyIcon = svg(<><circle cx="8" cy="15" r="4" /><path d="M10.8 12.2L20 3m-3 0 3 3m-5 2 2.5 2.5" /></>);
 
 const HELP_TEXT =
@@ -130,6 +133,7 @@ function Canvas() {
   // nameDlg drives both "rename" and "create" via one name-entry dialog.
   const [nameDlg, setNameDlg] = useState(null); // { mode:'rename'|'create', name, value, error } | null
   const [deleting, setDeleting] = useState(null); // project name | null
+  const [libraryOpen, setLibraryOpen] = useState(false);
   // API key dialog. keyState mirrors the server: { hasKey, keyHint }.
   const [keyState, setKeyState] = useState({ hasKey: true, keyHint: '' });
   const [keyDlg, setKeyDlg] = useState(null); // { value, error, saving, saved } | null
@@ -430,6 +434,22 @@ function Canvas() {
     },
   ];
 
+  // Drop a preset onto the canvas: fresh ids, rewritten references, bounding box
+  // centred on the current view. Inserted nodes are plain copies — nothing links
+  // back to the preset, so editing them is just editing nodes.
+  function insertPreset(preset) {
+    const { nodes: fresh, edges: freshEdges } = instantiateFragment(preset.fragment, nextId);
+    const r = canvasRef.current.getBoundingClientRect();
+    const centre = screenToFlowPosition({ x: r.x + r.width / 2, y: r.y + r.height / 2 });
+    const { dx, dy } = centerOffset(preset.fragment, centre);
+    setNodes((ns) => [
+      ...ns,
+      ...fresh.map((n) => withDrag({ ...n, position: { x: n.position.x + dx, y: n.position.y + dy } })),
+    ]);
+    setEdges((es) => [...es, ...freshEdges]);
+    setLibraryOpen(false);
+  }
+
   // Double-click on empty canvas: the most common node, ready to type into. Only
   // on the pane itself — double-clicking inside a node is how you select a word.
   function onCanvasDoubleClick(e) {
@@ -602,6 +622,16 @@ function Canvas() {
           <IconButton variant="ghost" size="sm" label="Fit view" icon={<Icon icon={FitIcon} />} onClick={() => fitView()} />
         </div>
 
+        <div className="fab-library">
+          <IconButton
+            variant="secondary"
+            size="lg"
+            label="Library"
+            tooltip="Ready-made flows and styles"
+            icon={<Icon icon={LibraryIcon} />}
+            onClick={() => setLibraryOpen(true)}
+          />
+        </div>
         <div className="fab">
           <DropdownMenu
             hasChevron={false}
@@ -620,6 +650,29 @@ function Canvas() {
         </div>
       </div>
       </ContextMenu>
+
+      <Dialog isOpen={libraryOpen} onOpenChange={setLibraryOpen} width={440}>
+        <DialogHeader title="Library" />
+        <VStack gap={4} padding={4}>
+          {CATEGORIES.filter((c) => PRESETS.some((p) => p.category === c)).map((cat) => (
+            <VStack gap={2} key={cat}>
+              <Text type="label" color="secondary">{cat}</Text>
+              {PRESETS.filter((p) => p.category === cat).map((p) => (
+                <HStack gap={3} key={p.id} align="center">
+                  <VStack gap={0.5}>
+                    <Text type="body" weight="medium">{p.name}</Text>
+                    <Text type="supporting">{p.summary}</Text>
+                    <Text type="supporting" color="secondary">Needs: {p.needs}</Text>
+                  </VStack>
+                  <span className="xnode-foot-end">
+                    <Button label="Add" size="sm" variant="secondary" onClick={() => insertPreset(p)} />
+                  </span>
+                </HStack>
+              ))}
+            </VStack>
+          ))}
+        </VStack>
+      </Dialog>
 
       <Dialog
         isOpen={!!keyDlg}
