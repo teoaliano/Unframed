@@ -1,4 +1,5 @@
-// Layerize: split an image into its parts, one generation per part. Four nodes
+// Layerize: split an image into its parts as transparent PNGs, one generation per
+// part. Four nodes
 // and four edges, nothing bespoke — the whole flow is ordinary wiring over the
 // Free-runs machinery. The image node ships empty but already wired into both
 // outputs — the planner has to see the picture, and each layer generation has to
@@ -37,10 +38,10 @@ export default {
             'part of it. For each part, write one section, separated by a line ' +
             'containing only ---. Start each section with "From image 1, ' +
             'recreate" and name the part, then instruct the generator to ' +
-            'reproduce it exactly as it appears there: alone, isolated on a ' +
-            'plain neutral background, in the same aspect ratio as the source, ' +
-            'keeping its original style, colours and text. No preamble, no ' +
-            'numbering.',
+            'reproduce it exactly as it appears there: alone, nothing else in ' +
+            'the frame, on a fully transparent background, in the same aspect ' +
+            'ratio as the source, keeping its original style, colours and text. ' +
+            'No preamble, no numbering.',
         },
       },
       {
@@ -50,10 +51,17 @@ export default {
         data: { text: '', result: '' },
       },
       {
+        // Pinned to gpt-image-1 with background: transparent. Layers are meant to
+        // be recomposed, so they need real alpha, and transparency is a model
+        // capability rather than a prompt: gpt-image-2, the app default, declares
+        // background ["auto","opaque"] only — asking it for transparency in words
+        // just makes it paint a background it thinks looks empty. Of the models
+        // that do declare "transparent", this one also keeps aspect_ratio and 16
+        // reference images, which Layerize needs.
         id: 'out',
         type: 'output',
         position: { x: 760, y: 0 },
-        data: { freeRuns: true, runs: 1 },
+        data: { freeRuns: true, runs: 1, model: 'openai/gpt-image-1', background: 'transparent' },
       },
       {
         id: 'ref',

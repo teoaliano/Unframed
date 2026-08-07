@@ -121,7 +121,8 @@ drops plain copies onto the canvas — fresh ids, nothing linking back to the pr
 edit them like anything you built by hand. Each entry says what it still **needs** wired
 in. The first preset is **Layerize**: a planner prompt, an empty image node, a text node,
 and a Free-mode output, pre-wired; drop your picture into the image node, Run the
-planner, read its plan, then Generate one image per part.
+planner, read its plan, then Generate one image per part. Layers come out as
+transparent PNGs, so they can be recomposed.
 
 ## Projects
 

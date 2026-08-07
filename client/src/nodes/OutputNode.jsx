@@ -77,6 +77,7 @@ export default function OutputNode({ id, data }) {
   const sizes = enumOf('resolution');
   const qualities = enumOf('quality');
   const ratios = enumOf('aspect_ratio');
+  const backgrounds = kind === 'image' ? enumOf('background') : undefined;
   const durations = kind === 'video' ? enumOf('duration') : undefined;
   const canAudio = kind === 'video' && Boolean(params?.generate_audio);
   const duration = Number(durations?.includes(String(data.duration)) ? data.duration : durations?.[0]);
@@ -269,6 +270,7 @@ export default function OutputNode({ id, data }) {
             resolution: supported(sizes, data.resolution),
             quality: supported(qualities, data.quality),
             aspect_ratio: supported(ratios, data.aspect_ratio),
+            background: supported(backgrounds, data.background),
             batchId,
             runIndex: i + 1,
             runCount: prompts.length,
@@ -351,6 +353,16 @@ export default function OutputNode({ id, data }) {
               value={qualities.includes(data.quality) ? data.quality : undefined}
               placeholder="—"
               onChange={(v) => updateNodeData(id, { quality: v })}
+            />
+          )}
+          {backgrounds && (
+            <Selector
+              label="Background"
+              size="sm"
+              options={backgrounds}
+              value={backgrounds.includes(data.background) ? data.background : undefined}
+              placeholder="—"
+              onChange={(v) => updateNodeData(id, { background: v })}
             />
           )}
           {ratios && (

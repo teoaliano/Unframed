@@ -533,6 +533,7 @@ app.post('/api/generate', async (req, res) => {
     quality,
     aspect_ratio,
     output_format = 'png',
+    background,
     model,
     project,
     batchId,
@@ -550,6 +551,8 @@ app.post('/api/generate', async (req, res) => {
   if (resolution) payload.resolution = resolution;
   if (quality && quality !== 'auto') payload.quality = quality;
   if (aspect_ratio) payload.aspect_ratio = aspect_ratio;
+  // 'auto' means "model's choice", same as quality: send nothing.
+  if (background && background !== 'auto') payload.background = background;
   if (input_references.length) payload.input_references = input_references;
 
   let orRes;
@@ -637,6 +640,7 @@ app.post('/api/generate', async (req, res) => {
             quality,
             aspect_ratio,
             output_format,
+            background: background || null,
             referenceCount: input_references.length,
             batchId: batchId || null,
             runIndex: runIndex || 1,
