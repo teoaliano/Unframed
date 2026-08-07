@@ -17,12 +17,21 @@ export default {
         type: 'prompt',
         position: { x: 0, y: 0 },
         data: {
+          // Leads with "writing prompts, plain prose" and bans coordinates before
+          // anything else: asked bare, "identify every distinct visual part" of a
+          // busy image trips Gemini's object-detection mode, which answers with
+          // box_2d bounding boxes instead of sections. Reproduced on flash-lite
+          // with a UI screenshot; this wording returned ten prose sections from
+          // the same image.
           text:
-            'Look at image 1. Identify every distinct visual part of it. For each part, ' +
-            'output one section separated by a line containing only ---. Each section ' +
-            'describes that part alone, isolated on a plain neutral background, in the ' +
-            'same aspect ratio as the source, matching its original style and colours. ' +
-            'No preamble, no numbering.',
+            'You are writing prompts for an image generator, in plain prose only: ' +
+            'no JSON, no coordinates, no bounding boxes, no code blocks. Look at ' +
+            'image 1 and identify every distinct visual part of it. For each part, ' +
+            'write one section, separated by a line containing only ---. Each ' +
+            'section is a complete image prompt describing that part alone, ' +
+            'isolated on a plain neutral background, in the same aspect ratio as ' +
+            'the source, matching its original style and colours. No preamble, no ' +
+            'numbering.',
         },
       },
       {
