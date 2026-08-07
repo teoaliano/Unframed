@@ -39,7 +39,7 @@ import {
   getHealth,
   saveKey,
   clearKey,
-  revealFile,
+  revealFiles,
 } from './api.js';
 
 const nodeTypes = { prompt: PromptNode, image: ImageNode, output: OutputNode, text: TextNode };
@@ -529,18 +529,24 @@ function Canvas() {
       ],
     };
     if (menuCtx?.type === 'image' && menuCtx.hasImage) {
+      // Every selected image rides along, so "select five layers, reveal" puts
+      // all five selected in one Finder window. The clicked node is always in
+      // the selection — right-click put it there.
+      const picked = nodes.filter((n) => n.selected && n.type === 'image' && n.data?.fileName);
+      const names = picked.length ? picked.map((n) => n.data.fileName) : [menuCtx.fileName];
+      const many = names.length > 1 ? ` (${names.length})` : '';
       const reveal = navigator.platform?.startsWith('Mac')
-        ? 'Reveal in Finder'
+        ? `Reveal in Finder${many}`
         : navigator.platform?.startsWith('Win')
-          ? 'Show in Explorer'
-          : 'Show in file manager';
+          ? `Show in Explorer${many}`
+          : `Show in file manager${many}`;
       return [
         {
           type: 'section',
           title: 'Image',
           items: [
             { label: 'Copy image', onClick: () => copyNodeImage(menuCtx.id) },
-            { label: reveal, onClick: () => revealFile(menuCtx.fileName).catch(() => {}) },
+            { label: reveal, onClick: () => revealFiles(names).catch(() => {}) },
           ],
         },
         edit,

@@ -467,30 +467,45 @@ app.get('/api/video/:id', async (req, res) => {
   });
 });
 
-// Show a generated file in the OS file manager. Falls back to opening the
-// project folder when the exact file isn't on disk (an uploaded or pasted image
-// never touches it), so the button always lands somewhere sensible.
+// Show generated files in the OS file manager. macOS can select many at once
+// (Finder's AppleScript `reveal` takes a list); Windows' explorer /select and
+// Linux openers cannot, so multiple files there degrade to opening the folder.
+// Files not on disk (uploaded or pasted pictures never touch it) are dropped,
+// and an empty survivor list falls back to the folder, so the button always
+// lands somewhere sensible.
 app.post('/api/reveal', async (req, res) => {
-  const { project, fileName } = req.body || {};
+  const { project, fileName, fileNames } = req.body || {};
   const dir = project ? projectDir(project) : OUTPUT_DIR;
-  // Basename only: the name comes from the client, and a path in it must not escape.
-  const file = fileName ? path.join(dir, path.basename(fileName)) : null;
-  const fileExists = file && (await fs.access(file).then(() => true, () => false));
   const dirExists = await fs.access(dir).then(() => true, () => false);
   if (!dirExists) return res.status(404).json({ error: 'No files for this project yet.' });
 
-  const cmd =
-    process.platform === 'darwin'
-      ? fileExists
-        ? ['open', ['-R', file]]
-        : ['open', [dir]]
-      : process.platform === 'win32'
-        ? fileExists
-          ? ['explorer', [`/select,${file}`]]
-          : ['explorer', [dir]]
-        : ['xdg-open', [dir]];
-  spawn(cmd[0], cmd[1], { detached: true, stdio: 'ignore' }).unref();
-  res.json({ ok: true, revealed: fileExists ? 'file' : 'folder' });
+  // Basenames only: the names come from the client, and a path must not escape.
+  const wanted = (Array.isArray(fileNames) ? fileNames : [fileName]).filter(Boolean);
+  const files = [];
+  for (const name of wanted) {
+    const file = path.join(dir, path.basename(name));
+    if (await fs.access(file).then(() => true, () => false)) files.push(file);
+  }
+
+  if (process.platform === 'darwin') {
+    // A quote in a path would break out of the AppleScript string literal.
+    const safe = files.filter((f) => !f.includes('"'));
+    if (safe.length) {
+      const list = safe.map((f) => `POSIX file "${f}"`).join(', ');
+      const script = `tell application "Finder"\nreveal {${list}}\nactivate\nend tell`;
+      spawn('osascript', ['-e', script], { detached: true, stdio: 'ignore' }).unref();
+    } else {
+      spawn('open', [dir], { detached: true, stdio: 'ignore' }).unref();
+    }
+    return res.json({ ok: true, revealed: safe.length || 'folder' });
+  }
+  if (process.platform === 'win32') {
+    if (files.length === 1) spawn('explorer', [`/select,${files[0]}`], { detached: true, stdio: 'ignore' }).unref();
+    else spawn('explorer', [dir], { detached: true, stdio: 'ignore' }).unref();
+    return res.json({ ok: true, revealed: files.length === 1 ? 1 : 'folder' });
+  }
+  spawn('xdg-open', [dir], { detached: true, stdio: 'ignore' }).unref();
+  res.json({ ok: true, revealed: 'folder' });
 });
 
 // Generated files on disk, for the browser to play without the bytes ever going

@@ -62,12 +62,12 @@ export async function generateVideo(body, onStatus) {
   throw new Error('Gave up waiting for the video after 15 minutes. It may still finish on OpenRouter.');
 }
 
-// Ask the OS to show a generated file (or the project folder) in its file manager.
-export async function revealFile(fileName) {
+// Ask the OS to show generated files (or the project folder) in its file manager.
+export async function revealFiles(fileNames) {
   const res = await fetch('/api/reveal', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ fileName, project: currentProject }),
+    body: JSON.stringify({ fileNames, project: currentProject }),
   });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(data.error || `Request failed (${res.status})`);
