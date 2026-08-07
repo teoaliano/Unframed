@@ -281,9 +281,12 @@ function Canvas() {
     bumpCounter(loaded);
     setCurrent(name);
     setProject(name);
-    requestAnimationFrame(() => {
+    // A timeout, not requestAnimationFrame: rAF never fires in a hidden tab, so a
+    // switch made while backgrounded left autosave off for the rest of the session
+    // and silently dropped every edit after it.
+    setTimeout(() => {
       ready.current = true;
-    });
+    }, 0);
   }
 
   // Switch to a fresh in-memory project seeded with the starter graph. It only
@@ -294,9 +297,12 @@ function Canvas() {
     setEdges(initialEdges);
     setCurrent(name);
     setProject(name);
-    requestAnimationFrame(() => {
+    // A timeout, not requestAnimationFrame: rAF never fires in a hidden tab, so a
+    // switch made while backgrounded left autosave off for the rest of the session
+    // and silently dropped every edit after it.
+    setTimeout(() => {
       ready.current = true;
-    });
+    }, 0);
   }
 
   function newProject() {
