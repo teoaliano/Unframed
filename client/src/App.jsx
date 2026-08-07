@@ -463,6 +463,9 @@ function Canvas() {
   // OS clipboard cannot hold a subgraph, and the system-paste path (images, text)
   // already has its own handler. A ref, not state — nothing renders from it.
   const nodeClipboard = useRef(null); // { nodes, edges } | null
+  // Written to the system clipboard on node-copy, so ⌘V can tell "paste my
+  // nodes" from "paste this screenshot" by whichever was copied last.
+  const NODE_CLIP_MARK = 'unframed:nodes';
 
   function copySelection() {
     const chosen = nodes.filter((n) => n.selected);
@@ -473,6 +476,7 @@ function Canvas() {
       // Only edges fully inside the selection: half an edge is not a thing.
       edges: edges.filter((e) => ids.has(e.source) && ids.has(e.target)),
     };
+    navigator.clipboard?.writeText(NODE_CLIP_MARK).catch(() => {});
   }
 
   function cutSelection() {
@@ -486,11 +490,11 @@ function Canvas() {
   // Same machinery as inserting a preset: fresh ids, @token rewrite, centred on
   // the right-click point — so pasted prompts keep referencing their co-pasted
   // neighbours instead of the originals.
-  function pasteNodeClipboard() {
+  function pasteNodeClipboard(at) {
     const clip = nodeClipboard.current;
     if (!clip?.nodes.length) return;
     const { nodes: fresh, edges: freshEdges } = instantiateFragment(clip, nextId);
-    const centre = screenToFlowPosition(menuPoint.current ?? { x: 300, y: 300 });
+    const centre = screenToFlowPosition(at ?? menuPoint.current ?? { x: 300, y: 300 });
     const { dx, dy } = centerOffset(clip, centre);
     setNodes((ns) => [
       ...ns,
@@ -519,13 +523,22 @@ function Canvas() {
   // gets edit actions and the add-node sections.
   function contextMenuItems() {
     const hasSelection = nodes.some((n) => n.selected) || menuCtx != null;
+    const mod = navigator.platform?.startsWith('Mac') ? '⌘' : 'Ctrl+';
+    // The items API forwards label but not endContent, so the shortcut rides
+    // inside the label as a right-aligned span.
+    const row = (text, k) => (
+      <span className="cm-row">
+        {text}
+        <span className="cm-shortcut">{mod}{k}</span>
+      </span>
+    );
     const edit = {
       type: 'section',
       title: 'Edit',
       items: [
-        { label: 'Cut', isDisabled: !hasSelection, onClick: cutSelection },
-        { label: 'Copy', isDisabled: !hasSelection, onClick: copySelection },
-        { label: 'Paste', isDisabled: !nodeClipboard.current, onClick: pasteNodeClipboard },
+        { label: row('Cut', 'X'), isDisabled: !hasSelection, onClick: cutSelection },
+        { label: row('Copy', 'C'), isDisabled: !hasSelection, onClick: copySelection },
+        { label: row('Paste', 'V'), isDisabled: !nodeClipboard.current, onClick: () => pasteNodeClipboard() },
       ],
     };
     if (menuCtx?.type === 'image' && menuCtx.hasImage) {
@@ -555,6 +568,28 @@ function Canvas() {
     if (menuCtx) return [edit];
     return [edit, ...addMenuItems(() => menuPoint.current)];
   }
+
+  // ⌘C/⌘X on a node selection, matching the hints the context menu shows. Inside
+  // a text field the browser's own copy wins, same rule as undo; with nothing
+  // selected the event passes through untouched so copying from anywhere else on
+  // the page keeps working.
+  useEffect(() => {
+    function onKeyDown(e) {
+      if (!(e.metaKey || e.ctrlKey)) return;
+      const key = e.key.toLowerCase();
+      if (key !== 'c' && key !== 'x') return;
+      const el = e.target;
+      const typing =
+        el instanceof HTMLElement &&
+        (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable);
+      if (typing) return;
+      if (!nodes.some((n) => n.selected)) return;
+      if (key === 'c') copySelection();
+      else cutSelection();
+    }
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  });
 
   // Double-click on empty canvas: the most common node, ready to type into. Only
   // on the pane itself — double-clicking inside a node is how you select a word.
@@ -597,6 +632,14 @@ function Canvas() {
     function onPaste(e) {
       const el = document.activeElement;
       if (el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA')) return;
+
+      // Nodes copied more recently than anything else: the marker is still on
+      // the system clipboard, so this paste is ours.
+      if (e.clipboardData?.getData('text') === NODE_CLIP_MARK && nodeClipboard.current) {
+        e.preventDefault();
+        pasteNodeClipboard(pointer.current);
+        return;
+      }
 
       const image = [...(e.clipboardData?.items || [])].find((it) =>
         it.type.startsWith('image/'),
@@ -679,7 +722,7 @@ function Canvas() {
         </div>
       </header>
 
-      <ContextMenu items={contextMenuItems()} menuWidth={188}>
+      <ContextMenu items={contextMenuItems()} menuWidth={188} size="sm">
       <div
         className="canvas"
         ref={canvasRef}

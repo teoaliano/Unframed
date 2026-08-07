@@ -454,3 +454,17 @@ div:has(> .add-node-menu) {
 .lib-card-add {
   margin-inline-start: auto;
 }
+
+/* Shortcut hint on context-menu rows: the label spans the row so the hint can
+   sit flush right. */
+.cm-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  width: 100%;
+}
+.cm-shortcut {
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-body-sm, 0.8125rem);
+}
