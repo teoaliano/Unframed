@@ -1,3 +1,4 @@
+import { spawn } from 'node:child_process';
 import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
@@ -464,6 +465,32 @@ app.get('/api/video/:id', async (req, res) => {
     // Served from disk rather than inlined, so the graph stays small.
     url: `/api/file/${encodeURIComponent(project || '')}/${encodeURIComponent(`${base}.mp4`)}`,
   });
+});
+
+// Show a generated file in the OS file manager. Falls back to opening the
+// project folder when the exact file isn't on disk (an uploaded or pasted image
+// never touches it), so the button always lands somewhere sensible.
+app.post('/api/reveal', async (req, res) => {
+  const { project, fileName } = req.body || {};
+  const dir = project ? projectDir(project) : OUTPUT_DIR;
+  // Basename only: the name comes from the client, and a path in it must not escape.
+  const file = fileName ? path.join(dir, path.basename(fileName)) : null;
+  const fileExists = file && (await fs.access(file).then(() => true, () => false));
+  const dirExists = await fs.access(dir).then(() => true, () => false);
+  if (!dirExists) return res.status(404).json({ error: 'No files for this project yet.' });
+
+  const cmd =
+    process.platform === 'darwin'
+      ? fileExists
+        ? ['open', ['-R', file]]
+        : ['open', [dir]]
+      : process.platform === 'win32'
+        ? fileExists
+          ? ['explorer', [`/select,${file}`]]
+          : ['explorer', [dir]]
+        : ['xdg-open', [dir]];
+  spawn(cmd[0], cmd[1], { detached: true, stdio: 'ignore' }).unref();
+  res.json({ ok: true, revealed: fileExists ? 'file' : 'folder' });
 });
 
 // Generated files on disk, for the browser to play without the bytes ever going

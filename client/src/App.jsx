@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { flushSync } from 'react-dom';
 import {
   ReactFlow,
   ReactFlowProvider,
@@ -38,6 +39,7 @@ import {
   getHealth,
   saveKey,
   clearKey,
+  revealFile,
 } from './api.js';
 
 const nodeTypes = { prompt: PromptNode, image: ImageNode, output: OutputNode, text: TextNode };
@@ -450,6 +452,104 @@ function Canvas() {
     setLibraryOpen(false);
   }
 
+  // What the last right-click landed on, captured before the menu opens so the
+  // menu can be about the thing under the cursor: a node gets node actions, the
+  // empty canvas gets the add sections. flushSync because the native menu opens
+  // in the same event dispatch — a normally-batched setState would still be
+  // pending, and the menu would render for the PREVIOUS right-click.
+  const [menuCtx, setMenuCtx] = useState(null); // { id, type, hasImage, fileName } | null
+
+  // The graph's own clipboard, for whole nodes. Separate from the system one: the
+  // OS clipboard cannot hold a subgraph, and the system-paste path (images, text)
+  // already has its own handler. A ref, not state — nothing renders from it.
+  const nodeClipboard = useRef(null); // { nodes, edges } | null
+
+  function copySelection() {
+    const chosen = nodes.filter((n) => n.selected);
+    if (!chosen.length) return;
+    const ids = new Set(chosen.map((n) => n.id));
+    nodeClipboard.current = {
+      nodes: chosen.map((n) => ({ ...n, selected: undefined })),
+      // Only edges fully inside the selection: half an edge is not a thing.
+      edges: edges.filter((e) => ids.has(e.source) && ids.has(e.target)),
+    };
+  }
+
+  function cutSelection() {
+    copySelection();
+    const ids = new Set(nodes.filter((n) => n.selected).map((n) => n.id));
+    if (!ids.size) return;
+    setNodes((ns) => ns.filter((n) => !ids.has(n.id)));
+    setEdges((es) => es.filter((e) => !ids.has(e.source) && !ids.has(e.target)));
+  }
+
+  // Same machinery as inserting a preset: fresh ids, @token rewrite, centred on
+  // the right-click point — so pasted prompts keep referencing their co-pasted
+  // neighbours instead of the originals.
+  function pasteNodeClipboard() {
+    const clip = nodeClipboard.current;
+    if (!clip?.nodes.length) return;
+    const { nodes: fresh, edges: freshEdges } = instantiateFragment(clip, nextId);
+    const centre = screenToFlowPosition(menuPoint.current ?? { x: 300, y: 300 });
+    const { dx, dy } = centerOffset(clip, centre);
+    setNodes((ns) => [
+      ...ns,
+      ...fresh.map((n) => withDrag({ ...n, position: { x: n.position.x + dx, y: n.position.y + dy } })),
+    ]);
+    setEdges((es) => [...es, ...freshEdges]);
+  }
+
+  // The node's picture onto the system clipboard, re-encoded as PNG: Chrome's
+  // clipboard accepts nothing else, and uploads can be JPEG.
+  async function copyNodeImage(id) {
+    const dataUrl = nodes.find((n) => n.id === id)?.data?.dataUrl;
+    if (!dataUrl) return;
+    const img = new Image();
+    await new Promise((res, rej) => { img.onload = res; img.onerror = rej; img.src = dataUrl; });
+    const c = document.createElement('canvas');
+    c.width = img.naturalWidth;
+    c.height = img.naturalHeight;
+    c.getContext('2d').drawImage(img, 0, 0);
+    const blob = await new Promise((r) => c.toBlob(r, 'image/png'));
+    await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
+  }
+
+  // What the right-click menu offers depends on what was under the cursor: a node
+  // gets edit actions (plus image actions when it has a picture), empty canvas
+  // gets edit actions and the add-node sections.
+  function contextMenuItems() {
+    const hasSelection = nodes.some((n) => n.selected) || menuCtx != null;
+    const edit = {
+      type: 'section',
+      title: 'Edit',
+      items: [
+        { label: 'Cut', isDisabled: !hasSelection, onClick: cutSelection },
+        { label: 'Copy', isDisabled: !hasSelection, onClick: copySelection },
+        { label: 'Paste', isDisabled: !nodeClipboard.current, onClick: pasteNodeClipboard },
+      ],
+    };
+    if (menuCtx?.type === 'image' && menuCtx.hasImage) {
+      const reveal = navigator.platform?.startsWith('Mac')
+        ? 'Reveal in Finder'
+        : navigator.platform?.startsWith('Win')
+          ? 'Show in Explorer'
+          : 'Show in file manager';
+      return [
+        {
+          type: 'section',
+          title: 'Image',
+          items: [
+            { label: 'Copy image', onClick: () => copyNodeImage(menuCtx.id) },
+            { label: reveal, onClick: () => revealFile(menuCtx.fileName).catch(() => {}) },
+          ],
+        },
+        edit,
+      ];
+    }
+    if (menuCtx) return [edit];
+    return [edit, ...addMenuItems(() => menuPoint.current)];
+  }
+
   // Double-click on empty canvas: the most common node, ready to type into. Only
   // on the pane itself — double-clicking inside a node is how you select a word.
   function onCanvasDoubleClick(e) {
@@ -573,7 +673,7 @@ function Canvas() {
         </div>
       </header>
 
-      <ContextMenu items={addMenuItems(() => menuPoint.current)} menuWidth={152}>
+      <ContextMenu items={contextMenuItems()} menuWidth={188}>
       <div
         className="canvas"
         ref={canvasRef}
@@ -584,6 +684,20 @@ function Canvas() {
         // items where the click was.
         onContextMenuCapture={(e) => {
           menuPoint.current = { x: e.clientX, y: e.clientY };
+          const el = e.target.closest?.('.react-flow__node');
+          const node = el ? nodes.find((n) => n.id === el.dataset.id) : null;
+          // Right-clicking an unselected node selects it (alone), like any file
+          // manager; right-clicking inside an existing selection keeps the group.
+          if (node && !node.selected) {
+            setNodes((ns) => ns.map((n) => ({ ...n, selected: n.id === node.id })));
+          }
+          flushSync(() =>
+            setMenuCtx(
+              node
+                ? { id: node.id, type: node.type, hasImage: Boolean(node.data?.dataUrl), fileName: node.data?.fileName }
+                : null,
+            ),
+          );
         }}
       >
         <ReactFlow
