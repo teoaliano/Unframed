@@ -6,7 +6,7 @@
 export default {
   id: 'layerize',
   name: 'Layerize',
-  category: 'flows',
+  type: 'flow',
   kind: 'image',
   summary: 'Split an image into its parts as separate generations',
   needs: 'Drop your picture into the image node, then Run the planner',

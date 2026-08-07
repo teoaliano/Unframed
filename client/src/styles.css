@@ -446,10 +446,22 @@ div:has(> .add-node-menu) {
   color: var(--color-icon-accent);
   opacity: 0.85;
 }
-/* Kind badge sits at the title row's far edge, Add at the footer's. */
-.lib-card-kind {
-  margin-inline-start: auto;
+/* Chip: what a preset is and what it makes, icon plus word. */
+.lib-chip {
   display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 9px;
+  border: 1px solid var(--color-border-emphasized);
+  border-radius: var(--radius-full);
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-body-sm, 0.8125rem);
+  white-space: nowrap;
+}
+.lib-chip svg {
+  width: 13px;
+  height: 13px;
+  stroke-width: 2;
 }
 .lib-card-add {
   margin-inline-start: auto;

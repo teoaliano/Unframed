@@ -7,11 +7,22 @@ import { Button } from '@astryxdesign/core/Button';
 import { Text } from '@astryxdesign/core/Text';
 import { Icon } from '@astryxdesign/core/Icon';
 import { HStack, VStack } from '@astryxdesign/core/Stack';
-import { ImageIcon, TextIcon, VideoIcon } from '../nodes/nodeIcons.jsx';
-import { PRESETS, CATEGORIES } from './index.js';
+import { FlowIcon, ImageIcon, PromptIcon, TextIcon, VideoIcon } from '../nodes/nodeIcons.jsx';
+import { PRESETS, TYPES } from './index.js';
 
-// What a preset produces, worn as a small badge on its card.
+// A preset's two chips: what it IS (a wired flow, a reusable prompt) and what it
+// MAKES (image, video, text). Same icon language as the nodes themselves.
+const TYPE_ICONS = { flow: FlowIcon, prompt: PromptIcon };
 const KIND_ICONS = { image: ImageIcon, video: VideoIcon, text: TextIcon };
+
+function Chip({ icon: ChipIcon, label }) {
+  return (
+    <span className="lib-chip">
+      <ChipIcon />
+      {label}
+    </span>
+  );
+}
 
 // Browse-and-add over the preset catalogue: search, category chips, card grid.
 // Search and filters are plain derived state over the bundled array — with the
@@ -21,12 +32,12 @@ const KIND_ICONS = { image: ImageIcon, video: VideoIcon, text: TextIcon };
 // for it the day the data exists.
 export default function LibraryDialog({ isOpen, onOpenChange, onAdd }) {
   const [query, setQuery] = useState('');
-  const [category, setCategory] = useState('all');
+  const [type, setType] = useState('all');
 
   const q = query.trim().toLowerCase();
   const shown = PRESETS.filter(
     (p) =>
-      (category === 'all' || p.category === category) &&
+      (type === 'all' || p.type === type) &&
       (!q || `${p.name} ${p.summary}`.toLowerCase().includes(q)),
   );
 
@@ -46,10 +57,10 @@ export default function LibraryDialog({ isOpen, onOpenChange, onAdd }) {
               onChange={setQuery}
             />
           </span>
-          <SegmentedControl label="Category" size="sm" value={category} onChange={setCategory}>
+          <SegmentedControl label="Type" size="sm" value={type} onChange={setType}>
             <SegmentedControlItem value="all" label="All" />
-            {CATEGORIES.map((c) => (
-              <SegmentedControlItem key={c} value={c} label={c[0].toUpperCase() + c.slice(1)} />
+            {TYPES.map((t) => (
+              <SegmentedControlItem key={t} value={t} label={t[0].toUpperCase() + t.slice(1) + 's'} />
             ))}
           </SegmentedControl>
         </HStack>
@@ -71,18 +82,11 @@ export default function LibraryDialog({ isOpen, onOpenChange, onAdd }) {
                     {KindIcon && <KindIcon />}
                   </div>
                   <VStack gap={1} padding={3}>
-                    <HStack gap={2} align="center">
-                      <Text type="body" weight="medium">{p.name}</Text>
-                      {KindIcon && (
-                        <span className="lib-card-kind" title={`Makes ${p.kind}s`}>
-                          <Icon icon={KindIcon} size="sm" color="secondary" />
-                        </span>
-                      )}
-                    </HStack>
+                    <Text type="body" weight="medium">{p.name}</Text>
                     <Text type="supporting">{p.summary}</Text>
-                    <Text type="supporting" color="secondary">Needs: {p.needs}</Text>
-                    <HStack gap={2} align="center">
-                      <Text type="supporting" color="secondary">{p.category}</Text>
+                    <HStack gap={1} align="center">
+                      {TYPE_ICONS[p.type] && <Chip icon={TYPE_ICONS[p.type]} label={p.type} />}
+                      {KindIcon && <Chip icon={KindIcon} label={p.kind} />}
                       <span className="lib-card-add">
                         <Button label="Add" size="sm" variant="secondary" onClick={() => onAdd(p)} />
                       </span>
