@@ -75,12 +75,6 @@ export default function LibraryDialog({ isOpen, onOpenChange, onAdd }) {
               const KindIcon = KIND_ICONS[p.kind];
               return (
                 <Card className="lib-card" padding={0} key={p.id}>
-                  {/* Every card's cover is drawn, not shipped: the canvas's own
-                      dot grid with a soft accent glow behind the kind icon, so
-                      the repo never carries screenshot payloads. */}
-                  <div className="lib-card-preview lib-card-placeholder" aria-hidden>
-                    {KindIcon && <KindIcon />}
-                  </div>
                   <VStack gap={1} padding={3}>
                     <Text type="body" weight="medium">{p.name}</Text>
                     <Text type="supporting">{p.summary}</Text>
