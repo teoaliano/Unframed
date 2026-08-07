@@ -12,7 +12,7 @@ import {
 import { Icon } from '@astryxdesign/core/Icon';
 import { IconButton } from '@astryxdesign/core/IconButton';
 import { DropdownMenu } from '@astryxdesign/core/DropdownMenu';
-import { ContextMenu } from '@astryxdesign/core/ContextMenu';
+import { ContextMenu, ContextMenuItem } from '@astryxdesign/core/ContextMenu';
 import { Button } from '@astryxdesign/core/Button';
 import { TextInput } from '@astryxdesign/core/TextInput';
 import { Dialog, DialogHeader } from '@astryxdesign/core/Dialog';
@@ -467,6 +467,18 @@ function Canvas() {
   // nodes" from "paste this screenshot" by whichever was copied last.
   const NODE_CLIP_MARK = 'unframed:nodes';
 
+  // A node's picture as a PNG blob: Chrome's clipboard accepts no other image
+  // type, and uploads can be JPEG.
+  async function pngBlob(dataUrl) {
+    const img = new Image();
+    await new Promise((res, rej) => { img.onload = res; img.onerror = rej; img.src = dataUrl; });
+    const c = document.createElement('canvas');
+    c.width = img.naturalWidth;
+    c.height = img.naturalHeight;
+    c.getContext('2d').drawImage(img, 0, 0);
+    return new Promise((r) => c.toBlob(r, 'image/png'));
+  }
+
   function copySelection() {
     const chosen = nodes.filter((n) => n.selected);
     if (!chosen.length) return;
@@ -476,7 +488,15 @@ function Canvas() {
       // Only edges fully inside the selection: half an edge is not a thing.
       edges: edges.filter((e) => ids.has(e.source) && ids.has(e.target)),
     };
-    navigator.clipboard?.writeText(NODE_CLIP_MARK).catch(() => {});
+    // One clipboard item, two faces. The text face is the routing marker that
+    // makes our own ⌘V paste nodes; the image face is the picture itself when
+    // exactly one image node is copied, so the same Copy pastes into Figma or
+    // anywhere else as a real PNG. Promise values keep the write inside the
+    // user gesture while the re-encode runs.
+    const faces = { 'text/plain': new Blob([NODE_CLIP_MARK], { type: 'text/plain' }) };
+    const pics = chosen.filter((n) => n.type === 'image' && n.data?.dataUrl);
+    if (pics.length === 1) faces['image/png'] = pngBlob(pics[0].data.dataUrl);
+    navigator.clipboard?.write([new ClipboardItem(faces)]).catch(() => {});
   }
 
   function cutSelection() {
@@ -503,72 +523,6 @@ function Canvas() {
     setEdges((es) => [...es, ...freshEdges]);
   }
 
-  // The node's picture onto the system clipboard, re-encoded as PNG: Chrome's
-  // clipboard accepts nothing else, and uploads can be JPEG.
-  async function copyNodeImage(id) {
-    const dataUrl = nodes.find((n) => n.id === id)?.data?.dataUrl;
-    if (!dataUrl) return;
-    const img = new Image();
-    await new Promise((res, rej) => { img.onload = res; img.onerror = rej; img.src = dataUrl; });
-    const c = document.createElement('canvas');
-    c.width = img.naturalWidth;
-    c.height = img.naturalHeight;
-    c.getContext('2d').drawImage(img, 0, 0);
-    const blob = await new Promise((r) => c.toBlob(r, 'image/png'));
-    await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
-  }
-
-  // What the right-click menu offers depends on what was under the cursor: a node
-  // gets edit actions (plus image actions when it has a picture), empty canvas
-  // gets edit actions and the add-node sections.
-  function contextMenuItems() {
-    const hasSelection = nodes.some((n) => n.selected) || menuCtx != null;
-    const mod = navigator.platform?.startsWith('Mac') ? '⌘' : 'Ctrl+';
-    // The items API forwards label but not endContent, so the shortcut rides
-    // inside the label as a right-aligned span.
-    const row = (text, k) => (
-      <span className="cm-row">
-        {text}
-        <span className="cm-shortcut">{mod}{k}</span>
-      </span>
-    );
-    const edit = {
-      type: 'section',
-      title: 'Edit',
-      items: [
-        { label: row('Cut', 'X'), isDisabled: !hasSelection, onClick: cutSelection },
-        { label: row('Copy', 'C'), isDisabled: !hasSelection, onClick: copySelection },
-        { label: row('Paste', 'V'), isDisabled: !nodeClipboard.current, onClick: () => pasteNodeClipboard() },
-      ],
-    };
-    if (menuCtx?.type === 'image' && menuCtx.hasImage) {
-      // Every selected image rides along, so "select five layers, reveal" puts
-      // all five selected in one Finder window. The clicked node is always in
-      // the selection — right-click put it there.
-      const picked = nodes.filter((n) => n.selected && n.type === 'image' && n.data?.fileName);
-      const names = picked.length ? picked.map((n) => n.data.fileName) : [menuCtx.fileName];
-      const many = names.length > 1 ? ` (${names.length})` : '';
-      const reveal = navigator.platform?.startsWith('Mac')
-        ? `Reveal in Finder${many}`
-        : navigator.platform?.startsWith('Win')
-          ? `Show in Explorer${many}`
-          : `Show in file manager${many}`;
-      return [
-        {
-          type: 'section',
-          title: 'Image',
-          items: [
-            { label: 'Copy image', onClick: () => copyNodeImage(menuCtx.id) },
-            { label: reveal, onClick: () => revealFiles(names).catch(() => {}) },
-          ],
-        },
-        edit,
-      ];
-    }
-    if (menuCtx) return [edit];
-    return [edit, ...addMenuItems(() => menuPoint.current)];
-  }
-
   // ⌘C/⌘X on a node selection, matching the hints the context menu shows. Inside
   // a text field the browser's own copy wins, same rule as undo; with nothing
   // selected the event passes through untouched so copying from anywhere else on
@@ -590,6 +544,61 @@ function Canvas() {
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
   });
+
+  // What the right-click menu offers depends on what was under the cursor: a node
+  // gets edit actions (plus a reveal action when it has a picture), empty canvas
+  // gets edit actions and the add-node sections. Rendered through the compound
+  // menuContent API rather than the items array: items are keyed by their label
+  // string, so the shortcut hints (JSX labels) collapsed onto one key — and only
+  // ContextMenuItem carries endContent.
+  function contextMenuContent() {
+    const hasSelection = nodes.some((n) => n.selected) || menuCtx != null;
+    const mod = navigator.platform?.startsWith('Mac') ? '⌘' : 'Ctrl+';
+    const kbd = (k) => <span className="cm-shortcut">{mod}{k}</span>;
+    const sections = [];
+
+    if (menuCtx?.type === 'image' && menuCtx.hasImage) {
+      const picked = nodes.filter((n) => n.selected && n.type === 'image' && n.data?.fileName);
+      const names = picked.length ? picked.map((n) => n.data.fileName) : [menuCtx.fileName];
+      const many = names.length > 1 ? ` (${names.length})` : '';
+      const reveal = navigator.platform?.startsWith('Mac')
+        ? `Reveal in Finder${many}`
+        : navigator.platform?.startsWith('Win')
+          ? `Show in Explorer${many}`
+          : `Show in file manager${many}`;
+      sections.push({
+        title: 'Image',
+        items: [{ label: reveal, onClick: () => revealFiles(names).catch(() => {}) }],
+      });
+    }
+
+    sections.push({
+      title: 'Edit',
+      items: [
+        { label: 'Cut', endContent: kbd('X'), isDisabled: !hasSelection, onClick: cutSelection },
+        { label: 'Copy', endContent: kbd('C'), isDisabled: !hasSelection, onClick: copySelection },
+        { label: 'Paste', endContent: kbd('V'), isDisabled: !nodeClipboard.current, onClick: () => pasteNodeClipboard() },
+      ],
+    });
+
+    if (!menuCtx) sections.push(...addMenuItems(() => menuPoint.current).map((s) => ({ title: s.title, items: s.items })));
+
+    return sections.map((sec) => (
+      <div key={sec.title}>
+        <Text type="supporting" color="secondary" as="div" className="cm-section">{sec.title}</Text>
+        {sec.items.map((it) => (
+          <ContextMenuItem
+            key={it.label}
+            label={it.label}
+            icon={it.icon}
+            endContent={it.endContent}
+            isDisabled={it.isDisabled}
+            onClick={it.onClick}
+          />
+        ))}
+      </div>
+    ));
+  }
 
   // Double-click on empty canvas: the most common node, ready to type into. Only
   // on the pane itself — double-clicking inside a node is how you select a word.
@@ -722,7 +731,7 @@ function Canvas() {
         </div>
       </header>
 
-      <ContextMenu items={contextMenuItems()} menuWidth={188} size="sm">
+      <ContextMenu menuContent={contextMenuContent()} menuWidth={188} size="sm">
       <div
         className="canvas"
         ref={canvasRef}
