@@ -1,15 +1,14 @@
-// Layerize: split an image into its parts, one generation per part. Three nodes
-// and two edges, nothing bespoke — the whole flow is ordinary wiring over the
-// Free-runs machinery. The user supplies the image node and wires it into both
-// outputs themselves (`needs` says so): the planner has to see the picture, and
-// each layer generation has to match its style. A preset cannot pre-wire a node
-// that does not exist yet.
+// Layerize: split an image into its parts, one generation per part. Four nodes
+// and four edges, nothing bespoke — the whole flow is ordinary wiring over the
+// Free-runs machinery. The image node ships empty but already wired into both
+// outputs — the planner has to see the picture, and each layer generation has to
+// match its style — so the only setup left is putting a picture in it.
 export default {
   id: 'layerize',
   name: 'Layerize',
   category: 'flows',
   summary: 'Split an image into its parts as separate generations',
-  needs: 'One image node wired into both the text and output nodes',
+  needs: 'Drop your picture into the image node, then Run the planner',
   fragment: {
     nodes: [
       {
@@ -37,10 +36,18 @@ export default {
         position: { x: 760, y: 0 },
         data: { freeRuns: true, runs: 1 },
       },
+      {
+        id: 'ref',
+        type: 'image',
+        position: { x: 0, y: 320 },
+        data: { fileName: '', dataUrl: '' },
+      },
     ],
     edges: [
       { id: 'e-plan', source: 'plan', target: 'planner' },
       { id: 'e-out', source: 'planner', target: 'out' },
+      { id: 'e-ref-planner', source: 'ref', target: 'planner' },
+      { id: 'e-ref-out', source: 'ref', target: 'out' },
     ],
   },
 };

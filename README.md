@@ -119,9 +119,9 @@ Source order is decided by vertical position on the canvas — prompts are conca
 The book button above **+** opens a small library of ready-made fragments. Adding one
 drops plain copies onto the canvas — fresh ids, nothing linking back to the preset, so
 edit them like anything you built by hand. Each entry says what it still **needs** wired
-in. The first preset is **Layerize**: a planner prompt, a text node, and a Free-mode
-output; wire one image node into both the text and output nodes, Run the planner, read
-its plan, then Generate one image per part.
+in. The first preset is **Layerize**: a planner prompt, an empty image node, a text node,
+and a Free-mode output, pre-wired; drop your picture into the image node, Run the
+planner, read its plan, then Generate one image per part.
 
 ## Projects
 

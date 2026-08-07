@@ -500,7 +500,21 @@ function Canvas() {
         const file = image.getAsFile();
         const reader = new FileReader();
         reader.onload = () =>
-          addNode('image', { fileName: file?.name || 'pasted-image', dataUrl: reader.result }, pointer.current);
+          setNodes((ns) => {
+            // A selected image node claims the paste: fill it instead of spawning
+            // a new node, so "select the empty reference, hit paste" just works.
+            const chosen = ns.filter((n) => n.selected && n.type === 'image');
+            if (!chosen.length) {
+              addNode('image', { fileName: file?.name || 'pasted-image', dataUrl: reader.result }, pointer.current);
+              return ns;
+            }
+            const hit = new Set(chosen.map((n) => n.id));
+            return ns.map((n) =>
+              hit.has(n.id)
+                ? { ...n, data: { ...n.data, fileName: file?.name || 'pasted-image', dataUrl: reader.result, aspect: null } }
+                : n,
+            );
+          });
         reader.readAsDataURL(file);
         return;
       }
@@ -513,7 +527,7 @@ function Canvas() {
     }
     window.addEventListener('paste', onPaste);
     return () => window.removeEventListener('paste', onPaste);
-  }, [addNode]);
+  }, [addNode, setNodes]);
 
   return (
     <div
