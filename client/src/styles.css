@@ -409,3 +409,48 @@ div:has(> .add-node-menu) {
   border-radius: var(--radius-element);
   display: block;
 }
+
+/* ---- Library dialog ---- */
+.lib-search {
+  flex: 1;
+  min-width: 0;
+}
+.lib-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  max-height: 420px;
+  overflow-y: auto;
+}
+.lib-card-preview {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  aspect-ratio: 16 / 10;
+  border-bottom: 1px solid var(--color-border);
+  border-radius: var(--radius-container) var(--radius-container) 0 0;
+}
+/* The unillustrated preset's cover: the canvas's own dot grid with a soft accent
+   glow behind the kind icon, so a card without a screenshot still has a subject. */
+.lib-card-placeholder {
+  background:
+    radial-gradient(closest-side at 50% 45%, var(--color-accent-muted), transparent 75%),
+    radial-gradient(circle at 1px 1px, var(--color-border) 1px, transparent 1.5px) 0 0 / 14px 14px,
+    var(--color-background-muted);
+}
+.lib-card-placeholder svg {
+  width: 44px;
+  height: 44px;
+  stroke-width: 1.5;
+  color: var(--color-icon-accent);
+  opacity: 0.85;
+}
+/* Kind badge sits at the title row's far edge, Add at the footer's. */
+.lib-card-kind {
+  margin-inline-start: auto;
+  display: inline-flex;
+}
+.lib-card-add {
+  margin-inline-start: auto;
+}

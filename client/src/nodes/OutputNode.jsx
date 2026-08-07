@@ -12,16 +12,9 @@ import { SegmentedControl, SegmentedControlItem } from '@astryxdesign/core/Segme
 import { HStack, VStack } from '@astryxdesign/core/Stack';
 import NodeHeader from './NodeHeader.jsx';
 import RunsControl, { clampRuns } from './RunsControl.jsx';
-import { ImageIcon } from './nodeIcons.jsx';
+import { ImageIcon, VideoIcon } from './nodeIcons.jsx';
 import { buildRequest, splitSections, findWiredTextNode, freeRunPrompts } from '../graph/resolve.js';
 import { generate, generateVideo, runText, listModels } from '../api.js';
-
-// Play triangle in a frame: the video tab.
-const VideoIcon = (p) => (
-  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...p}>
-    <rect x="3" y="5" width="18" height="14" rx="2" /><path d="M10 9.5l5 2.5-5 2.5z" />
-  </svg>
-);
 
 // Arrow leaving a frame: "send this out onto the canvas".
 const AddToCanvasIcon = (p) => (

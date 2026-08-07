@@ -26,7 +26,7 @@ import OutputNode from './nodes/OutputNode.jsx';
 import TextNode from './nodes/TextNode.jsx';
 import ProjectMenu from './ProjectMenu.jsx';
 import { PromptIcon, ImageIcon, OutputIcon, TextIcon } from './nodes/nodeIcons.jsx';
-import { PRESETS, CATEGORIES } from './library/index.js';
+import LibraryDialog from './library/LibraryDialog.jsx';
 import { instantiateFragment, centerOffset } from './library/insert.js';
 import {
   setProject,
@@ -665,28 +665,7 @@ function Canvas() {
       </div>
       </ContextMenu>
 
-      <Dialog isOpen={libraryOpen} onOpenChange={setLibraryOpen} width={440}>
-        <DialogHeader title="Library" />
-        <VStack gap={4} padding={4}>
-          {CATEGORIES.filter((c) => PRESETS.some((p) => p.category === c)).map((cat) => (
-            <VStack gap={2} key={cat}>
-              <Text type="label" color="secondary">{cat}</Text>
-              {PRESETS.filter((p) => p.category === cat).map((p) => (
-                <HStack gap={3} key={p.id} align="center">
-                  <VStack gap={0.5}>
-                    <Text type="body" weight="medium">{p.name}</Text>
-                    <Text type="supporting">{p.summary}</Text>
-                    <Text type="supporting" color="secondary">Needs: {p.needs}</Text>
-                  </VStack>
-                  <span className="xnode-foot-end">
-                    <Button label="Add" size="sm" variant="secondary" onClick={() => insertPreset(p)} />
-                  </span>
-                </HStack>
-              ))}
-            </VStack>
-          ))}
-        </VStack>
-      </Dialog>
+      <LibraryDialog isOpen={libraryOpen} onOpenChange={setLibraryOpen} onAdd={insertPreset} />
 
       <Dialog
         isOpen={!!keyDlg}
