@@ -7,12 +7,12 @@ import { Button } from '@astryxdesign/core/Button';
 import { Text } from '@astryxdesign/core/Text';
 import { Icon } from '@astryxdesign/core/Icon';
 import { HStack, VStack } from '@astryxdesign/core/Stack';
-import { FlowIcon, ImageIcon, PromptIcon, TextIcon, VideoIcon } from '../nodes/nodeIcons.jsx';
+import { BlockIcon, FlowIcon, ImageIcon, TextIcon, VideoIcon } from '../nodes/nodeIcons.jsx';
 import { PRESETS, TYPES } from './index.js';
 
-// A preset's two chips: what it IS (a wired flow, a reusable prompt) and what it
-// MAKES (image, video, text). Same icon language as the nodes themselves.
-const TYPE_ICONS = { flow: FlowIcon, prompt: PromptIcon };
+// A preset's two chips: what it IS (a wired flow, a single ready-made block) and
+// what it MAKES (image, video, text). Same icon language as the nodes themselves.
+const TYPE_ICONS = { flow: FlowIcon, block: BlockIcon };
 const KIND_ICONS = { image: ImageIcon, video: VideoIcon, text: TextIcon };
 
 function Chip({ icon: ChipIcon, label }) {

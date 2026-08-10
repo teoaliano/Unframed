@@ -23,6 +23,33 @@ const AddToCanvasIcon = (p) => (
   </svg>
 );
 
+// The few capabilities worth reading before you pick a model — the ones that
+// actually differ. input_references and aspect_ratio are on nearly every model,
+// so listing them would be noise; resolution (16 of 40), seed (10), transparency
+// (6) and quality (6) are the ones that decide whether a model can do the job.
+// Silence means "nothing unusual", which is why the common params are omitted.
+function capabilityTags(entry, kind) {
+  const p = entry?.params;
+  if (!p) return [];
+  const tags = [];
+  if (kind === 'video') {
+    const d = p.duration;
+    if (Array.isArray(d) && d.length) tags.push(`${Math.min(...d)}–${Math.max(...d)}s`);
+    const r = p.resolution;
+    if (Array.isArray(r) && r.length) tags.push(r[r.length - 1]);
+    if (p.generate_audio) tags.push('audio');
+    if (p.seed) tags.push('seed');
+    return tags;
+  }
+  // Top tier only: the full list belongs in the Size control, not in a summary.
+  const res = p.resolution?.values;
+  if (res?.length) tags.push(res[res.length - 1]);
+  if (p.background?.values?.includes('transparent')) tags.push('transparent');
+  if (p.quality?.values?.length) tags.push('quality');
+  if (p.seed) tags.push('seed');
+  return tags;
+}
+
 export default function OutputNode({ id, data }) {
   const { getNodes, getEdges, updateNodeData, getNode, addNodes } = useReactFlow();
   const [status, setStatus] = useState('idle'); // idle | running | done | error | partial
@@ -332,6 +359,24 @@ export default function OutputNode({ id, data }) {
           options={models.map((m) => ({ value: m.id, label: m.id }))}
           value={model}
           placeholder="Loading models…"
+          // Capabilities on the row, so a model is chosen by what it can do
+          // rather than by its name. Without this the differences only surfaced
+          // after the fact, as a control that quietly did nothing.
+          renderOption={(opt) => {
+            const tags = capabilityTags(models.find((m) => m.id === opt.value), kind);
+            return (
+              <span className="model-option">
+                <span className="model-option-id">{opt.label ?? opt.value}</span>
+                {tags.length > 0 && (
+                  <span className="model-option-tags">
+                    {tags.map((t) => (
+                      <span className="model-tag" key={t}>{t}</span>
+                    ))}
+                  </span>
+                )}
+              </span>
+            );
+          }}
           onChange={(v) => updateNodeData(id, kind === 'video' ? { videoModel: v } : { model: v })}
         />
         <HStack gap={2}>
