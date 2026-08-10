@@ -84,6 +84,16 @@ div:has(> .add-node-menu) {
   bottom: 20px;
   z-index: 5;
 }
+.fab-library {
+  position: absolute;
+  right: 20px;
+  bottom: 64px; /* + FAB bottom(20) + height(36) + 8px gap */
+  z-index: 5;
+}
+.fab-library .astryx-button {
+  border-radius: 12px;
+  box-shadow: 0 8px 24px var(--color-shadow);
+}
 .fab .astryx-button {
   border-radius: 12px;
   box-shadow: 0 8px 24px var(--color-shadow);
@@ -93,7 +103,7 @@ div:has(> .add-node-menu) {
 .tools {
   position: absolute;
   right: 20px;
-  bottom: 72px; /* FAB bottom(20) + FAB height(36) + 16px gap */
+  bottom: 116px; /* library FAB bottom(64) + height(36) + 16px gap */
   z-index: 5;
   display: flex;
   flex-direction: column;
@@ -398,4 +408,47 @@ div:has(> .add-node-menu) {
   width: 100%;
   border-radius: var(--radius-element);
   display: block;
+}
+
+/* ---- Library dialog ---- */
+.lib-search {
+  flex: 1;
+  min-width: 0;
+}
+.lib-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  max-height: 420px;
+  overflow-y: auto;
+}
+/* Chip: what a preset is and what it makes, icon plus word. */
+.lib-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 9px;
+  border: 1px solid var(--color-border-emphasized);
+  border-radius: var(--radius-full);
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-body-sm, 0.8125rem);
+  white-space: nowrap;
+}
+.lib-chip svg {
+  width: 13px;
+  height: 13px;
+  stroke-width: 2;
+}
+.lib-card-add {
+  margin-inline-start: auto;
+}
+
+/* Compound context menu: section headers mimic the items-mode ones. */
+.cm-section {
+  padding: 6px 10px 2px;
+  text-transform: none;
+}
+.cm-shortcut {
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-body-sm, 0.8125rem);
 }

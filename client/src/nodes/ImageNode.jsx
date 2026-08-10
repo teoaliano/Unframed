@@ -33,8 +33,27 @@ export default function ImageNode({ id, data }) {
 
   const status = nums.length ? nums.join(' / ') : data.dataUrl ? 'not connected' : undefined;
 
+  // Dropping a picture anywhere on the node fills (or replaces) it. Stopping
+  // propagation matters: the canvas has its own drop handler that would otherwise
+  // also spawn a brand-new image node from the same file.
+  function onDrop(e) {
+    const file = [...(e.dataTransfer?.files || [])].find((f) => f.type.startsWith('image/'));
+    if (!file) return;
+    e.preventDefault();
+    e.stopPropagation();
+    onFile(file);
+  }
+
   return (
-    <Card width={240} padding={0}>
+    <Card
+      width={240}
+      padding={0}
+      onDrop={onDrop}
+      onDragOver={(e) => {
+        e.preventDefault();
+        e.stopPropagation();
+      }}
+    >
       <Handle type="source" position={Position.Right} />
       <NodeHeader
         kind="image"

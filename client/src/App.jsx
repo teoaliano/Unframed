@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { flushSync } from 'react-dom';
 import {
   ReactFlow,
   ReactFlowProvider,
@@ -11,7 +12,7 @@ import {
 import { Icon } from '@astryxdesign/core/Icon';
 import { IconButton } from '@astryxdesign/core/IconButton';
 import { DropdownMenu } from '@astryxdesign/core/DropdownMenu';
-import { ContextMenu } from '@astryxdesign/core/ContextMenu';
+import { ContextMenu, ContextMenuItem } from '@astryxdesign/core/ContextMenu';
 import { Button } from '@astryxdesign/core/Button';
 import { TextInput } from '@astryxdesign/core/TextInput';
 import { Dialog, DialogHeader } from '@astryxdesign/core/Dialog';
@@ -26,6 +27,8 @@ import OutputNode from './nodes/OutputNode.jsx';
 import TextNode from './nodes/TextNode.jsx';
 import ProjectMenu from './ProjectMenu.jsx';
 import { PromptIcon, ImageIcon, OutputIcon, TextIcon } from './nodes/nodeIcons.jsx';
+import LibraryDialog from './library/LibraryDialog.jsx';
+import { instantiateFragment, centerOffset } from './library/insert.js';
 import {
   setProject,
   listProjects,
@@ -36,6 +39,7 @@ import {
   getHealth,
   saveKey,
   clearKey,
+  revealFiles,
 } from './api.js';
 
 const nodeTypes = { prompt: PromptNode, image: ImageNode, output: OutputNode, text: TextNode };
@@ -52,6 +56,7 @@ const HandIcon = svg(
   <path d="M8 13V5.5a1.5 1.5 0 013 0V11m0-1V4.5a1.5 1.5 0 013 0V11m0-.5V6a1.5 1.5 0 013 0v7a6 6 0 01-6 6h-1a6 6 0 01-5.5-3.6L7 14c-.5-1-.2-1.8.6-2.2.7-.3 1.5 0 2 .7l-1.6-1.5" />,
 );
 const FitIcon = svg(<path d="M4 8V4h4M16 4h4v4M20 16v4h-4M8 20H4v-4" />);
+const LibraryIcon = svg(<><path d="M4 19.5A2.5 2.5 0 016.5 17H20V4H6.5A2.5 2.5 0 004 6.5v13z" /><path d="M4 19.5A2.5 2.5 0 006.5 22H20v-2.5" /></>);
 const KeyIcon = svg(<><circle cx="8" cy="15" r="4" /><path d="M10.8 12.2L20 3m-3 0 3 3m-5 2 2.5 2.5" /></>);
 
 const HELP_TEXT =
@@ -130,6 +135,7 @@ function Canvas() {
   // nameDlg drives both "rename" and "create" via one name-entry dialog.
   const [nameDlg, setNameDlg] = useState(null); // { mode:'rename'|'create', name, value, error } | null
   const [deleting, setDeleting] = useState(null); // project name | null
+  const [libraryOpen, setLibraryOpen] = useState(false);
   // API key dialog. keyState mirrors the server: { hasKey, keyHint }.
   const [keyState, setKeyState] = useState({ hasKey: true, keyHint: '' });
   const [keyDlg, setKeyDlg] = useState(null); // { value, error, saving, saved } | null
@@ -281,9 +287,12 @@ function Canvas() {
     bumpCounter(loaded);
     setCurrent(name);
     setProject(name);
-    requestAnimationFrame(() => {
+    // A timeout, not requestAnimationFrame: rAF never fires in a hidden tab, so a
+    // switch made while backgrounded left autosave off for the rest of the session
+    // and silently dropped every edit after it.
+    setTimeout(() => {
       ready.current = true;
-    });
+    }, 0);
   }
 
   // Switch to a fresh in-memory project seeded with the starter graph. It only
@@ -294,9 +303,12 @@ function Canvas() {
     setEdges(initialEdges);
     setCurrent(name);
     setProject(name);
-    requestAnimationFrame(() => {
+    // A timeout, not requestAnimationFrame: rAF never fires in a hidden tab, so a
+    // switch made while backgrounded left autosave off for the rest of the session
+    // and silently dropped every edit after it.
+    setTimeout(() => {
       ready.current = true;
-    });
+    }, 0);
   }
 
   function newProject() {
@@ -424,6 +436,170 @@ function Canvas() {
     },
   ];
 
+  // Drop a preset onto the canvas: fresh ids, rewritten references, bounding box
+  // centred on the current view. Inserted nodes are plain copies — nothing links
+  // back to the preset, so editing them is just editing nodes.
+  function insertPreset(preset) {
+    const { nodes: fresh, edges: freshEdges } = instantiateFragment(preset.fragment, nextId);
+    const r = canvasRef.current.getBoundingClientRect();
+    const centre = screenToFlowPosition({ x: r.x + r.width / 2, y: r.y + r.height / 2 });
+    const { dx, dy } = centerOffset(preset.fragment, centre);
+    setNodes((ns) => [
+      ...ns,
+      ...fresh.map((n) => withDrag({ ...n, position: { x: n.position.x + dx, y: n.position.y + dy } })),
+    ]);
+    setEdges((es) => [...es, ...freshEdges]);
+    setLibraryOpen(false);
+  }
+
+  // What the last right-click landed on, captured before the menu opens so the
+  // menu can be about the thing under the cursor: a node gets node actions, the
+  // empty canvas gets the add sections. flushSync because the native menu opens
+  // in the same event dispatch — a normally-batched setState would still be
+  // pending, and the menu would render for the PREVIOUS right-click.
+  const [menuCtx, setMenuCtx] = useState(null); // { id, type, hasImage, fileName } | null
+
+  // The graph's own clipboard, for whole nodes. Separate from the system one: the
+  // OS clipboard cannot hold a subgraph, and the system-paste path (images, text)
+  // already has its own handler. A ref, not state — nothing renders from it.
+  const nodeClipboard = useRef(null); // { nodes, edges } | null
+  // Written to the system clipboard on node-copy, so ⌘V can tell "paste my
+  // nodes" from "paste this screenshot" by whichever was copied last.
+  const NODE_CLIP_MARK = 'unframed:nodes';
+
+  // A node's picture as a PNG blob: Chrome's clipboard accepts no other image
+  // type, and uploads can be JPEG.
+  async function pngBlob(dataUrl) {
+    const img = new Image();
+    await new Promise((res, rej) => { img.onload = res; img.onerror = rej; img.src = dataUrl; });
+    const c = document.createElement('canvas');
+    c.width = img.naturalWidth;
+    c.height = img.naturalHeight;
+    c.getContext('2d').drawImage(img, 0, 0);
+    return new Promise((r) => c.toBlob(r, 'image/png'));
+  }
+
+  function copySelection() {
+    const chosen = nodes.filter((n) => n.selected);
+    if (!chosen.length) return;
+    const ids = new Set(chosen.map((n) => n.id));
+    nodeClipboard.current = {
+      nodes: chosen.map((n) => ({ ...n, selected: undefined })),
+      // Only edges fully inside the selection: half an edge is not a thing.
+      edges: edges.filter((e) => ids.has(e.source) && ids.has(e.target)),
+    };
+    // One clipboard item, two faces. The text face is the routing marker that
+    // makes our own ⌘V paste nodes; the image face is the picture itself when
+    // exactly one image node is copied, so the same Copy pastes into Figma or
+    // anywhere else as a real PNG. Promise values keep the write inside the
+    // user gesture while the re-encode runs.
+    const faces = { 'text/plain': new Blob([NODE_CLIP_MARK], { type: 'text/plain' }) };
+    const pics = chosen.filter((n) => n.type === 'image' && n.data?.dataUrl);
+    if (pics.length === 1) faces['image/png'] = pngBlob(pics[0].data.dataUrl);
+    navigator.clipboard?.write([new ClipboardItem(faces)]).catch(() => {});
+  }
+
+  function cutSelection() {
+    copySelection();
+    const ids = new Set(nodes.filter((n) => n.selected).map((n) => n.id));
+    if (!ids.size) return;
+    setNodes((ns) => ns.filter((n) => !ids.has(n.id)));
+    setEdges((es) => es.filter((e) => !ids.has(e.source) && !ids.has(e.target)));
+  }
+
+  // Same machinery as inserting a preset: fresh ids, @token rewrite, centred on
+  // the right-click point — so pasted prompts keep referencing their co-pasted
+  // neighbours instead of the originals.
+  function pasteNodeClipboard(at) {
+    const clip = nodeClipboard.current;
+    if (!clip?.nodes.length) return;
+    const { nodes: fresh, edges: freshEdges } = instantiateFragment(clip, nextId);
+    const centre = screenToFlowPosition(at ?? menuPoint.current ?? { x: 300, y: 300 });
+    const { dx, dy } = centerOffset(clip, centre);
+    setNodes((ns) => [
+      ...ns,
+      ...fresh.map((n) => withDrag({ ...n, position: { x: n.position.x + dx, y: n.position.y + dy } })),
+    ]);
+    setEdges((es) => [...es, ...freshEdges]);
+  }
+
+  // ⌘C/⌘X on a node selection, matching the hints the context menu shows. Inside
+  // a text field the browser's own copy wins, same rule as undo; with nothing
+  // selected the event passes through untouched so copying from anywhere else on
+  // the page keeps working.
+  useEffect(() => {
+    function onKeyDown(e) {
+      if (!(e.metaKey || e.ctrlKey)) return;
+      const key = e.key.toLowerCase();
+      if (key !== 'c' && key !== 'x') return;
+      const el = e.target;
+      const typing =
+        el instanceof HTMLElement &&
+        (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable);
+      if (typing) return;
+      if (!nodes.some((n) => n.selected)) return;
+      if (key === 'c') copySelection();
+      else cutSelection();
+    }
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  });
+
+  // What the right-click menu offers depends on what was under the cursor: a node
+  // gets edit actions (plus a reveal action when it has a picture), empty canvas
+  // gets edit actions and the add-node sections. Rendered through the compound
+  // menuContent API rather than the items array: items are keyed by their label
+  // string, so the shortcut hints (JSX labels) collapsed onto one key — and only
+  // ContextMenuItem carries endContent.
+  function contextMenuContent() {
+    const hasSelection = nodes.some((n) => n.selected) || menuCtx != null;
+    const mod = navigator.platform?.startsWith('Mac') ? '⌘' : 'Ctrl+';
+    const kbd = (k) => <span className="cm-shortcut">{mod}{k}</span>;
+    const sections = [];
+
+    if (menuCtx?.type === 'image' && menuCtx.hasImage) {
+      const picked = nodes.filter((n) => n.selected && n.type === 'image' && n.data?.fileName);
+      const names = picked.length ? picked.map((n) => n.data.fileName) : [menuCtx.fileName];
+      const many = names.length > 1 ? ` (${names.length})` : '';
+      const reveal = navigator.platform?.startsWith('Mac')
+        ? `Reveal in Finder${many}`
+        : navigator.platform?.startsWith('Win')
+          ? `Show in Explorer${many}`
+          : `Show in file manager${many}`;
+      sections.push({
+        title: 'Image',
+        items: [{ label: reveal, onClick: () => revealFiles(names).catch(() => {}) }],
+      });
+    }
+
+    sections.push({
+      title: 'Edit',
+      items: [
+        { label: 'Cut', endContent: kbd('X'), isDisabled: !hasSelection, onClick: cutSelection },
+        { label: 'Copy', endContent: kbd('C'), isDisabled: !hasSelection, onClick: copySelection },
+        { label: 'Paste', endContent: kbd('V'), isDisabled: !nodeClipboard.current, onClick: () => pasteNodeClipboard() },
+      ],
+    });
+
+    if (!menuCtx) sections.push(...addMenuItems(() => menuPoint.current).map((s) => ({ title: s.title, items: s.items })));
+
+    return sections.map((sec) => (
+      <div key={sec.title}>
+        <Text type="supporting" color="secondary" as="div" className="cm-section">{sec.title}</Text>
+        {sec.items.map((it) => (
+          <ContextMenuItem
+            key={it.label}
+            label={it.label}
+            icon={it.icon}
+            endContent={it.endContent}
+            isDisabled={it.isDisabled}
+            onClick={it.onClick}
+          />
+        ))}
+      </div>
+    ));
+  }
+
   // Double-click on empty canvas: the most common node, ready to type into. Only
   // on the pane itself — double-clicking inside a node is how you select a word.
   function onCanvasDoubleClick(e) {
@@ -466,6 +642,14 @@ function Canvas() {
       const el = document.activeElement;
       if (el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA')) return;
 
+      // Nodes copied more recently than anything else: the marker is still on
+      // the system clipboard, so this paste is ours.
+      if (e.clipboardData?.getData('text') === NODE_CLIP_MARK && nodeClipboard.current) {
+        e.preventDefault();
+        pasteNodeClipboard(pointer.current);
+        return;
+      }
+
       const image = [...(e.clipboardData?.items || [])].find((it) =>
         it.type.startsWith('image/'),
       );
@@ -474,7 +658,21 @@ function Canvas() {
         const file = image.getAsFile();
         const reader = new FileReader();
         reader.onload = () =>
-          addNode('image', { fileName: file?.name || 'pasted-image', dataUrl: reader.result }, pointer.current);
+          setNodes((ns) => {
+            // A selected image node claims the paste: fill it instead of spawning
+            // a new node, so "select the empty reference, hit paste" just works.
+            const chosen = ns.filter((n) => n.selected && n.type === 'image');
+            if (!chosen.length) {
+              addNode('image', { fileName: file?.name || 'pasted-image', dataUrl: reader.result }, pointer.current);
+              return ns;
+            }
+            const hit = new Set(chosen.map((n) => n.id));
+            return ns.map((n) =>
+              hit.has(n.id)
+                ? { ...n, data: { ...n.data, fileName: file?.name || 'pasted-image', dataUrl: reader.result, aspect: null } }
+                : n,
+            );
+          });
         reader.readAsDataURL(file);
         return;
       }
@@ -487,7 +685,7 @@ function Canvas() {
     }
     window.addEventListener('paste', onPaste);
     return () => window.removeEventListener('paste', onPaste);
-  }, [addNode]);
+  }, [addNode, setNodes]);
 
   return (
     <div
@@ -533,7 +731,7 @@ function Canvas() {
         </div>
       </header>
 
-      <ContextMenu items={addMenuItems(() => menuPoint.current)} menuWidth={152}>
+      <ContextMenu menuContent={contextMenuContent()} menuWidth={188} size="sm">
       <div
         className="canvas"
         ref={canvasRef}
@@ -544,6 +742,20 @@ function Canvas() {
         // items where the click was.
         onContextMenuCapture={(e) => {
           menuPoint.current = { x: e.clientX, y: e.clientY };
+          const el = e.target.closest?.('.react-flow__node');
+          const node = el ? nodes.find((n) => n.id === el.dataset.id) : null;
+          // Right-clicking an unselected node selects it (alone), like any file
+          // manager; right-clicking inside an existing selection keeps the group.
+          if (node && !node.selected) {
+            setNodes((ns) => ns.map((n) => ({ ...n, selected: n.id === node.id })));
+          }
+          flushSync(() =>
+            setMenuCtx(
+              node
+                ? { id: node.id, type: node.type, hasImage: Boolean(node.data?.dataUrl), fileName: node.data?.fileName }
+                : null,
+            ),
+          );
         }}
       >
         <ReactFlow
@@ -596,6 +808,16 @@ function Canvas() {
           <IconButton variant="ghost" size="sm" label="Fit view" icon={<Icon icon={FitIcon} />} onClick={() => fitView()} />
         </div>
 
+        <div className="fab-library">
+          <IconButton
+            variant="secondary"
+            size="lg"
+            label="Library"
+            tooltip="Ready-made flows and styles"
+            icon={<Icon icon={LibraryIcon} />}
+            onClick={() => setLibraryOpen(true)}
+          />
+        </div>
         <div className="fab">
           <DropdownMenu
             hasChevron={false}
@@ -614,6 +836,8 @@ function Canvas() {
         </div>
       </div>
       </ContextMenu>
+
+      <LibraryDialog isOpen={libraryOpen} onOpenChange={setLibraryOpen} onAdd={insertPreset} />
 
       <Dialog
         isOpen={!!keyDlg}

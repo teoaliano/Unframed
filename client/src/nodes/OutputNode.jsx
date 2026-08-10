@@ -12,16 +12,9 @@ import { SegmentedControl, SegmentedControlItem } from '@astryxdesign/core/Segme
 import { HStack, VStack } from '@astryxdesign/core/Stack';
 import NodeHeader from './NodeHeader.jsx';
 import RunsControl, { clampRuns } from './RunsControl.jsx';
-import { ImageIcon } from './nodeIcons.jsx';
+import { ImageIcon, VideoIcon } from './nodeIcons.jsx';
 import { buildRequest, splitSections, findWiredTextNode, freeRunPrompts } from '../graph/resolve.js';
 import { generate, generateVideo, runText, listModels } from '../api.js';
-
-// Play triangle in a frame: the video tab.
-const VideoIcon = (p) => (
-  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...p}>
-    <rect x="3" y="5" width="18" height="14" rx="2" /><path d="M10 9.5l5 2.5-5 2.5z" />
-  </svg>
-);
 
 // Arrow leaving a frame: "send this out onto the canvas".
 const AddToCanvasIcon = (p) => (
@@ -84,6 +77,7 @@ export default function OutputNode({ id, data }) {
   const sizes = enumOf('resolution');
   const qualities = enumOf('quality');
   const ratios = enumOf('aspect_ratio');
+  const backgrounds = kind === 'image' ? enumOf('background') : undefined;
   const durations = kind === 'video' ? enumOf('duration') : undefined;
   const canAudio = kind === 'video' && Boolean(params?.generate_audio);
   const duration = Number(durations?.includes(String(data.duration)) ? data.duration : durations?.[0]);
@@ -276,6 +270,7 @@ export default function OutputNode({ id, data }) {
             resolution: supported(sizes, data.resolution),
             quality: supported(qualities, data.quality),
             aspect_ratio: supported(ratios, data.aspect_ratio),
+            background: supported(backgrounds, data.background),
             batchId,
             runIndex: i + 1,
             runCount: prompts.length,
@@ -358,6 +353,16 @@ export default function OutputNode({ id, data }) {
               value={qualities.includes(data.quality) ? data.quality : undefined}
               placeholder="—"
               onChange={(v) => updateNodeData(id, { quality: v })}
+            />
+          )}
+          {backgrounds && (
+            <Selector
+              label="Background"
+              size="sm"
+              options={backgrounds}
+              value={backgrounds.includes(data.background) ? data.background : undefined}
+              placeholder="—"
+              onChange={(v) => updateNodeData(id, { background: v })}
             />
           )}
           {ratios && (

@@ -1,6 +1,7 @@
 // Assert-based self-check. Run with: node client/src/graph/resolve.test.js
 import assert from 'node:assert/strict';
 import { buildRequest, imageRefNumbers, splitSections, findWiredTextNode, freeRunPrompts } from './resolve.js';
+import { instantiateFragment, centerOffset } from '../library/insert.js';
 
 const out = { id: 'out', type: 'output', position: { x: 400, y: 0 }, data: {} };
 
@@ -270,6 +271,50 @@ function graph(nodes, edges) {
   assert.ok(prompts[1].includes('two') && !prompts[1].includes('one'), 'block 1 should carry exactly one item');
   // The sibling's own text still comes through — only its @t1 token resolves to empty.
   assert.ok(prompts[0].includes('ref:'), 'sibling prompt should still contribute its own text');
+}
+
+// ---- instantiateFragment ----
+{
+  // Ids that prefix each other on purpose: rewriting @p1 must not eat into @p10.
+  const fragment = {
+    nodes: [
+      { id: 'p1', type: 'prompt', position: { x: 0, y: 0 }, data: { text: 'a @p1x @p1 and @p10, plus @stranger' } },
+      { id: 'p10', type: 'prompt', position: { x: 0, y: 200 }, data: { text: 'subject' } },
+      { id: 'o1', type: 'output', position: { x: 400, y: 0 }, data: { freeRuns: true } },
+    ],
+    edges: [
+      { id: 'e1', source: 'p1', target: 'o1' },
+      { id: 'e2', source: 'p10', target: 'o1' },
+    ],
+  };
+  let n = 500;
+  const minted = [];
+  const { nodes, edges } = instantiateFragment(fragment, () => { const id = String(n++); minted.push(id); return id; });
+
+  assert.deepEqual(nodes.map((x) => x.id), minted, 'every node gets a freshly minted id');
+  assert.deepEqual(edges.map((e) => [e.source, e.target]), [['500', '502'], ['501', '502']], 'edges follow the id map');
+  assert.equal(new Set(edges.map((e) => e.id)).size, 2, 'edge ids are distinct');
+  assert.equal(nodes[0].data.text, 'a @p1x @500 and @501, plus @stranger',
+    'tokens rewrite whole ids only; unknown ids pass through untouched');
+  assert.equal(fragment.nodes[0].data.text.includes('@p1 '), true, 'the fragment itself is not mutated');
+  assert.equal(fragment.edges[0].source, 'p1', 'fragment edges are not mutated');
+
+  // A second insertion mints different ids from the same fragment.
+  const again = instantiateFragment(fragment, () => String(n++));
+  assert.notEqual(again.nodes[0].id, nodes[0].id, 'insertions never share ids');
+}
+
+{
+  const fragment = { nodes: [
+    { id: 'a', position: { x: 0, y: 0 } },
+    { id: 'b', position: { x: 700, y: 100 } },
+  ] };
+  // Box spans x 0..1000, y 0..250 with the default 300x150 node size.
+  const { dx, dy } = centerOffset(fragment, { x: 500, y: 125 });
+  assert.equal(dx, 0, 'a box already centred needs no x shift');
+  assert.equal(dy, 0, 'a box already centred needs no y shift');
+  const off = centerOffset(fragment, { x: 0, y: 0 });
+  assert.equal(off.dx, -500, 'centres the box, not its origin');
 }
 
 console.log('resolve.js: all checks passed');

@@ -1,3 +1,4 @@
+import { spawn } from 'node:child_process';
 import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
@@ -466,6 +467,47 @@ app.get('/api/video/:id', async (req, res) => {
   });
 });
 
+// Show generated files in the OS file manager. macOS can select many at once
+// (Finder's AppleScript `reveal` takes a list); Windows' explorer /select and
+// Linux openers cannot, so multiple files there degrade to opening the folder.
+// Files not on disk (uploaded or pasted pictures never touch it) are dropped,
+// and an empty survivor list falls back to the folder, so the button always
+// lands somewhere sensible.
+app.post('/api/reveal', async (req, res) => {
+  const { project, fileName, fileNames } = req.body || {};
+  const dir = project ? projectDir(project) : OUTPUT_DIR;
+  const dirExists = await fs.access(dir).then(() => true, () => false);
+  if (!dirExists) return res.status(404).json({ error: 'No files for this project yet.' });
+
+  // Basenames only: the names come from the client, and a path must not escape.
+  const wanted = (Array.isArray(fileNames) ? fileNames : [fileName]).filter(Boolean);
+  const files = [];
+  for (const name of wanted) {
+    const file = path.join(dir, path.basename(name));
+    if (await fs.access(file).then(() => true, () => false)) files.push(file);
+  }
+
+  if (process.platform === 'darwin') {
+    // A quote in a path would break out of the AppleScript string literal.
+    const safe = files.filter((f) => !f.includes('"'));
+    if (safe.length) {
+      const list = safe.map((f) => `POSIX file "${f}"`).join(', ');
+      const script = `tell application "Finder"\nreveal {${list}}\nactivate\nend tell`;
+      spawn('osascript', ['-e', script], { detached: true, stdio: 'ignore' }).unref();
+    } else {
+      spawn('open', [dir], { detached: true, stdio: 'ignore' }).unref();
+    }
+    return res.json({ ok: true, revealed: safe.length || 'folder' });
+  }
+  if (process.platform === 'win32') {
+    if (files.length === 1) spawn('explorer', [`/select,${files[0]}`], { detached: true, stdio: 'ignore' }).unref();
+    else spawn('explorer', [dir], { detached: true, stdio: 'ignore' }).unref();
+    return res.json({ ok: true, revealed: files.length === 1 ? 1 : 'folder' });
+  }
+  spawn('xdg-open', [dir], { detached: true, stdio: 'ignore' }).unref();
+  res.json({ ok: true, revealed: 'folder' });
+});
+
 // Generated files on disk, for the browser to play without the bytes ever going
 // through node data.
 app.get('/api/file/:project/:name', (req, res) => {
@@ -491,6 +533,7 @@ app.post('/api/generate', async (req, res) => {
     quality,
     aspect_ratio,
     output_format = 'png',
+    background,
     model,
     project,
     batchId,
@@ -508,6 +551,8 @@ app.post('/api/generate', async (req, res) => {
   if (resolution) payload.resolution = resolution;
   if (quality && quality !== 'auto') payload.quality = quality;
   if (aspect_ratio) payload.aspect_ratio = aspect_ratio;
+  // 'auto' means "model's choice", same as quality: send nothing.
+  if (background && background !== 'auto') payload.background = background;
   if (input_references.length) payload.input_references = input_references;
 
   let orRes;
@@ -595,6 +640,7 @@ app.post('/api/generate', async (req, res) => {
             quality,
             aspect_ratio,
             output_format,
+            background: background || null,
             referenceCount: input_references.length,
             batchId: batchId || null,
             runIndex: runIndex || 1,
