@@ -17,6 +17,7 @@ export const OutputIcon = svg(<path d="M12 4l2.2 5.8 5.8 2.2-5.8 2.2-2.2 5.8-2.2
 export const TextIcon = svg(<><path d="M4 7V5h16v2M12 5v14M9 19h6" /></>);
 
 // Not node types — the output node's Video tab, and the Library's chips.
+export const BlockIcon = svg(<><rect x="4" y="4" width="16" height="16" rx="2" /><path d="M4 9.5h16" /></>);
 export const FlowIcon = svg(<><rect x="3" y="3" width="7" height="6" rx="1.5" /><rect x="14" y="15" width="7" height="6" rx="1.5" /><path d="M6.5 9v4a2 2 0 002 2H14" /></>);
 export const VideoIcon = svg(<><rect x="3" y="5" width="18" height="14" rx="2" /><path d="M10 9.5l5 2.5-5 2.5z" /></>);
 

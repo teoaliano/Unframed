@@ -1,30 +1,28 @@
-// Prose to JSON: an instruction prompt and a text node that turns whatever you
-// wire in into a structured spec. Two nodes rather than a canned schema, because
-// the useful field set depends on the subject — a character needs build and
-// outfit, a UI component needs radius and elevation, and guessing either in
-// advance produces a form nobody wants to fill in.
+// Prose to JSON: one text node whose Instructions turn whatever you wire in into
+// a structured spec. A block, not a flow — the instruction lives in the node's
+// own Instructions field, which the text node appends after anything wired in,
+// so no separate prompt node is needed.
 //
-// The text node's result is @id-referenceable like any other, so one spec can
-// feed several output nodes: generate from it, edit one field, generate again.
-//
-// The instruction is written to be order-agnostic. Prompt parts are joined by
-// canvas Y position, so whether the user's prose lands above or below this node
-// is theirs to decide, and "the prose accompanying this instruction" reads
-// correctly either way — "the text below" would be a coin flip.
+// Derives the keys from the subject rather than shipping a canned schema: a
+// character needs different fields than a UI component, and guessing either in
+// advance produces a form nobody wants to fill in. The result is
+// @id-referenceable like any text node, so one spec can feed several output
+// nodes: generate, edit one field, generate again.
 export default {
   id: 'to-json',
   name: 'Prose to JSON',
-  type: 'flow',
+  type: 'block',
   kind: 'text',
   summary: 'Turn a written prompt into a structured JSON spec you can reuse',
-  needs: 'Wire your own prompt node in, then Run',
+  needs: 'Wire your prompt node in, then Run',
   fragment: {
     nodes: [
       {
-        id: 'rules',
-        type: 'prompt',
+        id: 'convert',
+        type: 'text',
         position: { x: 0, y: 0 },
         data: {
+          result: '',
           text:
             'Convert the prose image description accompanying this instruction into ' +
             'a single JSON object, and output nothing but that object: no prose, no ' +
@@ -43,13 +41,7 @@ export default {
             'the output node rather than part of the prompt.',
         },
       },
-      {
-        id: 'convert',
-        type: 'text',
-        position: { x: 380, y: 0 },
-        data: { text: '', result: '' },
-      },
     ],
-    edges: [{ id: 'e-rules', source: 'rules', target: 'convert' }],
+    edges: [],
   },
 };
