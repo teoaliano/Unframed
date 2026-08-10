@@ -3,7 +3,8 @@
 // a wired flow or a single reusable prompt — and kind says what it makes
 // (image, video, text).
 import layerize from './layerize.js';
+import toJson from './toJson.js';
 
 export const TYPES = ['flow', 'prompt'];
 
-export const PRESETS = [layerize];
+export const PRESETS = [layerize, toJson];
