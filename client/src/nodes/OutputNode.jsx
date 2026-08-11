@@ -11,8 +11,10 @@ import { CheckboxInput } from '@astryxdesign/core/CheckboxInput';
 import { Icon } from '@astryxdesign/core/Icon';
 import { SegmentedControl, SegmentedControlItem } from '@astryxdesign/core/SegmentedControl';
 import { HStack, VStack } from '@astryxdesign/core/Stack';
+import { useToast } from '@astryxdesign/core/Toast';
 import NodeHeader from './NodeHeader.jsx';
 import RunsControl, { clampRuns } from './RunsControl.jsx';
+import { MAX_VIDEO_BYTES } from './VideoNode.jsx';
 import { ImageIcon, VideoIcon } from './nodeIcons.jsx';
 import { buildRequest, splitSections, findWiredTextNode, freeRunPrompts } from '../graph/resolve.js';
 import { generate, generateVideo, runText, listModels } from '../api.js';
@@ -69,6 +71,7 @@ function capabilityTags(entry, kind) {
 
 export default function OutputNode({ id, data }) {
   const { getNodes, getEdges, updateNodeData, getNode, addNodes } = useReactFlow();
+  const toast = useToast();
   const [status, setStatus] = useState('idle'); // idle | running | done | error | partial
   const [results, setResults] = useState([]); // [{ image, cost, savedPath, runIndex }]
   const [done, setDone] = useState(0);
@@ -79,6 +82,8 @@ export default function OutputNode({ id, data }) {
   const [models, setModels] = useState([]);
   const [defaultModel, setDefaultModel] = useState('');
   const [videoUrl, setVideoUrl] = useState(null);
+  // Inlining a clip means fetching and base64-ing it, which is not instant.
+  const [addingVideo, setAddingVideo] = useState(false);
   const liveNodes = useNodes();
   const liveEdges = useEdges();
 
@@ -183,6 +188,42 @@ export default function OutputNode({ id, data }) {
         dataUrl: result.image,
       },
     });
+  }
+
+  // Same idea for a generated clip, with one extra step: the video plays from disk
+  // (a URL), but a reference node has to carry base64, because OpenRouter fetches
+  // nothing from this machine. So the file is pulled back in and inlined — which is
+  // also why the 25MB cap applies here exactly as it does to an uploaded clip.
+  async function addVideoToCanvas() {
+    setAddingVideo(true);
+    try {
+      const blob = await fetch(videoUrl).then((r) => {
+        if (!r.ok) throw new Error(`could not read the saved file (${r.status})`);
+        return r.blob();
+      });
+      if (blob.size > MAX_VIDEO_BYTES) {
+        throw new Error(`it is ${(blob.size / 1024 / 1024).toFixed(0)}MB, over the 25MB reference cap`);
+      }
+      const dataUrl = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = () => reject(new Error('could not read the file'));
+        reader.readAsDataURL(blob);
+      });
+      const spot = freeSpot();
+      addNodes({
+        id: `gen-${Date.now()}-v`,
+        type: 'video',
+        dragHandle: '.xnode-head',
+        className: 'nowheel',
+        position: spot,
+        data: { fileName: videoUrl.split('/').pop() || 'generated.mp4', dataUrl },
+      });
+    } catch (err) {
+      toast({ body: `Could not add the video: ${err.message}`, uniqueID: `add-video-${id}` });
+    } finally {
+      setAddingVideo(false);
+    }
   }
 
   // Empty the node's result strip. Only this node's display: the files and their
@@ -584,8 +625,21 @@ export default function OutputNode({ id, data }) {
 
         {kind === 'video' && videoUrl && (
           // Played from the file on disk, not from node data: a clip inlined into
-          // the graph would be written back to graph.json on every edit.
-          <video className="xnode-video" src={videoUrl} controls preload="metadata" />
+          // the graph would be written back to graph.json on every edit. The add
+          // button is the one place that does inline it, on demand.
+          <span className="xnode-result">
+            <video className="xnode-video" src={videoUrl} controls preload="metadata" />
+            <span className="xnode-result-add">
+              <IconButton
+                label="Add this video to the canvas"
+                tooltip="Add to canvas as a video node, so it can be wired back in as a reference"
+                icon={<AddToCanvasIcon />}
+                size="sm"
+                isLoading={addingVideo}
+                onClick={addVideoToCanvas}
+              />
+            </span>
+          </span>
         )}
 
         {kind === 'image' && (results.length > 0 || repairCost > 0) && (
