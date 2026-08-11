@@ -204,7 +204,7 @@ function Canvas() {
         // generations into a folder nobody chose. ready stays false, so autosave
         // cannot overwrite a real project with the starter graph either.
         toast({
-          body: 'Could not reach the local server — reload once it is back up.',
+          body: 'Could not reach the local server. Reload once it is back up.',
           uniqueID: 'projects-unreachable',
           isAutoHide: false,
         });
@@ -863,7 +863,7 @@ function Canvas() {
           label={cfg.hasKey ? 'Settings' : 'Add your API key'}
           tooltip={
             cfg.hasKey
-              ? `Settings — key${cfg.keyHint ? ` …${cfg.keyHint}` : ''}, default models, output folder`
+              ? `Settings: key${cfg.keyHint ? ` …${cfg.keyHint}` : ''}, default models, output folder`
               : 'No OpenRouter key yet. Click to add one'
           }
           icon={<Icon icon={cfg.hasKey ? SettingsIcon : KeyIcon} />}
@@ -1140,7 +1140,7 @@ function Canvas() {
             <Banner
               status={cfgDlg.error ? 'error' : 'success'}
               title={cfgDlg.error || 'Saved to .env'}
-              description={cfgDlg.error ? undefined : 'Applied right away — no restart needed.'}
+              description={cfgDlg.error ? undefined : 'Applied right away, no restart needed.'}
             />
           )}
 

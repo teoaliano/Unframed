@@ -14,6 +14,7 @@
 // in os.tmpdir(), deleted on revoke. The tunnel process is killed as soon as no
 // live share remains, which also kills the URL itself.
 import http from 'node:http';
+import https from 'node:https';
 import crypto from 'node:crypto';
 import fs from 'node:fs/promises';
 import path from 'node:path';
@@ -120,6 +121,67 @@ export async function ensureTunnel() {
 export function stopTunnel() {
   tunnel?.proc.kill();
   tunnel = null;
+}
+
+// node --watch restarts this process on every edit, which wipes the share map but
+// leaves the cloudflared child running: an orphan serving a server that no longer
+// knows about it. Kill it on the way out.
+for (const signal of ['exit', 'SIGINT', 'SIGTERM']) {
+  process.on(signal, () => {
+    tunnel?.proc.kill();
+    if (signal !== 'exit') process.exit(0);
+  });
+}
+
+// A fresh trycloudflare hostname is handed over before it is fetchable, and the
+// provider pulls the reference within seconds of the job being created, so
+// creating the job first is a race the provider loses: "resource download
+// failed". This proves the URL serves BEFORE any job exists.
+//
+// It must NOT ask the local resolver. This machine kept answering NXDOMAIN for a
+// hostname that was already live at Cloudflare's edge -- a false negative that
+// would block a perfectly good generation. So: resolve over DoH (what a provider's
+// resolver would see) and connect straight to that IP, with SNI and Host set to
+// the real hostname, which is what `curl --resolve` does.
+async function resolvePublic(hostname) {
+  const r = await fetch(
+    `https://cloudflare-dns.com/dns-query?name=${encodeURIComponent(hostname)}&type=A`,
+    { headers: { accept: 'application/dns-json' } },
+  );
+  const d = await r.json();
+  return (d.Answer || []).filter((a) => a.type === 1).map((a) => a.data);
+}
+
+function headVia(ip, hostname, pathname) {
+  return new Promise((resolve) => {
+    const req = https.request(
+      { host: ip, servername: hostname, headers: { Host: hostname }, path: pathname, method: 'HEAD', timeout: 8000 },
+      (res) => {
+        res.resume();
+        resolve(res.statusCode);
+      },
+    );
+    req.on('error', () => resolve(0));
+    req.on('timeout', () => {
+      req.destroy();
+      resolve(0);
+    });
+    req.end();
+  });
+}
+
+export async function waitUntilPublic(url, timeoutMs = 90000) {
+  const { hostname, pathname } = new URL(url);
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const ips = await resolvePublic(hostname).catch(() => []);
+    for (const ip of ips) {
+      // 530 is Cloudflare saying the tunnel is not wired up yet.
+      if ((await headVia(ip, hostname, pathname)) === 200) return true;
+    }
+    await new Promise((r) => setTimeout(r, 2000));
+  }
+  return false;
 }
 
 // Expired shares must not outlive their TTL just because nobody asked for them:

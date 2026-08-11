@@ -22,7 +22,9 @@ const COLORS = { error: 'error', warning: 'warning', success: 'success', info: '
 export default function StatusLine({ type = 'info', children }) {
   return (
     <HStack gap={1} align="start">
-      <Icon icon={ICONS[type]} size="sm" color={COLORS[type]} />
+      <span className="xnode-status-icon">
+        <Icon icon={ICONS[type]} size="sm" color={COLORS[type]} />
+      </span>
       <Text type="supporting" className="xnode-status-text">
         {children}
       </Text>

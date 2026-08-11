@@ -42,6 +42,12 @@ function ratioLabel(size) {
   return best && best.diff / target < 0.02 ? best.label : '';
 }
 
+// Why Size, Ratio and Seconds go dead once a video is wired in. Lives on the
+// disabled controls themselves (disabledMessage keeps them focusable and shows
+// this on hover), which puts the explanation where the question gets asked.
+const EDIT_SHAPE_NOTE =
+  'With a video wired in this becomes an edit, so the result keeps the clip’s own size and length. This is set by the model, not here.';
+
 // The few capabilities worth reading before you pick a model — the ones that
 // actually differ. input_references and aspect_ratio are on nearly every model,
 // so listing them would be noise; resolution (16 of 40), seed (10), transparency
@@ -477,7 +483,7 @@ export default function OutputNode({ id, data }) {
           onChange={(v) => updateNodeData(id, kind === 'video' ? { videoModel: v } : { model: v })}
         />
         <HStack gap={2}>
-          {exactSizes && !editingFromVideo && (
+          {exactSizes && (
             <Selector
               label="Size"
               size="sm"
@@ -489,16 +495,20 @@ export default function OutputNode({ id, data }) {
               })}
               value={exactSizes.includes(data.size) ? data.size : undefined}
               placeholder="—"
+              isDisabled={editingFromVideo}
+              disabledMessage={EDIT_SHAPE_NOTE}
               onChange={(v) => updateNodeData(id, { size: v })}
             />
           )}
-          {resolutionTiers && !editingFromVideo && (
+          {resolutionTiers && (
             <Selector
               label="Size"
               size="sm"
               options={resolutionTiers}
               value={resolutionTiers.includes(data.resolution) ? data.resolution : undefined}
               placeholder="—"
+              isDisabled={editingFromVideo}
+              disabledMessage={EDIT_SHAPE_NOTE}
               onChange={(v) => updateNodeData(id, { resolution: v })}
             />
           )}
@@ -522,13 +532,15 @@ export default function OutputNode({ id, data }) {
               onChange={(v) => updateNodeData(id, { background: v })}
             />
           )}
-          {ratios && !editingFromVideo && (
+          {ratios && (
             <Selector
               label="Ratio"
               size="sm"
               options={ratios}
               value={ratios.includes(data.aspect_ratio) ? data.aspect_ratio : undefined}
               placeholder="—"
+              isDisabled={editingFromVideo}
+              disabledMessage={EDIT_SHAPE_NOTE}
               onChange={(v) => updateNodeData(id, { aspect_ratio: v })}
             />
           )}
@@ -536,12 +548,14 @@ export default function OutputNode({ id, data }) {
 
         {kind === 'video' && (durations || canAudio) && (
           <HStack gap={2} align="end">
-            {durations && !editingFromVideo && (
+            {durations && (
               <Selector
                 label="Seconds"
                 size="sm"
                 options={durations}
                 value={String(duration)}
+                isDisabled={editingFromVideo}
+                disabledMessage={EDIT_SHAPE_NOTE}
                 onChange={(v) => updateNodeData(id, { duration: Number(v) })}
               />
             )}
@@ -615,12 +629,6 @@ export default function OutputNode({ id, data }) {
         {/* Sharing is per-node opt-in, never automatic: it makes the clip publicly
             fetchable (unguessable URL, dedicated share-only server, dies with the
             job), and that is a call the user makes knowingly. */}
-        {editingFromVideo && (
-          <StatusLine type="info">
-            With a video wired in this becomes an edit, so the result keeps the clip's
-            own size and length — those controls do not apply and are not sent.
-          </StatusLine>
-        )}
 
         {kind === 'video' && wiredLocalVideos > 0 && (
           <VStack gap={1}>

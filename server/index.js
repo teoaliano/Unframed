@@ -6,7 +6,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { upsertEnv, PATTERNS } from './env.js';
-import { ensureTunnel, mintShare, revokeShare } from './share.js';
+import { ensureTunnel, mintShare, revokeShare, waitUntilPublic } from './share.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, '..');
@@ -536,6 +536,12 @@ app.post('/api/video', async (req, res) => {
         mintedTokens.push(token);
         ref.video_url.url = `${base}/share/${token}`;
       }
+      // Do not create the job until the link actually serves from the public
+      // internet: a brand-new tunnel hostname needs up to a minute to resolve,
+      // and the provider fetches within seconds, which is the losing side of
+      // that race ("resource download failed").
+      const ready = await waitUntilPublic(`${base}/share/${mintedTokens[0]}`);
+      if (!ready) throw new Error('the temporary link did not come up in time');
     } catch (err) {
       for (const t of mintedTokens) revokeShare(t);
       return res.status(400).json({ error: `Could not share the clip: ${err.message}` });

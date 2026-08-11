@@ -242,11 +242,23 @@ div:has(> .add-node-menu) {
   min-width: 0;
   overflow-wrap: anywhere;
 }
+/* The icon centres against the FIRST line of the text, not the top of the block:
+   a 16px glyph flush to a 20px line box sits noticeably high. 1lh is exactly the
+   text's own line height, with the current value as a fallback for older engines. */
+.xnode-status-icon {
+  display: flex;
+  align-items: center;
+  flex: none;
+  height: 20px;
+  height: 1lh;
+}
 
-/* A note that explains the checkbox above it, indented to line up with that
-   checkbox's label rather than with its box. */
+/* A note that explains the checkbox above it, indented to start exactly where
+   that checkbox's label does (measured: 32px from the control's left edge, which
+   is the box plus its gap), so the two read as one block. */
 .xnode-check-note {
-  padding-inline-start: calc(var(--size-element-sm) - var(--spacing-1));
+  padding-inline-start: var(--spacing-8);
+  padding-block-start: var(--spacing-1);
 }
 
 /* "or paste a link" under the video file picker: field grows, button hugs. */

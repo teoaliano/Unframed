@@ -14,7 +14,7 @@ import { imageRefNumbers } from '../graph/resolve.js';
 // graph.json on every autosave), so a hard cap keeps a single clip from blowing
 // the server's body limit or making saves crawl.
 export const MAX_VIDEO_BYTES = 25 * 1024 * 1024;
-export const VIDEO_TOO_BIG = 'Video is too large — keep it under 25MB.';
+export const VIDEO_TOO_BIG = 'Video is too large. Keep it under 25MB.';
 
 export default function VideoNode({ id, data }) {
   const { updateNodeData } = useReactFlow();
