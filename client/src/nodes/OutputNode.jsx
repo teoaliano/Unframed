@@ -244,11 +244,17 @@ export default function OutputNode({ id, data }) {
   // state, so the warning appears and disappears live as wiring changes.
   const liveWiredTextNode = findWiredTextNode(liveNodes, liveEdges, id);
 
-  // Same live subscription, for the video-reference warning below.
-  const wiredVideos = liveEdges.filter(
-    (e) =>
-      e.target === id &&
-      liveNodes.some((n) => n.id === e.source && n.type === 'video' && n.data?.dataUrl),
+  // Same live subscription, for the video-reference warnings below. Local clips are
+  // counted apart because video generation rejects them outright: OpenRouter's
+  // /videos endpoint takes video_url only as a public HTTPS URL, and its Files API
+  // (which could have hosted one) accepts images, audio and documents but not video.
+  const wiredVideoSources = liveEdges
+    .filter((e) => e.target === id)
+    .map((e) => liveNodes.find((n) => n.id === e.source && n.type === 'video' && n.data?.dataUrl))
+    .filter(Boolean);
+  const wiredVideos = wiredVideoSources.length;
+  const wiredLocalVideos = wiredVideoSources.filter((n) =>
+    String(n.data.dataUrl).startsWith('data:'),
   ).length;
 
   async function onGenerate() {
@@ -585,7 +591,21 @@ export default function OutputNode({ id, data }) {
             passthrough params, since OpenRouter publishes no modality field for
             video models. Silence from the API is ambiguous — the clip may simply be
             dropped — so this is the last honest moment to say so. */}
-        {wiredVideos > 0 && (kind === 'image' || entry?.acceptsVideo === false) && (
+        {/* A local clip cannot reach video generation at all — that is a hard 400
+            from OpenRouter, not a maybe — so it is called out even for models that
+            do accept footage. */}
+        {kind === 'video' && wiredLocalVideos > 0 && (
+          <HStack gap={1} align="start">
+            <Icon icon="warning" size="sm" color="warning" />
+            <Text type="supporting">
+              Video generation only accepts a reference video as a public https:// link, and
+              this one is a local file. Generating will fail. Wire it into a text node
+              instead, which does take local clips.
+            </Text>
+          </HStack>
+        )}
+
+        {wiredVideos > 0 && wiredLocalVideos === 0 && (kind === 'image' || entry?.acceptsVideo === false) && (
           <HStack gap={1} align="start">
             <Icon icon="warning" size="sm" color="warning" />
             <Text type="supporting">

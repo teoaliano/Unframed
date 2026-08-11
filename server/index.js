@@ -510,6 +510,22 @@ app.post('/api/video', async (req, res) => {
       .json({ error: 'Prompt is empty. Wire at least one prompt node into the output node.' });
   }
 
+  // OpenRouter's /videos endpoint takes a reference VIDEO only as a public https
+  // URL -- a base64 data URL comes back as "Only HTTPS URLs are allowed". There is
+  // no local way around it: the Files API that could have hosted one accepts
+  // images, audio and documents, not video. (Reference IMAGES are fine as base64,
+  // which is why an image-to-video run works.) Caught here so the failure names the
+  // cause instead of arriving as an opaque upstream 400.
+  const localVideoRef = (Array.isArray(input_references) ? input_references : []).find(
+    (r) => r?.video_url?.url && !String(r.video_url.url).startsWith('https://'),
+  );
+  if (localVideoRef) {
+    return res.status(400).json({
+      error:
+        'Video generation only accepts a reference video as a public https:// link, and this one is a local file. Wire the video into a text node instead — that path does take local clips.',
+    });
+  }
+
   const payload = { model: model || VIDEO_MODEL, prompt };
   if (duration) payload.duration = duration;
   // size is interchangeable with resolution + aspect_ratio upstream; the node sends
