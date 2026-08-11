@@ -76,14 +76,10 @@ export default function VideoNode({ id, data }) {
               muted
             />
             <span className="xnode-media-remove">
-              {/* Matched to what Thumbnail renders for an image: a secondary sm
-                  Button carrying an xsm icon. Thumbnail also pins the box to 20px
-                  through internal styles a prop cannot reach, hence the class. */}
               <Button
                 label={`Remove ${data.fileName || 'video'}`}
                 isIconOnly
                 icon={<Icon icon="close" size="xsm" />}
-                variant="secondary"
                 size="sm"
                 onClick={() => updateNodeData(id, { dataUrl: '', fileName: '' })}
               />

@@ -242,8 +242,10 @@ div:has(> .add-node-menu) {
   border-radius: 8px;
   background: var(--color-background-body);
 }
-/* Remove-over-the-corner, matching what Thumbnail draws for an image reference so
-   both kinds of reference are dismissed the same way. */
+/* One remove control for both reference kinds: an X over the top-right corner,
+   revealed on hover. Solid rather than translucent on purpose — a see-through chip
+   disappears against a pale picture and survives against a dark one, so how
+   visible it was depended on the media behind it. */
 .xnode-media {
   position: relative;
   display: block;
@@ -254,15 +256,27 @@ div:has(> .add-node-menu) {
   top: var(--spacing-1);
   right: var(--spacing-1);
   line-height: normal;
+  opacity: 0;
+  transition: opacity 120ms ease;
 }
-/* Thumbnail sizes its own remove button to 20px with a 6px corner via internal
-   styles; a plain Button lands on 28px/10px, so it is pinned here to match. Both
-   values read off the rendered image node rather than guessed. */
+.xnode-media:hover .xnode-media-remove,
+/* focus-within, so it is reachable by keyboard and not only by pointer. */
+.xnode-media:focus-within .xnode-media-remove {
+  opacity: 1;
+}
+@media (prefers-reduced-motion: reduce) {
+  .xnode-media-remove {
+    transition: none;
+  }
+}
 .xnode-media-remove > button {
   width: 20px;
   height: 20px;
   min-width: 20px;
   border-radius: 6px;
+  background: var(--color-background-popover);
+  border: 1px solid var(--color-border-emphasized);
+  color: var(--color-icon-primary);
 }
 
 /* Prompt node: drag the field's corner to resize in both axes. The handle can't

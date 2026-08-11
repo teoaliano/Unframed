@@ -3,6 +3,8 @@ import { Handle, Position, useReactFlow, useNodes, useEdges } from '@xyflow/reac
 import { Card } from '@astryxdesign/core/Card';
 import { FileInput } from '@astryxdesign/core/FileInput';
 import { Thumbnail } from '@astryxdesign/core/Thumbnail';
+import { Button } from '@astryxdesign/core/Button';
+import { Icon } from '@astryxdesign/core/Icon';
 import NodeHeader from './NodeHeader.jsx';
 import { imageRefNumbers } from '../graph/resolve.js';
 
@@ -63,14 +65,27 @@ export default function ImageNode({ id, data }) {
       />
       <div className="xnode-body">
         {data.dataUrl ? (
-          <Thumbnail
-            className="xnode-thumb"
-            style={{ aspectRatio: data.aspect || 1 }}
-            src={data.dataUrl}
-            alt={data.fileName || 'image'}
-            label={data.fileName || 'image'}
-            onRemove={() => updateNodeData(id, { dataUrl: '', fileName: '', aspect: null })}
-          />
+          // Thumbnail's own onRemove is not used: its X is translucent, so how
+          // visible it is depends on the picture behind it, and it cannot be
+          // restyled from out here. One overlay serves both reference kinds instead.
+          <span className="xnode-media">
+            <Thumbnail
+              className="xnode-thumb"
+              style={{ aspectRatio: data.aspect || 1 }}
+              src={data.dataUrl}
+              alt={data.fileName || 'image'}
+              label={data.fileName || 'image'}
+            />
+            <span className="xnode-media-remove">
+              <Button
+                label={`Remove ${data.fileName || 'image'}`}
+                isIconOnly
+                icon={<Icon icon="close" size="xsm" />}
+                size="sm"
+                onClick={() => updateNodeData(id, { dataUrl: '', fileName: '', aspect: null })}
+              />
+            </span>
+          </span>
         ) : (
           <FileInput
             label="Reference image"
