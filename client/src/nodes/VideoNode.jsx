@@ -6,6 +6,7 @@ import { Button } from '@astryxdesign/core/Button';
 import { Icon } from '@astryxdesign/core/Icon';
 import { Text } from '@astryxdesign/core/Text';
 import NodeHeader from './NodeHeader.jsx';
+import StatusLine from './StatusLine.jsx';
 import { imageRefNumbers } from '../graph/resolve.js';
 
 // Base64 inflates ~4/3 and the whole graph rides in one JSON body (and lands in
@@ -94,7 +95,7 @@ export default function VideoNode({ id, data }) {
               value={null}
               onChange={onFile}
             />
-            {error && <Text type="supporting" color="error">{error}</Text>}
+            {error && <StatusLine type="error">{error}</StatusLine>}
           </>
         )}
       </div>

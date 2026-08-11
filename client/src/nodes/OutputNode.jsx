@@ -6,7 +6,6 @@ import { Button } from '@astryxdesign/core/Button';
 import { Selector } from '@astryxdesign/core/Selector';
 import { Thumbnail } from '@astryxdesign/core/Thumbnail';
 import { IconButton } from '@astryxdesign/core/IconButton';
-import { StatusDot } from '@astryxdesign/core/StatusDot';
 import { CheckboxInput } from '@astryxdesign/core/CheckboxInput';
 import { Icon } from '@astryxdesign/core/Icon';
 import { SegmentedControl, SegmentedControlItem } from '@astryxdesign/core/SegmentedControl';
@@ -14,6 +13,7 @@ import { HStack, VStack } from '@astryxdesign/core/Stack';
 import { useToast } from '@astryxdesign/core/Toast';
 import NodeHeader from './NodeHeader.jsx';
 import RunsControl, { clampRuns } from './RunsControl.jsx';
+import StatusLine from './StatusLine.jsx';
 import { MAX_VIDEO_BYTES } from './VideoNode.jsx';
 import { ImageIcon, VideoIcon } from './nodeIcons.jsx';
 import { buildRequest, splitSections, findWiredTextNode, freeRunPrompts } from '../graph/resolve.js';
@@ -595,48 +595,35 @@ export default function OutputNode({ id, data }) {
             from OpenRouter, not a maybe — so it is called out even for models that
             do accept footage. */}
         {kind === 'video' && wiredLocalVideos > 0 && (
-          <HStack gap={1} align="start">
-            <Icon icon="warning" size="sm" color="warning" />
-            <Text type="supporting">
-              Video generation only accepts a reference video as a public https:// link, and
-              this one is a local file. Generating will fail. Wire it into a text node
-              instead, which does take local clips.
-            </Text>
-          </HStack>
+          <StatusLine type="warning">
+            Video generation only accepts a reference video as a public https:// link, and
+            this one is a local file. Generating will fail. Wire it into a text node
+            instead, which does take local clips.
+          </StatusLine>
         )}
 
         {wiredVideos > 0 && wiredLocalVideos === 0 && (kind === 'image' || entry?.acceptsVideo === false) && (
-          <HStack gap={1} align="start">
-            <Icon icon="warning" size="sm" color="warning" />
-            <Text type="supporting">
-              {wiredVideos === 1 ? 'A video is' : `${wiredVideos} videos are`} wired in, but{' '}
-              {kind === 'video'
-                ? 'this model is not known to accept video input'
-                : 'image models do not take video input'}
-              . It will be sent and probably ignored.
-            </Text>
-          </HStack>
+          <StatusLine type="warning">
+            {wiredVideos === 1 ? 'A video is' : `${wiredVideos} videos are`} wired in, but{' '}
+            {kind === 'video'
+              ? 'this model is not known to accept video input'
+              : 'image models do not take video input'}
+            . It will be sent and probably ignored.
+          </StatusLine>
         )}
 
         {kind === 'image' && freeRuns && !liveWiredTextNode && (
-          <HStack gap={1} align="start">
-            <Icon icon="info" size="sm" color="secondary" />
-            <Text type="supporting">
-              {'Wire a text node with a "---" separated list'}
-              <br />
-              Each item turns into one generation.
-            </Text>
-          </HStack>
+          <StatusLine type="info">
+            {'Wire a text node with a "---" separated list'}
+            <br />
+            Each item turns into one generation.
+          </StatusLine>
         )}
 
+        {/* The message already carries the outcome ("2 of 3 succeeded. …"), so the
+            icon only has to say which kind of outcome it is. */}
         {(status === 'error' || status === 'partial') && (
-          <HStack gap={2} align="center">
-            <StatusDot
-              variant={status === 'partial' ? 'warning' : 'error'}
-              label={status === 'partial' ? 'Partial success' : 'Generation failed'}
-            />
-            <Text type="supporting">{error}</Text>
-          </HStack>
+          <StatusLine type={status === 'partial' ? 'warning' : 'error'}>{error}</StatusLine>
         )}
 
         {note && (

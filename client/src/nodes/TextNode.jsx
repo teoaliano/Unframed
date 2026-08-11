@@ -7,6 +7,7 @@ import { Selector } from '@astryxdesign/core/Selector';
 import { TextArea } from '@astryxdesign/core/TextArea';
 import { VStack } from '@astryxdesign/core/Stack';
 import NodeHeader from './NodeHeader.jsx';
+import StatusLine from './StatusLine.jsx';
 import { buildRequest } from '../graph/resolve.js';
 import { runText, listModels } from '../api.js';
 
@@ -104,7 +105,7 @@ export default function TextNode({ id, data }) {
           onClick={onRun}
         />
 
-        {status === 'error' && <Text type="supporting" color="error">{error}</Text>}
+        {status === 'error' && <StatusLine type="error">{error}</StatusLine>}
 
         {data.result && (
           <VStack gap={1}>
