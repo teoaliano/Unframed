@@ -6,6 +6,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { upsertEnv, PATTERNS } from './env.js';
+import { ensureTunnel, mintShare, revokeShare } from './share.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, '..');
@@ -511,19 +512,34 @@ app.post('/api/video', async (req, res) => {
   }
 
   // OpenRouter's /videos endpoint takes a reference VIDEO only as a public https
-  // URL -- a base64 data URL comes back as "Only HTTPS URLs are allowed". There is
-  // no local way around it: the Files API that could have hosted one accepts
-  // images, audio and documents, not video. (Reference IMAGES are fine as base64,
-  // which is why an image-to-video run works.) Caught here so the failure names the
-  // cause instead of arriving as an opaque upstream 400.
-  const localVideoRef = (Array.isArray(input_references) ? input_references : []).find(
+  // URL -- a base64 data URL comes back as "Only HTTPS URLs are allowed", and the
+  // Files API that could have hosted one accepts images, audio and documents, not
+  // video. (Reference IMAGES are fine as base64, which is why image-to-video
+  // works.) The way through is a temporary Cloudflare tunnel to the dedicated
+  // share server in share.js -- EXPLICITLY opted into per node, because it makes
+  // the clip publicly fetchable (unguessable URL) for the duration of the job.
+  const localVideoRefs = (Array.isArray(input_references) ? input_references : []).filter(
     (r) => r?.video_url?.url && !String(r.video_url.url).startsWith('https://'),
   );
-  if (localVideoRef) {
+  const mintedTokens = [];
+  if (localVideoRefs.length && req.body?.shareLocalVideos !== true) {
     return res.status(400).json({
       error:
-        'Video generation only accepts a reference video as a public https:// link, and this one is a local file. Wire the video into a text node instead — that path does take local clips.',
+        'Video generation only accepts a reference video as a public https:// link, and this one is a local file. Tick “Share via temporary link” on the output node, or wire the video into a text node instead — that path does take local clips.',
     });
+  }
+  if (localVideoRefs.length) {
+    try {
+      const base = await ensureTunnel();
+      for (const ref of localVideoRefs) {
+        const token = await mintShare(ref.video_url.url);
+        mintedTokens.push(token);
+        ref.video_url.url = `${base}/share/${token}`;
+      }
+    } catch (err) {
+      for (const t of mintedTokens) revokeShare(t);
+      return res.status(400).json({ error: `Could not share the clip: ${err.message}` });
+    }
   }
 
   const payload = { model: model || VIDEO_MODEL, prompt };
@@ -553,6 +569,7 @@ app.post('/api/video', async (req, res) => {
       body: JSON.stringify(payload),
     });
   } catch (err) {
+    for (const t of mintedTokens) revokeShare(t);
     return res.status(502).json({ error: `Could not reach OpenRouter: ${err.message}` });
   }
 
@@ -561,21 +578,34 @@ app.post('/api/video', async (req, res) => {
   try {
     data = JSON.parse(raw);
   } catch {
+    for (const t of mintedTokens) revokeShare(t);
     return res.status(502).json({ error: `Unexpected response from OpenRouter: ${raw.slice(0, 300)}` });
   }
   if (!orRes.ok) {
+    for (const t of mintedTokens) revokeShare(t);
     const msg = data?.error?.message || data?.error || raw.slice(0, 300);
     return res.status(orRes.status).json({ error: `OpenRouter (${orRes.status}): ${msg}` });
   }
   if (!data?.id) {
+    for (const t of mintedTokens) revokeShare(t);
     return res.status(502).json({ error: 'OpenRouter did not return a video job id.' });
   }
   // The sidecar is written by the poll handler, which never sees the request body,
   // so what went out is parked here under the job id. Same process serves both, and
-  // a lost entry only costs a field in the sidecar.
+  // a lost entry only costs a field in the sidecar. Share tokens ride along so the
+  // poll handler can kill them the moment the job stops needing the file.
   rememberJobRefs(data.id, sentRefs);
+  if (mintedTokens.length) jobShareTokens.set(data.id, mintedTokens);
   res.json({ id: data.id, status: data.status || 'pending' });
 });
+
+// jobId -> share tokens minted for it. Revoked on completion or failure; the TTL
+// in share.js is the backstop for a browser that stops polling.
+const jobShareTokens = new Map();
+function revokeJobShares(id) {
+  for (const t of jobShareTokens.get(id) || []) revokeShare(t);
+  jobShareTokens.delete(id);
+}
 
 // Poll one job. While it runs this just forwards the status; once it completes the
 // file is fetched and written to disk, and the response points at the saved copy
@@ -607,6 +637,7 @@ app.get('/api/video/:id', async (req, res) => {
   const status = data.status || 'pending';
   if (status !== 'completed') {
     if (status === 'failed') {
+      revokeJobShares(req.params.id); // the provider will not fetch a dead job's refs
       return res.json({ status, error: data.error?.message || data.error || 'Generation failed.' });
     }
     return res.json({ status, progress: data.progress ?? null });
@@ -660,6 +691,7 @@ app.get('/api/video/:id', async (req, res) => {
     console.log(`  sidecar not written: ${err.message}`);
   }
   videoJobRefs.delete(req.params.id); // the job is done; nothing else will read it
+  revokeJobShares(req.params.id); // and its shared clip goes dark with it
 
   res.json({
     status,

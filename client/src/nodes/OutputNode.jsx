@@ -289,6 +289,9 @@ export default function OutputNode({ id, data }) {
             size: supported(exactSizes, data.size),
             resolution: supported(resolutionTiers, data.resolution),
             aspect_ratio: supported(ratios, data.aspect_ratio),
+            // Explicit consent, re-sent per request: the server refuses local
+            // clips without it.
+            ...(data.shareLocalVideos ? { shareLocalVideos: true } : {}),
             ...(canAudio ? { generate_audio: Boolean(data.generateAudio) } : {}),
           },
           (jobStatus) => setNote(jobStatus === 'in_progress' ? 'rendering…' : 'queued…'),
@@ -594,12 +597,31 @@ export default function OutputNode({ id, data }) {
         {/* A local clip cannot reach video generation at all — that is a hard 400
             from OpenRouter, not a maybe — so it is called out even for models that
             do accept footage. */}
+        {/* Sharing is per-node opt-in, never automatic: it makes the clip publicly
+            fetchable (unguessable URL, dedicated share-only server, dies with the
+            job), and that is a call the user makes knowingly. */}
         {kind === 'video' && wiredLocalVideos > 0 && (
-          <StatusLine type="warning">
-            Video generation only accepts a reference video as a public https:// link, and
-            this one is a local file. Generating will fail. Wire it into a text node
-            instead, which does take local clips.
-          </StatusLine>
+          <VStack gap={1}>
+            {data.shareLocalVideos ? (
+              <StatusLine type="info">
+                While this generates, the clip is served from this machine through a
+                temporary Cloudflare link only the model provider receives. Nothing is
+                uploaded to storage, and the link dies when the job ends. Needs
+                cloudflared installed.
+              </StatusLine>
+            ) : (
+              <StatusLine type="warning">
+                Video generation only accepts a reference video as a public https:// link,
+                and this one is a local file. Generating will fail — unless you share it
+                below, or wire it into a text node, which does take local clips.
+              </StatusLine>
+            )}
+            <CheckboxInput
+              label="Share via temporary link while generating"
+              value={Boolean(data.shareLocalVideos)}
+              onChange={(on) => updateNodeData(id, { shareLocalVideos: on })}
+            />
+          </VStack>
         )}
 
         {wiredVideos > 0 && wiredLocalVideos === 0 && (kind === 'image' || entry?.acceptsVideo === false) && (

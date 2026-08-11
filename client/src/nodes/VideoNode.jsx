@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Handle, Position, useReactFlow, useNodes, useEdges } from '@xyflow/react';
 import { Card } from '@astryxdesign/core/Card';
 import { FileInput } from '@astryxdesign/core/FileInput';
+import { TextInput } from '@astryxdesign/core/TextInput';
 import { Button } from '@astryxdesign/core/Button';
 import { Icon } from '@astryxdesign/core/Icon';
 import { Text } from '@astryxdesign/core/Text';
@@ -18,6 +19,8 @@ export const VIDEO_TOO_BIG = 'Video is too large — keep it under 25MB.';
 export default function VideoNode({ id, data }) {
   const { updateNodeData } = useReactFlow();
   const [error, setError] = useState('');
+  // Draft of the "paste a link" field, only until it is applied.
+  const [link, setLink] = useState('');
   // Same per-consumer numbering as images, counted among video nodes only, so
   // "image 1" and "video 1" can coexist on one output.
   const nums = imageRefNumbers(useNodes(), useEdges(), id, 'video');
@@ -29,6 +32,21 @@ export default function VideoNode({ id, data }) {
     const reader = new FileReader();
     reader.onload = () => updateNodeData(id, { dataUrl: reader.result, fileName: file.name });
     reader.readAsDataURL(file);
+  }
+
+  // A clip that is already hosted needs no file at all: dataUrl holds the https
+  // URL, everything downstream treats it as opaque, and video generation can use
+  // it directly — that path takes only public https links. The 25MB cap is a
+  // base64-in-the-graph concern, so it does not apply here.
+  function onLink() {
+    const url = link.trim();
+    if (!/^https:\/\/.+/.test(url)) {
+      return setError('Paste a full https:// link to a video file.');
+    }
+    setError('');
+    setLink('');
+    const name = url.split('/').pop()?.split('?')[0] || 'linked video';
+    updateNodeData(id, { dataUrl: url, fileName: name });
   }
 
   const status = nums.length ? nums.join(' / ') : data.dataUrl ? 'not connected' : undefined;
@@ -95,6 +113,21 @@ export default function VideoNode({ id, data }) {
               value={null}
               onChange={onFile}
             />
+            <div className="xnode-linkrow">
+              <TextInput
+                label="Or paste a video link"
+                isLabelHidden
+                placeholder="or paste an https:// link"
+                value={link}
+                onChange={(v) => {
+                  setLink(v);
+                  setError('');
+                }}
+              />
+              {/^https:\/\/.+/.test(link.trim()) && (
+                <Button label="Use link" size="sm" variant="secondary" onClick={onLink} />
+              )}
+            </div>
             {error && <StatusLine type="error">{error}</StatusLine>}
           </>
         )}

@@ -235,6 +235,17 @@ div:has(> .add-node-menu) {
   height: var(--size-element-sm);
 }
 
+/* "or paste a link" under the video file picker: field grows, button hugs. */
+.xnode-linkrow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.xnode-linkrow > *:first-child {
+  flex: 1;
+  min-width: 0;
+}
+
 /* Reference video preview: the element sizes itself to the clip's own aspect. */
 .xnode-video {
   width: 100%;
