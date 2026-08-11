@@ -20,6 +20,26 @@ import { generate, generateVideo, runText, listModels } from '../api.js';
 // every other icon here, so it shares the set's grid and stroke.
 import { ExternalLink as AddToCanvasIcon } from 'lucide-react';
 
+// "1280x720" → "16:9", so an exact-size list can still be scanned by shape. Reduced
+// by the greatest common divisor, then snapped to the nearest common ratio when the
+// reduced form is unreadable (1470x630 reduces to 7:3, but reads as 21:9).
+const RATIOS = [
+  [21, 9], [16, 9], [3, 2], [4, 3], [1, 1], [3, 4], [2, 3], [9, 16], [9, 21],
+];
+function ratioLabel(size) {
+  const [w, h] = String(size).toLowerCase().split('x').map(Number);
+  if (!w || !h) return '';
+  const target = w / h;
+  let best = null;
+  for (const [a, b] of RATIOS) {
+    const diff = Math.abs(a / b - target);
+    if (!best || diff < best.diff) best = { diff, label: `${a}:${b}` };
+  }
+  // 2% tolerance: 1470x630 (2.333) lands on 21:9 (2.333), but an oddball stays bare
+  // rather than being mislabelled.
+  return best && best.diff / target < 0.02 ? best.label : '';
+}
+
 // The few capabilities worth reading before you pick a model — the ones that
 // actually differ. input_references and aspect_ratio are on nearly every model,
 // so listing them would be noise; resolution (16 of 40), seed (10), transparency
@@ -98,9 +118,18 @@ export default function OutputNode({ id, data }) {
     if (Array.isArray(p)) return p.length ? p.map(String) : undefined;
     return p?.type === 'enum' && p.values?.length ? p.values : undefined;
   };
-  const sizes = enumOf('resolution');
+  const resolutions = enumOf('resolution');
   const qualities = enumOf('quality');
-  const ratios = enumOf('aspect_ratio');
+  const allRatios = enumOf('aspect_ratio');
+  // Exact WIDTHxHEIGHT dimensions, which 14 of the 22 video models declare and
+  // OpenRouter documents as "interchangeable with resolution + aspect_ratio". So
+  // where a model offers them they REPLACE that pair rather than joining it: one
+  // control instead of two, and no way to ask for 720p at a ratio the model only
+  // renders at 1080p. Each option is labelled with its ratio, since "1280x720" is
+  // harder to choose by than "16:9".
+  const exactSizes = kind === 'video' ? enumOf('size') : undefined;
+  const resolutionTiers = exactSizes ? undefined : resolutions;
+  const ratios = exactSizes ? undefined : allRatios;
   const backgrounds = kind === 'image' ? enumOf('background') : undefined;
   const durations = kind === 'video' ? enumOf('duration') : undefined;
   const canAudio = kind === 'video' && Boolean(params?.generate_audio);
@@ -208,7 +237,10 @@ export default function OutputNode({ id, data }) {
             input_references,
             model,
             duration,
-            resolution: supported(sizes, data.resolution),
+            // One or the other, never both: they are interchangeable upstream, and
+            // sending a size alongside a conflicting ratio is asking for trouble.
+            size: supported(exactSizes, data.size),
+            resolution: supported(resolutionTiers, data.resolution),
             aspect_ratio: supported(ratios, data.aspect_ratio),
             ...(canAudio ? { generate_audio: Boolean(data.generateAudio) } : {}),
           },
@@ -298,7 +330,7 @@ export default function OutputNode({ id, data }) {
             prompt: p,
             input_references,
             model,
-            resolution: supported(sizes, data.resolution),
+            resolution: supported(resolutionTiers, data.resolution),
             quality: supported(qualities, data.quality),
             aspect_ratio: supported(ratios, data.aspect_ratio),
             background: supported(backgrounds, data.background),
@@ -384,12 +416,27 @@ export default function OutputNode({ id, data }) {
           onChange={(v) => updateNodeData(id, kind === 'video' ? { videoModel: v } : { model: v })}
         />
         <HStack gap={2}>
-          {sizes && (
+          {exactSizes && (
             <Selector
               label="Size"
               size="sm"
-              options={sizes}
-              value={sizes.includes(data.resolution) ? data.resolution : undefined}
+              // Long for some models (seedance-2.0 declares 25), so searchable.
+              hasSearch={exactSizes.length > 8}
+              options={exactSizes.map((s) => {
+                const r = ratioLabel(s);
+                return { value: s, label: r ? `${s} · ${r}` : s };
+              })}
+              value={exactSizes.includes(data.size) ? data.size : undefined}
+              placeholder="—"
+              onChange={(v) => updateNodeData(id, { size: v })}
+            />
+          )}
+          {resolutionTiers && (
+            <Selector
+              label="Size"
+              size="sm"
+              options={resolutionTiers}
+              value={resolutionTiers.includes(data.resolution) ? data.resolution : undefined}
               placeholder="—"
               onChange={(v) => updateNodeData(id, { resolution: v })}
             />

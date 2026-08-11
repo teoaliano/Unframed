@@ -294,6 +294,10 @@ app.get('/api/models', async (req, res) => {
                 duration: m.supported_durations || null,
                 resolution: m.supported_resolutions || null,
                 aspect_ratio: m.supported_aspect_ratios || null,
+                // Exact WIDTHxHEIGHT dimensions. OpenRouter documents `size` as
+                // interchangeable with resolution + aspect_ratio, so the node
+                // offers these instead of that pair where a model declares them.
+                size: m.supported_sizes || null,
                 frame_images: m.supported_frame_images || null,
                 generate_audio: Boolean(m.generate_audio),
                 seed: Boolean(m.seed),
@@ -495,6 +499,7 @@ app.post('/api/video', async (req, res) => {
     duration,
     resolution,
     aspect_ratio,
+    size,
     generate_audio,
     model,
   } = req.body || {};
@@ -507,6 +512,9 @@ app.post('/api/video', async (req, res) => {
 
   const payload = { model: model || VIDEO_MODEL, prompt };
   if (duration) payload.duration = duration;
+  // size is interchangeable with resolution + aspect_ratio upstream; the node sends
+  // whichever pair the model declares, and never both.
+  if (size) payload.size = size;
   if (resolution) payload.resolution = resolution;
   if (aspect_ratio) payload.aspect_ratio = aspect_ratio;
   if (generate_audio != null) payload.generate_audio = generate_audio;
@@ -559,7 +567,7 @@ app.post('/api/video', async (req, res) => {
 // into graph.json on every keystroke.
 app.get('/api/video/:id', async (req, res) => {
   if (!API_KEY) return res.status(400).json({ error: 'No OpenRouter key yet.' });
-  const { project, prompt = '', model = '', duration, resolution } = req.query;
+  const { project, prompt = '', model = '', duration, resolution, size } = req.query;
 
   let data;
   try {
@@ -618,6 +626,7 @@ app.get('/api/video/:id', async (req, res) => {
           model,
           duration: duration ? Number(duration) : null,
           resolution: resolution || null,
+          size: size || null,
           references: videoJobRefs.get(req.params.id) || null,
           // Verbatim, because it is the only evidence that footage was actually
           // consumed: models that charge for video input price it under their own

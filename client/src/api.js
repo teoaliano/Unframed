@@ -45,7 +45,9 @@ export async function generateVideo(body, onStatus) {
     prompt: body.prompt || '',
     model: body.model || '',
     duration: body.duration ?? '',
+    // One of these is set, never both — see the size/resolution note in OutputNode.
     resolution: body.resolution || '',
+    size: body.size || '',
   });
 
   // Every 4s: fast enough to feel live, slow enough that a three-minute render is
