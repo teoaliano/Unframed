@@ -7,6 +7,7 @@ import { Selector } from '@astryxdesign/core/Selector';
 import { Thumbnail } from '@astryxdesign/core/Thumbnail';
 import { IconButton } from '@astryxdesign/core/IconButton';
 import { StatusDot } from '@astryxdesign/core/StatusDot';
+import { CheckboxInput } from '@astryxdesign/core/CheckboxInput';
 import { Icon } from '@astryxdesign/core/Icon';
 import { SegmentedControl, SegmentedControlItem } from '@astryxdesign/core/SegmentedControl';
 import { HStack, VStack } from '@astryxdesign/core/Stack';
@@ -15,13 +16,9 @@ import RunsControl, { clampRuns } from './RunsControl.jsx';
 import { ImageIcon, VideoIcon } from './nodeIcons.jsx';
 import { buildRequest, splitSections, findWiredTextNode, freeRunPrompts } from '../graph/resolve.js';
 import { generate, generateVideo, runText, listModels } from '../api.js';
-
-// Arrow leaving a frame: "send this out onto the canvas".
-const AddToCanvasIcon = (p) => (
-  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...p}>
-    <path d="M14 4h6v6M20 4l-8 8M18 14v5a1 1 0 01-1 1H5a1 1 0 01-1-1V7a1 1 0 011-1h5" />
-  </svg>
-);
+// Arrow leaving a frame: "send this out onto the canvas". From lucide-react, like
+// every other icon here, so it shares the set's grid and stroke.
+import { ExternalLink as AddToCanvasIcon } from 'lucide-react';
 
 // The few capabilities worth reading before you pick a model — the ones that
 // actually differ. input_references and aspect_ratio are on nearly every model,
@@ -176,6 +173,13 @@ export default function OutputNode({ id, data }) {
   // re-render this warning on its own. useNodes()/useEdges() subscribe to canvas
   // state, so the warning appears and disappears live as wiring changes.
   const liveWiredTextNode = findWiredTextNode(liveNodes, liveEdges, id);
+
+  // Same live subscription, for the video-reference warning below.
+  const wiredVideos = liveEdges.filter(
+    (e) =>
+      e.target === id &&
+      liveNodes.some((n) => n.id === e.source && n.type === 'video' && n.data?.dataUrl),
+  ).length;
 
   async function onGenerate() {
     setStatus('running');
@@ -434,13 +438,18 @@ export default function OutputNode({ id, data }) {
               />
             )}
             {canAudio && (
-              <Button
-                label="Audio"
-                size="sm"
-                variant={data.generateAudio ? 'primary' : 'ghost'}
-                tooltip="Generate a soundtrack with the video"
-                onClick={() => updateNodeData(id, { generateAudio: !data.generateAudio })}
-              />
+              // A checkbox, not a toggle-button: this is an on/off flag, and a
+              // ghost button reads as "not set" rather than "off". The wrapper
+              // gives it the same height as the Selector's input box so the two
+              // line up on their centres — bottom-aligning them does not, since
+              // the Selector's box is taller than the checkbox.
+              <div className="xnode-inline-check">
+                <CheckboxInput
+                  label="Audio"
+                  value={Boolean(data.generateAudio)}
+                  onChange={(on) => updateNodeData(id, { generateAudio: on })}
+                />
+              </div>
             )}
           </HStack>
         )}
@@ -482,6 +491,24 @@ export default function OutputNode({ id, data }) {
           isDisabled={kind === 'image' && freeRuns && !liveWiredTextNode}
           onClick={onGenerate}
         />
+
+        {/* A video wired into a model that shows no sign of taking footage. Warned,
+            not blocked: the capability is a heuristic over pricing SKUs and
+            passthrough params, since OpenRouter publishes no modality field for
+            video models. Silence from the API is ambiguous — the clip may simply be
+            dropped — so this is the last honest moment to say so. */}
+        {wiredVideos > 0 && (kind === 'image' || entry?.acceptsVideo === false) && (
+          <HStack gap={1} align="start">
+            <Icon icon="warning" size="sm" color="warning" />
+            <Text type="supporting">
+              {wiredVideos === 1 ? 'A video is' : `${wiredVideos} videos are`} wired in, but{' '}
+              {kind === 'video'
+                ? 'this model is not known to accept video input'
+                : 'image models do not take video input'}
+              . It will be sent and probably ignored.
+            </Text>
+          </HStack>
+        )}
 
         {kind === 'image' && freeRuns && !liveWiredTextNode && (
           <HStack gap={1} align="start">

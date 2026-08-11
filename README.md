@@ -1,6 +1,6 @@
 # Unframed
 
-A tiny, local, node-based image generator. Wire prompt and image nodes into an output node, hit **Generate**, and it calls **GPT Image 2 through OpenRouter** and writes the result to a folder on your machine. No hosting, pay-per-generation.
+A tiny, local, node-based image generator. Wire prompt and image nodes into an output node, hit **Generate**, and it calls video/image generation models via **OpenRouter** and writes the result to a folder on your machine. No hosting, **pay-per-generation only**.
 
 ## What's inside
 
@@ -18,8 +18,15 @@ A tiny, local, node-based image generator. Wire prompt and image nodes into an o
 
 ### 1. Get the code
 
+Clone the repo:
+
 ```bash
 git clone https://github.com/teoaliano/Unframed.git
+```
+
+Then move into it — every command below runs from there:
+
+```bash
 cd Unframed
 ```
 
@@ -41,30 +48,52 @@ This runs both processes together — the backend on **8787** and the canvas on 
 
 ### 4. Add your API key
 
-Open **http://localhost:5173** and click the **key icon** in the top right. Paste your OpenRouter key and save — that's it. The key is sent to the local server, which writes it to a `.env` file next to the code so it survives a restart, and keeps it server-side from then on. The browser never stores it.
+Open **http://localhost:5173** and click the **settings icon** in the top right. Paste your OpenRouter key and save — that's it. The key is sent to the local server, which writes it to a `.env` file next to the code so it survives a restart, and keeps it server-side from then on. The browser never stores it.
 
 The same dialog replaces the key later, or removes it with **Remove key** (two clicks, since the key can't be read back out).
 
-<details>
-<summary>Prefer to configure by file instead?</summary>
+`.env` is gitignored, so your key is never committed.
+
+### Settings
+
+Everything configurable lives in that one dialog, and every change is written to `.env` and applied immediately — no restart:
+
+- **API key** — paste to set or replace, **Remove key** to delete the line.
+- **Default models** — one picker each for image, text and video, listing what OpenRouter actually offers for that kind.
+- **Output folder** — type a path, or press **Browse…** to pick one in Finder / File Explorer. The dialog opens on this machine because the server is local; the folder is created if it doesn't exist. Projects live *inside* this folder, so pointing it somewhere new starts you with an empty project list — the old work is still in the old folder.
+
+**Default models are defaults, not locks.** Every node has its own model picker; these three decide what a fresh node starts on — an output node's Image tab, its Video tab, and text nodes respectively.
+
+### Configuring by file instead
+
+The dialog writes `.env` for you, but you can write it by hand — and `PORT` is only settable there.
+
+**1. Create the file.** Copy the example, which lists every variable with its default:
 
 ```bash
 cp .env.example .env
 ```
 
-Then set `OPENROUTER_API_KEY=sk-or-v1-...` in it and restart. Same result — the UI writes to this file.
-</details>
+**2. Open `.env` and fill it in.** This is the whole file — paste it and edit the values you care about:
 
-`.env` is gitignored, so your key is never committed. Nothing else needs configuring, but three more variables are available if you want them — set them in `.env`, they have no UI:
+```
+OPENROUTER_API_KEY=sk-or-v1-...
+OPENROUTER_IMAGE_MODEL=openai/gpt-image-2
+OPENROUTER_TEXT_MODEL=google/gemini-3.5-flash-lite
+OPENROUTER_VIDEO_MODEL=bytedance/seedance-2.0
+OUTPUT_DIR=./output
+PORT=8787
+```
 
-| Variable | Default | What it does |
-| --- | --- | --- |
-| `OPENROUTER_API_KEY` | — | Required. Set it in the app, or here. |
-| `OPENROUTER_MODEL` | `openai/gpt-image-2` | Any image model slug OpenRouter lists. |
-| `OPENROUTER_TEXT_MODEL` | `google/gemini-3.5-flash-lite` | Model for text nodes. Must accept image input. |
-| `OPENROUTER_VIDEO_MODEL` | `bytedance/seedance-2.0` | Model for the output node's Video tab. Billed per second. |
-| `OUTPUT_DIR` | `./output` | Where images, sidecars, and saved graphs are written. Created automatically. |
-| `PORT` | `8787` | Backend port. The client dev server proxies `/api` here. |
+Only `OPENROUTER_API_KEY` is required. Delete any other line and the default above is used.
+
+The three model lines are the same defaults the settings dialog sets. The text model must accept image input, since images wired into a text node are sent along with the prompt; video is billed per second of output.
+
+`OUTPUT_DIR` is where images, videos, sidecars, and saved projects are written (relative to the project root, or absolute) — created automatically. `PORT` is the backend port; it has no UI because the client dev server proxies `/api` to a fixed port, so changing it means editing `client/vite.config.js` too.
+
+**3. Restart** with `npm run dev` — `.env` is read at startup.
+
+> `OPENROUTER_MODEL` was the old name for `OPENROUTER_IMAGE_MODEL`. It is still read if present, so an existing `.env` keeps working, but the new name is what gets written.
 
 ### 5. Generate
 
@@ -74,7 +103,9 @@ At startup the server prints what it resolved, which is the quickest way to conf
 
 ```
   Unframed server  →  http://localhost:8787
-  model:    openai/gpt-image-2
+  image:    openai/gpt-image-2
+  text:     google/gemini-3.5-flash-lite
+  video:    bytedance/seedance-2.0
   api key:  loaded
   output:   /path/to/Unframed/output
 ```
@@ -88,11 +119,21 @@ npm run server   # backend only, on 8787
 npm run client   # canvas only, on 5173
 ```
 
+### Staying up to date
+
+This runs from a clone, so nothing updates itself. Pull, then reinstall in case a dependency moved:
+
+```bash
+git pull && npm run install:all
+```
+
+Your `.env` and `output/` are gitignored, so neither is touched. The app shows a toast reminding you of this once a day — dismiss it or ignore it, it comes back tomorrow, not on every reload.
+
 ## Troubleshooting
 
 | Symptom | Cause and fix |
 | --- | --- |
-| `api key:  MISSING` on startup | No key saved yet — add one with the key icon in the top right. If you set it by hand, it must be `OPENROUTER_API_KEY` in a `.env` at the repo root, not inside `server/`. |
+| `api key:  MISSING` on startup | No key saved yet — add one with the key icon in the top right (it becomes a settings gear once a key is saved). If you set it by hand, it must be `OPENROUTER_API_KEY` in a `.env` at the repo root, not inside `server/`. |
 | "That does not look like an OpenRouter key" | The key must start with `sk-or-`, with no spaces or line breaks. Copy it again from openrouter.ai/keys. |
 | `EADDRINUSE` on 8787 or 5173 | Something else holds the port. Find it with `lsof -ti tcp:8787` (macOS/Linux) and stop it, or set a different `PORT` in `.env`. |
 | Generate returns a 401 | The key is wrong or revoked. Test it: `curl -H "Authorization: Bearer $OPENROUTER_API_KEY" https://openrouter.ai/api/v1/key` |

@@ -74,18 +74,20 @@ export async function revealFiles(fileNames) {
   return data;
 }
 
-// { ok, model, hasKey, keyHint, outputDir } — keyHint is the last 4 chars; the key
-// itself never leaves the server.
+// { ok, hasKey, keyHint, imageModel, textModel, videoModel, outputDir } — keyHint
+// is the last 4 chars; the key itself never leaves the server.
 export const getHealth = () => fetch('/api/health').then((r) => r.json());
 
-export const saveKey = (key) =>
-  fetch('/api/key', {
-    method: 'POST',
+// Fields left out are left untouched on the server, so the dialog can save just
+// the key or just the folder. Returns the settings as they now stand.
+export const saveConfig = (fields) =>
+  fetch('/api/config', {
+    method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ key }),
+    body: JSON.stringify(fields),
   }).then(async (r) => {
     const d = await r.json().catch(() => ({}));
-    if (!r.ok) throw new Error(d.error || `Could not save the key (${r.status})`);
+    if (!r.ok) throw new Error(d.error || `Could not save settings (${r.status})`);
     return d;
   });
 
@@ -94,6 +96,15 @@ export const clearKey = () =>
     const d = await r.json().catch(() => ({}));
     if (!r.ok) throw new Error(d.error || `Could not remove the key (${r.status})`);
     return d;
+  });
+
+// Opens the OS folder dialog on the machine running the server (which is this
+// one). Resolves to '' if it was cancelled; throws where there is no picker.
+export const pickFolder = () =>
+  fetch('/api/pick-folder', { method: 'POST' }).then(async (r) => {
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(d.error || `Could not open the folder picker (${r.status})`);
+    return d.path || '';
   });
 
 export const listProjects = () =>

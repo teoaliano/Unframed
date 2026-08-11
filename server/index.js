@@ -5,6 +5,7 @@ import dotenv from 'dotenv';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { upsertEnv, PATTERNS } from './env.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, '..');
@@ -13,22 +14,29 @@ const ROOT = path.resolve(__dirname, '..');
 dotenv.config({ path: path.join(ROOT, '.env'), override: true });
 
 const PORT = process.env.PORT || 8787;
-const MODEL = process.env.OPENROUTER_MODEL || 'openai/gpt-image-2';
+// None of these are const: PUT /api/config rewrites .env and reassigns them, so a
+// setting changed in the app takes effect immediately, without a restart. PORT is
+// the exception -- the client's dev-server proxy points at a fixed port, so
+// changing it needs both halves restarted anyway.
+//
+// OPENROUTER_MODEL is the old name for the image model, still read so an existing
+// .env keeps working.
+let IMAGE_MODEL =
+  process.env.OPENROUTER_IMAGE_MODEL || process.env.OPENROUTER_MODEL || 'openai/gpt-image-2';
 // Vision-capable so a text node can describe images wired into it. Verified live
 // on OpenRouter; qwen/qwen3.7-flash is the cheaper fallback if this slug retires.
-const TEXT_MODEL = process.env.OPENROUTER_TEXT_MODEL || 'google/gemini-3.5-flash-lite';
+let TEXT_MODEL = process.env.OPENROUTER_TEXT_MODEL || 'google/gemini-3.5-flash-lite';
 // Video is priced per second of output, so the default is a mid-tier model rather
 // than the most capable one.
-const VIDEO_MODEL = process.env.OPENROUTER_VIDEO_MODEL || 'bytedance/seedance-2.0';
-// Not const: POST /api/key can replace it at runtime so a key entered in the UI
-// works immediately, without a restart.
+let VIDEO_MODEL = process.env.OPENROUTER_VIDEO_MODEL || 'bytedance/seedance-2.0';
 let API_KEY = process.env.OPENROUTER_API_KEY;
-const OUTPUT_DIR = path.resolve(ROOT, process.env.OUTPUT_DIR || './output');
+let OUTPUT_DIR = path.resolve(ROOT, process.env.OUTPUT_DIR || './output');
 
 const app = express();
 app.use(cors());
-// Reference images are sent as base64 data URLs, so allow a generous body size.
-app.use(express.json({ limit: '30mb' }));
+// References are sent as base64 data URLs. Video is the sizing case: the client
+// caps a clip at 25MB raw, which is ~33MB as base64, plus prompt and images.
+app.use(express.json({ limit: '60mb' }));
 
 function slugify(text) {
   return (
@@ -40,65 +48,202 @@ function slugify(text) {
   );
 }
 
-app.get('/api/health', (req, res) => {
-  res.json({
-    ok: true,
-    model: MODEL,
+// Everything the settings dialog shows. The key itself is never included -- only
+// its last 4 chars, enough to tell which key is in use.
+function settings() {
+  return {
     hasKey: Boolean(API_KEY),
-    // Last 4 only, so the settings dialog can show which key is in use without
-    // ever handing the key itself back to the browser.
     keyHint: API_KEY ? API_KEY.slice(-4) : '',
+    imageModel: IMAGE_MODEL,
+    textModel: TEXT_MODEL,
+    videoModel: VIDEO_MODEL,
     outputDir: OUTPUT_DIR,
-  });
+  };
+}
+
+app.get('/api/health', (req, res) => {
+  // `model` is the old field name for the image model, kept so a stale tab running
+  // an older client bundle still reads something sensible.
+  res.json({ ok: true, model: IMAGE_MODEL, ...settings() });
 });
 
-// Save a key typed into the UI, so a fresh clone doesn't have to hand-edit .env.
-// It lands in .env exactly where the manual instructions put it, which is also
-// what makes it survive a restart.
-app.post('/api/key', async (req, res) => {
-  const key = String(req.body?.key ?? '').trim();
-  // Trust boundary: this string gets written into .env and sent as an HTTP header,
-  // so only a single clean token is accepted. Whitespace, quotes and newlines --
-  // which could corrupt .env or inject a second header -- are rejected here.
-  if (!/^sk-or-[\w.-]{8,200}$/.test(key)) {
-    return res.status(400).json({
-      error: 'That does not look like an OpenRouter key. Keys start with "sk-or-".',
-    });
+async function writeEnv(updates) {
+  const envPath = path.join(ROOT, '.env');
+  const text = await fs.readFile(envPath, 'utf8').catch(() => '');
+  await fs.writeFile(envPath, upsertEnv(text, updates));
+}
+
+// Save settings typed into the UI, so a fresh clone doesn't have to hand-edit
+// .env. They land in .env exactly where the manual instructions put them, which
+// is also what makes them survive a restart. Anything absent from the body is
+// left alone, so the dialog can save one field without resending the others.
+app.put('/api/config', async (req, res) => {
+  const body = req.body ?? {};
+  const fields = {
+    key: 'OPENROUTER_API_KEY',
+    imageModel: 'OPENROUTER_IMAGE_MODEL',
+    textModel: 'OPENROUTER_TEXT_MODEL',
+    videoModel: 'OPENROUTER_VIDEO_MODEL',
+    outputDir: 'OUTPUT_DIR',
+  };
+  const updates = {};
+  for (const [field, envKey] of Object.entries(fields)) {
+    if (body[field] === undefined) continue;
+    const value = String(body[field]).trim();
+    // Trust boundary: these strings get written into .env, and the key is sent as
+    // an HTTP header. Only single clean tokens pass -- see PATTERNS in env.js.
+    if (!PATTERNS[envKey].test(value)) {
+      return res.status(400).json({
+        error:
+          field === 'key'
+            ? 'That does not look like an OpenRouter key. Keys start with "sk-or-".'
+            : field === 'outputDir'
+              ? 'That folder path has characters that cannot be saved.'
+              : 'That does not look like a model slug. Expected something like "openai/gpt-image-2".',
+      });
+    }
+    updates[envKey] = value;
+  }
+  if (!Object.keys(updates).length) return res.status(400).json({ error: 'Nothing to save.' });
+
+  // Writing the image model retires the old OPENROUTER_MODEL name, so an upgraded
+  // .env doesn't keep two lines that disagree.
+  if (updates.OPENROUTER_IMAGE_MODEL) updates.OPENROUTER_MODEL = null;
+
+  // The folder has to be usable before it is saved, or every later generation
+  // fails with a disk error instead of a message you can act on.
+  if (updates.OUTPUT_DIR) {
+    const dir = path.resolve(ROOT, updates.OUTPUT_DIR);
+    try {
+      await fs.mkdir(dir, { recursive: true });
+    } catch (err) {
+      return res.status(400).json({ error: `Cannot use that folder: ${err.message}` });
+    }
   }
 
-  const envPath = path.join(ROOT, '.env');
-  let text = await fs.readFile(envPath, 'utf8').catch(() => '');
-  const line = `OPENROUTER_API_KEY=${key}`;
-  // Replace the existing assignment if there is one, so the rest of .env survives.
-  text = /^OPENROUTER_API_KEY=.*$/m.test(text)
-    ? text.replace(/^OPENROUTER_API_KEY=.*$/m, line)
-    : `${text}${text && !text.endsWith('\n') ? '\n' : ''}${line}\n`;
-
   try {
-    await fs.writeFile(envPath, text);
+    await writeEnv(updates);
   } catch (err) {
     return res.status(500).json({ error: `Could not write .env: ${err.message}` });
   }
-  API_KEY = key;
-  res.json({ ok: true, hasKey: true, keyHint: key.slice(-4) });
+
+  // Apply to the live process too, so nothing needs a restart.
+  if (updates.OPENROUTER_API_KEY) API_KEY = updates.OPENROUTER_API_KEY;
+  if (updates.OPENROUTER_IMAGE_MODEL) IMAGE_MODEL = updates.OPENROUTER_IMAGE_MODEL;
+  if (updates.OPENROUTER_TEXT_MODEL) TEXT_MODEL = updates.OPENROUTER_TEXT_MODEL;
+  if (updates.OPENROUTER_VIDEO_MODEL) VIDEO_MODEL = updates.OPENROUTER_VIDEO_MODEL;
+  if (updates.OUTPUT_DIR) OUTPUT_DIR = path.resolve(ROOT, updates.OUTPUT_DIR);
+
+  res.json({ ok: true, ...settings() });
 });
 
 app.delete('/api/key', async (req, res) => {
-  const envPath = path.join(ROOT, '.env');
-  const text = await fs.readFile(envPath, 'utf8').catch(() => '');
-  // Drop the whole line rather than blanking the value, so a shell-provided
-  // OPENROUTER_API_KEY isn't overridden with an empty string on the next load.
-  const next = text.replace(/^OPENROUTER_API_KEY=.*\r?\n?/m, '');
-  if (next !== text) {
-    try {
-      await fs.writeFile(envPath, next);
-    } catch (err) {
-      return res.status(500).json({ error: `Could not write .env: ${err.message}` });
-    }
+  try {
+    // null drops the whole line rather than blanking the value, so a
+    // shell-provided OPENROUTER_API_KEY isn't overridden with an empty string on
+    // the next load.
+    await writeEnv({ OPENROUTER_API_KEY: null });
+  } catch (err) {
+    return res.status(500).json({ error: `Could not write .env: ${err.message}` });
   }
   API_KEY = '';
-  res.json({ ok: true, hasKey: false });
+  res.json({ ok: true, ...settings() });
 });
+
+// Native folder chooser for the output directory. The browser cannot hand back a
+// real filesystem path -- showDirectoryPicker yields a sandboxed handle, and the
+// server needs somewhere to write -- but the server is local, so it can open the
+// OS dialog itself. Same trick as /api/reveal further down.
+app.post('/api/pick-folder', async (req, res) => {
+  const run = (cmd, args) =>
+    new Promise((resolve) => {
+      const child = spawn(cmd, args);
+      let out = '';
+      child.stdout.on('data', (d) => (out += d));
+      // null: no such binary, i.e. no picker on this machine. '': the dialog was
+      // cancelled, which exits non-zero with no output and is not an error.
+      child.on('error', () => resolve(null));
+      child.on('close', (code) => resolve(code === 0 ? out.trim() : ''));
+    });
+
+  let picked = null;
+  if (process.platform === 'darwin') {
+    picked = await run('osascript', [
+      '-e',
+      `POSIX path of (choose folder with prompt "Choose where Unframed saves its output" default location POSIX file ${JSON.stringify(OUTPUT_DIR)})`,
+    ]);
+  } else if (process.platform === 'win32') {
+    picked = await run('powershell', [
+      '-NoProfile',
+      '-Command',
+      'Add-Type -AssemblyName System.Windows.Forms; $d = New-Object System.Windows.Forms.FolderBrowserDialog; if ($d.ShowDialog() -eq "OK") { $d.SelectedPath }',
+    ]);
+  } else {
+    // zenity is the usual one and is often absent; run() resolves null then, which
+    // the dialog reports as "type the path instead".
+    picked = await run('zenity', ['--file-selection', '--directory', `--filename=${OUTPUT_DIR}/`]);
+  }
+
+  if (picked === null) {
+    return res
+      .status(501)
+      .json({ error: 'No folder picker available here. Type the path instead.' });
+  }
+  res.json({ ok: true, path: picked.split('\n')[0] || '' });
+});
+
+// Which video models take existing footage as input. The documented API cannot
+// answer this: /api/v1/videos/models has no modality field, and video models are
+// absent from /api/v1/models, which is where architecture.input_modalities lives.
+// The site's own filter can, though, and this is the endpoint behind it — the same
+// data, one tier less official. Inferring from pricing SKUs instead got the count
+// right and the set wrong (claimed wan-2.7, missed hailuo-3), which is exactly the
+// failure mode a guess produces: plausible, unverifiable, wrong.
+//
+// Unofficial, so every failure degrades to an empty set: no data means no warning,
+// never a false one. Cached for the process lifetime; the catalogue moves weekly.
+let videoInputSlugs = null;
+async function loadVideoInputSlugs() {
+  if (videoInputSlugs) return videoInputSlugs;
+  try {
+    const r = await fetch(
+      'https://openrouter.ai/api/frontend/v1/models/find?active=true&fmt=cards&input_modalities=video',
+    );
+    const d = await r.json();
+    const models = d?.data?.models;
+    if (!Array.isArray(models)) throw new Error('unexpected shape');
+    videoInputSlugs = new Set(
+      models
+        .filter((m) => (m.input_modalities || []).includes('video'))
+        .map((m) => m.slug)
+        .filter(Boolean),
+    );
+  } catch (err) {
+    console.log(`  video input modalities unavailable (${err.message}); warnings disabled`);
+    videoInputSlugs = new Set();
+  }
+  return videoInputSlugs;
+}
+
+// jobId -> { images, videos } sent with a video job, so the poll handler can record
+// it in the sidecar. Bounded because a long session would otherwise accumulate ids
+// forever; entries are read once, seconds to minutes after they are written.
+const videoJobRefs = new Map();
+function rememberJobRefs(id, refs) {
+  if (videoJobRefs.size > 200) videoJobRefs.delete(videoJobRefs.keys().next().value);
+  videoJobRefs.set(id, refs);
+}
+
+// What a request actually carried, by kind. Recorded in every sidecar and logged,
+// so "was the video sent?" is answerable after the fact from our side. Whether the
+// model then USED it is a different question, and only billing can hint at that.
+function countRefs(refs) {
+  const list = Array.isArray(refs) ? refs : [];
+  return {
+    images: list.filter((r) => r?.image_url?.url).length,
+    videos: list.filter((r) => r?.video_url?.url).length,
+  };
+}
 
 // Models for the node pickers. Two catalogues, two upstream endpoints:
 //   image — /images/models is the image catalogue AND the only place that says
@@ -119,7 +264,7 @@ app.delete('/api/key', async (req, res) => {
 app.get('/api/models', async (req, res) => {
   const wantText = req.query.type === 'text';
   const wantVideo = req.query.type === 'video';
-  const fallback = wantText ? TEXT_MODEL : wantVideo ? VIDEO_MODEL : MODEL;
+  const fallback = wantText ? TEXT_MODEL : wantVideo ? VIDEO_MODEL : IMAGE_MODEL;
   try {
     const url = wantText
       ? 'https://openrouter.ai/api/v1/models'
@@ -128,6 +273,9 @@ app.get('/api/models', async (req, res) => {
         : 'https://openrouter.ai/api/v1/images/models';
     const r = await fetch(url);
     const d = await r.json();
+    // Only the video catalogue needs the extra lookup; it is the one whose input
+    // modalities the documented API omits.
+    const videoInputs = wantVideo ? await loadVideoInputSlugs() : null;
     const models = (d.data || [])
       .filter((m) => {
         if (!wantText) return true; // the image/video endpoints are already filtered
@@ -152,6 +300,9 @@ app.get('/api/models', async (req, res) => {
               },
               // cents per second, by resolution where the model prices them apart.
               pricing: m.pricing_skus || null,
+              // null, not false, when the lookup failed: "unknown" must not read as
+              // "does not accept", or an outage turns into a wrong warning.
+              acceptsVideo: videoInputs?.size ? videoInputs.has(m.id) : null,
             }
           : wantText
             ? {}
@@ -173,7 +324,7 @@ app.post('/api/text', async (req, res) => {
   if (!API_KEY) {
     return res
       .status(400)
-      .json({ error: 'No OpenRouter key yet. Add one with the key icon in the top right.' });
+      .json({ error: 'No OpenRouter key yet. Add one with the key icon in the top right (it becomes a settings gear once saved).' });
   }
 
   const { prompt, input_references, model, project, batchId } = req.body || {};
@@ -189,8 +340,11 @@ app.post('/api/text', async (req, res) => {
 
   const content = [{ type: 'text', text: p }];
   for (const ref of refs) {
-    const url = ref?.image_url?.url;
-    if (url) content.push({ type: 'image_url', image_url: { url } });
+    // Rebuilt rather than forwarded, so only the two known shapes ever reach the
+    // upstream call. video_url is OpenRouter's chat content type for video input
+    // (base64 data URLs allowed); the model must list video in input_modalities.
+    if (ref?.image_url?.url) content.push({ type: 'image_url', image_url: { url: ref.image_url.url } });
+    else if (ref?.video_url?.url) content.push({ type: 'video_url', video_url: { url: ref.video_url.url } });
   }
 
   let orRes;
@@ -250,6 +404,7 @@ app.post('/api/text', async (req, res) => {
           model: model || TEXT_MODEL,
           result: String(text),
           referenceCount: refs.length,
+          references: countRefs(refs),
           batchId: batchId || null,
           cost,
           createdAt: new Date().toISOString(),
@@ -263,7 +418,10 @@ app.post('/api/text', async (req, res) => {
     console.log(`  text sidecar failed: ${err.message}`);
   }
 
-  console.log(`  text →  ${String(text).length} chars${cost != null ? `  ($${Number(cost).toFixed(4)})` : ''}`);
+  const sent = countRefs(refs);
+  console.log(
+    `  text →  ${String(text).length} chars  (sent ${sent.images} image, ${sent.videos} video refs)${cost != null ? `  ($${Number(cost).toFixed(4)})` : ''}`,
+  );
   res.json({ text: String(text), cost });
 });
 
@@ -327,7 +485,7 @@ app.delete('/api/projects/:name', async (req, res) => {
 app.post('/api/video', async (req, res) => {
   if (!API_KEY) {
     return res.status(400).json({
-      error: 'No OpenRouter key yet. Add one with the key icon in the top right.',
+      error: 'No OpenRouter key yet. Add one with the key icon in the top right (it becomes a settings gear once saved).',
     });
   }
 
@@ -354,6 +512,15 @@ app.post('/api/video', async (req, res) => {
   if (generate_audio != null) payload.generate_audio = generate_audio;
   if (input_references.length) payload.input_references = input_references;
 
+  // Logged before the call so a failed or ignored run still leaves a record of what
+  // went out. OpenRouter documents input_references as reference IMAGES for video
+  // generation, so a video entry here is unproven territory: the request may be
+  // accepted and the footage silently dropped.
+  const sentRefs = countRefs(input_references);
+  console.log(
+    `  video job →  ${payload.model}  (sent ${sentRefs.images} image, ${sentRefs.videos} video refs)`,
+  );
+
   let orRes;
   try {
     orRes = await fetch('https://openrouter.ai/api/v1/videos', {
@@ -379,6 +546,10 @@ app.post('/api/video', async (req, res) => {
   if (!data?.id) {
     return res.status(502).json({ error: 'OpenRouter did not return a video job id.' });
   }
+  // The sidecar is written by the poll handler, which never sees the request body,
+  // so what went out is parked here under the job id. Same process serves both, and
+  // a lost entry only costs a field in the sidecar.
+  rememberJobRefs(data.id, sentRefs);
   res.json({ id: data.id, status: data.status || 'pending' });
 });
 
@@ -447,6 +618,12 @@ app.get('/api/video/:id', async (req, res) => {
           model,
           duration: duration ? Number(duration) : null,
           resolution: resolution || null,
+          references: videoJobRefs.get(req.params.id) || null,
+          // Verbatim, because it is the only evidence that footage was actually
+          // consumed: models that charge for video input price it under their own
+          // SKU (seedance's video_tokens_with_video_input), so the billing shape
+          // tells you what the request shape cannot.
+          usage: data.usage ?? null,
           cost,
           createdAt: new Date().toISOString(),
         },
@@ -457,6 +634,7 @@ app.get('/api/video/:id', async (req, res) => {
   } catch (err) {
     console.log(`  sidecar not written: ${err.message}`);
   }
+  videoJobRefs.delete(req.params.id); // the job is done; nothing else will read it
 
   res.json({
     status,
@@ -522,7 +700,7 @@ app.get('/api/file/:project/:name', (req, res) => {
 app.post('/api/generate', async (req, res) => {
   if (!API_KEY) {
     return res.status(400).json({
-      error: 'No OpenRouter key yet. Add one with the key icon in the top right.',
+      error: 'No OpenRouter key yet. Add one with the key icon in the top right (it becomes a settings gear once saved).',
     });
   }
 
@@ -547,7 +725,7 @@ app.post('/api/generate', async (req, res) => {
       .json({ error: 'Prompt is empty. Wire at least one prompt node into the output node.' });
   }
 
-  const payload = { model: model || MODEL, prompt, output_format };
+  const payload = { model: model || IMAGE_MODEL, prompt, output_format };
   if (resolution) payload.resolution = resolution;
   if (quality && quality !== 'auto') payload.quality = quality;
   if (aspect_ratio) payload.aspect_ratio = aspect_ratio;
@@ -642,6 +820,7 @@ app.post('/api/generate', async (req, res) => {
             output_format,
             background: background || null,
             referenceCount: input_references.length,
+            references: countRefs(input_references),
             batchId: batchId || null,
             runIndex: runIndex || 1,
             runCount: runCount || 1,
@@ -667,10 +846,11 @@ app.post('/api/generate', async (req, res) => {
 
 app.listen(PORT, () => {
   console.log(`\n  Unframed server  →  http://localhost:${PORT}`);
-  console.log(`  model:    ${MODEL}`);
+  console.log(`  image:    ${IMAGE_MODEL}`);
   console.log(`  text:     ${TEXT_MODEL}`);
+  console.log(`  video:    ${VIDEO_MODEL}`);
   console.log(
-    `  api key:  ${API_KEY ? 'loaded' : 'MISSING — add one in the app (key icon, top right)'}`,
+    `  api key:  ${API_KEY ? 'loaded' : 'MISSING — add one in the app (settings icon, top right)'}`,
   );
   console.log(`  output:   ${OUTPUT_DIR}\n`);
 });

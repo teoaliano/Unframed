@@ -19,14 +19,30 @@ import { Dialog, DialogHeader } from '@astryxdesign/core/Dialog';
 import { Text } from '@astryxdesign/core/Text';
 import { Link } from '@astryxdesign/core/Link';
 import { AlertDialog } from '@astryxdesign/core/AlertDialog';
-import { HStack, VStack } from '@astryxdesign/core/Stack';
+import { HStack, VStack, StackItem } from '@astryxdesign/core/Stack';
+import { Selector } from '@astryxdesign/core/Selector';
+import { Banner } from '@astryxdesign/core/Banner';
+import { Divider } from '@astryxdesign/core/Divider';
+import { useToast } from '@astryxdesign/core/Toast';
+import {
+  Plus,
+  Minus,
+  MousePointer2,
+  Hand,
+  Maximize,
+  Library,
+  KeyRound,
+  Settings,
+  Folder,
+} from 'lucide-react';
 import Logo from './Logo.jsx';
 import PromptNode from './nodes/PromptNode.jsx';
 import ImageNode from './nodes/ImageNode.jsx';
+import VideoNode, { MAX_VIDEO_BYTES } from './nodes/VideoNode.jsx';
 import OutputNode from './nodes/OutputNode.jsx';
 import TextNode from './nodes/TextNode.jsx';
 import ProjectMenu from './ProjectMenu.jsx';
-import { PromptIcon, ImageIcon, OutputIcon, TextIcon } from './nodes/nodeIcons.jsx';
+import { PromptIcon, ImageIcon, VideoIcon, OutputIcon, TextIcon } from './nodes/nodeIcons.jsx';
 import LibraryDialog from './library/LibraryDialog.jsx';
 import { instantiateFragment, centerOffset } from './library/insert.js';
 import {
@@ -37,27 +53,33 @@ import {
   renameProject,
   deleteProject,
   getHealth,
-  saveKey,
+  saveConfig,
   clearKey,
+  pickFolder,
+  listModels,
   revealFiles,
 } from './api.js';
 
-const nodeTypes = { prompt: PromptNode, image: ImageNode, output: OutputNode, text: TextNode };
+const nodeTypes = { prompt: PromptNode, image: ImageNode, video: VideoNode, output: OutputNode, text: TextNode };
 
-const svg = (path) => (p) => (
-  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...p}>
-    {path}
-  </svg>
-);
-const PlusIcon = svg(<path d="M12 5v14M5 12h14" />);
-const MinusIcon = svg(<path d="M5 12h14" />);
-const SelectIcon = svg(<path d="M4 3l7 17 2.5-7 7-2.5L4 3z" />);
-const HandIcon = svg(
-  <path d="M8 13V5.5a1.5 1.5 0 013 0V11m0-1V4.5a1.5 1.5 0 013 0V11m0-.5V6a1.5 1.5 0 013 0v7a6 6 0 01-6 6h-1a6 6 0 01-5.5-3.6L7 14c-.5-1-.2-1.8.6-2.2.7-.3 1.5 0 2 .7l-1.6-1.5" />,
-);
-const FitIcon = svg(<path d="M4 8V4h4M16 4h4v4M20 16v4h-4M8 20H4v-4" />);
-const LibraryIcon = svg(<><path d="M4 19.5A2.5 2.5 0 016.5 17H20V4H6.5A2.5 2.5 0 004 6.5v13z" /><path d="M4 19.5A2.5 2.5 0 006.5 22H20v-2.5" /></>);
-const KeyIcon = svg(<><circle cx="8" cy="15" r="4" /><path d="M10.8 12.2L20 3m-3 0 3 3m-5 2 2.5 2.5" /></>);
+// Icons come from lucide-react — the same pack @astryxdesign/theme-neutral
+// registers behind the design system's semantic names, so `icon="info"` and these
+// share one grid and one stroke weight. Hand-drawn paths did not: they ranged from
+// a 14- to a 22-unit extent inside the same 24 box, which is why some read a size
+// bigger than their neighbours.
+const PlusIcon = Plus;
+const MinusIcon = Minus;
+const SelectIcon = MousePointer2;
+const HandIcon = Hand;
+const FitIcon = Maximize;
+const LibraryIcon = Library;
+const KeyIcon = KeyRound;
+const SettingsIcon = Settings;
+const FolderIcon = Folder;
+
+// Dated, not a boolean: the nudge should come back tomorrow, not never again.
+const UPDATE_NUDGE_KEY = 'unframed:update-nudge';
+const UPDATE_COMMAND = 'git pull && npm run install:all';
 
 const HELP_TEXT =
   'Reference a prompt or text node with @id. Connect images to number them, then type “image 1”.';
@@ -124,6 +146,7 @@ function Canvas() {
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
   const { screenToFlowPosition, zoomIn, zoomOut, fitView } = useReactFlow();
+  const toast = useToast();
   const [tool, setTool] = useState('select'); // 'select' | 'pan'
   // Last pointer position over the canvas, so pasted nodes land where you're looking.
   const pointer = useRef({ x: 200, y: 200 });
@@ -136,9 +159,12 @@ function Canvas() {
   const [nameDlg, setNameDlg] = useState(null); // { mode:'rename'|'create', name, value, error } | null
   const [deleting, setDeleting] = useState(null); // project name | null
   const [libraryOpen, setLibraryOpen] = useState(false);
-  // API key dialog. keyState mirrors the server: { hasKey, keyHint }.
-  const [keyState, setKeyState] = useState({ hasKey: true, keyHint: '' });
-  const [keyDlg, setKeyDlg] = useState(null); // { value, error, saving, saved } | null
+  // Settings dialog. cfg mirrors what the server has on disk; cfgDlg is the open
+  // dialog's draft, so nothing is applied until Save.
+  const [cfg, setCfg] = useState({ hasKey: true, keyHint: '', imageModel: '', textModel: '', videoModel: '', outputDir: '' });
+  const [cfgDlg, setCfgDlg] = useState(null); // { key, imageModel, …, error, saving, saved } | null
+  // The three model catalogues, for the pickers. { image: [...], text: [...], video: [...] }
+  const [catalogues, setCatalogues] = useState({});
   // Gate auto-save until the initial load finishes, so we don't overwrite a saved
   // project with the starter graph on first render.
   const ready = useRef(false);
@@ -235,45 +261,118 @@ function Canvas() {
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [setNodes, setEdges]);
 
-  // Ask the server whether it has a key. With none, open the dialog straight away:
+  // This runs from a clone, so nothing tells you a fix landed upstream. A nudge,
+  // not a version check: once a day rather than every load, since a dev session
+  // reloads this page constantly and a toast on each one is just noise.
+  // ponytail: no `git fetch` behind it — add one server-side if "you are N commits
+  // behind" turns out to be worth the network call on every boot.
+  useEffect(() => {
+    const today = new Date().toISOString().slice(0, 10);
+    if (localStorage.getItem(UPDATE_NUDGE_KEY) === today) return;
+    localStorage.setItem(UPDATE_NUDGE_KEY, today);
+    toast({
+      // The button sits in the body, under the text, rather than in endContent —
+      // that slot only renders trailing, beside the message.
+      body: (
+        <VStack gap={1.5} align="start">
+          <VStack gap={0.5}>
+            <Text type="label">Update Unframed</Text>
+            <Text type="supporting">Run {UPDATE_COMMAND} to pick up fixes.</Text>
+          </VStack>
+          <Button
+            label="Copy command"
+            variant="secondary"
+            size="sm"
+            onClick={() => {
+              navigator.clipboard?.writeText(UPDATE_COMMAND);
+              toast({ body: 'Copied. Paste it in a terminal at the repo root.', uniqueID: 'update-nudge' });
+            }}
+          />
+        </VStack>
+      ),
+      uniqueID: 'update-nudge',
+      // Longer than the 5s default: this lands while the canvas is still drawing,
+      // and a reminder nobody reads is not a reminder.
+      autoHideDuration: 10000,
+    });
+  }, [toast]);
+
+  // Ask the server what it has. With no key, open the dialog straight away:
   // nothing on the canvas can produce an image yet, so setup is the only useful
-  // first action. keyState starts optimistic so the dialog doesn't flash for
-  // everyone else while this request is in flight.
+  // first action. cfg starts optimistic (hasKey: true) so the dialog doesn't flash
+  // for everyone else while this request is in flight.
   useEffect(() => {
     getHealth()
       .then((h) => {
-        setKeyState({ hasKey: Boolean(h.hasKey), keyHint: h.keyHint || '' });
-        if (!h.hasKey) setKeyDlg({ value: '' });
+        setCfg((c) => ({ ...c, ...h, hasKey: Boolean(h.hasKey), keyHint: h.keyHint || '' }));
+        if (!h.hasKey) setCfgDlg({ key: '' });
       })
       .catch(() => {});
   }, []);
 
-  async function confirmKey() {
-    const value = (keyDlg.value || '').trim();
-    setKeyDlg((d) => ({ ...d, saving: true, error: undefined }));
+  // Open with the saved values as the draft, so the pickers show what is in use.
+  function openSettings() {
+    setCfgDlg({
+      key: '',
+      imageModel: cfg.imageModel,
+      textModel: cfg.textModel,
+      videoModel: cfg.videoModel,
+      outputDir: cfg.outputDir,
+    });
+    // The catalogues are cached in api.js, so reopening the dialog costs nothing.
+    if (!catalogues.image) {
+      ['image', 'text', 'video'].forEach((type) =>
+        listModels(type).then((d) => setCatalogues((c) => ({ ...c, [type]: d.models || [] }))),
+      );
+    }
+  }
+
+  async function saveSettings() {
+    const d = cfgDlg;
+    // Only what actually changed, so saving the key doesn't rewrite four model
+    // lines and an empty key field doesn't wipe the saved key.
+    const fields = {};
+    if (d.key?.trim()) fields.key = d.key.trim();
+    for (const f of ['imageModel', 'textModel', 'videoModel', 'outputDir']) {
+      if (d[f] && d[f] !== cfg[f]) fields[f] = d[f];
+    }
+    if (!Object.keys(fields).length) return setCfgDlg(null);
+
+    setCfgDlg((s) => ({ ...s, saving: true, error: undefined }));
     try {
-      const r = await saveKey(value);
-      setKeyState({ hasKey: true, keyHint: r.keyHint || '' });
-      setKeyDlg({ value: '', saved: true });
+      const r = await saveConfig(fields);
+      setCfg((c) => ({ ...c, ...r }));
+      setCfgDlg((s) => ({ ...s, key: '', saving: false, saved: true }));
     } catch (err) {
-      setKeyDlg((d) => ({ ...d, saving: false, error: err.message }));
+      setCfgDlg((s) => ({ ...s, saving: false, error: err.message }));
+    }
+  }
+
+  // The picker runs on the server, which is this machine — a browser can't hand
+  // back a real path. Cancelling returns '' and changes nothing.
+  async function browseFolder() {
+    try {
+      const p = await pickFolder();
+      if (p) setCfgDlg((s) => ({ ...s, outputDir: p, error: undefined, saved: false }));
+    } catch (err) {
+      setCfgDlg((s) => ({ ...s, error: err.message }));
     }
   }
 
   // Two clicks to remove: the key isn't recoverable from here, so a stray click
   // shouldn't send you back to openrouter.ai for a new one.
   async function removeKey() {
-    if (!keyDlg.confirmRemove) {
-      setKeyDlg((d) => ({ ...d, confirmRemove: true, error: undefined, saved: false }));
+    if (!cfgDlg.confirmRemove) {
+      setCfgDlg((d) => ({ ...d, confirmRemove: true, error: undefined, saved: false }));
       return;
     }
-    setKeyDlg((d) => ({ ...d, saving: true }));
+    setCfgDlg((d) => ({ ...d, saving: true }));
     try {
-      await clearKey();
-      setKeyState({ hasKey: false, keyHint: '' });
-      setKeyDlg({ value: '', removed: true });
+      const r = await clearKey();
+      setCfg((c) => ({ ...c, ...r }));
+      setCfgDlg((d) => ({ ...d, key: '', saving: false, confirmRemove: false, removed: true }));
     } catch (err) {
-      setKeyDlg((d) => ({ ...d, saving: false, confirmRemove: false, error: err.message }));
+      setCfgDlg((d) => ({ ...d, saving: false, confirmRemove: false, error: err.message }));
     }
   }
 
@@ -420,6 +519,7 @@ function Canvas() {
       items: [
         { label: 'Prompt', icon: PromptIcon, onClick: () => addNode('prompt', { text: '' }, at?.()) },
         { label: 'Image', icon: ImageIcon, onClick: () => addNode('image', { fileName: '', dataUrl: '' }, at?.()) },
+        { label: 'Video', icon: VideoIcon, onClick: () => addNode('video', { fileName: '', dataUrl: '' }, at?.()) },
       ],
     },
     {
@@ -617,17 +717,23 @@ function Canvas() {
     if (tries > 0) setTimeout(() => focusField(id, tries - 1), 40);
   }, []);
 
-  // Drag image files from Finder/Explorer onto the canvas -> reference nodes at
-  // the drop point (offset a little when dropping several at once).
+  // Drag image/video files from Finder/Explorer onto the canvas -> reference nodes
+  // at the drop point (offset a little when dropping several at once). Oversized
+  // videos are skipped silently here — the node's own picker explains the cap, and
+  // a drop has nowhere sane to surface an error.
   function onDrop(e) {
-    const files = [...(e.dataTransfer?.files || [])].filter((f) => f.type.startsWith('image/'));
+    const files = [...(e.dataTransfer?.files || [])].filter(
+      (f) =>
+        f.type.startsWith('image/') ||
+        (f.type.startsWith('video/') && f.size <= MAX_VIDEO_BYTES),
+    );
     if (!files.length) return;
     e.preventDefault();
     files.forEach((file, i) => {
       const reader = new FileReader();
       reader.onload = () =>
         addNode(
-          'image',
+          file.type.startsWith('video/') ? 'video' : 'image',
           { fileName: file.name, dataUrl: reader.result },
           { x: e.clientX + i * 24, y: e.clientY + i * 24 },
         );
@@ -650,26 +756,29 @@ function Canvas() {
         return;
       }
 
-      const image = [...(e.clipboardData?.items || [])].find((it) =>
-        it.type.startsWith('image/'),
+      const media = [...(e.clipboardData?.items || [])].find(
+        (it) => it.type.startsWith('image/') || it.type.startsWith('video/'),
       );
-      if (image) {
+      if (media) {
         e.preventDefault();
-        const file = image.getAsFile();
+        const kind = media.type.startsWith('video/') ? 'video' : 'image';
+        const file = media.getAsFile();
+        if (kind === 'video' && file && file.size > MAX_VIDEO_BYTES) return;
         const reader = new FileReader();
         reader.onload = () =>
           setNodes((ns) => {
-            // A selected image node claims the paste: fill it instead of spawning
-            // a new node, so "select the empty reference, hit paste" just works.
-            const chosen = ns.filter((n) => n.selected && n.type === 'image');
+            // A selected node of the same kind claims the paste: fill it instead of
+            // spawning a new node, so "select the empty reference, hit paste" just
+            // works.
+            const chosen = ns.filter((n) => n.selected && n.type === kind);
             if (!chosen.length) {
-              addNode('image', { fileName: file?.name || 'pasted-image', dataUrl: reader.result }, pointer.current);
+              addNode(kind, { fileName: file?.name || `pasted-${kind}`, dataUrl: reader.result }, pointer.current);
               return ns;
             }
             const hit = new Set(chosen.map((n) => n.id));
             return ns.map((n) =>
               hit.has(n.id)
-                ? { ...n, data: { ...n.data, fileName: file?.name || 'pasted-image', dataUrl: reader.result, aspect: null } }
+                ? { ...n, data: { ...n.data, fileName: file?.name || `pasted-${kind}`, dataUrl: reader.result, aspect: null } }
                 : n,
             );
           });
@@ -694,42 +803,42 @@ function Canvas() {
         pointer.current = { x: e.clientX, y: e.clientY };
       }}
     >
-      <header className="toolbar">
-        <div className="toolbar-group">
-          <Logo size={28} />
-        </div>
-        <div className="toolbar-group toolbar-center">
-          <ProjectMenu
-            projects={projects}
-            current={project}
-            onSwitch={switchProject}
-            onRename={(p) => setNameDlg({ mode: 'rename', name: p, value: p })}
-            onDelete={(p) => setDeleting(p)}
-            onAdd={newProject}
-          />
-        </div>
-        <div className="toolbar-group toolbar-right">
-          <IconButton
-            variant={keyState.hasKey ? 'ghost' : 'primary'}
-            size="sm"
-            label="API key"
-            tooltip={
-              keyState.hasKey
-                ? `OpenRouter key set${keyState.keyHint ? ` (…${keyState.keyHint})` : ''}. Click to replace`
-                : 'No OpenRouter key yet. Click to add one'
-            }
-            icon={<Icon icon={KeyIcon} />}
-            onClick={() => setKeyDlg({ value: '' })}
-          />
-          <IconButton
-            variant="ghost"
-            size="sm"
-            label="Help"
-            tooltip={HELP_TEXT}
-            icon={<Icon icon="info" />}
-          />
-        </div>
-      </header>
+      {/* No topbar — two cards floating over the canvas corners, Figma-style. */}
+      <div className="toolbar-card toolbar-card-left">
+        <Logo size={28} />
+        <ProjectMenu
+          projects={projects}
+          current={project}
+          onSwitch={switchProject}
+          onRename={(p) => setNameDlg({ mode: 'rename', name: p, value: p })}
+          onDelete={(p) => setDeleting(p)}
+          onAdd={newProject}
+        />
+      </div>
+      <div className="toolbar-card toolbar-card-right">
+        {/* A Canvas / Generation mode switch lands here — see status.md. */}
+        <IconButton
+          variant={cfg.hasKey ? 'ghost' : 'primary'}
+          size="sm"
+          label={cfg.hasKey ? 'Settings' : 'Add your API key'}
+          tooltip={
+            cfg.hasKey
+              ? `Settings — key${cfg.keyHint ? ` …${cfg.keyHint}` : ''}, default models, output folder`
+              : 'No OpenRouter key yet. Click to add one'
+          }
+          icon={<Icon icon={cfg.hasKey ? SettingsIcon : KeyIcon} />}
+          onClick={openSettings}
+        />
+        {/* Will open the onboarding when it exists (status.md); the tooltip is the
+            interim help. */}
+        <IconButton
+          variant="ghost"
+          size="sm"
+          label="Help"
+          tooltip={HELP_TEXT}
+          icon={<Icon icon="info" />}
+        />
+      </div>
 
       <ContextMenu menuContent={contextMenuContent()} menuWidth={188} size="sm">
       <div
@@ -840,16 +949,16 @@ function Canvas() {
       <LibraryDialog isOpen={libraryOpen} onOpenChange={setLibraryOpen} onAdd={insertPreset} />
 
       <Dialog
-        isOpen={!!keyDlg}
-        onOpenChange={(open) => !open && setKeyDlg(null)}
+        isOpen={!!cfgDlg}
+        onOpenChange={(open) => !open && setCfgDlg(null)}
         purpose="form"
-        width={420}
+        width={480}
       >
         <DialogHeader
-          title={keyState.hasKey ? 'OpenRouter API key' : 'Add your OpenRouter key to start'}
+          title={cfg.hasKey ? 'Settings' : 'Add your OpenRouter key to start'}
         />
         <VStack gap={3} padding={4}>
-          {!keyState.hasKey && (
+          {!cfg.hasKey && (
             <VStack gap={2}>
               <Text type="supporting" as="p">
                 Unframed has no image model of its own. It sends your prompts to{' '}
@@ -876,62 +985,134 @@ function Canvas() {
               </Text>
             </VStack>
           )}
-          <TextInput
-            label="API key"
-            type="password"
-            hasAutoFocus
-            placeholder="sk-or-v1-…"
-            description={
-              keyState.hasKey
-                ? `A key is already saved${keyState.keyHint ? ` (…${keyState.keyHint})` : ''}. Entering a new one replaces it.`
-                : 'Paste it here. It starts with sk-or-'
-            }
-            value={keyDlg?.value ?? ''}
-            status={
-              keyDlg?.error
-                ? { type: 'error', message: keyDlg.error }
-                : keyDlg?.saved
-                  ? { type: 'success', message: 'Key saved. Generate is ready to use.' }
-                  : keyDlg?.removed
+          {/* Three sections, one heading style each, dividers between. The field
+              labels themselves are hidden where the heading already names the
+              field, but stay in the DOM for screen readers. */}
+          <VStack gap={2}>
+            <Text type="label">API key</Text>
+            {/* Remove sits next to the field it acts on, like Browse… does for the
+                folder below. */}
+            <HStack gap={2} align="center">
+              {/* size="fill" so the field takes the row and the button keeps its
+                  natural width — inside an HStack an input sizes to content. */}
+              <StackItem size="fill">
+              <TextInput
+                label="API key"
+                isLabelHidden
+                type="password"
+                hasAutoFocus
+                placeholder="sk-or-v1-…"
+                value={cfgDlg?.key ?? ''}
+                // Only key-specific states live on this field; a save result can come
+                // from any of the settings below, so it gets its own line by the buttons.
+                status={
+                  cfgDlg?.removed
                     ? { type: 'warning', message: 'Key removed. Generate is disabled until you add one.' }
-                    : keyDlg?.confirmRemove
+                    : cfgDlg?.confirmRemove
                       ? {
                           type: 'warning',
                           message:
                             'This deletes the key from .env. You will need to paste it again, or make a new one at openrouter.ai/keys.',
                         }
                       : undefined
-            }
-            onChange={(v) =>
-              setKeyDlg((d) => ({
-                ...d,
-                value: v,
-                error: undefined,
-                saved: false,
-                removed: false,
-                confirmRemove: false,
-              }))
-            }
-          />
-          <HStack gap={2} justify={keyState.hasKey ? 'between' : 'end'}>
-            {keyState.hasKey && (
-              <Button
-                label={keyDlg?.confirmRemove ? 'Yes, remove it' : 'Remove key'}
-                variant={keyDlg?.confirmRemove ? 'destructive' : 'ghost'}
-                isDisabled={keyDlg?.saving}
-                onClick={removeKey}
+                }
+                onChange={(v) =>
+                  setCfgDlg((d) => ({
+                    ...d,
+                    key: v,
+                    error: undefined,
+                    saved: false,
+                    removed: false,
+                    confirmRemove: false,
+                  }))
+                }
               />
-            )}
-            <HStack gap={2} justify="end">
-              <Button label="Close" variant="ghost" onClick={() => setKeyDlg(null)} />
+              </StackItem>
+              {cfg.hasKey && (
+                <Button
+                  label={cfgDlg?.confirmRemove ? 'Yes, remove it' : 'Remove key'}
+                  variant={cfgDlg?.confirmRemove ? 'destructive' : 'ghost'}
+                  isDisabled={cfgDlg?.saving}
+                  onClick={removeKey}
+                />
+              )}
+            </HStack>
+            <Text type="supporting" as="p">
+              {cfg.hasKey
+                ? `A key is already saved${cfg.keyHint ? ` (…${cfg.keyHint})` : ''}. Entering a new one replaces it.`
+                : 'Paste it here. It starts with sk-or-'}
+            </Text>
+          </VStack>
+
+          <Divider />
+
+          {/* Defaults, not locks: every node keeps its own model picker, and these
+              are what a fresh one starts on. */}
+          <VStack gap={2}>
+            <Text type="label">Default models</Text>
+            {[
+              { field: 'imageModel', type: 'image', label: 'Image' },
+              { field: 'textModel', type: 'text', label: 'Text' },
+              { field: 'videoModel', type: 'video', label: 'Video' },
+            ].map(({ field, type, label }) => (
+              <Selector
+                key={field}
+                label={label}
+                hasSearch
+                options={(catalogues[type] || [{ id: cfgDlg?.[field] }])
+                  .filter((m) => m.id)
+                  .map((m) => ({ value: m.id, label: m.id }))}
+                value={cfgDlg?.[field] ?? ''}
+                placeholder={catalogues[type] ? 'Pick a model' : 'Loading models…'}
+                onChange={(v) =>
+                  setCfgDlg((d) => ({ ...d, [field]: v, error: undefined, saved: false }))
+                }
+              />
+            ))}
+          </VStack>
+
+          <Divider />
+
+          <VStack gap={2}>
+            <Text type="label">Output folder</Text>
+            <HStack gap={2} align="center">
+              <StackItem size="fill">
+              <TextInput
+                label="Output folder"
+                isLabelHidden
+                placeholder="./output"
+                value={cfgDlg?.outputDir ?? ''}
+                onChange={(v) =>
+                  setCfgDlg((d) => ({ ...d, outputDir: v, error: undefined, saved: false }))
+                }
+              />
+              </StackItem>
               <Button
-                label="Save key"
-                variant="primary"
-                isDisabled={!keyDlg?.value?.trim() || keyDlg?.saving}
-                isLoading={keyDlg?.saving}
-                onClick={confirmKey}
+                label="Browse…"
+                variant="secondary"
+                icon={<Icon icon={FolderIcon} />}
+                onClick={browseFolder}
               />
             </HStack>
+          </VStack>
+
+          {(cfgDlg?.error || cfgDlg?.saved) && (
+            <Banner
+              status={cfgDlg.error ? 'error' : 'success'}
+              title={cfgDlg.error || 'Saved to .env'}
+              description={cfgDlg.error ? undefined : 'Applied right away — no restart needed.'}
+            />
+          )}
+
+          <HStack gap={2} justify="end">
+            <Button label="Close" variant="ghost" onClick={() => setCfgDlg(null)} />
+            <Button
+              label="Save"
+              variant="primary"
+              isDisabled={cfgDlg?.saving}
+              isLoading={cfgDlg?.saving}
+              onClick={saveSettings}
+            />
           </HStack>
         </VStack>
       </Dialog>

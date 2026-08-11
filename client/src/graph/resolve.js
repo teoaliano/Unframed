@@ -44,11 +44,17 @@ export function buildRequest(nodes, edges, outputId) {
     .filter(Boolean)
     .sort((a, b) => (a.position?.y ?? 0) - (b.position?.y ?? 0));
 
-  // Images (with a picture loaded) become the ordered references. Their position
-  // in this array is the "image N" the user sees on the node and types in prompts.
+  // Images and videos (with media loaded) become the ordered references, mixed in
+  // Y-order. A node's position among its own kind is the "image N" / "video N" the
+  // user sees on the node and types in prompts — two independent counters, because
+  // that's how the badges number them.
   const references = sources
-    .filter((n) => n.type === 'image' && n.data.dataUrl)
-    .map((n) => ({ type: 'image_url', image_url: { url: n.data.dataUrl } }));
+    .filter((n) => (n.type === 'image' || n.type === 'video') && n.data.dataUrl)
+    .map((n) =>
+      n.type === 'video'
+        ? { type: 'video_url', video_url: { url: n.data.dataUrl } }
+        : { type: 'image_url', image_url: { url: n.data.dataUrl } },
+    );
 
   const promptParts = [];
   for (const node of sources) {
@@ -60,27 +66,28 @@ export function buildRequest(nodes, edges, outputId) {
   return { prompt: promptParts.join('\n\n'), input_references: references };
 }
 
-// The reference numbers an image node will be sent as, one per node consuming it
-// (1-based, ascending, deduplicated). Empty when it has no picture or feeds nothing.
+// The reference numbers an image/video node will be sent as, one per node consuming
+// it (1-based, ascending, deduplicated). Empty when it has no media or feeds nothing.
 // Numbering is per consumer because that is how buildRequest sends them: an image can
-// be image 1 to a text node and image 2 to an output node at the same time. Kept here
-// so the node badge and buildRequest cannot disagree. `nodes`/`edges` are the live
-// React Flow arrays.
-export function imageRefNumbers(nodes, edges, imageId) {
-  const self = nodes.find((n) => n.id === imageId);
-  if (!self || self.type !== 'image' || !self.data?.dataUrl) return [];
+// be image 1 to a text node and image 2 to an output node at the same time. It is
+// also per kind — images and videos count independently, so "image 1" and "video 1"
+// can coexist on one consumer. Kept here so the node badge and buildRequest cannot
+// disagree. `nodes`/`edges` are the live React Flow arrays.
+export function imageRefNumbers(nodes, edges, nodeId, kind = 'image') {
+  const self = nodes.find((n) => n.id === nodeId);
+  if (!self || self.type !== kind || !self.data?.dataUrl) return [];
 
   const byId = new Map(nodes.map((n) => [n.id, n]));
   const consumers = nodes.filter((n) => n.type === 'output' || n.type === 'text');
   const ranks = new Set();
 
   for (const consumer of consumers) {
-    const images = edges
+    const sameKind = edges
       .filter((e) => e.target === consumer.id)
       .map((e) => byId.get(e.source))
-      .filter((n) => n && n.type === 'image' && n.data?.dataUrl)
+      .filter((n) => n && n.type === kind && n.data?.dataUrl)
       .sort((a, b) => (a.position?.y ?? 0) - (b.position?.y ?? 0));
-    const idx = images.findIndex((n) => n.id === imageId);
+    const idx = sameKind.findIndex((n) => n.id === nodeId);
     if (idx !== -1) ranks.add(idx + 1);
   }
 

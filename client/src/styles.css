@@ -17,33 +17,34 @@ body {
 }
 
 .app {
+  position: relative; /* anchor for the floating toolbar cards */
   display: flex;
   flex-direction: column;
   height: 100%;
 }
 
-/* ---- toolbar ---- */
-.toolbar {
-  display: grid;
-  grid-template-columns: 1fr auto 1fr;
-  align-items: center;
-  gap: 16px;
-  padding: 0 16px;
-  height: 52px;
-  flex: none;
-  border-bottom: 1px solid var(--color-border);
-  background: var(--color-background-surface);
-}
-.toolbar-group {
+/* ---- floating toolbar cards ----
+   No topbar: the canvas is full-bleed and these two cards float over its
+   corners, Figma-style. Same surface/border/radius recipe as the tools rail
+   further down, so all floating chrome reads as one family. */
+.toolbar-card {
+  position: absolute;
+  top: 12px;
+  z-index: 10;
   display: flex;
   align-items: center;
   gap: 8px;
+  padding: 6px;
+  background: var(--color-background-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  box-shadow: 0 8px 24px var(--color-shadow);
 }
-.toolbar-center {
-  justify-content: center;
+.toolbar-card-left {
+  left: 12px;
 }
-.toolbar-right {
-  justify-content: flex-end;
+.toolbar-card-right {
+  right: 12px;
 }
 
 /* project / add-node dropdown menus */
@@ -224,6 +225,29 @@ div:has(> .add-node-menu) {
   width: 100%;
   height: 100%;
   min-height: 0;
+}
+/* A checkbox sitting beside a size="sm" Selector: match the control height so the
+   two align on their centres, not their bottoms. The token is the same one the
+   Selector's input box uses, so this follows any change to it. */
+.xnode-inline-check {
+  display: flex;
+  align-items: center;
+  height: var(--size-element-sm);
+}
+
+/* Reference video preview: the element sizes itself to the clip's own aspect. */
+.xnode-video {
+  width: 100%;
+  height: auto;
+  border-radius: 8px;
+  background: var(--color-background-body);
+}
+.xnode-video-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
 }
 
 /* Prompt node: drag the field's corner to resize in both axes. The handle can't

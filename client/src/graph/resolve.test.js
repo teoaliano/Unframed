@@ -100,6 +100,34 @@ function graph(nodes, edges) {
   assert.equal(input_references[0].image_url.url, 'data:image/png;base64,AAA');
 }
 
+// Video references ride alongside images in Y-order, each with its own content
+// type, and each kind numbers independently ("image 1" and "video 1" coexist).
+{
+  const { nodes, edges } = graph(
+    [
+      { id: 'i1', type: 'image', position: { x: 0, y: 0 }, data: { dataUrl: 'data:image/png;base64,AAA' } },
+      { id: 'v1', type: 'video', position: { x: 0, y: 10 }, data: { dataUrl: 'data:video/mp4;base64,BBB' } },
+      { id: 'i2', type: 'image', position: { x: 0, y: 20 }, data: { dataUrl: 'data:image/png;base64,CCC' } },
+    ],
+    [
+      { id: 'e1', source: 'i1', target: 'out' },
+      { id: 'e2', source: 'v1', target: 'out' },
+      { id: 'e3', source: 'i2', target: 'out' },
+    ],
+  );
+  const { input_references } = buildRequest(nodes, edges, 'out');
+  assert.deepEqual(
+    input_references.map((r) => r.type),
+    ['image_url', 'video_url', 'image_url'],
+  );
+  assert.equal(input_references[1].video_url.url, 'data:video/mp4;base64,BBB');
+  // Per-kind numbering: the video is video 1 even though an image sits above it.
+  assert.deepEqual(imageRefNumbers(nodes, edges, 'v1', 'video'), [1]);
+  assert.deepEqual(imageRefNumbers(nodes, edges, 'i2'), [2]);
+  // Kind mismatch returns nothing rather than a wrong rank.
+  assert.deepEqual(imageRefNumbers(nodes, edges, 'v1'), []);
+}
+
 // A prompt-to-prompt cycle throws instead of recursing forever.
 {
   const { nodes, edges } = graph(
