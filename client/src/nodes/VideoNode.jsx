@@ -3,6 +3,7 @@ import { Handle, Position, useReactFlow, useNodes, useEdges } from '@xyflow/reac
 import { Card } from '@astryxdesign/core/Card';
 import { FileInput } from '@astryxdesign/core/FileInput';
 import { Button } from '@astryxdesign/core/Button';
+import { Icon } from '@astryxdesign/core/Icon';
 import { Text } from '@astryxdesign/core/Text';
 import NodeHeader from './NodeHeader.jsx';
 import { imageRefNumbers } from '../graph/resolve.js';
@@ -61,20 +62,33 @@ export default function VideoNode({ id, data }) {
       />
       <div className="xnode-body">
         {data.dataUrl ? (
-          <>
+          // Same shape as an image reference: the clip fills the node and remove is
+          // an X over its corner, rather than a labelled button in a footer. The
+          // file name moves to the title, which is where Thumbnail keeps it too.
+          <span className="xnode-media">
             {/* nodrag/nowheel so the player's controls scrub instead of panning
                 the canvas. */}
-            <video className="xnode-video nodrag nowheel" src={data.dataUrl} controls muted />
-            <div className="xnode-video-foot">
-              <Text type="supporting" maxLines={1}>{data.fileName || 'video'}</Text>
+            <video
+              className="xnode-video nodrag nowheel"
+              src={data.dataUrl}
+              title={data.fileName || 'video'}
+              controls
+              muted
+            />
+            <span className="xnode-media-remove">
+              {/* Matched to what Thumbnail renders for an image: a secondary sm
+                  Button carrying an xsm icon. Thumbnail also pins the box to 20px
+                  through internal styles a prop cannot reach, hence the class. */}
               <Button
-                label="Remove"
-                variant="ghost"
+                label={`Remove ${data.fileName || 'video'}`}
+                isIconOnly
+                icon={<Icon icon="close" size="xsm" />}
+                variant="secondary"
                 size="sm"
                 onClick={() => updateNodeData(id, { dataUrl: '', fileName: '' })}
               />
-            </div>
-          </>
+            </span>
+          </span>
         ) : (
           <>
             <FileInput

@@ -242,12 +242,27 @@ div:has(> .add-node-menu) {
   border-radius: 8px;
   background: var(--color-background-body);
 }
-.xnode-video-foot {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  min-width: 0;
+/* Remove-over-the-corner, matching what Thumbnail draws for an image reference so
+   both kinds of reference are dismissed the same way. */
+.xnode-media {
+  position: relative;
+  display: block;
+  line-height: 0;
+}
+.xnode-media-remove {
+  position: absolute;
+  top: var(--spacing-1);
+  right: var(--spacing-1);
+  line-height: normal;
+}
+/* Thumbnail sizes its own remove button to 20px with a 6px corner via internal
+   styles; a plain Button lands on 28px/10px, so it is pinned here to match. Both
+   values read off the rendered image node rather than guessed. */
+.xnode-media-remove > button {
+  width: 20px;
+  height: 20px;
+  min-width: 20px;
+  border-radius: 6px;
 }
 
 /* Prompt node: drag the field's corner to resize in both axes. The handle can't
