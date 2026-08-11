@@ -109,10 +109,14 @@ export const pickFolder = () =>
     return d.path || '';
   });
 
+// null means "could not ask" — the server is restarting, or the request failed.
+// That is NOT the same as [] ("no projects yet"), and the difference matters: on a
+// failure the app must not invent a project and start writing into it.
 export const listProjects = () =>
   fetch('/api/projects')
-    .then((r) => r.json())
-    .then((d) => d.projects || []);
+    .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
+    .then((d) => d.projects || [])
+    .catch(() => null);
 
 // { models: [{id,name}], default } per catalogue — cached, since the lists rarely
 // change within a session. Keyed by type so the two catalogues can't overwrite

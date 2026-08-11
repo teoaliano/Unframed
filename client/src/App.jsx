@@ -79,6 +79,11 @@ const FolderIcon = Folder;
 
 // Dated, not a boolean: the nudge should come back tomorrow, not never again.
 const UPDATE_NUDGE_KEY = 'unframed:update-nudge';
+// Which project you were last in. Without this, every reload opened whichever
+// project sorted first — and since a reload can be involuntary (the dev server
+// restarting, an HMR update that cannot patch), work generated afterwards was
+// written into a project you were not looking at.
+const ACTIVE_PROJECT_KEY = 'unframed:active-project';
 const UPDATE_COMMAND = 'git pull && npm run install:all';
 
 const HELP_TEXT =
@@ -168,23 +173,61 @@ function Canvas() {
   // Gate auto-save until the initial load finishes, so we don't overwrite a saved
   // project with the starter graph on first render.
   const ready = useRef(false);
+  // Set once any project has been activated. The initial load is async, so a switch
+  // made while it is still in flight would otherwise be silently overwritten when it
+  // lands — you would be looking at one project while writes went to another.
+  const activated = useRef(false);
+
+  // The one place a project becomes the active one. Three things have to move
+  // together — React state (what you see), the API layer's currentProject (where
+  // generations are written), and the remembered name (where the next reload
+  // lands). They drifted before, which is how a video was written into a project
+  // the toolbar was not showing.
+  const activate = useCallback((name) => {
+    activated.current = true;
+    setCurrent(name);
+    setProject(name);
+    localStorage.setItem(ACTIVE_PROJECT_KEY, name);
+  }, []);
 
   useEffect(() => {
     (async () => {
-      const list = await listProjects();
-      const current = list[0] || 'default';
+      // One retry: the usual cause of a failure here is the dev server restarting,
+      // which takes under a second.
+      let list = await listProjects();
+      if (list === null) {
+        await new Promise((r) => setTimeout(r, 1000));
+        list = await listProjects();
+      }
+      if (list === null) {
+        // Do NOT fall through to a default: inventing a project here is what wrote
+        // generations into a folder nobody chose. ready stays false, so autosave
+        // cannot overwrite a real project with the starter graph either.
+        toast({
+          body: 'Could not reach the local server — reload once it is back up.',
+          uniqueID: 'projects-unreachable',
+          isAutoHide: false,
+        });
+        return;
+      }
+
+      // Reopen where you left off; fall back to the first project only when the
+      // remembered one is gone (deleted, renamed, or a fresh clone).
+      const remembered = localStorage.getItem(ACTIVE_PROJECT_KEY);
+      const current = remembered && list.includes(remembered) ? remembered : list[0] || 'default';
       const g = await loadProject(current);
+      // The list always applies; the rest must not, if a switch beat us here.
+      setProjects(list.length ? list : [current]);
+      if (activated.current) return;
       if (g?.nodes) {
         setNodes(g.nodes.map(withDrag));
         setEdges(g.edges || []);
         bumpCounter(g.nodes);
       }
-      setProjects(list.length ? list : [current]);
-      setCurrent(current);
-      setProject(current);
+      activate(current);
       ready.current = true;
     })();
-  }, [setNodes, setEdges]);
+  }, [setNodes, setEdges, activate, toast]);
 
   useEffect(() => {
     if (!ready.current) return;
@@ -384,8 +427,7 @@ function Canvas() {
     setNodes(loaded.map(withDrag));
     setEdges(g?.nodes ? g.edges || [] : initialEdges);
     bumpCounter(loaded);
-    setCurrent(name);
-    setProject(name);
+    activate(name);
     // A timeout, not requestAnimationFrame: rAF never fires in a hidden tab, so a
     // switch made while backgrounded left autosave off for the rest of the session
     // and silently dropped every edit after it.
@@ -400,8 +442,7 @@ function Canvas() {
     ready.current = false;
     setNodes(initialNodes);
     setEdges(initialEdges);
-    setCurrent(name);
-    setProject(name);
+    activate(name);
     // A timeout, not requestAnimationFrame: rAF never fires in a hidden tab, so a
     // switch made while backgrounded left autosave off for the rest of the session
     // and silently dropped every edit after it.
@@ -447,8 +488,7 @@ function Canvas() {
     }
     setProjects((ps) => ps.map((p) => (p === name ? s : p)));
     if (project === name) {
-      setCurrent(s);
-      setProject(s);
+      activate(s);
     }
     setNameDlg(null);
   }
