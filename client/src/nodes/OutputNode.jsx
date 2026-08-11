@@ -256,6 +256,17 @@ export default function OutputNode({ id, data }) {
   const wiredLocalVideos = wiredVideoSources.filter((n) =>
     String(n.data.dataUrl).startsWith('data:'),
   ).length;
+  // On by default: without it a wired local clip can only fail, so the useful
+  // default is the one that works. Explicit `false` is the user turning it off.
+  const shareLocalVideos = data.shareLocalVideos !== false;
+
+  // A video wired into video generation makes it an EDITING task, and then the
+  // output's shape is the input's: Seedance rejects the request outright if a
+  // ratio or duration is sent ("`ratio` must be `adaptive`, `duration` must be
+  // -1"). Neither of those values is expressible through OpenRouter — duration is
+  // typed as an integer and ratios come from the model's declared list — so the
+  // only correct move is to send neither and let the provider derive them.
+  const editingFromVideo = kind === 'video' && wiredVideos > 0;
 
   async function onGenerate() {
     setStatus('running');
@@ -283,15 +294,15 @@ export default function OutputNode({ id, data }) {
             prompt,
             input_references,
             model,
-            duration,
+            // Omitted entirely for an editing task — see editingFromVideo above.
+            duration: editingFromVideo ? undefined : duration,
             // One or the other, never both: they are interchangeable upstream, and
             // sending a size alongside a conflicting ratio is asking for trouble.
-            size: supported(exactSizes, data.size),
-            resolution: supported(resolutionTiers, data.resolution),
-            aspect_ratio: supported(ratios, data.aspect_ratio),
-            // Explicit consent, re-sent per request: the server refuses local
-            // clips without it.
-            ...(data.shareLocalVideos ? { shareLocalVideos: true } : {}),
+            size: editingFromVideo ? undefined : supported(exactSizes, data.size),
+            resolution: editingFromVideo ? undefined : supported(resolutionTiers, data.resolution),
+            aspect_ratio: editingFromVideo ? undefined : supported(ratios, data.aspect_ratio),
+            // Consent re-sent per request: the server refuses local clips without it.
+            ...(shareLocalVideos ? { shareLocalVideos: true } : {}),
             ...(canAudio ? { generate_audio: Boolean(data.generateAudio) } : {}),
           },
           (jobStatus) => setNote(jobStatus === 'in_progress' ? 'rendering…' : 'queued…'),
@@ -466,7 +477,7 @@ export default function OutputNode({ id, data }) {
           onChange={(v) => updateNodeData(id, kind === 'video' ? { videoModel: v } : { model: v })}
         />
         <HStack gap={2}>
-          {exactSizes && (
+          {exactSizes && !editingFromVideo && (
             <Selector
               label="Size"
               size="sm"
@@ -481,7 +492,7 @@ export default function OutputNode({ id, data }) {
               onChange={(v) => updateNodeData(id, { size: v })}
             />
           )}
-          {resolutionTiers && (
+          {resolutionTiers && !editingFromVideo && (
             <Selector
               label="Size"
               size="sm"
@@ -511,7 +522,7 @@ export default function OutputNode({ id, data }) {
               onChange={(v) => updateNodeData(id, { background: v })}
             />
           )}
-          {ratios && (
+          {ratios && !editingFromVideo && (
             <Selector
               label="Ratio"
               size="sm"
@@ -525,7 +536,7 @@ export default function OutputNode({ id, data }) {
 
         {kind === 'video' && (durations || canAudio) && (
           <HStack gap={2} align="end">
-            {durations && (
+            {durations && !editingFromVideo && (
               <Selector
                 label="Seconds"
                 size="sm"
@@ -569,7 +580,11 @@ export default function OutputNode({ id, data }) {
           label={
             status === 'running'
               ? kind === 'video'
-                ? 'Rendering…'
+                // The job's own state reads better in the button than as a small
+                // label elsewhere — same pattern as the image counter.
+                ? note
+                  ? `${note.replace(/…$/, '')[0].toUpperCase()}${note.replace(/…$/, '').slice(1)}…`
+                  : 'Rendering…'
                 : total
                   ? `Generating ${done} / ${total}…`
                   : 'Generating…'
@@ -600,27 +615,38 @@ export default function OutputNode({ id, data }) {
         {/* Sharing is per-node opt-in, never automatic: it makes the clip publicly
             fetchable (unguessable URL, dedicated share-only server, dies with the
             job), and that is a call the user makes knowingly. */}
+        {editingFromVideo && (
+          <StatusLine type="info">
+            With a video wired in this becomes an edit, so the result keeps the clip's
+            own size and length — those controls do not apply and are not sent.
+          </StatusLine>
+        )}
+
         {kind === 'video' && wiredLocalVideos > 0 && (
           <VStack gap={1}>
-            {data.shareLocalVideos ? (
-              <StatusLine type="info">
-                While this generates, the clip is served from this machine through a
-                temporary Cloudflare link only the model provider receives. Nothing is
-                uploaded to storage, and the link dies when the job ends. Needs
-                cloudflared installed.
-              </StatusLine>
-            ) : (
-              <StatusLine type="warning">
-                Video generation only accepts a reference video as a public https:// link,
-                and this one is a local file. Generating will fail — unless you share it
-                below, or wire it into a text node, which does take local clips.
-              </StatusLine>
-            )}
             <CheckboxInput
               label="Share via temporary link while generating"
-              value={Boolean(data.shareLocalVideos)}
+              value={shareLocalVideos}
               onChange={(on) => updateNodeData(id, { shareLocalVideos: on })}
             />
+            {/* Indented to start where the checkbox's own label does, so it reads as
+                that control's explanation rather than a separate remark. */}
+            <div className="xnode-check-note">
+              {shareLocalVideos ? (
+                <StatusLine type="info">
+                  While this generates, the clip is served from this machine through a
+                  temporary Cloudflare link only the model provider receives. Nothing is
+                  uploaded to storage, and the link dies when the job ends. Needs
+                  cloudflared installed.
+                </StatusLine>
+              ) : (
+                <StatusLine type="warning">
+                  Video generation only accepts a reference video as a public https:// link,
+                  and this one is a local file. Generating will fail unless you tick this,
+                  or wire the clip into a text node, which does take local files.
+                </StatusLine>
+              )}
+            </div>
           </VStack>
         )}
 
@@ -648,9 +674,8 @@ export default function OutputNode({ id, data }) {
           <StatusLine type={status === 'partial' ? 'warning' : 'error'}>{error}</StatusLine>
         )}
 
-        {note && (
-          <Text type="supporting" color="secondary">{note}</Text>
-        )}
+        {/* note is not rendered on its own: while a video job runs it IS the
+            button's label, and after it finishes there is nothing left to say. */}
 
         {kind === 'video' && videoUrl && (
           // Played from the file on disk, not from node data: a clip inlined into

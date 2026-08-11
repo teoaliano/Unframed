@@ -14,11 +14,18 @@ const ICONS = { error: 'error', warning: 'warning', success: 'success', info: 'i
 // quiet instead of pulling accent colour.
 const COLORS = { error: 'error', warning: 'warning', success: 'success', info: 'secondary' };
 
+// An error is only useful if it can be read in full, and provider messages carry
+// unbreakable tokens — OpenRouter's request ids are 40+ characters with no space
+// in them. Left alone, one of those sets the row's min-content width and pushes
+// the text out past the node's edge, clipping every line. Hence the class: shrink
+// below content width, and break anywhere rather than overflow.
 export default function StatusLine({ type = 'info', children }) {
   return (
     <HStack gap={1} align="start">
       <Icon icon={ICONS[type]} size="sm" color={COLORS[type]} />
-      <Text type="supporting">{children}</Text>
+      <Text type="supporting" className="xnode-status-text">
+        {children}
+      </Text>
     </HStack>
   );
 }

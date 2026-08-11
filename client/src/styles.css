@@ -235,6 +235,20 @@ div:has(> .add-node-menu) {
   height: var(--size-element-sm);
 }
 
+/* Status text must stay inside the node however unfriendly the message: min-width
+   lets the flex child shrink, overflow-wrap breaks the unbreakable (provider
+   request ids run 40+ characters with no space in them). */
+.xnode-status-text {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+/* A note that explains the checkbox above it, indented to line up with that
+   checkbox's label rather than with its box. */
+.xnode-check-note {
+  padding-inline-start: calc(var(--size-element-sm) - var(--spacing-1));
+}
+
 /* "or paste a link" under the video file picker: field grows, button hugs. */
 .xnode-linkrow {
   display: flex;
