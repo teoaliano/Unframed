@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-Unframed: a local, node-based image generator. A React Flow canvas lets you wire `prompt` and `image` nodes into an `output` node, or wire prompts into a `text` node to run them through a text model first; clicking Generate calls an image model (GPT Image 2 by default) through OpenRouter and writes the result plus a `.json` sidecar to disk. No hosting, pay-per-generation.
+Unframed: a local, node-based image generator. A React Flow canvas lets you wire `prompt`, `image` and `video` input nodes into one of three output nodes — image, video or text — and clicking Generate calls the matching model (GPT Image 2 by default) through OpenRouter, writing the result plus a `.json` sidecar to disk. A text output can run a prompt through a text model first, and its answer feeds back in by `@id`. No hosting, pay-per-generation.
 
 ## Commands
 
@@ -23,7 +23,7 @@ Config lives in `.env` at the project root (copy from `.env.example`): `OPENROUT
 
 Three-package monorepo, no shared build. The only non-trivial logic is in `client/src/graph/resolve.js` — read it first.
 
-**Data flow:** `OutputNode.onGenerate` → `buildRequest(nodes, edges, outputId)` (pure, in `resolve.js`) → `POST /api/generate` (via `client/src/api.js`) → server's single `/api/generate` handler → OpenRouter `POST /api/v1/images` → image written to disk + returned as a data URL to the browser. The text path mirrors it: `TextNode.onRun` → `buildRequest` → `POST /api/text` → OpenRouter `chat/completions` → result stored in `node.data.result`.
+**Data flow:** `ImageOutputNode.onGenerate` → `buildRequest(nodes, edges, outputId)` (pure, in `resolve.js`) → `POST /api/generate` (via `client/src/api.js`) → server's single `/api/generate` handler → OpenRouter `POST /api/v1/images` → image written to disk + returned as a data URL to the browser. The other two mirror it: `TextOutputNode.onRun` → `buildRequest` → `POST /api/text` → OpenRouter `chat/completions` → result stored in `node.data.result`; `VideoOutputNode.onGenerate` → `POST /api/video`, then polls `/api/video/:id` until the server has downloaded the finished file.
 
 **Key design decisions:**
 - **Only output nodes consume edges** (all three of them). `resolve.js` asks `isOutput(n)` — `n.type.endsWith('Output')` — rather than listing type strings, because that list was repeated in five places and adding a third output type meant extending each of them. Its partner `isTextOutput(n)` is separate because getting *it* wrong is silent: `resolveRef` would fall through to substituting a text node's `data.text` (its instructions) instead of `data.result` (the model's answer), and generations would quietly build from the wrong text. Wiring is always "sources → output." Prompt-to-prompt composition happens through `@id` tokens in prompt text, *not* edges. `resolveRef` in `resolve.js` recursively substitutes `@id` references (`TOKEN_RE = /@([\w-]+)/g`) and throws on cycles; unknown ids resolve to empty string.
@@ -72,16 +72,6 @@ Registered in `App.jsx`'s `nodeTypes`, which also holds `NEW_NODE`, the starting
    - Port 8787 must not be reachable through the tunnel host at all.
 3. After the job completes (or you kill the poll), the same `/share` URL must die — 404 while other shares keep the tunnel up, unreachable once the last share revokes.
 4. `ls /tmp/unframed-share-*` → nothing after revoke.
-
-## Changelog format — a contract, not a preference
-
-`CHANGELOG.md` has two readers: the "See what's new" link in the update toast (`CHANGELOG_URL` in `App.jsx`, pointing at the file on GitHub) and, later, the website's What's new page. So the shape is fixed:
-
-- `## YYYY-MM-DD` per entry. NOT version numbers — Unframed ships by `git pull`, there is no release artifact to number, and inventing 0.2.0 for a day's commits would be fiction. `package.json` stays at 0.1.0.
-- `### Added` / `### Changed` / `### Fixed` groups, one bullet per user-visible change. That is a ten-line regex to parse on the site; no JSON sidecar, no generator script, no build step.
-- User-visible only. Refactors, docs and test commits do not appear — the git log is already the exhaustive record.
-
-The toast link goes to GitHub rather than an in-app viewer on purpose: GitHub already renders markdown, and a changelog dialog is a screen nobody opens twice. When the website exists, repoint `CHANGELOG_URL` at its What's new page.
 
 ## Switching models
 
