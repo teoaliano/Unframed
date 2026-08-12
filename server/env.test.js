@@ -1,6 +1,6 @@
 // node server/env.test.js  (also runs as part of `npm test`)
 import assert from 'node:assert/strict';
-import { upsertEnv, PATTERNS } from './env.js';
+import { upsertEnv, PATTERNS, envFile, outputPath } from './env.js';
 
 // Replaces in place, leaves the rest of the file alone.
 assert.equal(
@@ -50,5 +50,23 @@ assert.ok(PATTERNS.OUTPUT_DIR.test('/Users/me/Pictures/Unframed output'));
 assert.ok(PATTERNS.OUTPUT_DIR.test('./output'));
 assert.ok(!PATTERNS.OUTPUT_DIR.test('./out\nPORT=1'));
 assert.ok(!PATTERNS.OUTPUT_DIR.test(''));
+
+// Path rules. The default keeps a clone writing exactly where it always did;
+// UNFRAMED_DATA_DIR moves both, because in a packaged app the project root is a
+// read-only bundle and a key written there would fail or vanish on update.
+delete process.env.UNFRAMED_DATA_DIR;
+assert.equal(envFile('/repo'), '/repo/.env');
+assert.equal(outputPath('/repo'), '/repo/output');
+assert.equal(outputPath('/repo', './output'), '/repo/output');
+
+// An absolute output dir passes through untouched -- what the folder picker
+// returns and what the packaged app always supplies.
+assert.equal(outputPath('/repo', '/Users/me/Pictures/Unframed'), '/Users/me/Pictures/Unframed');
+
+process.env.UNFRAMED_DATA_DIR = '/data';
+assert.equal(envFile('/repo'), '/data/.env');
+assert.equal(outputPath('/repo', './output'), '/data/output');
+assert.equal(outputPath('/repo', '/abs'), '/abs');
+delete process.env.UNFRAMED_DATA_DIR;
 
 console.log('env.test.js: ok');

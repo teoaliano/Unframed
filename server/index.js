@@ -5,7 +5,7 @@ import dotenv from 'dotenv';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { upsertEnv, PATTERNS } from './env.js';
+import { upsertEnv, PATTERNS, envFile, outputPath } from './env.js';
 import { readPresets, writePresets } from './presets.js';
 import { ensureTunnel, mintShare, revokeShare, waitUntilPublic, stopTunnel } from './share.js';
 
@@ -13,7 +13,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, '..');
 // override: .env wins over ambient env. The preview harness injects PORT=5173
 // (its client port); without this the server would bind that instead of 8787.
-dotenv.config({ path: path.join(ROOT, '.env'), override: true });
+dotenv.config({ path: envFile(ROOT), override: true });
 
 const PORT = process.env.PORT || 8787;
 // None of these are const: PUT /api/config rewrites .env and reassigns them, so a
@@ -32,7 +32,7 @@ let TEXT_MODEL = process.env.OPENROUTER_TEXT_MODEL || 'google/gemini-3.5-flash-l
 // than the most capable one.
 let VIDEO_MODEL = process.env.OPENROUTER_VIDEO_MODEL || 'bytedance/seedance-2.0';
 let API_KEY = process.env.OPENROUTER_API_KEY;
-let OUTPUT_DIR = path.resolve(ROOT, process.env.OUTPUT_DIR || './output');
+let OUTPUT_DIR = outputPath(ROOT, process.env.OUTPUT_DIR);
 
 const app = express();
 app.use(cors());
@@ -70,9 +70,9 @@ app.get('/api/health', (req, res) => {
 });
 
 async function writeEnv(updates) {
-  const envPath = path.join(ROOT, '.env');
-  const text = await fs.readFile(envPath, 'utf8').catch(() => '');
-  await fs.writeFile(envPath, upsertEnv(text, updates));
+  const file = envFile(ROOT);
+  const text = await fs.readFile(file, 'utf8').catch(() => '');
+  await fs.writeFile(file, upsertEnv(text, updates));
 }
 
 // Save settings typed into the UI, so a fresh clone doesn't have to hand-edit
@@ -115,7 +115,7 @@ app.put('/api/config', async (req, res) => {
   // The folder has to be usable before it is saved, or every later generation
   // fails with a disk error instead of a message you can act on.
   if (updates.OUTPUT_DIR) {
-    const dir = path.resolve(ROOT, updates.OUTPUT_DIR);
+    const dir = outputPath(ROOT, updates.OUTPUT_DIR);
     try {
       await fs.mkdir(dir, { recursive: true });
     } catch (err) {
@@ -134,7 +134,7 @@ app.put('/api/config', async (req, res) => {
   if (updates.OPENROUTER_IMAGE_MODEL) IMAGE_MODEL = updates.OPENROUTER_IMAGE_MODEL;
   if (updates.OPENROUTER_TEXT_MODEL) TEXT_MODEL = updates.OPENROUTER_TEXT_MODEL;
   if (updates.OPENROUTER_VIDEO_MODEL) VIDEO_MODEL = updates.OPENROUTER_VIDEO_MODEL;
-  if (updates.OUTPUT_DIR) OUTPUT_DIR = path.resolve(ROOT, updates.OUTPUT_DIR);
+  if (updates.OUTPUT_DIR) OUTPUT_DIR = outputPath(ROOT, updates.OUTPUT_DIR);
 
   res.json({ ok: true, ...settings() });
 });

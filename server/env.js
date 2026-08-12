@@ -1,3 +1,5 @@
+import path from 'node:path';
+
 // The one place that edits .env. Every setting the UI can change is written here,
 // so a key or model chosen in the app survives a restart the same way a hand-typed
 // line does.
@@ -35,3 +37,16 @@ export function upsertEnv(text, updates) {
   }
   return out;
 }
+
+// Where user data lives. Defaults to the project root, which is right for a
+// clone; a packaged app points UNFRAMED_DATA_DIR at a writable directory,
+// because there the root is inside a read-only bundle. Both rules live here
+// rather than at their call sites so the read path and the write path cannot
+// drift -- writing .env somewhere the next boot does not read it loses the key
+// silently.
+export const envFile = (root) => path.join(process.env.UNFRAMED_DATA_DIR || root, '.env');
+
+// An absolute dir passes through untouched, which is what the folder picker and
+// the packaged app both hand in; a relative one lands under the data dir.
+export const outputPath = (root, dir) =>
+  path.resolve(process.env.UNFRAMED_DATA_DIR || root, dir || './output');
