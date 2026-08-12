@@ -14,6 +14,7 @@ import { useToast } from '@astryxdesign/core/Toast';
 import NodeHeader from './NodeHeader.jsx';
 import RunsControl, { clampRuns } from './RunsControl.jsx';
 import StatusLine from './StatusLine.jsx';
+import ExpandableNote from './ExpandableNote.jsx';
 import { MAX_VIDEO_BYTES } from './VideoNode.jsx';
 import { ImageIcon, VideoIcon } from './nodeIcons.jsx';
 import { buildRequest, splitSections, findWiredTextNode, freeRunPrompts } from '../graph/resolve.js';
@@ -624,31 +625,31 @@ export default function OutputNode({ id, data }) {
         )}
 
         {kind === 'video' && wiredLocalVideos > 0 && (
-          <VStack gap={1}>
-            <CheckboxInput
-              label="Share via temporary link while generating"
-              value={shareLocalVideos}
-              onChange={(on) => updateNodeData(id, { shareLocalVideos: on })}
-            />
-            {/* Indented to start where the checkbox's own label does, so it reads as
-                that control's explanation rather than a separate remark. */}
-            <div className="xnode-check-note">
-              {shareLocalVideos ? (
-                <StatusLine type="info">
-                  While this generates, the clip is served from this machine through a
-                  temporary Cloudflare link only the model provider receives. Nothing is
-                  uploaded to storage, and the link dies when the job ends. Needs
-                  cloudflared installed.
-                </StatusLine>
-              ) : (
-                <StatusLine type="warning">
-                  Video generation only accepts a reference video as a public https:// link,
-                  and this one is a local file. Generating will fail unless you tick this,
-                  or wire the clip into a text node, which does take local files.
-                </StatusLine>
-              )}
-            </div>
-          </VStack>
+          <ExpandableNote
+            label="What sharing does"
+            row={
+              <CheckboxInput
+                label="Share via temporary link while generating"
+                value={shareLocalVideos}
+                onChange={(on) => updateNodeData(id, { shareLocalVideos: on })}
+              />
+            }
+          >
+            {shareLocalVideos ? (
+              <StatusLine type="info">
+                While this generates, the clip is served from this machine through a
+                temporary Cloudflare link only the model provider receives. Nothing is
+                uploaded to storage, and the link dies when the job ends. Needs
+                cloudflared installed.
+              </StatusLine>
+            ) : (
+              <StatusLine type="warning">
+                Video generation only accepts a reference video as a public https:// link,
+                and this one is a local file. Generating will fail unless you tick this,
+                or wire the clip into a text node, which does take local files.
+              </StatusLine>
+            )}
+          </ExpandableNote>
         )}
 
         {wiredVideos > 0 && wiredLocalVideos === 0 && (kind === 'image' || entry?.acceptsVideo === false) && (

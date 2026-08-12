@@ -6,7 +6,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { upsertEnv, PATTERNS } from './env.js';
-import { ensureTunnel, mintShare, revokeShare, waitUntilPublic } from './share.js';
+import { ensureTunnel, mintShare, revokeShare, waitUntilPublic, stopTunnel } from './share.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, '..');
@@ -530,18 +530,30 @@ app.post('/api/video', async (req, res) => {
   }
   if (localVideoRefs.length) {
     try {
-      const base = await ensureTunnel();
       for (const ref of localVideoRefs) {
-        const token = await mintShare(ref.video_url.url);
-        mintedTokens.push(token);
-        ref.video_url.url = `${base}/share/${token}`;
+        mintedTokens.push(await mintShare(ref.video_url.url));
       }
-      // Do not create the job until the link actually serves from the public
-      // internet: a brand-new tunnel hostname needs up to a minute to resolve,
-      // and the provider fetches within seconds, which is the losing side of
-      // that race ("resource download failed").
-      const ready = await waitUntilPublic(`${base}/share/${mintedTokens[0]}`);
-      if (!ready) throw new Error('the temporary link did not come up in time');
+      // Quick tunnels are best-effort and a share of them never come up at all
+      // ("no more connections active and exiting"), so a dead one is retried with
+      // a fresh hostname rather than reported as a failure. Each attempt waits for
+      // the link to actually serve before the job exists: a new hostname is not
+      // fetchable for a few seconds, and the provider fetches immediately, which
+      // is the losing side of that race ("resource download failed").
+      let base = null;
+      for (let attempt = 1; attempt <= 3 && !base; attempt++) {
+        if (attempt > 1) stopTunnel(); // a stuck tunnel is not worth waiting on twice
+        const candidate = await ensureTunnel();
+        if (await waitUntilPublic(`${candidate}/share/${mintedTokens[0]}`, 30000)) base = candidate;
+        else console.log(`  tunnel attempt ${attempt} never came up; retrying`);
+      }
+      if (!base) {
+        throw new Error(
+          'the temporary link did not come up. Cloudflare quick tunnels are best-effort, so trying again usually works',
+        );
+      }
+      for (let i = 0; i < localVideoRefs.length; i++) {
+        localVideoRefs[i].video_url.url = `${base}/share/${mintedTokens[i]}`;
+      }
     } catch (err) {
       for (const t of mintedTokens) revokeShare(t);
       return res.status(400).json({ error: `Could not share the clip: ${err.message}` });
