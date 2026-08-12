@@ -157,3 +157,22 @@ export const renameProject = (name, to) =>
 
 export const deleteProject = (name) =>
   fetch(`/api/projects/${encodeURIComponent(name)}`, { method: 'DELETE' });
+
+// Your saved library presets — one array, one file. This one throws on failure
+// instead of falling back to []: savePresets replaces the whole file, so a
+// swallowed error here would let the next save quietly erase presets that are
+// still on disk. Same reasoning as listProjects returning null.
+export const listPresets = () =>
+  fetch('/api/presets').then((r) => {
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    return r.json();
+  });
+
+export const savePresets = (presets) =>
+  fetch('/api/presets', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(presets),
+  }).then((r) => {
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+  });

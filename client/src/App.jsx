@@ -45,6 +45,7 @@ import ProjectMenu from './ProjectMenu.jsx';
 import { PromptIcon, ImageIcon, VideoIcon, OutputIcon, TextIcon } from './nodes/nodeIcons.jsx';
 import LibraryDialog from './library/LibraryDialog.jsx';
 import { instantiateFragment, centerOffset } from './library/insert.js';
+import { selectionFragment, presetFromSelection } from './library/save.js';
 import {
   setProject,
   listProjects,
@@ -52,6 +53,8 @@ import {
   saveProject,
   renameProject,
   deleteProject,
+  listPresets,
+  savePresets,
   getHealth,
   saveConfig,
   clearKey,
@@ -166,6 +169,11 @@ function Canvas() {
   const [nameDlg, setNameDlg] = useState(null); // { mode:'rename'|'create', name, value, error } | null
   const [deleting, setDeleting] = useState(null); // project name | null
   const [libraryOpen, setLibraryOpen] = useState(false);
+  // Presets you saved, alongside the bundled ones. Display only — every write
+  // re-reads the file first, so this copy going stale can never cost you a preset.
+  const [userPresets, setUserPresets] = useState([]);
+  const [savePresetDlg, setSavePresetDlg] = useState(null); // { fragment, name, summary, error } | null
+  const [deletingPreset, setDeletingPreset] = useState(null); // preset | null
   // Settings dialog. cfg mirrors what the server has on disk; cfgDlg is the open
   // dialog's draft, so nothing is applied until Save.
   const [cfg, setCfg] = useState({ hasKey: true, keyHint: '', imageModel: '', textModel: '', videoModel: '', outputDir: '' });
@@ -599,6 +607,51 @@ function Canvas() {
     setLibraryOpen(false);
   }
 
+  // Re-read on open rather than once at boot: it costs one request on a click, and
+  // it means a preset saved in another window (or hand-edited into presets.json)
+  // shows up without a reload.
+  function openLibrary() {
+    setLibraryOpen(true);
+    listPresets().then(setUserPresets).catch(() => {});
+  }
+
+  // Right-click -> Add to library. The fragment is snapshotted here, at the click,
+  // so editing the canvas while the dialog is open cannot change what gets saved.
+  function openSavePreset() {
+    const fragment = selectionFragment(nodes, edges, menuCtx?.id);
+    if (!fragment) return;
+    setSavePresetDlg({ fragment, name: '', summary: '' });
+  }
+
+  // Read-modify-write, both here and on delete: the PUT replaces the whole file, so
+  // appending to the copy in React state would erase anything saved since it loaded.
+  async function confirmSavePreset() {
+    const dlg = savePresetDlg;
+    if (!dlg.name.trim()) return setSavePresetDlg({ ...dlg, error: 'Give it a name.' });
+    const preset = presetFromSelection(dlg.fragment, dlg);
+    try {
+      const next = [preset, ...(await listPresets())];
+      await savePresets(next);
+      setUserPresets(next);
+      setSavePresetDlg(null);
+      toast({ body: `Saved “${preset.name}” to your library.` });
+    } catch {
+      setSavePresetDlg({ ...dlg, error: 'Could not save. Is the local server running?' });
+    }
+  }
+
+  async function confirmDeletePreset() {
+    const doomed = deletingPreset;
+    setDeletingPreset(null);
+    try {
+      const next = (await listPresets()).filter((p) => p.id !== doomed.id);
+      await savePresets(next);
+      setUserPresets(next);
+    } catch {
+      toast({ body: 'Could not delete that preset. Is the local server running?' });
+    }
+  }
+
   // What the last right-click landed on, captured before the menu opens so the
   // menu can be about the thing under the cursor: a node gets node actions, the
   // empty canvas gets the add sections. flushSync because the native menu opens
@@ -627,14 +680,13 @@ function Canvas() {
   }
 
   function copySelection() {
-    const chosen = nodes.filter((n) => n.selected);
-    if (!chosen.length) return;
-    const ids = new Set(chosen.map((n) => n.id));
-    nodeClipboard.current = {
-      nodes: chosen.map((n) => ({ ...n, selected: undefined })),
-      // Only edges fully inside the selection: half an edge is not a thing.
-      edges: edges.filter((e) => ids.has(e.source) && ids.has(e.target)),
-    };
+    // Same selection rule as saving to the library, including the fallback to the
+    // right-clicked node — without it, Copy from a menu opened on an unselected
+    // node did nothing at all.
+    const fragment = selectionFragment(nodes, edges, menuCtx?.id);
+    if (!fragment) return;
+    nodeClipboard.current = fragment;
+    const chosen = fragment.nodes;
     // One clipboard item, two faces. The text face is the routing marker that
     // makes our own ⌘V paste nodes; the image face is the picture itself when
     // exactly one image node is copied, so the same Copy pastes into Figma or
@@ -648,7 +700,9 @@ function Canvas() {
 
   function cutSelection() {
     copySelection();
-    const ids = new Set(nodes.filter((n) => n.selected).map((n) => n.id));
+    // What copy actually took, so cut removes exactly that — including the case
+    // where the fallback stood in for an empty selection.
+    const ids = new Set((nodeClipboard.current?.nodes || []).map((n) => n.id));
     if (!ids.size) return;
     setNodes((ns) => ns.filter((n) => !ids.has(n.id)));
     setEdges((es) => es.filter((e) => !ids.has(e.source) && !ids.has(e.target)));
@@ -725,6 +779,15 @@ function Canvas() {
         { label: 'Cut', endContent: kbd('X'), isDisabled: !hasSelection, onClick: cutSelection },
         { label: 'Copy', endContent: kbd('C'), isDisabled: !hasSelection, onClick: copySelection },
         { label: 'Paste', endContent: kbd('V'), isDisabled: !nodeClipboard.current, onClick: () => pasteNodeClipboard() },
+      ],
+    });
+
+    sections.push({
+      title: 'Library',
+      items: [
+        // No ellipsis, even though this opens a dialog: "Add project" in the
+        // project menu does the same and has none, and one convention beats two.
+        { label: 'Add to library', icon: LibraryIcon, isDisabled: !hasSelection, onClick: openSavePreset },
       ],
     });
 
@@ -971,7 +1034,7 @@ function Canvas() {
             label="Library"
             tooltip="Ready-made flows and styles"
             icon={<Icon icon={LibraryIcon} />}
-            onClick={() => setLibraryOpen(true)}
+            onClick={openLibrary}
           />
         </div>
         <div className="fab">
@@ -993,7 +1056,58 @@ function Canvas() {
       </div>
       </ContextMenu>
 
-      <LibraryDialog isOpen={libraryOpen} onOpenChange={setLibraryOpen} onAdd={insertPreset} />
+      <LibraryDialog
+        isOpen={libraryOpen}
+        onOpenChange={setLibraryOpen}
+        userPresets={userPresets}
+        onAdd={insertPreset}
+        onDelete={setDeletingPreset}
+      />
+
+      <Dialog
+        isOpen={!!savePresetDlg}
+        onOpenChange={(open) => !open && setSavePresetDlg(null)}
+        purpose="form"
+        width={360}
+      >
+        <DialogHeader
+          title="Add to library"
+          subtitle={
+            savePresetDlg
+              ? `${savePresetDlg.fragment.nodes.length} node${savePresetDlg.fragment.nodes.length > 1 ? 's' : ''}, saved as you have them now.`
+              : undefined
+          }
+        />
+        <VStack gap={3} padding={4}>
+          <TextInput
+            label="Name"
+            hasAutoFocus
+            placeholder="e.g. Portrait retouch"
+            value={savePresetDlg?.name ?? ''}
+            status={savePresetDlg?.error ? { type: 'error', message: savePresetDlg.error } : undefined}
+            onChange={(v) => setSavePresetDlg((d) => ({ ...d, name: v, error: undefined }))}
+          />
+          <TextInput
+            label="Description"
+            placeholder="What it does, in a line"
+            value={savePresetDlg?.summary ?? ''}
+            onChange={(v) => setSavePresetDlg((d) => ({ ...d, summary: v }))}
+          />
+          <HStack gap={2} justify="end">
+            <Button label="Cancel" variant="ghost" onClick={() => setSavePresetDlg(null)} />
+            <Button label="Save" variant="primary" onClick={confirmSavePreset} />
+          </HStack>
+        </VStack>
+      </Dialog>
+
+      <AlertDialog
+        isOpen={!!deletingPreset}
+        onOpenChange={(open) => !open && setDeletingPreset(null)}
+        title="Delete preset?"
+        description={`This removes “${deletingPreset?.name}” from your library. Nodes already on the canvas are untouched. This can't be undone.`}
+        actionLabel="Delete preset"
+        onAction={confirmDeletePreset}
+      />
 
       <Dialog
         isOpen={!!cfgDlg}

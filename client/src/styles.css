@@ -523,39 +523,87 @@ div:has(> .add-node-menu) {
 }
 
 /* ---- Library dialog ---- */
+/* Search takes the leftover room on the filter row; the two controls hug. */
 .lib-search {
   flex: 1;
-  min-width: 0;
+  min-width: 140px;
+}
+/* Wide enough for "Newest" plus the chevron — any less and the longest option
+   truncates to "New…". */
+.lib-sort {
+  width: 112px;
+}
+/* Both views scroll inside the dialog rather than growing it. */
+.lib-scroll {
+  max-height: 420px;
+  overflow-y: auto;
+}
+/* Row dividers: between rows only, so the list has no rule top or bottom. */
+.lib-scroll .astryx-list > li + li {
+  border-top: 1px solid var(--color-border);
+}
+/* Asymmetric on purpose. Equal padding LOOKS bottom-heavy here, because the space
+   inside a line box is not shared evenly between these two lines:
+     above the name  = pad + half-leading (20-14)/2 = 3 + ascender-to-cap ~1 = pad + 4
+     below the last description line = pad + half-leading (20-12)/2 = 4
+                                    + the descender slot ~2.5, empty whenever that
+                                      line ends without a g/p/y ("…you can reuse")
+                                    = pad + 6.5
+   So the top needs ~2.5px more to read level: 10 over 8. */
+.lib-scroll .astryx-item {
+  padding-block: 10px 8px;
+}
+/* A clear break between the name and the chip cluster, which stays tight at 4px. */
+.lib-row-name {
+  margin-inline-end: 4px;
+}
+/* Three lines, then an ellipsis; the whole thing is in the row's title tooltip. */
+.lib-row-desc {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+  overflow: hidden;
 }
 .lib-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 12px;
-  max-height: 420px;
-  overflow-y: auto;
 }
-/* Chip: what a preset is and what it makes, icon plus word. */
-.lib-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  padding: 2px 9px;
-  border: 1px solid var(--color-border-emphasized);
-  border-radius: var(--radius-full);
-  color: var(--color-text-secondary);
-  font-size: var(--font-size-body-sm, 0.8125rem);
-  white-space: nowrap;
+/* Delete sits in the card's own corner, out of the chip row: it acts on the whole
+   preset, not on anything in that row. */
+.lib-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
 }
-.lib-chip svg {
-  width: 13px;
-  height: 13px;
-  stroke-width: 2;
+/* margin-top:auto, so the Add strips line up along the bottom of a row however
+   long each summary runs. */
+.lib-card-foot {
+  margin-top: auto;
+  display: flex;
+  justify-content: flex-end;
+  padding: 8px 12px;
+  /* Same weight as the card's own border, so the strip reads as a section rather
+     than a hairline someone forgot to remove. */
+  border-top: 1px solid var(--color-border-emphasized);
 }
-.lib-card-add {
-  margin-inline-start: auto;
+.lib-card-del {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+}
+/* Room for it, so a long name never runs under the button. */
+.lib-card-title {
+  padding-inline-end: 28px;
 }
 
-/* Compound context menu: section headers mimic the items-mode ones. */
+/* Compound context menu: section headers mimic the items-mode ones. The component
+   caps itself at 300px and scrolls; this menu is short and grouped into sections, so
+   a scrollbar only ever hid the last section. */
+.astryx-context-menu {
+  max-height: none;
+}
 .cm-section {
   padding: 6px 10px 2px;
   text-transform: none;

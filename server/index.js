@@ -482,6 +482,35 @@ app.delete('/api/projects/:name', async (req, res) => {
   res.json({ ok: true });
 });
 
+// ---- library ----
+// Presets you save from the canvas: one JSON array in one file at the root of
+// OUTPUT_DIR, beside the project folders rather than inside one — a preset is
+// yours, not any single project's. /api/projects lists directories only, so this
+// file can never surface as a phantom project.
+// A function, not a const: OUTPUT_DIR is reassigned when the settings dialog moves
+// the output folder, and presets follow it.
+const presetsPath = () => path.join(OUTPUT_DIR, 'presets.json');
+
+app.get('/api/presets', async (req, res) => {
+  const raw = await fs.readFile(presetsPath(), 'utf8').catch(() => '[]');
+  try {
+    res.json(JSON.parse(raw));
+  } catch {
+    // Hand-edited into invalid JSON: 500 rather than [], since the client replaces
+    // the whole file on its next write and an empty array here would erase it.
+    res.status(500).json({ error: 'presets.json is not valid JSON.' });
+  }
+});
+
+// Whole-array replace. Delete is the client filtering an item out and PUTting the
+// rest, which is why there are no per-preset routes.
+app.put('/api/presets', async (req, res) => {
+  if (!Array.isArray(req.body)) return res.status(400).json({ error: 'Expected an array of presets.' });
+  await fs.mkdir(OUTPUT_DIR, { recursive: true });
+  await fs.writeFile(presetsPath(), JSON.stringify(req.body, null, 2));
+  res.json({ ok: true });
+});
+
 // ---- video ----
 // Video generation is asynchronous upstream: the create call returns a job, and the
 // file only exists minutes later. So this is two routes, not one. The client starts

@@ -2,6 +2,7 @@
 import assert from 'node:assert/strict';
 import { buildRequest, imageRefNumbers, splitSections, findWiredTextNode, freeRunPrompts } from './resolve.js';
 import { instantiateFragment, centerOffset } from '../library/insert.js';
+import { selectionFragment, presetFromSelection } from '../library/save.js';
 
 const out = { id: 'out', type: 'output', position: { x: 400, y: 0 }, data: {} };
 
@@ -343,6 +344,56 @@ function graph(nodes, edges) {
   assert.equal(dy, 0, 'a box already centred needs no y shift');
   const off = centerOffset(fragment, { x: 0, y: 0 });
   assert.equal(off.dx, -500, 'centres the box, not its origin');
+}
+
+// ---- library/save.js: selection -> preset ----
+{
+  const graphNodes = [
+    { id: 'a', type: 'prompt', selected: true, data: {} },
+    { id: 'b', type: 'output', selected: true, data: { kind: 'video' } },
+    { id: 'c', type: 'prompt', data: {} },
+  ];
+  const graphEdges = [
+    { id: 'e1', source: 'a', target: 'b' },
+    { id: 'e2', source: 'c', target: 'b' }, // half outside the selection
+  ];
+
+  const frag = selectionFragment(graphNodes, graphEdges);
+  assert.deepEqual(frag.nodes.map((n) => n.id), ['a', 'b'], 'takes the selected nodes');
+  assert.deepEqual(frag.edges.map((e) => e.id), ['e1'], 'drops edges with an end outside the selection');
+  assert.equal('selected' in frag.nodes[0] && frag.nodes[0].selected, undefined, 'selection state is not saved');
+
+  // Right-clicking does not select, so the clicked node stands in for a selection.
+  const one = selectionFragment(graphNodes.map((n) => ({ ...n, selected: false })), graphEdges, 'c');
+  assert.deepEqual(one.nodes.map((n) => n.id), ['c'], 'falls back to the right-clicked node');
+  assert.equal(one.edges.length, 0, 'a single node brings no edges');
+  assert.equal(selectionFragment(graphNodes.map((n) => ({ ...n, selected: false })), graphEdges), null,
+    'nothing selected and nothing clicked means no fragment');
+
+  const preset = presetFromSelection(frag, { name: '  Hero shot ', summary: ' two nodes ' });
+  assert.equal(preset.type, 'flow', 'several nodes make a flow');
+  assert.equal(preset.kind, 'video', 'kind comes from the output node');
+  assert.equal(preset.source, 'user', 'saved presets are marked as yours');
+  assert.equal(preset.name, 'Hero shot', 'name is trimmed');
+  assert.equal(preset.summary, 'two nodes', 'summary is trimmed');
+  assert.equal(preset.fragment, frag, 'the fragment travels as-is');
+  assert.equal(Number.isFinite(Date.parse(preset.savedAt)), true, 'savedAt is a parseable date');
+
+  assert.equal(presetFromSelection(one, { name: 'x', summary: '' }).type, 'block', 'one node is a block');
+  assert.equal(presetFromSelection(one, { name: 'x', summary: '' }).kind, 'image',
+    'no consumer node falls back to image');
+  const textOnly = { nodes: [{ id: 't', type: 'text', data: {} }], edges: [] };
+  assert.equal(presetFromSelection(textOnly, { name: 'x', summary: '' }).kind, 'text',
+    'a text node with no output node makes text');
+  const imageOut = { nodes: [{ id: 'o', type: 'output', data: {} }], edges: [] };
+  assert.equal(presetFromSelection(imageOut, { name: 'x', summary: '' }).kind, 'image',
+    'an output node with no kind set is an image node');
+
+  // The whole point: a saved fragment inserts through the same path as a bundled one.
+  let n = 900;
+  const back = instantiateFragment(preset.fragment, () => String(n++));
+  assert.deepEqual(back.edges.map((e) => [e.source, e.target]), [['900', '901']],
+    'a saved preset re-inserts with fresh ids and its wiring intact');
 }
 
 console.log('resolve.js: all checks passed');

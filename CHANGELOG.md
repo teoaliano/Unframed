@@ -9,6 +9,14 @@ Keep that shape: the website's What's new page parses this file.
 
 ### Added
 
+- Save your own presets: select nodes, right-click, *Add to library*, give it a
+  name and a description. Whether it is a flow or a block, and what it makes, are
+  read off the selection rather than asked for.
+- Your presets are marked *Custom* in the Library, sort ahead of the bundled ones,
+  and each has a delete button. They live in `presets.json` in your output folder,
+  so they follow you between projects and survive clearing the browser.
+- The Library gained a Custom / System filter, sorting (Newest, Oldest, A–Z, Z–A),
+  a card-or-list view toggle that remembers your choice, and pages of ten.
 - Share a local video clip through a temporary tunnel for the length of one
   generation, so it can be used as a reference. Explicit per-node opt-in, never
   automatic; the link dies when the job ends.
@@ -16,6 +24,10 @@ Keep that shape: the website's What's new page parses this file.
 
 ### Changed
 
+- The right-click menu shows all of its items instead of scrolling the last
+  section out of reach.
+- Copy and Cut now act on the node you right-clicked, even when nothing is
+  selected — before, they quietly did nothing.
 - The tunnel runs on localtunnel instead of cloudflared — comes up in about a
   second, and needs no binary installed.
 - The output node warns when a wired video can't reach the model you picked, and
