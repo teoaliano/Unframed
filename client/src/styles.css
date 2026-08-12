@@ -327,7 +327,8 @@ div:has(> .add-node-menu) {
     transition: none;
   }
 }
-.xnode-media-remove > button {
+.xnode-media-remove > button,
+.xnode-result-add > button {
   width: 20px;
   height: 20px;
   min-width: 20px;

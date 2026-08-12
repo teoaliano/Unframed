@@ -5,7 +5,6 @@ import { Text } from '@astryxdesign/core/Text';
 import { Button } from '@astryxdesign/core/Button';
 import { Selector } from '@astryxdesign/core/Selector';
 import { Thumbnail } from '@astryxdesign/core/Thumbnail';
-import { IconButton } from '@astryxdesign/core/IconButton';
 import { CheckboxInput } from '@astryxdesign/core/CheckboxInput';
 import { Icon } from '@astryxdesign/core/Icon';
 import { SegmentedControl, SegmentedControlItem } from '@astryxdesign/core/SegmentedControl';
@@ -685,10 +684,11 @@ export default function OutputNode({ id, data }) {
           <span className="xnode-result">
             <video className="xnode-video" src={videoUrl} controls preload="metadata" />
             <span className="xnode-result-add">
-              <IconButton
+              <Button
                 label="Add this video to the canvas"
                 tooltip="Add to canvas as a video node, so it can be wired back in as a reference"
-                icon={<AddToCanvasIcon />}
+                isIconOnly
+                icon={<Icon icon={AddToCanvasIcon} size="xsm" />}
                 size="sm"
                 isLoading={addingVideo}
                 onClick={addVideoToCanvas}
@@ -710,10 +710,11 @@ export default function OutputNode({ id, data }) {
                     label={`result ${r.runIndex + 1}`}
                   />
                   <span className="xnode-result-add">
-                    <IconButton
+                    <Button
                       label={`Add result ${r.runIndex + 1} to the canvas`}
                       tooltip="Add to canvas as an image node"
-                      icon={<AddToCanvasIcon />}
+                      isIconOnly
+                      icon={<Icon icon={AddToCanvasIcon} size="xsm" />}
                       size="sm"
                       onClick={() => addToCanvas(r, 0, freeSpot())}
                     />
