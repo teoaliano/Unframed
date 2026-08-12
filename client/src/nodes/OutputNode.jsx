@@ -638,9 +638,8 @@ export default function OutputNode({ id, data }) {
             {shareLocalVideos ? (
               <StatusLine type="info">
                 While this generates, the clip is served from this machine through a
-                temporary Cloudflare link only the model provider receives. Nothing is
-                uploaded to storage, and the link dies when the job ends. Needs
-                cloudflared installed.
+                temporary public link only the model provider receives. Nothing is
+                uploaded to storage, and the link stops working when the job ends.
               </StatusLine>
             ) : (
               <StatusLine type="warning">
