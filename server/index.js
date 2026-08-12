@@ -6,6 +6,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { upsertEnv, PATTERNS } from './env.js';
+import { readPresets, writePresets } from './presets.js';
 import { ensureTunnel, mintShare, revokeShare, waitUntilPublic, stopTunnel } from './share.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -483,31 +484,22 @@ app.delete('/api/projects/:name', async (req, res) => {
 });
 
 // ---- library ----
-// Presets you save from the canvas: one JSON array in one file at the root of
-// OUTPUT_DIR, beside the project folders rather than inside one — a preset is
-// yours, not any single project's. /api/projects lists directories only, so this
-// file can never surface as a phantom project.
-// A function, not a const: OUTPUT_DIR is reassigned when the settings dialog moves
-// the output folder, and presets follow it.
-const presetsPath = () => path.join(OUTPUT_DIR, 'presets.json');
-
+// Presets live in presets.js — see the comment there on why reading them is its own
+// module. OUTPUT_DIR is passed per call rather than captured, since the settings
+// dialog reassigns it and presets follow the output folder.
 app.get('/api/presets', async (req, res) => {
-  const raw = await fs.readFile(presetsPath(), 'utf8').catch(() => '[]');
   try {
-    res.json(JSON.parse(raw));
-  } catch {
-    // Hand-edited into invalid JSON: 500 rather than [], since the client replaces
-    // the whole file on its next write and an empty array here would erase it.
-    res.status(500).json({ error: 'presets.json is not valid JSON.' });
+    res.json(await readPresets(OUTPUT_DIR));
+  } catch (err) {
+    // Unreadable is not empty: 500 so the client aborts its save instead of
+    // replacing the whole file with an empty array.
+    res.status(500).json({ error: err.message });
   }
 });
 
-// Whole-array replace. Delete is the client filtering an item out and PUTting the
-// rest, which is why there are no per-preset routes.
 app.put('/api/presets', async (req, res) => {
   if (!Array.isArray(req.body)) return res.status(400).json({ error: 'Expected an array of presets.' });
-  await fs.mkdir(OUTPUT_DIR, { recursive: true });
-  await fs.writeFile(presetsPath(), JSON.stringify(req.body, null, 2));
+  await writePresets(OUTPUT_DIR, req.body);
   res.json({ ok: true });
 });
 
