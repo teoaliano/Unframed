@@ -1,6 +1,7 @@
 // Assert-based self-check. Run with: node client/src/graph/resolve.test.js
 import assert from 'node:assert/strict';
-import { buildRequest, imageRefNumbers, splitSections, findWiredTextNode, freeRunPrompts } from './resolve.js';
+import { buildRequest, imageRefNumbers, splitSections, findWiredTextNode, freeRunPrompts, isOutput, isTextOutput } from './resolve.js';
+import { migrateNodes } from './migrate.js';
 import { instantiateFragment, centerOffset } from '../library/insert.js';
 import { selectionFragment, presetFromSelection } from '../library/save.js';
 
@@ -394,6 +395,58 @@ function graph(nodes, edges) {
   const back = instantiateFragment(preset.fragment, () => String(n++));
   assert.deepEqual(back.edges.map((e) => [e.source, e.target]), [['900', '901']],
     'a saved preset re-inserts with fresh ids and its wiring intact');
+}
+
+// --- migration: old graphs and presets carry `output` + data.kind, and `text` ---
+{
+  const legacy = [
+    { id: 'a', type: 'output', position: { x: 0, y: 0 }, data: {} },
+    { id: 'b', type: 'output', position: { x: 0, y: 0 }, data: { kind: 'video', duration: 5 } },
+    { id: 'c', type: 'output', position: { x: 0, y: 0 }, data: { kind: 'image', quality: 'low' } },
+    { id: 'd', type: 'text', position: { x: 0, y: 0 }, data: { result: 'hi' } },
+    { id: 'e', type: 'prompt', position: { x: 0, y: 0 }, data: { text: 'p' } },
+    { id: 'f', type: 'image', position: { x: 0, y: 0 }, data: { dataUrl: 'x' } },
+  ];
+  const got = migrateNodes(legacy);
+
+  assert.equal(got[0].type, 'imageOutput', 'an output node with no kind is an image output');
+  assert.equal(got[1].type, 'videoOutput', 'kind video becomes a video output');
+  assert.equal(got[2].type, 'imageOutput', 'kind image becomes an image output');
+  assert.equal(got[3].type, 'textOutput', 'a text node becomes a text output');
+  assert.equal(got[4].type, 'prompt', 'input nodes are untouched');
+  assert.equal(got[5].type, 'image', 'an image INPUT node is not confused with an image output');
+
+  assert.equal('kind' in got[1].data, false, 'kind is stripped once the type carries it');
+  assert.equal(got[1].data.duration, 5, 'the rest of data survives');
+  assert.equal(got[2].data.quality, 'low', 'the rest of data survives');
+  assert.equal(got[3].data.result, 'hi', 'a text result survives');
+
+  assert.deepEqual(migrateNodes(got), got,
+    'migration is idempotent — a second pass over a migrated graph is a no-op');
+
+  assert.equal(legacy[1].data.kind, 'video', 'the input array is not mutated');
+}
+
+// A node with no data at all must not throw — old fragments can omit it.
+{
+  const got = migrateNodes([{ id: 'a', type: 'output', position: { x: 0, y: 0 } }]);
+  assert.equal(got[0].type, 'imageOutput');
+  assert.deepEqual(got[0].data, {}, 'a missing data object becomes an empty one');
+}
+
+// --- the engine's one rule, as predicates rather than a list of strings ---
+{
+  assert.equal(isOutput({ type: 'imageOutput' }), true);
+  assert.equal(isOutput({ type: 'videoOutput' }), true);
+  assert.equal(isOutput({ type: 'textOutput' }), true);
+  assert.equal(isOutput({ type: 'prompt' }), false);
+  assert.equal(isOutput({ type: 'image' }), false);
+  assert.equal(isOutput({ type: 'video' }), false);
+  assert.equal(isOutput({}), false, 'a node with no type is not an output');
+
+  assert.equal(isTextOutput({ type: 'textOutput' }), true);
+  assert.equal(isTextOutput({ type: 'imageOutput' }), false);
+  assert.equal(isTextOutput({ type: 'text' }), false, 'the pre-migration id is not a text output');
 }
 
 console.log('resolve.js: all checks passed');

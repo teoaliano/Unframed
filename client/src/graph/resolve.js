@@ -7,6 +7,17 @@
 // positionally ("image 1", "image 2") which the user types as plain text.
 const TOKEN_RE = /@([\w-]+)/g;
 
+// The engine's one rule — inputs only feed edges, outputs consume them — as a
+// predicate rather than a list of type strings repeated down this file. Output type
+// ids end in `Output` so they cannot collide with the `image`/`video` INPUT nodes,
+// which is also what makes this a shape test rather than a list: a fourth output kind
+// is one type id, not a grep.
+export const isOutput = (n) => Boolean(n?.type?.endsWith('Output'));
+// A text output's stored ANSWER is what @id pulls in, never its instructions. Its own
+// predicate because getting it wrong is silent: resolveRef below would fall through to
+// substituting data.text, and generations would quietly build from the wrong text.
+export const isTextOutput = (n) => n?.type === 'textOutput';
+
 function substitute(text, refs, stack) {
   return (text || '').replace(TOKEN_RE, (_, raw) => {
     const ref = raw.trim();
