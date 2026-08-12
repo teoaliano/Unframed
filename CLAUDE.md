@@ -64,7 +64,7 @@ Registered in `App.jsx`'s `nodeTypes`, which also holds `NEW_NODE`, the starting
 - Free tunnels are best-effort and can fail to come up at all. The 90s timeout then reports it instead of spending a generation.
 - **Restarting the server mid-job breaks a shared link, unavoidably**: the share map is in memory AND the tunnel hostname is ephemeral, so a new process cannot resume the old URL. `node --watch` restarts on every server edit, so do not edit server files while a shared generation is running. The tunnel is closed on exit/SIGINT/SIGTERM.
 
-**Manual external check — run after any change to `share.js` or the tunnel flow.** Last run 2026-08-11, all green, but against cloudflared; NOT yet rerun since `07ae9d4` made localtunnel the only provider.
+**Manual external check — run after any change to `share.js` or the tunnel flow.** The automated `share.test.js` covers the surface from inside this machine; this one is the part only an outside caller can prove.
 1. Wire a local clip into a video output, tick "Share via temporary link", Generate. Grab the tunnel URL from the server log.
 2. From OUTSIDE this machine (a phone on cellular is ideal; same machine via `curl --resolve host:443:$(dig +short @1.1.1.1 host | head -1)` if local DNS lags a fresh hostname):
    - `GET https://<tunnel>/share/<token>` while the job runs → 200 video/mp4, byte-identical to the source clip.
