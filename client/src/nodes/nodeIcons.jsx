@@ -6,11 +6,10 @@
 // registers for the design system's own semantic icons (`icon="info"` and friends).
 // One pack means one grid, one stroke weight, one optical size — which hand-drawn
 // paths never quite matched.
-import { AlignLeft, Image, Sparkle, Type, PanelTop, Workflow, SquarePlay } from 'lucide-react';
+import { AlignLeft, Image, Type, PanelTop, Workflow, SquarePlay } from 'lucide-react';
 
 export const PromptIcon = AlignLeft;
 export const ImageIcon = Image;
-export const OutputIcon = Sparkle;
 export const TextIcon = Type;
 
 // Not node types — the Library's chips.
@@ -31,8 +30,4 @@ export const NODE_ICONS = {
   imageOutput: ImageIcon,
   videoOutput: VideoIcon,
   textOutput: TextIcon,
-  // Pre-split ids. Kept until the split lands so this file cannot break the app on
-  // its own; removed in the same commit that registers the new types.
-  output: OutputIcon,
-  text: TextIcon,
 };

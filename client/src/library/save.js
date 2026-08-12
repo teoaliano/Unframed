@@ -25,13 +25,14 @@ export function selectionFragment(nodes, edges, fallbackId) {
 //
 // Positions are stored as they are: centerOffset measures the bounding box rather
 // than assuming it starts at (0,0), so there is nothing to normalise.
+const OUTPUT_KINDS = { imageOutput: 'image', videoOutput: 'video', textOutput: 'text' };
+
 export function presetFromSelection(fragment, { name, summary }) {
-  const out = fragment.nodes.find((n) => n.type === 'output');
-  const kind = out
-    ? out.data?.kind || 'image'
-    : fragment.nodes.some((n) => n.type === 'text')
-      ? 'text'
-      : 'image';
+  // What a preset makes is whatever its consumer node produces, which since the
+  // output split is simply the consumer's type — no data.kind to sniff, and no
+  // fallback chain for an output node that never said which medium it was.
+  const out = fragment.nodes.find((n) => OUTPUT_KINDS[n.type]);
+  const kind = out ? OUTPUT_KINDS[out.type] : 'image';
   return {
     // ponytail: a timestamp, not a uuid — one dialog, one click, so two presets
     // cannot be born in the same millisecond. `user-` keeps it clear of the

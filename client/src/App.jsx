@@ -39,10 +39,11 @@ import Logo from './Logo.jsx';
 import PromptNode from './nodes/PromptNode.jsx';
 import ImageNode from './nodes/ImageNode.jsx';
 import VideoNode, { MAX_VIDEO_BYTES } from './nodes/VideoNode.jsx';
-import OutputNode from './nodes/OutputNode.jsx';
-import TextNode from './nodes/TextNode.jsx';
+import ImageOutputNode from './nodes/ImageOutputNode.jsx';
+import VideoOutputNode from './nodes/VideoOutputNode.jsx';
+import TextOutputNode from './nodes/TextOutputNode.jsx';
 import ProjectMenu from './ProjectMenu.jsx';
-import { PromptIcon, ImageIcon, VideoIcon, OutputIcon, TextIcon } from './nodes/nodeIcons.jsx';
+import { PromptIcon, ImageIcon, VideoIcon, TextIcon } from './nodes/nodeIcons.jsx';
 import LibraryDialog from './library/LibraryDialog.jsx';
 import { instantiateFragment, centerOffset } from './library/insert.js';
 import { selectionFragment, presetFromSelection } from './library/save.js';
@@ -63,7 +64,14 @@ import {
   revealFiles,
 } from './api.js';
 
-const nodeTypes = { prompt: PromptNode, image: ImageNode, video: VideoNode, output: OutputNode, text: TextNode };
+const nodeTypes = {
+  prompt: PromptNode,
+  image: ImageNode,
+  video: VideoNode,
+  imageOutput: ImageOutputNode,
+  videoOutput: VideoOutputNode,
+  textOutput: TextOutputNode,
+};
 
 // Icons come from lucide-react — the same pack @astryxdesign/theme-neutral
 // registers behind the design system's semantic names, so `icon="info"` and these
@@ -144,7 +152,7 @@ const initialNodes = [
   },
   {
     id: OUTPUT_ID,
-    type: 'output',
+    type: 'imageOutput',
     position: { x: 460, y: 120 },
     data: { resolution: '1K', quality: 'low', aspect_ratio: '1:1', runs: 1 },
   },
@@ -554,10 +562,22 @@ function Canvas() {
     [setNodes, screenToFlowPosition],
   );
 
-  const addPrompt = () => addNode('prompt', { text: '' });
-  const addImage = () => addNode('image', { fileName: '', dataUrl: '' });
-  const addOutput = () => addNode('output', { resolution: '1K', quality: 'low', aspect_ratio: '1:1' });
-  const addText = () => addNode('text', { text: '', result: '' });
+  // The starting data for each node type, in one place: the add menu and the
+  // keyboard shortcuts both mint from it, so a new node is the same node wherever
+  // you asked for it.
+  const NEW_NODE = {
+    prompt: { text: '' },
+    image: { fileName: '', dataUrl: '' },
+    video: { fileName: '', dataUrl: '' },
+    imageOutput: { resolution: '1K', quality: 'low', aspect_ratio: '1:1' },
+    videoOutput: {},
+    textOutput: { text: '', result: '' },
+  };
+
+  const addPrompt = () => addNode('prompt', NEW_NODE.prompt);
+  const addImage = () => addNode('image', NEW_NODE.image);
+  const addOutput = () => addNode('imageOutput', NEW_NODE.imageOutput);
+  const addText = () => addNode('textOutput', NEW_NODE.textOutput);
 
   // Where the last right-click landed, so the context menu's items can drop their
   // node on that spot. The menu component reports the click by opening, not by
@@ -572,21 +592,21 @@ function Canvas() {
       type: 'section',
       title: 'Inputs',
       items: [
-        { label: 'Prompt', icon: PromptIcon, onClick: () => addNode('prompt', { text: '' }, at?.()) },
-        { label: 'Image', icon: ImageIcon, onClick: () => addNode('image', { fileName: '', dataUrl: '' }, at?.()) },
-        { label: 'Video', icon: VideoIcon, onClick: () => addNode('video', { fileName: '', dataUrl: '' }, at?.()) },
+        { label: 'Prompt', icon: PromptIcon, onClick: () => addNode('prompt', NEW_NODE.prompt, at?.()) },
+        { label: 'Image', icon: ImageIcon, onClick: () => addNode('image', NEW_NODE.image, at?.()) },
+        { label: 'Video', icon: VideoIcon, onClick: () => addNode('video', NEW_NODE.video, at?.()) },
       ],
     },
     {
+      // Image and Video appear in both sections on purpose: one is a picture you
+      // supply, one is a picture you generate. The section header says which, and on
+      // the canvas an output's header is accent-coloured where an input's is not.
       type: 'section',
       title: 'Outputs',
       items: [
-        {
-          label: 'Output',
-          icon: OutputIcon,
-          onClick: () => addNode('output', { resolution: '1K', quality: 'low', aspect_ratio: '1:1' }, at?.()),
-        },
-        { label: 'Text', icon: TextIcon, onClick: () => addNode('text', { text: '', result: '' }, at?.()) },
+        { label: 'Image', icon: ImageIcon, onClick: () => addNode('imageOutput', NEW_NODE.imageOutput, at?.()) },
+        { label: 'Video', icon: VideoIcon, onClick: () => addNode('videoOutput', NEW_NODE.videoOutput, at?.()) },
+        { label: 'Text', icon: TextIcon, onClick: () => addNode('textOutput', NEW_NODE.textOutput, at?.()) },
       ],
     },
   ];

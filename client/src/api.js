@@ -1,3 +1,5 @@
+import { migrateNodes } from './graph/migrate.js';
+
 // Current project name — kept here so generate() tags every request without
 // threading it through the node components. Canvas sets it on load/switch.
 let currentProject = 'default';
@@ -134,8 +136,15 @@ export const listModels = (type = 'image') => {
   return modelsCache.get(type);
 };
 
+// Migrated on the way in, here rather than at the two call sites, because this is the
+// only place a graph is read and one of those sites would eventually be forgotten. A
+// graph saved before the output split names types nothing on the canvas registers any
+// more; the next autosave writes the migrated shape back, so each project self-heals
+// the first time it is opened.
 export const loadProject = (name) =>
-  fetch(`/api/projects/${encodeURIComponent(name)}`).then((r) => r.json());
+  fetch(`/api/projects/${encodeURIComponent(name)}`)
+    .then((r) => r.json())
+    .then((g) => (g?.nodes ? { ...g, nodes: migrateNodes(g.nodes) } : g));
 
 export const saveProject = (name, graph) =>
   fetch(`/api/projects/${encodeURIComponent(name)}`, {

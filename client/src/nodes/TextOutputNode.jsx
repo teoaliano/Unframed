@@ -14,7 +14,7 @@ import { runText } from '../api.js';
 // An output node that emits text instead of an image. It consumes edges exactly like
 // the image output node — same buildRequest — and its answer lives in data.result so
 // prompts downstream can pull it in with @id.
-export default function TextNode({ id, data }) {
+export default function TextOutputNode({ id, data }) {
   const { getNodes, getEdges, updateNodeData, getNode, addNodes } = useReactFlow();
   const [status, setStatus] = useState('idle'); // idle | running | error
   const [error, setError] = useState(null);
@@ -61,7 +61,7 @@ export default function TextNode({ id, data }) {
     <Card width="fit-content" padding={0} className="xnode-text">
       <Handle type="target" position={Position.Left} />
       <Handle type="source" position={Position.Right} />
-      <NodeHeader kind="text" family="output" copyId={id} />
+      <NodeHeader kind="textOutput" title="text" family="output" copyId={id} />
 
       <VStack gap={3} padding={3}>
         <ModelPicker

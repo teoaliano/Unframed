@@ -1,3 +1,5 @@
+import { migrateNodes } from '../graph/migrate.js';
+
 // Turn a preset fragment into nodes and edges ready for the canvas. Pure: the
 // caller supplies the id minter and does the viewport placement, so this can be
 // tested with plain assertions like the rest of the graph logic.
@@ -9,9 +11,15 @@
 const TOKEN_RE = /@([\w-]+)/g;
 
 export function instantiateFragment(fragment, nextId) {
-  const idMap = new Map(fragment.nodes.map((n) => [n.id, nextId()]));
+  // Every preset reaches the canvas through here, bundled or saved by you, so this is
+  // where a fragment written before the output split gets its node types brought up to
+  // date. presets.json on disk is deliberately left alone: rewriting it means a
+  // whole-array PUT, and that write path is the one place a stale read erases presets
+  // that are still there. Migrating on the way out costs nothing and risks nothing.
+  const source = migrateNodes(fragment.nodes);
+  const idMap = new Map(source.map((n) => [n.id, nextId()]));
 
-  const nodes = fragment.nodes.map((n) => {
+  const nodes = source.map((n) => {
     const data = { ...n.data };
     if (typeof data.text === 'string') {
       // Whole tokens only: TOKEN_RE consumes the full run of word characters, so

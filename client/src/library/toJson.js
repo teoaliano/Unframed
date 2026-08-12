@@ -19,7 +19,7 @@ export default {
     nodes: [
       {
         id: 'convert',
-        type: 'text',
+        type: 'textOutput',
         position: { x: 0, y: 0 },
         data: {
           result: '',
