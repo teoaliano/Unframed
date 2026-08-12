@@ -13,15 +13,26 @@ export const ImageIcon = Image;
 export const OutputIcon = Sparkle;
 export const TextIcon = Type;
 
-// Not node types — the output node's Video tab, and the Library's chips.
+// Not node types — the Library's chips.
 export const BlockIcon = PanelTop;
 export const FlowIcon = Workflow;
 export const VideoIcon = SquarePlay;
 
+// An output node wears the icon of the MEDIUM it makes, the same one its input
+// counterpart wears — an image is an image whichever family it is in, and after the
+// split the medium is the node's identity rather than a tab inside it. What separates
+// the two families is the accent colour NodeHeader gives an output, the handle side,
+// and bodies that look nothing alike: an image input is a thumbnail, an image output
+// is a model picker and a Generate button.
 export const NODE_ICONS = {
   prompt: PromptIcon,
   image: ImageIcon,
   video: VideoIcon,
+  imageOutput: ImageIcon,
+  videoOutput: VideoIcon,
+  textOutput: TextIcon,
+  // Pre-split ids. Kept until the split lands so this file cannot break the app on
+  // its own; removed in the same commit that registers the new types.
   output: OutputIcon,
   text: TextIcon,
 };
