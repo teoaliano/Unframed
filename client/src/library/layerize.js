@@ -45,7 +45,7 @@ export default {
       },
       {
         id: 'planner',
-        type: 'text',
+        type: 'textOutput',
         position: { x: 380, y: 0 },
         data: { text: '', result: '' },
       },
@@ -59,7 +59,7 @@ export default {
         // back 1536x1024 — so a second pass buys alpha by throwing away the
         // fidelity the first pass paid for.)
         id: 'out',
-        type: 'output',
+        type: 'imageOutput',
         position: { x: 760, y: 0 },
         data: { freeRuns: true, runs: 1 },
       },

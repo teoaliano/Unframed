@@ -4,11 +4,17 @@ import { Icon } from '@astryxdesign/core/Icon';
 import { NODE_ICONS } from './nodeIcons.jsx';
 
 // The node title bar. Doubles as the React Flow drag handle (.xnode-head).
-// `family` distinguishes inputs (prompt, image — they only feed edges) from outputs
-// (output, text — they consume edges), which is the engine's one rule made visible.
+// `family` distinguishes inputs (prompt, image, video — they only feed edges) from
+// outputs (they consume edges), which is the engine's one rule made visible.
 // When copyId is set, clicking (without dragging) copies "@<id>" so it can be
 // pasted into a prompt as a reference; `right` shows static text instead.
-export default function NodeHeader({ kind, family = 'input', copyId, right, rightTone = 'secondary' }) {
+//
+// `kind` is the type id and `title` is what the header reads, because after the
+// output split the two differ: the output types are `imageOutput`/`videoOutput`/
+// `textOutput` internally so they cannot collide with the `image`/`video` INPUT
+// nodes, but they are titled by their medium on the canvas, where the accent colour
+// already marks the family. Defaults to the type id, which is every other node.
+export default function NodeHeader({ kind, title, family = 'input', copyId, right, rightTone = 'secondary' }) {
   const [copied, setCopied] = useState(false);
 
   function copy() {
@@ -28,7 +34,7 @@ export default function NodeHeader({ kind, family = 'input', copyId, right, righ
           <Icon icon={NODE_ICONS[kind]} size="xsm" color={family === 'output' ? 'accent' : 'secondary'} />
         )}
         <Text type="supporting" weight="medium" color={family === 'output' ? 'accent' : undefined}>
-          {kind}
+          {title ?? kind}
         </Text>
       </span>
       {copyId != null && (

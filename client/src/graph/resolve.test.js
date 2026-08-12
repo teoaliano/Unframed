@@ -1,10 +1,11 @@
 // Assert-based self-check. Run with: node client/src/graph/resolve.test.js
 import assert from 'node:assert/strict';
-import { buildRequest, imageRefNumbers, splitSections, findWiredTextNode, freeRunPrompts } from './resolve.js';
+import { buildRequest, imageRefNumbers, splitSections, findWiredTextNode, freeRunPrompts, isOutput, isTextOutput } from './resolve.js';
+import { migrateNodes } from './migrate.js';
 import { instantiateFragment, centerOffset } from '../library/insert.js';
 import { selectionFragment, presetFromSelection } from '../library/save.js';
 
-const out = { id: 'out', type: 'output', position: { x: 400, y: 0 }, data: {} };
+const out = { id: 'out', type: 'imageOutput', position: { x: 400, y: 0 }, data: {} };
 
 function graph(nodes, edges) {
   return { nodes: [out, ...nodes], edges };
@@ -14,7 +15,7 @@ function graph(nodes, edges) {
 {
   const { nodes, edges } = graph(
     [
-      { id: 't1', type: 'text', position: { x: 0, y: 0 }, data: { result: 'a red fox' } },
+      { id: 't1', type: 'textOutput', position: { x: 0, y: 0 }, data: { result: 'a red fox' } },
       { id: 'p1', type: 'prompt', position: { x: 0, y: 10 }, data: { text: 'draw @t1 running' } },
     ],
     [{ id: 'e1', source: 'p1', target: 'out' }],
@@ -27,7 +28,7 @@ function graph(nodes, edges) {
 {
   const { nodes, edges } = graph(
     [
-      { id: 't1', type: 'text', position: { x: 0, y: 0 }, data: {} },
+      { id: 't1', type: 'textOutput', position: { x: 0, y: 0 }, data: {} },
       { id: 'p1', type: 'prompt', position: { x: 0, y: 10 }, data: { text: 'draw @t1 here' } },
     ],
     [{ id: 'e1', source: 'p1', target: 'out' }],
@@ -40,7 +41,7 @@ function graph(nodes, edges) {
 {
   const { nodes, edges } = graph(
     [
-      { id: 't1', type: 'text', position: { x: 0, y: 0 }, data: { result: 'ignore @p2 entirely' } },
+      { id: 't1', type: 'textOutput', position: { x: 0, y: 0 }, data: { result: 'ignore @p2 entirely' } },
       { id: 'p2', type: 'prompt', position: { x: 0, y: 5 }, data: { text: 'SECRET' } },
       { id: 'p1', type: 'prompt', position: { x: 0, y: 10 }, data: { text: '@t1' } },
     ],
@@ -56,7 +57,7 @@ function graph(nodes, edges) {
   const { nodes, edges } = graph(
     [
       { id: 'p1', type: 'prompt', position: { x: 0, y: 0 }, data: { text: 'top' } },
-      { id: 't1', type: 'text', position: { x: 0, y: 50 }, data: { result: 'middle' } },
+      { id: 't1', type: 'textOutput', position: { x: 0, y: 50 }, data: { result: 'middle' } },
       { id: 'p2', type: 'prompt', position: { x: 0, y: 90 }, data: { text: 'bottom' } },
     ],
     [
@@ -73,7 +74,7 @@ function graph(nodes, edges) {
 {
   const { nodes, edges } = graph(
     [
-      { id: 't1', type: 'text', position: { x: 0, y: 0 }, data: { result: 'from @p1' } },
+      { id: 't1', type: 'textOutput', position: { x: 0, y: 0 }, data: { result: 'from @p1' } },
       { id: 'p1', type: 'prompt', position: { x: 0, y: 10 }, data: { text: 'draw @t1' } },
     ],
     [{ id: 'e1', source: 'p1', target: 'out' }],
@@ -145,7 +146,7 @@ function graph(nodes, edges) {
 
 // An image wired only into a text node is rank 1 there.
 {
-  const t = { id: 't1', type: 'text', position: { x: 200, y: 0 }, data: { result: 'x' } };
+  const t = { id: 't1', type: 'textOutput', position: { x: 200, y: 0 }, data: { result: 'x' } };
   const i1 = { id: 'i1', type: 'image', position: { x: 0, y: 0 }, data: { dataUrl: 'data:,a' } };
   const nodes = [out, t, i1];
   const edges = [{ id: 'e1', source: 'i1', target: 't1' }];
@@ -165,7 +166,7 @@ function graph(nodes, edges) {
 // Ranks are per consumer: A (y=0) and B (y=100) both feed the output, so B is 2 there;
 // B alone feeds the text node, so it is 1 there. B's ranks are [1, 2].
 {
-  const t = { id: 't1', type: 'text', position: { x: 200, y: 0 }, data: { result: 'x' } };
+  const t = { id: 't1', type: 'textOutput', position: { x: 200, y: 0 }, data: { result: 'x' } };
   const a = { id: 'a', type: 'image', position: { x: 0, y: 0 }, data: { dataUrl: 'data:,a' } };
   const b = { id: 'b', type: 'image', position: { x: 0, y: 100 }, data: { dataUrl: 'data:,b' } };
   const nodes = [out, t, a, b];
@@ -180,7 +181,7 @@ function graph(nodes, edges) {
 
 // The rank a consumer sees matches the order buildRequest sends for that same consumer.
 {
-  const t = { id: 't1', type: 'text', position: { x: 200, y: 0 }, data: { result: 'x' } };
+  const t = { id: 't1', type: 'textOutput', position: { x: 200, y: 0 }, data: { result: 'x' } };
   const a = { id: 'a', type: 'image', position: { x: 0, y: 0 }, data: { dataUrl: 'data:,a' } };
   const b = { id: 'b', type: 'image', position: { x: 0, y: 100 }, data: { dataUrl: 'data:,b' } };
   const nodes = [out, t, a, b];
@@ -256,8 +257,8 @@ function graph(nodes, edges) {
 {
   const { nodes, edges } = graph(
     [
-      { id: 't-lo', type: 'text', position: { x: 0, y: 50 }, data: { result: 'a\n---\nb' } },
-      { id: 't-hi', type: 'text', position: { x: 0, y: 10 }, data: { result: 'c\n---\nd' } },
+      { id: 't-lo', type: 'textOutput', position: { x: 0, y: 50 }, data: { result: 'a\n---\nb' } },
+      { id: 't-hi', type: 'textOutput', position: { x: 0, y: 10 }, data: { result: 'c\n---\nd' } },
     ],
     [
       { id: 'e1', source: 't-lo', target: 'out' },
@@ -272,7 +273,7 @@ function graph(nodes, edges) {
 // prompt carries exactly one block, and a sibling prompt's @textNodeId reference
 // resolves to empty instead of smuggling the whole list back in.
 {
-  const textNode = { id: 't1', type: 'text', position: { x: 0, y: 50 }, data: { result: 'one\n---\ntwo' } };
+  const textNode = { id: 't1', type: 'textOutput', position: { x: 0, y: 50 }, data: { result: 'one\n---\ntwo' } };
   const shared = { id: 'p-shared', type: 'prompt', position: { x: 0, y: 0 }, data: { text: 'a shared subject' } };
   const sibling = { id: 'p-sib', type: 'prompt', position: { x: 0, y: 90 }, data: { text: 'ref: @t1' } };
   const { nodes, edges } = graph(
@@ -309,7 +310,7 @@ function graph(nodes, edges) {
     nodes: [
       { id: 'p1', type: 'prompt', position: { x: 0, y: 0 }, data: { text: 'a @p1x @p1 and @p10, plus @stranger' } },
       { id: 'p10', type: 'prompt', position: { x: 0, y: 200 }, data: { text: 'subject' } },
-      { id: 'o1', type: 'output', position: { x: 400, y: 0 }, data: { freeRuns: true } },
+      { id: 'o1', type: 'imageOutput', position: { x: 400, y: 0 }, data: { freeRuns: true } },
     ],
     edges: [
       { id: 'e1', source: 'p1', target: 'o1' },
@@ -350,7 +351,7 @@ function graph(nodes, edges) {
 {
   const graphNodes = [
     { id: 'a', type: 'prompt', selected: true, data: {} },
-    { id: 'b', type: 'output', selected: true, data: { kind: 'video' } },
+    { id: 'b', type: 'videoOutput', selected: true, data: {} },
     { id: 'c', type: 'prompt', data: {} },
   ];
   const graphEdges = [
@@ -372,7 +373,7 @@ function graph(nodes, edges) {
 
   const preset = presetFromSelection(frag, { name: '  Hero shot ', summary: ' two nodes ' });
   assert.equal(preset.type, 'flow', 'several nodes make a flow');
-  assert.equal(preset.kind, 'video', 'kind comes from the output node');
+  assert.equal(preset.kind, 'video', 'kind comes from the output node\'s type');
   assert.equal(preset.source, 'user', 'saved presets are marked as yours');
   assert.equal(preset.name, 'Hero shot', 'name is trimmed');
   assert.equal(preset.summary, 'two nodes', 'summary is trimmed');
@@ -382,18 +383,103 @@ function graph(nodes, edges) {
   assert.equal(presetFromSelection(one, { name: 'x', summary: '' }).type, 'block', 'one node is a block');
   assert.equal(presetFromSelection(one, { name: 'x', summary: '' }).kind, 'image',
     'no consumer node falls back to image');
-  const textOnly = { nodes: [{ id: 't', type: 'text', data: {} }], edges: [] };
+  const textOnly = { nodes: [{ id: 't', type: 'textOutput', data: {} }], edges: [] };
   assert.equal(presetFromSelection(textOnly, { name: 'x', summary: '' }).kind, 'text',
-    'a text node with no output node makes text');
-  const imageOut = { nodes: [{ id: 'o', type: 'output', data: {} }], edges: [] };
+    'a text output makes text');
+  const imageOut = { nodes: [{ id: 'o', type: 'imageOutput', data: {} }], edges: [] };
   assert.equal(presetFromSelection(imageOut, { name: 'x', summary: '' }).kind, 'image',
-    'an output node with no kind set is an image node');
+    'an image output makes an image');
+
+  // A legacy fragment still on disk goes through migrateNodes on its way to the
+  // canvas, so a preset saved before the split inserts as the right node types.
+  const legacyFrag = {
+    nodes: [
+      { id: 'p', type: 'prompt', position: { x: 0, y: 0 }, data: { text: 'x' } },
+      { id: 'o', type: 'output', position: { x: 0, y: 40 }, data: { kind: 'video' } },
+    ],
+    edges: [{ id: 'e', source: 'p', target: 'o' }],
+  };
+  let m = 800;
+  const migrated = instantiateFragment(
+    { ...legacyFrag, nodes: migrateNodes(legacyFrag.nodes) },
+    () => String(m++),
+  );
+  assert.deepEqual(migrated.nodes.map((n) => n.type), ['prompt', 'videoOutput'],
+    'a pre-split preset fragment inserts as the new node types');
 
   // The whole point: a saved fragment inserts through the same path as a bundled one.
   let n = 900;
   const back = instantiateFragment(preset.fragment, () => String(n++));
   assert.deepEqual(back.edges.map((e) => [e.source, e.target]), [['900', '901']],
     'a saved preset re-inserts with fresh ids and its wiring intact');
+}
+
+// The silent trap: an @id pointing at a text output must resolve to its stored
+// ANSWER, not to its instructions. Getting this wrong produces no error at all —
+// just generations quietly built from the wrong text.
+{
+  const { nodes, edges } = graph(
+    [
+      { id: 't1', type: 'textOutput', position: { x: 0, y: 0 },
+        data: { text: 'INSTRUCTIONS, not the answer', result: 'a red fox' } },
+      { id: 'p1', type: 'prompt', position: { x: 0, y: 10 }, data: { text: 'draw @t1' } },
+    ],
+    [{ id: 'e1', source: 'p1', target: 'out' }],
+  );
+  assert.equal(buildRequest(nodes, edges, 'out').prompt, 'draw a red fox');
+}
+
+// --- migration: old graphs and presets carry `output` + data.kind, and `text` ---
+{
+  const legacy = [
+    { id: 'a', type: 'output', position: { x: 0, y: 0 }, data: {} },
+    { id: 'b', type: 'output', position: { x: 0, y: 0 }, data: { kind: 'video', duration: 5 } },
+    { id: 'c', type: 'output', position: { x: 0, y: 0 }, data: { kind: 'image', quality: 'low' } },
+    { id: 'd', type: 'text', position: { x: 0, y: 0 }, data: { result: 'hi' } },
+    { id: 'e', type: 'prompt', position: { x: 0, y: 0 }, data: { text: 'p' } },
+    { id: 'f', type: 'image', position: { x: 0, y: 0 }, data: { dataUrl: 'x' } },
+  ];
+  const got = migrateNodes(legacy);
+
+  assert.equal(got[0].type, 'imageOutput', 'an output node with no kind is an image output');
+  assert.equal(got[1].type, 'videoOutput', 'kind video becomes a video output');
+  assert.equal(got[2].type, 'imageOutput', 'kind image becomes an image output');
+  assert.equal(got[3].type, 'textOutput', 'a text node becomes a text output');
+  assert.equal(got[4].type, 'prompt', 'input nodes are untouched');
+  assert.equal(got[5].type, 'image', 'an image INPUT node is not confused with an image output');
+
+  assert.equal('kind' in got[1].data, false, 'kind is stripped once the type carries it');
+  assert.equal(got[1].data.duration, 5, 'the rest of data survives');
+  assert.equal(got[2].data.quality, 'low', 'the rest of data survives');
+  assert.equal(got[3].data.result, 'hi', 'a text result survives');
+
+  assert.deepEqual(migrateNodes(got), got,
+    'migration is idempotent — a second pass over a migrated graph is a no-op');
+
+  assert.equal(legacy[1].data.kind, 'video', 'the input array is not mutated');
+}
+
+// A node with no data at all must not throw — old fragments can omit it.
+{
+  const got = migrateNodes([{ id: 'a', type: 'output', position: { x: 0, y: 0 } }]);
+  assert.equal(got[0].type, 'imageOutput');
+  assert.deepEqual(got[0].data, {}, 'a missing data object becomes an empty one');
+}
+
+// --- the engine's one rule, as predicates rather than a list of strings ---
+{
+  assert.equal(isOutput({ type: 'imageOutput' }), true);
+  assert.equal(isOutput({ type: 'videoOutput' }), true);
+  assert.equal(isOutput({ type: 'textOutput' }), true);
+  assert.equal(isOutput({ type: 'prompt' }), false);
+  assert.equal(isOutput({ type: 'image' }), false);
+  assert.equal(isOutput({ type: 'video' }), false);
+  assert.equal(isOutput({}), false, 'a node with no type is not an output');
+
+  assert.equal(isTextOutput({ type: 'textOutput' }), true);
+  assert.equal(isTextOutput({ type: 'imageOutput' }), false);
+  assert.equal(isTextOutput({ type: 'text' }), false, 'the pre-migration id is not a text output');
+  assert.equal(isOutput({ type: 'output' }), false, 'the pre-migration id is not an output either');
 }
 
 console.log('resolve.js: all checks passed');

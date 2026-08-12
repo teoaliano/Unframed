@@ -7,6 +7,17 @@
 // positionally ("image 1", "image 2") which the user types as plain text.
 const TOKEN_RE = /@([\w-]+)/g;
 
+// The engine's one rule — inputs only feed edges, outputs consume them — as a
+// predicate rather than a list of type strings repeated down this file. Output type
+// ids end in `Output` so they cannot collide with the `image`/`video` INPUT nodes,
+// which is also what makes this a shape test rather than a list: a fourth output kind
+// is one type id, not a grep.
+export const isOutput = (n) => Boolean(n?.type?.endsWith('Output'));
+// A text output's stored ANSWER is what @id pulls in, never its instructions. Its own
+// predicate because getting it wrong is silent: resolveRef below would fall through to
+// substituting data.text, and generations would quietly build from the wrong text.
+export const isTextOutput = (n) => n?.type === 'textOutput';
+
 function substitute(text, refs, stack) {
   return (text || '').replace(TOKEN_RE, (_, raw) => {
     const ref = raw.trim();
@@ -21,7 +32,7 @@ function substitute(text, refs, stack) {
 // Throws on circular prompt references (A -> B -> A).
 function resolveRef(id, refs, stack) {
   const node = refs.get(id);
-  if (node.type === 'text') return node.data?.result || '';
+  if (isTextOutput(node)) return node.data?.result || '';
   if (stack.includes(id)) {
     throw new Error(`Circular reference: ${[...stack, id].join(' -> ')}`);
   }
@@ -34,7 +45,7 @@ export function buildRequest(nodes, edges, outputId) {
   const byId = new Map(nodes.map((n) => [n.id, n]));
   // Both prompt and text nodes can be pulled in with @id.
   const refs = new Map(
-    nodes.filter((n) => n.type === 'prompt' || n.type === 'text').map((n) => [n.id, n]),
+    nodes.filter((n) => n.type === 'prompt' || isTextOutput(n)).map((n) => [n.id, n]),
   );
 
   // Every node wired into this output node, top-to-bottom for predictable order.
@@ -58,7 +69,7 @@ export function buildRequest(nodes, edges, outputId) {
 
   const promptParts = [];
   for (const node of sources) {
-    if (node.type !== 'prompt' && node.type !== 'text') continue;
+    if (node.type !== 'prompt' && !isTextOutput(node)) continue;
     const text = resolveRef(node.id, refs, []).trim();
     if (text) promptParts.push(text);
   }
@@ -78,7 +89,7 @@ export function imageRefNumbers(nodes, edges, nodeId, kind = 'image') {
   if (!self || self.type !== kind || !self.data?.dataUrl) return [];
 
   const byId = new Map(nodes.map((n) => [n.id, n]));
-  const consumers = nodes.filter((n) => n.type === 'output' || n.type === 'text');
+  const consumers = nodes.filter(isOutput);
   const ranks = new Set();
 
   for (const consumer of consumers) {
@@ -103,7 +114,7 @@ export function findWiredTextNode(nodes, edges, outputId) {
   return edges
     .filter((e) => e.target === outputId)
     .map((e) => byId.get(e.source))
-    .filter((n) => n && n.type === 'text')
+    .filter((n) => n && isTextOutput(n))
     .sort((a, b) => (a.position?.y ?? 0) - (b.position?.y ?? 0))[0];
 }
 
