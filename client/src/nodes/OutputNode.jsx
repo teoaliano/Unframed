@@ -42,12 +42,6 @@ function ratioLabel(size) {
   return best && best.diff / target < 0.02 ? best.label : '';
 }
 
-// Why Size, Ratio and Seconds go dead once a video is wired in. Lives on the
-// disabled controls themselves (disabledMessage keeps them focusable and shows
-// this on hover), which puts the explanation where the question gets asked.
-const EDIT_SHAPE_NOTE =
-  'With a video wired in this becomes an edit, so the result keeps the clip’s own size and length. This is set by the model, not here.';
-
 // The few capabilities worth reading before you pick a model — the ones that
 // actually differ. input_references and aspect_ratio are on nearly every model,
 // so listing them would be noise; resolution (16 of 40), seed (10), transparency
@@ -266,13 +260,13 @@ export default function OutputNode({ id, data }) {
   // default is the one that works. Explicit `false` is the user turning it off.
   const shareLocalVideos = data.shareLocalVideos !== false;
 
-  // A video wired into video generation makes it an EDITING task, and then the
-  // output's shape is the input's: Seedance rejects the request outright if a
-  // ratio or duration is sent ("`ratio` must be `adaptive`, `duration` must be
-  // -1"). Neither of those values is expressible through OpenRouter — duration is
-  // typed as an integer and ratios come from the model's declared list — so the
-  // only correct move is to send neither and let the provider derive them.
-  const editingFromVideo = kind === 'video' && wiredVideos > 0;
+  // Seedance picks its mode from the PROMPT, and only one of the two works here.
+  // Reference-to-video (describe the result you want) is fine: size and duration
+  // are honoured. Video EDITING (instruct a change to the clip) is not reachable
+  // through OpenRouter at all: the provider then demands `duration: -1`, which
+  // OpenRouter's own validation rejects ("expected number to be >=1"), whether we
+  // send a duration or leave it out. Verified against the live API, 2026-08-12.
+  const wiredVideoIntoVideo = kind === 'video' && wiredVideos > 0;
 
   async function onGenerate() {
     setStatus('running');
@@ -300,13 +294,12 @@ export default function OutputNode({ id, data }) {
             prompt,
             input_references,
             model,
-            // Omitted entirely for an editing task — see editingFromVideo above.
-            duration: editingFromVideo ? undefined : duration,
+            duration,
             // One or the other, never both: they are interchangeable upstream, and
             // sending a size alongside a conflicting ratio is asking for trouble.
-            size: editingFromVideo ? undefined : supported(exactSizes, data.size),
-            resolution: editingFromVideo ? undefined : supported(resolutionTiers, data.resolution),
-            aspect_ratio: editingFromVideo ? undefined : supported(ratios, data.aspect_ratio),
+            size: supported(exactSizes, data.size),
+            resolution: supported(resolutionTiers, data.resolution),
+            aspect_ratio: supported(ratios, data.aspect_ratio),
             // Consent re-sent per request: the server refuses local clips without it.
             ...(shareLocalVideos ? { shareLocalVideos: true } : {}),
             ...(canAudio ? { generate_audio: Boolean(data.generateAudio) } : {}),
@@ -495,8 +488,6 @@ export default function OutputNode({ id, data }) {
               })}
               value={exactSizes.includes(data.size) ? data.size : undefined}
               placeholder="—"
-              isDisabled={editingFromVideo}
-              disabledMessage={EDIT_SHAPE_NOTE}
               onChange={(v) => updateNodeData(id, { size: v })}
             />
           )}
@@ -507,8 +498,6 @@ export default function OutputNode({ id, data }) {
               options={resolutionTiers}
               value={resolutionTiers.includes(data.resolution) ? data.resolution : undefined}
               placeholder="—"
-              isDisabled={editingFromVideo}
-              disabledMessage={EDIT_SHAPE_NOTE}
               onChange={(v) => updateNodeData(id, { resolution: v })}
             />
           )}
@@ -539,8 +528,6 @@ export default function OutputNode({ id, data }) {
               options={ratios}
               value={ratios.includes(data.aspect_ratio) ? data.aspect_ratio : undefined}
               placeholder="—"
-              isDisabled={editingFromVideo}
-              disabledMessage={EDIT_SHAPE_NOTE}
               onChange={(v) => updateNodeData(id, { aspect_ratio: v })}
             />
           )}
@@ -554,8 +541,6 @@ export default function OutputNode({ id, data }) {
                 size="sm"
                 options={durations}
                 value={String(duration)}
-                isDisabled={editingFromVideo}
-                disabledMessage={EDIT_SHAPE_NOTE}
                 onChange={(v) => updateNodeData(id, { duration: Number(v) })}
               />
             )}
@@ -629,6 +614,14 @@ export default function OutputNode({ id, data }) {
         {/* Sharing is per-node opt-in, never automatic: it makes the clip publicly
             fetchable (unguessable URL, dedicated share-only server, dies with the
             job), and that is a call the user makes knowingly. */}
+
+        {wiredVideoIntoVideo && (
+          <StatusLine type="warning">
+            Describe the result you want, not a change to make. An instruction like
+            &ldquo;edit this video to...&rdquo; switches the model into editing mode, which
+            OpenRouter cannot currently express and which fails with a duration error.
+          </StatusLine>
+        )}
 
         {kind === 'video' && wiredLocalVideos > 0 && (
           <VStack gap={1}>
