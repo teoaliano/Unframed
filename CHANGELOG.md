@@ -5,6 +5,16 @@ is no release artifact to number. Headings are `## YYYY-MM-DD`, groups are
 `### Added` / `### Changed` / `### Fixed`, one bullet per user-visible change.
 Keep that shape: the website's What's new page parses this file.
 
+## 2026-08-13
+
+### Changed
+
+- Outputs are now three separate nodes — Image, Video and Text — instead of one
+  Output node with an Image/Video tab inside it. You pick what you are making when
+  you add the node, and its title says so on the canvas.
+- Existing projects and saved presets open as before: their output nodes become
+  Image or Video automatically, keeping their settings and wiring.
+
 ## 2026-08-12
 
 ### Added
