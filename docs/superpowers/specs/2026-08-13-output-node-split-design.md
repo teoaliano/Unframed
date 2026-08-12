@@ -170,6 +170,34 @@ later would silently break any graph or preset not opened since.
 **Edited directly in source, not migrated:** the starter graph in `App.jsx`, the
 `layerize` preset's output node, and `toJson`'s text node. Those are code.
 
+## Surface touched
+
+Client only. Nothing else in the repo should need an edit; if it does, that is a
+signal the change has grown beyond this spec.
+
+| File | Change |
+| --- | --- |
+| `nodes/output/core.js` | new — shared hooks and pure helpers |
+| `nodes/output/controls.jsx` | new — shared markup |
+| `nodes/ImageOutputNode.jsx` | new — from OutputNode's image path |
+| `nodes/VideoOutputNode.jsx` | new — from OutputNode's video path |
+| `nodes/TextOutputNode.jsx` | new — from TextNode, onto the core |
+| `nodes/OutputNode.jsx` | deleted |
+| `nodes/TextNode.jsx` | deleted |
+| `graph/migrate.js` | new — `migrateNodes` |
+| `graph/resolve.js` | `isOutput` / `isTextOutput`, six literals routed through them |
+| `graph/resolve.test.js` | new migration + predicate cases; 16 type literals updated |
+| `nodes/NodeHeader.jsx` | explicit `title` prop |
+| `nodes/nodeIcons.jsx` | `NODE_ICONS` is keyed by type id — three new keys |
+| `App.jsx` | `nodeTypes` registry, both add menus, starter graph, migrate on graph load |
+| `library/insert.js` | migrate fragments in `instantiateFragment` |
+| `library/save.js` | kind derived from node type |
+| `library/layerize.js` | fragment's output node retyped |
+| `library/toJson.js` | fragment's text node retyped |
+
+Node ids are a bare counter and carry no type prefix, so nothing about id
+minting changes.
+
 ## No server change
 
 The server has no knowledge of node types: it receives a prompt and
