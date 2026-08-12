@@ -85,6 +85,8 @@ const UPDATE_NUDGE_KEY = 'unframed:update-nudge';
 // written into a project you were not looking at.
 const ACTIVE_PROJECT_KEY = 'unframed:active-project';
 const UPDATE_COMMAND = 'git pull && npm run install:all';
+// ponytail: GitHub renders the file; no in-app changelog viewer until someone asks.
+const CHANGELOG_URL = 'https://github.com/teoaliano/Unframed/blob/main/CHANGELOG.md';
 
 const HELP_TEXT =
   'Reference a prompt or text node with @id. Connect images to number them, then type “image 1”.';
@@ -322,15 +324,20 @@ function Canvas() {
             <Text type="label">Update Unframed</Text>
             <Text type="supporting">Run {UPDATE_COMMAND} to pick up fixes.</Text>
           </VStack>
-          <Button
-            label="Copy command"
-            variant="secondary"
-            size="sm"
-            onClick={() => {
-              navigator.clipboard?.writeText(UPDATE_COMMAND);
-              toast({ body: 'Copied. Paste it in a terminal at the repo root.', uniqueID: 'update-nudge' });
-            }}
-          />
+          <HStack gap={1.5} align="center">
+            <Button
+              label="Copy command"
+              variant="secondary"
+              size="sm"
+              onClick={() => {
+                navigator.clipboard?.writeText(UPDATE_COMMAND);
+                toast({ body: 'Copied. Paste it in a terminal at the repo root.', uniqueID: 'update-nudge' });
+              }}
+            />
+            <Link href={CHANGELOG_URL} isExternalLink>
+              See what's new
+            </Link>
+          </HStack>
         </VStack>
       ),
       uniqueID: 'update-nudge',
