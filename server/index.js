@@ -765,6 +765,15 @@ app.post('/api/reveal', async (req, res) => {
     if (await fs.access(file).then(() => true, () => false)) files.push(file);
   }
 
+  // Hosted by the shell: hand the paths over rather than driving the OS here. The
+  // shell's showItemInFolder covers all three platforms, so this one seam replaces
+  // all three branches below -- and, on macOS, removes the Apple Event that would
+  // otherwise need an entitlement and a first-run consent prompt.
+  if (process.send) {
+    process.send({ type: 'reveal', files: files.length ? files : [dir] });
+    return res.json({ ok: true, revealed: files.length || 'folder' });
+  }
+
   if (process.platform === 'darwin') {
     // A quote in a path would break out of the AppleScript string literal.
     const safe = files.filter((f) => !f.includes('"'));

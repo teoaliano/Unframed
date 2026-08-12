@@ -70,6 +70,20 @@ try {
     await fs.readFile(path.join(dataDir, '.env'), 'utf8'),
     /OPENROUTER_IMAGE_MODEL=openai\/gpt-image-2/,
   );
+
+  // Hosted, reveal goes to the parent instead of spawning osascript. That is what
+  // keeps the app free of the Apple Events entitlement and the "wants to control
+  // Finder" consent prompt -- and it is why this assertion does not open a Finder
+  // window while the tests run.
+  await fs.writeFile(path.join(outDir, 'shot.png'), 'x');
+  const revealed = waitFor('reveal');
+  const res = await fetch(`${base}/api/reveal`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ fileName: 'shot.png' }),
+  });
+  assert.equal(res.status, 200);
+  assert.deepEqual((await revealed).files, [path.join(outDir, 'shot.png')]);
 } finally {
   child.kill();
   await fs.rm(dataDir, { recursive: true, force: true });
