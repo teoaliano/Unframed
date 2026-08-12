@@ -515,9 +515,9 @@ app.post('/api/video', async (req, res) => {
   // URL -- a base64 data URL comes back as "Only HTTPS URLs are allowed", and the
   // Files API that could have hosted one accepts images, audio and documents, not
   // video. (Reference IMAGES are fine as base64, which is why image-to-video
-  // works.) The way through is a temporary Cloudflare tunnel to the dedicated
-  // share server in share.js -- EXPLICITLY opted into per node, because it makes
-  // the clip publicly fetchable (unguessable URL) for the duration of the job.
+  // works.) The way through is a temporary public tunnel to the dedicated share
+  // server in share.js -- EXPLICITLY opted into per node, because it makes the
+  // clip publicly fetchable (unguessable URL) for the duration of the job.
   const localVideoRefs = (Array.isArray(input_references) ? input_references : []).filter(
     (r) => r?.video_url?.url && !String(r.video_url.url).startsWith('https://'),
   );
@@ -548,7 +548,7 @@ app.post('/api/video', async (req, res) => {
       }
       if (!base) {
         throw new Error(
-          'the temporary link did not come up. Cloudflare quick tunnels are best-effort, so trying again usually works',
+          'the temporary link did not come up. The tunnel service is best-effort, so trying again usually works',
         );
       }
       for (let i = 0; i < localVideoRefs.length; i++) {

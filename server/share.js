@@ -3,7 +3,7 @@
 // Files API takes no video; localhost is unreachable from a provider).
 //
 // SECURITY MODEL — the whole point of this file:
-// The cloudflared tunnel points at a DEDICATED http server that serves exactly
+// The tunnel points at a DEDICATED http server that serves exactly
 // one route shape: GET/HEAD /share/<256-bit token>. The Express app with the API
 // (key writes, money-spending generation, project files) is never behind the
 // tunnel, so no filter bug can expose it — the guarantee is structural, not a
@@ -19,7 +19,6 @@ import crypto from 'node:crypto';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
-import { spawn } from 'node:child_process';
 import { createRequire } from 'node:module';
 
 const TOKEN_RE = /^\/share\/([A-Za-z0-9_-]{43})$/;
@@ -80,67 +79,21 @@ export async function revokeShare(token) {
 }
 
 // ---- public tunnel ----
-// Two providers, measured against each other on this machine (2026-08-12):
-//   localtunnel  4/4 up, 0.6-1.4s, plain npm package, no binary to install
-//   cloudflared  2/4 up, 11-14s, needs `brew install cloudflared`
-// So localtunnel leads and cloudflared is the fallback for when the free
-// localtunnel service is down.
+// localtunnel: benchmarked against cloudflared on this machine (4/4 up in
+// 0.6-1.4s versus 2/4 in 11-14s), and an ordinary dependency rather than a
+// binary to install and whose stderr we parse.
 //
-// The interstitial worry does not apply: localtunnel answers browser-ish User-
-// Agents with an HTTP 511 reminder page, but the provider fetches with FFmpeg
-// (observed User-Agent `Lavf/59.27.100`), which it serves directly. Confirmed
+// The interstitial worry does not apply: localtunnel answers browser-ish
+// User-Agents with an HTTP 511 reminder page, but the provider fetches with
+// FFmpeg (observed User-Agent `Lavf/59.27.100`) and gets the bytes. Confirmed
 // end to end against the real API.
 let tunnel = null; // { url, close() }
-
-async function startLocaltunnel(port) {
-  const localtunnel = createRequire(import.meta.url)('localtunnel');
-  const t = await localtunnel({ port });
-  return {
-    url: t.url,
-    close: () => t.close(),
-  };
-}
-
-function startCloudflared(port) {
-  return new Promise((resolve, reject) => {
-    const proc = spawn('cloudflared', ['tunnel', '--url', `http://127.0.0.1:${port}`]);
-    let settled = false;
-    const fail = (msg) => {
-      if (settled) return;
-      settled = true;
-      proc.kill();
-      reject(new Error(msg));
-    };
-    proc.on('error', () => fail('cloudflared is not installed'));
-    let out = '';
-    proc.stderr.on('data', (d) => {
-      out += d;
-      const m = /https:\/\/[a-z0-9-]+\.trycloudflare\.com/.exec(out);
-      if (m && !settled) {
-        settled = true;
-        resolve({ url: m[0], close: () => proc.kill() });
-      }
-    });
-    proc.on('exit', () => fail('cloudflared exited before the tunnel came up'));
-    setTimeout(() => fail('timed out waiting for the cloudflared URL'), 20000);
-  });
-}
 
 export async function ensureTunnel() {
   const port = await startShareServer();
   if (tunnel?.url) return tunnel.url;
-  try {
-    tunnel = await startLocaltunnel(port);
-  } catch (err) {
-    try {
-      tunnel = await startCloudflared(port);
-    } catch (fallbackErr) {
-      tunnel = null;
-      throw new Error(
-        `no tunnel available (localtunnel: ${err.message}; cloudflared: ${fallbackErr.message})`,
-      );
-    }
-  }
+  const localtunnel = createRequire(import.meta.url)('localtunnel');
+  tunnel = await localtunnel({ port });
   return tunnel.url;
 }
 
@@ -167,13 +120,13 @@ for (const signal of ['exit', 'SIGINT', 'SIGTERM']) {
   });
 }
 
-// A fresh trycloudflare hostname is handed over before it is fetchable, and the
+// A fresh tunnel hostname is handed over before it is fetchable, and the
 // provider pulls the reference within seconds of the job being created, so
 // creating the job first is a race the provider loses: "resource download
 // failed". This proves the URL serves BEFORE any job exists.
 //
 // It must NOT ask the local resolver. This machine kept answering NXDOMAIN for a
-// hostname that was already live at Cloudflare's edge -- a false negative that
+// hostname that was already live at the tunnel's edge -- a false negative that
 // would block a perfectly good generation. So: resolve over DoH (what a provider's
 // resolver would see) and connect straight to that IP, with SNI and Host set to
 // the real hostname, which is what `curl --resolve` does.
@@ -210,7 +163,7 @@ export async function waitUntilPublic(url, timeoutMs = 90000) {
   while (Date.now() < deadline) {
     const ips = await resolvePublic(hostname).catch(() => []);
     for (const ip of ips) {
-      // 530 is Cloudflare saying the tunnel is not wired up yet.
+      // A non-200 means the edge has the name but the tunnel is not wired yet.
       if ((await headVia(ip, hostname, pathname)) === 200) return true;
     }
     await new Promise((r) => setTimeout(r, 2000));
