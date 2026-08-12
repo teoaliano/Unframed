@@ -16,58 +16,13 @@ import StatusLine from './StatusLine.jsx';
 import ExpandableNote from './ExpandableNote.jsx';
 import { MAX_VIDEO_BYTES } from './VideoNode.jsx';
 import { ImageIcon, VideoIcon } from './nodeIcons.jsx';
+import { useModels, useModelParams, freeSpot } from './output/core.js';
+import { ModelPicker, ParamControls, CostFoot } from './output/controls.jsx';
 import { buildRequest, splitSections, findWiredTextNode, freeRunPrompts } from '../graph/resolve.js';
-import { generate, generateVideo, runText, listModels } from '../api.js';
+import { generate, generateVideo, runText } from '../api.js';
 // Arrow leaving a frame: "send this out onto the canvas". From lucide-react, like
 // every other icon here, so it shares the set's grid and stroke.
 import { ExternalLink as AddToCanvasIcon } from 'lucide-react';
-
-// "1280x720" → "16:9", so an exact-size list can still be scanned by shape. Reduced
-// by the greatest common divisor, then snapped to the nearest common ratio when the
-// reduced form is unreadable (1470x630 reduces to 7:3, but reads as 21:9).
-const RATIOS = [
-  [21, 9], [16, 9], [3, 2], [4, 3], [1, 1], [3, 4], [2, 3], [9, 16], [9, 21],
-];
-function ratioLabel(size) {
-  const [w, h] = String(size).toLowerCase().split('x').map(Number);
-  if (!w || !h) return '';
-  const target = w / h;
-  let best = null;
-  for (const [a, b] of RATIOS) {
-    const diff = Math.abs(a / b - target);
-    if (!best || diff < best.diff) best = { diff, label: `${a}:${b}` };
-  }
-  // 2% tolerance: 1470x630 (2.333) lands on 21:9 (2.333), but an oddball stays bare
-  // rather than being mislabelled.
-  return best && best.diff / target < 0.02 ? best.label : '';
-}
-
-// The few capabilities worth reading before you pick a model — the ones that
-// actually differ. input_references and aspect_ratio are on nearly every model,
-// so listing them would be noise; resolution (16 of 40), seed (10), transparency
-// (6) and quality (6) are the ones that decide whether a model can do the job.
-// Silence means "nothing unusual", which is why the common params are omitted.
-function capabilityTags(entry, kind) {
-  const p = entry?.params;
-  if (!p) return [];
-  const tags = [];
-  if (kind === 'video') {
-    const d = p.duration;
-    if (Array.isArray(d) && d.length) tags.push(`${Math.min(...d)}–${Math.max(...d)}s`);
-    const r = p.resolution;
-    if (Array.isArray(r) && r.length) tags.push(r[r.length - 1]);
-    if (p.generate_audio) tags.push('audio');
-    if (p.seed) tags.push('seed');
-    return tags;
-  }
-  // Top tier only: the full list belongs in the Size control, not in a summary.
-  const res = p.resolution?.values;
-  if (res?.length) tags.push(res[res.length - 1]);
-  if (p.background?.values?.includes('transparent')) tags.push('transparent');
-  if (p.quality?.values?.length) tags.push('quality');
-  if (p.seed) tags.push('seed');
-  return tags;
-}
 
 export default function OutputNode({ id, data }) {
   const { getNodes, getEdges, updateNodeData, getNode, addNodes } = useReactFlow();
@@ -79,8 +34,6 @@ export default function OutputNode({ id, data }) {
   const [repairCost, setRepairCost] = useState(0); // Free mode's re-split call, if any
   const [error, setError] = useState(null);
   const [note, setNote] = useState(null);
-  const [models, setModels] = useState([]);
-  const [defaultModel, setDefaultModel] = useState('');
   const [videoUrl, setVideoUrl] = useState(null);
   // Inlining a clip means fetching and base64-ing it, which is not instant.
   const [addingVideo, setAddingVideo] = useState(false);
@@ -91,53 +44,17 @@ export default function OutputNode({ id, data }) {
   // different parameters and different money per click, so the tab decides both.
   const kind = data.kind === 'video' ? 'video' : 'image';
 
-  useEffect(() => {
-    let live = true;
-    listModels(kind).then((d) => {
-      if (!live) return;
-      setModels(d.models || []);
-      setDefaultModel(d.default || '');
-    });
-    return () => {
-      live = false;
-    };
-  }, [kind]);
+  const { models, defaultModel } = useModels(kind);
 
   // Fall back to the server's configured model until the user picks one, so this
-  // keeps tracking OPENROUTER_MODEL unless explicitly overridden.
+  // keeps tracking OPENROUTER_IMAGE_MODEL unless explicitly overridden.
   const model = (kind === 'video' ? data.videoModel : data.model) || defaultModel;
   const freeRuns = Boolean(data.freeRuns);
   const runs = clampRuns(data.runs ?? 1);
 
-  // What THIS model actually honours, straight from OpenRouter's image catalogue.
-  // A control is shown only when its parameter exists for the model, and offers
-  // exactly that model's values: gpt-image-2 takes no resolution at all, Gemini
-  // takes only "1K", and both accept ratios (21:9, 4:1) the old fixed list never
-  // offered. Sending an unsupported param was silent — the knob simply did nothing.
   const entry = models.find((m) => m.id === model);
-  const params = entry?.params;
-  // Two catalogues, two shapes: images give a typed map ({type:'enum',values}),
-  // video gives plain arrays. Both reduce to "the values this model takes".
-  const enumOf = (name) => {
-    const p = params?.[name];
-    if (Array.isArray(p)) return p.length ? p.map(String) : undefined;
-    return p?.type === 'enum' && p.values?.length ? p.values : undefined;
-  };
-  const resolutions = enumOf('resolution');
-  const qualities = enumOf('quality');
-  const allRatios = enumOf('aspect_ratio');
-  // Exact WIDTHxHEIGHT dimensions, which 14 of the 22 video models declare and
-  // OpenRouter documents as "interchangeable with resolution + aspect_ratio". So
-  // where a model offers them they REPLACE that pair rather than joining it: one
-  // control instead of two, and no way to ask for 720p at a ratio the model only
-  // renders at 1080p. Each option is labelled with its ratio, since "1280x720" is
-  // harder to choose by than "16:9".
-  const exactSizes = kind === 'video' ? enumOf('size') : undefined;
-  const resolutionTiers = exactSizes ? undefined : resolutions;
-  const ratios = exactSizes ? undefined : allRatios;
-  const backgrounds = kind === 'image' ? enumOf('background') : undefined;
-  const durations = kind === 'video' ? enumOf('duration') : undefined;
-  const canAudio = kind === 'video' && Boolean(params?.generate_audio);
+  const params = useModelParams(entry, kind);
+  const { exactSizes, resolutionTiers, ratios, qualities, backgrounds, durations, canAudio, supported } = params;
   const duration = Number(durations?.includes(String(data.duration)) ? data.duration : durations?.[0]);
 
   // Video is sold by the second, so the price of a click is knowable before it is
@@ -153,25 +70,6 @@ export default function OutputNode({ id, data }) {
     return skus.duration_seconds ? Number(skus.duration_seconds) : null;
   })();
   const estimate = kind === 'video' && perSecond && duration ? perSecond * duration : null;
-  // Only send a value the model declares, so a graph saved against another model
-  // can't smuggle a stale param into the request.
-  const supported = (values, value) => (values?.includes(value) ? value : undefined);
-
-  // A free spot to the right of the output node, stepped down past whatever is
-  // already there. Scanned once per add so a batch added together cannot land its
-  // images on top of each other: addNodes is async to getNodes(), so N scans in one
-  // tick would each read a snapshot without the others' nodes. Callers scan once
-  // and offset by index instead.
-  function freeSpot() {
-    const self = getNode(id);
-    const pos = self?.position ?? { x: 0, y: 0 };
-    const width = self?.measured?.width ?? 300;
-    const spot = { x: pos.x + width + 40, y: pos.y };
-    while (getNodes().some((n) => Math.hypot(n.position.x - spot.x, n.position.y - spot.y) < 24)) {
-      spot.y += 48;
-    }
-    return spot;
-  }
 
   // Put a generated image on the canvas as an image node, so it can be wired back
   // in as a reference for the next generation. Results no longer land here on their
@@ -210,7 +108,7 @@ export default function OutputNode({ id, data }) {
         reader.onerror = () => reject(new Error('could not read the file'));
         reader.readAsDataURL(blob);
       });
-      const spot = freeSpot();
+      const spot = freeSpot(getNode, getNodes, id);
       addNodes({
         id: `gen-${Date.now()}-v`,
         type: 'video',
@@ -423,6 +321,10 @@ export default function OutputNode({ id, data }) {
     }
   }
 
+  const spent = results.reduce((sum, r) => sum + (Number(r.cost) || 0), 0) + repairCost;
+  const hasSpend = results.some((r) => r.cost != null) || repairCost > 0;
+  const hasStrip = results.length > 0 || repairCost > 0;
+
   return (
     <Card width={300} padding={0}>
       <Handle type="target" position={Position.Left} />
@@ -446,92 +348,14 @@ export default function OutputNode({ id, data }) {
           <SegmentedControlItem value="video" label="Video" icon={<Icon icon={VideoIcon} />} />
         </SegmentedControl>
 
-        <Selector
-          label="Model"
-          size="sm"
-          hasSearch
-          // Labelled by slug, not OpenRouter's display name: the slug is what you
-          // put in OPENROUTER_MODEL, and it keeps every row in one format.
-          options={models.map((m) => ({ value: m.id, label: m.id }))}
+        <ModelPicker
+          models={models}
           value={model}
-          placeholder="Loading models…"
-          // Capabilities on the row, so a model is chosen by what it can do
-          // rather than by its name. Without this the differences only surfaced
-          // after the fact, as a control that quietly did nothing.
-          renderOption={(opt) => {
-            const tags = capabilityTags(models.find((m) => m.id === opt.value), kind);
-            return (
-              <span className="model-option">
-                <span className="model-option-id">{opt.label ?? opt.value}</span>
-                {tags.length > 0 && (
-                  <span className="model-option-tags">
-                    {tags.map((t) => (
-                      <span className="model-tag" key={t}>{t}</span>
-                    ))}
-                  </span>
-                )}
-              </span>
-            );
-          }}
+          kind={kind}
           onChange={(v) => updateNodeData(id, kind === 'video' ? { videoModel: v } : { model: v })}
         />
-        <HStack gap={2}>
-          {exactSizes && (
-            <Selector
-              label="Size"
-              size="sm"
-              // Long for some models (seedance-2.0 declares 25), so searchable.
-              hasSearch={exactSizes.length > 8}
-              options={exactSizes.map((s) => {
-                const r = ratioLabel(s);
-                return { value: s, label: r ? `${s} · ${r}` : s };
-              })}
-              value={exactSizes.includes(data.size) ? data.size : undefined}
-              placeholder="—"
-              onChange={(v) => updateNodeData(id, { size: v })}
-            />
-          )}
-          {resolutionTiers && (
-            <Selector
-              label="Size"
-              size="sm"
-              options={resolutionTiers}
-              value={resolutionTiers.includes(data.resolution) ? data.resolution : undefined}
-              placeholder="—"
-              onChange={(v) => updateNodeData(id, { resolution: v })}
-            />
-          )}
-          {qualities && (
-            <Selector
-              label="Quality"
-              size="sm"
-              options={qualities}
-              value={qualities.includes(data.quality) ? data.quality : undefined}
-              placeholder="—"
-              onChange={(v) => updateNodeData(id, { quality: v })}
-            />
-          )}
-          {backgrounds && (
-            <Selector
-              label="Background"
-              size="sm"
-              options={backgrounds}
-              value={backgrounds.includes(data.background) ? data.background : undefined}
-              placeholder="—"
-              onChange={(v) => updateNodeData(id, { background: v })}
-            />
-          )}
-          {ratios && (
-            <Selector
-              label="Ratio"
-              size="sm"
-              options={ratios}
-              value={ratios.includes(data.aspect_ratio) ? data.aspect_ratio : undefined}
-              placeholder="—"
-              onChange={(v) => updateNodeData(id, { aspect_ratio: v })}
-            />
-          )}
-        </HStack>
+
+        <ParamControls params={params} data={data} onChange={(u) => updateNodeData(id, u)} />
 
         {kind === 'video' && (durations || canAudio) && (
           <HStack gap={2} align="end">
@@ -603,17 +427,11 @@ export default function OutputNode({ id, data }) {
           onClick={onGenerate}
         />
 
-        {/* A video wired into a model that shows no sign of taking footage. Warned,
-            not blocked: the capability is a heuristic over pricing SKUs and
-            passthrough params, since OpenRouter publishes no modality field for
-            video models. Silence from the API is ambiguous — the clip may simply be
-            dropped — so this is the last honest moment to say so. */}
         {/* A local clip cannot reach video generation at all — that is a hard 400
             from OpenRouter, not a maybe — so it is called out even for models that
-            do accept footage. */}
-        {/* Sharing is per-node opt-in, never automatic: it makes the clip publicly
-            fetchable (unguessable URL, dedicated share-only server, dies with the
-            job), and that is a call the user makes knowingly. */}
+            do accept footage. Sharing is per-node opt-in, never automatic: it makes
+            the clip publicly fetchable (unguessable URL, dedicated share-only
+            server, dies with the job), and that is a call the user makes knowingly. */}
 
         {wiredVideoIntoVideo && (
           <StatusLine type="warning">
@@ -697,7 +515,7 @@ export default function OutputNode({ id, data }) {
           </span>
         )}
 
-        {kind === 'image' && (results.length > 0 || repairCost > 0) && (
+        {kind === 'image' && hasStrip && (
           <VStack gap={1}>
             {[...results]
               .sort((a, b) => a.runIndex - b.runIndex)
@@ -716,7 +534,7 @@ export default function OutputNode({ id, data }) {
                       isIconOnly
                       icon={<Icon icon={AddToCanvasIcon} size="xsm" />}
                       size="sm"
-                      onClick={() => addToCanvas(r, 0, freeSpot())}
+                      onClick={() => addToCanvas(r, 0, freeSpot(getNode, getNodes, id))}
                     />
                   </span>
                 </span>
@@ -731,7 +549,7 @@ export default function OutputNode({ id, data }) {
                 // getNodes(), which will not show the nodes added a line earlier in
                 // this same tick, so scanning per image would stack them.
                 onClick={() => {
-                  const base = freeSpot();
+                  const base = freeSpot(getNode, getNodes, id);
                   [...results]
                     .sort((a, b) => a.runIndex - b.runIndex)
                     .forEach((r, i) => addToCanvas(r, i, base));
@@ -742,43 +560,37 @@ export default function OutputNode({ id, data }) {
         )}
       </VStack>
 
-      {/* What the run cost sits in a footer rather than in the body's flow: it
-          reports on the node as a whole, so it reads better banded off against the
-          same rule as the title than stacked under the last result. Clear belongs
-          here too — it acts on the whole strip, not on the last image above it. */}
-      {(results.length > 0 || repairCost > 0 || estimate) && (
-        <div className="xnode-foot">
-          {!results.length && repairCost === 0 && estimate && (
+      <CostFoot
+        cost={hasSpend ? spent : null}
+        before={
+          !hasStrip && estimate ? (
             // The upcoming click's price, from the model's per-second rate. Images
             // get no estimate: their pricing is per token, and a guess dressed as
             // a number would be worse than silence.
             <Text type="supporting" color="secondary" hasTabularNumbers>
               est. ~${estimate.toFixed(2)}
             </Text>
-          )}
-          {(results.some((r) => r.cost != null) || repairCost > 0) && (
+          ) : null
+        }
+        after={
+          hasStrip ? (
             <>
-              <Text type="supporting" color="accent" hasTabularNumbers>
-                ${(results.reduce((sum, r) => sum + (Number(r.cost) || 0), 0) + repairCost).toFixed(4)}
-              </Text>
-              {results.length > 1 && (
+              {hasSpend && results.length > 1 && (
                 <Text type="supporting" color="secondary">{results.length} images</Text>
               )}
+              <span className="xnode-foot-end">
+                <Button
+                  label="Clear"
+                  variant="ghost"
+                  size="sm"
+                  tooltip="Remove these results from the node. Files already written to disk stay, and images added to the canvas stay."
+                  onClick={clearResults}
+                />
+              </span>
             </>
-          )}
-          {(results.length > 0 || repairCost > 0) && (
-          <span className="xnode-foot-end">
-            <Button
-              label="Clear"
-              variant="ghost"
-              size="sm"
-              tooltip="Remove these results from the node. Files already written to disk stay, and images added to the canvas stay."
-              onClick={clearResults}
-            />
-          </span>
-          )}
-        </div>
-      )}
+          ) : null
+        }
+      />
     </Card>
   );
 }

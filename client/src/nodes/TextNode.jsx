@@ -1,15 +1,15 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { Handle, Position, useReactFlow } from '@xyflow/react';
 import { Card } from '@astryxdesign/core/Card';
-import { Text } from '@astryxdesign/core/Text';
 import { Button } from '@astryxdesign/core/Button';
-import { Selector } from '@astryxdesign/core/Selector';
 import { TextArea } from '@astryxdesign/core/TextArea';
 import { VStack } from '@astryxdesign/core/Stack';
 import NodeHeader from './NodeHeader.jsx';
 import StatusLine from './StatusLine.jsx';
+import { useModels, freeSpot } from './output/core.js';
+import { ModelPicker, CostFoot } from './output/controls.jsx';
 import { buildRequest } from '../graph/resolve.js';
-import { runText, listModels } from '../api.js';
+import { runText } from '../api.js';
 
 // An output node that emits text instead of an image. It consumes edges exactly like
 // the image output node — same buildRequest — and its answer lives in data.result so
@@ -18,15 +18,7 @@ export default function TextNode({ id, data }) {
   const { getNodes, getEdges, updateNodeData, getNode, addNodes } = useReactFlow();
   const [status, setStatus] = useState('idle'); // idle | running | error
   const [error, setError] = useState(null);
-  const [models, setModels] = useState([]);
-  const [defaultModel, setDefaultModel] = useState('');
-
-  useEffect(() => {
-    listModels('text').then((d) => {
-      setModels(d.models || []);
-      setDefaultModel(d.default || '');
-    });
-  }, []);
+  const { models, defaultModel } = useModels('text');
 
   const model = data.model || defaultModel;
 
@@ -54,13 +46,7 @@ export default function TextNode({ id, data }) {
   // @id keeps resolving, and the new node is a plain prompt you can edit without
   // re-running the model.
   function addResultAsPrompt() {
-    const self = getNode(id);
-    const pos = self?.position ?? { x: 0, y: 0 };
-    const width = self?.measured?.width ?? 300;
-    const spot = { x: pos.x + width + 40, y: pos.y };
-    while (getNodes().some((n) => Math.hypot(n.position.x - spot.x, n.position.y - spot.y) < 24)) {
-      spot.y += 48;
-    }
+    const spot = freeSpot(getNode, getNodes, id);
     addNodes({
       id: `p-${Date.now()}`,
       type: 'prompt',
@@ -78,13 +64,10 @@ export default function TextNode({ id, data }) {
       <NodeHeader kind="text" family="output" copyId={id} />
 
       <VStack gap={3} padding={3}>
-        <Selector
-          label="Model"
-          size="sm"
-          hasSearch
-          options={models.map((m) => ({ value: m.id, label: m.id }))}
+        <ModelPicker
+          models={models}
           value={model}
-          placeholder="Loading models…"
+          kind="text"
           onChange={(v) => updateNodeData(id, { model: v })}
         />
 
@@ -128,13 +111,7 @@ export default function TextNode({ id, data }) {
         )}
       </VStack>
 
-      {data.cost != null && (
-        <div className="xnode-foot">
-          <Text type="supporting" color="accent" hasTabularNumbers>
-            ${Number(data.cost).toFixed(4)}
-          </Text>
-        </div>
-      )}
+      <CostFoot cost={data.cost ?? null} />
     </Card>
   );
 }
