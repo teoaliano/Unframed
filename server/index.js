@@ -15,7 +15,7 @@ const ROOT = path.resolve(__dirname, '..');
 // (its client port); without this the server would bind that instead of 8787.
 dotenv.config({ path: envFile(ROOT), override: true });
 
-const PORT = process.env.PORT || 8787;
+const PORT = Number(process.env.PORT ?? 8787);
 // None of these are const: PUT /api/config rewrites .env and reassigns them, so a
 // setting changed in the app takes effect immediately, without a restart. PORT is
 // the exception -- the client's dev-server proxy points at a fixed port, so
@@ -39,6 +39,10 @@ app.use(cors());
 // References are sent as base64 data URLs. Video is the sizing case: the client
 // caps a clip at 25MB raw, which is ~33MB as base64, plus prompt and images.
 app.use(express.json({ limit: '60mb' }));
+// A packaged app serves the canvas from the same origin as the API, so the window
+// needs no CORS and no file:// handling. Unset in a clone, where Vite serves it on
+// 5173 and proxies /api here.
+if (process.env.UNFRAMED_CLIENT_DIST) app.use(express.static(process.env.UNFRAMED_CLIENT_DIST));
 
 function slugify(text) {
   return (
@@ -940,8 +944,12 @@ app.post('/api/generate', async (req, res) => {
   }
 });
 
-app.listen(PORT, () => {
-  console.log(`\n  Unframed server  →  http://localhost:${PORT}`);
+// PORT=0 asks the OS for any free port, which is how the packaged app avoids
+// fighting whatever else is on 8787. The parent cannot guess it, so it is reported
+// back over the IPC channel fork() provides.
+const server = app.listen(PORT, () => {
+  const { port } = server.address();
+  console.log(`\n  Unframed server  →  http://localhost:${port}`);
   console.log(`  image:    ${IMAGE_MODEL}`);
   console.log(`  text:     ${TEXT_MODEL}`);
   console.log(`  video:    ${VIDEO_MODEL}`);
@@ -949,4 +957,5 @@ app.listen(PORT, () => {
     `  api key:  ${API_KEY ? 'loaded' : 'MISSING — add one in the app (settings icon, top right)'}`,
   );
   console.log(`  output:   ${OUTPUT_DIR}\n`);
+  process.send?.({ type: 'ready', port });
 });
