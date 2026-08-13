@@ -1,6 +1,10 @@
 node_modules/
 .env
-output/
+# Anchored with a leading slash: this is the generated-images folder at the project
+# root only. Unanchored, `output/` matches at EVERY depth, which silently swallowed
+# client/src/nodes/output/ -- the shared core of the three output nodes -- so a fresh
+# clone could not build the canvas at all.
+/output/
 dist/
 *.log
 .DS_Store
