@@ -5,7 +5,7 @@ import dotenv from 'dotenv';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { upsertEnv, PATTERNS } from './env.js';
+import { upsertEnv, PATTERNS, envFile, outputPath } from './env.js';
 import { readPresets, writePresets } from './presets.js';
 import { ensureTunnel, mintShare, revokeShare, waitUntilPublic, stopTunnel } from './share.js';
 
@@ -13,9 +13,9 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, '..');
 // override: .env wins over ambient env. The preview harness injects PORT=5173
 // (its client port); without this the server would bind that instead of 8787.
-dotenv.config({ path: path.join(ROOT, '.env'), override: true });
+dotenv.config({ path: envFile(ROOT), override: true });
 
-const PORT = process.env.PORT || 8787;
+const PORT = Number(process.env.PORT ?? 8787);
 // None of these are const: PUT /api/config rewrites .env and reassigns them, so a
 // setting changed in the app takes effect immediately, without a restart. PORT is
 // the exception -- the client's dev-server proxy points at a fixed port, so
@@ -32,13 +32,17 @@ let TEXT_MODEL = process.env.OPENROUTER_TEXT_MODEL || 'google/gemini-3.5-flash-l
 // than the most capable one.
 let VIDEO_MODEL = process.env.OPENROUTER_VIDEO_MODEL || 'bytedance/seedance-2.0';
 let API_KEY = process.env.OPENROUTER_API_KEY;
-let OUTPUT_DIR = path.resolve(ROOT, process.env.OUTPUT_DIR || './output');
+let OUTPUT_DIR = outputPath(ROOT, process.env.OUTPUT_DIR);
 
 const app = express();
 app.use(cors());
 // References are sent as base64 data URLs. Video is the sizing case: the client
 // caps a clip at 25MB raw, which is ~33MB as base64, plus prompt and images.
 app.use(express.json({ limit: '60mb' }));
+// A packaged app serves the canvas from the same origin as the API, so the window
+// needs no CORS and no file:// handling. Unset in a clone, where Vite serves it on
+// 5173 and proxies /api here.
+if (process.env.UNFRAMED_CLIENT_DIST) app.use(express.static(process.env.UNFRAMED_CLIENT_DIST));
 
 function slugify(text) {
   return (
@@ -70,9 +74,9 @@ app.get('/api/health', (req, res) => {
 });
 
 async function writeEnv(updates) {
-  const envPath = path.join(ROOT, '.env');
-  const text = await fs.readFile(envPath, 'utf8').catch(() => '');
-  await fs.writeFile(envPath, upsertEnv(text, updates));
+  const file = envFile(ROOT);
+  const text = await fs.readFile(file, 'utf8').catch(() => '');
+  await fs.writeFile(file, upsertEnv(text, updates));
 }
 
 // Save settings typed into the UI, so a fresh clone doesn't have to hand-edit
@@ -115,7 +119,7 @@ app.put('/api/config', async (req, res) => {
   // The folder has to be usable before it is saved, or every later generation
   // fails with a disk error instead of a message you can act on.
   if (updates.OUTPUT_DIR) {
-    const dir = path.resolve(ROOT, updates.OUTPUT_DIR);
+    const dir = outputPath(ROOT, updates.OUTPUT_DIR);
     try {
       await fs.mkdir(dir, { recursive: true });
     } catch (err) {
@@ -134,7 +138,7 @@ app.put('/api/config', async (req, res) => {
   if (updates.OPENROUTER_IMAGE_MODEL) IMAGE_MODEL = updates.OPENROUTER_IMAGE_MODEL;
   if (updates.OPENROUTER_TEXT_MODEL) TEXT_MODEL = updates.OPENROUTER_TEXT_MODEL;
   if (updates.OPENROUTER_VIDEO_MODEL) VIDEO_MODEL = updates.OPENROUTER_VIDEO_MODEL;
-  if (updates.OUTPUT_DIR) OUTPUT_DIR = path.resolve(ROOT, updates.OUTPUT_DIR);
+  if (updates.OUTPUT_DIR) OUTPUT_DIR = outputPath(ROOT, updates.OUTPUT_DIR);
 
   res.json({ ok: true, ...settings() });
 });
@@ -761,6 +765,15 @@ app.post('/api/reveal', async (req, res) => {
     if (await fs.access(file).then(() => true, () => false)) files.push(file);
   }
 
+  // Hosted by the shell: hand the paths over rather than driving the OS here. The
+  // shell's showItemInFolder covers all three platforms, so this one seam replaces
+  // all three branches below -- and, on macOS, removes the Apple Event that would
+  // otherwise need an entitlement and a first-run consent prompt.
+  if (process.send) {
+    process.send({ type: 'reveal', files: files.length ? files : [dir] });
+    return res.json({ ok: true, revealed: files.length || 'folder' });
+  }
+
   if (process.platform === 'darwin') {
     // A quote in a path would break out of the AppleScript string literal.
     const safe = files.filter((f) => !f.includes('"'));
@@ -940,8 +953,12 @@ app.post('/api/generate', async (req, res) => {
   }
 });
 
-app.listen(PORT, () => {
-  console.log(`\n  Unframed server  →  http://localhost:${PORT}`);
+// PORT=0 asks the OS for any free port, which is how the packaged app avoids
+// fighting whatever else is on 8787. The parent cannot guess it, so it is reported
+// back over the IPC channel fork() provides.
+const server = app.listen(PORT, () => {
+  const { port } = server.address();
+  console.log(`\n  Unframed server  →  http://localhost:${port}`);
   console.log(`  image:    ${IMAGE_MODEL}`);
   console.log(`  text:     ${TEXT_MODEL}`);
   console.log(`  video:    ${VIDEO_MODEL}`);
@@ -949,4 +966,5 @@ app.listen(PORT, () => {
     `  api key:  ${API_KEY ? 'loaded' : 'MISSING — add one in the app (settings icon, top right)'}`,
   );
   console.log(`  output:   ${OUTPUT_DIR}\n`);
+  process.send?.({ type: 'ready', port });
 });
