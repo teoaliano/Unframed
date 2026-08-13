@@ -43,15 +43,22 @@ to users.
 3. Open a PR against `main`. Describe what a *user* would notice, and what was
    verified beyond the test suite.
 4. Merge the PR.
-5. **Only if the engine changed in a way the shell needs**, tag it:
+5. **Only if the engine changed in a way the shell needs**, tag it. The version bump
+   is itself a change, so it goes through a PR like everything else — rule 1 has no
+   exception for release commits:
 
    ```bash
-   git checkout main && git pull --ff-only
+   git checkout -b bump-engine-0.3.0
    npm version --no-git-tag-version minor    # or patch/major
-   # commit the bump, then:
+   git commit -am "Bump the engine to 0.3.0"
+   # open the PR, merge it, then tag the merged main:
+   git checkout main && git pull --ff-only
    git tag engine-v0.3.0
    git push origin engine-v0.3.0
    ```
+
+   Tag only after the merge. A tag placed on the branch names a commit that is not
+   on `main` and can vanish under a rebase.
 
    Do **not** run `gh release create` for that tag. See the rule above.
 
