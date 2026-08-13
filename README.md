@@ -36,7 +36,7 @@ cd Unframed
 npm run install:all
 ```
 
-This is three installs in one: the repo root, `server/`, and `client/` each have their own `package.json`. Running plain `npm install` only does the root and the app will not start.
+This is two installs in one: the repo root (which carries the server's dependencies) and `client/`, which has its own `package.json`. Running plain `npm install` skips the canvas and the app will not start.
 
 ### 3. Start it
 

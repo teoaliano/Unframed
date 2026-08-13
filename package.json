@@ -5,11 +5,17 @@
   "type": "module",
   "description": "A tiny local node-based image generator (GPT Image 2 via OpenRouter).",
   "scripts": {
-    "install:all": "npm install && npm --prefix server install && npm --prefix client install",
-    "dev": "concurrently -n server,client -c yellow,magenta \"npm --prefix server run dev\" \"npm --prefix client run dev\"",
-    "server": "npm --prefix server run dev",
+    "install:all": "npm install && npm --prefix client install",
+    "dev": "concurrently -n server,client -c yellow,magenta \"npm run server\" \"npm run client\"",
+    "server": "node --watch server/index.js",
     "client": "npm --prefix client run dev",
     "test": "node client/src/graph/resolve.test.js && node server/env.test.js && node server/share.test.js && node server/presets.test.js && node server/host.test.js"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2",
+    "localtunnel": "^2.0.2"
   },
   "devDependencies": {
     "concurrently": "^9.1.0"

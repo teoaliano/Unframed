@@ -11,7 +11,7 @@ Unframed: a local, node-based image generator. A React Flow canvas lets you wire
 ## Commands
 
 ```bash
-npm run install:all   # installs root + server + client (each has its own package.json)
+npm run install:all   # installs root (engine) + client (each has its own package.json)
 npm run dev           # runs server (8787) and client (5173) together via concurrently
 npm run server        # server only (node --watch)
 npm run client        # client only (vite)
@@ -49,7 +49,7 @@ Before calling a piece of work done:
 
 ## Architecture
 
-Three-package monorepo, no shared build. The only non-trivial logic is in `client/src/graph/resolve.js` — read it first.
+Two-package monorepo, no shared build: the root IS the engine package (`server/` has no `package.json` of its own — its dependencies are the root's, so the repo can be installed as a single unit by the desktop shell), and `client/` is a separate Vite build. The only non-trivial logic is in `client/src/graph/resolve.js` — read it first.
 
 **Data flow:** `ImageOutputNode.onGenerate` → `buildRequest(nodes, edges, outputId)` (pure, in `resolve.js`) → `POST /api/generate` (via `client/src/api.js`) → server's `/api/generate` handler → OpenRouter `POST /api/v1/images` → image written to disk + returned as a data URL to the browser. The other two mirror it: `TextOutputNode.onRun` → `POST /api/text` → OpenRouter `chat/completions` → result stored in `node.data.result`; `VideoOutputNode.onGenerate` → `POST /api/video`, then polls `/api/video/:id` until the server has downloaded the finished file.
 
