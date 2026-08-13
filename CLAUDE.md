@@ -32,6 +32,7 @@ One home per rule. Never document the same thing in two files — pick the one t
 | `docs/models.md` | catalogues, model-driven controls, multi-run |
 | `docs/video-and-sharing.md` | video references, the two video-to-video modes, the share tunnel |
 | `docs/library.md` | presets, `presets.json`'s write rule, the Library dialog |
+| `docs/releases.md` | versioning, tagging, the PR workflow, and the invariants that keep this repo consumable by the desktop shell — **read before tagging or touching `package.json`** |
 | `docs/superpowers/specs/` | the reasoning behind one piece of work, including what was rejected |
 | `status.md` (gitignored) | the roadmap and its decisions, future tense — including what was decided NOT to build |
 | `CHANGELOG.md` | user-visible changes, dated. Its header states its own format |
