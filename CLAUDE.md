@@ -8,6 +8,16 @@ Kept deliberately short, because it loads into every session. It holds what appl
 
 Unframed: a local, node-based image generator. A React Flow canvas lets you wire `prompt`, `image` and `video` input nodes into one of three output nodes — image, video or text — and clicking Generate calls the matching model (GPT Image 2 by default) through OpenRouter, writing the result plus a `.json` sidecar to disk. A text output can run a prompt through a text model first, and its answer feeds back in by `@id`. No hosting, pay-per-generation.
 
+## The other repo, and three rules that are expensive to undo
+
+A second, **private** repo — `teoaliano/Unframed-app`, cloned as a sibling at `../Unframed-app` — holds the desktop shell that runs this engine as an installable app, plus the commercial side. It consumes this repo by git tag. The dependency is one-way and must stay that way: nothing here may reference it, and this repo must keep working with it deleted. For work that concerns the app, read `../Unframed-app/CLAUDE.md` and `../Unframed-app/docs/sync.md` first.
+
+These three are cheap to break from inside this repo and cannot be undone afterwards. `docs/releases.md` holds the rest, each with its consequence.
+
+1. **Changes land by PR, never a direct push to `main`** — not even one-liners. The shell pins tags from `main`, so anything that reaches `main` is shippable to users.
+2. **Never create a GitHub Release for an `engine-*` tag.** The app's updater asks this repo for its latest Release and expects installers attached; a tag without them breaks update checks for every installed copy, silently, for users nobody can contact. Engine versions are plain git tags; only app versions get Releases.
+3. **Nothing about pricing, strategy, or signing credentials belongs in this repo** — that lives in the private one. This has already gone wrong once and was caught only because nothing had been pushed yet; after a push it is in strangers' clones permanently.
+
 ## Commands
 
 ```bash
