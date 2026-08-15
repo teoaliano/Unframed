@@ -95,11 +95,19 @@ lands in your project whether or not the app is open, and survives a restart.
 
 This is also why re-polling a finished job is safe: asking about a job the
 sweep already collected returns the file it already saved rather than
-downloading it again, so the browser's own resume and the sweep can never both
-write the same clip to disk under two different timestamps.
+downloading it again. That alone isn't the whole guarantee, though — a sweep
+tick can be mid-download when a browser's own poll finishes the very same job
+first, so both sides also re-check the store immediately before they'd start
+downloading and back off if the other already finished, and every write to
+`jobs.json` is queued through one chain so two jobs finishing seconds apart
+can't have their updates overwrite each other. Together, that's what stops the
+browser's own resume and the sweep from ever writing the same clip to disk
+under two different timestamps.
 
-`done` and `failed` jobs are cleared out of `jobs.json` after seven days.
-A `pending` one is never dropped for age alone — only the sweep actually
+`done` and `failed` jobs are cleared out of `jobs.json` after seven days,
+counted from the moment a job actually finished rather than from when it was
+started — a render that sat queued for a week and then completed is not
+deleted in the same breath. A `pending` one is never dropped for age alone — only the sweep actually
 finishing it, one way or the other, retires it.
 
 ## The share tunnel

@@ -103,6 +103,41 @@ try {
   const health = await (await fetch(`${base}/api/health`)).json();
   assert.equal(health.keyHint, '0000', 'the live key is the fake one, not an inherited real one');
 
+  // The anti-double-collection guard (2026-08-15 review, Important 3/4 and the
+  // step-4 requirement it fixed): GET /api/video/:id must consult the job store
+  // BEFORE ever touching OpenRouter, so a job already `done` is served straight
+  // from there instead of being polled and re-downloaded. Seed the store the
+  // way the sweep (or an earlier poll) would have left it. The fake key set
+  // above would turn any REAL upstream call into a 401 within milliseconds --
+  // this asserts the happy response instead, which is only possible if
+  // OpenRouter was never actually asked.
+  const savedClipPath = path.join(outDir, 'already-rendered.mp4');
+  await fs.writeFile(savedClipPath, 'not a real mp4 but bytes are bytes');
+  await fs.writeFile(
+    path.join(outDir, 'jobs.json'),
+    JSON.stringify([
+      {
+        id: 'already-done-job',
+        project: '',
+        params: { prompt: 'a cat on a skateboard', model: 'bytedance/seedance-2.0' },
+        startedAt: Date.now(),
+        resolvedAt: Date.now(),
+        status: 'done',
+        savedPath: savedClipPath,
+        cost: 0.42,
+      },
+    ]),
+  );
+  const doneRes = await fetch(`${base}/api/video/already-done-job`);
+  assert.equal(doneRes.status, 200);
+  const doneBody = await doneRes.json();
+  assert.equal(
+    doneBody.status,
+    'completed',
+    'a job already done in the store answers completed straight away, with no upstream round trip',
+  );
+  assert.equal(doneBody.savedPath, savedClipPath, 'and hands back the already-saved path rather than downloading again');
+
   for (const route of ['/api/video', '/api/generate']) {
     // What this reaches upstream is a 401, or a connection error when offline.
     // Neither is under test, and neither should be able to hang the suite, hence

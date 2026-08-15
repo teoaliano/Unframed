@@ -7,7 +7,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { upsertEnv, PATTERNS, envFile, outputPath } from './env.js';
 import { readPresets, writePresets } from './presets.js';
-import { readJobs, writeJobs, upsertJob, pruneJobs } from './jobs.js';
+import { readJobs, persistJob } from './jobs.js';
 import { ensureTunnel, mintShare, revokeShare, waitUntilPublic, stopTunnel } from './share.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -664,7 +664,7 @@ app.post('/api/video', async (req, res) => {
   // still gets its id back and can resume the old way, via query-string params,
   // exactly as it could before this store existed.
   try {
-    await persistJob(data.id, {
+    await persistJob(OUTPUT_DIR, data.id, {
       project: project || null,
       params: { prompt, model: payload.model, duration: duration || null, resolution: resolution || null, size: size || null },
       startedAt: Date.now(),
@@ -693,16 +693,20 @@ function fileUrl(project, savedPath) {
   return `/api/file/${encodeURIComponent(project || '')}/${encodeURIComponent(path.basename(savedPath || ''))}`;
 }
 
-// Reads the current store, merges `patch` onto whatever record `id` already has
-// (starting fresh if it somehow has none), prunes, and writes the whole file
-// back. The one place a job record changes shape, so the poll route and the
-// sweep -- which both need to mark a job done or failed -- can't drift into
-// writing slightly different shapes for the same transition.
-async function persistJob(id, patch) {
-  const jobs = await readJobs(OUTPUT_DIR);
-  const job = { ...jobs.find((j) => j.id === id), ...patch, id };
-  await writeJobs(OUTPUT_DIR, pruneJobs(upsertJob(jobs, job), Date.now()));
-  return job;
+// The client-facing shape for a job the store already resolved, one way or the
+// other. Used both by the top-of-route short-circuit and by the re-check after
+// the collecting lock below -- two spots that need to answer "is this already
+// resolved?" identically, not two hand-rolled copies of the same JSON shape.
+function doneResponse(job) {
+  return {
+    status: 'completed',
+    cost: job.cost ?? null,
+    savedPath: job.savedPath,
+    url: fileUrl(job.project, job.savedPath),
+  };
+}
+function failedResponse(job) {
+  return { status: 'failed', error: job.error || 'Generation failed.' };
 }
 
 // Asks OpenRouter what one job is doing. Used by both the poll route and the
@@ -793,6 +797,16 @@ async function collectVideo(job, data) {
 // that already finished, but a sweep tick and a browser's poll for the SAME job
 // can both observe "not done yet" and both start collecting in the same instant
 // -- this set makes the second one back off instead of racing the first.
+//
+// It is NOT, on its own, enough for the sweep: sweepJobs takes one snapshot of
+// the store per tick, and sweepOne can spend real time (a slow download) inside
+// that tick. A second job in the same snapshot can be collected by someone else
+// entirely -- a browser's own poll -- while the sweep is still busy with the
+// first, and by the time the sweep reaches it `collecting` is long since clear
+// again (the other collector finished and released it). That is why sweepOne
+// re-reads the store AFTER taking the lock, not before: the lock only proves
+// nothing else is racing RIGHT NOW, not that nothing already finished the job
+// while this tick's snapshot was going stale.
 const collecting = new Set();
 
 // One pending job, one tick: poll it, and either leave it alone (still
@@ -807,9 +821,10 @@ async function sweepOne(job) {
 
   if (status === 'failed') {
     revokeJobShares(job.id); // the provider will not fetch a dead job's refs
-    await persistJob(job.id, {
+    await persistJob(OUTPUT_DIR, job.id, {
       status: 'failed',
       error: data.error?.message || data.error || 'Generation failed.',
+      resolvedAt: Date.now(),
     });
     return;
   }
@@ -818,8 +833,12 @@ async function sweepOne(job) {
   if (collecting.has(job.id)) return; // a poll for this exact job is already in flight
   collecting.add(job.id);
   try {
+    // See the comment on `collecting` above: this tick's snapshot could be
+    // stale by now. Only proceed if the store STILL says pending.
+    const fresh = (await readJobs(OUTPUT_DIR)).find((j) => j.id === job.id);
+    if (fresh && fresh.status !== 'pending') return; // already resolved elsewhere
     const { savedPath, cost } = await collectVideo(job, data);
-    await persistJob(job.id, { status: 'done', savedPath, cost });
+    await persistJob(OUTPUT_DIR, job.id, { status: 'done', savedPath, cost, resolvedAt: Date.now() });
     videoJobRefs.delete(job.id); // the job is done; nothing else will read it
     revokeJobShares(job.id); // and its shared clip goes dark with it
     console.log(`  video job ${job.id} collected by the sweep → ${savedPath}`);
@@ -830,16 +849,29 @@ async function sweepOne(job) {
   }
 }
 
+// Guards against a slow tick overlapping the next: with no re-entrancy check,
+// a tick whose downloads run past 30s would still be in its own for-loop when
+// the interval fired again, and the second sweepJobs call would build its
+// snapshot while the first was mid-flight -- the exact staleness `collecting`'s
+// comment above describes, just from two sweeps instead of a sweep and a
+// browser poll.
+let sweeping = false;
+
 // The point of this whole file: a render finishes whether or not a browser is
 // open to watch it. Every pending job in the store gets one poll per tick,
 // sequentially -- not Promise.all -- so two ticks' worth of reads-then-writes to
 // the same jobs.json can never interleave and drop one job's update under
 // another's.
 async function sweepJobs() {
-  if (!API_KEY) return; // nothing was sent upstream without one, so nothing to collect
-  const jobs = await readJobs(OUTPUT_DIR);
-  for (const job of jobs.filter((j) => j.status === 'pending')) {
-    await sweepOne(job);
+  if (!API_KEY || sweeping) return; // nothing to collect without a key; nothing to overlap with a running tick
+  sweeping = true;
+  try {
+    const jobs = await readJobs(OUTPUT_DIR);
+    for (const job of jobs.filter((j) => j.status === 'pending')) {
+      await sweepOne(job);
+    }
+  } finally {
+    sweeping = false;
   }
 }
 
@@ -854,19 +886,11 @@ app.get('/api/video/:id', async (req, res) => {
   // Consult the store BEFORE ever touching OpenRouter. Without this, a browser
   // resuming a job the sweep already finished (or a second tab polling the same
   // one) would download and write the clip a second time under a fresh
-  // timestamp -- this is what makes double collection impossible.
+  // timestamp -- this is what makes double collection impossible, together
+  // with the re-check after the lock further down.
   const stored = (await readJobs(OUTPUT_DIR)).find((j) => j.id === id);
-  if (stored?.status === 'done') {
-    return res.json({
-      status: 'completed',
-      cost: stored.cost ?? null,
-      savedPath: stored.savedPath,
-      url: fileUrl(stored.project, stored.savedPath),
-    });
-  }
-  if (stored?.status === 'failed') {
-    return res.json({ status: 'failed', error: stored.error || 'Generation failed.' });
-  }
+  if (stored?.status === 'done') return res.json(doneResponse(stored));
+  if (stored?.status === 'failed') return res.json(failedResponse(stored));
 
   // Still pending in the store (or not in it at all -- a job started before this
   // store existed). Query params are the fallback source for params in that
@@ -886,8 +910,8 @@ app.get('/api/video/:id', async (req, res) => {
     if (status === 'failed') {
       const message = data.error?.message || data.error || 'Generation failed.';
       revokeJobShares(id); // the provider will not fetch a dead job's refs
-      await persistJob(id, { status: 'failed', error: message });
-      return res.json({ status, error: message });
+      const job = await persistJob(OUTPUT_DIR, id, { status: 'failed', error: message, resolvedAt: Date.now() });
+      return res.json(failedResponse(job));
     }
     return res.json({ status, progress: data.progress ?? null });
   }
@@ -898,31 +922,35 @@ app.get('/api/video/:id', async (req, res) => {
   if (collecting.has(id)) return res.json({ status: 'pending', progress: null });
   collecting.add(id);
   try {
-    const job = stored || {
+    // The `stored` read above happened before the OpenRouter round trip this
+    // request just made -- real time, long enough for the sweep to have
+    // already collected this exact job while this request was waiting on
+    // fetchVideoStatus. Re-read AFTER taking the lock: the lock only proves
+    // nothing else can start collecting from here on, not that nothing already
+    // finished while `stored` was going stale.
+    const fresh = (await readJobs(OUTPUT_DIR)).find((j) => j.id === id) || stored;
+    if (fresh?.status === 'done') return res.json(doneResponse(fresh));
+    if (fresh?.status === 'failed') return res.json(failedResponse(fresh));
+
+    const job = fresh || {
       id,
       project: project || null,
       params: { prompt, model, duration, resolution, size },
-      // A job somehow never recorded at creation (started before this store
-      // existed) still needs a real startedAt: pruneJobs measures a done job's
-      // age against it, and a missing value reads as NaN, which fails EVERY
-      // age comparison -- pruning it the instant persistJob below runs its own
-      // prune pass, before it ever had a chance to show up anywhere.
-      startedAt: Date.now(),
       refs: videoJobRefs.get(id) || null,
     };
     const { savedPath, cost } = await collectVideo(job, data);
-    await persistJob(id, {
+    const saved = await persistJob(OUTPUT_DIR, id, {
       project: job.project,
       params: job.params,
-      startedAt: job.startedAt,
       refs: job.refs,
       status: 'done',
       savedPath,
       cost,
+      resolvedAt: Date.now(),
     });
     videoJobRefs.delete(id); // the job is done; nothing else will read it
     revokeJobShares(id); // and its shared clip goes dark with it
-    res.json({ status, cost, savedPath, url: fileUrl(job.project, savedPath) });
+    res.json(doneResponse(saved));
   } catch (err) {
     res.status(502).json({ error: err.message });
   } finally {
