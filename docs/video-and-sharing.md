@@ -15,7 +15,7 @@ A video node also accepts a pasted `https://` link directly — `dataUrl` holds 
 URL, opaque to everything downstream.
 
 Reference numbering is per kind: "image 1" and "video 1" coexist on one consumer
-(`imageRefNumbers(nodes, edges, id, kind)`).
+(`sourceRoles(nodes, edges, id)`, which reads the kind off the node).
 
 **A local clip can reach a text output but not video generation.** Video references
 reach a text model as OpenRouter's `video_url` chat content part (verified live:
@@ -26,6 +26,28 @@ video**. Reference *images* as base64 are fine there, which is why image-to-vide
 works. Both the video output and `POST /api/video` refuse a local clip with that
 explanation rather than letting it become an opaque upstream 400 — unless sharing is
 ticked.
+
+## Input modes
+
+Seedance offers four task types and a request is exactly one of them: omni
+reference-to-video, image-to-video from a first frame, image-to-video from first and
+last frames, or text-to-video. There is no mode that takes frames *and* references —
+send both and the references are discarded, which is ByteDance's design rather than
+OpenRouter's. Verified against the live API; the evidence is in
+`docs/superpowers/specs/2026-08-15-video-input-mode-design.md`.
+
+The video output node's **Input** selector picks the type. Options appear only where
+the model declares them in `supported_frame_images`, so a model without frame support
+shows no selector at all. Absent on a saved graph means References, which is what
+every graph did before the selector existed.
+
+Which image is which comes from canvas position, top to bottom — the same rule that
+orders prompts and numbers references. In first-frame mode the topmost wired image is
+the frame; in first-and-last mode the top two are first and last.
+
+Anything the mode has no room for keeps its connection and is marked instead of
+dropped: the edge turns red and stops animating, its tooltip says why, the input
+node's badge reads `—`, and the video node counts them. Nothing marked is sent.
 
 ## Only one of the two video-to-video modes is reachable
 

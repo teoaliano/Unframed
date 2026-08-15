@@ -5,6 +5,20 @@ is no release artifact to number. Headings are `## YYYY-MM-DD`, groups are
 `### Added` / `### Changed` / `### Fixed`, one bullet per user-visible change.
 Keep that shape: the website's What's new page parses this file.
 
+## 2026-08-15
+
+### Added
+
+- Video nodes choose how wired images are used: as references, as a first frame, or
+  as first and last frames. Models that do not accept frames do not offer the choice.
+- Inputs a mode has no room for keep their connection, marked red, and their badge
+  reads `—`.
+
+### Fixed
+
+- An `@word` in a prompt that matches no node id is left as typed. It used to be
+  deleted, so "@golden hour" became " hour".
+
 ## 2026-08-13
 
 ### Changed
