@@ -620,6 +620,25 @@ is built from."
 - Produces: `data.inputMode` on video output nodes — `'reference' | 'first_frame' | 'first_last'`,
   absent meaning `'reference'`.
 
+**Model coverage.** The menu is built from `supported_frame_images` alone, so every
+model on the video catalogue gets the same treatment without model-specific code.
+Surveyed 2026-08-15 across all 23:
+
+| Declares | Count | Menu |
+| --- | --- | --- |
+| `first_frame` + `last_frame` | 14 — every seedance, `google/veo-3.1{,-fast,-lite}`, `kwaivgi/kling-*`, `alibaba/wan-2.7`, `black-forest-labs/flux-3-video`, `minimax/hailuo-3` | three options |
+| `first_frame` only | 7 — `alibaba/happyhorse-1.{0,1}`, `alibaba/wan-2.6`, `minimax/hailuo-2.3`, `runway/gen-4.5`, `x-ai/grok-imagine-video{,-1.5}` | two options |
+| neither | 2 — `openai/sora-2-pro`, `runway/aleph-2` | no selector |
+
+Nothing in the catalogue describes reference support — the union of its fields is
+durations, resolutions, ratios, sizes, frame images, audio, seed, pricing and
+passthrough params. Frames are declared fact; references remain an assumption, which
+is why `acceptsVideo` is derived from a separate endpoint (`server/index.js:211`).
+
+A model declaring `last_frame` *without* `first_frame` would get References only.
+None exists today, and inventing a "Last frame" option for a hypothetical model is
+not worth the branch.
+
 - [ ] **Step 1: Derive the available modes**
 
 In `client/src/nodes/VideoOutputNode.jsx`, after the `params` destructure (line 41):
@@ -692,10 +711,14 @@ In `onGenerate`, replace the `buildRequest` call:
 npm run dev
 ```
 
-On `bytedance/seedance-2.0` the Input selector offers three options; switch to a
-model whose catalogue entry has `frame_images: null` (check `/api/models?type=video`)
-and the selector disappears. Set `first_frame`, switch to that model, and the warning
-appears.
+Three cases, one per row of the coverage table:
+
+- `bytedance/seedance-2.0` — the selector offers all three options.
+- `x-ai/grok-imagine-video` — two options, no "First and last frame".
+- `openai/sora-2-pro` — no selector at all.
+
+Then set First frame on seedance, switch the model to `openai/sora-2-pro`, and confirm
+the fallback warning appears rather than a stale mode being sent.
 
 - [ ] **Step 6: Commit**
 
