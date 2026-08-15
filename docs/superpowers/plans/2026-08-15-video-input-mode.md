@@ -1294,3 +1294,62 @@ this sweep both download the same clip and write two files with different timest
 
 `CLAUDE.md`'s server bullet gains one line: pending video jobs are durable and swept, so a
 render outlives the browser. `docs/video-and-sharing.md` gets the user-facing version.
+
+---
+
+### Task 12: A node's local state must not outlive the project it belongs to
+
+**Why this exists:** raised by Task 10's implementer and confirmed in review. `status`,
+`error` and `result` are `useState` inside the output nodes — per component INSTANCE.
+React Flow keys node components by node id (`jsx(NodeWrapper, {…}, nodeId)`), and node ids
+come from one counter shared by every project (`App.jsx`'s `bumpCounter`), so two projects
+each having a `videoOutput` with id `"103"` is the normal case rather than a coincidence.
+`switchProject` only calls `setNodes` — nothing unmounts — so that component instance
+survives the switch carrying the previous project's state.
+
+Concrete: start a render in project A, switch to project B whose node happens to share the
+id. B's node shows "Rendering…" for a job that is not its own, or a stale error, or a clip
+preview from A. Nothing is lost — `data.job` is per project and correct, and Task 10's
+identity guard stops an abandoned loop writing to the wrong node — but the node lies about
+what it is doing.
+
+**Files:** `client/src/App.jsx`, and whatever the verification turns up.
+
+- [ ] **Step 1: Remount the canvas when the project changes**
+
+The narrow fix (clearing state in an effect keyed on project) has to be repeated in every
+node type that holds local state, and silently stops covering the next one somebody adds.
+Remounting the canvas covers all of them at once and cannot rot:
+
+```jsx
+        <ReactFlow
+          // Keyed by project so a switch remounts every node component. Node ids come
+          // from one counter shared across projects, and React Flow keys node components
+          // by id, so without this the SAME component instance is reused for a different
+          // project's node — carrying status, error and the last clip with it.
+          key={project}
+```
+
+Check what a remount costs before committing to it: viewport and selection reset, and
+`fitView` runs again. Confirm that reads as correct on a switch rather than as a jolt — if
+it does not, say so in your report rather than working around it silently.
+
+- [ ] **Step 2: Confirm an abandoned poll cannot write to the new project's node**
+
+A loop belonging to project A's job keeps running after the remount. It must not touch
+project B's node of the same id. `runJob`'s `stillOurs()` compares `getNode(id)?.data?.job?.id`
+against the id the loop started with, so B's node — different job id, or none — fails the
+check. Read that path and confirm it in the report; do not assume it.
+
+- [ ] **Step 3: Verify in the running app (controller does this)**
+
+Switch between two projects that both have a video output node, one with a pending job,
+and confirm each node shows its own state. The controller has a real pending job available
+for this.
+
+- [ ] **Step 4: `npm test`, then commit**
+
+Not in scope, deliberately: persisting `result` into node data so a completed clip survives
+a reload. That is a real gap (a finished node shows empty after F5, though the file is safely
+on disk) but it is a different change with its own storage question, and folding it in here
+would hide it.
