@@ -26,12 +26,14 @@ export default function VideoOutputNode({ id, data }) {
   const { getNodes, getEdges, updateNodeData, getNode, addNodes } = useReactFlow();
   const toast = useToast();
   const [status, setStatus] = useState('idle'); // idle | running | done | error
-  // { url, cost, savedPath }. Seeded from the persisted pointer (data.result) so a
-  // reopened node — after a project switch or a reload, both of which remount this
-  // component — still shows the last finished clip instead of looking untouched.
-  // Never seeded from base64: the file already plays from `url`, exactly the same
-  // as a just-finished run, so there was never bytes to keep in local-only state.
-  const [result, setResult] = useState(() => data.result ?? null);
+  // { url, cost, savedPath } for a run finished in THIS component instance. NOT
+  // seeded from data.result: a lazy useState initialiser runs exactly once per
+  // instance, and React Flow reuses an instance (rather than mounting a fresh one)
+  // whenever a node with this id is already on the canvas — which is every page
+  // load, since the starter graph's own videoOutput node shares the loaded
+  // project's id space. A seed here would silently never fire on that path. See
+  // `shown` below, computed fresh on every render, for what actually displays.
+  const [result, setResult] = useState(null);
   const [error, setError] = useState(null);
   // Bumped by pollVideo's status callback purely to force a re-render, so the
   // elapsed "(N min)" on the button keeps advancing while a poll is in flight —
@@ -155,10 +157,13 @@ export default function VideoOutputNode({ id, data }) {
   // from disk (a URL), but a reference node has to carry base64, because OpenRouter
   // fetches nothing from this machine. So the file is pulled back in and inlined —
   // which is also why the 25MB cap applies here exactly as it does to an upload.
-  async function addVideoToCanvas() {
+  // Takes the url to add explicitly rather than closing over `result`: the only
+  // caller passes `shown.url`, since a reopened node's clip lives in `data.result`
+  // with no local `result` of its own (see `shown` below).
+  async function addVideoToCanvas(url) {
     setAddingVideo(true);
     try {
-      const blob = await fetch(result.url).then((r) => {
+      const blob = await fetch(url).then((r) => {
         if (!r.ok) throw new Error(`could not read the saved file (${r.status})`);
         return r.blob();
       });
@@ -177,7 +182,7 @@ export default function VideoOutputNode({ id, data }) {
         dragHandle: '.xnode-head',
         className: 'nowheel',
         position: freeSpot(getNode, getNodes, id),
-        data: { fileName: result.url.split('/').pop() || 'generated.mp4', dataUrl },
+        data: { fileName: url.split('/').pop() || 'generated.mp4', dataUrl },
       });
     } catch (err) {
       toast({ body: `Could not add the video: ${err.message}`, uniqueID: `add-video-${id}` });
@@ -386,6 +391,13 @@ export default function VideoOutputNode({ id, data }) {
   // Nth one has started.
   const jobMinutes = hasJob ? Math.max(0, Math.floor((Date.now() - data.job.startedAt) / 60000)) : 0;
 
+  // What actually displays: this instance's own finished run if it has one, else
+  // whatever pointer survived in node data (a reopened node that never finished a
+  // job in THIS component instance — see the comment on `result` above). Derived
+  // on every render rather than seeded once, so it stays correct across the
+  // reused-instance page-load case a lazy initialiser missed entirely.
+  const shown = result ?? data.result ?? null;
+
   return (
     <Card width={300} padding={0}>
       <Handle type="target" position={Position.Left} />
@@ -519,12 +531,14 @@ export default function VideoOutputNode({ id, data }) {
 
         {status === 'error' && <StatusLine type="error">{error}</StatusLine>}
 
-        {result?.url && (
+        {shown?.url && (
           // Played from the file on disk, not from node data: a clip inlined into
           // the graph would be written back to graph.json on every edit. The add
-          // button is the one place that does inline it, on demand.
+          // button is the one place that does inline it, on demand. `shown`, not
+          // `result`: a reopened node (page load or project switch) has a
+          // persisted pointer but no local `result` of its own.
           <span className="xnode-result">
-            <video className="xnode-video" src={result.url} controls preload="metadata" />
+            <video className="xnode-video" src={shown.url} controls preload="metadata" />
             <span className="xnode-result-add">
               <Button
                 label="Add this video to the canvas"
@@ -533,7 +547,7 @@ export default function VideoOutputNode({ id, data }) {
                 icon={<Icon icon={AddToCanvasIcon} size="xsm" />}
                 size="sm"
                 isLoading={addingVideo}
-                onClick={addVideoToCanvas}
+                onClick={() => addVideoToCanvas(shown.url)}
               />
             </span>
           </span>
@@ -541,9 +555,9 @@ export default function VideoOutputNode({ id, data }) {
       </VStack>
 
       <CostFoot
-        cost={result?.cost != null ? result.cost : null}
+        cost={shown?.cost != null ? shown.cost : null}
         before={
-          !result && estimate ? (
+          !shown && estimate ? (
             // The upcoming click's price, from the model's per-second rate. Images
             // get no estimate: their pricing is per token, and a guess dressed as a
             // number would be worse than silence.
@@ -553,7 +567,7 @@ export default function VideoOutputNode({ id, data }) {
           ) : null
         }
         after={
-          result ? (
+          shown ? (
             <span className="xnode-foot-end">
               <Button
                 label="Clear"

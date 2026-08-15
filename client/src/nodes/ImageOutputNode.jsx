@@ -26,12 +26,15 @@ export default function ImageOutputNode({ id, data }) {
   const { getNodes, getEdges, updateNodeData, getNode, addNodes } = useReactFlow();
   const toast = useToast();
   const [status, setStatus] = useState('idle'); // idle | running | done | error | partial
-  // [{ image, cost, savedPath, url, runIndex }]. Seeded from the persisted pointer
-  // (data.results) so a reopened node — after a project switch or a reload, both of
-  // which remount this component — shows last run's results instead of a blank strip.
-  // Those seeded entries have no `image`: only the file survives a remount, never the
-  // base64, so the thumbnail below falls back to `url` for them.
-  const [results, setResults] = useState(() => data.results ?? []);
+  // [{ image, cost, savedPath, url, runIndex }] — the CURRENT batch's bytes, the
+  // only place a freshly returned base64 lives. Deliberately NOT seeded from
+  // data.results: a lazy useState initialiser runs exactly once per component
+  // instance, and React Flow reuses an instance (rather than mounting a fresh one)
+  // whenever a node with this same id is already on the canvas — which is every
+  // page load, since the starter graph's own imageOutput node shares the loaded
+  // project's id space. Seeding here silently never fired for that path; see
+  // `shown` below for what actually drives the display.
+  const [results, setResults] = useState([]);
   const [done, setDone] = useState(0);
   const [total, setTotal] = useState(null); // null while the run count isn't known yet
   const [repairCost, setRepairCost] = useState(0); // Free mode's re-split call, if any
@@ -270,9 +273,16 @@ export default function ImageOutputNode({ id, data }) {
     }
   }
 
-  const spent = results.reduce((sum, r) => sum + (Number(r.cost) || 0), 0) + repairCost;
-  const hasSpend = results.some((r) => r.cost != null) || repairCost > 0;
-  const hasStrip = results.length > 0 || repairCost > 0;
+  // What the strip actually displays: the in-flight/just-finished batch if there is
+  // one, else whatever pointer survived in node data (a reopened node that never
+  // ran a batch in THIS component instance — see the comment on `results` above).
+  // Derived on every render rather than seeded once, so it stays correct across
+  // the reused-instance page-load case that a lazy initialiser missed entirely.
+  const shown = results.length ? results : (data.results ?? []);
+
+  const spent = shown.reduce((sum, r) => sum + (Number(r.cost) || 0), 0) + repairCost;
+  const hasSpend = shown.some((r) => r.cost != null) || repairCost > 0;
+  const hasStrip = shown.length > 0 || repairCost > 0;
 
   return (
     <Card width={300} padding={0}>
@@ -344,7 +354,7 @@ export default function ImageOutputNode({ id, data }) {
 
         {hasStrip && (
           <VStack gap={1}>
-            {[...results]
+            {[...shown]
               .sort((a, b) => a.runIndex - b.runIndex)
               .map((r) => (
                 <span className="xnode-result" key={r.runIndex}>
@@ -352,7 +362,7 @@ export default function ImageOutputNode({ id, data }) {
                     className="xnode-thumb"
                     // A just-finished run still has the bytes it fetched; a
                     // reopened node (after a project switch or reload) only has
-                    // the pointer that survived — see the `results` seed above.
+                    // the pointer that survived — see `shown` above.
                     src={r.image ?? r.url}
                     alt={`generated result ${r.runIndex + 1}`}
                     label={`result ${r.runIndex + 1}`}
@@ -370,7 +380,7 @@ export default function ImageOutputNode({ id, data }) {
                   </span>
                 </span>
               ))}
-            {results.length > 1 && (
+            {shown.length > 1 && (
               <Button
                 label="Add all to canvas"
                 icon={<AddToCanvasIcon />}
@@ -384,7 +394,7 @@ export default function ImageOutputNode({ id, data }) {
                 // state and there is no reason several fetches need to race.
                 onClick={async () => {
                   const base = freeSpot(getNode, getNodes, id);
-                  const ordered = [...results].sort((a, b) => a.runIndex - b.runIndex);
+                  const ordered = [...shown].sort((a, b) => a.runIndex - b.runIndex);
                   for (let i = 0; i < ordered.length; i++) {
                     await addToCanvas(ordered[i], i, base);
                   }
@@ -403,8 +413,8 @@ export default function ImageOutputNode({ id, data }) {
         after={
           hasStrip ? (
             <>
-              {hasSpend && results.length > 1 && (
-                <Text type="supporting" color="secondary">{results.length} images</Text>
+              {hasSpend && shown.length > 1 && (
+                <Text type="supporting" color="secondary">{shown.length} images</Text>
               )}
               <span className="xnode-foot-end">
                 <Button
