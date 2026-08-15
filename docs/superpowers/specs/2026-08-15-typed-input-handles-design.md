@@ -101,8 +101,19 @@ comfortable reading. Verified in the browser at zoom 0.806 with a DOM mock — l
 
 - only the *named* handles carry labels; the bare references handle has none
 - hover and keyboard focus show the label at any zoom
-- labels sit **inside** the card's left padding. Outside, incoming edges run through them —
-  observed in the mock.
+
+**Labels need a reserved gutter.** Three placements were mocked in the running app:
+
+| Placement | Result |
+| --- | --- |
+| outside the card, left of the dot | incoming edges run straight through the text |
+| inside the card's existing padding | "first" lands on top of the Model selector |
+| **40px left gutter, card 300 → 340** | dots and labels clear of both edges and controls |
+
+So `videoOutput` reserves a 40px gutter on the header and body, and widens to 340 rather
+than shrinking its controls to fit its own chrome. The gutter is unconditional on that node
+— the frame handles are always mounted (see below), so the space is always in use.
+`imageOutput` and `textOutput` keep their 300px card and single centred handle.
 
 Subscribe to the boolean, not the zoom: `useStore((s) => s.transform[2] >= 0.8)` re-renders
 a node only when it flips, not on every wheel tick.
