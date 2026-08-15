@@ -41,6 +41,24 @@ export default function VideoOutputNode({ id, data }) {
   const { exactSizes, resolutionTiers, ratios, durations, canAudio, supported } = params;
   const duration = Number(durations?.includes(String(data.duration)) ? data.duration : durations?.[0]);
 
+  // Seedance exposes four task types and OpenRouter surfaces the frame ones through
+  // supported_frame_images. Offer only what this model declares -- the same rule as
+  // every other control here -- and never a selector with one option.
+  const frameTypes = entry?.params?.frame_images || null;
+  const inputModes = [
+    { value: 'reference', label: 'References' },
+    ...(frameTypes?.includes('first_frame') ? [{ value: 'first_frame', label: 'First frame' }] : []),
+    ...(frameTypes?.includes('first_frame') && frameTypes?.includes('last_frame')
+      ? [{ value: 'first_last', label: 'First and last frame' }]
+      : []),
+  ];
+  const inputMode = inputModes.some((o) => o.value === data.inputMode)
+    ? data.inputMode
+    : 'reference';
+  // A graph saved in a frame mode, reopened on a model without frames. The request
+  // falls back rather than sending a param the model never declared.
+  const modeUnsupported = Boolean(data.inputMode) && data.inputMode !== inputMode;
+
   // Video is sold by the second, so the price of a click is knowable before it is
   // spent — and worth showing, at a dollar a clip rather than three cents.
   const perSecond = (() => {
@@ -127,7 +145,9 @@ export default function VideoOutputNode({ id, data }) {
     setResult(null);
     setNote(null);
     try {
-      const { prompt, input_references } = buildRequest(getNodes(), getEdges(), id);
+      const { prompt, input_references, frame_images } = buildRequest(getNodes(), getEdges(), id, {
+        framesUnsupported: modeUnsupported,
+      });
       if (!prompt.trim()) {
         throw new Error('Nothing connected. Wire a prompt node into this video node.');
       }
@@ -173,8 +193,17 @@ export default function VideoOutputNode({ id, data }) {
 
         <ParamControls params={params} data={data} onChange={(u) => updateNodeData(id, u)} />
 
-        {(durations || canAudio) && (
+        {(inputModes.length > 1 || durations || canAudio) && (
           <HStack gap={2} align="end">
+            {inputModes.length > 1 && (
+              <Selector
+                label="Input"
+                size="sm"
+                options={inputModes}
+                value={inputMode}
+                onChange={(v) => updateNodeData(id, { inputMode: v })}
+              />
+            )}
             {durations && (
               <Selector
                 label="Seconds"
@@ -221,6 +250,13 @@ export default function VideoOutputNode({ id, data }) {
             Describe the result you want, not a change to make. An instruction like
             &ldquo;edit this video to...&rdquo; switches the model into editing mode, which
             OpenRouter cannot currently express and which fails with a duration error.
+          </StatusLine>
+        )}
+
+        {modeUnsupported && (
+          <StatusLine type="warning">
+            This graph asks for a frame image, which {model} does not accept. The wired
+            images are being sent as references instead.
           </StatusLine>
         )}
 
