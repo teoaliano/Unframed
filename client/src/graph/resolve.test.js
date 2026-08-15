@@ -1,6 +1,6 @@
 // Assert-based self-check. Run with: node client/src/graph/resolve.test.js
 import assert from 'node:assert/strict';
-import { buildRequest, imageRefNumbers, splitSections, findWiredTextNode, freeRunPrompts, isOutput, isTextOutput } from './resolve.js';
+import { buildRequest, bucketSources, imageRefNumbers, splitSections, findWiredTextNode, freeRunPrompts, isOutput, isTextOutput } from './resolve.js';
 import { migrateNodes } from './migrate.js';
 import { instantiateFragment, centerOffset } from '../library/insert.js';
 import { selectionFragment, presetFromSelection } from '../library/save.js';
@@ -505,6 +505,99 @@ function graph(nodes, edges) {
   );
   const { prompt } = buildRequest(nodes, edges, 'out');
   assert.ok(prompt.includes('draw red fox now'), 'known tokens still resolve');
+}
+
+// ---- input modes ----
+
+// Builds a video output plus a prompt and N images, top to bottom.
+function videoGraph(inputMode, imageCount, extra = []) {
+  const nodes = [
+    { id: 'v1', type: 'videoOutput', position: { x: 400, y: 0 }, data: { inputMode } },
+    { id: 'p1', type: 'prompt', position: { x: 0, y: 0 }, data: { text: 'walk forward' } },
+    ...Array.from({ length: imageCount }, (_, i) => ({
+      id: `i${i + 1}`,
+      type: 'image',
+      position: { x: 0, y: 10 * (i + 1) },
+      data: { dataUrl: `data:,${i + 1}` },
+    })),
+    ...extra,
+  ];
+  const edges = nodes
+    .filter((n) => n.id !== 'v1')
+    .map((n, i) => ({ id: `e${i}`, source: n.id, target: 'v1' }));
+  return { nodes, edges };
+}
+
+// Reference mode is exactly today's behaviour: every image rides in input_references.
+{
+  const { nodes, edges } = videoGraph('reference', 3);
+  const { input_references, frame_images } = buildRequest(nodes, edges, 'v1');
+  assert.deepEqual(input_references.map((r) => r.image_url.url), ['data:,1', 'data:,2', 'data:,3']);
+  assert.deepEqual(frame_images, []);
+  assert.deepEqual(bucketSources(nodes, edges, 'v1').excess, []);
+}
+
+// An absent inputMode means reference mode, so graphs saved before this shipped
+// behave identically.
+{
+  const { nodes, edges } = videoGraph(undefined, 2);
+  const { input_references, frame_images } = buildRequest(nodes, edges, 'v1');
+  assert.equal(input_references.length, 2);
+  assert.deepEqual(frame_images, []);
+}
+
+// first_frame: the topmost image is the frame, the rest are excess, and nothing
+// rides in input_references -- the provider drops references when frames are sent.
+{
+  const { nodes, edges } = videoGraph('first_frame', 3);
+  const { input_references, frame_images } = buildRequest(nodes, edges, 'v1');
+  assert.deepEqual(input_references, []);
+  assert.deepEqual(frame_images, [
+    { type: 'image_url', image_url: { url: 'data:,1' }, frame_type: 'first_frame' },
+  ]);
+  assert.deepEqual(bucketSources(nodes, edges, 'v1').excess, ['i2', 'i3']);
+}
+
+// first_last: the top two images become first and last, in Y order.
+{
+  const { nodes, edges } = videoGraph('first_last', 3);
+  const { frame_images } = buildRequest(nodes, edges, 'v1');
+  assert.deepEqual(frame_images.map((f) => [f.frame_type, f.image_url.url]), [
+    ['first_frame', 'data:,1'],
+    ['last_frame', 'data:,2'],
+  ]);
+  assert.deepEqual(bucketSources(nodes, edges, 'v1').excess, ['i3']);
+}
+
+// A wired video is excess in a frame mode: frames are images only.
+{
+  const clip = { id: 'vid', type: 'video', position: { x: 0, y: 5 }, data: { dataUrl: 'data:,clip' } };
+  const { nodes, edges } = videoGraph('first_frame', 1, [clip]);
+  const { frame_images, input_references } = buildRequest(nodes, edges, 'v1');
+  assert.deepEqual(input_references, []);
+  assert.equal(frame_images.length, 1);
+  assert.deepEqual(bucketSources(nodes, edges, 'v1').excess, ['vid']);
+}
+
+// The model has no frame support: the mode collapses to references rather than
+// sending a frame the model never declared.
+{
+  const { nodes, edges } = videoGraph('first_frame', 2);
+  const { input_references, frame_images } = buildRequest(nodes, edges, 'v1', { framesUnsupported: true });
+  assert.equal(input_references.length, 2);
+  assert.deepEqual(frame_images, []);
+}
+
+// Modes are a video-output concern; an image output ignores the field entirely.
+{
+  const { nodes, edges } = graph(
+    [{ id: 'i1', type: 'image', position: { x: 0, y: 10 }, data: { dataUrl: 'data:,a' } }],
+    [{ id: 'e1', source: 'i1', target: 'out' }],
+  );
+  nodes[0].data.inputMode = 'first_frame'; // `out` is an imageOutput
+  const { input_references, frame_images } = buildRequest(nodes, edges, 'out');
+  assert.equal(input_references.length, 1);
+  assert.deepEqual(frame_images, []);
 }
 
 console.log('resolve.js: all checks passed');

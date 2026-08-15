@@ -18,6 +18,19 @@ export const isOutput = (n) => Boolean(n?.type?.endsWith('Output'));
 // substituting data.text, and generations would quietly build from the wrong text.
 export const isTextOutput = (n) => n?.type === 'textOutput';
 
+// Its own predicate for the same reason isTextOutput has one: only a video output
+// carries an input mode, and asking the wrong node type for one silently changes
+// what gets sent.
+export const isVideoOutput = (n) => n?.type === 'videoOutput';
+
+// Seedance takes exactly one task type per request -- references OR frames, never
+// both (docs/superpowers/specs/2026-08-15-video-input-mode-design.md). The mode
+// names map to the frame slots the request will carry.
+const MODE_FRAMES = {
+  first_frame: ['first_frame'],
+  first_last: ['first_frame', 'last_frame'],
+};
+
 function substitute(text, refs, stack) {
   return (text || '').replace(TOKEN_RE, (all, raw) => {
     const ref = raw.trim();
@@ -39,33 +52,62 @@ function resolveRef(id, refs, stack) {
   return substitute(node.data?.text, refs, [...stack, id]);
 }
 
-// Build the generation request for a given output node id.
-// Returns { prompt, input_references }.
-export function buildRequest(nodes, edges, outputId) {
+// Every source wired into one output, split by the role its mode gives them.
+// The single home for that split: buildRequest sends from it and the input node
+// badges read it, so what a node claims and what is sent cannot drift.
+// `opts.framesUnsupported` is the node saying "this model declares no frames",
+// which collapses any frame mode back to references.
+export function bucketSources(nodes, edges, outputId, opts = {}) {
   const byId = new Map(nodes.map((n) => [n.id, n]));
-  // Both prompt and text nodes can be pulled in with @id.
-  const refs = new Map(
-    nodes.filter((n) => n.type === 'prompt' || isTextOutput(n)).map((n) => [n.id, n]),
-  );
-
-  // Every node wired into this output node, top-to-bottom for predictable order.
+  const output = byId.get(outputId);
   const sources = edges
     .filter((e) => e.target === outputId)
     .map((e) => byId.get(e.source))
     .filter(Boolean)
     .sort((a, b) => (a.position?.y ?? 0) - (b.position?.y ?? 0));
 
-  // Images and videos (with media loaded) become the ordered references, mixed in
-  // Y-order. A node's position among its own kind is the "image N" / "video N" the
-  // user sees on the node and types in prompts — two independent counters, because
-  // that's how the badges number them.
-  const references = sources
-    .filter((n) => (n.type === 'image' || n.type === 'video') && n.data.dataUrl)
-    .map((n) =>
-      n.type === 'video'
-        ? { type: 'video_url', video_url: { url: n.data.dataUrl } }
-        : { type: 'image_url', image_url: { url: n.data.dataUrl } },
-    );
+  const media = sources.filter(
+    (n) => (n.type === 'image' || n.type === 'video') && n.data?.dataUrl,
+  );
+  const mode =
+    isVideoOutput(output) && !opts.framesUnsupported ? output?.data?.inputMode : undefined;
+  const wanted = MODE_FRAMES[mode];
+  if (!wanted) return { sources, references: media, frames: [], excess: [] };
+
+  // Frames are images only, top to bottom -- the same Y ordering that decides
+  // prompt order and "image 1".
+  const images = media.filter((n) => n.type === 'image');
+  const frames = wanted
+    .map((frame_type, i) => (images[i] ? { node: images[i], frame_type } : null))
+    .filter(Boolean);
+  const used = new Set(frames.map((f) => f.node.id));
+  return {
+    sources,
+    references: [],
+    frames,
+    excess: media.filter((n) => !used.has(n.id)).map((n) => n.id),
+  };
+}
+
+// Build the generation request for a given output node id.
+// Returns { prompt, input_references, frame_images }. frame_images is empty unless
+// the output is a video node asking for a frame mode.
+export function buildRequest(nodes, edges, outputId, opts = {}) {
+  const refs = new Map(
+    nodes.filter((n) => n.type === 'prompt' || isTextOutput(n)).map((n) => [n.id, n]),
+  );
+  const { sources, references, frames } = bucketSources(nodes, edges, outputId, opts);
+
+  const input_references = references.map((n) =>
+    n.type === 'video'
+      ? { type: 'video_url', video_url: { url: n.data.dataUrl } }
+      : { type: 'image_url', image_url: { url: n.data.dataUrl } },
+  );
+  const frame_images = frames.map(({ node, frame_type }) => ({
+    type: 'image_url',
+    image_url: { url: node.data.dataUrl },
+    frame_type,
+  }));
 
   const promptParts = [];
   for (const node of sources) {
@@ -74,7 +116,7 @@ export function buildRequest(nodes, edges, outputId) {
     if (text) promptParts.push(text);
   }
 
-  return { prompt: promptParts.join('\n\n'), input_references: references };
+  return { prompt: promptParts.join('\n\n'), input_references, frame_images };
 }
 
 // The reference numbers an image/video node will be sent as, one per node consuming
