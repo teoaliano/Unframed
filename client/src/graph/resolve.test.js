@@ -482,4 +482,29 @@ function graph(nodes, edges) {
   assert.equal(isOutput({ type: 'output' }), false, 'the pre-migration id is not an output either');
 }
 
+// An @token matching no node id is left exactly as typed. Prompts legitimately
+// contain @ ("@golden hour", a handle, an email), and deleting the word after it
+// corrupted them silently. insert.js has always behaved this way; now both agree.
+{
+  const { nodes, edges } = graph(
+    [{ id: 'p1', type: 'prompt', position: { x: 0, y: 0 }, data: { text: 'a @curly haired fox @p2' } }],
+    [{ id: 'e1', source: 'p1', target: 'out' }],
+  );
+  const { prompt } = buildRequest(nodes, edges, 'out');
+  assert.equal(prompt, 'a @curly haired fox @p2', 'unknown tokens are left as typed');
+}
+
+// A known id still resolves, and still resolves to empty when it has no text.
+{
+  const { nodes, edges } = graph(
+    [
+      { id: 'p2', type: 'prompt', position: { x: 0, y: 0 }, data: { text: 'red fox' } },
+      { id: 'p1', type: 'prompt', position: { x: 0, y: 10 }, data: { text: 'draw @p2 now' } },
+    ],
+    [{ id: 'e1', source: 'p1', target: 'out' }],
+  );
+  const { prompt } = buildRequest(nodes, edges, 'out');
+  assert.ok(prompt.includes('draw red fox now'), 'known tokens still resolve');
+}
+
 console.log('resolve.js: all checks passed');

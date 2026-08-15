@@ -19,10 +19,10 @@ export const isOutput = (n) => Boolean(n?.type?.endsWith('Output'));
 export const isTextOutput = (n) => n?.type === 'textOutput';
 
 function substitute(text, refs, stack) {
-  return (text || '').replace(TOKEN_RE, (_, raw) => {
+  return (text || '').replace(TOKEN_RE, (all, raw) => {
     const ref = raw.trim();
     if (refs.has(ref)) return resolveRef(ref, refs, stack);
-    return ''; // unknown ref -> nothing
+    return all; // unknown ref -> left as typed, same as insert.js's rewriter
   });
 }
 
@@ -124,8 +124,11 @@ export function findWiredTextNode(nodes, edges, outputId) {
 // keeps a blank line inside the result, or an @id reference to the list itself, from
 // smuggling the whole list back in. Each block is appended after a blank line.
 export function freeRunPrompts(nodes, edges, outputId, textNodeId, blocks) {
+  // The list node stays in the graph with an empty result rather than being removed:
+  // @its-id must resolve to nothing, and an absent node would now leave the token
+  // itself in the prompt. Known-and-empty is the intent; unknown was a side effect.
   const shared = buildRequest(
-    nodes.filter((n) => n.id !== textNodeId),
+    nodes.map((n) => (n.id === textNodeId ? { ...n, data: { ...n.data, result: '' } } : n)),
     edges,
     outputId,
   ).prompt;
