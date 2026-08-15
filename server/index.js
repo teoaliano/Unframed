@@ -240,14 +240,14 @@ function rememberJobRefs(id, refs) {
   videoJobRefs.set(id, refs);
 }
 
-// What actually went out, by kind, so "was the image sent as a frame?" is answerable
-// after the fact from our side.
-function countRefs(list, frames = []) {
-  const refs = Array.isArray(list) ? list : [];
+// What a request actually carried, by kind. Recorded in every sidecar and logged,
+// so "was the video sent?" is answerable after the fact from our side. Whether the
+// model then USED it is a different question, and only billing can hint at that.
+function countRefs(refs) {
+  const list = Array.isArray(refs) ? refs : [];
   return {
-    images: refs.filter((r) => r?.image_url?.url).length,
-    videos: refs.filter((r) => r?.video_url?.url).length,
-    frames: (Array.isArray(frames) ? frames : []).length,
+    images: list.filter((r) => r?.image_url?.url).length,
+    videos: list.filter((r) => r?.video_url?.url).length,
   };
 }
 
@@ -595,13 +595,15 @@ app.post('/api/video', async (req, res) => {
   if (aspect_ratio) payload.aspect_ratio = aspect_ratio;
   if (generate_audio != null) payload.generate_audio = generate_audio;
   if (input_references.length) payload.input_references = input_references;
-  if (frame_images.length) payload.frame_images = frame_images;
+  // Array.isArray, not just .length: a destructuring default only catches undefined,
+  // and a null here would take the process down rather than the request.
+  if (Array.isArray(frame_images) && frame_images.length) payload.frame_images = frame_images;
 
   // Logged before the call so a failed or ignored run still leaves a record of what
   // went out. OpenRouter documents input_references as reference IMAGES for video
   // generation, so a video entry here is unproven territory: the request may be
   // accepted and the footage silently dropped.
-  const sentRefs = countRefs(input_references, frame_images);
+  const sentRefs = { ...countRefs(input_references), frames: Array.isArray(frame_images) ? frame_images.length : 0 };
   console.log(
     `  video job →  ${payload.model}  (sent ${sentRefs.images} image, ${sentRefs.videos} video refs, ${sentRefs.frames} frames)`,
   );
