@@ -9,7 +9,7 @@ import StatusLine from './StatusLine.jsx';
 import { useModels, freeSpot } from './output/core.js';
 import { ModelPicker, CostFoot } from './output/controls.jsx';
 import { buildRequest } from '../graph/resolve.js';
-import { runText } from '../api.js';
+import { runText, getProject } from '../api.js';
 
 // An output node that emits text instead of an image. It consumes edges exactly like
 // the image output node — same buildRequest — and its answer lives in data.result so
@@ -25,6 +25,9 @@ export default function TextOutputNode({ id, data }) {
   async function onRun() {
     setStatus('running');
     setError(null);
+    // Captured out here, not inside the try: both exits compare against it, and a
+    // catch cannot see a const declared in the block it is catching for.
+    const startedIn = getProject();
     try {
       const { prompt, input_references } = buildRequest(getNodes(), getEdges(), id);
       // The node's own textarea is the last part, after everything wired in.
@@ -34,9 +37,25 @@ export default function TextOutputNode({ id, data }) {
         throw new Error('Nothing to run. Wire a prompt node in, or type one below.');
       }
       const resp = await runText({ prompt: full, input_references, model });
+      // A run outlives a project switch, and node ids come from one counter shared by
+      // every project, so by now this same component can be showing a DIFFERENT
+      // project's node with the same id. Writing then would overwrite that node's
+      // saved answer — and data.result is what @id resolves to, so every downstream
+      // prompt over there would quietly build from text that was never meant for it.
+      // The local status still clears, or the node reads "Running" forever.
+      if (getProject() !== startedIn) {
+        setStatus('idle');
+        return;
+      }
       updateNodeData(id, { result: resp.text, cost: resp.cost });
       setStatus('idle');
     } catch (err) {
+      // Same reasoning as the success path: an error belonging to a run started
+      // somewhere else must not surface on whatever node is showing now.
+      if (getProject() !== startedIn) {
+        setStatus('idle');
+        return;
+      }
       setError(err.message);
       setStatus('error');
     }

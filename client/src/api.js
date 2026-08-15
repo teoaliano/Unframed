@@ -6,6 +6,9 @@ let currentProject = 'default';
 export const setProject = (name) => {
   currentProject = name;
 };
+// Read back by anything whose result outlives the request: a run started in one
+// project must not write its answer into whatever project is open when it lands.
+export const getProject = () => currentProject;
 
 export async function generate(body) {
   const res = await fetch('/api/generate', {
