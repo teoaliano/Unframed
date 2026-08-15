@@ -16,11 +16,17 @@ OpenRouter's — it is ByteDance's ModelArk moderation, forwarded verbatim. `con
 ModelArk's own request shape: `content[0]` is the prompt, `content[1]` the first attached
 media.
 
-**Moderation is asynchronous.** Probed 2026-08-15: a create call carrying a reference image
-that a user had seen rejected returned `202` with a job id, not a `400`. So the error
-surfaces from the *poll* handler (`server/index.js:674`), not the create handler
-(`server/index.js:630`) — same error string, different route. Anything that reports or
-retries on moderation failures belongs on the polling path.
+**Moderation fires on two paths, at two times.** Probed against the live API 2026-08-15:
+
+| Check | When | How it arrives | Handled by |
+| --- | --- | --- | --- |
+| input (`InputImage/VideoSensitiveContentDetected`) | at create | HTTP 400, provider's own 400 quoted inside | `index.js:630` |
+| output (`…may be related to copyright restrictions`) | minutes later | HTTP 200, `status: "failed"` + `error` | `index.js:682` |
+
+The reported 400 carries both the `OpenRouter (400):` prefix and an inner `HTTP 400:`, so it
+came from the create path. A probe with the same image took the other path: accepted with
+`202`, then failed at poll on an *output* check. Both are already handled; neither needs new
+code, but anything that explains a moderation failure to the user has to cover both.
 
 The reason it fires here and not elsewhere is the *slot* the image goes into. OpenRouter's
 video API has two, and we only ever use one:
