@@ -183,7 +183,7 @@ populated. Excess sources are **not sent**.
 
 A new `sourceRoles(nodes, edges, nodeId)` returns one role per consuming output for the
 badge: a number in reference mode, `first` / `last` in a frame mode, `—` when excess.
-`imageRefNumbers` keeps its current signature and behaviour for reference mode.
+`imageRefNumbers` is gone; `sourceRoles` replaces it, reference mode included.
 
 `resolve.js` stays model-agnostic. It reads `data.inputMode` off the output node — already
 in `nodes` — and never learns which model is selected; the node passes a flag when the mode

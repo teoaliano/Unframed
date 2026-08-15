@@ -549,11 +549,15 @@ function videoGraph(inputMode, imageCount, extra = []) {
 
 // Modes are a video-output concern; an image output ignores the field entirely.
 {
+  // A copy, not a mutation of `out`: `out` is shared by reference with every block
+  // below this one, and setting inputMode on it directly would silently change
+  // their meaning too.
+  const nodeWithMode = { ...out, data: { ...out.data, inputMode: 'first_frame' } };
   const { nodes, edges } = graph(
     [{ id: 'i1', type: 'image', position: { x: 0, y: 10 }, data: { dataUrl: 'data:,a' } }],
     [{ id: 'e1', source: 'i1', target: 'out' }],
   );
-  nodes[0].data.inputMode = 'first_frame'; // `out` is an imageOutput
+  nodes[0] = nodeWithMode; // `out` is an imageOutput
   const { input_references, frame_images } = buildRequest(nodes, edges, 'out');
   assert.equal(input_references.length, 1);
   assert.deepEqual(frame_images, []);

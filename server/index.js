@@ -603,6 +603,9 @@ app.post('/api/video', async (req, res) => {
   // went out. OpenRouter documents input_references as reference IMAGES for video
   // generation, so a video entry here is unproven territory: the request may be
   // accepted and the footage silently dropped.
+  // Frames aren't references, but a run is either/or (references XOR frames), so
+  // folding frames into this object still answers "how much went upstream" —
+  // `images` alone stops doing that once a frame run is possible.
   const sentRefs = { ...countRefs(input_references), frames: Array.isArray(frame_images) ? frame_images.length : 0 };
   console.log(
     `  video job →  ${payload.model}  (sent ${sentRefs.images} image, ${sentRefs.videos} video refs, ${sentRefs.frames} frames)`,
