@@ -69,43 +69,50 @@ export default function PromptNode({ id, data }) {
 
   const list = candidates(query);
 
+  // The menu is a sibling of the Card, not a child of it: the Card clips to its
+  // rounded corners (overflow: clip), and the menu hangs below the Card's box, so
+  // nested it was laid out correctly and then clipped away — present in the DOM,
+  // never painted. Out here it anchors to the React Flow node wrapper instead,
+  // which is positioned and does not clip.
   return (
-    <Card width="fit-content" padding={0} className="xnode-prompt">
-      <Handle type="source" position={Position.Right} />
-      <NodeHeader kind="prompt" family="input" copyId={id} />
-      <div className="xnode-body" onKeyDown={onKeyDown} onClick={() => syncMenu(ref.current)}>
-        <TextArea
-          ref={ref}
-          label="Prompt text"
-          isLabelHidden
-          rows={4}
-          hasSpellCheck={false}
-          placeholder="Describe the image. Reference another prompt with @id"
-          value={data.text || ''}
-          onChange={(v, e) => {
-            updateNodeData(id, { text: v });
-            syncMenu(e.target);
-          }}
-          onBlur={() => setQuery(null)}
-        />
-        {list.length > 0 && (
-          <ul className="mention-menu">
-            {list.map((c, i) => (
-              <li
-                key={c.id}
-                className={i === sel ? 'active' : ''}
-                onMouseDown={(e) => {
-                  e.preventDefault();
-                  insert(c.id);
-                }}
-              >
-                <span className="mention-id">@{c.id}</span>
-                {c.preview && <span className="mention-preview">{c.preview}</span>}
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
-    </Card>
+    <>
+      <Card width="fit-content" padding={0} className="xnode-prompt">
+        <Handle type="source" position={Position.Right} />
+        <NodeHeader kind="prompt" family="input" copyId={id} />
+        <div className="xnode-body" onKeyDown={onKeyDown} onClick={() => syncMenu(ref.current)}>
+          <TextArea
+            ref={ref}
+            label="Prompt text"
+            isLabelHidden
+            rows={4}
+            hasSpellCheck={false}
+            placeholder="Describe the image. Reference another prompt with @id"
+            value={data.text || ''}
+            onChange={(v, e) => {
+              updateNodeData(id, { text: v });
+              syncMenu(e.target);
+            }}
+            onBlur={() => setQuery(null)}
+          />
+        </div>
+      </Card>
+      {list.length > 0 && (
+        <ul className="mention-menu">
+          {list.map((c, i) => (
+            <li
+              key={c.id}
+              className={i === sel ? 'active' : ''}
+              onMouseDown={(e) => {
+                e.preventDefault();
+                insert(c.id);
+              }}
+            >
+              <span className="mention-id">@{c.id}</span>
+              {c.preview && <span className="mention-preview">{c.preview}</span>}
+            </li>
+          ))}
+        </ul>
+      )}
+    </>
   );
 }
