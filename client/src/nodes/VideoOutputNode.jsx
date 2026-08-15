@@ -373,11 +373,11 @@ export default function VideoOutputNode({ id, data }) {
           </StatusLine>
         )}
 
+        {/* Count-free on purpose: the red connections already say WHICH inputs, and which
+            ones changes as you rewire. The line only has to say that something wired in is
+            not going. */}
         {ignoredCount > 0 && (
-          <StatusLine type="warning">
-            {ignoredCount === 1 ? 'One input is' : `${ignoredCount} inputs are`} not used by
-            this mode and will not be sent. Their connections are marked red.
-          </StatusLine>
+          <StatusLine type="warning">One or more inputs connected will not be sent</StatusLine>
         )}
 
         {/* A local clip cannot reach video generation at all — that is a hard 400

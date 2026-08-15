@@ -150,8 +150,12 @@ div:has(> .add-node-menu) {
    on purpose: React Flow's own `.react-flow__edge.animated path` scores (0,2,1) and
    would otherwise keep the marching-dash animation running underneath us. */
 .react-flow__edge.react-flow__edge-ignored .react-flow__edge-path {
-  stroke: var(--color-error);
-  stroke-dasharray: 2 4;
+  /* --color-error is a pale tint (#ffc6c1 in dark) meant to sit behind text; at 1.5px on
+     a near-black canvas it barely reads as red. The border red is the saturated one.
+     The dash pattern is deliberately NOT overridden: an ignored edge should look like
+     every other edge apart from having stopped, so colour and stillness are the only
+     differences and the eye compares like with like. */
+  stroke: var(--color-border-red);
   animation: none;
 }
 /* 12px dot with a transparent 24px target around it. WCAG 2.2 SC 2.5.8 (AA) asks
