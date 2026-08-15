@@ -11,3 +11,8 @@ dist/
 
 # Working notes, not for the repo
 status.md
+
+# Agent worktrees. Each is an embedded git repo, so `git add -A` commits it as a
+# gitlink -- once done and undone with `git rm --cached`. Only the worktrees dir:
+# .claude/launch.json is checked in and stays that way.
+.claude/worktrees/
