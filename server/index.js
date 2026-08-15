@@ -521,7 +521,7 @@ app.post('/api/video', async (req, res) => {
 
   const {
     prompt,
-    input_references = [],
+    input_references,
     duration,
     resolution,
     aspect_ratio,
@@ -529,6 +529,13 @@ app.post('/api/video', async (req, res) => {
     generate_audio,
     model,
   } = req.body || {};
+
+  // Normalised once rather than guarded at each use, the way /api/text does it. A
+  // destructuring default only fills in for undefined, so `"input_references": null`
+  // would reach .length below and throw -- and a throw in an async handler is not a
+  // failed request but a dead server, since Express 4 leaves the rejection unhandled
+  // and `node --watch` restarts on file changes, never after a crash.
+  const refs = Array.isArray(input_references) ? input_references : [];
 
   if (!prompt || !prompt.trim()) {
     return res
@@ -543,7 +550,7 @@ app.post('/api/video', async (req, res) => {
   // works.) The way through is a temporary public tunnel to the dedicated share
   // server in share.js -- EXPLICITLY opted into per node, because it makes the
   // clip publicly fetchable (unguessable URL) for the duration of the job.
-  const localVideoRefs = (Array.isArray(input_references) ? input_references : []).filter(
+  const localVideoRefs = refs.filter(
     (r) => r?.video_url?.url && !String(r.video_url.url).startsWith('https://'),
   );
   const mintedTokens = [];
@@ -593,13 +600,13 @@ app.post('/api/video', async (req, res) => {
   if (resolution) payload.resolution = resolution;
   if (aspect_ratio) payload.aspect_ratio = aspect_ratio;
   if (generate_audio != null) payload.generate_audio = generate_audio;
-  if (input_references.length) payload.input_references = input_references;
+  if (refs.length) payload.input_references = refs;
 
   // Logged before the call so a failed or ignored run still leaves a record of what
   // went out. OpenRouter documents input_references as reference IMAGES for video
   // generation, so a video entry here is unproven territory: the request may be
   // accepted and the footage silently dropped.
-  const sentRefs = countRefs(input_references);
+  const sentRefs = countRefs(refs);
   console.log(
     `  video job →  ${payload.model}  (sent ${sentRefs.images} image, ${sentRefs.videos} video refs)`,
   );
@@ -815,7 +822,7 @@ app.post('/api/generate', async (req, res) => {
 
   const {
     prompt,
-    input_references = [],
+    input_references,
     resolution,
     quality,
     aspect_ratio,
@@ -827,6 +834,9 @@ app.post('/api/generate', async (req, res) => {
     runIndex,
     runCount,
   } = req.body || {};
+
+  // Same reason as /api/video: a null here is a dead server, not a failed request.
+  const refs = Array.isArray(input_references) ? input_references : [];
 
   if (!prompt || !prompt.trim()) {
     return res
@@ -840,7 +850,7 @@ app.post('/api/generate', async (req, res) => {
   if (aspect_ratio) payload.aspect_ratio = aspect_ratio;
   // 'auto' means "model's choice", same as quality: send nothing.
   if (background && background !== 'auto') payload.background = background;
-  if (input_references.length) payload.input_references = input_references;
+  if (refs.length) payload.input_references = refs;
 
   let orRes;
   try {
@@ -928,8 +938,8 @@ app.post('/api/generate', async (req, res) => {
             aspect_ratio,
             output_format,
             background: background || null,
-            referenceCount: input_references.length,
-            references: countRefs(input_references),
+            referenceCount: refs.length,
+            references: countRefs(refs),
             batchId: batchId || null,
             runIndex: runIndex || 1,
             runCount: runCount || 1,
