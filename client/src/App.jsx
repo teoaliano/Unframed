@@ -201,6 +201,22 @@ function Canvas() {
   // lands — you would be looking at one project while writes went to another.
   const activated = useRef(false);
 
+  // Bumped only when a DIFFERENT graph is actually loaded (switchProject, openFresh)
+  // — never by renaming the project you're already in. Node ids come from one
+  // counter shared across every project, and React Flow keys node components by id,
+  // so a switch can hand the same component instance a different project's node,
+  // carrying status/error/result with it (see the <ReactFlow key={canvasGeneration}>
+  // below). It would be simpler to key on `project` itself, but `project` also
+  // changes when you rename the ACTIVE project (confirmName -> activate(s)) even
+  // though the graph is untouched — and remounting there is worse than a cosmetic
+  // jolt: a still-pending video job's poll loop (VideoOutputNode's runJob) would
+  // find a FRESH component instance whose own startedJobIds is empty, so its resume
+  // effect would start a SECOND loop for the very same job id the first loop is
+  // still polling. stillOurs() can't catch that, because both loops would agree on
+  // the job id — nothing about a rename changes it. A dedicated counter keeps
+  // "remount everything" scoped to genuine switches.
+  const [canvasGeneration, setCanvasGeneration] = useState(0);
+
   // The one place a project becomes the active one. Three things have to move
   // together — React state (what you see), the API layer's currentProject (where
   // generations are written), and the remembered name (where the next reload
@@ -456,6 +472,9 @@ function Canvas() {
     setEdges(g?.nodes ? g.edges || [] : initialEdges);
     bumpCounter(loaded);
     activate(name);
+    // A genuinely different graph just landed — remount every node component
+    // rather than reuse instances by id. See the comment on canvasGeneration.
+    setCanvasGeneration((n) => n + 1);
     // A timeout, not requestAnimationFrame: rAF never fires in a hidden tab, so a
     // switch made while backgrounded left autosave off for the rest of the session
     // and silently dropped every edit after it.
@@ -471,6 +490,9 @@ function Canvas() {
     setNodes(initialNodes);
     setEdges(initialEdges);
     activate(name);
+    // Same reasoning as switchProject: a fresh starter graph is still a different
+    // graph than whatever was on screen before.
+    setCanvasGeneration((n) => n + 1);
     // A timeout, not requestAnimationFrame: rAF never fires in a hidden tab, so a
     // switch made while backgrounded left autosave off for the rest of the session
     // and silently dropped every edit after it.
@@ -1020,6 +1042,16 @@ function Canvas() {
         }}
       >
         <ReactFlow
+          // Keyed by canvasGeneration so a genuine project switch remounts every
+          // node component. Node ids come from one counter shared across projects,
+          // and React Flow keys node components by id, so without this the SAME
+          // component instance is reused for a different project's node — carrying
+          // status, error and the last clip (or, for image/text outputs, status,
+          // results and error) with it. Not keyed by `project` itself: renaming the
+          // active project changes `project` too, and remounting on a mere rename
+          // while a video job is mid-poll would start a second poll loop for that
+          // same job (see canvasGeneration's own comment above).
+          key={canvasGeneration}
           nodes={nodes}
           edges={displayEdges}
           onNodesChange={onNodesChange}
