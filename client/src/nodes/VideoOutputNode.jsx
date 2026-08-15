@@ -217,8 +217,11 @@ export default function VideoOutputNode({ id, data }) {
 
         <ParamControls params={params} data={data} onChange={(u) => updateNodeData(id, u)} />
 
+        {/* The row wraps because "First and last frame" is a wide label: on a 300px card
+            it pushes Seconds and Audio past the edge, and a node that overflows its own
+            card is worse than one that grows a row taller. */}
         {(inputModes.length > 1 || Boolean(data.inputMode) || durations || canAudio) && (
-          <HStack gap={2} align="end">
+          <HStack gap={2} align="end" wrap="wrap">
             {/* Boolean(data.inputMode) alongside the usual length check: an unconfirmed
                 mode (see selectorOptions above) can leave inputModes itself at length 1
                 while there is still a stored mode that needs a visible, changeable row. */}
