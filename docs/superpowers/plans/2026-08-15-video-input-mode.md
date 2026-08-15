@@ -1353,3 +1353,56 @@ Not in scope, deliberately: persisting `result` into node data so a completed cl
 a reload. That is a real gap (a finished node shows empty after F5, though the file is safely
 on disk) but it is a different change with its own storage question, and folding it in here
 would hide it.
+
+---
+
+### Task 13: A finished result must survive leaving the node
+
+**Why this exists:** found by the user testing Task 12. They generated an image in a
+project, switched away, came back — and the node looked untouched. The image was on disk
+with its sidecar; the node simply had no memory of it. `ImageOutputNode` keeps `results`
+in `useState`, and Task 12's `key={canvasGeneration}` now remounts every node on a genuine
+project switch, so that state is discarded. Before Task 12 the instance survived and the
+results appeared to persist — while actually being displayed on whatever project's node
+reused the instance, which is the bug Task 12 fixed. The same applies to a reload, and to
+`VideoOutputNode.result`.
+
+Nothing is lost — the files and their sidecars are written server-side — but the app
+forgets work the user paid for, which reads as losing it.
+
+**The constraint that shapes the fix:** the result must NOT be persisted as base64. A
+1.4MB png inlined into `graph.json` would be rewritten on every keystroke — the exact
+reason the video node plays from disk (`CLAUDE.md`, "Add to canvas is the one place that
+does inline it"). Persist a pointer, render from the file route.
+
+**Files:** `server/index.js`, `client/src/nodes/ImageOutputNode.jsx`,
+`client/src/nodes/VideoOutputNode.jsx`, `CHANGELOG.md`
+
+- [ ] **Step 1: The server hands back a URL, not just a path**
+
+`/api/generate` returns `{ image, savedPath, cost }`; the client has no project name to
+build a file URL from. Add `url: fileUrl(project, imgPath)` to that response, the way the
+video routes already do. `fileUrl` and `GET /api/file/:project/:name` both exist.
+
+- [ ] **Step 2: Persist the pointer, not the picture**
+
+On each completed run, write `{ url, savedPath, cost, runIndex }` into node data alongside
+the existing local state — no `image` data URL. Render from `r.image ?? r.url`, so a
+just-finished run keeps showing the bytes it already has and a reopened node falls back to
+the file. Clearing results clears both.
+
+- [ ] **Step 3: Add to canvas still works from a URL**
+
+`addResultToCanvas` currently reads `r.image`. After a reload there is no data URL. Mirror
+`VideoOutputNode.addVideoToCanvas`: fetch the file, base64 it, inline THAT into the new
+image node — a reference has to travel to OpenRouter, which cannot reach this machine.
+
+- [ ] **Step 4: Same treatment for the video node's `result`**
+
+`{ url, cost, savedPath }` into node data, rendered from `url`. It already receives all
+three from the poll response.
+
+- [ ] **Step 5: `npm test`, CHANGELOG, and verify in the app (controller)**
+
+Generate, switch projects, come back, confirm the result is still shown; reload and confirm
+the same; then Add to canvas from a reopened node.
