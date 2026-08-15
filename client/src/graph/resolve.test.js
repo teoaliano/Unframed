@@ -612,4 +612,26 @@ function videoGraph(inputMode, imageCount, extra = []) {
   assert.deepEqual(sourceRoles(nodes, edges, 'i2'), ['last']);
 }
 
+// Badge order follows canvas position, not the order outputs were created. This needs
+// a node that gets a DIFFERENT role from each of two outputs -- if both gave it the
+// same role, Set dedup would hide an order bug no matter which output ran first.
+{
+  const w = { id: 'w', type: 'image', position: { x: 0, y: -100 }, data: { dataUrl: 'data:,w' } };
+  const x = { id: 'x', type: 'image', position: { x: 0, y: 0 }, data: { dataUrl: 'data:,x' } };
+  const solo = { id: 'o-solo', type: 'imageOutput', position: { x: 400, y: 0 }, data: {} };
+  const paired = { id: 'o-paired', type: 'imageOutput', position: { x: 400, y: 300 }, data: {} };
+  const edges = [
+    { id: 'e1', source: 'x', target: 'o-solo' },
+    { id: 'e2', source: 'w', target: 'o-paired' },
+    { id: 'e3', source: 'x', target: 'o-paired' },
+  ];
+  // x is the only image at o-solo (rank 1) and sits below w at o-paired (rank 2).
+  // o-solo sits above o-paired on the canvas, so rank 1 must lead regardless of which
+  // node array order the caller happens to pass.
+  const forwards = sourceRoles([solo, paired, w, x], edges, 'x');
+  const backwards = sourceRoles([paired, solo, w, x], edges, 'x');
+  assert.deepEqual(forwards, backwards, 'badge order must not depend on node array order');
+  assert.deepEqual(forwards, ['1', '2']);
+}
+
 console.log('resolve.js: all checks passed');

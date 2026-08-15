@@ -130,7 +130,13 @@ export function sourceRoles(nodes, edges, nodeId) {
   if (!self || (self.type !== 'image' && self.type !== 'video') || !self.data?.dataUrl) return [];
 
   const roles = [];
-  for (const consumer of nodes.filter(isOutput)) {
+  // Consumers in canvas order, top to bottom -- the same rule that orders prompts and
+  // numbers references. Without it the badge would read "1 / 2" or "2 / 1" for the same
+  // graph, depending only on which output happened to be created first.
+  const consumers = nodes
+    .filter(isOutput)
+    .sort((a, b) => (a.position?.y ?? 0) - (b.position?.y ?? 0));
+  for (const consumer of consumers) {
     const { references, frames, excess } = bucketSources(nodes, edges, consumer.id);
     const frame = frames.find((f) => f.node.id === nodeId);
     if (frame) {
