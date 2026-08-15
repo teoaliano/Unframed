@@ -1184,3 +1184,113 @@ places about models.
 git add client/src/nodes/output/core.js client/src/App.jsx client/src/nodes/ImageOutputNode.jsx client/src/nodes/VideoOutputNode.jsx client/src/nodes/TextOutputNode.jsx client/src/graph/resolve.js client/src/graph/resolve.test.js CHANGELOG.md docs/superpowers/specs/2026-08-15-video-input-mode-design.md
 git commit -m "Reset a node's model settings when its model changes"
 ```
+
+---
+
+### Task 10: A video job survives the browser
+
+**Why this exists:** found in testing. `generateVideo` keeps the job id in a local
+variable and polls for 15 minutes; on timeout it throws "It may still finish on
+OpenRouter". The id is in no file, so nothing can ever collect that job — a reload, a
+crash, a close, or a slow provider queue all lose a paid render permanently. A real run
+sat queued for 40+ minutes, and its id was only recoverable from the browser's network
+log. OpenRouter does not document how long a finished video stays fetchable, so the
+window to collect is unknown and possibly short.
+
+**Files:** `client/src/api.js`, `client/src/nodes/VideoOutputNode.jsx`, `CHANGELOG.md`
+
+**Interfaces produced:**
+- `startVideo(body) -> { id }` — POSTs `/api/video`, returns the job id, polls nothing.
+- `pollVideo(id, params, onStatus, { until }) -> result | { pending: true }` — polls
+  `/api/video/:id`; resolves with the completed result, or `{ pending: true }` when it
+  stops early. Throws only on a real failure. `params` is what the server needs to name
+  the file: `{ project, prompt, model, duration, resolution, size }`.
+- `data.job = { id, startedAt, params }` on the video output node — cleared on completion
+  or failure, and on nothing else.
+
+- [ ] **Step 1: Split start from poll in `client/src/api.js`**
+
+`generateVideo` currently does both and owns the timeout. Replace it with the two
+functions above, keeping the existing query-string construction (it moves into
+`pollVideo`, whose `params` argument is that same object). `pollVideo` polls every 4s as
+today; `until` is a wall-clock budget after which it returns `{ pending: true }` rather
+than throwing. Delete the "Gave up waiting" error entirely — nothing may throw away an id.
+
+- [ ] **Step 2: Persist the job before polling**
+
+In `onGenerate`: call `startVideo`, then `updateNodeData(id, { job: { id: resp.id, startedAt: Date.now(), params } })`
+BEFORE the first poll, so the id reaches `graph.json` even if the tab dies mid-render.
+Then `pollVideo`. On a completed result: set the result and clear the job in one update.
+On a thrown failure: clear the job and show the error.
+
+- [ ] **Step 3: Resume on mount**
+
+An effect that runs once per mount: if `data.job?.id` and there is no result, resume
+`pollVideo` with the stored `params`. This is the whole point of the task — reopening the
+project must pick the job back up with no user action.
+
+- [ ] **Step 4: A pending job is visible and escapable**
+
+While `data.job` exists: the Generate button reads `Rendering… (N min)` from
+`startedAt` and is disabled, so a second click cannot start a second paid render. Beside
+it, two ghost actions: **Check now** (one immediate poll) and **Forget this job** (clears
+`data.job` only — it does not cancel anything upstream, and the copy must say so, since a
+node stuck on a job that will never finish is otherwise unusable).
+
+- [ ] **Step 5: `npm test`, then CHANGELOG**
+
+Under today's `### Fixed`: a video that takes longer than the app was willing to wait is
+no longer lost — the node remembers its job and picks it up when you come back.
+
+---
+
+### Task 11: The server finishes jobs the browser is not watching
+
+**Why this exists:** Task 10 recovers a job when you reopen the project. It cannot
+collect one while the app is closed, and the collect window is undocumented. This makes
+the server the owner: pending jobs are written to disk, swept on an interval, and
+downloaded whether or not a browser is connected.
+
+**Files:** `server/jobs.js` (new), `server/jobs.test.js` (new), `server/index.js`,
+`CLAUDE.md`, `docs/video-and-sharing.md`
+
+**Interfaces produced (mirroring `env.js`/`presets.js`: pure logic here, I/O thin):**
+- `readJobs(dir) -> job[]` / `writeJobs(dir, jobs)` — `<OUTPUT_DIR>/jobs.json`.
+- `upsertJob(jobs, job) -> job[]`, `pruneJobs(jobs, now) -> job[]` — pure, tested.
+  A job is `{ id, project, params, startedAt, status, savedPath?, error?, refs? }`.
+- `sweepJobs()` in `index.js` — every 30s, poll each `pending` job through the same code
+  path `/api/video/:id` uses, write the file, record `savedPath`.
+
+- [ ] **Step 1: The store, with tests first**
+
+`jobs.js` holds the pure functions; `jobs.test.js` pins them in the house style (bare
+assert blocks, no framework). Cases: an upsert replaces by id rather than appending a
+duplicate; pruning drops completed jobs older than seven days and keeps pending ones
+regardless of age; a corrupt or absent `jobs.json` reads as `[]` rather than throwing —
+a broken file must not stop the server booting.
+
+- [ ] **Step 2: Record the job at creation**
+
+`POST /api/video` writes the job to the store as `pending` with everything the poll
+handler needs, including the `refs` counts that `videoJobRefs` holds in memory today.
+That map becomes a cache in front of the store, not the only copy — a restart currently
+loses the sidecar's `references` field.
+
+- [ ] **Step 3: Sweep**
+
+On boot and every 30s: for each `pending` job, poll upstream; on `completed` download and
+write exactly as the route does, then mark it `done` with `savedPath`; on `failed` mark it
+`failed` with the message. Extract the download-and-write half of `/api/video/:id` into a
+function both paths call, so there is one implementation of "a finished job becomes files
+on disk".
+
+- [ ] **Step 4: Make double collection impossible**
+
+`GET /api/video/:id` consults the store first: a job already `done` returns its
+`savedPath` immediately instead of downloading again. Without this, Task 10's resume and
+this sweep both download the same clip and write two files with different timestamps.
+
+- [ ] **Step 5: `npm test`, docs**
+
+`CLAUDE.md`'s server bullet gains one line: pending video jobs are durable and swept, so a
+render outlives the browser. `docs/video-and-sharing.md` gets the user-facing version.
