@@ -84,6 +84,41 @@ try {
   });
   assert.equal(res.status, 200);
   assert.deepEqual((await revealed).files, [path.join(outDir, 'shot.png')]);
+
+  // A null where the client always sends an array used to take the whole process
+  // down, so what is asserted is not what these routes reply -- it is that the
+  // server is still answering afterwards.
+  //
+  // Both routes return on a missing key before they ever read the body, so a fake
+  // one goes in first. Checking its hint is load-bearing, not decoration: `fork`
+  // inherits this shell's environment, so on a machine with OPENROUTER_API_KEY
+  // exported, a key that failed to apply means two billed generations, not two 401s.
+  const fakeKey = 'sk-or-v1-0000000000000000000000000000000000000000000000000000';
+  const keyed = await fetch(`${base}/api/config`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ key: fakeKey }),
+  });
+  assert.equal(keyed.status, 200);
+  const health = await (await fetch(`${base}/api/health`)).json();
+  assert.equal(health.keyHint, '0000', 'the live key is the fake one, not an inherited real one');
+
+  for (const route of ['/api/video', '/api/generate']) {
+    // What this reaches upstream is a 401, or a connection error when offline.
+    // Neither is under test, and neither should be able to hang the suite, hence
+    // the abort and the empty catch.
+    await fetch(`${base}${route}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ prompt: 'null reference guard', input_references: null }),
+      signal: AbortSignal.timeout(4000),
+    }).catch(() => {});
+    assert.equal(
+      (await fetch(`${base}/api/health`)).status,
+      200,
+      `server survived a null input_references on ${route}`,
+    );
+  }
 } finally {
   child.kill();
   await fs.rm(dataDir, { recursive: true, force: true });
