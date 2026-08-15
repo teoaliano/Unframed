@@ -119,6 +119,20 @@ try {
       `server survived a null input_references on ${route}`,
     );
   }
+
+  // frame_images reaches the same route from the same browser and is normalised the
+  // same way, so it gets the same guard and the same proof. Only /api/video reads it.
+  await fetch(`${base}/api/video`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ prompt: 'null frame guard', frame_images: null }),
+    signal: AbortSignal.timeout(4000),
+  }).catch(() => {});
+  assert.equal(
+    (await fetch(`${base}/api/health`)).status,
+    200,
+    'server survived a null frame_images on /api/video',
+  );
 } finally {
   child.kill();
   await fs.rm(dataDir, { recursive: true, force: true });
