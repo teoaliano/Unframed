@@ -55,9 +55,7 @@ function resolveRef(id, refs, stack) {
 // Every source wired into one output, split by the role its mode gives them.
 // The single home for that split: buildRequest sends from it and the input node
 // badges read it, so what a node claims and what is sent cannot drift.
-// `opts.framesUnsupported` is the node saying "this model declares no frames",
-// which collapses any frame mode back to references.
-export function bucketSources(nodes, edges, outputId, opts = {}) {
+export function bucketSources(nodes, edges, outputId) {
   const byId = new Map(nodes.map((n) => [n.id, n]));
   const output = byId.get(outputId);
   const sources = edges
@@ -69,8 +67,7 @@ export function bucketSources(nodes, edges, outputId, opts = {}) {
   const media = sources.filter(
     (n) => (n.type === 'image' || n.type === 'video') && n.data?.dataUrl,
   );
-  const mode =
-    isVideoOutput(output) && !opts.framesUnsupported ? output?.data?.inputMode : undefined;
+  const mode = isVideoOutput(output) ? output?.data?.inputMode : undefined;
   const wanted = MODE_FRAMES[mode];
   if (!wanted) return { sources, references: media, frames: [], excess: [] };
 
@@ -92,11 +89,11 @@ export function bucketSources(nodes, edges, outputId, opts = {}) {
 // Build the generation request for a given output node id.
 // Returns { prompt, input_references, frame_images }. frame_images is empty unless
 // the output is a video node asking for a frame mode.
-export function buildRequest(nodes, edges, outputId, opts = {}) {
+export function buildRequest(nodes, edges, outputId) {
   const refs = new Map(
     nodes.filter((n) => n.type === 'prompt' || isTextOutput(n)).map((n) => [n.id, n]),
   );
-  const { sources, references, frames } = bucketSources(nodes, edges, outputId, opts);
+  const { sources, references, frames } = bucketSources(nodes, edges, outputId);
 
   const input_references = references.map((n) =>
     n.type === 'video'

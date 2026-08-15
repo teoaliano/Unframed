@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Handle, Position, useReactFlow, useNodes, useEdges } from '@xyflow/react';
 import { Card } from '@astryxdesign/core/Card';
 import { Text } from '@astryxdesign/core/Text';
@@ -12,7 +12,7 @@ import NodeHeader from './NodeHeader.jsx';
 import StatusLine from './StatusLine.jsx';
 import ExpandableNote from './ExpandableNote.jsx';
 import { MAX_VIDEO_BYTES } from './VideoNode.jsx';
-import { useModels, useModelParams, freeSpot } from './output/core.js';
+import { useModels, useModelParams, freeSpot, resetModelParams } from './output/core.js';
 import { ModelPicker, ParamControls, CostFoot } from './output/controls.jsx';
 import { buildRequest, bucketSources } from '../graph/resolve.js';
 import { generateVideo } from '../api.js';
@@ -55,9 +55,18 @@ export default function VideoOutputNode({ id, data }) {
   const inputMode = inputModes.some((o) => o.value === data.inputMode)
     ? data.inputMode
     : 'reference';
-  // A graph saved in a frame mode, reopened on a model without frames. The request
-  // falls back rather than sending a param the model never declared.
-  const modeUnsupported = Boolean(data.inputMode) && data.inputMode !== inputMode;
+  // A node with no stored model follows the global default, so Settings can change its
+  // model without a switch. Clearing an inputMode the model cannot honour keeps the badge,
+  // the red edges and the request from ever disagreeing -- same self-healing shape as
+  // migrateNodes. Guarded on the catalogue: while it loads, entry is undefined and every
+  // mode would look unsupported, which would wipe a perfectly good setting.
+  useEffect(() => {
+    if (!models.length || !entry) return;
+    if (data.inputMode && !inputModes.some((o) => o.value === data.inputMode)) {
+      updateNodeData(id, { inputMode: undefined });
+    }
+  }, [models.length, entry, data.inputMode, inputModes, id, updateNodeData]);
+
   const ignoredCount = bucketSources(liveNodes, liveEdges, id).excess.length;
 
   // Video is sold by the second, so the price of a click is knowable before it is
@@ -146,9 +155,7 @@ export default function VideoOutputNode({ id, data }) {
     setResult(null);
     setNote(null);
     try {
-      const { prompt, input_references, frame_images } = buildRequest(getNodes(), getEdges(), id, {
-        framesUnsupported: modeUnsupported,
-      });
+      const { prompt, input_references, frame_images } = buildRequest(getNodes(), getEdges(), id);
       if (!prompt.trim()) {
         throw new Error('Nothing connected. Wire a prompt node into this video node.');
       }
@@ -192,7 +199,7 @@ export default function VideoOutputNode({ id, data }) {
           models={models}
           value={model}
           kind="video"
-          onChange={(v) => updateNodeData(id, { videoModel: v })}
+          onChange={(v) => updateNodeData(id, { videoModel: v, ...resetModelParams('videoOutput') })}
         />
 
         <ParamControls params={params} data={data} onChange={(u) => updateNodeData(id, u)} />
@@ -254,13 +261,6 @@ export default function VideoOutputNode({ id, data }) {
             Describe the result you want, not a change to make. An instruction like
             &ldquo;edit this video to...&rdquo; switches the model into editing mode, which
             OpenRouter cannot currently express and which fails with a duration error.
-          </StatusLine>
-        )}
-
-        {modeUnsupported && (
-          <StatusLine type="warning">
-            This graph asks for a frame image, which {model} does not accept. The wired
-            images are being sent as references instead.
           </StatusLine>
         )}
 

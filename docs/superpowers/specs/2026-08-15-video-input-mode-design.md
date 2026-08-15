@@ -116,6 +116,18 @@ Options are gated by what the model declares in `params.frame_images`, the way e
 control here is gated. A model with no frame support shows no selector at all, rather than
 a selector with one option.
 
+**Amendment:** this design originally carried a `framesUnsupported` fallback in
+`bucketSources`/`buildRequest`, for a graph saved in a frame mode and reopened on a model
+without frame support — the request would collapse the mode back to references. That left
+the canvas marks (red edges, the ignored count, the badges), which are derived without
+model knowledge, disagreeing with what the request actually did: a graph could show two
+contradictory warnings at once. The fallback is removed in favour of making the state
+unreachable — switching a node's model now resets its model-dependent settings to that
+model's defaults (`resetModelParams` in `client/src/nodes/output/core.js`), and a node whose
+stored mode the *effective* model cannot honour self-heals it the same way `migrateNodes`
+heals an old graph. Teaching three more places about models lost to removing the state they
+would have had to reconcile.
+
 ### 3. Which image is which comes from canvas position
 
 Top-to-bottom, as everything else in `resolve.js` already is. In first-frame mode the

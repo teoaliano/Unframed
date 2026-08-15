@@ -6,7 +6,7 @@ import { TextArea } from '@astryxdesign/core/TextArea';
 import { VStack } from '@astryxdesign/core/Stack';
 import NodeHeader from './NodeHeader.jsx';
 import StatusLine from './StatusLine.jsx';
-import { useModels, freeSpot } from './output/core.js';
+import { useModels, freeSpot, resetModelParams } from './output/core.js';
 import { ModelPicker, CostFoot } from './output/controls.jsx';
 import { buildRequest } from '../graph/resolve.js';
 import { runText } from '../api.js';
@@ -68,7 +68,7 @@ export default function TextOutputNode({ id, data }) {
           models={models}
           value={model}
           kind="text"
-          onChange={(v) => updateNodeData(id, { model: v })}
+          onChange={(v) => updateNodeData(id, { model: v, ...resetModelParams('textOutput') })}
         />
 
         <TextArea

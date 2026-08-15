@@ -9,7 +9,7 @@ import { VStack } from '@astryxdesign/core/Stack';
 import NodeHeader from './NodeHeader.jsx';
 import RunsControl, { clampRuns } from './RunsControl.jsx';
 import StatusLine from './StatusLine.jsx';
-import { useModels, useModelParams, freeSpot } from './output/core.js';
+import { useModels, useModelParams, freeSpot, resetModelParams } from './output/core.js';
 import { ModelPicker, ParamControls, CostFoot } from './output/controls.jsx';
 import { buildRequest, splitSections, findWiredTextNode, freeRunPrompts } from '../graph/resolve.js';
 import { generate, runText } from '../api.js';
@@ -221,7 +221,7 @@ export default function ImageOutputNode({ id, data }) {
           models={models}
           value={model}
           kind="image"
-          onChange={(v) => updateNodeData(id, { model: v })}
+          onChange={(v) => updateNodeData(id, { model: v, ...resetModelParams('imageOutput') })}
         />
 
         <ParamControls params={params} data={data} onChange={(u) => updateNodeData(id, u)} />

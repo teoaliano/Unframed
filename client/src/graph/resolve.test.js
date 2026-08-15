@@ -538,15 +538,6 @@ function videoGraph(inputMode, imageCount, extra = []) {
   assert.deepEqual(bucketSources(nodes, edges, 'v1').excess, ['vid']);
 }
 
-// The model has no frame support: the mode collapses to references rather than
-// sending a frame the model never declared.
-{
-  const { nodes, edges } = videoGraph('first_frame', 2);
-  const { input_references, frame_images } = buildRequest(nodes, edges, 'v1', { framesUnsupported: true });
-  assert.equal(input_references.length, 2);
-  assert.deepEqual(frame_images, []);
-}
-
 // Modes are a video-output concern; an image output ignores the field entirely.
 {
   // A copy, not a mutation of `out`: `out` is shared by reference with every block

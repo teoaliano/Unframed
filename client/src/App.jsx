@@ -42,6 +42,7 @@ import VideoNode, { MAX_VIDEO_BYTES } from './nodes/VideoNode.jsx';
 import ImageOutputNode from './nodes/ImageOutputNode.jsx';
 import VideoOutputNode from './nodes/VideoOutputNode.jsx';
 import TextOutputNode from './nodes/TextOutputNode.jsx';
+import { OUTPUT_DEFAULTS } from './nodes/output/core.js';
 import ProjectMenu from './ProjectMenu.jsx';
 import IgnoredEdge from './nodes/IgnoredEdge.jsx';
 import { PromptIcon, ImageIcon, VideoIcon, TextIcon } from './nodes/nodeIcons.jsx';
@@ -573,9 +574,9 @@ function Canvas() {
     prompt: { text: '' },
     image: { fileName: '', dataUrl: '' },
     video: { fileName: '', dataUrl: '' },
-    imageOutput: { resolution: '1K', quality: 'low', aspect_ratio: '1:1' },
-    videoOutput: {},
-    textOutput: { text: '', result: '' },
+    imageOutput: OUTPUT_DEFAULTS.imageOutput,
+    videoOutput: OUTPUT_DEFAULTS.videoOutput,
+    textOutput: OUTPUT_DEFAULTS.textOutput,
   };
 
   const addPrompt = () => addNode('prompt', NEW_NODE.prompt);
