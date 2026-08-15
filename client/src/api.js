@@ -47,10 +47,10 @@ export async function startVideo(body) {
 // Polls one job. `params` is exactly what the server needs to name the file and
 // its sidecar once the job lands — the same shape a caller stores in a node's
 // data.job, so a poll resumed after a reload has everything it needs from that
-// object alone, with nothing else in scope. Checks once immediately (so "check
-// now" and a fresh mount get an answer without waiting 4s for nothing), then every
-// 4s after — fast enough to feel live, slow enough that a three-minute render is
-// ~45 requests rather than hundreds.
+// object alone, with nothing else in scope. Checks once immediately, so a mount
+// resuming a job the server may already have collected gets its answer without
+// waiting 4s for nothing, then every 4s after — fast enough to feel live, slow
+// enough that a three-minute render is ~45 requests rather than hundreds.
 //
 // `until` (ms) bounds how long this call keeps at it; past that it resolves with
 // `{ pending: true }` rather than throwing — the caller decides what "still going"
