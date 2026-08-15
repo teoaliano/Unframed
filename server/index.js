@@ -7,6 +7,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { upsertEnv, PATTERNS, envFile, outputPath } from './env.js';
 import { readPresets, writePresets } from './presets.js';
+import { readJobs, writeJobs, upsertJob, pruneJobs } from './jobs.js';
 import { ensureTunnel, mintShare, revokeShare, waitUntilPublic, stopTunnel } from './share.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -529,6 +530,7 @@ app.post('/api/video', async (req, res) => {
     size,
     generate_audio,
     model,
+    project,
   } = req.body || {};
 
   // Normalised once rather than guarded at each use, the way /api/text does it. A
@@ -654,6 +656,25 @@ app.post('/api/video', async (req, res) => {
   // poll handler can kill them the moment the job stops needing the file.
   rememberJobRefs(data.id, sentRefs);
   if (mintedTokens.length) jobShareTokens.set(data.id, mintedTokens);
+
+  // Written to the store as pending, with everything the sweep will ever need to
+  // finish it without a browser in the loop: which project, and the exact params
+  // (prompt/model/duration/resolution/size) the sidecar has to match. A write
+  // failure here must not fail the request the user is waiting on -- the browser
+  // still gets its id back and can resume the old way, via query-string params,
+  // exactly as it could before this store existed.
+  try {
+    await persistJob(data.id, {
+      project: project || null,
+      params: { prompt, model: payload.model, duration: duration || null, resolution: resolution || null, size: size || null },
+      startedAt: Date.now(),
+      status: 'pending',
+      refs: sentRefs,
+    });
+  } catch (err) {
+    console.log(`  job store write failed: ${err.message}`);
+  }
+
   res.json({ id: data.id, status: data.status || 'pending' });
 });
 
@@ -665,55 +686,71 @@ function revokeJobShares(id) {
   jobShareTokens.delete(id);
 }
 
-// Poll one job. While it runs this just forwards the status; once it completes the
-// file is fetched and written to disk, and the response points at the saved copy
-// rather than carrying the bytes — a video inlined into node data would be saved
-// into graph.json on every keystroke.
-app.get('/api/video/:id', async (req, res) => {
-  if (!API_KEY) return res.status(400).json({ error: 'No OpenRouter key yet.' });
-  const { project, prompt = '', model = '', duration, resolution, size } = req.query;
+// Where the saved clip is served from, given the project it landed in and its
+// path on disk. Shared by the poll route (fresh and store-served alike) and
+// nothing else needs it, since the sweep never returns an HTTP response.
+function fileUrl(project, savedPath) {
+  return `/api/file/${encodeURIComponent(project || '')}/${encodeURIComponent(path.basename(savedPath || ''))}`;
+}
 
-  let data;
+// Reads the current store, merges `patch` onto whatever record `id` already has
+// (starting fresh if it somehow has none), prunes, and writes the whole file
+// back. The one place a job record changes shape, so the poll route and the
+// sweep -- which both need to mark a job done or failed -- can't drift into
+// writing slightly different shapes for the same transition.
+async function persistJob(id, patch) {
+  const jobs = await readJobs(OUTPUT_DIR);
+  const job = { ...jobs.find((j) => j.id === id), ...patch, id };
+  await writeJobs(OUTPUT_DIR, pruneJobs(upsertJob(jobs, job), Date.now()));
+  return job;
+}
+
+// Asks OpenRouter what one job is doing. Used by both the poll route and the
+// sweep, so "ask upstream" has one implementation the same way "turn a finished
+// job into files" (collectVideo, below) does. Never throws -- everything
+// upstream can say or fail to say comes back as a value to branch on, so a
+// caller always gets an answer rather than having to wrap this in its own
+// try/catch too.
+async function fetchVideoStatus(id) {
+  let r;
   try {
-    const r = await fetch(`https://openrouter.ai/api/v1/videos/${encodeURIComponent(req.params.id)}`, {
+    r = await fetch(`https://openrouter.ai/api/v1/videos/${encodeURIComponent(id)}`, {
       headers: { Authorization: `Bearer ${API_KEY}` },
     });
-    const raw = await r.text();
-    try {
-      data = JSON.parse(raw);
-    } catch {
-      return res.status(502).json({ error: `Unexpected response from OpenRouter: ${raw.slice(0, 300)}` });
-    }
-    if (!r.ok) {
-      const msg = data?.error?.message || data?.error || raw.slice(0, 300);
-      return res.status(r.status).json({ error: `OpenRouter (${r.status}): ${msg}` });
-    }
   } catch (err) {
-    return res.status(502).json({ error: `Could not reach OpenRouter: ${err.message}` });
+    return { ok: false, networkError: err.message };
   }
-
-  const status = data.status || 'pending';
-  if (status !== 'completed') {
-    if (status === 'failed') {
-      revokeJobShares(req.params.id); // the provider will not fetch a dead job's refs
-      return res.json({ status, error: data.error?.message || data.error || 'Generation failed.' });
-    }
-    return res.json({ status, progress: data.progress ?? null });
-  }
-
-  const url = data.unsigned_urls?.[0] || data.urls?.[0];
-  if (!url) return res.status(502).json({ error: 'Job completed without a video URL.' });
-
-  let buf;
+  const raw = await r.text();
+  let data;
   try {
-    const f = await fetch(url, { headers: { Authorization: `Bearer ${API_KEY}` } });
-    if (!f.ok) return res.status(502).json({ error: `Could not download the video (${f.status}).` });
-    buf = Buffer.from(await f.arrayBuffer());
-  } catch (err) {
-    return res.status(502).json({ error: `Could not download the video: ${err.message}` });
+    data = JSON.parse(raw);
+  } catch {
+    return { ok: false, httpStatus: 502, upstreamError: `Unexpected response from OpenRouter: ${raw.slice(0, 300)}` };
   }
+  if (!r.ok) {
+    const msg = data?.error?.message || data?.error || raw.slice(0, 300);
+    return { ok: false, httpStatus: r.status, upstreamError: `OpenRouter (${r.status}): ${msg}` };
+  }
+  return { ok: true, data };
+}
 
-  const dir = project ? projectDir(project) : OUTPUT_DIR;
+// Turns one COMPLETED OpenRouter job into files on disk: the clip, then its
+// sidecar. The only implementation of that step -- the poll route calls it for
+// a browser that is watching, the sweep calls it for one that isn't, and
+// neither downloads or writes anything a finished job needs on its own. `job`
+// carries what was true at creation (project, params, refs) rather than
+// whatever the current request happens to have, because the sweep has no
+// request at all.
+async function collectVideo(job, data) {
+  const url = data.unsigned_urls?.[0] || data.urls?.[0];
+  if (!url) throw new Error('Job completed without a video URL.');
+
+  const f = await fetch(url, { headers: { Authorization: `Bearer ${API_KEY}` } });
+  if (!f.ok) throw new Error(`Could not download the video (${f.status}).`);
+  const buf = Buffer.from(await f.arrayBuffer());
+
+  const { prompt = '', model = '', duration, resolution, size } = job.params || {};
+  const dir = job.project ? projectDir(job.project) : OUTPUT_DIR;
   await fs.mkdir(dir, { recursive: true });
   const stamp = new Date().toISOString().replace(/[:.]/g, '-');
   const base = `${stamp}-${slugify(prompt)}`;
@@ -732,11 +769,10 @@ app.get('/api/video/:id', async (req, res) => {
           duration: duration ? Number(duration) : null,
           resolution: resolution || null,
           size: size || null,
-          references: videoJobRefs.get(req.params.id) || null,
+          references: job.refs || null,
           // Verbatim, because it is the only evidence that footage was actually
-          // consumed: models that charge for video input price it under their own
-          // SKU (seedance's video_tokens_with_video_input), so the billing shape
-          // tells you what the request shape cannot.
+          // consumed: models that charge for video input price it under their
+          // own SKU, so the billing shape tells you what the request shape can't.
           usage: data.usage ?? null,
           cost,
           createdAt: new Date().toISOString(),
@@ -748,16 +784,150 @@ app.get('/api/video/:id', async (req, res) => {
   } catch (err) {
     console.log(`  sidecar not written: ${err.message}`);
   }
-  videoJobRefs.delete(req.params.id); // the job is done; nothing else will read it
-  revokeJobShares(req.params.id); // and its shared clip goes dark with it
 
-  res.json({
-    status,
-    cost,
-    savedPath: videoPath,
-    // Served from disk rather than inlined, so the graph stays small.
-    url: `/api/file/${encodeURIComponent(project || '')}/${encodeURIComponent(`${base}.mp4`)}`,
-  });
+  return { savedPath: videoPath, cost };
+}
+
+// In-process only: closes the gap collectVideo's own idempotency can't. The
+// store check in the poll route stops a SECOND request from re-downloading a job
+// that already finished, but a sweep tick and a browser's poll for the SAME job
+// can both observe "not done yet" and both start collecting in the same instant
+// -- this set makes the second one back off instead of racing the first.
+const collecting = new Set();
+
+// One pending job, one tick: poll it, and either leave it alone (still
+// rendering), fail it, or collect it. Never throws -- a transient problem
+// reaching OpenRouter or downloading the file just waits for the next tick,
+// the same tolerance pollVideo has client-side for reaching this server.
+async function sweepOne(job) {
+  const polled = await fetchVideoStatus(job.id);
+  if (!polled.ok) return; // try again next tick
+  const { data } = polled;
+  const status = data.status || 'pending';
+
+  if (status === 'failed') {
+    revokeJobShares(job.id); // the provider will not fetch a dead job's refs
+    await persistJob(job.id, {
+      status: 'failed',
+      error: data.error?.message || data.error || 'Generation failed.',
+    });
+    return;
+  }
+  if (status !== 'completed') return; // still queued or rendering
+
+  if (collecting.has(job.id)) return; // a poll for this exact job is already in flight
+  collecting.add(job.id);
+  try {
+    const { savedPath, cost } = await collectVideo(job, data);
+    await persistJob(job.id, { status: 'done', savedPath, cost });
+    videoJobRefs.delete(job.id); // the job is done; nothing else will read it
+    revokeJobShares(job.id); // and its shared clip goes dark with it
+    console.log(`  video job ${job.id} collected by the sweep → ${savedPath}`);
+  } catch (err) {
+    console.log(`  sweep could not collect ${job.id}: ${err.message}`);
+  } finally {
+    collecting.delete(job.id);
+  }
+}
+
+// The point of this whole file: a render finishes whether or not a browser is
+// open to watch it. Every pending job in the store gets one poll per tick,
+// sequentially -- not Promise.all -- so two ticks' worth of reads-then-writes to
+// the same jobs.json can never interleave and drop one job's update under
+// another's.
+async function sweepJobs() {
+  if (!API_KEY) return; // nothing was sent upstream without one, so nothing to collect
+  const jobs = await readJobs(OUTPUT_DIR);
+  for (const job of jobs.filter((j) => j.status === 'pending')) {
+    await sweepOne(job);
+  }
+}
+
+// Poll one job. While it runs this just forwards the status; once it completes the
+// file is fetched and written to disk, and the response points at the saved copy
+// rather than carrying the bytes — a video inlined into node data would be saved
+// into graph.json on every keystroke.
+app.get('/api/video/:id', async (req, res) => {
+  if (!API_KEY) return res.status(400).json({ error: 'No OpenRouter key yet.' });
+  const id = req.params.id;
+
+  // Consult the store BEFORE ever touching OpenRouter. Without this, a browser
+  // resuming a job the sweep already finished (or a second tab polling the same
+  // one) would download and write the clip a second time under a fresh
+  // timestamp -- this is what makes double collection impossible.
+  const stored = (await readJobs(OUTPUT_DIR)).find((j) => j.id === id);
+  if (stored?.status === 'done') {
+    return res.json({
+      status: 'completed',
+      cost: stored.cost ?? null,
+      savedPath: stored.savedPath,
+      url: fileUrl(stored.project, stored.savedPath),
+    });
+  }
+  if (stored?.status === 'failed') {
+    return res.json({ status: 'failed', error: stored.error || 'Generation failed.' });
+  }
+
+  // Still pending in the store (or not in it at all -- a job started before this
+  // store existed). Query params are the fallback source for params in that
+  // second case; a job created after this change already has them in `stored`.
+  const { project, prompt = '', model = '', duration, resolution, size } = req.query;
+
+  const polled = await fetchVideoStatus(id);
+  if (!polled.ok) {
+    return polled.networkError
+      ? res.status(502).json({ error: `Could not reach OpenRouter: ${polled.networkError}` })
+      : res.status(polled.httpStatus).json({ error: polled.upstreamError });
+  }
+  const { data } = polled;
+
+  const status = data.status || 'pending';
+  if (status !== 'completed') {
+    if (status === 'failed') {
+      const message = data.error?.message || data.error || 'Generation failed.';
+      revokeJobShares(id); // the provider will not fetch a dead job's refs
+      await persistJob(id, { status: 'failed', error: message });
+      return res.json({ status, error: message });
+    }
+    return res.json({ status, progress: data.progress ?? null });
+  }
+
+  // Completed. The store check above closes the gap once either side finishes;
+  // this closes it while both the sweep and this request are still in flight
+  // for the exact same job at the exact same moment.
+  if (collecting.has(id)) return res.json({ status: 'pending', progress: null });
+  collecting.add(id);
+  try {
+    const job = stored || {
+      id,
+      project: project || null,
+      params: { prompt, model, duration, resolution, size },
+      // A job somehow never recorded at creation (started before this store
+      // existed) still needs a real startedAt: pruneJobs measures a done job's
+      // age against it, and a missing value reads as NaN, which fails EVERY
+      // age comparison -- pruning it the instant persistJob below runs its own
+      // prune pass, before it ever had a chance to show up anywhere.
+      startedAt: Date.now(),
+      refs: videoJobRefs.get(id) || null,
+    };
+    const { savedPath, cost } = await collectVideo(job, data);
+    await persistJob(id, {
+      project: job.project,
+      params: job.params,
+      startedAt: job.startedAt,
+      refs: job.refs,
+      status: 'done',
+      savedPath,
+      cost,
+    });
+    videoJobRefs.delete(id); // the job is done; nothing else will read it
+    revokeJobShares(id); // and its shared clip goes dark with it
+    res.json({ status, cost, savedPath, url: fileUrl(job.project, savedPath) });
+  } catch (err) {
+    res.status(502).json({ error: err.message });
+  } finally {
+    collecting.delete(id);
+  }
 });
 
 // Show generated files in the OS file manager. macOS can select many at once
@@ -970,6 +1140,17 @@ app.post('/api/generate', async (req, res) => {
     res.status(500).json({ error: `Generated the image but failed to write it: ${err.message}` });
   }
 });
+
+// A render outlives the browser: sweep once at boot (a job that finished while
+// the app was closed shouldn't wait for the first interval to land) and every
+// 30s after. unref() so this timer alone can never keep the process alive --
+// host.test.js kills a forked server and needs it to actually exit, and a
+// packaged app closing its window must not leave an orphan still polling
+// OpenRouter on its way out.
+sweepJobs().catch((err) => console.log(`  sweep failed: ${err.message}`));
+setInterval(() => {
+  sweepJobs().catch((err) => console.log(`  sweep failed: ${err.message}`));
+}, 30_000).unref();
 
 // PORT=0 asks the OS for any free port, which is how the packaged app avoids
 // fighting whatever else is on 8787. The parent cannot guess it, so it is reported

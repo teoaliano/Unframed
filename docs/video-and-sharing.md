@@ -78,6 +78,30 @@ dropping params**, which was tried and bought nothing.
 Provider limits on a reference clip, worth knowing before spending a generation:
 duration >= 1.8s, width >= 300px (and 4–30s for the editing path).
 
+## A render outlives the browser
+
+A video job is asynchronous upstream and can run for minutes. The node persists
+its job id (`data.job`) so a reload can resume watching one already in flight,
+but that alone still needs someone to reopen the app before a finished clip
+gets collected. It doesn't anymore: the **server** owns the job too.
+
+`POST /api/video` writes the job to `<OUTPUT_DIR>/jobs.json` as `pending` before
+it replies. From then on, a 30-second sweep — running independently of any
+browser tab, starting once at boot so a job that finished while the app was
+closed doesn't wait for the first tick — polls every pending job the exact way
+`GET /api/video/:id` does, and on completion downloads the clip and writes it
+plus its sidecar, the same as if a tab had been watching. A render finishes and
+lands in your project whether or not the app is open, and survives a restart.
+
+This is also why re-polling a finished job is safe: asking about a job the
+sweep already collected returns the file it already saved rather than
+downloading it again, so the browser's own resume and the sweep can never both
+write the same clip to disk under two different timestamps.
+
+`done` and `failed` jobs are cleared out of `jobs.json` after seven days.
+A `pending` one is never dropped for age alone — only the sweep actually
+finishing it, one way or the other, retires it.
+
 ## The share tunnel
 
 Ticking **"Share via temporary link"** on a video output makes `server/share.js`
