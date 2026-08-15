@@ -240,14 +240,14 @@ function rememberJobRefs(id, refs) {
   videoJobRefs.set(id, refs);
 }
 
-// What a request actually carried, by kind. Recorded in every sidecar and logged,
-// so "was the video sent?" is answerable after the fact from our side. Whether the
-// model then USED it is a different question, and only billing can hint at that.
-function countRefs(refs) {
-  const list = Array.isArray(refs) ? refs : [];
+// What actually went out, by kind, so "was the image sent as a frame?" is answerable
+// after the fact from our side.
+function countRefs(list, frames = []) {
+  const refs = Array.isArray(list) ? list : [];
   return {
-    images: list.filter((r) => r?.image_url?.url).length,
-    videos: list.filter((r) => r?.video_url?.url).length,
+    images: refs.filter((r) => r?.image_url?.url).length,
+    videos: refs.filter((r) => r?.video_url?.url).length,
+    frames: (Array.isArray(frames) ? frames : []).length,
   };
 }
 
@@ -522,6 +522,7 @@ app.post('/api/video', async (req, res) => {
   const {
     prompt,
     input_references = [],
+    frame_images = [],
     duration,
     resolution,
     aspect_ratio,
@@ -594,14 +595,15 @@ app.post('/api/video', async (req, res) => {
   if (aspect_ratio) payload.aspect_ratio = aspect_ratio;
   if (generate_audio != null) payload.generate_audio = generate_audio;
   if (input_references.length) payload.input_references = input_references;
+  if (frame_images.length) payload.frame_images = frame_images;
 
   // Logged before the call so a failed or ignored run still leaves a record of what
   // went out. OpenRouter documents input_references as reference IMAGES for video
   // generation, so a video entry here is unproven territory: the request may be
   // accepted and the footage silently dropped.
-  const sentRefs = countRefs(input_references);
+  const sentRefs = countRefs(input_references, frame_images);
   console.log(
-    `  video job →  ${payload.model}  (sent ${sentRefs.images} image, ${sentRefs.videos} video refs)`,
+    `  video job →  ${payload.model}  (sent ${sentRefs.images} image, ${sentRefs.videos} video refs, ${sentRefs.frames} frames)`,
   );
 
   let orRes;

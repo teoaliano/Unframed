@@ -156,6 +156,9 @@ export default function VideoOutputNode({ id, data }) {
         {
           prompt,
           input_references,
+          // Only ever one of the two: the provider treats a request with frames as
+          // image-to-video and discards references entirely.
+          ...(frame_images.length ? { frame_images } : {}),
           model,
           duration,
           // One or the other, never both: they are interchangeable upstream, and
