@@ -36,6 +36,10 @@ Keep that shape: the website's What's new page parses this file.
   the node remembers its job and picks it up when you come back, and the server
   finishes and saves it on its own even if the app is closed the whole time. A
   render that was queued upstream for over an hour prompted this.
+- A finished image or video no longer looks lost after you switch projects or
+  reload — the node remembers what it made and keeps showing it, and "Add to
+  canvas" still works. The file and its sidecar were always on disk; only the
+  node's own memory of them was being discarded.
 
 ## 2026-08-13
 

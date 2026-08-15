@@ -6,6 +6,7 @@ import { Button } from '@astryxdesign/core/Button';
 import { Thumbnail } from '@astryxdesign/core/Thumbnail';
 import { Icon } from '@astryxdesign/core/Icon';
 import { VStack } from '@astryxdesign/core/Stack';
+import { useToast } from '@astryxdesign/core/Toast';
 import NodeHeader from './NodeHeader.jsx';
 import RunsControl, { clampRuns } from './RunsControl.jsx';
 import StatusLine from './StatusLine.jsx';
@@ -23,13 +24,23 @@ import { ExternalLink as AddToCanvasIcon } from 'lucide-react';
 // the bill, which is too much to hide behind a segmented control.
 export default function ImageOutputNode({ id, data }) {
   const { getNodes, getEdges, updateNodeData, getNode, addNodes } = useReactFlow();
+  const toast = useToast();
   const [status, setStatus] = useState('idle'); // idle | running | done | error | partial
-  const [results, setResults] = useState([]); // [{ image, cost, savedPath, runIndex }]
+  // [{ image, cost, savedPath, url, runIndex }]. Seeded from the persisted pointer
+  // (data.results) so a reopened node — after a project switch or a reload, both of
+  // which remount this component — shows last run's results instead of a blank strip.
+  // Those seeded entries have no `image`: only the file survives a remount, never the
+  // base64, so the thumbnail below falls back to `url` for them.
+  const [results, setResults] = useState(() => data.results ?? []);
   const [done, setDone] = useState(0);
   const [total, setTotal] = useState(null); // null while the run count isn't known yet
   const [repairCost, setRepairCost] = useState(0); // Free mode's re-split call, if any
   const [error, setError] = useState(null);
   const [note, setNote] = useState(null);
+  // Which result is currently being fetched-and-inlined for "add to canvas" — see
+  // addToCanvas below. Keyed by runIndex so several thumbnails' buttons can carry
+  // their own loading state instead of one flag freezing the whole strip.
+  const [addingKeys, setAddingKeys] = useState(() => new Set());
   const liveNodes = useNodes();
   const liveEdges = useEdges();
 
@@ -44,25 +55,57 @@ export default function ImageOutputNode({ id, data }) {
   const params = useModelParams(entry, 'image');
   const { resolutionTiers, ratios, qualities, backgrounds, supported } = params;
 
+  // A just-finished result already carries its bytes; a reopened one (seeded from
+  // data.results after a reload or a project switch) only has a file url and needs
+  // fetching — same reasoning as VideoOutputNode.addVideoToCanvas: a reference has
+  // to travel to OpenRouter, which cannot reach this machine, so it must be inlined.
+  async function toDataUrl(result) {
+    if (result.image) return result.image;
+    const res = await fetch(result.url);
+    if (!res.ok) throw new Error(`could not read the saved file (${res.status})`);
+    const blob = await res.blob();
+    return await new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result);
+      reader.onerror = () => reject(new Error('could not read the file'));
+      reader.readAsDataURL(blob);
+    });
+  }
+
   // Put a generated image on the canvas as an image node, so it can be wired back
   // in as a reference for the next generation. Results no longer land here on their
   // own: a ten-run batch used to bury the canvas in nodes nobody asked for, so this
   // is now driven by the add buttons on the results below.
-  function addToCanvas(result, index, base) {
-    addNodes({
-      id: `gen-${Date.now()}-${index}`,
-      type: 'image',
-      dragHandle: '.xnode-head',
-      position: { x: base.x, y: base.y + 48 * index },
-      data: {
-        fileName: result.savedPath?.split('/').pop() || 'generated',
-        dataUrl: result.image,
-      },
-    });
+  async function addToCanvas(result, index, base) {
+    setAddingKeys((s) => new Set(s).add(result.runIndex));
+    try {
+      const dataUrl = await toDataUrl(result);
+      addNodes({
+        id: `gen-${Date.now()}-${index}`,
+        type: 'image',
+        dragHandle: '.xnode-head',
+        position: { x: base.x, y: base.y + 48 * index },
+        data: {
+          fileName: (result.savedPath || result.url)?.split('/').pop() || 'generated',
+          dataUrl,
+        },
+      });
+    } catch (err) {
+      toast({ body: `Could not add the image: ${err.message}`, uniqueID: `add-image-${id}-${result.runIndex}` });
+    } finally {
+      setAddingKeys((s) => {
+        const next = new Set(s);
+        next.delete(result.runIndex);
+        return next;
+      });
+    }
   }
 
   // Empty the node's result strip. Only this node's display: the files and their
   // sidecars are already on disk, and anything added to the canvas stays there.
+  // Persisted results are cleared too (results: undefined, dropped by JSON.stringify
+  // the same way VideoOutputNode drops a forgotten job) — otherwise a cleared node
+  // would repopulate the next time it reloads.
   function clearResults() {
     setResults([]);
     setRepairCost(0);
@@ -71,6 +114,7 @@ export default function ImageOutputNode({ id, data }) {
     setDone(0);
     setTotal(null);
     setStatus('idle');
+    updateNodeData(id, { results: undefined });
   }
 
   // Render-time twin of findWiredTextNode(): getNodes()/getEdges() are stable
@@ -88,6 +132,10 @@ export default function ImageOutputNode({ id, data }) {
     setStatus('running');
     setError(null);
     setResults([]);
+    // A fresh run's persisted pointer starts empty too, same reasoning as
+    // clearResults: a run interrupted before its first result lands must not leave
+    // the PREVIOUS batch's images to reappear on the next reload of a blank node.
+    updateNodeData(id, { results: undefined });
     setDone(0);
     setNote(null);
     setRepairCost(0);
@@ -188,7 +236,21 @@ export default function ImageOutputNode({ id, data }) {
             setDone((d) => d + 1);
             // runIndex travels with the result so thumbnails, canvas placement, and
             // labels all agree on run order regardless of completion order.
-            setResults((r) => [...r, { ...resp, runIndex: i }]);
+            const withIndex = { ...resp, runIndex: i };
+            setResults((r) => [...r, withIndex]);
+            // Persist a pointer alongside it, never the bytes: `image` is a base64
+            // data URL, and inlining that into node data means it gets rewritten
+            // into graph.json on every keystroke (CLAUDE.md). Every result in the
+            // batch is persisted as it lands, not just the last, and as a functional
+            // update rather than a captured `data` — several runs in this batch can
+            // resolve in the same tick, and each must append to what the LAST one
+            // just wrote, not to the data this closure was created with.
+            updateNodeData(id, (node) => ({
+              results: [
+                ...(node.data.results || []),
+                { url: withIndex.url, savedPath: withIndex.savedPath, cost: withIndex.cost, runIndex: withIndex.runIndex },
+              ],
+            }));
             return resp;
           }),
         ),
@@ -288,7 +350,10 @@ export default function ImageOutputNode({ id, data }) {
                 <span className="xnode-result" key={r.runIndex}>
                   <Thumbnail
                     className="xnode-thumb"
-                    src={r.image}
+                    // A just-finished run still has the bytes it fetched; a
+                    // reopened node (after a project switch or reload) only has
+                    // the pointer that survived — see the `results` seed above.
+                    src={r.image ?? r.url}
                     alt={`generated result ${r.runIndex + 1}`}
                     label={`result ${r.runIndex + 1}`}
                   />
@@ -299,6 +364,7 @@ export default function ImageOutputNode({ id, data }) {
                       isIconOnly
                       icon={<Icon icon={AddToCanvasIcon} size="xsm" />}
                       size="sm"
+                      isLoading={addingKeys.has(r.runIndex)}
                       onClick={() => addToCanvas(r, 0, freeSpot(getNode, getNodes, id))}
                     />
                   </span>
@@ -310,14 +376,18 @@ export default function ImageOutputNode({ id, data }) {
                 icon={<AddToCanvasIcon />}
                 variant="secondary"
                 size="sm"
+                isLoading={addingKeys.size > 0}
                 // One scan, then an index offset per image: freeSpot() reads
                 // getNodes(), which will not show the nodes added a line earlier in
-                // this same tick, so scanning per image would stack them.
-                onClick={() => {
+                // this same tick, so scanning per image would stack them. Sequential
+                // (not Promise.all) since each add reads/writes the same addingKeys
+                // state and there is no reason several fetches need to race.
+                onClick={async () => {
                   const base = freeSpot(getNode, getNodes, id);
-                  [...results]
-                    .sort((a, b) => a.runIndex - b.runIndex)
-                    .forEach((r, i) => addToCanvas(r, i, base));
+                  const ordered = [...results].sort((a, b) => a.runIndex - b.runIndex);
+                  for (let i = 0; i < ordered.length; i++) {
+                    await addToCanvas(ordered[i], i, base);
+                  }
                 }}
               />
             )}

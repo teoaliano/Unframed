@@ -1163,7 +1163,16 @@ app.post('/api/generate', async (req, res) => {
 
     console.log(`  generated → ${imgPath}${cost != null ? `  ($${Number(cost).toFixed(4)})` : ''}`);
 
-    res.json({ image: `data:${mediaType};base64,${first.b64_json}`, savedPath: imgPath, cost });
+    // url alongside the data URL: the client has no project name of its own to build
+    // a file route from, and needs one to persist a pointer instead of the base64
+    // bytes in node data (a 1.4MB png inlined into graph.json would be rewritten on
+    // every keystroke — the same reason the video routes hand one back).
+    res.json({
+      image: `data:${mediaType};base64,${first.b64_json}`,
+      savedPath: imgPath,
+      url: fileUrl(project, imgPath),
+      cost,
+    });
   } catch (err) {
     res.status(500).json({ error: `Generated the image but failed to write it: ${err.message}` });
   }

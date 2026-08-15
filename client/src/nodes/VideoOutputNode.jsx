@@ -26,7 +26,12 @@ export default function VideoOutputNode({ id, data }) {
   const { getNodes, getEdges, updateNodeData, getNode, addNodes } = useReactFlow();
   const toast = useToast();
   const [status, setStatus] = useState('idle'); // idle | running | done | error
-  const [result, setResult] = useState(null); // { url, cost }
+  // { url, cost, savedPath }. Seeded from the persisted pointer (data.result) so a
+  // reopened node — after a project switch or a reload, both of which remount this
+  // component — still shows the last finished clip instead of looking untouched.
+  // Never seeded from base64: the file already plays from `url`, exactly the same
+  // as a just-finished run, so there was never bytes to keep in local-only state.
+  const [result, setResult] = useState(() => data.result ?? null);
   const [error, setError] = useState(null);
   // Bumped by pollVideo's status callback purely to force a re-render, so the
   // elapsed "(N min)" on the button keeps advancing while a poll is in flight —
@@ -185,6 +190,10 @@ export default function VideoOutputNode({ id, data }) {
     setResult(null);
     setError(null);
     setStatus('idle');
+    // Persisted pointer goes too (dropped from graph.json entirely, same as
+    // `job: undefined` below) — otherwise a cleared node would show the clip again
+    // the next time it reloads.
+    updateNodeData(id, { result: undefined });
   }
 
   // Seedance picks its mode from the PROMPT, and only one of the two works here.
@@ -231,9 +240,15 @@ export default function VideoOutputNode({ id, data }) {
         setStatus('idle');
         return;
       }
-      setResult({ url: d.url, cost: d.cost });
+      const finished = { url: d.url, cost: d.cost, savedPath: d.savedPath };
+      setResult(finished);
       setStatus('done');
-      updateNodeData(id, { job: undefined });
+      // The pointer, not the bytes -- there are none to persist, the clip already
+      // plays from `url` same as it always has. Written in the same call that
+      // clears `job`: a result and a pending job are never both true at once (see
+      // the comment on the resume effect below), and one updateNodeData call is
+      // what keeps that atomic instead of two writes a remount could land between.
+      updateNodeData(id, { job: undefined, result: finished });
     } catch (err) {
       if (!stillOurs()) return;
       setError(err.message);
@@ -346,7 +361,13 @@ export default function VideoOutputNode({ id, data }) {
       const jobParams = { prompt, model, duration, resolution, size };
       // Written before the first poll, not after — this line is the whole task:
       // a crash or a reload one line later still leaves the id recoverable.
-      updateNodeData(id, { job: { id: resp.id, startedAt: Date.now(), params: jobParams } });
+      // result: undefined clears any PREVIOUS run's persisted pointer here too, so
+      // a reload while this new job is still rendering shows "no result yet"
+      // rather than resurrecting the clip this run is about to replace.
+      updateNodeData(id, {
+        job: { id: resp.id, startedAt: Date.now(), params: jobParams },
+        result: undefined,
+      });
       // Recorded synchronously, before runJob starts: updateNodeData above is
       // queued and only lands on a later React commit, and when it does, the
       // resume effect above will notice data.job?.id changed and re-run. Without
