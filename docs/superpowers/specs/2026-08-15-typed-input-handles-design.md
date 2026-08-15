@@ -12,9 +12,15 @@ The request failed because the input video 'content[1]' may contain real person.
 ```
 
 The same picture had worked for them on another platform. It is not our bug and not
-OpenRouter's — it is ByteDance's ModelArk moderation, forwarded verbatim by
-`server/index.js:630`. `content[1]` is ModelArk's own request shape: `content[0]` is the
-prompt, `content[1]` the first attached media.
+OpenRouter's — it is ByteDance's ModelArk moderation, forwarded verbatim. `content[1]` is
+ModelArk's own request shape: `content[0]` is the prompt, `content[1]` the first attached
+media.
+
+**Moderation is asynchronous.** Probed 2026-08-15: a create call carrying a reference image
+that a user had seen rejected returned `202` with a job id, not a `400`. So the error
+surfaces from the *poll* handler (`server/index.js:674`), not the create handler
+(`server/index.js:630`) — same error string, different route. Anything that reports or
+retries on moderation failures belongs on the polling path.
 
 The reason it fires here and not elsewhere is the *slot* the image goes into. OpenRouter's
 video API has two, and we only ever use one:
