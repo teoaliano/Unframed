@@ -199,7 +199,33 @@ for the capability, only for the payload.
 Both arrays accept `data:` base64 URLs (confirmed in OpenRouter's own skill doc), so our
 image nodes need no hosting.
 
-## Open risk
+## Frames and references are mutually exclusive
+
+**Settled by probe, 2026-08-15, on `bytedance/seedance-2.0` at 480p/4s.** Three runs, each
+changing one thing:
+
+| Run | Sent | Result |
+| --- | --- | --- |
+| A′ | reference only, prompt naming it | **failed** — output-side content rejection derived from the reference |
+| B | same model, same prompt, same reference, **plus** a `first_frame` | **completed** ($0.2716) — clip contains only the frame image; no trace of the reference, no moderation complaint |
+
+So OpenRouter's "`frame_images` takes precedence" means the references are discarded, not
+ranked lower. "One frame plus several references" does not work on this route.
+
+This does not undo decision 2 — the wire still declares the role, and that is now *more*
+useful, because the two roles genuinely cannot be combined. What changes is what the node
+must say when both are wired:
+
+**Warn, do not block, and do not rewrite the request.** A `StatusLine` on the video node
+when a frame handle and the references handle are both occupied: pinning a frame means the
+references are ignored by this model. The node already carries three warnings of this shape
+(local clips, video-into-video, unknown video support), so this is the established pattern.
+Silently dropping references from the payload would make the canvas lie about what was sent.
+
+Caveat on the evidence: "forwarded but unused" cannot be distinguished from "not forwarded"
+from outside. Either way the user-visible behaviour is the same, and the warning is correct.
+
+## Superseded risk
 
 OpenRouter documents: *"If both fields are provided, `frame_images` takes precedence and
 the request is treated as image-to-video."* Their skill doc: *"If both arrays are present,
@@ -209,14 +235,10 @@ or dropped.
 This matters, because "one frame plus several references" is the normal case for this
 feature. If references are dropped, pinning a frame silently discards them.
 
-**Probe during implementation**, before the UI is finished: one job on
-`bytedance/seedance-2.0-mini` at 480p/4s with a frame image *and* a reference image that is
-known to trip the real-person classifier. A 400 proves the reference reached ModelArk; a
-rendered clip proves it did not. Costs ~$0.30 if it succeeds, nothing if it 400s. Needs the
-user's explicit go-ahead to spend it.
-
-If references turn out to be dropped: the video node warns when both are wired, and the
-feature becomes "frames *or* references", not both.
+Resolved by the probe above, at a total cost of $0.3274 across three runs. References are
+dropped when frames are present, so the video node warns and the feature is "frames *or*
+references". The section above is the outcome; this one is kept for the reasoning that led
+there.
 
 ## Out of scope
 
