@@ -1,6 +1,6 @@
 // Assert-based self-check. Run with: node client/src/graph/resolve.test.js
 import assert from 'node:assert/strict';
-import { buildRequest, bucketSources, imageRefNumbers, splitSections, findWiredTextNode, freeRunPrompts, isOutput, isTextOutput } from './resolve.js';
+import { buildRequest, bucketSources, sourceRoles, splitSections, findWiredTextNode, freeRunPrompts, isOutput, isTextOutput } from './resolve.js';
 import { migrateNodes } from './migrate.js';
 import { instantiateFragment, centerOffset } from '../library/insert.js';
 import { selectionFragment, presetFromSelection } from '../library/save.js';
@@ -124,10 +124,8 @@ function graph(nodes, edges) {
   );
   assert.equal(input_references[1].video_url.url, 'data:video/mp4;base64,BBB');
   // Per-kind numbering: the video is video 1 even though an image sits above it.
-  assert.deepEqual(imageRefNumbers(nodes, edges, 'v1', 'video'), [1]);
-  assert.deepEqual(imageRefNumbers(nodes, edges, 'i2'), [2]);
-  // Kind mismatch returns nothing rather than a wrong rank.
-  assert.deepEqual(imageRefNumbers(nodes, edges, 'v1'), []);
+  assert.deepEqual(sourceRoles(nodes, edges, 'v1'), ['1']);
+  assert.deepEqual(sourceRoles(nodes, edges, 'i2'), ['2']);
 }
 
 // A prompt-to-prompt cycle throws instead of recursing forever.
@@ -140,57 +138,6 @@ function graph(nodes, edges) {
     [{ id: 'e1', source: 'p1', target: 'out' }],
   );
   assert.throws(() => buildRequest(nodes, edges, 'out'), /Circular reference/);
-}
-
-// --- imageRefNumbers ---
-
-// An image wired only into a text node is rank 1 there.
-{
-  const t = { id: 't1', type: 'textOutput', position: { x: 200, y: 0 }, data: { result: 'x' } };
-  const i1 = { id: 'i1', type: 'image', position: { x: 0, y: 0 }, data: { dataUrl: 'data:,a' } };
-  const nodes = [out, t, i1];
-  const edges = [{ id: 'e1', source: 'i1', target: 't1' }];
-  assert.deepEqual(imageRefNumbers(nodes, edges, 'i1'), [1]);
-}
-
-// An unwired image, and an image with no picture, have no ranks.
-{
-  const i1 = { id: 'i1', type: 'image', position: { x: 0, y: 0 }, data: { dataUrl: 'data:,a' } };
-  const i2 = { id: 'i2', type: 'image', position: { x: 0, y: 10 }, data: {} };
-  const nodes = [out, i1, i2];
-  const edges = [{ id: 'e1', source: 'i2', target: 'out' }];
-  assert.deepEqual(imageRefNumbers(nodes, edges, 'i1'), []);
-  assert.deepEqual(imageRefNumbers(nodes, edges, 'i2'), []);
-}
-
-// Ranks are per consumer: A (y=0) and B (y=100) both feed the output, so B is 2 there;
-// B alone feeds the text node, so it is 1 there. B's ranks are [1, 2].
-{
-  const t = { id: 't1', type: 'textOutput', position: { x: 200, y: 0 }, data: { result: 'x' } };
-  const a = { id: 'a', type: 'image', position: { x: 0, y: 0 }, data: { dataUrl: 'data:,a' } };
-  const b = { id: 'b', type: 'image', position: { x: 0, y: 100 }, data: { dataUrl: 'data:,b' } };
-  const nodes = [out, t, a, b];
-  const edges = [
-    { id: 'e1', source: 'a', target: 'out' },
-    { id: 'e2', source: 'b', target: 'out' },
-    { id: 'e3', source: 'b', target: 't1' },
-  ];
-  assert.deepEqual(imageRefNumbers(nodes, edges, 'a'), [1]);
-  assert.deepEqual(imageRefNumbers(nodes, edges, 'b'), [1, 2]);
-}
-
-// The rank a consumer sees matches the order buildRequest sends for that same consumer.
-{
-  const t = { id: 't1', type: 'textOutput', position: { x: 200, y: 0 }, data: { result: 'x' } };
-  const a = { id: 'a', type: 'image', position: { x: 0, y: 0 }, data: { dataUrl: 'data:,a' } };
-  const b = { id: 'b', type: 'image', position: { x: 0, y: 100 }, data: { dataUrl: 'data:,b' } };
-  const nodes = [out, t, a, b];
-  const edges = [{ id: 'e1', source: 'b', target: 't1' }, { id: 'e2', source: 'a', target: 't1' }];
-  const { input_references } = buildRequest(nodes, edges, 't1');
-  // a is above b, so a is image 1 for the text node
-  assert.equal(input_references[0].image_url.url, 'data:,a');
-  assert.deepEqual(imageRefNumbers(nodes, edges, 'a'), [1]);
-  assert.deepEqual(imageRefNumbers(nodes, edges, 'b'), [2]);
 }
 
 // --- splitSections ---
@@ -610,6 +557,59 @@ function videoGraph(inputMode, imageCount, extra = []) {
   const { input_references, frame_images } = buildRequest(nodes, edges, 'out');
   assert.equal(input_references.length, 1);
   assert.deepEqual(frame_images, []);
+}
+
+// ---- sourceRoles ----
+
+// An image wired only into a text node is rank 1 there.
+{
+  const { nodes, edges } = graph(
+    [
+      { id: 't1', type: 'textOutput', position: { x: 400, y: 0 }, data: { result: '' } },
+      { id: 'i1', type: 'image', position: { x: 0, y: 0 }, data: { dataUrl: 'data:,a' } },
+    ],
+    [{ id: 'e1', source: 'i1', target: 't1' }],
+  );
+  assert.deepEqual(sourceRoles(nodes, edges, 'i1'), ['1']);
+}
+
+// An unwired image, and an image with no picture, have no roles.
+{
+  const { nodes, edges } = graph(
+    [
+      { id: 'i1', type: 'image', position: { x: 0, y: 0 }, data: { dataUrl: 'data:,a' } },
+      { id: 'i2', type: 'image', position: { x: 0, y: 10 }, data: {} },
+    ],
+    [{ id: 'e1', source: 'i2', target: 'out' }],
+  );
+  assert.deepEqual(sourceRoles(nodes, edges, 'i1'), []);
+  assert.deepEqual(sourceRoles(nodes, edges, 'i2'), []);
+}
+
+// Roles are per consumer: used by one output, ignored by a video node in frame
+// mode, reads "2 / —".
+{
+  const nodes = [
+    { id: 'out', type: 'imageOutput', position: { x: 400, y: 0 }, data: {} },
+    { id: 'v1', type: 'videoOutput', position: { x: 400, y: 200 }, data: { inputMode: 'first_frame' } },
+    { id: 'a', type: 'image', position: { x: 0, y: 0 }, data: { dataUrl: 'data:,a' } },
+    { id: 'b', type: 'image', position: { x: 0, y: 100 }, data: { dataUrl: 'data:,b' } },
+  ];
+  const edges = [
+    { id: 'e1', source: 'a', target: 'out' },
+    { id: 'e2', source: 'b', target: 'out' },
+    { id: 'e3', source: 'a', target: 'v1' },
+    { id: 'e4', source: 'b', target: 'v1' },
+  ];
+  assert.deepEqual(sourceRoles(nodes, edges, 'a'), ['1', 'first']);
+  assert.deepEqual(sourceRoles(nodes, edges, 'b'), ['2', '—']);
+}
+
+// first_last names both slots.
+{
+  const { nodes, edges } = videoGraph('first_last', 2);
+  assert.deepEqual(sourceRoles(nodes, edges, 'i1'), ['first']);
+  assert.deepEqual(sourceRoles(nodes, edges, 'i2'), ['last']);
 }
 
 console.log('resolve.js: all checks passed');

@@ -119,32 +119,34 @@ export function buildRequest(nodes, edges, outputId, opts = {}) {
   return { prompt: promptParts.join('\n\n'), input_references, frame_images };
 }
 
-// The reference numbers an image/video node will be sent as, one per node consuming
-// it (1-based, ascending, deduplicated). Empty when it has no media or feeds nothing.
-// Numbering is per consumer because that is how buildRequest sends them: an image can
-// be image 1 to a text node and image 2 to an output node at the same time. It is
-// also per kind — images and videos count independently, so "image 1" and "video 1"
-// can coexist on one consumer. Kept here so the node badge and buildRequest cannot
-// disagree. `nodes`/`edges` are the live React Flow arrays.
-export function imageRefNumbers(nodes, edges, nodeId, kind = 'image') {
+// What each consuming output will do with this image or video, one entry per
+// consumer, deduplicated. A number is its position in that output's references
+// ("image 2"); `first`/`last` is a frame slot; `—` means the output's mode has no
+// room for it and it will not be sent. Per consumer because an image can be image 2
+// to one node and the first frame of another. Kept beside bucketSources so the
+// badge and the request cannot disagree. `nodes`/`edges` are the live arrays.
+export function sourceRoles(nodes, edges, nodeId) {
   const self = nodes.find((n) => n.id === nodeId);
-  if (!self || self.type !== kind || !self.data?.dataUrl) return [];
+  if (!self || (self.type !== 'image' && self.type !== 'video') || !self.data?.dataUrl) return [];
 
-  const byId = new Map(nodes.map((n) => [n.id, n]));
-  const consumers = nodes.filter(isOutput);
-  const ranks = new Set();
-
-  for (const consumer of consumers) {
-    const sameKind = edges
-      .filter((e) => e.target === consumer.id)
-      .map((e) => byId.get(e.source))
-      .filter((n) => n && n.type === kind && n.data?.dataUrl)
-      .sort((a, b) => (a.position?.y ?? 0) - (b.position?.y ?? 0));
+  const roles = [];
+  for (const consumer of nodes.filter(isOutput)) {
+    const { references, frames, excess } = bucketSources(nodes, edges, consumer.id);
+    const frame = frames.find((f) => f.node.id === nodeId);
+    if (frame) {
+      roles.push(frame.frame_type === 'first_frame' ? 'first' : 'last');
+      continue;
+    }
+    if (excess.includes(nodeId)) {
+      roles.push('—');
+      continue;
+    }
+    // Numbering is per kind: "image 1" and "video 1" coexist on one consumer.
+    const sameKind = references.filter((n) => n.type === self.type);
     const idx = sameKind.findIndex((n) => n.id === nodeId);
-    if (idx !== -1) ranks.add(idx + 1);
+    if (idx !== -1) roles.push(String(idx + 1));
   }
-
-  return [...ranks].sort((a, b) => a - b);
+  return [...new Set(roles)];
 }
 
 // The text node feeding this output, if any — Free mode needs its result to know
