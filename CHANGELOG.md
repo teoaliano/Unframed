@@ -5,6 +5,14 @@ is no release artifact to number. Headings are `## YYYY-MM-DD`, groups are
 `### Added` / `### Changed` / `### Fixed`, one bullet per user-visible change.
 Keep that shape: the website's What's new page parses this file.
 
+## 2026-08-15
+
+### Fixed
+
+- Typing `@` in a prompt offers Text nodes again. The menu had listed only other
+  prompts since the output nodes were split on 2026-08-13, so a text result could
+  be referenced only by typing its id from memory.
+
 ## 2026-08-13
 
 ### Changed

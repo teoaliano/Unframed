@@ -3,6 +3,7 @@ import { Handle, Position, useReactFlow } from '@xyflow/react';
 import { Card } from '@astryxdesign/core/Card';
 import { TextArea } from '@astryxdesign/core/TextArea';
 import NodeHeader from './NodeHeader.jsx';
+import { isTextOutput } from '../graph/resolve.js';
 
 // Match a partial "@query" ending exactly at the caret, so the menu only shows
 // while you're actively typing a reference.
@@ -14,7 +15,7 @@ export default function PromptNode({ id, data }) {
   const [query, setQuery] = useState(null); // null = menu closed; string = open
   const [sel, setSel] = useState(0);
 
-  // Other prompt and text nodes whose id starts with the current @query, with a
+  // Other prompt and text output nodes whose id starts with the current @query, with a
   // preview so opaque ids stay identifiable. (Images aren't @-referenced — they
   // are typed as "image N", see the number on each connected reference node.)
   function candidates(q) {
@@ -22,7 +23,7 @@ export default function PromptNode({ id, data }) {
     const lower = q.toLowerCase();
     return getNodes()
       .filter(
-        (n) => (n.type === 'prompt' || n.type === 'text') && n.id !== id && n.id.toLowerCase().startsWith(lower),
+        (n) => (n.type === 'prompt' || isTextOutput(n)) && n.id !== id && n.id.toLowerCase().startsWith(lower),
       )
       .map((n) => ({
         id: n.id,
