@@ -145,9 +145,11 @@ div:has(> .add-node-menu) {
   stroke-width: 1.5;
 }
 
-/* Ignored edges stop moving as well as turning red -- two channels, because red
-   alone is the one signal colour-blind users do not get. */
-.xedge-ignored .react-flow__edge-path {
+/* Ignored edges stop moving as well as turning red -- two channels, because red alone
+   is the one signal colour-blind users do not get. The selector carries three classes
+   on purpose: React Flow's own `.react-flow__edge.animated path` scores (0,2,1) and
+   would otherwise keep the marching-dash animation running underneath us. */
+.react-flow__edge.react-flow__edge-ignored .react-flow__edge-path {
   stroke: var(--color-error);
   stroke-dasharray: 2 4;
   animation: none;

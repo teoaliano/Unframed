@@ -13,11 +13,11 @@ export default function IgnoredEdge({
   });
   return (
     <g className="xedge-ignored">
-      <BaseEdge path={path} markerEnd={markerEnd} />
       <title>
         Not sent: this output&apos;s input mode has no slot for it. Switch the mode to
         References, or unwire it.
       </title>
+      <BaseEdge path={path} markerEnd={markerEnd} />
     </g>
   );
 }
