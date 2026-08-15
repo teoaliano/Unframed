@@ -569,6 +569,18 @@ function videoGraph(inputMode, imageCount, extra = []) {
   assert.deepEqual(bucketSources(nodes, edges, 'v1').excess, ['i3']);
 }
 
+// first_last with only one image wired: the slot that has no image is simply absent,
+// rather than a null entry or a frame pointing at nothing. Nothing becomes excess --
+// the mode wanted two and got one, which is short, not over-supplied.
+{
+  const { nodes, edges } = videoGraph('first_last', 1);
+  const { frame_images } = buildRequest(nodes, edges, 'v1');
+  assert.deepEqual(frame_images.map((f) => [f.frame_type, f.image_url.url]), [
+    ['first_frame', 'data:,1'],
+  ]);
+  assert.deepEqual(bucketSources(nodes, edges, 'v1').excess, []);
+}
+
 // A wired video is excess in a frame mode: frames are images only.
 {
   const clip = { id: 'vid', type: 'video', position: { x: 0, y: 5 }, data: { dataUrl: 'data:,clip' } };
