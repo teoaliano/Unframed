@@ -41,9 +41,9 @@ video API has two, and we only ever use one:
 
 Sourcing: the two-slot split, precedence, and `supported_frame_images` being exactly
 `["first_frame","last_frame"]` on all five seedance models come from OpenRouter's docs and
-its live `/api/v1/videos/models` catalogue. The per-model reference counts and the
-`@ImageN` convention come from ByteDance-side docs and provider guides, not from
-OpenRouter — treat them as indicative, not contractual.
+its live `/api/v1/videos/models` catalogue. The reference counts are ByteDance's own, from
+the ModelArk "Create a video generation task" reference. The `@ImageN` convention is from
+provider guides — indicative, not contractual.
 
 `resolve.js` puts every wired image into `input_references`, so every generation takes the
 reference-to-video path — the identity-transfer one, with the classifier in front of it.
@@ -210,7 +210,15 @@ changing one thing:
 | B | same model, same prompt, same reference, **plus** a `first_frame` | **completed** ($0.2716) — clip contains only the frame image; no trace of the reference, no moderation complaint |
 
 So OpenRouter's "`frame_images` takes precedence" means the references are discarded, not
-ranked lower. "One frame plus several references" does not work on this route.
+ranked lower.
+
+**This is Seedance's constraint, not OpenRouter's.** ByteDance's API reference enumerates
+four mutually exclusive task types — omni reference-to-video (0–30 images, 0–10 videos,
+0–10 audio on 2.5; 0–9 / 0–3 / 0–3 on the 2.0 series), image-to-video with first and last
+frames, image-to-video with first frame, and text-to-video. None of them takes frames *and*
+references, and the API carries an `omni_reference_task_type` hint because a request is
+exactly one task type. OpenRouter's adapter is picking one on your behalf, correctly. There
+is no workaround to find: the model cannot do both at once.
 
 This does not undo decision 2 — the wire still declares the role, and that is now *more*
 useful, because the two roles genuinely cannot be combined. What changes is what the node
