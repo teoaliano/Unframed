@@ -54,9 +54,10 @@ The test for where something goes: **if it were deleted, what breaks?** An agent
 Before calling a piece of work done:
 
 1. **`npm test`**, and add a case if the change touched pure logic. Node components have no tests by design — verify those in the browser and say so.
-2. **`CHANGELOG.md`** — a dated entry if a user would notice. User-visible only; refactors and test commits do not appear, the git log is already the exhaustive record.
-3. **`status.md`** — delete any todo this closed. If you decided *not* to build something along the way, record it under "Decided not to build" with the reasoning, so it is not re-proposed in six weeks. Do not add a todo for something nobody intends to build; a checkbox reads as intent.
-4. **Documentation** — if behaviour changed, update the file that owns it, here or in a topic doc. If a topic has grown past a few paragraphs, give it its own doc and leave a row in the table above rather than letting this file swell.
+2. **Verify in the running app whenever the app can express the case** — including questions about how a provider behaves. Wire the graph, click Generate, read the server log and the sidecar. A curl script tests OpenRouter; the app tests `buildRequest`, the route, the error branch and the UI at the same time, for the same money. Canvas state can be seeded by writing `output/<project>/graph.json` and reloading, since a file picker cannot be driven from here. Reach for a script only when the request shape is one the UI has no way to build yet — which usually means you are testing a feature that does not exist, and the script is throwaway.
+3. **`CHANGELOG.md`** — a dated entry if a user would notice. User-visible only; refactors and test commits do not appear, the git log is already the exhaustive record.
+4. **`status.md`** — delete any todo this closed. If you decided *not* to build something along the way, record it under "Decided not to build" with the reasoning, so it is not re-proposed in six weeks. Do not add a todo for something nobody intends to build; a checkbox reads as intent.
+5. **Documentation** — if behaviour changed, update the file that owns it, here or in a topic doc. If a topic has grown past a few paragraphs, give it its own doc and leave a row in the table above rather than letting this file swell.
 
 ## Architecture
 
