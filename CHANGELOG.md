@@ -5,6 +5,16 @@ is no release artifact to number. Headings are `## YYYY-MM-DD`, groups are
 `### Added` / `### Changed` / `### Fixed`, one bullet per user-visible change.
 Keep that shape: the website's What's new page parses this file.
 
+## 2026-08-15
+
+### Fixed
+
+- The `@` reference menu appears again when you type `@` in a prompt. It was being
+  drawn just outside the node's card, which clips to its rounded corners, so the
+  menu was cut away entirely and no suggestions ever showed.
+- That menu now also lists Text nodes, not just other prompts. It had dropped them
+  when the output nodes were split on 2026-08-13.
+
 ## 2026-08-13
 
 ### Changed
