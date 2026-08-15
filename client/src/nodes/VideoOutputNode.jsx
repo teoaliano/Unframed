@@ -6,7 +6,7 @@ import { Button } from '@astryxdesign/core/Button';
 import { Selector } from '@astryxdesign/core/Selector';
 import { CheckboxInput } from '@astryxdesign/core/CheckboxInput';
 import { Icon } from '@astryxdesign/core/Icon';
-import { HStack, VStack } from '@astryxdesign/core/Stack';
+import { VStack } from '@astryxdesign/core/Stack';
 import { useToast } from '@astryxdesign/core/Toast';
 import NodeHeader from './NodeHeader.jsx';
 import StatusLine from './StatusLine.jsx';
@@ -215,50 +215,46 @@ export default function VideoOutputNode({ id, data }) {
           onChange={(v) => updateNodeData(id, { videoModel: v, ...resetModelParams('videoOutput') })}
         />
 
-        <ParamControls params={params} data={data} onChange={(u) => updateNodeData(id, u)} />
-
-        {/* The row wraps because "First and last frame" is a wide label: on a 300px card
-            it pushes Seconds and Audio past the edge, and a node that overflows its own
-            card is worse than one that grows a row taller. */}
-        {(inputModes.length > 1 || Boolean(data.inputMode) || durations || canAudio) && (
-          <HStack gap={2} align="end" wrap="wrap">
-            {/* Boolean(data.inputMode) alongside the usual length check: an unconfirmed
-                mode (see selectorOptions above) can leave inputModes itself at length 1
-                while there is still a stored mode that needs a visible, changeable row. */}
-            {(inputModes.length > 1 || Boolean(data.inputMode)) && (
-              <Selector
-                label="Input"
-                size="sm"
-                options={selectorOptions}
-                value={inputMode}
-                onChange={(v) => updateNodeData(id, { inputMode: v })}
+        {/* Passed as children so Size, Input, Seconds and Audio share ONE wrapping row.
+            As a second HStack they could never wrap into the first, so "First and last
+            frame" pushed its neighbours out of the card while space sat unused by Size. */}
+        <ParamControls params={params} data={data} onChange={(u) => updateNodeData(id, u)}>
+          {/* Boolean(data.inputMode) alongside the usual length check: an unconfirmed
+              mode (see selectorOptions above) can leave inputModes itself at length 1
+              while there is still a stored mode that needs a visible, changeable row. */}
+          {(inputModes.length > 1 || Boolean(data.inputMode)) && (
+            <Selector
+              label="Input"
+              size="sm"
+              options={selectorOptions}
+              value={inputMode}
+              onChange={(v) => updateNodeData(id, { inputMode: v })}
+            />
+          )}
+          {durations && (
+            <Selector
+              label="Seconds"
+              size="sm"
+              options={durations}
+              value={String(duration)}
+              onChange={(v) => updateNodeData(id, { duration: Number(v) })}
+            />
+          )}
+          {canAudio && (
+            // A checkbox, not a toggle-button: this is an on/off flag, and a
+            // ghost button reads as "not set" rather than "off". The wrapper
+            // gives it the same height as the Selector's input box so the two
+            // line up on their centres — bottom-aligning them does not, since
+            // the Selector's box is taller than the checkbox.
+            <div className="xnode-inline-check">
+              <CheckboxInput
+                label="Audio"
+                value={Boolean(data.generateAudio)}
+                onChange={(on) => updateNodeData(id, { generateAudio: on })}
               />
-            )}
-            {durations && (
-              <Selector
-                label="Seconds"
-                size="sm"
-                options={durations}
-                value={String(duration)}
-                onChange={(v) => updateNodeData(id, { duration: Number(v) })}
-              />
-            )}
-            {canAudio && (
-              // A checkbox, not a toggle-button: this is an on/off flag, and a
-              // ghost button reads as "not set" rather than "off". The wrapper
-              // gives it the same height as the Selector's input box so the two
-              // line up on their centres — bottom-aligning them does not, since
-              // the Selector's box is taller than the checkbox.
-              <div className="xnode-inline-check">
-                <CheckboxInput
-                  label="Audio"
-                  value={Boolean(data.generateAudio)}
-                  onChange={(on) => updateNodeData(id, { generateAudio: on })}
-                />
-              </div>
-            )}
-          </HStack>
-        )}
+            </div>
+          )}
+        </ParamControls>
 
         <Button
           label={

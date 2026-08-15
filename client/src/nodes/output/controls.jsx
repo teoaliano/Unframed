@@ -44,10 +44,15 @@ export function ModelPicker({ models, value, onChange, kind }) {
 // One control per parameter the selected model declares, and none for the rest.
 // `params` is the object from useModelParams; `data` is the node's data; `onChange`
 // takes the same partial update object updateNodeData does.
-export function ParamControls({ params, data, onChange }) {
+// `children` are the calling node's own controls, rendered INSIDE this row rather than
+// under it: a second HStack could never wrap into this one, so a wide control below
+// (video's "First and last frame") pushed its neighbours out of the card while there was
+// still space beside Size. One row, wrapping, is the only arrangement where every control
+// shares the same space budget.
+export function ParamControls({ params, data, onChange, children }) {
   const { exactSizes, resolutionTiers, qualities, backgrounds, ratios } = params;
   return (
-    <HStack gap={2}>
+    <HStack gap={2} align="end" wrap="wrap">
       {exactSizes && (
         <Selector
           label="Size"
@@ -103,6 +108,7 @@ export function ParamControls({ params, data, onChange }) {
           onChange={(v) => onChange({ aspect_ratio: v })}
         />
       )}
+      {children}
     </HStack>
   );
 }
