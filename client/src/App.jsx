@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { flushSync } from 'react-dom';
 import {
   ReactFlow,
@@ -43,7 +43,9 @@ import ImageOutputNode from './nodes/ImageOutputNode.jsx';
 import VideoOutputNode from './nodes/VideoOutputNode.jsx';
 import TextOutputNode from './nodes/TextOutputNode.jsx';
 import ProjectMenu from './ProjectMenu.jsx';
+import IgnoredEdge from './nodes/IgnoredEdge.jsx';
 import { PromptIcon, ImageIcon, VideoIcon, TextIcon } from './nodes/nodeIcons.jsx';
+import { bucketSources, isOutput } from './graph/resolve.js';
 import LibraryDialog from './library/LibraryDialog.jsx';
 import { instantiateFragment, centerOffset } from './library/insert.js';
 import { selectionFragment, presetFromSelection } from './library/save.js';
@@ -72,6 +74,8 @@ const nodeTypes = {
   videoOutput: VideoOutputNode,
   textOutput: TextOutputNode,
 };
+
+const edgeTypes = { ignored: IgnoredEdge };
 
 // Icons come from lucide-react — the same pack @astryxdesign/theme-neutral
 // registers behind the design system's semantic names, so `icon="info"` and these
@@ -926,6 +930,23 @@ function Canvas() {
     return () => window.removeEventListener('paste', onPaste);
   }, [addNode, setNodes]);
 
+  // Derived at render, never stored: which edges are ignored depends on the target's
+  // mode AND the selected model, so writing it onto the edges would persist a fact
+  // that goes stale the moment either changes -- into graph.json, where it would be
+  // read back as truth.
+  const displayEdges = useMemo(() => {
+    const ignored = new Set();
+    for (const node of nodes) {
+      if (!isOutput(node)) continue;
+      const { excess } = bucketSources(nodes, edges, node.id);
+      if (!excess.length) continue;
+      for (const e of edges) {
+        if (e.target === node.id && excess.includes(e.source)) ignored.add(e.id);
+      }
+    }
+    return ignored.size ? edges.map((e) => (ignored.has(e.id) ? { ...e, type: 'ignored' } : e)) : edges;
+  }, [nodes, edges]);
+
   return (
     <div
       className="app"
@@ -999,11 +1020,12 @@ function Canvas() {
       >
         <ReactFlow
           nodes={nodes}
-          edges={edges}
+          edges={displayEdges}
           onNodesChange={onNodesChange}
           onEdgesChange={onEdgesChange}
           onConnect={onConnect}
           nodeTypes={nodeTypes}
+          edgeTypes={edgeTypes}
           fitView
           minZoom={0.3}
           defaultEdgeOptions={{ animated: true }}

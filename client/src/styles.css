@@ -144,6 +144,14 @@ div:has(> .add-node-menu) {
   stroke: var(--color-accent);
   stroke-width: 1.5;
 }
+
+/* Ignored edges stop moving as well as turning red -- two channels, because red
+   alone is the one signal colour-blind users do not get. */
+.xedge-ignored .react-flow__edge-path {
+  stroke: var(--color-error);
+  stroke-dasharray: 2 4;
+  animation: none;
+}
 /* 12px dot with a transparent 24px target around it. WCAG 2.2 SC 2.5.8 (AA) asks
    for 24x24 CSS px; the visible dot stays small because a big one crowds the node
    edge, and the pseudo-element does the catching. Size is stated directly (not

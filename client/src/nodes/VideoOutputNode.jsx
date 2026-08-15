@@ -14,7 +14,7 @@ import ExpandableNote from './ExpandableNote.jsx';
 import { MAX_VIDEO_BYTES } from './VideoNode.jsx';
 import { useModels, useModelParams, freeSpot } from './output/core.js';
 import { ModelPicker, ParamControls, CostFoot } from './output/controls.jsx';
-import { buildRequest } from '../graph/resolve.js';
+import { buildRequest, bucketSources } from '../graph/resolve.js';
 import { generateVideo } from '../api.js';
 import { ExternalLink as AddToCanvasIcon } from 'lucide-react';
 
@@ -58,6 +58,7 @@ export default function VideoOutputNode({ id, data }) {
   // A graph saved in a frame mode, reopened on a model without frames. The request
   // falls back rather than sending a param the model never declared.
   const modeUnsupported = Boolean(data.inputMode) && data.inputMode !== inputMode;
+  const ignoredCount = bucketSources(liveNodes, liveEdges, id).excess.length;
 
   // Video is sold by the second, so the price of a click is knowable before it is
   // spent — and worth showing, at a dollar a clip rather than three cents.
@@ -260,6 +261,13 @@ export default function VideoOutputNode({ id, data }) {
           <StatusLine type="warning">
             This graph asks for a frame image, which {model} does not accept. The wired
             images are being sent as references instead.
+          </StatusLine>
+        )}
+
+        {ignoredCount > 0 && (
+          <StatusLine type="warning">
+            {ignoredCount === 1 ? 'One input is' : `${ignoredCount} inputs are`} not used by
+            this mode and will not be sent. Their connections are marked red.
           </StatusLine>
         )}
 
