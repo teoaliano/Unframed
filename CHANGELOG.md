@@ -19,9 +19,9 @@ Keep that shape: the website's What's new page parses this file.
 - Reference badge numbers are now ordered by the consuming output's position on
   the canvas rather than always counting up from 1, so the same wired image can
   read `2 / 1` — the position tells you which output gives which rank.
-- Switching a model now resets that node's model-specific settings to that
-  model's defaults, so a setting the new model cannot honour is never silently
-  carried over.
+- Switching a model now returns that node's model-specific settings to that
+  model's defaults, whether or not the new model could have honoured the old
+  value, the same as a freshly added node on that model.
 
 ### Fixed
 

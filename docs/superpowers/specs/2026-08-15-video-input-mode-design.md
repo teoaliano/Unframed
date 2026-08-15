@@ -123,7 +123,7 @@ the canvas marks (red edges, the ignored count, the badges), which are derived w
 model knowledge, disagreeing with what the request actually did: a graph could show two
 contradictory warnings at once. The fallback is removed in favour of making the state
 unreachable — switching a node's model now resets its model-dependent settings to that
-model's defaults (`resetModelParams` in `client/src/nodes/output/core.js`), and a node whose
+model's defaults (`resetModelParams` in `client/src/nodes/output/defaults.js`), and a node whose
 stored mode the *effective* model cannot honour self-heals it the same way `migrateNodes`
 heals an old graph. Teaching three more places about models lost to removing the state they
 would have had to reconcile.

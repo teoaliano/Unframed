@@ -116,34 +116,6 @@ export function useModelParams(entry, kind) {
   };
 }
 
-// The data a freshly added output node starts with. Lives here rather than in App.jsx
-// because switching a node's model resets it to exactly this -- two homes for one list
-// is how the reset silently stops covering a control somebody added later.
-export const OUTPUT_DEFAULTS = {
-  imageOutput: { resolution: '1K', quality: 'low', aspect_ratio: '1:1' },
-  videoOutput: {},
-  textOutput: { text: '', result: '' },
-};
-
-// Every data key a model's capabilities decide. Add to this when you add a control, or
-// the old model's value survives the switch and gets filtered out at send time instead --
-// which reads as "the app forgot my setting" rather than "that model cannot do this".
-// NOT here on purpose: runs/freeRuns (a batch size, not a model trait), shareLocalVideos
-// (consent about a wired clip), text/result/model itself.
-export const MODEL_PARAM_KEYS = {
-  imageOutput: ['quality', 'background', 'resolution', 'aspect_ratio', 'size'],
-  videoOutput: ['size', 'resolution', 'aspect_ratio', 'duration', 'generateAudio', 'inputMode'],
-  textOutput: [],
-};
-
-// What to merge alongside a new model id: clear every model-dependent key, then lay this
-// type's fresh-node defaults back over the top, so switching lands exactly where adding a
-// new node with that model would. An undefined value drops out of graph.json entirely.
-export function resetModelParams(type) {
-  const cleared = Object.fromEntries((MODEL_PARAM_KEYS[type] || []).map((k) => [k, undefined]));
-  return { ...cleared, ...(OUTPUT_DEFAULTS[type] || {}) };
-}
-
 // A free spot to the right of a node, stepped down past whatever is already there.
 // Scanned once per add so a batch added together cannot land on top of itself:
 // addNodes is async to getNodes(), so N scans in one tick would each read a snapshot

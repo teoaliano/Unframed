@@ -12,7 +12,8 @@ import NodeHeader from './NodeHeader.jsx';
 import StatusLine from './StatusLine.jsx';
 import ExpandableNote from './ExpandableNote.jsx';
 import { MAX_VIDEO_BYTES } from './VideoNode.jsx';
-import { useModels, useModelParams, freeSpot, resetModelParams } from './output/core.js';
+import { useModels, useModelParams, freeSpot } from './output/core.js';
+import { resetModelParams } from './output/defaults.js';
 import { ModelPicker, ParamControls, CostFoot } from './output/controls.jsx';
 import { buildRequest, bucketSources } from '../graph/resolve.js';
 import { generateVideo } from '../api.js';
@@ -45,23 +46,35 @@ export default function VideoOutputNode({ id, data }) {
   // supported_frame_images. Offer only what this model declares -- the same rule as
   // every other control here -- and never a selector with one option.
   const frameTypes = entry?.params?.frame_images || null;
+  const FRAME_MODE_LABELS = { first_frame: 'First frame', first_last: 'First and last frame' };
   const inputModes = [
     { value: 'reference', label: 'References' },
-    ...(frameTypes?.includes('first_frame') ? [{ value: 'first_frame', label: 'First frame' }] : []),
+    ...(frameTypes?.includes('first_frame') ? [{ value: 'first_frame', label: FRAME_MODE_LABELS.first_frame }] : []),
     ...(frameTypes?.includes('first_frame') && frameTypes?.includes('last_frame')
-      ? [{ value: 'first_last', label: 'First and last frame' }]
+      ? [{ value: 'first_last', label: FRAME_MODE_LABELS.first_last }]
       : []),
   ];
-  const inputMode = inputModes.some((o) => o.value === data.inputMode)
-    ? data.inputMode
-    : 'reference';
+  // A stored mode this model doesn't currently declare -- entry not yet loaded, or a
+  // real mismatch the self-heal effect below hasn't caught up with yet -- still needs a
+  // row to change it from. Kept out of `inputModes` itself: that list is also what the
+  // effect and the request consider valid, and folding the stray value into it would
+  // make an unsupported mode look supported forever, so the reset it exists to catch
+  // would never fire.
+  const unconfirmedMode = Boolean(data.inputMode) && !inputModes.some((o) => o.value === data.inputMode);
+  const selectorOptions = unconfirmedMode
+    ? [...inputModes, { value: data.inputMode, label: FRAME_MODE_LABELS[data.inputMode] || data.inputMode }]
+    : inputModes;
+  const inputMode = data.inputMode || 'reference';
   // A node with no stored model follows the global default, so Settings can change its
   // model without a switch. Clearing an inputMode the model cannot honour keeps the badge,
   // the red edges and the request from ever disagreeing -- same self-healing shape as
-  // migrateNodes. Guarded on the catalogue: while it loads, entry is undefined and every
-  // mode would look unsupported, which would wipe a perfectly good setting.
+  // migrateNodes.
   useEffect(() => {
-    if (!models.length || !entry) return;
+    // `entry` is not enough: the server manufactures a bare { id, name } for the
+    // configured model when the catalogue is unavailable, and a missing params means
+    // "we do not know", not "this model has no frames". Healing on that wipes a valid
+    // setting during an upstream outage.
+    if (!models.length || !entry?.params) return;
     if (data.inputMode && !inputModes.some((o) => o.value === data.inputMode)) {
       updateNodeData(id, { inputMode: undefined });
     }
@@ -204,13 +217,16 @@ export default function VideoOutputNode({ id, data }) {
 
         <ParamControls params={params} data={data} onChange={(u) => updateNodeData(id, u)} />
 
-        {(inputModes.length > 1 || durations || canAudio) && (
+        {(inputModes.length > 1 || Boolean(data.inputMode) || durations || canAudio) && (
           <HStack gap={2} align="end">
-            {inputModes.length > 1 && (
+            {/* Boolean(data.inputMode) alongside the usual length check: an unconfirmed
+                mode (see selectorOptions above) can leave inputModes itself at length 1
+                while there is still a stored mode that needs a visible, changeable row. */}
+            {(inputModes.length > 1 || Boolean(data.inputMode)) && (
               <Selector
                 label="Input"
                 size="sm"
-                options={inputModes}
+                options={selectorOptions}
                 value={inputMode}
                 onChange={(v) => updateNodeData(id, { inputMode: v })}
               />

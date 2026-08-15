@@ -42,7 +42,7 @@ import VideoNode, { MAX_VIDEO_BYTES } from './nodes/VideoNode.jsx';
 import ImageOutputNode from './nodes/ImageOutputNode.jsx';
 import VideoOutputNode from './nodes/VideoOutputNode.jsx';
 import TextOutputNode from './nodes/TextOutputNode.jsx';
-import { OUTPUT_DEFAULTS } from './nodes/output/core.js';
+import { OUTPUT_DEFAULTS } from './nodes/output/defaults.js';
 import ProjectMenu from './ProjectMenu.jsx';
 import IgnoredEdge from './nodes/IgnoredEdge.jsx';
 import { PromptIcon, ImageIcon, VideoIcon, TextIcon } from './nodes/nodeIcons.jsx';
@@ -159,7 +159,7 @@ const initialNodes = [
     id: OUTPUT_ID,
     type: 'imageOutput',
     position: { x: 460, y: 120 },
-    data: { resolution: '1K', quality: 'low', aspect_ratio: '1:1', runs: 1 },
+    data: { ...OUTPUT_DEFAULTS.imageOutput, runs: 1 },
   },
 ].map(withDrag);
 

@@ -4,6 +4,7 @@ import { buildRequest, bucketSources, sourceRoles, splitSections, findWiredTextN
 import { migrateNodes } from './migrate.js';
 import { instantiateFragment, centerOffset } from '../library/insert.js';
 import { selectionFragment, presetFromSelection } from '../library/save.js';
+import { MODEL_PARAM_KEYS, resetModelParams } from '../nodes/output/defaults.js';
 
 const out = { id: 'out', type: 'imageOutput', position: { x: 400, y: 0 }, data: {} };
 
@@ -627,6 +628,49 @@ function videoGraph(inputMode, imageCount, extra = []) {
   const backwards = sourceRoles([paired, solo, w, x], edges, 'x');
   assert.deepEqual(forwards, backwards, 'badge order must not depend on node array order');
   assert.deepEqual(forwards, ['1', '2']);
+}
+
+// ---- resetModelParams ----
+
+// Critical regression guard: a naive "clear the model keys, then spread the WHOLE
+// defaults object over them" also resets text output's `text`/`result`, wiping the
+// user's instructions and the model's answer -- and every @id reference to it -- on a
+// mere model switch. textOutput has no model-dependent keys, so the reset must be a
+// true no-op.
+{
+  assert.deepEqual(resetModelParams('textOutput'), {});
+}
+
+// videoOutput has no fresh-node defaults of its own (OUTPUT_DEFAULTS.videoOutput is
+// {}), so every model-dependent key comes back cleared rather than repopulated.
+{
+  const reset = resetModelParams('videoOutput');
+  assert.deepEqual(Object.keys(reset).sort(), [...MODEL_PARAM_KEYS.videoOutput].sort());
+  for (const key of MODEL_PARAM_KEYS.videoOutput) assert.equal(reset[key], undefined);
+}
+
+// imageOutput DOES have fresh-node defaults: resolution/quality/aspect_ratio land back
+// on them, while size/background -- keys the type has no default for -- clear to
+// undefined instead of surviving the switch.
+{
+  const reset = resetModelParams('imageOutput');
+  assert.equal(reset.resolution, '1K');
+  assert.equal(reset.quality, 'low');
+  assert.equal(reset.aspect_ratio, '1:1');
+  assert.equal(reset.size, undefined);
+  assert.equal(reset.background, undefined);
+}
+
+// A model switch must never reset what a node keeps across switches on purpose -- a
+// batch size, consent about a wired clip, or the node's own content/identity. An
+// overlap here is the Critical-1 bug recurring in a different key.
+{
+  const mustSurvive = ['runs', 'freeRuns', 'shareLocalVideos', 'text', 'result', 'model', 'videoModel'];
+  for (const type of Object.keys(MODEL_PARAM_KEYS)) {
+    for (const key of MODEL_PARAM_KEYS[type]) {
+      assert.ok(!mustSurvive.includes(key), `${type}'s MODEL_PARAM_KEYS must not include "${key}"`);
+    }
+  }
 }
 
 console.log('resolve.js: all checks passed');

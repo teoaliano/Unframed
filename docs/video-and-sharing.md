@@ -41,6 +41,18 @@ the model declares them in `supported_frame_images`, so a model without frame su
 shows no selector at all. Absent on a saved graph means References, which is what
 every graph did before the selector existed.
 
+**A mode never outlives the model it was picked for.** Switching the node's model clears
+`inputMode` along with every other model-dependent setting (`resetModelParams` in
+`client/src/nodes/output/defaults.js`), so a fresh model starts at its own defaults rather
+than inheriting a mode it may not support. A node that keeps its *stored* model but
+whose *effective* model changes underneath it — the global default moved in Settings,
+or the catalogue came back with different capabilities after being unavailable — heals
+the same way on next open: a mode the model can no longer honour is cleared, the same
+self-correction `migrateNodes` does for an old graph shape. The healing is deliberately
+cautious about what "can no longer honour" means: a catalogue fetch that fails or omits
+the configured model is treated as "unknown," not "unsupported," so an OpenRouter outage
+does not itself wipe a perfectly good setting.
+
 Which image is which comes from canvas position, top to bottom — the same rule that
 orders prompts and numbers references. In first-frame mode the topmost wired image is
 the frame; in first-and-last mode the top two are first and last.
