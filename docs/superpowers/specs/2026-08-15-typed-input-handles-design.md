@@ -102,18 +102,21 @@ comfortable reading. Verified in the browser at zoom 0.806 with a DOM mock — l
 - only the *named* handles carry labels; the bare references handle has none
 - hover and keyboard focus show the label at any zoom
 
-**Labels need a reserved gutter.** Three placements were mocked in the running app:
+**Labels sit outside the card, left of the dot**, at 12px / weight 500. All three
+placements were mocked in the running app:
 
 | Placement | Result |
 | --- | --- |
-| outside the card, left of the dot | incoming edges run straight through the text |
+| **outside the card, left of the dot** | chosen — edges do cross the text, accepted as the lesser cost |
 | inside the card's existing padding | "first" lands on top of the Model selector |
-| **40px left gutter, card 300 → 340** | dots and labels clear of both edges and controls |
+| 40px gutter, card 300 → 340 | clean, but every video node pays 40px of width for chrome |
 
-So `videoOutput` reserves a 40px gutter on the header and body, and widens to 340 rather
-than shrinking its controls to fit its own chrome. The gutter is unconditional on that node
-— the frame handles are always mounted (see below), so the space is always in use.
-`imageOutput` and `textOutput` keep their 300px card and single centred handle.
+The card stays 300px and matches the other two outputs. The edge/label overlap is real but
+minor: edges are thin dashed lines, and the label is only up while you are zoomed in on the
+node anyway.
+
+At 12px the legibility floor (~9px rendered) actually lands at zoom 0.75, so 0.8 has a
+little headroom — worth remembering if labels turn out to appear later than wanted.
 
 Subscribe to the boolean, not the zoom: `useStore((s) => s.transform[2] >= 0.8)` re-renders
 a node only when it flips, not on every wheel tick.
@@ -139,8 +142,12 @@ a node only when it flips, not on every wheel tick.
 | id | label | accepts |
 | --- | --- | --- |
 | *(default, `null`)* | — | anything, as today |
-| `first` | first | one `image` node |
-| `last` | last | one `image` node |
+| `first_frame` | first | one `image` node |
+| `last_frame` | last | one `image` node |
+
+Handle ids are the API's own `frame_type` values, so the mapping is an identity —
+`frame_type: edge.targetHandle` — with no lookup table to drift. The visible label stays
+short ("first"), since it hangs outside the card where every character costs.
 
 Stacked below the header, 32px apart, in that order. Anchoring to the top rather than
 centring means a later audio handle appends at the bottom and nothing above it moves.
