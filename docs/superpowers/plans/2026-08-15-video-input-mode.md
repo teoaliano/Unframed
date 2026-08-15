@@ -1053,3 +1053,134 @@ EOF
   `first` while the request falls back to references. The node's warning covers it;
   threading model state into every input node's badge would cost more than the case is
   worth.
+
+---
+
+### Task 9: Switching model resets that node to the model's defaults
+
+**Why this exists:** added after the final review. The branch's marks (red edges, ignored
+count, badges) are derived without model knowledge, while the request falls back via
+`framesUnsupported` — so a graph saved in a frame mode and reopened on a model without
+frames showed two contradictory warnings. Rather than teach the marks about models, make
+the bad state unreachable: a model switch resets that node's model-dependent params to
+what a fresh node with that model would have. The fallback then has nothing to fall back
+from, and three pieces of code delete themselves.
+
+The rule is general — it applies to image outputs too, not just video.
+
+**Files:**
+- Modify: `client/src/nodes/output/core.js` (new exports)
+- Modify: `client/src/App.jsx` (`NEW_NODE` reads the shared defaults)
+- Modify: `client/src/nodes/ImageOutputNode.jsx`, `client/src/nodes/VideoOutputNode.jsx`, `client/src/nodes/TextOutputNode.jsx` (the `ModelPicker` `onChange`)
+- Modify: `client/src/graph/resolve.js`, `client/src/graph/resolve.test.js` (retire `framesUnsupported`)
+- Modify: `CHANGELOG.md`, `docs/superpowers/specs/2026-08-15-video-input-mode-design.md`
+
+**Interfaces produced:**
+- `OUTPUT_DEFAULTS` — `{ imageOutput, videoOutput, textOutput }`, the starting data per output type.
+- `MODEL_PARAM_KEYS` — `{ imageOutput: [...], videoOutput: [...], textOutput: [] }`.
+- `resetModelParams(type)` — every key in `MODEL_PARAM_KEYS[type]` set to `undefined`, then `OUTPUT_DEFAULTS[type]` spread over it. Merge it into the same `updateNodeData` call that writes the new model id.
+
+- [ ] **Step 1: One home for the defaults and the key list**
+
+In `client/src/nodes/output/core.js`:
+
+```js
+// The data a freshly added output node starts with. Lives here rather than in App.jsx
+// because switching a node's model resets it to exactly this -- two homes for one list
+// is how the reset silently stops covering a control somebody added later.
+export const OUTPUT_DEFAULTS = {
+  imageOutput: { resolution: '1K', quality: 'low', aspect_ratio: '1:1' },
+  videoOutput: {},
+  textOutput: { text: '', result: '' },
+};
+
+// Every data key a model's capabilities decide. Add to this when you add a control, or
+// the old model's value survives the switch and gets filtered out at send time instead --
+// which reads as "the app forgot my setting" rather than "that model cannot do this".
+// NOT here on purpose: runs/freeRuns (a batch size, not a model trait), shareLocalVideos
+// (consent about a wired clip), text/result/model itself.
+export const MODEL_PARAM_KEYS = {
+  imageOutput: ['quality', 'background', 'resolution', 'aspect_ratio', 'size'],
+  videoOutput: ['size', 'resolution', 'aspect_ratio', 'duration', 'generateAudio', 'inputMode'],
+  textOutput: [],
+};
+
+// What to merge alongside a new model id: clear every model-dependent key, then lay this
+// type's fresh-node defaults back over the top, so switching lands exactly where adding a
+// new node with that model would. An undefined value drops out of graph.json entirely.
+export function resetModelParams(type) {
+  const cleared = Object.fromEntries((MODEL_PARAM_KEYS[type] || []).map((k) => [k, undefined]));
+  return { ...cleared, ...(OUTPUT_DEFAULTS[type] || {}) };
+}
+```
+
+- [ ] **Step 2: `App.jsx` stops owning the seeds**
+
+Import `OUTPUT_DEFAULTS` from `./nodes/output/core.js` and replace the three output rows of
+`NEW_NODE` with references to it, leaving the `prompt`/`image`/`video` rows alone:
+
+```js
+  const NEW_NODE = {
+    prompt: { text: '' },
+    image: { fileName: '', dataUrl: '' },
+    video: { fileName: '', dataUrl: '' },
+    imageOutput: OUTPUT_DEFAULTS.imageOutput,
+    videoOutput: OUTPUT_DEFAULTS.videoOutput,
+    textOutput: OUTPUT_DEFAULTS.textOutput,
+  };
+```
+
+- [ ] **Step 3: The three call sites**
+
+`ImageOutputNode.jsx`: `onChange={(v) => updateNodeData(id, { model: v, ...resetModelParams('imageOutput') })}`
+`VideoOutputNode.jsx`: `onChange={(v) => updateNodeData(id, { videoModel: v, ...resetModelParams('videoOutput') })}`
+`TextOutputNode.jsx`: `onChange={(v) => updateNodeData(id, { model: v, ...resetModelParams('textOutput') })}`
+
+Text outputs have no model-dependent params; the call is there so the next control added to
+that node is covered by the same rule instead of being the exception nobody remembers.
+
+- [ ] **Step 4: Self-heal a mode the effective model cannot honour**
+
+A node with no stored model follows the global default, so changing that default in Settings
+changes the node's model with no switch event. Heal it the way `migrateNodes` heals old
+graphs — on open, letting the next autosave write the correction back. In `VideoOutputNode`:
+
+```js
+  // A node with no stored model follows the global default, so Settings can change its
+  // model without a switch. Clearing an inputMode the model cannot honour keeps the badge,
+  // the red edges and the request from ever disagreeing -- same self-healing shape as
+  // migrateNodes. Guarded on the catalogue: while it loads, entry is undefined and every
+  // mode would look unsupported, which would wipe a perfectly good setting.
+  useEffect(() => {
+    if (!models.length || !entry) return;
+    if (data.inputMode && !inputModes.some((o) => o.value === data.inputMode)) {
+      updateNodeData(id, { inputMode: undefined });
+    }
+  }, [models.length, entry, data.inputMode, inputModes, id, updateNodeData]);
+```
+
+- [ ] **Step 5: Retire the fallback**
+
+With Steps 3 and 4 in place, `data.inputMode` can no longer disagree with the model, so
+delete: `modeUnsupported` and its `StatusLine` from `VideoOutputNode`, the
+`{ framesUnsupported: modeUnsupported }` argument, and `opts.framesUnsupported` from
+`bucketSources` in `resolve.js` (the `opts` parameter goes with it if nothing else uses it).
+Delete the now-unreachable `resolve.test.js` block whose comment begins "The model has no
+frame support".
+
+- [ ] **Step 6: `npm test`, then CHANGELOG and spec**
+
+CHANGELOG, under today's `### Changed`: switching a model now resets that node's
+model-specific settings to that model's defaults, so a setting the new model cannot honour
+is never silently carried over.
+
+In the spec, amend decision 2 to record that the `framesUnsupported` fallback was removed
+in favour of the reset, and why: making the state unreachable beat teaching three more
+places about models.
+
+- [ ] **Step 7: Commit**
+
+```bash
+git add client/src/nodes/output/core.js client/src/App.jsx client/src/nodes/ImageOutputNode.jsx client/src/nodes/VideoOutputNode.jsx client/src/nodes/TextOutputNode.jsx client/src/graph/resolve.js client/src/graph/resolve.test.js CHANGELOG.md docs/superpowers/specs/2026-08-15-video-input-mode-design.md
+git commit -m "Reset a node's model settings when its model changes"
+```
