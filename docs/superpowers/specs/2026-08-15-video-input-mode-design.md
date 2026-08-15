@@ -158,7 +158,9 @@ Handles are 9×9px today (`styles.css:147`) and need precise aiming. WCAG 2.2 SC
 24px apart, centre to centre.
 
 - dot: **12px**
-- hit box: **24px**, transparent, via `::before` inset −6px
+- hit box: **24px**, transparent, via a `::before` sized directly (not derived from
+  `inset`: the 2px border plus `box-sizing: border-box` shrink the padding box to
+  8px, so an inset would only reach 20px)
 
 Applies to every handle in the app. With one handle per node there is nothing to label, so
 the labels, their hover behaviour and the zoom threshold that governed them are all
@@ -174,9 +176,10 @@ without a migration.
 
 Offered only where the model supports it: `first_frame` needs `params.frame_images` to
 include `first_frame`, `first_last` needs both. If a saved graph names a mode the current
-model does not support, the request falls back to references and the node says so — the
-same shape as `supported(values, value)` in `output/core.js`, which already refuses to send
-a param the model never declared.
+model does not support, the node clears `data.inputMode` outright — self-healing before a
+request is ever built, rather than falling back at request time. See the Amendment below
+for why: an earlier version of this design had `bucketSources`/`buildRequest` do the
+falling back instead, and that's what got removed.
 
 ### `resolve.js`
 
@@ -198,8 +201,9 @@ badge: a number in reference mode, `first` / `last` in a frame mode, `—` when 
 `imageRefNumbers` is gone; `sourceRoles` replaces it, reference mode included.
 
 `resolve.js` stays model-agnostic. It reads `data.inputMode` off the output node — already
-in `nodes` — and never learns which model is selected; the node passes a flag when the mode
-is unsupported.
+in `nodes` — and never learns which model is selected, and it is never told a mode is
+unsupported: the node clears its own `data.inputMode` before that state can reach
+`bucketSources` at all (see the Amendment above).
 
 ### Red edges
 
@@ -254,7 +258,8 @@ In the running app, per the rule in `CLAUDE.md`:
 - switching modes with five images wired turns four edges red, and the tooltip explains why
 - the badge reads `2 / —` for an image used by one output and ignored by another
 - a model without frame support hides the selector, and a graph saved in frame mode on that
-  model falls back to references with a visible note
+  model has `inputMode` cleared automatically — no visible note, the same silent self-heal
+  `migrateNodes` does for an old graph shape
 - an actual generation in first-frame mode, wired in the canvas, writes a sidecar naming
   `frame_images` — the one paid check, on the cheapest model at 480p/4s
 

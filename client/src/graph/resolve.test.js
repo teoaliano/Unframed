@@ -299,7 +299,9 @@ function graph(nodes, edges) {
 {
   const graphNodes = [
     { id: 'a', type: 'prompt', selected: true, data: {} },
-    { id: 'b', type: 'videoOutput', selected: true, data: {} },
+    // videoModel survives; job must not -- see selectionFragment's comment for why a
+    // job id baked into a never-rewritten preset (or a copy-pasted node) is permanent.
+    { id: 'b', type: 'videoOutput', selected: true, data: { videoModel: 'seedance', job: { id: 'j1', startedAt: 1, params: {} } } },
     { id: 'c', type: 'prompt', data: {} },
   ];
   const graphEdges = [
@@ -311,6 +313,8 @@ function graph(nodes, edges) {
   assert.deepEqual(frag.nodes.map((n) => n.id), ['a', 'b'], 'takes the selected nodes');
   assert.deepEqual(frag.edges.map((e) => e.id), ['e1'], 'drops edges with an end outside the selection');
   assert.equal('selected' in frag.nodes[0] && frag.nodes[0].selected, undefined, 'selection state is not saved');
+  assert.equal(frag.nodes[1].data.job, undefined, 'a pending job is stripped from a saved/copied node');
+  assert.equal(frag.nodes[1].data.videoModel, 'seedance', 'other data survives the strip');
 
   // Right-clicking does not select, so the clicked node stands in for a selection.
   const one = selectionFragment(graphNodes.map((n) => ({ ...n, selected: false })), graphEdges, 'c');

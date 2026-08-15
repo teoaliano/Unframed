@@ -58,8 +58,10 @@ orders prompts and numbers references. In first-frame mode the topmost wired ima
 the frame; in first-and-last mode the top two are first and last.
 
 Anything the mode has no room for keeps its connection and is marked instead of
-dropped: the edge turns red and stops animating, its tooltip says why, the input
-node's badge reads `—`, and the video node counts them. Nothing marked is sent.
+dropped: the edge turns red and stops animating, its tooltip says why, and the input
+node's badge reads `—`. The video output's own StatusLine stays count-free on
+purpose ("One or more inputs connected will not be sent") — the red edges already
+say which ones, and that changes as you rewire. Nothing marked is sent.
 
 ## Only one of the two video-to-video modes is reachable
 

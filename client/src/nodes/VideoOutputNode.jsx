@@ -37,14 +37,27 @@ export default function VideoOutputNode({ id, data }) {
   const liveNodes = useNodes();
   const liveEdges = useEdges();
   // Every job id this component instance has already started a poll loop for, once
-  // each — no matter how many times a project switch brings that same job back into
-  // view (React Flow keys node components by id, not by project, so the instance
-  // survives a switch without unmounting), or React StrictMode's dev-only
-  // double-mount fires the resume effect below twice. Without it, either would start
-  // a SECOND loop for a job something else already has one running for, and the
-  // server re-downloads (and re-saves) a completed job on every poll that reaches
-  // it rather than caching it — see the completion branch of /api/video/:id.
+  // each — no matter how many times React StrictMode's dev-only double-mount fires
+  // the resume effect below twice, or onGenerate's own call into runJob lands before
+  // the data.job update it just wrote has round-tripped back through props (see that
+  // effect's comment). A genuine project switch no longer needs this guard: the
+  // canvas remounts on `canvasGeneration` (App.jsx), so a switch gives this job a
+  // brand new component instance with an empty set, same as a reload. Without this
+  // guard, either remaining case would start a SECOND loop for a job something else
+  // already has one running for, and the server re-downloads (and re-saves) a
+  // completed job on every poll that reaches it rather than caching it — see the
+  // completion branch of /api/video/:id.
   const startedJobIds = useRef(new Set());
+  // True while a poll loop -- fast or the slow re-arm below -- is actively in flight
+  // for the CURRENT job. Unlike startedJobIds (which never clears, and only stops
+  // THIS component's own effects from re-firing for a job they already started once),
+  // this clears the moment a loop exits. It exists so the resume effect and the
+  // re-arm effect can never both start a loop for the same job in the same commit:
+  // if a job is already pending when this component mounts, both effects run in the
+  // same pass, and setStatus('running') from the first one is not yet visible to the
+  // second one's closure (state updates are batched) -- but this ref IS, since runJob
+  // sets it synchronously before its first await.
+  const loopRunning = useRef(false);
 
   const { models, defaultModel } = useModels('video');
   const model = data.videoModel || defaultModel;
@@ -92,7 +105,13 @@ export default function VideoOutputNode({ id, data }) {
     }
   }, [models.length, entry, data.inputMode, inputModes, id, updateNodeData]);
 
-  const ignoredCount = bucketSources(liveNodes, liveEdges, id).excess.length;
+  // Computed once and shared by every count below, so the three things this card can
+  // say about its wired videos -- the ignored-input warning, the "probably ignored"
+  // capability warning, and the sharing block's promises -- describe the same request
+  // bucketSources itself will build, rather than three independent readings of the
+  // edges that can disagree the moment a frame mode is active.
+  const buckets = bucketSources(liveNodes, liveEdges, id);
+  const ignoredCount = buckets.excess.length;
 
   // Video is sold by the second, so the price of a click is knowable before it is
   // spent — and worth showing, at a dollar a clip rather than three cents.
@@ -112,10 +131,13 @@ export default function VideoOutputNode({ id, data }) {
   // OpenRouter's /videos endpoint takes video_url only as a public HTTPS URL, and its
   // Files API (which could have hosted one) accepts images, audio and documents but
   // not video.
-  const wiredVideoSources = liveEdges
-    .filter((e) => e.target === id)
-    .map((e) => liveNodes.find((n) => n.id === e.source && n.type === 'video' && n.data?.dataUrl))
-    .filter(Boolean);
+  //
+  // Read off buckets.references rather than the raw edges: a frame mode sends no
+  // references at all (frames are images only, so any wired video lands in `excess`
+  // instead -- see bucketSources), and counting from the edges directly ignored that,
+  // which is how one card ended up claiming a video would be sent, ignored, AND shared
+  // over a tunnel all at once.
+  const wiredVideoSources = buckets.references.filter((n) => n.type === 'video' && n.data?.dataUrl);
   const wiredVideos = wiredVideoSources.length;
   const wiredLocalVideos = wiredVideoSources.filter((n) =>
     String(n.data.dataUrl).startsWith('data:'),
@@ -180,7 +202,10 @@ export default function VideoOutputNode({ id, data }) {
   // reveals a pending job on this same node id). Named jobParams, not params: this
   // component already has a `params` (the model's capability set from
   // useModelParams), and the two are easy to confuse for one another.
-  async function runJob(jobId, jobParams) {
+  // `pollOpts` is forwarded straight to pollVideo -- undefined means its own 15-minute
+  // default (the fast 4s-interval window); the slow re-arm effect below passes
+  // `{ until: 0 }` for a single immediate check instead of resuming a full fast loop.
+  async function runJob(jobId, jobParams, pollOpts) {
     // A loop outlives the job that started it — Forget, then Generate again while
     // this one is still mid-poll, is enough. Every write below the await must
     // confirm it still owns the node's CURRENT job, or a finished job A clears (or
@@ -189,15 +214,20 @@ export default function VideoOutputNode({ id, data }) {
     // passed in already matching data.job.id at call time.
     const stillOurs = () => getNode(id)?.data?.job?.id === jobId;
 
+    // Set synchronously, before setStatus or any await -- see loopRunning's own
+    // comment for why that ordering is what lets the resume and re-arm effects share
+    // one guard even when both run in the same commit.
+    loopRunning.current = true;
     setStatus('running');
     setError(null);
     try {
-      const d = await pollVideo(jobId, jobParams, () => stillOurs() && bump((n) => n + 1));
+      const d = await pollVideo(jobId, jobParams, () => stillOurs() && bump((n) => n + 1), pollOpts);
       if (!stillOurs()) return;
       if (d.pending) {
         // Not a failure, and not a reason to touch data.job — the node stays
-        // exactly as it was, waiting for the next mount, the next project switch
-        // back into view, or a longer budget next time around.
+        // exactly as it was. The re-arm effect below is what stops this from being
+        // a dead end: it notices status is back to idle with a job still stored,
+        // and schedules another look.
         setStatus('idle');
         return;
       }
@@ -212,32 +242,62 @@ export default function VideoOutputNode({ id, data }) {
       // reason to clear the job — pollVideo never throws for a transient error
       // reaching our own server, only for that.
       updateNodeData(id, { job: undefined });
+    } finally {
+      loopRunning.current = false;
     }
   }
 
   // Picks up a pending job with no user action — the entire point of persisting
   // one. Fires whenever data.job?.id changes to something this component instance
-  // hasn't already started a loop for: on a genuine fresh mount (a reload), and
-  // just as much on switching INTO a project whose same-id node has one pending —
-  // React Flow keys node components by id, not by project, so the instance
-  // survives that switch without ever unmounting, and a mount-only effect would
-  // never see it. startedJobIds is what stops this from ALSO starting a second
-  // loop for a job onGenerate (or React StrictMode's double-mount) already has one
-  // running for; stillOurs() inside runJob is what keeps two loops from
-  // corrupting each other's state if they ever do briefly overlap.
+  // hasn't already started a loop for: on a genuine fresh mount, which now covers
+  // both a reload AND a project switch (the canvas remounts on `canvasGeneration` —
+  // see App.jsx — so a switch into a project with a pending job is indistinguishable
+  // from a reload as far as this effect is concerned). startedJobIds is what stops
+  // this from ALSO starting a second loop for a job onGenerate (or React
+  // StrictMode's dev-only double-mount) already has one running for; stillOurs()
+  // inside runJob is what keeps two loops from corrupting each other's state if
+  // they ever do briefly overlap.
   useEffect(() => {
     const jobId = data.job?.id;
     if (jobId && !startedJobIds.current.has(jobId)) {
       startedJobIds.current.add(jobId);
-      // Whatever result/error is showing locally belongs to a different job, or a
-      // different project's view of this same node id — never to this one: a job
-      // and a result for IT are never both present at once (runJob clears one
-      // exactly when it sets the other).
+      // Whatever result/error is showing locally belongs to a stale run — a
+      // StrictMode double-mount, or onGenerate's own start already updating this
+      // job — never to this one: a job and a result for IT are never both present
+      // at once (runJob clears one exactly when it sets the other).
       setResult(null);
       setError(null);
       runJob(jobId, data.job.params);
     }
   }, [data.job?.id]);
+
+  // The fast loop above gives up after its budget (pollVideo's default 15 minutes),
+  // leaving data.job in place — that part is deliberate, the job may still be
+  // rendering. But nothing then asked again: startedJobIds already has this id, and
+  // the effect above only fires when data.job?.id CHANGES, so a render queued for
+  // over an hour sat frozen at "Rendering… (N min)" until a reload. This re-arms at
+  // a much slower cadence instead of a reload: once runJob has actually given up
+  // (status idle) and nothing is already polling this job (loopRunning, checked so
+  // this can never stack a second loop under one still running), wait, then take a
+  // single look (`{ until: 0 }` makes pollVideo check once and return immediately
+  // instead of resuming a full 4s-interval window). If still pending, status goes
+  // back to idle and this effect reschedules itself. The server's own sweep is what
+  // actually finishes an abandoned job; this only keeps the node's display current
+  // with no user action, without polling every 4s indefinitely.
+  useEffect(() => {
+    const jobId = data.job?.id;
+    if (!jobId || status !== 'idle' || loopRunning.current) return;
+    const RECHECK_MS = 2 * 60 * 1000;
+    const timer = setTimeout(() => {
+      if (!loopRunning.current && getNode(id)?.data?.job?.id === jobId) {
+        runJob(jobId, data.job.params, { until: 0 });
+      }
+    }, RECHECK_MS);
+    // Unmounting cancels the scheduled recheck outright — there is no node left to
+    // update, and the fast loop's own in-flight fetch (if any) is already guarded by
+    // stillOurs() inside runJob.
+    return () => clearTimeout(timer);
+  }, [data.job?.id, status]);
 
   // Clears the job HERE only. OpenRouter has no cancel for a running video job,
   // so this cannot stop the render — only stop this node from watching for it.
