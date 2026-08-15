@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Handle, Position, useReactFlow, useNodes, useEdges } from '@xyflow/react';
 import { Card } from '@astryxdesign/core/Card';
 import { Text } from '@astryxdesign/core/Text';
@@ -6,7 +6,7 @@ import { Button } from '@astryxdesign/core/Button';
 import { Selector } from '@astryxdesign/core/Selector';
 import { CheckboxInput } from '@astryxdesign/core/CheckboxInput';
 import { Icon } from '@astryxdesign/core/Icon';
-import { VStack } from '@astryxdesign/core/Stack';
+import { HStack, VStack } from '@astryxdesign/core/Stack';
 import { useToast } from '@astryxdesign/core/Toast';
 import NodeHeader from './NodeHeader.jsx';
 import StatusLine from './StatusLine.jsx';
@@ -16,7 +16,7 @@ import { useModels, useModelParams, freeSpot } from './output/core.js';
 import { resetModelParams } from './output/defaults.js';
 import { ModelPicker, ParamControls, CostFoot } from './output/controls.jsx';
 import { buildRequest, bucketSources } from '../graph/resolve.js';
-import { generateVideo } from '../api.js';
+import { startVideo, pollVideo } from '../api.js';
 import { ExternalLink as AddToCanvasIcon } from 'lucide-react';
 
 // Makes a video. Runs once per click and reports the job's own status rather than a
@@ -28,11 +28,19 @@ export default function VideoOutputNode({ id, data }) {
   const [status, setStatus] = useState('idle'); // idle | running | done | error
   const [result, setResult] = useState(null); // { url, cost }
   const [error, setError] = useState(null);
-  const [note, setNote] = useState(null);
+  // Bumped by pollVideo's status callback purely to force a re-render, so the
+  // elapsed "(N min)" on the button keeps advancing while a poll is in flight —
+  // its value is never read.
+  const [, bump] = useState(0);
   // Inlining a clip means fetching and base64-ing it, which is not instant.
   const [addingVideo, setAddingVideo] = useState(false);
   const liveNodes = useNodes();
   const liveEdges = useEdges();
+  // StrictMode mounts, discards and remounts once in dev; without this guard the
+  // resume effect below would start the same poll twice, and the server
+  // re-downloads (and re-saves) a completed job on every poll that reaches it
+  // rather than caching it — see the completion branch of /api/video/:id.
+  const resumedJob = useRef(false);
 
   const { models, defaultModel } = useModels('video');
   const model = data.videoModel || defaultModel;
@@ -149,7 +157,6 @@ export default function VideoOutputNode({ id, data }) {
 
   function clearResult() {
     setResult(null);
-    setNote(null);
     setError(null);
     setStatus('idle');
   }
@@ -162,45 +169,116 @@ export default function VideoOutputNode({ id, data }) {
   // send a duration or leave it out. Verified against the live API, 2026-08-12.
   const wiredVideoIntoVideo = wiredVideos > 0;
 
+  // Polls one job through to a conclusion — a completed result, a genuine failure,
+  // or the polling budget running out — and is the only place any of the three
+  // outcomes are handled. Shared by every caller that already holds a job id:
+  // starting one, picking one back up on mount, and "Check now" asking for a
+  // single extra look. Named jobParams, not params: this component already has a
+  // `params` (the model's capability set from useModelParams), and the two are
+  // easy to confuse for one another.
+  async function runJob(jobId, jobParams, opts) {
+    setStatus('running');
+    setError(null);
+    try {
+      const d = await pollVideo(jobId, jobParams, () => bump((n) => n + 1), opts);
+      if (d.pending) {
+        // Not a failure, and not a reason to touch data.job — the node stays
+        // exactly as it was, waiting for the next mount, the next "Check now",
+        // or a longer budget next time around.
+        setStatus('idle');
+        return;
+      }
+      setResult({ url: d.url, cost: d.cost });
+      setStatus('done');
+      updateNodeData(id, { job: undefined });
+    } catch (err) {
+      setError(err.message);
+      setStatus('error');
+      // A genuine failure (the job itself failed upstream) is the only other
+      // reason to clear the job — pollVideo never throws for a transient error
+      // reaching our own server, only for that.
+      updateNodeData(id, { job: undefined });
+    }
+  }
+
+  // Picks a job left behind by a previous mount back up with no user action —
+  // the entire point of persisting it. Runs once per real mount, deliberately not
+  // on every data.job change: this is the pickup on load, not a live subscription
+  // to the job's lifecycle. resumedJob is the StrictMode guard described where
+  // it's declared.
+  useEffect(() => {
+    if (resumedJob.current) return;
+    if (data.job?.id && !result) {
+      resumedJob.current = true;
+      runJob(data.job.id, data.job.params);
+    }
+  }, []);
+
+  // A single extra look, for a job whose automatic polling already gave up.
+  function checkNow() {
+    if (!data.job) return;
+    runJob(data.job.id, data.job.params, { until: 0 });
+  }
+
+  // Clears the job HERE only. OpenRouter has no cancel for a running video job,
+  // so this cannot stop the render — only stop this node from watching for it.
+  // Without an escape hatch, a node whose polling window keeps expiring would be
+  // permanently stuck showing "Rendering…" with no way back to Generate.
+  function forgetJob() {
+    updateNodeData(id, { job: undefined });
+    setStatus('idle');
+    setError(null);
+  }
+
   async function onGenerate() {
     setStatus('running');
     setError(null);
     setResult(null);
-    setNote(null);
     try {
       const { prompt, input_references, frame_images } = buildRequest(getNodes(), getEdges(), id);
       if (!prompt.trim()) {
         throw new Error('Nothing connected. Wire a prompt node into this video node.');
       }
 
-      const resp = await generateVideo(
-        {
-          prompt,
-          input_references,
-          // Only ever one of the two: the provider treats a request with frames as
-          // image-to-video and discards references entirely.
-          ...(frame_images.length ? { frame_images } : {}),
-          model,
-          duration,
-          // One or the other, never both: they are interchangeable upstream, and
-          // sending a size alongside a conflicting ratio is asking for trouble.
-          size: supported(exactSizes, data.size),
-          resolution: supported(resolutionTiers, data.resolution),
-          aspect_ratio: supported(ratios, data.aspect_ratio),
-          // Consent re-sent per request: the server refuses local clips without it.
-          ...(shareLocalVideos ? { shareLocalVideos: true } : {}),
-          ...(canAudio ? { generate_audio: Boolean(data.generateAudio) } : {}),
-        },
-        (jobStatus) => setNote(jobStatus === 'in_progress' ? 'rendering…' : 'queued…'),
-      );
-      setResult({ url: resp.url, cost: resp.cost });
-      setNote(null);
-      setStatus('done');
+      // Computed once, not inline in both the request and the stored job: the
+      // job's params drive every future poll, so they must name the exact same
+      // one of size/resolution the request actually sent.
+      const size = supported(exactSizes, data.size);
+      const resolution = supported(resolutionTiers, data.resolution);
+
+      const resp = await startVideo({
+        prompt,
+        input_references,
+        // Only ever one of the two: the provider treats a request with frames as
+        // image-to-video and discards references entirely.
+        ...(frame_images.length ? { frame_images } : {}),
+        model,
+        duration,
+        size,
+        resolution,
+        aspect_ratio: supported(ratios, data.aspect_ratio),
+        // Consent re-sent per request: the server refuses local clips without it.
+        ...(shareLocalVideos ? { shareLocalVideos: true } : {}),
+        ...(canAudio ? { generate_audio: Boolean(data.generateAudio) } : {}),
+      });
+
+      // What a poll needs to name the file, kept next to the id so a resumed
+      // poll after a reload has everything it needs from data.job alone.
+      const jobParams = { prompt, model, duration, resolution, size };
+      // Written before the first poll, not after — this line is the whole task:
+      // a crash or a reload one line later still leaves the id recoverable.
+      updateNodeData(id, { job: { id: resp.id, startedAt: Date.now(), params: jobParams } });
+      await runJob(resp.id, jobParams);
     } catch (err) {
       setError(err.message);
       setStatus('error');
     }
   }
+
+  const hasJob = Boolean(data.job);
+  // Floored, not rounded: "N min" means N full minutes have passed, not that the
+  // Nth one has started.
+  const jobMinutes = hasJob ? Math.max(0, Math.floor((Date.now() - data.job.startedAt) / 60000)) : 0;
 
   return (
     <Card width={300} padding={0}>
@@ -257,19 +335,35 @@ export default function VideoOutputNode({ id, data }) {
         </ParamControls>
 
         <Button
-          label={
-            status === 'running'
-              // The job's own state reads better in the button than as a small
-              // label elsewhere.
-              ? note
-                ? `${note.replace(/…$/, '')[0].toUpperCase()}${note.replace(/…$/, '').slice(1)}…`
-                : 'Rendering…'
-              : 'Generate'
-          }
+          label={hasJob ? `Rendering… (${jobMinutes} min)` : status === 'running' ? 'Starting…' : 'Generate'}
           variant="primary"
           isLoading={status === 'running'}
+          // A job in flight disables Generate outright: a second click would
+          // start a second paid render for the one this node is already
+          // tracking, and the id it would return has nowhere to go.
+          isDisabled={hasJob || status === 'running'}
           onClick={onGenerate}
         />
+
+        {hasJob && (
+          <HStack gap={2}>
+            <Button
+              label="Check now"
+              variant="ghost"
+              size="sm"
+              tooltip="Poll once immediately, instead of waiting for the next automatic check."
+              isDisabled={status === 'running'}
+              onClick={checkNow}
+            />
+            <Button
+              label="Forget this job"
+              variant="ghost"
+              size="sm"
+              tooltip="Stops tracking this job here. It does not cancel the render upstream — if it finishes anyway, this node will never learn about it."
+              onClick={forgetJob}
+            />
+          </HStack>
+        )}
 
         {wiredVideoIntoVideo && (
           <StatusLine type="warning">
@@ -328,9 +422,6 @@ export default function VideoOutputNode({ id, data }) {
         )}
 
         {status === 'error' && <StatusLine type="error">{error}</StatusLine>}
-
-        {/* note is not rendered on its own: while a job runs it IS the button's
-            label, and after it finishes there is nothing left to say. */}
 
         {result?.url && (
           // Played from the file on disk, not from node data: a clip inlined into

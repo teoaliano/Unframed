@@ -29,41 +29,60 @@ export async function runText(body) {
   return data;
 }
 
-// Video is a job, not a call: this starts one and resolves when the file exists,
-// reporting progress along the way. The upstream job can run for minutes, so the
-// polling lives here rather than in one long request that a proxy would time out.
-export async function generateVideo(body, onStatus) {
+// Starts a video job and returns immediately with its id — nothing here waits on
+// the render. Split out from polling (which used to live in one function together
+// with this) so the id can be written to node data, and therefore graph.json,
+// before any polling begins: a tab that dies one line later still has it.
+export async function startVideo(body) {
   const res = await fetch('/api/video', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ ...body, project: currentProject }),
   });
-  const started = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(started.error || `Request failed (${res.status})`);
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || `Request failed (${res.status})`);
+  return data;
+}
 
-  // Everything the server needs to name the file and its sidecar once the job lands.
+// Polls one job. `params` is exactly what the server needs to name the file and
+// its sidecar once the job lands — the same shape a caller stores in a node's
+// data.job, so a poll resumed after a reload has everything it needs from that
+// object alone, with nothing else in scope. Checks once immediately (so "check
+// now" and a fresh mount get an answer without waiting 4s for nothing), then every
+// 4s after — fast enough to feel live, slow enough that a three-minute render is
+// ~45 requests rather than hundreds.
+//
+// `until` (ms) bounds how long this call keeps at it; past that it resolves with
+// `{ pending: true }` rather than throwing — the caller decides what "still going"
+// means for the id it holds, and it is never this function's place to decide the
+// id is lost. The one thing that DOES throw is a genuine failure: the job itself
+// reporting failed. A bad response or a failure to even reach our own server
+// (it could just be restarting) says nothing about the job, so it is treated the
+// same as still-pending rather than costing the id its only reference.
+export async function pollVideo(id, params, onStatus, { until = 15 * 60 * 1000 } = {}) {
   const q = new URLSearchParams({
     project: currentProject,
-    prompt: body.prompt || '',
-    model: body.model || '',
-    duration: body.duration ?? '',
+    prompt: params.prompt || '',
+    model: params.model || '',
+    duration: params.duration ?? '',
     // One of these is set, never both — see the size/resolution note in OutputNode.
-    resolution: body.resolution || '',
-    size: body.size || '',
+    resolution: params.resolution || '',
+    size: params.size || '',
   });
 
-  // Every 4s: fast enough to feel live, slow enough that a three-minute render is
-  // ~45 requests rather than hundreds.
-  for (let waited = 0; waited < 15 * 60 * 1000; waited += 4000) {
+  const deadline = Date.now() + until;
+  for (;;) {
+    const d = await fetch(`/api/video/${encodeURIComponent(id)}?${q}`)
+      .then((p) => (p.ok ? p.json().catch(() => null) : null))
+      .catch(() => null);
+    if (d) {
+      if (d.status === 'failed') throw new Error(d.error || 'Generation failed.');
+      if (d.status === 'completed') return d;
+      onStatus?.(d.status, d.progress);
+    }
+    if (Date.now() >= deadline) return { pending: true };
     await new Promise((r) => setTimeout(r, 4000));
-    const p = await fetch(`/api/video/${encodeURIComponent(started.id)}?${q}`);
-    const d = await p.json().catch(() => ({}));
-    if (!p.ok) throw new Error(d.error || `Request failed (${p.status})`);
-    if (d.status === 'failed') throw new Error(d.error || 'Generation failed.');
-    if (d.status === 'completed') return d;
-    onStatus?.(d.status, d.progress);
   }
-  throw new Error('Gave up waiting for the video after 15 minutes. It may still finish on OpenRouter.');
 }
 
 // Ask the OS to show generated files (or the project folder) in its file manager.

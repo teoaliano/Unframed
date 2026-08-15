@@ -32,6 +32,8 @@ Keep that shape: the website's What's new page parses this file.
   menu was cut away entirely and no suggestions ever showed.
 - That menu now also lists Text nodes, not just other prompts. It had dropped them
   when the output nodes were split on 2026-08-13.
+- A video that takes longer than the app was willing to wait is no longer lost —
+  the node remembers its job and picks it up when you come back.
 
 ## 2026-08-13
 
