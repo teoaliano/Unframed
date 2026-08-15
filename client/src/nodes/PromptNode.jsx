@@ -3,6 +3,7 @@ import { Handle, Position, useReactFlow } from '@xyflow/react';
 import { Card } from '@astryxdesign/core/Card';
 import { TextArea } from '@astryxdesign/core/TextArea';
 import NodeHeader from './NodeHeader.jsx';
+import { isTextOutput } from '../graph/resolve.js';
 
 // Match a partial "@query" ending exactly at the caret, so the menu only shows
 // while you're actively typing a reference.
@@ -14,7 +15,7 @@ export default function PromptNode({ id, data }) {
   const [query, setQuery] = useState(null); // null = menu closed; string = open
   const [sel, setSel] = useState(0);
 
-  // Other prompt and text nodes whose id starts with the current @query, with a
+  // Other prompt and text output nodes whose id starts with the current @query, with a
   // preview so opaque ids stay identifiable. (Images aren't @-referenced — they
   // are typed as "image N", see the number on each connected reference node.)
   function candidates(q) {
@@ -22,7 +23,7 @@ export default function PromptNode({ id, data }) {
     const lower = q.toLowerCase();
     return getNodes()
       .filter(
-        (n) => (n.type === 'prompt' || n.type === 'text') && n.id !== id && n.id.toLowerCase().startsWith(lower),
+        (n) => (n.type === 'prompt' || isTextOutput(n)) && n.id !== id && n.id.toLowerCase().startsWith(lower),
       )
       .map((n) => ({
         id: n.id,
@@ -68,43 +69,50 @@ export default function PromptNode({ id, data }) {
 
   const list = candidates(query);
 
+  // The menu is a sibling of the Card, not a child of it: the Card clips to its
+  // rounded corners (overflow: clip), and the menu hangs below the Card's box, so
+  // nested it was laid out correctly and then clipped away — present in the DOM,
+  // never painted. Out here it anchors to the React Flow node wrapper instead,
+  // which is positioned and does not clip.
   return (
-    <Card width="fit-content" padding={0} className="xnode-prompt">
-      <Handle type="source" position={Position.Right} />
-      <NodeHeader kind="prompt" family="input" copyId={id} />
-      <div className="xnode-body" onKeyDown={onKeyDown} onClick={() => syncMenu(ref.current)}>
-        <TextArea
-          ref={ref}
-          label="Prompt text"
-          isLabelHidden
-          rows={4}
-          hasSpellCheck={false}
-          placeholder="Describe the image. Reference another prompt with @id"
-          value={data.text || ''}
-          onChange={(v, e) => {
-            updateNodeData(id, { text: v });
-            syncMenu(e.target);
-          }}
-          onBlur={() => setQuery(null)}
-        />
-        {list.length > 0 && (
-          <ul className="mention-menu">
-            {list.map((c, i) => (
-              <li
-                key={c.id}
-                className={i === sel ? 'active' : ''}
-                onMouseDown={(e) => {
-                  e.preventDefault();
-                  insert(c.id);
-                }}
-              >
-                <span className="mention-id">@{c.id}</span>
-                {c.preview && <span className="mention-preview">{c.preview}</span>}
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
-    </Card>
+    <>
+      <Card width="fit-content" padding={0} className="xnode-prompt">
+        <Handle type="source" position={Position.Right} />
+        <NodeHeader kind="prompt" family="input" copyId={id} />
+        <div className="xnode-body" onKeyDown={onKeyDown} onClick={() => syncMenu(ref.current)}>
+          <TextArea
+            ref={ref}
+            label="Prompt text"
+            isLabelHidden
+            rows={4}
+            hasSpellCheck={false}
+            placeholder="Describe the image. Reference another prompt with @id"
+            value={data.text || ''}
+            onChange={(v, e) => {
+              updateNodeData(id, { text: v });
+              syncMenu(e.target);
+            }}
+            onBlur={() => setQuery(null)}
+          />
+        </div>
+      </Card>
+      {list.length > 0 && (
+        <ul className="mention-menu">
+          {list.map((c, i) => (
+            <li
+              key={c.id}
+              className={i === sel ? 'active' : ''}
+              onMouseDown={(e) => {
+                e.preventDefault();
+                insert(c.id);
+              }}
+            >
+              <span className="mention-id">@{c.id}</span>
+              {c.preview && <span className="mention-preview">{c.preview}</span>}
+            </li>
+          ))}
+        </ul>
+      )}
+    </>
   );
 }

@@ -27,6 +27,11 @@ Keep that shape: the website's What's new page parses this file.
 
 - An `@word` in a prompt that matches no node id is left as typed. It used to be
   deleted, so "@golden hour" became " hour".
+- The `@` reference menu appears again when you type `@` in a prompt. It was being
+  drawn just outside the node's card, which clips to its rounded corners, so the
+  menu was cut away entirely and no suggestions ever showed.
+- That menu now also lists Text nodes, not just other prompts. It had dropped them
+  when the output nodes were split on 2026-08-13.
 
 ## 2026-08-13
 
