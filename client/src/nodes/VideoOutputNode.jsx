@@ -6,7 +6,7 @@ import { Button } from '@astryxdesign/core/Button';
 import { Selector } from '@astryxdesign/core/Selector';
 import { CheckboxInput } from '@astryxdesign/core/CheckboxInput';
 import { Icon } from '@astryxdesign/core/Icon';
-import { HStack, VStack } from '@astryxdesign/core/Stack';
+import { VStack } from '@astryxdesign/core/Stack';
 import { useToast } from '@astryxdesign/core/Toast';
 import NodeHeader from './NodeHeader.jsx';
 import StatusLine from './StatusLine.jsx';
@@ -36,11 +36,15 @@ export default function VideoOutputNode({ id, data }) {
   const [addingVideo, setAddingVideo] = useState(false);
   const liveNodes = useNodes();
   const liveEdges = useEdges();
-  // StrictMode mounts, discards and remounts once in dev; without this guard the
-  // resume effect below would start the same poll twice, and the server
-  // re-downloads (and re-saves) a completed job on every poll that reaches it
-  // rather than caching it — see the completion branch of /api/video/:id.
-  const resumedJob = useRef(false);
+  // Every job id this component instance has already started a poll loop for, once
+  // each — no matter how many times a project switch brings that same job back into
+  // view (React Flow keys node components by id, not by project, so the instance
+  // survives a switch without unmounting), or React StrictMode's dev-only
+  // double-mount fires the resume effect below twice. Without it, either would start
+  // a SECOND loop for a job something else already has one running for, and the
+  // server re-downloads (and re-saves) a completed job on every poll that reaches
+  // it rather than caching it — see the completion branch of /api/video/:id.
+  const startedJobIds = useRef(new Set());
 
   const { models, defaultModel } = useModels('video');
   const model = data.videoModel || defaultModel;
@@ -172,19 +176,28 @@ export default function VideoOutputNode({ id, data }) {
   // Polls one job through to a conclusion — a completed result, a genuine failure,
   // or the polling budget running out — and is the only place any of the three
   // outcomes are handled. Shared by every caller that already holds a job id:
-  // starting one, picking one back up on mount, and "Check now" asking for a
-  // single extra look. Named jobParams, not params: this component already has a
-  // `params` (the model's capability set from useModelParams), and the two are
-  // easy to confuse for one another.
-  async function runJob(jobId, jobParams, opts) {
+  // starting one, and picking one back up (a fresh mount, or a project switch that
+  // reveals a pending job on this same node id). Named jobParams, not params: this
+  // component already has a `params` (the model's capability set from
+  // useModelParams), and the two are easy to confuse for one another.
+  async function runJob(jobId, jobParams) {
+    // A loop outlives the job that started it — Forget, then Generate again while
+    // this one is still mid-poll, is enough. Every write below the await must
+    // confirm it still owns the node's CURRENT job, or a finished job A clears (or
+    // overwrites the UI for) a job B that started after it — the one outcome this
+    // entire task exists to prevent. Not needed above the await: jobId is only ever
+    // passed in already matching data.job.id at call time.
+    const stillOurs = () => getNode(id)?.data?.job?.id === jobId;
+
     setStatus('running');
     setError(null);
     try {
-      const d = await pollVideo(jobId, jobParams, () => bump((n) => n + 1), opts);
+      const d = await pollVideo(jobId, jobParams, () => stillOurs() && bump((n) => n + 1));
+      if (!stillOurs()) return;
       if (d.pending) {
         // Not a failure, and not a reason to touch data.job — the node stays
-        // exactly as it was, waiting for the next mount, the next "Check now",
-        // or a longer budget next time around.
+        // exactly as it was, waiting for the next mount, the next project switch
+        // back into view, or a longer budget next time around.
         setStatus('idle');
         return;
       }
@@ -192,6 +205,7 @@ export default function VideoOutputNode({ id, data }) {
       setStatus('done');
       updateNodeData(id, { job: undefined });
     } catch (err) {
+      if (!stillOurs()) return;
       setError(err.message);
       setStatus('error');
       // A genuine failure (the job itself failed upstream) is the only other
@@ -201,24 +215,29 @@ export default function VideoOutputNode({ id, data }) {
     }
   }
 
-  // Picks a job left behind by a previous mount back up with no user action —
-  // the entire point of persisting it. Runs once per real mount, deliberately not
-  // on every data.job change: this is the pickup on load, not a live subscription
-  // to the job's lifecycle. resumedJob is the StrictMode guard described where
-  // it's declared.
+  // Picks up a pending job with no user action — the entire point of persisting
+  // one. Fires whenever data.job?.id changes to something this component instance
+  // hasn't already started a loop for: on a genuine fresh mount (a reload), and
+  // just as much on switching INTO a project whose same-id node has one pending —
+  // React Flow keys node components by id, not by project, so the instance
+  // survives that switch without ever unmounting, and a mount-only effect would
+  // never see it. startedJobIds is what stops this from ALSO starting a second
+  // loop for a job onGenerate (or React StrictMode's double-mount) already has one
+  // running for; stillOurs() inside runJob is what keeps two loops from
+  // corrupting each other's state if they ever do briefly overlap.
   useEffect(() => {
-    if (resumedJob.current) return;
-    if (data.job?.id && !result) {
-      resumedJob.current = true;
-      runJob(data.job.id, data.job.params);
+    const jobId = data.job?.id;
+    if (jobId && !startedJobIds.current.has(jobId)) {
+      startedJobIds.current.add(jobId);
+      // Whatever result/error is showing locally belongs to a different job, or a
+      // different project's view of this same node id — never to this one: a job
+      // and a result for IT are never both present at once (runJob clears one
+      // exactly when it sets the other).
+      setResult(null);
+      setError(null);
+      runJob(jobId, data.job.params);
     }
-  }, []);
-
-  // A single extra look, for a job whose automatic polling already gave up.
-  function checkNow() {
-    if (!data.job) return;
-    runJob(data.job.id, data.job.params, { until: 0 });
-  }
+  }, [data.job?.id]);
 
   // Clears the job HERE only. OpenRouter has no cancel for a running video job,
   // so this cannot stop the render — only stop this node from watching for it.
@@ -268,6 +287,12 @@ export default function VideoOutputNode({ id, data }) {
       // Written before the first poll, not after — this line is the whole task:
       // a crash or a reload one line later still leaves the id recoverable.
       updateNodeData(id, { job: { id: resp.id, startedAt: Date.now(), params: jobParams } });
+      // Recorded synchronously, before runJob starts: updateNodeData above is
+      // queued and only lands on a later React commit, and when it does, the
+      // resume effect above will notice data.job?.id changed and re-run. Without
+      // this ref already holding the id by then, that effect would see this very
+      // job appear and start a second loop for it.
+      startedJobIds.current.add(resp.id);
       await runJob(resp.id, jobParams);
     } catch (err) {
       setError(err.message);
@@ -346,23 +371,13 @@ export default function VideoOutputNode({ id, data }) {
         />
 
         {hasJob && (
-          <HStack gap={2}>
-            <Button
-              label="Check now"
-              variant="ghost"
-              size="sm"
-              tooltip="Poll once immediately, instead of waiting for the next automatic check."
-              isDisabled={status === 'running'}
-              onClick={checkNow}
-            />
-            <Button
-              label="Forget this job"
-              variant="ghost"
-              size="sm"
-              tooltip="Stops tracking this job here. It does not cancel the render upstream — if it finishes anyway, this node will never learn about it."
-              onClick={forgetJob}
-            />
-          </HStack>
+          <Button
+            label="Forget this job"
+            variant="ghost"
+            size="sm"
+            tooltip="Stops tracking this job here. It does not cancel the render upstream — if it finishes anyway, this node will never learn about it."
+            onClick={forgetJob}
+          />
         )}
 
         {wiredVideoIntoVideo && (
