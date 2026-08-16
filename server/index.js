@@ -870,11 +870,24 @@ async function collectVideo(job, data) {
 // while this tick's snapshot was going stale.
 const collecting = new Set();
 
+// One pending job, one tick -- and one job's failure costs only ITS update.
+// sweepOneInner's branches await persistJob in several places; a rejected store
+// write there used to throw past the for-loop in sweepJobs and silently skip
+// every job queued behind this one until the next tick. The wrapper is what
+// makes the "never throws" promise in the comment below actually true.
+async function sweepOne(job) {
+  try {
+    await sweepOneInner(job);
+  } catch (err) {
+    console.log(`  sweep failed for ${job.id}: ${err.message}`);
+  }
+}
+
 // One pending job, one tick: poll it, and either leave it alone (still
 // rendering), fail it, or collect it. Never throws -- a transient problem
 // reaching OpenRouter or downloading the file just waits for the next tick,
 // the same tolerance pollVideo has client-side for reaching this server.
-async function sweepOne(job) {
+async function sweepOneInner(job) {
   const polled = await fetchVideoStatus(job.id);
   if (!polled.ok) {
     // A poll that got no answer. Ordinarily that means "try again next tick" and
