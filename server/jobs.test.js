@@ -13,6 +13,12 @@ import {
   givenUp,
   UNREACHABLE_MS,
   migratePendingJobs,
+  readJobsStrict,
+  pendingJobsFor,
+  copyPendingJobs,
+  dropPendingJobs,
+  failPendingJobs,
+  reassignPendingJobs,
 } from './jobs.js';
 
 const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'unframed-jobs-test-'));
@@ -246,6 +252,116 @@ assert.ok(
   'the pending record survives a migration call where toDir is a symlink to fromDir',
 );
 await fs.rm(symlinkBase, { recursive: true, force: true });
+
+// ---- readJobsStrict ----
+// readJobs answers [] for a missing file, corrupt JSON and an unreadable path
+// alike, which is right for booting the sweep and lethal for a mutation: "0
+// pending" read out of a damaged store is indistinguishable from "nothing is in
+// flight", and acting on it orphans every render the store was tracking.
+const strictDir = await fs.mkdtemp(path.join(os.tmpdir(), 'unframed-jobs-strict-'));
+assert.deepEqual(await readJobsStrict(strictDir), [],
+  'a missing file is genuinely nothing saved yet -- the one case that stays lenient');
+await writeJobs(strictDir, [job]);
+assert.deepEqual(await readJobsStrict(strictDir), [job], 'a readable store round-trips');
+await fs.writeFile(jobsPath(strictDir), '{not json');
+await assert.rejects(() => readJobsStrict(strictDir), 'corrupt JSON throws instead of reading as empty');
+await fs.writeFile(jobsPath(strictDir), '{"oops": true}');
+await assert.rejects(() => readJobsStrict(strictDir), 'valid JSON that is not an array throws too');
+await fs.rm(jobsPath(strictDir));
+await fs.mkdir(jobsPath(strictDir)); // a directory where the file belongs
+await assert.rejects(() => readJobsStrict(strictDir), 'an unreadable path throws');
+await fs.rm(jobsPath(strictDir), { recursive: true });
+await fs.rm(strictDir, { recursive: true, force: true });
+
+// ---- pendingJobsFor ----
+const mixed = [
+  { id: 'p-a', status: 'pending', project: 'alpha', startedAt: now },
+  { id: 'p-a2', status: 'pending', project: 'alpha', startedAt: now },
+  { id: 'p-b', status: 'pending', project: 'beta', startedAt: now },
+  { id: 'p-root', status: 'pending', project: '', startedAt: now },
+  { id: 'p-none', status: 'pending', startedAt: now },
+  { id: 'd-a', status: 'done', project: 'alpha', startedAt: now, resolvedAt: now },
+];
+assert.deepEqual(pendingJobsFor(mixed, 'alpha').map((j) => j.id), ['p-a', 'p-a2'],
+  'one project, pending only -- a done record cannot be stranded by an action');
+assert.deepEqual(pendingJobsFor(mixed, '').map((j) => j.id), ['p-root', 'p-none'],
+  'a missing project field and an empty one are the same "no project"');
+assert.deepEqual(pendingJobsFor(mixed).map((j) => j.id).sort(),
+  ['p-a', 'p-a2', 'p-b', 'p-none', 'p-root'], 'no project argument means every pending record');
+
+// ---- copyPendingJobs / dropPendingJobs: the two halves of a committed move ----
+// Split so the caller can copy, commit its own change, and only then strip the
+// source -- so a failure between the two duplicates a record rather than losing it.
+const srcDir = await fs.mkdtemp(path.join(os.tmpdir(), 'unframed-jobs-src-'));
+const dstDir = await fs.mkdtemp(path.join(os.tmpdir(), 'unframed-jobs-dst-'));
+await writeJobs(srcDir, mixed);
+const copied = await copyPendingJobs(srcDir, dstDir);
+assert.equal(copied.count, 5, 'every pending record is copied, whatever project it belongs to');
+assert.deepEqual(copied.ids.sort(), ['p-a', 'p-a2', 'p-b', 'p-none', 'p-root'],
+  'and it reports exactly which, so the caller can strip precisely those later');
+assert.equal((await readJobs(dstDir)).length, 5, 'the destination holds them');
+assert.equal((await readJobs(srcDir)).length, 6, 'and the SOURCE is untouched -- copy, not move');
+
+// A job created after the copy must survive the strip: ids, not "all pending".
+await persistJob(srcDir, 'p-late', { status: 'pending', project: 'alpha' });
+assert.equal(await dropPendingJobs(srcDir, copied.ids), 5, 'drops exactly what was copied');
+const afterDrop = await readJobs(srcDir);
+assert.deepEqual(afterDrop.map((j) => j.id).sort(), ['d-a', 'p-late'],
+  'the done record and a render started after the copy both stay');
+assert.equal(await dropPendingJobs(srcDir, copied.ids), 0, 'a second drop is a no-op');
+await fs.rm(srcDir, { recursive: true, force: true });
+await fs.rm(dstDir, { recursive: true, force: true });
+
+// The same-directory guard lives on the copy half.
+const aliasDir = await fs.mkdtemp(path.join(os.tmpdir(), 'unframed-jobs-alias-'));
+await writeJobs(aliasDir, mixed);
+const aliasLink = path.join(path.dirname(aliasDir), `${path.basename(aliasDir)}-link`);
+await fs.symlink(aliasDir, aliasLink);
+assert.equal((await copyPendingJobs(aliasDir, aliasLink)).count, 0,
+  'two paths naming one directory copy nothing rather than round-tripping the file');
+assert.equal((await readJobs(aliasDir)).length, 6, 'and nothing is lost');
+await fs.unlink(aliasLink);
+await fs.rm(aliasDir, { recursive: true, force: true });
+
+// ---- failPendingJobs ----
+const failDir = await fs.mkdtemp(path.join(os.tmpdir(), 'unframed-jobs-fail-'));
+await writeJobs(failDir, mixed);
+assert.equal(await failPendingJobs(failDir, { project: 'alpha', error: 'project deleted' }), 2,
+  'reports how many renders it ended -- the number the confirmation copy shows');
+const afterFail = await readJobs(failDir);
+for (const id of ['p-a', 'p-a2']) {
+  const j = afterFail.find((x) => x.id === id);
+  assert.equal(j.status, 'failed', `${id} ends visibly instead of staying pending forever`);
+  assert.equal(j.error, 'project deleted', 'and says why, so the node can show a reason');
+  assert.ok(Number.isFinite(j.resolvedAt), 'resolvedAt is stamped so pruneJobs can drop it in seven days');
+}
+assert.equal(afterFail.find((x) => x.id === 'p-b').status, 'pending', "another project's render is untouched");
+assert.equal(afterFail.find((x) => x.id === 'd-a').status, 'done', 'an already-done record is left alone');
+assert.equal(await failPendingJobs(failDir, { project: 'alpha', error: 'again' }), 0, 'a second call reports zero');
+await fs.rm(failDir, { recursive: true, force: true });
+
+// ---- reassignPendingJobs ----
+const moveDir = await fs.mkdtemp(path.join(os.tmpdir(), 'unframed-jobs-reassign-'));
+await writeJobs(moveDir, mixed);
+assert.equal(await reassignPendingJobs(moveDir, 'alpha', 'alpha-renamed'), 2, 'reports how many it repointed');
+const afterMove = await readJobs(moveDir);
+assert.deepEqual(afterMove.filter((j) => j.project === 'alpha-renamed').map((j) => j.id).sort(),
+  ['p-a', 'p-a2'], 'a pending render follows its project, so the clip lands where the user is looking');
+assert.equal(afterMove.find((x) => x.id === 'd-a').project, 'alpha',
+  'a done record keeps the name its files are already sitting under');
+// Reversible, which is what lets the rename route compensate for a failed fs.rename.
+assert.equal(await reassignPendingJobs(moveDir, 'alpha-renamed', 'alpha'), 2, 'and it reverses cleanly');
+assert.equal((await readJobs(moveDir)).find((x) => x.id === 'p-a').project, 'alpha', 'back where it started');
+await fs.rm(moveDir, { recursive: true, force: true });
+
+// Every mutating helper refuses a damaged store rather than reading it as empty.
+const brokenDir = await fs.mkdtemp(path.join(os.tmpdir(), 'unframed-jobs-broken-'));
+await fs.writeFile(jobsPath(brokenDir), '{not json');
+await assert.rejects(() => failPendingJobs(brokenDir, { project: 'x', error: 'y' }),
+  'failPendingJobs refuses a damaged store');
+await assert.rejects(() => reassignPendingJobs(brokenDir, 'x', 'y'), 'reassignPendingJobs refuses too');
+await assert.rejects(() => copyPendingJobs(brokenDir, dir), 'and so does copyPendingJobs');
+await fs.rm(brokenDir, { recursive: true, force: true });
 
 await fs.rm(dir, { recursive: true, force: true });
 console.log('jobs.test.js: ok');
