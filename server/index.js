@@ -567,9 +567,16 @@ app.put('/api/projects/:name', async (req, res) => {
 });
 
 app.post('/api/projects/:name/rename', async (req, res) => {
+  // Slugify the source side too, and reuse this one value for both the folder
+  // path and the record match below -- projectDir() already slugifies
+  // internally, so resolving the folder from the raw :name while matching
+  // records against that same raw string is how the two could silently
+  // disagree about which project this is. `to` was already slugified for
+  // exactly this reason; `from` now matches it.
+  const name = slugify(req.params.name);
   const to = slugify(req.body?.to || '');
   if (!to) return res.status(400).json({ error: 'New name is empty.' });
-  const from = projectDir(req.params.name);
+  const from = projectDir(name);
   const dest = path.join(OUTPUT_DIR, to);
   try {
     await fs.access(dest);
@@ -586,7 +593,7 @@ app.post('/api/projects/:name/rename', async (req, res) => {
   // that can fail just as easily.
   let moved = 0;
   try {
-    moved = await reassignPendingJobs(OUTPUT_DIR, req.params.name, to);
+    moved = await reassignPendingJobs(OUTPUT_DIR, name, to);
   } catch (err) {
     return res.status(500).json({
       error: `Could not update the renders in progress for this project, so it was not renamed: ${err.message}`,
@@ -600,7 +607,7 @@ app.post('/api/projects/:name/rename', async (req, res) => {
     // so say both things plainly rather than reporting a clean failure.
     let restored = true;
     try {
-      await reassignPendingJobs(OUTPUT_DIR, to, req.params.name);
+      await reassignPendingJobs(OUTPUT_DIR, to, name);
     } catch (rollbackErr) {
       restored = false;
       console.log(`  could not restore job records after a failed rename: ${rollbackErr.message}`);
@@ -621,7 +628,11 @@ app.post('/api/projects/:name/rename', async (req, res) => {
 // render: without confirmRenders the route reports what is at stake and changes
 // nothing.
 app.delete('/api/projects/:name', async (req, res) => {
-  const name = req.params.name;
+  // Slugify once and reuse it for the record lookup below AND for projectDir()
+  // (which slugifies internally too) -- a raw :name would let the confirm gate
+  // check pending renders under one spelling while the folder it goes on to
+  // remove is a different one, which is the gate bypassed silently.
+  const name = slugify(req.params.name);
   let pending;
   try {
     // Strict: a store that cannot be read cannot tell us what this delete would

@@ -359,6 +359,28 @@ try {
   await fs.access(path.join(outDir, 'keepers-renamed'));
   await assert.rejects(fs.access(path.join(outDir, 'keepers-again')), 'and the folder did not move');
 
+  // Rename rollback: a project with pending records but NO folder on disk makes
+  // fs.rename itself fail (ENOENT), which is what exercises the rollback branch
+  // rather than the earlier "store unreadable" branch above. The record must land
+  // back at its OLD project name -- asserting only that a record still exists
+  // would pass even if the rollback's two arguments were swapped and it "rolled
+  // back" onto the new name instead, which is exactly the stranding this task
+  // exists to prevent.
+  await fs.writeFile(path.join(outDir, 'jobs.json'), JSON.stringify([
+    { id: 'g-1', project: 'ghost', status: 'pending', startedAt: Date.now(), params: {} },
+  ]));
+  const ghostRename = await fetch(`${base}/api/projects/ghost/rename`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ to: 'ghost2' }),
+  });
+  assert.equal(ghostRename.status, 500, 'renaming a project with no folder on disk fails');
+  assert.match((await ghostRename.json()).error, /could not rename/i);
+  const afterGhostRollback = JSON.parse(await fs.readFile(path.join(outDir, 'jobs.json'), 'utf8'));
+  const ghostJob = afterGhostRollback.find((j) => j.id === 'g-1');
+  assert.equal(ghostJob.project, 'ghost',
+    'the rollback puts the record back at its OLD project name, not stranded at the new one it never reached');
+  assert.equal(ghostJob.status, 'pending', 'and it is still pending, not lost');
+
   // Delete: refuses without confirmation, and says how many renders are at stake.
   await seedJobs();
   const refused = await fetch(`${base}/api/projects/doomed`, { method: 'DELETE' });
@@ -377,6 +399,38 @@ try {
   }
   assert.equal(afterDelete.find((x) => x.id === 'k-1').status, 'pending', "another project's render survives");
   await assert.rejects(fs.access(path.join(outDir, 'doomed')), 'and the folder is gone');
+
+  // Delete after a failed rm: records must already be ended before the rm is even
+  // attempted, and a folder the rm cannot remove must not silently swallow that --
+  // the response has to name BOTH facts, and the folder (still undeleted) has to
+  // still be there for a retry. chmod 0o500 strips owner write from the directory
+  // itself, so unlinking graph.json inside it fails with EACCES -- confirmed to
+  // reproduce on this machine (not running as root, which would bypass the check)
+  // before relying on it here.
+  await fs.mkdir(path.join(outDir, 'unrmable'), { recursive: true });
+  await fs.writeFile(path.join(outDir, 'unrmable', 'graph.json'), '{}');
+  await fs.writeFile(path.join(outDir, 'jobs.json'), JSON.stringify([
+    { id: 'u-1', project: 'unrmable', status: 'pending', startedAt: Date.now(), params: {} },
+    { id: 'u-2', project: 'unrmable', status: 'pending', startedAt: Date.now(), params: {} },
+  ]));
+  await fs.chmod(path.join(outDir, 'unrmable'), 0o500);
+  try {
+    const rmFailed = await fetch(`${base}/api/projects/unrmable?confirmRenders=1`, { method: 'DELETE' });
+    assert.equal(rmFailed.status, 500, 'a folder that cannot be removed is still reported as a failure');
+    const rmFailedBody = await rmFailed.json();
+    assert.match(rmFailedBody.error, /stopped 2 render/i, 'names the renders it already stopped');
+    assert.match(rmFailedBody.error, /could not be deleted/i, 'and names that the folder deletion itself failed');
+    const afterFailedRm = JSON.parse(await fs.readFile(path.join(outDir, 'jobs.json'), 'utf8'));
+    for (const id of ['u-1', 'u-2']) {
+      assert.equal(afterFailedRm.find((j) => j.id === id).status, 'failed',
+        'records were already ended before the rm was even attempted');
+    }
+    await fs.access(path.join(outDir, 'unrmable')); // the folder is still there for a retry
+  } finally {
+    // Restore write access or the final `fs.rm(dataDir, ...)` cleanup at the
+    // bottom of this file cannot remove it either.
+    await fs.chmod(path.join(outDir, 'unrmable'), 0o700);
+  }
 
   // A damaged store blocks the delete outright -- it cannot know what it would strand.
   await fs.mkdir(path.join(outDir, 'unknowable'), { recursive: true });
@@ -419,10 +473,17 @@ try {
 
   // Key REPLACEMENT ends nothing: usually a renewed key for the same account.
   await seedJobs();
-  await fetch(`${base}/api/config`, {
+  const replaced = await fetch(`${base}/api/config`, {
     method: 'PUT', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ key: 'sk-or-v1-1111111111111111111111111111111111111111111111111111' }),
   });
+  // Assert the replacement itself actually took, before trusting what it did NOT
+  // do to the records -- otherwise a rejected PUT (say, a tightened key pattern)
+  // would leave every record untouched for a reason that has nothing to do with
+  // replacement-vs-removal, and this test would stay green while proving nothing.
+  assert.equal(replaced.status, 200, 'the replacement PUT must succeed for this test to mean anything');
+  assert.equal((await (await fetch(`${base}/api/health`)).json()).keyHint, '1111',
+    'and the live key actually changed to the new one');
   assert.equal(
     JSON.parse(await fs.readFile(path.join(outDir, 'jobs.json'), 'utf8')).filter((j) => j.status === 'pending').length,
     3, 'replacing the key leaves renders polling');
