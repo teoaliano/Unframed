@@ -48,19 +48,39 @@ export function stripRunMarkers(data) {
   return copy;
 }
 
-// For undo/redo. Restored nodes take the live graph's marker values; a node
-// absent from the live graph (undo bringing it back from a delete) keeps what
-// its snapshot held -- there is no live run to prefer. Untouched nodes are
-// returned as the same object, so an undo does not churn React Flow's
-// referential equality for the whole canvas.
 export function keepLiveRunMarkers(restored, live) {
   const byId = new Map(live.map((n) => [n.id, n.data]));
   return restored.map((n) => {
     const liveData = byId.get(n.id);
-    if (!liveData) return n;
-    if (RUN_MARKERS.every((k) => liveData[k] === n.data?.[k])) return n;
-    const data = { ...n.data };
-    for (const k of RUN_MARKERS) data[k] = liveData[k];
-    return { ...n, data };
+    // Still on the canvas: the live value wins for every marker, in both
+    // directions -- undoing past a Generate must not strand a render, and
+    // redoing past a finish must not resurrect a dead one.
+    if (liveData) {
+      if (RUN_MARKERS.every((k) => liveData[k] === n.data?.[k])) return n;
+      const data = { ...n.data };
+      for (const k of RUN_MARKERS) data[k] = liveData[k];
+      return { ...n, data };
+    }
+    // Absent from the live graph: undo is bringing this node back from a
+    // delete, and there is no live value to prefer. The two markers part
+    // company here, which is the whole reason this branch is not just "keep
+    // the snapshot".
+    //
+    // `job` is kept: a video render is durable on the server, so the restored
+    // node's resume effect picks it up and the clip still lands.
+    //
+    // `running` is dropped: it belongs to a single HTTP request owned by a
+    // component instance that no longer exists. Its result can never arrive,
+    // and the mount-only self-clear cannot save the node either -- that only
+    // clears a marker from a DIFFERENT session, and this one carries the
+    // session that is still open. Kept, it disables Run forever: the same bug
+    // this module was written to end, reached through the delete door.
+    //
+    // The trade this accepts, deliberately: a request in flight when the node
+    // was deleted CAN still land afterwards, since updateNodeData addresses by
+    // id. So there is a brief window where Run is enabled while a request is
+    // still coming. A rare double-run beats a certain permanent freeze.
+    if (n.data?.running === undefined) return n;
+    return { ...n, data: { ...n.data, running: undefined } };
   });
 }

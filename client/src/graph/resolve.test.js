@@ -442,10 +442,36 @@ function graph(nodes, edges) {
   assert.equal(matchingKept[0], matchingRestored[0],
     'a marker already equal to the live value (same reference) comes back unchanged, not rebuilt');
 
-  // A node undo is bringing back from a delete has no live counterpart: the
-  // snapshot is all there is, and it keeps it.
-  const ghost = keepLiveRunMarkers([{ id: 'gone', data: { job: { id: 'j-old' } } }], []);
-  assert.equal(ghost[0].data.job.id, 'j-old', 'a node absent from the live graph keeps its snapshot');
+  // A node undo is bringing back from a delete has no live counterpart, and the
+  // two markers part company there. `job` is durable server-side, so a restored
+  // video node should resume watching its render. `running` is not: it belongs to
+  // one HTTP request owned by a component instance that no longer exists, so a
+  // restored image or text node would show a permanently disabled Run button --
+  // the mount-only self-clear cannot help, because the marker's session id still
+  // matches this tab.
+  const ghostVideo = keepLiveRunMarkers([{ id: 'gone-v', data: { job: { id: 'j-old' } } }], []);
+  assert.equal(ghostVideo[0].data.job.id, 'j-old',
+    'a restored video node keeps its job, so it resumes watching a render that is still running');
+
+  const staleRun = { startedAt: 1, session: 's1' };
+  const ghostRun = keepLiveRunMarkers([{ id: 'gone-t', data: { running: staleRun, text: 'keep me' } }], []);
+  assert.equal(ghostRun[0].data.running, undefined,
+    'a restored image or text node drops its run marker, or Run stays disabled until a reload');
+  assert.equal(ghostRun[0].data.text, 'keep me', 'the rest of a restored node is untouched');
+
+  // The undo stack holds the snapshot itself; computing what the canvas should
+  // show must not rewrite it, or stepping forward again reads the amended copy.
+  const snapshot = [{ id: 'gone-t2', data: { running: staleRun } }];
+  const amended = keepLiveRunMarkers(snapshot, []);
+  assert.notEqual(amended[0], snapshot[0], 'a cleared marker produces a new node object');
+  assert.equal(snapshot[0].data.running, staleRun, 'the snapshot in the undo stack is not mutated');
+
+  // The same-object fast path applies on this branch too: a restored node with
+  // nothing to clear must not be rebuilt, or every undo churns identity for the
+  // whole canvas.
+  const cleanGhost = [{ id: 'gone-p', data: { text: 'a prompt' } }];
+  assert.equal(keepLiveRunMarkers(cleanGhost, [])[0], cleanGhost[0],
+    'a restored node with no run marker comes back as the identical object');
 
   assert.deepEqual(RUN_MARKERS, ['job', 'running'], 'the list itself is the contract');
 }
