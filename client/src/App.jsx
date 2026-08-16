@@ -182,6 +182,12 @@ function Canvas() {
   // nameDlg drives both "rename" and "create" via one name-entry dialog.
   const [nameDlg, setNameDlg] = useState(null); // { mode:'rename'|'create', name, value, error } | null
   const [deleting, setDeleting] = useState(null); // project name | null
+  // Second stage of the delete confirmation, reached only when the server
+  // refuses because the project has renders in flight. A separate state (and a
+  // separate dialog below) rather than reshaping `deleting`: the first dialog
+  // may close itself when its action fires, and a single dialog trying to stay
+  // open to escalate would be fighting that.
+  const [deleteRenders, setDeleteRenders] = useState(null); // { name, count } | null
   const [libraryOpen, setLibraryOpen] = useState(false);
   // Presets you saved, alongside the bundled ones. Display only — every write
   // re-reads the file first, so this copy going stale can never cost you a preset.
@@ -463,7 +469,18 @@ function Canvas() {
     try {
       const r = await clearKey();
       setCfg((c) => ({ ...c, ...r }));
-      setCfgDlg((d) => ({ ...d, key: '', saving: false, confirmRemove: false, removed: true }));
+      // The key is gone either way -- removed stays true even when the cleanup
+      // below failed. renderCleanupError, when present, reuses the banner slot
+      // below (shared with save results) rather than implying the removal itself
+      // didn't happen; its wording already says the key was removed.
+      setCfgDlg((d) => ({
+        ...d,
+        key: '',
+        saving: false,
+        confirmRemove: false,
+        removed: true,
+        error: r.renderCleanupError,
+      }));
     } catch (err) {
       setCfgDlg((d) => ({ ...d, saving: false, confirmRemove: false, error: err.message }));
     }
@@ -549,16 +566,46 @@ function Canvas() {
     setNameDlg(null);
   }
 
-  async function confirmDelete() {
-    const name = deleting;
-    await deleteProject(name);
+  // Shared tail: the project is gone on the server, so bring the UI in line.
+  function projectDeleted(name) {
     const rest = projects.filter((p) => p !== name);
     setProjects(rest.length ? rest : ['default']);
     if (project === name) {
       if (rest.length) switchProject(rest[0]);
       else openFresh('default');
     }
+  }
+
+  async function confirmDelete() {
+    const name = deleting;
     setDeleting(null);
+    try {
+      await deleteProject(name);
+    } catch (err) {
+      // A refusal is not a failure: the server is telling us what this delete
+      // would abandon so the user can decide. Anything else is a real error,
+      // and must NOT remove the project from the list -- doing that regardless
+      // of outcome is what made a failed delete look successful.
+      if (err.pendingRenders > 0) {
+        setDeleteRenders({ name, count: err.pendingRenders });
+        return;
+      }
+      toast({ body: err.message, uniqueID: `delete-project-${name}` });
+      return;
+    }
+    projectDeleted(name);
+  }
+
+  async function confirmDeleteWithRenders() {
+    const { name } = deleteRenders;
+    setDeleteRenders(null);
+    try {
+      await deleteProject(name, { confirmRenders: true });
+    } catch (err) {
+      toast({ body: err.message, uniqueID: `delete-project-${name}` });
+      return;
+    }
+    projectDeleted(name);
   }
 
   const onConnect = useCallback(
@@ -1393,6 +1440,15 @@ function Canvas() {
         description={`This permanently removes “${deleting}” and its generated images. This can't be undone.`}
         actionLabel="Delete project"
         onAction={confirmDelete}
+      />
+
+      <AlertDialog
+        isOpen={!!deleteRenders}
+        onOpenChange={(open) => !open && setDeleteRenders(null)}
+        title="Stop renders and delete?"
+        description={`This stops tracking ${deleteRenders?.count} video render${deleteRenders?.count === 1 ? '' : 's'}. They may still complete upstream, but their results will not be saved here.`}
+        actionLabel="Stop renders and delete"
+        onAction={confirmDeleteWithRenders}
       />
     </div>
   );
