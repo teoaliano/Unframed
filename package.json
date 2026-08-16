@@ -4,6 +4,7 @@
   "version": "0.2.1",
   "type": "module",
   "description": "A tiny local node-based image generator (GPT Image 2 via OpenRouter).",
+  "license": "MIT",
   "scripts": {
     "install:all": "npm install && npm --prefix client install",
     "dev": "concurrently -n server,client -c yellow,magenta \"npm run server\" \"npm run client\"",
