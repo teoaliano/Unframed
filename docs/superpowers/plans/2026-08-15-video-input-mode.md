@@ -1464,3 +1464,56 @@ the provider's message — and that a `pending` one does not. Confirm each fails
 fix reverted.
 
 - [ ] **Step 5: `npm test`, CHANGELOG**
+
+---
+
+### Task 15: A run in flight must survive a project switch — and must not follow you
+
+**Why this exists:** found by the user testing task 13. Generating an image, switching
+projects and coming back showed the node with an enabled "Generate" button, as if nothing
+were running; the results appeared correctly when the request landed. The same for a text
+node's "Run". `status` is component state and the canvas remounts on a genuine switch
+(task 12), so the in-flight state is discarded. The button being enabled is the sharp end:
+a second click is a second paid run.
+
+Chasing it surfaced a second, quieter problem. Task 13 made the image node write its
+results into node DATA. Node ids come from one counter shared across projects, so a run
+started in project A that resolves after a switch now writes A's images into B's same-id
+node — and persists them. This is the bug PR #11 fixed for text on `main`; this branch
+gave images the same exposure and has no guard for either.
+
+**Files:** `client/src/api.js`, `client/src/nodes/ImageOutputNode.jsx`,
+`client/src/nodes/TextOutputNode.jsx`, `CHANGELOG.md`
+
+- [ ] **Step 1: A writer must know where it started**
+
+`api.js` has `setProject` and no getter. Add `getProject()` — PR #11 adds the identical
+line on a branch off `main`, so expect a trivial conflict there; keep the shapes the same
+so it resolves to one line.
+
+Guard every post-await write in `ImageOutputNode.onGenerate` and `TextOutputNode.onRun`:
+capture the project before the request, and if it has changed by the time the response
+lands, do not write node data. The identity must be the PROJECT, not a run token — a token
+in a ref survives the switch too, because the component instance is exactly what gets
+reused.
+
+- [ ] **Step 2: A run in flight is a fact about the node, not about the component**
+
+Persist a marker before the request — `data.running = { startedAt, session }` — and clear
+it on completion, failure, and the project-changed exit. While it is set, the node's button
+reads "Generating…"/"Running…" and is disabled, however many times the canvas remounts.
+
+- [ ] **Step 3: A marker must never outlive the app that set it**
+
+Unlike a video job, an image or text run is a single in-flight request: nothing can resume
+it, and the server writes the file regardless. So a marker left behind by a closed tab
+would disable that button forever. Mint one id per app session (a module-level constant in
+`api.js`, alongside `getProject`), stamp it into the marker, and on mount treat a marker
+from any other session as stale — clear it rather than trusting it. Same self-healing shape
+as `migrateNodes` and the video node's `inputMode` heal.
+
+- [ ] **Step 4: `npm test`, CHANGELOG, and verify in the app (controller)**
+
+Start a run, switch project mid-flight, come back: the button must still read as running.
+Let it land: the result must appear in the project that started it, and NOT in the other
+one. Then reload mid-run: the stale marker must clear rather than leaving a dead button.
