@@ -146,3 +146,36 @@ export function persistJob(dir, id, patch) {
     return job;
   });
 }
+
+// Moves every `pending` record from one store to another as a single unit on
+// the SAME chain persistJob queues on. That placement is the whole point, not
+// an implementation detail: a caller like sweepOne calls persistJob(OUTPUT_DIR,
+// ...) with OUTPUT_DIR captured at dispatch time, so a sweep tick started
+// just before OUTPUT_DIR changes still has the OLD dir in its closure -- and
+// its queued read-modify-write can run at any point after this function is
+// called. A migration done as two bare readJobs/writeJobs calls outside the
+// queue can land in the gap between that sweep's read and its write, so the
+// sweep's own write -- which still targets the old dir and still has the
+// pending record in memory -- lands AFTER the migration's write and silently
+// resurrects a record this function just moved out. Enqueuing the whole
+// migration closes that gap: the sweep's call and this one serialize onto the
+// same storeChain, so one fully finishes (old dir stripped, new dir has the
+// record) before the other's read-modify-write can even start.
+//
+// Destination first, source second: if the second write throws (the disk
+// error an external drive makes plausible), the worst case is a record
+// present in both stores -- and the copy that matters, the one in the folder
+// the sweep now reads, already exists. Writing source-first and having the
+// destination write fail would delete the only copy of a render still in
+// flight, which is exactly the loss this whole feature exists to prevent.
+export function migratePendingJobs(fromDir, toDir) {
+  return enqueue(async () => {
+    const old = await readJobs(fromDir);
+    const pending = old.filter((j) => j.status === 'pending');
+    if (!pending.length) return 0;
+    const dest = pending.reduce(upsertJob, await readJobs(toDir));
+    await writeJobs(toDir, pruneJobs(dest, Date.now()));
+    await writeJobs(fromDir, old.filter((j) => j.status !== 'pending'));
+    return pending.length;
+  });
+}
