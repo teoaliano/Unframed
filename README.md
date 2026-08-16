@@ -188,3 +188,8 @@ These are the obvious next steps if you want to grow it, each small:
 - Your key lives server-side. If you set it in `.env` the browser never sees it at all; if you paste it into the dialog it is POSTed once to the local server over loopback and never stored in the browser or sent back to it — the app only ever receives the last 4 characters, to show you which key is in use.
 - OpenRouter bills per completed image (a failed generation isn't charged), so each output-node run maps to one billable image.
 - Verify current per-image pricing on the model's OpenRouter page before running large batches.
+
+## License
+
+MIT — see [LICENSE](LICENSE). Clone it, change it, ship it; the only condition is
+that the copyright notice travels with it.

@@ -7,6 +7,13 @@ Keep that shape: the website's What's new page parses this file.
 
 ## 2026-08-16
 
+### Added
+
+- Unframed is MIT licensed, and now says so in a `LICENSE` file. There wasn't one
+  before, which meant default copyright applied: cloning and running the thing this
+  README invites you to clone and run was never actually permitted. Nothing about
+  the project changes — the permission it always intended to give is now given.
+
 ### Fixed
 
 - A text node's answer can no longer land in the wrong project. Starting a run and
