@@ -323,6 +323,48 @@ assert.equal((await readJobs(aliasDir)).length, 6, 'and nothing is lost');
 await fs.unlink(aliasLink);
 await fs.rm(aliasDir, { recursive: true, force: true });
 
+// dropPendingJobs' `status === 'pending'` guard is the whole reason the drop
+// half is safe: a render that finishes in the SOURCE between the copy and the
+// drop must not then be deleted by a drop call that still names its id --
+// that would erase the very record the store just collected a result for.
+const raceSrcDir = await fs.mkdtemp(path.join(os.tmpdir(), 'unframed-jobs-race-src-'));
+const raceDstDir = await fs.mkdtemp(path.join(os.tmpdir(), 'unframed-jobs-race-dst-'));
+await writeJobs(raceSrcDir, mixed);
+const raceCopied = await copyPendingJobs(raceSrcDir, raceDstDir);
+// Simulate the render finishing in the source while the caller is still
+// committing its own change, before the drop call ever runs.
+const raceJobs = await readJobs(raceSrcDir);
+await writeJobs(
+  raceSrcDir,
+  raceJobs.map((j) => (j.id === 'p-a' ? { ...j, status: 'done', resolvedAt: Date.now() } : j)),
+);
+const raceDropped = await dropPendingJobs(raceSrcDir, raceCopied.ids);
+assert.equal(raceDropped, 4, 'the record that finished mid-move is excluded from the drop count');
+const raceAfter = await readJobs(raceSrcDir);
+const survived = raceAfter.find((j) => j.id === 'p-a');
+assert.ok(survived, 'a render that finished between the copy and the drop is not deleted from the store that just collected it');
+assert.equal(survived.status, 'done', 'and its done status is left intact, not reverted to pending or removed');
+await fs.rm(raceSrcDir, { recursive: true, force: true });
+await fs.rm(raceDstDir, { recursive: true, force: true });
+
+// A same-id collision in the destination must replace, not duplicate -- two
+// records for one render id would be polled twice and could be collected
+// twice, writing the clip to disk under two different timestamps.
+const collideSrcDir = await fs.mkdtemp(path.join(os.tmpdir(), 'unframed-jobs-collide-src-'));
+const collideDstDir = await fs.mkdtemp(path.join(os.tmpdir(), 'unframed-jobs-collide-dst-'));
+await writeJobs(collideSrcDir, mixed);
+await writeJobs(collideDstDir, [
+  { id: 'p-a', status: 'pending', project: 'alpha', startedAt: now, marker: 'stale-destination-copy' },
+]);
+await copyPendingJobs(collideSrcDir, collideDstDir);
+const collideDest = await readJobs(collideDstDir);
+assert.equal(collideDest.length, 5, 'the destination gains no extra row for the colliding id');
+const collidedMatches = collideDest.filter((j) => j.id === 'p-a');
+assert.equal(collidedMatches.length, 1, 'exactly one record for the colliding id, not two');
+assert.equal(collidedMatches[0].marker, undefined, "the source's version replaces the destination's stale one");
+await fs.rm(collideSrcDir, { recursive: true, force: true });
+await fs.rm(collideDstDir, { recursive: true, force: true });
+
 // ---- failPendingJobs ----
 const failDir = await fs.mkdtemp(path.join(os.tmpdir(), 'unframed-jobs-fail-'));
 await writeJobs(failDir, mixed);
@@ -361,6 +403,7 @@ await assert.rejects(() => failPendingJobs(brokenDir, { project: 'x', error: 'y'
   'failPendingJobs refuses a damaged store');
 await assert.rejects(() => reassignPendingJobs(brokenDir, 'x', 'y'), 'reassignPendingJobs refuses too');
 await assert.rejects(() => copyPendingJobs(brokenDir, dir), 'and so does copyPendingJobs');
+await assert.rejects(() => dropPendingJobs(brokenDir, ['x']), 'and dropPendingJobs too');
 await fs.rm(brokenDir, { recursive: true, force: true });
 
 await fs.rm(dir, { recursive: true, force: true });
