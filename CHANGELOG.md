@@ -5,6 +5,15 @@ is no release artifact to number. Headings are `## YYYY-MM-DD`, groups are
 `### Added` / `### Changed` / `### Fixed`, one bullet per user-visible change.
 Keep that shape: the website's What's new page parses this file.
 
+## 2026-08-16
+
+### Fixed
+
+- A text node's answer can no longer land in the wrong project. Starting a run and
+  switching projects before it finished wrote that answer — and its cost — over
+  whatever text node happened to share the same id in the project you moved to,
+  which downstream prompts then quietly built from.
+
 ## 2026-08-15
 
 ### Added
