@@ -122,6 +122,29 @@ const withDrag = (n) => ({
   className: n.type === 'image' ? undefined : 'nowheel',
 });
 
+// Undo deliberately does not own `data.job`. Everything else in a node is graph
+// shape — a snapshot of it is a state worth going back to. A job id is not: it is
+// a live pointer at a paid render that is happening right now, and the snapshot
+// taken 400ms before Generate was clicked does not have one. Restoring that
+// snapshot wholesale strands the node — VideoOutputNode's runJob already set
+// status='running' and every write past its await is gated on the node still
+// owning that id, so the spinner never clears, Generate stays disabled, and even
+// "Forget this job" is gone (it renders only when data.job exists) until a reload.
+// The clip itself is safe throughout; the server's sweep still collects it.
+//
+// So the live value always wins, in both directions: undoing past a Generate keeps
+// the job, and redoing past a finish does not resurrect a dead one. A node that is
+// not on the canvas right now (undo is bringing it back from a delete) has no live
+// value to prefer, so it keeps whatever the snapshot held.
+const withLiveJobs = (restored, live) => {
+  const jobs = new Map(live.map((n) => [n.id, n.data?.job]));
+  return restored.map((n) => {
+    if (!jobs.has(n.id)) return n;
+    const job = jobs.get(n.id);
+    return job === n.data?.job ? n : { ...n, data: { ...n.data, job } };
+  });
+};
+
 let counter = 100;
 const nextId = () => String(counter++);
 // ponytail: keep counter-issued ids from colliding with ids in a loaded graph,
@@ -336,7 +359,7 @@ function Canvas() {
       e.preventDefault();
       h.at = to;
       restoring.current = true;
-      setNodes(h.stack[to].nodes);
+      setNodes((live) => withLiveJobs(h.stack[to].nodes, live));
       setEdges(h.stack[to].edges);
     }
     window.addEventListener('keydown', onKeyDown);
