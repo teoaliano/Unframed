@@ -89,6 +89,34 @@ export function pruneJobs(jobs, now = Date.now()) {
   });
 }
 
+// 24 hours. The one thing that can end a `pending` job the sweep can no longer
+// poll at all -- an id OpenRouter has forgotten answers 404 forever, sweepOne
+// returns silently on any not-ok poll, and pruneJobs above keeps every pending
+// record on purpose, so without this the record is re-polled every 30 seconds for
+// the life of the process and jobs.json only ever grows.
+//
+// A duration, not a count of failed polls: at one sweep every 30s, "N failures"
+// is really "N/2 minutes of bad luck", and the number that reads as generous
+// (say 20) is eight minutes -- shorter than plenty of real outages. And the two
+// mistakes here are nothing like symmetrical. Give up too early on a job that
+// was only unreachable, and a clip the user already paid for is never collected
+// and never mentioned again. Give up too late and it costs one line in jobs.json
+// and one poll every 30s. So this errs long, deliberately.
+//
+// The clock is what makes that honest, and it measures CONTINUOUS unreachability:
+// the sweep stamps unreachableSince on the first failed poll and clears it on any
+// poll that gets an answer -- even one that only says "still queued". A blip on
+// day one followed by a blip on day two is two blips, not 24 hours of silence.
+export const UNREACHABLE_MS = 24 * 60 * 60 * 1000;
+
+// A record with no unreachableSince (the normal case) yields NaN and is never
+// given up on -- same "an unknown age is not evidence of anything" rule pruneJobs
+// follows one function up.
+export function givenUp(job, now = Date.now()) {
+  const stuck = now - job.unreachableSince;
+  return Number.isFinite(stuck) && stuck >= UNREACHABLE_MS;
+}
+
 // Every store mutation queues behind the last one, so a read-modify-write on
 // the shared file can never interleave with another and drop an update -- two
 // jobs finishing seconds apart is the ordinary case once a sweep is polling

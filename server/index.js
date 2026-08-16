@@ -7,7 +7,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { upsertEnv, PATTERNS, envFile, outputPath } from './env.js';
 import { readPresets, writePresets } from './presets.js';
-import { readJobs, persistJob } from './jobs.js';
+import { readJobs, persistJob, givenUp } from './jobs.js';
 import { ensureTunnel, mintShare, revokeShare, waitUntilPublic, stopTunnel } from './share.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -840,7 +840,34 @@ const collecting = new Set();
 // the same tolerance pollVideo has client-side for reaching this server.
 async function sweepOne(job) {
   const polled = await fetchVideoStatus(job.id);
-  if (!polled.ok) return; // try again next tick
+  if (!polled.ok) {
+    // A poll that got no answer. Ordinarily that means "try again next tick" and
+    // nothing else -- but an id OpenRouter has forgotten answers this way every
+    // time, and a pending record is never pruned, so something has to end it. See
+    // UNREACHABLE_MS in jobs.js for the window and why it is a duration rather
+    // than a count of failures.
+    const why = polled.upstreamError || polled.networkError || 'no answer';
+    if (givenUp(job)) {
+      revokeJobShares(job.id); // nothing will ever fetch this job's refs now
+      await persistJob(OUTPUT_DIR, job.id, {
+        status: 'failed',
+        // Says what actually happened rather than "Generation failed.": the render
+        // may well have run. What is certain is that this machine stopped being
+        // able to ask about it, and a user whose clip vanished deserves that much.
+        error: `Stopped checking after 24 hours with no answer about this render. The last attempt said: ${why}`,
+        resolvedAt: Date.now(),
+      });
+      console.log(`  video job ${job.id} gave up: unreachable for 24h (${why})`);
+      return;
+    }
+    // Only the FIRST failure in a run of them writes; every one after that leaves
+    // the record alone, so a dead job costs one write, not one every 30 seconds.
+    if (!job.unreachableSince) await persistJob(OUTPUT_DIR, job.id, { unreachableSince: Date.now() });
+    return;
+  }
+  // Upstream answered. Whatever it said, the job is reachable, so the clock resets
+  // -- a blip today and a blip tomorrow must not add up to a day of silence.
+  if (job.unreachableSince) await persistJob(OUTPUT_DIR, job.id, { unreachableSince: undefined });
   const { data } = polled;
   const status = data.status || 'pending';
 
