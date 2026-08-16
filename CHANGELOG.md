@@ -38,11 +38,11 @@ Keep that shape: the website's What's new page parses this file.
   lands in the renamed project instead of recreating the old one.
 - Deleting a project with a render in progress now asks first, and says how many
   renders it will stop tracking.
-- Removing your OpenRouter key now marks every render it was tracking as ended,
-  with a reason, instead of leaving it to be silently retried forever once there's
-  no key left to check it with. The card itself still reads "Rendering…" until you
-  add a key back — nothing changes on screen — but the render is no longer stuck
-  retrying behind the scenes.
+- Removing your OpenRouter key now ends every render it was tracking, with a
+  reason, instead of leaving its record unresolved forever with nothing left able
+  to check on it. The card itself is unchanged — it still reads "Rendering…"
+  until you add a key back — but the render itself is no longer stuck in limbo
+  behind the scenes.
 - Changing the output folder now fails with a message if it cannot take renders in
   progress with it, instead of reporting success and leaving them behind.
 - A failed project delete no longer looks like it worked.
