@@ -47,6 +47,7 @@ import ProjectMenu from './ProjectMenu.jsx';
 import IgnoredEdge from './nodes/IgnoredEdge.jsx';
 import { PromptIcon, ImageIcon, VideoIcon, TextIcon } from './nodes/nodeIcons.jsx';
 import { bucketSources, isOutput } from './graph/resolve.js';
+import { keepLiveRunMarkers } from './graph/runMarkers.js';
 import LibraryDialog from './library/LibraryDialog.jsx';
 import { instantiateFragment, centerOffset } from './library/insert.js';
 import { selectionFragment, presetFromSelection } from './library/save.js';
@@ -121,29 +122,6 @@ const withDrag = (n) => ({
   dragHandle: DRAG,
   className: n.type === 'image' ? undefined : 'nowheel',
 });
-
-// Undo deliberately does not own `data.job`. Everything else in a node is graph
-// shape — a snapshot of it is a state worth going back to. A job id is not: it is
-// a live pointer at a paid render that is happening right now, and the snapshot
-// taken 400ms before Generate was clicked does not have one. Restoring that
-// snapshot wholesale strands the node — VideoOutputNode's runJob already set
-// status='running' and every write past its await is gated on the node still
-// owning that id, so the spinner never clears, Generate stays disabled, and even
-// "Forget this job" is gone (it renders only when data.job exists) until a reload.
-// The clip itself is safe throughout; the server's sweep still collects it.
-//
-// So the live value always wins, in both directions: undoing past a Generate keeps
-// the job, and redoing past a finish does not resurrect a dead one. A node that is
-// not on the canvas right now (undo is bringing it back from a delete) has no live
-// value to prefer, so it keeps whatever the snapshot held.
-const withLiveJobs = (restored, live) => {
-  const jobs = new Map(live.map((n) => [n.id, n.data?.job]));
-  return restored.map((n) => {
-    if (!jobs.has(n.id)) return n;
-    const job = jobs.get(n.id);
-    return job === n.data?.job ? n : { ...n, data: { ...n.data, job } };
-  });
-};
 
 let counter = 100;
 const nextId = () => String(counter++);
@@ -359,7 +337,12 @@ function Canvas() {
       e.preventDefault();
       h.at = to;
       restoring.current = true;
-      setNodes((live) => withLiveJobs(h.stack[to].nodes, live));
+      // Undo deliberately does not own the in-flight run markers (data.job,
+      // data.running): they are pointers at paid network traffic happening
+      // right now, and a snapshot from before a run started must not strand it
+      // -- nor may one from during a run resurrect it after it finished. The
+      // policy and its receipts live in graph/runMarkers.js.
+      setNodes((live) => keepLiveRunMarkers(h.stack[to].nodes, live));
       setEdges(h.stack[to].edges);
     }
     window.addEventListener('keydown', onKeyDown);
