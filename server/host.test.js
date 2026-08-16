@@ -282,6 +282,47 @@ try {
   });
   assert.equal(switchedBack.status, 200, 'the switch-back itself must succeed, or every test below runs against the wrong folder');
 
+  // A folder change that cannot take its renders must FAIL, not report success
+  // and leave them behind. A directory where the destination store belongs is
+  // the deterministic way to make the write fail -- the same trick
+  // presets.test.js and jobs.test.js use for unreadable paths.
+  const blockedDir = path.join(dataDir, 'blocked');
+  await fs.mkdir(blockedDir);
+  await fs.mkdir(path.join(blockedDir, 'jobs.json'));
+  const seedOne = () =>
+    fs.writeFile(
+      path.join(outDir, 'jobs.json'),
+      JSON.stringify([{ id: 'must-not-be-orphaned', project: '', params: {}, startedAt: Date.now(), status: 'pending' }]),
+    );
+  await seedOne();
+  const blocked = await fetch(`${base}/api/config`, {
+    method: 'PUT', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ outputDir: blockedDir }),
+  });
+  assert.equal(blocked.status, 500, 'a folder change that cannot move its pending renders fails');
+  assert.match((await blocked.json()).error, /render/i, 'and says renders are why, not a raw errno');
+  assert.equal(
+    JSON.parse(await fs.readFile(path.join(outDir, 'jobs.json'), 'utf8'))
+      .find((j) => j.id === 'must-not-be-orphaned')?.status,
+    'pending', 'the render stays in the old store, still pending, still swept');
+  assert.equal((await (await fetch(`${base}/api/health`)).json()).outputDir, outDir,
+    'the live output folder did not move');
+  assert.doesNotMatch(await fs.readFile(path.join(dataDir, '.env'), 'utf8'), /OUTPUT_DIR=.*blocked/,
+    'and .env did not move either, so a restart cannot lose the render');
+
+  // A damaged source store must refuse too. This is the case readJobs would
+  // have read as "0 pending" and waved through, orphaning everything in it.
+  await fs.writeFile(path.join(outDir, 'jobs.json'), '{not json');
+  const damagedDest = path.join(dataDir, 'damaged-dest');
+  const damaged = await fetch(`${base}/api/config`, {
+    method: 'PUT', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ outputDir: damagedDest }),
+  });
+  assert.equal(damaged.status, 500, 'an unreadable job store blocks the folder change');
+  assert.equal((await (await fetch(`${base}/api/health`)).json()).outputDir, outDir,
+    'and the folder stays put rather than moving on a store nobody could read');
+  await fs.writeFile(path.join(outDir, 'jobs.json'), '[]');
+
   for (const route of ['/api/video', '/api/generate']) {
     // What this reaches upstream is a 401, or a connection error when offline.
     // Neither is under test, and neither should be able to hang the suite, hence

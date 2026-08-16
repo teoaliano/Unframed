@@ -12,7 +12,6 @@ import {
   persistJob,
   givenUp,
   UNREACHABLE_MS,
-  migratePendingJobs,
   readJobsStrict,
   pendingJobsFor,
   copyPendingJobs,
@@ -198,60 +197,6 @@ const freshJobDir = await fs.mkdtemp(path.join(os.tmpdir(), 'unframed-jobs-fresh
 const created = await persistJob(freshJobDir, 'never-seen-before', { status: 'failed', error: 'x' });
 assert.ok(Number.isFinite(created.startedAt), 'a brand-new record gets a real startedAt, not undefined');
 await fs.rm(freshJobDir, { recursive: true, force: true });
-
-// ---- migratePendingJobs: two paths naming the SAME directory must be a no-op ----
-// Reviewed bug: fromDir and toDir being two different strings that resolve to
-// one physical directory (a case alias, or a symlink) was not guarded. The
-// call site's guard in index.js is `oldDir !== OUTPUT_DIR`, a string compare
-// of path.resolve() output -- which normalises trailing slashes and `..` but
-// not case and not a symlink, so it stays `true` (different) for both aliases
-// below and lets the call through. Once inside, the "migration" wrote the
-// pending records back to the alias (a no-op, since it's the same file) and
-// then overwrote that same file with the non-pending remainder -- deleting
-// every in-flight render. Both cases here assert the guard catches it via
-// fs.stat's dev+ino instead.
-
-// Case alias: on default case-insensitive APFS (macOS), `Renders` and
-// `renders` are one directory. Elsewhere (ext4 on Linux CI) they are two, so
-// this probes the actual filesystem under test rather than assuming macOS.
-const caseBase = await fs.mkdtemp(path.join(os.tmpdir(), 'unframed-jobs-case-'));
-const caseDir = path.join(caseBase, 'Renders');
-await fs.mkdir(caseDir);
-const caseAlias = path.join(caseBase, 'renders');
-const caseInsensitive = await fs.stat(caseAlias).then(
-  () => true,
-  () => false,
-);
-if (caseInsensitive) {
-  await writeJobs(caseDir, [{ id: 'case-job', status: 'pending', startedAt: Date.now() }]);
-  const movedCase = await migratePendingJobs(caseDir, caseAlias);
-  assert.equal(movedCase, 0, 'a case-alias of the same directory is a no-op, not a migration');
-  const stillThereCase = await readJobs(caseDir);
-  assert.ok(
-    stillThereCase.find((j) => j.id === 'case-job'),
-    'the pending record survives a migration call where fromDir and toDir are the same directory under different case',
-  );
-} else {
-  console.log('  (skipping the case-alias check: this filesystem is case-sensitive)');
-}
-await fs.rm(caseBase, { recursive: true, force: true });
-
-// Symlink alias: works on every platform, unlike the case one above, which is
-// why it stands on its own rather than as a fallback for the skip above.
-const symlinkBase = await fs.mkdtemp(path.join(os.tmpdir(), 'unframed-jobs-symlink-'));
-const realDir = path.join(symlinkBase, 'real');
-await fs.mkdir(realDir);
-const symlinkAlias = path.join(symlinkBase, 'alias');
-await fs.symlink(realDir, symlinkAlias, 'dir');
-await writeJobs(realDir, [{ id: 'symlink-job', status: 'pending', startedAt: Date.now() }]);
-const movedSymlink = await migratePendingJobs(realDir, symlinkAlias);
-assert.equal(movedSymlink, 0, 'a symlink alias of the same directory is a no-op, not a migration');
-const stillThereSymlink = await readJobs(realDir);
-assert.ok(
-  stillThereSymlink.find((j) => j.id === 'symlink-job'),
-  'the pending record survives a migration call where toDir is a symlink to fromDir',
-);
-await fs.rm(symlinkBase, { recursive: true, force: true });
 
 // ---- readJobsStrict ----
 // readJobs answers [] for a missing file, corrupt JSON and an unreadable path

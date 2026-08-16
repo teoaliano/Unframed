@@ -7,7 +7,17 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { upsertEnv, PATTERNS, envFile, outputPath } from './env.js';
 import { readPresets, writePresets } from './presets.js';
-import { readJobs, persistJob, givenUp, migratePendingJobs } from './jobs.js';
+import {
+  readJobs,
+  readJobsStrict,
+  persistJob,
+  givenUp,
+  pendingJobsFor,
+  copyPendingJobs,
+  dropPendingJobs,
+  failPendingJobs,
+  reassignPendingJobs,
+} from './jobs.js';
 import { ensureTunnel, mintShare, revokeShare, waitUntilPublic, stopTunnel } from './share.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -128,9 +138,41 @@ app.put('/api/config', async (req, res) => {
     }
   }
 
+  // Moving the output folder is a commit protocol, not a sequence of hopeful
+  // steps, because every one of them can fail and a pending record is a paid
+  // render. The strip of the OLD store is the commit point and comes LAST, so
+  // no failure anywhere can lose a record -- the worst outcome is a duplicate
+  // in a store nothing reads. See docs/video-and-sharing.md for the row this
+  // makes true.
+  let copied = { ids: [], count: 0 };
+  const nextOutputDir = updates.OUTPUT_DIR ? outputPath(ROOT, updates.OUTPUT_DIR) : null;
+  if (nextOutputDir) {
+    // 1. Copy first. A strict read is the point: readJobs would answer [] for a
+    // corrupt or unreadable store, which reads exactly like "nothing is in
+    // flight" and would wave the folder change through, orphaning every render
+    // the store was tracking.
+    try {
+      copied = await copyPendingJobs(OUTPUT_DIR, nextOutputDir);
+    } catch (err) {
+      return res.status(500).json({
+        error: `Could not move the renders already in progress to that folder, so the folder was not changed: ${err.message}`,
+      });
+    }
+  }
+
+  // 2. Commit the setting. If this fails the copies are rolled back, so the old
+  // store is still the only place those records live -- exactly as before the
+  // request.
   try {
     await writeEnv(updates);
   } catch (err) {
+    if (copied.count) {
+      try {
+        await dropPendingJobs(nextOutputDir, copied.ids);
+      } catch (rollbackErr) {
+        console.log(`  could not roll back copied jobs: ${rollbackErr.message}`);
+      }
+    }
     return res.status(500).json({ error: `Could not write .env: ${err.message}` });
   }
 
@@ -139,29 +181,22 @@ app.put('/api/config', async (req, res) => {
   if (updates.OPENROUTER_IMAGE_MODEL) IMAGE_MODEL = updates.OPENROUTER_IMAGE_MODEL;
   if (updates.OPENROUTER_TEXT_MODEL) TEXT_MODEL = updates.OPENROUTER_TEXT_MODEL;
   if (updates.OPENROUTER_VIDEO_MODEL) VIDEO_MODEL = updates.OPENROUTER_VIDEO_MODEL;
-  if (updates.OUTPUT_DIR) {
-    const oldDir = OUTPUT_DIR;
-    OUTPUT_DIR = outputPath(ROOT, updates.OUTPUT_DIR);
-    // Pending jobs live in <dir>/jobs.json and the sweep only reads the CURRENT
-    // dir, so a render still in flight when the folder changes would be orphaned
-    // in the old file: paid for, finished upstream, never collected. Move the
-    // pending records with the setting; done/failed stay behind as the old
-    // folder's history. Delegated to jobs.js's migratePendingJobs rather than
-    // done here with a bare readJobs/writeJobs: that function enqueues the
-    // whole move onto the SAME chain persistJob queues writes on, which is
-    // what stops it from racing a sweep tick dispatched against the old dir
-    // moments before this request landed -- one queued unit, so it cannot
-    // interleave with a sweep's own read-modify-write and either drop or
-    // resurrect a record. Best-effort on purpose: the setting itself already
-    // saved, and failing the whole request over bookkeeping would leave the
-    // UI claiming the folder change failed when it didn't.
-    if (oldDir !== OUTPUT_DIR) {
+
+  if (nextOutputDir) {
+    const previousDir = OUTPUT_DIR;
+    OUTPUT_DIR = nextOutputDir; // 3. the new store is authoritative from here
+    // 4. Strip the source last, and only the ids that actually travelled -- a
+    // render started between the copy and now has not been copied anywhere.
+    // Failure here is the one step allowed to be best-effort: the record exists
+    // in the store being swept, so nothing is lost, only duplicated in a folder
+    // nothing reads.
+    if (copied.count) {
       try {
-        const moved = await migratePendingJobs(oldDir, OUTPUT_DIR);
-        if (moved) console.log(`  moved ${moved} pending video job(s) to the new output folder`);
+        await dropPendingJobs(previousDir, copied.ids);
       } catch (err) {
-        console.log(`  could not move pending jobs to the new folder: ${err.message}`);
+        console.log(`  left ${copied.count} job record(s) behind in the old folder: ${err.message}`);
       }
+      console.log(`  moved ${copied.count} pending video job(s) to the new output folder`);
     }
   }
 
