@@ -51,6 +51,14 @@ body {
 .astryx-dropdown-menu {
   min-width: 200px;
 }
+/* The project you are currently in. A dropdown focuses its first item on open,
+   which reads as a selection even when it is not one, so the project actually
+   loaded says so itself — tinted here, and check-marked in the row (see
+   ProjectMenu.jsx), because a tint alone is a colour-only signal. Kept quieter
+   than the focus/hover fill so the two never look like the same state. */
+.project-current {
+  background: var(--color-background-gray);
+}
 /* add-node menu: narrower than the default, and nudged left of the + button so
    it doesn't crowd the trigger (placement="start", no offset prop available).
    The nudge goes on the wrapper that paints the surface — shifting the inner
