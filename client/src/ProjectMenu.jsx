@@ -19,11 +19,16 @@ export default function ProjectMenu({ projects, current, onSwitch, onRename, onD
           // are actually in, and the class tints it, so the two states are told
           // apart rather than competing. Check AND tint on purpose: the tint alone
           // would be one more thing distinguished only by colour.
+          //
+          // The check goes in the component's own leading-icon slot rather than
+          // beside the row's buttons: that slot centres it against the label for us,
+          // and putting it first indents the current project's name, which is a
+          // second, non-colour way to spot it at a glance.
+          icon={p === current ? CheckIcon : undefined}
           className={p === current ? 'project-current' : undefined}
           onClick={() => onSwitch(p)}
           endContent={
             <HStack gap={1}>
-              {p === current && <Icon icon={CheckIcon} size="sm" />}
               <IconButton
                 size="sm"
                 variant="ghost"
