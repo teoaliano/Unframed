@@ -122,6 +122,28 @@ all marks the job failed, with an error saying that is what happened. The window
 is deliberately long. Giving up early on a render that was merely unreachable
 throws away a clip already paid for; giving up late costs one line in `jobs.json`.
 
+## The contract, in one table
+
+Every render started ends in exactly one of two visible states — clip + sidecar
+on disk, or a `failed` record that says why — under every disruption below.
+This table is the scope: a new "what if X happens mid-render" belongs here as a
+row (with its guarantee and its test) before it becomes work anywhere else.
+
+| Mid-render, the user… | What happens | Guaranteed by |
+| --- | --- | --- |
+| closes the tab or laptop | the server's sweep collects it; files land in the project | `host.test.js` store tests, `jobs.test.js` |
+| reloads the page | the node resumes watching via `data.job` | resume effect in `VideoOutputNode`; verified in app 2026-08-15 |
+| switches projects | the canvas remounts; the job stays with its project's record | `canvasGeneration` remount; verified in app 2026-08-15 |
+| presses undo/redo | live run markers win over the snapshot | `keepLiveRunMarkers` cases in `resolve.test.js`; verified in app 2026-08-16 |
+| copies the node or saves it as a preset | markers stripped; the copy is a fresh node | strip cases in `resolve.test.js` |
+| inserts a preset saved mid-render years ago | markers stripped again on the way in | inbound-strip case in `resolve.test.js` |
+| changes the output folder in Settings | pending records move with the folder | migration case in `host.test.js` |
+| — and the provider kills the job | the record fails with the provider's own message | terminal-status cases in `host.test.js` |
+| — and the provider forgets the id entirely | failed after 24h of continuous silence, saying so | `givenUp` cases in `jobs.test.js` |
+| — and the network blips for less than 24h | the silence clock resets on the first answer | clock-clear case in `jobs.test.js` |
+| — and this machine's server restarts | the store is durable; the boot sweep resumes | jobs.json's durability is tested (`jobs.test.js`'s write/read/corruption cases); the boot-time sweep call is real code (`server/index.js`) but no test actually restarts the forked server to prove it resumes one |
+| — and two watchers race the same finished job | one download: store consulted first, then the in-process lock | already-done case in `host.test.js`; three-layer note above |
+
 ## The share tunnel
 
 Ticking **"Share via temporary link"** on a video output makes `server/share.js`

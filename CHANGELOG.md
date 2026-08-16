@@ -22,6 +22,11 @@ Keep that shape: the website's What's new page parses this file.
   since finished.
 - A render this app can no longer ask about is given up on after 24 hours and
   reported as failed, saying so, instead of being retried silently forever.
+- Changing the output folder in Settings no longer loses track of a render
+  already in flight — pending renders move with the folder and land there.
+- Undo can no longer freeze an image or text node's Run button. Stepping back
+  to a moment when a run was in flight used to leave the button disabled, with
+  the node showing "Running…" until a reload.
 
 ## 2026-08-15
 
