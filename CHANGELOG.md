@@ -40,6 +40,11 @@ Keep that shape: the website's What's new page parses this file.
   reload — the node remembers what it made and keeps showing it, and "Add to
   canvas" still works. The file and its sidecar were always on disk; only the
   node's own memory of them was being discarded.
+- A video job OpenRouter marks `expired` (or `cancelled`/`canceled`) now ends
+  the render with that message shown, instead of spinning forever: the server
+  only recognised `completed`/`failed`, so a job stuck upstream past its own
+  time limit was polled every 30 seconds for the rest of the process with no
+  way out. A render that sat queued for over two hours prompted this.
 
 ## 2026-08-13
 

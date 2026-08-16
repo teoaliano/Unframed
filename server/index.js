@@ -709,6 +709,13 @@ function failedResponse(job) {
   return { status: 'failed', error: job.error || 'Generation failed.' };
 }
 
+// Overridable ONLY so host.test.js can pin how an upstream status is handled --
+// there is no honest way to make OpenRouter itself answer "expired" or an
+// unrecognised status on demand. Unset in every real environment, including the
+// Electron shell's, so production always asks the real OpenRouter.
+const VIDEOS_STATUS_BASE =
+  process.env.UNFRAMED_TEST_VIDEOS_STATUS_BASE || 'https://openrouter.ai/api/v1/videos';
+
 // Asks OpenRouter what one job is doing. Used by both the poll route and the
 // sweep, so "ask upstream" has one implementation the same way "turn a finished
 // job into files" (collectVideo, below) does. Never throws -- everything
@@ -718,7 +725,7 @@ function failedResponse(job) {
 async function fetchVideoStatus(id) {
   let r;
   try {
-    r = await fetch(`https://openrouter.ai/api/v1/videos/${encodeURIComponent(id)}`, {
+    r = await fetch(`${VIDEOS_STATUS_BASE}/${encodeURIComponent(id)}`, {
       headers: { Authorization: `Bearer ${API_KEY}` },
     });
   } catch (err) {
@@ -737,6 +744,24 @@ async function fetchVideoStatus(id) {
   }
   return { ok: true, data };
 }
+
+// What an upstream status means here, in one place so sweepOne and the poll
+// route below can't drift into recognising a different set of terminal
+// failures. `failed` has meant this from the start; `expired` is the one that
+// surfaced this gap (a job queued over two hours came back
+// `{"status":"expired","error":"Job exceeded maximum time to live"}`, which
+// neither branch recognised, so it fell through as "still rendering" forever);
+// `cancelled`/`canceled` are the same shape of problem waiting to happen.
+//
+// Deliberately NOT a mapping of every status: completed and "still going" are
+// each one plain comparison at the call site, and everything that is neither
+// completed nor a name in this set is treated as still in flight. A provider is
+// far more likely to add a new in-progress status than a new terminal one, and
+// silently failing a job that is still actually rendering would throw away
+// money -- so an unrecognised status must default to "keep waiting", never to
+// "this failed".
+const TERMINAL_FAILURE_STATUSES = new Set(['failed', 'expired', 'cancelled', 'canceled']);
+const isTerminalFailure = (status) => TERMINAL_FAILURE_STATUSES.has(status);
 
 // Turns one COMPLETED OpenRouter job into files on disk: the clip, then its
 // sidecar. The only implementation of that step -- the poll route calls it for
@@ -819,7 +844,7 @@ async function sweepOne(job) {
   const { data } = polled;
   const status = data.status || 'pending';
 
-  if (status === 'failed') {
+  if (isTerminalFailure(status)) {
     revokeJobShares(job.id); // the provider will not fetch a dead job's refs
     await persistJob(OUTPUT_DIR, job.id, {
       status: 'failed',
@@ -828,7 +853,7 @@ async function sweepOne(job) {
     });
     return;
   }
-  if (status !== 'completed') return; // still queued or rendering
+  if (status !== 'completed') return; // still queued, rendering, or an unrecognised in-flight status
 
   if (collecting.has(job.id)) return; // a poll for this exact job is already in flight
   collecting.add(job.id);
@@ -907,12 +932,17 @@ app.get('/api/video/:id', async (req, res) => {
 
   const status = data.status || 'pending';
   if (status !== 'completed') {
-    if (status === 'failed') {
+    if (isTerminalFailure(status)) {
       const message = data.error?.message || data.error || 'Generation failed.';
       revokeJobShares(id); // the provider will not fetch a dead job's refs
       const job = await persistJob(OUTPUT_DIR, id, { status: 'failed', error: message, resolvedAt: Date.now() });
       return res.json(failedResponse(job));
     }
+    // Still in flight, including a status neither `completed` nor a known
+    // failure -- the raw upstream string rides along as-is (not folded into a
+    // generic "pending") so an unrecognised one reads as unusual rather than
+    // as ordinary progress. pollVideo (client/src/api.js) only branches on
+    // `completed`/`failed`; anything else just reaches its onStatus callback.
     return res.json({ status, progress: data.progress ?? null });
   }
 
