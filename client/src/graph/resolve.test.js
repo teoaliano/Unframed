@@ -403,6 +403,12 @@ function graph(nodes, edges) {
   const kept = keepLiveRunMarkers(restoredWithout, live);
   assert.equal(kept[0].data.job.id, 'j-live', 'a live job survives an undo to before it started');
   assert.equal(kept[0].data.videoModel, 'seedance', 'the snapshot keeps its own content');
+  // A changed marker means a rebuilt node, and the snapshot that fed it must come
+  // out exactly as it went in -- keepLiveRunMarkers reads straight from the undo
+  // stack's own history, and mutating an entry in place would corrupt whatever
+  // step undo/redo lands on next.
+  assert.notEqual(kept[0], restoredWithout[0], 'a changed marker produces a new object, not the input returned as-is');
+  assert.equal(restoredWithout[0].data.job, undefined, 'the snapshot itself is not mutated by computing what the canvas should show');
 
   // Undo restoring a snapshot from DURING a run that has since finished: the
   // stale marker must NOT come back -- this is the bug where a text node's Run
@@ -412,6 +418,29 @@ function graph(nodes, edges) {
   const restoredMidRun = [{ id: 't', data: { running: { session: 's1' }, result: undefined } }];
   const cleared = keepLiveRunMarkers(restoredMidRun, liveDone);
   assert.equal(cleared[0].data.running, undefined, 'a finished run is not resurrected by undo');
+  assert.notEqual(cleared[0], restoredMidRun[0], 'a changed marker produces a new object, not the input returned as-is');
+  assert.deepEqual(restoredMidRun[0].data.running, { session: 's1' },
+    'the snapshot itself is not mutated -- a later redo back to this step must still see its own running marker, not one erased as a side effect of computing what the canvas shows now');
+
+  // The fast path this module's own doc comment promises: when nothing about a
+  // node's markers actually changes, keepLiveRunMarkers must hand back the SAME
+  // object rather than a rebuilt copy. Task 5 feeds the result straight into React
+  // Flow's setNodes on every undo -- an implementation that always rebuilds would
+  // pass every value-only assertion above while still churning referential
+  // equality for the whole canvas on each undo, which is exactly the re-render
+  // this path exists to avoid.
+  const untouchedLive = [{ id: 'u', data: { text: 'plain' } }];
+  const untouchedRestored = [{ id: 'u', data: { text: 'plain' } }];
+  const untouchedKept = keepLiveRunMarkers(untouchedRestored, untouchedLive);
+  assert.equal(untouchedKept[0], untouchedRestored[0],
+    'a node with no markers on either side comes back as the identical object, not a rebuild');
+
+  const sharedJob = { id: 'j-same' };
+  const matchingLive = [{ id: 'm', data: { job: sharedJob } }];
+  const matchingRestored = [{ id: 'm', data: { job: sharedJob } }];
+  const matchingKept = keepLiveRunMarkers(matchingRestored, matchingLive);
+  assert.equal(matchingKept[0], matchingRestored[0],
+    'a marker already equal to the live value (same reference) comes back unchanged, not rebuilt');
 
   // A node undo is bringing back from a delete has no live counterpart: the
   // snapshot is all there is, and it keeps it.
