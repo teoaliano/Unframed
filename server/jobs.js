@@ -153,15 +153,16 @@ export function persistJob(dir, id, patch) {
 // persistJob(oldDir, ...) -- for instance sweepOne mid-poll when the folder
 // changes underneath it -- can land between a NON-queued migration's read and
 // its write, so the migration's stale snapshot overwrites that update. Concretely:
-// the sweep finishes a job (status -> 'done') and queues that write; a bare,
-// unqueued migration reads the old store BEFORE that write lands, still sees
-// the job as 'pending', moves it, and then writes the old store back with it
-// stripped out; the sweep's queued write then lands on top of THAT, reviving
-// the record as 'pending' in a store nothing is migrating anymore -- so it
-// gets re-polled, re-downloaded, and written to disk a second time under a
-// fresh timestamp. Enqueuing the whole migration closes that gap: the sweep's
-// call and this one serialize onto the same storeChain, so one fully finishes
-// (old dir stripped, new dir has the record) before the other's
+// a bare, unqueued migration reads the old store before the sweep's 'done'
+// write for that job ever lands, so the snapshot it carries still says
+// 'pending' -- and it writes that stale snapshot into the new store, the one
+// OUTPUT_DIR now points at and the one the sweep reads from then on, stripping
+// the record out of the old store in the same breath. The job is complete
+// upstream but recorded as 'pending' in the live store, so the next poll asks
+// OpenRouter again, gets 'completed', and collects the clip a second time
+// under a fresh timestamp. Enqueuing the whole migration closes that gap: the
+// sweep's call and this one serialize onto the same storeChain, so one fully
+// finishes (old dir stripped, new dir has the record) before the other's
 // read-modify-write can even start.
 //
 // Destination first, source second: if the SECOND write throws (the disk
@@ -201,10 +202,20 @@ export function migratePendingJobs(fromDir, toDir) {
     // regardless of the string used to reach it, which is why that -- not
     // `===` -- is the comparison here. A toDir that does not exist yet cannot
     // be an alias of anything, so a stat failure (ENOENT) falls through to a
-    // normal migration rather than being treated as an error.
+    // normal migration rather than being treated as an error. A zero inode is
+    // guarded separately: libuv reports st_ino as 0 on some Windows
+    // network/non-NTFS mounts and some FUSE mounts, so two genuinely
+    // different directories can both stat as ino 0 -- and without the
+    // truthiness check, that would match and skip a migration that needed to
+    // happen, orphaning pending renders in the folder being left behind.
+    // Erring toward migrating is the safe side of that mistake: migrating a
+    // directory onto itself when it didn't need to is a no-op (and still
+    // caught by this same guard whenever the filesystem hands back real
+    // inodes), where skipping a migration that needed to happen loses
+    // renders outright.
     try {
       const [fromStat, toStat] = await Promise.all([fs.stat(fromDir), fs.stat(toDir)]);
-      if (fromStat.dev === toStat.dev && fromStat.ino === toStat.ino) return 0;
+      if (fromStat.ino && fromStat.dev === toStat.dev && fromStat.ino === toStat.ino) return 0;
     } catch {
       // fromDir or toDir doesn't exist (yet) -- can't be the same directory.
     }
