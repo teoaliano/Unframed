@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { readJobs, writeJobs, jobsPath, upsertJob, pruneJobs, persistJob } from './jobs.js';
+import { readJobs, writeJobs, jobsPath, upsertJob, pruneJobs, persistJob, givenUp, UNREACHABLE_MS } from './jobs.js';
 
 const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'unframed-jobs-test-'));
 
@@ -111,6 +111,26 @@ assert.deepEqual(
   'a job resolved just now survives even after a week pending; one resolved a week ago does not',
 );
 
+// ---- givenUp ----
+// pruneJobs above keeps every pending record forever, and sweepOne returns
+// silently on a failed poll, so a job whose id OpenRouter has forgotten was
+// re-polled every 30 seconds for the life of the process and jobs.json only ever
+// grew. This is the only thing that ends one.
+assert.equal(givenUp({ id: 'x', status: 'pending' }, now), false,
+  'a job that has never failed a poll is never given up on');
+assert.equal(givenUp({ id: 'x', unreachableSince: now - 60_000 }, now), false,
+  'a minute of failed polls is a blip, not a dead job');
+assert.equal(givenUp({ id: 'x', unreachableSince: now - UNREACHABLE_MS + 1000 }, now), false,
+  'still inside the window with a second to go');
+assert.equal(givenUp({ id: 'x', unreachableSince: now - UNREACHABLE_MS }, now), true,
+  'a full day with no answer at all ends the job');
+// Same rule pruneJobs follows: an age that cannot be computed is not evidence of
+// anything. Failing a job over a garbage timestamp would throw away a paid render.
+assert.equal(givenUp({ id: 'x', unreachableSince: NaN }, now), false,
+  'a NaN unreachableSince is not treated as infinitely stale');
+assert.equal(givenUp({ id: 'x', unreachableSince: 'yesterday' }, now), false,
+  'nor is a non-numeric one');
+
 // ---- persistJob (serialized read-modify-write) ----
 // Reviewed bug: persistJob used to be a bare read-modify-write with no
 // serialization. Two concurrent calls for DIFFERENT ids could both read the
@@ -141,6 +161,18 @@ assert.deepEqual(
   'two concurrent persistJob calls for different ids must not lose either update',
 );
 await fs.rm(raceDir, { recursive: true, force: true });
+
+// The other half of the give-up clock: sweepOne clears unreachableSince by
+// patching it to undefined, and that has to actually reach the FILE. If the field
+// survived on disk, one blip today plus one tomorrow would read as a day of
+// continuous silence and fail a job that is still rendering.
+const clockDir = await fs.mkdtemp(path.join(os.tmpdir(), 'unframed-jobs-clock-'));
+await writeJobs(clockDir, [{ id: 'C', status: 'pending', startedAt: now, unreachableSince: now - 60_000 }]);
+await persistJob(clockDir, 'C', { unreachableSince: undefined });
+const [cleared] = await readJobs(clockDir);
+assert.equal('unreachableSince' in cleared, false, 'a successful poll clears the clock on disk, not just in memory');
+assert.equal(cleared.status, 'pending', 'and leaves the rest of the record alone');
+await fs.rm(clockDir, { recursive: true, force: true });
 
 // A job absent from the store entirely (persistJob's first-ever write for that
 // id) still gets a real startedAt, so it can't come back with a NaN age the

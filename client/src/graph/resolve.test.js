@@ -299,9 +299,10 @@ function graph(nodes, edges) {
 {
   const graphNodes = [
     { id: 'a', type: 'prompt', selected: true, data: {} },
-    // videoModel survives; job must not -- see selectionFragment's comment for why a
-    // job id baked into a never-rewritten preset (or a copy-pasted node) is permanent.
-    { id: 'b', type: 'videoOutput', selected: true, data: { videoModel: 'seedance', job: { id: 'j1', startedAt: 1, params: {} } } },
+    // videoModel survives; job and running must not -- see selectionFragment's
+    // comment for why either marker baked into a never-rewritten preset (or a
+    // copy-pasted node) is permanent.
+    { id: 'b', type: 'videoOutput', selected: true, data: { videoModel: 'seedance', job: { id: 'j1', startedAt: 1, params: {} }, running: { startedAt: 1, session: 's1' } } },
     { id: 'c', type: 'prompt', data: {} },
   ];
   const graphEdges = [
@@ -314,7 +315,27 @@ function graph(nodes, edges) {
   assert.deepEqual(frag.edges.map((e) => e.id), ['e1'], 'drops edges with an end outside the selection');
   assert.equal('selected' in frag.nodes[0] && frag.nodes[0].selected, undefined, 'selection state is not saved');
   assert.equal(frag.nodes[1].data.job, undefined, 'a pending job is stripped from a saved/copied node');
+  assert.equal(frag.nodes[1].data.running, undefined, 'an in-flight run marker is stripped too');
   assert.equal(frag.nodes[1].data.videoModel, 'seedance', 'other data survives the strip');
+
+  // The inbound half of the same strip, and the only one that can help a preset
+  // ALREADY on disk: presets.json is never rewritten, so a fragment saved before
+  // selectionFragment stripped these still carries them, forever. Left in, the
+  // pasted node polls a job id OpenRouter has forgotten -- and a 404 reads to
+  // pollVideo as "could not reach our own server", so it never resolves on its own.
+  {
+    const stale = {
+      nodes: [{ id: 'v', type: 'videoOutput', position: { x: 0, y: 0 },
+        data: { videoModel: 'seedance', job: { id: 'j-gone', startedAt: 1, params: {} }, running: { startedAt: 1, session: 's1' } } }],
+      edges: [],
+    };
+    let k = 700;
+    const fresh = instantiateFragment(stale, () => String(k++));
+    assert.equal(fresh.nodes[0].data.job, undefined, 'a stale job never reaches the canvas');
+    assert.equal(fresh.nodes[0].data.running, undefined, 'nor does a stale run marker');
+    assert.equal(fresh.nodes[0].data.videoModel, 'seedance', 'the rest of the node is untouched');
+    assert.equal(stale.nodes[0].data.job.id, 'j-gone', 'the fragment on disk is not mutated');
+  }
 
   // Right-clicking does not select, so the clicked node stands in for a selection.
   const one = selectionFragment(graphNodes.map((n) => ({ ...n, selected: false })), graphEdges, 'c');

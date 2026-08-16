@@ -112,6 +112,16 @@ started — a render that sat queued for a week and then completed is not
 deleted in the same breath. A `pending` one is never dropped for age alone — only the sweep actually
 finishing it, one way or the other, retires it.
 
+There is one way for the sweep to finish a job it can never get an answer about.
+An id OpenRouter no longer knows answers 404 to every poll, and since a pending
+record is kept regardless of age, that job would be re-polled every 30 seconds for
+as long as the server runs. So the sweep keeps a clock: the first poll that fails
+to get any answer stamps the record, any poll that *does* get one — even one that
+only says "still queued" — clears it, and 24 continuous hours with no answer at
+all marks the job failed, with an error saying that is what happened. The window
+is deliberately long. Giving up early on a render that was merely unreachable
+throws away a clip already paid for; giving up late costs one line in `jobs.json`.
+
 ## The share tunnel
 
 Ticking **"Share via temporary link"** on a video output makes `server/share.js`

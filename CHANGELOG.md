@@ -13,6 +13,15 @@ Keep that shape: the website's What's new page parses this file.
   switching projects before it finished wrote that answer — and its cost — over
   whatever text node happened to share the same id in the project you moved to,
   which downstream prompts then quietly built from.
+- Undo no longer strands a video node mid-render. Pressing Cmd+Z after clicking
+  Generate left the card spinning forever, with Generate disabled and no "Forget
+  this job" button to escape with, until a reload. The clip itself was never at
+  risk and still landed on disk.
+- A preset saved while a video was rendering no longer carries that render with it.
+  Every copy inserted afterwards started disabled, waiting on a job that had long
+  since finished.
+- A render this app can no longer ask about is given up on after 24 hours and
+  reported as failed, saying so, instead of being retried silently forever.
 
 ## 2026-08-15
 
