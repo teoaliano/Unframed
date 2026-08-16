@@ -751,6 +751,11 @@ async function fetchVideoStatus(id) {
   try {
     r = await fetch(`${VIDEOS_STATUS_BASE}/${encodeURIComponent(id)}`, {
       headers: { Authorization: `Bearer ${API_KEY}` },
+      // A status check is one small JSON answer, and the sweep polls jobs one at
+      // a time -- without a signal, one hung socket holds the line for undici's
+      // ~5-minute default and stalls collection for every job behind it. 30s
+      // matches the sweep's own cadence: slower than that IS no answer.
+      signal: AbortSignal.timeout(30_000),
     });
   } catch (err) {
     return { ok: false, networkError: err.message };
@@ -798,7 +803,14 @@ async function collectVideo(job, data) {
   const url = data.unsigned_urls?.[0] || data.urls?.[0];
   if (!url) throw new Error('Job completed without a video URL.');
 
-  const f = await fetch(url, { headers: { Authorization: `Bearer ${API_KEY}` } });
+  const f = await fetch(url, {
+    headers: { Authorization: `Bearer ${API_KEY}` },
+    // A total-time cap, not an inactivity one: a big clip on a slow line still
+    // fits comfortably in five minutes, and the failure this ends is the socket
+    // that never answers at all. On abort the throw lands in the caller's
+    // existing catch -- the sweep retries next tick, the poll route answers 502.
+    signal: AbortSignal.timeout(300_000),
+  });
   if (!f.ok) throw new Error(`Could not download the video (${f.status}).`);
   const buf = Buffer.from(await f.arrayBuffer());
 
