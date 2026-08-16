@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Handle, Position, useReactFlow, useNodes, useEdges } from '@xyflow/react';
 import { Card } from '@astryxdesign/core/Card';
 import { Text } from '@astryxdesign/core/Text';
@@ -14,7 +14,7 @@ import { useModels, useModelParams, freeSpot } from './output/core.js';
 import { resetModelParams } from './output/defaults.js';
 import { ModelPicker, ParamControls, CostFoot } from './output/controls.jsx';
 import { buildRequest, splitSections, findWiredTextNode, freeRunPrompts } from '../graph/resolve.js';
-import { generate, runText } from '../api.js';
+import { generate, runText, getProject, SESSION_ID } from '../api.js';
 // Arrow leaving a frame: "send this out onto the canvas". From lucide-react, like
 // every other icon here, so it shares the set's grid and stroke.
 import { ExternalLink as AddToCanvasIcon } from 'lucide-react';
@@ -46,6 +46,23 @@ export default function ImageOutputNode({ id, data }) {
   const [addingKeys, setAddingKeys] = useState(() => new Set());
   const liveNodes = useNodes();
   const liveEdges = useEdges();
+
+  // A marker left by a closed or reloaded tab can never be resumed — a batch is a
+  // set of single requests, and the server has already written whatever it wrote
+  // by the time anyone reopens this node. Runs once per mount, which now covers a
+  // genuine project switch too (App.jsx remounts every node on one — see
+  // canvasGeneration): a marker stamped by THIS session must survive that switch
+  // unchanged (it may still be genuinely in flight), so only a marker whose
+  // session does not match gets cleared here. Same self-healing shape as
+  // migrateNodes and VideoOutputNode's inputMode heal.
+  useEffect(() => {
+    if (data.running && data.running.session !== SESSION_ID) {
+      updateNodeData(id, { running: undefined });
+    }
+    // Deliberately mount-only ([]): re-running this whenever `data` changes would
+    // race onGenerate's own marker, clearing a session-matched one the instant it
+    // sets it.
+  }, []);
 
   const { models, defaultModel } = useModels('image');
   // Fall back to the server's configured model until the user picks one, so this
@@ -135,10 +152,28 @@ export default function ImageOutputNode({ id, data }) {
     setStatus('running');
     setError(null);
     setResults([]);
+    // Captured before anything is awaited: every guard below compares against
+    // this, not against a ref or a token held by this component instance. A
+    // rename (not a genuine switch) reuses this very instance, and even when a
+    // switch DOES remount it, updateNodeData still reaches into whichever
+    // project is CURRENTLY loaded — never the one this closure started in — so a
+    // write after an await needs its own check regardless of what remounted.
+    const startedIn = getProject();
     // A fresh run's persisted pointer starts empty too, same reasoning as
     // clearResults: a run interrupted before its first result lands must not leave
     // the PREVIOUS batch's images to reappear on the next reload of a blank node.
-    updateNodeData(id, { results: undefined });
+    // `running` is set in the same call: local `status` alone is wiped by a
+    // genuine switch's remount, so without a persisted marker a switch-and-back
+    // would show an enabled Generate button for a batch still in flight — a
+    // second click would be a second paid run. Stamped with SESSION_ID so a
+    // marker outliving this tab (a reload, or a close) reads as abandoned on
+    // mount instead of disabling the button forever — see the mount effect
+    // above. Boolean-ish fact plus its provenance, not a progress log: done/total
+    // stay local only, same as before.
+    updateNodeData(id, {
+      results: undefined,
+      running: { startedAt: Date.now(), session: SESSION_ID },
+    });
     setDone(0);
     setNote(null);
     setRepairCost(0);
@@ -236,6 +271,15 @@ export default function ImageOutputNode({ id, data }) {
             runIndex: i + 1,
             runCount: prompts.length,
           }).then((resp) => {
+            // Every request in a batch resolves independently, so the project can
+            // change between one landing and the next — this is not a
+            // once-per-batch check. Skipping here skips ALL of a stale write: the
+            // local strip and the persisted pointer both, not just the last one.
+            // The image this response carries is real and already billed, but
+            // attributing it to whatever node now sits at this id would be
+            // attributing it to the wrong project's node — see the task's own
+            // account of why this guard exists.
+            if (getProject() !== startedIn) return resp;
             setDone((d) => d + 1);
             // runIndex travels with the result so thumbnails, canvas placement, and
             // labels all agree on run order regardless of completion order.
@@ -259,6 +303,15 @@ export default function ImageOutputNode({ id, data }) {
         ),
       );
 
+      if (getProject() !== startedIn) {
+        // The switch outlasted the whole batch, not just one result in it —
+        // every individual write above already skipped itself. Nothing left here
+        // is this project's to touch; only clear the marker, so whatever node
+        // now sits at this id is not left carrying a run that is not its own.
+        updateNodeData(id, { running: undefined });
+        return;
+      }
+
       const failures = settled.filter((s) => s.status === 'rejected').map((s) => s.reason?.message || 'failed');
       const ok = settled.length - failures.length;
       if (failures.length) {
@@ -267,9 +320,15 @@ export default function ImageOutputNode({ id, data }) {
       } else {
         setStatus('done');
       }
+      updateNodeData(id, { running: undefined });
     } catch (err) {
+      if (getProject() !== startedIn) {
+        updateNodeData(id, { running: undefined });
+        return;
+      }
       setError(err.message);
       setStatus('error');
+      updateNodeData(id, { running: undefined });
     }
   }
 
@@ -283,6 +342,15 @@ export default function ImageOutputNode({ id, data }) {
   const spent = shown.reduce((sum, r) => sum + (Number(r.cost) || 0), 0) + repairCost;
   const hasSpend = shown.some((r) => r.cost != null) || repairCost > 0;
   const hasStrip = shown.length > 0 || repairCost > 0;
+
+  // True whenever a batch is in flight, whether or not THIS instance is the one
+  // that started it: local `status` alone is wiped the moment a genuine project
+  // switch remounts the node (App.jsx's canvasGeneration), so a marker persisted
+  // in data is what lets the button keep reading "Generating…" across that gap.
+  // Read from data rather than a ref for the same reason `startedIn` above is —
+  // a rename reuses this very component instance for what could, after enough
+  // switching, be sitting on a different project's node of this id.
+  const isRunning = status === 'running' || Boolean(data.running);
 
   return (
     <Card width={300} padding={0}>
@@ -313,8 +381,12 @@ export default function ImageOutputNode({ id, data }) {
 
         <Button
           label={
-            status === 'running'
-              ? total
+            isRunning
+              ? // total/done are local-only (never persisted — see data.running's
+                // own comment), so a node showing a marker from BEFORE its last
+                // remount has no progress count to report, only that something
+                // is running.
+                status === 'running' && total
                 ? `Generating ${done} / ${total}…`
                 : 'Generating…'
               : runs > 1 && !freeRuns
@@ -322,12 +394,13 @@ export default function ImageOutputNode({ id, data }) {
                 : 'Generate'
           }
           variant="primary"
-          isLoading={status === 'running'}
-          // Free with nothing wired in has no list to work from, so there is
-          // nothing to generate. Disabled rather than clickable-then-failing: the
-          // hint below already says what to wire, and an error saying the same
-          // thing would just be the hint again in red.
-          isDisabled={freeRuns && !liveWiredTextNode}
+          isLoading={isRunning}
+          // A batch in flight disables Generate outright — a second click would be
+          // a second paid run for the one this node is already tracking. Free with
+          // nothing wired in has no list to work from either; the hint below
+          // already says what to wire, so an error saying the same thing would
+          // just be the hint again in red.
+          isDisabled={isRunning || (freeRuns && !liveWiredTextNode)}
           onClick={onGenerate}
         />
 

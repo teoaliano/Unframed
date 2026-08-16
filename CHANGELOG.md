@@ -45,6 +45,13 @@ Keep that shape: the website's What's new page parses this file.
   only recognised `completed`/`failed`, so a job stuck upstream past its own
   time limit was polled every 30 seconds for the rest of the process with no
   way out. A render that sat queued for over two hours prompted this.
+- An image or text run in flight now keeps its node's Generate/Run button
+  disabled across a project switch, so coming back to it can no longer invite a
+  second, paid click. A run that finishes after you have switched away no
+  longer writes its result into whatever project you have since moved to —
+  node ids are shared by every project, so that could otherwise land a
+  different project's images, or an @id-resolvable text answer, on a same-id
+  node that never asked for them.
 
 ## 2026-08-13
 

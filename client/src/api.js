@@ -6,6 +6,17 @@ let currentProject = 'default';
 export const setProject = (name) => {
   currentProject = name;
 };
+// Read back by anything whose result outlives the request: a run started in one
+// project must not write its answer into whatever project is open when it lands.
+export const getProject = () => currentProject;
+
+// One id per app session (i.e. per page load), never persisted anywhere itself.
+// Stamped into a node's in-flight marker (ImageOutputNode.onGenerate,
+// TextOutputNode.onRun) so a marker left behind by a closed or reloaded tab reads
+// as abandoned rather than disabling that node's button forever: an image or text
+// run is a single request nothing can resume, so a marker from any OTHER session
+// is stale by definition and gets cleared on mount instead of trusted.
+export const SESSION_ID = `s-${Date.now()}-${Math.random().toString(36).slice(2)}`;
 
 export async function generate(body) {
   const res = await fetch('/api/generate', {
