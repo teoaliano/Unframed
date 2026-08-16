@@ -401,11 +401,11 @@ export function reassignPendingJobs(dir, from, to) {
 }
 ```
 
-Then delete `migratePendingJobs` and its comment — `copyPendingJobs`/`dropPendingJobs` replace it, and Task 3 is its only caller. Keep the same-directory reasoning by moving it into `sameDirectory` as shown; do not lose it. The existing same-directory tests in `jobs.test.js` that call `migratePendingJobs` must be rewritten against `copyPendingJobs` (the alias case above covers this — delete the old ones).
+**Leave `migratePendingJobs` and its existing tests exactly where they are in this task.** `server/index.js` still calls it until Task 3, and an ESM named import of a deleted export fails at module load — which would take `host.test.js` (and the server) down at this commit. Task 3 removes the call and the function together. The same-directory reasoning is duplicated between it and the new `sameDirectory` helper for one commit; that is deliberate and temporary.
 
 - [ ] **Step 4: Verify, then the whole suite**
 
-Run: `node server/jobs.test.js`, then `npm test` — all six ok. `host.test.js`'s existing folder-move case still passes only after Task 3; if it fails here, note it and continue to Task 3 rather than patching around it.
+Run: `node server/jobs.test.js`, then `npm test` — all six ok. Nothing is removed in this task, so the suite must be green before you commit; if it is not, something in the additions is wrong.
 
 - [ ] **Step 5: Commit**
 
@@ -488,6 +488,8 @@ Run: `node server/host.test.js` — FAIL at the 500 assertion; the route answers
 
 Extend the jobs import to `readJobs, readJobsStrict, persistJob, givenUp, pendingJobsFor, copyPendingJobs, dropPendingJobs, failPendingJobs, reassignPendingJobs` (some are for Task 4; adding them now is fine) and drop `migratePendingJobs`.
 
+**Then remove `migratePendingJobs` itself.** Task 2 deliberately left it in place because this route was still calling it; now that the call is gone, delete the function and its comment from `server/jobs.js` and delete its tests from `server/jobs.test.js` (the alias coverage now lives on `copyPendingJobs`). Grep to confirm no caller or test references it before you commit — a leftover named import fails at module load, not at call time.
+
 Replace the section from `try { await writeEnv(updates); }` through the end of the `if (updates.OUTPUT_DIR)` block with:
 
 ```js
@@ -561,7 +563,7 @@ Run: `node server/host.test.js`, then `npm test` — all six ok.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add server/index.js server/host.test.js
+git add server/index.js server/host.test.js server/jobs.js server/jobs.test.js
 git commit -m "Make an output-folder change commit or change nothing"
 ```
 
