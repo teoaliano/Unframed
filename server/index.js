@@ -141,9 +141,26 @@ app.put('/api/config', async (req, res) => {
   // Moving the output folder is a commit protocol, not a sequence of hopeful
   // steps, because every one of them can fail and a pending record is a paid
   // render. The strip of the OLD store is the commit point and comes LAST, so
-  // no failure anywhere can lose a record -- the worst outcome is a duplicate
-  // in a store nothing reads. See docs/video-and-sharing.md for the row this
-  // makes true.
+  // no FAILING step anywhere can lose a record -- the worst outcome of a
+  // failure is a duplicate in a store nothing reads. See
+  // docs/video-and-sharing.md for the row this makes true.
+  //
+  // That guarantee is about failures, not about every possible timing: there is
+  // a narrow window this protocol does NOT close, and closing it (a second copy
+  // pass, merged id lists) is not worth the complexity for what it buys. The
+  // copy reads the OLD store before writeEnv commits, and the strip below acts
+  // only on the ids that were actually copied -- so a render created between
+  // that read and the commit (POST /api/video's persistJob resolves OUTPUT_DIR
+  // at call time, and can land mid-writeEnv) is written straight into the old
+  // store, was never copied, and is therefore never stripped either: it is left
+  // behind, pending, in a folder the sweep no longer visits. The window is one
+  // small file read plus write -- on the order of a millisecond. It costs
+  // nothing to a browser tab still watching that job, though: the poll route
+  // already falls back to its own query-string params when the store lookup
+  // misses (the same fallback it used before this store existed), so the clip
+  // still gets collected and written under the CURRENT output dir. What is
+  // actually lost is bookkeeping -- a stray `pending` row in the old
+  // jobs.json that nothing will ever mark done.
   let copied = { ids: [], count: 0 };
   const nextOutputDir = updates.OUTPUT_DIR ? outputPath(ROOT, updates.OUTPUT_DIR) : null;
   if (nextOutputDir) {
@@ -193,10 +210,10 @@ app.put('/api/config', async (req, res) => {
     if (copied.count) {
       try {
         await dropPendingJobs(previousDir, copied.ids);
+        console.log(`  moved ${copied.count} pending video job(s) to the new output folder`);
       } catch (err) {
         console.log(`  left ${copied.count} job record(s) behind in the old folder: ${err.message}`);
       }
-      console.log(`  moved ${copied.count} pending video job(s) to the new output folder`);
     }
   }
 

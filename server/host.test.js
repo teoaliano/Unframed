@@ -283,9 +283,11 @@ try {
   assert.equal(switchedBack.status, 200, 'the switch-back itself must succeed, or every test below runs against the wrong folder');
 
   // A folder change that cannot take its renders must FAIL, not report success
-  // and leave them behind. A directory where the destination store belongs is
-  // the deterministic way to make the write fail -- the same trick
-  // presets.test.js and jobs.test.js use for unreadable paths.
+  // and leave them behind. A directory where the destination store belongs
+  // makes copyPendingJobs' own readJobsStrict(toDir) fail (EISDIR) before any
+  // write is ever attempted -- the deterministic way to make the destination
+  // store unREADABLE, the same trick presets.test.js and jobs.test.js use for
+  // unreadable paths.
   const blockedDir = path.join(dataDir, 'blocked');
   await fs.mkdir(blockedDir);
   await fs.mkdir(path.join(blockedDir, 'jobs.json'));
@@ -319,8 +321,12 @@ try {
     body: JSON.stringify({ outputDir: damagedDest }),
   });
   assert.equal(damaged.status, 500, 'an unreadable job store blocks the folder change');
+  assert.match((await damaged.json()).error, /job store/i,
+    'pinned to readJobsStrict refusing the damaged store, not just any 500 the route could produce (e.g. a writeEnv failure)');
   assert.equal((await (await fetch(`${base}/api/health`)).json()).outputDir, outDir,
     'and the folder stays put rather than moving on a store nobody could read');
+  assert.doesNotMatch(await fs.readFile(path.join(dataDir, '.env'), 'utf8'), /OUTPUT_DIR=.*damaged-dest/,
+    'and .env did not move either, same as the blocked-destination case above');
   await fs.writeFile(path.join(outDir, 'jobs.json'), '[]');
 
   for (const route of ['/api/video', '/api/generate']) {
