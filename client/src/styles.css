@@ -59,6 +59,15 @@ body {
 .project-current {
   background: var(--color-background-gray);
 }
+/* Opening a menu with the mouse focuses its first item programmatically, and Astryx
+   paints that on :focus — so every menu opened by pointer looked like its first row
+   was chosen. The browser already disagrees: :focus-visible is false there, because
+   the last input was a pointer. Deferring to it means the highlight appears the
+   moment you press an arrow or Tab, and never for a click. The :not() keeps a row
+   that is marked current (see ProjectMenu.jsx) from losing its own tint. */
+.astryx-dropdown-menu-item:focus:not(:focus-visible):not(.project-current) {
+  background: transparent;
+}
 /* add-node menu: narrower than the default, and nudged left of the + button so
    it doesn't crowd the trigger (placement="start", no offset prop available).
    The nudge goes on the wrapper that paints the surface — shifting the inner
