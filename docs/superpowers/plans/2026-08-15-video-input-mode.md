@@ -1406,3 +1406,61 @@ three from the poll response.
 
 Generate, switch projects, come back, confirm the result is still shown; reload and confirm
 the same; then Add to canvas from a reopened node.
+
+---
+
+### Task 14: A terminal upstream status must end the job
+
+**Why this exists:** found by the user. A render queued for over two hours came back from
+OpenRouter as:
+
+```
+{"status":"expired","error":"Job exceeded maximum time to live"}   HTTP 200
+```
+
+`server/index.js` recognises exactly two outcomes — `completed` and `failed` — so `expired`
+falls through every "still rendering" branch. The node spins forever with Generate
+disabled, and `sweepJobs` leaves the record `pending` and re-polls it every 30s for the
+life of the process. `pruneJobs` never drops a `pending` record by design, so it is also
+permanent in `jobs.json`. The whole-branch review predicted this as a Minor with "no user-facing
+symptom"; the symptom is a node that never stops loading.
+
+**The rule:** only the server talks upstream, so the server normalises. Neither the client
+nor the sweep should carry its own list of provider status strings.
+
+**Files:** `server/index.js`, `server/host.test.js`, `CHANGELOG.md`
+
+- [ ] **Step 1: Name the terminal states in one place**
+
+Beside `fetchVideoStatus`, a single mapping from a provider status to what it means here:
+`completed` succeeds; `failed`, `expired`, `cancelled` and `canceled` are terminal
+failures; everything else is still in flight. One constant, one helper, used by BOTH
+`sweepOne` and `GET /api/video/:id` — the two places that currently branch on the string
+themselves.
+
+Do NOT treat an unrecognised status as failure. An unknown string is far more likely to be
+a provider adding a new in-flight state than a new terminal one, and abandoning a job that
+is still rendering throws away money. Unknown stays in flight — but see step 3.
+
+- [ ] **Step 2: A terminal failure ends it everywhere**
+
+`expired` must take exactly the path `failed` takes today: revoke share tokens, persist
+`{ status: 'failed', error, resolvedAt }` so the record stops being swept and eventually
+prunes, and return the failed response to the browser. Carry the provider's own message
+(`Job exceeded maximum time to live` is precisely what the user needs to read) rather than
+a generic one.
+
+- [ ] **Step 3: An unknown status must not be invisible**
+
+Since unknown keeps waiting, it has to be legible: include the raw upstream status in the
+pending response so the node can show "Rendering… (queued)" rather than an unexplained
+spinner. A status nobody recognises should read as unusual, not as normal.
+
+- [ ] **Step 4: Pin it**
+
+`host.test.js` forks the real server with a fake key. Seed `jobs.json` with a `pending`
+record, stub the upstream call, and assert an `expired` status ends the job as failed with
+the provider's message — and that a `pending` one does not. Confirm each fails with the
+fix reverted.
+
+- [ ] **Step 5: `npm test`, CHANGELOG**
