@@ -329,6 +329,108 @@ try {
     'and .env did not move either, same as the blocked-destination case above');
   await fs.writeFile(path.join(outDir, 'jobs.json'), '[]');
 
+  await fs.mkdir(path.join(outDir, 'keepers'), { recursive: true });
+  await fs.mkdir(path.join(outDir, 'doomed'), { recursive: true });
+  const seedJobs = () =>
+    fs.writeFile(path.join(outDir, 'jobs.json'), JSON.stringify([
+      { id: 'k-1', project: 'keepers', status: 'pending', startedAt: Date.now(), params: {} },
+      { id: 'd-1', project: 'doomed', status: 'pending', startedAt: Date.now(), params: {} },
+      { id: 'd-2', project: 'doomed', status: 'pending', startedAt: Date.now(), params: {} },
+    ]));
+
+  // Rename: the render follows the project instead of recreating the old folder.
+  await seedJobs();
+  assert.equal((await fetch(`${base}/api/projects/keepers/rename`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ to: 'keepers-renamed' }),
+  })).status, 200);
+  const afterRename = JSON.parse(await fs.readFile(path.join(outDir, 'jobs.json'), 'utf8'));
+  assert.equal(afterRename.find((j) => j.id === 'k-1').project, 'keepers-renamed', 'repointed at the new name');
+  assert.equal(afterRename.find((j) => j.id === 'k-1').status, 'pending',
+    'and still pending -- a rename does not cost the user their render');
+  assert.equal(afterRename.find((j) => j.id === 'd-1').project, 'doomed', 'another project is untouched');
+
+  // A rename that cannot repoint its records must not rename the folder either.
+  await fs.writeFile(path.join(outDir, 'jobs.json'), '{not json');
+  assert.equal((await fetch(`${base}/api/projects/keepers-renamed/rename`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ to: 'keepers-again' }),
+  })).status, 500, 'an unreadable store blocks the rename');
+  await fs.access(path.join(outDir, 'keepers-renamed'));
+  await assert.rejects(fs.access(path.join(outDir, 'keepers-again')), 'and the folder did not move');
+
+  // Delete: refuses without confirmation, and says how many renders are at stake.
+  await seedJobs();
+  const refused = await fetch(`${base}/api/projects/doomed`, { method: 'DELETE' });
+  assert.equal(refused.status, 409, 'deleting a project with renders in flight needs confirmation');
+  assert.equal((await refused.json()).pendingRenders, 2, 'and says how many, so the dialog can name it');
+  await fs.access(path.join(outDir, 'doomed'));
+
+  const confirmed = await fetch(`${base}/api/projects/doomed?confirmRenders=1`, { method: 'DELETE' });
+  assert.equal(confirmed.status, 200);
+  assert.equal((await confirmed.json()).endedRenders, 2, 'reports what it ended');
+  const afterDelete = JSON.parse(await fs.readFile(path.join(outDir, 'jobs.json'), 'utf8'));
+  for (const id of ['d-1', 'd-2']) {
+    const j = afterDelete.find((x) => x.id === id);
+    assert.equal(j.status, 'failed', 'a deleted project ends its renders rather than leaving them pending');
+    assert.match(j.error, /deleted/i, 'and the reason names the deletion');
+  }
+  assert.equal(afterDelete.find((x) => x.id === 'k-1').status, 'pending', "another project's render survives");
+  await assert.rejects(fs.access(path.join(outDir, 'doomed')), 'and the folder is gone');
+
+  // A damaged store blocks the delete outright -- it cannot know what it would strand.
+  await fs.mkdir(path.join(outDir, 'unknowable'), { recursive: true });
+  await fs.writeFile(path.join(outDir, 'jobs.json'), '{not json');
+  assert.equal((await fetch(`${base}/api/projects/unknowable?confirmRenders=1`, { method: 'DELETE' })).status, 500,
+    'an unreadable store blocks the delete');
+  await fs.access(path.join(outDir, 'unknowable')); // and the project survives
+
+  // No renders in flight means no extra step.
+  await fs.writeFile(path.join(outDir, 'jobs.json'), '[]');
+  assert.equal((await fetch(`${base}/api/projects/unknowable`, { method: 'DELETE' })).status, 200,
+    'no renders in flight means no confirmation');
+
+  // Key removal ends every pending render, whatever project it belongs to.
+  await seedJobs();
+  const keyGone = await fetch(`${base}/api/key`, { method: 'DELETE' });
+  assert.equal(keyGone.status, 200);
+  assert.equal((await keyGone.json()).endedRenders, 3, 'reports how many renders it ended');
+  for (const j of JSON.parse(await fs.readFile(path.join(outDir, 'jobs.json'), 'utf8'))) {
+    assert.equal(j.status, 'failed', 'every pending render ends');
+    assert.match(j.error, /key/i, 'and the reason names the key');
+  }
+
+  // A damaged store must NOT block removing a key -- that is a security action,
+  // and a corrupt JSON file is no reason to make someone keep a leaked key.
+  // The failure is reported instead of swallowed.
+  await fetch(`${base}/api/config`, {
+    method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key: fakeKey }),
+  });
+  await fs.writeFile(path.join(outDir, 'jobs.json'), '{not json');
+  const keyGoneAnyway = await fetch(`${base}/api/key`, { method: 'DELETE' });
+  assert.equal(keyGoneAnyway.status, 200, 'the key is still removed');
+  const keyBody = await keyGoneAnyway.json();
+  assert.equal(keyBody.hasKey, false, 'and it really is gone');
+  assert.ok(keyBody.renderCleanupError, 'but the failure to end renders is reported, not swallowed');
+
+  await fetch(`${base}/api/config`, {
+    method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key: fakeKey }),
+  });
+
+  // Key REPLACEMENT ends nothing: usually a renewed key for the same account.
+  await seedJobs();
+  await fetch(`${base}/api/config`, {
+    method: 'PUT', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ key: 'sk-or-v1-1111111111111111111111111111111111111111111111111111' }),
+  });
+  assert.equal(
+    JSON.parse(await fs.readFile(path.join(outDir, 'jobs.json'), 'utf8')).filter((j) => j.status === 'pending').length,
+    3, 'replacing the key leaves renders polling');
+  await fetch(`${base}/api/config`, {
+    method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key: fakeKey }),
+  });
+  await fs.writeFile(path.join(outDir, 'jobs.json'), '[]');
+
   for (const route of ['/api/video', '/api/generate']) {
     // What this reaches upstream is a 401, or a connection error when offline.
     // Neither is under test, and neither should be able to hang the suite, hence

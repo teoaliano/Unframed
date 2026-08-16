@@ -230,7 +230,33 @@ app.delete('/api/key', async (req, res) => {
     return res.status(500).json({ error: `Could not write .env: ${err.message}` });
   }
   API_KEY = '';
-  res.json({ ok: true, ...settings() });
+  // The sweep returns immediately without a key, so every pending render would
+  // sit unresolved until the 24-hour clock -- neither collected nor failed,
+  // precisely the state the lifecycle contract says cannot happen. Removing a
+  // key is an explicit "stop using my account", so ending them now and saying
+  // why is the honest answer. REPLACING a key deliberately does not do this: it
+  // is usually a renewed key for the same account, and a genuinely unusable id
+  // is already ended by the clock.
+  //
+  // Unlike every other lifecycle mutation here, a store this cannot read does
+  // NOT block the action -- the key is already gone by this line, on purpose.
+  // Removing a key is a security act, and someone doing it may be responding to
+  // a leak; refusing over a corrupt JSON file would be a worse failure than the
+  // orphaning it prevents, and in a packaged app they cannot edit .env by hand
+  // either. So the failure is REPORTED rather than swallowed, and the caller
+  // decides what to say about it.
+  let ended = 0;
+  let renderCleanupError;
+  try {
+    ended = await failPendingJobs(OUTPUT_DIR, {
+      project: null,
+      error: 'Stopped tracking this render: the OpenRouter key was removed, so its progress can no longer be checked. It may still finish upstream, but nothing here will save the result.',
+    });
+  } catch (err) {
+    renderCleanupError = `The key was removed, but renders already in progress could not be stopped: ${err.message}`;
+    console.log(`  ${renderCleanupError}`);
+  }
+  res.json({ ok: true, endedRenders: ended, ...(renderCleanupError ? { renderCleanupError } : {}), ...settings() });
 });
 
 // Native folder chooser for the output directory. The browser cannot hand back a
@@ -551,17 +577,98 @@ app.post('/api/projects/:name/rename', async (req, res) => {
   } catch {
     // dest is free — proceed
   }
+  // Records first, folder second. A job record carries the slug it was created
+  // under and collectVideo mkdirs that path when the clip lands -- so a render
+  // finishing after a rename would recreate the OLD folder and write itself
+  // into a project the user no longer has. Repointing first is deliberate: a
+  // record write is the more reliable of the two operations and its rollback is
+  // another record write, whereas rolling back an fs.rename is another rename
+  // that can fail just as easily.
+  let moved = 0;
+  try {
+    moved = await reassignPendingJobs(OUTPUT_DIR, req.params.name, to);
+  } catch (err) {
+    return res.status(500).json({
+      error: `Could not update the renders in progress for this project, so it was not renamed: ${err.message}`,
+    });
+  }
   try {
     await fs.rename(from, dest);
-    res.json({ ok: true, name: to });
   } catch (err) {
-    res.status(500).json({ error: `Could not rename: ${err.message}` });
+    // Put the records back, or they point at a name with no folder and the next
+    // collection creates one. If even that fails there is nothing left to try,
+    // so say both things plainly rather than reporting a clean failure.
+    let restored = true;
+    try {
+      await reassignPendingJobs(OUTPUT_DIR, to, req.params.name);
+    } catch (rollbackErr) {
+      restored = false;
+      console.log(`  could not restore job records after a failed rename: ${rollbackErr.message}`);
+    }
+    return res.status(500).json({
+      error: restored
+        ? `Could not rename: ${err.message}`
+        : `Could not rename (${err.message}), and ${moved} render(s) in progress are now recorded under "${to}". Renaming the project to "${to}" by hand will reunite them.`,
+    });
   }
+  res.json({ ok: true, name: to, movedRenders: moved });
 });
 
+// Deleting a project with renders in flight is the one destructive case here:
+// the render is paid for and cannot be stopped upstream, so the most the app
+// can do is stop tracking it and say so. Two-phase rather than a client-side
+// confirmation alone, so a caller that forgets to ask cannot silently abandon a
+// render: without confirmRenders the route reports what is at stake and changes
+// nothing.
 app.delete('/api/projects/:name', async (req, res) => {
-  await fs.rm(projectDir(req.params.name), { recursive: true, force: true });
-  res.json({ ok: true });
+  const name = req.params.name;
+  let pending;
+  try {
+    // Strict: a store that cannot be read cannot tell us what this delete would
+    // strand, and guessing "nothing" is how a paid render disappears silently.
+    pending = pendingJobsFor(await readJobsStrict(OUTPUT_DIR), name);
+  } catch (err) {
+    return res.status(500).json({
+      error: `Could not check whether this project has renders in progress, so nothing was deleted: ${err.message}`,
+    });
+  }
+  if (pending.length && req.query.confirmRenders !== '1') {
+    return res.status(409).json({
+      error: `This project has ${pending.length} video render${pending.length === 1 ? '' : 's'} in progress.`,
+      pendingRenders: pending.length,
+    });
+  }
+  // Records first, folder second. If the rm then fails, the user retries a
+  // delete on a project that is still intact; the other order would leave
+  // records pointing at a folder that is gone, and the sweep would recreate it
+  // as a ghost holding one clip and no graph.
+  let ended = 0;
+  if (pending.length) {
+    try {
+      ended = await failPendingJobs(OUTPUT_DIR, {
+        project: name,
+        error: 'Stopped tracking this render: the project it belonged to was deleted. It may still finish upstream, but nothing here will save the result.',
+      });
+    } catch (err) {
+      return res.status(500).json({
+        error: `Could not stop the renders in progress, so the project was not deleted: ${err.message}`,
+      });
+    }
+    for (const job of pending) revokeJobShares(job.id);
+  }
+  try {
+    await fs.rm(projectDir(name), { recursive: true, force: true });
+  } catch (err) {
+    // The one partial outcome with no compensation worth having: un-failing a
+    // record would claim a render is still being watched when its project may
+    // be half-deleted. State both facts instead, so a retry is an informed one.
+    return res.status(500).json({
+      error: ended
+        ? `Stopped ${ended} render(s), but the project folder could not be deleted: ${err.message}. Deleting again is safe.`
+        : `Could not delete the project: ${err.message}`,
+    });
+  }
+  res.json({ ok: true, endedRenders: ended });
 });
 
 // ---- library ----
