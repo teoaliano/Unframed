@@ -2,6 +2,7 @@
 // Pure, so the derivation rules are asserted in resolve.test.js instead of being
 // clicked through — a saved preset goes back through instantiateFragment exactly
 // like a bundled one, so it has to come out the same shape.
+import { stripRunMarkers } from '../graph/runMarkers.js';
 
 // The chosen nodes plus the edges wholly inside them — half an edge is not a
 // thing. `fallbackId` is the right-clicked node: right-clicking does not select in
@@ -13,22 +14,17 @@ export function selectionFragment(nodes, edges, fallbackId) {
   if (!chosen.length) return null;
   const ids = new Set(chosen.map((n) => n.id));
   return {
-    // `selected` is stripped because it's UI state, not graph shape. The two
-    // in-flight markers are stripped for a sharper reason: presets.json is
-    // deliberately never migrated or rewritten (see CLAUDE.md and docs/library.md),
-    // so whatever is captured mid-render sits in that JSON forever. `data.job` is
-    // the video node's — every later instantiation would hand the new node a stored
-    // job, start it disabled, and poll an id OpenRouter forgot the moment its own
-    // job ended. `data.running` is the image and text nodes' equivalent; it is
-    // stamped with a per-session id and so self-clears on mount, but a preset is
-    // still no place for "a run was in flight when this was saved". This same
-    // function backs the node clipboard (App.jsx's copySelection/pasteNodeClipboard),
-    // so both strips cover a mid-render copy-paste too, not just a saved preset.
-    nodes: chosen.map((n) => ({
-      ...n,
-      selected: undefined,
-      data: { ...n.data, job: undefined, running: undefined },
-    })),
+    // `selected` is stripped because it's UI state, not graph shape. The
+    // in-flight run markers are stripped for a sharper reason: presets.json is
+    // deliberately never migrated or rewritten (see CLAUDE.md and
+    // docs/library.md), so a marker captured mid-run sits in that JSON forever
+    // -- every later instantiation would arrive pre-stuck tracking a run that
+    // ended long ago. WHICH fields count as markers, and how each copy path
+    // must treat them, lives in graph/runMarkers.js -- one home, not five call
+    // sites. This same function backs the node clipboard (App.jsx's
+    // copySelection/pasteNodeClipboard), so the strip covers a mid-render
+    // copy-paste too, not just a saved preset.
+    nodes: chosen.map((n) => ({ ...n, selected: undefined, data: stripRunMarkers(n.data) })),
     edges: edges.filter((e) => ids.has(e.source) && ids.has(e.target)),
   };
 }

@@ -5,6 +5,7 @@ import { migrateNodes } from './migrate.js';
 import { instantiateFragment, centerOffset } from '../library/insert.js';
 import { selectionFragment, presetFromSelection } from '../library/save.js';
 import { MODEL_PARAM_KEYS, resetModelParams } from '../nodes/output/defaults.js';
+import { RUN_MARKERS, stripRunMarkers, keepLiveRunMarkers } from './runMarkers.js';
 
 const out = { id: 'out', type: 'imageOutput', position: { x: 400, y: 0 }, data: {} };
 
@@ -385,6 +386,39 @@ function graph(nodes, edges) {
   const back = instantiateFragment(preset.fragment, () => String(n++));
   assert.deepEqual(back.edges.map((e) => [e.source, e.target]), [['900', '901']],
     'a saved preset re-inserts with fresh ids and its wiring intact');
+}
+
+// ---- graph/runMarkers.js: the one home for in-flight markers ----
+{
+  const data = { videoModel: 'seedance', job: { id: 'j1' }, running: { session: 's1' }, text: 'keep me' };
+  const stripped = stripRunMarkers(data);
+  assert.equal(stripped.job, undefined, 'job is stripped');
+  assert.equal(stripped.running, undefined, 'running is stripped');
+  assert.equal(stripped.text, 'keep me', 'ordinary data survives');
+  assert.equal(data.job.id, 'j1', 'the input object is not mutated');
+
+  // Undo restoring a snapshot from BEFORE Generate: the live job must survive.
+  const live = [{ id: 'v', data: { job: { id: 'j-live' } } }];
+  const restoredWithout = [{ id: 'v', data: { videoModel: 'seedance' } }];
+  const kept = keepLiveRunMarkers(restoredWithout, live);
+  assert.equal(kept[0].data.job.id, 'j-live', 'a live job survives an undo to before it started');
+  assert.equal(kept[0].data.videoModel, 'seedance', 'the snapshot keeps its own content');
+
+  // Undo restoring a snapshot from DURING a run that has since finished: the
+  // stale marker must NOT come back -- this is the bug where a text node's Run
+  // button froze until reload, because the mount-only session-id self-clear
+  // never fires on an undo (no remount, same session).
+  const liveDone = [{ id: 't', data: { result: 'answer' } }];
+  const restoredMidRun = [{ id: 't', data: { running: { session: 's1' }, result: undefined } }];
+  const cleared = keepLiveRunMarkers(restoredMidRun, liveDone);
+  assert.equal(cleared[0].data.running, undefined, 'a finished run is not resurrected by undo');
+
+  // A node undo is bringing back from a delete has no live counterpart: the
+  // snapshot is all there is, and it keeps it.
+  const ghost = keepLiveRunMarkers([{ id: 'gone', data: { job: { id: 'j-old' } } }], []);
+  assert.equal(ghost[0].data.job.id, 'j-old', 'a node absent from the live graph keeps its snapshot');
+
+  assert.deepEqual(RUN_MARKERS, ['job', 'running'], 'the list itself is the contract');
 }
 
 // The silent trap: an @id pointing at a text output must resolve to its stored
