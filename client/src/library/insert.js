@@ -20,7 +20,19 @@ export function instantiateFragment(fragment, nextId) {
   const idMap = new Map(source.map((n) => [n.id, nextId()]));
 
   const nodes = source.map((n) => {
-    const data = { ...n.data };
+    // Same two in-flight markers selectionFragment strips on the way out, dropped
+    // again on the way in — and for a reason the outbound strip cannot cover.
+    // presets.json is never rewritten, so a preset saved before that strip existed
+    // still carries its job id, permanently, and this is the only path that sees it.
+    // Left in place it is not self-correcting: the pasted node polls, and the poll
+    // only ends well if THIS machine's store still holds that job as `done`. Once
+    // the record has pruned (seven days) or the preset has travelled to another
+    // machine or output folder, the route falls through to OpenRouter, gets a 404,
+    // and answers 404 — which pollVideo (client/src/api.js) treats as a transient
+    // failure to reach our own server, not as an answer. So the node polls for its
+    // full 15-minute window, re-arms every two minutes after that, and stays
+    // disabled forever with only "Forget this job" as the way out.
+    const data = { ...n.data, job: undefined, running: undefined };
     if (typeof data.text === 'string') {
       // Whole tokens only: TOKEN_RE consumes the full run of word characters, so
       // rewriting @p1 can never chew the front off an unrelated @p10.

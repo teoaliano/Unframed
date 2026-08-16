@@ -13,15 +13,22 @@ export function selectionFragment(nodes, edges, fallbackId) {
   if (!chosen.length) return null;
   const ids = new Set(chosen.map((n) => n.id));
   return {
-    // `selected` is stripped because it's UI state, not graph shape. `data.job` is
-    // stripped for a sharper reason: presets.json is deliberately never migrated or
-    // rewritten (see CLAUDE.md and docs/library.md), so a job id captured mid-render
-    // would sit in that JSON forever, and every later instantiation of this preset
-    // would hand the new node a stored job, start it disabled, and poll an id
-    // OpenRouter forgot the moment its own job ended. This same function backs the
-    // node clipboard (App.jsx's copySelection/pasteNodeClipboard), so the strip
-    // covers a mid-render copy-paste too, not just a saved preset.
-    nodes: chosen.map((n) => ({ ...n, selected: undefined, data: { ...n.data, job: undefined } })),
+    // `selected` is stripped because it's UI state, not graph shape. The two
+    // in-flight markers are stripped for a sharper reason: presets.json is
+    // deliberately never migrated or rewritten (see CLAUDE.md and docs/library.md),
+    // so whatever is captured mid-render sits in that JSON forever. `data.job` is
+    // the video node's — every later instantiation would hand the new node a stored
+    // job, start it disabled, and poll an id OpenRouter forgot the moment its own
+    // job ended. `data.running` is the image and text nodes' equivalent; it is
+    // stamped with a per-session id and so self-clears on mount, but a preset is
+    // still no place for "a run was in flight when this was saved". This same
+    // function backs the node clipboard (App.jsx's copySelection/pasteNodeClipboard),
+    // so both strips cover a mid-render copy-paste too, not just a saved preset.
+    nodes: chosen.map((n) => ({
+      ...n,
+      selected: undefined,
+      data: { ...n.data, job: undefined, running: undefined },
+    })),
     edges: edges.filter((e) => ids.has(e.source) && ids.has(e.target)),
   };
 }
