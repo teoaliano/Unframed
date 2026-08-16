@@ -126,9 +126,14 @@ throws away a clip already paid for; giving up late costs one line in `jobs.json
 
 Every render started ends in exactly one of two visible states — clip + sidecar
 on disk, or a `failed` record that says why — under every disruption below,
-**provided the server still has a working OpenRouter key to finish it with**.
-This table is the scope: a new "what if X happens mid-render" belongs here as a
-row (with its guarantee and its test) before it becomes work anywhere else.
+provided three things hold for the render's lifetime: **the server must
+eventually be able to run again** (a sleeping laptop, a closed tab, a restart, or
+a temporary network outage are covered by design and do not count against this
+— see the sections above); **the output storage must stay writable**; and
+**Unframed must go on holding credentials for the same OpenRouter account that
+started the job**. This table is the scope: a new "what if X happens
+mid-render" belongs here as a row (with its guarantee and its test) before it
+becomes work anywhere else.
 
 `Tested?` is `yes` when the row's guarantee is exercised end to end (an
 automated test, or an in-app run logged as verified), `partial` when part of
@@ -143,15 +148,17 @@ say exactly which part is which; the column is only a place to look first.
 | the user presses undo/redo | live run markers win over the snapshot | yes [^4] |
 | the user copies the node or saves it as a preset | markers stripped; the copy is a fresh node | yes [^5] |
 | the user inserts a preset saved mid-render years ago | markers stripped again on the way in | yes [^6] |
-| the user changes the output folder in Settings | pending records move with the folder | yes [^7] |
+| the user changes the output folder in Settings | records copy into the new store, then the source is stripped — a failure anywhere duplicates a record rather than losing it; a destination or source it can't read fails outright and moves nothing | yes [^7] |
 | the provider ends the job (fails, expires, or is cancelled) | the record fails with the provider's own message | partial [^8] |
 | the provider forgets the job id entirely (every poll answers with no match) | failed after 24h of continuous silence, saying so | partial [^9] |
 | the connection to the provider blips for less than 24 hours | the silence clock resets on the first answer that gets through | partial [^10] |
 | this machine's server restarts | the store is durable; the boot sweep resumes | partial [^11] |
 | two watchers race to collect the same finished job (a sweep tick and a browser poll, or two tabs) | one download: the store is consulted first, then an in-process lock | partial [^12] |
-| the user removes the OpenRouter key, or replaces it with a different account's | neither of the two contract states — see footnote | no [^13] |
-| the user renames the project | the sweep recreates the OLD folder and writes the clip there; a ghost project appears | no [^14] |
-| the user deletes the project | the sweep recreates the deleted folder, holding one clip and one sidecar and no graph | no [^15] |
+| the user removes the OpenRouter key | every pending record ends immediately, `failed`, saying the key was removed | yes [^13] |
+| the user replaces the key with a different account's | replacement ends nothing by itself; an id the new account can't see 404s like a forgotten job and still resolves eventually via the 24h silence clock, just without naming why | partial [^14] |
+| the user renames the project | records repoint to the new name before the folder moves, and are put back if the move fails — no ghost project | yes [^15] |
+| the user deletes the project | asks first, naming how many renders it will stop tracking; confirmed, records end before the folder is removed, and a failed removal says so instead of looking clean | yes [^16] |
+| `jobs.json` itself is damaged when the user changes the folder, renames, or deletes a project, or removes the key | every one of those mutations refuses outright rather than acting on a store it couldn't read — except key removal, which proceeds anyway and reports the failure instead of blocking on it | yes [^17] |
 
 [^1]: The shared collection primitives (`collectVideo`, `fetchVideoStatus`, terminal-status classification) are tested via `host.test.js`'s route-driven cases and `jobs.test.js`; the unattended sweep path itself — `sweepJobs`/`sweepOneInner` firing on its own 30s timer with zero client requests — is not directly exercised by any test.
 [^2]: Resume effect in `VideoOutputNode`; verified in app 2026-08-15.
@@ -159,15 +166,17 @@ say exactly which part is which; the column is only a place to look first.
 [^4]: `keepLiveRunMarkers` cases in `resolve.test.js`; verified in app 2026-08-16.
 [^5]: Strip cases in `resolve.test.js`.
 [^6]: Inbound-strip case in `resolve.test.js`.
-[^7]: Migration case in `host.test.js`.
+[^7]: Exercised end to end in `host.test.js`: the happy path (pending records land at the new folder, still `pending`), a destination that can't accept the copy (500, folder and `.env` both untouched), and a source store `readJobsStrict` can't read (500). Two things this protocol does not claim to close, and neither is reachable by a test because neither is a failure path: a render created in the roughly-1ms window between the copy's read and the setting's commit is written straight into the OLD store and never copied — a tab still watching that job is unaffected, since the poll route falls back to its own query-string params rather than this store lookup, but nothing here will ever mark the stray record resolved; and the old store's now-orphaned pending records stay inert only while the folder stays changed, so pointing the output folder back at that old location later has the sweep re-poll and re-collect an already-finished clip a second time, under a fresh timestamp. Duplication, never loss, in both cases.
 [^8]: Terminal-status classification and message handling are tested via the poll route (`expired-job`/`still-going-job` cases in `host.test.js`); `sweepOneInner`'s own terminal-failure branch, reached only by the unattended sweep, shares the same classification function but is not separately exercised by any test.
 [^9]: The 24h give-up threshold itself is unit-tested (`givenUp` cases in `jobs.test.js`); that `sweepOneInner` actually invokes it and persists the resulting failure (with its message) during a real sweep tick is not exercised by any test.
 [^10]: Clearing the flag on disk is unit-tested (clock-clear case in `jobs.test.js`, calling `persistJob` directly); that `sweepOneInner` actually calls it after a successful poll during a real sweep tick is not exercised by any test.
 [^11]: jobs.json's durability is tested (`jobs.test.js`'s write/read/corruption cases); the boot-time sweep call is real code (`server/index.js`) but no test actually restarts the forked server to prove it resumes one.
 [^12]: The store-consulted-first layer is what `host.test.js`'s already-done case actually tests (one sequential request against a job already `done`); the in-process `collecting` lock and the re-read-after-lock step in both `sweepOneInner` and the poll route are not exercised by any test — the race itself is not reproduced in CI.
-[^13]: Removing the key stops the sweep outright (`sweepJobs` returns at `if (!API_KEY || sweeping) return;` before it looks at a single job), and the poll route 400s the same way — so the job reaches neither `done` nor `failed`; `pollVideo` treats that 400 as transient, so the node just sits at "Rendering…", re-arming every couple of minutes, forever, until a key is restored. Replacing the key with a different account's does not stop the sweep, but the job id then 404s under the new account, indistinguishable from "the provider forgot this id" — so the existing 24-hour give-up clock still ends it, just with a message that says there was no answer rather than naming the key change. Guaranteed by: nothing — the sweep needs a working key to finish anything, and neither disruption here leaves it one.
-[^14]: `fs.rename` in the project route moves the folder, but `job.project` — the slug captured at job creation — does not follow; the sweep's `collectVideo` later does `fs.mkdir(dir, { recursive: true })` on that old slug and writes the clip and sidecar into a folder that no longer has a `graph.json`, and `/api/projects` lists it anyway (every subdirectory, no `graph.json` required), so it reappears in the project menu as a folder with one orphaned clip. Not a regression from this branch — the matrix declares itself the scope for exactly this kind of question, so the defect is the missing row, not new behaviour. Guaranteed by: nothing.
-[^15]: `fs.rm` deletes the project folder, but the job record lives at `<OUTPUT_DIR>/jobs.json`, outside it, so the record survives; the sweep's `collectVideo` recreates the deleted folder on completion, leaving one clip and one sidecar with no graph at all. Same scope note as the rename row above. Guaranteed by: nothing.
+[^13]: `host.test.js`: removing the key ends every pending record, whatever project it belongs to (`endedRenders` matches the count, each record's error naming the key) — including when `jobs.json` is damaged, the one lifecycle mutation that proceeds regardless and reports the failure via `renderCleanupError` rather than refusing, since removing a key is a security action and a corrupt store is no reason to make someone keep a leaked one.
+[^14]: That replacement ends nothing is tested directly in `host.test.js` (pending count unchanged after the key swap, with the live key hint confirmed changed first, so the assertion means something). That a different account's 404 is then absorbed by the same 24-hour give-up clock as any other unpollable id is not exercised end to end — it shares the `givenUp` logic unit-tested in `jobs.test.js`, but no test replaces a key with a genuinely different account's and lets, or fast-forwards, that clock run out.
+[^15]: `host.test.js`: the happy path (record repointed to the new name, still `pending`, another project's record untouched), an unreadable store blocking the rename outright (500, folder unmoved), and the rollback branch itself — a project with a pending record but no folder on disk, so `fs.rename` fails — asserting the record lands back at its OLD name rather than the new one it never reached.
+[^16]: `host.test.js`: the 409 refusal and its `pendingRenders` count, the confirmed delete (records end `failed` naming the deletion, another project's record untouched, folder removed), a damaged store blocking the delete outright (500), and the `fs.rm`-failed branch — asserting the response names both that records ended and that the folder still couldn't be removed.
+[^17]: `host.test.js` asserts each half directly: an unreadable store returns 500 for the folder change, the rename, and the delete; the same damaged store still lets key removal succeed, reporting `renderCleanupError` rather than blocking.
 
 ## The share tunnel
 
