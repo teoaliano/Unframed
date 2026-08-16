@@ -226,6 +226,61 @@ try {
     'an unrecognised status leaves the job record untouched -- still eligible for the next sweep',
   );
 
+  // Changing the output folder must not orphan a render in flight. The store
+  // lives at <OUTPUT_DIR>/jobs.json and the sweep only reads the CURRENT dir,
+  // so before this fix a pending record simply stopped being polled the moment
+  // the folder changed -- paid for, finished upstream, never collected. Pending
+  // records move with the setting; done/failed stay behind as the old folder's
+  // history.
+  const outDir2 = path.join(dataDir, 'out2');
+  await fs.writeFile(
+    path.join(outDir, 'jobs.json'),
+    JSON.stringify([
+      {
+        id: 'mid-render-move-job',
+        project: '',
+        params: { prompt: 'a render surviving a folder move', model: 'bytedance/seedance-2.0' },
+        startedAt: Date.now(),
+        status: 'pending',
+      },
+      {
+        id: 'already-history-job',
+        project: '',
+        params: { prompt: 'old history stays put', model: 'bytedance/seedance-2.0' },
+        startedAt: Date.now(),
+        resolvedAt: Date.now(),
+        status: 'done',
+        savedPath: path.join(outDir, 'history.mp4'),
+      },
+    ]),
+  );
+  const moved = await fetch(`${base}/api/config`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ outputDir: outDir2 }),
+  });
+  assert.equal(moved.status, 200);
+  const newStore = JSON.parse(await fs.readFile(path.join(outDir2, 'jobs.json'), 'utf8'));
+  const movedRecord = newStore.find((j) => j.id === 'mid-render-move-job');
+  assert.ok(movedRecord, 'the pending job is tracked in the NEW folder');
+  assert.equal(movedRecord.status, 'pending', 'still pending -- the sweep keeps polling it');
+  const oldStore = JSON.parse(await fs.readFile(path.join(outDir, 'jobs.json'), 'utf8'));
+  assert.equal(
+    oldStore.find((j) => j.id === 'mid-render-move-job'),
+    undefined,
+    'the old store no longer lists it as pending, so a later switch back cannot double-collect',
+  );
+  assert.ok(
+    oldStore.find((j) => j.id === 'already-history-job'),
+    'done/failed history stays in the folder it belongs to',
+  );
+  // Point the server back at the first folder so the tests below run unchanged.
+  await fetch(`${base}/api/config`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ outputDir: outDir }),
+  });
+
   for (const route of ['/api/video', '/api/generate']) {
     // What this reaches upstream is a 401, or a connection error when offline.
     // Neither is under test, and neither should be able to hang the suite, hence

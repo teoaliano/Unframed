@@ -7,7 +7,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { upsertEnv, PATTERNS, envFile, outputPath } from './env.js';
 import { readPresets, writePresets } from './presets.js';
-import { readJobs, persistJob, givenUp } from './jobs.js';
+import { readJobs, writeJobs, persistJob, givenUp } from './jobs.js';
 import { ensureTunnel, mintShare, revokeShare, waitUntilPublic, stopTunnel } from './share.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -139,7 +139,33 @@ app.put('/api/config', async (req, res) => {
   if (updates.OPENROUTER_IMAGE_MODEL) IMAGE_MODEL = updates.OPENROUTER_IMAGE_MODEL;
   if (updates.OPENROUTER_TEXT_MODEL) TEXT_MODEL = updates.OPENROUTER_TEXT_MODEL;
   if (updates.OPENROUTER_VIDEO_MODEL) VIDEO_MODEL = updates.OPENROUTER_VIDEO_MODEL;
-  if (updates.OUTPUT_DIR) OUTPUT_DIR = outputPath(ROOT, updates.OUTPUT_DIR);
+  if (updates.OUTPUT_DIR) {
+    const oldDir = OUTPUT_DIR;
+    OUTPUT_DIR = outputPath(ROOT, updates.OUTPUT_DIR);
+    // Pending jobs live in <dir>/jobs.json and the sweep only reads the CURRENT
+    // dir, so a render still in flight when the folder changes would be orphaned
+    // in the old file: paid for, finished upstream, never collected. Move the
+    // pending records with the setting; done/failed stay behind as the old
+    // folder's history. The raw writeJobs on the OLD store is deliberate and
+    // safe: everything else writes through persistJob(OUTPUT_DIR, ...), which
+    // from this line on points at the new dir -- nothing races the old file.
+    // Best-effort on purpose: the setting itself already saved, and failing the
+    // whole request over bookkeeping would leave the UI claiming the folder
+    // change failed when it didn't.
+    if (oldDir !== OUTPUT_DIR) {
+      try {
+        const old = await readJobs(oldDir);
+        const pending = old.filter((j) => j.status === 'pending');
+        for (const j of pending) await persistJob(OUTPUT_DIR, j.id, j);
+        if (pending.length) {
+          await writeJobs(oldDir, old.filter((j) => j.status !== 'pending'));
+          console.log(`  moved ${pending.length} pending video job(s) to the new output folder`);
+        }
+      } catch (err) {
+        console.log(`  could not move pending jobs to the new folder: ${err.message}`);
+      }
+    }
+  }
 
   res.json({ ok: true, ...settings() });
 });
