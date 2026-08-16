@@ -19,6 +19,20 @@
 // one file. Receipts: job-in-preset, job-lost-to-undo and running-in-preset
 // were three separate bugs fixed at three separate call sites in two days
 // before this module existed.
+//
+// Verified complete for THIS list: every updateNodeData call under
+// client/src/nodes/ was enumerated and none writes a fifth marker. That is
+// deliberately a narrower claim than "the one place a preset can go stale."
+// `data.result` / `data.results` (an image or text output's produced content)
+// are NOT run markers and are NOT stripped by selectionFragment -- and they
+// hold machine-local `/api/file/<project>/...` URLs, so a preset saved from a
+// node that has already produced output bakes in a path that only exists on
+// the machine that made it. Inserted elsewhere, or even just reopened after
+// the file moved, it points at nothing. That is the same class of bug this
+// module exists to end, one severity band down (a broken image, not a frozen
+// button) -- considered here and deliberately left alone, because stripping
+// it needs its own decision about what a preset should carry (the produced
+// output, or just the recipe that makes it) that hasn't been made yet.
 export const RUN_MARKERS = ['job', 'running'];
 
 // For any path that copies a node out of the live graph.

@@ -148,28 +148,66 @@ export function persistJob(dir, id, patch) {
 }
 
 // Moves every `pending` record from one store to another as a single unit on
-// the SAME chain persistJob queues on. That placement is the whole point, not
-// an implementation detail: a caller like sweepOne calls persistJob(OUTPUT_DIR,
-// ...) with OUTPUT_DIR captured at dispatch time, so a sweep tick started
-// just before OUTPUT_DIR changes still has the OLD dir in its closure -- and
-// its queued read-modify-write can run at any point after this function is
-// called. A migration done as two bare readJobs/writeJobs calls outside the
-// queue can land in the gap between that sweep's read and its write, so the
-// sweep's own write -- which still targets the old dir and still has the
-// pending record in memory -- lands AFTER the migration's write and silently
-// resurrects a record this function just moved out. Enqueuing the whole
-// migration closes that gap: the sweep's call and this one serialize onto the
-// same storeChain, so one fully finishes (old dir stripped, new dir has the
-// record) before the other's read-modify-write can even start.
+// the SAME chain persistJob queues writes on. That placement is the whole
+// point, not an implementation detail: a queued-but-not-yet-run
+// persistJob(oldDir, ...) -- for instance sweepOne mid-poll when the folder
+// changes underneath it -- can land between a NON-queued migration's read and
+// its write, so the migration's stale snapshot overwrites that update. Concretely:
+// the sweep finishes a job (status -> 'done') and queues that write; a bare,
+// unqueued migration reads the old store BEFORE that write lands, still sees
+// the job as 'pending', moves it, and then writes the old store back with it
+// stripped out; the sweep's queued write then lands on top of THAT, reviving
+// the record as 'pending' in a store nothing is migrating anymore -- so it
+// gets re-polled, re-downloaded, and written to disk a second time under a
+// fresh timestamp. Enqueuing the whole migration closes that gap: the sweep's
+// call and this one serialize onto the same storeChain, so one fully finishes
+// (old dir stripped, new dir has the record) before the other's
+// read-modify-write can even start.
 //
-// Destination first, source second: if the second write throws (the disk
+// Destination first, source second: if the SECOND write throws (the disk
 // error an external drive makes plausible), the worst case is a record
 // present in both stores -- and the copy that matters, the one in the folder
 // the sweep now reads, already exists. Writing source-first and having the
 // destination write fail would delete the only copy of a render still in
 // flight, which is exactly the loss this whole feature exists to prevent.
+//
+// The FIRST write failing is not free either, and is worth naming rather than
+// leaving implied: if writeJobs(toDir, ...) throws, the record is left ONLY in
+// the old store while OUTPUT_DIR already points at the new one -- an orphan,
+// the very loss this feature exists to prevent, just reached from the other
+// write instead. The caller (server/index.js's PUT /api/config) treats the
+// whole call as best-effort and swallows that error into a console line no
+// user ever sees. Destination-first is still the right order -- it is the
+// ONLY one of the two failure modes with a mitigation, since source-first has
+// none -- but that does not make a failed first write free, only less bad
+// than the alternative.
 export function migratePendingJobs(fromDir, toDir) {
   return enqueue(async () => {
+    // Same-directory guard. String comparison cannot catch this: the call
+    // site already compares path.resolve(fromDir) to path.resolve(toDir), and
+    // that normalises trailing slashes and `..` but NOT case and NOT a
+    // symlink -- so it is `false` for two paths that name the very same
+    // directory. Reproduced concretely: on default case-insensitive APFS,
+    // ".../probe/Renders" vs ".../probe/renders" resolve to different strings
+    // but the same directory; "/tmp/x" vs "/private/tmp/x" do too, through a
+    // symlink macOS puts in front of /tmp. fs.realpath does not fix the case
+    // one either -- it preserves the caller's own casing on macOS rather than
+    // canonicalising it. Left unguarded, either alias reaches the code below
+    // and "migrates" a directory onto itself: the pending records get written
+    // back to where they already were (a no-op that looks harmless), and then
+    // the very next line overwrites that same file with the non-pending
+    // remainder -- erasing every in-flight render in one call. fs.stat's
+    // dev+ino pair is what the filesystem itself agrees an identity on,
+    // regardless of the string used to reach it, which is why that -- not
+    // `===` -- is the comparison here. A toDir that does not exist yet cannot
+    // be an alias of anything, so a stat failure (ENOENT) falls through to a
+    // normal migration rather than being treated as an error.
+    try {
+      const [fromStat, toStat] = await Promise.all([fs.stat(fromDir), fs.stat(toDir)]);
+      if (fromStat.dev === toStat.dev && fromStat.ino === toStat.ino) return 0;
+    } catch {
+      // fromDir or toDir doesn't exist (yet) -- can't be the same directory.
+    }
     const old = await readJobs(fromDir);
     const pending = old.filter((j) => j.status === 'pending');
     if (!pending.length) return 0;

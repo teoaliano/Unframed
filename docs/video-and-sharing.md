@@ -125,24 +125,49 @@ throws away a clip already paid for; giving up late costs one line in `jobs.json
 ## The contract, in one table
 
 Every render started ends in exactly one of two visible states — clip + sidecar
-on disk, or a `failed` record that says why — under every disruption below.
+on disk, or a `failed` record that says why — under every disruption below,
+**provided the server still has a working OpenRouter key to finish it with**.
 This table is the scope: a new "what if X happens mid-render" belongs here as a
 row (with its guarantee and its test) before it becomes work anywhere else.
 
-| Mid-render, the user… | What happens | Guaranteed by |
+`Tested?` is `yes` when the row's guarantee is exercised end to end (an
+automated test, or an in-app run logged as verified), `partial` when part of
+it is and part isn't, and `no` when nothing exercises it. The footnotes below
+say exactly which part is which; the column is only a place to look first.
+
+| Mid-render… | What happens | Tested? |
 | --- | --- | --- |
-| closes the tab or laptop | the server's sweep collects it; files land in the project | the shared collection primitives (`collectVideo`, `fetchVideoStatus`, terminal-status classification) are tested via `host.test.js`'s route-driven cases and `jobs.test.js`; the unattended sweep path itself — `sweepJobs`/`sweepOneInner` firing on its own 30s timer with zero client requests — is not directly exercised by any test |
-| reloads the page | the node resumes watching via `data.job` | resume effect in `VideoOutputNode`; verified in app 2026-08-15 |
-| switches projects | the canvas remounts; the job stays with its project's record | `canvasGeneration` remount; verified in app 2026-08-15 |
-| presses undo/redo | live run markers win over the snapshot | `keepLiveRunMarkers` cases in `resolve.test.js`; verified in app 2026-08-16 |
-| copies the node or saves it as a preset | markers stripped; the copy is a fresh node | strip cases in `resolve.test.js` |
-| inserts a preset saved mid-render years ago | markers stripped again on the way in | inbound-strip case in `resolve.test.js` |
-| changes the output folder in Settings | pending records move with the folder | migration case in `host.test.js` |
-| — and the provider kills the job | the record fails with the provider's own message | terminal-status classification and message handling are tested via the poll route (`expired-job`/`still-going-job` cases in `host.test.js`); `sweepOneInner`'s own terminal-failure branch, reached only by the unattended sweep, shares the same classification function but is not separately exercised by any test |
-| — and the provider forgets the id entirely | failed after 24h of continuous silence, saying so | the 24h give-up threshold itself is unit-tested (`givenUp` cases in `jobs.test.js`); that `sweepOneInner` actually invokes it and persists the resulting failure (with its message) during a real sweep tick is not exercised by any test |
-| — and the network blips for less than 24h | the silence clock resets on the first answer | clearing the flag on disk is unit-tested (clock-clear case in `jobs.test.js`, calling `persistJob` directly); that `sweepOneInner` actually calls it after a successful poll during a real sweep tick is not exercised by any test |
-| — and this machine's server restarts | the store is durable; the boot sweep resumes | jobs.json's durability is tested (`jobs.test.js`'s write/read/corruption cases); the boot-time sweep call is real code (`server/index.js`) but no test actually restarts the forked server to prove it resumes one |
-| — and two watchers race the same finished job | one download: store consulted first, then the in-process lock | the store-consulted-first layer is what `host.test.js`'s already-done case actually tests (one sequential request against a job already `done`); the in-process `collecting` lock and the re-read-after-lock step in both `sweepOneInner` and the poll route are not exercised by any test — the race itself is not reproduced in CI |
+| the user closes the tab or laptop | the server's sweep collects it; files land in the project | partial [^1] |
+| the user reloads the page | the node resumes watching via `data.job` | yes [^2] |
+| the user switches projects | the canvas remounts; the job stays with its project's record | yes [^3] |
+| the user presses undo/redo | live run markers win over the snapshot | yes [^4] |
+| the user copies the node or saves it as a preset | markers stripped; the copy is a fresh node | yes [^5] |
+| the user inserts a preset saved mid-render years ago | markers stripped again on the way in | yes [^6] |
+| the user changes the output folder in Settings | pending records move with the folder | yes [^7] |
+| the provider ends the job (fails, expires, or is cancelled) | the record fails with the provider's own message | partial [^8] |
+| the provider forgets the job id entirely (every poll answers with no match) | failed after 24h of continuous silence, saying so | partial [^9] |
+| the connection to the provider blips for less than 24 hours | the silence clock resets on the first answer that gets through | partial [^10] |
+| this machine's server restarts | the store is durable; the boot sweep resumes | partial [^11] |
+| two watchers race to collect the same finished job (a sweep tick and a browser poll, or two tabs) | one download: the store is consulted first, then an in-process lock | partial [^12] |
+| the user removes the OpenRouter key, or replaces it with a different account's | neither of the two contract states — see footnote | no [^13] |
+| the user renames the project | the sweep recreates the OLD folder and writes the clip there; a ghost project appears | no [^14] |
+| the user deletes the project | the sweep recreates the deleted folder, holding one clip and one sidecar and no graph | no [^15] |
+
+[^1]: The shared collection primitives (`collectVideo`, `fetchVideoStatus`, terminal-status classification) are tested via `host.test.js`'s route-driven cases and `jobs.test.js`; the unattended sweep path itself — `sweepJobs`/`sweepOneInner` firing on its own 30s timer with zero client requests — is not directly exercised by any test.
+[^2]: Resume effect in `VideoOutputNode`; verified in app 2026-08-15.
+[^3]: `canvasGeneration` remount; verified in app 2026-08-15.
+[^4]: `keepLiveRunMarkers` cases in `resolve.test.js`; verified in app 2026-08-16.
+[^5]: Strip cases in `resolve.test.js`.
+[^6]: Inbound-strip case in `resolve.test.js`.
+[^7]: Migration case in `host.test.js`.
+[^8]: Terminal-status classification and message handling are tested via the poll route (`expired-job`/`still-going-job` cases in `host.test.js`); `sweepOneInner`'s own terminal-failure branch, reached only by the unattended sweep, shares the same classification function but is not separately exercised by any test.
+[^9]: The 24h give-up threshold itself is unit-tested (`givenUp` cases in `jobs.test.js`); that `sweepOneInner` actually invokes it and persists the resulting failure (with its message) during a real sweep tick is not exercised by any test.
+[^10]: Clearing the flag on disk is unit-tested (clock-clear case in `jobs.test.js`, calling `persistJob` directly); that `sweepOneInner` actually calls it after a successful poll during a real sweep tick is not exercised by any test.
+[^11]: jobs.json's durability is tested (`jobs.test.js`'s write/read/corruption cases); the boot-time sweep call is real code (`server/index.js`) but no test actually restarts the forked server to prove it resumes one.
+[^12]: The store-consulted-first layer is what `host.test.js`'s already-done case actually tests (one sequential request against a job already `done`); the in-process `collecting` lock and the re-read-after-lock step in both `sweepOneInner` and the poll route are not exercised by any test — the race itself is not reproduced in CI.
+[^13]: Removing the key stops the sweep outright (`sweepJobs` returns at `if (!API_KEY || sweeping) return;` before it looks at a single job), and the poll route 400s the same way — so the job reaches neither `done` nor `failed`; `pollVideo` treats that 400 as transient, so the node just sits at "Rendering…", re-arming every couple of minutes, forever, until a key is restored. Replacing the key with a different account's does not stop the sweep, but the job id then 404s under the new account, indistinguishable from "the provider forgot this id" — so the existing 24-hour give-up clock still ends it, just with a message that says there was no answer rather than naming the key change. Guaranteed by: nothing — the sweep needs a working key to finish anything, and neither disruption here leaves it one.
+[^14]: `fs.rename` in the project route moves the folder, but `job.project` — the slug captured at job creation — does not follow; the sweep's `collectVideo` later does `fs.mkdir(dir, { recursive: true })` on that old slug and writes the clip and sidecar into a folder that no longer has a `graph.json`, and `/api/projects` lists it anyway (every subdirectory, no `graph.json` required), so it reappears in the project menu as a folder with one orphaned clip. Not a regression from this branch — the matrix declares itself the scope for exactly this kind of question, so the defect is the missing row, not new behaviour. Guaranteed by: nothing.
+[^15]: `fs.rm` deletes the project folder, but the job record lives at `<OUTPUT_DIR>/jobs.json`, outside it, so the record survives; the sweep's `collectVideo` recreates the deleted folder on completion, leaving one clip and one sidecar with no graph at all. Same scope note as the rename row above. Guaranteed by: nothing.
 
 ## The share tunnel
 

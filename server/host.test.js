@@ -275,11 +275,12 @@ try {
     'done/failed history stays in the folder it belongs to',
   );
   // Point the server back at the first folder so the tests below run unchanged.
-  await fetch(`${base}/api/config`, {
+  const switchedBack = await fetch(`${base}/api/config`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ outputDir: outDir }),
   });
+  assert.equal(switchedBack.status, 200, 'the switch-back itself must succeed, or every test below runs against the wrong folder');
 
   for (const route of ['/api/video', '/api/generate']) {
     // What this reaches upstream is a 401, or a connection error when offline.
