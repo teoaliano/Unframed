@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Handle, Position, useReactFlow } from '@xyflow/react';
 import { Card } from '@astryxdesign/core/Card';
 import { Button } from '@astryxdesign/core/Button';
@@ -7,9 +7,10 @@ import { VStack } from '@astryxdesign/core/Stack';
 import NodeHeader from './NodeHeader.jsx';
 import StatusLine from './StatusLine.jsx';
 import { useModels, freeSpot } from './output/core.js';
+import { resetModelParams } from './output/defaults.js';
 import { ModelPicker, CostFoot } from './output/controls.jsx';
 import { buildRequest } from '../graph/resolve.js';
-import { runText, getProject } from '../api.js';
+import { runText, getProject, SESSION_ID } from '../api.js';
 
 // An output node that emits text instead of an image. It consumes edges exactly like
 // the image output node — same buildRequest — and its answer lives in data.result so
@@ -22,12 +23,39 @@ export default function TextOutputNode({ id, data }) {
 
   const model = data.model || defaultModel;
 
+  // A marker left by a closed or reloaded tab can never be resumed — a text run is
+  // one request, and the server has already produced whatever it produced by the
+  // time anyone reopens this node. Runs once per mount, which now covers a genuine
+  // project switch too (App.jsx remounts every node on one — see
+  // canvasGeneration): a marker stamped by THIS session must survive that switch
+  // unchanged (it may still be genuinely in flight), so only a marker whose
+  // session does not match gets cleared here. Same self-healing shape as
+  // migrateNodes and VideoOutputNode's inputMode heal.
+  useEffect(() => {
+    if (data.running && data.running.session !== SESSION_ID) {
+      updateNodeData(id, { running: undefined });
+    }
+    // Deliberately mount-only ([]): re-running this whenever `data` changes would
+    // race onRun's own marker, clearing a session-matched one the instant it sets
+    // it.
+  }, []);
+
   async function onRun() {
     setStatus('running');
     setError(null);
-    // Captured out here, not inside the try: both exits compare against it, and a
-    // catch cannot see a const declared in the block it is catching for.
+    // Captured before anything is awaited: the identity for every guard below is
+    // the PROJECT, not a ref or a token held by this component instance. A rename
+    // (not a genuine switch) reuses this very instance, and even when a switch
+    // DOES remount it, updateNodeData still reaches into whichever project is
+    // CURRENTLY loaded — never the one this closure started in.
     const startedIn = getProject();
+    // Persisted before the request: local `status` alone is wiped by a genuine
+    // switch's remount, so without this a switch-and-back would show an enabled
+    // Run button for a request still in flight — a second click would be a
+    // second paid run. Stamped with SESSION_ID so a marker outliving this tab
+    // reads as abandoned on mount instead of disabling the button forever — see
+    // the mount effect above.
+    updateNodeData(id, { running: { startedAt: Date.now(), session: SESSION_ID } });
     try {
       const { prompt, input_references } = buildRequest(getNodes(), getEdges(), id);
       // The node's own textarea is the last part, after everything wired in.
@@ -37,29 +65,38 @@ export default function TextOutputNode({ id, data }) {
         throw new Error('Nothing to run. Wire a prompt node in, or type one below.');
       }
       const resp = await runText({ prompt: full, input_references, model });
-      // A run outlives a project switch, and node ids come from one counter shared by
-      // every project, so by now this same component can be showing a DIFFERENT
-      // project's node with the same id. Writing then would overwrite that node's
-      // saved answer — and data.result is what @id resolves to, so every downstream
-      // prompt over there would quietly build from text that was never meant for it.
-      // The local status still clears, or the node reads "Running" forever.
       if (getProject() !== startedIn) {
+        // A run outlives a project switch, and node ids come from one counter
+        // shared by every project, so this id may now belong to a DIFFERENT
+        // project's node. Writing would attribute someone else's answer to it —
+        // and data.result is what @id resolves to, so every downstream prompt
+        // over there would quietly build from text that was never meant for it.
+        updateNodeData(id, { running: undefined });
         setStatus('idle');
         return;
       }
-      updateNodeData(id, { result: resp.text, cost: resp.cost });
+      updateNodeData(id, { result: resp.text, cost: resp.cost, running: undefined });
       setStatus('idle');
     } catch (err) {
-      // Same reasoning as the success path: an error belonging to a run started
-      // somewhere else must not surface on whatever node is showing now.
       if (getProject() !== startedIn) {
+        // Same reasoning as the success path: an error belonging to a run
+        // started somewhere else must not surface on whatever node is showing
+        // now, and the marker it left behind is not this node's to keep either.
+        updateNodeData(id, { running: undefined });
         setStatus('idle');
         return;
       }
       setError(err.message);
       setStatus('error');
+      updateNodeData(id, { running: undefined });
     }
   }
+
+  // True whenever a run is in flight, whether or not THIS instance is the one
+  // that started it: local `status` alone is wiped the moment a genuine project
+  // switch remounts the node (App.jsx's canvasGeneration), so the persisted
+  // marker is what lets the button keep reading "Running…" across that gap.
+  const isRunning = status === 'running' || Boolean(data.running);
 
   // Copy, not move: the result stays on this node so anything referencing it by
   // @id keeps resolving, and the new node is a plain prompt you can edit without
@@ -87,7 +124,7 @@ export default function TextOutputNode({ id, data }) {
           models={models}
           value={model}
           kind="text"
-          onChange={(v) => updateNodeData(id, { model: v })}
+          onChange={(v) => updateNodeData(id, { model: v, ...resetModelParams('textOutput') })}
         />
 
         <TextArea
@@ -101,9 +138,13 @@ export default function TextOutputNode({ id, data }) {
         />
 
         <Button
-          label={status === 'running' ? 'Running…' : 'Run'}
+          label={isRunning ? 'Running…' : 'Run'}
           variant="primary"
-          isLoading={status === 'running'}
+          isLoading={isRunning}
+          // A run in flight disables Run outright — a second click would be a
+          // second paid run for the one this node is already tracking, however
+          // many times the canvas has remounted since it started.
+          isDisabled={isRunning}
           onClick={onRun}
         />
 

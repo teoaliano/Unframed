@@ -9,7 +9,7 @@
     "dev": "concurrently -n server,client -c yellow,magenta \"npm run server\" \"npm run client\"",
     "server": "node --watch server/index.js",
     "client": "npm --prefix client run dev",
-    "test": "node client/src/graph/resolve.test.js && node server/env.test.js && node server/share.test.js && node server/presets.test.js && node server/host.test.js"
+    "test": "node client/src/graph/resolve.test.js && node server/env.test.js && node server/share.test.js && node server/presets.test.js && node server/jobs.test.js && node server/host.test.js"
   },
   "dependencies": {
     "cors": "^2.8.5",

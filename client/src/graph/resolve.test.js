@@ -1,9 +1,10 @@
 // Assert-based self-check. Run with: node client/src/graph/resolve.test.js
 import assert from 'node:assert/strict';
-import { buildRequest, imageRefNumbers, splitSections, findWiredTextNode, freeRunPrompts, isOutput, isTextOutput } from './resolve.js';
+import { buildRequest, bucketSources, sourceRoles, splitSections, findWiredTextNode, freeRunPrompts, isOutput, isTextOutput } from './resolve.js';
 import { migrateNodes } from './migrate.js';
 import { instantiateFragment, centerOffset } from '../library/insert.js';
 import { selectionFragment, presetFromSelection } from '../library/save.js';
+import { MODEL_PARAM_KEYS, resetModelParams } from '../nodes/output/defaults.js';
 
 const out = { id: 'out', type: 'imageOutput', position: { x: 400, y: 0 }, data: {} };
 
@@ -124,10 +125,8 @@ function graph(nodes, edges) {
   );
   assert.equal(input_references[1].video_url.url, 'data:video/mp4;base64,BBB');
   // Per-kind numbering: the video is video 1 even though an image sits above it.
-  assert.deepEqual(imageRefNumbers(nodes, edges, 'v1', 'video'), [1]);
-  assert.deepEqual(imageRefNumbers(nodes, edges, 'i2'), [2]);
-  // Kind mismatch returns nothing rather than a wrong rank.
-  assert.deepEqual(imageRefNumbers(nodes, edges, 'v1'), []);
+  assert.deepEqual(sourceRoles(nodes, edges, 'v1'), ['1']);
+  assert.deepEqual(sourceRoles(nodes, edges, 'i2'), ['2']);
 }
 
 // A prompt-to-prompt cycle throws instead of recursing forever.
@@ -140,57 +139,6 @@ function graph(nodes, edges) {
     [{ id: 'e1', source: 'p1', target: 'out' }],
   );
   assert.throws(() => buildRequest(nodes, edges, 'out'), /Circular reference/);
-}
-
-// --- imageRefNumbers ---
-
-// An image wired only into a text node is rank 1 there.
-{
-  const t = { id: 't1', type: 'textOutput', position: { x: 200, y: 0 }, data: { result: 'x' } };
-  const i1 = { id: 'i1', type: 'image', position: { x: 0, y: 0 }, data: { dataUrl: 'data:,a' } };
-  const nodes = [out, t, i1];
-  const edges = [{ id: 'e1', source: 'i1', target: 't1' }];
-  assert.deepEqual(imageRefNumbers(nodes, edges, 'i1'), [1]);
-}
-
-// An unwired image, and an image with no picture, have no ranks.
-{
-  const i1 = { id: 'i1', type: 'image', position: { x: 0, y: 0 }, data: { dataUrl: 'data:,a' } };
-  const i2 = { id: 'i2', type: 'image', position: { x: 0, y: 10 }, data: {} };
-  const nodes = [out, i1, i2];
-  const edges = [{ id: 'e1', source: 'i2', target: 'out' }];
-  assert.deepEqual(imageRefNumbers(nodes, edges, 'i1'), []);
-  assert.deepEqual(imageRefNumbers(nodes, edges, 'i2'), []);
-}
-
-// Ranks are per consumer: A (y=0) and B (y=100) both feed the output, so B is 2 there;
-// B alone feeds the text node, so it is 1 there. B's ranks are [1, 2].
-{
-  const t = { id: 't1', type: 'textOutput', position: { x: 200, y: 0 }, data: { result: 'x' } };
-  const a = { id: 'a', type: 'image', position: { x: 0, y: 0 }, data: { dataUrl: 'data:,a' } };
-  const b = { id: 'b', type: 'image', position: { x: 0, y: 100 }, data: { dataUrl: 'data:,b' } };
-  const nodes = [out, t, a, b];
-  const edges = [
-    { id: 'e1', source: 'a', target: 'out' },
-    { id: 'e2', source: 'b', target: 'out' },
-    { id: 'e3', source: 'b', target: 't1' },
-  ];
-  assert.deepEqual(imageRefNumbers(nodes, edges, 'a'), [1]);
-  assert.deepEqual(imageRefNumbers(nodes, edges, 'b'), [1, 2]);
-}
-
-// The rank a consumer sees matches the order buildRequest sends for that same consumer.
-{
-  const t = { id: 't1', type: 'textOutput', position: { x: 200, y: 0 }, data: { result: 'x' } };
-  const a = { id: 'a', type: 'image', position: { x: 0, y: 0 }, data: { dataUrl: 'data:,a' } };
-  const b = { id: 'b', type: 'image', position: { x: 0, y: 100 }, data: { dataUrl: 'data:,b' } };
-  const nodes = [out, t, a, b];
-  const edges = [{ id: 'e1', source: 'b', target: 't1' }, { id: 'e2', source: 'a', target: 't1' }];
-  const { input_references } = buildRequest(nodes, edges, 't1');
-  // a is above b, so a is image 1 for the text node
-  assert.equal(input_references[0].image_url.url, 'data:,a');
-  assert.deepEqual(imageRefNumbers(nodes, edges, 'a'), [1]);
-  assert.deepEqual(imageRefNumbers(nodes, edges, 'b'), [2]);
 }
 
 // --- splitSections ---
@@ -351,7 +299,9 @@ function graph(nodes, edges) {
 {
   const graphNodes = [
     { id: 'a', type: 'prompt', selected: true, data: {} },
-    { id: 'b', type: 'videoOutput', selected: true, data: {} },
+    // videoModel survives; job must not -- see selectionFragment's comment for why a
+    // job id baked into a never-rewritten preset (or a copy-pasted node) is permanent.
+    { id: 'b', type: 'videoOutput', selected: true, data: { videoModel: 'seedance', job: { id: 'j1', startedAt: 1, params: {} } } },
     { id: 'c', type: 'prompt', data: {} },
   ];
   const graphEdges = [
@@ -363,6 +313,8 @@ function graph(nodes, edges) {
   assert.deepEqual(frag.nodes.map((n) => n.id), ['a', 'b'], 'takes the selected nodes');
   assert.deepEqual(frag.edges.map((e) => e.id), ['e1'], 'drops edges with an end outside the selection');
   assert.equal('selected' in frag.nodes[0] && frag.nodes[0].selected, undefined, 'selection state is not saved');
+  assert.equal(frag.nodes[1].data.job, undefined, 'a pending job is stripped from a saved/copied node');
+  assert.equal(frag.nodes[1].data.videoModel, 'seedance', 'other data survives the strip');
 
   // Right-clicking does not select, so the clicked node stands in for a selection.
   const one = selectionFragment(graphNodes.map((n) => ({ ...n, selected: false })), graphEdges, 'c');
@@ -480,6 +432,249 @@ function graph(nodes, edges) {
   assert.equal(isTextOutput({ type: 'imageOutput' }), false);
   assert.equal(isTextOutput({ type: 'text' }), false, 'the pre-migration id is not a text output');
   assert.equal(isOutput({ type: 'output' }), false, 'the pre-migration id is not an output either');
+}
+
+// An @token matching no node id is left exactly as typed. Prompts legitimately
+// contain @ ("@golden hour", a handle, an email), and deleting the word after it
+// corrupted them silently. insert.js has always behaved this way; now both agree.
+{
+  const { nodes, edges } = graph(
+    [{ id: 'p1', type: 'prompt', position: { x: 0, y: 0 }, data: { text: 'a @curly haired fox @p2' } }],
+    [{ id: 'e1', source: 'p1', target: 'out' }],
+  );
+  const { prompt } = buildRequest(nodes, edges, 'out');
+  assert.equal(prompt, 'a @curly haired fox @p2', 'unknown tokens are left as typed');
+}
+
+// A known id still resolves, and still resolves to empty when it has no text.
+{
+  const { nodes, edges } = graph(
+    [
+      { id: 'p2', type: 'prompt', position: { x: 0, y: 0 }, data: { text: 'red fox' } },
+      { id: 'p1', type: 'prompt', position: { x: 0, y: 10 }, data: { text: 'draw @p2 now' } },
+    ],
+    [{ id: 'e1', source: 'p1', target: 'out' }],
+  );
+  const { prompt } = buildRequest(nodes, edges, 'out');
+  assert.ok(prompt.includes('draw red fox now'), 'known tokens still resolve');
+}
+
+// ---- input modes ----
+
+// Builds a video output plus a prompt and N images, top to bottom.
+function videoGraph(inputMode, imageCount, extra = []) {
+  const nodes = [
+    { id: 'v1', type: 'videoOutput', position: { x: 400, y: 0 }, data: { inputMode } },
+    { id: 'p1', type: 'prompt', position: { x: 0, y: 0 }, data: { text: 'walk forward' } },
+    ...Array.from({ length: imageCount }, (_, i) => ({
+      id: `i${i + 1}`,
+      type: 'image',
+      position: { x: 0, y: 10 * (i + 1) },
+      data: { dataUrl: `data:,${i + 1}` },
+    })),
+    ...extra,
+  ];
+  const edges = nodes
+    .filter((n) => n.id !== 'v1')
+    .map((n, i) => ({ id: `e${i}`, source: n.id, target: 'v1' }));
+  return { nodes, edges };
+}
+
+// Reference mode is exactly today's behaviour: every image rides in input_references.
+{
+  const { nodes, edges } = videoGraph('reference', 3);
+  const { input_references, frame_images } = buildRequest(nodes, edges, 'v1');
+  assert.deepEqual(input_references.map((r) => r.image_url.url), ['data:,1', 'data:,2', 'data:,3']);
+  assert.deepEqual(frame_images, []);
+  assert.deepEqual(bucketSources(nodes, edges, 'v1').excess, []);
+}
+
+// An absent inputMode means reference mode, so graphs saved before this shipped
+// behave identically.
+{
+  const { nodes, edges } = videoGraph(undefined, 2);
+  const { input_references, frame_images } = buildRequest(nodes, edges, 'v1');
+  assert.equal(input_references.length, 2);
+  assert.deepEqual(frame_images, []);
+}
+
+// first_frame: the topmost image is the frame, the rest are excess, and nothing
+// rides in input_references -- the provider drops references when frames are sent.
+{
+  const { nodes, edges } = videoGraph('first_frame', 3);
+  const { input_references, frame_images } = buildRequest(nodes, edges, 'v1');
+  assert.deepEqual(input_references, []);
+  assert.deepEqual(frame_images, [
+    { type: 'image_url', image_url: { url: 'data:,1' }, frame_type: 'first_frame' },
+  ]);
+  assert.deepEqual(bucketSources(nodes, edges, 'v1').excess, ['i2', 'i3']);
+}
+
+// first_last: the top two images become first and last, in Y order.
+{
+  const { nodes, edges } = videoGraph('first_last', 3);
+  const { frame_images } = buildRequest(nodes, edges, 'v1');
+  assert.deepEqual(frame_images.map((f) => [f.frame_type, f.image_url.url]), [
+    ['first_frame', 'data:,1'],
+    ['last_frame', 'data:,2'],
+  ]);
+  assert.deepEqual(bucketSources(nodes, edges, 'v1').excess, ['i3']);
+}
+
+// first_last with only one image wired: the slot that has no image is simply absent,
+// rather than a null entry or a frame pointing at nothing. Nothing becomes excess --
+// the mode wanted two and got one, which is short, not over-supplied.
+{
+  const { nodes, edges } = videoGraph('first_last', 1);
+  const { frame_images } = buildRequest(nodes, edges, 'v1');
+  assert.deepEqual(frame_images.map((f) => [f.frame_type, f.image_url.url]), [
+    ['first_frame', 'data:,1'],
+  ]);
+  assert.deepEqual(bucketSources(nodes, edges, 'v1').excess, []);
+}
+
+// A wired video is excess in a frame mode: frames are images only.
+{
+  const clip = { id: 'vid', type: 'video', position: { x: 0, y: 5 }, data: { dataUrl: 'data:,clip' } };
+  const { nodes, edges } = videoGraph('first_frame', 1, [clip]);
+  const { frame_images, input_references } = buildRequest(nodes, edges, 'v1');
+  assert.deepEqual(input_references, []);
+  assert.equal(frame_images.length, 1);
+  assert.deepEqual(bucketSources(nodes, edges, 'v1').excess, ['vid']);
+}
+
+// Modes are a video-output concern; an image output ignores the field entirely.
+{
+  // A copy, not a mutation of `out`: `out` is shared by reference with every block
+  // below this one, and setting inputMode on it directly would silently change
+  // their meaning too.
+  const nodeWithMode = { ...out, data: { ...out.data, inputMode: 'first_frame' } };
+  const { nodes, edges } = graph(
+    [{ id: 'i1', type: 'image', position: { x: 0, y: 10 }, data: { dataUrl: 'data:,a' } }],
+    [{ id: 'e1', source: 'i1', target: 'out' }],
+  );
+  nodes[0] = nodeWithMode; // `out` is an imageOutput
+  const { input_references, frame_images } = buildRequest(nodes, edges, 'out');
+  assert.equal(input_references.length, 1);
+  assert.deepEqual(frame_images, []);
+}
+
+// ---- sourceRoles ----
+
+// An image wired only into a text node is rank 1 there.
+{
+  const { nodes, edges } = graph(
+    [
+      { id: 't1', type: 'textOutput', position: { x: 400, y: 0 }, data: { result: '' } },
+      { id: 'i1', type: 'image', position: { x: 0, y: 0 }, data: { dataUrl: 'data:,a' } },
+    ],
+    [{ id: 'e1', source: 'i1', target: 't1' }],
+  );
+  assert.deepEqual(sourceRoles(nodes, edges, 'i1'), ['1']);
+}
+
+// An unwired image, and an image with no picture, have no roles.
+{
+  const { nodes, edges } = graph(
+    [
+      { id: 'i1', type: 'image', position: { x: 0, y: 0 }, data: { dataUrl: 'data:,a' } },
+      { id: 'i2', type: 'image', position: { x: 0, y: 10 }, data: {} },
+    ],
+    [{ id: 'e1', source: 'i2', target: 'out' }],
+  );
+  assert.deepEqual(sourceRoles(nodes, edges, 'i1'), []);
+  assert.deepEqual(sourceRoles(nodes, edges, 'i2'), []);
+}
+
+// Roles are per consumer: used by one output, ignored by a video node in frame
+// mode, reads "2 / —".
+{
+  const nodes = [
+    { id: 'out', type: 'imageOutput', position: { x: 400, y: 0 }, data: {} },
+    { id: 'v1', type: 'videoOutput', position: { x: 400, y: 200 }, data: { inputMode: 'first_frame' } },
+    { id: 'a', type: 'image', position: { x: 0, y: 0 }, data: { dataUrl: 'data:,a' } },
+    { id: 'b', type: 'image', position: { x: 0, y: 100 }, data: { dataUrl: 'data:,b' } },
+  ];
+  const edges = [
+    { id: 'e1', source: 'a', target: 'out' },
+    { id: 'e2', source: 'b', target: 'out' },
+    { id: 'e3', source: 'a', target: 'v1' },
+    { id: 'e4', source: 'b', target: 'v1' },
+  ];
+  assert.deepEqual(sourceRoles(nodes, edges, 'a'), ['1', 'first']);
+  assert.deepEqual(sourceRoles(nodes, edges, 'b'), ['2', '—']);
+}
+
+// first_last names both slots.
+{
+  const { nodes, edges } = videoGraph('first_last', 2);
+  assert.deepEqual(sourceRoles(nodes, edges, 'i1'), ['first']);
+  assert.deepEqual(sourceRoles(nodes, edges, 'i2'), ['last']);
+}
+
+// Badge order follows canvas position, not the order outputs were created. This needs
+// a node that gets a DIFFERENT role from each of two outputs -- if both gave it the
+// same role, Set dedup would hide an order bug no matter which output ran first.
+{
+  const w = { id: 'w', type: 'image', position: { x: 0, y: -100 }, data: { dataUrl: 'data:,w' } };
+  const x = { id: 'x', type: 'image', position: { x: 0, y: 0 }, data: { dataUrl: 'data:,x' } };
+  const solo = { id: 'o-solo', type: 'imageOutput', position: { x: 400, y: 0 }, data: {} };
+  const paired = { id: 'o-paired', type: 'imageOutput', position: { x: 400, y: 300 }, data: {} };
+  const edges = [
+    { id: 'e1', source: 'x', target: 'o-solo' },
+    { id: 'e2', source: 'w', target: 'o-paired' },
+    { id: 'e3', source: 'x', target: 'o-paired' },
+  ];
+  // x is the only image at o-solo (rank 1) and sits below w at o-paired (rank 2).
+  // o-solo sits above o-paired on the canvas, so rank 1 must lead regardless of which
+  // node array order the caller happens to pass.
+  const forwards = sourceRoles([solo, paired, w, x], edges, 'x');
+  const backwards = sourceRoles([paired, solo, w, x], edges, 'x');
+  assert.deepEqual(forwards, backwards, 'badge order must not depend on node array order');
+  assert.deepEqual(forwards, ['1', '2']);
+}
+
+// ---- resetModelParams ----
+
+// Critical regression guard: a naive "clear the model keys, then spread the WHOLE
+// defaults object over them" also resets text output's `text`/`result`, wiping the
+// user's instructions and the model's answer -- and every @id reference to it -- on a
+// mere model switch. textOutput has no model-dependent keys, so the reset must be a
+// true no-op.
+{
+  assert.deepEqual(resetModelParams('textOutput'), {});
+}
+
+// videoOutput has no fresh-node defaults of its own (OUTPUT_DEFAULTS.videoOutput is
+// {}), so every model-dependent key comes back cleared rather than repopulated.
+{
+  const reset = resetModelParams('videoOutput');
+  assert.deepEqual(Object.keys(reset).sort(), [...MODEL_PARAM_KEYS.videoOutput].sort());
+  for (const key of MODEL_PARAM_KEYS.videoOutput) assert.equal(reset[key], undefined);
+}
+
+// imageOutput DOES have fresh-node defaults: resolution/quality/aspect_ratio land back
+// on them, while size/background -- keys the type has no default for -- clear to
+// undefined instead of surviving the switch.
+{
+  const reset = resetModelParams('imageOutput');
+  assert.equal(reset.resolution, '1K');
+  assert.equal(reset.quality, 'low');
+  assert.equal(reset.aspect_ratio, '1:1');
+  assert.equal(reset.size, undefined);
+  assert.equal(reset.background, undefined);
+}
+
+// A model switch must never reset what a node keeps across switches on purpose -- a
+// batch size, consent about a wired clip, or the node's own content/identity. An
+// overlap here is the Critical-1 bug recurring in a different key.
+{
+  const mustSurvive = ['runs', 'freeRuns', 'shareLocalVideos', 'text', 'result', 'model', 'videoModel'];
+  for (const type of Object.keys(MODEL_PARAM_KEYS)) {
+    for (const key of MODEL_PARAM_KEYS[type]) {
+      assert.ok(!mustSurvive.includes(key), `${type}'s MODEL_PARAM_KEYS must not include "${key}"`);
+    }
+  }
 }
 
 console.log('resolve.js: all checks passed');

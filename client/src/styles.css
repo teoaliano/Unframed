@@ -51,6 +51,23 @@ body {
 .astryx-dropdown-menu {
   min-width: 200px;
 }
+/* The project you are currently in. A dropdown focuses its first item on open,
+   which reads as a selection even when it is not one, so the project actually
+   loaded says so itself — tinted here, and check-marked in the row (see
+   ProjectMenu.jsx), because a tint alone is a colour-only signal. Kept quieter
+   than the focus/hover fill so the two never look like the same state. */
+.project-current {
+  background: var(--color-background-gray);
+}
+/* Opening a menu with the mouse focuses its first item programmatically, and Astryx
+   paints that on :focus — so every menu opened by pointer looked like its first row
+   was chosen. The browser already disagrees: :focus-visible is false there, because
+   the last input was a pointer. Deferring to it means the highlight appears the
+   moment you press an arrow or Tab, and never for a click. The :not() keeps a row
+   that is marked current (see ProjectMenu.jsx) from losing its own tint. */
+.astryx-dropdown-menu-item:focus:not(:focus-visible):not(.project-current) {
+  background: transparent;
+}
 /* add-node menu: narrower than the default, and nudged left of the + button so
    it doesn't crowd the trigger (placement="start", no offset prop available).
    The nudge goes on the wrapper that paints the surface — shifting the inner
@@ -144,11 +161,40 @@ div:has(> .add-node-menu) {
   stroke: var(--color-accent);
   stroke-width: 1.5;
 }
+
+/* Ignored edges stop moving as well as turning red -- two channels, because red alone
+   is the one signal colour-blind users do not get. The selector carries three classes
+   on purpose: React Flow's own `.react-flow__edge.animated path` scores (0,2,1) and
+   would otherwise keep the marching-dash animation running underneath us. */
+.react-flow__edge.react-flow__edge-ignored .react-flow__edge-path {
+  /* --color-error is a pale tint (#ffc6c1 in dark) meant to sit behind text; at 1.5px on
+     a near-black canvas it barely reads as red. The border red is the saturated one.
+     The dash pattern is deliberately NOT overridden: an ignored edge should look like
+     every other edge apart from having stopped, so colour and stillness are the only
+     differences and the eye compares like with like. */
+  stroke: var(--color-border-red);
+  animation: none;
+}
+/* 12px dot with a transparent 24px target around it. WCAG 2.2 SC 2.5.8 (AA) asks
+   for 24x24 CSS px; the visible dot stays small because a big one crowds the node
+   edge, and the pseudo-element does the catching. Size is stated directly (not
+   derived from inset) because the 2px border and box-sizing: border-box shrink the
+   padding box to 8px, so inset would yield only 20px. */
 .react-flow__handle {
-  width: 9px;
-  height: 9px;
+  width: 12px;
+  height: 12px;
   background: var(--color-accent);
   border: 2px solid var(--color-background-surface);
+}
+.react-flow__handle::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 24px;
+  height: 24px;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
 }
 
 /* ---- node chrome ---- */

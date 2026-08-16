@@ -7,6 +7,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { upsertEnv, PATTERNS, envFile, outputPath } from './env.js';
 import { readPresets, writePresets } from './presets.js';
+import { readJobs, persistJob } from './jobs.js';
 import { ensureTunnel, mintShare, revokeShare, waitUntilPublic, stopTunnel } from './share.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -522,12 +523,14 @@ app.post('/api/video', async (req, res) => {
   const {
     prompt,
     input_references,
+    frame_images,
     duration,
     resolution,
     aspect_ratio,
     size,
     generate_audio,
     model,
+    project,
   } = req.body || {};
 
   // Normalised once rather than guarded at each use, the way /api/text does it. A
@@ -536,6 +539,9 @@ app.post('/api/video', async (req, res) => {
   // failed request but a dead server, since Express 4 leaves the rejection unhandled
   // and `node --watch` restarts on file changes, never after a crash.
   const refs = Array.isArray(input_references) ? input_references : [];
+  // Same reason as refs: a destructuring default only fills in for undefined, so a
+  // literal null would reach .length and take the process down rather than the request.
+  const frames = Array.isArray(frame_images) ? frame_images : [];
 
   if (!prompt || !prompt.trim()) {
     return res
@@ -601,14 +607,18 @@ app.post('/api/video', async (req, res) => {
   if (aspect_ratio) payload.aspect_ratio = aspect_ratio;
   if (generate_audio != null) payload.generate_audio = generate_audio;
   if (refs.length) payload.input_references = refs;
+  if (frames.length) payload.frame_images = frames;
 
   // Logged before the call so a failed or ignored run still leaves a record of what
   // went out. OpenRouter documents input_references as reference IMAGES for video
   // generation, so a video entry here is unproven territory: the request may be
   // accepted and the footage silently dropped.
-  const sentRefs = countRefs(refs);
+  // Frames aren't references, but a run is either/or (references XOR frames), so
+  // folding frames into this object still answers "how much went upstream" —
+  // `images` alone stops doing that once a frame run is possible.
+  const sentRefs = { ...countRefs(refs), frames: frames.length };
   console.log(
-    `  video job →  ${payload.model}  (sent ${sentRefs.images} image, ${sentRefs.videos} video refs)`,
+    `  video job →  ${payload.model}  (sent ${sentRefs.images} image, ${sentRefs.videos} video refs, ${sentRefs.frames} frames)`,
   );
 
   let orRes;
@@ -646,6 +656,25 @@ app.post('/api/video', async (req, res) => {
   // poll handler can kill them the moment the job stops needing the file.
   rememberJobRefs(data.id, sentRefs);
   if (mintedTokens.length) jobShareTokens.set(data.id, mintedTokens);
+
+  // Written to the store as pending, with everything the sweep will ever need to
+  // finish it without a browser in the loop: which project, and the exact params
+  // (prompt/model/duration/resolution/size) the sidecar has to match. A write
+  // failure here must not fail the request the user is waiting on -- the browser
+  // still gets its id back and can resume the old way, via query-string params,
+  // exactly as it could before this store existed.
+  try {
+    await persistJob(OUTPUT_DIR, data.id, {
+      project: project || null,
+      params: { prompt, model: payload.model, duration: duration || null, resolution: resolution || null, size: size || null },
+      startedAt: Date.now(),
+      status: 'pending',
+      refs: sentRefs,
+    });
+  } catch (err) {
+    console.log(`  job store write failed: ${err.message}`);
+  }
+
   res.json({ id: data.id, status: data.status || 'pending' });
 });
 
@@ -657,55 +686,100 @@ function revokeJobShares(id) {
   jobShareTokens.delete(id);
 }
 
-// Poll one job. While it runs this just forwards the status; once it completes the
-// file is fetched and written to disk, and the response points at the saved copy
-// rather than carrying the bytes — a video inlined into node data would be saved
-// into graph.json on every keystroke.
-app.get('/api/video/:id', async (req, res) => {
-  if (!API_KEY) return res.status(400).json({ error: 'No OpenRouter key yet.' });
-  const { project, prompt = '', model = '', duration, resolution, size } = req.query;
+// Where the saved clip is served from, given the project it landed in and its
+// path on disk. Shared by the poll route (fresh and store-served alike) and
+// nothing else needs it, since the sweep never returns an HTTP response.
+function fileUrl(project, savedPath) {
+  return `/api/file/${encodeURIComponent(project || '')}/${encodeURIComponent(path.basename(savedPath || ''))}`;
+}
 
-  let data;
+// The client-facing shape for a job the store already resolved, one way or the
+// other. Used both by the top-of-route short-circuit and by the re-check after
+// the collecting lock below -- two spots that need to answer "is this already
+// resolved?" identically, not two hand-rolled copies of the same JSON shape.
+function doneResponse(job) {
+  return {
+    status: 'completed',
+    cost: job.cost ?? null,
+    savedPath: job.savedPath,
+    url: fileUrl(job.project, job.savedPath),
+  };
+}
+function failedResponse(job) {
+  return { status: 'failed', error: job.error || 'Generation failed.' };
+}
+
+// Overridable ONLY so host.test.js can pin how an upstream status is handled --
+// there is no honest way to make OpenRouter itself answer "expired" or an
+// unrecognised status on demand. Unset in every real environment, including the
+// Electron shell's, so production always asks the real OpenRouter.
+const VIDEOS_STATUS_BASE =
+  process.env.UNFRAMED_TEST_VIDEOS_STATUS_BASE || 'https://openrouter.ai/api/v1/videos';
+
+// Asks OpenRouter what one job is doing. Used by both the poll route and the
+// sweep, so "ask upstream" has one implementation the same way "turn a finished
+// job into files" (collectVideo, below) does. Never throws -- everything
+// upstream can say or fail to say comes back as a value to branch on, so a
+// caller always gets an answer rather than having to wrap this in its own
+// try/catch too.
+async function fetchVideoStatus(id) {
+  let r;
   try {
-    const r = await fetch(`https://openrouter.ai/api/v1/videos/${encodeURIComponent(req.params.id)}`, {
+    r = await fetch(`${VIDEOS_STATUS_BASE}/${encodeURIComponent(id)}`, {
       headers: { Authorization: `Bearer ${API_KEY}` },
     });
-    const raw = await r.text();
-    try {
-      data = JSON.parse(raw);
-    } catch {
-      return res.status(502).json({ error: `Unexpected response from OpenRouter: ${raw.slice(0, 300)}` });
-    }
-    if (!r.ok) {
-      const msg = data?.error?.message || data?.error || raw.slice(0, 300);
-      return res.status(r.status).json({ error: `OpenRouter (${r.status}): ${msg}` });
-    }
   } catch (err) {
-    return res.status(502).json({ error: `Could not reach OpenRouter: ${err.message}` });
+    return { ok: false, networkError: err.message };
   }
-
-  const status = data.status || 'pending';
-  if (status !== 'completed') {
-    if (status === 'failed') {
-      revokeJobShares(req.params.id); // the provider will not fetch a dead job's refs
-      return res.json({ status, error: data.error?.message || data.error || 'Generation failed.' });
-    }
-    return res.json({ status, progress: data.progress ?? null });
-  }
-
-  const url = data.unsigned_urls?.[0] || data.urls?.[0];
-  if (!url) return res.status(502).json({ error: 'Job completed without a video URL.' });
-
-  let buf;
+  const raw = await r.text();
+  let data;
   try {
-    const f = await fetch(url, { headers: { Authorization: `Bearer ${API_KEY}` } });
-    if (!f.ok) return res.status(502).json({ error: `Could not download the video (${f.status}).` });
-    buf = Buffer.from(await f.arrayBuffer());
-  } catch (err) {
-    return res.status(502).json({ error: `Could not download the video: ${err.message}` });
+    data = JSON.parse(raw);
+  } catch {
+    return { ok: false, httpStatus: 502, upstreamError: `Unexpected response from OpenRouter: ${raw.slice(0, 300)}` };
   }
+  if (!r.ok) {
+    const msg = data?.error?.message || data?.error || raw.slice(0, 300);
+    return { ok: false, httpStatus: r.status, upstreamError: `OpenRouter (${r.status}): ${msg}` };
+  }
+  return { ok: true, data };
+}
 
-  const dir = project ? projectDir(project) : OUTPUT_DIR;
+// What an upstream status means here, in one place so sweepOne and the poll
+// route below can't drift into recognising a different set of terminal
+// failures. `failed` has meant this from the start; `expired` is the one that
+// surfaced this gap (a job queued over two hours came back
+// `{"status":"expired","error":"Job exceeded maximum time to live"}`, which
+// neither branch recognised, so it fell through as "still rendering" forever);
+// `cancelled`/`canceled` are the same shape of problem waiting to happen.
+//
+// Deliberately NOT a mapping of every status: completed and "still going" are
+// each one plain comparison at the call site, and everything that is neither
+// completed nor a name in this set is treated as still in flight. A provider is
+// far more likely to add a new in-progress status than a new terminal one, and
+// silently failing a job that is still actually rendering would throw away
+// money -- so an unrecognised status must default to "keep waiting", never to
+// "this failed".
+const TERMINAL_FAILURE_STATUSES = new Set(['failed', 'expired', 'cancelled', 'canceled']);
+const isTerminalFailure = (status) => TERMINAL_FAILURE_STATUSES.has(status);
+
+// Turns one COMPLETED OpenRouter job into files on disk: the clip, then its
+// sidecar. The only implementation of that step -- the poll route calls it for
+// a browser that is watching, the sweep calls it for one that isn't, and
+// neither downloads or writes anything a finished job needs on its own. `job`
+// carries what was true at creation (project, params, refs) rather than
+// whatever the current request happens to have, because the sweep has no
+// request at all.
+async function collectVideo(job, data) {
+  const url = data.unsigned_urls?.[0] || data.urls?.[0];
+  if (!url) throw new Error('Job completed without a video URL.');
+
+  const f = await fetch(url, { headers: { Authorization: `Bearer ${API_KEY}` } });
+  if (!f.ok) throw new Error(`Could not download the video (${f.status}).`);
+  const buf = Buffer.from(await f.arrayBuffer());
+
+  const { prompt = '', model = '', duration, resolution, size } = job.params || {};
+  const dir = job.project ? projectDir(job.project) : OUTPUT_DIR;
   await fs.mkdir(dir, { recursive: true });
   const stamp = new Date().toISOString().replace(/[:.]/g, '-');
   const base = `${stamp}-${slugify(prompt)}`;
@@ -724,11 +798,10 @@ app.get('/api/video/:id', async (req, res) => {
           duration: duration ? Number(duration) : null,
           resolution: resolution || null,
           size: size || null,
-          references: videoJobRefs.get(req.params.id) || null,
+          references: job.refs || null,
           // Verbatim, because it is the only evidence that footage was actually
-          // consumed: models that charge for video input price it under their own
-          // SKU (seedance's video_tokens_with_video_input), so the billing shape
-          // tells you what the request shape cannot.
+          // consumed: models that charge for video input price it under their
+          // own SKU, so the billing shape tells you what the request shape can't.
           usage: data.usage ?? null,
           cost,
           createdAt: new Date().toISOString(),
@@ -740,16 +813,179 @@ app.get('/api/video/:id', async (req, res) => {
   } catch (err) {
     console.log(`  sidecar not written: ${err.message}`);
   }
-  videoJobRefs.delete(req.params.id); // the job is done; nothing else will read it
-  revokeJobShares(req.params.id); // and its shared clip goes dark with it
 
-  res.json({
-    status,
-    cost,
-    savedPath: videoPath,
-    // Served from disk rather than inlined, so the graph stays small.
-    url: `/api/file/${encodeURIComponent(project || '')}/${encodeURIComponent(`${base}.mp4`)}`,
-  });
+  return { savedPath: videoPath, cost };
+}
+
+// In-process only: closes the gap collectVideo's own idempotency can't. The
+// store check in the poll route stops a SECOND request from re-downloading a job
+// that already finished, but a sweep tick and a browser's poll for the SAME job
+// can both observe "not done yet" and both start collecting in the same instant
+// -- this set makes the second one back off instead of racing the first.
+//
+// It is NOT, on its own, enough for the sweep: sweepJobs takes one snapshot of
+// the store per tick, and sweepOne can spend real time (a slow download) inside
+// that tick. A second job in the same snapshot can be collected by someone else
+// entirely -- a browser's own poll -- while the sweep is still busy with the
+// first, and by the time the sweep reaches it `collecting` is long since clear
+// again (the other collector finished and released it). That is why sweepOne
+// re-reads the store AFTER taking the lock, not before: the lock only proves
+// nothing else is racing RIGHT NOW, not that nothing already finished the job
+// while this tick's snapshot was going stale.
+const collecting = new Set();
+
+// One pending job, one tick: poll it, and either leave it alone (still
+// rendering), fail it, or collect it. Never throws -- a transient problem
+// reaching OpenRouter or downloading the file just waits for the next tick,
+// the same tolerance pollVideo has client-side for reaching this server.
+async function sweepOne(job) {
+  const polled = await fetchVideoStatus(job.id);
+  if (!polled.ok) return; // try again next tick
+  const { data } = polled;
+  const status = data.status || 'pending';
+
+  if (isTerminalFailure(status)) {
+    revokeJobShares(job.id); // the provider will not fetch a dead job's refs
+    await persistJob(OUTPUT_DIR, job.id, {
+      status: 'failed',
+      error: data.error?.message || data.error || 'Generation failed.',
+      resolvedAt: Date.now(),
+    });
+    return;
+  }
+  if (status !== 'completed') return; // still queued, rendering, or an unrecognised in-flight status
+
+  if (collecting.has(job.id)) return; // a poll for this exact job is already in flight
+  collecting.add(job.id);
+  try {
+    // See the comment on `collecting` above: this tick's snapshot could be
+    // stale by now. Only proceed if the store STILL says pending.
+    const fresh = (await readJobs(OUTPUT_DIR)).find((j) => j.id === job.id);
+    if (fresh && fresh.status !== 'pending') return; // already resolved elsewhere
+    const { savedPath, cost } = await collectVideo(job, data);
+    await persistJob(OUTPUT_DIR, job.id, { status: 'done', savedPath, cost, resolvedAt: Date.now() });
+    videoJobRefs.delete(job.id); // the job is done; nothing else will read it
+    revokeJobShares(job.id); // and its shared clip goes dark with it
+    console.log(`  video job ${job.id} collected by the sweep → ${savedPath}`);
+  } catch (err) {
+    console.log(`  sweep could not collect ${job.id}: ${err.message}`);
+  } finally {
+    collecting.delete(job.id);
+  }
+}
+
+// Guards against a slow tick overlapping the next: with no re-entrancy check,
+// a tick whose downloads run past 30s would still be in its own for-loop when
+// the interval fired again, and the second sweepJobs call would build its
+// snapshot while the first was mid-flight -- the exact staleness `collecting`'s
+// comment above describes, just from two sweeps instead of a sweep and a
+// browser poll.
+let sweeping = false;
+
+// The point of this whole file: a render finishes whether or not a browser is
+// open to watch it. Every pending job in the store gets one poll per tick,
+// sequentially -- not Promise.all -- so two ticks' worth of reads-then-writes to
+// the same jobs.json can never interleave and drop one job's update under
+// another's.
+async function sweepJobs() {
+  if (!API_KEY || sweeping) return; // nothing to collect without a key; nothing to overlap with a running tick
+  sweeping = true;
+  try {
+    const jobs = await readJobs(OUTPUT_DIR);
+    for (const job of jobs.filter((j) => j.status === 'pending')) {
+      await sweepOne(job);
+    }
+  } finally {
+    sweeping = false;
+  }
+}
+
+// Poll one job. While it runs this just forwards the status; once it completes the
+// file is fetched and written to disk, and the response points at the saved copy
+// rather than carrying the bytes — a video inlined into node data would be saved
+// into graph.json on every keystroke.
+app.get('/api/video/:id', async (req, res) => {
+  if (!API_KEY) return res.status(400).json({ error: 'No OpenRouter key yet.' });
+  const id = req.params.id;
+
+  // Consult the store BEFORE ever touching OpenRouter. Without this, a browser
+  // resuming a job the sweep already finished (or a second tab polling the same
+  // one) would download and write the clip a second time under a fresh
+  // timestamp -- this is what makes double collection impossible, together
+  // with the re-check after the lock further down.
+  const stored = (await readJobs(OUTPUT_DIR)).find((j) => j.id === id);
+  if (stored?.status === 'done') return res.json(doneResponse(stored));
+  if (stored?.status === 'failed') return res.json(failedResponse(stored));
+
+  // Still pending in the store (or not in it at all -- a job started before this
+  // store existed). Query params are the fallback source for params in that
+  // second case; a job created after this change already has them in `stored`.
+  const { project, prompt = '', model = '', duration, resolution, size } = req.query;
+
+  const polled = await fetchVideoStatus(id);
+  if (!polled.ok) {
+    return polled.networkError
+      ? res.status(502).json({ error: `Could not reach OpenRouter: ${polled.networkError}` })
+      : res.status(polled.httpStatus).json({ error: polled.upstreamError });
+  }
+  const { data } = polled;
+
+  const status = data.status || 'pending';
+  if (status !== 'completed') {
+    if (isTerminalFailure(status)) {
+      const message = data.error?.message || data.error || 'Generation failed.';
+      revokeJobShares(id); // the provider will not fetch a dead job's refs
+      const job = await persistJob(OUTPUT_DIR, id, { status: 'failed', error: message, resolvedAt: Date.now() });
+      return res.json(failedResponse(job));
+    }
+    // Still in flight, including a status neither `completed` nor a known
+    // failure -- the raw upstream string rides along as-is (not folded into a
+    // generic "pending") so an unrecognised one reads as unusual rather than
+    // as ordinary progress. pollVideo (client/src/api.js) only branches on
+    // `completed`/`failed`; anything else just reaches its onStatus callback.
+    return res.json({ status, progress: data.progress ?? null });
+  }
+
+  // Completed. The store check above closes the gap once either side finishes;
+  // this closes it while both the sweep and this request are still in flight
+  // for the exact same job at the exact same moment.
+  if (collecting.has(id)) return res.json({ status: 'pending', progress: null });
+  collecting.add(id);
+  try {
+    // The `stored` read above happened before the OpenRouter round trip this
+    // request just made -- real time, long enough for the sweep to have
+    // already collected this exact job while this request was waiting on
+    // fetchVideoStatus. Re-read AFTER taking the lock: the lock only proves
+    // nothing else can start collecting from here on, not that nothing already
+    // finished while `stored` was going stale.
+    const fresh = (await readJobs(OUTPUT_DIR)).find((j) => j.id === id) || stored;
+    if (fresh?.status === 'done') return res.json(doneResponse(fresh));
+    if (fresh?.status === 'failed') return res.json(failedResponse(fresh));
+
+    const job = fresh || {
+      id,
+      project: project || null,
+      params: { prompt, model, duration, resolution, size },
+      refs: videoJobRefs.get(id) || null,
+    };
+    const { savedPath, cost } = await collectVideo(job, data);
+    const saved = await persistJob(OUTPUT_DIR, id, {
+      project: job.project,
+      params: job.params,
+      refs: job.refs,
+      status: 'done',
+      savedPath,
+      cost,
+      resolvedAt: Date.now(),
+    });
+    videoJobRefs.delete(id); // the job is done; nothing else will read it
+    revokeJobShares(id); // and its shared clip goes dark with it
+    res.json(doneResponse(saved));
+  } catch (err) {
+    res.status(502).json({ error: err.message });
+  } finally {
+    collecting.delete(id);
+  }
 });
 
 // Show generated files in the OS file manager. macOS can select many at once
@@ -957,11 +1193,31 @@ app.post('/api/generate', async (req, res) => {
 
     console.log(`  generated → ${imgPath}${cost != null ? `  ($${Number(cost).toFixed(4)})` : ''}`);
 
-    res.json({ image: `data:${mediaType};base64,${first.b64_json}`, savedPath: imgPath, cost });
+    // url alongside the data URL: the client has no project name of its own to build
+    // a file route from, and needs one to persist a pointer instead of the base64
+    // bytes in node data (a 1.4MB png inlined into graph.json would be rewritten on
+    // every keystroke — the same reason the video routes hand one back).
+    res.json({
+      image: `data:${mediaType};base64,${first.b64_json}`,
+      savedPath: imgPath,
+      url: fileUrl(project, imgPath),
+      cost,
+    });
   } catch (err) {
     res.status(500).json({ error: `Generated the image but failed to write it: ${err.message}` });
   }
 });
+
+// A render outlives the browser: sweep once at boot (a job that finished while
+// the app was closed shouldn't wait for the first interval to land) and every
+// 30s after. unref() so this timer alone can never keep the process alive --
+// host.test.js kills a forked server and needs it to actually exit, and a
+// packaged app closing its window must not leave an orphan still polling
+// OpenRouter on its way out.
+sweepJobs().catch((err) => console.log(`  sweep failed: ${err.message}`));
+setInterval(() => {
+  sweepJobs().catch((err) => console.log(`  sweep failed: ${err.message}`));
+}, 30_000).unref();
 
 // PORT=0 asks the OS for any free port, which is how the packaged app avoids
 // fighting whatever else is on 8787. The parent cannot guess it, so it is reported

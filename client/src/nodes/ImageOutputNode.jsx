@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Handle, Position, useReactFlow, useNodes, useEdges } from '@xyflow/react';
 import { Card } from '@astryxdesign/core/Card';
 import { Text } from '@astryxdesign/core/Text';
@@ -6,13 +6,15 @@ import { Button } from '@astryxdesign/core/Button';
 import { Thumbnail } from '@astryxdesign/core/Thumbnail';
 import { Icon } from '@astryxdesign/core/Icon';
 import { VStack } from '@astryxdesign/core/Stack';
+import { useToast } from '@astryxdesign/core/Toast';
 import NodeHeader from './NodeHeader.jsx';
 import RunsControl, { clampRuns } from './RunsControl.jsx';
 import StatusLine from './StatusLine.jsx';
 import { useModels, useModelParams, freeSpot } from './output/core.js';
+import { resetModelParams } from './output/defaults.js';
 import { ModelPicker, ParamControls, CostFoot } from './output/controls.jsx';
 import { buildRequest, splitSections, findWiredTextNode, freeRunPrompts } from '../graph/resolve.js';
-import { generate, runText } from '../api.js';
+import { generate, runText, getProject, SESSION_ID } from '../api.js';
 // Arrow leaving a frame: "send this out onto the canvas". From lucide-react, like
 // every other icon here, so it shares the set's grid and stroke.
 import { ExternalLink as AddToCanvasIcon } from 'lucide-react';
@@ -22,15 +24,45 @@ import { ExternalLink as AddToCanvasIcon } from 'lucide-react';
 // the bill, which is too much to hide behind a segmented control.
 export default function ImageOutputNode({ id, data }) {
   const { getNodes, getEdges, updateNodeData, getNode, addNodes } = useReactFlow();
+  const toast = useToast();
   const [status, setStatus] = useState('idle'); // idle | running | done | error | partial
-  const [results, setResults] = useState([]); // [{ image, cost, savedPath, runIndex }]
+  // [{ image, cost, savedPath, url, runIndex }] — the CURRENT batch's bytes, the
+  // only place a freshly returned base64 lives. Deliberately NOT seeded from
+  // data.results: a lazy useState initialiser runs exactly once per component
+  // instance, and React Flow reuses an instance (rather than mounting a fresh one)
+  // whenever a node with this same id is already on the canvas — which is every
+  // page load, since the starter graph's own imageOutput node shares the loaded
+  // project's id space. Seeding here silently never fired for that path; see
+  // `shown` below for what actually drives the display.
+  const [results, setResults] = useState([]);
   const [done, setDone] = useState(0);
   const [total, setTotal] = useState(null); // null while the run count isn't known yet
   const [repairCost, setRepairCost] = useState(0); // Free mode's re-split call, if any
   const [error, setError] = useState(null);
   const [note, setNote] = useState(null);
+  // Which result is currently being fetched-and-inlined for "add to canvas" — see
+  // addToCanvas below. Keyed by runIndex so several thumbnails' buttons can carry
+  // their own loading state instead of one flag freezing the whole strip.
+  const [addingKeys, setAddingKeys] = useState(() => new Set());
   const liveNodes = useNodes();
   const liveEdges = useEdges();
+
+  // A marker left by a closed or reloaded tab can never be resumed — a batch is a
+  // set of single requests, and the server has already written whatever it wrote
+  // by the time anyone reopens this node. Runs once per mount, which now covers a
+  // genuine project switch too (App.jsx remounts every node on one — see
+  // canvasGeneration): a marker stamped by THIS session must survive that switch
+  // unchanged (it may still be genuinely in flight), so only a marker whose
+  // session does not match gets cleared here. Same self-healing shape as
+  // migrateNodes and VideoOutputNode's inputMode heal.
+  useEffect(() => {
+    if (data.running && data.running.session !== SESSION_ID) {
+      updateNodeData(id, { running: undefined });
+    }
+    // Deliberately mount-only ([]): re-running this whenever `data` changes would
+    // race onGenerate's own marker, clearing a session-matched one the instant it
+    // sets it.
+  }, []);
 
   const { models, defaultModel } = useModels('image');
   // Fall back to the server's configured model until the user picks one, so this
@@ -43,25 +75,57 @@ export default function ImageOutputNode({ id, data }) {
   const params = useModelParams(entry, 'image');
   const { resolutionTiers, ratios, qualities, backgrounds, supported } = params;
 
+  // A just-finished result already carries its bytes; a reopened one (seeded from
+  // data.results after a reload or a project switch) only has a file url and needs
+  // fetching — same reasoning as VideoOutputNode.addVideoToCanvas: a reference has
+  // to travel to OpenRouter, which cannot reach this machine, so it must be inlined.
+  async function toDataUrl(result) {
+    if (result.image) return result.image;
+    const res = await fetch(result.url);
+    if (!res.ok) throw new Error(`could not read the saved file (${res.status})`);
+    const blob = await res.blob();
+    return await new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result);
+      reader.onerror = () => reject(new Error('could not read the file'));
+      reader.readAsDataURL(blob);
+    });
+  }
+
   // Put a generated image on the canvas as an image node, so it can be wired back
   // in as a reference for the next generation. Results no longer land here on their
   // own: a ten-run batch used to bury the canvas in nodes nobody asked for, so this
   // is now driven by the add buttons on the results below.
-  function addToCanvas(result, index, base) {
-    addNodes({
-      id: `gen-${Date.now()}-${index}`,
-      type: 'image',
-      dragHandle: '.xnode-head',
-      position: { x: base.x, y: base.y + 48 * index },
-      data: {
-        fileName: result.savedPath?.split('/').pop() || 'generated',
-        dataUrl: result.image,
-      },
-    });
+  async function addToCanvas(result, index, base) {
+    setAddingKeys((s) => new Set(s).add(result.runIndex));
+    try {
+      const dataUrl = await toDataUrl(result);
+      addNodes({
+        id: `gen-${Date.now()}-${index}`,
+        type: 'image',
+        dragHandle: '.xnode-head',
+        position: { x: base.x, y: base.y + 48 * index },
+        data: {
+          fileName: (result.savedPath || result.url)?.split('/').pop() || 'generated',
+          dataUrl,
+        },
+      });
+    } catch (err) {
+      toast({ body: `Could not add the image: ${err.message}`, uniqueID: `add-image-${id}-${result.runIndex}` });
+    } finally {
+      setAddingKeys((s) => {
+        const next = new Set(s);
+        next.delete(result.runIndex);
+        return next;
+      });
+    }
   }
 
   // Empty the node's result strip. Only this node's display: the files and their
   // sidecars are already on disk, and anything added to the canvas stays there.
+  // Persisted results are cleared too (results: undefined, dropped by JSON.stringify
+  // the same way VideoOutputNode drops a forgotten job) — otherwise a cleared node
+  // would repopulate the next time it reloads.
   function clearResults() {
     setResults([]);
     setRepairCost(0);
@@ -70,6 +134,7 @@ export default function ImageOutputNode({ id, data }) {
     setDone(0);
     setTotal(null);
     setStatus('idle');
+    updateNodeData(id, { results: undefined });
   }
 
   // Render-time twin of findWiredTextNode(): getNodes()/getEdges() are stable
@@ -87,6 +152,28 @@ export default function ImageOutputNode({ id, data }) {
     setStatus('running');
     setError(null);
     setResults([]);
+    // Captured before anything is awaited: every guard below compares against
+    // this, not against a ref or a token held by this component instance. A
+    // rename (not a genuine switch) reuses this very instance, and even when a
+    // switch DOES remount it, updateNodeData still reaches into whichever
+    // project is CURRENTLY loaded — never the one this closure started in — so a
+    // write after an await needs its own check regardless of what remounted.
+    const startedIn = getProject();
+    // A fresh run's persisted pointer starts empty too, same reasoning as
+    // clearResults: a run interrupted before its first result lands must not leave
+    // the PREVIOUS batch's images to reappear on the next reload of a blank node.
+    // `running` is set in the same call: local `status` alone is wiped by a
+    // genuine switch's remount, so without a persisted marker a switch-and-back
+    // would show an enabled Generate button for a batch still in flight — a
+    // second click would be a second paid run. Stamped with SESSION_ID so a
+    // marker outliving this tab (a reload, or a close) reads as abandoned on
+    // mount instead of disabling the button forever — see the mount effect
+    // above. Boolean-ish fact plus its provenance, not a progress log: done/total
+    // stay local only, same as before.
+    updateNodeData(id, {
+      results: undefined,
+      running: { startedAt: Date.now(), session: SESSION_ID },
+    });
     setDone(0);
     setNote(null);
     setRepairCost(0);
@@ -184,14 +271,46 @@ export default function ImageOutputNode({ id, data }) {
             runIndex: i + 1,
             runCount: prompts.length,
           }).then((resp) => {
+            // Every request in a batch resolves independently, so the project can
+            // change between one landing and the next — this is not a
+            // once-per-batch check. Skipping here skips ALL of a stale write: the
+            // local strip and the persisted pointer both, not just the last one.
+            // The image this response carries is real and already billed, but
+            // attributing it to whatever node now sits at this id would be
+            // attributing it to the wrong project's node — see the task's own
+            // account of why this guard exists.
+            if (getProject() !== startedIn) return resp;
             setDone((d) => d + 1);
             // runIndex travels with the result so thumbnails, canvas placement, and
             // labels all agree on run order regardless of completion order.
-            setResults((r) => [...r, { ...resp, runIndex: i }]);
+            const withIndex = { ...resp, runIndex: i };
+            setResults((r) => [...r, withIndex]);
+            // Persist a pointer alongside it, never the bytes: `image` is a base64
+            // data URL, and inlining that into node data means it gets rewritten
+            // into graph.json on every keystroke (CLAUDE.md). Every result in the
+            // batch is persisted as it lands, not just the last, and as a functional
+            // update rather than a captured `data` — several runs in this batch can
+            // resolve in the same tick, and each must append to what the LAST one
+            // just wrote, not to the data this closure was created with.
+            updateNodeData(id, (node) => ({
+              results: [
+                ...(node.data.results || []),
+                { url: withIndex.url, savedPath: withIndex.savedPath, cost: withIndex.cost, runIndex: withIndex.runIndex },
+              ],
+            }));
             return resp;
           }),
         ),
       );
+
+      if (getProject() !== startedIn) {
+        // The switch outlasted the whole batch, not just one result in it —
+        // every individual write above already skipped itself. Nothing left here
+        // is this project's to touch; only clear the marker, so whatever node
+        // now sits at this id is not left carrying a run that is not its own.
+        updateNodeData(id, { running: undefined });
+        return;
+      }
 
       const failures = settled.filter((s) => s.status === 'rejected').map((s) => s.reason?.message || 'failed');
       const ok = settled.length - failures.length;
@@ -201,15 +320,37 @@ export default function ImageOutputNode({ id, data }) {
       } else {
         setStatus('done');
       }
+      updateNodeData(id, { running: undefined });
     } catch (err) {
+      if (getProject() !== startedIn) {
+        updateNodeData(id, { running: undefined });
+        return;
+      }
       setError(err.message);
       setStatus('error');
+      updateNodeData(id, { running: undefined });
     }
   }
 
-  const spent = results.reduce((sum, r) => sum + (Number(r.cost) || 0), 0) + repairCost;
-  const hasSpend = results.some((r) => r.cost != null) || repairCost > 0;
-  const hasStrip = results.length > 0 || repairCost > 0;
+  // What the strip actually displays: the in-flight/just-finished batch if there is
+  // one, else whatever pointer survived in node data (a reopened node that never
+  // ran a batch in THIS component instance — see the comment on `results` above).
+  // Derived on every render rather than seeded once, so it stays correct across
+  // the reused-instance page-load case that a lazy initialiser missed entirely.
+  const shown = results.length ? results : (data.results ?? []);
+
+  const spent = shown.reduce((sum, r) => sum + (Number(r.cost) || 0), 0) + repairCost;
+  const hasSpend = shown.some((r) => r.cost != null) || repairCost > 0;
+  const hasStrip = shown.length > 0 || repairCost > 0;
+
+  // True whenever a batch is in flight, whether or not THIS instance is the one
+  // that started it: local `status` alone is wiped the moment a genuine project
+  // switch remounts the node (App.jsx's canvasGeneration), so a marker persisted
+  // in data is what lets the button keep reading "Generating…" across that gap.
+  // Read from data rather than a ref for the same reason `startedIn` above is —
+  // a rename reuses this very component instance for what could, after enough
+  // switching, be sitting on a different project's node of this id.
+  const isRunning = status === 'running' || Boolean(data.running);
 
   return (
     <Card width={300} padding={0}>
@@ -221,7 +362,7 @@ export default function ImageOutputNode({ id, data }) {
           models={models}
           value={model}
           kind="image"
-          onChange={(v) => updateNodeData(id, { model: v })}
+          onChange={(v) => updateNodeData(id, { model: v, ...resetModelParams('imageOutput') })}
         />
 
         <ParamControls params={params} data={data} onChange={(u) => updateNodeData(id, u)} />
@@ -240,8 +381,12 @@ export default function ImageOutputNode({ id, data }) {
 
         <Button
           label={
-            status === 'running'
-              ? total
+            isRunning
+              ? // total/done are local-only (never persisted — see data.running's
+                // own comment), so a node showing a marker from BEFORE its last
+                // remount has no progress count to report, only that something
+                // is running.
+                status === 'running' && total
                 ? `Generating ${done} / ${total}…`
                 : 'Generating…'
               : runs > 1 && !freeRuns
@@ -249,12 +394,13 @@ export default function ImageOutputNode({ id, data }) {
                 : 'Generate'
           }
           variant="primary"
-          isLoading={status === 'running'}
-          // Free with nothing wired in has no list to work from, so there is
-          // nothing to generate. Disabled rather than clickable-then-failing: the
-          // hint below already says what to wire, and an error saying the same
-          // thing would just be the hint again in red.
-          isDisabled={freeRuns && !liveWiredTextNode}
+          isLoading={isRunning}
+          // A batch in flight disables Generate outright — a second click would be
+          // a second paid run for the one this node is already tracking. Free with
+          // nothing wired in has no list to work from either; the hint below
+          // already says what to wire, so an error saying the same thing would
+          // just be the hint again in red.
+          isDisabled={isRunning || (freeRuns && !liveWiredTextNode)}
           onClick={onGenerate}
         />
 
@@ -281,13 +427,16 @@ export default function ImageOutputNode({ id, data }) {
 
         {hasStrip && (
           <VStack gap={1}>
-            {[...results]
+            {[...shown]
               .sort((a, b) => a.runIndex - b.runIndex)
               .map((r) => (
                 <span className="xnode-result" key={r.runIndex}>
                   <Thumbnail
                     className="xnode-thumb"
-                    src={r.image}
+                    // A just-finished run still has the bytes it fetched; a
+                    // reopened node (after a project switch or reload) only has
+                    // the pointer that survived — see `shown` above.
+                    src={r.image ?? r.url}
                     alt={`generated result ${r.runIndex + 1}`}
                     label={`result ${r.runIndex + 1}`}
                   />
@@ -298,25 +447,30 @@ export default function ImageOutputNode({ id, data }) {
                       isIconOnly
                       icon={<Icon icon={AddToCanvasIcon} size="xsm" />}
                       size="sm"
+                      isLoading={addingKeys.has(r.runIndex)}
                       onClick={() => addToCanvas(r, 0, freeSpot(getNode, getNodes, id))}
                     />
                   </span>
                 </span>
               ))}
-            {results.length > 1 && (
+            {shown.length > 1 && (
               <Button
                 label="Add all to canvas"
                 icon={<AddToCanvasIcon />}
                 variant="secondary"
                 size="sm"
+                isLoading={addingKeys.size > 0}
                 // One scan, then an index offset per image: freeSpot() reads
                 // getNodes(), which will not show the nodes added a line earlier in
-                // this same tick, so scanning per image would stack them.
-                onClick={() => {
+                // this same tick, so scanning per image would stack them. Sequential
+                // (not Promise.all) since each add reads/writes the same addingKeys
+                // state and there is no reason several fetches need to race.
+                onClick={async () => {
                   const base = freeSpot(getNode, getNodes, id);
-                  [...results]
-                    .sort((a, b) => a.runIndex - b.runIndex)
-                    .forEach((r, i) => addToCanvas(r, i, base));
+                  const ordered = [...shown].sort((a, b) => a.runIndex - b.runIndex);
+                  for (let i = 0; i < ordered.length; i++) {
+                    await addToCanvas(ordered[i], i, base);
+                  }
                 }}
               />
             )}
@@ -332,8 +486,8 @@ export default function ImageOutputNode({ id, data }) {
         after={
           hasStrip ? (
             <>
-              {hasSpend && results.length > 1 && (
-                <Text type="supporting" color="secondary">{results.length} images</Text>
+              {hasSpend && shown.length > 1 && (
+                <Text type="supporting" color="secondary">{shown.length} images</Text>
               )}
               <span className="xnode-foot-end">
                 <Button

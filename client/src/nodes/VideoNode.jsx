@@ -8,7 +8,7 @@ import { Icon } from '@astryxdesign/core/Icon';
 import { Text } from '@astryxdesign/core/Text';
 import NodeHeader from './NodeHeader.jsx';
 import StatusLine from './StatusLine.jsx';
-import { imageRefNumbers } from '../graph/resolve.js';
+import { sourceRoles } from '../graph/resolve.js';
 
 // Base64 inflates ~4/3 and the whole graph rides in one JSON body (and lands in
 // graph.json on every autosave), so a hard cap keeps a single clip from blowing
@@ -21,9 +21,9 @@ export default function VideoNode({ id, data }) {
   const [error, setError] = useState('');
   // Draft of the "paste a link" field, only until it is applied.
   const [link, setLink] = useState('');
-  // Same per-consumer numbering as images, counted among video nodes only, so
+  // Same per-consumer role reporting as images, read off this node's own type, so
   // "image 1" and "video 1" can coexist on one output.
-  const nums = imageRefNumbers(useNodes(), useEdges(), id, 'video');
+  const roles = sourceRoles(useNodes(), useEdges(), id);
 
   function onFile(file) {
     if (!file) return;
@@ -49,7 +49,7 @@ export default function VideoNode({ id, data }) {
     updateNodeData(id, { dataUrl: url, fileName: name });
   }
 
-  const status = nums.length ? nums.join(' / ') : data.dataUrl ? 'not connected' : undefined;
+  const status = roles.length ? roles.join(' / ') : data.dataUrl ? 'not connected' : undefined;
 
   // Dropping a clip anywhere on the node fills (or replaces) it. Stopping
   // propagation matters: the canvas drop handler would otherwise also spawn a
@@ -77,7 +77,7 @@ export default function VideoNode({ id, data }) {
         kind="video"
         family="input"
         right={status}
-        rightTone={nums.length ? 'accent' : 'secondary'}
+        rightTone={roles.length ? 'accent' : 'secondary'}
       />
       <div className="xnode-body">
         {data.dataUrl ? (

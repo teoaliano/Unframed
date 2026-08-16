@@ -16,13 +16,51 @@ Keep that shape: the website's What's new page parses this file.
 
 ## 2026-08-15
 
+### Added
+
+- Video nodes choose how wired images are used: as references, as a first frame, or
+  as first and last frames. Models that do not accept frames do not offer the choice.
+- Inputs a mode has no room for keep their connection, marked red, and their badge
+  reads `—`.
+
+### Changed
+
+- Reference badge numbers are now ordered by the consuming output's position on
+  the canvas rather than always counting up from 1, so the same wired image can
+  read `2 / 1` — the position tells you which output gives which rank.
+- Switching a model now returns that node's model-specific settings to that
+  model's defaults, whether or not the new model could have honoured the old
+  value, the same as a freshly added node on that model.
+
 ### Fixed
 
+- An `@word` in a prompt that matches no node id is left as typed. It used to be
+  deleted, so "@golden hour" became " hour".
 - The `@` reference menu appears again when you type `@` in a prompt. It was being
   drawn just outside the node's card, which clips to its rounded corners, so the
   menu was cut away entirely and no suggestions ever showed.
 - That menu now also lists Text nodes, not just other prompts. It had dropped them
   when the output nodes were split on 2026-08-13.
+- A video that takes longer than the app was willing to wait is no longer lost —
+  the node remembers its job and picks it up when you come back, and the server
+  finishes and saves it on its own even if the app is closed the whole time. A
+  render that was queued upstream for over an hour prompted this.
+- A finished image or video no longer looks lost after you switch projects or
+  reload — the node remembers what it made and keeps showing it, and "Add to
+  canvas" still works. The file and its sidecar were always on disk; only the
+  node's own memory of them was being discarded.
+- A video job OpenRouter marks `expired` (or `cancelled`/`canceled`) now ends
+  the render with that message shown, instead of spinning forever: the server
+  only recognised `completed`/`failed`, so a job stuck upstream past its own
+  time limit was polled every 30 seconds for the rest of the process with no
+  way out. A render that sat queued for over two hours prompted this.
+- An image or text run in flight now keeps its node's Generate/Run button
+  disabled across a project switch, so coming back to it can no longer invite a
+  second, paid click. A run that finishes after you have switched away no
+  longer writes its result into whatever project you have since moved to —
+  node ids are shared by every project, so that could otherwise land a
+  different project's images, or an @id-resolvable text answer, on a same-id
+  node that never asked for them.
 
 ## 2026-08-13
 

@@ -6,14 +6,14 @@ import { Thumbnail } from '@astryxdesign/core/Thumbnail';
 import { Button } from '@astryxdesign/core/Button';
 import { Icon } from '@astryxdesign/core/Icon';
 import NodeHeader from './NodeHeader.jsx';
-import { imageRefNumbers } from '../graph/resolve.js';
+import { sourceRoles } from '../graph/resolve.js';
 
 export default function ImageNode({ id, data }) {
   const { updateNodeData } = useReactFlow();
-  // Live numbers this image will be sent as, recomputed as connections/positions
-  // change. One entry per consuming node — usually one, two when the same image is
-  // image 1 to one target and image 2 to another. Empty = not wired anywhere.
-  const nums = imageRefNumbers(useNodes(), useEdges(), id);
+  // What each consuming node will do with this image, recomputed as connections,
+  // positions and input modes change. "2 / —" = image 2 to one output, unused by
+  // another. Empty = not wired anywhere.
+  const roles = sourceRoles(useNodes(), useEdges(), id);
 
   function onFile(file) {
     if (!file) return;
@@ -33,7 +33,7 @@ export default function ImageNode({ id, data }) {
     img.src = data.dataUrl;
   }, [data.dataUrl, data.aspect, id, updateNodeData]);
 
-  const status = nums.length ? nums.join(' / ') : data.dataUrl ? 'not connected' : undefined;
+  const status = roles.length ? roles.join(' / ') : data.dataUrl ? 'not connected' : undefined;
 
   // Dropping a picture anywhere on the node fills (or replaces) it. Stopping
   // propagation matters: the canvas has its own drop handler that would otherwise
@@ -61,7 +61,7 @@ export default function ImageNode({ id, data }) {
         kind="image"
         family="input"
         right={status}
-        rightTone={nums.length ? 'accent' : 'secondary'}
+        rightTone={roles.length ? 'accent' : 'secondary'}
       />
       <div className="xnode-body">
         {data.dataUrl ? (

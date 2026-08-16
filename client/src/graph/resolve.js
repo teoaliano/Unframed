@@ -18,11 +18,24 @@ export const isOutput = (n) => Boolean(n?.type?.endsWith('Output'));
 // substituting data.text, and generations would quietly build from the wrong text.
 export const isTextOutput = (n) => n?.type === 'textOutput';
 
+// Its own predicate for the same reason isTextOutput has one: only a video output
+// carries an input mode, and asking the wrong node type for one silently changes
+// what gets sent.
+export const isVideoOutput = (n) => n?.type === 'videoOutput';
+
+// Seedance takes exactly one task type per request -- references OR frames, never
+// both (docs/superpowers/specs/2026-08-15-video-input-mode-design.md). The mode
+// names map to the frame slots the request will carry.
+const MODE_FRAMES = {
+  first_frame: ['first_frame'],
+  first_last: ['first_frame', 'last_frame'],
+};
+
 function substitute(text, refs, stack) {
-  return (text || '').replace(TOKEN_RE, (_, raw) => {
+  return (text || '').replace(TOKEN_RE, (all, raw) => {
     const ref = raw.trim();
     if (refs.has(ref)) return resolveRef(ref, refs, stack);
-    return ''; // unknown ref -> nothing
+    return all; // unknown ref -> left as typed, same as insert.js's rewriter
   });
 }
 
@@ -39,33 +52,59 @@ function resolveRef(id, refs, stack) {
   return substitute(node.data?.text, refs, [...stack, id]);
 }
 
-// Build the generation request for a given output node id.
-// Returns { prompt, input_references }.
-export function buildRequest(nodes, edges, outputId) {
+// Every source wired into one output, split by the role its mode gives them.
+// The single home for that split: buildRequest sends from it and the input node
+// badges read it, so what a node claims and what is sent cannot drift.
+export function bucketSources(nodes, edges, outputId) {
   const byId = new Map(nodes.map((n) => [n.id, n]));
-  // Both prompt and text nodes can be pulled in with @id.
-  const refs = new Map(
-    nodes.filter((n) => n.type === 'prompt' || isTextOutput(n)).map((n) => [n.id, n]),
-  );
-
-  // Every node wired into this output node, top-to-bottom for predictable order.
+  const output = byId.get(outputId);
   const sources = edges
     .filter((e) => e.target === outputId)
     .map((e) => byId.get(e.source))
     .filter(Boolean)
     .sort((a, b) => (a.position?.y ?? 0) - (b.position?.y ?? 0));
 
-  // Images and videos (with media loaded) become the ordered references, mixed in
-  // Y-order. A node's position among its own kind is the "image N" / "video N" the
-  // user sees on the node and types in prompts — two independent counters, because
-  // that's how the badges number them.
-  const references = sources
-    .filter((n) => (n.type === 'image' || n.type === 'video') && n.data.dataUrl)
-    .map((n) =>
-      n.type === 'video'
-        ? { type: 'video_url', video_url: { url: n.data.dataUrl } }
-        : { type: 'image_url', image_url: { url: n.data.dataUrl } },
-    );
+  const media = sources.filter(
+    (n) => (n.type === 'image' || n.type === 'video') && n.data?.dataUrl,
+  );
+  const mode = isVideoOutput(output) ? output?.data?.inputMode : undefined;
+  const wanted = MODE_FRAMES[mode];
+  if (!wanted) return { sources, references: media, frames: [], excess: [] };
+
+  // Frames are images only, top to bottom -- the same Y ordering that decides
+  // prompt order and "image 1".
+  const images = media.filter((n) => n.type === 'image');
+  const frames = wanted
+    .map((frame_type, i) => (images[i] ? { node: images[i], frame_type } : null))
+    .filter(Boolean);
+  const used = new Set(frames.map((f) => f.node.id));
+  return {
+    sources,
+    references: [],
+    frames,
+    excess: media.filter((n) => !used.has(n.id)).map((n) => n.id),
+  };
+}
+
+// Build the generation request for a given output node id.
+// Returns { prompt, input_references, frame_images }. frame_images is empty unless
+// the output is a video node asking for a frame mode.
+export function buildRequest(nodes, edges, outputId) {
+  const refs = new Map(
+    nodes.filter((n) => n.type === 'prompt' || isTextOutput(n)).map((n) => [n.id, n]),
+  );
+  const { sources, references, frames } = bucketSources(nodes, edges, outputId);
+
+  const input_references = references.map((n) =>
+    n.type === 'video'
+      ? { type: 'video_url', video_url: { url: n.data.dataUrl } }
+      : { type: 'image_url', image_url: { url: n.data.dataUrl } },
+  );
+  const frame_images = frames.map(({ node, frame_type }) => ({
+    type: 'image_url',
+    image_url: { url: node.data.dataUrl },
+    frame_type,
+  }));
 
   const promptParts = [];
   for (const node of sources) {
@@ -74,35 +113,43 @@ export function buildRequest(nodes, edges, outputId) {
     if (text) promptParts.push(text);
   }
 
-  return { prompt: promptParts.join('\n\n'), input_references: references };
+  return { prompt: promptParts.join('\n\n'), input_references, frame_images };
 }
 
-// The reference numbers an image/video node will be sent as, one per node consuming
-// it (1-based, ascending, deduplicated). Empty when it has no media or feeds nothing.
-// Numbering is per consumer because that is how buildRequest sends them: an image can
-// be image 1 to a text node and image 2 to an output node at the same time. It is
-// also per kind — images and videos count independently, so "image 1" and "video 1"
-// can coexist on one consumer. Kept here so the node badge and buildRequest cannot
-// disagree. `nodes`/`edges` are the live React Flow arrays.
-export function imageRefNumbers(nodes, edges, nodeId, kind = 'image') {
+// What each consuming output will do with this image or video, one entry per
+// consumer, deduplicated. A number is its position in that output's references
+// ("image 2"); `first`/`last` is a frame slot; `—` means the output's mode has no
+// room for it and it will not be sent. Per consumer because an image can be image 2
+// to one node and the first frame of another. Kept beside bucketSources so the
+// badge and the request cannot disagree. `nodes`/`edges` are the live arrays.
+export function sourceRoles(nodes, edges, nodeId) {
   const self = nodes.find((n) => n.id === nodeId);
-  if (!self || self.type !== kind || !self.data?.dataUrl) return [];
+  if (!self || (self.type !== 'image' && self.type !== 'video') || !self.data?.dataUrl) return [];
 
-  const byId = new Map(nodes.map((n) => [n.id, n]));
-  const consumers = nodes.filter(isOutput);
-  const ranks = new Set();
-
+  const roles = [];
+  // Consumers in canvas order, top to bottom -- the same rule that orders prompts and
+  // numbers references. Without it the badge would read "1 / 2" or "2 / 1" for the same
+  // graph, depending only on which output happened to be created first.
+  const consumers = nodes
+    .filter(isOutput)
+    .sort((a, b) => (a.position?.y ?? 0) - (b.position?.y ?? 0));
   for (const consumer of consumers) {
-    const sameKind = edges
-      .filter((e) => e.target === consumer.id)
-      .map((e) => byId.get(e.source))
-      .filter((n) => n && n.type === kind && n.data?.dataUrl)
-      .sort((a, b) => (a.position?.y ?? 0) - (b.position?.y ?? 0));
+    const { references, frames, excess } = bucketSources(nodes, edges, consumer.id);
+    const frame = frames.find((f) => f.node.id === nodeId);
+    if (frame) {
+      roles.push(frame.frame_type === 'first_frame' ? 'first' : 'last');
+      continue;
+    }
+    if (excess.includes(nodeId)) {
+      roles.push('—');
+      continue;
+    }
+    // Numbering is per kind: "image 1" and "video 1" coexist on one consumer.
+    const sameKind = references.filter((n) => n.type === self.type);
     const idx = sameKind.findIndex((n) => n.id === nodeId);
-    if (idx !== -1) ranks.add(idx + 1);
+    if (idx !== -1) roles.push(String(idx + 1));
   }
-
-  return [...ranks].sort((a, b) => a - b);
+  return [...new Set(roles)];
 }
 
 // The text node feeding this output, if any — Free mode needs its result to know
@@ -124,8 +171,11 @@ export function findWiredTextNode(nodes, edges, outputId) {
 // keeps a blank line inside the result, or an @id reference to the list itself, from
 // smuggling the whole list back in. Each block is appended after a blank line.
 export function freeRunPrompts(nodes, edges, outputId, textNodeId, blocks) {
+  // The list node stays in the graph with an empty result rather than being removed:
+  // @its-id must resolve to nothing, and an absent node would now leave the token
+  // itself in the prompt. Known-and-empty is the intent; unknown was a side effect.
   const shared = buildRequest(
-    nodes.filter((n) => n.id !== textNodeId),
+    nodes.map((n) => (n.id === textNodeId ? { ...n, data: { ...n.data, result: '' } } : n)),
     edges,
     outputId,
   ).prompt;
