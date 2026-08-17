@@ -28,15 +28,17 @@
 
 `POST /api/generate`, `POST /api/text` and `POST /api/video` each wrap only the `fetch()` in `try/catch`; the `await orRes.text()` that reads the body sits just outside it. A socket dropping mid-body-read — after OpenRouter accepted the request, so after the money is spent — rejects there, and the request hangs. The user loses a paid generation to a spinner with no error.
 
-One of the three gets a deterministic end-to-end test (`/api/text`, the simplest — no share tokens to revoke), via a stub that sends headers plus half a body and then destroys the socket. The other two get the identical four-line pattern and are review-verified; the test pins the pattern itself, and the assertion that matters — the route ANSWERS rather than hangs — is exactly what a regression would break.
+**All three share one helper** (owner's decision, 2026-08-17, over three inline copies): `readUpstreamBody(orRes, what)` returns `{raw}` or `{error}`. This follows the repo's own precedent — `fetchVideoStatus` exists so "ask upstream" has one implementation — and it is what makes a single test cover all three routes rather than one, since the other two call the same code. Each route keeps what is genuinely its own: `/api/video` revokes its minted share tokens like every other failure branch in that route, and `what` names the thing the user paid for so the copy fits.
+
+The test drives `/api/text` (the simplest — no share tokens), via a stub that sends headers plus half a body and then destroys the socket.
 
 **Files:**
-- Modify: `server/index.js` — a `CHAT_COMPLETIONS_URL` const above `POST /api/text` (~line 436), and the three `const raw = await orRes.text();` lines (~482 in `/api/text`, ~830 in `/api/video`, ~1373 in `/api/generate`)
+- Modify: `server/index.js` — a `CHAT_COMPLETIONS_URL` const and the `readUpstreamBody` helper above `POST /api/text` (~line 436), and the three `const raw = await orRes.text();` lines (~482 in `/api/text`, ~830 in `/api/video`, ~1373 in `/api/generate`)
 - Test: `server/host.test.js`
 
 **Interfaces:**
 - Consumes: nothing new.
-- Produces: `UNFRAMED_TEST_CHAT_COMPLETIONS_URL` (env, test-only), consumed only by this task's test.
+- Produces: `readUpstreamBody(orRes, what) -> Promise<{raw: string} | {error: string}>` — module-private in `server/index.js`, called by all three generation routes and nothing else. `UNFRAMED_TEST_CHAT_COMPLETIONS_URL` (env, test-only), consumed only by this task's test.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -111,6 +113,25 @@ In `server/index.js`, directly above `app.post('/api/text', ...)` (~line 436), a
 // real endpoint will do on demand.
 const CHAT_COMPLETIONS_URL =
   process.env.UNFRAMED_TEST_CHAT_COMPLETIONS_URL || 'https://openrouter.ai/api/v1/chat/completions';
+
+// Reading a response BODY is a second network operation after the fetch that
+// delivered the headers, and it can die on its own -- after OpenRouter accepted
+// the request, so after the money is spent. Unwrapped, that rejection hangs the
+// request (Express 4 here has no error-handling middleware, so a rejected async
+// handler sends NO response) and the user loses a paid run to a spinner with no
+// message. One implementation for all three generation routes, the same reason
+// fetchVideoStatus below exists: "ask upstream" is one behaviour, not three.
+// `what` names the thing the user paid for, so the copy fits the route. Callers
+// keep their own cleanup -- /api/video's minted share tokens, for one.
+async function readUpstreamBody(orRes, what) {
+  try {
+    return { raw: await orRes.text() };
+  } catch (err) {
+    return {
+      error: `Lost the connection while reading OpenRouter's answer: ${err.message}. The ${what} may still have completed and been charged — check your OpenRouter activity page.`,
+    };
+  }
+}
 ```
 
 In `POST /api/text`, change the fetch target from the literal `'https://openrouter.ai/api/v1/chat/completions'` to `CHAT_COMPLETIONS_URL`, and replace:
@@ -122,51 +143,30 @@ In `POST /api/text`, change the fetch target from the literal `'https://openrout
 with:
 
 ```js
-  // The try above wraps only the fetch, but the body read is a SECOND network
-  // operation and can die on its own -- after OpenRouter accepted the request,
-  // so after the money is spent. Unwrapped, that rejection hangs the request
-  // (Express 4, no error middleware); the user loses a paid run to a spinner.
-  let raw;
-  try {
-    raw = await orRes.text();
-  } catch (err) {
-    return res.status(502).json({
-      error: `Lost the connection while reading OpenRouter's answer: ${err.message}. The run may still have completed and been charged — check your OpenRouter activity page.`,
-    });
-  }
+  const { raw, error: bodyError } = await readUpstreamBody(orRes, 'run');
+  if (bodyError) return res.status(502).json({ error: bodyError });
 ```
 
-In `POST /api/generate` (~line 1373), replace `const raw = await orRes.text();` with the identical block, with a one-line comment instead of the full one:
+In `POST /api/generate` (~line 1373), replace `const raw = await orRes.text();` with:
 
 ```js
-  // Same wrap as /api/text: the body read is a second network operation, and
-  // unwrapped it hangs the request after the money is already spent.
-  let raw;
-  try {
-    raw = await orRes.text();
-  } catch (err) {
-    return res.status(502).json({
-      error: `Lost the connection while reading OpenRouter's answer: ${err.message}. The run may still have completed and been charged — check your OpenRouter activity page.`,
-    });
-  }
+  const { raw, error: bodyError } = await readUpstreamBody(orRes, 'run');
+  if (bodyError) return res.status(502).json({ error: bodyError });
 ```
 
 In `POST /api/video` (~line 830), the same — plus the share-token revocation every other failure branch in that route performs:
 
 ```js
-  // Same wrap as /api/text -- and like every other failure branch in this
-  // route, the minted share tokens go dark: a job that was never learned about
-  // has nothing left to fetch its refs.
-  let raw;
-  try {
-    raw = await orRes.text();
-  } catch (err) {
+  const { raw, error: bodyError } = await readUpstreamBody(orRes, 'render');
+  if (bodyError) {
+    // Like every other failure branch in this route: a job nothing will ever
+    // learn about has no refs left to fetch, so its share tokens go dark.
     for (const t of mintedTokens) revokeShare(t);
-    return res.status(502).json({
-      error: `Lost the connection while reading OpenRouter's answer: ${err.message}. The render may still have started and been charged — check your OpenRouter activity page.`,
-    });
+    return res.status(502).json({ error: bodyError });
   }
 ```
+
+Note the rename to `bodyError`: all three routes already have an `err` in scope from the surrounding `catch` blocks, and `/api/video` also has `error` on the parsed upstream payload — a bare `error` would shadow confusingly.
 
 - [ ] **Step 4: Run to verify it passes, then the whole suite**
 
@@ -812,6 +812,7 @@ git commit -m "Record the hardened routes and closed sweep coverage in the docs"
 
 ## Self-Review
 
+- **Owner decisions applied before execution (2026-08-17):** Task 1 uses one shared `readUpstreamBody` helper rather than three inline try/catch copies, so a single test covers all three routes and there is no duplicated logic block for the review to flag.
 - **Spec coverage:** the three in-scope deferred items map to Tasks 1–2 (seven awaits: three body reads in Task 1; `PUT /api/projects/:name`'s two, `GET /api/projects`'s two — one route wrap each — plus `PUT /api/presets` and the poll persist in Task 2), Task 3 (sweep-only branches), Task 4 (download-window rename + record/folder mislabel). The parked items and the preset-assets feature are explicitly out of scope, recorded in Task 5's status.md step per the owner's answers of 2026-08-17.
 - **Placeholders:** none — every step carries its code, command, or exact replacement text.
 - **Type consistency:** `collectVideo` returns `{savedPath, cost, project}` in Task 4 and both callers destructure exactly that; `UNFRAMED_TEST_CHAT_COMPLETIONS_URL` is named identically in Task 1's stub env and const; Task 3 consumes the give-up message text exactly as `sweepOneInner` writes it.
