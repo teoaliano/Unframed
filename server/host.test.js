@@ -1428,4 +1428,95 @@ try {
   }
 }
 
+// ---- reveal standalone: an IPC channel is not proof of the shell (2026-08-17) ----
+// `npm run server` is `node --watch`, and watch mode runs the app in a child of
+// its own WITH an IPC channel, so `process.send` is a function in ordinary
+// development. Gating the hosted branch on `process.send` alone therefore fired
+// the reveal message at Node's file watcher -- which drops messages it doesn't
+// know -- while the route still answered 200, so the client had no error to
+// report and Finder simply never opened. Every other hosted behaviour is gated
+// on an env var unset in a clone (docs/releases.md's first invariant); this one
+// was gated on ambient plumbing instead, and that is the whole bug.
+//
+// So this fork is the dev setup: the channel, without the marker the shell sets
+// (`UNFRAMED_CLIENT_DIST`). It keeps UNFRAMED_DATA_DIR, because that is what
+// points `.env` at a temp dir -- a fork without it reads the REAL .env, whose
+// `override: true` would hand this test the real output folder, the real key and
+// port 8787. Which is also why the hosted gate cannot be UNFRAMED_DATA_DIR: no
+// test could then take the standalone branch safely at all.
+//
+// The platform's opener is shimmed onto PATH so the assertion can see which
+// branch ran without a real Finder window opening mid-suite. Skipped on Windows,
+// where the branch spawns `explorer` and a POSIX shim would not stand in for it.
+if (process.platform !== 'win32') {
+  const revealHome = await fs.mkdtemp(path.join(os.tmpdir(), 'unframed-reveal-'));
+  const outDir7 = path.join(revealHome, 'out');
+  const binDir = path.join(revealHome, 'bin');
+  const marker = path.join(revealHome, 'spawned.txt');
+  await fs.mkdir(outDir7);
+  await fs.mkdir(binDir);
+  await fs.writeFile(path.join(outDir7, 'shot.png'), 'x');
+
+  const opener = process.platform === 'darwin' ? 'osascript' : 'xdg-open';
+  await fs.writeFile(
+    path.join(binDir, opener),
+    `#!/bin/sh\nprintf '%s\\n' "$@" > ${JSON.stringify(marker)}\n`,
+    { mode: 0o755 },
+  );
+
+  // Deleted rather than merely left out of the spread: `fork` inherits this
+  // shell's environment, so on a machine that happens to export the marker this
+  // block would take the hosted branch and quietly assert nothing.
+  const standaloneEnv = {
+    ...process.env,
+    UNFRAMED_DATA_DIR: revealHome,
+    OUTPUT_DIR: outDir7,
+    PORT: '0',
+    PATH: `${binDir}:${process.env.PATH}`,
+    OPENROUTER_API_KEY: 'sk-or-v1-1111111111111111111111111111111111111111111111111111',
+  };
+  delete standaloneEnv.UNFRAMED_CLIENT_DIST;
+
+  const child7 = fork(path.join(here, 'index.js'), { env: standaloneEnv, stdio: 'ignore' });
+
+  try {
+    const ready7 = await waitForMessage(child7, 'ready');
+    let hostedMessage = null;
+    child7.on('message', (m) => {
+      if (m?.type === 'reveal') hostedMessage = m;
+    });
+
+    const res7 = await fetch(`http://127.0.0.1:${ready7.port}/api/reveal`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ fileName: 'shot.png' }),
+    });
+    assert.equal(res7.status, 200, 'the route answers either way -- which is why this failed silently');
+
+    // The spawn is detached and fire-and-forget, so the shim's marker file is
+    // the only evidence it ran. Polled with a deadline rather than slept on:
+    // bounded, so a regression fails loudly instead of hanging `npm test`.
+    const deadline7 = Date.now() + 5000;
+    let spawned = '';
+    while (Date.now() < deadline7) {
+      spawned = await fs.readFile(marker, 'utf8').catch(() => '');
+      if (spawned) break;
+      await new Promise((r) => setTimeout(r, 50));
+    }
+    assert.match(
+      spawned,
+      /shot\.png/,
+      `with no shell marker, reveal must drive ${opener} on this machine -- not post a message nobody reads`,
+    );
+    assert.equal(
+      hostedMessage,
+      null,
+      'and it must not take the hosted branch: node --watch hands every developer that same channel',
+    );
+  } finally {
+    child7.kill();
+    await fs.rm(revealHome, { recursive: true, force: true });
+  }
+}
+
 console.log('host.test.js: ok');
