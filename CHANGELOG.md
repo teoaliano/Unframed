@@ -17,6 +17,11 @@ Keep that shape: the website's What's new page parses this file.
 
 ### Fixed
 
+- Pasting an image or video onto the canvas works in the desktop app. It did
+  nothing there — no node, no error — while working normally under `npm run dev`,
+  so nothing about the canvas looked wrong until you tried it in the app.
+  Drag-and-drop was never affected, and neither was pasting into a selected
+  reference node.
 - The settings dialog scrolls. It caps at three quarters of the window height, and
   everything past that was cut off rather than reachable — on a small laptop, or a
   resized window, that included the Save button, so there was no way to finish. The
