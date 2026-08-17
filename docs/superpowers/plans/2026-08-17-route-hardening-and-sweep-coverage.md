@@ -713,10 +713,19 @@ git commit -m "Resolve a clip's project at write time, not before the download"
 ### Task 5: Docs, changelog, and status.md
 
 **Files:**
-- Modify: `docs/video-and-sharing.md` (rows and footnotes 8, 9, 10, 15), `CLAUDE.md` (one sentence in the server bullet), `CHANGELOG.md` (new `## 2026-08-17` section)
+- Modify: `docs/video-and-sharing.md` (rows and footnotes 8, 9, 10, 15), `CLAUDE.md` (one sentence in the server bullet), `CHANGELOG.md` (new `## 2026-08-17` section), and two comment inaccuracies in `server/index.js` (Step 0 below)
 - Edit directly, never `git add`: `status.md` (gitignored)
 
-**Interfaces:** none — documentation.
+**Interfaces:** none — documentation and comments only. No behaviour changes; `npm test` must stay green without any test being touched.
+
+- [ ] **Step 0: Fix two comment inaccuracies this branch introduced**
+
+Both were found in Task 4's re-review and are in comments added earlier on this branch, in `server/index.js`'s poll route, just above and around the `collectVideo` call:
+
+1. A comment cites "line ~1269" for the `req.query` destructuring that actually sits at line 1275. Either correct the number or — better, since line numbers rot — describe it instead ("the `req.query` destructuring above"), which cannot go stale.
+2. The parenthetical immediately after it is garbled: "no store record to fall back on `job.project` reads never reach it" is two clauses run together. The claim it is trying to make is correct and worth keeping: when there IS no store record, the fallback object is what supplies `project`, and the shadowing hazard the rename avoids would only bite on that same path. Rewrite it as a grammatical sentence saying that.
+
+Find them by searching `server/index.js` for `1269` and for `fall back on`. Change nothing but prose.
 
 - [ ] **Step 1: Upgrade the matrix rows the new tests earn**
 
