@@ -32,6 +32,21 @@ Requires Node 18+ (server relies on built-in `fetch`). No lint setup exists. `np
 
 Config lives in `.env` at the project root (copy from `.env.example`): `OPENROUTER_API_KEY`, `OPENROUTER_IMAGE_MODEL` (was `OPENROUTER_MODEL`, still read as a fallback and retired from the file the first time the new name is written), `OPENROUTER_TEXT_MODEL`, `OPENROUTER_VIDEO_MODEL`, `OUTPUT_DIR`, `PORT`. Everything except `PORT` is editable in the app's settings dialog. The client dev server proxies `/api` → `http://localhost:8787` (see `client/vite.config.js`), so both must be running.
 
+**Maintainers only — `gh` has to be authenticated as `teoaliano`.** Contributors can
+skip this; it is about who is pushing, not about the code. More than one account may
+be logged in on a machine, and the active one changes between sessions:
+
+```bash
+gh auth switch --user teoaliano   # gh auth status shows which is active
+```
+
+This repo is public, so a wrong account still reads it and only *writes* fail —
+opening a PR, merging one, pushing a tag. The private shell repo is where the same
+mistake actually hurts: it is invisible to an account without access, and GitHub
+reports invisible as **missing**, not forbidden — `404`, or
+`Could not resolve to a Repository`. That reads as a deleted repo or a broken `gh`,
+so the account is the last thing anyone checks. Check it first.
+
 ## Where things are documented
 
 One home per rule. Never document the same thing in two files — pick the one that owns it and link from the other.
