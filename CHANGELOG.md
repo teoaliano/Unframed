@@ -7,6 +7,14 @@ Keep that shape: the website's What's new page parses this file.
 
 ## 2026-08-17
 
+### Changed
+
+- Setting up for the first time now asks for the key and nothing else. The default
+  models and output folder appear once a key is saved, since the model lists come
+  from OpenRouter and cannot be filled in before there is a key to fetch them with.
+  Saving the first key confirms with a toast and closes the dialog; reopening it
+  shows the full settings.
+
 ### Fixed
 
 - Pasting an image or video onto the canvas works in the desktop app. It did
@@ -14,7 +22,14 @@ Keep that shape: the website's What's new page parses this file.
   so nothing about the canvas looked wrong until you tried it in the app.
   Drag-and-drop was never affected, and neither was pasting into a selected
   reference node.
-
+- The settings dialog scrolls. It caps at three quarters of the window height, and
+  everything past that was cut off rather than reachable — on a small laptop, or a
+  resized window, that included the Save button, so there was no way to finish. The
+  buttons now stay put at the bottom while the form scrolls behind them.
+- The three default-model pickers no longer sit on "Loading models…" forever after
+  you add your key. They were shown before a key existed, so their lists were never
+  fetched, and saving the key did not go back for them — only closing and reopening
+  the dialog did.
 - A failed project save, preset save, or project-list load now shows an error
   instead of hanging forever with nothing to see. Under the hood these could take
   the local server down with them, which ended the session rather than the request.

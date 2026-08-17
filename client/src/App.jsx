@@ -102,16 +102,11 @@ const KeyIcon = KeyRound;
 const SettingsIcon = Settings;
 const FolderIcon = Folder;
 
-// Dated, not a boolean: the nudge should come back tomorrow, not never again.
-const UPDATE_NUDGE_KEY = 'unframed:update-nudge';
 // Which project you were last in. Without this, every reload opened whichever
 // project sorted first — and since a reload can be involuntary (the dev server
 // restarting, an HMR update that cannot patch), work generated afterwards was
 // written into a project you were not looking at.
 const ACTIVE_PROJECT_KEY = 'unframed:active-project';
-const UPDATE_COMMAND = 'git pull && npm run install:all';
-// ponytail: GitHub renders the file; no in-app changelog viewer until someone asks.
-const CHANGELOG_URL = 'https://github.com/teoaliano/Unframed/blob/main/CHANGELOG.md';
 
 const HELP_TEXT =
   'Reference a prompt or text node with @id. Connect images to number them, then type “image 1”.';
@@ -331,47 +326,6 @@ function Canvas() {
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [setNodes, setEdges]);
 
-  // This runs from a clone, so nothing tells you a fix landed upstream. A nudge,
-  // not a version check: once a day rather than every load, since a dev session
-  // reloads this page constantly and a toast on each one is just noise.
-  // ponytail: no `git fetch` behind it — add one server-side if "you are N commits
-  // behind" turns out to be worth the network call on every boot.
-  useEffect(() => {
-    const today = new Date().toISOString().slice(0, 10);
-    if (localStorage.getItem(UPDATE_NUDGE_KEY) === today) return;
-    localStorage.setItem(UPDATE_NUDGE_KEY, today);
-    toast({
-      // The button sits in the body, under the text, rather than in endContent —
-      // that slot only renders trailing, beside the message.
-      body: (
-        <VStack gap={1.5} align="start">
-          <VStack gap={0.5}>
-            <Text type="label">Update Unframed</Text>
-            <Text type="supporting">Run {UPDATE_COMMAND} to pick up fixes.</Text>
-          </VStack>
-          <HStack gap={1.5} align="center">
-            <Button
-              label="Copy command"
-              variant="secondary"
-              size="sm"
-              onClick={() => {
-                navigator.clipboard?.writeText(UPDATE_COMMAND);
-                toast({ body: 'Copied. Paste it in a terminal at the repo root.', uniqueID: 'update-nudge' });
-              }}
-            />
-            <Link href={CHANGELOG_URL} isExternalLink>
-              See what's new
-            </Link>
-          </HStack>
-        </VStack>
-      ),
-      uniqueID: 'update-nudge',
-      // Longer than the 5s default: this lands while the canvas is still drawing,
-      // and a reminder nobody reads is not a reminder.
-      autoHideDuration: 10000,
-    });
-  }, [toast]);
-
   // Ask the server what it has. With no key, open the dialog straight away:
   // nothing on the canvas can produce an image yet, so setup is the only useful
   // first action. cfg starts optimistic (hasKey: true) so the dialog doesn't flash
@@ -413,10 +367,28 @@ function Canvas() {
     }
     if (!Object.keys(fields).length) return setCfgDlg(null);
 
+    // Read BEFORE the save: `cfg.hasKey` is about to flip, and this decides
+    // whether the dialog was the key-only onboarding one.
+    const wasKeyless = !cfg.hasKey;
+
     setCfgDlg((s) => ({ ...s, saving: true, error: undefined }));
     try {
       const r = await saveConfig(fields);
       setCfg((c) => ({ ...c, ...r }));
+      // Onboarding ends by closing. The rest of the form -- the model pickers and
+      // the output folder -- was hidden while there was no key, and their
+      // catalogues are only fetched by openSettings(), so leaving the dialog open
+      // here would show a form that is still stuck on "Loading models…". Closing
+      // makes the next open go through openSettings() and arrive populated.
+      //
+      // The toast is the whole confirmation in this path: the success banner below
+      // lives inside the dialog, so closing takes it with it and the save would
+      // otherwise land in silence. Toast has no success type, only info and error,
+      // so this is a plain auto-hiding info one rather than a themed green.
+      if (wasKeyless) {
+        toast({ body: 'Key saved. Unframed is ready to generate.', uniqueID: 'key-saved' });
+        return setCfgDlg(null);
+      }
       setCfgDlg((s) => ({ ...s, key: '', saving: false, saved: true }));
     } catch (err) {
       setCfgDlg((s) => ({ ...s, saving: false, error: err.message }));
@@ -1249,7 +1221,15 @@ function Canvas() {
         <DialogHeader
           title={cfg.hasKey ? 'Settings' : 'Add your OpenRouter key to start'}
         />
-        <VStack gap={3} padding={4}>
+        {/* Two regions, not one: the form scrolls, the buttons do not. Dialog caps
+            itself at 75vh and its wrapper hides the overflow, so on a short window
+            (a small laptop, or the app resized) everything past the cap was simply
+            cut off -- with Save among the casualties, leaving no way to finish.
+            minHeight 0 is what actually lets the scroller shrink: a flex item's
+            default min-height is auto, which refuses to go below its content and
+            hands the overflow back to the clipped parent. */}
+        <VStack gap={3} padding={4} style={{ minHeight: 0 }}>
+          <VStack gap={3} style={{ overflowY: 'auto', minHeight: 0 }}>
           {!cfg.hasKey && (
             <VStack gap={2}>
               <Text type="supporting" as="p">
@@ -1336,6 +1316,14 @@ function Canvas() {
             </Text>
           </VStack>
 
+          {/* Everything below needs a key to be worth showing. The catalogues are
+              fetched from OpenRouter WITH the key, so before there is one the three
+              pickers can only say "Loading models…" forever — and the folder field
+              is a detail nobody setting up for the first time is here for. Saving
+              the first key closes the dialog (saveSettings), so the full form is one
+              reopen away rather than hidden for good. */}
+          {cfg.hasKey && (
+          <>
           <Divider />
 
           {/* Defaults, not locks: every node keeps its own model picker, and these
@@ -1386,6 +1374,9 @@ function Canvas() {
                 onClick={browseFolder}
               />
             </HStack>
+          </VStack>
+          </>
+          )}
           </VStack>
 
           {(cfgDlg?.error || cfgDlg?.saved) && (
