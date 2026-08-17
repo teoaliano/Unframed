@@ -932,6 +932,36 @@ function revokeJobShares(id) {
   jobShareTokens.delete(id);
 }
 
+// The two record-shapes the sweep and the poll route must never disagree on.
+// PR 19's shadowing crash lived in one diverged copy of exactly this code.
+async function failJob(id, message) {
+  revokeJobShares(id); // the provider will not fetch a dead job's refs
+  return persistJob(OUTPUT_DIR, id, { status: 'failed', error: message, resolvedAt: Date.now() });
+}
+
+// One finished job becomes one done record.
+//
+// `params`/`refs` are added ONLY when this caller actually has them, and the
+// `!== undefined` guard is load-bearing rather than defensive: persistJob merges
+// with `{...existing, ...patch}`, and a spread copies a key even when its value
+// is undefined, so an unconditional `params: job.params` would overwrite the
+// stored params with undefined -- which writeJobs' JSON.stringify then drops,
+// erasing the key from disk. The sweep's own done patch never wrote these two
+// keys for exactly that reason; the poll route wrote them because its fallback
+// record (a job the store never learned about) is the only source for them.
+// Guarded, one function serves both: the poll route's fallback still supplies
+// them, and a store-backed job re-writes the values it already has.
+async function collectToDone(job, data) {
+  const { savedPath, cost, project } = await collectVideo(job, data);
+  const patch = { project, status: 'done', savedPath, cost, resolvedAt: Date.now() };
+  if (job.params !== undefined) patch.params = job.params;
+  if (job.refs !== undefined) patch.refs = job.refs;
+  const saved = await persistJob(OUTPUT_DIR, job.id, patch);
+  videoJobRefs.delete(job.id); // the job is done; nothing else will read it
+  revokeJobShares(job.id); // and its shared clip goes dark with it
+  return saved;
+}
+
 // Where the saved clip is served from, given the project it landed in and its
 // path on disk. Shared by the poll route (fresh and store-served alike) and
 // nothing else needs it, since the sweep never returns an HTTP response.
@@ -1140,15 +1170,10 @@ async function sweepOneInner(job) {
     // than a count of failures.
     const why = polled.upstreamError || polled.networkError || 'no answer';
     if (givenUp(job)) {
-      revokeJobShares(job.id); // nothing will ever fetch this job's refs now
-      await persistJob(OUTPUT_DIR, job.id, {
-        status: 'failed',
-        // Says what actually happened rather than "Generation failed.": the render
-        // may well have run. What is certain is that this machine stopped being
-        // able to ask about it, and a user whose clip vanished deserves that much.
-        error: `Stopped checking after 24 hours with no answer about this render. The last attempt said: ${why}`,
-        resolvedAt: Date.now(),
-      });
+      // Says what actually happened rather than "Generation failed.": the render
+      // may well have run. What is certain is that this machine stopped being
+      // able to ask about it, and a user whose clip vanished deserves that much.
+      await failJob(job.id, `Stopped checking after 24 hours with no answer about this render. The last attempt said: ${why}`);
       console.log(`  video job ${job.id} gave up: unreachable for 24h (${why})`);
       return;
     }
@@ -1164,12 +1189,7 @@ async function sweepOneInner(job) {
   const status = data.status || 'pending';
 
   if (isTerminalFailure(status)) {
-    revokeJobShares(job.id); // the provider will not fetch a dead job's refs
-    await persistJob(OUTPUT_DIR, job.id, {
-      status: 'failed',
-      error: data.error?.message || data.error || 'Generation failed.',
-      resolvedAt: Date.now(),
-    });
+    await failJob(job.id, data.error?.message || data.error || 'Generation failed.');
     return;
   }
   if (status !== 'completed') return; // still queued, rendering, or an unrecognised in-flight status
@@ -1186,11 +1206,8 @@ async function sweepOneInner(job) {
     // buys the `status !== 'pending'` guard above plus current params/refs for
     // the filename and sidecar. Fall back to the snapshot only when the store
     // can't supply the record -- damaged or replaced -- same as the poll route.
-    const { savedPath, cost, project } = await collectVideo(fresh || job, data);
-    await persistJob(OUTPUT_DIR, job.id, { status: 'done', savedPath, cost, project, resolvedAt: Date.now() });
-    videoJobRefs.delete(job.id); // the job is done; nothing else will read it
-    revokeJobShares(job.id); // and its shared clip goes dark with it
-    console.log(`  video job ${job.id} collected by the sweep → ${savedPath}`);
+    const saved = await collectToDone(fresh || job, data);
+    console.log(`  video job ${job.id} collected by the sweep → ${saved.savedPath}`);
   } catch (err) {
     console.log(`  sweep could not collect ${job.id}: ${err.message}`);
   } finally {
@@ -1267,15 +1284,12 @@ app.get('/api/video/:id', async (req, res) => {
   if (status !== 'completed') {
     if (isTerminalFailure(status)) {
       const message = data.error?.message || data.error || 'Generation failed.';
-      revokeJobShares(id); // the provider will not fetch a dead job's refs
-      // The one await in this route outside the collect block's try. A rejected
-      // store write here hung the poll; the failure still reached the store via
-      // the sweep eventually, but the browser sat on a request that never
-      // answered. A directory where jobs.json belongs makes writeJobs' own
-      // rename fail with EISDIR -- the same trick as the other three wraps in
-      // this task, exercised in host.test.js.
+      // A rejected store write here hung the poll; the failure still reached the
+      // store via the sweep eventually, but the browser sat on a request that
+      // never answered. A directory where jobs.json belongs makes writeJobs' own
+      // rename fail with EISDIR, which is how host.test.js exercises this.
       try {
-        const job = await persistJob(OUTPUT_DIR, id, { status: 'failed', error: message, resolvedAt: Date.now() });
+        const job = await failJob(id, message);
         return res.json(failedResponse(job));
       } catch (err) {
         return res.status(502).json({
@@ -1313,21 +1327,7 @@ app.get('/api/video/:id', async (req, res) => {
       params: { prompt, model, duration, resolution, size },
       refs: videoJobRefs.get(id) || null,
     };
-    // `usedProject`, not `project`: `project` is bound from req.query above,
-    // and shadowing it would put the `project || null` fallback a few lines up
-    // in its own TDZ -- exactly on the missing-record path it exists to handle.
-    const { savedPath, cost, project: usedProject } = await collectVideo(job, data);
-    const saved = await persistJob(OUTPUT_DIR, id, {
-      project: usedProject,
-      params: job.params,
-      refs: job.refs,
-      status: 'done',
-      savedPath,
-      cost,
-      resolvedAt: Date.now(),
-    });
-    videoJobRefs.delete(id); // the job is done; nothing else will read it
-    revokeJobShares(id); // and its shared clip goes dark with it
+    const saved = await collectToDone(job, data);
     res.json(doneResponse(saved));
   } catch (err) {
     res.status(502).json({ error: err.message });
