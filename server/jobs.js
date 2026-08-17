@@ -146,3 +146,128 @@ export function persistJob(dir, id, patch) {
     return job;
   });
 }
+
+// The strict twin of readJobs, for callers that are about to CHANGE something.
+// readJobs answers [] for a missing file, corrupt JSON and an unreadable path
+// alike -- deliberate, because refusing to boot the sweep over one bad file is
+// worse than losing the ability to resume. A lifecycle mutation is the opposite
+// case: "0 pending" read out of a damaged store is indistinguishable from
+// "nothing is in flight", and acting on that silently orphans every render the
+// store was tracking. So only a MISSING file stays lenient here -- that one
+// genuinely means nothing has been saved yet. Everything else throws, and the
+// route turns it into a visible failure.
+export async function readJobsStrict(dir) {
+  let raw;
+  try {
+    raw = await fs.readFile(jobsPath(dir), 'utf8');
+  } catch (err) {
+    if (err.code === 'ENOENT') return [];
+    throw new Error(`The job store at ${jobsPath(dir)} could not be read: ${err.message}`);
+  }
+  let parsed;
+  try {
+    parsed = JSON.parse(raw);
+  } catch (err) {
+    throw new Error(`The job store at ${jobsPath(dir)} is not valid JSON: ${err.message}`);
+  }
+  if (!Array.isArray(parsed)) throw new Error(`The job store at ${jobsPath(dir)} is not a list of jobs.`);
+  return parsed;
+}
+
+// Which pending records an action is about to affect. Pending only: a done or
+// failed record has already ended, and nothing a user does to a folder or a
+// project can strand it. `project` omitted (or null) means every pending record.
+// A record written before projects existed has no `project` field at all, so a
+// missing one and '' are deliberately the same bucket.
+export function pendingJobsFor(jobs, project) {
+  const all = jobs.filter((j) => j.status === 'pending');
+  if (project === undefined || project === null) return all;
+  return all.filter((j) => (j.project || '') === (project || ''));
+}
+
+// Same-directory identity. Two spellings of one folder -- a case variant on
+// case-insensitive APFS, or /tmp vs /private/tmp through the symlink macOS puts
+// in front of it -- are different strings for the same place, and path.resolve
+// normalises neither. A zero inode (some Windows network mounts, some FUSE)
+// never satisfies this: a needless copy is a no-op, a wrongly skipped one loses
+// renders, so an unknown identity errs toward doing the work.
+async function sameDirectory(a, b) {
+  try {
+    const [x, y] = await Promise.all([fs.stat(a), fs.stat(b)]);
+    return Boolean(x.ino) && x.dev === y.dev && x.ino === y.ino;
+  } catch {
+    return false; // one of them does not exist yet, so they cannot be the same
+  }
+}
+
+// The first half of a committed move: merge the source's pending records into
+// the destination and report exactly which ids travelled. The source is NOT
+// touched -- that is dropPendingJobs' job, and splitting them is what lets a
+// caller commit its own change in between. A failure anywhere after this point
+// therefore duplicates a record rather than losing one, which is the only
+// direction worth erring in when the record represents a paid render.
+export function copyPendingJobs(fromDir, toDir) {
+  return enqueue(async () => {
+    if (await sameDirectory(fromDir, toDir)) return { ids: [], count: 0 };
+    const source = await readJobsStrict(fromDir);
+    const pending = pendingJobsFor(source);
+    if (!pending.length) return { ids: [], count: 0 };
+    const dest = pending.reduce(upsertJob, await readJobsStrict(toDir));
+    await writeJobs(toDir, pruneJobs(dest, Date.now()));
+    return { ids: pending.map((j) => j.id), count: pending.length };
+  });
+}
+
+// The second half: strip exactly the ids that were copied, and only while they
+// are still pending. By id rather than "every pending record" on purpose -- a
+// render started between the copy and this call has not been copied anywhere,
+// and dropping it would be the very loss this split exists to prevent.
+export function dropPendingJobs(dir, ids) {
+  return enqueue(async () => {
+    const wanted = new Set(ids);
+    const jobs = await readJobsStrict(dir);
+    const going = jobs.filter((j) => j.status === 'pending' && wanted.has(j.id));
+    if (!going.length) return 0;
+    const gone = new Set(going.map((j) => j.id));
+    await writeJobs(dir, pruneJobs(jobs.filter((j) => !gone.has(j.id)), Date.now()));
+    return going.length;
+  });
+}
+
+// Ends matching pending records visibly, and reports how many. Other than the
+// sweep resolving one, this is the only way a record stops being pending --
+// which is exactly why it exists: an action that would otherwise leave a render
+// unpollable forever (its project deleted, its key removed) has to be able to
+// say so, or the record sits pending until the 24-hour clock and the user never
+// learns what happened. `error` reaches the node, so it names the action.
+export function failPendingJobs(dir, { project, error }) {
+  return enqueue(async () => {
+    const jobs = await readJobsStrict(dir);
+    const doomed = pendingJobsFor(jobs, project);
+    if (!doomed.length) return 0;
+    const at = Date.now();
+    const ids = new Set(doomed.map((j) => j.id));
+    const next = jobs.map((j) => (ids.has(j.id) ? { ...j, status: 'failed', error, resolvedAt: at } : j));
+    await writeJobs(dir, pruneJobs(next, at));
+    return doomed.length;
+  });
+}
+
+// Repoints a project's pending records at a new slug, and reports how many. A
+// rename is a plain fs.rename of the folder, but a job record carries the slug
+// it was created under and collectVideo mkdirs that path when the clip lands --
+// so without this, a render finishing after a rename recreates the OLD folder
+// and writes itself into a project the user no longer has. Only pending records
+// move: a done one names the folder its files already sit in. Exactly
+// reversible, which is what lets the rename route undo it when fs.rename fails.
+export function reassignPendingJobs(dir, from, to) {
+  return enqueue(async () => {
+    const jobs = await readJobsStrict(dir);
+    const moving = pendingJobsFor(jobs, from);
+    if (!moving.length) return 0;
+    const ids = new Set(moving.map((j) => j.id));
+    const next = jobs.map((j) => (ids.has(j.id) ? { ...j, project: to } : j));
+    await writeJobs(dir, pruneJobs(next, Date.now()));
+    return moving.length;
+  });
+}

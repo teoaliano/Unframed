@@ -194,8 +194,23 @@ export const renameProject = (name, to) =>
     return d;
   });
 
-export const deleteProject = (name) =>
-  fetch(`/api/projects/${encodeURIComponent(name)}`, { method: 'DELETE' });
+// Unlike its neighbours this one reads the body: a project with renders in
+// flight answers 409 with how many, and the caller escalates its confirmation
+// before calling again with confirmRenders. Returning the bare fetch (as this
+// did) meant that refusal -- and every other failure -- read as success, and the
+// project vanished from the list without being deleted.
+export const deleteProject = (name, { confirmRenders } = {}) =>
+  fetch(`/api/projects/${encodeURIComponent(name)}${confirmRenders ? '?confirmRenders=1' : ''}`, {
+    method: 'DELETE',
+  }).then(async (r) => {
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) {
+      const err = new Error(d.error || `Could not delete the project (${r.status})`);
+      err.pendingRenders = d.pendingRenders ?? 0;
+      throw err;
+    }
+    return d;
+  });
 
 // Your saved library presets — one array, one file. This one throws on failure
 // instead of falling back to []: savePresets replaces the whole file, so a

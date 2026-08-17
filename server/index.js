@@ -7,7 +7,17 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { upsertEnv, PATTERNS, envFile, outputPath } from './env.js';
 import { readPresets, writePresets } from './presets.js';
-import { readJobs, persistJob, givenUp } from './jobs.js';
+import {
+  readJobs,
+  readJobsStrict,
+  persistJob,
+  givenUp,
+  pendingJobsFor,
+  copyPendingJobs,
+  dropPendingJobs,
+  failPendingJobs,
+  reassignPendingJobs,
+} from './jobs.js';
 import { ensureTunnel, mintShare, revokeShare, waitUntilPublic, stopTunnel } from './share.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -128,9 +138,58 @@ app.put('/api/config', async (req, res) => {
     }
   }
 
+  // Moving the output folder is a commit protocol, not a sequence of hopeful
+  // steps, because every one of them can fail and a pending record is a paid
+  // render. The strip of the OLD store is the commit point and comes LAST, so
+  // no FAILING step anywhere can lose a record -- the worst outcome of a
+  // failure is a duplicate in a store nothing reads. See
+  // docs/video-and-sharing.md for the row this makes true.
+  //
+  // That guarantee is about failures, not about every possible timing: there is
+  // a narrow window this protocol does NOT close, and closing it (a second copy
+  // pass, merged id lists) is not worth the complexity for what it buys. The
+  // copy reads the OLD store before writeEnv commits, and the strip below acts
+  // only on the ids that were actually copied -- so a render created between
+  // that read and the commit (POST /api/video's persistJob resolves OUTPUT_DIR
+  // at call time, and can land mid-writeEnv) is written straight into the old
+  // store, was never copied, and is therefore never stripped either: it is left
+  // behind, pending, in a folder the sweep no longer visits. The window is one
+  // small file read plus write -- on the order of a millisecond. It costs
+  // nothing to a browser tab still watching that job, though: the poll route
+  // already falls back to its own query-string params when the store lookup
+  // misses (the same fallback it used before this store existed), so the clip
+  // still gets collected and written under the CURRENT output dir. What is
+  // actually lost is bookkeeping -- a stray `pending` row in the old
+  // jobs.json that nothing will ever mark done.
+  let copied = { ids: [], count: 0 };
+  const nextOutputDir = updates.OUTPUT_DIR ? outputPath(ROOT, updates.OUTPUT_DIR) : null;
+  if (nextOutputDir) {
+    // 1. Copy first. A strict read is the point: readJobs would answer [] for a
+    // corrupt or unreadable store, which reads exactly like "nothing is in
+    // flight" and would wave the folder change through, orphaning every render
+    // the store was tracking.
+    try {
+      copied = await copyPendingJobs(OUTPUT_DIR, nextOutputDir);
+    } catch (err) {
+      return res.status(500).json({
+        error: `Could not move the renders already in progress to that folder, so the folder was not changed: ${err.message}`,
+      });
+    }
+  }
+
+  // 2. Commit the setting. If this fails the copies are rolled back, so the old
+  // store is still the only place those records live -- exactly as before the
+  // request.
   try {
     await writeEnv(updates);
   } catch (err) {
+    if (copied.count) {
+      try {
+        await dropPendingJobs(nextOutputDir, copied.ids);
+      } catch (rollbackErr) {
+        console.log(`  could not roll back copied jobs: ${rollbackErr.message}`);
+      }
+    }
     return res.status(500).json({ error: `Could not write .env: ${err.message}` });
   }
 
@@ -139,7 +198,24 @@ app.put('/api/config', async (req, res) => {
   if (updates.OPENROUTER_IMAGE_MODEL) IMAGE_MODEL = updates.OPENROUTER_IMAGE_MODEL;
   if (updates.OPENROUTER_TEXT_MODEL) TEXT_MODEL = updates.OPENROUTER_TEXT_MODEL;
   if (updates.OPENROUTER_VIDEO_MODEL) VIDEO_MODEL = updates.OPENROUTER_VIDEO_MODEL;
-  if (updates.OUTPUT_DIR) OUTPUT_DIR = outputPath(ROOT, updates.OUTPUT_DIR);
+
+  if (nextOutputDir) {
+    const previousDir = OUTPUT_DIR;
+    OUTPUT_DIR = nextOutputDir; // 3. the new store is authoritative from here
+    // 4. Strip the source last, and only the ids that actually travelled -- a
+    // render started between the copy and now has not been copied anywhere.
+    // Failure here is the one step allowed to be best-effort: the record exists
+    // in the store being swept, so nothing is lost, only duplicated in a folder
+    // nothing reads.
+    if (copied.count) {
+      try {
+        await dropPendingJobs(previousDir, copied.ids);
+        console.log(`  moved ${copied.count} pending video job(s) to the new output folder`);
+      } catch (err) {
+        console.log(`  left ${copied.count} job record(s) behind in the old folder: ${err.message}`);
+      }
+    }
+  }
 
   res.json({ ok: true, ...settings() });
 });
@@ -154,7 +230,33 @@ app.delete('/api/key', async (req, res) => {
     return res.status(500).json({ error: `Could not write .env: ${err.message}` });
   }
   API_KEY = '';
-  res.json({ ok: true, ...settings() });
+  // The sweep returns immediately without a key, so every pending render would
+  // sit unresolved until the 24-hour clock -- neither collected nor failed,
+  // precisely the state the lifecycle contract says cannot happen. Removing a
+  // key is an explicit "stop using my account", so ending them now and saying
+  // why is the honest answer. REPLACING a key deliberately does not do this: it
+  // is usually a renewed key for the same account, and a genuinely unusable id
+  // is already ended by the clock.
+  //
+  // Unlike every other lifecycle mutation here, a store this cannot read does
+  // NOT block the action -- the key is already gone by this line, on purpose.
+  // Removing a key is a security act, and someone doing it may be responding to
+  // a leak; refusing over a corrupt JSON file would be a worse failure than the
+  // orphaning it prevents, and in a packaged app they cannot edit .env by hand
+  // either. So the failure is REPORTED rather than swallowed, and the caller
+  // decides what to say about it.
+  let ended = 0;
+  let renderCleanupError;
+  try {
+    ended = await failPendingJobs(OUTPUT_DIR, {
+      project: null,
+      error: 'Stopped tracking this render: the OpenRouter key was removed, so its progress can no longer be checked. It may still finish upstream, but nothing here will save the result.',
+    });
+  } catch (err) {
+    renderCleanupError = `The key was removed, but renders already in progress could not be stopped: ${err.message}`;
+    console.log(`  ${renderCleanupError}`);
+  }
+  res.json({ ok: true, endedRenders: ended, ...(renderCleanupError ? { renderCleanupError } : {}), ...settings() });
 });
 
 // Native folder chooser for the output directory. The browser cannot hand back a
@@ -465,9 +567,16 @@ app.put('/api/projects/:name', async (req, res) => {
 });
 
 app.post('/api/projects/:name/rename', async (req, res) => {
+  // Slugify the source side too, and reuse this one value for both the folder
+  // path and the record match below -- projectDir() already slugifies
+  // internally, so resolving the folder from the raw :name while matching
+  // records against that same raw string is how the two could silently
+  // disagree about which project this is. `to` was already slugified for
+  // exactly this reason; `from` now matches it.
+  const name = slugify(req.params.name);
   const to = slugify(req.body?.to || '');
   if (!to) return res.status(400).json({ error: 'New name is empty.' });
-  const from = projectDir(req.params.name);
+  const from = projectDir(name);
   const dest = path.join(OUTPUT_DIR, to);
   try {
     await fs.access(dest);
@@ -475,17 +584,102 @@ app.post('/api/projects/:name/rename', async (req, res) => {
   } catch {
     // dest is free — proceed
   }
+  // Records first, folder second. A job record carries the slug it was created
+  // under and collectVideo mkdirs that path when the clip lands -- so a render
+  // finishing after a rename would recreate the OLD folder and write itself
+  // into a project the user no longer has. Repointing first is deliberate: a
+  // record write is the more reliable of the two operations and its rollback is
+  // another record write, whereas rolling back an fs.rename is another rename
+  // that can fail just as easily.
+  let moved = 0;
+  try {
+    moved = await reassignPendingJobs(OUTPUT_DIR, name, to);
+  } catch (err) {
+    return res.status(500).json({
+      error: `Could not update the renders in progress for this project, so it was not renamed: ${err.message}`,
+    });
+  }
   try {
     await fs.rename(from, dest);
-    res.json({ ok: true, name: to });
   } catch (err) {
-    res.status(500).json({ error: `Could not rename: ${err.message}` });
+    // Put the records back, or they point at a name with no folder and the next
+    // collection creates one. If even that fails there is nothing left to try,
+    // so say both things plainly rather than reporting a clean failure.
+    let restored = true;
+    try {
+      await reassignPendingJobs(OUTPUT_DIR, to, name);
+    } catch (rollbackErr) {
+      restored = false;
+      console.log(`  could not restore job records after a failed rename: ${rollbackErr.message}`);
+    }
+    return res.status(500).json({
+      error: restored
+        ? `Could not rename: ${err.message}`
+        : `Could not rename (${err.message}), and ${moved} render(s) in progress are now recorded under "${to}". Renaming the project to "${to}" by hand will reunite them.`,
+    });
   }
+  res.json({ ok: true, name: to, movedRenders: moved });
 });
 
+// Deleting a project with renders in flight is the one destructive case here:
+// the render is paid for and cannot be stopped upstream, so the most the app
+// can do is stop tracking it and say so. Two-phase rather than a client-side
+// confirmation alone, so a caller that forgets to ask cannot silently abandon a
+// render: without confirmRenders the route reports what is at stake and changes
+// nothing.
 app.delete('/api/projects/:name', async (req, res) => {
-  await fs.rm(projectDir(req.params.name), { recursive: true, force: true });
-  res.json({ ok: true });
+  // Slugify once and reuse it for the record lookup below AND for projectDir()
+  // (which slugifies internally too) -- a raw :name would let the confirm gate
+  // check pending renders under one spelling while the folder it goes on to
+  // remove is a different one, which is the gate bypassed silently.
+  const name = slugify(req.params.name);
+  let pending;
+  try {
+    // Strict: a store that cannot be read cannot tell us what this delete would
+    // strand, and guessing "nothing" is how a paid render disappears silently.
+    pending = pendingJobsFor(await readJobsStrict(OUTPUT_DIR), name);
+  } catch (err) {
+    return res.status(500).json({
+      error: `Could not check whether this project has renders in progress, so nothing was deleted: ${err.message}`,
+    });
+  }
+  if (pending.length && req.query.confirmRenders !== '1') {
+    return res.status(409).json({
+      error: `This project has ${pending.length} video render${pending.length === 1 ? '' : 's'} in progress.`,
+      pendingRenders: pending.length,
+    });
+  }
+  // Records first, folder second. If the rm then fails, the user retries a
+  // delete on a project that is still intact; the other order would leave
+  // records pointing at a folder that is gone, and the sweep would recreate it
+  // as a ghost holding one clip and no graph.
+  let ended = 0;
+  if (pending.length) {
+    try {
+      ended = await failPendingJobs(OUTPUT_DIR, {
+        project: name,
+        error: 'Stopped tracking this render: the project it belonged to was deleted. It may still finish upstream, but nothing here will save the result.',
+      });
+    } catch (err) {
+      return res.status(500).json({
+        error: `Could not stop the renders in progress, so the project was not deleted: ${err.message}`,
+      });
+    }
+    for (const job of pending) revokeJobShares(job.id);
+  }
+  try {
+    await fs.rm(projectDir(name), { recursive: true, force: true });
+  } catch (err) {
+    // The one partial outcome with no compensation worth having: un-failing a
+    // record would claim a render is still being watched when its project may
+    // be half-deleted. State both facts instead, so a retry is an informed one.
+    return res.status(500).json({
+      error: ended
+        ? `Stopped ${ended} render(s), but the project folder could not be deleted: ${err.message}. Deleting again is safe.`
+        : `Could not delete the project: ${err.message}`,
+    });
+  }
+  res.json({ ok: true, endedRenders: ended });
 });
 
 // ---- library ----
@@ -727,6 +921,11 @@ async function fetchVideoStatus(id) {
   try {
     r = await fetch(`${VIDEOS_STATUS_BASE}/${encodeURIComponent(id)}`, {
       headers: { Authorization: `Bearer ${API_KEY}` },
+      // A status check is one small JSON answer, and the sweep polls jobs one at
+      // a time -- without a signal, one hung socket holds the line for undici's
+      // ~5-minute default and stalls collection for every job behind it. 30s
+      // matches the sweep's own cadence: slower than that IS no answer.
+      signal: AbortSignal.timeout(30_000),
     });
   } catch (err) {
     return { ok: false, networkError: err.message };
@@ -774,7 +973,14 @@ async function collectVideo(job, data) {
   const url = data.unsigned_urls?.[0] || data.urls?.[0];
   if (!url) throw new Error('Job completed without a video URL.');
 
-  const f = await fetch(url, { headers: { Authorization: `Bearer ${API_KEY}` } });
+  const f = await fetch(url, {
+    headers: { Authorization: `Bearer ${API_KEY}` },
+    // A total-time cap, not an inactivity one: a big clip on a slow line still
+    // fits comfortably in five minutes, and the failure this ends is the socket
+    // that never answers at all. On abort the throw lands in the caller's
+    // existing catch -- the sweep retries next tick, the poll route answers 502.
+    signal: AbortSignal.timeout(300_000),
+  });
   if (!f.ok) throw new Error(`Could not download the video (${f.status}).`);
   const buf = Buffer.from(await f.arrayBuffer());
 
@@ -834,11 +1040,24 @@ async function collectVideo(job, data) {
 // while this tick's snapshot was going stale.
 const collecting = new Set();
 
+// One pending job, one tick -- and one job's failure costs only ITS update.
+// sweepOneInner's branches await persistJob in several places; a rejected store
+// write there used to throw past the for-loop in sweepJobs and silently skip
+// every job queued behind this one until the next tick. The wrapper is what
+// makes the "never throws" promise in the comment below actually true.
+async function sweepOne(job) {
+  try {
+    await sweepOneInner(job);
+  } catch (err) {
+    console.log(`  sweep failed for ${job.id}: ${err.message}`);
+  }
+}
+
 // One pending job, one tick: poll it, and either leave it alone (still
 // rendering), fail it, or collect it. Never throws -- a transient problem
 // reaching OpenRouter or downloading the file just waits for the next tick,
 // the same tolerance pollVideo has client-side for reaching this server.
-async function sweepOne(job) {
+async function sweepOneInner(job) {
   const polled = await fetchVideoStatus(job.id);
   if (!polled.ok) {
     // A poll that got no answer. Ordinarily that means "try again next tick" and
@@ -889,7 +1108,20 @@ async function sweepOne(job) {
     // stale by now. Only proceed if the store STILL says pending.
     const fresh = (await readJobs(OUTPUT_DIR)).find((j) => j.id === job.id);
     if (fresh && fresh.status !== 'pending') return; // already resolved elsewhere
-    const { savedPath, cost } = await collectVideo(job, data);
+    // Collect with FRESH, not `job` -- `job` is this tick's snapshot, taken once
+    // at the top of sweepJobs and then carried through fetchVideoStatus (up to
+    // 30s) and every job ahead of this one in the same tick's sequential loop,
+    // so by the time execution reaches here `job.project` can be minutes old.
+    // collectVideo resolves the output folder from `.project`
+    // (`projectDir(job.project)`, mkdir'd with recursive:true) and only reads it
+    // AFTER downloading the clip, so collecting with the stale copy is exactly
+    // what recreates a project folder the user renamed away from in the
+    // meantime -- the ghost-project bug reassignPendingJobs exists to prevent,
+    // reopened here by the sweep instead of by the rename route. The poll route
+    // above already does this right (`const job = fresh || {...}`); `fresh` can
+    // legitimately be absent -- the store may have been damaged or replaced --
+    // so fall back to the snapshot only then, same as there.
+    const { savedPath, cost } = await collectVideo(fresh || job, data);
     await persistJob(OUTPUT_DIR, job.id, { status: 'done', savedPath, cost, resolvedAt: Date.now() });
     videoJobRefs.delete(job.id); // the job is done; nothing else will read it
     revokeJobShares(job.id); // and its shared clip goes dark with it
@@ -932,7 +1164,6 @@ async function sweepJobs() {
 // rather than carrying the bytes — a video inlined into node data would be saved
 // into graph.json on every keystroke.
 app.get('/api/video/:id', async (req, res) => {
-  if (!API_KEY) return res.status(400).json({ error: 'No OpenRouter key yet.' });
   const id = req.params.id;
 
   // Consult the store BEFORE ever touching OpenRouter. Without this, a browser
@@ -940,9 +1171,19 @@ app.get('/api/video/:id', async (req, res) => {
   // one) would download and write the clip a second time under a fresh
   // timestamp -- this is what makes double collection impossible, together
   // with the re-check after the lock further down.
+  //
+  // And before the key check below, not after: an already-resolved record is an
+  // answer this route can give with no key at all, since giving it needs only
+  // the store. Answering 400 first is what left a card reading "Rendering..."
+  // forever after DELETE /api/key ended its record -- the record said `failed`,
+  // and the only route that could have told the node bounced it for the very
+  // reason the record existed.
   const stored = (await readJobs(OUTPUT_DIR)).find((j) => j.id === id);
   if (stored?.status === 'done') return res.json(doneResponse(stored));
   if (stored?.status === 'failed') return res.json(failedResponse(stored));
+
+  // Everything past here has to reach OpenRouter, so now the key matters.
+  if (!API_KEY) return res.status(400).json({ error: 'No OpenRouter key yet.' });
 
   // Still pending in the store (or not in it at all -- a job started before this
   // store existed). Query params are the fallback source for params in that

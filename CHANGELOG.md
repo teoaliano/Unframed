@@ -29,6 +29,23 @@ Keep that shape: the website's What's new page parses this file.
   since finished.
 - A render this app can no longer ask about is given up on after 24 hours and
   reported as failed, saying so, instead of being retried silently forever.
+- Changing the output folder in Settings no longer loses track of a render
+  already in flight — pending renders move with the folder and land there.
+- Undo can no longer freeze an image or text node's Run button. Stepping back
+  to a moment when a run was in flight used to leave the button disabled, with
+  the node showing "Running…" until a reload.
+- Renaming a project no longer loses a render that is still going. The clip now
+  lands in the renamed project instead of recreating the old one.
+- Deleting a project with a render in progress now asks first, and says how many
+  renders it will stop tracking.
+- Removing your OpenRouter key now ends every render it was tracking, with a
+  reason, instead of leaving its record unresolved forever with nothing left able
+  to check on it. A card still watching one of those renders now says the key was
+  removed, rather than reading "Rendering…" until you reload.
+- Changing the output folder now fails with a message if it cannot take renders in
+  progress with it, instead of reporting success and leaving them behind.
+- A failed project delete no longer looks like it worked.
+- Undo no longer freezes an image or text node that it brings back from a delete.
 
 ## 2026-08-15
 
