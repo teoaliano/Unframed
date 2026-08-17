@@ -6,6 +6,7 @@ import { instantiateFragment, centerOffset } from '../library/insert.js';
 import { selectionFragment, presetFromSelection } from '../library/save.js';
 import { MODEL_PARAM_KEYS, resetModelParams } from '../nodes/output/defaults.js';
 import { RUN_MARKERS, stripRunMarkers, keepLiveRunMarkers } from './runMarkers.js';
+import { nextId, bumpCounter, slug, initialNodes, initialEdges } from './starter.js';
 
 const out = { id: 'out', type: 'imageOutput', position: { x: 400, y: 0 }, data: {} };
 
@@ -785,6 +786,54 @@ function videoGraph(inputMode, imageCount, extra = []) {
       assert.ok(!mustSurvive.includes(key), `${type}'s MODEL_PARAM_KEYS must not include "${key}"`);
     }
   }
+}
+
+// ---- starter.js ----
+// These two were unreachable by any test while they lived in App.jsx: it is JSX,
+// so plain `node` cannot import it. Moving them out is what makes them testable,
+// and both have a rule worth pinning.
+
+// bumpCounter must clear every numeric id in a loaded graph. Ids are reference
+// keys (@id in a prompt), so a counter that reissues one lets a newly added node
+// silently capture a reference meant for an existing node.
+// No counter reset is exported on purpose -- a test-only setter would be API
+// nobody else wants. These assertions hold from whatever value the counter is
+// already at, since bumpCounter only ever moves it forward.
+{
+  bumpCounter([{ id: '500' }, { id: 'not-a-number' }, { id: '7' }]);
+  assert.equal(nextId(), '501', 'bumpCounter clears the highest numeric id in the graph');
+  assert.equal(nextId(), '502', 'and keeps counting from there');
+  // The property that actually matters: a graph whose ids are all non-numeric
+  // must never drag the counter BACKWARDS onto an id already in use. (It does
+  // advance by one here -- Math.max(counter) + 1 with nothing to compare -- so
+  // one id is skipped. Harmless: ids only have to be unique, never dense.)
+  bumpCounter([{ id: 'a' }, { id: 'b' }]);
+  assert.ok(Number(nextId()) > 502, 'a graph with no numeric ids never reissues a used id');
+}
+
+// slug is a hand-kept copy of the server's slugify (server/index.js): the client
+// tracks the project name, the server writes the folder, and they have to agree.
+// Same three rules, same 40-char cap.
+{
+  assert.equal(slug('Golden Hour!! At the CLIFF'), 'golden-hour-at-the-cliff');
+  assert.equal(slug('--x--'), 'x');
+  assert.equal(slug('A'.repeat(60)).length, 40, 'slug caps at 40 chars');
+}
+
+// The starter graph has to be a graph the resolver can actually build from, and
+// its scene prompt references the subject prompt by @id -- the one feature a
+// first-run canvas exists to demonstrate. A typo'd id here ships a broken
+// reference to every new user, and nothing else would catch it.
+{
+  assert.equal(initialNodes.length, 3, 'three starter nodes');
+  const [scene, subject, output] = initialNodes;
+  assert.ok(
+    scene.data.text.includes(`@${subject.id}`),
+    "the starter scene prompt references the subject prompt by its real id",
+  );
+  const { prompt } = buildRequest(initialNodes, initialEdges, output.id);
+  assert.ok(prompt.includes('lone red fox'), 'the @id reference resolves in the starter graph');
+  assert.ok(!prompt.includes('@'), 'and leaves no unresolved token behind');
 }
 
 console.log('resolve.js: all checks passed');
