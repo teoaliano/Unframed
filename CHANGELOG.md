@@ -7,6 +7,20 @@ Keep that shape: the website's What's new page parses this file.
 
 ## 2026-08-18
 
+### Added
+
+- **Wire several nodes at once.** Select a group, then drag from any one node's
+  handle: every selected node that can connect follows along, so three prompts
+  reach an output in one drag instead of three. It works in both directions —
+  drag from an output's input handle and every selected output gets wired.
+- Shift+click adds a node to the selection, alongside the Cmd/Ctrl+click that
+  already did. Shift+dragging a selection box now adds to the selection too.
+- **Connect nodes** and **Disconnect nodes** in the right-click menu, under Edit.
+  Connect wires every source in the selection to every output in it; Disconnect
+  removes the connections *between* selected nodes, leaving the ones that reach
+  out to the rest of the graph alone. Each is greyed out when it would do
+  nothing.
+
 ### Changed
 
 - Searching a model list is easier to see: the search box now carries a magnifier

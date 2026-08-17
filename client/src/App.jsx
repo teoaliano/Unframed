@@ -55,6 +55,7 @@ import ProjectMenu from './ProjectMenu.jsx';
 import IgnoredEdge from './nodes/IgnoredEdge.jsx';
 import { PromptIcon, ImageIcon, VideoIcon, TextIcon } from './nodes/nodeIcons.jsx';
 import { bucketSources, isOutput } from './graph/resolve.js';
+import { canSource, canTarget, selectedIds, connections, dropInternal } from './graph/bulkWire.js';
 import { keepLiveRunMarkers } from './graph/runMarkers.js';
 import LibraryDialog from './library/LibraryDialog.jsx';
 import { instantiateFragment, centerOffset } from './library/insert.js';
@@ -562,15 +563,55 @@ function Canvas() {
     projectDeleted(name);
   }
 
+  // Which handle the current drag came off, so onConnect can tell a drag that
+  // STARTED on a selected node (fan the whole group out) from one that merely
+  // landed on one (a single edge, as always). onConnect alone cannot: it reports
+  // a settled source and target, and either end may be the one you dragged from.
+  const connectFrom = useRef(null);
+
   const onConnect = useCallback(
     (conn) => {
       // Text nodes have both handles, so without this a node could wire into
       // itself and silently self-amplify its own prompt on every run.
       if (conn.source === conn.target) return;
-      setEdges((eds) => addEdge(conn, eds));
+      setEdges((eds) => {
+        const from = connectFrom.current;
+        const group = from && nodes.find((n) => n.id === from.nodeId)?.selected
+          ? // Dragged off a source handle: every selected node that HAS a source
+            // handle wires into wherever you dropped. Off a target handle, the
+            // reverse. The origin is in the selection by definition of the branch,
+            // so it needs no special case.
+            from.handleType === 'source'
+            ? connections({ edges: eds, sources: selectedIds(nodes, canSource), targets: [conn.target] })
+            : connections({ edges: eds, sources: [conn.source], targets: selectedIds(nodes, canTarget) })
+          : [conn];
+        return group.reduce((es, c) => addEdge(c, es), eds);
+      });
     },
-    [setEdges],
+    [setEdges, nodes],
   );
+
+  // Cleared on end rather than only on start: a drag released over empty canvas
+  // never reaches onConnect, and a stale origin would fan out the NEXT drag.
+  const onConnectStart = useCallback((_, params) => { connectFrom.current = params; }, []);
+  const onConnectEnd = useCallback(() => { connectFrom.current = null; }, []);
+
+  // The two bulk items in the right-click menu. Both read the selection straight
+  // from `nodes`, so they work on whatever the right-click left selected.
+  const connectSelection = useCallback(() => {
+    setEdges((eds) => {
+      const fresh = connections({
+        edges: eds,
+        sources: selectedIds(nodes, canSource),
+        targets: selectedIds(nodes, canTarget),
+      });
+      return fresh.reduce((es, c) => addEdge(c, es), eds);
+    });
+  }, [setEdges, nodes]);
+
+  const disconnectSelection = useCallback(() => {
+    setEdges((eds) => dropInternal(eds, nodes.filter((n) => n.selected).map((n) => n.id)));
+  }, [setEdges, nodes]);
 
   const addNode = useCallback(
     (type, data, screenPos) => {
@@ -835,12 +876,26 @@ function Canvas() {
       });
     }
 
+    // Disabled by whether the action would actually DO anything, not merely by
+    // whether something is selected: "Connect nodes" on a group that is already
+    // fully wired, or on three prompts with no output among them, would be a
+    // click that changes nothing and explains nothing.
+    const selected = nodes.filter((n) => n.selected);
+    const wouldConnect = connections({
+      edges,
+      sources: selectedIds(nodes, canSource),
+      targets: selectedIds(nodes, canTarget),
+    }).length;
+    const wouldDisconnect = edges.length - dropInternal(edges, selected.map((n) => n.id)).length;
+
     sections.push({
       title: 'Edit',
       items: [
         { label: 'Cut', endContent: kbd('X'), isDisabled: !hasSelection, onClick: cutSelection },
         { label: 'Copy', endContent: kbd('C'), isDisabled: !hasSelection, onClick: copySelection },
         { label: 'Paste', endContent: kbd('V'), isDisabled: !nodeClipboard.current, onClick: () => pasteNodeClipboard() },
+        { label: 'Connect nodes', isDisabled: !wouldConnect, onClick: connectSelection },
+        { label: 'Disconnect nodes', isDisabled: !wouldDisconnect, onClick: disconnectSelection },
       ],
     });
 
@@ -1085,6 +1140,13 @@ function Canvas() {
           onNodesChange={onNodesChange}
           onEdgesChange={onEdgesChange}
           onConnect={onConnect}
+          onConnectStart={onConnectStart}
+          onConnectEnd={onConnectEnd}
+          // Shift joins Meta/Control as a multi-select modifier -- React Flow's
+          // default pair is the OS one, but Shift is what every canvas tool uses
+          // and it is already this app's box-select key, so shift-dragging a box
+          // adds to the selection instead of replacing it.
+          multiSelectionKeyCode={['Meta', 'Control', 'Shift']}
           nodeTypes={nodeTypes}
           edgeTypes={edgeTypes}
           fitView
