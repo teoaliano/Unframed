@@ -25,6 +25,10 @@ Keep that shape: the website's What's new page parses this file.
   registered, and no window ever opened.
 - A reveal that fails now says why — the folder having been moved or deleted, for
   instance. It used to fail exactly like it succeeded: in silence.
+- The top row of a menu highlights under the cursor like every other row. Opening a
+  menu with the mouse focuses its first row, and the rule that stops that from
+  looking pre-selected was flattening the hover highlight along with it — so
+  *Reveal in Finder*, first in the canvas menu, never lit up.
 
 ## 2026-08-16
 
