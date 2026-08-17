@@ -1108,7 +1108,20 @@ async function sweepOneInner(job) {
     // stale by now. Only proceed if the store STILL says pending.
     const fresh = (await readJobs(OUTPUT_DIR)).find((j) => j.id === job.id);
     if (fresh && fresh.status !== 'pending') return; // already resolved elsewhere
-    const { savedPath, cost } = await collectVideo(job, data);
+    // Collect with FRESH, not `job` -- `job` is this tick's snapshot, taken once
+    // at the top of sweepJobs and then carried through fetchVideoStatus (up to
+    // 30s) and every job ahead of this one in the same tick's sequential loop,
+    // so by the time execution reaches here `job.project` can be minutes old.
+    // collectVideo resolves the output folder from `.project`
+    // (`projectDir(job.project)`, mkdir'd with recursive:true) and only reads it
+    // AFTER downloading the clip, so collecting with the stale copy is exactly
+    // what recreates a project folder the user renamed away from in the
+    // meantime -- the ghost-project bug reassignPendingJobs exists to prevent,
+    // reopened here by the sweep instead of by the rename route. The poll route
+    // above already does this right (`const job = fresh || {...}`); `fresh` can
+    // legitimately be absent -- the store may have been damaged or replaced --
+    // so fall back to the snapshot only then, same as there.
+    const { savedPath, cost } = await collectVideo(fresh || job, data);
     await persistJob(OUTPUT_DIR, job.id, { status: 'done', savedPath, cost, resolvedAt: Date.now() });
     videoJobRefs.delete(job.id); // the job is done; nothing else will read it
     revokeJobShares(job.id); // and its shared clip goes dark with it

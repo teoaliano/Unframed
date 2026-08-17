@@ -54,16 +54,20 @@ const child = fork(path.join(here, 'index.js'), {
   stdio: 'ignore',
 });
 
-const waitFor = (type, ms = 10000) =>
+// Factored out so the sweep-staleness test further down (its own forked
+// server, its own 'ready' message) can wait on a different child without a
+// second copy of this.
+const waitForMessage = (proc, type, ms = 10000) =>
   new Promise((resolve, reject) => {
     const timer = setTimeout(() => reject(new Error(`no ${type} message within ${ms}ms`)), ms);
-    child.on('message', (m) => {
+    proc.on('message', (m) => {
       if (m?.type === type) {
         clearTimeout(timer);
         resolve(m);
       }
     });
   });
+const waitFor = (type, ms) => waitForMessage(child, type, ms);
 
 try {
   const ready = await waitFor('ready');
@@ -526,6 +530,136 @@ try {
   child.kill();
   await new Promise((resolve) => statusStub.close(resolve));
   await fs.rm(dataDir, { recursive: true, force: true });
+}
+
+// ---- sweep staleness (2026-08-17) ----
+// sweepJobs takes ONE snapshot of the store per tick and used to hand that
+// snapshot straight to collectVideo, instead of a fresh re-read, when a job
+// turned out to be done. collectVideo resolves the output folder from
+// `.project` (`projectDir`, mkdir'd with recursive:true) and only reads it
+// AFTER downloading the clip -- so a rename landing between the tick's
+// snapshot and that download recreated the OLD project folder, exactly the
+// ghost-project bug reassignPendingJobs exists to prevent, just reopened by
+// the sweep instead of the rename route.
+//
+// The running `child` above can't exercise this: the sweep only runs at boot
+// and every 30s, and nothing exposes a way to trigger a tick on demand. So
+// this forks a SECOND server with a pending job already sitting in its store,
+// under project "alpha" -- sweepJobs() runs once at boot, synchronously
+// queued (its store read is dispatched) before app.listen is even called, a
+// few lines earlier in index.js than the 'ready' message this test waits on.
+// A real rename can only reach this new server after that 'ready' message
+// arrives (the socket isn't in LISTEN state, and therefore can't accept our
+// connection, any earlier), so the ordering -- sweep reads first, our rename
+// lands second -- holds by construction, not by luck. The status stub delays
+// its "completed" answer well past the time the rename (real HTTP, real disk
+// I/O) needs to land, giving the race a wide window rather than a tight one.
+{
+  const dataDir2 = await fs.mkdtemp(path.join(os.tmpdir(), 'unframed-sweep-race-'));
+  const outDir2 = path.join(dataDir2, 'out');
+  await fs.mkdir(outDir2, { recursive: true });
+  // Must exist on disk, or the rename below fails at fs.rename (ENOENT) and
+  // rolls back before the sweep ever gets a chance to race it.
+  await fs.mkdir(path.join(outDir2, 'alpha'), { recursive: true });
+
+  const raceJobId = 'sweep-race-job';
+  await fs.writeFile(
+    path.join(outDir2, 'jobs.json'),
+    JSON.stringify([
+      {
+        id: raceJobId,
+        project: 'alpha',
+        params: { prompt: 'sweep staleness race', model: 'bytedance/seedance-2.0' },
+        startedAt: Date.now(),
+        status: 'pending',
+      },
+    ]),
+  );
+
+  // Stands in for OpenRouter's status AND download endpoints. The status leg
+  // answers "completed" after a delay long enough for the rename below to
+  // land first; the download leg (whatever URL that answer points at) needs
+  // no delay -- by the time it's fetched the race is already decided.
+  let raceBase;
+  const raceServer = http.createServer((req, res) => {
+    if (req.url.startsWith('/api/v1/videos/')) {
+      setTimeout(() => {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ status: 'completed', unsigned_urls: [`${raceBase}/clip.mp4`] }));
+      }, 1000);
+      return;
+    }
+    res.writeHead(200, { 'Content-Type': 'video/mp4' });
+    res.end('not a real mp4 but bytes are bytes');
+  });
+  await new Promise((resolve) => raceServer.listen(0, '127.0.0.1', resolve));
+  raceBase = `http://127.0.0.1:${raceServer.address().port}`;
+
+  const child2 = fork(path.join(here, 'index.js'), {
+    env: {
+      ...process.env,
+      UNFRAMED_DATA_DIR: dataDir2,
+      OUTPUT_DIR: outDir2,
+      PORT: '0',
+      // Ambient, not saved through /api/config -- read directly at module
+      // load, before the boot sweep's first line runs, no upstream call ever
+      // reaches a real OpenRouter with it.
+      OPENROUTER_API_KEY: 'sk-or-v1-sweep-race-0000000000000000000000000000',
+      UNFRAMED_TEST_VIDEOS_STATUS_BASE: `${raceBase}/api/v1/videos`,
+    },
+    stdio: 'ignore',
+  });
+
+  try {
+    const ready2 = await waitForMessage(child2, 'ready');
+    const base2 = `http://127.0.0.1:${ready2.port}`;
+
+    const renamed = await fetch(`${base2}/api/projects/alpha/rename`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ to: 'beta' }),
+    });
+    assert.equal(renamed.status, 200, 'the rename itself must succeed for this test to mean anything');
+    assert.equal(
+      JSON.parse(await fs.readFile(path.join(outDir2, 'jobs.json'), 'utf8')).find((j) => j.id === raceJobId)
+        ?.project,
+      'beta',
+      'the record is repointed to the new name -- this part already passed before this fix',
+    );
+
+    // Now wait for the sweep to actually finish collecting it (the stub
+    // answers after 1s, plus collectVideo's own download and writes).
+    let finalRecord;
+    const deadline = Date.now() + 15000;
+    while (Date.now() < deadline) {
+      const jobs = JSON.parse(await fs.readFile(path.join(outDir2, 'jobs.json'), 'utf8').catch(() => '[]'));
+      finalRecord = jobs.find((j) => j.id === raceJobId);
+      if (finalRecord?.status === 'done') break;
+      await new Promise((r) => setTimeout(r, 100));
+    }
+    assert.equal(finalRecord?.status, 'done', 'the sweep collected the job within the deadline');
+
+    // THE new assertion -- about collectVideo's input, which the sweep (not
+    // the rename route) controls. Before the fix, sweepOneInner passed this
+    // tick's stale snapshot (project "alpha") into collectVideo; after it,
+    // it passes the freshly re-read record (project "beta"). This is what
+    // must fail before the fix and pass after.
+    assert.match(
+      finalRecord.savedPath,
+      /[\\/]beta[\\/]/,
+      'the sweep saved the clip under the RENAMED project, not the tick\'s stale snapshot',
+    );
+    const ghostRecreated = await fs.access(path.join(outDir2, 'alpha')).then(() => true, () => false);
+    assert.equal(
+      ghostRecreated,
+      false,
+      'and did not recreate the old "alpha" folder as a ghost project',
+    );
+  } finally {
+    child2.kill();
+    await new Promise((resolve) => raceServer.close(resolve));
+    await fs.rm(dataDir2, { recursive: true, force: true });
+  }
 }
 
 console.log('host.test.js: ok');
