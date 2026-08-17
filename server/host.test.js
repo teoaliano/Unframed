@@ -778,4 +778,117 @@ try {
   }
 }
 
+// ---- the sweep-only branches (2026-08-17) ----
+// givenUp, the clock-clear, and terminal failure are each reached ONLY through
+// the sweep -- the poll route has its own equivalents, and those are what the
+// tests above exercise. Same harness as the sweep-staleness test: jobs seeded
+// before the fork, so the boot-time sweepJobs() -- the identical function the
+// 30s interval runs -- processes them against a stub that answers per id.
+{
+  const dataDir3 = await fs.mkdtemp(path.join(os.tmpdir(), 'unframed-sweep-branches-'));
+  const outDir3 = path.join(dataDir3, 'out');
+  await fs.mkdir(outDir3, { recursive: true });
+
+  const HOUR = 60 * 60 * 1000;
+  await fs.writeFile(
+    path.join(outDir3, 'jobs.json'),
+    JSON.stringify([
+      {
+        // 25 continuous hours of silence: past the 24h window, so the sweep must
+        // END this record -- the only way an id OpenRouter has forgotten ever
+        // stops being re-polled every 30 seconds.
+        id: 'giveup-job',
+        project: '',
+        params: { prompt: 'a render nobody can ask about', model: 'bytedance/seedance-2.0' },
+        startedAt: Date.now() - 26 * HOUR,
+        unreachableSince: Date.now() - 25 * HOUR,
+        status: 'pending',
+      },
+      {
+        // Marked unreachable ten minutes ago, but the stub ANSWERS for it now --
+        // any answer at all, even "still queued", must clear the clock, or a blip
+        // today and a blip tomorrow add up to a day of silence.
+        id: 'clockclear-job',
+        project: '',
+        params: { prompt: 'a blip, not a death', model: 'bytedance/seedance-2.0' },
+        startedAt: Date.now() - HOUR,
+        unreachableSince: Date.now() - 10 * 60 * 1000,
+        status: 'pending',
+      },
+      {
+        // The provider killed it. The sweep's own terminal-failure branch -- not
+        // the poll route's, which the expired-job test further up already pins --
+        // must fail the record with the provider's message.
+        id: 'sweep-terminal-job',
+        project: '',
+        params: { prompt: 'killed upstream, no browser open', model: 'bytedance/seedance-2.0' },
+        startedAt: Date.now() - HOUR,
+        status: 'pending',
+      },
+    ]),
+  );
+
+  // Per-id answers: giveup-job is deliberately ABSENT, so the stub 404s it --
+  // the exact shape an id OpenRouter has forgotten produces.
+  const branchResponses = {
+    'clockclear-job': { status: 'queued' },
+    'sweep-terminal-job': { status: 'expired', error: 'Job exceeded maximum time to live' },
+  };
+  const branchStub = http.createServer((req, res) => {
+    const id = decodeURIComponent(req.url.split('/').pop());
+    const body = branchResponses[id];
+    res.writeHead(body ? 200 : 404, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify(body || { error: `no stub for ${id}` }));
+  });
+  await new Promise((resolve) => branchStub.listen(0, '127.0.0.1', resolve));
+
+  const child3 = fork(path.join(here, 'index.js'), {
+    env: {
+      ...process.env,
+      UNFRAMED_DATA_DIR: dataDir3,
+      OUTPUT_DIR: outDir3,
+      PORT: '0',
+      OPENROUTER_API_KEY: 'sk-or-v1-sweep-branches-000000000000000000000000000',
+      UNFRAMED_TEST_VIDEOS_STATUS_BASE: `http://127.0.0.1:${branchStub.address().port}/api/v1/videos`,
+    },
+    stdio: 'ignore',
+  });
+
+  try {
+    await waitForMessage(child3, 'ready');
+
+    // The boot sweep resolves all three; poll the store until it has.
+    let jobs;
+    const deadline = Date.now() + 10000;
+    while (Date.now() < deadline) {
+      jobs = JSON.parse(await fs.readFile(path.join(outDir3, 'jobs.json'), 'utf8').catch(() => '[]'));
+      const giveup = jobs.find((j) => j.id === 'giveup-job');
+      const terminal = jobs.find((j) => j.id === 'sweep-terminal-job');
+      const cleared = jobs.find((j) => j.id === 'clockclear-job');
+      if (giveup?.status === 'failed' && terminal?.status === 'failed' && cleared && !('unreachableSince' in cleared)) break;
+      await new Promise((r) => setTimeout(r, 100));
+    }
+
+    const giveup = jobs.find((j) => j.id === 'giveup-job');
+    assert.equal(giveup?.status, 'failed', 'after 24h of continuous silence the sweep ends the record');
+    assert.match(giveup.error, /24 hours/, 'and the reason says how long it tried');
+    assert.match(giveup.error, /OpenRouter \(404\)/, 'and carries what the last attempt actually said');
+    assert.ok(Number.isFinite(giveup.resolvedAt), 'resolvedAt is stamped so pruneJobs can age it out');
+
+    const cleared = jobs.find((j) => j.id === 'clockclear-job');
+    assert.equal(cleared?.status, 'pending', 'a job that answered stays pending -- an answer is not a failure');
+    assert.equal('unreachableSince' in cleared, false,
+      'and the silence clock is CLEARED, so two blips a day apart never add up to 24 hours');
+
+    const terminal = jobs.find((j) => j.id === 'sweep-terminal-job');
+    assert.equal(terminal?.status, 'failed', 'the sweep ends a job the provider killed, with no browser open');
+    assert.equal(terminal.error, 'Job exceeded maximum time to live',
+      "and the record carries the provider's own message, not a generic one");
+  } finally {
+    child3.kill();
+    await new Promise((resolve) => branchStub.close(resolve));
+    await fs.rm(dataDir3, { recursive: true, force: true });
+  }
+}
+
 console.log('host.test.js: ok');
