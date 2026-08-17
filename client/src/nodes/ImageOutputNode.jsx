@@ -368,7 +368,7 @@ export default function ImageOutputNode({ id, data }) {
         <ParamControls params={params} data={data} onChange={(u) => updateNodeData(id, u)} />
 
         <VStack gap={1}>
-          {/* type="label" is what the Selectors above render for Size and Quality,
+          {/* type="label" is what the selects above render for Size and Quality,
               so the four labels stay one size instead of Runs sitting a step down. */}
           <Text type="label" as="label" color="secondary">Runs</Text>
           <RunsControl

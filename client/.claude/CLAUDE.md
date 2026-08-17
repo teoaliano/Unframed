@@ -31,3 +31,21 @@ MORE CLI:
   swizzle <Name>     eject component source for deep customization
   upgrade --apply    run after any @astryxdesign/core bump
 <!-- ASTRYX:END -->
+
+<!-- Outside the ASTRYX markers on purpose: `astryx upgrade --apply` rewrites
+     everything between them. -->
+
+## The one sanctioned exception to "no <div>, components do all layout"
+
+The parameter controls on the output nodes (`NativeSelect` in
+`src/nodes/output/controls.jsx`) are raw `<select>` elements with hand-written CSS
+in `src/styles.css`. Astryx popups are positioned purely by CSS anchor positioning,
+and where the anchor fails to resolve they render at the viewport corner instead of
+on their node — reproducible in the packaged Electron app and in Safari, not fixable
+from this repo, and not fixed by the 0.4.3 upgrade. A native select's list is drawn
+by the OS, so it cannot be mispositioned by any of that.
+
+The exception is that one component, and it is not a precedent: **the CSS still uses
+only tokens**, copied from the same `inputStyles` Astryx gives its own input wrapper,
+so a theme change carries. Reach for a real component everywhere else, and take this
+one back the day anchor positioning is reliable everywhere Unframed runs.

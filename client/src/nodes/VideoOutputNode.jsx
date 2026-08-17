@@ -3,7 +3,6 @@ import { Handle, Position, useReactFlow, useNodes, useEdges } from '@xyflow/reac
 import { Card } from '@astryxdesign/core/Card';
 import { Text } from '@astryxdesign/core/Text';
 import { Button } from '@astryxdesign/core/Button';
-import { Selector } from '@astryxdesign/core/Selector';
 import { CheckboxInput } from '@astryxdesign/core/CheckboxInput';
 import { Icon } from '@astryxdesign/core/Icon';
 import { VStack } from '@astryxdesign/core/Stack';
@@ -14,7 +13,7 @@ import ExpandableNote from './ExpandableNote.jsx';
 import { MAX_VIDEO_BYTES } from './VideoNode.jsx';
 import { useModels, useModelParams, freeSpot } from './output/core.js';
 import { resetModelParams } from './output/defaults.js';
-import { ModelPicker, ParamControls, CostFoot } from './output/controls.jsx';
+import { ModelPicker, ParamControls, CostFoot, NativeSelect } from './output/controls.jsx';
 import { buildRequest, bucketSources } from '../graph/resolve.js';
 import { startVideo, pollVideo } from '../api.js';
 import { ExternalLink as AddToCanvasIcon } from 'lucide-react';
@@ -419,18 +418,16 @@ export default function VideoOutputNode({ id, data }) {
               mode (see selectorOptions above) can leave inputModes itself at length 1
               while there is still a stored mode that needs a visible, changeable row. */}
           {(inputModes.length > 1 || Boolean(data.inputMode)) && (
-            <Selector
+            <NativeSelect
               label="Input"
-              size="sm"
               options={selectorOptions}
               value={inputMode}
               onChange={(v) => updateNodeData(id, { inputMode: v })}
             />
           )}
           {durations && (
-            <Selector
+            <NativeSelect
               label="Seconds"
-              size="sm"
               options={durations}
               value={String(duration)}
               onChange={(v) => updateNodeData(id, { duration: Number(v) })}
@@ -439,9 +436,9 @@ export default function VideoOutputNode({ id, data }) {
           {canAudio && (
             // A checkbox, not a toggle-button: this is an on/off flag, and a
             // ghost button reads as "not set" rather than "off". The wrapper
-            // gives it the same height as the Selector's input box so the two
-            // line up on their centres — bottom-aligning them does not, since
-            // the Selector's box is taller than the checkbox.
+            // gives it the same height as the select's box so the two line up
+            // on their centres — bottom-aligning them does not, since the
+            // select's box is taller than the checkbox.
             <div className="xnode-inline-check">
               <CheckboxInput
                 label="Audio"

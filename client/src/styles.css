@@ -278,9 +278,77 @@ div:has(> .add-node-menu) {
   height: 100%;
   min-height: 0;
 }
-/* A checkbox sitting beside a size="sm" Selector: match the control height so the
+/* The closed box of the output nodes' native <select>s (see NativeSelect in
+   nodes/output/controls.jsx for why they are native at all). Every value is the token
+   Astryx's own inputStyles uses for an input wrapper, so a theme change carries here
+   too; the OPEN list is the OS's and takes none of this, which is the entire point. */
+.xnode-native-select {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  /* The gap Astryx's Field puts between a label and its control. */
+  gap: var(--spacing-1);
+  /* Lets the control shrink inside the wrapping row rather than widening the card:
+     a size list like "1280x720 · 16:9" is wider than a 300px node. */
+  min-width: 0;
+  max-width: 100%;
+}
+.xnode-native-select select {
+  /* appearance:none is what lets the tokens below apply at all — it strips the OS's
+     own box chrome WITHOUT touching the popup, which stays natively drawn. */
+  appearance: none;
+  -webkit-appearance: none;
+  box-sizing: border-box;
+  max-width: 100%;
+  height: var(--size-element-sm);
+  padding-block: var(--spacing-1);
+  padding-inline: var(--spacing-2);
+  /* Room for the chevron drawn by ::after. */
+  padding-inline-end: calc(var(--spacing-2) * 2 + 10px);
+  border: var(--border-width) solid var(--color-border-emphasized);
+  border-radius: var(--radius-element);
+  background-color: var(--color-background-surface);
+  color: var(--color-text-primary);
+  font-family: var(--font-family-body);
+  font-size: var(--text-label-size);
+  line-height: var(--text-label-leading);
+  outline: none;
+  transition: border-color var(--duration-fast) var(--ease-standard),
+    box-shadow var(--duration-fast) var(--ease-standard);
+}
+@media (hover: hover) {
+  .xnode-native-select select:hover:not(:focus) {
+    box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--color-border-emphasized) 30%, transparent);
+  }
+}
+.xnode-native-select select:focus {
+  border-color: var(--color-accent);
+  box-shadow: inset 0 0 0 2px var(--color-accent-muted);
+}
+@media (prefers-reduced-motion: reduce) {
+  .xnode-native-select select {
+    transition-duration: 0s;
+  }
+}
+/* The chevron appearance:none removed. A mask rather than a background-image so the
+   glyph takes a token colour instead of a hex baked into the data URI. Pinned to the
+   bottom of the wrapper, which is the select's own box — it is the last child. */
+.xnode-native-select::after {
+  content: '';
+  position: absolute;
+  inset-block-end: 0;
+  inset-inline-end: var(--spacing-2);
+  width: 10px;
+  height: var(--size-element-sm);
+  background-color: var(--color-icon-secondary);
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='black' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") center / 10px auto no-repeat;
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='black' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") center / 10px auto no-repeat;
+  pointer-events: none;
+}
+
+/* A checkbox sitting beside a size="sm" select: match the control height so the
    two align on their centres, not their bottoms. The token is the same one the
-   Selector's input box uses, so this follows any change to it. */
+   select's box uses, so this follows any change to it. */
 .xnode-inline-check {
   display: flex;
   align-items: center;

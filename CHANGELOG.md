@@ -27,6 +27,12 @@ Keep that shape: the website's What's new page parses this file.
   text area itself bigger again. The bordered box grew but the writing area stayed
   four lines tall, so a long prompt or result scrolled in a strip at the top of a
   mostly-empty box. Broken by the same toolkit upgrade noted under Changed.
+- **The Quality, Background, Ratio, Size, Input and Seconds menus on the output
+  nodes open on the node again.** They could open at the corner of the window
+  instead, far from the control you clicked — always in the installed app, and in
+  Safari. They are now the operating system's own menus, so they open where you
+  click and scroll properly on a long list; typing a few letters jumps to a value.
+  The controls look and behave the same otherwise.
 - Pressing Enter in the New project dialog creates the project, and in Rename
   renames it. The button was the only way through; Enter did nothing. An empty or
   already-taken name still stops with its message rather than closing on the
