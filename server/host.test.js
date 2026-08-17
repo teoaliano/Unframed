@@ -891,4 +891,106 @@ try {
   }
 }
 
+// ---- rename during the download window (2026-08-17) ----
+// 850666b narrowed the stale-project window to "between sweepOneInner's store
+// re-read and collectVideo's write" -- but collectVideo's own download sits
+// inside that gap and can run for up to 300s. This holds the download open,
+// lands a real rename while it is open, then releases it: fully deterministic,
+// no timing luck. Two things must be true after: the clip is written under the
+// NEW name, and the done record's `project` names the folder its savedPath is
+// actually in -- before this fix the sweep's done patch never set `project` at
+// all, so the record said "beta" while the file sat in "alpha".
+{
+  const dataDir4 = await fs.mkdtemp(path.join(os.tmpdir(), 'unframed-download-rename-'));
+  const outDir4 = path.join(dataDir4, 'out');
+  await fs.mkdir(path.join(outDir4, 'alpha'), { recursive: true });
+
+  const holdJobId = 'held-download-job';
+  await fs.writeFile(
+    path.join(outDir4, 'jobs.json'),
+    JSON.stringify([
+      {
+        id: holdJobId,
+        project: 'alpha',
+        params: { prompt: 'renamed mid-download', model: 'bytedance/seedance-2.0' },
+        startedAt: Date.now(),
+        status: 'pending',
+      },
+    ]),
+  );
+
+  // Status answers "completed" immediately; the DOWNLOAD is parked until the
+  // test releases it, after the rename has landed.
+  let holdBase;
+  let releaseDownload;
+  const downloadArrived = new Promise((resolve) => {
+    releaseDownload = resolve;
+  });
+  const holdServer = http.createServer((req, res) => {
+    if (req.url.startsWith('/api/v1/videos/')) {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ status: 'completed', unsigned_urls: [`${holdBase}/clip.mp4`] }));
+      return;
+    }
+    // The download leg: signal the test it has started, and park the response
+    // object for the test to finish later.
+    downloadArrived.parked = res;
+    releaseDownload();
+  });
+  await new Promise((resolve) => holdServer.listen(0, '127.0.0.1', resolve));
+  holdBase = `http://127.0.0.1:${holdServer.address().port}`;
+
+  const child4 = fork(path.join(here, 'index.js'), {
+    env: {
+      ...process.env,
+      UNFRAMED_DATA_DIR: dataDir4,
+      OUTPUT_DIR: outDir4,
+      PORT: '0',
+      OPENROUTER_API_KEY: 'sk-or-v1-download-rename-00000000000000000000000000',
+      UNFRAMED_TEST_VIDEOS_STATUS_BASE: `${holdBase}/api/v1/videos`,
+    },
+    stdio: 'ignore',
+  });
+
+  try {
+    const ready4 = await waitForMessage(child4, 'ready');
+    const base4 = `http://127.0.0.1:${ready4.port}`;
+
+    // Wait until the sweep is INSIDE the download -- past its own store
+    // re-read, which is exactly the window 850666b left open.
+    await downloadArrived;
+
+    const renamed = await fetch(`${base4}/api/projects/alpha/rename`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ to: 'beta' }),
+    });
+    assert.equal(renamed.status, 200, 'the mid-download rename itself must succeed for this test to mean anything');
+
+    // NOW let the download finish.
+    downloadArrived.parked.writeHead(200, { 'Content-Type': 'video/mp4' });
+    downloadArrived.parked.end('bytes standing in for a clip');
+
+    let record;
+    const deadline = Date.now() + 10000;
+    while (Date.now() < deadline) {
+      const jobs = JSON.parse(await fs.readFile(path.join(outDir4, 'jobs.json'), 'utf8').catch(() => '[]'));
+      record = jobs.find((j) => j.id === holdJobId);
+      if (record?.status === 'done') break;
+      await new Promise((r) => setTimeout(r, 100));
+    }
+    assert.equal(record?.status, 'done', 'the sweep collected the held job within the deadline');
+    assert.match(record.savedPath, /[\\/]beta[\\/]/,
+      'the clip lands under the RENAMED project even when the rename arrives mid-download');
+    assert.equal(record.project, 'beta',
+      "and the done record's project names the folder its savedPath is actually in");
+    const ghostAlpha = await fs.access(path.join(outDir4, 'alpha')).then(() => true, () => false);
+    assert.equal(ghostAlpha, false, 'and the old folder is not recreated as a ghost');
+  } finally {
+    child4.kill();
+    await new Promise((resolve) => holdServer.close(resolve));
+    await fs.rm(dataDir4, { recursive: true, force: true });
+  }
+}
+
 console.log('host.test.js: ok');

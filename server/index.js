@@ -1049,7 +1049,17 @@ async function collectVideo(job, data) {
   const buf = Buffer.from(await f.arrayBuffer());
 
   const { prompt = '', model = '', duration, resolution, size } = job.params || {};
-  const dir = job.project ? projectDir(job.project) : OUTPUT_DIR;
+  // Resolve the project AFTER the download, from the store as it stands NOW.
+  // The download above can run for minutes, and `job` was read before it
+  // started -- a rename landing in between is exactly what used to recreate the
+  // old folder as a ghost (the same bug 850666b fixed one call frame up, left
+  // open here for the length of the download). `current` can legitimately be
+  // absent -- a damaged or replaced store -- so fall back to the handed job,
+  // the same tolerance both callers already have. Not `||`: '' is a real value
+  // meaning "no project".
+  const current = (await readJobs(OUTPUT_DIR)).find((j) => j.id === job.id);
+  const project = current ? current.project : job.project;
+  const dir = project ? projectDir(project) : OUTPUT_DIR;
   await fs.mkdir(dir, { recursive: true });
   const stamp = new Date().toISOString().replace(/[:.]/g, '-');
   const base = `${stamp}-${slugify(prompt)}`;
@@ -1084,7 +1094,11 @@ async function collectVideo(job, data) {
     console.log(`  sidecar not written: ${err.message}`);
   }
 
-  return { savedPath: videoPath, cost };
+  // `project` rides along so the callers' done patches can record the folder
+  // the clip ACTUALLY went into. Without it the sweep's patch left `project`
+  // untouched and the poll route's wrote its own pre-download copy -- either
+  // way a record whose project and savedPath could disagree after a rename.
+  return { savedPath: videoPath, cost, project };
 }
 
 // In-process only: closes the gap collectVideo's own idempotency can't. The
@@ -1185,8 +1199,8 @@ async function sweepOneInner(job) {
     // above already does this right (`const job = fresh || {...}`); `fresh` can
     // legitimately be absent -- the store may have been damaged or replaced --
     // so fall back to the snapshot only then, same as there.
-    const { savedPath, cost } = await collectVideo(fresh || job, data);
-    await persistJob(OUTPUT_DIR, job.id, { status: 'done', savedPath, cost, resolvedAt: Date.now() });
+    const { savedPath, cost, project } = await collectVideo(fresh || job, data);
+    await persistJob(OUTPUT_DIR, job.id, { status: 'done', savedPath, cost, project, resolvedAt: Date.now() });
     videoJobRefs.delete(job.id); // the job is done; nothing else will read it
     revokeJobShares(job.id); // and its shared clip goes dark with it
     console.log(`  video job ${job.id} collected by the sweep → ${savedPath}`);
@@ -1312,9 +1326,9 @@ app.get('/api/video/:id', async (req, res) => {
       params: { prompt, model, duration, resolution, size },
       refs: videoJobRefs.get(id) || null,
     };
-    const { savedPath, cost } = await collectVideo(job, data);
+    const { savedPath, cost, project } = await collectVideo(job, data);
     const saved = await persistJob(OUTPUT_DIR, id, {
-      project: job.project,
+      project,
       params: job.params,
       refs: job.refs,
       status: 'done',
