@@ -976,12 +976,15 @@ try {
       Number.isFinite(stamped?.unreachableSince),
       'but the silence clock starts ticking from that first miss',
     );
-    // NOT exercised here, and not cheaply exercisable in this harness: that the
-    // `if (!job.unreachableSince)` guard on that same line also stops a SECOND
-    // and later miss from rewriting the stamp forward. Proving that needs a
-    // second sweep tick to actually run, and the interval is a real,
-    // unconfigurable 30s (server/index.js) -- this test's 10s deadline ends
-    // before one ever fires. See footnote 9 in docs/video-and-sharing.md.
+    // The middle link -- that the `if (!job.unreachableSince)` guard on that
+    // same line also stops a SECOND and later miss from rewriting the stamp
+    // forward -- is NOT this single boot sweep's to prove; a single process
+    // observing it would mean waiting out a real, unconfigurable 30s interval
+    // tick, which this test does not do. It is proven separately, and for
+    // real, by the "give-up chain across two independent boot sweeps" block
+    // further down: a second BOOT sweep (a second forked process) is a second
+    // tick, without waiting on the interval. See footnote 9 in
+    // docs/video-and-sharing.md.
   } finally {
     child3.kill();
     await new Promise((resolve) => branchStub.close(resolve));
@@ -1235,6 +1238,172 @@ try {
     child5.kill();
     await new Promise((resolve) => pollStub.close(resolve));
     await fs.rm(dataDir5, { recursive: true, force: true });
+  }
+}
+
+// ---- the give-up chain across two independent boot sweeps (fix round 2, 2026-08-17) ----
+// The sweep-branches block above proves the clock STARTS (stamp-job) and that
+// it eventually FIRES (giveup-job), but neither proves the link between them:
+// that `if (!job.unreachableSince)` -- the same line that writes the stamp --
+// also stops a SECOND and later miss from rewriting it. That link is not a
+// nicety, it is load-bearing: `givenUp(job)` is checked BEFORE this write (a
+// few lines up: `if (givenUp(job)) { ... }` runs first), so if the guard were
+// gone the stamp becomes `Date.now()` on every tick and `now - unreachableSince`
+// would never reach 24 hours -- the job would not be given up on LATE, it
+// would never be given up on AT ALL, silently, forever `pending`. That is
+// exactly the outcome this row's "yes" claims does not happen.
+//
+// A single process can't observe a second tick without this suite waiting out
+// a real 30s interval -- but a second BOOT sweep IS a second tick: footnotes 1
+// and 11 on this same row already argue that sweepJobs() at boot is the
+// identical function the interval calls, and that a fresh process finding a
+// pending job behaves indistinguishably from a restarted one finding it. So:
+// fork the real server twice in sequence against the SAME store and compare
+// the stamp across the two boot sweeps, rather than one process across two
+// ticks.
+{
+  const dataDir6 = await fs.mkdtemp(path.join(os.tmpdir(), 'unframed-give-up-chain-'));
+  const outDir6 = path.join(dataDir6, 'out');
+  await fs.mkdir(outDir6, { recursive: true });
+
+  const targetId = 'twotick-target-job';
+  await fs.writeFile(
+    path.join(outDir6, 'jobs.json'),
+    JSON.stringify([
+      {
+        // No unreachableSince yet. Absent from chainResponses below, so every
+        // poll -- in EITHER fork -- 404s it, the same shape an id OpenRouter
+        // has forgotten produces.
+        id: targetId,
+        project: '',
+        params: { prompt: 'silence across two separate boot sweeps', model: 'bytedance/seedance-2.0' },
+        startedAt: Date.now(),
+        status: 'pending',
+      },
+    ]),
+  );
+
+  // One stub server, reused by both forks -- chainResponses is mutated between
+  // them to add the sentinel's answer (see below), which is fine: it's a plain
+  // object this closure reads fresh on every request, not a snapshot taken once.
+  const chainResponses = {};
+  const chainStub = http.createServer((req, res) => {
+    const id = decodeURIComponent(req.url.split('/').pop());
+    const body = chainResponses[id];
+    res.writeHead(body ? 200 : 404, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify(body || { error: `no stub for ${id}` }));
+  });
+  await new Promise((resolve) => chainStub.listen(0, '127.0.0.1', resolve));
+  const chainStubBase = `http://127.0.0.1:${chainStub.address().port}/api/v1/videos`;
+
+  const forkAgainstChainStore = () =>
+    fork(path.join(here, 'index.js'), {
+      env: {
+        ...process.env,
+        UNFRAMED_DATA_DIR: dataDir6,
+        OUTPUT_DIR: outDir6,
+        PORT: '0',
+        OPENROUTER_API_KEY: 'sk-or-v1-give-up-chain-000000000000000000000000000',
+        UNFRAMED_TEST_VIDEOS_STATUS_BASE: chainStubBase,
+      },
+      stdio: 'ignore',
+    });
+
+  let stampAfterTick1;
+  try {
+    // ---- tick 1: the first boot sweep stamps the first missed poll ----
+    const child6a = forkAgainstChainStore();
+    try {
+      await waitForMessage(child6a, 'ready');
+      const deadline1 = Date.now() + 10000;
+      let jobsAfterTick1;
+      while (Date.now() < deadline1) {
+        jobsAfterTick1 = JSON.parse(await fs.readFile(path.join(outDir6, 'jobs.json'), 'utf8').catch(() => '[]'));
+        const target = jobsAfterTick1.find((j) => j.id === targetId);
+        if (Number.isFinite(target?.unreachableSince)) break;
+        await new Promise((r) => setTimeout(r, 100));
+      }
+      const targetAfterTick1 = jobsAfterTick1.find((j) => j.id === targetId);
+      assert.ok(
+        Number.isFinite(targetAfterTick1?.unreachableSince),
+        'setup: the first boot sweep must stamp the first missed poll before this test can mean anything',
+      );
+      stampAfterTick1 = targetAfterTick1.unreachableSince;
+    } finally {
+      // Killed before its own 30s interval could ever fire, so this fork's
+      // entire contribution to jobs.json is exactly ONE boot-time sweep tick --
+      // never a second, in-process one that would confound tick 2 below.
+      child6a.kill();
+    }
+
+    // Add the sentinel strictly BETWEEN the two forks: tick 1's snapshot was
+    // taken before this write exists on disk, so tick 1 could not have touched
+    // it under any timing, and it is not yet answered by the stub either (added
+    // to chainResponses in the same step). Its only route to `failed` is a
+    // sweep tick that reads the store fresh and polls it -- which is exactly
+    // what tick 2, and only tick 2, can do.
+    const sentinelId = 'twotick-sentinel-job';
+    chainResponses[sentinelId] = { status: 'expired', error: 'Job exceeded maximum time to live' };
+    const jobsBeforeTick2 = JSON.parse(await fs.readFile(path.join(outDir6, 'jobs.json'), 'utf8'));
+    await fs.writeFile(
+      path.join(outDir6, 'jobs.json'),
+      JSON.stringify([
+        ...jobsBeforeTick2,
+        {
+          id: sentinelId,
+          project: '',
+          params: { prompt: 'exists only to prove the second boot sweep actually ran', model: 'bytedance/seedance-2.0' },
+          startedAt: Date.now(),
+          status: 'pending',
+        },
+      ]),
+    );
+
+    // ---- tick 2: a SECOND, independent boot sweep against the SAME store ----
+    const child6b = forkAgainstChainStore();
+    try {
+      await waitForMessage(child6b, 'ready');
+      const deadline2 = Date.now() + 10000;
+      let jobsAfterTick2;
+      while (Date.now() < deadline2) {
+        jobsAfterTick2 = JSON.parse(await fs.readFile(path.join(outDir6, 'jobs.json'), 'utf8').catch(() => '[]'));
+        const sentinel = jobsAfterTick2.find((j) => j.id === sentinelId);
+        if (sentinel?.status === 'failed') break;
+        await new Promise((r) => setTimeout(r, 100));
+      }
+
+      // The one way this whole block could lie: "the stamp is unchanged"
+      // is exactly what a NO-OP second tick would also produce. This is the
+      // positive evidence that tick 2 actually read the store and polled it --
+      // proof independent of, and unconnected to, the assertion below.
+      const sentinelAfterTick2 = jobsAfterTick2.find((j) => j.id === sentinelId);
+      assert.equal(
+        sentinelAfterTick2?.status,
+        'failed',
+        'the sentinel resolving is what proves the second boot sweep actually ran -- not an assumption',
+      );
+
+      // THE assertion this block exists for. Same job, same store, two
+      // completely separate processes' boot sweeps apart: if the guard on
+      // server/index.js's `if (!job.unreachableSince) await persistJob(...)`
+      // line is doing its job, nothing in tick 2 ever touches this record at
+      // all (the condition is false, so persistJob is never even called for
+      // it) and the value carries over byte-for-byte. If the guard is gone,
+      // this is where that shows up: a later, DIFFERENT timestamp, and a job
+      // whose 24h clock would then never reach 24 hours no matter how long
+      // this ran for real.
+      const targetAfterTick2 = jobsAfterTick2.find((j) => j.id === targetId);
+      assert.equal(
+        targetAfterTick2?.unreachableSince,
+        stampAfterTick1,
+        'a second miss must not move the stamp forward -- only the FIRST one may ever write it',
+      );
+    } finally {
+      child6b.kill();
+    }
+  } finally {
+    await new Promise((resolve) => chainStub.close(resolve));
+    await fs.rm(dataDir6, { recursive: true, force: true });
   }
 }
 

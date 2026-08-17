@@ -179,8 +179,15 @@ function Canvas() {
   // instead of stacking a new one on top of it every 500ms.
   const reportSaveFailure = useCallback(
     (err) => {
+      // err.message already opens with its own "Could not save the project:"
+      // (the server's wrap, server/index.js) or "Could not save the project
+      // (500)" (api.js's fallback when the body isn't JSON) -- prefixing
+      // another "Could not save" here is what doubled the sentence in the
+      // in-app check. A raw network failure (the server not running at all,
+      // so the PUT never reaches it) has no such prefix, and reads fine
+      // without one too.
       toast({
-        body: `Could not save the canvas: ${err.message}. Is the local server running?`,
+        body: `${err.message}. Is the local server running?`,
         uniqueID: 'autosave-failed',
       });
     },
