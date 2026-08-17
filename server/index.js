@@ -446,6 +446,14 @@ const CHAT_COMPLETIONS_URL =
 // fetchVideoStatus below exists: "ask upstream" is one behaviour, not three.
 // `what` names the thing the user paid for, so the copy fits the route. Callers
 // keep their own cleanup -- /api/video's minted share tokens, for one.
+//
+// Only the /api/text call site is actually pinned by a test: it alone can be
+// pointed at a stub (UNFRAMED_TEST_CHAT_COMPLETIONS_URL) that dies mid-body,
+// which is the only way to make this catch fire on demand. The /api/generate
+// and /api/video call sites hit hardcoded OpenRouter URLs with no equivalent
+// override, so deleting either of THOSE two calls still leaves the suite
+// green -- they are identical two-liners to this one, covered by inspection,
+// not by a test that would catch a regression in them specifically.
 async function readUpstreamBody(orRes, what) {
   try {
     return { raw: await orRes.text() };

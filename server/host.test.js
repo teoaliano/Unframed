@@ -88,6 +88,18 @@ const waitForMessage = (proc, type, ms = 10000) =>
   });
 const waitFor = (type, ms) => waitForMessage(child, type, ms);
 
+// Two blocks below (rename-during-download, once for the sweep and once for
+// the poll route) await a promise that only resolves once collectVideo's
+// download leg actually starts. Left unbounded, a regression that stops the
+// sweep or the poll route from ever reaching that leg doesn't fail an
+// assertion -- it hangs this await forever, and with it `npm test`, silently,
+// with no output pointing at the cause. Every other wait in this file is
+// bounded (this file's own `waitForMessage` above, the store-polling deadlines
+// below, `AbortSignal.timeout` on the fetches) for the same reason: a suite
+// that runs in CI must fail loudly, not sit there.
+const withDeadline = (promise, ms, message) =>
+  Promise.race([promise, new Promise((_, reject) => setTimeout(() => reject(new Error(message)), ms))]);
+
 try {
   const ready = await waitFor('ready');
 
@@ -1060,7 +1072,7 @@ try {
 
     // Wait until the sweep is INSIDE the download -- past its own store
     // re-read, which is exactly the window 850666b left open.
-    await downloadArrived;
+    await withDeadline(downloadArrived, 10000, 'the sweep never reached collectVideo\'s download leg within 10s');
 
     const renamed = await fetch(`${base4}/api/projects/alpha/rename`, {
       method: 'POST',
@@ -1207,7 +1219,7 @@ try {
     // Wait until the download for THIS job has started before renaming -- the
     // rename must land inside collectVideo's fetch, not before it, or this
     // proves nothing beyond what the sweep-side block above already does.
-    await pollDownloadArrived;
+    await withDeadline(pollDownloadArrived, 10000, 'the poll route never reached collectVideo\'s download leg within 10s');
 
     const renamed = await fetch(`${base5}/api/projects/alpha/rename`, {
       method: 'POST',

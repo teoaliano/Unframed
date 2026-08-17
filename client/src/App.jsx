@@ -189,6 +189,7 @@ function Canvas() {
       toast({
         body: `${err.message}. Is the local server running?`,
         uniqueID: 'autosave-failed',
+        type: 'error',
       });
     },
     [toast],
