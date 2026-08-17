@@ -499,8 +499,10 @@ Two related residues from PR #15's `850666b`. First, the narrowed-but-open windo
 One change closes both: re-read the store after the download completes, immediately before the write, use THAT record's project for the folder, and return the project actually used so both callers persist it into the `done` record. The record and the folder can no longer disagree, whatever the timing.
 
 **Files:**
-- Modify: `server/index.js` — `collectVideo` (~line 987, the `dir` computation) and its two callers' `done` persists (sweep ~line 1125, poll route ~line 1240)
-- Test: `server/host.test.js` — a new block after Task 3's block
+- Modify: `server/index.js` — `collectVideo` (~line 987, the `dir` computation) and its two callers' `done` persists (sweep ~line 1125, poll route ~line 1240); also the sweep's now-stale explanatory comment (~1189-1201), which currently credits `collectVideo`'s late `.project` read with the ghost-folder bug this task moves inside `collectVideo` itself
+- Test: `server/host.test.js` — a new block after Task 3's block, plus the older sweep-staleness block's comment (~758-767), whose "must fail before the fix" claim stops being true once the re-read lives in `collectVideo`
+
+**Both callers need their own test.** The sweep-driven test alone cannot pin either `done` patch: after a rename, `reassignPendingJobs` has already set the record's `project`, and `persistJob` merges onto it, so the assertion passes whether or not the patch supplied it. The poll route needs its own coverage for the same reason and one sharper one — with no store record it takes the `const job = fresh || {…}` branch, which is the only path that exercises the fallback and the only one that would have caught the shadowing bug described below. Cover two cases through the poll route: no store record at all (asserting a 200 and a written clip), and a rename landing during a parked download (asserting `savedPath` and the record's `project` both name the new project).
 
 **Interfaces:**
 - Consumes: `readJobs(dir)` from `server/jobs.js` (lenient on purpose: a damaged store falls back to the handed job, same tolerance both callers already have).
@@ -686,12 +688,14 @@ In the poll route (~line 1240), replace:
 with:
 
 ```js
-    const { savedPath, cost, project } = await collectVideo(job, data);
+    const { savedPath, cost, project: usedProject } = await collectVideo(job, data);
     const saved = await persistJob(OUTPUT_DIR, id, {
-      project,
+      project: usedProject,
 ```
 
 (the rest of that persist — `params`, `refs`, `status`, `savedPath`, `cost`, `resolvedAt` — stays exactly as it is).
+
+**The rename to `usedProject` is load-bearing, not style.** This route already binds `project` from `req.query` above, and a bare `const { … project }` here is declared inside the `try` block — which shadows it for the whole block and puts the earlier `project: project || null` read (in the `const job = fresh || {…}` fallback) in its temporal dead zone. That throws `ReferenceError` whenever `fresh` is falsy — the job is absent from the store, which is exactly the pre-store-era and damaged-`jobs.json` cases the comment above it names — and never throws when it is truthy, so a test suite that always seeds the store stays green while a paid render is lost in silence. This plan shipped the bare version first; it was caught in Task 4's review on 2026-08-17 and is corrected here.
 
 - [ ] **Step 4: Run to verify it passes, then the whole suite**
 
