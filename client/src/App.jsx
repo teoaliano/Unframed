@@ -900,7 +900,27 @@ function Canvas() {
           : `Show in file manager${many}`;
       sections.push({
         title: 'Image',
-        items: [{ label: reveal, onClick: () => revealFiles(names).catch(() => {}) }],
+        items: [
+          {
+            label: reveal,
+            // Caught, not swallowed. The catch itself has to stay -- an unhandled
+            // rejection in the browser is a console line and nothing more, which
+            // is the same silence -- but throwing the message away made a failed
+            // reveal look exactly like a successful one: nothing happens either
+            // way. That is how a reveal that opened no window at all went four
+            // days unreported (2026-08-13 to 08-17). One stable uniqueID, the
+            // same reason reportSaveFailure above has one, so clicking a reveal
+            // that keeps failing updates one toast instead of stacking per click.
+            onClick: () =>
+              revealFiles(names).catch((err) =>
+                toast({
+                  body: `Could not show ${names.length > 1 ? `those ${names.length} files` : 'that file'}: ${err.message}`,
+                  uniqueID: 'reveal-failed',
+                  type: 'error',
+                }),
+              ),
+          },
+        ],
       });
     }
 

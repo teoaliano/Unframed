@@ -20,6 +20,11 @@ Keep that shape: the website's What's new page parses this file.
   too, ending the session rather than just that one poll.
 - A render finishing while its project is being renamed now lands in the
   renamed project, and its record names the folder the clip is actually in.
+- **Reveal in Finder works again.** Since 2026-08-13 it did nothing at all when
+  running Unframed from a clone: the menu item was there, the click was
+  registered, and no window ever opened.
+- A reveal that fails now says why — the folder having been moved or deleted, for
+  instance. It used to fail exactly like it succeeded: in silence.
 
 ## 2026-08-16
 

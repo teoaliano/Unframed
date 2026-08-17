@@ -99,7 +99,12 @@ near.
   next boot does not read it — no error, key gone.
 - **`/api/reveal` keeps its standalone branches.** The `process.send` seam is added
   *before* the platform branches, not instead of them. A clone has no parent and
-  must still open Finder or Explorer.
+  must still open Finder or Explorer. And the seam is entered only when
+  `UNFRAMED_CLIENT_DIST` is set as well: a clone under `node --watch` DOES have a
+  parent with an IPC channel, and gating on `process.send` alone silently gave
+  every clone a reveal that answered 200 and opened nothing (2026-08-13 to
+  2026-08-17). The first invariant above is the general rule this broke;
+  `server/host.test.js` now forks a channel-without-marker server to hold the line.
 
 ## Anti-patterns
 

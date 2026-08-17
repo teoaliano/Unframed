@@ -1395,7 +1395,20 @@ app.post('/api/reveal', async (req, res) => {
   // shell's showItemInFolder covers all three platforms, so this one seam replaces
   // all three branches below -- and, on macOS, removes the Apple Event that would
   // otherwise need an entitlement and a first-run consent prompt.
-  if (process.send) {
+  //
+  // `process.send` alone is NOT the test, and gating on it alone broke reveal for
+  // every developer between 2026-08-13 and 2026-08-17: `npm run server` is
+  // `node --watch`, watch mode runs the app in a child WITH an IPC channel, and
+  // its supervisor drops messages it doesn't know -- so the reveal went nowhere,
+  // this route still answered 200, and nothing anywhere reported a failure. Any
+  // other IPC-bearing parent (a debugger's auto-attach, nodemon, a process
+  // manager) would have done the same. So the channel has to be paired with
+  // proof that the parent on the other end is the shell, and that proof is the
+  // shell's own marker: UNFRAMED_CLIENT_DIST is set on every fork it makes and
+  // by nothing else, which keeps hosted-mode behaviour gated on an env var unset
+  // in a clone (docs/releases.md's first invariant) rather than on plumbing that
+  // an ordinary dev run happens to share.
+  if (process.send && process.env.UNFRAMED_CLIENT_DIST) {
     process.send({ type: 'reveal', files: files.length ? files : [dir] });
     return res.json({ ok: true, revealed: files.length || 'folder' });
   }
