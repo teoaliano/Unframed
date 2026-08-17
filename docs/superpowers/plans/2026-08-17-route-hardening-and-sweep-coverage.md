@@ -185,7 +185,9 @@ git commit -m "Answer with an error, not a hang, when a paid call's body read di
 
 Four unprotected awaits remain after Task 1, all cheaper failures but the same hang: `PUT /api/projects/:name` (autosave — a disk error hangs every save while the UI looks fine, silently lost work), `GET /api/projects` (project list never loads), `PUT /api/presets` (preset save looks like it worked), and `GET /api/video/:id`'s terminal-failure `persistJob` (mildest — the sweep retries regardless).
 
-The first three get deterministic tests via the directory-where-a-file-belongs trick this repo's tests already use. The `persistJob` wrap is review-verified: inducing a `persistJob` rejection from outside the process is not cheaply possible (`readJobs` never throws, and breaking the directory breaks the seed too) — the same precedent as PR #15's `sweepOne` containment; say so in the PR.
+All four get deterministic tests via the directory-where-a-file-belongs trick this repo's tests already use — including the `persistJob` one. (This plan originally claimed a `persistJob` rejection was not cheaply inducible from outside the process and told the implementer to skip that test. That was false, caught in Task 2's review on 2026-08-17 and corrected: making `jobs.json` a directory makes `writeJobs`' rename fail with `EISDIR`, and `readJobs` swallows its own read error so the route still reaches the branch under test.)
+
+**A fifth call site, added in Task 2's fix round (owner-approved 2026-08-17):** `fetchVideoStatus` (~line 985) reads its response body with a bare `await r.text()` outside its own try/catch, making its "Never throws" comment false. `sweepOne` catches, so the sweep survives — but `GET /api/video/:id` awaits it outside any try, so a status answer dying mid-body hangs that route and can kill the process. It returns the existing `{ok: false, networkError}` shape, because "could not read the answer" means what "could not reach" means to both callers, and the 24h give-up clock counts it identically. Untested on purpose: the mid-body stub is wired to chat-completions, and re-pointing it at the video status base would disturb the video tests that depend on that stub.
 
 **Files:**
 - Modify: `server/index.js` — `GET /api/projects` (~line 547), `PUT /api/projects/:name` (~line 562), `PUT /api/presets` (~line 699), and the terminal-failure `persistJob` in `GET /api/video/:id` (~line 1206)
@@ -751,7 +753,7 @@ Closed 2026-08-17: `collectVideo` now re-reads the store after its download and 
 In the server bullet of `CLAUDE.md` (the one beginning `**Server is one file plus four modules**`), append this sentence at the end:
 
 ```
-One rule with no exceptions in the routes: every `await` sits inside a `try/catch` that returns a status, because this Express 4 setup has no error-handling middleware — a rejected async handler sends NO response, and the request hangs, which is strictly worse than a 500.
+One rule with no exceptions in the routes: every `await` sits inside a `try/catch` that returns a status, because this Express 4 setup has no error-handling middleware. A rejected async handler sends NO response — and it is worse than a hung request, because Node exits on an unhandled rejection by default, so one unwrapped `await` can take the whole server down with it. `/api/video`'s own null-guard comment has said so since it was written: "not a failed request but a dead server". Both halves were observed while hardening these routes on 2026-08-17: removing a single wrap killed the forked test server on `UND_ERR_SOCKET`.
 ```
 
 - [ ] **Step 3: CHANGELOG.md**
@@ -764,7 +766,8 @@ Add a new section at the top (below the header block, above `## 2026-08-16`):
 ### Fixed
 
 - A failed project save, preset save, or project-list load now shows an error
-  instead of hanging forever with nothing to see.
+  instead of hanging forever with nothing to see. Under the hood these could take
+  the local server down with them, which ended the session rather than the request.
 - When the connection drops while reading a generation's answer, the node now
   shows an error — with a note that the run may still have been charged —
   instead of spinning forever.
