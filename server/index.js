@@ -572,9 +572,15 @@ function projectDir(name) {
 }
 
 app.get('/api/projects', async (req, res) => {
-  await fs.mkdir(OUTPUT_DIR, { recursive: true });
-  const entries = await fs.readdir(OUTPUT_DIR, { withFileTypes: true });
-  res.json({ projects: entries.filter((e) => e.isDirectory()).map((e) => e.name) });
+  // Express 4 with no error middleware: a rejection here used to hang the
+  // request, and the project list simply never loaded, with nothing to show why.
+  try {
+    await fs.mkdir(OUTPUT_DIR, { recursive: true });
+    const entries = await fs.readdir(OUTPUT_DIR, { withFileTypes: true });
+    res.json({ projects: entries.filter((e) => e.isDirectory()).map((e) => e.name) });
+  } catch (err) {
+    res.status(500).json({ error: `Could not list the output folder: ${err.message}` });
+  }
 });
 
 app.get('/api/projects/:name', async (req, res) => {
@@ -587,10 +593,17 @@ app.get('/api/projects/:name', async (req, res) => {
 });
 
 app.put('/api/projects/:name', async (req, res) => {
-  const dir = projectDir(req.params.name);
-  await fs.mkdir(dir, { recursive: true });
-  await fs.writeFile(path.join(dir, 'graph.json'), JSON.stringify(req.body, null, 2));
-  res.json({ ok: true });
+  // This is AUTOSAVE. Unwrapped, a full disk or a permissions change hung every
+  // save while the canvas looked fine -- silently lost work, the worst version
+  // of the no-error-middleware hang.
+  try {
+    const dir = projectDir(req.params.name);
+    await fs.mkdir(dir, { recursive: true });
+    await fs.writeFile(path.join(dir, 'graph.json'), JSON.stringify(req.body, null, 2));
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: `Could not save the project: ${err.message}` });
+  }
 });
 
 app.post('/api/projects/:name/rename', async (req, res) => {
@@ -725,8 +738,14 @@ app.get('/api/presets', async (req, res) => {
 
 app.put('/api/presets', async (req, res) => {
   if (!Array.isArray(req.body)) return res.status(400).json({ error: 'Expected an array of presets.' });
-  await writePresets(OUTPUT_DIR, req.body);
-  res.json({ ok: true });
+  try {
+    await writePresets(OUTPUT_DIR, req.body);
+    res.json({ ok: true });
+  } catch (err) {
+    // Unwrapped this hung -- and a preset save that never answers reads as a
+    // preset saved, which presets.json's never-rewritten rule makes permanent.
+    res.status(500).json({ error: `Could not save the presets: ${err.message}` });
+  }
 });
 
 // ---- video ----
@@ -1236,8 +1255,19 @@ app.get('/api/video/:id', async (req, res) => {
     if (isTerminalFailure(status)) {
       const message = data.error?.message || data.error || 'Generation failed.';
       revokeJobShares(id); // the provider will not fetch a dead job's refs
-      const job = await persistJob(OUTPUT_DIR, id, { status: 'failed', error: message, resolvedAt: Date.now() });
-      return res.json(failedResponse(job));
+      // The one await in this route outside the collect block's try. A rejected
+      // store write here hung the poll; the failure still reached the store via
+      // the sweep eventually, but the browser sat on a request that never
+      // answered. Review-verified rather than tested: a persistJob rejection is
+      // not cheaply inducible from outside the process.
+      try {
+        const job = await persistJob(OUTPUT_DIR, id, { status: 'failed', error: message, resolvedAt: Date.now() });
+        return res.json(failedResponse(job));
+      } catch (err) {
+        return res.status(502).json({
+          error: `The render failed upstream (${message}), but recording that failed too: ${err.message}`,
+        });
+      }
     }
     // Still in flight, including a status neither `completed` nor a known
     // failure -- the raw upstream string rides along as-is (not folded into a

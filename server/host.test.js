@@ -551,6 +551,48 @@ try {
   assert.match(midBodyBody.error, /reading OpenRouter/i, 'and says the answer could not be read');
   assert.match(midBodyBody.error, /charged/i, 'and warns the run may still have been charged');
 
+  // The same hang, three cheaper doors. Each of these routes awaits filesystem
+  // work outside any try/catch, so a disk error was a request that never
+  // answered -- for the first one that is AUTOSAVE, work that looks saved and
+  // is not. A directory where the file belongs is the deterministic way to make
+  // each write fail (the presets.test.js / jobs.test.js trick); the timeout on
+  // each fetch is the hang detector.
+
+  // PUT /api/projects/:name -- autosave.
+  await fs.mkdir(path.join(outDir, 'wrapcheck', 'graph.json'), { recursive: true });
+  const saveBlocked = await fetch(`${base}/api/projects/wrapcheck`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ nodes: [], edges: [] }),
+    signal: AbortSignal.timeout(5000),
+  });
+  assert.equal(saveBlocked.status, 500, 'a save that cannot write answers 500 instead of hanging');
+  assert.match((await saveBlocked.json()).error, /save/i, 'and says the save is what failed');
+  await fs.rm(path.join(outDir, 'wrapcheck'), { recursive: true, force: true });
+
+  // PUT /api/presets.
+  await fs.mkdir(path.join(outDir, 'presets.json'));
+  const presetsBlocked = await fetch(`${base}/api/presets`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify([]),
+    signal: AbortSignal.timeout(5000),
+  });
+  assert.equal(presetsBlocked.status, 500, 'a preset write that cannot land answers 500 instead of hanging');
+  await fs.rm(path.join(outDir, 'presets.json'), { recursive: true, force: true });
+
+  // GET /api/projects -- a FILE where OUTPUT_DIR belongs makes both its awaits
+  // (mkdir, readdir) fail. Moved aside and restored rather than left broken,
+  // since every test after this still uses outDir. The sweep may tick while the
+  // dir is a file; readJobs is lenient by design and reads that as [], writing
+  // nothing, so this cannot corrupt anything.
+  await fs.rename(outDir, `${outDir}-moved`);
+  await fs.writeFile(outDir, 'not a directory');
+  const listBlocked = await fetch(`${base}/api/projects`, { signal: AbortSignal.timeout(5000) });
+  assert.equal(listBlocked.status, 500, 'an unlistable output folder answers 500 instead of hanging');
+  await fs.rm(outDir);
+  await fs.rename(`${outDir}-moved`, outDir);
+
   for (const route of ['/api/video', '/api/generate']) {
     // What this reaches upstream is a 401, or a connection error when offline.
     // Neither is under test, and neither should be able to hang the suite, hence
