@@ -21,6 +21,13 @@ Keep that shape: the website's What's new page parses this file.
   out to the rest of the graph alone. Each is greyed out when it would do
   nothing.
 
+### Fixed
+
+- Pressing Enter in the New project dialog creates the project, and in Rename
+  renames it. The button was the only way through; Enter did nothing. An empty or
+  already-taken name still stops with its message rather than closing on the
+  keystroke.
+
 ### Changed
 
 - Searching a model list is easier to see: the search box now carries a magnifier

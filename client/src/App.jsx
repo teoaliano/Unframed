@@ -1477,6 +1477,12 @@ function Canvas() {
             value={nameDlg?.value ?? ''}
             status={nameDlg?.error ? { type: 'error', message: nameDlg.error } : undefined}
             onChange={(v) => setNameDlg((d) => ({ ...d, value: v, error: undefined }))}
+            // Enter submits, the way a one-field dialog is expected to. Nothing
+            // else here does: the dialog is not a <form>, so the button was the
+            // only way through. Routed to confirmName rather than to the button
+            // so both paths hit the same validation -- an empty or duplicate name
+            // still stops with its message instead of closing on the keystroke.
+            onEnter={confirmName}
           />
           <HStack gap={2} justify="end">
             <Button label="Cancel" variant="ghost" onClick={() => setNameDlg(null)} />
