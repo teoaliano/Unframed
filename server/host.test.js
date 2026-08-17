@@ -166,8 +166,7 @@ try {
   );
   assert.equal(doneBody.savedPath, savedClipPath, 'and hands back the already-saved path rather than downloading again');
 
-  // Task 14 (2026-08-15 plan, docs/superpowers/plans/2026-08-15-video-input-mode.md):
-  // a terminal upstream status must end the job, whatever string the provider
+  // A terminal upstream status must end the job, whatever string the provider
   // used for it. Seed two `pending` records -- what the sweep or an earlier
   // poll would have left -- and let this route actually poll. The status stub
   // above answers in place of OpenRouter, so this exercises the real
