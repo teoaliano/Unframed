@@ -438,22 +438,14 @@ const CHAT_COMPLETIONS_URL =
   process.env.UNFRAMED_TEST_CHAT_COMPLETIONS_URL || 'https://openrouter.ai/api/v1/chat/completions';
 
 // Reading a response BODY is a second network operation after the fetch that
-// delivered the headers, and it can die on its own -- after OpenRouter accepted
-// the request, so after the money is spent. Unwrapped, that rejection hangs the
-// request (Express 4 here has no error-handling middleware, so a rejected async
-// handler sends NO response) and the user loses a paid run to a spinner with no
-// message. One implementation for all three generation routes, the same reason
-// fetchVideoStatus below exists: "ask upstream" is one behaviour, not three.
-// `what` names the thing the user paid for, so the copy fits the route. Callers
-// keep their own cleanup -- /api/video's minted share tokens, for one.
-//
-// Only the /api/text call site is actually pinned by a test: it alone can be
-// pointed at a stub (UNFRAMED_TEST_CHAT_COMPLETIONS_URL) that dies mid-body,
-// which is the only way to make this catch fire on demand. The /api/generate
-// and /api/video call sites hit hardcoded OpenRouter URLs with no equivalent
-// override, so deleting either of THOSE two calls still leaves the suite
-// green -- they are identical two-liners to this one, covered by inspection,
-// not by a test that would catch a regression in them specifically.
+// delivered the headers, and it can die on its own -- after the money is spent.
+// Unwrapped, that rejection hangs the request and can kill the server (see
+// CLAUDE.md's no-error-middleware rule). One implementation for all three
+// generation routes; `what` names the thing the user paid for. Callers keep
+// their own cleanup -- /api/video's minted share tokens, for one.
+// Only the /api/text call site is pinned by a test (its stub can die
+// mid-body); /api/generate and /api/video hit hardcoded URLs, so their
+// identical two-line call sites are covered by inspection, not by a test.
 async function readUpstreamBody(orRes, what) {
   try {
     return { raw: await orRes.text() };
@@ -1016,21 +1008,13 @@ async function fetchVideoStatus(id) {
   return { ok: true, data };
 }
 
-// What an upstream status means here, in one place so sweepOne and the poll
-// route below can't drift into recognising a different set of terminal
-// failures. `failed` has meant this from the start; `expired` is the one that
-// surfaced this gap (a job queued over two hours came back
-// `{"status":"expired","error":"Job exceeded maximum time to live"}`, which
-// neither branch recognised, so it fell through as "still rendering" forever);
-// `cancelled`/`canceled` are the same shape of problem waiting to happen.
-//
-// Deliberately NOT a mapping of every status: completed and "still going" are
-// each one plain comparison at the call site, and everything that is neither
-// completed nor a name in this set is treated as still in flight. A provider is
-// far more likely to add a new in-progress status than a new terminal one, and
-// silently failing a job that is still actually rendering would throw away
-// money -- so an unrecognised status must default to "keep waiting", never to
-// "this failed".
+// One home for "this status is terminal", so sweepOne and the poll route can't
+// drift apart (`expired` surfaced that gap: it fell through as "still
+// rendering" forever). Deliberately NOT a map of every status: anything
+// neither `completed` nor in this set is treated as still in flight, because
+// providers add in-progress statuses far more often than terminal ones, and
+// silently failing a job that is still rendering throws away money -- an
+// unrecognised status must default to "keep waiting", never to "this failed".
 const TERMINAL_FAILURE_STATUSES = new Set(['failed', 'expired', 'cancelled', 'canceled']);
 const isTerminalFailure = (status) => TERMINAL_FAILURE_STATUSES.has(status);
 
@@ -1197,22 +1181,11 @@ async function sweepOneInner(job) {
     // stale by now. Only proceed if the store STILL says pending.
     const fresh = (await readJobs(OUTPUT_DIR)).find((j) => j.id === job.id);
     if (fresh && fresh.status !== 'pending') return; // already resolved elsewhere
-    // Collect with FRESH, not `job` -- `job` is this tick's snapshot, taken once
-    // at the top of sweepJobs and then carried through fetchVideoStatus (up to
-    // 30s) and every job ahead of this one in the same tick's sequential loop,
-    // so by the time execution reaches here `job.project` can be minutes old.
-    // The ghost-project consequence that staleness used to cause here has since
-    // moved INTO collectVideo itself: it now re-reads the store after its own
-    // download and resolves the folder from THAT, so the copy handed in below
-    // is only a fallback for a damaged or replaced store, and no longer decides
-    // the folder in the common case. `fresh` still earns its place for two
-    // other reasons that re-read doesn't cover: the `status !== 'pending'`
-    // guard just above (a job already collected elsewhere must not be
-    // collected again), and fresher `params`/`refs` for the filename and
-    // sidecar collectVideo writes. The poll route above does the same
-    // `const job = fresh || {...}` fallback; `fresh` can legitimately be
-    // absent -- the store may have been damaged or replaced -- so fall back to
-    // the snapshot only then, same as there.
+    // Collect with FRESH, not `job`: the tick's snapshot can be minutes old by
+    // now. collectVideo re-reads the store for the FOLDER itself, so fresh here
+    // buys the `status !== 'pending'` guard above plus current params/refs for
+    // the filename and sidecar. Fall back to the snapshot only when the store
+    // can't supply the record -- damaged or replaced -- same as the poll route.
     const { savedPath, cost, project } = await collectVideo(fresh || job, data);
     await persistJob(OUTPUT_DIR, job.id, { status: 'done', savedPath, cost, project, resolvedAt: Date.now() });
     videoJobRefs.delete(job.id); // the job is done; nothing else will read it
@@ -1340,17 +1313,9 @@ app.get('/api/video/:id', async (req, res) => {
       params: { prompt, model, duration, resolution, size },
       refs: videoJobRefs.get(id) || null,
     };
-    // Named `usedProject`, not `project`: `project` is already bound by the
-    // `req.query` destructuring above for the whole length of this route, and
-    // a `const project` here would shadow it for the rest of this try block --
-    // including the `project || null` fallback a few lines up, which would
-    // then be reading its own temporal-dead-zone declaration instead of the
-    // query param. That shadow only throws when `fresh` is falsy: with no
-    // store record, the fallback object a few lines up is what supplies
-    // `project`, so the shadowing hazard this naming avoids would only bite
-    // on that same path -- exactly the corrupted-or-missing-store case this
-    // whole fallback exists for, so the bug would have surfaced only in the
-    // case it's supposed to handle.
+    // `usedProject`, not `project`: `project` is bound from req.query above,
+    // and shadowing it would put the `project || null` fallback a few lines up
+    // in its own TDZ -- exactly on the missing-record path it exists to handle.
     const { savedPath, cost, project: usedProject } = await collectVideo(job, data);
     const saved = await persistJob(OUTPUT_DIR, id, {
       project: usedProject,
