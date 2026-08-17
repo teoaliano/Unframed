@@ -1164,7 +1164,6 @@ async function sweepJobs() {
 // rather than carrying the bytes — a video inlined into node data would be saved
 // into graph.json on every keystroke.
 app.get('/api/video/:id', async (req, res) => {
-  if (!API_KEY) return res.status(400).json({ error: 'No OpenRouter key yet.' });
   const id = req.params.id;
 
   // Consult the store BEFORE ever touching OpenRouter. Without this, a browser
@@ -1172,9 +1171,19 @@ app.get('/api/video/:id', async (req, res) => {
   // one) would download and write the clip a second time under a fresh
   // timestamp -- this is what makes double collection impossible, together
   // with the re-check after the lock further down.
+  //
+  // And before the key check below, not after: an already-resolved record is an
+  // answer this route can give with no key at all, since giving it needs only
+  // the store. Answering 400 first is what left a card reading "Rendering..."
+  // forever after DELETE /api/key ended its record -- the record said `failed`,
+  // and the only route that could have told the node bounced it for the very
+  // reason the record existed.
   const stored = (await readJobs(OUTPUT_DIR)).find((j) => j.id === id);
   if (stored?.status === 'done') return res.json(doneResponse(stored));
   if (stored?.status === 'failed') return res.json(failedResponse(stored));
+
+  // Everything past here has to reach OpenRouter, so now the key matters.
+  if (!API_KEY) return res.status(400).json({ error: 'No OpenRouter key yet.' });
 
   // Still pending in the store (or not in it at all -- a job started before this
   // store existed). Query params are the fallback source for params in that

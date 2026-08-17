@@ -40,9 +40,8 @@ Keep that shape: the website's What's new page parses this file.
   renders it will stop tracking.
 - Removing your OpenRouter key now ends every render it was tracking, with a
   reason, instead of leaving its record unresolved forever with nothing left able
-  to check on it. The card itself is unchanged — it still reads "Rendering…"
-  until you add a key back — but the render itself is no longer stuck in limbo
-  behind the scenes.
+  to check on it. A card still watching one of those renders now says the key was
+  removed, rather than reading "Rendering…" until you reload.
 - Changing the output folder now fails with a message if it cannot take renders in
   progress with it, instead of reporting success and leaving them behind.
 - A failed project delete no longer looks like it worked.

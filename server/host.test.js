@@ -458,6 +458,26 @@ try {
     assert.match(j.error, /key/i, 'and the reason names the key');
   }
 
+  // ...and the card polling that render finally learns about it. Ending the
+  // record is only half the job: the node hears about a render exclusively
+  // through this route, which used to answer 400 on a missing key BEFORE
+  // consulting the store -- so the record said `failed` while the one route
+  // that could have said so bounced the question for the very reason the record
+  // existed, and the card read "Rendering..." until a reload. No key is needed
+  // to read a resolved record, so the store answer comes first now. Nothing
+  // upstream is contacted here: the store short-circuits before any poll.
+  const polledAfterKeyGone = await fetch(`${base}/api/video/k-1`);
+  assert.equal(polledAfterKeyGone.status, 200,
+    'a resolved record is still readable with no key -- the store, not OpenRouter, holds the answer');
+  const polledBody = await polledAfterKeyGone.json();
+  assert.equal(polledBody.status, 'failed', 'so the node learns the render ended instead of spinning forever');
+  assert.match(polledBody.error, /key/i, 'and shows the reason the record already recorded');
+
+  // A job the store has never heard of still needs a key, since answering it
+  // means asking OpenRouter -- the reorder above must not turn the key check off.
+  assert.equal((await fetch(`${base}/api/video/never-heard-of-this-one`)).status, 400,
+    'an unknown id with no key still refuses, rather than reaching upstream keyless');
+
   // A damaged store must NOT block removing a key -- that is a security action,
   // and a corrupt JSON file is no reason to make someone keep a leaked key.
   // The failure is reported instead of swallowed.
