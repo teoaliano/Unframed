@@ -63,9 +63,15 @@ body {
    paints that on :focus — so every menu opened by pointer looked like its first row
    was chosen. The browser already disagrees: :focus-visible is false there, because
    the last input was a pointer. Deferring to it means the highlight appears the
-   moment you press an arrow or Tab, and never for a click. The :not() keeps a row
-   that is marked current (see ProjectMenu.jsx) from losing its own tint. */
-.astryx-dropdown-menu-item:focus:not(:focus-visible):not(.project-current) {
+   moment you press an arrow or Tab, and never for a click. The :not()s keep a row
+   that is marked current (see ProjectMenu.jsx) from losing its own tint, and step
+   this rule aside while the pointer is actually on the row — without :not(:hover)
+   it also flattened the HOVER highlight, so the one row a menu focuses on open (its
+   first: "Reveal in Finder" in the canvas menu) was the one row that never lit up
+   under the cursor. This file is unlayered and Astryx's compiled styles are not, so
+   a plain `background` here outranks their `:hover` no matter how specific theirs is
+   — which is why this had to be narrowed rather than out-specified. */
+.astryx-dropdown-menu-item:focus:not(:focus-visible):not(.project-current):not(:hover) {
   background: transparent;
 }
 /* add-node menu: narrower than the default, and nudged left of the + button so
