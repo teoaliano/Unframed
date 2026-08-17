@@ -97,8 +97,17 @@ const waitFor = (type, ms) => waitForMessage(child, type, ms);
 // bounded (this file's own `waitForMessage` above, the store-polling deadlines
 // below, `AbortSignal.timeout` on the fetches) for the same reason: a suite
 // that runs in CI must fail loudly, not sit there.
-const withDeadline = (promise, ms, message) =>
-  Promise.race([promise, new Promise((_, reject) => setTimeout(() => reject(new Error(message)), ms))]);
+const withDeadline = (promise, ms, message) => {
+  let timer;
+  const deadline = new Promise((_, reject) => {
+    timer = setTimeout(() => reject(new Error(message)), ms);
+  });
+  // Cleared once the race settles either way -- same idiom as waitForMessage's
+  // own clearTimeout above. Left uncleared, the timer keeps the event loop
+  // alive for the full `ms` regardless of which side won, which is how two
+  // orphaned 10s timers turned one 4.8s test file into a 13.9s process.
+  return Promise.race([promise, deadline]).finally(() => clearTimeout(timer));
+};
 
 try {
   const ready = await waitFor('ready');
