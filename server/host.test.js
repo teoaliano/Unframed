@@ -42,6 +42,22 @@ const statusStub = http.createServer((req, res) => {
 await new Promise((resolve) => statusStub.listen(0, '127.0.0.1', resolve));
 const statusStubBase = `http://127.0.0.1:${statusStub.address().port}/api/v1/videos`;
 
+// Stands in for OpenRouter's chat-completions endpoint, dying mid-body: headers
+// and half a JSON answer, then the socket is destroyed. This is the failure the
+// money routes could not survive -- the fetch() succeeds (headers arrived), so
+// the existing try/catch is already passed, and the `await orRes.text()` body
+// read is what rejects. Money is spent at this point: OpenRouter accepted the
+// request before the connection died. Same override pattern as the status stub
+// above: UNFRAMED_TEST_CHAT_COMPLETIONS_URL is unset, and therefore inert, in
+// every real environment.
+const midBodyStub = http.createServer((req, res) => {
+  res.writeHead(200, { 'Content-Type': 'application/json' });
+  res.write('{"choices":[{"message":{"content":"half an ans');
+  setTimeout(() => res.destroy(), 50);
+});
+await new Promise((resolve) => midBodyStub.listen(0, '127.0.0.1', resolve));
+const midBodyStubBase = `http://127.0.0.1:${midBodyStub.address().port}/api/v1/chat/completions`;
+
 const child = fork(path.join(here, 'index.js'), {
   env: {
     ...process.env,
@@ -50,6 +66,7 @@ const child = fork(path.join(here, 'index.js'), {
     OUTPUT_DIR: outDir,
     PORT: '0',
     UNFRAMED_TEST_VIDEOS_STATUS_BASE: statusStubBase,
+    UNFRAMED_TEST_CHAT_COMPLETIONS_URL: midBodyStubBase,
   },
   stdio: 'ignore',
 });
@@ -515,6 +532,25 @@ try {
   });
   await fs.writeFile(path.join(outDir, 'jobs.json'), '[]');
 
+  // A response body that dies mid-read must produce an ERROR, not a hang.
+  // Express 4 with no error middleware sends nothing at all for a rejected
+  // async handler -- the request just sits until the client gives up, which for
+  // a paid call means the user loses a generation to a spinner with no message.
+  // The try in these routes wraps only the fetch(); the body read is a second
+  // network operation and used to sit outside it. The timeout on this fetch is
+  // the hang detector: before the fix the route never answers and the abort
+  // fires, failing the test.
+  const midBodyRes = await fetch(`${base}/api/text`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ prompt: 'a prompt whose answer dies mid-read' }),
+    signal: AbortSignal.timeout(5000),
+  });
+  assert.equal(midBodyRes.status, 502, 'a dead body read answers 502 instead of hanging');
+  const midBodyBody = await midBodyRes.json();
+  assert.match(midBodyBody.error, /reading OpenRouter/i, 'and says the answer could not be read');
+  assert.match(midBodyBody.error, /charged/i, 'and warns the run may still have been charged');
+
   for (const route of ['/api/video', '/api/generate']) {
     // What this reaches upstream is a 401, or a connection error when offline.
     // Neither is under test, and neither should be able to hang the suite, hence
@@ -548,6 +584,7 @@ try {
 } finally {
   child.kill();
   await new Promise((resolve) => statusStub.close(resolve));
+  await new Promise((resolve) => midBodyStub.close(resolve));
   await fs.rm(dataDir, { recursive: true, force: true });
 }
 

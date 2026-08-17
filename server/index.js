@@ -430,6 +430,32 @@ app.get('/api/models', async (req, res) => {
   }
 });
 
+// Same test-only override pattern as VIDEOS_STATUS_BASE below: unset -- and
+// therefore inert -- in every real environment. What it buys is the one
+// deterministic way to make a response BODY die mid-read in a test, which no
+// real endpoint will do on demand.
+const CHAT_COMPLETIONS_URL =
+  process.env.UNFRAMED_TEST_CHAT_COMPLETIONS_URL || 'https://openrouter.ai/api/v1/chat/completions';
+
+// Reading a response BODY is a second network operation after the fetch that
+// delivered the headers, and it can die on its own -- after OpenRouter accepted
+// the request, so after the money is spent. Unwrapped, that rejection hangs the
+// request (Express 4 here has no error-handling middleware, so a rejected async
+// handler sends NO response) and the user loses a paid run to a spinner with no
+// message. One implementation for all three generation routes, the same reason
+// fetchVideoStatus below exists: "ask upstream" is one behaviour, not three.
+// `what` names the thing the user paid for, so the copy fits the route. Callers
+// keep their own cleanup -- /api/video's minted share tokens, for one.
+async function readUpstreamBody(orRes, what) {
+  try {
+    return { raw: await orRes.text() };
+  } catch (err) {
+    return {
+      error: `Lost the connection while reading OpenRouter's answer: ${err.message}. The ${what} may still have completed and been charged — check your OpenRouter activity page.`,
+    };
+  }
+}
+
 // Run a prompt through a text model. Images wired into a text node are passed as
 // content parts so the model can actually see them — that is what lets a text node
 // plan work from a picture.
@@ -462,7 +488,7 @@ app.post('/api/text', async (req, res) => {
 
   let orRes;
   try {
-    orRes = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+    orRes = await fetch(CHAT_COMPLETIONS_URL, {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${API_KEY}`,
@@ -479,7 +505,8 @@ app.post('/api/text', async (req, res) => {
     return res.status(502).json({ error: `Could not reach OpenRouter: ${err.message}` });
   }
 
-  const raw = await orRes.text();
+  const { raw, error: bodyError } = await readUpstreamBody(orRes, 'run');
+  if (bodyError) return res.status(502).json({ error: bodyError });
   let data;
   try {
     data = JSON.parse(raw);
@@ -827,7 +854,13 @@ app.post('/api/video', async (req, res) => {
     return res.status(502).json({ error: `Could not reach OpenRouter: ${err.message}` });
   }
 
-  const raw = await orRes.text();
+  const { raw, error: bodyError } = await readUpstreamBody(orRes, 'render');
+  if (bodyError) {
+    // Like every other failure branch in this route: a job nothing will ever
+    // learn about has no refs left to fetch, so its share tokens go dark.
+    for (const t of mintedTokens) revokeShare(t);
+    return res.status(502).json({ error: bodyError });
+  }
   let data;
   try {
     data = JSON.parse(raw);
@@ -1370,7 +1403,8 @@ app.post('/api/generate', async (req, res) => {
     return res.status(502).json({ error: `Could not reach OpenRouter: ${err.message}` });
   }
 
-  const raw = await orRes.text();
+  const { raw, error: bodyError } = await readUpstreamBody(orRes, 'run');
+  if (bodyError) return res.status(502).json({ error: bodyError });
   let data;
   try {
     data = JSON.parse(raw);
