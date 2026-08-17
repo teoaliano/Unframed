@@ -5,6 +5,16 @@ is no release artifact to number. Headings are `## YYYY-MM-DD`, groups are
 `### Added` / `### Changed` / `### Fixed`, one bullet per user-visible change.
 Keep that shape: the website's What's new page parses this file.
 
+## 2026-08-18
+
+### Changed
+
+- Searching a model list is easier to see: the search box now carries a magnifier
+  and, once you have typed, a ✕ that clears it and puts the cursor back. Menus
+  also sit a little clear of the control that opened them instead of flush
+  against it. Both come from the interface toolkit the app is built on, which
+  moved several versions forward in one step; nothing else about the app changed.
+
 ## 2026-08-17
 
 ### Changed

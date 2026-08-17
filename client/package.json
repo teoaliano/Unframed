@@ -9,9 +9,9 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "@astryxdesign/cli": "^0.1.6",
-    "@astryxdesign/core": "^0.1.6",
-    "@astryxdesign/theme-neutral": "^0.1.6",
+    "@astryxdesign/cli": "^0.4.3",
+    "@astryxdesign/core": "^0.4.3",
+    "@astryxdesign/theme-neutral": "^0.4.3",
     "@xyflow/react": "^12.3.5",
     "lucide-react": "^1.24.0",
     "react": "^19.2.7",
