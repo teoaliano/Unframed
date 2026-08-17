@@ -651,12 +651,16 @@ try {
 // ---- sweep staleness (2026-08-17) ----
 // sweepJobs takes ONE snapshot of the store per tick and used to hand that
 // snapshot straight to collectVideo, instead of a fresh re-read, when a job
-// turned out to be done. collectVideo resolves the output folder from
-// `.project` (`projectDir`, mkdir'd with recursive:true) and only reads it
-// AFTER downloading the clip -- so a rename landing between the tick's
-// snapshot and that download recreated the OLD project folder, exactly the
-// ghost-project bug reassignPendingJobs exists to prevent, just reopened by
-// the sweep instead of the rename route.
+// turned out to be done. At the time this bug existed, collectVideo trusted
+// `.project` on whatever job it was handed (`projectDir(job.project)`,
+// mkdir'd with recursive:true) -- so a rename landing between the tick's
+// snapshot and the call into collectVideo recreated the OLD project folder,
+// exactly the ghost-project bug reassignPendingJobs exists to prevent, just
+// reopened by the sweep instead of the rename route. 850666b fixed THIS
+// window, by call site (see the comment below); collectVideo's own re-read,
+// added 2026-08-17 (the "rename during the download window" block further
+// down), closed a second, longer-lived window inside collectVideo itself and
+// is now what actually decides the folder in every case this block exercises.
 //
 // The running `child` above can't exercise this: the sweep only runs at boot
 // and every 30s, and nothing exposes a way to trigger a tick on demand. So
@@ -755,11 +759,17 @@ try {
     }
     assert.equal(finalRecord?.status, 'done', 'the sweep collected the job within the deadline');
 
-    // THE new assertion -- about collectVideo's input, which the sweep (not
-    // the rename route) controls. Before the fix, sweepOneInner passed this
-    // tick's stale snapshot (project "alpha") into collectVideo; after it,
-    // it passes the freshly re-read record (project "beta"). This is what
-    // must fail before the fix and pass after.
+    // THE assertion this block exists for. It used to be true that this failed
+    // before 850666b and passed after, because that fix was what made
+    // sweepOneInner pass the freshly re-read record instead of this tick's
+    // stale snapshot. It no longer discriminates between the two: since the
+    // 2026-08-17 "rename during the download window" fix below, collectVideo
+    // re-reads the store itself, by id, right before it writes -- so it lands
+    // on "beta" whether it's handed the stale snapshot or the fresh record.
+    // The guarantee this asserts has moved from sweepOneInner's call site into
+    // collectVideo; this block is kept because it still exercises a real
+    // rename racing a real sweep tick end to end, just no longer as the thing
+    // that would catch a regression in WHICH copy sweepOneInner passes in.
     assert.match(
       finalRecord.savedPath,
       /[\\/]beta[\\/]/,
@@ -923,6 +933,7 @@ try {
   // test releases it, after the rename has landed.
   let holdBase;
   let releaseDownload;
+  let parkedRes;
   const downloadArrived = new Promise((resolve) => {
     releaseDownload = resolve;
   });
@@ -934,7 +945,7 @@ try {
     }
     // The download leg: signal the test it has started, and park the response
     // object for the test to finish later.
-    downloadArrived.parked = res;
+    parkedRes = res;
     releaseDownload();
   });
   await new Promise((resolve) => holdServer.listen(0, '127.0.0.1', resolve));
@@ -968,8 +979,8 @@ try {
     assert.equal(renamed.status, 200, 'the mid-download rename itself must succeed for this test to mean anything');
 
     // NOW let the download finish.
-    downloadArrived.parked.writeHead(200, { 'Content-Type': 'video/mp4' });
-    downloadArrived.parked.end('bytes standing in for a clip');
+    parkedRes.writeHead(200, { 'Content-Type': 'video/mp4' });
+    parkedRes.end('bytes standing in for a clip');
 
     let record;
     const deadline = Date.now() + 10000;
@@ -990,6 +1001,152 @@ try {
     child4.kill();
     await new Promise((resolve) => holdServer.close(resolve));
     await fs.rm(dataDir4, { recursive: true, force: true });
+  }
+}
+
+// ---- poll-route collect-to-done coverage (fix round 1, 2026-08-17) ----
+// Both callers of collectVideo needed updating for the fix above, but every
+// video block in this file up to here drives the boot sweep -- none of them
+// call GET /api/video/:id itself, so the poll route's half of the edit shipped
+// with no coverage at all. That gap is exactly how a real bug got through:
+// `const { savedPath, cost, project }` at that call site shadowed the
+// `project` already bound higher up in the route (from req.query, for the
+// whole length of the handler), and reading `project || null` a few lines
+// above the shadowing declaration threw "Cannot access 'project' before
+// initialization" -- but ONLY when `fresh` is falsy, i.e. only when the job
+// isn't in the store yet. Every sweep-driven test seeds a store record, so
+// none of them ever took that branch. Two sub-tests, sharing one forked
+// server and one stub (a fresh fork per case would just be the same
+// boilerplate twice): (a) drives the exact no-record branch the shadow bug
+// lived in, (b) pins caller 2's actual behavioural edit -- writing the
+// project collectVideo resolved instead of the pre-download `job.project`.
+{
+  const dataDir5 = await fs.mkdtemp(path.join(os.tmpdir(), 'unframed-poll-route-'));
+  const outDir5 = path.join(dataDir5, 'out');
+  // Must exist before the mid-download rename in (b), same reason as the
+  // block above: fs.rename needs something on disk to rename.
+  await fs.mkdir(path.join(outDir5, 'alpha'), { recursive: true });
+
+  const noRecordJobId = 'poll-no-record-job';
+  const heldJobId = 'poll-held-download-job';
+
+  // One status/download stub for both sub-tests, disambiguated by clip path.
+  // (a)'s download answers immediately; (b)'s is parked until the test has
+  // landed the mid-download rename, then released -- same shape as the block
+  // above, just keyed by which job's status check asked for it.
+  let pollBase;
+  let releasePollDownload;
+  let parkedPollRes;
+  const pollDownloadArrived = new Promise((resolve) => {
+    releasePollDownload = resolve;
+  });
+  const pollStub = http.createServer((req, res) => {
+    if (req.url.startsWith('/api/v1/videos/')) {
+      const id = decodeURIComponent(req.url.split('/').pop());
+      const clip = id === noRecordJobId ? 'clip-a.mp4' : 'clip-b.mp4';
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ status: 'completed', unsigned_urls: [`${pollBase}/${clip}`] }));
+      return;
+    }
+    if (req.url === '/clip-a.mp4') {
+      res.writeHead(200, { 'Content-Type': 'video/mp4' });
+      res.end('bytes standing in for a clip, no store record to begin with');
+      return;
+    }
+    // /clip-b.mp4: park it until (b) has landed its rename.
+    parkedPollRes = res;
+    releasePollDownload();
+  });
+  await new Promise((resolve) => pollStub.listen(0, '127.0.0.1', resolve));
+  pollBase = `http://127.0.0.1:${pollStub.address().port}`;
+
+  const child5 = fork(path.join(here, 'index.js'), {
+    env: {
+      ...process.env,
+      UNFRAMED_DATA_DIR: dataDir5,
+      OUTPUT_DIR: outDir5,
+      PORT: '0',
+      OPENROUTER_API_KEY: 'sk-or-v1-poll-route-0000000000000000000000000000000',
+      UNFRAMED_TEST_VIDEOS_STATUS_BASE: `${pollBase}/api/v1/videos`,
+    },
+    stdio: 'ignore',
+  });
+
+  try {
+    const ready5 = await waitForMessage(child5, 'ready');
+    const base5 = `http://127.0.0.1:${ready5.port}`;
+
+    // (a) No store record at all: jobs.json doesn't exist yet, so `stored` and
+    // `fresh` are both undefined and the route builds its own job object from
+    // query params -- the exact branch the shadowing bug threw in.
+    const pollA = await fetch(`${base5}/api/video/${noRecordJobId}?project=alpha&prompt=no-record`);
+    assert.equal(pollA.status, 200, 'a job with no store record collects instead of 502ing on the shadow bug');
+    const bodyA = await pollA.json();
+    assert.equal(bodyA.status, 'completed', 'the poll route reports the job done in the same response');
+    assert.match(bodyA.savedPath, /[\\/]alpha[\\/]/, 'and the clip is written under the project the query param named');
+
+    const jobsAfterA = JSON.parse(await fs.readFile(path.join(outDir5, 'jobs.json'), 'utf8'));
+    const recordA = jobsAfterA.find((j) => j.id === noRecordJobId);
+    assert.equal(recordA?.status, 'done', 'the poll route persisted a done record for a job the store never had');
+    assert.equal(recordA?.project, 'alpha', "and the record's project is what the route actually used");
+
+    // (b) A pending record, renamed mid-download, collected by THIS route --
+    // not the sweep. Seeded after 'ready' (not before boot) so the one
+    // boot-time sweep -- which already ran, against a store with nothing in
+    // it -- can't race this request for the `collecting` lock, and the 30s
+    // interval sweep has no chance to fire before this test's own request
+    // resolves. That keeps the poll route the sole collector: caller 2's edit
+    // is untestable if caller 1 gets there first.
+    await fs.writeFile(
+      path.join(outDir5, 'jobs.json'),
+      JSON.stringify([
+        ...jobsAfterA,
+        {
+          id: heldJobId,
+          project: 'alpha',
+          params: { prompt: 'renamed mid-download via poll route', model: 'bytedance/seedance-2.0' },
+          startedAt: Date.now(),
+          status: 'pending',
+        },
+      ]),
+    );
+
+    const pollBPromise = fetch(`${base5}/api/video/${heldJobId}`);
+
+    // Wait until the download for THIS job has started before renaming -- the
+    // rename must land inside collectVideo's fetch, not before it, or this
+    // proves nothing beyond what the sweep-side block above already does.
+    await pollDownloadArrived;
+
+    const renamed = await fetch(`${base5}/api/projects/alpha/rename`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ to: 'beta' }),
+    });
+    assert.equal(renamed.status, 200, 'the mid-download rename itself must succeed for this test to mean anything');
+
+    parkedPollRes.writeHead(200, { 'Content-Type': 'video/mp4' });
+    parkedPollRes.end('bytes standing in for a clip, collected by the poll route');
+
+    const pollB = await pollBPromise;
+    assert.equal(pollB.status, 200, 'the poll route request itself succeeds despite the rename racing it');
+    const bodyB = await pollB.json();
+    assert.match(bodyB.savedPath, /[\\/]beta[\\/]/, 'the poll route saves under the RENAMED project too');
+
+    const jobsAfterB = JSON.parse(await fs.readFile(path.join(outDir5, 'jobs.json'), 'utf8'));
+    const recordB = jobsAfterB.find((j) => j.id === heldJobId);
+    assert.equal(recordB?.status, 'done', 'the poll route persisted the held job as done');
+    assert.equal(
+      recordB?.project,
+      'beta',
+      "and its project names the folder its savedPath is actually in -- not job.project from the pre-download read",
+    );
+    const ghostAlpha = await fs.access(path.join(outDir5, 'alpha')).then(() => true, () => false);
+    assert.equal(ghostAlpha, false, 'and the pre-rename folder was not recreated as a ghost by this route either');
+  } finally {
+    child5.kill();
+    await new Promise((resolve) => pollStub.close(resolve));
+    await fs.rm(dataDir5, { recursive: true, force: true });
   }
 }
 

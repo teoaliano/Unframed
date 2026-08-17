@@ -1056,7 +1056,10 @@ async function collectVideo(job, data) {
   // open here for the length of the download). `current` can legitimately be
   // absent -- a damaged or replaced store -- so fall back to the handed job,
   // the same tolerance both callers already have. Not `||`: '' is a real value
-  // meaning "no project".
+  // meaning "no project", and `current` existing but lacking a `project` key
+  // (undefined) is treated the same as '' by this ternary -- consistent with
+  // pendingJobsFor's own missing-and-''-are-one-bucket rule, and no reachable
+  // path produces a record with `project` literally missing mid-flight anyway.
   const current = (await readJobs(OUTPUT_DIR)).find((j) => j.id === job.id);
   const project = current ? current.project : job.project;
   const dir = project ? projectDir(project) : OUTPUT_DIR;
@@ -1190,15 +1193,18 @@ async function sweepOneInner(job) {
     // at the top of sweepJobs and then carried through fetchVideoStatus (up to
     // 30s) and every job ahead of this one in the same tick's sequential loop,
     // so by the time execution reaches here `job.project` can be minutes old.
-    // collectVideo resolves the output folder from `.project`
-    // (`projectDir(job.project)`, mkdir'd with recursive:true) and only reads it
-    // AFTER downloading the clip, so collecting with the stale copy is exactly
-    // what recreates a project folder the user renamed away from in the
-    // meantime -- the ghost-project bug reassignPendingJobs exists to prevent,
-    // reopened here by the sweep instead of by the rename route. The poll route
-    // above already does this right (`const job = fresh || {...}`); `fresh` can
-    // legitimately be absent -- the store may have been damaged or replaced --
-    // so fall back to the snapshot only then, same as there.
+    // The ghost-project consequence that staleness used to cause here has since
+    // moved INTO collectVideo itself: it now re-reads the store after its own
+    // download and resolves the folder from THAT, so the copy handed in below
+    // is only a fallback for a damaged or replaced store, and no longer decides
+    // the folder in the common case. `fresh` still earns its place for two
+    // other reasons that re-read doesn't cover: the `status !== 'pending'`
+    // guard just above (a job already collected elsewhere must not be
+    // collected again), and fresher `params`/`refs` for the filename and
+    // sidecar collectVideo writes. The poll route above does the same
+    // `const job = fresh || {...}` fallback; `fresh` can legitimately be
+    // absent -- the store may have been damaged or replaced -- so fall back to
+    // the snapshot only then, same as there.
     const { savedPath, cost, project } = await collectVideo(fresh || job, data);
     await persistJob(OUTPUT_DIR, job.id, { status: 'done', savedPath, cost, project, resolvedAt: Date.now() });
     videoJobRefs.delete(job.id); // the job is done; nothing else will read it
@@ -1326,9 +1332,18 @@ app.get('/api/video/:id', async (req, res) => {
       params: { prompt, model, duration, resolution, size },
       refs: videoJobRefs.get(id) || null,
     };
-    const { savedPath, cost, project } = await collectVideo(job, data);
+    // Named `usedProject`, not `project`: `project` is already bound above
+    // (from req.query, line ~1269) for the whole length of this route, and a
+    // `const project` here would shadow it for the rest of this try block --
+    // including the `project || null` fallback a few lines up, which would
+    // then be reading its own temporal-dead-zone declaration instead of the
+    // query param. That shadow only throws when `fresh` is falsy (no store
+    // record to fall back on `job.project` reads never reach it), which is
+    // exactly the corrupted-or-missing-store case this whole fallback exists
+    // for -- so the bug surfaces only in the case it's supposed to handle.
+    const { savedPath, cost, project: usedProject } = await collectVideo(job, data);
     const saved = await persistJob(OUTPUT_DIR, id, {
-      project,
+      project: usedProject,
       params: job.params,
       refs: job.refs,
       status: 'done',
