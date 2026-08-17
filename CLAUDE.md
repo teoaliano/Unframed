@@ -49,6 +49,8 @@ One home per rule. Never document the same thing in two files — pick the one t
 
 The test for where something goes: **if it were deleted, what breaks?** An agent writing wrong code → here. Re-proposing a settled decision → `status.md`. A user not knowing what changed → `CHANGELOG.md`.
 
+**Implementation plans are scaffolding and get deleted once merged** — that is why no row above owns them. A plan is step-by-step instructions for work not yet done; the moment it ships, the code is the truth, the git log is the exhaustive record of how it got there, and a stale plan describing an intermediate state is a trap for the next reader. So before deleting one, move anything it holds that outlives it: a rejected alternative goes to `status.md`'s "Decided not to build" (or the spec, if the piece has one), and a rule the code cannot state itself comes here. Specs are the opposite and stay: they are cited by code comments and by the rows above.
+
 ## After a change
 
 Before calling a piece of work done:
