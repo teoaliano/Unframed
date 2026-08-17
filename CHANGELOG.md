@@ -9,6 +9,12 @@ Keep that shape: the website's What's new page parses this file.
 
 ### Fixed
 
+- Pasting an image or video onto the canvas works in the desktop app. It did
+  nothing there — no node, no error — while working normally under `npm run dev`,
+  so nothing about the canvas looked wrong until you tried it in the app.
+  Drag-and-drop was never affected, and neither was pasting into a selected
+  reference node.
+
 - A failed project save, preset save, or project-list load now shows an error
   instead of hanging forever with nothing to see. Under the hood these could take
   the local server down with them, which ended the session rather than the request.
