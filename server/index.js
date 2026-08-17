@@ -430,6 +430,40 @@ app.get('/api/models', async (req, res) => {
   }
 });
 
+// Same test-only override pattern as VIDEOS_STATUS_BASE below: unset -- and
+// therefore inert -- in every real environment. What it buys is the one
+// deterministic way to make a response BODY die mid-read in a test, which no
+// real endpoint will do on demand.
+const CHAT_COMPLETIONS_URL =
+  process.env.UNFRAMED_TEST_CHAT_COMPLETIONS_URL || 'https://openrouter.ai/api/v1/chat/completions';
+
+// Reading a response BODY is a second network operation after the fetch that
+// delivered the headers, and it can die on its own -- after OpenRouter accepted
+// the request, so after the money is spent. Unwrapped, that rejection hangs the
+// request (Express 4 here has no error-handling middleware, so a rejected async
+// handler sends NO response) and the user loses a paid run to a spinner with no
+// message. One implementation for all three generation routes, the same reason
+// fetchVideoStatus below exists: "ask upstream" is one behaviour, not three.
+// `what` names the thing the user paid for, so the copy fits the route. Callers
+// keep their own cleanup -- /api/video's minted share tokens, for one.
+//
+// Only the /api/text call site is actually pinned by a test: it alone can be
+// pointed at a stub (UNFRAMED_TEST_CHAT_COMPLETIONS_URL) that dies mid-body,
+// which is the only way to make this catch fire on demand. The /api/generate
+// and /api/video call sites hit hardcoded OpenRouter URLs with no equivalent
+// override, so deleting either of THOSE two calls still leaves the suite
+// green -- they are identical two-liners to this one, covered by inspection,
+// not by a test that would catch a regression in them specifically.
+async function readUpstreamBody(orRes, what) {
+  try {
+    return { raw: await orRes.text() };
+  } catch (err) {
+    return {
+      error: `Lost the connection while reading OpenRouter's answer: ${err.message}. The ${what} may still have completed and been charged — check your OpenRouter activity page.`,
+    };
+  }
+}
+
 // Run a prompt through a text model. Images wired into a text node are passed as
 // content parts so the model can actually see them — that is what lets a text node
 // plan work from a picture.
@@ -462,7 +496,7 @@ app.post('/api/text', async (req, res) => {
 
   let orRes;
   try {
-    orRes = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+    orRes = await fetch(CHAT_COMPLETIONS_URL, {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${API_KEY}`,
@@ -479,7 +513,8 @@ app.post('/api/text', async (req, res) => {
     return res.status(502).json({ error: `Could not reach OpenRouter: ${err.message}` });
   }
 
-  const raw = await orRes.text();
+  const { raw, error: bodyError } = await readUpstreamBody(orRes, 'run');
+  if (bodyError) return res.status(502).json({ error: bodyError });
   let data;
   try {
     data = JSON.parse(raw);
@@ -545,9 +580,15 @@ function projectDir(name) {
 }
 
 app.get('/api/projects', async (req, res) => {
-  await fs.mkdir(OUTPUT_DIR, { recursive: true });
-  const entries = await fs.readdir(OUTPUT_DIR, { withFileTypes: true });
-  res.json({ projects: entries.filter((e) => e.isDirectory()).map((e) => e.name) });
+  // Express 4 with no error middleware: a rejection here used to hang the
+  // request, and the project list simply never loaded, with nothing to show why.
+  try {
+    await fs.mkdir(OUTPUT_DIR, { recursive: true });
+    const entries = await fs.readdir(OUTPUT_DIR, { withFileTypes: true });
+    res.json({ projects: entries.filter((e) => e.isDirectory()).map((e) => e.name) });
+  } catch (err) {
+    res.status(500).json({ error: `Could not list the output folder: ${err.message}` });
+  }
 });
 
 app.get('/api/projects/:name', async (req, res) => {
@@ -560,10 +601,17 @@ app.get('/api/projects/:name', async (req, res) => {
 });
 
 app.put('/api/projects/:name', async (req, res) => {
-  const dir = projectDir(req.params.name);
-  await fs.mkdir(dir, { recursive: true });
-  await fs.writeFile(path.join(dir, 'graph.json'), JSON.stringify(req.body, null, 2));
-  res.json({ ok: true });
+  // This is AUTOSAVE. Unwrapped, a full disk or a permissions change hung every
+  // save while the canvas looked fine -- silently lost work, the worst version
+  // of the no-error-middleware hang.
+  try {
+    const dir = projectDir(req.params.name);
+    await fs.mkdir(dir, { recursive: true });
+    await fs.writeFile(path.join(dir, 'graph.json'), JSON.stringify(req.body, null, 2));
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: `Could not save the project: ${err.message}` });
+  }
 });
 
 app.post('/api/projects/:name/rename', async (req, res) => {
@@ -698,8 +746,14 @@ app.get('/api/presets', async (req, res) => {
 
 app.put('/api/presets', async (req, res) => {
   if (!Array.isArray(req.body)) return res.status(400).json({ error: 'Expected an array of presets.' });
-  await writePresets(OUTPUT_DIR, req.body);
-  res.json({ ok: true });
+  try {
+    await writePresets(OUTPUT_DIR, req.body);
+    res.json({ ok: true });
+  } catch (err) {
+    // Unwrapped this hung -- and a preset save that never answers reads as a
+    // preset saved, which presets.json's never-rewritten rule makes permanent.
+    res.status(500).json({ error: `Could not save the presets: ${err.message}` });
+  }
 });
 
 // ---- video ----
@@ -827,7 +881,13 @@ app.post('/api/video', async (req, res) => {
     return res.status(502).json({ error: `Could not reach OpenRouter: ${err.message}` });
   }
 
-  const raw = await orRes.text();
+  const { raw, error: bodyError } = await readUpstreamBody(orRes, 'render');
+  if (bodyError) {
+    // Like every other failure branch in this route: a job nothing will ever
+    // learn about has no refs left to fetch, so its share tokens go dark.
+    for (const t of mintedTokens) revokeShare(t);
+    return res.status(502).json({ error: bodyError });
+  }
   let data;
   try {
     data = JSON.parse(raw);
@@ -930,7 +990,19 @@ async function fetchVideoStatus(id) {
   } catch (err) {
     return { ok: false, networkError: err.message };
   }
-  const raw = await r.text();
+  // The body is a second network operation after the headers arrived, and it can
+  // die on its own -- which is what made the "never throws" promise above false.
+  // The poll route awaits this function outside any try/catch, so a rejection
+  // here hung that request; the sweep survived only because sweepOne catches.
+  // "Could not read the answer" means exactly what "could not reach" means to
+  // both callers -- no answer -- so it returns the same shape, and the 24h
+  // give-up clock counts it the same way.
+  let raw;
+  try {
+    raw = await r.text();
+  } catch (err) {
+    return { ok: false, networkError: `could not read the status answer: ${err.message}` };
+  }
   let data;
   try {
     data = JSON.parse(raw);
@@ -985,7 +1057,20 @@ async function collectVideo(job, data) {
   const buf = Buffer.from(await f.arrayBuffer());
 
   const { prompt = '', model = '', duration, resolution, size } = job.params || {};
-  const dir = job.project ? projectDir(job.project) : OUTPUT_DIR;
+  // Resolve the project AFTER the download, from the store as it stands NOW.
+  // The download above can run for minutes, and `job` was read before it
+  // started -- a rename landing in between is exactly what used to recreate the
+  // old folder as a ghost (the same bug 850666b fixed one call frame up, left
+  // open here for the length of the download). `current` can legitimately be
+  // absent -- a damaged or replaced store -- so fall back to the handed job,
+  // the same tolerance both callers already have. Not `||`: '' is a real value
+  // meaning "no project", and `current` existing but lacking a `project` key
+  // (undefined) is treated the same as '' by this ternary -- consistent with
+  // pendingJobsFor's own missing-and-''-are-one-bucket rule, and no reachable
+  // path produces a record with `project` literally missing mid-flight anyway.
+  const current = (await readJobs(OUTPUT_DIR)).find((j) => j.id === job.id);
+  const project = current ? current.project : job.project;
+  const dir = project ? projectDir(project) : OUTPUT_DIR;
   await fs.mkdir(dir, { recursive: true });
   const stamp = new Date().toISOString().replace(/[:.]/g, '-');
   const base = `${stamp}-${slugify(prompt)}`;
@@ -1020,7 +1105,11 @@ async function collectVideo(job, data) {
     console.log(`  sidecar not written: ${err.message}`);
   }
 
-  return { savedPath: videoPath, cost };
+  // `project` rides along so the callers' done patches can record the folder
+  // the clip ACTUALLY went into. Without it the sweep's patch left `project`
+  // untouched and the poll route's wrote its own pre-download copy -- either
+  // way a record whose project and savedPath could disagree after a rename.
+  return { savedPath: videoPath, cost, project };
 }
 
 // In-process only: closes the gap collectVideo's own idempotency can't. The
@@ -1112,17 +1201,20 @@ async function sweepOneInner(job) {
     // at the top of sweepJobs and then carried through fetchVideoStatus (up to
     // 30s) and every job ahead of this one in the same tick's sequential loop,
     // so by the time execution reaches here `job.project` can be minutes old.
-    // collectVideo resolves the output folder from `.project`
-    // (`projectDir(job.project)`, mkdir'd with recursive:true) and only reads it
-    // AFTER downloading the clip, so collecting with the stale copy is exactly
-    // what recreates a project folder the user renamed away from in the
-    // meantime -- the ghost-project bug reassignPendingJobs exists to prevent,
-    // reopened here by the sweep instead of by the rename route. The poll route
-    // above already does this right (`const job = fresh || {...}`); `fresh` can
-    // legitimately be absent -- the store may have been damaged or replaced --
-    // so fall back to the snapshot only then, same as there.
-    const { savedPath, cost } = await collectVideo(fresh || job, data);
-    await persistJob(OUTPUT_DIR, job.id, { status: 'done', savedPath, cost, resolvedAt: Date.now() });
+    // The ghost-project consequence that staleness used to cause here has since
+    // moved INTO collectVideo itself: it now re-reads the store after its own
+    // download and resolves the folder from THAT, so the copy handed in below
+    // is only a fallback for a damaged or replaced store, and no longer decides
+    // the folder in the common case. `fresh` still earns its place for two
+    // other reasons that re-read doesn't cover: the `status !== 'pending'`
+    // guard just above (a job already collected elsewhere must not be
+    // collected again), and fresher `params`/`refs` for the filename and
+    // sidecar collectVideo writes. The poll route above does the same
+    // `const job = fresh || {...}` fallback; `fresh` can legitimately be
+    // absent -- the store may have been damaged or replaced -- so fall back to
+    // the snapshot only then, same as there.
+    const { savedPath, cost, project } = await collectVideo(fresh || job, data);
+    await persistJob(OUTPUT_DIR, job.id, { status: 'done', savedPath, cost, project, resolvedAt: Date.now() });
     videoJobRefs.delete(job.id); // the job is done; nothing else will read it
     revokeJobShares(job.id); // and its shared clip goes dark with it
     console.log(`  video job ${job.id} collected by the sweep → ${savedPath}`);
@@ -1203,8 +1295,20 @@ app.get('/api/video/:id', async (req, res) => {
     if (isTerminalFailure(status)) {
       const message = data.error?.message || data.error || 'Generation failed.';
       revokeJobShares(id); // the provider will not fetch a dead job's refs
-      const job = await persistJob(OUTPUT_DIR, id, { status: 'failed', error: message, resolvedAt: Date.now() });
-      return res.json(failedResponse(job));
+      // The one await in this route outside the collect block's try. A rejected
+      // store write here hung the poll; the failure still reached the store via
+      // the sweep eventually, but the browser sat on a request that never
+      // answered. A directory where jobs.json belongs makes writeJobs' own
+      // rename fail with EISDIR -- the same trick as the other three wraps in
+      // this task, exercised in host.test.js.
+      try {
+        const job = await persistJob(OUTPUT_DIR, id, { status: 'failed', error: message, resolvedAt: Date.now() });
+        return res.json(failedResponse(job));
+      } catch (err) {
+        return res.status(502).json({
+          error: `The render failed upstream (${message}), but recording that failed too: ${err.message}`,
+        });
+      }
     }
     // Still in flight, including a status neither `completed` nor a known
     // failure -- the raw upstream string rides along as-is (not folded into a
@@ -1236,9 +1340,20 @@ app.get('/api/video/:id', async (req, res) => {
       params: { prompt, model, duration, resolution, size },
       refs: videoJobRefs.get(id) || null,
     };
-    const { savedPath, cost } = await collectVideo(job, data);
+    // Named `usedProject`, not `project`: `project` is already bound by the
+    // `req.query` destructuring above for the whole length of this route, and
+    // a `const project` here would shadow it for the rest of this try block --
+    // including the `project || null` fallback a few lines up, which would
+    // then be reading its own temporal-dead-zone declaration instead of the
+    // query param. That shadow only throws when `fresh` is falsy: with no
+    // store record, the fallback object a few lines up is what supplies
+    // `project`, so the shadowing hazard this naming avoids would only bite
+    // on that same path -- exactly the corrupted-or-missing-store case this
+    // whole fallback exists for, so the bug would have surfaced only in the
+    // case it's supposed to handle.
+    const { savedPath, cost, project: usedProject } = await collectVideo(job, data);
     const saved = await persistJob(OUTPUT_DIR, id, {
-      project: job.project,
+      project: usedProject,
       params: job.params,
       refs: job.refs,
       status: 'done',
@@ -1370,7 +1485,8 @@ app.post('/api/generate', async (req, res) => {
     return res.status(502).json({ error: `Could not reach OpenRouter: ${err.message}` });
   }
 
-  const raw = await orRes.text();
+  const { raw, error: bodyError } = await readUpstreamBody(orRes, 'run');
+  if (bodyError) return res.status(502).json({ error: bodyError });
   let data;
   try {
     data = JSON.parse(raw);

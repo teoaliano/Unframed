@@ -5,6 +5,22 @@ is no release artifact to number. Headings are `## YYYY-MM-DD`, groups are
 `### Added` / `### Changed` / `### Fixed`, one bullet per user-visible change.
 Keep that shape: the website's What's new page parses this file.
 
+## 2026-08-17
+
+### Fixed
+
+- A failed project save, preset save, or project-list load now shows an error
+  instead of hanging forever with nothing to see. Under the hood these could take
+  the local server down with them, which ended the session rather than the request.
+- When the connection drops while reading a generation's answer, the node now
+  shows an error — with a note that the run may still have been charged —
+  instead of spinning forever.
+- A render's status check dying mid-poll no longer leaves its card stuck on
+  "Rendering…" forever. Under the hood this could take the local server down
+  too, ending the session rather than just that one poll.
+- A render finishing while its project is being renamed now lands in the
+  renamed project, and its record names the folder the clip is actually in.
+
 ## 2026-08-16
 
 ### Added
