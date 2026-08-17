@@ -593,6 +593,24 @@ try {
   await fs.rm(outDir);
   await fs.rename(`${outDir}-moved`, outDir);
 
+  // The fourth hardened call site: the poll route's terminal-failure persistJob.
+  // A store write CAN be made to fail on demand -- the same
+  // directory-where-a-file-belongs trick as above makes writeJobs' rename fail
+  // with EISDIR -- so this branch gets the same regression test as the other
+  // three instead of being review-verified only. readJobs swallows its own read
+  // error and answers [], so the route still reaches the branch under test.
+  const jobsFile = path.join(outDir, 'jobs.json');
+  const jobsBackup = await fs.readFile(jobsFile, 'utf8').catch(() => '[]');
+  await fs.rm(jobsFile, { force: true });
+  await fs.mkdir(jobsFile);
+  const persistBlocked = await fetch(`${base}/api/video/expired-job`, { signal: AbortSignal.timeout(5000) });
+  assert.equal(persistBlocked.status, 502,
+    'a terminal upstream status that cannot be recorded answers instead of hanging');
+  assert.match((await persistBlocked.json()).error, /recording that failed/i,
+    'and the message says recording the failure is what failed');
+  await fs.rm(jobsFile, { recursive: true, force: true });
+  await fs.writeFile(jobsFile, jobsBackup);
+
   for (const route of ['/api/video', '/api/generate']) {
     // What this reaches upstream is a 401, or a connection error when offline.
     // Neither is under test, and neither should be able to hang the suite, hence

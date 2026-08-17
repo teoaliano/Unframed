@@ -982,7 +982,19 @@ async function fetchVideoStatus(id) {
   } catch (err) {
     return { ok: false, networkError: err.message };
   }
-  const raw = await r.text();
+  // The body is a second network operation after the headers arrived, and it can
+  // die on its own -- which is what made the "never throws" promise above false.
+  // The poll route awaits this function outside any try/catch, so a rejection
+  // here hung that request; the sweep survived only because sweepOne catches.
+  // "Could not read the answer" means exactly what "could not reach" means to
+  // both callers -- no answer -- so it returns the same shape, and the 24h
+  // give-up clock counts it the same way.
+  let raw;
+  try {
+    raw = await r.text();
+  } catch (err) {
+    return { ok: false, networkError: `could not read the status answer: ${err.message}` };
+  }
   let data;
   try {
     data = JSON.parse(raw);
@@ -1258,8 +1270,9 @@ app.get('/api/video/:id', async (req, res) => {
       // The one await in this route outside the collect block's try. A rejected
       // store write here hung the poll; the failure still reached the store via
       // the sweep eventually, but the browser sat on a request that never
-      // answered. Review-verified rather than tested: a persistJob rejection is
-      // not cheaply inducible from outside the process.
+      // answered. A directory where jobs.json belongs makes writeJobs' own
+      // rename fail with EISDIR -- the same trick as the other three wraps in
+      // this task, exercised in host.test.js.
       try {
         const job = await persistJob(OUTPUT_DIR, id, { status: 'failed', error: message, resolvedAt: Date.now() });
         return res.json(failedResponse(job));
