@@ -176,11 +176,21 @@ export const loadProject = (name) =>
     .then((r) => r.json())
     .then((g) => (g?.nodes ? { ...g, nodes: migrateNodes(g.nodes) } : g));
 
+// This is AUTOSAVE, so a failure here is a real one -- the canvas keeps
+// editing whether or not the last change actually reached disk. Same shape as
+// deleteProject below: returning the bare fetch (as this did) meant a 500 from
+// the server's own wrap (a full disk, a permissions change) read as success,
+// so the failure this fixed on the server (2026-08-17) stayed invisible on the
+// client -- the canvas just never told you it stopped saving.
 export const saveProject = (name, graph) =>
   fetch(`/api/projects/${encodeURIComponent(name)}`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(graph),
+  }).then(async (r) => {
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(d.error || `Could not save the project (${r.status})`);
+    return d;
   });
 
 export const renameProject = (name, to) =>

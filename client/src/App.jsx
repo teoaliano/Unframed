@@ -171,6 +171,21 @@ function Canvas() {
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
   const { screenToFlowPosition, zoomIn, zoomOut, fitView } = useReactFlow();
   const toast = useToast();
+  // Shared by every saveProject call site (the debounced autosave below, and
+  // the immediate save `confirmName` fires right after creating a project):
+  // the same failure -- a full disk, a permissions change, the local server
+  // having gone away -- can hit either one, sometimes both within the same
+  // second. One uniqueID so a second failure updates the existing toast
+  // instead of stacking a new one on top of it every 500ms.
+  const reportSaveFailure = useCallback(
+    (err) => {
+      toast({
+        body: `Could not save the canvas: ${err.message}. Is the local server running?`,
+        uniqueID: 'autosave-failed',
+      });
+    },
+    [toast],
+  );
   const [tool, setTool] = useState('select'); // 'select' | 'pan'
   // Last pointer position over the canvas, so pasted nodes land where you're looking.
   const pointer = useRef({ x: 200, y: 200 });
@@ -277,9 +292,11 @@ function Canvas() {
 
   useEffect(() => {
     if (!ready.current) return;
-    const t = setTimeout(() => saveProject(project, { nodes, edges }), 500);
+    const t = setTimeout(() => {
+      saveProject(project, { nodes, edges }).catch(reportSaveFailure);
+    }, 500);
     return () => clearTimeout(t);
-  }, [nodes, edges, project]);
+  }, [nodes, edges, project, reportSaveFailure]);
 
   // ---- undo / redo ----
   // A stack of settled graph states with a cursor, rather than one entry per
@@ -543,8 +560,14 @@ function Canvas() {
       setProjects((ps) => [...ps, s]);
       openFresh(s);
       // Persist immediately so the project exists on disk (survives reload, can be
-      // renamed right away) instead of only after the first edit.
-      saveProject(s, { nodes: initialNodes, edges: initialEdges });
+      // renamed right away) instead of only after the first edit. Not awaited --
+      // the dialog closes regardless -- so a failure here has to be caught rather
+      // than left to become an unhandled rejection, which in the browser is just
+      // a console error and nothing more: the same silence this whole fix is for,
+      // relocated rather than closed. The debounced autosave above will retry the
+      // same save within 500ms regardless (nodes/edges just changed via
+      // openFresh), so this shares its toast rather than risking two.
+      saveProject(s, { nodes: initialNodes, edges: initialEdges }).catch(reportSaveFailure);
       setNameDlg(null);
       return;
     }

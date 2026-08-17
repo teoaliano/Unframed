@@ -31,6 +31,8 @@ await fs.writeFile(path.join(distDir, 'index.html'), '<title>canvas</title>');
 // expecting the 401 a fake key earns.
 const STATUS_STUB_RESPONSES = {
   'expired-job': { status: 'expired', error: 'Job exceeded maximum time to live' },
+  'cancelled-job': { status: 'cancelled', error: 'Job was cancelled' },
+  'failed-job': { status: 'failed', error: 'Generation failed upstream' },
   'still-going-job': { status: 'queued' }, // a status this server has never named
 };
 const statusStub = http.createServer((req, res) => {
@@ -184,12 +186,14 @@ try {
   assert.equal(doneBody.savedPath, savedClipPath, 'and hands back the already-saved path rather than downloading again');
 
   // A terminal upstream status must end the job, whatever string the provider
-  // used for it. Seed two `pending` records -- what the sweep or an earlier
+  // used for it. Seed four `pending` records -- what the sweep or an earlier
   // poll would have left -- and let this route actually poll. The status stub
   // above answers in place of OpenRouter, so this exercises the real
   // classify-and-persist code in server/index.js rather than a value the test
-  // invented; reverting the fix (recognising only completed/failed) makes both
-  // assertions below fail.
+  // invented; removing any of `expired`/`cancelled`/`failed` from
+  // TERMINAL_FAILURE_STATUSES makes that status's assertions below fail while
+  // the rest of the suite stays green -- which is exactly how the historical
+  // gap this set exists to close (a name missing from it) went unnoticed.
   await fs.writeFile(
     path.join(outDir, 'jobs.json'),
     JSON.stringify([
@@ -197,6 +201,20 @@ try {
         id: 'expired-job',
         project: '',
         params: { prompt: 'a job that outlived its own time limit', model: 'bytedance/seedance-2.0' },
+        startedAt: Date.now(),
+        status: 'pending',
+      },
+      {
+        id: 'cancelled-job',
+        project: '',
+        params: { prompt: 'a job the user cancelled', model: 'bytedance/seedance-2.0' },
+        startedAt: Date.now(),
+        status: 'pending',
+      },
+      {
+        id: 'failed-job',
+        project: '',
+        params: { prompt: 'a job that failed outright, not by timeout or cancellation', model: 'bytedance/seedance-2.0' },
         startedAt: Date.now(),
         status: 'pending',
       },
@@ -228,6 +246,34 @@ try {
   const expiredRecord = jobsAfterExpiry.find((j) => j.id === 'expired-job');
   assert.equal(expiredRecord.status, 'failed', 'the store is updated too, not just the response');
   assert.ok(expiredRecord.resolvedAt, 'resolvedAt is stamped so pruneJobs can eventually drop the record');
+
+  // `cancelled` and `failed` are the other two names the row this set backs
+  // enumerates ("fails, expires, or is cancelled") -- `expired` alone left the
+  // other two unproven, and a name missing from TERMINAL_FAILURE_STATUSES is
+  // exactly the shape of bug its own comment describes.
+  const cancelledRes = await fetch(`${base}/api/video/cancelled-job`);
+  assert.equal(cancelledRes.status, 200);
+  const cancelledBody = await cancelledRes.json();
+  assert.equal(cancelledBody.status, 'failed', 'a cancelled job reads as failed to the client');
+  assert.equal(cancelledBody.error, 'Job was cancelled', "the provider's own message survives, not a generic one");
+  const jobsAfterCancelled = JSON.parse(await fs.readFile(path.join(outDir, 'jobs.json'), 'utf8'));
+  assert.equal(
+    jobsAfterCancelled.find((j) => j.id === 'cancelled-job').status,
+    'failed',
+    'the store is updated too, not just the response',
+  );
+
+  const failedRes = await fetch(`${base}/api/video/failed-job`);
+  assert.equal(failedRes.status, 200);
+  const failedBody = await failedRes.json();
+  assert.equal(failedBody.status, 'failed', 'a job the provider itself calls failed reads as failed to the client');
+  assert.equal(failedBody.error, 'Generation failed upstream', "the provider's own message survives, not a generic one");
+  const jobsAfterFailed = JSON.parse(await fs.readFile(path.join(outDir, 'jobs.json'), 'utf8'));
+  assert.equal(
+    jobsAfterFailed.find((j) => j.id === 'failed-job').status,
+    'failed',
+    'the store is updated too, not just the response',
+  );
 
   // A status this server has never named must NOT be folded into failure --
   // a provider is far more likely to add a new in-flight status than a new
@@ -835,11 +881,25 @@ try {
         startedAt: Date.now() - HOUR,
         status: 'pending',
       },
+      {
+        // No unreachableSince yet -- this is a job's FIRST unanswered poll, the
+        // other end of the give-up chain giveup-job above assumes already
+        // started ticking. Without this case nothing ever proved the clock
+        // actually gets STARTED, only that a clock already running eventually
+        // fires. The stub 404s this one too (absent from branchResponses
+        // below), the same shape an id OpenRouter has forgotten produces.
+        id: 'stamp-job',
+        project: '',
+        params: { prompt: 'the clock has not started ticking yet', model: 'bytedance/seedance-2.0' },
+        startedAt: Date.now() - 5 * 60 * 1000,
+        status: 'pending',
+      },
     ]),
   );
 
-  // Per-id answers: giveup-job is deliberately ABSENT, so the stub 404s it --
-  // the exact shape an id OpenRouter has forgotten produces.
+  // Per-id answers: giveup-job and stamp-job are deliberately ABSENT, so the
+  // stub 404s them both -- the exact shape an id OpenRouter has forgotten
+  // produces.
   const branchResponses = {
     'clockclear-job': { status: 'queued' },
     'sweep-terminal-job': { status: 'expired', error: 'Job exceeded maximum time to live' },
@@ -867,7 +927,7 @@ try {
   try {
     await waitForMessage(child3, 'ready');
 
-    // The boot sweep resolves all three; poll the store until it has.
+    // The boot sweep resolves all four; poll the store until it has.
     let jobs;
     const deadline = Date.now() + 10000;
     while (Date.now() < deadline) {
@@ -875,7 +935,17 @@ try {
       const giveup = jobs.find((j) => j.id === 'giveup-job');
       const terminal = jobs.find((j) => j.id === 'sweep-terminal-job');
       const cleared = jobs.find((j) => j.id === 'clockclear-job');
-      if (giveup?.status === 'failed' && terminal?.status === 'failed' && cleared && !('unreachableSince' in cleared)) break;
+      const stamped = jobs.find((j) => j.id === 'stamp-job');
+      if (
+        giveup?.status === 'failed' &&
+        terminal?.status === 'failed' &&
+        cleared &&
+        !('unreachableSince' in cleared) &&
+        stamped?.status === 'pending' &&
+        Number.isFinite(stamped?.unreachableSince)
+      ) {
+        break;
+      }
       await new Promise((r) => setTimeout(r, 100));
     }
 
@@ -894,6 +964,24 @@ try {
     assert.equal(terminal?.status, 'failed', 'the sweep ends a job the provider killed, with no browser open');
     assert.equal(terminal.error, 'Job exceeded maximum time to live',
       "and the record carries the provider's own message, not a generic one");
+
+    // The other end of the give-up chain: giveup-job above only proves the
+    // clock fires once it is already running. This proves it gets STARTED --
+    // a job's first unanswered poll must stamp unreachableSince rather than
+    // leaving it unset forever (in which case givenUp's `now - undefined` is
+    // NaN and the job would never be given up on at all).
+    const stamped = jobs.find((j) => j.id === 'stamp-job');
+    assert.equal(stamped?.status, 'pending', 'a forgotten job is not failed on its first missed poll');
+    assert.ok(
+      Number.isFinite(stamped?.unreachableSince),
+      'but the silence clock starts ticking from that first miss',
+    );
+    // NOT exercised here, and not cheaply exercisable in this harness: that the
+    // `if (!job.unreachableSince)` guard on that same line also stops a SECOND
+    // and later miss from rewriting the stamp forward. Proving that needs a
+    // second sweep tick to actually run, and the interval is a real,
+    // unconfigurable 30s (server/index.js) -- this test's 10s deadline ends
+    // before one ever fires. See footnote 9 in docs/video-and-sharing.md.
   } finally {
     child3.kill();
     await new Promise((resolve) => branchStub.close(resolve));
