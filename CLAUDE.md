@@ -80,6 +80,8 @@ Before calling a piece of work done:
 
 Two-package monorepo, no shared build: the root IS the engine package (`server/` has no `package.json` of its own — its dependencies are the root's, so the repo can be installed as a single unit by the desktop shell), and `client/` is a separate Vite build. The only non-trivial logic is in `client/src/graph/resolve.js` — read it first.
 
+Two rules keep this tree small. **Files split when a chunk earns its own tests, never on line count** — that trigger produced `env.js`, `share.js`, `presets.js`, `jobs.js` and `output/core.js`, and it is the only one that has. **A comment earns its length only if deleting it would let someone make a wrong change** — everything else is history, and the git log holds history better than a comment does. Prose (comments, doc footnotes) gets reviewed for length the way code gets reviewed for logic.
+
 **Data flow:** `ImageOutputNode.onGenerate` → `buildRequest(nodes, edges, outputId)` (pure, in `resolve.js`) → `POST /api/generate` (via `client/src/api.js`) → server's `/api/generate` handler → OpenRouter `POST /api/v1/images` → image written to disk + returned as a data URL to the browser. The other two mirror it: `TextOutputNode.onRun` → `POST /api/text` → OpenRouter `chat/completions` → result stored in `node.data.result`; `VideoOutputNode.onGenerate` → `POST /api/video`, then polls `/api/video/:id` until the server has downloaded the finished file.
 
 **Key design decisions:**
