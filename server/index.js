@@ -1332,15 +1332,17 @@ app.get('/api/video/:id', async (req, res) => {
       params: { prompt, model, duration, resolution, size },
       refs: videoJobRefs.get(id) || null,
     };
-    // Named `usedProject`, not `project`: `project` is already bound above
-    // (from req.query, line ~1269) for the whole length of this route, and a
-    // `const project` here would shadow it for the rest of this try block --
+    // Named `usedProject`, not `project`: `project` is already bound by the
+    // `req.query` destructuring above for the whole length of this route, and
+    // a `const project` here would shadow it for the rest of this try block --
     // including the `project || null` fallback a few lines up, which would
     // then be reading its own temporal-dead-zone declaration instead of the
-    // query param. That shadow only throws when `fresh` is falsy (no store
-    // record to fall back on `job.project` reads never reach it), which is
-    // exactly the corrupted-or-missing-store case this whole fallback exists
-    // for -- so the bug surfaces only in the case it's supposed to handle.
+    // query param. That shadow only throws when `fresh` is falsy: with no
+    // store record, the fallback object a few lines up is what supplies
+    // `project`, so the shadowing hazard this naming avoids would only bite
+    // on that same path -- exactly the corrupted-or-missing-store case this
+    // whole fallback exists for, so the bug would have surfaced only in the
+    // case it's supposed to handle.
     const { savedPath, cost, project: usedProject } = await collectVideo(job, data);
     const saved = await persistJob(OUTPUT_DIR, id, {
       project: usedProject,
