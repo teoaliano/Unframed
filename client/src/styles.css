@@ -390,35 +390,43 @@ div:has(> .add-node-menu) {
   color: var(--color-icon-primary);
 }
 
-/* Prompt node: drag the field's corner to resize in both axes. The handle can't
-   live on the textarea — it's a flex item with basis 0, so an inline width from a
-   horizontal drag would be ignored. It goes on the field wrapper instead, and the
-   card (width: fit-content) tracks it. */
+/* Prompt node: drag the field's corner to resize in both axes. The handle goes on
+   the field wrapper, not the textarea — the textarea is width: 100%, so an inline
+   width from a horizontal drag would be overridden — and the card (width:
+   fit-content) tracks it. The textarea must then be told to FILL that wrapper:
+   Astryx 0.4.3 made the wrapper display: block (0.1.6 was flex, where
+   align-items: stretch grew the textarea for free), so without height: 100% a
+   vertical drag grows the bordered box while the text keeps its rows height and
+   scrolls in a strip at the top. Percentage height against the un-dragged
+   wrapper's auto height resolves to auto, so rows still sets the natural size —
+   which is also why min-height below has to stay under the rows height: a
+   min-height does not make the parent definite, so raising it past that brings
+   the dead strip back for every field nobody has dragged. */
 .xnode-prompt .astryx-textarea {
   resize: both;
   overflow: auto;
-  align-items: stretch;
   width: 220px; /* = old 240px card minus body padding */
   min-width: 160px;
   min-height: 64px;
 }
 .xnode-prompt .astryx-textarea textarea {
   resize: none;
+  height: 100%;
 }
 
-/* Text node fields resize in both axes, same as the prompt node's: the handle
-   goes on the field wrapper (a flex item with basis 0 ignores an inline width)
-   and the card, now fit-content, tracks whichever field is widest. */
+/* Text node fields resize in both axes, same as the prompt node's — handle on the
+   wrapper, height: 100% on the textarea so it follows a vertical drag — and the
+   card, now fit-content, tracks whichever field is widest. */
 .xnode-text .astryx-textarea {
   resize: both;
   overflow: auto;
-  align-items: stretch;
   width: 260px; /* = old 300px card minus body padding */
   min-width: 180px;
   min-height: 64px;
 }
 .xnode-text .astryx-textarea textarea {
   resize: none;
+  height: 100%;
 }
 
 /* ---- @ mention menu ---- */
