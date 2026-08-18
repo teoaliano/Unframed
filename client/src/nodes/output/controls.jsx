@@ -7,6 +7,53 @@ import { Selector } from '@astryxdesign/core/Selector';
 import { HStack } from '@astryxdesign/core/Stack';
 import { capabilityTags, ratioLabel } from './core.js';
 
+// A raw <select>, which breaks client/.claude/CLAUDE.md's "no <div>, components do all
+// layout/spacing" rule on purpose. Astryx popups are positioned purely by CSS anchor
+// positioning, and where the anchor fails to resolve they render at the viewport corner
+// instead of on their node -- reproducible in the packaged Electron app and in Safari,
+// not fixable from this repo, and NOT fixed by the 0.4.3 upgrade. A native select's
+// list is drawn by the OS, outside the page's layout entirely, so it cannot be
+// mispositioned by any of that. The closed box is still Astryx: every value below is a
+// token, copied from the same inputStyles the Selector's own box uses, so it follows a
+// theme change. The trade is deliberate -- take the popup back to a component the day
+// anchor positioning is reliable everywhere Unframed runs.
+// Its props mirror Selector's (label/options/value/onChange) so the call sites read the
+// same. There is no `hasSearch`: a native select has the OS's own type-ahead, which is
+// what that prop was standing in for.
+export function NativeSelect({ label, options, value, onChange }) {
+  return (
+    <label className="xnode-native-select">
+      {/* secondary + type="label" is exactly what Astryx's own FieldLabel renders,
+          so these sit at the same weight and colour as the Model and Runs labels. */}
+      <Text type="label" color="secondary">{label}</Text>
+      <select
+        // nodrag, or a click that opens the list pans the canvas instead.
+        className="nodrag"
+        // The wrapping <label> already focuses the control on click, but naming it
+        // through that label would read the whole option list out as the name -- the
+        // accessible name of a wrapped control includes its own subtree. Naming it
+        // here gives exactly what the Astryx Selector announced: "Quality, combobox".
+        aria-label={label}
+        // '' is the placeholder row's value, so an unsupported stored value (the
+        // `includes` checks below resolve to undefined) shows the dash rather than
+        // silently displaying the model's first option as if it were chosen.
+        value={value ?? ''}
+        onChange={(e) => onChange(e.target.value)}
+      >
+        {value == null && <option value="">—</option>}
+        {options.map((o) => {
+          const opt = typeof o === 'string' ? { value: o, label: o } : o;
+          return (
+            <option key={opt.value} value={opt.value}>
+              {opt.label ?? opt.value}
+            </option>
+          );
+        })}
+      </select>
+    </label>
+  );
+}
+
 // Labelled by slug, not OpenRouter's display name: the slug is what you put in
 // OPENROUTER_IMAGE_MODEL, and it keeps every row in one format. Capabilities sit on
 // the row so a model is chosen by what it can do rather than by its name — without
@@ -54,57 +101,45 @@ export function ParamControls({ params, data, onChange, children }) {
   return (
     <HStack gap={2} align="end" wrap="wrap">
       {exactSizes && (
-        <Selector
+        <NativeSelect
           label="Size"
-          size="sm"
-          // Long for some models (seedance-2.0 declares 25), so searchable.
-          hasSearch={exactSizes.length > 8}
           options={exactSizes.map((s) => {
             const r = ratioLabel(s);
             return { value: s, label: r ? `${s} · ${r}` : s };
           })}
           value={exactSizes.includes(data.size) ? data.size : undefined}
-          placeholder="—"
           onChange={(v) => onChange({ size: v })}
         />
       )}
       {resolutionTiers && (
-        <Selector
+        <NativeSelect
           label="Size"
-          size="sm"
           options={resolutionTiers}
           value={resolutionTiers.includes(data.resolution) ? data.resolution : undefined}
-          placeholder="—"
           onChange={(v) => onChange({ resolution: v })}
         />
       )}
       {qualities && (
-        <Selector
+        <NativeSelect
           label="Quality"
-          size="sm"
           options={qualities}
           value={qualities.includes(data.quality) ? data.quality : undefined}
-          placeholder="—"
           onChange={(v) => onChange({ quality: v })}
         />
       )}
       {backgrounds && (
-        <Selector
+        <NativeSelect
           label="Background"
-          size="sm"
           options={backgrounds}
           value={backgrounds.includes(data.background) ? data.background : undefined}
-          placeholder="—"
           onChange={(v) => onChange({ background: v })}
         />
       )}
       {ratios && (
-        <Selector
+        <NativeSelect
           label="Ratio"
-          size="sm"
           options={ratios}
           value={ratios.includes(data.aspect_ratio) ? data.aspect_ratio : undefined}
-          placeholder="—"
           onChange={(v) => onChange({ aspect_ratio: v })}
         />
       )}
