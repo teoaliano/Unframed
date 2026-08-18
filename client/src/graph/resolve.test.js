@@ -1051,6 +1051,23 @@ const img = (i, y) => ({ id: `i${i}`, type: 'image', position: { x: 0, y }, data
   assert.equal(truncated, 2);
 }
 
+// Truncation and dropped directive-only sections can land in the same list. The cap acts
+// on the RAW section count first, so a directive-only section counts toward the 10 kept
+// just like any other -- the fix this pins down is what the caller does with the counts
+// afterward: `truncated` is only ever the sections beyond the cap, never inflated by ones
+// the cap kept but freeBatch itself dropped for having no prompt text.
+{
+  const src = { id: 'p-list', type: 'prompt', position: { x: 0, y: 0 }, data: { text: '' } };
+  const { nodes, edges } = graph([src], [{ id: 'e1', source: 'p-list', target: 'out' }]);
+  // 12 sections; the first 10 survive the cap (2 truncated); of those 10, 3 are nothing
+  // but an `images: 1` directive and are dropped as empty, leaving 7 runs.
+  const sections = Array.from({ length: 12 }, (_, i) => (i === 2 || i === 5 || i === 8 ? 'images: 1' : `item ${i}`));
+  const { runs, truncated, empty } = freeBatch(nodes, edges, 'out', 'p-list', sections.join('\n---\n'));
+  assert.equal(runs.length, 7);
+  assert.equal(truncated, 2);
+  assert.equal(empty, 3);
+}
+
 // A section that is only a directive is not a run: with its line stripped it would send
 // the shared context alone -- exactly the paid generation of nobody's prompt that the
 // node's NO_SECTIONS guard exists to prevent. Dropped, and counted so the caller can say.

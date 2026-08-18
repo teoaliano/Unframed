@@ -289,9 +289,11 @@ export default function ImageOutputNode({ id, data }) {
     // was never actually sent. `staged.notes` itself is safe to reuse as-is -- it only
     // ever holds the repair call's own notes, which already happened and which editing
     // this text cannot undo.
-    const shapeNotes = [truncationNote(built.length, truncated), emptyNote(empty), droppedImagesNote(built)].filter(
-      Boolean,
-    );
+    const shapeNotes = [
+      truncationNote(built.length + empty, truncated),
+      emptyNote(empty),
+      droppedImagesNote(built),
+    ].filter(Boolean);
     const allNotes = [...staged.notes, ...shapeNotes];
     setNote(allNotes.length ? allNotes.join(' · ') : null);
     setStaged(null);
@@ -469,7 +471,7 @@ export default function ImageOutputNode({ id, data }) {
         // No preview pending, so nothing can edit `built` before it reaches `fire` --
         // safe to compute its shape notes once, same as `stepNotes` above.
         shapeNotes = [
-          truncationNote(built.runs.length, built.truncated),
+          truncationNote(built.runs.length + built.empty, built.truncated),
           emptyNote(built.empty),
           droppedImagesNote(built.runs),
         ].filter(Boolean);
