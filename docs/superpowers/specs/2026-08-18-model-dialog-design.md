@@ -24,86 +24,28 @@ construction — and it has room for a real table.
 
 ## What changes for the user
 
-The Model row on all three output nodes becomes a button showing the current
-slug. Clicking it opens a centered dialog holding a search field and a table
-of three columns:
+The Model row on all three output nodes becomes a button. Clicking it opens a
+centered dialog: a search field, a link to OpenRouter's catalogue filtered to
+this medium, and a sortable table of Model, Provider and Released. Clicking a
+model picks it and closes.
 
-| Model | Provider | Released |
-| --- | --- | --- |
-| the model half of the slug | the provider, as a coloured `Token` | the release date |
+`docs/models.md` owns how all of that works — the provider-label derivation,
+where `Released` comes from, the scroll boundary and the Escape handling. This
+file is only the reasoning, and what was rejected.
 
-All three sort; newest first by default, which is the reason the date is there
-at all. Search matches the whole slug (`openai/gpt-image-2`) and the display
-name (`OpenAI: GPT Image 2`) — neither is shown intact now that the slug is
-split, so search has to cover both. Clicking a model picks it and closes; the
-value stored is always the full slug, not the displayed half.
+## Why a table of three columns and nothing else
 
-Rows are single-line. An earlier version put the display name on a second line
-under the slug, which made every row double height for information the Provider
-column now carries in a scannable, sortable form.
+The first build had filter pills over derived facets, capability tags per row,
+and a price column. All of it worked; none of it survived contact with the
+built thing. The pills wrapped onto two rows, the tags crowded every cell, and
+together they made a two-column question — which model, how new — look like a
+six-column one. Cut on review, and the dialog got legible.
 
-`Released` comes from OpenRouter's `created` (Unix seconds), present on every
-model in all three catalogues — 43/43, 23/23, 413/413 when measured on
-2026-08-18. The server passes it through as a number so the table sorts on the
-value rather than on a formatted string.
-
-`Provider` is derived, and the derivation is the one non-obvious bit left. The
-slug prefix is the provider's KEY; its pretty label comes from the display name,
-which is `Provider: Model` — but only for some models. 23 of 245 text models
-have no colon, so parsing per row rendered `~anthropic` directly below
-`Anthropic`. Keying on the prefix (with any leading `~` stripped) and taking the
-label from whichever sibling does have a colon resolves every provider in image
-and video, and all but two in text, which fall back to the bare prefix. Both
-derived fields are put on the row objects so Table's own comparators sort the
-values it renders rather than the raw slug.
-
-The `Token` hue is derived from the provider key by a small hash, not mapped:
-the provider list grows, so a table keyed to today's names would leave new ones
-uncoloured. Red and yellow are excluded because they read as error and warning
-next to the app's real ones, and gray sits at the same weight as the text around
-it — the same reasoning `LibraryDialog`'s own chip table records. Seven hues over
-25 providers means colours repeat; that is acceptable because the colour groups
-rows for scanning and never carries information the label does not.
-
-## Design
-
-`client/src/nodes/output/ModelDialog.jsx` is the whole feature: Astryx
-`Dialog` + `DialogHeader`, a `TextInput` for search, and a `Table` with
-`useTableSortable`. `ModelPicker` in `controls.jsx` keeps its name, its props
-`{ models, value, onChange, kind }` and its three call sites; only its body
-changed from `Selector` to button-plus-dialog. The three node files are
-untouched.
-
-There is no separate pure module and no test file, because there is no logic
-left that fails silently — a substring search and a numeric comparator are
-both obvious from reading them. (An earlier draft had one; see "Decided
-against".)
-
-Three things are not obvious from the code and are commented where they live:
-
-- **Escape is handled by the component, not by `Dialog`.** Astryx's own Escape
-  path does not reach `onOpenChange` in this configuration — verified in the
-  browser, where two model dialogs could be left open at once — so
-  `ModelDialog` listens for the key itself, in the capture phase.
-- **The scroll boundary sits on Table's own `.astryx-table-scroll-wrapper`**,
-  which is the nearest scrolling ancestor and therefore what a sticky `th`
-  sticks to; putting it one level higher left the header scrolling away with
-  the rows. It has to exist somewhere, because the `Dialog`'s wrapper is
-  `overflow: hidden` and a long catalogue would otherwise clip silently.
-- **Table's `containerBleed` reads `--container-padding-*` from its ancestors**
-  and applies negative margins to cancel them, which pushed the table 16px
-  past the scroll box on every side and put half the header above the
-  boundary. Zeroing those vars on the wrapper div is the fix.
-
-Each output node mounts its own dialog conditionally — `{open && <ModelDialog
-…/>}` — rather than sharing one instance in `App.jsx` the way `LibraryDialog`
-does, because the picker belongs to the node whose model it sets and a shared
-instance would mean plumbing "which node asked" through `App.jsx` for nothing.
-
-**Nothing anchor-positioned goes inside the dialog** — search is a `TextInput`,
-and `NativeSelect` (PR #28) is the fallback if a select is ever needed, never
-an Astryx `Selector`. Otherwise the dialog reproduces the bug it exists to
-dodge.
+Two rules came out of that worth keeping. **The picker does not restate what
+the parameter controls already say**: capability data drives `useModelParams`,
+which is where it belongs. And **the row's job is identification**, which is
+why the display name became a Provider column rather than a second line: same
+information, a third of the height, and sortable.
 
 ## Decided against
 
