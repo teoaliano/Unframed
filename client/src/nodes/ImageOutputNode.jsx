@@ -150,14 +150,14 @@ export default function ImageOutputNode({ id, data }) {
 
   // The paid half of a run, split out so the preview gate can sit between building a
   // batch and sending it -- and so confirming a preview reuses this exact code rather
-  // than a second copy that drifts. The caller owns `status`, the `running` marker and
-  // the cleared results; fire() owns the requests and the settlement.
+  // than a second copy that drifts. The caller sets `status`, the `running` marker and
+  // the cleared results; fire() owns the requests, the settlement, and clearing the marker.
   async function fire(batch, batchId) {
     // Captured before anything is awaited, same reasoning as onGenerate's copy: a write
     // after an await reaches whichever project is CURRENTLY loaded, never this one.
     const startedIn = getProject();
-    setTotal(batch.length);
     try {
+      setTotal(batch.length);
       const settled = await Promise.allSettled(
         batch.map((run, i) =>
           generate({
@@ -300,10 +300,11 @@ export default function ImageOutputNode({ id, data }) {
           // punctuate one. Asked merely to "split into sections", models copy the
           // whole text N times: a real batch came back as three identical prompts,
           // each still reading "3 versions of ...", so every image rendered three
-          // subjects and the run cost triple for one result. Two clauses earn their
-          // place here — each section is a whole prompt for one image, and a text
-          // that isn't a list comes back untouched rather than being chopped into
-          // fragments that each bill as a generation.
+          // subjects and the run cost triple for one result. Two of the clauses below
+          // do the real work — each section must be a whole prompt for one image, and
+          // a text that isn't a list must come back untouched rather than being
+          // chopped into fragments that each bill as a generation.
+
           // The count is known here and nowhere else: the model cannot see the canvas, so
           // "images 1 to 8" has to be stated or it invents numbers. Zero wired images
           // means the directive clauses are noise, so they are left out entirely.
@@ -350,7 +351,9 @@ export default function ImageOutputNode({ id, data }) {
           notes.push(`list had ${built.runs.length + built.truncated} items, running the first ${built.runs.length}`);
         }
         const missing = [...new Set(built.runs.flatMap((r) => r.dropped))].sort((a, b) => a - b);
-        if (missing.length) notes.push(`no image ${missing.join(', ')} wired`);
+        if (missing.length) {
+          notes.push(`no image${missing.length > 1 ? 's' : ''} ${missing.join(', ')} wired`);
+        }
         batch = built.runs;
       } else {
         batch = Array.from({ length: runs }, () => ({ prompt, input_references }));
@@ -459,6 +462,10 @@ export default function ImageOutputNode({ id, data }) {
             icon only has to say which kind of outcome it is. */}
         {(status === 'error' || status === 'partial') && (
           <StatusLine type={status === 'partial' ? 'warning' : 'error'}>{error}</StatusLine>
+        )}
+
+        {note && (
+          <StatusLine type="info">{note}</StatusLine>
         )}
 
         {hasStrip && (
