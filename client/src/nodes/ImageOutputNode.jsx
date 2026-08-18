@@ -11,7 +11,7 @@ import { CheckboxInput } from '@astryxdesign/core/CheckboxInput';
 import NodeHeader from './NodeHeader.jsx';
 import RunsControl, { clampRuns } from './RunsControl.jsx';
 import StatusLine from './StatusLine.jsx';
-import FreePreviewDialog from './FreePreviewDialog.jsx';
+import FreePreviewDialog, { droppedImagesNote } from './FreePreviewDialog.jsx';
 import { useModels, useModelParams, freeSpot } from './output/core.js';
 import { resetModelParams } from './output/defaults.js';
 import { ModelPicker, ParamControls, CostFoot } from './output/controls.jsx';
@@ -20,6 +20,22 @@ import { generate, runText, getProject, SESSION_ID } from '../api.js';
 // Arrow leaving a frame: "send this out onto the canvas". From lucide-react, like
 // every other icon here, so it shares the set's grid and stroke.
 import { ExternalLink as AddToCanvasIcon } from 'lucide-react';
+
+// A list made of nothing but separators (or an edit that reduces one to that) splits to
+// zero sections. Shared between onGenerate's direct-fire throw and onConfirmPreview's
+// fallback error -- one string, one rule, checked in both places freeBatch can come back
+// empty.
+const NO_SECTIONS_ERROR = 'That list has no sections to run.';
+
+// "list had N items, running the first M" -- the truncation half of a batch's shape
+// notes, for the node's OWN footer line. Deliberately worded differently from the
+// dialog's own truncation warning (which reads "N more sections beyond the cap"): that
+// one lives beside a visible run count and this one doesn't. Shared only between the two
+// places this exact wording is used -- the direct-fire path and onConfirmPreview -- so
+// they can't drift from each other.
+function truncationNote(runCount, truncated) {
+  return truncated ? `list had ${runCount + truncated} items, running the first ${runCount}` : null;
+}
 
 // Makes an image. Its sibling makes a video, and the two used to be one node with a
 // tab: the medium picked the catalogue, the controls and the order of magnitude of
@@ -254,9 +270,9 @@ export default function ImageOutputNode({ id, data }) {
   }
 
   async function onConfirmPreview(text) {
-    const { runs: built, error: bad } = derivePreview(text);
+    const { runs: built, truncated, error: bad } = derivePreview(text);
     if (bad || !built.length) {
-      setError(bad || 'That list has no sections to run.');
+      setError(bad || NO_SECTIONS_ERROR);
       setStatus('error');
       setStaged(null);
       return;
@@ -264,6 +280,15 @@ export default function ImageOutputNode({ id, data }) {
     // Reuses the staged batchId, so the repair call's text sidecar and these images stay
     // summable as one batch -- the reason a batch has an id at all.
     const batchId = staged.batchId;
+    // Recomputed from the text as CONFIRMED, not from anything staged earlier: the
+    // textarea may have changed since Generate first built a batch, and a directive
+    // fixed (or broken) by that edit must be reflected here, not report on a batch that
+    // was never actually sent. `staged.notes` itself is safe to reuse as-is -- it only
+    // ever holds the repair call's own notes, which already happened and which editing
+    // this text cannot undo.
+    const shapeNotes = [truncationNote(built.length, truncated), droppedImagesNote(built)].filter(Boolean);
+    const allNotes = [...staged.notes, ...shapeNotes];
+    setNote(allNotes.length ? allNotes.join(' · ') : null);
     setStaged(null);
     setStatus('running');
     setError(null);
@@ -279,7 +304,14 @@ export default function ImageOutputNode({ id, data }) {
   async function onGenerate() {
     setStatus('running');
     setError(null);
-    setResults([]);
+    // A pending preview must not disturb a batch already on screen and already paid
+    // for: Cancel has to leave it exactly as it was -- the local strip, the persisted
+    // pointer, AND the note describing it, none of which this click has earned the
+    // right to touch yet. onConfirmPreview is where all three get cleared (and re-set)
+    // once a run actually starts -- see there. The `running` marker below still lands
+    // immediately either way, so Generate stays disabled through the repair call.
+    const previewing = freeRuns && data.previewPrompt;
+    if (!previewing) setResults([]);
     // Captured before anything is awaited: every guard below compares against
     // this, not against a ref or a token held by this component instance. A
     // rename (not a genuine switch) reuses this very instance, and even when a
@@ -299,11 +331,14 @@ export default function ImageOutputNode({ id, data }) {
     // above. Boolean-ish fact plus its provenance, not a progress log: done/total
     // stay local only, same as before.
     updateNodeData(id, {
-      results: undefined,
+      // Skipped when a preview is pending, for the same reason `setResults` above is --
+      // the marker still has to land immediately, but there is no run yet whose pointer
+      // this should blank.
+      ...(previewing ? {} : { results: undefined }),
       running: { startedAt: Date.now(), session: SESSION_ID },
     });
     setDone(0);
-    setNote(null);
+    if (!previewing) setNote(null);
     setRepairCost(0);
     // Unknown until the run count is worked out below (which, in Free mode, needs
     // an await) — showing the previous batch's total in the meantime would read as
@@ -321,7 +356,17 @@ export default function ImageOutputNode({ id, data }) {
 
       let batch;
       let listText = '';
-      const notes = [];
+      // The repair CALL's own notes -- history that already happened, and that editing
+      // the textarea in a preview cannot undo. This is the only kind of note that ever
+      // travels into `staged`; see `shapeNotes` below for the other kind.
+      const stepNotes = [];
+      // The batch's SHAPE -- truncation, dropped-image directives -- which an edit in
+      // the preview dialog very much CAN change. Left empty for the non-Free path, and
+      // computed once, right below, for the direct-fire Free path where nothing can
+      // edit `built` between here and `fire`. onConfirmPreview recomputes its own
+      // version of this from whatever text was actually confirmed, rather than reusing
+      // this one -- see there for why.
+      let shapeNotes = [];
       if (freeRuns) {
         const source = findFreeSource(getNodes(), getEdges(), id);
         if (!source) {
@@ -381,36 +426,39 @@ export default function ImageOutputNode({ id, data }) {
           const again = splitSections(repaired.text);
           if (again.blocks.length > 1) {
             listText = repaired.text;
-            notes.push(`re-split into ${again.blocks.length} sections`);
+            stepNotes.push(`re-split into ${again.blocks.length} sections`);
           } else {
-            notes.push('no sections found, running as a single generation');
+            stepNotes.push('no sections found, running as a single generation');
           }
         }
 
         const built = freeBatch(getNodes(), getEdges(), id, source.id, listText);
         // A list made of nothing but separators splits to zero sections. Saying so beats
         // the old fall-back-to-one-run, which spent money on the shared context alone.
-        if (!built.runs.length) throw new Error('That list has no sections to run.');
-        if (built.truncated) {
-          notes.push(`list had ${built.runs.length + built.truncated} items, running the first ${built.runs.length}`);
-        }
-        const missing = [...new Set(built.runs.flatMap((r) => r.dropped))].sort((a, b) => a - b);
-        if (missing.length) {
-          notes.push(`no image${missing.length > 1 ? 's' : ''} ${missing.join(', ')} wired`);
-        }
+        if (!built.runs.length) throw new Error(NO_SECTIONS_ERROR);
         batch = built.runs;
+        if (previewing) {
+          // Stage before touching anything else: the marker and the spinner both have
+          // to come back off, or Generate freezes behind its own disabled guard with
+          // nothing in flight. Only `stepNotes` is staged (see its own comment) --
+          // `shapeNotes` stays [] here on purpose, since this batch is not the one
+          // that will actually be sent; onConfirmPreview computes its own once the
+          // user says which text that is.
+          setStaged({ listText, notes: stepNotes, batchId });
+          setStatus('idle');
+          updateNodeData(id, { running: undefined });
+          return;
+        }
+        // No preview pending, so nothing can edit `built` before it reaches `fire` --
+        // safe to compute its shape notes once, same as `stepNotes` above.
+        shapeNotes = [truncationNote(built.runs.length, built.truncated), droppedImagesNote(built.runs)].filter(
+          Boolean,
+        );
       } else {
         batch = Array.from({ length: runs }, () => ({ prompt, input_references }));
       }
-      setNote(notes.length ? notes.join(' · ') : null);
-      if (freeRuns && data.previewPrompt) {
-        // The marker and the spinner both have to come back off: leaving them set would
-        // freeze Generate behind its own disabled guard with nothing in flight.
-        setStaged({ listText, notes, batchId });
-        setStatus('idle');
-        updateNodeData(id, { running: undefined });
-        return;
-      }
+      const allNotes = [...stepNotes, ...shapeNotes];
+      setNote(allNotes.length ? allNotes.join(' · ') : null);
       await fire(batch, batchId);
     } catch (err) {
       if (getProject() !== startedIn) {
