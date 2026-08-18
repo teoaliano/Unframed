@@ -27,33 +27,6 @@ export function ratioLabel(size) {
   return best && best.diff / target < 0.02 ? best.label : '';
 }
 
-// The few capabilities worth reading before you pick a model — the ones that
-// actually differ. input_references and aspect_ratio are on nearly every model,
-// so listing them would be noise; resolution (16 of 40), seed (10), transparency
-// (6) and quality (6) are the ones that decide whether a model can do the job.
-// Silence means "nothing unusual", which is why the common params are omitted.
-export function capabilityTags(entry, kind) {
-  const p = entry?.params;
-  if (!p) return [];
-  const tags = [];
-  if (kind === 'video') {
-    const d = p.duration;
-    if (Array.isArray(d) && d.length) tags.push(`${Math.min(...d)}–${Math.max(...d)}s`);
-    const r = p.resolution;
-    if (Array.isArray(r) && r.length) tags.push(r[r.length - 1]);
-    if (p.generate_audio) tags.push('audio');
-    if (p.seed) tags.push('seed');
-    return tags;
-  }
-  // Top tier only: the full list belongs in the Size control, not in a summary.
-  const res = p.resolution?.values;
-  if (res?.length) tags.push(res[res.length - 1]);
-  if (p.background?.values?.includes('transparent')) tags.push('transparent');
-  if (p.quality?.values?.length) tags.push('quality');
-  if (p.seed) tags.push('seed');
-  return tags;
-}
-
 // The catalogue for one medium, plus the server's configured default. `kind` here is
 // the CATALOGUE name the API takes — 'image' | 'video' | 'text' — not a node type id.
 // The live flag matters: switching an output node's medium used to be possible, and a

@@ -741,15 +741,6 @@ div:has(> .add-node-menu) {
   font-size: var(--font-size-body-sm, 0.8125rem);
 }
 
-/* Capability tags on model dialog rows. */
-.model-tag {
-  padding: 1px 6px;
-  border: 1px solid var(--color-border-emphasized);
-  border-radius: var(--radius-full);
-  color: var(--color-text-secondary);
-  font-size: var(--font-size-body-xs, 0.75rem);
-  white-space: nowrap;
-}
 /* Table brings its own scroll wrapper (.astryx-table-scroll-wrapper) with
    overflow: auto on BOTH axes for its horizontal scroll — that makes IT,
    not this div, the nearest scrolling ancestor as far as a sticky <th>
@@ -763,7 +754,10 @@ div:has(> .add-node-menu) {
    overflow: hidden wrapper (Dialog's max-height is 75vh) — the reason a
    boundary exists here at all. */
 .model-dialog-list .astryx-table-scroll-wrapper {
-  max-height: 420px;
+  /* Viewport-relative so a tall window shows more rows instead of scrolling
+     a short box. Kept well under the Dialog's own 75vh: the header, search
+     field and padding above the table take roughly 150px of that budget. */
+  max-height: 55vh;
   overflow-y: auto;
 }
 /* Table's own containerBleed (Table.tsx) reads --container-padding-* off
@@ -783,9 +777,9 @@ div:has(> .add-node-menu) {
   --container-padding-block-start: 0px;
   --container-padding-block-end: 0px;
 }
-/* Pinned header: a 23-to-245-row table with sortable columns wants "Model /
-   Capabilities / Price" — and the sort arrows living in them — visible the
-   whole time you scroll, not just before you start. Sticking each <th>
+/* Pinned header: a 23-to-245-row table with sortable columns wants Model and
+   Released — and the sort arrows living in them — visible the whole time you
+   scroll, not just before you start. Sticking each <th>
    individually (rather than <thead>) is the cross-browser-reliable form of
    this; the background stops rows sliding underneath from showing through. */
 .model-dialog-list th {

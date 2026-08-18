@@ -2,93 +2,57 @@
 // anchor-positioned popups can render at the viewport corner when the anchor
 // fails to resolve (packaged app, Safari), and a centered Dialog is immune by
 // construction. For the same reason NOTHING anchor-positioned goes inside it —
-// pills are ToggleButtons, and any future select in here is NativeSelect. Same
-// rule for Table's own plugins: only useTableSortable and Pagination, neither
-// of which renders a popup.
+// search is a TextInput, and any future select in here is NativeSelect.
 import { useEffect, useMemo, useState } from 'react';
 import { Dialog, DialogHeader } from '@astryxdesign/core/Dialog';
 import { TextInput } from '@astryxdesign/core/TextInput';
-import { ToggleButton } from '@astryxdesign/core/ToggleButton';
-import { Pagination } from '@astryxdesign/core/Pagination';
 import { Table, proportional, pixel, useTableSortable, useTableSortableState } from '@astryxdesign/core/Table';
-import { Button } from '@astryxdesign/core/Button';
-import { Token } from '@astryxdesign/core/Token';
+import { Link } from '@astryxdesign/core/Link';
 import { Text } from '@astryxdesign/core/Text';
-import { HStack, VStack } from '@astryxdesign/core/Stack';
-import { capabilityTags } from './core.js';
-import { buildFacets, applyFacets, priceLabel, priceRate } from './facets.js';
+import { VStack } from '@astryxdesign/core/Stack';
 
-const PAGE_SIZE = 10;
 const TITLES = { image: 'Image models', video: 'Video models', text: 'Text models' };
 
-// Cheapest-first, with "no listed price" sorted last in ascending order rather
-// than first — a null reading as $0 would put every unpriced model at the top
-// of "cheapest first", which is backwards.
-//
-// Video still mixes units after the facets.js fix — priceRate returns the
-// same figure the row prints ($/s or $ per M, see facets.js), so ordering is
-// by what's on screen, not by a raw catalogue rate. But $/s and $ per M are
-// still not the same currency: a $0.17/s model and a $2.40 per M model are not
-// truly comparable costs, they just both sort correctly within their own unit.
-// Acceptable for a picker where every row states its own unit; not a cost
-// comparison across the two families.
-function priceComparator(kind) {
-  return (a, b) => {
-    const ra = priceRate(a, kind);
-    const rb = priceRate(b, kind);
-    if (ra == null && rb == null) return 0;
-    if (ra == null) return 1;
-    if (rb == null) return -1;
-    return ra - rb;
-  };
-}
+// OpenRouter gives `created` as a Unix timestamp (seconds), on every model in
+// all three catalogues. Rendered short because the column is for scanning
+// "how new is this" rather than for exact dates.
+const DATE = new Intl.DateTimeFormat(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
+const released = (m) => (m.created ? DATE.format(new Date(m.created * 1000)) : '');
 
 export default function ModelDialog({ models, kind, value, onPick, onClose }) {
   const [query, setQuery] = useState('');
-  const [selected, setSelected] = useState({});
-  const [page, setPage] = useState(1);
 
-  // Astryx's Dialog has its own Escape handling (purpose defaults to 'info',
-  // which permits it), but that path never reaches onOpenChange here — reason
-  // not isolated (see the 2026-08-18 fix report). Handling it directly, on
-  // window with capture, means this fires regardless of whatever guard is
-  // swallowing it inside Astryx.
+  // Escape is handled here, not by Dialog: Astryx's own Escape path does not
+  // reach onOpenChange in this configuration, which let two dialogs sit open
+  // at once. Capture phase so nothing in the canvas swallows it first.
   useEffect(() => {
-    const handleKeyDown = (e) => {
-      if (e.key === 'Escape') onClose();
+    const onKey = (e) => {
+      if (e.key === 'Escape') {
+        e.stopPropagation();
+        onClose();
+      }
     };
-    window.addEventListener('keydown', handleKeyDown, true);
-    return () => window.removeEventListener('keydown', handleKeyDown, true);
+    window.addEventListener('keydown', onKey, true);
+    return () => window.removeEventListener('keydown', onKey, true);
   }, [onClose]);
 
-  const facets = useMemo(() => buildFacets(models, kind), [models, kind]);
-  const shown = useMemo(
-    () => applyFacets(models, kind, query, selected),
-    [models, kind, query, selected],
-  );
+  // Matches slug and display name: "openai/gpt-image-2" and "OpenAI: GPT
+  // Image 2" are both plausible things to type.
+  const shown = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return models;
+    return models.filter(
+      (m) => m.id.toLowerCase().includes(q) || (m.name || '').toLowerCase().includes(q),
+    );
+  }, [models, query]);
 
-  // Sorting runs over the whole filtered set before paging — same rule the
-  // Library documents for its own sort — so "cheapest" means cheapest of every
-  // match, not cheapest of the current page.
+  // Newest first by default — the reason the column exists.
   const { sortedData, sortConfig } = useTableSortableState({
     data: shown,
-    defaultSort: [{ sortKey: 'id', direction: 'ascending' }],
-    comparators: { price: priceComparator(kind) },
+    defaultSort: [{ sortKey: 'created', direction: 'descending' }],
+    comparators: { created: (a, b) => (a.created || 0) - (b.created || 0) },
   });
   const sortPlugin = useTableSortable(sortConfig);
-
-  // A new search or filter is a new result set; page 3 of the old one means
-  // nothing. Same rule as the Library.
-  useEffect(() => setPage(1), [query, selected]);
-  const pageCount = Math.max(1, Math.ceil(sortedData.length / PAGE_SIZE));
-  const current = Math.min(page, pageCount);
-  const paged = sortedData.slice((current - 1) * PAGE_SIZE, current * PAGE_SIZE);
-
-  const toggle = (key, v) =>
-    setSelected((s) => {
-      const cur = s[key] || [];
-      return { ...s, [key]: cur.includes(v) ? cur.filter((x) => x !== v) : [...cur, v] };
-    });
 
   const columns = [
     {
@@ -96,83 +60,29 @@ export default function ModelDialog({ models, kind, value, onPick, onClose }) {
       header: 'Model',
       width: proportional(2),
       sortable: true,
-      // The slug Button is the only click target in this row — rows are not
-      // clickable <tr>s, same rule as the Library's list view ("the rows are
-      // not clickable, so buttons in the end slot are not nested click
-      // targets"), which is also why this is a plugin-free Table: a custom
-      // plugin to inject row onClick would just be a second way to do this.
+      // The slug is the click target, not the row: LibraryDialog's rule is
+      // that the action is a button, not the row. A Link with onClick and no
+      // href renders a real <button> with link styling (useInteractiveRole),
+      // so this needs no hand-written CSS and stays keyboard-reachable.
+      // Labelled by slug, not display name: the slug is what goes in
+      // OPENROUTER_*_MODEL.
       renderCell: (m) => (
         <VStack gap={0}>
-          <HStack gap={1} align="center" wrap="wrap">
-            {/* Slug, not display name: the slug is what goes in
-                OPENROUTER_*_MODEL, same rule as the old picker. */}
-            <Button
-              label={m.id}
-              variant="ghost"
-              size="sm"
-              onClick={() => { onPick(m.id); onClose(); }}
-            />
-            {m.id === value && <Token size="sm" color="blue" label="current" />}
-          </HStack>
-          {m.name !== m.id && (
+          <Link onClick={() => { onPick(m.id); onClose(); }} weight={m.id === value ? 'bold' : 'medium'}>
+            {m.id}
+          </Link>
+          {m.name && m.name !== m.id && (
             <Text type="supporting" color="secondary">{m.name}</Text>
           )}
         </VStack>
       ),
     },
-    // Text models carry no params (see facets.js), so capabilityTags is always
-    // [] here — an always-empty column would just be noise, same reasoning as
-    // the Price column omitted below for image.
-    ...(kind === 'text'
-      ? []
-      : [
-          {
-            key: 'caps',
-            header: 'Capabilities',
-            width: proportional(1),
-            renderCell: (m) => (
-              <HStack gap={1} align="center" wrap="wrap">
-                {capabilityTags(m, kind).map((t) => (
-                  <span className="model-tag" key={t}>{t}</span>
-                ))}
-              </HStack>
-            ),
-          },
-        ]),
-    // Image carries no pricing data at all (see facets.js) — an always-empty
-    // column would just be noise, so it is omitted rather than rendered blank.
-    ...(kind === 'image'
-      ? []
-      : [
-          {
-            key: 'price',
-            header: 'Price',
-            // Measured against the real catalogue (not guessed): with
-            // textOverflow="truncate" the unit is the part that gets
-            // ellipsised away first, and the unit is the one thing a price
-            // cell must never hide (a hidden "/s" vs "per M" is the same
-            // class of bug as the wrong-prices defect this dialog already
-            // had once). 140px clipped video's own longest string
-            // ("$6.40-10.70 per M", ~121px of text) and text's is wider
-            // still ("$150.00 / $600.00 per M", ~160px, from openai/o1-pro
-            // — this column is shared by both kinds). 200px clears that
-            // with the cell's 8+16px padding and ~16px to spare.
-            width: pixel(200),
-            align: 'end',
-            sortable: true,
-            renderCell: (m) => {
-              const price = priceLabel(m, kind);
-              return price ? <Text hasTabularNumbers>{price}</Text> : null;
-            },
-          },
-        ]),
+    { key: 'created', header: 'Released', width: pixel(130), align: 'end', sortable: true, renderCell: released },
   ];
 
   return (
-    // nodrag/nowheel: the dialog's DOM lives inside the node's subtree. Belt
-    // and braces — dragHandle: '.xnode-head' and the node's own nowheel class
-    // already scope those gestures, so this is defense in depth, not the only
-    // thing stopping a drag or scroll from reaching the canvas.
+    // nodrag/nowheel: the dialog's DOM lives inside the node's subtree, so
+    // these keep a drag or scroll inside it off the canvas.
     <Dialog isOpen onOpenChange={(open) => { if (!open) onClose(); }} width={680} className="nodrag nowheel">
       <DialogHeader title={TITLES[kind] || 'Models'} />
       <VStack gap={3} padding={4}>
@@ -186,52 +96,12 @@ export default function ModelDialog({ models, kind, value, onPick, onClose }) {
           onChange={setQuery}
         />
 
-        {facets.length > 0 && (
-          <HStack gap={1} align="center" wrap="wrap">
-            {facets.flatMap((f) =>
-              f.values.map((v) => (
-                <ToggleButton
-                  key={`${f.key}:${v.value}`}
-                  label={`${v.label} (${v.count})`}
-                  size="sm"
-                  isPressed={Boolean(selected[f.key]?.includes(v.value))}
-                  onPressedChange={() => toggle(f.key, v.value)}
-                />
-              )),
-            )}
-          </HStack>
-        )}
-
-        {shown.length === 0 ? (
-          <Text type="supporting" color="secondary">
-            No model matches. Clear the search or a filter.
-          </Text>
+        {sortedData.length === 0 ? (
+          <Text type="supporting" color="secondary">No model matches. Clear the search.</Text>
         ) : (
           <div className="model-dialog-list">
-            <Table
-              data={paged}
-              columns={columns}
-              idKey="id"
-              density="compact"
-              dividers="rows"
-              hasHover
-              textOverflow="truncate"
-              plugins={{ sort: sortPlugin }}
-            />
+            <Table data={sortedData} columns={columns} idKey="id" hasHover plugins={{ sort: sortPlugin }} />
           </div>
-        )}
-
-        {shown.length > PAGE_SIZE && (
-          <HStack justify="end">
-            <Pagination
-              page={current}
-              onChange={setPage}
-              totalItems={shown.length}
-              pageSize={PAGE_SIZE}
-              variant="count"
-              size="sm"
-            />
-          </HStack>
         )}
       </VStack>
     </Dialog>
