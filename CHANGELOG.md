@@ -9,6 +9,17 @@ Keep that shape: the website's What's new page parses this file.
 
 ### Added
 
+- **Choosing a model opens a dialog instead of a dropdown.** Room to read the
+  list properly: search across every model by slug or name, filter pills for
+  what a model can do, and a sortable table with the capability tags and the
+  price per row. The pills only offer values that actually tell models apart —
+  a filter every model would match is not shown — so each catalogue gets its
+  own set, and text models get search alone because OpenRouter publishes no
+  capabilities for them. Price is shown where OpenRouter includes it, per
+  second or per million tokens for video depending on the model and per million
+  for text; image models publish none. Like the menus fixed below, the dialog
+  cannot open at the corner of the window.
+
 - **Wire several nodes at once.** Select a group, then drag from any one node's
   handle: every selected node that can connect follows along, so three prompts
   reach an output in one drag instead of three. It works in both directions —

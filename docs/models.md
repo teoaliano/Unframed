@@ -57,6 +57,40 @@ pair is hard to choose by.
 near-universal params are omitted, so an empty row means "nothing unusual" rather
 than "nothing known".
 
+## The picker is a dialog, and its filters are derived
+
+`ModelDialog.jsx` over `facets.js`, not an anchored popup (a centered `Dialog`
+cannot be mispositioned the way an anchor-positioned one can). Rows are an
+Astryx `Table` — Model / Capabilities / Price — with sortable Model and Price
+columns and a header made sticky on the `th` cells; the scroll boundary sits on
+Table's own `.astryx-table-scroll-wrapper`, which is the nearest scrolling
+ancestor, and it must exist somewhere because the `Dialog` wrapper is
+`overflow: hidden`.
+
+**Pills are DERIVED from the catalogue by `buildFacets`.** The eligibility
+table in `facets.js` nominates a param and supplies its wording; the data
+decides whether it appears, because a value carried by every model in the
+catalogue — or by none — filters nothing and is dropped. That rule is what
+keeps `aspect_ratio`, declared by 43 of 43 image models, from becoming a pill,
+and it means a param OpenRouter adds later cannot quietly become a dead one.
+
+**Price is shown only where the list response already carries it: video and
+text. Image pricing is deliberately not fetched** — it lives at
+`/api/v1/images/models/{id}/endpoints`, one request per model, and is quoted
+per token besides.
+
+**Video prices come in three units and the unit must be read from the key
+name.** `duration_seconds*` is dollars per second, `cents_per_second*` is
+CENTS per second, and `video_tokens*` is dollars per token (rendered per
+million). Keys that are not rates — `reference_images`,
+`minimum_cents_per_generation`, `cents_per_image_input` — are ignored rather
+than folded into a range. Getting this wrong is invisible in tests and loud in
+the UI: treating every value as dollars-per-second once showed the default
+video model as `$0.00/s` and another as `$17.00/s` instead of `$0.17/s`.
+`priceRate` returns the same figure the row displays, so sorting can never
+disagree with the visible column; per-second and per-million figures are still
+not equivalent costs, so the order is by printed figure, not by true spend.
+
 ## Multi-run
 
 N runs are N ordinary `/api/generate` calls fired with `Promise.allSettled`, so a

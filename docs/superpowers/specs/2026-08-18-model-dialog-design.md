@@ -1,6 +1,6 @@
 # The model picker becomes a dialog
 
-Status: designed, not built. Companion to the native-selects change (PR #28),
+Status: built 2026-08-18. Companion to the native-selects change (PR #28),
 which fixed the parameter menus the cheap way; this is the deliberate feature
 half. Brainstormed 2026-08-18.
 
@@ -37,11 +37,15 @@ slug. Clicking it opens a centered dialog:
   params to filter. Duration is not a pill: it splits the catalogue (1–30s),
   but any threshold to bucket it by is a judgment call with no clear answer,
   and it wasn't worth inventing one — cut during plan review 2026-08-18.
-- **Rows** with the slug, the capability tags as chips, and — where the data
-  is free — price: per-second for video, per-token for text. Image shows no
-  price (see "Decided against" below).
-- Clicking a row selects the model and closes the dialog. The current model's
-  row is marked. 10 rows per page with pagination, like the Library.
+- **A table** — Model / Capabilities / Price — with sortable Model and Price
+  columns and a sticky header. Price where the data is free: per second or per
+  million tokens for video depending on the model, per million for text. The
+  image column is omitted entirely, since no image model carries pricing.
+- The slug in each row is a button; clicking it selects the model and closes
+  the dialog. Rows themselves are not click targets, following
+  `LibraryDialog`'s rule that the action is a button, not the row. The current
+  model is marked. 10 rows per page, sorted and filtered across the whole set
+  before paging.
 
 ## The data, which decides most of this
 
@@ -51,8 +55,25 @@ than pretending they match:
 | kind  | models | params (→ tags, pills)   | price                        |
 | ----- | ------ | ------------------------ | ---------------------------- |
 | image | 43     | yes                      | not in the list response     |
-| video | 23     | yes, plus `acceptsVideo` | per second, in hand          |
+| video | 23     | yes, plus `acceptsVideo` | in hand, but in three different units — see below |
 | text  | 245    | none                     | per token, in hand but today discarded |
+
+**Video pricing is not one unit, and assuming it was put wrong prices on
+screen.** This spec originally said "per second", generalised from a single
+sampled model. Measured across all 23 on 2026-08-18: 9 use
+`duration_seconds*` (dollars per second), 5 use `video_tokens*` (dollars per
+TOKEN), 2 use `cents_per_second*` (CENTS per second), and 7 mix prefixes,
+several carrying non-rate charges (`reference_images`,
+`minimum_cents_per_generation`, `cents_per_image_input`) alongside the rate.
+Treating every value as dollars-per-second displayed `$0.00/s` for
+`bytedance/seedance-2.0` — the default video model, whose per-token rate
+rounds to zero — and `$17.00/s` for `black-forest-labs/flux-3-video`, whose
+cents figure is really `$0.17/s`. `priceLabel` therefore decides the unit from
+the KEY NAME and ignores non-rate keys; `priceRate` returns the same figure the
+row displays, so sorting can never disagree with the visible column. The unit
+tests carried the same wrong assumption as the code and passed throughout —
+only the live catalogue exposed it, which is why node components are verified
+in the running app.
 
 Measured against the live catalogues on 2026-08-18: on image, `aspect_ratio`
 and `input_references` are declared by 43 of 43 models — a pill for either
@@ -67,12 +88,12 @@ would select everything. The values that split the list: resolution 1K 18 /
 
 `client/src/nodes/output/facets.js`, pure and tested under bare `node`:
 
-- `buildFacets(models, kind)` → `[{ key, label, values: [{value, label, count}] }]`.
+- `buildFacets(models, kind)` → `[{ key, values: [{value, label, count}] }]`.
   Scans the catalogue it is given, counts each candidate value, and **drops any
   facet whose values match all models or none** — the dead-pill rule. So
   `aspect_ratio` disappears on its own, and a new OpenRouter param cannot
   quietly become a pill that filters nothing.
-- `applyFacets(models, query, selected)` → filtered models. Selections
+- `applyFacets(models, kind, query, selected)` → filtered models. Selections
   intersect across facets and union within one (4K **or** 2K, **and** seed).
   Search matches slug and name, case-insensitive.
 - A small eligibility table names which params may become facets and what
@@ -80,16 +101,37 @@ would select everything. The values that split the list: resolution 1K 18 /
   a pill labelled "input_references". Data decides presence and values; the
   table decides wording and order.
 
+It also holds `priceLabel`/`priceRate`, since the unit rules are the part of
+this feature that was wrong in the first draft and is invisible when wrong.
+
 The test pins what fails silently: a facet present on every model is dropped,
-a facet that splits the list survives with correct counts, and the
-intersect/union semantics.
+a facet that splits the list survives with correct counts, the intersect/union
+semantics, one case per pricing unit family (including that a
+`minimum_cents_per_generation` or `reference_images` charge never widens a
+rate range), and that `priceRate` is `null` exactly when `priceLabel` is —
+the invariant that keeps sort and display from drifting apart again.
 
 ### The dialog is thin markup over it
 
 `client/src/nodes/output/ModelDialog.jsx`: Astryx `Dialog` + `DialogHeader`,
-search `TextInput`, pills, `List`/`Item` rows with `Chip` tags, `Pagination`
-at 10 per page — the `LibraryDialog` vocabulary. Tags come from
+search `TextInput`, `ToggleButton` pills, and an Astryx `Table` sorted by
+`useTableSortable`, `Pagination` at 10 per page — the `LibraryDialog`
+vocabulary, with `Table` rather than `List`/`Item` because the rows are
+uniform columns and price wants its own right-aligned one. Tags come from
 `capabilityTags` in `core.js`, reused unchanged.
+
+Two things the `Table` needs that its defaults do not give. The sticky header
+is `position: sticky` on the `th` cells, not on `thead`, and the scroll
+boundary lives on Table's own `.astryx-table-scroll-wrapper` — that wrapper is
+the nearest scrolling ancestor, so a header pinned one level higher rides away
+with the rows. And the boundary has to exist somewhere: the `Dialog`'s own
+wrapper is `overflow: hidden`, so without it a long catalogue clips silently
+instead of scrolling.
+
+**Escape is handled by this component, not by `Dialog`.** Astryx's own Escape
+path does not reach `onOpenChange` in this configuration — verified in the
+browser, where two model dialogs could be left open at once — so `ModelDialog`
+listens for the key itself.
 
 **Nothing anchor-positioned goes inside the dialog** — pills, search box,
 pagination, and `NativeSelect` (PR #28) if a select is ever needed, never an
