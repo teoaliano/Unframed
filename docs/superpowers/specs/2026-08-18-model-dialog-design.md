@@ -33,8 +33,10 @@ slug. Clicking it opens a centered dialog:
   name (`OpenAI: GPT Image 2`).
 - **Filter pills** for capabilities that actually split the catalogue —
   resolution tiers, seed, transparent, quality on image; resolution, audio,
-  seed, exact sizes, accepts-video-in, duration on video; none on text, which
-  has no params to filter.
+  seed, exact sizes, accepts-video-in on video; none on text, which has no
+  params to filter. Duration is not a pill: it splits the catalogue (1–30s),
+  but any threshold to bucket it by is a judgment call with no clear answer,
+  and it wasn't worth inventing one — cut during plan review 2026-08-18.
 - **Rows** with the slug, the capability tags as chips, and — where the data
   is free — price: per-second for video, per-token for text. Image shows no
   price (see "Decided against" below).

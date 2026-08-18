@@ -103,7 +103,7 @@ assert.deepEqual(buildFacets([IMAGE[0]], 'image'), []);
 const vidFacets = buildFacets(VIDEO, 'video');
 const vres = vidFacets.find((f) => f.key === 'resolution');
 assert.deepEqual(vres.values.map((v) => v.value), ['1080p']); // 720p is on 2 of 2 → dropped
-for (const key of ['audio', 'seed', 'sizes', 'videoIn', 'duration']) {
+for (const key of ['audio', 'seed', 'sizes', 'videoIn']) {
   assert.ok(vidFacets.some((f) => f.key === key), `missing video facet ${key}`);
 }
 
@@ -140,6 +140,12 @@ assert.equal(
 assert.equal(priceLabel({ id: 't', pricing: { prompt: '0', completion: '0' } }, 'text'), 'free');
 assert.equal(priceLabel({ id: 't' }, 'text'), null);
 assert.equal(priceLabel(IMAGE[0], 'image'), null); // image never shows price
+// Fixed 2 decimals, no cleverness: $0.0000833 per M would be a real rate for a
+// cheap model, and it prints as $0.00 rather than growing extra digits for it.
+assert.equal(
+  priceLabel({ id: 't', pricing: { prompt: '0.0000000833', completion: '0.0000025' } }, 'text'),
+  '$0.00 / $2.50 per M',
+);
 
 console.log('facets.test.js ok');
 ```
@@ -212,8 +218,6 @@ const FACET_DEFS = {
     { key: 'videoIn', label: 'Video input',
       values: (m) => (m.acceptsVideo === true ? ['videoIn'] : []),
       valueLabel: { videoIn: 'Video input' } },
-    { key: 'duration', label: '10s+',
-      values: (m) => (Array.isArray(m.params?.duration) && Math.max(...m.params.duration) >= 10 ? ['10s+'] : []) },
   ],
   text: [], // no params in the catalogue; search and price are all there is
 };
@@ -253,7 +257,10 @@ export function applyFacets(models, kind, query, selected) {
   });
 }
 
-const fmt = (x) => (x >= 10 ? x.toFixed(0) : x >= 0.01 ? x.toFixed(2) : x.toPrecision(1));
+// Fixed 2 decimals, no smart-precision branching: the real rates ($0.0988/s,
+// $0.30 per M) all read fine at two places, and a rate too small to show at
+// that precision just prints as $0.00 rather than growing extra digits for it.
+const fmt = (x) => x.toFixed(2);
 
 // Price only where the list response carries it for free: video (per second,
 // possibly split by resolution) and text (per token, shown per million).
@@ -305,99 +312,22 @@ git commit -m "Derive the model dialog's filter facets from the catalogue"
 ### Task 2: Server passes text pricing through
 
 **Files:**
-- Modify: `server/index.js` (the `/api/models` route, lines ~373–430)
-- Modify: `server/host.test.js` (new stub + assertion)
+- Modify: `server/index.js` (the `/api/models` route, line ~410)
 
 **Interfaces:**
 - Consumes: nothing new.
 - Produces: `/api/models?type=text` rows gain `pricing: { prompt, completion, … } | null`. `priceLabel(model, 'text')` from Task 1 reads exactly this field.
 
-- [ ] **Step 1: Write the failing assertion**
+A pure pass-through of a field OpenRouter already sends — no new logic, so no
+new test infrastructure. `host.test.js` already forks the real server against a
+temp dir for exactly the routes worth that cost (money-spending paths, sweep
+timing); this is neither. A mistake here shows up immediately as a missing
+price in the dialog, which Task 5's browser pass already checks per kind.
 
-`host.test.js` already stubs OpenRouter endpoints via `UNFRAMED_TEST_*` env vars that are unset — and therefore inert — in every real environment. Follow the same pattern for the text catalogue.
+- [ ] **Step 1: Make the change**
 
-Add a stub server next to the existing `statusStub`/`midBodyStub` blocks in `server/host.test.js`:
-
-```js
-// Stands in for OpenRouter's /api/v1/models listing, so the pricing-passthrough
-// test asserts what the real route DOES to a known upstream body rather than
-// whatever the live catalogue happens to contain today. Same inert-override
-// pattern as the stubs above.
-const textModelsStub = http.createServer((req, res) => {
-  res.writeHead(200, { 'Content-Type': 'application/json' });
-  res.end(JSON.stringify({ data: [
-    {
-      id: 'stub/priced-model',
-      name: 'Stub: Priced Model',
-      architecture: { input_modalities: ['text', 'image'], output_modalities: ['text'] },
-      pricing: { prompt: '0.0000003', completion: '0.0000025' },
-    },
-    {
-      // Text-only input: the route's vision filter must drop it, proving the
-      // stub exercises the real filter and not a bypass.
-      id: 'stub/text-only',
-      name: 'Stub: Text Only',
-      architecture: { input_modalities: ['text'], output_modalities: ['text'] },
-      pricing: { prompt: '0.0000001', completion: '0.0000001' },
-    },
-  ] }));
-});
-await new Promise((resolve) => textModelsStub.listen(0, '127.0.0.1', resolve));
-const textModelsUrl = `http://127.0.0.1:${textModelsStub.address().port}/api/v1/models`;
-```
-
-Pass it to the forked server's env where the other overrides are passed (find the `fork(` call's `env:` object, which already carries `UNFRAMED_TEST_VIDEOS_STATUS_BASE` and `UNFRAMED_TEST_CHAT_COMPLETIONS_URL`):
-
-```js
-UNFRAMED_TEST_TEXT_MODELS_URL: textModelsUrl,
-```
-
-Add the assertion alongside the other route tests (after the health-check block; use the file's existing `get`/request helper — read how the neighbouring tests call the server and use the same helper):
-
-```js
-// /api/models?type=text passes per-token pricing through, and still applies
-// the vision filter to the same body.
-{
-  const r = await getJson(`/api/models?type=text`);
-  const priced = r.models.find((m) => m.id === 'stub/priced-model');
-  assert.ok(priced, 'stubbed text model missing from /api/models?type=text');
-  assert.deepEqual(priced.pricing, { prompt: '0.0000003', completion: '0.0000025' });
-  assert.ok(!r.models.some((m) => m.id === 'stub/text-only'), 'vision filter no longer applied');
-}
-```
-
-(`getJson` here stands for the file's existing HTTP helper — match its real name when editing; do not add a second helper.)
-
-Close the stub where the other stubs are closed at the end of the file:
-
-```js
-textModelsStub.close();
-```
-
-- [ ] **Step 2: Run to verify it fails**
-
-Run: `node server/host.test.js`
-Expected: FAIL — the stub is not consulted (route still calls the real URL), so `stub/priced-model` is missing.
-
-- [ ] **Step 3: Implement the route change**
-
-In `server/index.js`, two edits inside the `/api/models` route (starts line ~373):
-
-1. The URL selection currently reads:
-
-```js
-    const url = wantText
-      ? 'https://openrouter.ai/api/v1/models'
-```
-
-becomes (same inert-override pattern as `VIDEOS_STATUS_BASE`, line ~992):
-
-```js
-    const url = wantText
-      ? (process.env.UNFRAMED_TEST_TEXT_MODELS_URL || 'https://openrouter.ai/api/v1/models')
-```
-
-2. The per-model mapping's text branch currently discards pricing:
+In `server/index.js`, inside the `/api/models` route, the per-model mapping's
+text branch currently discards pricing:
 
 ```js
           : wantText
@@ -416,14 +346,14 @@ becomes:
             : { params: m.supported_parameters || null }),
 ```
 
-- [ ] **Step 4: Run to verify it passes**
+- [ ] **Step 2: Run the suite**
 
-Run: `node server/host.test.js` — ok. Then `npm test` — all green.
+Run: `npm test` — all green (nothing here is exercised by it; this just confirms the edit didn't break the route's existing shape).
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 3: Commit**
 
 ```bash
-git add server/index.js server/host.test.js
+git add server/index.js
 git commit -m "Pass text models' per-token pricing through /api/models"
 ```
 
@@ -716,8 +646,8 @@ Start `npm run dev` from the worktree. For each of the three output nodes:
 
 1. The Model row is a button showing the current slug; click → a centered dialog opens (not at a corner; drag the node first and reopen — position must not depend on the node).
 2. **image:** pills show Size (1K/2K/4K), Transparent, Quality, Seed with counts; no Ratio pill (the 43/43 rule). Toggling 4K narrows the list; 4K+Seed narrows it further; counts match `docs/models.md`'s expectations. No price on rows.
-3. **video:** pills show Size tiers, Audio, Seed, Exact sizes, Video input, 10s+; rows show per-second prices (`$0.10–0.17/s` shape). Filter Video input → only the video-to-video models remain.
-4. **text:** no pills (no params exist), search over 245 rows, per-M prices on rows, `free` on free models. Pagination works; changing the search resets to page 1.
+3. **video:** pills show Size tiers, Audio, Seed, Exact sizes, Video input; rows show per-second prices (`$0.10–0.17/s` shape). Filter Video input → only the video-to-video models remain.
+4. **text:** no pills (no params exist), search over 245 rows, per-M prices on rows (`$0.30 / $2.50 per M` shape), `free` on free models. This is the one manual check standing in for the automated test Task 2 skipped — confirm at least one row actually shows a price, not just that the column exists (a `pricing: null` bug would render as an empty column, easy to miss). Pagination works; changing the search resets to page 1.
 5. Picking a model closes the dialog, the button relabels, and the node's parameter controls rebuild for the new model (the `resetModelParams` path — pick a model with different params and watch Size/Quality change).
 6. Reload: the choice persisted to `graph.json` (check `output/<project>/graph.json`).
 7. Inside the open dialog: dragging on its body must not move the node; scrolling must not pan the canvas; Backspace in the search field must not delete the node.
