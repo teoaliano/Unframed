@@ -9,6 +9,12 @@ Keep that shape: the website's What's new page parses this file.
 
 ### Added
 
+- **Choosing a model opens a dialog instead of a dropdown.** Room to read the
+  list properly: search every model by slug or name, see when each was
+  released, and sort by either. The old dropdown showed 43 image, 23 video or
+  245 text models through a 200px window; this one also cannot open at the
+  corner of the window, like the menus fixed below.
+
 - **Wire several nodes at once.** Select a group, then drag from any one node's
   handle: every selected node that can connect follows along, so three prompts
   reach an output in one drag instead of three. It works in both directions —

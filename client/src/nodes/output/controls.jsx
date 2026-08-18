@@ -2,10 +2,12 @@
 // only boundary that pays for itself at this size — six small files would cost more to
 // navigate than the duplication they removed.
 
+import { useState } from 'react';
 import { Text } from '@astryxdesign/core/Text';
-import { Selector } from '@astryxdesign/core/Selector';
-import { HStack } from '@astryxdesign/core/Stack';
-import { capabilityTags, ratioLabel } from './core.js';
+import { Button } from '@astryxdesign/core/Button';
+import { HStack, VStack } from '@astryxdesign/core/Stack';
+import { ratioLabel } from './core.js';
+import ModelDialog from './ModelDialog.jsx';
 
 // A raw <select>, which breaks client/.claude/CLAUDE.md's "no <div>, components do all
 // layout/spacing" rule on purpose. Astryx popups are positioned purely by CSS anchor
@@ -55,36 +57,39 @@ export function NativeSelect({ label, options, value, onChange }) {
 }
 
 // Labelled by slug, not OpenRouter's display name: the slug is what you put in
-// OPENROUTER_IMAGE_MODEL, and it keeps every row in one format. Capabilities sit on
-// the row so a model is chosen by what it can do rather than by its name — without
-// them the differences only surfaced after the fact, as a control that quietly did
-// nothing. `kind` is the catalogue name, which decides which tags are worth showing.
+// OPENROUTER_IMAGE_MODEL, and it keeps every row in one format. The picker is a
+// button into a centered dialog rather than an anchored popup — the dialog is
+// immune to the anchor-positioning failures that hit Astryx popups in the
+// packaged app and Safari, and it has room for search, filters and price that
+// 200px never had. Mounted only while open: each node owns its own picker, and
+// an unmounted dialog costs nothing.
 export function ModelPicker({ models, value, onChange, kind }) {
+  const [open, setOpen] = useState(false);
   return (
-    <Selector
-      label="Model"
-      size="sm"
-      hasSearch
-      options={models.map((m) => ({ value: m.id, label: m.id }))}
-      value={value}
-      placeholder="Loading models…"
-      renderOption={(opt) => {
-        const tags = capabilityTags(models.find((m) => m.id === opt.value), kind);
-        return (
-          <span className="model-option">
-            <span className="model-option-id">{opt.label ?? opt.value}</span>
-            {tags.length > 0 && (
-              <span className="model-option-tags">
-                {tags.map((t) => (
-                  <span className="model-tag" key={t}>{t}</span>
-                ))}
-              </span>
-            )}
-          </span>
-        );
-      }}
-      onChange={onChange}
-    />
+    <VStack gap={1}>
+      <Text type="label" color="secondary">Model</Text>
+      <Button
+        label={value || 'Loading models…'}
+        // A <button> is not a labelable element, so the visible "Model" caption
+        // above it (and the wrapping VStack, rather than a <label> for exactly
+        // this reason) names nothing for it — the button must name itself.
+        aria-label={`Model: ${value || 'Loading models…'}`}
+        size="sm"
+        variant="secondary"
+        width="100%"
+        isDisabled={!models.length}
+        onClick={() => setOpen(true)}
+      />
+      {open && (
+        <ModelDialog
+          models={models}
+          kind={kind}
+          value={value}
+          onPick={onChange}
+          onClose={() => setOpen(false)}
+        />
+      )}
+    </VStack>
   );
 }
 

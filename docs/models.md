@@ -57,6 +57,52 @@ pair is hard to choose by.
 near-universal params are omitted, so an empty row means "nothing unusual" rather
 than "nothing known".
 
+## The picker is a dialog
+
+`ModelDialog.jsx`, not an anchored popup — a centered `Dialog` cannot be
+mispositioned the way an anchor-positioned one can. It holds a search field and
+an Astryx `Table` of three sortable columns — Model, Provider, Released —
+newest first by default. Nothing else: no capability tags, no filter pills, no
+price. Search still matches the whole slug and the display name, neither of
+which is shown intact once the slug is split across two columns.
+
+The header carries a **Browse on OpenRouter** link, filtered to the medium on
+show. `output_modalities` is the site's real filter param — the same one
+`.env.example` already points at for image. Text also pins
+`input_modalities=image`, because the text catalogue here is vision-capable
+models only; without it the link lands on 791 models against the 245 listed.
+
+**Released comes from OpenRouter's `created`** (Unix seconds), which every model
+in all three catalogues carries. The server passes it through as a number so the
+table can sort on it; the column formats it for display only.
+
+Provider renders as a coloured `Token` — Astryx's guidance reserves `Badge` for
+counts — with the hue assigned by the provider's position in that catalogue's
+own sorted provider list. Not a hand-written map (OpenRouter keeps adding
+providers, so it would go stale) and not a hash (that clustered, spending two
+hues six times each while others went unused). By index the palette is spent
+evenly and every provider is distinct wherever there are enough colours: image
+has 10 providers and video 9 against a palette of 11, so both are fully unique;
+text has 26, so some repeat there.
+
+**The Provider label is looked up by slug prefix, not parsed per row.** A slug is
+`<provider>/<model>`, sometimes with a leading `~` (OpenRouter's floating
+`-latest` aliases), and the pretty name lives in the display name as
+`Provider: Model` — but only for some models. 23 of 245 text models have no
+colon, so parsing each row independently rendered `~anthropic` one row below
+`Anthropic`. Keying on the prefix and taking the label from whichever sibling
+does have a colon resolves every provider in the image and video catalogues and
+all but two in text, which fall back to the prefix itself.
+
+**Escape is handled by the component, not by `Dialog`.** Astryx's own Escape path
+does not reach `onOpenChange` in this configuration — two model dialogs could be
+left open at once — so `ModelDialog` listens for the key itself.
+
+The scroll boundary sits on Table's own `.astryx-table-scroll-wrapper`, which is
+the nearest scrolling ancestor and therefore what a sticky `th` sticks to. It has
+to exist somewhere: the `Dialog`'s wrapper is `overflow: hidden`, so without it a
+long catalogue clips silently instead of scrolling.
+
 ## Multi-run
 
 N runs are N ordinary `/api/generate` calls fired with `Promise.allSettled`, so a
