@@ -5,6 +5,28 @@ is no release artifact to number. Headings are `## YYYY-MM-DD`, groups are
 `### Added` / `### Changed` / `### Fixed`, one bullet per user-visible change.
 Keep that shape: the website's What's new page parses this file.
 
+## 2026-08-19
+
+### Fixed
+
+- **Missing a node while building a selection no longer costs you the group.**
+  Holding Shift (or Cmd/Ctrl) and clicking a gap between nodes used to throw
+  away everything selected so far, so picking quickly across a grid left some
+  nodes behind. A press on empty canvas with the key held now does nothing at
+  all — whether it lands perfectly still or wobbles a few pixels.
+
+### Changed
+
+- **A selection box adds to the selection when a modifier is held**, the way
+  Figma, Sketch and Illustrator do; without one it still replaces, as before.
+  Nodes already selected are never toggled off by a box that passes over them.
+
+- **The tinted rectangle over a selected group is gone**, and with it the dead
+  zone it created. It covered the whole bounding box and swallowed every click
+  inside, so a node in the middle of a group could not be clicked off, dragged on
+  its own, or used at all until you cleared the selection. Dragging any selected
+  node still moves the whole group, and arrow keys still nudge it.
+
 ## 2026-08-18
 
 ### Added
@@ -20,8 +42,7 @@ Keep that shape: the website's What's new page parses this file.
   reach an output in one drag instead of three. It works in both directions —
   drag from an output's input handle and every selected output gets wired.
 - Shift+click adds a node to the selection, alongside the Cmd/Ctrl+click that
-  already did. A selection box still replaces the selection rather than adding
-  to it, whichever key is held.
+  already did.
 - **Connect nodes** and **Disconnect nodes** in the right-click menu, under Edit.
   Connect wires every source in the selection to every output in it; Disconnect
   removes the connections *between* selected nodes, leaving the ones that reach

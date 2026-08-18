@@ -76,30 +76,44 @@ Nobody has asked for it, and adding it now would double the states to reason abo
 
 ## Approach
 
-React Flow has no prop for this — `getSelectionChanges` rebuilds from the rectangle by
-design — so it needs a small intervention in `App.jsx`. The shape that looks right:
+React Flow has no prop for this -- `getSelectionChanges` rebuilds from the rectangle by
+design -- so it needs a small intervention in `App.jsx`. What shipped, and what the two
+open questions below turned out to be:
 
-1. On `onSelectionStart`, if a multi-selection key is held, remember the ids selected at
-   that moment.
-2. While that is set, filter `{ type: 'select', selected: false }` changes for those ids
-   out of what reaches `onNodesChange`, so a box adds rather than replaces.
-3. Clear it on `onSelectionEnd`.
+1. On a `pointerdown` whose target is the pane itself, with a multi-selection key held,
+   remember the ids selected at that moment. Latched at the press, so releasing the key
+   mid-drag does not turn an additive box back into a replacing one.
+2. Any `{ type: 'select', selected: false }` change for one of those ids is turned into
+   `selected: true` on its way to `onNodesChange`.
+3. Cleared on `pointerup`.
 
-**Two things to verify before trusting that, rather than after.** Neither is settled:
+**Both questions answered by reading the library and then by real input.**
 
-- `getSelectionChanges` is called with `mutateItem = true`, so it writes `selected` onto
-  React Flow's internal node lookup as well as emitting a change. Filtering the change may
-  leave the lookup disagreeing with the `nodes` prop for a frame. Check whether the
-  controlled `nodes` prop wins on the next render, or whether the selection flickers.
-- The still-press path may not emit `select` changes at all — `resetSelectedElements()` is
-  a store action, and it is reached from `onPointerUp`, not from a handler this app owns.
-  It may need a different lever from the box path. Find out which before designing around
-  it.
+- *Does the still press emit changes?* Yes. `resetSelectedElements()` builds
+  `createSelectionChange(id, false)` for every selected node and calls
+  `triggerNodeChanges` synchronously, so it arrives at `onNodesChange` like any other
+  change. One lever covers both paths after all; no second mechanism was needed.
+- *Does `mutateItem = true` leave the lookup disagreeing?* Yes, and that is why the
+  changes are re-selected rather than filtered out. Dropping them leaves the `nodes` prop
+  untouched, so nothing ever contradicts the lookup React Flow just mutated and the node
+  renders unselected. Re-selecting produces a new `nodes` array, which syncs the lookup
+  back. Verified by DOM class, not by state: `.react-flow__node.selected` is what the
+  lookup drives.
+
+One thing the spec did not anticipate. The modifier is read from React Flow's own
+`multiSelectionActive`, not from the event's `shiftKey`/`metaKey`/`ctrlKey`. Restating the
+key list is exactly the drift the section above warns about -- and it is also the wrong
+list: that state is driven by `keydown`, and a pointer event's modifier bits are not
+reliably set on a drag, which is how a first attempt passed the click case and failed the
+box case.
 
 Whatever the mechanism, it is verified the way everything in the previous spec was: real
 pointer input, with `?trace=1`. **Synthetic `MouseEvent`s fire no `pointerdown` and skip
-the capture-phase listeners this entire feature lives in** — that mistake cost two wrong
-diagnoses last time.
+the capture-phase listeners this entire feature lives in** -- that mistake cost two wrong
+diagnoses last time. One narrow exception, learned here: driving the browser from
+automation, the modifier has to be *held* with a `keydown`, because React Flow reads the
+key from a keyboard listener and a mouse event carrying a modifier bit alone leaves
+`multiSelectionActive` false. The pointer input stays real; only the key is dispatched.
 
 ## Acceptance
 
@@ -121,6 +135,12 @@ the canvas interaction work has already produced one browser/Electron difference
   tracer built to diagnose it. Its "Left open" item is now closed: native `<select>`
   popups were tested in the packaged app and behave correctly (menu opens on the node, the
   node selects afterwards, a shaky press does not drag it).
+- The one thing this work uncovered and did not fix in the same change: React Flow's
+  `.react-flow__nodesselection-rect`, the rectangle it lays over a selected group's
+  bounding box, swallowed every click inside it -- pre-existing, but an additive box
+  grows that box to the union of the selection, so it went from a nuisance to most of
+  the canvas being dead. Neutralised in `client/src/styles.css`, where the comment
+  explains why it is made transparent rather than hidden.
 - `CHANGELOG.md`'s line "A selection box still replaces the selection rather than adding
-  to it, whichever key is held" describes today's behaviour and must be rewritten when
-  this ships.
+  to it, whichever key is held" described the old behaviour and was removed when this
+  shipped (2026-08-19).

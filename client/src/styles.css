@@ -652,6 +652,26 @@ div:has(> .add-node-menu) {
   outline-offset: 2px;
 }
 
+/* After a box-select React Flow lays a rectangle over the selection's whole
+   bounding box -- `pointer-events: all`, so the group can be dragged from the
+   empty space between its nodes. It swallows every click that lands inside, so a
+   node in the middle of a group cannot be clicked off, dragged on its own or used
+   at all until the selection is cleared; and now that a modifier+box ADDS, that
+   box is the union of everything selected and covers most of the canvas. Dragging
+   any selected node already moves the whole selection, so it buys nothing here.
+   Its parent is already pointer-events: none; this puts the child back in line.
+
+   Made transparent rather than hidden, and hidden is the trap: React Flow drives
+   arrow-key nudging of a selection from THIS element's keyboard focus, which it
+   takes programmatically on mount, and neither `display: none` nor
+   `visibility: hidden` can hold focus -- either one silently costs you the arrow
+   keys. Transparent leaves it focusable and out of the way. */
+.react-flow__nodesselection-rect {
+  pointer-events: none;
+  background: transparent;
+  border: none;
+}
+
 /* Generated video, played from disk. Same width as the result thumbnails; height
    follows the clip's own ratio rather than being forced square. */
 .xnode-video {
