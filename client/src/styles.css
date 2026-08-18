@@ -768,3 +768,8 @@ div:has(> .add-node-menu) {
   font-size: var(--font-size-body-xs, 0.75rem);
   white-space: nowrap;
 }
+/* Model dialog rows: same divider treatment as the Library's list view
+   (.lib-scroll), which these rows are a sibling of in spirit. */
+.model-dialog-list .astryx-list > li + li {
+  border-top: 1px solid var(--color-border);
+}
