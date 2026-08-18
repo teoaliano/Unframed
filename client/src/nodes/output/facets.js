@@ -126,7 +126,7 @@ function videoRateFamily(model) {
     if (!Number.isFinite(n) || n <= 0) continue;
     if (key.includes('cents_per') && key.includes('second')) perSecond.push(n / 100);
     else if (key.includes('duration_seconds')) perSecond.push(n);
-    else if (key.startsWith('video_tokens')) perM.push(n * 1e6);
+    else if (key.includes('video_tokens')) perM.push(n * 1e6); // matches the seconds branch's convention above
   }
   // Per-second is the directly comparable, headline rate; a token family found
   // alongside it is ignored rather than mixed into the same range.
@@ -150,7 +150,9 @@ export function priceLabel(model, kind) {
   if (kind === 'text') {
     const p = Number(model.pricing?.prompt);
     const c = Number(model.pricing?.completion);
-    if (!Number.isFinite(p) || !Number.isFinite(c)) return null;
+    // OpenRouter uses "-1" for "variable, decided by the routed model"
+    // (openrouter/auto, openrouter/auto-beta) — treat a negative rate as no price.
+    if (!Number.isFinite(p) || !Number.isFinite(c) || p < 0 || c < 0) return null;
     if (p === 0 && c === 0) return 'free';
     return `$${fmt(p * 1e6)} / $${fmt(c * 1e6)} per M`;
   }
@@ -172,7 +174,8 @@ export function priceRate(model, kind) {
   if (kind === 'text') {
     const p = Number(model.pricing?.prompt);
     const c = Number(model.pricing?.completion);
-    if (!Number.isFinite(p) || !Number.isFinite(c)) return null;
+    // Same "-1" sentinel guard as priceLabel — the two must never disagree.
+    if (!Number.isFinite(p) || !Number.isFinite(c) || p < 0 || c < 0) return null;
     return Math.min(p, c) * 1e6;
   }
   return null;

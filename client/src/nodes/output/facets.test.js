@@ -58,6 +58,8 @@ assert.deepEqual(only4K.values.map((v) => v.value), ['4K']);
 assert.deepEqual(buildFacets([{ id: 't/t', name: 'T' }], 'text'), []);
 // One-model catalogue (the offline fallback): everything matches "all" → no pills.
 assert.deepEqual(buildFacets([IMAGE[0]], 'image'), []);
+// /api/models' manufactured fallback entry ({id, name}, no params/pricing) — no crash, no pills.
+assert.deepEqual(buildFacets([{ id: 'f/f', name: 'f/f' }], 'image'), []);
 
 // Video: ordered resolutions, and the derived flags.
 const vidFacets = buildFacets(VIDEO, 'video');
@@ -100,6 +102,12 @@ assert.equal(
 assert.equal(priceLabel({ id: 't', pricing: { prompt: '0', completion: '0' } }, 'text'), 'free');
 assert.equal(priceLabel({ id: 't' }, 'text'), null);
 assert.equal(priceLabel(IMAGE[0], 'image'), null); // image never shows price
+// OpenRouter's "-1" sentinel ("variable, decided by the routed model") must read
+// as no price, not as a huge negative number (openrouter/auto, openrouter/auto-beta).
+assert.equal(
+  priceLabel({ id: 'openrouter/auto', pricing: { prompt: '-1', completion: '-1' } }, 'text'),
+  null,
+);
 // Fixed 2 decimals, no cleverness: a rate too small to show at that precision
 // prints as $0.00 rather than growing extra digits for it.
 assert.equal(
@@ -188,6 +196,7 @@ const RATE_CASES = [
   [{ id: 'seedance-2.0', pricing: { video_tokens: '0.000007' } }, 'video'],
   [{ id: 'hailuo-3', pricing: { duration_seconds: '0.13', reference_images: '0.04' } }, 'video'],
   [{ id: 'aleph-2', pricing: { cents_per_second_output: '28', minimum_cents_per_generation: '56' } }, 'video'],
+  [{ id: 'openrouter/auto', pricing: { prompt: '-1', completion: '-1' } }, 'text'],
 ];
 for (const [model, kind] of RATE_CASES) {
   const label = priceLabel(model, kind);
