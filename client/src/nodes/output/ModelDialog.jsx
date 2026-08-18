@@ -16,6 +16,18 @@ import { Check } from 'lucide-react';
 
 const TITLES = { image: 'Image models', video: 'Video models', text: 'Text models' };
 
+// OpenRouter's own catalogue, filtered to the medium this dialog is showing.
+// `output_modalities` is the site's real filter param — the same one
+// .env.example already points at for image. Text also pins
+// `input_modalities=image`, because the text catalogue here is vision-capable
+// models only (see /api/models' filter); without it the link lands on 791
+// models against the 245 listed here.
+const BROWSE = {
+  image: 'https://openrouter.ai/models?output_modalities=image',
+  video: 'https://openrouter.ai/models?output_modalities=video',
+  text: 'https://openrouter.ai/models?output_modalities=text&input_modalities=image',
+};
+
 // OpenRouter gives `created` as a Unix timestamp (seconds), on every model in
 // all three catalogues. Rendered short because the column is for scanning
 // "how new is this" rather than for exact dates.
@@ -138,7 +150,14 @@ export default function ModelDialog({ models, kind, value, onPick, onClose }) {
     // nodrag/nowheel: the dialog's DOM lives inside the node's subtree, so
     // these keep a drag or scroll inside it off the canvas.
     <Dialog isOpen onOpenChange={(open) => { if (!open) onClose(); }} width={680} className="nodrag nowheel">
-      <DialogHeader title={TITLES[kind] || 'Models'} />
+      <DialogHeader
+        title={TITLES[kind] || 'Models'}
+        endContent={
+          <Link href={BROWSE[kind]} isExternalLink size="sm" color="secondary">
+            Browse on OpenRouter
+          </Link>
+        }
+      />
       <VStack gap={3} padding={4}>
         <TextInput
           label="Search models"

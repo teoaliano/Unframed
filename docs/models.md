@@ -66,6 +66,12 @@ newest first by default. Nothing else: no capability tags, no filter pills, no
 price. Search still matches the whole slug and the display name, neither of
 which is shown intact once the slug is split across two columns.
 
+The header carries a **Browse on OpenRouter** link, filtered to the medium on
+show. `output_modalities` is the site's real filter param — the same one
+`.env.example` already points at for image. Text also pins
+`input_modalities=image`, because the text catalogue here is vision-capable
+models only; without it the link lands on 791 models against the 245 listed.
+
 **Released comes from OpenRouter's `created`** (Unix seconds), which every model
 in all three catalogues carries. The server passes it through as a number so the
 table can sort on it; the column formats it for display only.
