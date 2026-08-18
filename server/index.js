@@ -418,7 +418,10 @@ app.get('/api/models', async (req, res) => {
               acceptsVideo: videoInputs?.size ? videoInputs.has(m.id) : null,
             }
           : wantText
-            ? {}
+            // Per-token rates, already in this response; the model dialog shows
+            // them per million. Image pricing is NOT fetched — it costs one
+            // request per model (see the 2026-08-18 model-dialog spec).
+            ? { pricing: m.pricing || null }
             : { params: m.supported_parameters || null }),
       }));
     if (!models.some((m) => m.id === fallback)) models.push({ id: fallback, name: fallback });
