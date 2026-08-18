@@ -31,7 +31,7 @@
 **Interfaces:**
 - Consumes: nothing (pure module, zero imports).
 - Produces (Task 3 relies on these exact signatures):
-  - `buildFacets(models, kind)` → `[{ key, label, values: [{ value, label, count }] }]`
+  - `buildFacets(models, kind)` → `[{ key, values: [{ value, label, count }] }]`
   - `applyFacets(models, kind, query, selected)` → filtered `models` array, where `selected` is `{ [facetKey]: [value, …] }`
   - `priceLabel(model, kind)` → `string | null`
 
@@ -75,7 +75,9 @@ const VIDEO = [
 
 // --- buildFacets: the dead-pill rule ---
 const imgFacets = buildFacets(IMAGE, 'image');
-// aspect_ratio is on 3 of 3 models: no facet may surface it.
+// aspect_ratio must never become a pill — it is on 43 of 43 real models. This
+// guards the eligibility table against someone adding it later; the rule itself
+// is exercised by the all1K case below.
 assert.ok(!imgFacets.some((f) => f.key === 'aspect_ratio'));
 // resolution splits the list: 1K on 2 models, 2K on 1.
 const res = imgFacets.find((f) => f.key === 'resolution');
@@ -140,10 +142,10 @@ assert.equal(
 assert.equal(priceLabel({ id: 't', pricing: { prompt: '0', completion: '0' } }, 'text'), 'free');
 assert.equal(priceLabel({ id: 't' }, 'text'), null);
 assert.equal(priceLabel(IMAGE[0], 'image'), null); // image never shows price
-// Fixed 2 decimals, no cleverness: $0.0000833 per M would be a real rate for a
-// cheap model, and it prints as $0.00 rather than growing extra digits for it.
+// Fixed 2 decimals, no cleverness: a rate too small to show at that precision
+// prints as $0.00 rather than growing extra digits for it.
 assert.equal(
-  priceLabel({ id: 't', pricing: { prompt: '0.0000000833', completion: '0.0000025' } }, 'text'),
+  priceLabel({ id: 't', pricing: { prompt: '0.000000001', completion: '0.0000025' } }, 'text'),
   '$0.00 / $2.50 per M',
 );
 
@@ -188,34 +190,36 @@ const resRank = (v) => {
 
 // The eligibility table: which params may become facets, and their wording.
 // `values(m)` returns the facet values a model carries — [] means "not this one".
-// Data decides presence and counts; this table decides labels and order.
+// Data decides presence and counts; this table decides pill text and order.
+// No per-facet heading: the pills are rendered as one flat wrapping row, and
+// 1K/2K/4K/Transparent/Seed each read for themselves.
 const FACET_DEFS = {
   image: [
-    { key: 'resolution', label: 'Size', values: (m) => enumValues(m.params?.resolution) },
-    { key: 'background', label: 'Transparent',
+    { key: 'resolution', values: (m) => enumValues(m.params?.resolution) },
+    { key: 'background',
       values: (m) => (enumValues(m.params?.background).includes('transparent') ? ['transparent'] : []),
       valueLabel: { transparent: 'Transparent' } },
-    { key: 'quality', label: 'Quality',
+    { key: 'quality',
       values: (m) => (enumValues(m.params?.quality).length ? ['quality'] : []),
       valueLabel: { quality: 'Quality' } },
-    { key: 'seed', label: 'Seed',
+    { key: 'seed',
       values: (m) => (m.params?.seed ? ['seed'] : []),
       valueLabel: { seed: 'Seed' } },
   ],
   video: [
-    { key: 'resolution', label: 'Size', values: (m) => enumValues(m.params?.resolution) },
-    { key: 'audio', label: 'Audio',
+    { key: 'resolution', values: (m) => enumValues(m.params?.resolution) },
+    { key: 'audio',
       values: (m) => (m.params?.generate_audio ? ['audio'] : []),
       valueLabel: { audio: 'Audio' } },
-    { key: 'seed', label: 'Seed',
+    { key: 'seed',
       values: (m) => (m.params?.seed ? ['seed'] : []),
       valueLabel: { seed: 'Seed' } },
-    { key: 'sizes', label: 'Exact sizes',
+    { key: 'sizes',
       values: (m) => (enumValues(m.params?.size).length ? ['sizes'] : []),
       valueLabel: { sizes: 'Exact sizes' } },
     // === true on purpose: acceptsVideo is null when the modality lookup failed,
     // and unknown must never filter as "does not accept" (docs/models.md).
-    { key: 'videoIn', label: 'Video input',
+    { key: 'videoIn',
       values: (m) => (m.acceptsVideo === true ? ['videoIn'] : []),
       valueLabel: { videoIn: 'Video input' } },
   ],
@@ -235,7 +239,7 @@ export function buildFacets(models, kind) {
     if (def.key === 'resolution') {
       values.sort((a, b) => resRank(a.value) - resRank(b.value) || a.value.localeCompare(b.value));
     }
-    if (values.length) facets.push({ key: def.key, label: def.label, values });
+    if (values.length) facets.push({ key: def.key, values });
   }
   return facets;
 }
