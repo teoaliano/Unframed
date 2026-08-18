@@ -158,8 +158,15 @@ input.
 - **Per-result copy buttons** on the result thumbnails. `Copy image N of M` in the
   right-click menu already covers it.
 
-## Left open
+## Answered since
 
-Whether a native `<select>` popup swallows the click in the packaged Electron app, so
-the node under it is never selected. Not reproducible headless — it needs the packaged
-app. Deferred to its own change; the tracer is how to answer it.
+Whether a native `<select>` popup swallows the click in the packaged Electron app was
+left open here, because it was not reproducible headless. Tested in the packaged app on
+`engine-v0.2.4`: it does not. The menu opens on the node rather than at a window corner,
+the node is selected after a value is picked, and a press that moves slightly works the
+control instead of dragging the node. The suspicion was wrong and the concern is closed.
+
+What that same session did surface is a different gap, which has its own spec:
+`2026-08-18-shift-pane-selection-design.md`. Building a group by shift+clicking works,
+but any press landing on empty canvas resets the whole selection without consulting the
+modifier — so one press into a gap between nodes throws the group away.
