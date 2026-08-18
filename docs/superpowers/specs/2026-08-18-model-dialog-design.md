@@ -150,8 +150,11 @@ changes from `Selector` to button-plus-dialog.
 
 `/api/models`' `wantText` branch maps `{}` where the upstream response already
 carries `pricing` — the per-token rates are being discarded. It starts passing
-`pricing: m.pricing ?? null` through. `host.test.js` asserts the field
-survives the route. Image pricing is *not* added (below). Video already works.
+`pricing: m.pricing || null` through. **This is not asserted by `host.test.js`**
+— the route fetches OpenRouter live at request time, so covering it would mean
+stubbing the upstream response, disproportionate for a pure pass-through; the
+failure mode is a visibly missing price, which the browser pass below checks
+instead. Image pricing is *not* added (below). Video already works.
 
 ## Decided against
 
@@ -174,8 +177,11 @@ survives the route. Image pricing is *not* added (below). Video already works.
 
 ## Testing
 
-`facets.test.js` under `npm test` for everything pure; `host.test.js` gains
-the text-pricing assertion. The dialog itself is a node component — no tests
-by design, verified in the browser: open each of the three kinds, filter,
-search, pick, confirm the node's model changed and the dialog closed, and
-confirm the pills match the counts above.
+`facets.test.js` under `npm test` for everything pure. The text-pricing line
+in `/api/models` is **not** covered by `host.test.js` — that route calls
+OpenRouter live, so asserting the field would mean stubbing upstream, which a
+pure pass-through doesn't earn. The dialog itself is a node component — no
+tests by design, verified in the browser: open each of the three kinds,
+filter, search, pick, confirm the node's model changed and the dialog closed,
+and confirm the pills match the counts above, plus a missing price would be
+visible there (a blank cell) if the pass-through ever broke.
