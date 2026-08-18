@@ -13,7 +13,7 @@ import StatusLine from './StatusLine.jsx';
 import { useModels, useModelParams, freeSpot } from './output/core.js';
 import { resetModelParams } from './output/defaults.js';
 import { ModelPicker, ParamControls, CostFoot } from './output/controls.jsx';
-import { buildRequest, splitSections, findFreeSource, freeSourceText, freeRunPrompts, isTextOutput } from '../graph/resolve.js';
+import { buildRequest, splitSections, findFreeSource, freeSourceText, freeBatch, bucketSources, isTextOutput } from '../graph/resolve.js';
 import { generate, runText, getProject, SESSION_ID } from '../api.js';
 // Arrow leaving a frame: "send this out onto the canvas". From lucide-react, like
 // every other icon here, so it shares the set's grid and stroke.
@@ -148,126 +148,21 @@ export default function ImageOutputNode({ id, data }) {
     .filter((e) => liveNodes.some((n) => n.id === e.source && n.type === 'video' && n.data?.dataUrl))
     .length;
 
-  async function onGenerate() {
-    setStatus('running');
-    setError(null);
-    setResults([]);
-    // Captured before anything is awaited: every guard below compares against
-    // this, not against a ref or a token held by this component instance. A
-    // rename (not a genuine switch) reuses this very instance, and even when a
-    // switch DOES remount it, updateNodeData still reaches into whichever
-    // project is CURRENTLY loaded — never the one this closure started in — so a
-    // write after an await needs its own check regardless of what remounted.
+  // The paid half of a run, split out so the preview gate can sit between building a
+  // batch and sending it -- and so confirming a preview reuses this exact code rather
+  // than a second copy that drifts. The caller owns `status`, the `running` marker and
+  // the cleared results; fire() owns the requests and the settlement.
+  async function fire(batch, batchId) {
+    // Captured before anything is awaited, same reasoning as onGenerate's copy: a write
+    // after an await reaches whichever project is CURRENTLY loaded, never this one.
     const startedIn = getProject();
-    // A fresh run's persisted pointer starts empty too, same reasoning as
-    // clearResults: a run interrupted before its first result lands must not leave
-    // the PREVIOUS batch's images to reappear on the next reload of a blank node.
-    // `running` is set in the same call: local `status` alone is wiped by a
-    // genuine switch's remount, so without a persisted marker a switch-and-back
-    // would show an enabled Generate button for a batch still in flight — a
-    // second click would be a second paid run. Stamped with SESSION_ID so a
-    // marker outliving this tab (a reload, or a close) reads as abandoned on
-    // mount instead of disabling the button forever — see the mount effect
-    // above. Boolean-ish fact plus its provenance, not a progress log: done/total
-    // stay local only, same as before.
-    updateNodeData(id, {
-      results: undefined,
-      running: { startedAt: Date.now(), session: SESSION_ID },
-    });
-    setDone(0);
-    setNote(null);
-    setRepairCost(0);
-    // Unknown until the run count is worked out below (which, in Free mode, needs
-    // an await) — showing the previous batch's total in the meantime would read as
-    // "Generating 0 / <stale total>…".
-    setTotal(null);
+    setTotal(batch.length);
     try {
-      const { prompt, input_references } = buildRequest(getNodes(), getEdges(), id);
-      if (!prompt.trim()) {
-        throw new Error('Nothing connected. Wire a prompt node into this image node.');
-      }
-
-      // One id per Generate click, so a batch's sidecars — including a Free repair
-      // call's text sidecar — can be summed later by one field.
-      const batchId = `b-${Date.now()}`;
-
-      let prompts;
-      const notes = [];
-      if (freeRuns) {
-        const source = findFreeSource(getNodes(), getEdges(), id);
-        if (!source) {
-          throw new Error('Free needs a prompt or text node wired in. It lists what to generate.');
-        }
-        // A prompt node's @ids are expanded here, before splitting -- see freeSourceText.
-        let listText = freeSourceText(source, getNodes()).trim();
-        if (!listText) {
-          throw new Error(
-            isTextOutput(source)
-              ? 'The text node has no result yet. Run it first.'
-              : 'The prompt node is empty. It lists what to generate.',
-          );
-        }
-
-        let { blocks, truncated } = splitSections(listText);
-        if (blocks.length < 2) {
-          // The model ignored the format. One repair call, using its own model.
-          //
-          // The instruction has to say what a section is FOR, not just how to
-          // punctuate one. Asked merely to "split into sections", models copy the
-          // whole text N times: a real batch came back as three identical prompts,
-          // each still reading "3 versions of ...", so every image rendered three
-          // subjects and the run cost triple for one result. Two clauses earn their
-          // place here — each section is a whole prompt for one image, and a text
-          // that isn't a list comes back untouched rather than being chopped into
-          // fragments that each bill as a generation.
-          const repaired = await runText({
-            prompt: [
-              'Rewrite the text below as image prompts, one per image, separated by lines containing only ---.',
-              '',
-              'Each section must read as a complete prompt on its own: repeat the shared subject and style rather than referring back to another section.',
-              'If the text asks for several versions or variations of one subject, write that many sections, each describing a different specific variation, and drop the count itself ("3 versions of a fox" becomes three sections, each describing one fox).',
-              'Never emit the same section twice.',
-              'If the text describes a single image with no variations implied, return it unchanged.',
-              'No preamble, no numbering, no commentary.',
-              '',
-              listText,
-            ].join('\n'),
-            model: isTextOutput(source) ? source.data.model || undefined : undefined,
-            batchId,
-          });
-          setRepairCost(Number(repaired.cost) || 0);
-          const again = splitSections(repaired.text);
-          if (again.blocks.length > 1) {
-            blocks = again.blocks;
-            truncated = again.truncated;
-            notes.push(`re-split into ${blocks.length} sections`);
-          } else {
-            notes.push('no sections found, running as a single generation');
-          }
-        }
-
-        if (blocks.length === 0) {
-          // Nothing survived splitting or repair. Fall back to the whole result as
-          // one block so the "single generation" note above stays true instead of
-          // reporting success after zero runs.
-          const fallback = listText;
-          if (!fallback) throw new Error('The text node has no result yet. Run it first.');
-          blocks = [fallback];
-        }
-        if (truncated) notes.push(`list had ${blocks.length + truncated} items, running the first ${blocks.length}`);
-
-        prompts = freeRunPrompts(getNodes(), getEdges(), id, source.id, blocks);
-      } else {
-        prompts = Array.from({ length: runs }, () => prompt);
-      }
-      setNote(notes.length ? notes.join(' · ') : null);
-      setTotal(prompts.length);
-
       const settled = await Promise.allSettled(
-        prompts.map((p, i) =>
+        batch.map((run, i) =>
           generate({
-            prompt: p,
-            input_references,
+            prompt: run.prompt,
+            input_references: run.input_references,
             model,
             resolution: supported(resolutionTiers, data.resolution),
             quality: supported(qualities, data.quality),
@@ -275,7 +170,7 @@ export default function ImageOutputNode({ id, data }) {
             background: supported(backgrounds, data.background),
             batchId,
             runIndex: i + 1,
-            runCount: prompts.length,
+            runCount: batch.length,
           }).then((resp) => {
             // Every request in a batch resolves independently, so the project can
             // change between one landing and the next — this is not a
@@ -327,6 +222,141 @@ export default function ImageOutputNode({ id, data }) {
         setStatus('done');
       }
       updateNodeData(id, { running: undefined });
+    } catch (err) {
+      if (getProject() !== startedIn) {
+        updateNodeData(id, { running: undefined });
+        return;
+      }
+      setError(err.message);
+      setStatus('error');
+      updateNodeData(id, { running: undefined });
+    }
+  }
+
+  async function onGenerate() {
+    setStatus('running');
+    setError(null);
+    setResults([]);
+    // Captured before anything is awaited: every guard below compares against
+    // this, not against a ref or a token held by this component instance. A
+    // rename (not a genuine switch) reuses this very instance, and even when a
+    // switch DOES remount it, updateNodeData still reaches into whichever
+    // project is CURRENTLY loaded — never the one this closure started in — so a
+    // write after an await needs its own check regardless of what remounted.
+    const startedIn = getProject();
+    // A fresh run's persisted pointer starts empty too, same reasoning as
+    // clearResults: a run interrupted before its first result lands must not leave
+    // the PREVIOUS batch's images to reappear on the next reload of a blank node.
+    // `running` is set in the same call: local `status` alone is wiped by a
+    // genuine switch's remount, so without a persisted marker a switch-and-back
+    // would show an enabled Generate button for a batch still in flight — a
+    // second click would be a second paid run. Stamped with SESSION_ID so a
+    // marker outliving this tab (a reload, or a close) reads as abandoned on
+    // mount instead of disabling the button forever — see the mount effect
+    // above. Boolean-ish fact plus its provenance, not a progress log: done/total
+    // stay local only, same as before.
+    updateNodeData(id, {
+      results: undefined,
+      running: { startedAt: Date.now(), session: SESSION_ID },
+    });
+    setDone(0);
+    setNote(null);
+    setRepairCost(0);
+    // Unknown until the run count is worked out below (which, in Free mode, needs
+    // an await) — showing the previous batch's total in the meantime would read as
+    // "Generating 0 / <stale total>…".
+    setTotal(null);
+    try {
+      const { prompt, input_references } = buildRequest(getNodes(), getEdges(), id);
+      if (!prompt.trim()) {
+        throw new Error('Nothing connected. Wire a prompt node into this image node.');
+      }
+
+      // One id per Generate click, so a batch's sidecars — including a Free repair
+      // call's text sidecar — can be summed later by one field.
+      const batchId = `b-${Date.now()}`;
+
+      let batch;
+      const notes = [];
+      if (freeRuns) {
+        const source = findFreeSource(getNodes(), getEdges(), id);
+        if (!source) {
+          throw new Error('Free needs a prompt or text node wired in. It lists what to generate.');
+        }
+        // A prompt node's @ids are expanded here, before splitting -- see freeSourceText.
+        let listText = freeSourceText(source, getNodes()).trim();
+        if (!listText) {
+          throw new Error(
+            isTextOutput(source)
+              ? 'The text node has no result yet. Run it first.'
+              : 'The prompt node is empty. It lists what to generate.',
+          );
+        }
+
+        if (splitSections(listText).blocks.length < 2) {
+          // The model ignored the format. One repair call, using its own model.
+          //
+          // The instruction has to say what a section is FOR, not just how to
+          // punctuate one. Asked merely to "split into sections", models copy the
+          // whole text N times: a real batch came back as three identical prompts,
+          // each still reading "3 versions of ...", so every image rendered three
+          // subjects and the run cost triple for one result. Two clauses earn their
+          // place here — each section is a whole prompt for one image, and a text
+          // that isn't a list comes back untouched rather than being chopped into
+          // fragments that each bill as a generation.
+          // The count is known here and nowhere else: the model cannot see the canvas, so
+          // "images 1 to 8" has to be stated or it invents numbers. Zero wired images
+          // means the directive clauses are noise, so they are left out entirely.
+          const imageCount = bucketSources(getNodes(), getEdges(), id)
+            .references.filter((n) => n.type === 'image').length;
+          const ask = [
+            'Rewrite the text below as image prompts, one per image, separated by lines containing only ---.',
+            '',
+            'Each section must read as a complete prompt on its own: repeat the shared subject and style rather than referring back to another section.',
+            'If the text asks for several versions or variations of one subject, write that many sections, each describing a different specific variation, and drop the count itself ("3 versions of a fox" becomes three sections, each describing one fox).',
+            'Never emit the same section twice.',
+            'If the text describes a single image with no variations implied, return it unchanged.',
+            'No preamble, no numbering, no commentary.',
+          ];
+          if (imageCount > 0) {
+            ask.push(
+              '',
+              `${imageCount} reference image${imageCount > 1 ? 's are' : ' is'} attached, numbered 1 to ${imageCount}.`,
+              'If the text says which of them a section should use, begin that section with a line reading "images: " followed by their numbers, for example "images: 1, 4". Omit that line when a section should receive all of them.',
+              'Inside a section, refer to the images you named by their position in that line: the first number you list is "image 1" for that section, the second is "image 2". Rewrite the text\'s own image numbers to match.',
+            );
+          }
+          ask.push('', listText);
+          const repaired = await runText({
+            prompt: ask.join('\n'),
+            model: isTextOutput(source) ? source.data.model || undefined : undefined,
+            batchId,
+          });
+          setRepairCost(Number(repaired.cost) || 0);
+          const again = splitSections(repaired.text);
+          if (again.blocks.length > 1) {
+            listText = repaired.text;
+            notes.push(`re-split into ${again.blocks.length} sections`);
+          } else {
+            notes.push('no sections found, running as a single generation');
+          }
+        }
+
+        const built = freeBatch(getNodes(), getEdges(), id, source.id, listText);
+        // A list made of nothing but separators splits to zero sections. Saying so beats
+        // the old fall-back-to-one-run, which spent money on the shared context alone.
+        if (!built.runs.length) throw new Error('That list has no sections to run.');
+        if (built.truncated) {
+          notes.push(`list had ${built.runs.length + built.truncated} items, running the first ${built.runs.length}`);
+        }
+        const missing = [...new Set(built.runs.flatMap((r) => r.dropped))].sort((a, b) => a - b);
+        if (missing.length) notes.push(`no image ${missing.join(', ')} wired`);
+        batch = built.runs;
+      } else {
+        batch = Array.from({ length: runs }, () => ({ prompt, input_references }));
+      }
+      setNote(notes.length ? notes.join(' · ') : null);
+      await fire(batch, batchId);
     } catch (err) {
       if (getProject() !== startedIn) {
         updateNodeData(id, { running: undefined });
