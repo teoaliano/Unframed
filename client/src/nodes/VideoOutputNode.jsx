@@ -401,16 +401,7 @@ export default function VideoOutputNode({ id, data }) {
       <Handle type="target" position={Position.Left} />
       <NodeHeader kind="videoOutput" title="video" family="output" />
 
-      {/* nodrag on the whole body, not per control: Astryx portals a Selector's
-          popup UP to this stack, so no wrapper around the control can ever contain
-          it, and an open model list would otherwise drag the node. Everything in
-          here is a control anyway -- these nodes drag by their header, footer and
-          card edge. See the 2026-08-18 canvas-interaction spec. */}
       <VStack gap={3} padding={3}>
-        {/* Controls fenced off as one block; the clip below sits outside it so the
-            node drags by its video the way an image node drags by its picture. An
-            open Selector popup portals up to the nearest stack, which is this one. */}
-        <VStack gap={3}>
         <ModelPicker
           models={models}
           value={model}
@@ -540,7 +531,6 @@ export default function VideoOutputNode({ id, data }) {
 
         {status === 'error' && <StatusLine type="error">{error}</StatusLine>}
 
-        </VStack>
 
         {shown?.url && (
           // Played from the file on disk, not from node data: a clip inlined into

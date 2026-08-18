@@ -1,6 +1,6 @@
 // Assert-based self-check. Run with: node client/src/graph/resolve.test.js
 import assert from 'node:assert/strict';
-import { buildRequest, bucketSources, sourceRoles, splitSections, findWiredTextNode, freeRunPrompts, isOutput, isTextOutput, isReferenceable } from './resolve.js';
+import { buildRequest, bucketSources, sourceRoles, splitSections, findFreeSource, freeSourceText, freeShared, freeRunPrompts, parseImagePicks, expandSlots, runReferences, freeBatch, isOutput, isTextOutput, isReferenceable, MAX_RUNS } from './resolve.js';
 import { migrateNodes } from './migrate.js';
 import { instantiateFragment, centerOffset } from '../library/insert.js';
 import { selectionFragment, presetFromSelection } from '../library/save.js';
@@ -192,15 +192,44 @@ function graph(nodes, edges) {
   assert.equal(truncated, 1);
 }
 
-// --- findWiredTextNode / freeRunPrompts ---
+// --- findFreeSource / freeSourceText / freeRunPrompts ---
 
-// No text node wired in -> undefined.
+// A wired text output wins outright, even when a prompt node sits above it. Precedence
+// rather than lowest-Y across both kinds: an existing Free graph with a context prompt
+// above its text output would otherwise silently change which node supplies the list,
+// and a batch built from the wrong text is only noticed after it is paid for.
 {
   const { nodes, edges } = graph(
-    [{ id: 'p1', type: 'prompt', position: { x: 0, y: 0 }, data: { text: 'hello' } }],
-    [{ id: 'e1', source: 'p1', target: 'out' }],
+    [
+      { id: 'p1', type: 'prompt', position: { x: 0, y: 0 }, data: { text: 'context' } },
+      { id: 't1', type: 'textOutput', position: { x: 0, y: 50 }, data: { result: 'a\n---\nb' } },
+    ],
+    [
+      { id: 'e1', source: 'p1', target: 'out' },
+      { id: 'e2', source: 't1', target: 'out' },
+    ],
   );
-  assert.equal(findWiredTextNode(nodes, edges, 'out'), undefined);
+  assert.equal(findFreeSource(nodes, edges, 'out').id, 't1', 'a text output outranks a prompt node');
+}
+
+// No text output wired -> the lowest-Y prompt node stands in.
+{
+  const { nodes, edges } = graph(
+    [
+      { id: 'p-lo', type: 'prompt', position: { x: 0, y: 50 }, data: { text: 'second' } },
+      { id: 'p-hi', type: 'prompt', position: { x: 0, y: 10 }, data: { text: 'first' } },
+    ],
+    [
+      { id: 'e1', source: 'p-lo', target: 'out' },
+      { id: 'e2', source: 'p-hi', target: 'out' },
+    ],
+  );
+  assert.equal(findFreeSource(nodes, edges, 'out').id, 'p-hi');
+}
+
+// Nothing wired in -> undefined.
+{
+  assert.equal(findFreeSource([out], [], 'out'), undefined);
 }
 
 // Several text nodes wired in -> the lowest-Y one wins.
@@ -215,7 +244,47 @@ function graph(nodes, edges) {
       { id: 'e2', source: 't-hi', target: 'out' },
     ],
   );
-  assert.equal(findWiredTextNode(nodes, edges, 'out').id, 't-hi');
+  assert.equal(findFreeSource(nodes, edges, 'out').id, 't-hi');
+}
+
+// freeSourceText: a text output's answer verbatim, even when it contains a token
+// (@p2) that WOULD resolve to something else if re-scanned -- proving the "never
+// re-scanned for @tokens" rule actually holds, rather than merely being untestable
+// because the token happened to be unknown. A prompt node's @ids, by contrast, DO
+// expand first so no literal token reaches the splitter.
+{
+  const t = { id: 't1', type: 'textOutput', position: { x: 0, y: 0 }, data: { result: 'raw @p2 answer' } };
+  const other = { id: 'p2', type: 'prompt', position: { x: 0, y: 0 }, data: { text: 'golden hour' } };
+  const p = { id: 'p1', type: 'prompt', position: { x: 0, y: 0 }, data: { text: 'in @p2 light' } };
+  const nodes = [out, t, other, p];
+  assert.equal(freeSourceText(t, nodes), 'raw @p2 answer', "a text output's answer is taken verbatim, not re-scanned");
+  assert.equal(freeSourceText(p, nodes), 'in golden hour light', "a prompt node's @ids expand before splitting");
+  assert.equal(freeSourceText(undefined, nodes), '', 'no source is an empty list, not a crash');
+}
+
+// freeRunPrompts with a PROMPT node as the source: its own text is blanked out of the
+// shared context exactly as a text output's result is, so the list cannot smuggle
+// itself back in either by being wired in or through @its-id.
+{
+  const src = { id: 'p-list', type: 'prompt', position: { x: 0, y: 0 }, data: { text: 'one\n---\ntwo' } };
+  const shared = { id: 'p-shared', type: 'prompt', position: { x: 0, y: 50 }, data: { text: 'a shared subject' } };
+  const sibling = { id: 'p-sib', type: 'prompt', position: { x: 0, y: 90 }, data: { text: 'ref: @p-list' } };
+  const { nodes, edges } = graph([shared, src, sibling], [
+    { id: 'e1', source: 'p-shared', target: 'out' },
+    { id: 'e2', source: 'p-list', target: 'out' },
+    { id: 'e3', source: 'p-sib', target: 'out' },
+  ]);
+  assert.equal(findFreeSource(nodes, edges, 'out').id, 'p-list');
+  assert.equal(freeShared(nodes, edges, 'out', 'p-list').includes('one'), false, 'the list is not in the shared context');
+
+  const prompts = freeRunPrompts(nodes, edges, 'out', 'p-list', ['one', 'two']);
+  assert.equal(prompts.length, 2);
+  for (const p of prompts) {
+    assert.ok(p.includes('a shared subject'), 'shared context missing');
+    assert.ok(!p.includes('---'), 'separator leaked');
+    assert.ok(!p.includes('@p-list'), 'unresolved @token leaked');
+  }
+  assert.ok(prompts[0].includes('one') && !prompts[0].includes('two'), 'block 0 carries exactly one item');
 }
 
 // freeRunPrompts: the shared context (everything wired in except the text node) is
@@ -234,7 +303,7 @@ function graph(nodes, edges) {
       { id: 'e3', source: 'p-sib', target: 'out' },
     ],
   );
-  const found = findWiredTextNode(nodes, edges, 'out');
+  const found = findFreeSource(nodes, edges, 'out');
   assert.equal(found.id, 't1');
 
   const { blocks } = splitSections(textNode.data.result);
@@ -792,7 +861,7 @@ function videoGraph(inputMode, imageCount, extra = []) {
 // batch size, consent about a wired clip, or the node's own content/identity. An
 // overlap here is the Critical-1 bug recurring in a different key.
 {
-  const mustSurvive = ['runs', 'freeRuns', 'shareLocalVideos', 'text', 'result', 'model', 'videoModel'];
+  const mustSurvive = ['runs', 'freeRuns', 'previewPrompt', 'shareLocalVideos', 'text', 'result', 'model', 'videoModel'];
   for (const type of Object.keys(MODEL_PARAM_KEYS)) {
     for (const key of MODEL_PARAM_KEYS[type]) {
       assert.ok(!mustSurvive.includes(key), `${type}'s MODEL_PARAM_KEYS must not include "${key}"`);
@@ -846,6 +915,220 @@ function videoGraph(inputMode, imageCount, extra = []) {
   const { prompt } = buildRequest(initialNodes, initialEdges, output.id);
   assert.ok(prompt.includes('lone red fox'), 'the @id reference resolves in the starter graph');
   assert.ok(!prompt.includes('@'), 'and leaves no unresolved token behind');
+}
+
+// --- parseImagePicks ---
+
+// A section may open with a line naming which wired images it uses. The line is stripped
+// from the prompt: the provider must never see the bookkeeping.
+{
+  const { text, picks } = parseImagePicks('images: 2, 5\nA hand, palm forward');
+  assert.deepEqual(picks, [2, 5]);
+  assert.equal(text, 'A hand, palm forward', 'the directive line is stripped from the prompt');
+}
+
+// Singular form, spaces instead of commas, leading blank lines, and a repeat.
+{
+  assert.deepEqual(parseImagePicks('\n\n image : 3 1 3 \nprose').picks, [3, 1], 'order preserved, duplicates collapsed');
+}
+
+// Recognised on the FIRST non-empty line only: prose saying "images: ..." halfway down
+// a section must not silently reduce what that run sends.
+{
+  const { text, picks } = parseImagePicks('A hand\nimages: 2, 5');
+  assert.equal(picks, null, 'only the first non-empty line can be a directive');
+  assert.equal(text, 'A hand\nimages: 2, 5', 'and it stays in the prompt untouched');
+}
+
+// No directive at all -> null, meaning every image.
+{
+  assert.equal(parseImagePicks('just prose').picks, null);
+}
+
+// Only a pure list of positive integers is a directive. "images: none of them" is prose,
+// and deleting it would hand the model a prompt nobody wrote.
+{
+  const { text, picks } = parseImagePicks('images: none of them\nprose');
+  assert.equal(picks, null);
+  assert.equal(text, 'images: none of them\nprose', 'a line that is not a directive stays put');
+}
+
+// "Image:" as a section caption is ordinary text-model formatting, and the repair prompt
+// teaches the model this very keyword -- so the collision is invited, not remote. Each of
+// these once became an empty prompt plus a paid image.
+{
+  for (const prose of [
+    'Image: 3 women standing in a row, studio light',
+    'images: 2 hands holding a cup',
+    'Image: a red fox in snow, watercolour',
+  ]) {
+    const { text, picks } = parseImagePicks(prose);
+    assert.equal(picks, null, `"${prose}" is prose, not a directive`);
+    assert.equal(text, prose, 'and reaches the model exactly as written');
+  }
+}
+
+// Keyword case and number are both free; the numbers are what makes it a directive.
+{
+  assert.deepEqual(parseImagePicks('Image: 2\nfox').picks, [2], 'capitalised singular parses');
+  assert.equal(parseImagePicks('Image: 2\nfox').text, 'fox');
+  assert.deepEqual(parseImagePicks('IMAGES: 2, 1\nfox').picks, [2, 1]);
+}
+
+// A directive that names nothing usable is left in place, not deleted: a line is only ever
+// stripped once it has been confirmed to be a directive that did something.
+{
+  for (const src of ['images: 0', 'images: 0, -2\nprose']) {
+    const { text, picks } = parseImagePicks(src);
+    assert.equal(picks, null, `"${src}" yields no usable pick`);
+    assert.equal(text, src, 'and the line survives');
+  }
+}
+
+// --- runReferences ---
+
+const img = (i, y) => ({ id: `i${i}`, type: 'image', position: { x: 0, y }, data: { dataUrl: `data:image/png;base64,IMG${i}` } });
+
+{
+  const vid = { id: 'v1', type: 'video', position: { x: 0, y: 99 }, data: { dataUrl: 'data:video/mp4;base64,VID' } };
+  const { nodes, edges } = graph([img(1, 0), img(2, 10), img(3, 20), vid], [
+    { id: 'e1', source: 'i1', target: 'out' },
+    { id: 'e2', source: 'i2', target: 'out' },
+    { id: 'e3', source: 'i3', target: 'out' },
+    { id: 'e4', source: 'v1', target: 'out' },
+  ]);
+
+  // No directive -> byte-for-byte what buildRequest sends today. This is the assertion
+  // that pins "not asking for a split still gets everything".
+  const all = runReferences(nodes, edges, 'out', null);
+  assert.deepEqual(all.input_references, buildRequest(nodes, edges, 'out').input_references);
+  assert.equal(all.used, null);
+  assert.deepEqual(all.dropped, []);
+
+  // A directive picks by badge number, IN THE ORDER IT LISTED THEM -- that order is what
+  // "image 1" means inside the section's prose, since the provider only sees attachments.
+  const picked = runReferences(nodes, edges, 'out', [3, 1]);
+  assert.deepEqual(picked.used, [3, 1]);
+  assert.deepEqual(
+    picked.input_references.map((r) => r.image_url?.url ?? r.video_url.url),
+    ['data:image/png;base64,IMG3', 'data:image/png;base64,IMG1', 'data:video/mp4;base64,VID'],
+    'picked images in listed order, videos appended untouched',
+  );
+
+  // An out-of-range number is dropped and reported; the rest of the directive still runs.
+  const partial = runReferences(nodes, edges, 'out', [2, 9]);
+  assert.deepEqual(partial.used, [2]);
+  assert.deepEqual(partial.dropped, [9]);
+  assert.equal(partial.input_references.length, 2, 'one picked image plus the video');
+
+  // Every number out of range -> fall back to every image rather than a run with none.
+  const none = runReferences(nodes, edges, 'out', [8, 9]);
+  assert.equal(none.used, null);
+  assert.deepEqual(none.dropped, [8, 9]);
+  assert.equal(none.input_references.length, 4);
+}
+
+// --- freeBatch ---
+
+// The seam the preview dialog and Generate share: one call turns list text into the exact
+// runs that will be sent. A preview deriving its rows any other way is how a preview
+// starts lying about what it is previewing.
+{
+  const src = { id: 'p-list', type: 'prompt', position: { x: 0, y: 50 }, data: { text: '' } };
+  const ctx = { id: 'p-ctx', type: 'prompt', position: { x: 0, y: 5 }, data: { text: 'shared style' } };
+  const { nodes, edges } = graph([ctx, src, img(1, 0), img(2, 10)], [
+    { id: 'e0', source: 'p-ctx', target: 'out' },
+    { id: 'e1', source: 'p-list', target: 'out' },
+    { id: 'e2', source: 'i1', target: 'out' },
+    { id: 'e3', source: 'i2', target: 'out' },
+  ]);
+  const { runs, truncated, shared } = freeBatch(nodes, edges, 'out', 'p-list', 'images: 2\nfirst\n---\nsecond');
+  assert.equal(truncated, 0);
+  assert.equal(shared, 'shared style');
+  assert.equal(runs.length, 2);
+  assert.equal(runs[0].prompt, 'shared style\n\nfirst', 'the directive line never reaches the model');
+  assert.deepEqual(runs[0].used, [2]);
+  assert.equal(runs[0].input_references.length, 1);
+  assert.equal(runs[1].used, null, 'a section without a directive gets every image');
+  assert.equal(runs[1].input_references.length, 2);
+}
+
+// The 10-run cap still applies through freeBatch, and reports what it dropped.
+{
+  const src = { id: 'p-list', type: 'prompt', position: { x: 0, y: 0 }, data: { text: '' } };
+  const { nodes, edges } = graph([src], [{ id: 'e1', source: 'p-list', target: 'out' }]);
+  const many = Array.from({ length: 12 }, (_, i) => `item ${i}`).join('\n---\n');
+  const { runs, truncated } = freeBatch(nodes, edges, 'out', 'p-list', many);
+  assert.equal(runs.length, 10);
+  assert.equal(truncated, 2);
+}
+
+// Truncation and dropped directive-only sections can land in the same list. The cap acts
+// on the RAW section count first, so a directive-only section counts toward the 10 kept
+// just like any other -- the fix this pins down is what the caller does with the counts
+// afterward: `truncated` is only ever the sections beyond the cap, never inflated by ones
+// the cap kept but freeBatch itself dropped for having no prompt text.
+{
+  const src = { id: 'p-list', type: 'prompt', position: { x: 0, y: 0 }, data: { text: '' } };
+  const { nodes, edges } = graph([src], [{ id: 'e1', source: 'p-list', target: 'out' }]);
+  // 12 sections; the first 10 survive the cap (2 truncated); of those 10, 3 are nothing
+  // but an `images: 1` directive and are dropped as empty, leaving 7 runs.
+  const sections = Array.from({ length: 12 }, (_, i) => (i === 2 || i === 5 || i === 8 ? 'images: 1' : `item ${i}`));
+  const { runs, truncated, empty } = freeBatch(nodes, edges, 'out', 'p-list', sections.join('\n---\n'));
+  assert.equal(runs.length, 7);
+  assert.equal(truncated, 2);
+  assert.equal(empty, 3);
+}
+
+// A section that is only a directive is not a run: with its line stripped it would send
+// the shared context alone -- exactly the paid generation of nobody's prompt that the
+// node's NO_SECTIONS guard exists to prevent. Dropped, and counted so the caller can say.
+{
+  const src = { id: 'p-list', type: 'prompt', position: { x: 0, y: 50 }, data: { text: '' } };
+  const ctx = { id: 'p-ctx', type: 'prompt', position: { x: 0, y: 5 }, data: { text: 'shared style' } };
+  const { nodes, edges } = graph([ctx, src, img(1, 0)], [
+    { id: 'e0', source: 'p-ctx', target: 'out' },
+    { id: 'e1', source: 'p-list', target: 'out' },
+    { id: 'e2', source: 'i1', target: 'out' },
+  ]);
+  const one = freeBatch(nodes, edges, 'out', 'p-list', 'images: 1\n---\nA fox');
+  assert.equal(one.runs.length, 1, 'the directive-only section is not a run');
+  assert.equal(one.runs[0].prompt, 'shared style\n\nA fox');
+  assert.equal(one.empty, 1);
+
+  // Every section directive-only -> no runs at all, and the caller's NO_SECTIONS error.
+  const none = freeBatch(nodes, edges, 'out', 'p-list', 'images: 1\n---\nimages: 1');
+  assert.equal(none.runs.length, 0);
+  assert.equal(none.empty, 2);
+}
+
+// The cap has one home. The dialog interpolates MAX_RUNS while truncation is computed from
+// these defaults, so a raised constant that did not reach them would state a cap nothing
+// enforces.
+{
+  const src = { id: 'p-list', type: 'prompt', position: { x: 0, y: 0 }, data: { text: '' } };
+  const { nodes, edges } = graph([src], [{ id: 'e1', source: 'p-list', target: 'out' }]);
+  const many = Array.from({ length: MAX_RUNS + 3 }, (_, i) => `item ${i}`).join('\n---\n');
+  assert.equal(splitSections(many).blocks.length, MAX_RUNS, 'splitSections defaults to the cap');
+  assert.equal(splitSections(many).truncated, 3);
+  assert.equal(freeBatch(nodes, edges, 'out', 'p-list', many).runs.length, MAX_RUNS, 'and so does freeBatch');
+}
+
+// --- expandSlots ---
+
+// The repair prompt asks for [2] rather than "image 2" so the model cannot echo the
+// source's own numbering by reflex. The provider never sees a bracket.
+{
+  assert.equal(expandSlots('Apply the style of [1] to the composition of [2].'),
+    'Apply the style of image 1 to the composition of image 2.');
+  assert.equal(expandSlots('no slots here'), 'no slots here');
+  assert.equal(expandSlots(''), '');
+  assert.equal(expandSlots(undefined), '');
+  // Runs through parseImagePicks, which is where the substitution actually happens --
+  // so what freeBatch assembles is already the phrasing an image model expects.
+  const { text, picks } = parseImagePicks('images: 1, 3\nBlend [1] into [2].');
+  assert.deepEqual(picks, [1, 3]);
+  assert.equal(text, 'Blend image 1 into image 2.');
 }
 
 console.log('resolve.js: all checks passed');

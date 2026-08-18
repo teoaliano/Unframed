@@ -98,11 +98,12 @@ surface. Putting it on a node's body stack was tried first and is wrong for exac
 reason — it fenced off the labels, the gaps and the padding along with the controls, and
 left the output nodes barely better than the title-bar handle this set out to remove.
 
-The one container that legitimately carries it is a stack wrapping the model `Selector`
-alone (`ModelPicker` in `output/controls.jsx`). Astryx moves an open popup out of its
-trigger and up to the NEAREST stack, so a stack of its own is the tightest container
-that can catch it; without one the open model list is a drag surface sitting over the
-node. It wraps the control and nothing else, which is the rule for any such wrapper.
+No container carries the class. It was briefly on a node's whole body stack, and then on
+a stack wrapping the model `Selector` alone — the latter because Astryx moved an open
+popup out of its trigger and up to the nearest stack, so nothing tighter could catch it.
+Main has since replaced that `Selector` with a modal `ModelDialog`, which carries its own
+`nodrag` (its DOM still sits in the node's subtree), so the wrapper is gone and the
+"Model" caption drags like every other label.
 
 **What becomes draggable.** Everything that is not a control: header, footer, every
 label, the gaps between controls, the body's padding, and the thumbnails and result

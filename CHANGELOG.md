@@ -9,6 +9,12 @@ Keep that shape: the website's What's new page parses this file.
 
 ### Added
 
+- **Choosing a model opens a dialog instead of a dropdown.** Room to read the
+  list properly: search every model by slug or name, see when each was
+  released, and sort by either. The old dropdown showed 43 image, 23 video or
+  245 text models through a 200px window; this one also cannot open at the
+  corner of the window, like the menus fixed below.
+
 - **Wire several nodes at once.** Select a group, then drag from any one node's
   handle: every selected node that can connect follows along, so three prompts
   reach an output in one drag instead of three. It works in both directions —
@@ -21,6 +27,13 @@ Keep that shape: the website's What's new page parses this file.
   removes the connections *between* selected nodes, leaving the ones that reach
   out to the rest of the graph alone. Each is greyed out when it would do
   nothing.
+- Free mode now works from a plain prompt node, not only a text output — wire prose in
+  and the text model splits it into one prompt per image.
+- A Free section can name which wired images it uses (`images: 2, 5` on its first line),
+  so a nine-run batch no longer sends every reference to every run. No line still means
+  every image.
+- New **View final prompt** checkbox under Free: see the assembled sections, edit them,
+  and check which images each run will get before anything is generated.
 
 ### Fixed
 
