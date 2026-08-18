@@ -203,6 +203,17 @@ div:has(> .add-node-menu) {
   border-radius: 50%;
 }
 
+/* React Flow draws a bordered box around a multi-node selection so the group can be
+   dragged as one. It outstays the gesture, and it is a HITBOX as much as a border:
+   it spans the selection's bounding box, so every patch of empty canvas between the
+   outermost nodes stops responding. Hiding only its paint would leave that intact and
+   invisible, which is worse. Dragging any selected node still moves the whole group --
+   React Flow collects the selection in its own drag handler, so nothing is lost but
+   arrow-key nudging, which lived on this element's own onKeyDown. */
+.react-flow__nodesselection {
+  display: none;
+}
+
 /* ---- node chrome ---- */
 /* The whole card is the drag surface; controls opt out with `nodrag` (see
    docs/superpowers/specs/2026-08-18-canvas-interaction-design.md). The header keeps
