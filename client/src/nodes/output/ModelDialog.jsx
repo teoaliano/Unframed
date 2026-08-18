@@ -25,12 +25,12 @@ const TITLES = { image: 'Image models', video: 'Video models', text: 'Text model
 // than first — a null reading as $0 would put every unpriced model at the top
 // of "cheapest first", which is backwards.
 //
-// Video still mixes units after the facets.js fix — priceRate is the RAW
-// per-second or per-token dollar figure (facets.js), and the token family's
-// raw numbers (~0.000001) are orders of magnitude smaller than any per-second
-// model's, so a token-priced model always sorts as "cheapest" here regardless
-// of the "$X per M" figure actually printed on its row. Acceptable for a
-// picker, where every row states its own unit, but this is not a cost
+// Video still mixes units after the facets.js fix — priceRate returns the
+// same figure the row prints ($/s or $ per M, see facets.js), so ordering is
+// by what's on screen, not by a raw catalogue rate. But $/s and $ per M are
+// still not the same currency: a $0.17/s model and a $2.40 per M model are not
+// truly comparable costs, they just both sort correctly within their own unit.
+// Acceptable for a picker where every row states its own unit; not a cost
 // comparison across the two families.
 function priceComparator(kind) {
   return (a, b) => {

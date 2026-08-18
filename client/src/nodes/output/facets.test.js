@@ -147,7 +147,10 @@ assert.equal(
   priceLabel({ id: 'seedance-2.0', pricing: { video_tokens: '0.000007' } }, 'video'),
   '$7.00 per M',
 );
-assert.equal(priceRate({ id: 'seedance-2.0', pricing: { video_tokens: '0.000007' } }, 'video'), 0.000007);
+// priceRate must match the DISPLAYED unit (per M here), not the raw per-token
+// catalogue number — the raw number (~1e-6) would sort every token-priced model
+// below every per-second model regardless of the figure actually shown.
+assert.equal(priceRate({ id: 'seedance-2.0', pricing: { video_tokens: '0.000007' } }, 'video'), 7);
 
 // A per-reference-image fee must not widen the per-second range it sits beside.
 assert.equal(
@@ -161,5 +164,39 @@ assert.equal(
   priceLabel({ id: 'aleph-2', pricing: { cents_per_second_output: '28', minimum_cents_per_generation: '56' } }, 'video'),
   '$0.28/s',
 );
+
+// Text priceRate is also the per-M figure on screen, not the raw per-token rate —
+// same reason as the video token family, even though every text model shares one
+// unit so the relative order does not actually change.
+assert.equal(
+  priceRate({ id: 't', pricing: { prompt: '0.0000003', completion: '0.0000025' } }, 'text'),
+  0.3,
+);
+
+// The invariant that stops priceLabel and priceRate from drifting apart again:
+// one is null exactly when the other is, for every kind and every fixture above.
+const RATE_CASES = [
+  [VIDEO[0], 'video'],
+  [VIDEO[1], 'video'],
+  [{ id: 'n', pricing: null }, 'video'],
+  [{ id: 't', pricing: { prompt: '0.0000003', completion: '0.0000025' } }, 'text'],
+  [{ id: 't', pricing: { prompt: '0', completion: '0' } }, 'text'],
+  [{ id: 't' }, 'text'],
+  [IMAGE[0], 'image'],
+  [{ id: 'happyhorse', pricing: { duration_seconds_720p: '0.0988', duration_seconds_1080p: '0.1694' } }, 'video'],
+  [{ id: 'flux-3-video', pricing: { cents_per_second_output: '17' } }, 'video'],
+  [{ id: 'seedance-2.0', pricing: { video_tokens: '0.000007' } }, 'video'],
+  [{ id: 'hailuo-3', pricing: { duration_seconds: '0.13', reference_images: '0.04' } }, 'video'],
+  [{ id: 'aleph-2', pricing: { cents_per_second_output: '28', minimum_cents_per_generation: '56' } }, 'video'],
+];
+for (const [model, kind] of RATE_CASES) {
+  const label = priceLabel(model, kind);
+  const rate = priceRate(model, kind);
+  assert.equal(
+    rate === null,
+    label === null,
+    `priceRate/priceLabel disagree on null for ${model.id} (${kind}): label=${label}, rate=${rate}`,
+  );
+}
 
 console.log('facets.test.js ok');

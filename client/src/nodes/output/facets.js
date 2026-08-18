@@ -111,20 +111,27 @@ const fmt = (x) => x.toFixed(2);
 // family, in this order, and everything else (reference_images,
 // minimum_cents_per_generation, cents_per_image_input, …) is a real charge that
 // is deliberately dropped rather than folded into a range it does not belong in.
+//
+// Values come back already converted to the unit that gets DISPLAYED (cents
+// divided by 100, tokens multiplied by 1e6 for "per million") rather than the
+// raw catalogue number. This is the one and only place either conversion
+// happens: priceLabel formats what it is given and priceRate mins what it is
+// given, so the two can never scale a family differently and disagree about
+// which model is "cheaper" than what the row actually prints.
 function videoRateFamily(model) {
   const perSecond = [];
-  const perToken = [];
+  const perM = [];
   for (const [key, raw] of Object.entries(model.pricing || {})) {
     const n = Number(raw);
     if (!Number.isFinite(n) || n <= 0) continue;
     if (key.includes('cents_per') && key.includes('second')) perSecond.push(n / 100);
     else if (key.includes('duration_seconds')) perSecond.push(n);
-    else if (key.startsWith('video_tokens')) perToken.push(n);
+    else if (key.startsWith('video_tokens')) perM.push(n * 1e6);
   }
   // Per-second is the directly comparable, headline rate; a token family found
   // alongside it is ignored rather than mixed into the same range.
-  if (perSecond.length) return { unit: 'second', values: perSecond };
-  if (perToken.length) return { unit: 'token', values: perToken };
+  if (perSecond.length) return { suffix: '/s', values: perSecond };
+  if (perM.length) return { suffix: ' per M', values: perM };
   return null;
 }
 
@@ -136,14 +143,9 @@ export function priceLabel(model, kind) {
   if (kind === 'video') {
     const family = videoRateFamily(model);
     if (!family) return null;
-    if (family.unit === 'second') {
-      const lo = fmt(Math.min(...family.values));
-      const hi = fmt(Math.max(...family.values));
-      return lo === hi ? `$${lo}/s` : `$${lo}–${hi}/s`;
-    }
-    const lo = fmt(Math.min(...family.values) * 1e6);
-    const hi = fmt(Math.max(...family.values) * 1e6);
-    return lo === hi ? `$${lo} per M` : `$${lo}–${hi} per M`;
+    const lo = fmt(Math.min(...family.values));
+    const hi = fmt(Math.max(...family.values));
+    return lo === hi ? `$${lo}${family.suffix}` : `$${lo}–${hi}${family.suffix}`;
   }
   if (kind === 'text') {
     const p = Number(model.pricing?.prompt);
@@ -155,12 +157,13 @@ export function priceLabel(model, kind) {
   return null;
 }
 
-// The numeric rate priceLabel is built from, for sorting — display and sort must
-// never disagree about which family they read. Always the family's minimum (the
-// cheapest figure shown), and always the RAW unscaled value even for the token
-// family, whose label multiplies by 1e6 only for display: sort order is the same
-// either way, and this is the number that would need to change if the label's
-// scaling ever did.
+// The numeric rate priceLabel is built from, for sorting — always the family's
+// minimum (the cheapest figure shown), and always in the SAME unit the label
+// prints, never a raw catalogue rate: a per-token video model's row reads
+// "$X per M", so sorting it by its raw per-token number (orders of magnitude
+// smaller than any per-second model's) would put it below every per-second
+// model regardless of the figure actually shown — sort and display must never
+// disagree about which model is cheaper. null exactly where priceLabel is null.
 export function priceRate(model, kind) {
   if (kind === 'video') {
     const family = videoRateFamily(model);
@@ -170,7 +173,7 @@ export function priceRate(model, kind) {
     const p = Number(model.pricing?.prompt);
     const c = Number(model.pricing?.completion);
     if (!Number.isFinite(p) || !Number.isFinite(c)) return null;
-    return Math.min(p, c);
+    return Math.min(p, c) * 1e6;
   }
   return null;
 }
