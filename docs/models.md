@@ -61,13 +61,23 @@ than "nothing known".
 
 `ModelDialog.jsx`, not an anchored popup — a centered `Dialog` cannot be
 mispositioned the way an anchor-positioned one can. It holds a search field and
-an Astryx `Table` of two columns, Model and Released, both sortable, newest
-first by default. Nothing else: no capability tags, no filter pills, no price.
-Search matches the slug and the display name.
+an Astryx `Table` of three sortable columns — Model, Provider, Released —
+newest first by default. Nothing else: no capability tags, no filter pills, no
+price. Search still matches the whole slug and the display name, neither of
+which is shown intact once the slug is split across two columns.
 
 **Released comes from OpenRouter's `created`** (Unix seconds), which every model
 in all three catalogues carries. The server passes it through as a number so the
 table can sort on it; the column formats it for display only.
+
+**The Provider label is looked up by slug prefix, not parsed per row.** A slug is
+`<provider>/<model>`, sometimes with a leading `~` (OpenRouter's floating
+`-latest` aliases), and the pretty name lives in the display name as
+`Provider: Model` — but only for some models. 23 of 245 text models have no
+colon, so parsing each row independently rendered `~anthropic` one row below
+`Anthropic`. Keying on the prefix and taking the label from whichever sibling
+does have a colon resolves every provider in the image and video catalogues and
+all but two in text, which fall back to the prefix itself.
 
 **Escape is handled by the component, not by `Dialog`.** Astryx's own Escape path
 does not reach `onOpenChange` in this configuration — two model dialogs could be

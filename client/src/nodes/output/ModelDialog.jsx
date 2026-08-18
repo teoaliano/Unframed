@@ -19,6 +19,15 @@ const TITLES = { image: 'Image models', video: 'Video models', text: 'Text model
 const DATE = new Intl.DateTimeFormat(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
 const released = (m) => (m.created ? DATE.format(new Date(m.created * 1000)) : '');
 
+// Slugs are "<provider>/<model>", sometimes with a leading ~ (OpenRouter's
+// floating "-latest" aliases). The prefix is the provider's KEY; its pretty
+// label comes from the display name, which is "Provider: Model" — but only for
+// some models, so the label is looked up by key rather than parsed per row.
+// Without that, ~anthropic/claude-haiku-latest (no colon in its name) would
+// render "~anthropic" one row below "Anthropic".
+const providerKey = (m) => m.id.split('/')[0].replace(/^~/, '');
+const modelPart = (m) => (m.id.includes('/') ? m.id.slice(m.id.indexOf('/') + 1) : m.id);
+
 export default function ModelDialog({ models, kind, value, onPick, onClose }) {
   const [query, setQuery] = useState('');
 
@@ -36,15 +45,32 @@ export default function ModelDialog({ models, kind, value, onPick, onClose }) {
     return () => window.removeEventListener('keydown', onKey, true);
   }, [onClose]);
 
-  // Matches slug and display name: "openai/gpt-image-2" and "OpenAI: GPT
-  // Image 2" are both plausible things to type.
+  // Provider and model split onto the row itself, so Table's own comparators
+  // sort the values it renders instead of the raw slug.
+  const rows = useMemo(() => {
+    const labels = {};
+    for (const m of models) {
+      const name = m.name || '';
+      const key = providerKey(m);
+      if (name.includes(':') && !labels[key]) labels[key] = name.split(':')[0].trim();
+    }
+    return models.map((m) => ({
+      ...m,
+      provider: labels[providerKey(m)] || providerKey(m),
+      model: modelPart(m),
+    }));
+  }, [models]);
+
+  // Matches the full slug and the display name: "openai/gpt-image-2" and
+  // "OpenAI: GPT Image 2" are both plausible things to type, and neither is
+  // shown whole now that the slug is split across two columns.
   const shown = useMemo(() => {
     const q = query.trim().toLowerCase();
-    if (!q) return models;
-    return models.filter(
+    if (!q) return rows;
+    return rows.filter(
       (m) => m.id.toLowerCase().includes(q) || (m.name || '').toLowerCase().includes(q),
     );
-  }, [models, query]);
+  }, [rows, query]);
 
   // Newest first by default — the reason the column exists.
   const { sortedData, sortConfig } = useTableSortableState({
@@ -56,7 +82,7 @@ export default function ModelDialog({ models, kind, value, onPick, onClose }) {
 
   const columns = [
     {
-      key: 'id',
+      key: 'model',
       header: 'Model',
       width: proportional(2),
       sortable: true,
@@ -64,19 +90,13 @@ export default function ModelDialog({ models, kind, value, onPick, onClose }) {
       // that the action is a button, not the row. A Link with onClick and no
       // href renders a real <button> with link styling (useInteractiveRole),
       // so this needs no hand-written CSS and stays keyboard-reachable.
-      // Labelled by slug, not display name: the slug is what goes in
-      // OPENROUTER_*_MODEL.
       renderCell: (m) => (
-        <VStack gap={0}>
-          <Link onClick={() => { onPick(m.id); onClose(); }} weight={m.id === value ? 'bold' : 'medium'}>
-            {m.id}
-          </Link>
-          {m.name && m.name !== m.id && (
-            <Text type="supporting" color="secondary">{m.name}</Text>
-          )}
-        </VStack>
+        <Link onClick={() => { onPick(m.id); onClose(); }} weight={m.id === value ? 'bold' : 'medium'}>
+          {m.model}
+        </Link>
       ),
     },
+    { key: 'provider', header: 'Provider', width: proportional(1), sortable: true },
     { key: 'created', header: 'Released', width: pixel(130), align: 'end', sortable: true, renderCell: released },
   ];
 

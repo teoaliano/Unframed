@@ -26,20 +26,36 @@ construction — and it has room for a real table.
 
 The Model row on all three output nodes becomes a button showing the current
 slug. Clicking it opens a centered dialog holding a search field and a table
-of two columns:
+of three columns:
 
-| Model | Released |
-| --- | --- |
-| slug, with the display name beneath it | the model's release date |
+| Model | Provider | Released |
+| --- | --- | --- |
+| the model half of the slug | the provider's display name | the release date |
 
-Both columns sort; newest first by default, which is the reason the date is
-there at all. Search matches the slug (`openai/gpt-image-2`) and the display
-name (`OpenAI: GPT Image 2`). Clicking a slug picks that model and closes.
+All three sort; newest first by default, which is the reason the date is there
+at all. Search matches the whole slug (`openai/gpt-image-2`) and the display
+name (`OpenAI: GPT Image 2`) — neither is shown intact now that the slug is
+split, so search has to cover both. Clicking a model picks it and closes; the
+value stored is always the full slug, not the displayed half.
+
+Rows are single-line. An earlier version put the display name on a second line
+under the slug, which made every row double height for information the Provider
+column now carries in a scannable, sortable form.
 
 `Released` comes from OpenRouter's `created` (Unix seconds), present on every
 model in all three catalogues — 43/43, 23/23, 413/413 when measured on
 2026-08-18. The server passes it through as a number so the table sorts on the
 value rather than on a formatted string.
+
+`Provider` is derived, and the derivation is the one non-obvious bit left. The
+slug prefix is the provider's KEY; its pretty label comes from the display name,
+which is `Provider: Model` — but only for some models. 23 of 245 text models
+have no colon, so parsing per row rendered `~anthropic` directly below
+`Anthropic`. Keying on the prefix (with any leading `~` stripped) and taking the
+label from whichever sibling does have a colon resolves every provider in image
+and video, and all but two in text, which fall back to the bare prefix. Both
+derived fields are put on the row objects so Table's own comparators sort the
+values it renders rather than the raw slug.
 
 ## Design
 
