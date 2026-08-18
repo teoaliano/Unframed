@@ -1,10 +1,10 @@
-# Canvas polish: leftover selection chrome, media tooltips, a node-native player, and lassoing connectors
+# Canvas polish: selection chrome, media tooltips, a node-native player, lassoing connectors, connection aim, and remembered field sizes
 
 *2026-08-18*
 
 ## Why
 
-Four complaints from using the packaged app, unrelated in cause but all of the same
+Seven complaints from using the packaged app, unrelated in cause but all of the same
 kind: the canvas shows something it should not, or refuses a gesture the rest of it
 accepts.
 
@@ -15,6 +15,9 @@ accepts.
   its clip.
 - Selecting several connections means shift+clicking each one, which is a precise
   click on a thin curve.
+- Handles are small, and a connection must be dropped almost exactly on one.
+- A resized prompt or text field snaps back to its default on every reload and every
+  project switch.
 
 They are grouped here because they are all the canvas's interaction surface, and the
 canvas-interaction spec (`2026-08-18-canvas-interaction-design.md`) is where that
@@ -176,10 +179,105 @@ one placed just beside the same polyline — inside its bounding box, off the cu
 misses. That second case is the one that fails if anyone later swaps sampling for a
 bounding box.
 
+## 5. Bigger handles, and room to miss
+
+### The dot and its target
+
+A handle is a 12px dot with a transparent 24px circle around it, drawn by a
+pseudo-element. The 24 was chosen to meet WCAG 2.2 SC 2.5.8 (AA), which asks for
+24×24 CSS px and is a **floor**, not a target — so 16px dot, 32px target keeps the
+rule satisfied and simply gives more of everything.
+
+Both numbers are stated directly rather than derived from an inset, and the existing
+comment explains why: the 2px border plus `box-sizing: border-box` shrink the padding
+box, so `inset` would undershoot. That reasoning survives the change unaltered; only
+the two numbers move.
+
+### Aim: `connectionRadius`
+
+React Flow already has the mechanism, sitting at its default of **20** flow-pixels:
+on release it looks for the nearest compatible handle within that radius and connects
+to it. Twenty pixels is roughly the handle itself, which is why a connection feels like
+it demands a bull's-eye. Raised to 60–80, a release anywhere in the neighbourhood of
+the handle lands.
+
+The cost, and the reason it is a number rather than "as large as possible": the radius
+also applies over empty canvas, so a release near a node but not on it now makes an
+edge where it used to make nothing. That is visible and undoable, and it is the whole
+trade — the number is set where a deliberate miss still reads as a miss.
+
+**Not attempted here: dropping anywhere on the node.** It is possible, and it is
+specced under **Deferred** below rather than built, because the radius bump is two
+characters and answers most of the same complaint. Whether it is still needed is a
+question the radius has to be used before anyone can answer.
+
+## 6. Field sizes that survive a reload
+
+The prompt node's field and both of the text node's fields resize by `resize: both` on
+the Astryx text-area wrapper. The browser implements that by writing `width` and
+`height` as an **inline style on that element**, and nothing in this app ever reads
+them. So the size is real, and it is entirely outside React's knowledge — which is why
+it does not survive a reload, a project switch, or anything else that rebuilds the node
+from `graph.json`.
+
+**Save on release, restore as a prop.** On `mouseup` inside the node body — the
+gesture's own end, since a CSS resize has no event of its own — read the inline
+`width`/`height` off the wrapper and write them into node data. Restore by passing them
+straight back as the text area's `style`.
+
+Three things make that as small as it looks:
+
+- The wrapper is reachable without a ref. `mouseup` from a resize gripper targets the
+  wrapper itself, so `e.target.closest('.astryx-textarea')` finds it, and the node body
+  already has handlers on it in `PromptNode`.
+- Astryx's `TextArea` forwards both `className` and `style` to that same wrapper, so
+  restoring needs no DOM access at all.
+- Autosave and undo already do the persisting. Both are debounced on `nodes`, and a
+  resize writes once per gesture, so it costs one autosave and one undo entry —
+  which is correct: undoing a resize should undo the whole drag, not each pixel.
+
+**Where it is stored.** `data.size` for the prompt node and the text node's
+instructions field, `data.resultSize` for the text node's result field. Two named keys
+rather than a map keyed by field: there are two fields in the whole app, and a map
+would need a naming scheme nothing else has to read.
+
+**Node data is the right home, not `node.style`.** React Flow applies `node.style` to
+its own wrapper, which would resize the card and leave the field inside it unchanged —
+a different feature. What is being remembered is the size of a control.
+
 ## Also
 
 `.xnode-video` is defined twice in `styles.css`, at lines 430 and 657. The second is
 dead. It goes, since this change is already in that rule.
+
+## Deferred: the whole node as a drop target
+
+The most forgiving version of section 5 is to let a connection be released anywhere on
+a receiving node. It works, and the mechanism is worth writing down now so that picking
+it up later is a short job rather than a fresh investigation.
+
+**It resolves by hit, not by distance.** React Flow's drop handler calls
+`elementFromPoint` and prefers whatever handle sits under the cursor over the nearest
+one by distance — explicitly, with a comment saying so. So a target `Handle` sized to
+cover the whole card connects on release regardless of `connectionRadius`. Only output
+nodes need it; they are the only family with a target handle at all.
+
+Three consequences, each with its answer:
+
+- **The overlay would eat every click on the node's controls.** It takes pointer events
+  only while a connection is in flight. `onConnectStart` and `onConnectEnd` are already
+  wired in `App.jsx` for the bulk-wire fan-out, so this is a flag and a class, not new
+  plumbing.
+- **Edges would anchor at the node's centre.** A handle's connection point is the centre
+  of its bounds, and the overlay's bounds are the card. `onConnect` belongs to this app,
+  so it strips the phantom handle id and the edge renders into the real left-hand
+  handle as always.
+- **Overlapping nodes.** The topmost card takes the drop, which is what the eye expects
+  and needs no code.
+
+Deferred rather than rejected: `connectionRadius` is two characters and addresses the
+same complaint, and building both at once would leave no way to tell which one did the
+work.
 
 ## Rejected
 
@@ -199,3 +297,8 @@ dead. It goes, since this change is already in that rule.
 - **Rebuilding arrow-key nudging** of a multi-selection after the group rect is
   removed; see section 1.
 - **Bounding-box hit-testing for edges.** Over-selects on diagonals; see section 4.
+- **A `ResizeObserver` for the field sizes.** Fires on the initial layout and on every
+  font and container change, so it needs a guard to tell a user's drag from a reflow,
+  and then writing the size back re-enters it. `mouseup` is the gesture's actual end.
+- **`node.style` or React Flow's `NodeResizer` for the field sizes.** Both resize the
+  card, which is a different feature from the one that regressed; see section 6.
