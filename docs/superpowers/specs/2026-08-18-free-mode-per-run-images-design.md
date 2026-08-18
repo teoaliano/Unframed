@@ -67,13 +67,22 @@ A hand, palm forward, ...
 
 The numbers are the badge numbers the canvas already shows — the Y-ordered, per-kind
 numbering `sourceRoles` renders on each image node, so what the user sees on the
-canvas is what the directive means. The line is stripped from the prompt and that run
-attaches only those images. **No line means every image**, which is exactly today's
-behaviour and matches the stated expectation: not asking for a split gets everything.
+canvas is what the directive means. The line is stripped from the prompt only once it
+has yielded a usable pick, per **Parsing** below; otherwise it is left in place as
+ordinary text. **No line means every image**, which is exactly today's behaviour and
+matches the stated expectation: not asking for a split gets everything.
 
 **Parsing** is pure, in `resolve.js`, tested. The directive is recognised only on the
-first non-empty line of a block, matched case-insensitively as `images:` or `image:`
-— a stray "images: three of them" mid-prose must not hijack a section. Numbers are
+first non-empty line of a block, and only when that whole line is a bare list of
+positive integers — `images: 2, 5`, nothing else on it. A caption that merely opens
+with the word, like "Image: 3 women standing in a row, studio light", fails that match
+and stays in the prompt untouched. The asymmetry is deliberate: a stray bookkeeping
+line left in a prompt is noise, while a description deleted by a false match is a paid
+image of something nobody asked for — so the line is deleted only once it is confirmed
+to name something usable, never on the strength of the keyword alone. A section that
+turns out to be nothing but a directive, with no prose left once the line is gone, is
+dropped by `freeBatch` rather than run — it would otherwise bill for the shared context
+alone, exactly what the node's no-sections guard exists to prevent. Numbers are
 comma- or space-separated; duplicates collapse; **listed order is preserved**, because
 that order defines the run's numbering (below).
 
