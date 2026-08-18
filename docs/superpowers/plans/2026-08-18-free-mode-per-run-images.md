@@ -87,11 +87,13 @@ Replace the block at `client/src/graph/resolve.test.js:195-204` (the "No text no
 // freeSourceText: a text output's answer verbatim (never re-scanned for @tokens), a
 // prompt node's @ids expanded first so no literal token reaches the splitter.
 {
-  const t = { id: 't1', type: 'textOutput', position: { x: 0, y: 0 }, data: { result: 'raw @nope answer' } };
+  // @p2 DOES resolve, so this fails if the text output's result is ever re-scanned --
+  // the bug the verbatim rule exists to prevent. A token naming nothing would pass either way.
+  const t = { id: 't1', type: 'textOutput', position: { x: 0, y: 0 }, data: { result: 'raw @p2 answer' } };
   const other = { id: 'p2', type: 'prompt', position: { x: 0, y: 0 }, data: { text: 'golden hour' } };
   const p = { id: 'p1', type: 'prompt', position: { x: 0, y: 0 }, data: { text: 'in @p2 light' } };
   const nodes = [out, t, other, p];
-  assert.equal(freeSourceText(t, nodes), 'raw @nope answer', "a text output's answer is taken verbatim");
+  assert.equal(freeSourceText(t, nodes), 'raw @p2 answer', "a text output's answer is taken verbatim");
   assert.equal(freeSourceText(p, nodes), 'in golden hour light', "a prompt node's @ids expand before splitting");
   assert.equal(freeSourceText(undefined, nodes), '', 'no source is an empty list, not a crash');
 }
@@ -100,8 +102,8 @@ Replace the block at `client/src/graph/resolve.test.js:195-204` (the "No text no
 // shared context exactly as a text output's result is, so the list cannot smuggle
 // itself back in either by being wired in or through @its-id.
 {
-  const src = { id: 'p-list', type: 'prompt', position: { x: 0, y: 50 }, data: { text: 'one\n---\ntwo' } };
-  const shared = { id: 'p-shared', type: 'prompt', position: { x: 0, y: 0 }, data: { text: 'a shared subject' } };
+  const src = { id: 'p-list', type: 'prompt', position: { x: 0, y: 0 }, data: { text: 'one\n---\ntwo' } };
+  const shared = { id: 'p-shared', type: 'prompt', position: { x: 0, y: 50 }, data: { text: 'a shared subject' } };
   const sibling = { id: 'p-sib', type: 'prompt', position: { x: 0, y: 90 }, data: { text: 'ref: @p-list' } };
   const { nodes, edges } = graph([shared, src, sibling], [
     { id: 'e1', source: 'p-shared', target: 'out' },
