@@ -247,14 +247,17 @@ function graph(nodes, edges) {
   assert.equal(findFreeSource(nodes, edges, 'out').id, 't-hi');
 }
 
-// freeSourceText: a text output's answer verbatim (never re-scanned for @tokens), a
-// prompt node's @ids expanded first so no literal token reaches the splitter.
+// freeSourceText: a text output's answer verbatim, even when it contains a token
+// (@p2) that WOULD resolve to something else if re-scanned -- proving the "never
+// re-scanned for @tokens" rule actually holds, rather than merely being untestable
+// because the token happened to be unknown. A prompt node's @ids, by contrast, DO
+// expand first so no literal token reaches the splitter.
 {
-  const t = { id: 't1', type: 'textOutput', position: { x: 0, y: 0 }, data: { result: 'raw @nope answer' } };
+  const t = { id: 't1', type: 'textOutput', position: { x: 0, y: 0 }, data: { result: 'raw @p2 answer' } };
   const other = { id: 'p2', type: 'prompt', position: { x: 0, y: 0 }, data: { text: 'golden hour' } };
   const p = { id: 'p1', type: 'prompt', position: { x: 0, y: 0 }, data: { text: 'in @p2 light' } };
   const nodes = [out, t, other, p];
-  assert.equal(freeSourceText(t, nodes), 'raw @nope answer', "a text output's answer is taken verbatim");
+  assert.equal(freeSourceText(t, nodes), 'raw @p2 answer', "a text output's answer is taken verbatim, not re-scanned");
   assert.equal(freeSourceText(p, nodes), 'in golden hour light', "a prompt node's @ids expand before splitting");
   assert.equal(freeSourceText(undefined, nodes), '', 'no source is an empty list, not a crash');
 }
