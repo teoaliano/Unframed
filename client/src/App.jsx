@@ -54,7 +54,7 @@ import {
 import ProjectMenu from './ProjectMenu.jsx';
 import IgnoredEdge from './nodes/IgnoredEdge.jsx';
 import { PromptIcon, ImageIcon, VideoIcon, TextIcon } from './nodes/nodeIcons.jsx';
-import { bucketSources, isOutput } from './graph/resolve.js';
+import { bucketSources, isOutput, isReferenceable } from './graph/resolve.js';
 import { canSource, canTarget, selectedIds, connections, dropInternal } from './graph/bulkWire.js';
 import { keepLiveRunMarkers } from './graph/runMarkers.js';
 import LibraryDialog from './library/LibraryDialog.jsx';
@@ -781,6 +781,48 @@ function Canvas() {
     navigator.clipboard?.write([new ClipboardItem(faces)]).catch(() => {});
   }
 
+  // "@100" onto the clipboard, ready to paste into a prompt. This used to be a click
+  // on the node's own header, which is also its drag handle — so reaching for a drag
+  // or a selection copied instead, and the one strip a node must keep grabbable was
+  // carrying a button (see NodeHeader.jsx). The clipboard write is reported rather
+  // than swallowed: a menu item that quietly does nothing is indistinguishable from
+  // one that worked, and the header at least used to say "copied!".
+  function copyReference(id) {
+    const written = navigator.clipboard?.writeText(`@${id}`);
+    if (!written) return;
+    written.catch(() =>
+      toast({ body: `Could not copy @${id} to the clipboard.`, uniqueID: 'copy-ref-failed', type: 'error' }),
+    );
+  }
+
+  // Where a node's pictures actually live, in the order the node shows them. An input
+  // node carries its own bytes; an output node deliberately does not — inlining a data
+  // URL into node data would rewrite it into graph.json on every edit (CLAUDE.md) — so
+  // it holds `/api/file/...` pointers instead, which an <img> loads just the same, and
+  // which is what makes one copy path serve both.
+  function picturesOf(node) {
+    if (node?.type === 'image') return node.data?.dataUrl ? [node.data.dataUrl] : [];
+    if (node?.type !== 'imageOutput') return [];
+    return [...(node.data?.results || [])]
+      .sort((a, b) => a.runIndex - b.runIndex)
+      .map((r) => r.url)
+      .filter(Boolean);
+  }
+
+  // The picture itself onto the clipboard, so it pastes into Figma or a chat as a real
+  // image rather than as a node. PNG because Chrome's clipboard accepts no other image
+  // type, and a source can be a JPEG upload — pngBlob re-encodes. The blob is handed
+  // over as a PROMISE, not awaited first: the write has to be issued inside the click
+  // that asked for it or the browser rejects it as a write without a user gesture, and
+  // the re-encode is async. Same trick as copySelection above.
+  function copyAsImage(src) {
+    const written = navigator.clipboard?.write([new ClipboardItem({ 'image/png': pngBlob(src) })]);
+    if (!written) return;
+    written.catch(() =>
+      toast({ body: 'Could not copy that image to the clipboard.', uniqueID: 'copy-image-failed', type: 'error' }),
+    );
+  }
+
   function cutSelection() {
     copySelection();
     // What copy actually took, so cut removes exactly that — including the case
@@ -841,6 +883,11 @@ function Canvas() {
     const kbd = (k) => <span className="cm-shortcut">{mod}{k}</span>;
     const sections = [];
 
+    // Built as a list rather than pushed as a section outright: an input node offers
+    // reveal AND copy, a generated one only copy, and neither should leave an empty
+    // "Image" heading behind when it has no picture yet.
+    const imageItems = [];
+
     if (menuCtx?.type === 'image' && menuCtx.hasImage) {
       const picked = nodes.filter((n) => n.selected && n.type === 'image' && n.data?.fileName);
       const names = picked.length ? picked.map((n) => n.data.fileName) : [menuCtx.fileName];
@@ -850,29 +897,48 @@ function Canvas() {
         : navigator.platform?.startsWith('Win')
           ? `Show in Explorer${many}`
           : `Show in file manager${many}`;
+      imageItems.push({
+        label: reveal,
+        // Caught, not swallowed. The catch itself has to stay -- an unhandled
+        // rejection in the browser is a console line and nothing more, which
+        // is the same silence -- but throwing the message away made a failed
+        // reveal look exactly like a successful one: nothing happens either
+        // way. That is how a reveal that opened no window at all went four
+        // days unreported (2026-08-13 to 08-17). One stable uniqueID, the
+        // same reason reportSaveFailure above has one, so clicking a reveal
+        // that keeps failing updates one toast instead of stacking per click.
+        onClick: () =>
+          revealFiles(names).catch((err) =>
+            toast({
+              body: `Could not show ${names.length > 1 ? `those ${names.length} files` : 'that file'}: ${err.message}`,
+              uniqueID: 'reveal-failed',
+              type: 'error',
+            }),
+          ),
+      });
+    }
+
+    // One item per picture, so a batch of results is not silently reduced to its
+    // first — the clipboard holds one image, and picking WHICH is the user's call,
+    // not ours. A lone picture needs no number.
+    const pictures = picturesOf(menuCtx ? nodes.find((n) => n.id === menuCtx.id) : null);
+    imageItems.push(
+      ...pictures.map((src, i) => ({
+        label: pictures.length > 1 ? `Copy image ${i + 1} of ${pictures.length}` : 'Copy as image',
+        onClick: () => copyAsImage(src),
+      })),
+    );
+
+    if (imageItems.length) sections.push({ title: 'Image', items: imageItems });
+
+    // Only the two types an @ref can resolve to — the same predicate the @ menu in
+    // PromptNode offers candidates from, so what you can copy and what you can insert
+    // cannot drift apart. Keyed off the right-clicked node rather than the selection:
+    // a reference names ONE node, and a group of them has no single answer.
+    if (menuCtx && isReferenceable(menuCtx)) {
       sections.push({
-        title: 'Image',
-        items: [
-          {
-            label: reveal,
-            // Caught, not swallowed. The catch itself has to stay -- an unhandled
-            // rejection in the browser is a console line and nothing more, which
-            // is the same silence -- but throwing the message away made a failed
-            // reveal look exactly like a successful one: nothing happens either
-            // way. That is how a reveal that opened no window at all went four
-            // days unreported (2026-08-13 to 08-17). One stable uniqueID, the
-            // same reason reportSaveFailure above has one, so clicking a reveal
-            // that keeps failing updates one toast instead of stacking per click.
-            onClick: () =>
-              revealFiles(names).catch((err) =>
-                toast({
-                  body: `Could not show ${names.length > 1 ? `those ${names.length} files` : 'that file'}: ${err.message}`,
-                  uniqueID: 'reveal-failed',
-                  type: 'error',
-                }),
-              ),
-          },
-        ],
+        title: 'Reference',
+        items: [{ label: `Copy @${menuCtx.id}`, onClick: () => copyReference(menuCtx.id) }],
       });
     }
 
@@ -1143,10 +1209,25 @@ function Canvas() {
           onConnectStart={onConnectStart}
           onConnectEnd={onConnectEnd}
           // Shift joins Meta/Control as a multi-select modifier -- React Flow's
-          // default pair is the OS one, but Shift is what every canvas tool uses
-          // and it is already this app's box-select key, so shift-dragging a box
-          // adds to the selection instead of replacing it.
+          // default pair is the OS one, but Shift is what every canvas tool uses.
+          // It governs CLICK only: a selection box always replaces the selection
+          // rather than adding to it, whatever is held, because React Flow builds
+          // that selection from the rectangle's contents alone. An earlier version
+          // of this comment claimed otherwise; it was never true.
           multiSelectionKeyCode={['Meta', 'Control', 'Shift']}
+          // Shift is the multi-select key above, so it must NOT also be React Flow's
+          // box-select key -- and 'Shift' is what that prop defaults to. When both
+          // claimed it, the pane's capture-phase pointerdown listener treated every
+          // shift+press as the start of a selection rectangle and killed the event
+          // with stopPropagation + preventDefault before it reached the node. No
+          // mousedown was produced at all, so the handler that actually selects a
+          // node never ran and shift+click did nothing whatsoever. The click still
+          // fired, which is why a header would flash "copied!" while the node stayed
+          // unselected -- the one visible symptom that said the event was arriving
+          // and the selection was being cancelled, not missed.
+          // null, not another key: box-select already has selectionOnDrag below, so
+          // nothing is lost. Verified with client/src/debug/trace.js.
+          selectionKeyCode={null}
           nodeTypes={nodeTypes}
           edgeTypes={edgeTypes}
           fitView

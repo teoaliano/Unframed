@@ -1,6 +1,6 @@
 // Assert-based self-check. Run with: node client/src/graph/resolve.test.js
 import assert from 'node:assert/strict';
-import { buildRequest, bucketSources, sourceRoles, splitSections, findWiredTextNode, freeRunPrompts, isOutput, isTextOutput } from './resolve.js';
+import { buildRequest, bucketSources, sourceRoles, splitSections, findWiredTextNode, freeRunPrompts, isOutput, isTextOutput, isReferenceable } from './resolve.js';
 import { migrateNodes } from './migrate.js';
 import { instantiateFragment, centerOffset } from '../library/insert.js';
 import { selectionFragment, presetFromSelection } from '../library/save.js';
@@ -543,6 +543,18 @@ function graph(nodes, edges) {
   assert.equal(isTextOutput({ type: 'imageOutput' }), false);
   assert.equal(isTextOutput({ type: 'text' }), false, 'the pre-migration id is not a text output');
   assert.equal(isOutput({ type: 'output' }), false, 'the pre-migration id is not an output either');
+
+  // Exactly the two kinds resolveRef can answer with. The @ menu offers candidates
+  // from this and the right-click item copies from it, so a type drifting in or out
+  // of the set has to move both at once or one of them starts lying.
+  assert.equal(isReferenceable({ type: 'prompt' }), true);
+  assert.equal(isReferenceable({ type: 'textOutput' }), true);
+  assert.equal(isReferenceable({ type: 'image' }), false, 'images are named positionally, not by @id');
+  assert.equal(isReferenceable({ type: 'video' }), false);
+  assert.equal(isReferenceable({ type: 'imageOutput' }), false, 'an image output has no text to substitute');
+  assert.equal(isReferenceable({ type: 'videoOutput' }), false);
+  assert.equal(isReferenceable({ type: 'text' }), false, 'the pre-migration id is not referenceable');
+  assert.equal(isReferenceable({}), false);
 }
 
 // An @token matching no node id is left exactly as typed. Prompts legitimately

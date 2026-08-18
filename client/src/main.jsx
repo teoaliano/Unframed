@@ -10,6 +10,10 @@ import { neutralTheme } from '@astryxdesign/theme-neutral/built';
 import App from './App.jsx';
 import './styles.css';
 
+// ?trace=1 arms the pointer/selection tracer. A dynamic import, so it is its own
+// chunk and never lands in a normal bundle. See debug/trace.js for what it answers.
+if (new URLSearchParams(location.search).has('trace')) import('./debug/trace.js');
+
 createRoot(document.getElementById('root')).render(
   <React.StrictMode>
     <Theme theme={neutralTheme}>

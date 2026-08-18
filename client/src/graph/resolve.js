@@ -17,6 +17,11 @@ export const isOutput = (n) => Boolean(n?.type?.endsWith('Output'));
 // predicate because getting it wrong is silent: resolveRef below would fall through to
 // substituting data.text, and generations would quietly build from the wrong text.
 export const isTextOutput = (n) => n?.type === 'textOutput';
+// The two kinds a TOKEN_RE match can ever resolve to, so "can this node be @-referenced"
+// is asked in one place: the @ menu that offers candidates while typing, and the
+// right-click item that copies a reference. Those two disagreeing is a menu offering an
+// id nothing will substitute, or an id you can copy but never insert.
+export const isReferenceable = (n) => n?.type === 'prompt' || isTextOutput(n);
 
 // Its own predicate for the same reason isTextOutput has one: only a video output
 // carries an input mode, and asking the wrong node type for one silently changes

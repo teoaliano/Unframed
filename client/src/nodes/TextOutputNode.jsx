@@ -117,7 +117,7 @@ export default function TextOutputNode({ id, data }) {
     <Card width="fit-content" padding={0} className="xnode-text">
       <Handle type="target" position={Position.Left} />
       <Handle type="source" position={Position.Right} />
-      <NodeHeader kind="textOutput" title="text" family="output" copyId={id} />
+      <NodeHeader kind="textOutput" title="text" family="output" right={`@${id}`} />
 
       <VStack gap={3} padding={3}>
         <ModelPicker

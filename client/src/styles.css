@@ -278,6 +278,16 @@ div:has(> .add-node-menu) {
   height: 100%;
   min-height: 0;
 }
+/* An <img> is natively draggable, and a picture fills most of an image node. Without
+   this, pressing on one and moving a pixel starts the browser's own image drag: the
+   node neither moves (the drag handle is the header) NOR gets selected, because the
+   native drag eats the mouseup and no click is ever dispatched. That reads as "the
+   canvas randomly ignores me" — a still click works, a click with any hand movement
+   does not. Applies to every img inside a node: reference thumbnails and the output
+   nodes' result strips alike. */
+.react-flow__node img {
+  -webkit-user-drag: none;
+}
 /* The closed box of the output nodes' native <select>s (see NativeSelect in
    nodes/output/controls.jsx for why they are native at all). Every value is the token
    Astryx's own inputStyles uses for an input wrapper, so a theme change carries here
@@ -539,9 +549,6 @@ div:has(> .add-node-menu) {
   text-overflow: ellipsis;
   white-space: nowrap;
   color: var(--color-text-secondary);
-}
-.xnode-head--copy {
-  cursor: pointer;
 }
 
 @media (prefers-reduced-motion: reduce) {
