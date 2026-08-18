@@ -1,6 +1,6 @@
 // Assert-based self-check. Run with: node client/src/graph/resolve.test.js
 import assert from 'node:assert/strict';
-import { buildRequest, bucketSources, sourceRoles, splitSections, findFreeSource, freeSourceText, freeShared, freeRunPrompts, parseImagePicks, runReferences, freeBatch, isOutput, isTextOutput, MAX_RUNS } from './resolve.js';
+import { buildRequest, bucketSources, sourceRoles, splitSections, findFreeSource, freeSourceText, freeShared, freeRunPrompts, parseImagePicks, expandSlots, runReferences, freeBatch, isOutput, isTextOutput, MAX_RUNS } from './resolve.js';
 import { migrateNodes } from './migrate.js';
 import { instantiateFragment, centerOffset } from '../library/insert.js';
 import { selectionFragment, presetFromSelection } from '../library/save.js';
@@ -1100,6 +1100,23 @@ const img = (i, y) => ({ id: `i${i}`, type: 'image', position: { x: 0, y }, data
   assert.equal(splitSections(many).blocks.length, MAX_RUNS, 'splitSections defaults to the cap');
   assert.equal(splitSections(many).truncated, 3);
   assert.equal(freeBatch(nodes, edges, 'out', 'p-list', many).runs.length, MAX_RUNS, 'and so does freeBatch');
+}
+
+// --- expandSlots ---
+
+// The repair prompt asks for [2] rather than "image 2" so the model cannot echo the
+// source's own numbering by reflex. The provider never sees a bracket.
+{
+  assert.equal(expandSlots('Apply the style of [1] to the composition of [2].'),
+    'Apply the style of image 1 to the composition of image 2.');
+  assert.equal(expandSlots('no slots here'), 'no slots here');
+  assert.equal(expandSlots(''), '');
+  assert.equal(expandSlots(undefined), '');
+  // Runs through parseImagePicks, which is where the substitution actually happens --
+  // so what freeBatch assembles is already the phrasing an image model expects.
+  const { text, picks } = parseImagePicks('images: 1, 3\nBlend [1] into [2].');
+  assert.deepEqual(picks, [1, 3]);
+  assert.equal(text, 'Blend image 1 into image 2.');
 }
 
 console.log('resolve.js: all checks passed');

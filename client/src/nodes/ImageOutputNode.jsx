@@ -415,25 +415,42 @@ export default function ImageOutputNode({ id, data }) {
           const imageCount = bucketSources(getNodes(), getEdges(), id)
             .references.filter((n) => n.type === 'image').length;
           const ask = [
-            'Rewrite the text below as image prompts, one per image, separated by lines containing only ---.',
+            'You rewrite a rough description into image prompts, one per image, separated by lines containing only ---.',
             '',
             'Each section must read as a complete prompt on its own: repeat the shared subject and style rather than referring back to another section.',
             'If the text asks for several versions or variations of one subject, write that many sections, each describing a different specific variation, and drop the count itself ("3 versions of a fox" becomes three sections, each describing one fox).',
             'Never emit the same section twice.',
             'If the text describes a single image with no variations implied, return it unchanged.',
-            'No preamble, no numbering, no commentary.',
+            'No preamble, no numbering, no commentary. Output the sections and nothing else.',
           ];
           if (imageCount > 0) {
             ask.push(
               '',
               `${imageCount} reference image${imageCount > 1 ? 's are' : ' is'} attached, numbered 1 to ${imageCount}.`,
-              'If the text says which of them a section should use, begin that section with a line reading "images: " followed by their numbers, for example "images: 1, 4". Omit that line when a section should receive all of them.',
-              'Inside a section, refer to the images you named by their position in that line: the first number you list is "image 1" for that section, the second is "image 2". Rewrite the text\'s own image numbers to match.',
+              'A section that needs only some of them opens with a line reading "images: " followed by their numbers, for example "images: 1, 4". Omit that line when the section should receive all of them.',
+              // The rule the old wording could not carry. Asked to "renumber", the model
+              // echoed the source's own "image 3" into a run holding two attachments,
+              // where that number named nothing. Brackets are a token it cannot copy by
+              // reflex, and the example restarts them per section, which is the whole point.
+              'Never write "image 3" inside a section. Refer to an image by its POSITION in that section\'s own images: line, in square brackets. [1] is the first number you listed, [2] the second. The brackets restart at [1] in every section.',
+              '',
+              'Example. Three images are attached and the description reads:',
+              '  "Use image 1 as a style reference. Apply it to image 2 and to image 3, as two separate images."',
+              'You output exactly:',
+              '  images: 1, 2',
+              '  Apply the visual style of [1] to the subject and composition of [2].',
+              '  ---',
+              '  images: 1, 3',
+              '  Apply the visual style of [1] to the subject and composition of [2].',
             );
           }
-          ask.push('', listText);
           const repaired = await runText({
-            prompt: ask.join('\n'),
+            // Rules in the system role, material in the user turn. They used to be one
+            // string with a blank line between them, which is how a description reading
+            // "apply that style to image 3" got obeyed as an instruction instead of
+            // rewritten as data -- see the system handling in server/index.js.
+            system: ask.join('\n'),
+            prompt: `Text to rewrite:\n\n${listText}`,
             model: isTextOutput(source) ? source.data.model || undefined : undefined,
             batchId,
           });

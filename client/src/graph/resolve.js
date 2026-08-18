@@ -265,8 +265,19 @@ export function parseImagePicks(block) {
   // A line is deleted only once it is confirmed to be a directive that named something
   // usable. The cost is asymmetric: a stray bookkeeping line left in a prompt is noise,
   // while a deleted description is a paid image of something nobody asked for.
-  if (!picks.length) return { text: String(block).trim(), picks: null };
-  return { text: lines.slice(at + 1).join('\n').trim(), picks };
+  if (!picks.length) return { text: expandSlots(String(block).trim()), picks: null };
+  return { text: expandSlots(lines.slice(at + 1).join('\n').trim()), picks };
+}
+
+// `[2]` -> "image 2". The repair prompt asks for bracket slots rather than plain
+// numbers for one reason: a model rewriting "apply image 1's style to image 3" will
+// happily copy "image 3" straight through, and that run only ever receives two
+// attachments, so the number names nothing. A different token shape cannot be copied
+// by reflex -- writing [2] is an act the model has to perform, not a word it can echo.
+// The provider never sees the brackets; this turns them back into the phrasing image
+// models are used to, right before the prompt is assembled.
+export function expandSlots(text) {
+  return String(text || '').replace(/\[(\d+)\]/g, 'image $1');
 }
 
 // One run's input_references. `picks` are directive numbers; null means every wired

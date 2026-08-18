@@ -72,6 +72,14 @@ otherwise silently change which node supplies the list, and a batch built from t
 text is only noticed after it is paid for. `splitSections` cuts the text on standalone
 `---` lines; fewer than two blocks triggers one repair call through `/api/text`.
 
+**The repair call is the only place this app sends a system message.** Its rules go in
+the system role and the text being rewritten goes in the user turn, prefixed
+`Text to rewrite:`. They used to be one string with a blank line between them, and a
+description reading "apply that style to image 3" was obeyed as an instruction instead of
+rewritten as data — the model echoed that number into a run holding two attachments, where
+it named nothing. `POST /api/text` takes an optional `system` string for this; every other
+caller omits it and gets the single user message it always had.
+
 The repair prompt is load-bearing and is not a "split this up" instruction. Asked
 merely to split, models copy the whole text N times: a real batch came back as three
 identical prompts each still reading "3 versions of …", so every image rendered three
@@ -89,10 +97,17 @@ on the keyword alone turned a described image into the shared context by itself 
 description gone, the generation paid for. A stray bookkeeping line left in a prompt is the
 cheaper mistake, so that is the one the rule makes. No line means every image, which is
 what every run got before directives existed, so a text model that ignores the syntax
-degrades to the old behaviour rather than to a broken one. Within a section, a picked
-image is referred to by its position in that line: the first listed is "image 1" for
-that run, because the provider only ever sees the attachments it is handed. The repair
-prompt is told the attached count and that renumbering rule; a hand-written text output
+degrades to the old behaviour rather than to a broken one. Within a section, a picked image is referred to by its
+position in that line — the first listed is "image 1" for that run, because the provider
+only ever sees the attachments it is handed — and the repair prompt asks for that position
+in **square brackets**, `[1]` and `[2]`, which `expandSlots` turns back into "image 1"
+before the prompt is assembled. The brackets exist because plain numbers failed: told to
+renumber, the model copied the source's own "image 3" straight through. A different token
+shape cannot be echoed by reflex, and the prompt carries one worked example whose brackets
+restart at `[1]` in each section, which is the part rules alone could not convey. Measured
+after the change, on a description the example did not cover: `images: 3, 1` with the prose
+correctly calling them `[1]` and `[2]`, listed in the order that made the sentence read
+naturally. The repair prompt is told the attached count and that renumbering rule; a hand-written text output
 emitting the same lines parses identically. Out-of-range numbers are dropped and noted,
 and a directive whose numbers all miss falls back to every image rather than a paid run
 with no reference at all. A section left with nothing but its directive is not a run:
