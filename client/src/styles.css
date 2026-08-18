@@ -204,7 +204,10 @@ div:has(> .add-node-menu) {
 }
 
 /* ---- node chrome ---- */
-/* .xnode-head is the drag handle (App.jsx sets dragHandle to this selector). */
+/* The whole card is the drag surface; controls opt out with `nodrag` (see
+   docs/superpowers/specs/2026-08-18-canvas-interaction-design.md). The header keeps
+   the grab cursor because it is the one strip that is nothing BUT a handle, so it
+   still reads as the obvious place to pick a node up. */
 .xnode-head {
   display: flex;
   align-items: center;

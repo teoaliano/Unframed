@@ -76,7 +76,7 @@ export default function ImageNode({ id, data }) {
               alt={data.fileName || 'image'}
               label={data.fileName || 'image'}
             />
-            <span className="xnode-media-remove">
+            <span className="xnode-media-remove nodrag">
               <Button
                 label={`Remove ${data.fileName || 'image'}`}
                 isIconOnly
@@ -88,6 +88,7 @@ export default function ImageNode({ id, data }) {
           </span>
         ) : (
           <FileInput
+            className="nodrag"
             label="Reference image"
             isLabelHidden
             accept="image/*"

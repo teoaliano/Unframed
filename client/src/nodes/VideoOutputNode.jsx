@@ -178,7 +178,6 @@ export default function VideoOutputNode({ id, data }) {
       addNodes({
         id: `gen-${Date.now()}-v`,
         type: 'video',
-        dragHandle: '.xnode-head',
         className: 'nowheel',
         position: freeSpot(getNode, getNodes, id),
         data: { fileName: url.split('/').pop() || 'generated.mp4', dataUrl },
@@ -402,7 +401,12 @@ export default function VideoOutputNode({ id, data }) {
       <Handle type="target" position={Position.Left} />
       <NodeHeader kind="videoOutput" title="video" family="output" />
 
-      <VStack gap={3} padding={3}>
+      {/* nodrag on the whole body, not per control: Astryx portals a Selector's
+          popup UP to this stack, so no wrapper around the control can ever contain
+          it, and an open model list would otherwise drag the node. Everything in
+          here is a control anyway -- these nodes drag by their header, footer and
+          card edge. See the 2026-08-18 canvas-interaction spec. */}
+      <VStack gap={3} padding={3} className="nodrag">
         <ModelPicker
           models={models}
           value={model}
@@ -535,7 +539,7 @@ export default function VideoOutputNode({ id, data }) {
           // `result`: a reopened node (page load or project switch) has a
           // persisted pointer but no local `result` of its own.
           <span className="xnode-result">
-            <video className="xnode-video" src={shown.url} controls preload="metadata" />
+            <video className="xnode-video nowheel" src={shown.url} controls preload="metadata" />
             <span className="xnode-result-add">
               <Button
                 label="Add this video to the canvas"
@@ -567,6 +571,7 @@ export default function VideoOutputNode({ id, data }) {
           shown ? (
             <span className="xnode-foot-end">
               <Button
+                className="nodrag"
                 label="Clear"
                 variant="ghost"
                 size="sm"

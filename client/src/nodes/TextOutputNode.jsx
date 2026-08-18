@@ -106,7 +106,6 @@ export default function TextOutputNode({ id, data }) {
     addNodes({
       id: `p-${Date.now()}`,
       type: 'prompt',
-      dragHandle: '.xnode-head',
       className: 'nowheel',
       position: spot,
       data: { text: data.result },
@@ -119,7 +118,12 @@ export default function TextOutputNode({ id, data }) {
       <Handle type="source" position={Position.Right} />
       <NodeHeader kind="textOutput" title="text" family="output" right={`@${id}`} />
 
-      <VStack gap={3} padding={3}>
+      {/* nodrag on the whole body, not per control: Astryx portals a Selector's
+          popup UP to this stack, so no wrapper around the control can ever contain
+          it, and an open model list would otherwise drag the node. Everything in
+          here is a control anyway -- these nodes drag by their header, footer and
+          card edge. See the 2026-08-18 canvas-interaction spec. */}
+      <VStack gap={3} padding={3} className="nodrag">
         <ModelPicker
           models={models}
           value={model}

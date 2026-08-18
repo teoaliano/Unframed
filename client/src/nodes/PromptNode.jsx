@@ -79,6 +79,7 @@ export default function PromptNode({ id, data }) {
         <NodeHeader kind="prompt" family="input" right={`@${id}`} />
         <div className="xnode-body" onKeyDown={onKeyDown} onClick={() => syncMenu(ref.current)}>
           <TextArea
+            className="nodrag"
             ref={ref}
             label="Prompt text"
             isLabelHidden
