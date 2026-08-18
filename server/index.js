@@ -471,10 +471,18 @@ app.post('/api/text', async (req, res) => {
       .json({ error: 'No OpenRouter key yet. Add one with the key icon in the top right (it becomes a settings gear once saved).' });
   }
 
-  const { prompt, input_references, model, project, batchId } = req.body || {};
+  const { prompt, system, input_references, model, project, batchId } = req.body || {};
   // Coerce so a non-string prompt (e.g. a number) can't throw on .trim() inside
   // this async handler, which would otherwise hang the request.
   const p = typeof prompt === 'string' ? prompt : '';
+  // Optional, and the only caller that sends it is the Free-mode repair call. It is
+  // what stops the text being rewritten from being read as instructions: rules in the
+  // system role arrive through a different channel than the material, so a prompt
+  // saying "apply this to image 3" is data, not an order. Sent as a plain string
+  // rather than the content array a user turn takes -- providers that have no system
+  // slot get it folded into the first user turn by OpenRouter, which is exactly the
+  // shape this call had before, so a model without one is no worse off than today.
+  const sys = typeof system === 'string' && system.trim() ? system : null;
   if (!p.trim()) {
     return res
       .status(400)
@@ -501,7 +509,7 @@ app.post('/api/text', async (req, res) => {
       },
       body: JSON.stringify({
         model: model || TEXT_MODEL,
-        messages: [{ role: 'user', content }],
+        messages: sys ? [{ role: 'system', content: sys }, { role: 'user', content }] : [{ role: 'user', content }],
         // Ask for cost in the usage block so the node can show what the call cost.
         usage: { include: true },
       }),

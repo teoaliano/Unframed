@@ -26,6 +26,13 @@ Keep that shape: the website's What's new page parses this file.
   removes the connections *between* selected nodes, leaving the ones that reach
   out to the rest of the graph alone. Each is greyed out when it would do
   nothing.
+- Free mode now works from a plain prompt node, not only a text output — wire prose in
+  and the text model splits it into one prompt per image.
+- A Free section can name which wired images it uses (`images: 2, 5` on its first line),
+  so a nine-run batch no longer sends every reference to every run. No line still means
+  every image.
+- New **View final prompt** checkbox under Free: see the assembled sections, edit them,
+  and check which images each run will get before anything is generated.
 
 ### Fixed
 
