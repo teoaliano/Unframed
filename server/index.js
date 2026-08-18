@@ -411,7 +411,8 @@ app.get('/api/models', async (req, res) => {
                 generate_audio: Boolean(m.generate_audio),
                 seed: Boolean(m.seed),
               },
-              // cents per second, by resolution where the model prices them apart.
+              // Per-model billing SKUs in three different units, keyed by name —
+              // read docs/models.md before interpreting any value.
               pricing: m.pricing_skus || null,
               // null, not false, when the lookup failed: "unknown" must not read as
               // "does not accept", or an outage turns into a wrong warning.
