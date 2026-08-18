@@ -112,13 +112,22 @@ export default function TextOutputNode({ id, data }) {
     });
   }
 
+  // See PromptNode's copy of this: a CSS resize writes an inline style the browser
+  // owns and React never sees. Two fields here, so which one resized decides the key.
+  function saveSize(e) {
+    const box = e.target.closest?.('.astryx-textarea');
+    if (!box?.style.width && !box?.style.height) return;
+    const key = box.classList.contains('xnode-text-result') ? 'resultSize' : 'size';
+    updateNodeData(id, { [key]: { width: box.style.width, height: box.style.height } });
+  }
+
   return (
     <Card width="fit-content" padding={0} className="xnode-text">
       <Handle type="target" position={Position.Left} />
       <Handle type="source" position={Position.Right} />
       <NodeHeader kind="textOutput" title="text" family="output" right={`@${id}`} />
 
-      <VStack gap={3} padding={3}>
+      <VStack gap={3} padding={3} onMouseUp={saveSize}>
         <ModelPicker
           models={models}
           value={model}
@@ -128,6 +137,7 @@ export default function TextOutputNode({ id, data }) {
 
         <TextArea
           className="xnode-text-field nodrag"
+          style={data.size}
           label="Instructions"
           rows={3}
           hasSpellCheck={false}
@@ -154,6 +164,7 @@ export default function TextOutputNode({ id, data }) {
           <VStack gap={1}>
             <TextArea
               className="xnode-text-field xnode-text-result nodrag"
+              style={data.resultSize}
               label="Result"
               rows={6}
               hasSpellCheck={false}

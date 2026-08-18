@@ -67,6 +67,15 @@ export default function PromptNode({ id, data }) {
 
   const list = candidates(query);
 
+  // A CSS resize has no event of its own, so the gesture's end is the mouseup -- which
+  // targets the wrapper the browser wrote the size onto. Without this the size is real
+  // but invisible to React, and dies with the next reload or project switch.
+  function saveSize(e) {
+    const box = e.target.closest?.('.astryx-textarea');
+    if (!box?.style.width && !box?.style.height) return;
+    updateNodeData(id, { size: { width: box.style.width, height: box.style.height } });
+  }
+
   // The menu is a sibling of the Card, not a child of it: the Card clips to its
   // rounded corners (overflow: clip), and the menu hangs below the Card's box, so
   // nested it was laid out correctly and then clipped away — present in the DOM,
@@ -77,9 +86,10 @@ export default function PromptNode({ id, data }) {
       <Card width="fit-content" padding={0} className="xnode-prompt">
         <Handle type="source" position={Position.Right} />
         <NodeHeader kind="prompt" family="input" right={`@${id}`} />
-        <div className="xnode-body" onKeyDown={onKeyDown} onClick={() => syncMenu(ref.current)}>
+        <div className="xnode-body" onKeyDown={onKeyDown} onClick={() => syncMenu(ref.current)} onMouseUp={saveSize}>
           <TextArea
             className="nodrag"
+            style={data.size}
             ref={ref}
             label="Prompt text"
             isLabelHidden
