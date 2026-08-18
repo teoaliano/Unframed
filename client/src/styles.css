@@ -741,25 +741,7 @@ div:has(> .add-node-menu) {
   font-size: var(--font-size-body-sm, 0.8125rem);
 }
 
-/* Capability tags on model picker rows. */
-.model-option {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  width: 100%;
-  min-width: 0;
-}
-.model-option-id {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.model-option-tags {
-  display: flex;
-  gap: 4px;
-  margin-inline-start: auto;
-  flex: none;
-}
+/* Capability tags on model dialog rows. */
 .model-tag {
   padding: 1px 6px;
   border: 1px solid var(--color-border-emphasized);
@@ -778,4 +760,12 @@ div:has(> .add-node-menu) {
 }
 .model-dialog-list .astryx-list > li + li {
   border-top: 1px solid var(--color-border);
+}
+
+/* The picker's label + button column: same label-to-control gap as Astryx's
+   own Field, matching the native selects beside it. */
+.model-picker {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-1);
 }
