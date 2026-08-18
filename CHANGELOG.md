@@ -23,6 +23,10 @@ Keep that shape: the website's What's new page parses this file.
 
 ### Fixed
 
+- Dragging a prompt's or a text node's field by its bottom-right corner makes the
+  text area itself bigger again. The bordered box grew but the writing area stayed
+  four lines tall, so a long prompt or result scrolled in a strip at the top of a
+  mostly-empty box. Broken by the same toolkit upgrade noted under Changed.
 - Pressing Enter in the New project dialog creates the project, and in Rename
   renames it. The button was the only way through; Enter did nothing. An empty or
   already-taken name still stops with its message rather than closing on the
