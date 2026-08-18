@@ -89,15 +89,22 @@ That choice has a cost, and it is the reason for the guard below: the exclusion 
 surface that eats clicks — invisible in review and invisible in the UI. An allowlist
 would have failed benignly (an area that just does not drag).
 
-**What gets `nodrag`.** Most of it lands in one shared file: `output/controls.jsx`
-covers `ModelPicker`, `NativeSelect` and `CostFoot`'s buttons for all three output nodes
-at once. Then `RunsControl`'s wrapper, the text areas, `FileInput` and the remove
-buttons, `<video controls>`, the paste-a-link row, and the primary buttons (Generate,
-Run, Clear, Add to canvas).
+**What gets `nodrag`, and where.** On input nodes it is per control: the text areas,
+`FileInput`, the remove buttons, `<video controls>` and the paste-a-link row. Their
+pictures carry no class and so become drag surfaces, which is the point.
 
-**What becomes draggable.** Header, footer, labels, padding, the gaps — and the
-thumbnails and result strips. That last one is the real gain, because a reference node
-is mostly picture.
+On the three output nodes it sits on an inner stack wrapping the controls as one block,
+NOT on each control. That is forced, not a shortcut: Astryx moves a `Selector`'s open
+popup out of its trigger and up to the nearest stack, so no wrapper around the control
+can contain it, and an open model list would otherwise drag the node out from under the
+cursor. Wrapping the controls in their own stack is what catches it — the popup lands in
+the same stack the class is on. The result strip sits OUTSIDE that inner stack, so a
+generated image drags the node exactly like a reference picture does; only its
+add-to-canvas button and the footer's Clear opt out.
+
+**What becomes draggable.** Header, footer, labels, margins — and the thumbnails and
+result strips. That last one is the real gain, because the picture-heavy nodes are the
+ones with almost no chrome to aim at.
 
 **Clearing the old handle.** `withDrag` sets `dragHandle: undefined` rather than dropping
 the key. Every node saved to `graph.json` carries `dragHandle: '.xnode-head'`, and

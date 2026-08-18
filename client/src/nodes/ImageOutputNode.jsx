@@ -361,7 +361,12 @@ export default function ImageOutputNode({ id, data }) {
           it, and an open model list would otherwise drag the node. Everything in
           here is a control anyway -- these nodes drag by their header, footer and
           card edge. See the 2026-08-18 canvas-interaction spec. */}
-      <VStack gap={3} padding={3} className="nodrag">
+      <VStack gap={3} padding={3}>
+        {/* The controls, fenced off from dragging as one block. Per control would not
+            be enough: Astryx portals a Selector's open popup up to the nearest stack,
+            so it lands HERE and is covered by the same class. The results below sit
+            outside it, so a thumbnail drags the node like any other picture. */}
+        <VStack gap={3} className="nodrag">
         <ModelPicker
           models={models}
           value={model}
@@ -429,6 +434,8 @@ export default function ImageOutputNode({ id, data }) {
           <StatusLine type={status === 'partial' ? 'warning' : 'error'}>{error}</StatusLine>
         )}
 
+        </VStack>
+
         {hasStrip && (
           <VStack gap={1}>
             {[...shown]
@@ -444,7 +451,7 @@ export default function ImageOutputNode({ id, data }) {
                     alt={`generated result ${r.runIndex + 1}`}
                     label={`result ${r.runIndex + 1}`}
                   />
-                  <span className="xnode-result-add">
+                  <span className="xnode-result-add nodrag">
                     <Button
                       label={`Add result ${r.runIndex + 1} to the canvas`}
                       tooltip="Add to canvas as an image node"
@@ -459,6 +466,7 @@ export default function ImageOutputNode({ id, data }) {
               ))}
             {shown.length > 1 && (
               <Button
+                className="nodrag"
                 label="Add all to canvas"
                 icon={<AddToCanvasIcon />}
                 variant="secondary"

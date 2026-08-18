@@ -24,12 +24,13 @@ Keep that shape: the website's What's new page parses this file.
 
 ### Fixed
 
-- **Nodes drag from anywhere, not just their title bar.** The bar is 33px on a
-  node up to 284px tall, so most of a node was dead to dragging and grabbing one
-  meant aiming. The whole card now moves it — including a reference node's
-  picture and an output's result strip, which are the largest part of those
-  nodes. Controls are excluded, so a text field still selects text and a slightly
-  shaky press on Generate still generates rather than nudging the node.
+- **Nodes drag from anywhere except their controls.** The title bar was the only
+  handle — 33px on a node up to 284px tall — so most of a node was dead to
+  dragging and grabbing one meant aiming. Now a reference node drags by its
+  picture, an output node by its generated result, and every node by its header,
+  footer and margins. Text fields, menus and buttons are left alone, so a field
+  still selects text and a slightly shaky press on Generate still generates
+  rather than nudging the node.
 - **Shift+clicking a node adds it to the selection.** It did nothing at all:
   Shift was both the "add to selection" key and the key that starts a selection
   box, and the selection box claimed the press before the node ever saw it. The

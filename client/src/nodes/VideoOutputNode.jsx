@@ -406,7 +406,11 @@ export default function VideoOutputNode({ id, data }) {
           it, and an open model list would otherwise drag the node. Everything in
           here is a control anyway -- these nodes drag by their header, footer and
           card edge. See the 2026-08-18 canvas-interaction spec. */}
-      <VStack gap={3} padding={3} className="nodrag">
+      <VStack gap={3} padding={3}>
+        {/* Controls fenced off as one block; the clip below sits outside it so the
+            node drags by its video the way an image node drags by its picture. An
+            open Selector popup portals up to the nearest stack, which is this one. */}
+        <VStack gap={3} className="nodrag">
         <ModelPicker
           models={models}
           value={model}
@@ -532,6 +536,8 @@ export default function VideoOutputNode({ id, data }) {
 
         {status === 'error' && <StatusLine type="error">{error}</StatusLine>}
 
+        </VStack>
+
         {shown?.url && (
           // Played from the file on disk, not from node data: a clip inlined into
           // the graph would be written back to graph.json on every edit. The add
@@ -539,8 +545,8 @@ export default function VideoOutputNode({ id, data }) {
           // `result`: a reopened node (page load or project switch) has a
           // persisted pointer but no local `result` of its own.
           <span className="xnode-result">
-            <video className="xnode-video nowheel" src={shown.url} controls preload="metadata" />
-            <span className="xnode-result-add">
+            <video className="xnode-video nodrag nowheel" src={shown.url} controls preload="metadata" />
+            <span className="xnode-result-add nodrag">
               <Button
                 label="Add this video to the canvas"
                 tooltip="Add to canvas as a video node, so it can be wired back in as a reference"
