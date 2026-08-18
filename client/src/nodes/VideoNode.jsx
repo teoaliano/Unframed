@@ -8,6 +8,7 @@ import { Icon } from '@astryxdesign/core/Icon';
 import { Text } from '@astryxdesign/core/Text';
 import NodeHeader from './NodeHeader.jsx';
 import StatusLine from './StatusLine.jsx';
+import VideoPlayer from './VideoPlayer.jsx';
 import { sourceRoles } from '../graph/resolve.js';
 
 // Base64 inflates ~4/3 and the whole graph rides in one JSON body (and lands in
@@ -85,14 +86,7 @@ export default function VideoNode({ id, data }) {
           // an X over its corner, rather than a labelled button in a footer. The
           // file name moves to the title, which is where Thumbnail keeps it too.
           <span className="xnode-media">
-            {/* nodrag/nowheel so the player's controls scrub instead of panning
-                the canvas. */}
-            <video
-              className="xnode-video nodrag nowheel"
-              src={data.dataUrl}
-              controls
-              muted
-            />
+            <VideoPlayer src={data.dataUrl} />
             <span className="xnode-media-remove nodrag">
               <Button
                 label={`Remove ${data.fileName || 'video'}`}

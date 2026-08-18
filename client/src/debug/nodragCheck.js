@@ -9,7 +9,10 @@
 //
 // Imported from main.jsx behind import.meta.env.DEV, so it is never in a real bundle.
 
-const INTERACTIVE = 'button, input, select, textarea, video, [contenteditable="true"]';
+// `video` is deliberately absent: a clip is a drag surface like a picture, and its
+// controls live outside it in a `nodrag` row (nodes/VideoPlayer.jsx). Listing it would
+// warn on every video node forever, which is how a guard stops being read.
+const INTERACTIVE = 'button, input, select, textarea, [contenteditable="true"]';
 
 // Astryx renders its own inner elements, so the class can sit on any ancestor up to the
 // node -- that is exactly how React Flow's own hasSelector resolves it, and checking it

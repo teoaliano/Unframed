@@ -444,6 +444,17 @@ div:has(> .add-node-menu) {
   border-radius: 8px;
   background: var(--color-background-body);
 }
+/* The clip's controls, moved out of the <video> so the frame itself can be dragged
+   (see nodes/VideoPlayer.jsx). The row carries `nodrag`; the slider needs to take the
+   leftover width so the time readout keeps its own. */
+.xnode-player {
+  width: 100%;
+  padding-block-start: var(--spacing-1);
+}
+.xnode-player-track {
+  flex: 1;
+  min-width: 0;
+}
 /* One remove control for both reference kinds: an X over the top-right corner,
    revealed on hover. Solid rather than translucent on purpose — a see-through chip
    disappears against a pale picture and survives against a dark one, so how
@@ -661,14 +672,6 @@ div:has(> .add-node-menu) {
 .react-flow__node.selected > .astryx-card {
   outline: 2px solid var(--color-accent);
   outline-offset: 2px;
-}
-
-/* Generated video, played from disk. Same width as the result thumbnails; height
-   follows the clip's own ratio rather than being forced square. */
-.xnode-video {
-  width: 100%;
-  border-radius: var(--radius-element);
-  display: block;
 }
 
 /* ---- Library dialog ---- */
