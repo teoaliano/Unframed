@@ -120,18 +120,25 @@ export default function ModelDialog({ models, kind, value, onPick, onClose }) {
         </VStack>
       ),
     },
-    {
-      key: 'caps',
-      header: 'Capabilities',
-      width: proportional(1),
-      renderCell: (m) => (
-        <HStack gap={1} align="center" wrap="wrap">
-          {capabilityTags(m, kind).map((t) => (
-            <span className="model-tag" key={t}>{t}</span>
-          ))}
-        </HStack>
-      ),
-    },
+    // Text models carry no params (see facets.js), so capabilityTags is always
+    // [] here — an always-empty column would just be noise, same reasoning as
+    // the Price column omitted below for image.
+    ...(kind === 'text'
+      ? []
+      : [
+          {
+            key: 'caps',
+            header: 'Capabilities',
+            width: proportional(1),
+            renderCell: (m) => (
+              <HStack gap={1} align="center" wrap="wrap">
+                {capabilityTags(m, kind).map((t) => (
+                  <span className="model-tag" key={t}>{t}</span>
+                ))}
+              </HStack>
+            ),
+          },
+        ]),
     // Image carries no pricing data at all (see facets.js) — an always-empty
     // column would just be noise, so it is omitted rather than rendered blank.
     ...(kind === 'image'
@@ -162,9 +169,10 @@ export default function ModelDialog({ models, kind, value, onPick, onClose }) {
   ];
 
   return (
-    // nodrag/nowheel: the dialog's DOM lives inside the node's subtree, so
-    // without them a drag inside the dialog moves the node under it and a
-    // scroll pans the canvas.
+    // nodrag/nowheel: the dialog's DOM lives inside the node's subtree. Belt
+    // and braces — dragHandle: '.xnode-head' and the node's own nowheel class
+    // already scope those gestures, so this is defense in depth, not the only
+    // thing stopping a drag or scroll from reaching the canvas.
     <Dialog isOpen onOpenChange={(open) => { if (!open) onClose(); }} width={680} className="nodrag nowheel">
       <DialogHeader title={TITLES[kind] || 'Models'} />
       <VStack gap={3} padding={4}>
