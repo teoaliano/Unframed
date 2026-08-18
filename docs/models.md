@@ -70,6 +70,14 @@ which is shown intact once the slug is split across two columns.
 in all three catalogues carries. The server passes it through as a number so the
 table can sort on it; the column formats it for display only.
 
+Provider renders as a coloured `Token` — Astryx's guidance reserves `Badge` for
+counts — with the hue **derived** from the provider key rather than mapped: there
+are 10 image, 9 video and 24 text providers and OpenRouter adds more, so a
+hand-written table would leave most uncoloured and go stale. Red and yellow are
+excluded (they read as error and warning beside the app's real ones) and so is
+gray; with 7 hues over 25 providers colours repeat, which is fine because the
+colour is a scanning aid and the label always carries the information.
+
 **The Provider label is looked up by slug prefix, not parsed per row.** A slug is
 `<provider>/<model>`, sometimes with a leading `~` (OpenRouter's floating
 `-latest` aliases), and the pretty name lives in the display name as

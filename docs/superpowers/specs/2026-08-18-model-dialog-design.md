@@ -30,7 +30,7 @@ of three columns:
 
 | Model | Provider | Released |
 | --- | --- | --- |
-| the model half of the slug | the provider's display name | the release date |
+| the model half of the slug | the provider, as a coloured `Token` | the release date |
 
 All three sort; newest first by default, which is the reason the date is there
 at all. Search matches the whole slug (`openai/gpt-image-2`) and the display
@@ -56,6 +56,14 @@ label from whichever sibling does have a colon resolves every provider in image
 and video, and all but two in text, which fall back to the bare prefix. Both
 derived fields are put on the row objects so Table's own comparators sort the
 values it renders rather than the raw slug.
+
+The `Token` hue is derived from the provider key by a small hash, not mapped:
+the provider list grows, so a table keyed to today's names would leave new ones
+uncoloured. Red and yellow are excluded because they read as error and warning
+next to the app's real ones, and gray sits at the same weight as the text around
+it — the same reasoning `LibraryDialog`'s own chip table records. Seven hues over
+25 providers means colours repeat; that is acceptable because the colour groups
+rows for scanning and never carries information the label does not.
 
 ## Design
 

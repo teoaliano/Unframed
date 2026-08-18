@@ -8,6 +8,7 @@ import { Dialog, DialogHeader } from '@astryxdesign/core/Dialog';
 import { TextInput } from '@astryxdesign/core/TextInput';
 import { Table, proportional, pixel, useTableSortable, useTableSortableState } from '@astryxdesign/core/Table';
 import { Link } from '@astryxdesign/core/Link';
+import { Token } from '@astryxdesign/core/Token';
 import { Text } from '@astryxdesign/core/Text';
 import { VStack } from '@astryxdesign/core/Stack';
 
@@ -27,6 +28,21 @@ const released = (m) => (m.created ? DATE.format(new Date(m.created * 1000)) : '
 // render "~anthropic" one row below "Anthropic".
 const providerKey = (m) => m.id.split('/')[0].replace(/^~/, '');
 const modelPart = (m) => (m.id.includes('/') ? m.id.slice(m.id.indexOf('/') + 1) : m.id);
+
+// A hue per provider, derived rather than mapped: there are 10 image, 9 video
+// and 24 text providers and OpenRouter adds more, so a hand-written table
+// would leave most of them uncoloured and go stale. Hashing the provider KEY
+// (not its label, which falls back to the key for a couple of providers) keeps
+// a provider's colour stable across renders, reloads and catalogues. Red and
+// yellow are left out because they read as error and warning next to the app's
+// real ones, and gray sits at the same weight as the surrounding text; the
+// colour is a scanning aid, never the information — the label always shows.
+const PROVIDER_HUES = ['blue', 'purple', 'teal', 'cyan', 'pink', 'orange', 'green'];
+const hueFor = (key) => {
+  let h = 0;
+  for (let i = 0; i < key.length; i += 1) h = (h * 31 + key.charCodeAt(i)) % 997;
+  return PROVIDER_HUES[h % PROVIDER_HUES.length];
+};
 
 export default function ModelDialog({ models, kind, value, onPick, onClose }) {
   const [query, setQuery] = useState('');
@@ -54,11 +70,10 @@ export default function ModelDialog({ models, kind, value, onPick, onClose }) {
       const key = providerKey(m);
       if (name.includes(':') && !labels[key]) labels[key] = name.split(':')[0].trim();
     }
-    return models.map((m) => ({
-      ...m,
-      provider: labels[providerKey(m)] || providerKey(m),
-      model: modelPart(m),
-    }));
+    return models.map((m) => {
+      const key = providerKey(m);
+      return { ...m, provider: labels[key] || key, providerHue: hueFor(key), model: modelPart(m) };
+    });
   }, [models]);
 
   // Matches the full slug and the display name: "openai/gpt-image-2" and
@@ -96,7 +111,13 @@ export default function ModelDialog({ models, kind, value, onPick, onClose }) {
         </Link>
       ),
     },
-    { key: 'provider', header: 'Provider', width: proportional(1), sortable: true },
+    {
+      key: 'provider',
+      header: 'Provider',
+      width: proportional(1),
+      sortable: true,
+      renderCell: (m) => <Token size="sm" color={m.providerHue} label={m.provider} />,
+    },
     { key: 'created', header: 'Released', width: pixel(130), align: 'end', sortable: true, renderCell: released },
   ];
 
