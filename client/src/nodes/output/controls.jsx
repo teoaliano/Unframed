@@ -66,10 +66,15 @@ export function NativeSelect({ label, options, value, onChange }) {
 export function ModelPicker({ models, value, onChange, kind }) {
   const [open, setOpen] = useState(false);
   return (
-    <label className="model-picker">
+    <span className="model-picker">
       <Text type="label" color="secondary">Model</Text>
       <Button
         label={value || 'Loading models…'}
+        // A <button> is not a labelable element, so the visible "Model" caption
+        // above it (and the wrapping element, which is a <span> rather than a
+        // <label> for exactly this reason) names nothing for it — the button
+        // must name itself.
+        aria-label={`Model: ${value || 'Loading models…'}`}
         size="sm"
         variant="secondary"
         width="100%"
@@ -85,7 +90,7 @@ export function ModelPicker({ models, value, onChange, kind }) {
           onClose={() => setOpen(false)}
         />
       )}
-    </label>
+    </span>
   );
 }
 
