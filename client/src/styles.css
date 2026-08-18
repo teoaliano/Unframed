@@ -181,14 +181,14 @@ div:has(> .add-node-menu) {
   stroke: var(--color-border-red);
   animation: none;
 }
-/* 12px dot with a transparent 24px target around it. WCAG 2.2 SC 2.5.8 (AA) asks
-   for 24x24 CSS px; the visible dot stays small because a big one crowds the node
-   edge, and the pseudo-element does the catching. Size is stated directly (not
-   derived from inset) because the 2px border and box-sizing: border-box shrink the
-   padding box to 8px, so inset would yield only 20px. */
+/* 16px dot with a transparent 32px target around it. WCAG 2.2 SC 2.5.8 (AA) asks
+   for 24x24 CSS px and that is a floor, not a target; the visible dot stays smaller
+   than its target because a big one crowds the node edge, and the pseudo-element does
+   the catching. Size is stated directly (not derived from inset) because the 2px
+   border and box-sizing: border-box shrink the padding box, so inset would undershoot. */
 .react-flow__handle {
-  width: 12px;
-  height: 12px;
+  width: 16px;
+  height: 16px;
   background: var(--color-accent);
   border: 2px solid var(--color-background-surface);
 }
@@ -197,8 +197,8 @@ div:has(> .add-node-menu) {
   position: absolute;
   top: 50%;
   left: 50%;
-  width: 24px;
-  height: 24px;
+  width: 32px;
+  height: 32px;
   transform: translate(-50%, -50%);
   border-radius: 50%;
 }

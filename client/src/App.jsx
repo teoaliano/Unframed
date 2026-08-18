@@ -1285,6 +1285,12 @@ function Canvas() {
           selectionMode="partial"
           onSelectionStart={onSelectionStart}
           onSelectionEnd={onSelectionEnd}
+          // How far from a handle a release still connects, in flow pixels. React
+          // Flow's default of 20 is about the size of the handle itself, which is why
+          // connecting felt like it wanted a bull's-eye. The radius also applies over
+          // empty canvas, so this is set where a deliberate miss still reads as a miss
+          // rather than as large as it could be.
+          connectionRadius={70}
         >
           <Background gap={26} size={1} color="var(--color-border)" />
         </ReactFlow>
