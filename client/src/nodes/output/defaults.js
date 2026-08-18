@@ -17,8 +17,9 @@ export const OUTPUT_DEFAULTS = {
 // Every data key a model's capabilities decide. Add to this when you add a control, or
 // the old model's value survives the switch and gets filtered out at send time instead --
 // which reads as "the app forgot my setting" rather than "that model cannot do this".
-// NOT here on purpose: runs/freeRuns (a batch size, not a model trait), shareLocalVideos
-// (consent about a wired clip), text/result/model itself.
+// NOT here on purpose: runs/freeRuns/previewPrompt (batch size and how a batch is
+// confirmed, not model traits), shareLocalVideos (consent about a wired clip),
+// text/result/model itself.
 export const MODEL_PARAM_KEYS = {
   imageOutput: ['quality', 'background', 'resolution', 'aspect_ratio', 'size'],
   videoOutput: ['size', 'resolution', 'aspect_ratio', 'duration', 'generateAudio', 'quality', 'inputMode'],

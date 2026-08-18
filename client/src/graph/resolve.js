@@ -86,6 +86,16 @@ export function bucketSources(nodes, edges, outputId) {
   };
 }
 
+// Media nodes -> the array the API takes. Shared by buildRequest and runReferences so a
+// new reference kind cannot be added to one and silently forgotten in the other.
+function toReferences(media) {
+  return media.map((n) =>
+    n.type === 'video'
+      ? { type: 'video_url', video_url: { url: n.data.dataUrl } }
+      : { type: 'image_url', image_url: { url: n.data.dataUrl } },
+  );
+}
+
 // Build the generation request for a given output node id.
 // Returns { prompt, input_references, frame_images }. frame_images is empty unless
 // the output is a video node asking for a frame mode.
@@ -95,11 +105,7 @@ export function buildRequest(nodes, edges, outputId) {
   );
   const { sources, references, frames } = bucketSources(nodes, edges, outputId);
 
-  const input_references = references.map((n) =>
-    n.type === 'video'
-      ? { type: 'video_url', video_url: { url: n.data.dataUrl } }
-      : { type: 'image_url', image_url: { url: n.data.dataUrl } },
-  );
+  const input_references = toReferences(references);
   const frame_images = frames.map(({ node, frame_type }) => ({
     type: 'image_url',
     image_url: { url: node.data.dataUrl },
@@ -152,41 +158,69 @@ export function sourceRoles(nodes, edges, nodeId) {
   return [...new Set(roles)];
 }
 
-// The text node feeding this output, if any — Free mode needs its result to know
-// what to generate. Lowest Y wins, matching buildRequest's ordering, so "the text
-// node" is a stable choice when several are wired in. Returns undefined when none
-// are wired in.
-export function findWiredTextNode(nodes, edges, outputId) {
+// The node supplying Free mode's list. A wired text output wins outright; only when
+// none is wired does a prompt node stand in. Precedence rather than lowest-Y across
+// both kinds: an existing Free graph with a context prompt sitting above its text
+// output would otherwise silently change which node supplies the list, and a batch
+// built from the wrong text is only noticed after it has been paid for. Lowest Y
+// breaks ties within a kind, matching buildRequest's ordering.
+export function findFreeSource(nodes, edges, outputId) {
   const byId = new Map(nodes.map((n) => [n.id, n]));
-  return edges
+  const wired = edges
     .filter((e) => e.target === outputId)
     .map((e) => byId.get(e.source))
-    .filter((n) => n && isTextOutput(n))
-    .sort((a, b) => (a.position?.y ?? 0) - (b.position?.y ?? 0))[0];
+    .filter(Boolean)
+    .sort((a, b) => (a.position?.y ?? 0) - (b.position?.y ?? 0));
+  return wired.find(isTextOutput) || wired.find((n) => n.type === 'prompt');
 }
 
-// One prompt per Free-mode block. The shared context is everything wired into the
-// output EXCEPT the text node supplying the list — asking buildRequest for the graph
-// minus that node (rather than subtracting its result from the joined prompt) is what
-// keeps a blank line inside the result, or an @id reference to the list itself, from
-// smuggling the whole list back in. Each block is appended after a blank line.
-export function freeRunPrompts(nodes, edges, outputId, textNodeId, blocks) {
-  // The list node stays in the graph with an empty result rather than being removed:
-  // @its-id must resolve to nothing, and an absent node would now leave the token
-  // itself in the prompt. Known-and-empty is the intent; unknown was a side effect.
-  const shared = buildRequest(
-    nodes.map((n) => (n.id === textNodeId ? { ...n, data: { ...n.data, result: '' } } : n)),
+// Free mode's list, as text. A text output's answer is taken verbatim -- never
+// re-scanned for @tokens, per resolveRef's rule. A prompt node holds what the user
+// typed, so its @ids are substituted first: an unexpanded @p-123 would otherwise
+// reach the splitter as a literal token and travel to the model that way.
+export function freeSourceText(node, nodes) {
+  if (!node) return '';
+  if (isTextOutput(node)) return node.data?.result || '';
+  const refs = new Map(
+    nodes.filter((n) => n.type === 'prompt' || isTextOutput(n)).map((n) => [n.id, n]),
+  );
+  // Seeded with the source's own id so @itself throws Circular instead of recursing,
+  // the same guard resolveRef applies.
+  return substitute(node.data?.text, refs, [node.id]);
+}
+
+// Everything wired into the output EXCEPT the list source -- the context every Free run
+// receives. Asking buildRequest for the graph with the source blanked (rather than
+// subtracting its text from the joined prompt) is what keeps a blank line inside the
+// list, or an @id reference to the source itself, from smuggling the whole list back in.
+// BOTH text and result are blanked, so this works whichever kind of node the source is:
+// known-and-empty is the intent, and an absent node would leave the @token itself in
+// the prompt.
+export function freeShared(nodes, edges, outputId, sourceId) {
+  return buildRequest(
+    nodes.map((n) => (n.id === sourceId ? { ...n, data: { ...n.data, text: '', result: '' } } : n)),
     edges,
     outputId,
   ).prompt;
+}
+
+// One prompt per Free-mode block: the shared context, then the block after a blank line.
+export function freeRunPrompts(nodes, edges, outputId, sourceId, blocks) {
+  const shared = freeShared(nodes, edges, outputId, sourceId);
   return blocks.map((b) => [shared, b].filter(Boolean).join('\n\n'));
 }
+
+// The run cap, for both a fixed count and Free mode. It lives here rather than beside
+// RunsControl's number input because truncation is computed in this module and the dialog
+// only quotes the number: a cap with two homes is a dialog stating a limit nothing
+// enforces. This module has no JSX, so the UI can import it and not the reverse.
+export const MAX_RUNS = 10;
 
 // Split a text node's result into one block per run. The separator is a line that
 // contains only "---", so a --- inside prose is left alone. `max` is the run cap;
 // `truncated` lets the caller say "list had 14 items, running the first 10" instead
 // of silently dropping the tail.
-export function splitSections(text, max = 10) {
+export function splitSections(text, max = MAX_RUNS) {
   const all = String(text || '')
     .split('\n')
     .reduce(
@@ -201,4 +235,95 @@ export function splitSections(text, max = 10) {
     .filter(Boolean);
 
   return { blocks: all.slice(0, max), truncated: Math.max(0, all.length - max) };
+}
+
+// A section may open with a line naming which wired images it uses -- `images: 2, 5`, the
+// badge numbers sourceRoles already puts on the canvas, so what the user sees is what the
+// directive means. Recognised on the FIRST non-empty line only: prose reading
+// "images: three of them" halfway down a section must not silently reduce what that run
+// sends. picks is null when there is no directive, meaning every image -- the behaviour
+// every run had before directives existed, and what a text model that ignores the syntax
+// falls back to. Only a pure list of positive integers counts: "Image: 3 women in a row"
+// is an ordinary caption, and the repair prompt teaches the model this very keyword.
+const PICKS_RE = /^images?\s*:\s*(\d+(?:[,\s]+\d+)*)\s*$/i;
+
+export function parseImagePicks(block) {
+  const lines = String(block || '').split('\n');
+  const at = lines.findIndex((l) => l.trim() !== '');
+  if (at === -1) return { text: '', picks: null };
+  const m = lines[at].trim().match(PICKS_RE);
+  const picks = m
+    ? [
+        ...new Set(
+          m[1]
+            .split(/[,\s]+/)
+            .map((t) => Number(t))
+            .filter((n) => Number.isInteger(n) && n > 0),
+        ),
+      ]
+    : [];
+  // A line is deleted only once it is confirmed to be a directive that named something
+  // usable. The cost is asymmetric: a stray bookkeeping line left in a prompt is noise,
+  // while a deleted description is a paid image of something nobody asked for.
+  if (!picks.length) return { text: expandSlots(String(block).trim()), picks: null };
+  return { text: expandSlots(lines.slice(at + 1).join('\n').trim()), picks };
+}
+
+// `[2]` -> "image 2". The repair prompt asks for bracket slots rather than plain
+// numbers for one reason: a model rewriting "apply image 1's style to image 3" will
+// happily copy "image 3" straight through, and that run only ever receives two
+// attachments, so the number names nothing. A different token shape cannot be copied
+// by reflex -- writing [2] is an act the model has to perform, not a word it can echo.
+// The provider never sees the brackets; this turns them back into the phrasing image
+// models are used to, right before the prompt is assembled.
+export function expandSlots(text) {
+  return String(text || '').replace(/\[(\d+)\]/g, 'image $1');
+}
+
+// One run's input_references. `picks` are directive numbers; null means every wired
+// reference, which is what a section without a directive gets. Picked images come first,
+// in the order the directive listed them -- that order is what "image 1" means inside that
+// section's prose, since the provider only ever sees the attachments it is handed. Videos
+// are appended untouched: an image output already warns that it sends and ignores them,
+// and a directive numbers images only.
+export function runReferences(nodes, edges, outputId, picks) {
+  const { references } = bucketSources(nodes, edges, outputId);
+  if (!picks) return { input_references: toReferences(references), used: null, dropped: [] };
+  const images = references.filter((n) => n.type === 'image');
+  const videos = references.filter((n) => n.type !== 'image');
+  const used = picks.filter((n) => images[n - 1]);
+  const dropped = picks.filter((n) => !images[n - 1]);
+  // Every number named an image that is not wired. Falling back to all of them keeps a
+  // garbled directive costing one text call to fix rather than a paid run with no
+  // reference at all; `dropped` is what the caller reports.
+  if (!used.length) return { input_references: toReferences(references), used: null, dropped };
+  return {
+    input_references: toReferences([...used.map((n) => images[n - 1]), ...videos]),
+    used,
+    dropped,
+  };
+}
+
+// The whole of Free mode after the list text is in hand: split, read each section's
+// directive, assemble prompts, pick each run's references. ONE seam, because the preview
+// dialog derives its rows from this same call -- a preview that assembled its own view of
+// the batch would eventually disagree with what gets sent, which is the one thing a
+// preview must never do.
+export function freeBatch(nodes, edges, outputId, sourceId, listText, max = MAX_RUNS) {
+  const { blocks, truncated } = splitSections(listText, max);
+  const all = blocks.map(parseImagePicks);
+  // A section that was nothing but a directive has no text left, and running it would send
+  // the shared context alone -- a paid generation of nobody's prompt. Dropped, and counted
+  // like `truncated` so the caller can say how many.
+  const parsed = all.filter((p) => p.text);
+  const prompts = freeRunPrompts(nodes, edges, outputId, sourceId, parsed.map((p) => p.text));
+  return {
+    runs: prompts.map((prompt, i) => ({
+      prompt,
+      ...runReferences(nodes, edges, outputId, parsed[i].picks),
+    })),
+    truncated,
+    empty: all.length - parsed.length,
+    shared: freeShared(nodes, edges, outputId, sourceId),
+  };
 }

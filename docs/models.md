@@ -60,11 +60,25 @@ than "nothing known".
 ## Multi-run
 
 N runs are N ordinary `/api/generate` calls fired with `Promise.allSettled`, so a
-partial batch keeps its successes (`2 of 3 succeeded`). Cap is 10 everywhere.
+partial batch keeps its successes (`2 of 3 succeeded`). Cap is 10 everywhere — `MAX_RUNS`
+in `resolve.js`, which is where truncation is computed, so the UI quotes it rather than
+keeping a second copy.
 
-Free mode takes the run count from a wired text output: `splitSections` in
-`resolve.js` cuts its result on standalone `---` lines. Fewer than two blocks
-triggers one repair call through `/api/text` before falling back to a single run.
+Free mode takes the run count from the flow. Its list comes from the lowest-Y wired
+**text output**, or — only when none is wired — the lowest-Y wired **prompt** node, whose
+`@id` references are expanded before splitting. Precedence rather than lowest-Y across
+both kinds: an existing Free graph with a context prompt above its text output would
+otherwise silently change which node supplies the list, and a batch built from the wrong
+text is only noticed after it is paid for. `splitSections` cuts the text on standalone
+`---` lines; fewer than two blocks triggers one repair call through `/api/text`.
+
+**The repair call is the only place this app sends a system message.** Its rules go in
+the system role and the text being rewritten goes in the user turn, prefixed
+`Text to rewrite:`. They used to be one string with a blank line between them, and a
+description reading "apply that style to image 3" was obeyed as an instruction instead of
+rewritten as data — the model echoed that number into a run holding two attachments, where
+it named nothing. `POST /api/text` takes an optional `system` string for this; every other
+caller omits it and gets the single user message it always had.
 
 The repair prompt is load-bearing and is not a "split this up" instruction. Asked
 merely to split, models copy the whole text N times: a real batch came back as three
@@ -72,5 +86,45 @@ identical prompts each still reading "3 versions of …", so every image rendere
 subjects and the run cost triple for one result. Two clauses earn their place — each
 section must read as a complete prompt on its own, and a text that is not a list
 comes back untouched rather than chopped into fragments that each bill as a
-generation. It lives in `ImageOutputNode.jsx`; `freeRunPrompts` has tests in
+generation.
+
+**A section can name the images it uses.** `images: 2, 5` on a section's first line — the
+badge numbers the canvas already shows — sends only those, and the line is stripped before
+the prompt travels. Only a bare list of positive integers counts, and the line is deleted
+only once it has yielded at least one usable number: `Image: 3 women in a row` is an
+ordinary caption, and the repair prompt teaches the model this very keyword, so stripping
+on the keyword alone turned a described image into the shared context by itself — the
+description gone, the generation paid for. A stray bookkeeping line left in a prompt is the
+cheaper mistake, so that is the one the rule makes. No line means every image, which is
+what every run got before directives existed, so a text model that ignores the syntax
+degrades to the old behaviour rather than to a broken one. Within a section, a picked image is referred to by its
+position in that line — the first listed is "image 1" for that run, because the provider
+only ever sees the attachments it is handed — and the repair prompt asks for that position
+in **square brackets**, `[1]` and `[2]`, which `expandSlots` turns back into "image 1"
+before the prompt is assembled. The brackets exist because plain numbers failed: told to
+renumber, the model copied the source's own "image 3" straight through. A different token
+shape cannot be echoed by reflex, and the prompt carries one worked example whose brackets
+restart at `[1]` in each section, which is the part rules alone could not convey. Measured
+after the change, on a description the example did not cover: `images: 3, 1` with the prose
+correctly calling them `[1]` and `[2]`, listed in the order that made the sentence read
+naturally. The repair prompt is told the attached count and that renumbering rule; a hand-written text output
+emitting the same lines parses identically. Out-of-range numbers are dropped and noted,
+and a directive whose numbers all miss falls back to every image rather than a paid run
+with no reference at all. A section left with nothing but its directive is not a run:
+`freeBatch` drops it and reports how many, since running it would bill for the shared
+context alone, and a list of nothing but directives raises the same "no sections" error
+as a list of nothing but separators. The note is rendered on the node itself —
+truncation, skipped sections, dropped images, a re-split count — not just logged.
+
+One caveat the code cannot state: a *separate* prompt node that stays in the shared context
+and refers to images by number can contradict a run's renumbering, since the shared text is
+prepended verbatim. Let the list source own the image references.
+
+`freeBatch` in `resolve.js` is the single seam from list text to the runs that get sent —
+split, directive parse, prompt assembly, per-run references. The **View final prompt**
+checkbox (Free only, `data.previewPrompt`) stages a built batch and opens a dialog that
+derives its rows from that same call, so what is previewed cannot drift from what is sent;
+confirming reuses the staged `batchId` and makes no second text call. It exists to make
+prompt-tuning free and is expected to be removed once the repair prompt settles.
+`freeRunPrompts`, `parseImagePicks`, `runReferences` and `freeBatch` have tests in
 `resolve.test.js`, so extend them if insertion changes prompt assembly.
