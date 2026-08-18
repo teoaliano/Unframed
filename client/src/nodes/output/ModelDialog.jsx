@@ -140,7 +140,17 @@ export default function ModelDialog({ models, kind, value, onPick, onClose }) {
           {
             key: 'price',
             header: 'Price',
-            width: pixel(140),
+            // Measured against the real catalogue (not guessed): with
+            // textOverflow="truncate" the unit is the part that gets
+            // ellipsised away first, and the unit is the one thing a price
+            // cell must never hide (a hidden "/s" vs "per M" is the same
+            // class of bug as the wrong-prices defect this dialog already
+            // had once). 140px clipped video's own longest string
+            // ("$6.40-10.70 per M", ~121px of text) and text's is wider
+            // still ("$150.00 / $600.00 per M", ~160px, from openai/o1-pro
+            // — this column is shared by both kinds). 200px clears that
+            // with the cell's 8+16px padding and ~16px to spare.
+            width: pixel(200),
             align: 'end',
             sortable: true,
             renderCell: (m) => {

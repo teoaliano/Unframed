@@ -750,15 +750,49 @@ div:has(> .add-node-menu) {
   font-size: var(--font-size-body-xs, 0.75rem);
   white-space: nowrap;
 }
-/* Dialog's own inner wrapper is overflow: hidden, so without a scroll
-   boundary here a long catalogue (the 245-model text list) clips silently
-   instead of scrolling once search + pills + rows + pagination exceed the
-   Dialog's 75vh max-height. Table brings its own horizontal scroll wrapper
-   and dividers="rows" supplies the row dividers, so this rule is only the
-   vertical scroll boundary — nothing to divide here ourselves. */
-.model-dialog-list {
+/* Table brings its own scroll wrapper (.astryx-table-scroll-wrapper) with
+   overflow: auto on BOTH axes for its horizontal scroll — that makes IT,
+   not this div, the nearest scrolling ancestor as far as a sticky <th>
+   below is concerned. Putting the vertical scroll boundary on this div
+   instead (as a first pass did) left the wrapper as an inert, never-
+   actually-scrolling middle box between the boundary and the header: the
+   header stuck to the wrapper's own top, which never moved, so it just
+   scrolled away with the rows once this div scrolled. The boundary
+   belongs on the wrapper itself, which is also what still stops the
+   245-model text list from clipping silently against the Dialog's own
+   overflow: hidden wrapper (Dialog's max-height is 75vh) — the reason a
+   boundary exists here at all. */
+.model-dialog-list .astryx-table-scroll-wrapper {
   max-height: 420px;
   overflow-y: auto;
+}
+/* Table's own containerBleed (Table.tsx) reads --container-padding-* off
+   the ancestor tree and applies negative margins sized to cancel it, so a
+   table that's the sole child of a padded Card/Section bleeds edge-to-edge
+   into that padding rather than leaving a visible gap. This dialog's own
+   VStack (padding={4}) sets those vars, but .model-dialog-list sits between
+   it and the table with no padding of its own to cancel — so the bleed
+   pushed the whole table 16px past THIS div's edges on every side, which is
+   what put half of <thead> above the scroll boundary even at scrollTop: 0
+   (measured live: thead's top was 16px above .model-dialog-list's own top).
+   Zeroing these here makes the bleed exactly 0, the same as a table with no
+   ambient padding to bleed into. */
+.model-dialog-list {
+  --container-padding-inline-start: 0px;
+  --container-padding-inline-end: 0px;
+  --container-padding-block-start: 0px;
+  --container-padding-block-end: 0px;
+}
+/* Pinned header: a 23-to-245-row table with sortable columns wants "Model /
+   Capabilities / Price" — and the sort arrows living in them — visible the
+   whole time you scroll, not just before you start. Sticking each <th>
+   individually (rather than <thead>) is the cross-browser-reliable form of
+   this; the background stops rows sliding underneath from showing through. */
+.model-dialog-list th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--color-background-surface);
 }
 
 /* The picker's label + button column: same label-to-control gap as Astryx's
