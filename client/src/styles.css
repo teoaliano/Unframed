@@ -777,6 +777,12 @@ div:has(> .add-node-menu) {
   --container-padding-block-start: 0px;
   --container-padding-block-end: 0px;
 }
+/* A <button> centres its text by UA default, and Link renders as one when it
+   has an onClick and no href. Invisible for a short slug, obvious the moment a
+   long one wraps to a second line — which it then centres. */
+.model-dialog-list .astryx-link {
+  text-align: start;
+}
 /* Pinned header: a 23-to-245-row table with sortable columns wants Model and
    Released — and the sort arrows living in them — visible the whole time you
    scroll, not just before you start. Sticking each <th>
