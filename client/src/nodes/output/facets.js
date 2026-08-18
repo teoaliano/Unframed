@@ -102,17 +102,48 @@ export function applyFacets(models, kind, query, selected) {
 // that precision just prints as $0.00 rather than growing extra digits for it.
 const fmt = (x) => x.toFixed(2);
 
-// Price only where the list response carries it for free: video (per second,
-// possibly split by resolution) and text (per token, shown per million).
+// The video catalogue's `pricing` is not one unit — it is whatever OpenRouter
+// happens to bill that model in, keyed by a name that is the ONLY reliable
+// signal of which unit a value is (measured shapes: pricing-units.md). Treating
+// every numeric value as dollars-per-second, as this used to, made a
+// dollars-per-TOKEN model ($0.000007) round to "$0.00/s" and a CENTS-per-second
+// model ($17) read as "$17.00/s" instead of $0.17/s. So the key name decides the
+// family, in this order, and everything else (reference_images,
+// minimum_cents_per_generation, cents_per_image_input, …) is a real charge that
+// is deliberately dropped rather than folded into a range it does not belong in.
+function videoRateFamily(model) {
+  const perSecond = [];
+  const perToken = [];
+  for (const [key, raw] of Object.entries(model.pricing || {})) {
+    const n = Number(raw);
+    if (!Number.isFinite(n) || n <= 0) continue;
+    if (key.includes('cents_per') && key.includes('second')) perSecond.push(n / 100);
+    else if (key.includes('duration_seconds')) perSecond.push(n);
+    else if (key.startsWith('video_tokens')) perToken.push(n);
+  }
+  // Per-second is the directly comparable, headline rate; a token family found
+  // alongside it is ignored rather than mixed into the same range.
+  if (perSecond.length) return { unit: 'second', values: perSecond };
+  if (perToken.length) return { unit: 'token', values: perToken };
+  return null;
+}
+
+// Price only where the list response carries it for free: video (per second
+// or per token, see videoRateFamily) and text (per token, shown per million).
 // Image returns null by decision, not omission — its pricing lives one
 // request-per-model deeper (see the spec's "Decided against").
 export function priceLabel(model, kind) {
   if (kind === 'video') {
-    const nums = Object.values(model.pricing || {}).map(Number).filter((n) => Number.isFinite(n) && n > 0);
-    if (!nums.length) return null;
-    const lo = fmt(Math.min(...nums));
-    const hi = fmt(Math.max(...nums));
-    return lo === hi ? `$${lo}/s` : `$${lo}–${hi}/s`;
+    const family = videoRateFamily(model);
+    if (!family) return null;
+    if (family.unit === 'second') {
+      const lo = fmt(Math.min(...family.values));
+      const hi = fmt(Math.max(...family.values));
+      return lo === hi ? `$${lo}/s` : `$${lo}–${hi}/s`;
+    }
+    const lo = fmt(Math.min(...family.values) * 1e6);
+    const hi = fmt(Math.max(...family.values) * 1e6);
+    return lo === hi ? `$${lo} per M` : `$${lo}–${hi} per M`;
   }
   if (kind === 'text') {
     const p = Number(model.pricing?.prompt);
@@ -120,6 +151,26 @@ export function priceLabel(model, kind) {
     if (!Number.isFinite(p) || !Number.isFinite(c)) return null;
     if (p === 0 && c === 0) return 'free';
     return `$${fmt(p * 1e6)} / $${fmt(c * 1e6)} per M`;
+  }
+  return null;
+}
+
+// The numeric rate priceLabel is built from, for sorting — display and sort must
+// never disagree about which family they read. Always the family's minimum (the
+// cheapest figure shown), and always the RAW unscaled value even for the token
+// family, whose label multiplies by 1e6 only for display: sort order is the same
+// either way, and this is the number that would need to change if the label's
+// scaling ever did.
+export function priceRate(model, kind) {
+  if (kind === 'video') {
+    const family = videoRateFamily(model);
+    return family ? Math.min(...family.values) : null;
+  }
+  if (kind === 'text') {
+    const p = Number(model.pricing?.prompt);
+    const c = Number(model.pricing?.completion);
+    if (!Number.isFinite(p) || !Number.isFinite(c)) return null;
+    return Math.min(p, c);
   }
   return null;
 }

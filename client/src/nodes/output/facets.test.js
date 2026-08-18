@@ -1,6 +1,6 @@
 // node client/src/nodes/output/facets.test.js  (also runs as part of `npm test`)
 import assert from 'node:assert/strict';
-import { buildFacets, applyFacets, priceLabel } from './facets.js';
+import { buildFacets, applyFacets, priceLabel, priceRate } from './facets.js';
 
 // Miniature catalogues in the exact shapes /api/models returns.
 // Image: params is a typed map ({type:'enum',values}); video: plain arrays.
@@ -105,6 +105,61 @@ assert.equal(priceLabel(IMAGE[0], 'image'), null); // image never shows price
 assert.equal(
   priceLabel({ id: 't', pricing: { prompt: '0.000000001', completion: '0.0000025' } }, 'text'),
   '$0.00 / $2.50 per M',
+);
+
+// --- priceLabel/priceRate: video unit detection by key name (defect 1) ---
+// Real key shapes from .superpowers/sdd/2026-08-18-model-dialog/pricing-units.md —
+// the unit lives in the key name, not in the value's position or magnitude.
+
+// Regression guard: the models that were already right must stay byte-identical.
+assert.equal(
+  priceLabel({ id: 'happyhorse', pricing: { duration_seconds_720p: '0.0988', duration_seconds_1080p: '0.1694' } }, 'video'),
+  '$0.10–0.17/s',
+);
+
+// Cents-per-second must divide by 100, not print the raw cents value as dollars
+// (flux-3-video used to render "$17.00/s" for a true $0.17/s).
+assert.equal(
+  priceLabel({ id: 'flux-3-video', pricing: { cents_per_second_output: '17' } }, 'video'),
+  '$0.17/s',
+);
+assert.equal(priceRate({ id: 'flux-3-video', pricing: { cents_per_second_output: '17' } }, 'video'), 0.17);
+
+// Prefixed cents-per-second-output keys (grok-imagine-video's shape).
+assert.equal(
+  priceLabel(
+    { id: 'grok', pricing: { cents_per_video_output_second_480p: '5', cents_per_video_output_second_720p: '7' } },
+    'video',
+  ),
+  '$0.05–0.07/s',
+);
+assert.equal(
+  priceRate(
+    { id: 'grok', pricing: { cents_per_video_output_second_480p: '5', cents_per_video_output_second_720p: '7' } },
+    'video',
+  ),
+  0.05,
+);
+
+// Dollars-per-TOKEN must render per million, not fold into a per-second range
+// (seedance-2.0, the default video model, used to render "$0.00/s").
+assert.equal(
+  priceLabel({ id: 'seedance-2.0', pricing: { video_tokens: '0.000007' } }, 'video'),
+  '$7.00 per M',
+);
+assert.equal(priceRate({ id: 'seedance-2.0', pricing: { video_tokens: '0.000007' } }, 'video'), 0.000007);
+
+// A per-reference-image fee must not widen the per-second range it sits beside.
+assert.equal(
+  priceLabel({ id: 'hailuo-3', pricing: { duration_seconds: '0.13', reference_images: '0.04' } }, 'video'),
+  '$0.13/s',
+);
+
+// A per-generation minimum is not a per-second rate and must be ignored outright,
+// not treated as 56 cents/s.
+assert.equal(
+  priceLabel({ id: 'aleph-2', pricing: { cents_per_second_output: '28', minimum_cents_per_generation: '56' } }, 'video'),
+  '$0.28/s',
 );
 
 console.log('facets.test.js ok');
