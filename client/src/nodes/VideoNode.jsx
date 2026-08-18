@@ -90,7 +90,6 @@ export default function VideoNode({ id, data }) {
             <video
               className="xnode-video nodrag nowheel"
               src={data.dataUrl}
-              title={data.fileName || 'video'}
               controls
               muted
             />
