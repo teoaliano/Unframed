@@ -60,7 +60,9 @@ than "nothing known".
 ## Multi-run
 
 N runs are N ordinary `/api/generate` calls fired with `Promise.allSettled`, so a
-partial batch keeps its successes (`2 of 3 succeeded`). Cap is 10 everywhere.
+partial batch keeps its successes (`2 of 3 succeeded`). Cap is 10 everywhere — `MAX_RUNS`
+in `resolve.js`, which is where truncation is computed, so the UI quotes it rather than
+keeping a second copy.
 
 Free mode takes the run count from the flow. Its list comes from the lowest-Y wired
 **text output**, or — only when none is wired — the lowest-Y wired **prompt** node, whose
@@ -80,16 +82,24 @@ generation.
 
 **A section can name the images it uses.** `images: 2, 5` on a section's first line — the
 badge numbers the canvas already shows — sends only those, and the line is stripped before
-the prompt travels. No line means every image, which is what every run got before
+the prompt travels. Only a bare list of positive integers counts, and the line is deleted
+only once it has yielded at least one usable number: `Image: 3 women in a row` is an
+ordinary caption, and the repair prompt teaches the model this very keyword, so stripping
+on the keyword alone turned a described image into the shared context by itself — the
+description gone, the generation paid for. A stray bookkeeping line left in a prompt is the
+cheaper mistake, so that is the one the rule makes. No line means every image, which is what every run got before
 directives existed, so a text model that ignores the syntax degrades to the old behaviour
 rather than to a broken one. Within a section, a picked image is referred to by its
 position in that line: the first listed is "image 1" for that run, because the provider
 only ever sees the attachments it is handed. The repair prompt is told the attached count
 and that renumbering rule; a hand-written text output emitting the same lines parses
 identically. Out-of-range numbers are dropped and noted, and a directive whose numbers all
-miss falls back to every image rather than a paid run with no reference at all. The note is
-rendered on the node itself — truncation, dropped images, a re-split count — not just
-logged.
+miss falls back to every image rather than a paid run with no reference at all. A section
+left with nothing but its directive is not a run: `freeBatch` drops it and reports how many,
+since running it would bill for the shared context alone, and a list of nothing but
+directives raises the same "no sections" error as a list of nothing but separators. The note
+is rendered on the node itself — truncation, skipped sections, dropped images, a re-split
+count — not just logged.
 
 One caveat the code cannot state: a *separate* prompt node that stays in the shared context
 and refers to images by number can contradict a run's renumbering, since the shared text is
