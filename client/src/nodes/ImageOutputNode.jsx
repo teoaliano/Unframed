@@ -13,7 +13,7 @@ import StatusLine from './StatusLine.jsx';
 import { useModels, useModelParams, freeSpot } from './output/core.js';
 import { resetModelParams } from './output/defaults.js';
 import { ModelPicker, ParamControls, CostFoot } from './output/controls.jsx';
-import { buildRequest, splitSections, findWiredTextNode, freeRunPrompts } from '../graph/resolve.js';
+import { buildRequest, splitSections, findFreeSource, freeSourceText, freeRunPrompts, isTextOutput } from '../graph/resolve.js';
 import { generate, runText, getProject, SESSION_ID } from '../api.js';
 // Arrow leaving a frame: "send this out onto the canvas". From lucide-react, like
 // every other icon here, so it shares the set's grid and stroke.
@@ -137,11 +137,11 @@ export default function ImageOutputNode({ id, data }) {
     updateNodeData(id, { results: undefined });
   }
 
-  // Render-time twin of findWiredTextNode(): getNodes()/getEdges() are stable
-  // function references, so React has no way to know an edge changed and won't
-  // re-render this warning on its own. useNodes()/useEdges() subscribe to canvas
-  // state, so the warning appears and disappears live as wiring changes.
-  const liveWiredTextNode = findWiredTextNode(liveNodes, liveEdges, id);
+  // Render-time twin of findFreeSource(): getNodes()/getEdges() are stable function
+  // references, so React has no way to know an edge changed and won't re-render this
+  // warning on its own. useNodes()/useEdges() subscribe to canvas state, so the hint
+  // appears and disappears live as wiring changes.
+  const liveFreeSource = findFreeSource(liveNodes, liveEdges, id);
 
   const wiredVideos = liveEdges
     .filter((e) => e.target === id)
@@ -194,15 +194,21 @@ export default function ImageOutputNode({ id, data }) {
       let prompts;
       const notes = [];
       if (freeRuns) {
-        const textNode = findWiredTextNode(getNodes(), getEdges(), id);
-        if (!textNode) {
-          throw new Error('Free needs a text node wired in. It lists what to generate.');
+        const source = findFreeSource(getNodes(), getEdges(), id);
+        if (!source) {
+          throw new Error('Free needs a prompt or text node wired in. It lists what to generate.');
         }
-        if (!textNode.data?.result?.trim()) {
-          throw new Error('The text node has no result yet. Run it first.');
+        // A prompt node's @ids are expanded here, before splitting -- see freeSourceText.
+        let listText = freeSourceText(source, getNodes()).trim();
+        if (!listText) {
+          throw new Error(
+            isTextOutput(source)
+              ? 'The text node has no result yet. Run it first.'
+              : 'The prompt node is empty. It lists what to generate.',
+          );
         }
 
-        let { blocks, truncated } = splitSections(textNode.data.result);
+        let { blocks, truncated } = splitSections(listText);
         if (blocks.length < 2) {
           // The model ignored the format. One repair call, using its own model.
           //
@@ -224,9 +230,9 @@ export default function ImageOutputNode({ id, data }) {
               'If the text describes a single image with no variations implied, return it unchanged.',
               'No preamble, no numbering, no commentary.',
               '',
-              textNode.data.result,
+              listText,
             ].join('\n'),
-            model: textNode.data.model || undefined,
+            model: isTextOutput(source) ? source.data.model || undefined : undefined,
             batchId,
           });
           setRepairCost(Number(repaired.cost) || 0);
@@ -244,13 +250,13 @@ export default function ImageOutputNode({ id, data }) {
           // Nothing survived splitting or repair. Fall back to the whole result as
           // one block so the "single generation" note above stays true instead of
           // reporting success after zero runs.
-          const fallback = textNode.data.result.trim();
+          const fallback = listText;
           if (!fallback) throw new Error('The text node has no result yet. Run it first.');
           blocks = [fallback];
         }
         if (truncated) notes.push(`list had ${blocks.length + truncated} items, running the first ${blocks.length}`);
 
-        prompts = freeRunPrompts(getNodes(), getEdges(), id, textNode.id, blocks);
+        prompts = freeRunPrompts(getNodes(), getEdges(), id, source.id, blocks);
       } else {
         prompts = Array.from({ length: runs }, () => prompt);
       }
@@ -400,7 +406,7 @@ export default function ImageOutputNode({ id, data }) {
           // nothing wired in has no list to work from either; the hint below
           // already says what to wire, so an error saying the same thing would
           // just be the hint again in red.
-          isDisabled={isRunning || (freeRuns && !liveWiredTextNode)}
+          isDisabled={isRunning || (freeRuns && !liveFreeSource)}
           onClick={onGenerate}
         />
 
@@ -411,11 +417,11 @@ export default function ImageOutputNode({ id, data }) {
           </StatusLine>
         )}
 
-        {freeRuns && !liveWiredTextNode && (
+        {freeRuns && !liveFreeSource && (
           <StatusLine type="info">
-            {'Wire a text node with a "---" separated list'}
+            Wire a prompt or text node in. Each item turns into one generation
             <br />
-            Each item turns into one generation.
+            — a &quot;---&quot; separated list, or prose a text model can split.
           </StatusLine>
         )}
 
