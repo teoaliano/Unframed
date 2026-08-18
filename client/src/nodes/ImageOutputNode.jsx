@@ -21,20 +21,21 @@ import { generate, runText, getProject, SESSION_ID } from '../api.js';
 // every other icon here, so it shares the set's grid and stroke.
 import { ExternalLink as AddToCanvasIcon } from 'lucide-react';
 
-// A list made of nothing but separators (or an edit that reduces one to that) splits to
-// zero sections. Shared between onGenerate's direct-fire throw and onConfirmPreview's
-// fallback error -- one string, one rule, checked in both places freeBatch can come back
-// empty.
+// One string for both places freeBatch can come back with no runs at all: onGenerate's
+// direct-fire throw and onConfirmPreview's fallback error.
 const NO_SECTIONS_ERROR = 'That list has no sections to run.';
 
-// "list had N items, running the first M" -- the truncation half of a batch's shape
-// notes, for the node's OWN footer line. Deliberately worded differently from the
-// dialog's own truncation warning (which reads "N more sections beyond the cap"): that
-// one lives beside a visible run count and this one doesn't. Shared only between the two
-// places this exact wording is used -- the direct-fire path and onConfirmPreview -- so
-// they can't drift from each other.
+// The truncation half of a batch's shape notes, for the node's OWN footer line. Worded
+// differently from the dialog's "N more sections beyond the cap" on purpose: that one sits
+// beside a visible run count and this one does not.
 function truncationNote(runCount, truncated) {
   return truncated ? `list had ${runCount + truncated} items, running the first ${runCount}` : null;
+}
+
+// The other half: sections that were nothing but an `images:` line, dropped by freeBatch
+// before they could bill for a generation of the shared context alone.
+function emptyNote(empty) {
+  return empty ? `skipped ${empty} section${empty === 1 ? '' : 's'} with no prompt text` : null;
 }
 
 // Makes an image. Its sibling makes a video, and the two used to be one node with a
@@ -261,16 +262,18 @@ export default function ImageOutputNode({ id, data }) {
   // @reference typed mid-edit must grey the button out, not blank the dialog.
   function derivePreview(text) {
     const source = findFreeSource(getNodes(), getEdges(), id);
-    if (!source) return { runs: [], truncated: 0, shared: '', error: 'The list source is no longer wired in.' };
+    if (!source) {
+      return { runs: [], truncated: 0, empty: 0, shared: '', error: 'The list source is no longer wired in.' };
+    }
     try {
       return { ...freeBatch(getNodes(), getEdges(), id, source.id, text), error: null };
     } catch (err) {
-      return { runs: [], truncated: 0, shared: '', error: err.message };
+      return { runs: [], truncated: 0, empty: 0, shared: '', error: err.message };
     }
   }
 
   async function onConfirmPreview(text) {
-    const { runs: built, truncated, error: bad } = derivePreview(text);
+    const { runs: built, truncated, empty, error: bad } = derivePreview(text);
     if (bad || !built.length) {
       setError(bad || NO_SECTIONS_ERROR);
       setStatus('error');
@@ -286,7 +289,9 @@ export default function ImageOutputNode({ id, data }) {
     // was never actually sent. `staged.notes` itself is safe to reuse as-is -- it only
     // ever holds the repair call's own notes, which already happened and which editing
     // this text cannot undo.
-    const shapeNotes = [truncationNote(built.length, truncated), droppedImagesNote(built)].filter(Boolean);
+    const shapeNotes = [truncationNote(built.length, truncated), emptyNote(empty), droppedImagesNote(built)].filter(
+      Boolean,
+    );
     const allNotes = [...staged.notes, ...shapeNotes];
     setNote(allNotes.length ? allNotes.join(' · ') : null);
     setStaged(null);
@@ -298,7 +303,18 @@ export default function ImageOutputNode({ id, data }) {
       running: { startedAt: Date.now(), session: SESSION_ID },
     });
     setDone(0);
-    await fire(built, batchId);
+    // fire() handles its own failures; this is the backstop, because a throw escaping here
+    // would leave `running` set with nothing in flight and Generate disabled until remount.
+    const startedIn = getProject();
+    try {
+      await fire(built, batchId);
+    } catch (err) {
+      if (getProject() === startedIn) {
+        setError(err.message);
+        setStatus('error');
+      }
+      updateNodeData(id, { running: undefined });
+    }
   }
 
   async function onGenerate() {
@@ -356,16 +372,13 @@ export default function ImageOutputNode({ id, data }) {
 
       let batch;
       let listText = '';
-      // The repair CALL's own notes -- history that already happened, and that editing
-      // the textarea in a preview cannot undo. This is the only kind of note that ever
-      // travels into `staged`; see `shapeNotes` below for the other kind.
+      // The repair CALL's own notes: history that already happened, so this is the only
+      // kind of note that travels into `staged`.
       const stepNotes = [];
-      // The batch's SHAPE -- truncation, dropped-image directives -- which an edit in
-      // the preview dialog very much CAN change. Left empty for the non-Free path, and
-      // computed once, right below, for the direct-fire Free path where nothing can
-      // edit `built` between here and `fire`. onConfirmPreview recomputes its own
-      // version of this from whatever text was actually confirmed, rather than reusing
-      // this one -- see there for why.
+      // The batch's SHAPE -- truncation, skipped sections, dropped-image directives --
+      // which an edit in the preview dialog CAN change, so onConfirmPreview recomputes its
+      // own from the text actually confirmed instead of reusing this. Filled here only for
+      // the direct-fire path, where nothing can edit `built` before `fire`.
       let shapeNotes = [];
       if (freeRuns) {
         const source = findFreeSource(getNodes(), getEdges(), id);
@@ -428,13 +441,17 @@ export default function ImageOutputNode({ id, data }) {
             listText = repaired.text;
             stepNotes.push(`re-split into ${again.blocks.length} sections`);
           } else {
+            // The repaired text is dropped here -- including any `images:` directive that
+            // paid-for call just produced -- because using it would import the model's own
+            // phrasing into what is now a single-image prompt.
             stepNotes.push('no sections found, running as a single generation');
           }
         }
 
         const built = freeBatch(getNodes(), getEdges(), id, source.id, listText);
-        // A list made of nothing but separators splits to zero sections. Saying so beats
-        // the old fall-back-to-one-run, which spent money on the shared context alone.
+        // Nothing but separators, or nothing but `images:` lines, leaves zero runs. Saying
+        // so beats the old fall-back-to-one-run, which spent money on the shared context
+        // alone.
         if (!built.runs.length) throw new Error(NO_SECTIONS_ERROR);
         batch = built.runs;
         if (previewing) {
@@ -451,9 +468,11 @@ export default function ImageOutputNode({ id, data }) {
         }
         // No preview pending, so nothing can edit `built` before it reaches `fire` --
         // safe to compute its shape notes once, same as `stepNotes` above.
-        shapeNotes = [truncationNote(built.runs.length, built.truncated), droppedImagesNote(built.runs)].filter(
-          Boolean,
-        );
+        shapeNotes = [
+          truncationNote(built.runs.length, built.truncated),
+          emptyNote(built.empty),
+          droppedImagesNote(built.runs),
+        ].filter(Boolean);
       } else {
         batch = Array.from({ length: runs }, () => ({ prompt, input_references }));
       }

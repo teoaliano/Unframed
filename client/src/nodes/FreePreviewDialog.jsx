@@ -5,7 +5,7 @@ import { Text } from '@astryxdesign/core/Text';
 import { TextArea } from '@astryxdesign/core/TextArea';
 import { VStack, HStack } from '@astryxdesign/core/Stack';
 import StatusLine from './StatusLine.jsx';
-import { MAX_RUNS } from './RunsControl.jsx';
+import { MAX_RUNS } from '../graph/resolve.js';
 
 /**
  * What Free mode is about to send, before a single image is paid for.
@@ -35,7 +35,7 @@ export function droppedImagesNote(runs) {
 
 export default function FreePreviewDialog({ staged, derive, onCancel, onConfirm }) {
   const [text, setText] = useState(staged.listText);
-  const { runs, truncated, shared, error } = derive(text);
+  const { runs, truncated, empty, shared, error } = derive(text);
   const missingNote = error ? null : droppedImagesNote(runs);
 
   return (
@@ -89,6 +89,11 @@ export default function FreePreviewDialog({ staged, derive, onCancel, onConfirm 
               {truncated > 0 && (
                 <StatusLine type="warning">
                   {truncated} more section{truncated === 1 ? '' : 's'} beyond the {MAX_RUNS}-run cap will not run.
+                </StatusLine>
+              )}
+              {empty > 0 && (
+                <StatusLine type="warning">
+                  {empty} section{empty === 1 ? '' : 's'} with no prompt text will not run.
                 </StatusLine>
               )}
               {/* Live, not staged: an edit that fixes a directive (or introduces a new

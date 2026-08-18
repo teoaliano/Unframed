@@ -1,6 +1,6 @@
 import { useState } from 'react';
-
-export const MAX_RUNS = 10;
+// The cap lives in the pure module, which is where truncation is computed; see it there.
+import { MAX_RUNS } from '../graph/resolve.js';
 
 // Typed input is clamped rather than rejected: 15 becomes 10, 0 or empty becomes 1.
 export const clampRuns = (v) => {
@@ -59,7 +59,7 @@ export default function RunsControl({ runs, freeRuns, onRunsChange, onModeChange
         className="xruns-free"
         data-active={freeRuns}
         aria-pressed={freeRuns}
-        title="Free takes the number of runs from the flow. Wire in a Text node whose result is a list of items separated by lines containing only ---, and each item becomes one image."
+        title="Free takes the number of runs from the flow. Wire in a prompt or text node listing what to generate — sections split by lines containing only ---, or prose a text model can split — and each item becomes one image."
         onClick={() => {
           setDraft(null);
           onModeChange(true);
