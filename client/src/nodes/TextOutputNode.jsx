@@ -123,7 +123,7 @@ export default function TextOutputNode({ id, data }) {
           it, and an open model list would otherwise drag the node. Everything in
           here is a control anyway -- these nodes drag by their header, footer and
           card edge. See the 2026-08-18 canvas-interaction spec. */}
-      <VStack gap={3} padding={3} className="nodrag">
+      <VStack gap={3} padding={3}>
         <ModelPicker
           models={models}
           value={model}
@@ -132,7 +132,7 @@ export default function TextOutputNode({ id, data }) {
         />
 
         <TextArea
-          className="xnode-text-field"
+          className="xnode-text-field nodrag"
           label="Instructions"
           rows={3}
           hasSpellCheck={false}
@@ -142,6 +142,7 @@ export default function TextOutputNode({ id, data }) {
         />
 
         <Button
+          className="nodrag"
           label={isRunning ? 'Running…' : 'Run'}
           variant="primary"
           isLoading={isRunning}
@@ -157,7 +158,7 @@ export default function TextOutputNode({ id, data }) {
         {data.result && (
           <VStack gap={1}>
             <TextArea
-              className="xnode-text-field xnode-text-result"
+              className="xnode-text-field xnode-text-result nodrag"
               label="Result"
               rows={6}
               hasSpellCheck={false}
@@ -165,6 +166,7 @@ export default function TextOutputNode({ id, data }) {
               onChange={(v) => updateNodeData(id, { result: v })}
             />
             <Button
+              className="nodrag"
               label="Add as prompt node"
               variant="secondary"
               size="sm"

@@ -89,22 +89,24 @@ That choice has a cost, and it is the reason for the guard below: the exclusion 
 surface that eats clicks — invisible in review and invisible in the UI. An allowlist
 would have failed benignly (an area that just does not drag).
 
-**What gets `nodrag`, and where.** On input nodes it is per control: the text areas,
-`FileInput`, the remove buttons, `<video controls>` and the paste-a-link row. Their
-pictures carry no class and so become drag surfaces, which is the point.
+**What gets `nodrag`, and where.** The class goes on individual controls — the text
+areas, the selects, the buttons, `RunsControl`'s pill, `FileInput`, the remove and
+add-to-canvas buttons, `<video controls>`, the paste-a-link row. Deliberately NOT on any
+container that also holds labels or spacing: React Flow's `hasSelector` walks up from
+the target, so a class on a wrapper takes the wrapper's whole area out of the drag
+surface. Putting it on a node's body stack was tried first and is wrong for exactly that
+reason — it fenced off the labels, the gaps and the padding along with the controls, and
+left the output nodes barely better than the title-bar handle this set out to remove.
 
-On the three output nodes it sits on an inner stack wrapping the controls as one block,
-NOT on each control. That is forced, not a shortcut: Astryx moves a `Selector`'s open
-popup out of its trigger and up to the nearest stack, so no wrapper around the control
-can contain it, and an open model list would otherwise drag the node out from under the
-cursor. Wrapping the controls in their own stack is what catches it — the popup lands in
-the same stack the class is on. The result strip sits OUTSIDE that inner stack, so a
-generated image drags the node exactly like a reference picture does; only its
-add-to-canvas button and the footer's Clear opt out.
+The one container that legitimately carries it is a stack wrapping the model `Selector`
+alone (`ModelPicker` in `output/controls.jsx`). Astryx moves an open popup out of its
+trigger and up to the NEAREST stack, so a stack of its own is the tightest container
+that can catch it; without one the open model list is a drag surface sitting over the
+node. It wraps the control and nothing else, which is the rule for any such wrapper.
 
-**What becomes draggable.** Header, footer, labels, margins — and the thumbnails and
-result strips. That last one is the real gain, because the picture-heavy nodes are the
-ones with almost no chrome to aim at.
+**What becomes draggable.** Everything that is not a control: header, footer, every
+label, the gaps between controls, the body's padding, and the thumbnails and result
+strips. A node is grabbable anywhere your pointer is not already on something.
 
 **Clearing the old handle.** `withDrag` sets `dragHandle: undefined` rather than dropping
 the key. Every node saved to `graph.json` carries `dragHandle: '.xnode-head'`, and

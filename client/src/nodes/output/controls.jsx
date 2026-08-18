@@ -4,7 +4,7 @@
 
 import { Text } from '@astryxdesign/core/Text';
 import { Selector } from '@astryxdesign/core/Selector';
-import { HStack } from '@astryxdesign/core/Stack';
+import { HStack, VStack } from '@astryxdesign/core/Stack';
 import { capabilityTags, ratioLabel } from './core.js';
 
 // A raw <select>, which breaks client/.claude/CLAUDE.md's "no <div>, components do all
@@ -61,6 +61,12 @@ export function NativeSelect({ label, options, value, onChange }) {
 // nothing. `kind` is the catalogue name, which decides which tags are worth showing.
 export function ModelPicker({ models, value, onChange, kind }) {
   return (
+    // Wrapped in a stack of its own PURELY to carry `nodrag`: Astryx moves an open
+    // popup out of its trigger and up to the nearest stack, so this is the tightest
+    // container that can catch it. Tight on purpose -- the class stops anything under
+    // it from dragging the node, so it must cover the control and nothing else, or the
+    // labels and gaps around it stop being grab surfaces too.
+    <VStack className="nodrag">
     <Selector
       label="Model"
       size="sm"
@@ -85,6 +91,7 @@ export function ModelPicker({ models, value, onChange, kind }) {
       }}
       onChange={onChange}
     />
+    </VStack>
   );
 }
 

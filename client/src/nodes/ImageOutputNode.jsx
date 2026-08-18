@@ -366,7 +366,7 @@ export default function ImageOutputNode({ id, data }) {
             be enough: Astryx portals a Selector's open popup up to the nearest stack,
             so it lands HERE and is covered by the same class. The results below sit
             outside it, so a thumbnail drags the node like any other picture. */}
-        <VStack gap={3} className="nodrag">
+        <VStack gap={3}>
         <ModelPicker
           models={models}
           value={model}
@@ -389,6 +389,7 @@ export default function ImageOutputNode({ id, data }) {
         </VStack>
 
         <Button
+          className="nodrag"
           label={
             isRunning
               ? // total/done are local-only (never persisted — see data.running's
