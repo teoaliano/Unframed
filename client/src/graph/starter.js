@@ -12,10 +12,11 @@
 import { OUTPUT_DEFAULTS } from '../nodes/output/defaults.js';
 
 // nowheel = "the wheel belongs to whatever is under the cursor, not the canvas".
-// Prompts need it for long text. Output nodes need it too: the model Selector renders
-// its scrollable list *inside* the node, so without nowheel React Flow swallows the
-// wheel and pans instead of scrolling the list. Reference nodes hold nothing
-// scrollable, so they keep scroll-to-pan.
+// Prompt and text fields need it: their textarea (styles.css, `.astryx-textarea`)
+// is `overflow: auto` and user-resizable, so without nowheel React Flow swallows
+// the wheel and pans instead of scrolling long text. Output node bodies can
+// likewise overflow (a long result, a resized field), so they keep it too.
+// Reference nodes hold nothing scrollable, so they keep scroll-to-pan.
 export const DRAG = '.xnode-head';
 // Both keys are derived, so they go after the spread — a className saved into an
 // older graph must not stick around and shadow the current rule.
