@@ -69,6 +69,12 @@ export function ModelPicker({ models, value, onChange, kind }) {
     <VStack gap={1}>
       <Text type="label" color="secondary">Model</Text>
       <Button
+        // nodrag on the control, not on the VStack around it: the class takes
+        // everything beneath it out of the drag surface, so on the wrapper it would
+        // cost the "Model" caption its grab area too. Every other label in a node
+        // drags. (The list itself is a modal dialog now, rendered outside the node,
+        // so unlike the old in-node popup it needs nothing here.)
+        className="nodrag"
         label={value || 'Loading models…'}
         // A <button> is not a labelable element, so the visible "Model" caption
         // above it (and the wrapping VStack, rather than a <label> for exactly

@@ -178,7 +178,6 @@ export default function VideoOutputNode({ id, data }) {
       addNodes({
         id: `gen-${Date.now()}-v`,
         type: 'video',
-        dragHandle: '.xnode-head',
         className: 'nowheel',
         position: freeSpot(getNode, getNodes, id),
         data: { fileName: url.split('/').pop() || 'generated.mp4', dataUrl },
@@ -441,6 +440,7 @@ export default function VideoOutputNode({ id, data }) {
             // select's box is taller than the checkbox.
             <div className="xnode-inline-check">
               <CheckboxInput
+                className="nodrag"
                 label="Audio"
                 value={Boolean(data.generateAudio)}
                 onChange={(on) => updateNodeData(id, { generateAudio: on })}
@@ -450,6 +450,7 @@ export default function VideoOutputNode({ id, data }) {
         </ParamControls>
 
         <Button
+          className="nodrag"
           label={hasJob ? `Rendering… (${jobMinutes} min)` : status === 'running' ? 'Starting…' : 'Generate'}
           variant="primary"
           isLoading={status === 'running'}
@@ -462,6 +463,7 @@ export default function VideoOutputNode({ id, data }) {
 
         {hasJob && (
           <Button
+            className="nodrag"
             label="Forget this job"
             variant="ghost"
             size="sm"
@@ -495,6 +497,7 @@ export default function VideoOutputNode({ id, data }) {
             label="What sharing does"
             row={
               <CheckboxInput
+                className="nodrag"
                 label="Share via temporary link while generating"
                 value={shareLocalVideos}
                 onChange={(on) => updateNodeData(id, { shareLocalVideos: on })}
@@ -528,6 +531,7 @@ export default function VideoOutputNode({ id, data }) {
 
         {status === 'error' && <StatusLine type="error">{error}</StatusLine>}
 
+
         {shown?.url && (
           // Played from the file on disk, not from node data: a clip inlined into
           // the graph would be written back to graph.json on every edit. The add
@@ -535,9 +539,10 @@ export default function VideoOutputNode({ id, data }) {
           // `result`: a reopened node (page load or project switch) has a
           // persisted pointer but no local `result` of its own.
           <span className="xnode-result">
-            <video className="xnode-video" src={shown.url} controls preload="metadata" />
-            <span className="xnode-result-add">
+            <video className="xnode-video nodrag nowheel" src={shown.url} controls preload="metadata" />
+            <span className="xnode-result-add nodrag">
               <Button
+                className="nodrag"
                 label="Add this video to the canvas"
                 tooltip="Add to canvas as a video node, so it can be wired back in as a reference"
                 isIconOnly
@@ -567,6 +572,7 @@ export default function VideoOutputNode({ id, data }) {
           shown ? (
             <span className="xnode-foot-end">
               <Button
+                className="nodrag"
                 label="Clear"
                 variant="ghost"
                 size="sm"

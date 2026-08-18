@@ -94,7 +94,7 @@ export default function VideoNode({ id, data }) {
               controls
               muted
             />
-            <span className="xnode-media-remove">
+            <span className="xnode-media-remove nodrag">
               <Button
                 label={`Remove ${data.fileName || 'video'}`}
                 isIconOnly
@@ -107,13 +107,14 @@ export default function VideoNode({ id, data }) {
         ) : (
           <>
             <FileInput
+              className="nodrag"
               label="Reference video"
               isLabelHidden
               accept="video/*"
               value={null}
               onChange={onFile}
             />
-            <div className="xnode-linkrow">
+            <div className="xnode-linkrow nodrag">
               <TextInput
                 label="Or paste a video link"
                 isLabelHidden

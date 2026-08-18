@@ -3,7 +3,7 @@ import { Handle, Position, useReactFlow } from '@xyflow/react';
 import { Card } from '@astryxdesign/core/Card';
 import { TextArea } from '@astryxdesign/core/TextArea';
 import NodeHeader from './NodeHeader.jsx';
-import { isTextOutput } from '../graph/resolve.js';
+import { isReferenceable } from '../graph/resolve.js';
 
 // Match a partial "@query" ending exactly at the caret, so the menu only shows
 // while you're actively typing a reference.
@@ -22,9 +22,7 @@ export default function PromptNode({ id, data }) {
     if (q == null) return [];
     const lower = q.toLowerCase();
     return getNodes()
-      .filter(
-        (n) => (n.type === 'prompt' || isTextOutput(n)) && n.id !== id && n.id.toLowerCase().startsWith(lower),
-      )
+      .filter((n) => isReferenceable(n) && n.id !== id && n.id.toLowerCase().startsWith(lower))
       .map((n) => ({
         id: n.id,
         preview: (n.data.result || n.data.text || '').replace(/\s+/g, ' ').slice(0, 24),
@@ -78,9 +76,10 @@ export default function PromptNode({ id, data }) {
     <>
       <Card width="fit-content" padding={0} className="xnode-prompt">
         <Handle type="source" position={Position.Right} />
-        <NodeHeader kind="prompt" family="input" copyId={id} />
+        <NodeHeader kind="prompt" family="input" right={`@${id}`} />
         <div className="xnode-body" onKeyDown={onKeyDown} onClick={() => syncMenu(ref.current)}>
           <TextArea
+            className="nodrag"
             ref={ref}
             label="Prompt text"
             isLabelHidden

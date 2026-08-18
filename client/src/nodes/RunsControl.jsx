@@ -29,7 +29,7 @@ export default function RunsControl({ runs, freeRuns, onRunsChange, onModeChange
   const [draft, setDraft] = useState(null);
 
   return (
-    <span className="xruns" role="group" aria-label="Runs">
+    <span className="xruns nodrag" role="group" aria-label="Runs">
       <input
         className="xruns-num"
         type="number"

@@ -20,7 +20,8 @@ Keep that shape: the website's What's new page parses this file.
   reach an output in one drag instead of three. It works in both directions —
   drag from an output's input handle and every selected output gets wired.
 - Shift+click adds a node to the selection, alongside the Cmd/Ctrl+click that
-  already did. Shift+dragging a selection box now adds to the selection too.
+  already did. A selection box still replaces the selection rather than adding
+  to it, whichever key is held.
 - **Connect nodes** and **Disconnect nodes** in the right-click menu, under Edit.
   Connect wires every source in the selection to every output in it; Disconnect
   removes the connections *between* selected nodes, leaving the ones that reach
@@ -36,6 +37,24 @@ Keep that shape: the website's What's new page parses this file.
 
 ### Fixed
 
+- **Nodes drag from anywhere except their controls.** The title bar was the only
+  handle — 33px on a node up to 284px tall — so most of a node was dead to
+  dragging and grabbing one meant aiming. Now a reference node drags by its
+  picture, an output node by its generated result, and every node by its header,
+  footer and margins. Text fields, menus and buttons are left alone, so a field
+  still selects text and a slightly shaky press on Generate still generates
+  rather than nudging the node.
+- **Shift+clicking a node adds it to the selection.** It did nothing at all:
+  Shift was both the "add to selection" key and the key that starts a selection
+  box, and the selection box claimed the press before the node ever saw it. The
+  giveaway was an input node's header flashing "copied!" on a shift+click that
+  left the node unselected — the click was arriving, the selection was being
+  cancelled. Building a group one node at a time now works.
+- **Clicking a node on its picture selects it again.** Pressing on a reference
+  image or a generated result and moving even a pixel started the browser's own
+  image drag, which swallowed the click: the node was neither selected nor moved,
+  so shift+clicking to add one to a selection appeared to fail at random. A
+  perfectly still click had always worked, which is why it looked intermittent.
 - Dragging a prompt's or a text node's field by its bottom-right corner makes the
   text area itself bigger again. The bordered box grew but the writing area stayed
   four lines tall, so a long prompt or result scrolled in a strip at the top of a
@@ -52,6 +71,11 @@ Keep that shape: the website's What's new page parses this file.
   keystroke.
 
 ### Changed
+
+- **Copying a prompt or text node's `@reference` moved to the right-click menu**,
+  under Reference. It used to happen when you clicked the node's title bar — which
+  is also the strip you drag a node by, so reaching for a drag or a selection
+  copied instead. The title bar is now only a title bar, and still shows the id.
 
 - Searching a model list is easier to see: the search box now carries a magnifier
   and, once you have typed, a ✕ that clears it and puts the cursor back. Menus

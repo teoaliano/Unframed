@@ -127,7 +127,6 @@ export default function ImageOutputNode({ id, data }) {
       addNodes({
         id: `gen-${Date.now()}-${index}`,
         type: 'image',
-        dragHandle: '.xnode-head',
         position: { x: base.x, y: base.y + 48 * index },
         data: {
           fileName: (result.savedPath || result.url)?.split('/').pop() || 'generated',
@@ -534,6 +533,11 @@ export default function ImageOutputNode({ id, data }) {
       <Handle type="target" position={Position.Left} />
       <NodeHeader kind="imageOutput" title="image" family="output" />
 
+      {/* nodrag on the whole body, not per control: Astryx portals a Selector's
+          popup UP to this stack, so no wrapper around the control can ever contain
+          it, and an open model list would otherwise drag the node. Everything in
+          here is a control anyway -- these nodes drag by their header, footer and
+          card edge. See the 2026-08-18 canvas-interaction spec. */}
       <VStack gap={3} padding={3}>
         <ModelPicker
           models={models}
@@ -564,6 +568,7 @@ export default function ImageOutputNode({ id, data }) {
         </VStack>
 
         <Button
+          className="nodrag"
           label={
             isRunning
               ? // total/done are local-only (never persisted — see data.running's
@@ -628,7 +633,7 @@ export default function ImageOutputNode({ id, data }) {
                     alt={`generated result ${r.runIndex + 1}`}
                     label={`result ${r.runIndex + 1}`}
                   />
-                  <span className="xnode-result-add">
+                  <span className="xnode-result-add nodrag">
                     <Button
                       label={`Add result ${r.runIndex + 1} to the canvas`}
                       tooltip="Add to canvas as an image node"
@@ -643,6 +648,7 @@ export default function ImageOutputNode({ id, data }) {
               ))}
             {shown.length > 1 && (
               <Button
+                className="nodrag"
                 label="Add all to canvas"
                 icon={<AddToCanvasIcon />}
                 variant="secondary"
@@ -679,6 +685,7 @@ export default function ImageOutputNode({ id, data }) {
               )}
               <span className="xnode-foot-end">
                 <Button
+                  className="nodrag"
                   label="Clear"
                   variant="ghost"
                   size="sm"

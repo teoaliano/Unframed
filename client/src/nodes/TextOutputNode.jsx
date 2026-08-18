@@ -106,7 +106,6 @@ export default function TextOutputNode({ id, data }) {
     addNodes({
       id: `p-${Date.now()}`,
       type: 'prompt',
-      dragHandle: '.xnode-head',
       className: 'nowheel',
       position: spot,
       data: { text: data.result },
@@ -117,7 +116,7 @@ export default function TextOutputNode({ id, data }) {
     <Card width="fit-content" padding={0} className="xnode-text">
       <Handle type="target" position={Position.Left} />
       <Handle type="source" position={Position.Right} />
-      <NodeHeader kind="textOutput" title="text" family="output" copyId={id} />
+      <NodeHeader kind="textOutput" title="text" family="output" right={`@${id}`} />
 
       <VStack gap={3} padding={3}>
         <ModelPicker
@@ -128,7 +127,7 @@ export default function TextOutputNode({ id, data }) {
         />
 
         <TextArea
-          className="xnode-text-field"
+          className="xnode-text-field nodrag"
           label="Instructions"
           rows={3}
           hasSpellCheck={false}
@@ -138,6 +137,7 @@ export default function TextOutputNode({ id, data }) {
         />
 
         <Button
+          className="nodrag"
           label={isRunning ? 'Running…' : 'Run'}
           variant="primary"
           isLoading={isRunning}
@@ -153,7 +153,7 @@ export default function TextOutputNode({ id, data }) {
         {data.result && (
           <VStack gap={1}>
             <TextArea
-              className="xnode-text-field xnode-text-result"
+              className="xnode-text-field xnode-text-result nodrag"
               label="Result"
               rows={6}
               hasSpellCheck={false}
@@ -161,6 +161,7 @@ export default function TextOutputNode({ id, data }) {
               onChange={(v) => updateNodeData(id, { result: v })}
             />
             <Button
+              className="nodrag"
               label="Add as prompt node"
               variant="secondary"
               size="sm"

@@ -17,12 +17,19 @@ import { OUTPUT_DEFAULTS } from '../nodes/output/defaults.js';
 // the wheel and pans instead of scrolling long text. Output node bodies can
 // likewise overflow (a long result, a resized field), so they keep it too.
 // Reference nodes hold nothing scrollable, so they keep scroll-to-pan.
-export const DRAG = '.xnode-head';
-// Both keys are derived, so they go after the spread — a className saved into an
-// older graph must not stick around and shadow the current rule.
+// Both keys are derived, so they go after the spread — a value saved into an older
+// graph must not stick around and shadow the current rule. `dragHandle` is set to
+// undefined rather than left out for exactly that reason: every node written to
+// graph.json before 2026-08-18 carries `dragHandle: '.xnode-head'`, and omitting the
+// key here would let that stale value through, leaving old projects draggable only by
+// their title bar while new nodes drag from anywhere. presets.json is never rewritten
+// (docs/library.md), so for presets the split would be permanent. Undefined means "no
+// handle" to React Flow, which is what makes the whole card the drag surface; the
+// controls opt out individually with `nodrag`. See
+// docs/superpowers/specs/2026-08-18-canvas-interaction-design.md.
 export const withDrag = (n) => ({
   ...n,
-  dragHandle: DRAG,
+  dragHandle: undefined,
   className: n.type === 'image' ? undefined : 'nowheel',
 });
 
