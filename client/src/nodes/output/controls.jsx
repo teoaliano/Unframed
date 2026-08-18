@@ -5,7 +5,7 @@
 import { useState } from 'react';
 import { Text } from '@astryxdesign/core/Text';
 import { Button } from '@astryxdesign/core/Button';
-import { HStack } from '@astryxdesign/core/Stack';
+import { HStack, VStack } from '@astryxdesign/core/Stack';
 import { ratioLabel } from './core.js';
 import ModelDialog from './ModelDialog.jsx';
 
@@ -66,14 +66,13 @@ export function NativeSelect({ label, options, value, onChange }) {
 export function ModelPicker({ models, value, onChange, kind }) {
   const [open, setOpen] = useState(false);
   return (
-    <span className="model-picker">
+    <VStack gap={1}>
       <Text type="label" color="secondary">Model</Text>
       <Button
         label={value || 'Loading models…'}
         // A <button> is not a labelable element, so the visible "Model" caption
-        // above it (and the wrapping element, which is a <span> rather than a
-        // <label> for exactly this reason) names nothing for it — the button
-        // must name itself.
+        // above it (and the wrapping VStack, rather than a <label> for exactly
+        // this reason) names nothing for it — the button must name itself.
         aria-label={`Model: ${value || 'Loading models…'}`}
         size="sm"
         variant="secondary"
@@ -90,7 +89,7 @@ export function ModelPicker({ models, value, onChange, kind }) {
           onClose={() => setOpen(false)}
         />
       )}
-    </span>
+    </VStack>
   );
 }
 

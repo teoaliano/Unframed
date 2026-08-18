@@ -794,11 +794,3 @@ div:has(> .add-node-menu) {
   z-index: 1;
   background: var(--color-background-surface);
 }
-
-/* The picker's label + button column: same label-to-control gap as Astryx's
-   own Field, matching the native selects beside it. */
-.model-picker {
-  display: flex;
-  flex-direction: column;
-  gap: var(--spacing-1);
-}
