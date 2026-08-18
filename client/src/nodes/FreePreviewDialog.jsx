@@ -48,53 +48,58 @@ export default function FreePreviewDialog({ staged, derive, onCancel, onConfirm 
             : `${runs.length} generation${runs.length === 1 ? '' : 's'}. Nothing has been sent yet.`
         }
       />
-      <VStack gap={3} padding={4}>
-        {shared && (
-          <VStack gap={1}>
-            <Text type="label" color="secondary">Shared by every run</Text>
-            {/* Read-only: it comes from the other wired nodes, not from this list. Each
-                run is this text, a blank line, then its own section. */}
-            <Text type="supporting" color="secondary">{shared}</Text>
-          </VStack>
-        )}
+      {/* Two regions, not one, same as the settings Dialog in App.jsx (see its
+          comment for the full reasoning): the row list scrolls, Cancel/Generate do
+          not, or a 10-run batch hides its own confirm button below the fold. */}
+      <VStack gap={3} padding={4} style={{ minHeight: 0 }}>
+        <VStack gap={3} style={{ overflowY: 'auto', minHeight: 0 }}>
+          {shared && (
+            <VStack gap={1}>
+              <Text type="label" color="secondary">Shared by every run</Text>
+              {/* Read-only: it comes from the other wired nodes, not from this list. Each
+                  run is this text, a blank line, then its own section. */}
+              <Text type="supporting" color="secondary">{shared}</Text>
+            </VStack>
+          )}
 
-        <VStack gap={1}>
-          <Text type="label" as="label" color="secondary">Sections</Text>
-          <TextArea
-            label="List text"
-            isLabelHidden
-            rows={12}
-            hasSpellCheck={false}
-            value={text}
-            onChange={(v) => setText(v)}
-          />
+          <VStack gap={1}>
+            <Text type="label" as="label" color="secondary">Sections</Text>
+            <TextArea
+              label="List text"
+              isLabelHidden
+              rows={12}
+              hasSpellCheck={false}
+              value={text}
+              onChange={(v) => setText(v)}
+            />
+          </VStack>
+
+          {error ? (
+            <StatusLine type="error">{error}</StatusLine>
+          ) : (
+            <VStack gap={1}>
+              {/* How the directives were READ, not what was typed -- the whole point of
+                  looking. "all images" is what a section with no directive gets. */}
+              {runs.map((run, i) => (
+                <HStack key={i} gap={2} justify="between">
+                  <Text type="label" color="secondary">Run {i + 1}</Text>
+                  <Text type="label">{run.used ? `images ${run.used.join(', ')}` : 'all images'}</Text>
+                </HStack>
+              ))}
+              {truncated > 0 && (
+                <StatusLine type="warning">
+                  {truncated} more section{truncated === 1 ? '' : 's'} beyond the {MAX_RUNS}-run cap will not run.
+                </StatusLine>
+              )}
+              {/* Live, not staged: an edit that fixes a directive (or introduces a new
+                  broken one) must change this on the next keystroke, not just the row
+                  above it -- see droppedImagesNote's own comment. */}
+              {missingNote && <StatusLine type="warning">{missingNote}</StatusLine>}
+            </VStack>
+          )}
+
+          {staged.notes.length > 0 && <StatusLine type="info">{staged.notes.join(' · ')}</StatusLine>}
         </VStack>
-
-        {error ? (
-          <StatusLine type="error">{error}</StatusLine>
-        ) : (
-          <VStack gap={1}>
-            {/* How the directives were READ, not what was typed -- the whole point of
-                looking. "all images" is what a section with no directive gets. */}
-            {runs.map((run, i) => (
-              <HStack key={i} gap={2}>
-                <Text type="label" color="secondary">Run {i + 1}</Text>
-                <Text type="label">{run.used ? `images ${run.used.join(', ')}` : 'all images'}</Text>
-              </HStack>
-            ))}
-            {truncated > 0 && (
-              <StatusLine type="warning">
-                {truncated} more section{truncated === 1 ? '' : 's'} beyond the {MAX_RUNS}-run cap will not run.
-              </StatusLine>
-            )}
-            {/* Live, not staged: an edit that fixes a directive (or introduces a new
-                broken one) must change this on the next keystroke, not just the row
-                above it -- see droppedImagesNote's own comment. */}
-            {missingNote && <StatusLine type="warning">{missingNote}</StatusLine>}
-          </VStack>
-        )}
-
-        {staged.notes.length > 0 && <StatusLine type="info">{staged.notes.join(' · ')}</StatusLine>}
 
         <HStack gap={2} justify="end">
           <Button label="Cancel" variant="ghost" onClick={onCancel} />
