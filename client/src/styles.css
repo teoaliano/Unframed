@@ -753,13 +753,12 @@ div:has(> .add-node-menu) {
 /* Dialog's own inner wrapper is overflow: hidden, so without a scroll
    boundary here a long catalogue (the 245-model text list) clips silently
    instead of scrolling once search + pills + rows + pagination exceed the
-   Dialog's 75vh max-height. */
+   Dialog's 75vh max-height. Table brings its own horizontal scroll wrapper
+   and dividers="rows" supplies the row dividers, so this rule is only the
+   vertical scroll boundary — nothing to divide here ourselves. */
 .model-dialog-list {
   max-height: 420px;
   overflow-y: auto;
-}
-.model-dialog-list .astryx-list > li + li {
-  border-top: 1px solid var(--color-border);
 }
 
 /* The picker's label + button column: same label-to-control gap as Astryx's
