@@ -849,7 +849,7 @@ function videoGraph(inputMode, imageCount, extra = []) {
 // batch size, consent about a wired clip, or the node's own content/identity. An
 // overlap here is the Critical-1 bug recurring in a different key.
 {
-  const mustSurvive = ['runs', 'freeRuns', 'shareLocalVideos', 'text', 'result', 'model', 'videoModel'];
+  const mustSurvive = ['runs', 'freeRuns', 'previewPrompt', 'shareLocalVideos', 'text', 'result', 'model', 'videoModel'];
   for (const type of Object.keys(MODEL_PARAM_KEYS)) {
     for (const key of MODEL_PARAM_KEYS[type]) {
       assert.ok(!mustSurvive.includes(key), `${type}'s MODEL_PARAM_KEYS must not include "${key}"`);

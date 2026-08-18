@@ -7,9 +7,11 @@ import { Thumbnail } from '@astryxdesign/core/Thumbnail';
 import { Icon } from '@astryxdesign/core/Icon';
 import { VStack } from '@astryxdesign/core/Stack';
 import { useToast } from '@astryxdesign/core/Toast';
+import { CheckboxInput } from '@astryxdesign/core/CheckboxInput';
 import NodeHeader from './NodeHeader.jsx';
 import RunsControl, { clampRuns } from './RunsControl.jsx';
 import StatusLine from './StatusLine.jsx';
+import FreePreviewDialog from './FreePreviewDialog.jsx';
 import { useModels, useModelParams, freeSpot } from './output/core.js';
 import { resetModelParams } from './output/defaults.js';
 import { ModelPicker, ParamControls, CostFoot } from './output/controls.jsx';
@@ -44,6 +46,11 @@ export default function ImageOutputNode({ id, data }) {
   // addToCanvas below. Keyed by runIndex so several thumbnails' buttons can carry
   // their own loading state instead of one flag freezing the whole strip.
   const [addingKeys, setAddingKeys] = useState(() => new Set());
+  // A built-but-unsent batch, waiting on the preview dialog. Component state, not node
+  // data: it is transient, and autosaving a prompt blob into graph.json on every edit is
+  // exactly what the results pointer exists to avoid. Losing it on unmount costs nothing
+  // but the text call already made.
+  const [staged, setStaged] = useState(null);
   const liveNodes = useNodes();
   const liveEdges = useEdges();
 
@@ -233,6 +240,42 @@ export default function ImageOutputNode({ id, data }) {
     }
   }
 
+  // The dialog's live rows and its confirm both go through freeBatch, so what is shown
+  // and what is sent cannot diverge. Errors are returned rather than thrown: a circular
+  // @reference typed mid-edit must grey the button out, not blank the dialog.
+  function derivePreview(text) {
+    const source = findFreeSource(getNodes(), getEdges(), id);
+    if (!source) return { runs: [], truncated: 0, shared: '', error: 'The list source is no longer wired in.' };
+    try {
+      return { ...freeBatch(getNodes(), getEdges(), id, source.id, text), error: null };
+    } catch (err) {
+      return { runs: [], truncated: 0, shared: '', error: err.message };
+    }
+  }
+
+  async function onConfirmPreview(text) {
+    const { runs: built, error: bad } = derivePreview(text);
+    if (bad || !built.length) {
+      setError(bad || 'That list has no sections to run.');
+      setStatus('error');
+      setStaged(null);
+      return;
+    }
+    // Reuses the staged batchId, so the repair call's text sidecar and these images stay
+    // summable as one batch -- the reason a batch has an id at all.
+    const batchId = staged.batchId;
+    setStaged(null);
+    setStatus('running');
+    setError(null);
+    setResults([]);
+    updateNodeData(id, {
+      results: undefined,
+      running: { startedAt: Date.now(), session: SESSION_ID },
+    });
+    setDone(0);
+    await fire(built, batchId);
+  }
+
   async function onGenerate() {
     setStatus('running');
     setError(null);
@@ -277,6 +320,7 @@ export default function ImageOutputNode({ id, data }) {
       const batchId = `b-${Date.now()}`;
 
       let batch;
+      let listText = '';
       const notes = [];
       if (freeRuns) {
         const source = findFreeSource(getNodes(), getEdges(), id);
@@ -284,7 +328,7 @@ export default function ImageOutputNode({ id, data }) {
           throw new Error('Free needs a prompt or text node wired in. It lists what to generate.');
         }
         // A prompt node's @ids are expanded here, before splitting -- see freeSourceText.
-        let listText = freeSourceText(source, getNodes()).trim();
+        listText = freeSourceText(source, getNodes()).trim();
         if (!listText) {
           throw new Error(
             isTextOutput(source)
@@ -359,6 +403,14 @@ export default function ImageOutputNode({ id, data }) {
         batch = Array.from({ length: runs }, () => ({ prompt, input_references }));
       }
       setNote(notes.length ? notes.join(' · ') : null);
+      if (freeRuns && data.previewPrompt) {
+        // The marker and the spinner both have to come back off: leaving them set would
+        // freeze Generate behind its own disabled guard with nothing in flight.
+        setStaged({ listText, notes, batchId });
+        setStatus('idle');
+        updateNodeData(id, { running: undefined });
+        return;
+      }
       await fire(batch, batchId);
     } catch (err) {
       if (getProject() !== startedIn) {
@@ -416,6 +468,13 @@ export default function ImageOutputNode({ id, data }) {
             onRunsChange={(n) => updateNodeData(id, { runs: n })}
             onModeChange={(free) => updateNodeData(id, { freeRuns: free })}
           />
+          {freeRuns && (
+            <CheckboxInput
+              label="View final prompt"
+              value={Boolean(data.previewPrompt)}
+              onChange={(on) => updateNodeData(id, { previewPrompt: on })}
+            />
+          )}
         </VStack>
 
         <Button
@@ -545,6 +604,19 @@ export default function ImageOutputNode({ id, data }) {
           ) : null
         }
       />
+
+      {/* Keyed by batchId so a second staging mounts a FRESH dialog: its textarea seeds
+          from staged.listText once, and React Flow's habit of reusing an instance for a
+          node id is exactly how a stale draft would survive into the next preview. */}
+      {staged && (
+        <FreePreviewDialog
+          key={staged.batchId}
+          staged={staged}
+          derive={derivePreview}
+          onCancel={() => setStaged(null)}
+          onConfirm={onConfirmPreview}
+        />
+      )}
     </Card>
   );
 }
