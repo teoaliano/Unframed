@@ -152,33 +152,55 @@ export function sourceRoles(nodes, edges, nodeId) {
   return [...new Set(roles)];
 }
 
-// The text node feeding this output, if any — Free mode needs its result to know
-// what to generate. Lowest Y wins, matching buildRequest's ordering, so "the text
-// node" is a stable choice when several are wired in. Returns undefined when none
-// are wired in.
-export function findWiredTextNode(nodes, edges, outputId) {
+// The node supplying Free mode's list. A wired text output wins outright; only when
+// none is wired does a prompt node stand in. Precedence rather than lowest-Y across
+// both kinds: an existing Free graph with a context prompt sitting above its text
+// output would otherwise silently change which node supplies the list, and a batch
+// built from the wrong text is only noticed after it has been paid for. Lowest Y
+// breaks ties within a kind, matching buildRequest's ordering.
+export function findFreeSource(nodes, edges, outputId) {
   const byId = new Map(nodes.map((n) => [n.id, n]));
-  return edges
+  const wired = edges
     .filter((e) => e.target === outputId)
     .map((e) => byId.get(e.source))
-    .filter((n) => n && isTextOutput(n))
-    .sort((a, b) => (a.position?.y ?? 0) - (b.position?.y ?? 0))[0];
+    .filter(Boolean)
+    .sort((a, b) => (a.position?.y ?? 0) - (b.position?.y ?? 0));
+  return wired.find(isTextOutput) || wired.find((n) => n.type === 'prompt');
 }
 
-// One prompt per Free-mode block. The shared context is everything wired into the
-// output EXCEPT the text node supplying the list — asking buildRequest for the graph
-// minus that node (rather than subtracting its result from the joined prompt) is what
-// keeps a blank line inside the result, or an @id reference to the list itself, from
-// smuggling the whole list back in. Each block is appended after a blank line.
-export function freeRunPrompts(nodes, edges, outputId, textNodeId, blocks) {
-  // The list node stays in the graph with an empty result rather than being removed:
-  // @its-id must resolve to nothing, and an absent node would now leave the token
-  // itself in the prompt. Known-and-empty is the intent; unknown was a side effect.
-  const shared = buildRequest(
-    nodes.map((n) => (n.id === textNodeId ? { ...n, data: { ...n.data, result: '' } } : n)),
+// Free mode's list, as text. A text output's answer is taken verbatim -- never
+// re-scanned for @tokens, per resolveRef's rule. A prompt node holds what the user
+// typed, so its @ids are substituted first: an unexpanded @p-123 would otherwise
+// reach the splitter as a literal token and travel to the model that way.
+export function freeSourceText(node, nodes) {
+  if (!node) return '';
+  if (isTextOutput(node)) return node.data?.result || '';
+  const refs = new Map(
+    nodes.filter((n) => n.type === 'prompt' || isTextOutput(n)).map((n) => [n.id, n]),
+  );
+  // Seeded with the source's own id so @itself throws Circular instead of recursing,
+  // the same guard resolveRef applies.
+  return substitute(node.data?.text, refs, [node.id]);
+}
+
+// Everything wired into the output EXCEPT the list source -- the context every Free run
+// receives. Asking buildRequest for the graph with the source blanked (rather than
+// subtracting its text from the joined prompt) is what keeps a blank line inside the
+// list, or an @id reference to the source itself, from smuggling the whole list back in.
+// BOTH text and result are blanked, so this works whichever kind of node the source is:
+// known-and-empty is the intent, and an absent node would leave the @token itself in
+// the prompt.
+export function freeShared(nodes, edges, outputId, sourceId) {
+  return buildRequest(
+    nodes.map((n) => (n.id === sourceId ? { ...n, data: { ...n.data, text: '', result: '' } } : n)),
     edges,
     outputId,
   ).prompt;
+}
+
+// One prompt per Free-mode block: the shared context, then the block after a blank line.
+export function freeRunPrompts(nodes, edges, outputId, sourceId, blocks) {
+  const shared = freeShared(nodes, edges, outputId, sourceId);
   return blocks.map((b) => [shared, b].filter(Boolean).join('\n\n'));
 }
 

@@ -1,6 +1,6 @@
 // Assert-based self-check. Run with: node client/src/graph/resolve.test.js
 import assert from 'node:assert/strict';
-import { buildRequest, bucketSources, sourceRoles, splitSections, findWiredTextNode, freeRunPrompts, isOutput, isTextOutput } from './resolve.js';
+import { buildRequest, bucketSources, sourceRoles, splitSections, findFreeSource, freeSourceText, freeShared, freeRunPrompts, isOutput, isTextOutput } from './resolve.js';
 import { migrateNodes } from './migrate.js';
 import { instantiateFragment, centerOffset } from '../library/insert.js';
 import { selectionFragment, presetFromSelection } from '../library/save.js';
@@ -192,15 +192,44 @@ function graph(nodes, edges) {
   assert.equal(truncated, 1);
 }
 
-// --- findWiredTextNode / freeRunPrompts ---
+// --- findFreeSource / freeSourceText / freeRunPrompts ---
 
-// No text node wired in -> undefined.
+// A wired text output wins outright, even when a prompt node sits above it. Precedence
+// rather than lowest-Y across both kinds: an existing Free graph with a context prompt
+// above its text output would otherwise silently change which node supplies the list,
+// and a batch built from the wrong text is only noticed after it is paid for.
 {
   const { nodes, edges } = graph(
-    [{ id: 'p1', type: 'prompt', position: { x: 0, y: 0 }, data: { text: 'hello' } }],
-    [{ id: 'e1', source: 'p1', target: 'out' }],
+    [
+      { id: 'p1', type: 'prompt', position: { x: 0, y: 0 }, data: { text: 'context' } },
+      { id: 't1', type: 'textOutput', position: { x: 0, y: 50 }, data: { result: 'a\n---\nb' } },
+    ],
+    [
+      { id: 'e1', source: 'p1', target: 'out' },
+      { id: 'e2', source: 't1', target: 'out' },
+    ],
   );
-  assert.equal(findWiredTextNode(nodes, edges, 'out'), undefined);
+  assert.equal(findFreeSource(nodes, edges, 'out').id, 't1', 'a text output outranks a prompt node');
+}
+
+// No text output wired -> the lowest-Y prompt node stands in.
+{
+  const { nodes, edges } = graph(
+    [
+      { id: 'p-lo', type: 'prompt', position: { x: 0, y: 50 }, data: { text: 'second' } },
+      { id: 'p-hi', type: 'prompt', position: { x: 0, y: 10 }, data: { text: 'first' } },
+    ],
+    [
+      { id: 'e1', source: 'p-lo', target: 'out' },
+      { id: 'e2', source: 'p-hi', target: 'out' },
+    ],
+  );
+  assert.equal(findFreeSource(nodes, edges, 'out').id, 'p-hi');
+}
+
+// Nothing wired in -> undefined.
+{
+  assert.equal(findFreeSource([out], [], 'out'), undefined);
 }
 
 // Several text nodes wired in -> the lowest-Y one wins.
@@ -215,7 +244,44 @@ function graph(nodes, edges) {
       { id: 'e2', source: 't-hi', target: 'out' },
     ],
   );
-  assert.equal(findWiredTextNode(nodes, edges, 'out').id, 't-hi');
+  assert.equal(findFreeSource(nodes, edges, 'out').id, 't-hi');
+}
+
+// freeSourceText: a text output's answer verbatim (never re-scanned for @tokens), a
+// prompt node's @ids expanded first so no literal token reaches the splitter.
+{
+  const t = { id: 't1', type: 'textOutput', position: { x: 0, y: 0 }, data: { result: 'raw @nope answer' } };
+  const other = { id: 'p2', type: 'prompt', position: { x: 0, y: 0 }, data: { text: 'golden hour' } };
+  const p = { id: 'p1', type: 'prompt', position: { x: 0, y: 0 }, data: { text: 'in @p2 light' } };
+  const nodes = [out, t, other, p];
+  assert.equal(freeSourceText(t, nodes), 'raw @nope answer', "a text output's answer is taken verbatim");
+  assert.equal(freeSourceText(p, nodes), 'in golden hour light', "a prompt node's @ids expand before splitting");
+  assert.equal(freeSourceText(undefined, nodes), '', 'no source is an empty list, not a crash');
+}
+
+// freeRunPrompts with a PROMPT node as the source: its own text is blanked out of the
+// shared context exactly as a text output's result is, so the list cannot smuggle
+// itself back in either by being wired in or through @its-id.
+{
+  const src = { id: 'p-list', type: 'prompt', position: { x: 0, y: 0 }, data: { text: 'one\n---\ntwo' } };
+  const shared = { id: 'p-shared', type: 'prompt', position: { x: 0, y: 50 }, data: { text: 'a shared subject' } };
+  const sibling = { id: 'p-sib', type: 'prompt', position: { x: 0, y: 90 }, data: { text: 'ref: @p-list' } };
+  const { nodes, edges } = graph([shared, src, sibling], [
+    { id: 'e1', source: 'p-shared', target: 'out' },
+    { id: 'e2', source: 'p-list', target: 'out' },
+    { id: 'e3', source: 'p-sib', target: 'out' },
+  ]);
+  assert.equal(findFreeSource(nodes, edges, 'out').id, 'p-list');
+  assert.equal(freeShared(nodes, edges, 'out', 'p-list').includes('one'), false, 'the list is not in the shared context');
+
+  const prompts = freeRunPrompts(nodes, edges, 'out', 'p-list', ['one', 'two']);
+  assert.equal(prompts.length, 2);
+  for (const p of prompts) {
+    assert.ok(p.includes('a shared subject'), 'shared context missing');
+    assert.ok(!p.includes('---'), 'separator leaked');
+    assert.ok(!p.includes('@p-list'), 'unresolved @token leaked');
+  }
+  assert.ok(prompts[0].includes('one') && !prompts[0].includes('two'), 'block 0 carries exactly one item');
 }
 
 // freeRunPrompts: the shared context (everything wired in except the text node) is
@@ -234,7 +300,7 @@ function graph(nodes, edges) {
       { id: 'e3', source: 'p-sib', target: 'out' },
     ],
   );
-  const found = findWiredTextNode(nodes, edges, 'out');
+  const found = findFreeSource(nodes, edges, 'out');
   assert.equal(found.id, 't1');
 
   const { blocks } = splitSections(textNode.data.result);
