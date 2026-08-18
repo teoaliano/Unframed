@@ -1,6 +1,6 @@
 // Assert-based self-check. Run with: node client/src/graph/resolve.test.js
 import assert from 'node:assert/strict';
-import { buildRequest, bucketSources, sourceRoles, splitSections, findFreeSource, freeSourceText, freeShared, freeRunPrompts, parseImagePicks, runReferences, freeBatch, isOutput, isTextOutput } from './resolve.js';
+import { buildRequest, bucketSources, sourceRoles, splitSections, findFreeSource, freeSourceText, freeShared, freeRunPrompts, parseImagePicks, runReferences, freeBatch, isOutput, isTextOutput, MAX_RUNS } from './resolve.js';
 import { migrateNodes } from './migrate.js';
 import { instantiateFragment, centerOffset } from '../library/insert.js';
 import { selectionFragment, presetFromSelection } from '../library/save.js';
@@ -933,11 +933,44 @@ function videoGraph(inputMode, imageCount, extra = []) {
   assert.equal(parseImagePicks('just prose').picks, null);
 }
 
-// A directive line with no usable numbers degrades to "every image", line still stripped.
+// Only a pure list of positive integers is a directive. "images: none of them" is prose,
+// and deleting it would hand the model a prompt nobody wrote.
 {
   const { text, picks } = parseImagePicks('images: none of them\nprose');
   assert.equal(picks, null);
-  assert.equal(text, 'prose');
+  assert.equal(text, 'images: none of them\nprose', 'a line that is not a directive stays put');
+}
+
+// "Image:" as a section caption is ordinary text-model formatting, and the repair prompt
+// teaches the model this very keyword -- so the collision is invited, not remote. Each of
+// these once became an empty prompt plus a paid image.
+{
+  for (const prose of [
+    'Image: 3 women standing in a row, studio light',
+    'images: 2 hands holding a cup',
+    'Image: a red fox in snow, watercolour',
+  ]) {
+    const { text, picks } = parseImagePicks(prose);
+    assert.equal(picks, null, `"${prose}" is prose, not a directive`);
+    assert.equal(text, prose, 'and reaches the model exactly as written');
+  }
+}
+
+// Keyword case and number are both free; the numbers are what makes it a directive.
+{
+  assert.deepEqual(parseImagePicks('Image: 2\nfox').picks, [2], 'capitalised singular parses');
+  assert.equal(parseImagePicks('Image: 2\nfox').text, 'fox');
+  assert.deepEqual(parseImagePicks('IMAGES: 2, 1\nfox').picks, [2, 1]);
+}
+
+// A directive that names nothing usable is left in place, not deleted: a line is only ever
+// stripped once it has been confirmed to be a directive that did something.
+{
+  for (const src of ['images: 0', 'images: 0, -2\nprose']) {
+    const { text, picks } = parseImagePicks(src);
+    assert.equal(picks, null, `"${src}" yields no usable pick`);
+    assert.equal(text, src, 'and the line survives');
+  }
 }
 
 // --- runReferences ---
@@ -1016,6 +1049,40 @@ const img = (i, y) => ({ id: `i${i}`, type: 'image', position: { x: 0, y }, data
   const { runs, truncated } = freeBatch(nodes, edges, 'out', 'p-list', many);
   assert.equal(runs.length, 10);
   assert.equal(truncated, 2);
+}
+
+// A section that is only a directive is not a run: with its line stripped it would send
+// the shared context alone -- exactly the paid generation of nobody's prompt that the
+// node's NO_SECTIONS guard exists to prevent. Dropped, and counted so the caller can say.
+{
+  const src = { id: 'p-list', type: 'prompt', position: { x: 0, y: 50 }, data: { text: '' } };
+  const ctx = { id: 'p-ctx', type: 'prompt', position: { x: 0, y: 5 }, data: { text: 'shared style' } };
+  const { nodes, edges } = graph([ctx, src, img(1, 0)], [
+    { id: 'e0', source: 'p-ctx', target: 'out' },
+    { id: 'e1', source: 'p-list', target: 'out' },
+    { id: 'e2', source: 'i1', target: 'out' },
+  ]);
+  const one = freeBatch(nodes, edges, 'out', 'p-list', 'images: 1\n---\nA fox');
+  assert.equal(one.runs.length, 1, 'the directive-only section is not a run');
+  assert.equal(one.runs[0].prompt, 'shared style\n\nA fox');
+  assert.equal(one.empty, 1);
+
+  // Every section directive-only -> no runs at all, and the caller's NO_SECTIONS error.
+  const none = freeBatch(nodes, edges, 'out', 'p-list', 'images: 1\n---\nimages: 1');
+  assert.equal(none.runs.length, 0);
+  assert.equal(none.empty, 2);
+}
+
+// The cap has one home. The dialog interpolates MAX_RUNS while truncation is computed from
+// these defaults, so a raised constant that did not reach them would state a cap nothing
+// enforces.
+{
+  const src = { id: 'p-list', type: 'prompt', position: { x: 0, y: 0 }, data: { text: '' } };
+  const { nodes, edges } = graph([src], [{ id: 'e1', source: 'p-list', target: 'out' }]);
+  const many = Array.from({ length: MAX_RUNS + 3 }, (_, i) => `item ${i}`).join('\n---\n');
+  assert.equal(splitSections(many).blocks.length, MAX_RUNS, 'splitSections defaults to the cap');
+  assert.equal(splitSections(many).truncated, 3);
+  assert.equal(freeBatch(nodes, edges, 'out', 'p-list', many).runs.length, MAX_RUNS, 'and so does freeBatch');
 }
 
 console.log('resolve.js: all checks passed');

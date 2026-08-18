@@ -210,11 +210,17 @@ export function freeRunPrompts(nodes, edges, outputId, sourceId, blocks) {
   return blocks.map((b) => [shared, b].filter(Boolean).join('\n\n'));
 }
 
+// The run cap, for both a fixed count and Free mode. It lives here rather than beside
+// RunsControl's number input because truncation is computed in this module and the dialog
+// only quotes the number: a cap with two homes is a dialog stating a limit nothing
+// enforces. This module has no JSX, so the UI can import it and not the reverse.
+export const MAX_RUNS = 10;
+
 // Split a text node's result into one block per run. The separator is a line that
 // contains only "---", so a --- inside prose is left alone. `max` is the run cap;
 // `truncated` lets the caller say "list had 14 items, running the first 10" instead
 // of silently dropping the tail.
-export function splitSections(text, max = 10) {
+export function splitSections(text, max = MAX_RUNS) {
   const all = String(text || '')
     .split('\n')
     .reduce(
@@ -237,26 +243,30 @@ export function splitSections(text, max = 10) {
 // "images: three of them" halfway down a section must not silently reduce what that run
 // sends. picks is null when there is no directive, meaning every image -- the behaviour
 // every run had before directives existed, and what a text model that ignores the syntax
-// falls back to.
-const PICKS_RE = /^images?\s*:\s*(.+)$/i;
+// falls back to. Only a pure list of positive integers counts: "Image: 3 women in a row"
+// is an ordinary caption, and the repair prompt teaches the model this very keyword.
+const PICKS_RE = /^images?\s*:\s*(\d+(?:[,\s]+\d+)*)\s*$/i;
 
 export function parseImagePicks(block) {
   const lines = String(block || '').split('\n');
   const at = lines.findIndex((l) => l.trim() !== '');
   if (at === -1) return { text: '', picks: null };
   const m = lines[at].trim().match(PICKS_RE);
-  if (!m) return { text: String(block).trim(), picks: null };
-  const picks = [
-    ...new Set(
-      m[1]
-        .split(/[,\s]+/)
-        .map((t) => Number(t))
-        .filter((n) => Number.isInteger(n) && n > 0),
-    ),
-  ];
-  // The line is stripped even when it named nothing usable: it is bookkeeping either way,
-  // and an empty pick list means the same as no directive.
-  return { text: lines.slice(at + 1).join('\n').trim(), picks: picks.length ? picks : null };
+  const picks = m
+    ? [
+        ...new Set(
+          m[1]
+            .split(/[,\s]+/)
+            .map((t) => Number(t))
+            .filter((n) => Number.isInteger(n) && n > 0),
+        ),
+      ]
+    : [];
+  // A line is deleted only once it is confirmed to be a directive that named something
+  // usable. The cost is asymmetric: a stray bookkeeping line left in a prompt is noise,
+  // while a deleted description is a paid image of something nobody asked for.
+  if (!picks.length) return { text: String(block).trim(), picks: null };
+  return { text: lines.slice(at + 1).join('\n').trim(), picks };
 }
 
 // One run's input_references. `picks` are directive numbers; null means every wired
@@ -288,9 +298,13 @@ export function runReferences(nodes, edges, outputId, picks) {
 // dialog derives its rows from this same call -- a preview that assembled its own view of
 // the batch would eventually disagree with what gets sent, which is the one thing a
 // preview must never do.
-export function freeBatch(nodes, edges, outputId, sourceId, listText, max = 10) {
+export function freeBatch(nodes, edges, outputId, sourceId, listText, max = MAX_RUNS) {
   const { blocks, truncated } = splitSections(listText, max);
-  const parsed = blocks.map(parseImagePicks);
+  const all = blocks.map(parseImagePicks);
+  // A section that was nothing but a directive has no text left, and running it would send
+  // the shared context alone -- a paid generation of nobody's prompt. Dropped, and counted
+  // like `truncated` so the caller can say how many.
+  const parsed = all.filter((p) => p.text);
   const prompts = freeRunPrompts(nodes, edges, outputId, sourceId, parsed.map((p) => p.text));
   return {
     runs: prompts.map((prompt, i) => ({
@@ -298,6 +312,7 @@ export function freeBatch(nodes, edges, outputId, sourceId, listText, max = 10) 
       ...runReferences(nodes, edges, outputId, parsed[i].picks),
     })),
     truncated,
+    empty: all.length - parsed.length,
     shared: freeShared(nodes, edges, outputId, sourceId),
   };
 }
