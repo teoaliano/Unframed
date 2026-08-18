@@ -86,6 +86,16 @@ export function bucketSources(nodes, edges, outputId) {
   };
 }
 
+// Media nodes -> the array the API takes. Shared by buildRequest and runReferences so a
+// new reference kind cannot be added to one and silently forgotten in the other.
+function toReferences(media) {
+  return media.map((n) =>
+    n.type === 'video'
+      ? { type: 'video_url', video_url: { url: n.data.dataUrl } }
+      : { type: 'image_url', image_url: { url: n.data.dataUrl } },
+  );
+}
+
 // Build the generation request for a given output node id.
 // Returns { prompt, input_references, frame_images }. frame_images is empty unless
 // the output is a video node asking for a frame mode.
@@ -95,11 +105,7 @@ export function buildRequest(nodes, edges, outputId) {
   );
   const { sources, references, frames } = bucketSources(nodes, edges, outputId);
 
-  const input_references = references.map((n) =>
-    n.type === 'video'
-      ? { type: 'video_url', video_url: { url: n.data.dataUrl } }
-      : { type: 'image_url', image_url: { url: n.data.dataUrl } },
-  );
+  const input_references = toReferences(references);
   const frame_images = frames.map(({ node, frame_type }) => ({
     type: 'image_url',
     image_url: { url: node.data.dataUrl },
@@ -223,4 +229,75 @@ export function splitSections(text, max = 10) {
     .filter(Boolean);
 
   return { blocks: all.slice(0, max), truncated: Math.max(0, all.length - max) };
+}
+
+// A section may open with a line naming which wired images it uses -- `images: 2, 5`, the
+// badge numbers sourceRoles already puts on the canvas, so what the user sees is what the
+// directive means. Recognised on the FIRST non-empty line only: prose reading
+// "images: three of them" halfway down a section must not silently reduce what that run
+// sends. picks is null when there is no directive, meaning every image -- the behaviour
+// every run had before directives existed, and what a text model that ignores the syntax
+// falls back to.
+const PICKS_RE = /^images?\s*:\s*(.+)$/i;
+
+export function parseImagePicks(block) {
+  const lines = String(block || '').split('\n');
+  const at = lines.findIndex((l) => l.trim() !== '');
+  if (at === -1) return { text: '', picks: null };
+  const m = lines[at].trim().match(PICKS_RE);
+  if (!m) return { text: String(block).trim(), picks: null };
+  const picks = [
+    ...new Set(
+      m[1]
+        .split(/[,\s]+/)
+        .map((t) => Number(t))
+        .filter((n) => Number.isInteger(n) && n > 0),
+    ),
+  ];
+  // The line is stripped even when it named nothing usable: it is bookkeeping either way,
+  // and an empty pick list means the same as no directive.
+  return { text: lines.slice(at + 1).join('\n').trim(), picks: picks.length ? picks : null };
+}
+
+// One run's input_references. `picks` are directive numbers; null means every wired
+// reference, which is what a section without a directive gets. Picked images come first,
+// in the order the directive listed them -- that order is what "image 1" means inside that
+// section's prose, since the provider only ever sees the attachments it is handed. Videos
+// are appended untouched: an image output already warns that it sends and ignores them,
+// and a directive numbers images only.
+export function runReferences(nodes, edges, outputId, picks) {
+  const { references } = bucketSources(nodes, edges, outputId);
+  if (!picks) return { input_references: toReferences(references), used: null, dropped: [] };
+  const images = references.filter((n) => n.type === 'image');
+  const videos = references.filter((n) => n.type !== 'image');
+  const used = picks.filter((n) => images[n - 1]);
+  const dropped = picks.filter((n) => !images[n - 1]);
+  // Every number named an image that is not wired. Falling back to all of them keeps a
+  // garbled directive costing one text call to fix rather than a paid run with no
+  // reference at all; `dropped` is what the caller reports.
+  if (!used.length) return { input_references: toReferences(references), used: null, dropped };
+  return {
+    input_references: toReferences([...used.map((n) => images[n - 1]), ...videos]),
+    used,
+    dropped,
+  };
+}
+
+// The whole of Free mode after the list text is in hand: split, read each section's
+// directive, assemble prompts, pick each run's references. ONE seam, because the preview
+// dialog derives its rows from this same call -- a preview that assembled its own view of
+// the batch would eventually disagree with what gets sent, which is the one thing a
+// preview must never do.
+export function freeBatch(nodes, edges, outputId, sourceId, listText, max = 10) {
+  const { blocks, truncated } = splitSections(listText, max);
+  const parsed = blocks.map(parseImagePicks);
+  const prompts = freeRunPrompts(nodes, edges, outputId, sourceId, parsed.map((p) => p.text));
+  return {
+    runs: prompts.map((prompt, i) => ({
+      prompt,
+      ...runReferences(nodes, edges, outputId, parsed[i].picks),
+    })),
+    truncated,
+    shared: freeShared(nodes, edges, outputId, sourceId),
+  };
 }

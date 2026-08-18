@@ -1,6 +1,6 @@
 // Assert-based self-check. Run with: node client/src/graph/resolve.test.js
 import assert from 'node:assert/strict';
-import { buildRequest, bucketSources, sourceRoles, splitSections, findFreeSource, freeSourceText, freeShared, freeRunPrompts, isOutput, isTextOutput } from './resolve.js';
+import { buildRequest, bucketSources, sourceRoles, splitSections, findFreeSource, freeSourceText, freeShared, freeRunPrompts, parseImagePicks, runReferences, freeBatch, isOutput, isTextOutput } from './resolve.js';
 import { migrateNodes } from './migrate.js';
 import { instantiateFragment, centerOffset } from '../library/insert.js';
 import { selectionFragment, presetFromSelection } from '../library/save.js';
@@ -903,6 +903,119 @@ function videoGraph(inputMode, imageCount, extra = []) {
   const { prompt } = buildRequest(initialNodes, initialEdges, output.id);
   assert.ok(prompt.includes('lone red fox'), 'the @id reference resolves in the starter graph');
   assert.ok(!prompt.includes('@'), 'and leaves no unresolved token behind');
+}
+
+// --- parseImagePicks ---
+
+// A section may open with a line naming which wired images it uses. The line is stripped
+// from the prompt: the provider must never see the bookkeeping.
+{
+  const { text, picks } = parseImagePicks('images: 2, 5\nA hand, palm forward');
+  assert.deepEqual(picks, [2, 5]);
+  assert.equal(text, 'A hand, palm forward', 'the directive line is stripped from the prompt');
+}
+
+// Singular form, spaces instead of commas, leading blank lines, and a repeat.
+{
+  assert.deepEqual(parseImagePicks('\n\n image : 3 1 3 \nprose').picks, [3, 1], 'order preserved, duplicates collapsed');
+}
+
+// Recognised on the FIRST non-empty line only: prose saying "images: ..." halfway down
+// a section must not silently reduce what that run sends.
+{
+  const { text, picks } = parseImagePicks('A hand\nimages: 2, 5');
+  assert.equal(picks, null, 'only the first non-empty line can be a directive');
+  assert.equal(text, 'A hand\nimages: 2, 5', 'and it stays in the prompt untouched');
+}
+
+// No directive at all -> null, meaning every image.
+{
+  assert.equal(parseImagePicks('just prose').picks, null);
+}
+
+// A directive line with no usable numbers degrades to "every image", line still stripped.
+{
+  const { text, picks } = parseImagePicks('images: none of them\nprose');
+  assert.equal(picks, null);
+  assert.equal(text, 'prose');
+}
+
+// --- runReferences ---
+
+const img = (i, y) => ({ id: `i${i}`, type: 'image', position: { x: 0, y }, data: { dataUrl: `data:image/png;base64,IMG${i}` } });
+
+{
+  const vid = { id: 'v1', type: 'video', position: { x: 0, y: 99 }, data: { dataUrl: 'data:video/mp4;base64,VID' } };
+  const { nodes, edges } = graph([img(1, 0), img(2, 10), img(3, 20), vid], [
+    { id: 'e1', source: 'i1', target: 'out' },
+    { id: 'e2', source: 'i2', target: 'out' },
+    { id: 'e3', source: 'i3', target: 'out' },
+    { id: 'e4', source: 'v1', target: 'out' },
+  ]);
+
+  // No directive -> byte-for-byte what buildRequest sends today. This is the assertion
+  // that pins "not asking for a split still gets everything".
+  const all = runReferences(nodes, edges, 'out', null);
+  assert.deepEqual(all.input_references, buildRequest(nodes, edges, 'out').input_references);
+  assert.equal(all.used, null);
+  assert.deepEqual(all.dropped, []);
+
+  // A directive picks by badge number, IN THE ORDER IT LISTED THEM -- that order is what
+  // "image 1" means inside the section's prose, since the provider only sees attachments.
+  const picked = runReferences(nodes, edges, 'out', [3, 1]);
+  assert.deepEqual(picked.used, [3, 1]);
+  assert.deepEqual(
+    picked.input_references.map((r) => r.image_url?.url ?? r.video_url.url),
+    ['data:image/png;base64,IMG3', 'data:image/png;base64,IMG1', 'data:video/mp4;base64,VID'],
+    'picked images in listed order, videos appended untouched',
+  );
+
+  // An out-of-range number is dropped and reported; the rest of the directive still runs.
+  const partial = runReferences(nodes, edges, 'out', [2, 9]);
+  assert.deepEqual(partial.used, [2]);
+  assert.deepEqual(partial.dropped, [9]);
+  assert.equal(partial.input_references.length, 2, 'one picked image plus the video');
+
+  // Every number out of range -> fall back to every image rather than a run with none.
+  const none = runReferences(nodes, edges, 'out', [8, 9]);
+  assert.equal(none.used, null);
+  assert.deepEqual(none.dropped, [8, 9]);
+  assert.equal(none.input_references.length, 4);
+}
+
+// --- freeBatch ---
+
+// The seam the preview dialog and Generate share: one call turns list text into the exact
+// runs that will be sent. A preview deriving its rows any other way is how a preview
+// starts lying about what it is previewing.
+{
+  const src = { id: 'p-list', type: 'prompt', position: { x: 0, y: 50 }, data: { text: '' } };
+  const ctx = { id: 'p-ctx', type: 'prompt', position: { x: 0, y: 5 }, data: { text: 'shared style' } };
+  const { nodes, edges } = graph([ctx, src, img(1, 0), img(2, 10)], [
+    { id: 'e0', source: 'p-ctx', target: 'out' },
+    { id: 'e1', source: 'p-list', target: 'out' },
+    { id: 'e2', source: 'i1', target: 'out' },
+    { id: 'e3', source: 'i2', target: 'out' },
+  ]);
+  const { runs, truncated, shared } = freeBatch(nodes, edges, 'out', 'p-list', 'images: 2\nfirst\n---\nsecond');
+  assert.equal(truncated, 0);
+  assert.equal(shared, 'shared style');
+  assert.equal(runs.length, 2);
+  assert.equal(runs[0].prompt, 'shared style\n\nfirst', 'the directive line never reaches the model');
+  assert.deepEqual(runs[0].used, [2]);
+  assert.equal(runs[0].input_references.length, 1);
+  assert.equal(runs[1].used, null, 'a section without a directive gets every image');
+  assert.equal(runs[1].input_references.length, 2);
+}
+
+// The 10-run cap still applies through freeBatch, and reports what it dropped.
+{
+  const src = { id: 'p-list', type: 'prompt', position: { x: 0, y: 0 }, data: { text: '' } };
+  const { nodes, edges } = graph([src], [{ id: 'e1', source: 'p-list', target: 'out' }]);
+  const many = Array.from({ length: 12 }, (_, i) => `item ${i}`).join('\n---\n');
+  const { runs, truncated } = freeBatch(nodes, edges, 'out', 'p-list', many);
+  assert.equal(runs.length, 10);
+  assert.equal(truncated, 2);
 }
 
 console.log('resolve.js: all checks passed');
