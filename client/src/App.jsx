@@ -75,6 +75,8 @@ import {
   getHealth,
   saveConfig,
   clearKey,
+  startOauth,
+  cancelOauth,
   pickFolder,
   listModels,
   revealFiles,
@@ -432,6 +434,39 @@ function Canvas() {
       .catch(() => {});
   }, []);
 
+  // Polls while a connection is pending. This lives here rather than in the
+  // dialog because closing the dialog must NOT abandon the flow -- the callback
+  // still lands on the server, and this is what notices. Owned by the dialog, a
+  // close would leave the key on disk and the toolbar still showing "add a key".
+  //
+  // Ten minutes, not two: that is how long OpenRouter's code is valid, and giving
+  // up sooner reports failure on a flow that is still perfectly completable.
+  useEffect(() => {
+    const pending = cfgDlg?.connecting;
+    if (!pending) return;
+    const id = setInterval(async () => {
+      const elapsed = Date.now() - pending.since;
+      const h = await getHealth().catch(() => null);
+      if (h?.hasKey) {
+        setCfg((c) => ({ ...c, ...h, hasKey: true, keyHint: h.keyHint || '' }));
+        setCfgDlg((d) => (d ? { ...d, connecting: undefined } : d));
+        toast({ body: 'Connected to OpenRouter.', uniqueID: 'oauth-connected' });
+        return;
+      }
+      if (elapsed > 10 * 60 * 1000) {
+        setCfgDlg((d) =>
+          d ? { ...d, connecting: undefined, error: 'Nothing came back from OpenRouter. Try connecting again.' } : d,
+        );
+        return;
+      }
+      // After two minutes the copy softens, but the polling does not stop.
+      if (elapsed > 2 * 60 * 1000 && !pending.slow) {
+        setCfgDlg((d) => (d?.connecting ? { ...d, connecting: { ...d.connecting, slow: true } } : d));
+      }
+    }, 1500);
+    return () => clearInterval(id);
+  }, [cfgDlg?.connecting, toast]);
+
   // Open with the saved values as the draft, so the pickers show what is in use.
   function openSettings() {
     setCfgDlg({
@@ -486,6 +521,28 @@ function Canvas() {
     } catch (err) {
       setCfgDlg((s) => ({ ...s, saving: false, error: err.message }));
     }
+  }
+
+  // Opens OpenRouter in the user's real browser: a plain _blank navigation, which
+  // the packaged shell turns into shell.openExternal via setWindowOpenHandler and
+  // a clone treats as an ordinary tab. One code path for both.
+  async function connectOpenRouter() {
+    setCfgDlg((d) => ({ ...d, error: undefined, saved: false }));
+    try {
+      const url = await startOauth();
+      // A blocked popup returns null. The flow is still perfectly valid -- the
+      // attempt is live on the server -- so the URL is kept and shown rather than
+      // failing, which is also the answer for an environment with no browser.
+      const opened = window.open(url, '_blank', 'noopener');
+      setCfgDlg((d) => ({ ...d, connecting: { since: Date.now(), slow: false, url, opened: !!opened } }));
+    } catch (err) {
+      setCfgDlg((d) => ({ ...d, error: err.message }));
+    }
+  }
+
+  function cancelConnect() {
+    cancelOauth();
+    setCfgDlg((d) => ({ ...d, connecting: undefined }));
   }
 
   // The picker runs on the server, which is this machine — a browser can't hand
@@ -1505,7 +1562,7 @@ function Canvas() {
         width={480}
       >
         <DialogHeader
-          title={cfg.hasKey ? 'Settings' : 'Add your OpenRouter key to start'}
+          title={cfg.hasKey ? 'Settings' : 'Connect OpenRouter to start'}
         />
         {/* Two regions, not one: the form scrolls, the buttons do not. Dialog caps
             itself at 75vh and its wrapper hides the overflow, so on a short window
@@ -1516,36 +1573,52 @@ function Canvas() {
             hands the overflow back to the clipped parent. */}
         <VStack gap={3} padding={4} style={{ minHeight: 0 }}>
           <VStack gap={3} style={{ overflowY: 'auto', minHeight: 0 }}>
-          {!cfg.hasKey && (
+          {!cfg.hasKey && !cfgDlg?.connecting && (
             <VStack gap={2}>
               <Text type="supporting" as="p">
                 Unframed has no image model of its own. It sends your prompts to{' '}
                 <Link href="https://openrouter.ai" isExternalLink>
                   OpenRouter
                 </Link>
-                , which runs the model and bills your account per image (a few cents for most
-                models). It needs your own key to do that.
+                , which runs the model and bills your OpenRouter account per image (a few cents for
+                most models). Connecting takes you there to approve Unframed; the key it gives back
+                is saved on this machine and used only by your local server.
               </Text>
-              <Text type="supporting" as="p">
-                To get one: sign in at{' '}
-                <Link href="https://openrouter.ai/keys" isExternalLink>
-                  openrouter.ai/keys
-                </Link>
-                , press <strong>Create key</strong>, and copy it. Add a few dollars of credit under{' '}
-                <Link href="https://openrouter.ai/credits" isExternalLink>
-                  Credits
-                </Link>{' '}
-                or generating will fail with "insufficient credits".
-              </Text>
-              <Text type="supporting" as="p">
-                The key is saved to a <code>.env</code> file on this machine, is used only by your
-                local server to call OpenRouter, and is never sent anywhere else.
-              </Text>
+              <Button label="Connect OpenRouter" variant="primary" onClick={connectOpenRouter} />
             </VStack>
+          )}
+          {cfgDlg?.connecting && (
+            <VStack gap={2}>
+              <Text type="supporting" as="p">
+                {!cfgDlg.connecting.opened
+                  ? 'Your browser did not open. Open this link to approve Unframed:'
+                  : cfgDlg.connecting.slow
+                    ? 'Still waiting. Finish approving in your browser, or cancel and try again.'
+                    : 'Waiting for OpenRouter in your browser…'}
+              </Text>
+              {!cfgDlg.connecting.opened && (
+                <TextInput
+                  label="Authorization link"
+                  isLabelHidden
+                  value={cfgDlg.connecting.url}
+                  isReadOnly
+                  onChange={() => {}}
+                />
+              )}
+              <Button label="Cancel" variant="ghost" onClick={cancelConnect} />
+            </VStack>
+          )}
+          {!cfg.hasKey && !cfgDlg?.connecting && !cfgDlg?.showPaste && (
+            <Button
+              label="or paste a key instead"
+              variant="ghost"
+              onClick={() => setCfgDlg((d) => ({ ...d, showPaste: true }))}
+            />
           )}
           {/* Three sections, one heading style each, dividers between. The field
               labels themselves are hidden where the heading already names the
               field, but stay in the DOM for screen readers. */}
+          {(cfg.hasKey || cfgDlg?.showPaste) && (
           <VStack gap={2}>
             <Text type="label">API key</Text>
             {/* Remove sits next to the field it acts on, like Browse… does for the
@@ -1601,6 +1674,7 @@ function Canvas() {
                 : 'Paste it here. It starts with sk-or-'}
             </Text>
           </VStack>
+          )}
 
           {/* Everything below needs a key to be worth showing. The catalogues are
               fetched from OpenRouter WITH the key, so before there is one the three
