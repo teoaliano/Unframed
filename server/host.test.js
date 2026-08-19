@@ -72,7 +72,21 @@ const AUTH_KEY_STUB_RESPONSES = {
   'malformed-key-code': { status: 200, body: { key: 'not-a-key\nHost: evil' } },
   'refused-code': { status: 400, body: { error: 'invalid code' } },
 };
+// Counts the key-info reads below, so the revoked assertion can prove it resolved
+// here rather than at openrouter.ai.
+let keyInfoReads = 0;
 const authKeyStub = http.createServer((req, res) => {
+  // GET /api/v1/key, the key-info route /api/oauth/status reads, on the same stub
+  // because it is the same upstream. 401 is the revoked branch. Asserting that
+  // branch against the real endpoint made the suite need network egress -- offline
+  // it got the route's 502 catch -- and assumed OpenRouter answers 401 rather than
+  // 403 forever, which this file's own convention says not to do.
+  if (req.url.startsWith('/api/v1/key')) {
+    keyInfoReads += 1;
+    res.writeHead(401, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ error: { message: 'no auth credentials found' } }));
+    return;
+  }
   let raw = '';
   req.on('data', (c) => (raw += c));
   req.on('end', () => {
@@ -87,7 +101,9 @@ const authKeyStub = http.createServer((req, res) => {
   });
 });
 await new Promise((resolve) => authKeyStub.listen(0, '127.0.0.1', resolve));
-const authKeyStubUrl = `http://127.0.0.1:${authKeyStub.address().port}/api/v1/auth/keys`;
+const authKeyStubBase = `http://127.0.0.1:${authKeyStub.address().port}`;
+const authKeyStubUrl = `${authKeyStubBase}/api/v1/auth/keys`;
+const keyInfoStubUrl = `${authKeyStubBase}/api/v1/key`;
 
 const child = fork(path.join(here, 'index.js'), {
   env: {
@@ -99,6 +115,7 @@ const child = fork(path.join(here, 'index.js'), {
     UNFRAMED_TEST_VIDEOS_STATUS_BASE: statusStubBase,
     UNFRAMED_TEST_CHAT_COMPLETIONS_URL: midBodyStubBase,
     UNFRAMED_TEST_AUTH_KEYS_URL: authKeyStubUrl,
+    UNFRAMED_TEST_KEY_URL: keyInfoStubUrl,
   },
   stdio: 'ignore',
 });
@@ -194,50 +211,73 @@ try {
   });
   assert.equal(preflight.headers.get('access-control-allow-origin'), null);
 
-  // DNS rebinding sends no Origin at all: a page whose own hostname resolves to
-  // 127.0.0.1 is same-origin with this server, so the check above cannot see it.
-  // Host is the name the browser actually dialled.
-  //
-  // Sent with http.request rather than fetch: undici treats `host` as a
-  // forbidden header and drops it silently, so a fetch-based version of this
-  // test passes while asserting nothing.
-  const withHost = (host) =>
+  // The Host check, which is NOT the origin check above in another form. A page
+  // served from a hostname the attacker resolves to 127.0.0.1 is same-origin with
+  // this server: no Origin is sent, so nothing above runs, and the response is
+  // readable. Host is the name the browser actually dialled. Raw http.request
+  // because fetch does not let Host be set.
+  const withHost = (host, path = '/api/health', method = 'GET') =>
     new Promise((resolve, reject) => {
       const req = http.request(
-        { host: '127.0.0.1', port: ready.port, path: '/api/health', headers: { Host: host } },
+        { host: '127.0.0.1', port: ready.port, path, method, headers: { Host: host } },
         (res) => {
-          res.resume();
-          resolve(res.statusCode);
+          let body = '';
+          res.on('data', (c) => (body += c));
+          res.on('end', () => resolve({ status: res.statusCode, body }));
         },
       );
       req.on('error', reject);
       req.end();
     });
 
-  assert.equal(await withHost('attacker.example'), 403, 'a rebound hostname is refused');
-  assert.equal(await withHost('attacker.example:1234'), 403, 'with a port too');
+  // Both real consumers: Vite proxies without changeOrigin, so the Host it
+  // forwards is its own, and the packaged app loads 127.0.0.1 on the port above.
+  assert.equal((await withHost('localhost:5173')).status, 200, 'the dev proxy passes');
+  assert.equal((await withHost(`127.0.0.1:${ready.port}`)).status, 200, 'the packaged app passes');
+  assert.equal((await withHost('[::1]')).status, 200);
+  assert.equal((await withHost('rebound.evil.example')).status, 403);
+  assert.equal((await withHost('rebound.evil.example:1234')).status, 403, 'with a port too');
 
   // Host names are case-insensitive, so LOCALHOST names the same machine and
   // refusing it rejects a request that was always legitimate. Paired with the
-  // suffix trick immediately below, spelled in caps on purpose: what does the
+  // prefix and suffix tricks below, spelled in caps on purpose: what does the
   // refusing is the anchors and the digits-only port group, not the letter case,
   // so the `i` flag cannot widen what gets through.
-  assert.equal(await withHost('LOCALHOST:5173'), 200, 'the name is matched case-insensitively');
-  assert.equal(await withHost('127.0.0.1'), 200);
-  assert.equal(await withHost('LOCALHOST.evil.example'), 403, 'and a suffix is still no match');
-  assert.equal(await withHost('evil.example.localhost'), 403, 'nor a prefix');
+  assert.equal((await withHost('LOCALHOST:5173')).status, 200, 'the name is matched case-insensitively');
+  assert.equal((await withHost('127.0.0.1')).status, 200);
+  assert.equal((await withHost('LOCALHOST.evil.example')).status, 403, 'and a suffix is still no match');
+  assert.equal((await withHost('evil.example.localhost')).status, 403, 'nor a prefix');
 
-  // The two consumers that must keep passing it: the packaged app's window, and
-  // a Vite proxy forwarding the dev page's own Host unchanged.
-  assert.equal(await withHost(`127.0.0.1:${ready.port}`), 200, 'the packaged app');
-  assert.equal(await withHost('localhost:5173'), 200, 'the Vite proxy');
+  // A request with NO Host at all, which http.request will not send -- it
+  // substitutes the address it dialled -- so this one goes down a raw socket.
+  // HTTP/1.1 requires the header, and Node's own parser refuses the request with
+  // a 400 before any middleware runs. Asserted so a future change that starts
+  // tolerating a missing Host cannot slip past the middleware above, which reads
+  // an absent Host as '' and would refuse it too.
+  const hostless = await new Promise((resolve, reject) => {
+    const sock = net.connect(ready.port, '127.0.0.1', () =>
+      sock.write('GET /api/health HTTP/1.1\r\nConnection: close\r\n\r\n'),
+    );
+    let raw = '';
+    sock.on('data', (c) => (raw += c));
+    sock.on('end', () => resolve(raw));
+    sock.on('error', reject);
+  });
+  assert.match(hostless.split('\r\n')[0], /^HTTP\/1\.1 (400|403) /, 'a Host-less request is refused');
 
-  // The socket itself, which is the only check the two above cannot make: both
-  // read headers, and a client that is not a browser writes its own. Tested by
-  // dialling a real non-loopback address of this machine rather than by asking
-  // the server what it thinks it bound -- a listener on 0.0.0.0 answers here,
-  // and one on 127.0.0.1 refuses the connection. Skipped where the machine has
-  // no such address to dial, which is a missing test, not a passing one.
+  // And the payload that makes this worth checking: /api/oauth/start's nonce and
+  // challenge are what let an attacker approve their own OpenRouter account
+  // against this flow and have the victim's .env receive THEIR key.
+  const rebound = await withHost('rebound.evil.example', '/api/oauth/start', 'POST');
+  assert.equal(rebound.status, 403);
+  assert.doesNotMatch(rebound.body, /code_challenge/, 'no challenge leaks to a rebound host');
+
+  // The socket itself, which is the only check every assertion above cannot make:
+  // they all read headers, and a client that is not a browser writes its own.
+  // Tested by dialling a real non-loopback address of this machine rather than by
+  // asking the server what it thinks it bound -- a listener on 0.0.0.0 answers
+  // here, and one on 127.0.0.1 refuses the connection. Skipped where the machine
+  // has no such address to dial, which is a missing test, not a passing one.
   const lan = Object.values(os.networkInterfaces())
     .flat()
     .find((n) => n && n.family === 'IPv4' && !n.internal);
@@ -279,9 +319,9 @@ try {
   assert.equal(cb.port, String(ready.port));
   assert.match(cb.pathname, /^\/api\/oauth\/callback\/[0-9a-f]{32}$/);
 
-  // Cancel answers. That a cancelled attempt cannot then be COMPLETED is
-  // asserted in Task 4, where the callback route exists -- asserting it here
-  // would pass or fail on a 404 and prove nothing.
+  // Cancel answers. That a cancelled attempt cannot then be COMPLETED needs the
+  // callback route, so it is asserted further down, after the happy path has
+  // established that the route works at all.
   assert.equal((await fetch(`${base}/api/oauth/pending`, { method: 'DELETE' })).status, 200);
 
   // A nonce nobody issued is refused, and the answer is a PAGE -- this is the
@@ -300,16 +340,16 @@ try {
   assert.match(await fs.readFile(path.join(dataDir, '.env'), 'utf8'), /OPENROUTER_API_KEY=sk-or-v1-stubbedkey1234/);
 
   // Depends on the happy-path block just above having already written a key into
-  // .env: the stub key `sk-or-v1-stubbedkey1234` is not one OpenRouter has ever
-  // issued, so this makes a real call to openrouter.ai/api/v1/key and gets back a
-  // 401 -- which is exactly the revoked branch this asserts. Do not reorder this
-  // above the block that writes the key, or the route would see no key at all
-  // and this would assert the wrong branch.
+  // .env: the route returns before asking anything when there is no key, so
+  // reordering this above that block would assert the wrong branch. The key-info
+  // read goes to the local stub, which answers 401 -- the revoked branch.
+  const readsBefore = keyInfoReads;
   const status = await fetch(`${base}/api/oauth/status`);
   assert.equal(status.status, 200);
   const statusBody = await status.json();
   assert.equal(statusBody.hasKey, true);
   assert.equal(statusBody.revoked, true);
+  assert.equal(keyInfoReads, readsBefore + 1, 'the key was read from the local stub, not openrouter.ai');
   assert.equal('usage' in statusBody, false, 'no spend is claimed for a key that does not work');
 
   // ...and the same nonce cannot be replayed.

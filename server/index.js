@@ -347,6 +347,10 @@ app.delete('/api/oauth/pending', (req, res) => {
 const AUTH_KEYS_URL =
   process.env.UNFRAMED_TEST_AUTH_KEYS_URL || 'https://openrouter.ai/api/v1/auth/keys';
 
+// Same pattern, for the key-info route /api/oauth/status reads. Unset, and
+// therefore inert, in every real environment.
+const KEY_INFO_URL = process.env.UNFRAMED_TEST_KEY_URL || 'https://openrouter.ai/api/v1/key';
+
 // The callback lands in a browser tab, so every branch answers with a readable
 // page rather than JSON. Self-contained on purpose: this server does not know
 // where the canvas lives -- :5173 in a clone, its own port in the packaged app --
@@ -441,7 +445,7 @@ app.get('/api/oauth/callback/:nonce', async (req, res) => {
 app.get('/api/oauth/status', async (req, res) => {
   if (!API_KEY) return res.json({ hasKey: false });
   try {
-    const orRes = await fetch('https://openrouter.ai/api/v1/key', {
+    const orRes = await fetch(KEY_INFO_URL, {
       headers: { Authorization: `Bearer ${API_KEY}` },
       signal: AbortSignal.timeout(10_000),
     });
@@ -740,7 +744,13 @@ app.post('/api/text', async (req, res) => {
   }
 
   if (!orRes.ok) {
-    const msg = data?.error?.message || data?.error || raw.slice(0, 300);
+    // Guarded rather than a bare `||`: an object-shaped upstream error would
+    // otherwise render as [object Object] inside the sentences below. Same
+    // guard as the OAuth callback route.
+    const msg =
+      (typeof data?.error?.message === 'string' && data.error.message) ||
+      (typeof data?.error === 'string' && data.error) ||
+      raw.slice(0, 300);
     // is_free_tier (in /api/oauth/status) doesn't catch a user who paid once and
     // ran dry, so it still needs naming here where it actually happens: the 402.
     // OpenRouter also answers 402 for a key's own spending cap -- the same one
@@ -1122,7 +1132,13 @@ app.post('/api/video', async (req, res) => {
   }
   if (!orRes.ok) {
     for (const t of mintedTokens) revokeShare(t);
-    const msg = data?.error?.message || data?.error || raw.slice(0, 300);
+    // Guarded rather than a bare `||`: an object-shaped upstream error would
+    // otherwise render as [object Object] inside the sentences below. Same
+    // guard as the OAuth callback route.
+    const msg =
+      (typeof data?.error?.message === 'string' && data.error.message) ||
+      (typeof data?.error === 'string' && data.error) ||
+      raw.slice(0, 300);
     if (orRes.status === 402) {
       return res.status(402).json({
         error: `OpenRouter says this account is out of credit. Add some at openrouter.ai/credits. (${msg})`,
@@ -1713,7 +1729,13 @@ app.post('/api/generate', async (req, res) => {
   }
 
   if (!orRes.ok) {
-    const msg = data?.error?.message || data?.error || raw.slice(0, 300);
+    // Guarded rather than a bare `||`: an object-shaped upstream error would
+    // otherwise render as [object Object] inside the sentences below. Same
+    // guard as the OAuth callback route.
+    const msg =
+      (typeof data?.error?.message === 'string' && data.error.message) ||
+      (typeof data?.error === 'string' && data.error) ||
+      raw.slice(0, 300);
     if (orRes.status === 402) {
       return res.status(402).json({
         error: `OpenRouter says this account is out of credit. Add some at openrouter.ai/credits. (${msg})`,
