@@ -631,7 +631,6 @@ export default function ImageOutputNode({ id, data }) {
                     // the pointer that survived — see `shown` above.
                     src={r.image ?? r.url}
                     alt={`generated result ${r.runIndex + 1}`}
-                    label={`result ${r.runIndex + 1}`}
                   />
                   <span className="xnode-result-add nodrag">
                     <Button

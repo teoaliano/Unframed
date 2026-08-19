@@ -9,12 +9,32 @@ Keep that shape: the website's What's new page parses this file.
 
 ### Added
 
+- Video reference and result nodes have their own play/scrub controls, built into
+  the node instead of the browser's native ones. A clip now drags by its frame like
+  a picture does — scrubbing the new controls moves the playhead, not the node.
+
 - **Image and video reference nodes can be resized.** Drag any edge — including
   the right one, where the dot still takes precedence for wiring. The picture or
   clip keeps its exact proportions whichever edge you pull, and the size is
   saved with the project.
 
 ### Changed
+
+- **A selection box adds to the selection when a modifier is held**, the way
+  Figma, Sketch and Illustrator do; without one it still replaces, as before.
+  Nodes already selected are never toggled off by a box that passes over them.
+
+- **The tinted rectangle over a selected group is gone**, and with it the dead
+  zone it created. It covered the whole bounding box and swallowed every click
+  inside, so a node in the middle of a group could not be clicked off, dragged on
+  its own, or used at all until you cleared the selection. Dragging any selected
+  node still moves the whole group, and arrow keys still nudge it.
+
+- Box-select is more forgiving: a rectangle that only touches a node now selects
+  it (it used to have to enclose the whole node), and one drawn across a bare
+  connection — touching neither of its nodes — now selects that connection too.
+- Connection handles are bigger, and a release nearby now connects instead of
+  demanding a precise drop on the dot.
 
 - **You can zoom much further in and out** — down to 10% (was 30%) and up to
   400% (was 200%).
@@ -29,6 +49,17 @@ Keep that shape: the website's What's new page parses this file.
   match the node at the bottom.
 
 ### Fixed
+
+- **Missing a node while building a selection no longer costs you the group.**
+  Holding Shift (or Cmd/Ctrl) and clicking a gap between nodes used to throw
+  away everything selected so far, so picking quickly across a grid left some
+  nodes behind. A press on empty canvas with the key held now does nothing at
+  all — whether it lands perfectly still or wobbles a few pixels.
+- Hovering a reference picture, a generated result or a reference clip no longer
+  raises a tooltip — one that, in the packaged app, could land in the corner of
+  the window instead of on the picture.
+- A prompt or text field resized by its corner keeps that size after a reload or
+  a project switch, instead of snapping back to its default.
 
 - **The canvas navigates over an output node again.** Scroll, pinch and
   Cmd/Ctrl+wheel did nothing at all while the cursor sat on an image, video or
@@ -50,8 +81,7 @@ Keep that shape: the website's What's new page parses this file.
   reach an output in one drag instead of three. It works in both directions —
   drag from an output's input handle and every selected output gets wired.
 - Shift+click adds a node to the selection, alongside the Cmd/Ctrl+click that
-  already did. A selection box still replaces the selection rather than adding
-  to it, whichever key is held.
+  already did.
 - **Connect nodes** and **Disconnect nodes** in the right-click menu, under Edit.
   Connect wires every source in the selection to every output in it; Disconnect
   removes the connections *between* selected nodes, leaving the ones that reach

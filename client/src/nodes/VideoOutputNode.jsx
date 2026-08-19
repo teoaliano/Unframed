@@ -16,6 +16,7 @@ import { resetModelParams } from './output/defaults.js';
 import { ModelPicker, ParamControls, CostFoot, NativeSelect } from './output/controls.jsx';
 import { buildRequest, bucketSources } from '../graph/resolve.js';
 import { startVideo, pollVideo } from '../api.js';
+import VideoPlayer from './VideoPlayer.jsx';
 import { ExternalLink as AddToCanvasIcon } from 'lucide-react';
 
 // Makes a video. Runs once per click and reports the job's own status rather than a
@@ -538,7 +539,7 @@ export default function VideoOutputNode({ id, data }) {
           // `result`: a reopened node (page load or project switch) has a
           // persisted pointer but no local `result` of its own.
           <span className="xnode-result">
-            <video className="xnode-video nodrag nowheel" src={shown.url} controls preload="metadata" />
+            <VideoPlayer src={shown.url} />
             <span className="xnode-result-add nodrag">
               <Button
                 className="nodrag"

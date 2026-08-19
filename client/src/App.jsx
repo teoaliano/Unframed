@@ -7,6 +7,7 @@ import {
   addEdge,
   useNodesState,
   useEdgesState,
+  useStoreApi,
   useReactFlow,
 } from '@xyflow/react';
 import { Icon } from '@astryxdesign/core/Icon';
@@ -57,6 +58,7 @@ import { PromptIcon, ImageIcon, VideoIcon, TextIcon } from './nodes/nodeIcons.js
 import { bucketSources, isOutput, isReferenceable } from './graph/resolve.js';
 import { canSource, canTarget, selectedIds, connections, dropInternal } from './graph/bulkWire.js';
 import { keepLiveRunMarkers } from './graph/runMarkers.js';
+import { hitEdges, samplePaths } from './graph/edgeHits.js';
 import LibraryDialog from './library/LibraryDialog.jsx';
 import { instantiateFragment, centerOffset } from './library/insert.js';
 import { selectionFragment, presetFromSelection } from './library/save.js';
@@ -142,6 +144,68 @@ function Canvas() {
     [toast],
   );
   const [tool, setTool] = useState('select'); // 'select' | 'pan'
+
+  // A press on empty canvas must not take anything away while a multi-selection
+  // key is held: you missed a node, you don't lose the group you were building.
+  // React Flow has no prop for it and resets from two directions -- a press that
+  // never moves is routed by the pane's own onPointerUp into
+  // resetSelectedElements(), and a press that moves rebuilds the selection from
+  // the rectangle's contents -- but both arrive here as `select: false` changes,
+  // so remembering what was selected when the press landed covers both.
+  //
+  // Those changes are re-SELECTED rather than dropped. The box path calls
+  // getSelectionChanges(nodeLookup, ids, true), and that `true` writes
+  // selected=false into React Flow's own node lookup as well as emitting the
+  // change; a dropped change leaves the `nodes` prop untouched, so nothing ever
+  // contradicts the lookup and the node renders unselected. Re-selecting produces
+  // a new nodes array, which syncs the lookup back.
+  //
+  // The key is read from React Flow's `multiSelectionActive`, not the event's
+  // modifier bits: it follows multiSelectionKeyCode below instead of restating it,
+  // and it is the truthful one -- that state comes from keydown, and a pointer
+  // event's modifier bits are not always set on a drag.
+  //
+  // Latched at pointerdown so releasing the key mid-drag doesn't turn an additive
+  // box back into a replacing one. The pane check mirrors React Flow's own
+  // (`event.target === container.current`), the exact condition under which either
+  // reset can fire, so a press on a NODE is untouched and modifier+click still
+  // deselects it.
+  // Spec: docs/superpowers/specs/2026-08-18-shift-pane-selection-design.md
+  const keepSelected = useRef(null);
+  const store = useStoreApi();
+  useEffect(() => {
+    const down = (e) => {
+      keepSelected.current =
+        e.target?.classList?.contains('react-flow__pane') &&
+        store.getState().multiSelectionActive
+          ? new Set(getNodes().filter((n) => n.selected).map((n) => n.id))
+          : null;
+    };
+    // Bubble, not capture: React Flow's handler runs on the pane and has to have
+    // fired its changes before the latch is dropped.
+    const up = () => {
+      keepSelected.current = null;
+    };
+    window.addEventListener('pointerdown', down, true);
+    window.addEventListener('pointerup', up);
+    return () => {
+      window.removeEventListener('pointerdown', down, true);
+      window.removeEventListener('pointerup', up);
+    };
+  }, [getNodes, store]);
+  const handleNodesChange = useCallback(
+    (changes) => {
+      const kept = keepSelected.current;
+      onNodesChange(
+        kept
+          ? changes.map((c) =>
+              c.type === 'select' && !c.selected && kept.has(c.id) ? { ...c, selected: true } : c,
+            )
+          : changes,
+      );
+    },
+    [onNodesChange],
+  );
   // Last pointer position over the canvas, so pasted nodes land where you're looking.
   const pointer = useRef({ x: 200, y: 200 });
   const canvasRef = useRef(null);
@@ -595,6 +659,38 @@ function Canvas() {
   // never reaches onConnect, and a stale origin would fan out the NEXT drag.
   const onConnectStart = useCallback((_, params) => { connectFrom.current = params; }, []);
   const onConnectEnd = useCallback(() => { connectFrom.current = null; }, []);
+
+  // Where the selection rectangle started, in flow coordinates. Read off React Flow's
+  // own store rather than the pointer event: by the time a drag is recognised as a
+  // selection the pointer has already travelled past the origin, and the store holds
+  // the exact starting point. (`store` is the one declared above for the selection latch.)
+  const lassoFrom = useRef(null);
+  const onSelectionStart = useCallback(() => {
+    const rect = store.getState().userSelectionRect;
+    lassoFrom.current = rect ? { x: rect.startX, y: rect.startY } : null;
+  }, [store]);
+
+  // React Flow selects an edge whenever one of its nodes lands in the box, and it has
+  // already done so by the time this runs -- so marking hits here ADDS the connectors
+  // the box crossed in empty canvas, rather than replacing anything.
+  const onSelectionEnd = useCallback(
+    (e) => {
+      const from = lassoFrom.current;
+      lassoFrom.current = null;
+      if (!from) return;
+      const to = screenToFlowPosition({ x: e.clientX, y: e.clientY });
+      const rect = {
+        x: Math.min(from.x, to.x),
+        y: Math.min(from.y, to.y),
+        width: Math.abs(to.x - from.x),
+        height: Math.abs(to.y - from.y),
+      };
+      const hits = hitEdges(rect, samplePaths());
+      if (!hits.size) return;
+      setEdges((es) => es.map((edge) => (hits.has(edge.id) ? { ...edge, selected: true } : edge)));
+    },
+    [screenToFlowPosition, setEdges],
+  );
 
   // The two bulk items in the right-click menu. Both read the selection straight
   // from `nodes`, so they work on whatever the right-click left selected.
@@ -1210,17 +1306,17 @@ function Canvas() {
           key={canvasGeneration}
           nodes={nodes}
           edges={displayEdges}
-          onNodesChange={onNodesChange}
+          onNodesChange={handleNodesChange}
           onEdgesChange={onEdgesChange}
           onConnect={onConnect}
           onConnectStart={onConnectStart}
           onConnectEnd={onConnectEnd}
           // Shift joins Meta/Control as a multi-select modifier -- React Flow's
           // default pair is the OS one, but Shift is what every canvas tool uses.
-          // It governs CLICK only: a selection box always replaces the selection
-          // rather than adding to it, whatever is held, because React Flow builds
-          // that selection from the rectangle's contents alone. An earlier version
-          // of this comment claimed otherwise; it was never true.
+          // React Flow itself consults it on CLICK only -- a selection box is built
+          // from the rectangle's contents alone, and a press on empty canvas resets
+          // regardless. `keepSelected` above is what makes both of those honour
+          // whatever this names.
           multiSelectionKeyCode={['Meta', 'Control', 'Shift']}
           // Shift is the multi-select key above, so it must NOT also be React Flow's
           // box-select key -- and 'Shift' is what that prop defaults to. When both
@@ -1254,6 +1350,16 @@ function Canvas() {
           // mouse. pan tool: drag anywhere pans, like a hand tool.
           panOnDrag={tool === 'pan' ? true : [1]}
           selectionOnDrag={tool === 'select'}
+          // A node need only TOUCH the selection box, not sit entirely inside it.
+          selectionMode="partial"
+          onSelectionStart={onSelectionStart}
+          onSelectionEnd={onSelectionEnd}
+          // How far from a handle a release still connects, in flow pixels. React
+          // Flow's default of 20 is about the size of the handle itself, which is why
+          // connecting felt like it wanted a bull's-eye. The radius also applies over
+          // empty canvas, so this is set where a deliberate miss still reads as a miss
+          // rather than as large as it could be.
+          connectionRadius={70}
         >
           <Background gap={26} size={1} color="var(--color-border)" />
         </ReactFlow>

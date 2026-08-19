@@ -76,7 +76,6 @@ export default function ImageNode({ id, data }) {
                 style={{ aspectRatio: data.aspect || 1 }}
                 src={data.dataUrl}
                 alt={data.fileName || 'image'}
-                label={data.fileName || 'image'}
               />
               <span className="xnode-media-remove nodrag">
                 <Button
