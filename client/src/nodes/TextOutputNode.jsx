@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Handle, Position, useReactFlow } from '@xyflow/react';
 import { Card } from '@astryxdesign/core/Card';
 import { Button } from '@astryxdesign/core/Button';
@@ -112,13 +112,34 @@ export default function TextOutputNode({ id, data }) {
     });
   }
 
-  // See PromptNode's copy of this: a CSS resize writes an inline style the browser
-  // owns and React never sees. Two fields here, so which one resized decides the key.
-  function saveSize(e) {
+  // See PromptNode's copy of this: a CSS resize sets no pointer capture, so a
+  // mouseup handler on the field can miss its own release entirely -- shrinking
+  // past min-width/min-height stalls the box while the cursor keeps travelling,
+  // so the mouseup lands on the canvas instead. Stashing the field (and which of
+  // the two it is) on mousedown, then reading its size from a one-shot window
+  // mouseup, means the key and the geometry always come from the SAME element
+  // regardless of where the cursor ends up. The pending-listener ref replaces
+  // rather than stacks on a second mousedown before the first's mouseup, so
+  // nothing accumulates on window.
+  const pendingResizeUp = useRef(null);
+  function onResizeMouseDown(e) {
     const box = e.target.closest?.('.astryx-textarea');
-    if (!box?.style.width && !box?.style.height) return;
+    if (!box) return;
+    if (pendingResizeUp.current) window.removeEventListener('mouseup', pendingResizeUp.current);
     const key = box.classList.contains('xnode-text-result') ? 'resultSize' : 'size';
-    updateNodeData(id, { [key]: { width: box.style.width, height: box.style.height } });
+    function onUp() {
+      pendingResizeUp.current = null;
+      if (!box.style.width && !box.style.height) return;
+      const size = { width: box.style.width, height: box.style.height };
+      // A plain click (place the caret, select text) re-delivers the same size on
+      // every mouseup once one is set; skip the write when nothing actually changed
+      // so it doesn't cost a redundant save and a no-op undo entry.
+      const current = data[key];
+      if (current?.width === size.width && current?.height === size.height) return;
+      updateNodeData(id, { [key]: size });
+    }
+    pendingResizeUp.current = onUp;
+    window.addEventListener('mouseup', onUp, { once: true });
   }
 
   return (
@@ -127,7 +148,7 @@ export default function TextOutputNode({ id, data }) {
       <Handle type="source" position={Position.Right} />
       <NodeHeader kind="textOutput" title="text" family="output" right={`@${id}`} />
 
-      <VStack gap={3} padding={3} onMouseUp={saveSize}>
+      <VStack gap={3} padding={3} onMouseDown={onResizeMouseDown}>
         <ModelPicker
           models={models}
           value={model}
