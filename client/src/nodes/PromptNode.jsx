@@ -79,7 +79,7 @@ export default function PromptNode({ id, data }) {
   // which is positioned and does not clip.
   return (
     <>
-      <Card width="fit-content" padding={0} className="xnode-prompt">
+      <Card width="fit-content" padding={0} elevation="low" className="xnode-prompt">
         <Handle type="source" position={Position.Right} />
         <NodeHeader kind="prompt" family="input" right={`@${id}`} />
         <div

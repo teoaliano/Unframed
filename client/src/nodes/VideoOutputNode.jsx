@@ -397,7 +397,7 @@ export default function VideoOutputNode({ id, data }) {
   const shown = result ?? data.result ?? null;
 
   return (
-    <Card width={300} padding={0}>
+    <Card width={300} padding={0} elevation="low">
       <Handle type="target" position={Position.Left} />
       <NodeHeader kind="videoOutput" title="video" family="output" />
 

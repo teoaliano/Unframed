@@ -3,7 +3,6 @@ import { flushSync } from 'react-dom';
 import {
   ReactFlow,
   ReactFlowProvider,
-  Background,
   addEdge,
   useNodesState,
   useEdgesState,
@@ -37,6 +36,7 @@ import {
   Folder,
 } from 'lucide-react';
 import Logo from './Logo.jsx';
+import CanvasBackground from './CanvasBackground.jsx';
 import PromptNode from './nodes/PromptNode.jsx';
 import ImageNode from './nodes/ImageNode.jsx';
 import VideoNode, { MAX_VIDEO_BYTES } from './nodes/VideoNode.jsx';
@@ -1361,7 +1361,7 @@ function Canvas() {
           // rather than as large as it could be.
           connectionRadius={70}
         >
-          <Background gap={26} size={1} color="var(--color-border)" />
+          <CanvasBackground />
         </ReactFlow>
 
         <div className="tools">
