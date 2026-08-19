@@ -2,36 +2,42 @@ import { Text } from '@astryxdesign/core/Text';
 import { Icon } from '@astryxdesign/core/Icon';
 import { NODE_ICONS } from './nodeIcons.jsx';
 
-// The node title bar. Doubles as the React Flow drag handle (.xnode-head).
-// `family` distinguishes inputs (prompt, image, video — they only feed edges) from
-// outputs (they consume edges), which is the engine's one rule made visible.
+// The node's name tag. It is DOCKED onto the card's top-left edge rather than being a
+// bar inside it — `border-bottom: none` plus a -1px margin makes its bottom border and
+// the card's top border one line, which is what makes it read as part of the node
+// instead of a chip floating above one. See
+// docs/superpowers/specs/2026-08-20-node-anatomy-redesign-design.md.
+//
+// Why it left the card at all: the box now holds CONTENT ONLY. A title bar inside an
+// image node was 28px of the picture you were trying to look at, and the medium is
+// already said by the icon. Everything that reports ON a node rather than being part of
+// it — the connection role, an @id, a run's cost — lives in NodeLine below the card.
 //
 // It carries NO interaction of its own. It used to copy "@<id>" on click, which put a
-// button on the one strip of a node that has to stay grabbable: the drag handle. Every
-// attempt to drag or select a prompt by its header also copied, and a click that lands
-// on a control is a click that is not selecting. The reference moved to the right-click
-// menu (App.jsx), where it costs nothing to reach and nothing to avoid. Referenceable
-// nodes pass their id as plain `right` text, so the id is still readable on the canvas.
+// button on the one strip of a node that has to stay grabbable. The reference moved to
+// the right-click menu (App.jsx), where it costs nothing to reach and nothing to avoid.
 //
-// `kind` is the type id and `title` is what the header reads, because after the
-// output split the two differ: the output types are `imageOutput`/`videoOutput`/
-// `textOutput` internally so they cannot collide with the `image`/`video` INPUT
-// nodes, but they are titled by their medium on the canvas, where the accent colour
-// already marks the family. Defaults to the type id, which is every other node.
-export default function NodeHeader({ kind, title, family = 'input', right, rightTone = 'secondary' }) {
+// `family` is the ONLY colour telling the two families apart, and that is deliberate:
+// the accent border that used to ring every output card is gone, so both families share
+// one neutral card border. An input tab is a surface-filled tag; an output tab is SOLID
+// accent. Two consequences that are expensive to rediscover:
+//
+//   1. The tab's FILL is spent on family, which is why selection is a doubled border
+//      (styles.css) and not a filled tab. Moving family back to ink frees the fill.
+//   2. Below the zoom threshold the tab is hidden, so nothing distinguishes the
+//      families out there any more. The spec's "Left open" records the fix if it
+//      turns out to matter.
+//
+// `kind` is the type id and `title` is what the tab reads, because after the output
+// split the two differ: the output types are `imageOutput`/`videoOutput`/`textOutput`
+// internally so they cannot collide with the `image`/`video` INPUT nodes, but they are
+// titled by their medium on the canvas. Defaults to the type id, which is every other
+// node.
+export default function NodeHeader({ kind, title, family = 'input' }) {
   return (
-    <div className={`xnode-head xnode-head--${family}`}>
-      <span className="xnode-head-title">
-        {NODE_ICONS[kind] && (
-          <Icon icon={NODE_ICONS[kind]} size="xsm" color={family === 'output' ? 'accent' : 'secondary'} />
-        )}
-        <Text type="supporting" weight="medium" color={family === 'output' ? 'accent' : undefined}>
-          {title ?? kind}
-        </Text>
-      </span>
-      {right != null && (
-        <Text type="supporting" color={rightTone}>{right}</Text>
-      )}
-    </div>
+    <span className={`xnode-tab xnode-tab--${family}`}>
+      {NODE_ICONS[kind] && <Icon icon={NODE_ICONS[kind]} size="xsm" />}
+      <Text type="supporting" weight="medium">{title ?? kind}</Text>
+    </span>
   );
 }

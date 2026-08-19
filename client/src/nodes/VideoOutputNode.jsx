@@ -397,9 +397,10 @@ export default function VideoOutputNode({ id, data }) {
   const shown = result ?? data.result ?? null;
 
   return (
-    <Card width={300} padding={0}>
-      <Handle type="target" position={Position.Left} />
+    <>
       <NodeHeader kind="videoOutput" title="video" family="output" />
+      <Card width={300} padding={0}>
+      <Handle type="target" position={Position.Left} />
 
       <VStack gap={3} padding={3}>
         <ModelPicker
@@ -554,35 +555,33 @@ export default function VideoOutputNode({ id, data }) {
             </span>
           </span>
         )}
-      </VStack>
 
-      <CostFoot
-        cost={shown?.cost != null ? shown.cost : null}
-        before={
-          !shown && estimate ? (
-            // The upcoming click's price, from the model's per-second rate. Images
-            // get no estimate: their pricing is per token, and a guess dressed as a
-            // number would be worse than silence.
-            <Text type="supporting" color="secondary" hasTabularNumbers>
-              est. ~${estimate.toFixed(2)}
-            </Text>
-          ) : null
-        }
-        after={
-          shown ? (
-            <span className="xnode-foot-end">
-              <Button
-                className="nodrag"
-                label="Clear"
-                variant="ghost"
-                size="sm"
-                tooltip="Remove this result from the node. The file already written to disk stays, and a clip added to the canvas stays."
-                onClick={clearResult}
-              />
-            </span>
-          ) : null
-        }
-      />
-    </Card>
+        {shown && (
+          <Button
+            className="nodrag"
+            label="Clear"
+            variant="ghost"
+            size="sm"
+            tooltip="Remove this result from the node. The file already written to disk stays, and a clip added to the canvas stays."
+            onClick={clearResult}
+          />
+        )}
+      </VStack>
+      </Card>
+
+      {/* Cost and estimate report on the node as a whole and sit below it, beside
+          where an input shows its connection role. Clear stayed inside: it is a
+          control, and a control on the canvas has no `nodrag` ancestor to opt out of
+          the drag surface. */}
+      <div className="xnode-under">
+        <CostFoot
+          cost={shown?.cost != null ? shown.cost : null}
+          // The upcoming click's price, from the model's per-second rate. Images get no
+          // estimate: their pricing is per token, and a guess dressed as a number would
+          // be worse than silence.
+          extra={!shown && estimate ? `est. ~$${estimate.toFixed(2)}` : null}
+        />
+      </div>
+    </>
   );
 }

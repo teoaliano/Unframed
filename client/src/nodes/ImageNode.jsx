@@ -6,13 +6,14 @@ import { Thumbnail } from '@astryxdesign/core/Thumbnail';
 import { Button } from '@astryxdesign/core/Button';
 import { Icon } from '@astryxdesign/core/Icon';
 import NodeHeader from './NodeHeader.jsx';
+import NodeLine from './NodeLine.jsx';
 import MediaResize from './MediaResize.jsx';
 import { sourceRoles } from '../graph/resolve.js';
 
 export default function ImageNode({ id, data }) {
   const { updateNodeData } = useReactFlow();
   // What each consuming node will do with this image, recomputed as connections,
-  // positions and input modes change. "2 / —" = image 2 to one output, unused by
+  // positions and input modes change. "image 1 / —" = image 1 to one output, unused by
   // another. Empty = not wired anywhere.
   const roles = sourceRoles(useNodes(), useEdges(), id);
 
@@ -34,7 +35,11 @@ export default function ImageNode({ id, data }) {
     img.src = data.dataUrl;
   }, [data.dataUrl, data.aspect, id, updateNodeData]);
 
-  const status = roles.length ? roles.join(' / ') : data.dataUrl ? 'not connected' : undefined;
+  // sourceRoles answers with bare ranks ("1", "1 / 2"), which read fine beside a header
+  // that already said "image" and read as nothing at all on a line of their own. The
+  // medium is spelled out here rather than in resolve.js so the pure module keeps
+  // answering the graph question and this one owns the wording.
+  const role = roles.length ? `image ${roles.join(' / ')}` : data.dataUrl ? 'not connected' : null;
 
   // Dropping a picture anywhere on the node fills (or replaces) it. Stopping
   // propagation matters: the canvas has its own drop handler that would otherwise
@@ -49,6 +54,7 @@ export default function ImageNode({ id, data }) {
 
   return (
     <>
+      <NodeHeader kind="image" family="input" />
       <Card
         width="100%"
         padding={0}
@@ -59,12 +65,6 @@ export default function ImageNode({ id, data }) {
         }}
       >
         <Handle type="source" position={Position.Right} />
-        <NodeHeader
-          kind="image"
-          family="input"
-          right={status}
-          rightTone={roles.length ? 'accent' : 'secondary'}
-        />
         <div className="xnode-body">
           {data.dataUrl ? (
             // Thumbnail's own onRemove is not used: its X is translucent, so how
@@ -99,6 +99,13 @@ export default function ImageNode({ id, data }) {
           )}
         </div>
       </Card>
+      {/* Outside the card on purpose: a badge on the picture needs a scrim to survive an
+          arbitrary photograph, and the scrim is then the thing covering the photograph.
+          Out here it needs neither. `xnode-under` takes it out of the wrapper's flow —
+          see styles.css for why the wrapper has to stay exactly the card's box. */}
+      <div className="xnode-under">
+        <NodeLine live={roles.length > 0}>{role}</NodeLine>
+      </div>
       {/* Resizable from any edge once it holds something — nodes/MediaResize.jsx owns
           why that includes the right one, where the handle also lives. */}
       {data.dataUrl && <MediaResize />}

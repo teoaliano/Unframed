@@ -8,6 +8,7 @@ import {
   useNodesState,
   useEdgesState,
   useStoreApi,
+  useStore,
   useReactFlow,
 } from '@xyflow/react';
 import { Icon } from '@astryxdesign/core/Icon';
@@ -115,6 +116,33 @@ const HELP_TEXT =
   'Reference a prompt or text node with @id. Connect images to number them, then type “image 1”.';
 
 // React Flow drags a node only from this handle, so the inputs inside stay usable.
+// A node's tab and its line below are part of the node, so they scale with the canvas
+// like everything else in it — no counter-scaling, no chrome that holds 11px while the
+// node it names becomes a thumbnail. The cost is that they stop being READABLE well
+// before they stop being drawn: at 0.35x an 11px tab is under 4px. So they hide, and
+// the threshold is really "the zoom at which this type still resolves".
+//
+//   below 0.5   hidden
+//   0.5 - 0.75  hidden at rest, shown while the pointer is on the node
+//   0.75 and up always shown
+//
+// One attribute on the flow element drives all of it in CSS (styles.css), rather than
+// each node subscribing to the zoom: 40 nodes re-rendering on every wheel tick is a
+// cost paid continuously for a signal that only changes twice across the whole range.
+//
+// The numbers came from drawing rather than from use — see the redesign spec's "Left
+// open" — so they are expected to move once this has been lived with.
+function ChromeZoom() {
+  const zoom = useStore((s) => s.transform[2]);
+  const ref = useRef(null);
+  const level = zoom < 0.5 ? 'off' : zoom < 0.75 ? 'hover' : 'on';
+  useEffect(() => {
+    ref.current?.closest('.react-flow')?.setAttribute('data-chrome', level);
+  }, [level]);
+  // Anchors to the flow element without a document-wide query, and takes no space.
+  return <span ref={ref} hidden />;
+}
+
 function Canvas() {
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
@@ -1361,6 +1389,7 @@ function Canvas() {
           // rather than as large as it could be.
           connectionRadius={70}
         >
+          <ChromeZoom />
           <Background gap={26} size={1} color="var(--color-border)" />
         </ReactFlow>
 

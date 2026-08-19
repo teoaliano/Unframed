@@ -3,8 +3,9 @@ import { Handle, Position, useReactFlow } from '@xyflow/react';
 import { Card } from '@astryxdesign/core/Card';
 import { TextArea } from '@astryxdesign/core/TextArea';
 import NodeHeader from './NodeHeader.jsx';
+import NodeLine from './NodeLine.jsx';
+import MediaResize from './MediaResize.jsx';
 import { isReferenceable } from '../graph/resolve.js';
-import { useFieldResize } from './fieldResize.js';
 
 // Match a partial "@query" ending exactly at the caret, so the menu only shows
 // while you're actively typing a reference.
@@ -18,7 +19,7 @@ export default function PromptNode({ id, data }) {
 
   // Other prompt and text output nodes whose id starts with the current @query, with a
   // preview so opaque ids stay identifiable. (Images aren't @-referenced — they
-  // are typed as "image N", see the number on each connected reference node.)
+  // are typed as "image N", see the number under each connected reference node.)
   function candidates(q) {
     if (q == null) return [];
     const lower = q.toLowerCase();
@@ -68,29 +69,25 @@ export default function PromptNode({ id, data }) {
 
   const list = candidates(query);
 
-  // See fieldResize.js for why this needs a mousedown-armed window listener rather
-  // than a plain mouseup handler on the field.
-  const onResizeMouseDown = useFieldResize({ id, data, updateNodeData, keyFor: () => 'size' });
-
-  // The menu is a sibling of the Card, not a child of it: the Card clips to its
-  // rounded corners (overflow: clip), and the menu hangs below the Card's box, so
-  // nested it was laid out correctly and then clipped away — present in the DOM,
-  // never painted. Out here it anchors to the React Flow node wrapper instead,
-  // which is positioned and does not clip.
+  // The menu and the @id line are siblings of the Card, not children of it: the Card
+  // clips to its rounded corners (overflow: clip) and both hang below the Card's box,
+  // so nested they were laid out correctly and then clipped away — present in the DOM,
+  // never painted. Out here they anchor to the React Flow node wrapper instead, which
+  // is positioned and does not clip.
+  //
+  // The field IS the node now — no rows box, no inner border, no body padding. It fills
+  // the card, and the card fills whatever box a border-drag writes onto the node
+  // wrapper. That replaced the field's own CSS `resize: both` handle, and with it the
+  // whole fieldResize.js dance: a NodeResizeControl sets pointer capture, so there is
+  // no longer a mouseup that can land on the canvas instead of the field.
   return (
     <>
-      <Card width="fit-content" padding={0} className="xnode-prompt">
+      <NodeHeader kind="prompt" family="input" />
+      <Card width="100%" padding={0} className="xnode-prompt">
         <Handle type="source" position={Position.Right} />
-        <NodeHeader kind="prompt" family="input" right={`@${id}`} />
-        <div
-          className="xnode-body"
-          onKeyDown={onKeyDown}
-          onClick={() => syncMenu(ref.current)}
-          onMouseDown={onResizeMouseDown}
-        >
+        <div className="xnode-body" onKeyDown={onKeyDown} onClick={() => syncMenu(ref.current)}>
           <TextArea
             className="nodrag nowheel"
-            style={data.size}
             ref={ref}
             label="Prompt text"
             isLabelHidden
@@ -106,6 +103,14 @@ export default function PromptNode({ id, data }) {
           />
         </div>
       </Card>
+      {/* A prompt has no connection role — sourceRoles answers only for media — so its
+          line below carries the one other fact worth having on the canvas: the id every
+          @reference is written against. */}
+      <div className="xnode-under">
+        <NodeLine>{`@${id}`}</NodeLine>
+      </div>
+      {/* Both axes, unlike media: there is no aspect ratio here to preserve. */}
+      <MediaResize free />
       {list.length > 0 && (
         <ul className="mention-menu">
           {list.map((c, i) => (

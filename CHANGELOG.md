@@ -5,6 +5,41 @@ is no release artifact to number. Headings are `## YYYY-MM-DD`, groups are
 `### Added` / `### Changed` / `### Fixed`, one bullet per user-visible change.
 Keep that shape: the website's What's new page parses this file.
 
+## 2026-08-20
+
+### Changed
+
+- **Every node is a name tag, a box and one line underneath.** The title bar is
+  gone from the top of the card. The node's name now sits on a small tab docked to
+  its top-left corner, and the one fact that reports on the whole node — what an
+  image or clip is wired in as, a prompt's `@id`, what a run cost — sits on a line
+  just below it. What is left inside the box is the content and nothing else, so a
+  picture, a clip or the prompt text runs edge to edge.
+
+- **Image and video nodes have square corners.** A rounded corner was quietly
+  cropping the picture; everything else keeps the rounding it had.
+
+- **The prompt node resizes by its edges**, like the image and video nodes, instead
+  of by a small handle in the corner of its text field. The text fills whatever
+  size you drag it to, and both the width and the height are saved with the
+  project.
+
+- **Input and output nodes are told apart by their name tag** rather than by the
+  colour of their outline: an output's tag is filled, an input's is not. Both kinds
+  of node now have the same quiet border.
+
+- **A video reference's play and scrub controls moved below the clip**, outside the
+  frame, so the clip itself fills the node.
+
+- **Name tags and the line below fade out as you zoom out**, and come back when you
+  point at a node or zoom back in — so a canvas seen from far away is just the work.
+
+- **Node edges show where they can be dragged.** Hovering a node's edge lights it
+  up; before this it was invisible and you had to know it was there.
+
+- **An output node's cost moved out from the footer strip to the line below the
+  node**, and its Clear button moved up beside the results it clears.
+
 ## 2026-08-19
 
 ### Added
