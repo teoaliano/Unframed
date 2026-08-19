@@ -892,19 +892,37 @@ function videoGraph(inputMode, imageCount, extra = []) {
   assert.ok(Number(nextId()) > 502, 'a graph with no numeric ids never reissues a used id');
 }
 
-// withDrag decides three things per node, and each has a way of going wrong that
+// withDrag decides four things per node, and each has a way of going wrong that
 // the UI reports as something else entirely. `dragHandle`/`className` are derived
-// so a value saved by an older build cannot shadow the current rule; `width` is
-// the opposite -- a resized reference node must keep the width its user gave it,
-// and only fall back to the 240 the Card used to carry, because the Card is now
-// width: 100% and has nothing to resolve against without one.
+// so a value saved by an older build cannot shadow the current rule; `width` and
+// `height` are the opposite -- a resized input node must keep the size its user gave
+// it, and only fall back to a default, because its Card is now width/height: 100% and
+// has nothing to resolve against without one.
+//
+// The height rule is the subtle one, and getting it wrong is silent both ways. MEDIA
+// must have NO height: while it is undefined the picture's own aspect ratio computes
+// it, which is what keeps a resize from ever cropping or letterboxing. A PROMPT must
+// HAVE one: it has no ratio to derive a height from, so an unset height collapses the
+// card to its content and the border-drag has nothing to grow.
 {
   const stale = withDrag({ id: '1', type: 'image', dragHandle: '.xnode-head', className: 'nowheel' });
   assert.equal(stale.dragHandle, undefined, 'a stale dragHandle never survives a load');
   assert.equal(stale.className, undefined, 'nor a stale nowheel, which killed pan and zoom over a node');
-  assert.equal(stale.width, 240, 'a reference node with no width gets the default');
+  assert.equal(stale.width, 240, 'a media node with no width gets the default');
+  assert.equal(stale.height, undefined, 'and never a height -- its aspect ratio computes one');
   assert.equal(withDrag({ id: '2', type: 'video', width: 480 }).width, 480, 'a resized width is kept');
-  assert.equal(withDrag({ id: '3', type: 'prompt' }).width, undefined, 'other node types are left to size themselves');
+  assert.equal(withDrag({ id: '2b', type: 'video', height: 300 }).height, undefined,
+    'a height saved onto a media node by an older build is dropped, not honoured');
+
+  const prompt = withDrag({ id: '3', type: 'prompt' });
+  assert.equal(prompt.width, 240, 'a prompt is resizable too, so it gets a width');
+  assert.equal(prompt.height, 160, 'and a height, because it has no ratio to derive one from');
+  assert.equal(withDrag({ id: '4', type: 'prompt', width: 400, height: 320 }).height, 320,
+    'a resized prompt keeps both axes');
+
+  const output = withDrag({ id: '5', type: 'imageOutput' });
+  assert.equal(output.width, undefined, 'output nodes are left to size themselves');
+  assert.equal(output.height, undefined);
 }
 
 // slug is a hand-kept copy of the server's slugify (server/index.js): the client

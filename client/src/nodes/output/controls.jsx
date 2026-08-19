@@ -4,6 +4,7 @@
 
 import { useState } from 'react';
 import { Text } from '@astryxdesign/core/Text';
+import NodeLine from '../NodeLine.jsx';
 import { Button } from '@astryxdesign/core/Button';
 import { HStack, VStack } from '@astryxdesign/core/Stack';
 import { ratioLabel } from './core.js';
@@ -159,22 +160,22 @@ export function ParamControls({ params, data, onChange, children }) {
   );
 }
 
-// What the run cost sits in a footer rather than in the body's flow: it reports on the
-// node as a whole, so it reads better banded off against the same rule as the title
-// than stacked under the last result. `cost` is null when there is nothing to bill
-// yet; `before` and `after` are the caller's own extras (an estimate, a Clear button),
-// which stay caller-specific because they differ per medium.
-export function CostFoot({ cost, before, after }) {
-  if (cost == null && !before && !after) return null;
+// What the run cost reports on is the node as a WHOLE, not the last result above it —
+// the same kind of fact as an input node's connection role, so it lives in the same
+// place: NodeLine, at the right end of the node's name row. See
+// docs/superpowers/specs/2026-08-20-node-anatomy-redesign-design.md.
+//
+// Only LABELS come here. The Clear button each output used to pass through this
+// component's `after` slot could not follow the cost out: a control sitting on the
+// canvas rather than inside a node has no `nodrag` ancestor to opt out of the drag
+// surface, so it would fight every press. It moved into the body, beside the result
+// strip it empties. `extra` is what remains — a video's pre-run estimate, an image
+// batch's result count — and it stays caller-specific because it differs per medium.
+export function CostFoot({ cost, extra }) {
+  if (cost == null && !extra) return null;
   return (
-    <div className="xnode-foot">
-      {before}
-      {cost != null && (
-        <Text type="supporting" color="accent" hasTabularNumbers>
-          ${Number(cost).toFixed(4)}
-        </Text>
-      )}
-      {after}
-    </div>
+    <NodeLine>
+      {[cost != null ? `$${Number(cost).toFixed(4)}` : null, extra].filter(Boolean).join(' · ')}
+    </NodeLine>
   );
 }

@@ -5,11 +5,11 @@ import { FileInput } from '@astryxdesign/core/FileInput';
 import { TextInput } from '@astryxdesign/core/TextInput';
 import { Button } from '@astryxdesign/core/Button';
 import { Icon } from '@astryxdesign/core/Icon';
-import { Text } from '@astryxdesign/core/Text';
 import NodeHeader from './NodeHeader.jsx';
+import NodeLine from './NodeLine.jsx';
 import MediaResize from './MediaResize.jsx';
 import StatusLine from './StatusLine.jsx';
-import VideoPlayer from './VideoPlayer.jsx';
+import { useVideoPlayback, VideoFrame, VideoControls } from './VideoPlayer.jsx';
 import { sourceRoles } from '../graph/resolve.js';
 
 // Base64 inflates ~4/3 and the whole graph rides in one JSON body (and lands in
@@ -26,6 +26,9 @@ export default function VideoNode({ id, data }) {
   // Same per-consumer role reporting as images, read off this node's own type, so
   // "image 1" and "video 1" can coexist on one output.
   const roles = sourceRoles(useNodes(), useEdges(), id);
+  // One playback state, two placements: the clip inside the card, the transport below
+  // it — see VideoPlayer.jsx.
+  const player = useVideoPlayback();
 
   function onFile(file) {
     if (!file) return;
@@ -51,7 +54,20 @@ export default function VideoNode({ id, data }) {
     updateNodeData(id, { dataUrl: url, fileName: name });
   }
 
-  const status = roles.length ? roles.join(' / ') : data.dataUrl ? 'not connected' : undefined;
+  // sourceRoles answers with bare ranks ("1", "1 / 2") for reference mode and with
+  // words ("first", "last") for a frame mode. A rank alone said nothing once it left
+  // the header that used to sit beside it, so the medium is spelled out — but only for
+  // the numeric case, since "video first frame" would be worse than "first frame". The
+  // wording lives here rather than in resolve.js so that pure module keeps answering
+  // the graph question and the node owns how it reads.
+  const numeric = roles.every((r) => /^[\d—]+$/.test(r));
+  const role = roles.length
+    ? numeric
+      ? `video ${roles.join(' / ')}`
+      : roles.map((r) => (r === 'first' || r === 'last' ? `${r} frame` : r)).join(' / ')
+    : data.dataUrl
+      ? 'not connected'
+      : null;
 
   // Dropping a clip anywhere on the node fills (or replaces) it. Stopping
   // propagation matters: the canvas drop handler would otherwise also spawn a
@@ -66,6 +82,7 @@ export default function VideoNode({ id, data }) {
 
   return (
     <>
+      <NodeHeader kind="video" family="input" />
       <Card
         width="100%"
         elevation="low"
@@ -77,19 +94,13 @@ export default function VideoNode({ id, data }) {
         }}
       >
         <Handle type="source" position={Position.Right} />
-        <NodeHeader
-          kind="video"
-          family="input"
-          right={status}
-          rightTone={roles.length ? 'accent' : 'secondary'}
-        />
         <div className="xnode-body">
           {data.dataUrl ? (
             // Same shape as an image reference: the clip fills the node and remove is
-            // an X over its corner, rather than a labelled button in a footer. The
-            // file name moves to the title, which is where Thumbnail keeps it too.
+            // an X over its corner. The file name is on the Thumbnail's alt, and the
+            // transport is OUTSIDE the card entirely — see below.
             <span className="xnode-media">
-              <VideoPlayer src={data.dataUrl} />
+              <VideoFrame player={player} src={data.dataUrl} />
               <span className="xnode-media-remove nodrag">
                 <Button
                   label={`Remove ${data.fileName || 'video'}`}
@@ -130,6 +141,20 @@ export default function VideoNode({ id, data }) {
           )}
         </div>
       </Card>
+      {/* The transport lives out here, between the card and the role line. It cannot go
+          ON the clip: VideoPlayer.jsx already moved its controls out of the <video> for
+          exactly this reason — a press on a scrubber retargets to the video element and
+          nothing downstream can tell a scrub from a node drag. Inside the card it ate
+          10px of frame on every side and made the clip stop short of the node's edge. */}
+      <NodeLine live={roles.length > 0}>{role}</NodeLine>
+      {/* The transport is the one thing that still has to go BELOW: it is a control, so
+          it cannot sit on the clip (a press there is indistinguishable from a node drag
+          — see VideoPlayer.jsx), and it is far too wide for the name row. */}
+      {data.dataUrl && (
+        <div className="xnode-under">
+          <VideoControls player={player} />
+        </div>
+      )}
       {/* Resizable from any edge once it holds something — nodes/MediaResize.jsx owns
           why that includes the right one, where the handle also lives. */}
       {data.dataUrl && <MediaResize />}

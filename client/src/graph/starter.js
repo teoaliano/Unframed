@@ -28,18 +28,31 @@ import { OUTPUT_DEFAULTS } from '../nodes/output/defaults.js';
 // handle" to React Flow, which is what makes the whole card the drag surface; the
 // controls opt out individually with `nodrag`. See
 // docs/superpowers/specs/2026-08-18-canvas-interaction-design.md.
+const RESIZABLE_INPUT = new Set(['image', 'video', 'prompt']);
+
 export const withDrag = (n) => ({
   ...n,
   dragHandle: undefined,
   className: undefined,
-  // Reference nodes are resizable from any edge (nodes/MediaResize.jsx), and their Card
+  // Every INPUT node is resizable from its edges (nodes/MediaResize.jsx), and its Card
   // is width/height: 100% — which needs a size on the node wrapper to resolve against.
   // So they start at the 240 the Card used to carry itself, and keep whatever a resize
-  // has written since. Unlike the two above this is NOT derived: a resized width is the
-  // user's, not a stale default. Height is deliberately never set, here or by a resize:
-  // while it is undefined the media's own aspect ratio computes it, which is what makes
-  // a resize keep the picture's proportions exactly.
-  width: n.type === 'image' || n.type === 'video' ? n.width ?? 240 : n.width,
+  // has written since. Unlike the two above this is NOT derived: a resized size is the
+  // user's, not a stale default.
+  //
+  // Height differs by type, and the difference is the whole reason this is not one
+  // line. For MEDIA it is deliberately never set, here or by a resize: while it is
+  // undefined the picture's own aspect ratio computes it, which is what makes a resize
+  // keep the media's proportions exactly. A PROMPT has no ratio to keep, so both axes
+  // are the user's and a height has to be seeded — before this it resized by a CSS
+  // handle on the field itself (the old data.size + fieldResize.js), which is what the
+  // 2026-08-20 node-anatomy redesign replaced with a border drag on the card.
+  width: RESIZABLE_INPUT.has(n.type) ? n.width ?? 240 : n.width,
+  // Media is the DERIVED case, so its height is dropped rather than passed through: a
+  // height saved by an older build, or by a hand-edited graph.json, would otherwise be
+  // honoured forever and quietly letterbox the picture. Everything that is not a prompt
+  // and not media has no wrapper size at all.
+  height: n.type === 'prompt' ? n.height ?? 160 : undefined,
 });
 
 let counter = 100;

@@ -123,10 +123,11 @@ export default function TextOutputNode({ id, data }) {
   });
 
   return (
-    <Card width="fit-content" padding={0} elevation="low" className="xnode-text">
+    <>
+      <NodeHeader kind="textOutput" title="text" family="output" />
+      <Card width="fit-content" padding={0} elevation="low" className="xnode-text">
       <Handle type="target" position={Position.Left} />
       <Handle type="source" position={Position.Right} />
-      <NodeHeader kind="textOutput" title="text" family="output" right={`@${id}`} />
 
       <VStack gap={3} padding={3} onMouseDown={onResizeMouseDown}>
         <ModelPicker
@@ -184,7 +185,10 @@ export default function TextOutputNode({ id, data }) {
         )}
       </VStack>
 
-      <CostFoot cost={data.cost ?? null} />
-    </Card>
+      </Card>
+      {/* A text output is referenceable by @id like a prompt, and it also spends money,
+          so its line carries both. */}
+      <CostFoot cost={data.cost ?? null} extra={`@${id}`} />
+    </>
   );
 }

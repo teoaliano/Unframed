@@ -270,65 +270,172 @@ div:has(> .add-node-menu) {
 
 /* ---- node chrome ---- */
 /* The whole card is the drag surface; controls opt out with `nodrag` (see
-   docs/superpowers/specs/2026-08-18-canvas-interaction-design.md). The header keeps
-   the grab cursor because it is the one strip that is nothing BUT a handle, so it
-   still reads as the obvious place to pick a node up. */
-.xnode-head {
+   docs/superpowers/specs/2026-08-18-canvas-interaction-design.md). A node is now a
+   TAB, a BOX and a LINE BELOW — the box holds content only, so a picture, a clip or a
+   prompt field runs edge to edge. See
+   docs/superpowers/specs/2026-08-20-node-anatomy-redesign-design.md. */
+
+/* The node WRAPPER stays exactly the card's box, and the tab and the line hang off it
+   out of flow. That is not cosmetic: React Flow measures a node from this element and
+   positions handles and NodeResizeControls against it, so letting the tab and line sit
+   in its flow made the wrapper 50px taller than the card — the top resize strip landed
+   on top of the tab, and the bottom one floated below the role line with nothing under
+   it. Out of flow, `width`/`height` from node data size the card, the four resize edges
+   hug the card, and the handle centres on the card rather than on a box that happens to
+   include its own labels. */
+/* The strip above the card is the node's name row: the tab docked at the left, the one
+   volatile fact right-aligned at the other end of the same 22px band. `.xnode-under` is
+   what still has to go BELOW — only the video transport, which is a control and cannot
+   sit on the clip. */
+.xnode-tab {
+  position: absolute;
+  inset-block-end: 100%;
+  inset-inline-start: 0;
+}
+.xnode-line {
+  position: absolute;
+  inset-block-end: 100%;
+  inset-inline-end: 0;
+  height: 22px;
+  /* Ellipsis rather than wrap: the row is one band tall, and a two-line cost would
+     push the tab's baseline out of alignment with it. */
+  max-width: 62%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.xnode-under {
+  position: absolute;
+  inset-block-start: 100%;
+  inset-inline-start: 0;
+  width: 100%;
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  padding: 6px 10px;
-  cursor: grab;
-  border-bottom: 1px solid var(--color-border);
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  /* The Card is now a flex column (see .astryx-card below) so a manually
-     resized-taller node has somewhere to put the extra height. Without this the
-     header is still a flex item and, while nothing here would actually shrink
-     it, the rule says explicitly what should never move. */
-  flex-shrink: 0;
-}
-/* Output nodes (output, text) consume edges; inputs (prompt, image) only feed them.
-   The accent border makes that difference visible at a glance. */
-.xnode-head--output {
-  border-bottom-color: var(--color-accent);
-}
-/* A node's outline matches its own header rule, so the two never disagree: accent
-   all the way around an output, the quieter emphasized grey around an input. That
-   keeps the two families apart at a glance and keeps one border colour per node. */
-.react-flow__node:has(.xnode-head--output) > .astryx-card {
-  border-color: var(--color-accent);
-}
-.react-flow__node:has(.xnode-head--input) > .astryx-card {
-  border-color: var(--color-border-emphasized);
-}
-.xnode-head--input {
-  border-bottom-color: var(--color-border-emphasized);
-}
-/* Footer: mirrors the header's rule so a node reads as banded top and bottom. */
-.xnode-foot {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 6px 10px;
-  border-top: 1px solid var(--color-border-emphasized);
-}
-/* Pushed right rather than the footer being space-between: the cost and the image
-   count are two separate texts, and space-between would fling them apart. */
-.xnode-foot-end {
-  margin-inline-start: auto;
-}
-.react-flow__node:has(.xnode-head--output) .xnode-foot {
-  border-top-color: var(--color-accent);
+  flex-direction: column;
+  align-items: flex-start;
 }
 
-/* Icon and label travel together on the left; the id or badge stays right. */
-.xnode-head-title {
+/* The tab. `border-bottom: none` plus the -1px margin makes its bottom edge and the
+   card's top edge one line, which is what makes it read as docked rather than as a
+   chip hovering above the node. It keeps the grab cursor: it is the one strip that is
+   nothing BUT a handle, and with the title bar gone it is the only visible "pick me up
+   here" left on a node. */
+.xnode-tab {
   display: inline-flex;
   align-items: center;
   gap: 6px;
+  height: 22px;
+  padding-inline: var(--spacing-2) 10px;
+  cursor: grab;
+  background: var(--color-background-card);
+  border: 1px solid var(--color-border-emphasized);
+  border-bottom: none;
+  border-start-start-radius: var(--radius-element);
+  border-start-end-radius: var(--radius-element);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  flex-shrink: 0;
+  transition: opacity var(--duration-fast) ease;
 }
+/* The tab's FILL is the only thing telling the two families apart, now that both cards
+   carry the same neutral border. That is why selection is a doubled border and not a
+   filled tab — the fill is already spoken for. Undoing either half breaks the other:
+   see NodeHeader.jsx and the `.selected` rule below. */
+.xnode-tab--output {
+  background: var(--color-accent);
+  border-color: var(--color-accent);
+  color: var(--color-on-accent);
+}
+.xnode-tab--output .astryx-text,
+.xnode-tab--output svg {
+  color: var(--color-on-accent);
+}
+.xnode-tab--input .astryx-text,
+.xnode-tab--input svg {
+  color: var(--color-text-secondary);
+}
+.react-flow__node:hover .xnode-tab--input .astryx-text,
+.react-flow__node:hover .xnode-tab--input svg,
+.react-flow__node.selected .xnode-tab--input .astryx-text,
+.react-flow__node.selected .xnode-tab--input svg {
+  color: var(--color-text-primary);
+}
+
+/* The node's one volatile fact — a connection role, an @id, what a run cost — sitting
+   at the right end of the name row. Outside the card so nothing is ever drawn over the
+   content: a badge on a picture needs a scrim to survive an arbitrary photograph, and
+   the scrim is then the thing covering the photograph. */
+.xnode-line {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding-inline: 2px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  flex-shrink: 0;
+  white-space: nowrap;
+  transition: opacity var(--duration-fast) ease;
+}
+/* Two channels, not colour alone: a live role gets the dot AND the weight, so "this is
+   feeding something" never reads the same as "this is a fact about the node". */
+.xnode-line-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: var(--radius-full);
+  background: var(--color-accent);
+  flex: none;
+}
+
+/* Tab and line hide below the zoom threshold and come back on hover in the band above
+   it — App.jsx's ChromeZoom sets data-chrome, and owns why the thresholds are what they
+   are. `visibility`, not `display`: the card must not move when they go. */
+.react-flow[data-chrome='off'] .xnode-tab,
+.react-flow[data-chrome='off'] .xnode-line,
+.react-flow[data-chrome='hover'] .xnode-tab,
+.react-flow[data-chrome='hover'] .xnode-line {
+  opacity: 0;
+}
+.react-flow[data-chrome='hover'] .react-flow__node:hover .xnode-tab,
+.react-flow[data-chrome='hover'] .react-flow__node:hover .xnode-line,
+.react-flow[data-chrome='hover'] .react-flow__node.selected .xnode-tab,
+.react-flow[data-chrome='hover'] .react-flow__node.selected .xnode-line {
+  opacity: 1;
+}
+/* With no tab docked into it, a square top-left corner is just a defect — so the card
+   rounds back as the tab fades. Only the types that HAVE a container radius need this;
+   image and video are square in both states, which is the second thing squaring the
+   media bought. */
+.react-flow[data-chrome='off'] .react-flow__node:not(.react-flow__node-image):not(.react-flow__node-video) > .astryx-card {
+  border-start-start-radius: var(--radius-container);
+}
+@media (prefers-reduced-motion: reduce) {
+  .xnode-tab,
+  .xnode-line,
+  .astryx-card {
+    transition: none;
+  }
+}
+
+/* One border for both families: the tab carries the distinction now. */
+.react-flow__node > .astryx-card {
+  border-color: var(--color-border-emphasized);
+  /* Square where the tab docks, so the two share one unbroken edge. */
+  border-start-start-radius: 0;
+  transition: border-color var(--duration-fast) ease,
+    border-start-start-radius var(--duration-fast) ease;
+}
+/* A container radius softens CHROME. A reference image is not chrome — it is the thing
+   being judged, and four rounded corners are four small bites out of every picture on
+   the canvas. So the media nodes square off entirely, and everything with nothing
+   reaching its corner keeps --radius-container. */
+.react-flow__node-image > .astryx-card,
+.react-flow__node-video > .astryx-card {
+  border-radius: 0;
+}
+/* Hover steps the border up one stop, so the resize edges stop being invisible without
+   anything moving. */
+.react-flow__node:hover > .astryx-card {
+  border-color: var(--color-text-secondary);
+}
+
 .xnode-body {
   position: relative;
   display: flex;
@@ -344,6 +451,15 @@ div:has(> .add-node-menu) {
   height: auto;
   aspect-ratio: 1;
   min-height: 0;
+}
+/* Media squares wherever it appears, not only on the input nodes: the generated
+   thumbnails in an output's strip and the video result are pictures too, and a rounded
+   one inside a rounded card is the same handful of pixels lost twice over. */
+.xnode-thumb,
+.xnode-thumb > *,
+.xnode-thumb img,
+.xnode-video {
+  border-radius: 0;
 }
 .xnode-thumb > * {
   aspect-ratio: auto;
@@ -558,7 +674,7 @@ div:has(> .add-node-menu) {
   flex: 1 1 auto;
   min-height: 0;
   overflow: hidden;
-  border-radius: 0 0 var(--radius-container) var(--radius-container);
+  border-radius: 0;
 }
 .xnode-body > .xnode-media .xnode-thumb,
 .xnode-body > .xnode-media .xnode-video {
@@ -581,9 +697,18 @@ div:has(> .add-node-menu) {
 .xnode-body > .xnode-media .xnode-video {
   object-fit: cover;
 }
-/* The clip now fills the node edge to edge, so the control row that used to sit
-   inside .xnode-body's 10px padding has to bring its own — without this the play
-   button and the time readout touch the node's border. */
+/* On an INPUT node the transport is a sibling of the card, out on the canvas below the
+   clip — see nodes/VideoNode.jsx for why it cannot sit on the clip, and why it is the
+   only part of a node still down there. It is the full width of the node and needs no
+   padding of its own; the 2px matches the tab above so the two align on the same left
+   edge. */
+.xnode-under > .xnode-player {
+  width: 100%;
+  margin-top: var(--spacing-1);
+  padding-inline: 2px;
+}
+/* Inside an output node the clip still fills the card edge to edge, so the control row
+   there brings its own padding. */
 .xnode-body > .xnode-media .xnode-player {
   padding-inline: var(--spacing-2);
   padding-block-end: var(--spacing-1);
@@ -611,34 +736,70 @@ div:has(> .add-node-menu) {
   width: 20px;
   height: 20px;
   min-width: 20px;
-  border-radius: 6px;
+  /* Square, like the media under it — a rounded chip on a square picture reads as a
+     sticker stuck to the node. */
+  border-radius: 0;
   background: var(--color-background-popover);
   border: 1px solid var(--color-border-emphasized);
   color: var(--color-icon-primary);
 }
 
-/* Prompt node: drag the field's corner to resize in both axes. The handle goes on
-   the field wrapper, not the textarea — the textarea is width: 100%, so an inline
-   width from a horizontal drag would be overridden — and the card (width:
-   fit-content) tracks it. The textarea must then be told to FILL that wrapper:
-   Astryx 0.4.3 made the wrapper display: block (0.1.6 was flex, where
-   align-items: stretch grew the textarea for free), so without height: 100% a
-   vertical drag grows the bordered box while the text keeps its rows height and
-   scrolls in a strip at the top. Percentage height against the un-dragged
-   wrapper's auto height resolves to auto, so rows still sets the natural size —
-   which is also why min-height below has to stay under the rows height: a
-   min-height does not make the parent definite, so raising it past that brings
-   the dead strip back for every field nobody has dragged. */
+/* Prompt node: the field IS the node. No inner border, no rows box, no body padding —
+   the card's own border is the field's border, and the card fills whatever box a
+   border-drag writes onto the node wrapper. That replaced the field's own CSS
+   `resize: both` handle and, with it, fieldResize.js's mousedown-armed window listener:
+   a NodeResizeControl sets pointer capture, so there is no longer a mouseup that can
+   land on the canvas instead of the field. */
+.xnode-prompt .xnode-body {
+  padding: 0;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+/* Astryx wraps a TextArea in a Field and one unnamed div, so filling the card means
+   filling FOUR boxes, not one — the field, its inner wrapper, the textarea's own
+   wrapper and the textarea. Miss any of them and the card grows while the text keeps
+   its `rows` height and sits in a strip at the top, which is exactly what the old
+   field-corner resize did before this. `min-height: 0` on each is what lets a flex item
+   shrink below its content, so dragging the bottom edge UP works as well as down. */
+.xnode-prompt .xnode-body > .astryx-field,
+.xnode-prompt .astryx-field > div,
 .xnode-prompt .astryx-textarea {
-  resize: both;
-  overflow: auto;
-  width: 220px; /* = old 240px card minus body padding */
-  min-width: 160px;
-  min-height: 64px;
+  width: 100%;
+  height: 100%;
+  flex: 1 1 auto;
+  min-height: 0;
+  resize: none;
+}
+/* The field's own bordered box has to GO, not just be filled. Astryx draws the border,
+   the 10px radius and the white fill on the `.astryx-textarea` WRAPPER — not on the
+   <textarea> — so stripping the inner element left the wrapper's rounded box sitting
+   1px inside the card's square one: a double border, made obvious by the two corners
+   disagreeing. The card's border is now the field's only border, which is the whole
+   point of "the field IS the node". */
+.xnode-prompt .astryx-textarea {
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
 }
 .xnode-prompt .astryx-textarea textarea {
-  resize: none;
+  width: 100%;
   height: 100%;
+  resize: none;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  padding: 10px;
+}
+.xnode-prompt .astryx-textarea textarea:focus {
+  outline: none;
+  box-shadow: none;
+}
+/* Focus moved with the border: with nothing of its own left to ring, the field's focus
+   is the card's. Same colour as selection, which is correct — a focused prompt IS the
+   selected node. */
+.react-flow__node-prompt:focus-within > .astryx-card {
+  border-color: var(--color-accent);
 }
 
 /* Text node fields resize in both axes, same as the prompt node's — handle on the
@@ -790,12 +951,31 @@ div:has(> .add-node-menu) {
   }
 }
 
-/* Selection: React Flow marks the wrapper, so the ring goes on the card inside it.
-   Offset rather than flush, because an output node's own border is already this
-   colour and a flush ring would just read as a thicker border. */
+/* Selection: a DOUBLED accent border on the card and the tab together.
+   Not the offset ring it used to be. The silhouette is notched — a tab narrower than
+   the card, sitting on its top edge — and an outline with an offset traces the bounding
+   box, leaving the tab hanging outside its own ring.
+   This only works because both families now start from the same neutral border. It did
+   not work before, and the reason is worth keeping: an output's border WAS accent, so a
+   flush ring read as nothing but a slightly thicker border. Giving the outputs their
+   accent border back silently breaks selection on them. */
+.react-flow__node.selected > .astryx-card,
+.react-flow__node.selected .xnode-tab {
+  border-color: var(--color-accent);
+}
+/* The elevation shadow is repeated here on purpose. Nodes carry `elevation="low"`
+   (the Card prop), which IS a box-shadow, and box-shadow does not merge — setting the
+   selection ring alone would drop a selected node back down onto the canvas, which in
+   light mode is most of what separates a white node from a white background. */
 .react-flow__node.selected > .astryx-card {
-  outline: 2px solid var(--color-accent);
-  outline-offset: 2px;
+  box-shadow: inset 0 0 0 1px var(--color-accent), var(--shadow-low);
+}
+/* Three sides, because the fourth is shared with the card's top edge. */
+.react-flow__node.selected .xnode-tab--input {
+  box-shadow:
+    inset 0 1px 0 var(--color-accent),
+    inset 1px 0 0 var(--color-accent),
+    inset -1px 0 0 var(--color-accent);
 }
 
 /* After a box-select React Flow lays a rectangle over the selection's whole
@@ -974,14 +1154,16 @@ div:has(> .add-node-menu) {
    resize strips below (z-index 1), which is what lets a right-edge strip coexist
    with the handle: the dot wins its own few pixels, the strip takes the rest. */
 .react-flow__node-image .react-flow__handle,
-.react-flow__node-video .react-flow__handle {
+.react-flow__node-video .react-flow__handle,
+.react-flow__node-prompt .react-flow__handle {
   z-index: 2;
 }
 /* Resizing on the two reference nodes. The card fills whatever box React Flow
    writes onto the node wrapper; see nodes/MediaResize.jsx for which edge does
    what. */
 .react-flow__node-image > .astryx-card,
-.react-flow__node-video > .astryx-card {
+.react-flow__node-video > .astryx-card,
+.react-flow__node-prompt > .astryx-card {
   width: 100%;
   /* Both filled, and flex column, so a height-resize has a chain of "leftover
      space goes here" all the way down to the picture: the header stays its own
@@ -993,15 +1175,26 @@ div:has(> .add-node-menu) {
 }
 /* Three classes deep on purpose: React Flow's own `.line.left`/`.line.right`
    rules are two, and a single-class override left its default blue line drawn
-   down both sides of every reference node. Invisible full stop — not even on
-   hover: the cursor already says an edge is grabbable, and the node is due a
-   redesign that will decide what an affordance here should look like. */
+   down both sides of every reference node.
+   These used to draw nothing at all, not even on hover, with a comment saying the
+   affordance was a redesign's to decide. This is that decision: transparent at rest,
+   and the edge under the pointer lights accent. The cursor still does most of the
+   work; this only answers "is this edge grabbable at all". */
 .react-flow__resize-control.xnode-resize {
   /* Painted after the Card in the DOM (see the two node components), which is
      enough on its own for these to sit on top of the picture -- this is a
      second, explicit guarantee of the same thing, cheap enough to just set. */
   z-index: 1;
   border-color: transparent;
+  transition: border-color var(--duration-fast) ease;
+}
+.react-flow__resize-control.xnode-resize:hover {
+  border-color: var(--color-accent);
+}
+@media (prefers-reduced-motion: reduce) {
+  .react-flow__resize-control.xnode-resize {
+    transition: none;
+  }
 }
 /* left/right are vertical strips (full height, `width` is their thickness);
    top/bottom are horizontal ones (full width, `height` is their thickness).

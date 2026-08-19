@@ -529,9 +529,10 @@ export default function ImageOutputNode({ id, data }) {
   const isRunning = status === 'running' || Boolean(data.running);
 
   return (
-    <Card width={300} padding={0} elevation="low">
-      <Handle type="target" position={Position.Left} />
+    <>
       <NodeHeader kind="imageOutput" title="image" family="output" />
+      <Card width={300} padding={0} elevation="low">
+      <Handle type="target" position={Position.Left} />
 
       {/* nodrag on the whole body, not per control: Astryx portals a Selector's
           popup UP to this stack, so no wrapper around the control can ever contain
@@ -667,34 +668,29 @@ export default function ImageOutputNode({ id, data }) {
                 }}
               />
             )}
+            {/* Clears the whole strip, so it belongs with the strip rather than under
+                the last image in it. It used to live in the footer; a control cannot
+                follow the cost out onto the canvas. */}
+            <Button
+              className="nodrag"
+              label="Clear"
+              variant="ghost"
+              size="sm"
+              tooltip="Remove these results from the node. Files already written to disk stay, and images added to the canvas stay."
+              onClick={clearResults}
+            />
           </VStack>
         )}
       </VStack>
-
-      {/* What the run cost sits in a footer rather than in the body's flow: it
-          reports on the node as a whole. Clear belongs here too — it acts on the
-          whole strip, not on the last image above it. */}
+      </Card>
+      {/* The cost and the result count report on the node as a whole, so they sit in the
+          name row opposite the tab, where an input node shows its connection role. Clear
+          could not follow them out: it is a control, and a control on the canvas has no
+          `nodrag` ancestor to opt out of the drag surface — it moved up into the body,
+          beside the strip it empties. */}
       <CostFoot
         cost={hasSpend ? spent : null}
-        after={
-          hasStrip ? (
-            <>
-              {hasSpend && shown.length > 1 && (
-                <Text type="supporting" color="secondary">{shown.length} images</Text>
-              )}
-              <span className="xnode-foot-end">
-                <Button
-                  className="nodrag"
-                  label="Clear"
-                  variant="ghost"
-                  size="sm"
-                  tooltip="Remove these results from the node. Files already written to disk stay, and images added to the canvas stay."
-                  onClick={clearResults}
-                />
-              </span>
-            </>
-          ) : null
-        }
+        extra={hasSpend && shown.length > 1 ? `${shown.length} images` : null}
       />
 
       {/* Keyed by batchId so a second staging mounts a FRESH dialog: its textarea seeds
@@ -709,6 +705,6 @@ export default function ImageOutputNode({ id, data }) {
           onConfirm={onConfirmPreview}
         />
       )}
-    </Card>
+    </>
   );
 }
