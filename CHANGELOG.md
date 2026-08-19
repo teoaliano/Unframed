@@ -5,9 +5,31 @@ is no release artifact to number. Headings are `## YYYY-MM-DD`, groups are
 `### Added` / `### Changed` / `### Fixed`, one bullet per user-visible change.
 Keep that shape: the website's What's new page parses this file.
 
-## 2026-08-18
+## 2026-08-19
 
 ### Added
+
+- Video reference and result nodes have their own play/scrub controls, built into
+  the node instead of the browser's native ones. A clip now drags by its frame like
+  a picture does — scrubbing the new controls moves the playhead, not the node.
+
+### Changed
+
+- Box-select is more forgiving: a rectangle that only touches a node now selects
+  it (it used to have to enclose the whole node), and one drawn across a bare
+  connection — touching neither of its nodes — now selects that connection too.
+- Connection handles are bigger, and a release nearby now connects instead of
+  demanding a precise drop on the dot.
+
+### Fixed
+
+- The selection rectangle no longer lingers on screen after a box-select is
+  released, and the canvas underneath it responds again.
+- Hovering a reference picture, a generated result or a reference clip no longer
+  raises a tooltip — one that, in the packaged app, could land in the corner of
+  the window instead of on the picture.
+- A prompt or text field resized by its corner keeps that size after a reload or
+  a project switch, instead of snapping back to its default.
 
 - **Choosing a model opens a dialog instead of a dropdown.** Room to read the
   list properly: search every model by slug or name, see when each was
