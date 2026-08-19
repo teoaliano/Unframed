@@ -121,6 +121,29 @@ try {
   // The API answers on that port.
   assert.equal((await fetch(`${base}/api/health`)).status, 200);
 
+  // CORS is loopback-only. Wide open, any site the user happened to have open
+  // could read this API cross-origin -- /api/health alone carries the key hint,
+  // the model settings and the output path -- and call DELETE /api/key. The
+  // browser sets Origin, not the page, so an allowlist is a real boundary here.
+  const evil = await fetch(`${base}/api/health`, { headers: { Origin: 'https://evil.example' } });
+  assert.equal(evil.status, 200, 'a cross-origin GET still answers');
+  assert.equal(
+    evil.headers.get('access-control-allow-origin'),
+    null,
+    'but the browser is not told the page may read the answer',
+  );
+
+  // The dev client's own origin is reflected, so local tooling keeps working.
+  const dev = await fetch(`${base}/api/health`, { headers: { Origin: 'http://localhost:5173' } });
+  assert.equal(dev.headers.get('access-control-allow-origin'), 'http://localhost:5173');
+
+  // And a preflight for a destructive method is refused the same way.
+  const preflight = await fetch(`${base}/api/key`, {
+    method: 'OPTIONS',
+    headers: { Origin: 'https://evil.example', 'Access-Control-Request-Method': 'DELETE' },
+  });
+  assert.equal(preflight.headers.get('access-control-allow-origin'), null);
+
   // ...and the built canvas is served from the same origin, which is what
   // spares the window CORS and file:// handling.
   const page = await fetch(`${base}/index.html`);

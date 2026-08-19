@@ -50,6 +50,12 @@ Keep that shape: the website's What's new page parses this file.
 
 ### Fixed
 
+- **Other websites can no longer read or change your local Unframed settings.**
+  Any page open in the same browser could previously reach the local server: it
+  could read which key was in use, your default models and your output folder
+  path, or remove your API key outright. The server now answers only its own
+  canvas.
+
 - **Missing a node while building a selection no longer costs you the group.**
   Holding Shift (or Cmd/Ctrl) and clicking a gap between nodes used to throw
   away everything selected so far, so picking quickly across a grid left some
