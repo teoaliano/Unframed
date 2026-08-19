@@ -234,6 +234,27 @@ try {
   assert.equal(page.status, 200);
   assert.match(await page.text(), /canvas/);
 
+  // The server builds the authorize URL, because only it knows its own port --
+  // the client reaches the API through Vite's proxy in a clone.
+  const startRes = await fetch(`${base}/api/oauth/start`, { method: 'POST' });
+  assert.equal(startRes.status, 200);
+  const { authorizeUrl: started } = await startRes.json();
+  const parsed = new URL(started);
+  assert.equal(parsed.origin + parsed.pathname, 'https://openrouter.ai/auth');
+  assert.equal(parsed.searchParams.get('code_challenge_method'), 'S256');
+  assert.ok(parsed.searchParams.get('code_challenge'), 'a challenge is sent');
+
+  // The callback points back at THIS server, on the port it was actually given
+  // -- PORT=0 means it cannot be a constant.
+  const cb = new URL(parsed.searchParams.get('callback_url'));
+  assert.equal(cb.port, String(ready.port));
+  assert.match(cb.pathname, /^\/api\/oauth\/callback\/[0-9a-f]{32}$/);
+
+  // Cancel answers. That a cancelled attempt cannot then be COMPLETED is
+  // asserted in Task 4, where the callback route exists -- asserting it here
+  // would pass or fail on a 404 and prove nothing.
+  assert.equal((await fetch(`${base}/api/oauth/pending`, { method: 'DELETE' })).status, 200);
+
   // A setting saved from the UI lands in the data dir, not in the repo.
   const put = await fetch(`${base}/api/config`, {
     method: 'PUT',

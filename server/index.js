@@ -19,6 +19,7 @@ import {
   reassignPendingJobs,
 } from './jobs.js';
 import { ensureTunnel, mintShare, revokeShare, waitUntilPublic, stopTunnel } from './share.js';
+import { start as oauthStart, cancel as oauthCancel, authorizeUrl, callbackUrl } from './oauth.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, '..');
@@ -307,6 +308,30 @@ app.delete('/api/key', async (req, res) => {
     console.log(`  ${renderCleanupError}`);
   }
   res.json({ ok: true, endedRenders: ended, ...(renderCleanupError ? { renderCleanupError } : {}), ...settings() });
+});
+
+// Begins the browser flow. Nothing here awaits, so there is nothing to catch --
+// the code_verifier is minted and held in oauth.js and never reaches the client.
+app.post('/api/oauth/start', (req, res) => {
+  const { nonce, challenge } = oauthStart();
+  const callback = callbackUrl({
+    port: server.address().port,
+    nonce,
+    // Unset in a clone, which means direct loopback: the development mode, and
+    // the fallback when the public page is unreachable. Set, it names the public
+    // bounce page, which exists only so the consent screen can say "Unframed"
+    // instead of "127.0.0.1:51423".
+    bounce: process.env.UNFRAMED_OAUTH_BOUNCE,
+  });
+  res.json({ authorizeUrl: authorizeUrl({ callback, challenge }) });
+});
+
+// Cancel is a real action, not just a UI reset: without it, approving in the
+// browser after pressing Cancel would still write a key, and the app would have
+// said the attempt was cancelled.
+app.delete('/api/oauth/pending', (req, res) => {
+  oauthCancel();
+  res.json({ ok: true });
 });
 
 // Native folder chooser for the output directory. The browser cannot hand back a
