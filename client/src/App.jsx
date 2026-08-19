@@ -573,7 +573,11 @@ function Canvas() {
   // popup from an opened one; the link is always shown as a fallback because of
   // that, not because either path is detected.
   async function connectOpenRouter() {
-    setCfgDlg((d) => ({ ...d, error: undefined, saved: false }));
+    // key: '' drops any draft in the field this hides. Save stays available during
+    // a reconnect (the models and folder are still editable), and saving a pasted
+    // key mid-flow would change keyHint -- which the poll below reads as the
+    // browser approval having come back.
+    setCfgDlg((d) => ({ ...d, key: '', error: undefined, saved: false }));
     try {
       const url = await startOauth();
       window.open(url, '_blank', 'noopener');
@@ -1675,7 +1679,9 @@ function Canvas() {
               flow having succeeded. */}
           {(cfg.hasKey || cfgDlg?.showPaste) && !connecting && (
           <VStack gap={2}>
-            <Text type="label">API key</Text>
+            {/* Named for the account once there is one: with a key saved this
+                section is about the connection, and the key is one field in it. */}
+            <Text type="label">{cfg.hasKey ? 'OpenRouter' : 'API key'}</Text>
             {/* Remove sits next to the field it acts on, like Browse… does for the
                 folder below. */}
             <HStack gap={2} align="center">
@@ -1739,15 +1745,21 @@ function Canvas() {
               )
             ) : orStatus?.hasKey ? (
               <VStack gap={2}>
+                {/* No `label`: the only value ever observed for it is a truncated
+                    display form of the key itself, so "Connected as
+                    sk-or-v1-abc...123" says nothing and puts key material on
+                    screen. `limitReset` is skipped for its own reason -- an
+                    undocumented upstream string, in whatever shape and units
+                    OpenRouter happens to send, is not something to drop into a
+                    sentence. */}
                 <Text type="supporting" as="p">
-                  Connected to OpenRouter{orStatus.label ? ` as ${orStatus.label}` : ''}. $
-                  {(Number(orStatus.usage) || 0).toFixed(2)} spent with this key
+                  {`Connected to OpenRouter. $${(Number(orStatus.usage) || 0).toFixed(2)} spent with this key`}
                   {orStatus.limit != null
-                    ? `, $${orStatus.limit.toFixed(2)} cap${
+                    ? `, of a $${orStatus.limit.toFixed(2)} cap${
                         orStatus.limitRemaining != null
-                          ? ` ($${orStatus.limitRemaining.toFixed(2)} remaining)`
+                          ? ` — $${orStatus.limitRemaining.toFixed(2)} still available`
                           : ''
-                      }${orStatus.limitReset ? ` (resets ${orStatus.limitReset})` : ''}`
+                      }`
                     : ''}
                   .
                 </Text>
@@ -1763,9 +1775,20 @@ function Canvas() {
               </VStack>
             ) : (
               <Text type="supporting" as="p">
-                {cfg.hasKey
-                  ? `A key is already saved${cfg.keyHint ? ` (…${cfg.keyHint})` : ''}. Entering a new one replaces it.`
-                  : 'Paste it here. It starts with sk-or-'}
+                {cfg.hasKey ? (
+                  `A key is already saved${cfg.keyHint ? ` (…${cfg.keyHint})` : ''}. Entering a new one replaces it.`
+                ) : (
+                  // Whoever is reading this is whoever Connect did not work for, so
+                  // the manual route has to be complete on its own: where the key
+                  // comes from, not just what it looks like.
+                  <>
+                    Make a key at{' '}
+                    <Link href="https://openrouter.ai/keys" isExternalLink>
+                      openrouter.ai/keys
+                    </Link>{' '}
+                    and paste it here. It starts with sk-or-.
+                  </>
+                )}
               </Text>
             )}
           </VStack>
@@ -1844,10 +1867,13 @@ function Canvas() {
 
           <HStack gap={2} justify="end">
             <Button label="Close" variant="ghost" onClick={() => setCfgDlg(null)} />
-            {/* Nothing to save on the bare Connect screen or mid-wait -- the key
-                field is the only thing Save ever writes there, and it's not shown
-                until an existing key or "or paste a key instead" reveals it. */}
-            {(cfg.hasKey || cfgDlg?.showPaste) && !connecting && (
+            {/* Nothing to save until something saveable is on screen. Keyless, that
+                is the key field alone, and it isn't shown until an existing key or
+                "or paste a key instead" reveals it -- hence !connecting on that
+                side only. With a key, Default models and Output folder stay
+                rendered and editable through a reconnect, so Save has to stay too;
+                gating it on !connecting left those edits with no way out. */}
+            {(cfg.hasKey || (cfgDlg?.showPaste && !connecting)) && (
               <Button
                 label="Save"
                 variant="primary"
