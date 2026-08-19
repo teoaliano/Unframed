@@ -1,7 +1,8 @@
 /*
   Unframed — app structure + the chrome React Flow renders itself. All content
-  styling now comes from Astryx components; this file only covers layout, the
-  canvas, node drag-handles, and the @-mention menu.
+  styling now comes from Astryx components; this file covers layout, the canvas,
+  node drag-handles, the @-mention menu, and the glass surfaces (chrome, menus,
+  dialogs) that Astryx has no prop for. Colours come from theme.js, never here.
   ponytail: a few raw px remain for structural sizing (handle, header height)
   where a token adds nothing; colors all use Astryx tokens.
 */
