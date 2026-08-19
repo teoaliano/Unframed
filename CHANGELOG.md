@@ -75,6 +75,11 @@ Keep that shape: the website's What's new page parses this file.
 
 ### Added
 
+- Connect your OpenRouter account with one button instead of creating and pasting
+  an API key by hand. Settings now shows what you have spent with the key, its
+  spending cap if it has one, and a prompt to add credit before your first
+  generation rather than after it fails. Pasting a key still works.
+
 - Video reference and result nodes have their own play/scrub controls, built into
   the node instead of the browser's native ones. A clip now drags by its frame like
   a picture does — scrubbing the new controls moves the playhead, not the node.
