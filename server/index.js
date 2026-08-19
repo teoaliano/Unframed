@@ -46,7 +46,15 @@ let API_KEY = process.env.OPENROUTER_API_KEY;
 let OUTPUT_DIR = outputPath(ROOT, process.env.OUTPUT_DIR);
 
 const app = express();
-app.use(cors());
+// Loopback only. A wide-open ACAO let any page the user happened to be visiting
+// read this API cross-origin -- /api/health alone carries the key hint, the model
+// settings and the output path -- and call DELETE /api/key. Neither real consumer
+// needs CORS at all: Vite proxies server-side, so no browser origin is involved,
+// and a packaged app is same-origin (see the note below). The allowlist rather
+// than nothing is for local tooling, and it is a real boundary because the browser
+// sets Origin, not the page.
+const LOOPBACK_ORIGIN = /^https?:\/\/(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$/;
+app.use(cors({ origin: (origin, cb) => cb(null, !origin || LOOPBACK_ORIGIN.test(origin)) }));
 // References are sent as base64 data URLs. Video is the sizing case: the client
 // caps a clip at 25MB raw, which is ~33MB as base64, plus prompt and images.
 app.use(express.json({ limit: '60mb' }));
