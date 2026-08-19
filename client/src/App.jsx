@@ -267,8 +267,7 @@ function Canvas() {
   // lands on the server, so this poll must outlive the dialog's own state.
   const [connecting, setConnecting] = useState(null); // { since, slow, url, keyHint } | null
   // What GET /api/oauth/status last answered, or null if it hasn't been asked
-  // (or the ask failed) — fetched fresh each time the dialog opens, never on a
-  // timer, since inference responses carry no quota information of their own.
+  // (or the ask failed).
   const [orStatus, setOrStatus] = useState(null);
   // Read inside the poll's interval callback (which fires long after the render
   // that scheduled it) to decide whether the dialog is open right now, without
@@ -557,6 +556,9 @@ function Canvas() {
         toast({ body: 'Key saved. Unframed is ready to generate.', uniqueID: 'key-saved' });
         return setCfgDlg(null);
       }
+      // A new key was just saved over the old one, but the dialog stays open --
+      // the status fetched at open time now describes a key that's gone.
+      if (fields.key) setOrStatus(null);
       setCfgDlg((s) => ({ ...s, key: '', saving: false, saved: true }));
     } catch (err) {
       setCfgDlg((s) => ({ ...s, saving: false, error: err.message }));
@@ -611,6 +613,9 @@ function Canvas() {
     try {
       const r = await clearKey();
       setCfg((c) => ({ ...c, ...r }));
+      // The key just described by orStatus is gone; null falls back to the
+      // honest "not asked" copy instead of reporting a deleted key's spend.
+      setOrStatus(null);
       // The key is gone either way -- removed stays true even when the cleanup
       // below failed. renderCleanupError, when present, reuses the banner slot
       // below (shared with save results) rather than implying the removal itself
@@ -1715,20 +1720,30 @@ function Canvas() {
               )}
             </HStack>
             {orStatus?.revoked ? (
-              <VStack gap={2}>
-                <Text type="supporting" as="p">
-                  This key no longer works at OpenRouter — it may have been deleted or disabled
-                  there.
-                </Text>
-                <Button label="Reconnect OpenRouter" variant="primary" onClick={connectOpenRouter} />
-              </VStack>
+              // Hidden while a reconnect is already live -- its own waiting block
+              // above already covers this, and a second click here would call
+              // startOauth() again and clear the pending attempt out from under
+              // an approval that's already on its way back.
+              !connecting && (
+                <VStack gap={2}>
+                  <Text type="supporting" as="p">
+                    This key no longer works at OpenRouter — it may have been deleted or disabled
+                    there.
+                  </Text>
+                  <Button label="Reconnect OpenRouter" variant="primary" onClick={connectOpenRouter} />
+                </VStack>
+              )
             ) : orStatus?.hasKey ? (
               <VStack gap={2}>
                 <Text type="supporting" as="p">
                   Connected to OpenRouter{orStatus.label ? ` as ${orStatus.label}` : ''}. $
-                  {orStatus.usage.toFixed(2)} spent with this key
+                  {(Number(orStatus.usage) || 0).toFixed(2)} spent with this key
                   {orStatus.limit != null
-                    ? `, $${(orStatus.limitRemaining ?? 0).toFixed(2)} of $${orStatus.limit.toFixed(2)} remaining${orStatus.limitReset ? ` (resets ${orStatus.limitReset})` : ''}`
+                    ? `, $${orStatus.limit.toFixed(2)} cap${
+                        orStatus.limitRemaining != null
+                          ? ` ($${orStatus.limitRemaining.toFixed(2)} remaining)`
+                          : ''
+                      }${orStatus.limitReset ? ` (resets ${orStatus.limitReset})` : ''}`
                     : ''}
                   .
                 </Text>
