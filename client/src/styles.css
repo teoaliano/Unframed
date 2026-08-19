@@ -218,6 +218,11 @@ div:has(> .add-node-menu) {
   border-bottom: 1px solid var(--color-border);
   text-transform: uppercase;
   letter-spacing: 0.06em;
+  /* The Card is now a flex column (see .astryx-card below) so a manually
+     resized-taller node has somewhere to put the extra height. Without this the
+     header is still a flex item and, while nothing here would actually shrink
+     it, the rule says explicitly what should never move. */
+  flex-shrink: 0;
 }
 /* Output nodes (output, text) consume edges; inputs (prompt, image) only feed them.
    The accent border makes that difference visible at a glance. */
@@ -439,8 +444,59 @@ div:has(> .add-node-menu) {
    visible it was depended on the media behind it. */
 .xnode-media {
   position: relative;
-  display: block;
+  display: flex;
+  flex-direction: column;
   line-height: 0;
+}
+/* Media fills its node edge to edge: a reference IS its picture, and a 10px
+   frame around one only made the node bigger than the thing it shows. The body
+   keeps its padding while the node still shows a file picker instead.
+
+   Rounded HERE, and squared on EVERY descendant: Thumbnail rounds two inner
+   divs of its own (`imageContainer` and its inset border) that no class of ours
+   names, and `overflow: hidden` on this wrapper cannot undo that — a child that
+   declines to paint its corner leaves a gap there, clipping or not, which is
+   exactly the rounded top corners this was supposed to remove. So the descendant
+   selector below zeroes them and this wrapper owns the visible shape: flat at
+   the top (it hugs the header, not a corner of the card), rounded at the bottom
+   to match the card's own.
+
+   `flex: 1 1 auto`, not the `flex: 1` shorthand (which zeroes the basis and
+   would collapse the picture to nothing before growing it back from zero):
+   auto keeps the content's own aspect-ratio-computed size as the starting
+   point, and only grows past it when a height-resize hands the card more
+   room than the picture needs on its own. */
+.xnode-body:has(> .xnode-media) {
+  padding: 0;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+.xnode-body > .xnode-media {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+  border-radius: 0 0 var(--radius-container) var(--radius-container);
+}
+.xnode-body > .xnode-media .xnode-thumb,
+.xnode-body > .xnode-media .xnode-video {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+/* Scoped under .xnode-thumb rather than the wrapper, so the remove chip's own
+   6px radius survives — it is a sibling of the thumbnail, not a child. */
+.xnode-body > .xnode-media .xnode-thumb,
+.xnode-body > .xnode-media .xnode-thumb *,
+.xnode-body > .xnode-media .xnode-video {
+  border-radius: 0;
+}
+/* Cover rather than stretch. A resize keeps the media's own ratio, so this should
+   never actually have anything to trim — it is the fallback that keeps a node
+   carrying a stale explicit height (or a clip whose real ratio differs from the
+   box) cropped instead of distorted. Thumbnail's <img> covers internally already;
+   a plain <video> does not. */
+.xnode-body > .xnode-media .xnode-thumb img,
+.xnode-body > .xnode-media .xnode-video {
+  object-fit: cover;
 }
 .xnode-media-remove {
   position: absolute;
@@ -742,9 +798,13 @@ div:has(> .add-node-menu) {
 .astryx-context-menu {
   max-height: none;
 }
+/* Padding-inline matches ContextMenuItem's own (--spacing-2), so a heading's
+   first letter sits exactly over its items' — 10px here left it 2px adrift. */
 .cm-section {
-  padding: 6px 10px 2px;
-  text-transform: none;
+  padding: 6px var(--spacing-2) 2px;
+  text-transform: uppercase;
+  font-variant-caps: all-small-caps;
+  letter-spacing: 0.06em;
 }
 .cm-shortcut {
   color: var(--color-text-secondary);
@@ -803,4 +863,55 @@ div:has(> .add-node-menu) {
   top: 0;
   z-index: 1;
   background: var(--color-background-surface);
+}
+
+/* The source handle sits half inside the node, and the media now reaches that far.
+   Both are positioned and the media comes later in the DOM, so without this the
+   picture painted over the handle's inner half — and, on the right edge, over the
+   drag that starts a connection. z-index 2 keeps it above BOTH the media and the
+   resize strips below (z-index 1), which is what lets a right-edge strip coexist
+   with the handle: the dot wins its own few pixels, the strip takes the rest. */
+.react-flow__node-image .react-flow__handle,
+.react-flow__node-video .react-flow__handle {
+  z-index: 2;
+}
+/* Resizing on the two reference nodes. The card fills whatever box React Flow
+   writes onto the node wrapper; see nodes/MediaResize.jsx for which edge does
+   what. */
+.react-flow__node-image > .astryx-card,
+.react-flow__node-video > .astryx-card {
+  width: 100%;
+  /* Both filled, and flex column, so a height-resize has a chain of "leftover
+     space goes here" all the way down to the picture: the header stays its own
+     size (flex-shrink: 0 above) and .xnode-body's media wrapper is the one
+     flex: 1 1 auto item that actually claims the rest. */
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+/* Three classes deep on purpose: React Flow's own `.line.left`/`.line.right`
+   rules are two, and a single-class override left its default blue line drawn
+   down both sides of every reference node. Invisible full stop — not even on
+   hover: the cursor already says an edge is grabbable, and the node is due a
+   redesign that will decide what an affordance here should look like. */
+.react-flow__resize-control.xnode-resize {
+  /* Painted after the Card in the DOM (see the two node components), which is
+     enough on its own for these to sit on top of the picture -- this is a
+     second, explicit guarantee of the same thing, cheap enough to just set. */
+  z-index: 1;
+  border-color: transparent;
+}
+/* left/right are vertical strips (full height, `width` is their thickness);
+   top/bottom are horizontal ones (full width, `height` is their thickness).
+   A single `width: 10px` here once applied to all four, which for top/bottom
+   didn't make the strip thicker -- it made it 10px WIDE instead of the full
+   edge, shrinking the actual grabbable hit area down to a sliver at the node's
+   left corner and leaving the rest of that edge undraggable. */
+.react-flow__resize-control.xnode-resize.line.left,
+.react-flow__resize-control.xnode-resize.line.right {
+  width: 10px;
+}
+.react-flow__resize-control.xnode-resize.line.top,
+.react-flow__resize-control.xnode-resize.line.bottom {
+  height: 10px;
 }

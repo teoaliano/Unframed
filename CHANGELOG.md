@@ -5,6 +5,36 @@ is no release artifact to number. Headings are `## YYYY-MM-DD`, groups are
 `### Added` / `### Changed` / `### Fixed`, one bullet per user-visible change.
 Keep that shape: the website's What's new page parses this file.
 
+## 2026-08-19
+
+### Added
+
+- **Image and video reference nodes can be resized.** Drag any edge — including
+  the right one, where the dot still takes precedence for wiring. The picture or
+  clip keeps its exact proportions whichever edge you pull, and the size is
+  saved with the project.
+
+### Changed
+
+- **You can zoom much further in and out** — down to 10% (was 30%) and up to
+  400% (was 200%).
+
+- **The right-click menu shows only what it can actually do.** Unavailable
+  actions are hidden rather than greyed out, and a heading disappears with its
+  last item, so the menu is as short as the situation. "Connect nodes" and
+  "Disconnect nodes" are now "Connect all" and "Disconnect all".
+
+- **Reference images and clips fill their node**, edge to edge, instead of
+  sitting inside a frame of padding — square corners at the top, rounded to
+  match the node at the bottom.
+
+### Fixed
+
+- **The canvas navigates over an output node again.** Scroll, pinch and
+  Cmd/Ctrl+wheel did nothing at all while the cursor sat on an image, video or
+  text output — the node claimed the wheel for its whole area. Only the prompt
+  and instruction fields keep it now, where it is what lets long text scroll.
+
 ## 2026-08-18
 
 ### Added

@@ -7,6 +7,7 @@ import { Button } from '@astryxdesign/core/Button';
 import { Icon } from '@astryxdesign/core/Icon';
 import { Text } from '@astryxdesign/core/Text';
 import NodeHeader from './NodeHeader.jsx';
+import MediaResize from './MediaResize.jsx';
 import StatusLine from './StatusLine.jsx';
 import { sourceRoles } from '../graph/resolve.js';
 
@@ -63,76 +64,81 @@ export default function VideoNode({ id, data }) {
   }
 
   return (
-    <Card
-      width={240}
-      padding={0}
-      onDrop={onDrop}
-      onDragOver={(e) => {
-        e.preventDefault();
-        e.stopPropagation();
-      }}
-    >
-      <Handle type="source" position={Position.Right} />
-      <NodeHeader
-        kind="video"
-        family="input"
-        right={status}
-        rightTone={roles.length ? 'accent' : 'secondary'}
-      />
-      <div className="xnode-body">
-        {data.dataUrl ? (
-          // Same shape as an image reference: the clip fills the node and remove is
-          // an X over its corner, rather than a labelled button in a footer. The
-          // file name moves to the title, which is where Thumbnail keeps it too.
-          <span className="xnode-media">
-            {/* nodrag/nowheel so the player's controls scrub instead of panning
-                the canvas. */}
-            <video
-              className="xnode-video nodrag nowheel"
-              src={data.dataUrl}
-              title={data.fileName || 'video'}
-              controls
-              muted
-            />
-            <span className="xnode-media-remove nodrag">
-              <Button
-                label={`Remove ${data.fileName || 'video'}`}
-                isIconOnly
-                icon={<Icon icon="close" size="xsm" />}
-                size="sm"
-                onClick={() => updateNodeData(id, { dataUrl: '', fileName: '' })}
+    <>
+      <Card
+        width="100%"
+        padding={0}
+        onDrop={onDrop}
+        onDragOver={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+        }}
+      >
+        <Handle type="source" position={Position.Right} />
+        <NodeHeader
+          kind="video"
+          family="input"
+          right={status}
+          rightTone={roles.length ? 'accent' : 'secondary'}
+        />
+        <div className="xnode-body">
+          {data.dataUrl ? (
+            // Same shape as an image reference: the clip fills the node and remove is
+            // an X over its corner, rather than a labelled button in a footer. The
+            // file name moves to the title, which is where Thumbnail keeps it too.
+            <span className="xnode-media">
+              {/* nodrag/nowheel so the player's controls scrub instead of panning
+                  the canvas. */}
+              <video
+                className="xnode-video nodrag nowheel"
+                src={data.dataUrl}
+                title={data.fileName || 'video'}
+                controls
+                muted
               />
+              <span className="xnode-media-remove nodrag">
+                <Button
+                  label={`Remove ${data.fileName || 'video'}`}
+                  isIconOnly
+                  icon={<Icon icon="close" size="xsm" />}
+                  size="sm"
+                  onClick={() => updateNodeData(id, { dataUrl: '', fileName: '' })}
+                />
+              </span>
             </span>
-          </span>
-        ) : (
-          <>
-            <FileInput
-              className="nodrag"
-              label="Reference video"
-              isLabelHidden
-              accept="video/*"
-              value={null}
-              onChange={onFile}
-            />
-            <div className="xnode-linkrow nodrag">
-              <TextInput
-                label="Or paste a video link"
+          ) : (
+            <>
+              <FileInput
+                className="nodrag"
+                label="Reference video"
                 isLabelHidden
-                placeholder="or paste an https:// link"
-                value={link}
-                onChange={(v) => {
-                  setLink(v);
-                  setError('');
-                }}
+                accept="video/*"
+                value={null}
+                onChange={onFile}
               />
-              {/^https:\/\/.+/.test(link.trim()) && (
-                <Button label="Use link" size="sm" variant="secondary" onClick={onLink} />
-              )}
-            </div>
-            {error && <StatusLine type="error">{error}</StatusLine>}
-          </>
-        )}
-      </div>
-    </Card>
+              <div className="xnode-linkrow nodrag">
+                <TextInput
+                  label="Or paste a video link"
+                  isLabelHidden
+                  placeholder="or paste an https:// link"
+                  value={link}
+                  onChange={(v) => {
+                    setLink(v);
+                    setError('');
+                  }}
+                />
+                {/^https:\/\/.+/.test(link.trim()) && (
+                  <Button label="Use link" size="sm" variant="secondary" onClick={onLink} />
+                )}
+              </div>
+              {error && <StatusLine type="error">{error}</StatusLine>}
+            </>
+          )}
+        </div>
+      </Card>
+      {/* Resizable from any edge once it holds something — nodes/MediaResize.jsx owns
+          why that includes the right one, where the handle also lives. */}
+      {data.dataUrl && <MediaResize />}
+    </>
   );
 }
