@@ -179,7 +179,6 @@ export default function VideoOutputNode({ id, data }) {
       addNodes({
         id: `gen-${Date.now()}-v`,
         type: 'video',
-        className: 'nowheel',
         position: freeSpot(getNode, getNodes, id),
         data: { fileName: url.split('/').pop() || 'generated.mp4', dataUrl },
       });

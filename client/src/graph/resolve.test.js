@@ -6,7 +6,7 @@ import { instantiateFragment, centerOffset } from '../library/insert.js';
 import { selectionFragment, presetFromSelection } from '../library/save.js';
 import { MODEL_PARAM_KEYS, resetModelParams } from '../nodes/output/defaults.js';
 import { RUN_MARKERS, stripRunMarkers, keepLiveRunMarkers } from './runMarkers.js';
-import { nextId, bumpCounter, slug, initialNodes, initialEdges } from './starter.js';
+import { nextId, bumpCounter, slug, initialNodes, initialEdges, withDrag } from './starter.js';
 
 const out = { id: 'out', type: 'imageOutput', position: { x: 400, y: 0 }, data: {} };
 
@@ -890,6 +890,21 @@ function videoGraph(inputMode, imageCount, extra = []) {
   // one id is skipped. Harmless: ids only have to be unique, never dense.)
   bumpCounter([{ id: 'a' }, { id: 'b' }]);
   assert.ok(Number(nextId()) > 502, 'a graph with no numeric ids never reissues a used id');
+}
+
+// withDrag decides three things per node, and each has a way of going wrong that
+// the UI reports as something else entirely. `dragHandle`/`className` are derived
+// so a value saved by an older build cannot shadow the current rule; `width` is
+// the opposite -- a resized reference node must keep the width its user gave it,
+// and only fall back to the 240 the Card used to carry, because the Card is now
+// width: 100% and has nothing to resolve against without one.
+{
+  const stale = withDrag({ id: '1', type: 'image', dragHandle: '.xnode-head', className: 'nowheel' });
+  assert.equal(stale.dragHandle, undefined, 'a stale dragHandle never survives a load');
+  assert.equal(stale.className, undefined, 'nor a stale nowheel, which killed pan and zoom over a node');
+  assert.equal(stale.width, 240, 'a reference node with no width gets the default');
+  assert.equal(withDrag({ id: '2', type: 'video', width: 480 }).width, 480, 'a resized width is kept');
+  assert.equal(withDrag({ id: '3', type: 'prompt' }).width, undefined, 'other node types are left to size themselves');
 }
 
 // slug is a hand-kept copy of the server's slugify (server/index.js): the client

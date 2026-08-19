@@ -89,7 +89,7 @@ export default function PromptNode({ id, data }) {
           onMouseDown={onResizeMouseDown}
         >
           <TextArea
-            className="nodrag"
+            className="nodrag nowheel"
             style={data.size}
             ref={ref}
             label="Prompt text"

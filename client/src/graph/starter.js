@@ -11,13 +11,14 @@
 // `resolve.test.js` — it is the only test file this directory has.
 import { OUTPUT_DEFAULTS } from '../nodes/output/defaults.js';
 
-// nowheel = "the wheel belongs to whatever is under the cursor, not the canvas".
-// Prompt and text fields need it: their textarea (styles.css, `.astryx-textarea`)
-// is `overflow: auto` and user-resizable, so without nowheel React Flow swallows
-// the wheel and pans instead of scrolling long text. Output node bodies can
-// likewise overflow (a long result, a resized field), so they keep it too.
-// Reference nodes hold nothing scrollable, so they keep scroll-to-pan.
-// Both keys are derived, so they go after the spread — a value saved into an older
+// `nowheel` deliberately does NOT live here. It was on whole nodes until
+// 2026-08-19, and React Flow honours the class for a node's entire subtree, so
+// the wheel did nothing at all over an output node — no scroll-to-pan, no
+// pinch, no Cmd+wheel zoom. It now sits on the scrolling textareas alone
+// (PromptNode, TextOutputNode), which are the only things that need it: their
+// `.astryx-textarea` is `overflow: auto` and user-resizable, so without it long
+// text cannot be scrolled. Everywhere else on a node the canvas navigates.
+// `className` is derived, so it goes after the spread — a value saved into an older
 // graph must not stick around and shadow the current rule. `dragHandle` is set to
 // undefined rather than left out for exactly that reason: every node written to
 // graph.json before 2026-08-18 carries `dragHandle: '.xnode-head'`, and omitting the
@@ -30,7 +31,15 @@ import { OUTPUT_DEFAULTS } from '../nodes/output/defaults.js';
 export const withDrag = (n) => ({
   ...n,
   dragHandle: undefined,
-  className: n.type === 'image' ? undefined : 'nowheel',
+  className: undefined,
+  // Reference nodes are resizable from any edge (nodes/MediaResize.jsx), and their Card
+  // is width/height: 100% — which needs a size on the node wrapper to resolve against.
+  // So they start at the 240 the Card used to carry itself, and keep whatever a resize
+  // has written since. Unlike the two above this is NOT derived: a resized width is the
+  // user's, not a stale default. Height is deliberately never set, here or by a resize:
+  // while it is undefined the media's own aspect ratio computes it, which is what makes
+  // a resize keep the picture's proportions exactly.
+  width: n.type === 'image' || n.type === 'video' ? n.width ?? 240 : n.width,
 });
 
 let counter = 100;

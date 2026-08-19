@@ -107,7 +107,6 @@ export default function TextOutputNode({ id, data }) {
     addNodes({
       id: `p-${Date.now()}`,
       type: 'prompt',
-      className: 'nowheel',
       position: spot,
       data: { text: data.result },
     });
@@ -138,7 +137,7 @@ export default function TextOutputNode({ id, data }) {
         />
 
         <TextArea
-          className="xnode-text-field nodrag"
+          className="xnode-text-field nodrag nowheel"
           style={data.size}
           label="Instructions"
           rows={3}
@@ -165,7 +164,7 @@ export default function TextOutputNode({ id, data }) {
         {data.result && (
           <VStack gap={1}>
             <TextArea
-              className="xnode-text-field xnode-text-result nodrag"
+              className="xnode-text-field xnode-text-result nodrag nowheel"
               style={data.resultSize}
               label="Result"
               rows={6}

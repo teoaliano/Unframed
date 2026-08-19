@@ -6,6 +6,7 @@ import { Thumbnail } from '@astryxdesign/core/Thumbnail';
 import { Button } from '@astryxdesign/core/Button';
 import { Icon } from '@astryxdesign/core/Icon';
 import NodeHeader from './NodeHeader.jsx';
+import MediaResize from './MediaResize.jsx';
 import { sourceRoles } from '../graph/resolve.js';
 
 export default function ImageNode({ id, data }) {
@@ -47,55 +48,60 @@ export default function ImageNode({ id, data }) {
   }
 
   return (
-    <Card
-      width={240}
-      padding={0}
-      onDrop={onDrop}
-      onDragOver={(e) => {
-        e.preventDefault();
-        e.stopPropagation();
-      }}
-    >
-      <Handle type="source" position={Position.Right} />
-      <NodeHeader
-        kind="image"
-        family="input"
-        right={status}
-        rightTone={roles.length ? 'accent' : 'secondary'}
-      />
-      <div className="xnode-body">
-        {data.dataUrl ? (
-          // Thumbnail's own onRemove is not used: its X is translucent, so how
-          // visible it is depends on the picture behind it, and it cannot be
-          // restyled from out here. One overlay serves both reference kinds instead.
-          <span className="xnode-media">
-            <Thumbnail
-              className="xnode-thumb"
-              style={{ aspectRatio: data.aspect || 1 }}
-              src={data.dataUrl}
-              alt={data.fileName || 'image'}
-            />
-            <span className="xnode-media-remove nodrag">
-              <Button
-                label={`Remove ${data.fileName || 'image'}`}
-                isIconOnly
-                icon={<Icon icon="close" size="xsm" />}
-                size="sm"
-                onClick={() => updateNodeData(id, { dataUrl: '', fileName: '', aspect: null })}
+    <>
+      <Card
+        width="100%"
+        padding={0}
+        onDrop={onDrop}
+        onDragOver={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+        }}
+      >
+        <Handle type="source" position={Position.Right} />
+        <NodeHeader
+          kind="image"
+          family="input"
+          right={status}
+          rightTone={roles.length ? 'accent' : 'secondary'}
+        />
+        <div className="xnode-body">
+          {data.dataUrl ? (
+            // Thumbnail's own onRemove is not used: its X is translucent, so how
+            // visible it is depends on the picture behind it, and it cannot be
+            // restyled from out here. One overlay serves both reference kinds instead.
+            <span className="xnode-media">
+              <Thumbnail
+                className="xnode-thumb"
+                style={{ aspectRatio: data.aspect || 1 }}
+                src={data.dataUrl}
+                alt={data.fileName || 'image'}
               />
+              <span className="xnode-media-remove nodrag">
+                <Button
+                  label={`Remove ${data.fileName || 'image'}`}
+                  isIconOnly
+                  icon={<Icon icon="close" size="xsm" />}
+                  size="sm"
+                  onClick={() => updateNodeData(id, { dataUrl: '', fileName: '', aspect: null })}
+                />
+              </span>
             </span>
-          </span>
-        ) : (
-          <FileInput
-            className="nodrag"
-            label="Reference image"
-            isLabelHidden
-            accept="image/*"
-            value={null}
-            onChange={onFile}
-          />
-        )}
-      </div>
-    </Card>
+          ) : (
+            <FileInput
+              className="nodrag"
+              label="Reference image"
+              isLabelHidden
+              accept="image/*"
+              value={null}
+              onChange={onFile}
+            />
+          )}
+        </div>
+      </Card>
+      {/* Resizable from any edge once it holds something — nodes/MediaResize.jsx owns
+          why that includes the right one, where the handle also lives. */}
+      {data.dataUrl && <MediaResize />}
+    </>
   );
 }

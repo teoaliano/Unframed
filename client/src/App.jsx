@@ -1038,8 +1038,8 @@ function Canvas() {
       });
     }
 
-    // Disabled by whether the action would actually DO anything, not merely by
-    // whether something is selected: "Connect nodes" on a group that is already
+    // Judged by whether the action would actually DO anything, not merely by
+    // whether something is selected: "Connect all" on a group that is already
     // fully wired, or on three prompts with no output among them, would be a
     // click that changes nothing and explains nothing.
     const selected = nodes.filter((n) => n.selected);
@@ -1056,8 +1056,8 @@ function Canvas() {
         { label: 'Cut', endContent: kbd('X'), isDisabled: !hasSelection, onClick: cutSelection },
         { label: 'Copy', endContent: kbd('C'), isDisabled: !hasSelection, onClick: copySelection },
         { label: 'Paste', endContent: kbd('V'), isDisabled: !nodeClipboard.current, onClick: () => pasteNodeClipboard() },
-        { label: 'Connect nodes', isDisabled: !wouldConnect, onClick: connectSelection },
-        { label: 'Disconnect nodes', isDisabled: !wouldDisconnect, onClick: disconnectSelection },
+        { label: 'Connect all', isDisabled: !wouldConnect, onClick: connectSelection },
+        { label: 'Disconnect all', isDisabled: !wouldDisconnect, onClick: disconnectSelection },
       ],
     });
 
@@ -1072,21 +1072,28 @@ function Canvas() {
 
     if (!menuCtx) sections.push(...addMenuItems(() => menuPoint.current).map((s) => ({ title: s.title, items: s.items })));
 
-    return sections.map((sec) => (
-      <div key={sec.title}>
-        <Text type="supporting" color="secondary" as="div" className="cm-section">{sec.title}</Text>
-        {sec.items.map((it) => (
-          <ContextMenuItem
-            key={it.label}
-            label={it.label}
-            icon={it.icon}
-            endContent={it.endContent}
-            isDisabled={it.isDisabled}
-            onClick={it.onClick}
-          />
-        ))}
-      </div>
-    ));
+    // An unavailable action is dropped, not greyed: what this menu can offer
+    // depends so heavily on what is under the cursor that most of it was greyed
+    // most of the time, which reads as a broken menu rather than a contextual
+    // one. A section whose every item went goes with them, or it leaves a
+    // heading standing over nothing.
+    return sections
+      .map((sec) => ({ ...sec, items: sec.items.filter((it) => !it.isDisabled) }))
+      .filter((sec) => sec.items.length)
+      .map((sec) => (
+        <div key={sec.title}>
+          <Text type="supporting" color="secondary" as="div" className="cm-section">{sec.title}</Text>
+          {sec.items.map((it) => (
+            <ContextMenuItem
+              key={it.label}
+              label={it.label}
+              icon={it.icon}
+              endContent={it.endContent}
+              onClick={it.onClick}
+            />
+          ))}
+        </div>
+      ));
   }
 
   // Double-click on empty canvas: the most common node, ready to type into. Only
@@ -1327,7 +1334,8 @@ function Canvas() {
           nodeTypes={nodeTypes}
           edgeTypes={edgeTypes}
           fitView
-          minZoom={0.3}
+          minZoom={0.1}
+          maxZoom={4}
           defaultEdgeOptions={{ animated: true }}
           proOptions={{ hideAttribution: true }}
           className={tool === 'pan' ? 'tool-pan' : undefined}
