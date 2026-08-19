@@ -61,6 +61,34 @@ const midBodyStub = http.createServer((req, res) => {
 await new Promise((resolve) => midBodyStub.listen(0, '127.0.0.1', resolve));
 const midBodyStubBase = `http://127.0.0.1:${midBodyStub.address().port}/api/v1/chat/completions`;
 
+// Stands in for OpenRouter's key-exchange endpoint. The real exchange needs a
+// real human approving in a real browser, so this is what lets the callback
+// route's actual logic -- nonce claim, exchange, key validation, writeEnv -- be
+// tested at all. Same override pattern as the two stubs above:
+// UNFRAMED_TEST_AUTH_KEYS_URL is unset, and therefore inert, in every real
+// environment. The `code` decides which answer comes back.
+const AUTH_KEY_STUB_RESPONSES = {
+  'good-code': { status: 200, body: { key: 'sk-or-v1-stubbedkey1234', user_id: 'u_1' } },
+  'malformed-key-code': { status: 200, body: { key: 'not-a-key\nHost: evil' } },
+  'refused-code': { status: 400, body: { error: 'invalid code' } },
+};
+const authKeyStub = http.createServer((req, res) => {
+  let raw = '';
+  req.on('data', (c) => (raw += c));
+  req.on('end', () => {
+    const sent = JSON.parse(raw || '{}');
+    // The verifier must arrive, or PKCE is decorative.
+    const answer = sent.code_verifier
+      ? AUTH_KEY_STUB_RESPONSES[sent.code]
+      : { status: 400, body: { error: 'no code_verifier sent' } };
+    const { status, body } = answer || { status: 404, body: { error: `no stub for ${sent.code}` } };
+    res.writeHead(status, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify(body));
+  });
+});
+await new Promise((resolve) => authKeyStub.listen(0, '127.0.0.1', resolve));
+const authKeyStubUrl = `http://127.0.0.1:${authKeyStub.address().port}/api/v1/auth/keys`;
+
 const child = fork(path.join(here, 'index.js'), {
   env: {
     ...process.env,
@@ -70,6 +98,7 @@ const child = fork(path.join(here, 'index.js'), {
     PORT: '0',
     UNFRAMED_TEST_VIDEOS_STATUS_BASE: statusStubBase,
     UNFRAMED_TEST_CHAT_COMPLETIONS_URL: midBodyStubBase,
+    UNFRAMED_TEST_AUTH_KEYS_URL: authKeyStubUrl,
   },
   stdio: 'ignore',
 });
@@ -254,6 +283,52 @@ try {
   // asserted in Task 4, where the callback route exists -- asserting it here
   // would pass or fail on a 404 and prove nothing.
   assert.equal((await fetch(`${base}/api/oauth/pending`, { method: 'DELETE' })).status, 200);
+
+  // A nonce nobody issued is refused, and the answer is a PAGE -- this is the
+  // one route a human's browser lands on, and a bare JSON 400 is a dead end.
+  const unknown = await fetch(`${base}/api/oauth/callback/${'0'.repeat(32)}?code=good-code`);
+  assert.equal(unknown.status, 400);
+  assert.match(unknown.headers.get('content-type') || '', /text\/html/);
+
+  // The happy path: start, then complete, and the key lands in the data dir's
+  // .env through the same funnel a pasted key uses.
+  const okStart = await (await fetch(`${base}/api/oauth/start`, { method: 'POST' })).json();
+  const okPath = new URL(new URL(okStart.authorizeUrl).searchParams.get('callback_url')).pathname;
+  const done = await fetch(`${base}${okPath}?code=good-code`);
+  assert.equal(done.status, 200);
+  assert.match(await done.text(), /close this tab/i);
+  assert.match(await fs.readFile(path.join(dataDir, '.env'), 'utf8'), /OPENROUTER_API_KEY=sk-or-v1-stubbedkey1234/);
+
+  // ...and the same nonce cannot be replayed.
+  assert.equal((await fetch(`${base}${okPath}?code=good-code`)).status, 400);
+
+  // A cancelled attempt cannot be completed either: approving in the browser
+  // after pressing Cancel must not quietly write a key.
+  const abandoned = await (await fetch(`${base}/api/oauth/start`, { method: 'POST' })).json();
+  const abandonedPath = new URL(new URL(abandoned.authorizeUrl).searchParams.get('callback_url')).pathname;
+  await fetch(`${base}/api/oauth/pending`, { method: 'DELETE' });
+  assert.equal((await fetch(`${base}${abandonedPath}?code=good-code`)).status, 400);
+
+  // A callback with no code at all is refused before anything is exchanged.
+  const codeless = await (await fetch(`${base}/api/oauth/start`, { method: 'POST' })).json();
+  const codelessPath = new URL(new URL(codeless.authorizeUrl).searchParams.get('callback_url')).pathname;
+  assert.equal((await fetch(`${base}${codelessPath}`)).status, 400);
+
+  // A key in a shape we cannot safely write is refused. It would otherwise reach
+  // .env and an HTTP header -- the trust boundary applies to a provider's answer
+  // exactly as it does to a paste.
+  const badStart = await (await fetch(`${base}/api/oauth/start`, { method: 'POST' })).json();
+  const badPath = new URL(new URL(badStart.authorizeUrl).searchParams.get('callback_url')).pathname;
+  const malformed = await fetch(`${base}${badPath}?code=malformed-key-code`);
+  assert.equal(malformed.status, 502);
+  assert.match(await malformed.text(), /shape/i);
+
+  // An upstream refusal is reported, not swallowed, and still as a page.
+  const refusedStart = await (await fetch(`${base}/api/oauth/start`, { method: 'POST' })).json();
+  const refusedPath = new URL(new URL(refusedStart.authorizeUrl).searchParams.get('callback_url')).pathname;
+  const refusedCallback = await fetch(`${base}${refusedPath}?code=refused-code`);
+  assert.equal(refusedCallback.status, 502);
+  assert.match(refusedCallback.headers.get('content-type') || '', /text\/html/);
 
   // A setting saved from the UI lands in the data dir, not in the repo.
   const put = await fetch(`${base}/api/config`, {
@@ -840,6 +915,7 @@ try {
   child.kill();
   await new Promise((resolve) => statusStub.close(resolve));
   await new Promise((resolve) => midBodyStub.close(resolve));
+  await new Promise((resolve) => authKeyStub.close(resolve));
   await fs.rm(dataDir, { recursive: true, force: true });
 }
 

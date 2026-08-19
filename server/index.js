@@ -19,7 +19,7 @@ import {
   reassignPendingJobs,
 } from './jobs.js';
 import { ensureTunnel, mintShare, revokeShare, waitUntilPublic, stopTunnel } from './share.js';
-import { start as oauthStart, cancel as oauthCancel, authorizeUrl, callbackUrl } from './oauth.js';
+import { start as oauthStart, cancel as oauthCancel, claim as oauthClaim, authorizeUrl, callbackUrl } from './oauth.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, '..');
@@ -332,6 +332,80 @@ app.post('/api/oauth/start', (req, res) => {
 app.delete('/api/oauth/pending', (req, res) => {
   oauthCancel();
   res.json({ ok: true });
+});
+
+// Unset -- and therefore inert -- in every real environment; the forked test
+// server points it at a local stub, because the real exchange needs a human
+// approving in a browser. Same pattern as UNFRAMED_TEST_VIDEOS_STATUS_BASE.
+const AUTH_KEYS_URL =
+  process.env.UNFRAMED_TEST_AUTH_KEYS_URL || 'https://openrouter.ai/api/v1/auth/keys';
+
+// The callback lands in a browser tab, so every branch answers with a readable
+// page rather than JSON. Self-contained on purpose: this server does not know
+// where the canvas lives -- :5173 in a clone, its own port in the packaged app --
+// so it cannot redirect anywhere, and says so instead.
+const oauthPage = (heading, detail) =>
+  `<!doctype html><meta charset="utf-8"><title>Unframed</title>` +
+  `<div style="font:16px/1.5 system-ui;margin:12vh auto;max-width:32em;padding:0 1.5em">` +
+  `<h1 style="font-size:1.3em">${heading}</h1><p>${detail}</p></div>`;
+
+app.get('/api/oauth/callback/:nonce', async (req, res) => {
+  // Single-use: claim() deletes whatever it finds, so a replayed callback and a
+  // superseded one both land here.
+  const verifier = oauthClaim(req.params.nonce);
+  if (!verifier) {
+    return res
+      .status(400)
+      .send(oauthPage('That link is no longer valid', 'Close this tab and press Connect in Unframed again.'));
+  }
+  const code = String(req.query.code || '');
+  if (!code) {
+    return res
+      .status(400)
+      .send(oauthPage('OpenRouter did not send a code', 'Close this tab and press Connect in Unframed again.'));
+  }
+  try {
+    const orRes = await fetch(AUTH_KEYS_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      // The method must match what the authorize URL declared, or this 400s.
+      body: JSON.stringify({ code, code_verifier: verifier, code_challenge_method: 'S256' }),
+    });
+    const data = await orRes.json().catch(() => ({}));
+    if (!orRes.ok || !data.key) {
+      return res
+        .status(502)
+        .send(
+          oauthPage(
+            'OpenRouter could not complete the connection',
+            data.error?.message || data.error || `It answered ${orRes.status}. Try connecting again.`,
+          ),
+        );
+    }
+    // Same trust boundary as a paste: this value reaches .env and an auth header.
+    // The message differs because "sk-or-v1-" is not a documented contract, so a
+    // failure here is about OUR expectations, not the user's typing.
+    if (!PATTERNS.OPENROUTER_API_KEY.test(data.key)) {
+      return res
+        .status(502)
+        .send(
+          oauthPage(
+            'OpenRouter returned a key in a shape Unframed does not recognise',
+            'Nothing was saved. You can paste a key manually in Unframed’s settings instead.',
+          ),
+        );
+    }
+    await writeEnv({ OPENROUTER_API_KEY: data.key });
+    API_KEY = data.key;
+    console.log('  oauth:    connected, key saved');
+    return res.send(
+      oauthPage('Connected to OpenRouter', 'You can close this tab and return to Unframed.'),
+    );
+  } catch (err) {
+    // Both awaits above can reject, and an unhandled rejection exits the process
+    // -- not a failed request but a dead server.
+    return res.status(502).send(oauthPage('Could not reach OpenRouter', err.message));
+  }
 });
 
 // Native folder chooser for the output directory. The browser cannot hand back a
