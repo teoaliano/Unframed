@@ -30,16 +30,16 @@ export default function VideoPlayer({ src }) {
   const [length, setLength] = useState(0);
 
   function toggle() {
-    const el = ref.current;
-    if (!el) return;
-    if (el.paused) el.play();
-    else el.pause();
+    if (ref.current?.paused) ref.current.play();
+    else ref.current?.pause();
   }
 
   function seek(v) {
     setAt(v);
     if (ref.current) ref.current.currentTime = v;
   }
+
+  const maxLength = length || 1;
 
   return (
     <>
@@ -74,9 +74,9 @@ export default function VideoPlayer({ src }) {
           // app — the same defect that keeps the model parameters on native selects.
           valueDisplay="none"
           min={0}
-          max={length || 1}
+          max={maxLength}
           step={0.01}
-          value={Math.min(at, length || 1)}
+          value={Math.min(at, maxLength)}
           onChange={seek}
         />
         {/* Tabular numbers so the row does not twitch as the seconds tick over. */}
