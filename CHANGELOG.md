@@ -91,6 +91,12 @@ Keep that shape: the website's What's new page parses this file.
 
 ### Changed
 
+- Generating, running a text prompt, or rendering a video when the account is out
+  of credit now says so plainly, with a link to add credit, instead of showing
+  OpenRouter's generic error. The same message can also mean the key has hit its
+  own spending cap, where adding credit won't help; the underlying reason from
+  OpenRouter is included alongside it.
+
 - **A selection box adds to the selection when a modifier is held**, the way
   Figma, Sketch and Illustrator do; without one it still replaces, as before.
   Nodes already selected are never toggled off by a box that passes over them.
