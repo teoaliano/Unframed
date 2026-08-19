@@ -262,6 +262,15 @@ function Canvas() {
   // dialog's draft, so nothing is applied until Save.
   const [cfg, setCfg] = useState({ hasKey: true, keyHint: '', imageModel: '', textModel: '', videoModel: '', outputDir: '' });
   const [cfgDlg, setCfgDlg] = useState(null); // { key, imageModel, …, error, saving, saved } | null
+  // Not part of cfgDlg: the dialog is closable mid-flow, and the callback still
+  // lands on the server, so this poll must outlive the dialog's own state.
+  const [connecting, setConnecting] = useState(null); // { since, slow, url, opened } | null
+  // Read inside the poll's interval callback (which fires long after the render
+  // that scheduled it) to decide whether the dialog is open right now, without
+  // making cfgDlg a dependency of that effect -- that would restart the
+  // interval on every keystroke in the dialog.
+  const cfgDlgRef = useRef(null);
+  cfgDlgRef.current = cfgDlg;
   // The three model catalogues, for the pickers. { image: [...], text: [...], video: [...] }
   const [catalogues, setCatalogues] = useState({});
   // Gate auto-save until the initial load finishes, so we don't overwrite a saved
@@ -434,38 +443,48 @@ function Canvas() {
       .catch(() => {});
   }, []);
 
-  // Polls while a connection is pending. This lives here rather than in the
-  // dialog because closing the dialog must NOT abandon the flow -- the callback
-  // still lands on the server, and this is what notices. Owned by the dialog, a
-  // close would leave the key on disk and the toolbar still showing "add a key".
+  // Polls while a connection is pending. Depends on `connecting`, which lives
+  // outside `cfgDlg` (see its declaration above) -- so closing the dialog
+  // cannot cancel this: the callback still lands on the server, and this is
+  // what notices.
   //
-  // Ten minutes, not two: that is how long OpenRouter's code is valid, and giving
-  // up sooner reports failure on a flow that is still perfectly completable.
+  // Ten minutes, not two: that is how long OpenRouter's code is valid, and
+  // giving up sooner reports failure on a flow that is still perfectly
+  // completable. After two minutes the copy softens, but polling continues.
   useEffect(() => {
-    const pending = cfgDlg?.connecting;
+    const pending = connecting;
     if (!pending) return;
     const id = setInterval(async () => {
       const elapsed = Date.now() - pending.since;
       const h = await getHealth().catch(() => null);
       if (h?.hasKey) {
+        setConnecting(null);
         setCfg((c) => ({ ...c, ...h, hasKey: true, keyHint: h.keyHint || '' }));
-        setCfgDlg((d) => (d ? { ...d, connecting: undefined } : d));
+        // The toast fires whether or not the dialog is open -- when it was
+        // closed mid-flow it is the only feedback the user gets at all.
+        if (cfgDlgRef.current) setCfgDlg(null);
         toast({ body: 'Connected to OpenRouter.', uniqueID: 'oauth-connected' });
         return;
       }
       if (elapsed > 10 * 60 * 1000) {
-        setCfgDlg((d) =>
-          d ? { ...d, connecting: undefined, error: 'Nothing came back from OpenRouter. Try connecting again.' } : d,
-        );
+        setConnecting(null);
+        const msg = 'Nothing came back from OpenRouter. Try connecting again.';
+        if (cfgDlgRef.current) {
+          setCfgDlg((d) => (d ? { ...d, error: msg } : d));
+        } else {
+          // Dialog is closed, so the inline banner above would say this to
+          // nobody -- a toast is the only way the failure is ever seen.
+          toast({ body: msg, uniqueID: 'oauth-timeout' });
+        }
         return;
       }
       // After two minutes the copy softens, but the polling does not stop.
       if (elapsed > 2 * 60 * 1000 && !pending.slow) {
-        setCfgDlg((d) => (d?.connecting ? { ...d, connecting: { ...d.connecting, slow: true } } : d));
+        setConnecting((c) => (c ? { ...c, slow: true } : c));
       }
     }, 1500);
     return () => clearInterval(id);
-  }, [cfgDlg?.connecting, toast]);
+  }, [connecting, toast]);
 
   // Open with the saved values as the draft, so the pickers show what is in use.
   function openSettings() {
@@ -534,7 +553,7 @@ function Canvas() {
       // attempt is live on the server -- so the URL is kept and shown rather than
       // failing, which is also the answer for an environment with no browser.
       const opened = window.open(url, '_blank', 'noopener');
-      setCfgDlg((d) => ({ ...d, connecting: { since: Date.now(), slow: false, url, opened: !!opened } }));
+      setConnecting({ since: Date.now(), slow: false, url, opened: !!opened });
     } catch (err) {
       setCfgDlg((d) => ({ ...d, error: err.message }));
     }
@@ -542,7 +561,7 @@ function Canvas() {
 
   function cancelConnect() {
     cancelOauth();
-    setCfgDlg((d) => ({ ...d, connecting: undefined }));
+    setConnecting(null);
   }
 
   // The picker runs on the server, which is this machine — a browser can't hand
@@ -1573,7 +1592,7 @@ function Canvas() {
             hands the overflow back to the clipped parent. */}
         <VStack gap={3} padding={4} style={{ minHeight: 0 }}>
           <VStack gap={3} style={{ overflowY: 'auto', minHeight: 0 }}>
-          {!cfg.hasKey && !cfgDlg?.connecting && (
+          {!cfg.hasKey && !connecting && (
             <VStack gap={2}>
               <Text type="supporting" as="p">
                 Unframed has no image model of its own. It sends your prompts to{' '}
@@ -1587,20 +1606,20 @@ function Canvas() {
               <Button label="Connect OpenRouter" variant="primary" onClick={connectOpenRouter} />
             </VStack>
           )}
-          {cfgDlg?.connecting && (
+          {connecting && (
             <VStack gap={2}>
               <Text type="supporting" as="p">
-                {!cfgDlg.connecting.opened
+                {!connecting.opened
                   ? 'Your browser did not open. Open this link to approve Unframed:'
-                  : cfgDlg.connecting.slow
+                  : connecting.slow
                     ? 'Still waiting. Finish approving in your browser, or cancel and try again.'
                     : 'Waiting for OpenRouter in your browser…'}
               </Text>
-              {!cfgDlg.connecting.opened && (
+              {!connecting.opened && (
                 <TextInput
                   label="Authorization link"
                   isLabelHidden
-                  value={cfgDlg.connecting.url}
+                  value={connecting.url}
                   isReadOnly
                   onChange={() => {}}
                 />
@@ -1608,7 +1627,7 @@ function Canvas() {
               <Button label="Cancel" variant="ghost" onClick={cancelConnect} />
             </VStack>
           )}
-          {!cfg.hasKey && !cfgDlg?.connecting && !cfgDlg?.showPaste && (
+          {!cfg.hasKey && !connecting && !cfgDlg?.showPaste && (
             <Button
               label="or paste a key instead"
               variant="ghost"
