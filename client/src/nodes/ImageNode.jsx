@@ -57,6 +57,7 @@ export default function ImageNode({ id, data }) {
       <NodeHeader kind="image" family="input" />
       <Card
         width="100%"
+        elevation="low"
         padding={0}
         onDrop={onDrop}
         onDragOver={(e) => {

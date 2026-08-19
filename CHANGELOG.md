@@ -31,14 +31,30 @@ Keep that shape: the website's What's new page parses this file.
 - **A video reference's play and scrub controls moved below the clip**, outside the
   frame, so the clip itself fills the node.
 
-- **The name row fades out as you zoom out**, and come back when you
-  point at a node or zoom back in — so a canvas seen from far away is just the work.
+- **The name row fades out as you zoom out**, and comes back when you point at a
+  node or zoom back in — so a canvas seen from far away is just the work.
 
 - **Node edges show where they can be dragged.** Hovering a node's edge lights it
   up; before this it was invisible and you had to know it was there.
 
 - **An output node's cost moved out from the footer strip to the top-right of the
   node**, and its Clear button moved up beside the results it clears.
+
+- **New canvas palette, in both light and dark.** The canvas is a near-black in
+  dark mode and a shade off white in light, and nodes sit on their own lifted
+  surface with a soft shadow, so a node reads as an object above the canvas rather
+  than a bordered patch of it — in dark mode the two used to be the same colour.
+
+- **The floating chrome is translucent.** The toolbar cards, the tools rail and the
+  menus are frosted glass over the canvas rather than solid panels: you can see
+  what is behind them, blurred. A dialog barely dims the canvas now — it is a pane
+  of foggy glass, grain and lit edge included, and what is behind it stays visible
+  through it.
+
+- **The canvas dots stay visible at every zoom.** They used to shrink with the view
+  and disappear below about 60%; now they hold their size on screen, and the grid
+  halves its density on the way out instead of crowding into texture. They are a
+  step lighter, too.
 
 ## 2026-08-19
 
@@ -84,6 +100,12 @@ Keep that shape: the website's What's new page parses this file.
   match the node at the bottom.
 
 ### Fixed
+
+- **Other websites can no longer read or change your local Unframed settings.**
+  Any page open in the same browser could previously reach the local server: it
+  could read which key was in use, your default models and your output folder
+  path, or remove your API key outright. The server now answers only its own
+  canvas.
 
 - **Missing a node while building a selection no longer costs you the group.**
   Holding Shift (or Cmd/Ctrl) and clicking a gap between nodes used to throw

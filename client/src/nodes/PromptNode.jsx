@@ -83,7 +83,9 @@ export default function PromptNode({ id, data }) {
   return (
     <>
       <NodeHeader kind="prompt" family="input" />
-      <Card width="100%" padding={0} className="xnode-prompt">
+      {/* width: 100%, not fit-content — the node wrapper now carries the size a border
+          drag writes, and the card fills it. */}
+      <Card width="100%" padding={0} elevation="low" className="xnode-prompt">
         <Handle type="source" position={Position.Right} />
         <div className="xnode-body" onKeyDown={onKeyDown} onClick={() => syncMenu(ref.current)}>
           <TextArea

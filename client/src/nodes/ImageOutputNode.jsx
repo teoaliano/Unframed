@@ -531,7 +531,7 @@ export default function ImageOutputNode({ id, data }) {
   return (
     <>
       <NodeHeader kind="imageOutput" title="image" family="output" />
-      <Card width={300} padding={0}>
+      <Card width={300} padding={0} elevation="low">
       <Handle type="target" position={Position.Left} />
 
       {/* nodrag on the whole body, not per control: Astryx portals a Selector's

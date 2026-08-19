@@ -399,7 +399,7 @@ export default function VideoOutputNode({ id, data }) {
   return (
     <>
       <NodeHeader kind="videoOutput" title="video" family="output" />
-      <Card width={300} padding={0}>
+      <Card width={300} padding={0} elevation="low">
       <Handle type="target" position={Position.Left} />
 
       <VStack gap={3} padding={3}>

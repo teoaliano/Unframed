@@ -125,7 +125,7 @@ export default function TextOutputNode({ id, data }) {
   return (
     <>
       <NodeHeader kind="textOutput" title="text" family="output" />
-      <Card width="fit-content" padding={0} className="xnode-text">
+      <Card width="fit-content" padding={0} elevation="low" className="xnode-text">
       <Handle type="target" position={Position.Left} />
       <Handle type="source" position={Position.Right} />
 
