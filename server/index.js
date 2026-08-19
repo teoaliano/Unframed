@@ -312,10 +312,13 @@ app.delete('/api/key', async (req, res) => {
 
 // Begins the browser flow. Nothing here awaits, so there is nothing to catch --
 // the code_verifier is minted and held in oauth.js and never reaches the client.
-// The response carries the nonce and the code challenge. Reachable cross-origin,
-// a hostile page could read it, start its own approval, and have this server
-// write someone else's key into the user's .env -- the loopback CORS
-// restriction is what stops that, not anything in this handler.
+// This response carries the nonce and the code challenge, so it must not be
+// readable cross-origin -- that depends on CORS being restricted to loopback
+// origins. Without that restriction, a hostile page in the user's browser can
+// read this response, run its own OpenRouter approval against the leaked
+// challenge and callback, then navigate the user's browser to the callback --
+// and this server writes SOMEONE ELSE'S key into the user's .env, quietly
+// routing their prompts through an account they do not control.
 app.post('/api/oauth/start', (req, res) => {
   const { nonce, challenge } = oauthStart();
   const callback = callbackUrl({
