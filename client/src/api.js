@@ -132,6 +132,27 @@ export const clearKey = () =>
     return d;
   });
 
+// The server builds the authorize URL, because only it knows the port the
+// callback has to come back to -- in a clone this client talks to Vite's proxy
+// and has no idea what it is.
+export const startOauth = () =>
+  fetch('/api/oauth/start', { method: 'POST' }).then(async (r) => {
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(d.error || `Could not start connecting (${r.status})`);
+    return d.authorizeUrl;
+  });
+
+// Cancelling drops the attempt on the server too, so approving in the browser
+// afterwards is refused rather than quietly saving a key.
+export const cancelOauth = () => fetch('/api/oauth/pending', { method: 'DELETE' }).catch(() => {});
+
+// null means "could not ask" -- the dialog then shows nothing about the
+// connection rather than claiming zero spend.
+export const oauthStatus = () =>
+  fetch('/api/oauth/status')
+    .then((r) => (r.ok ? r.json() : null))
+    .catch(() => null);
+
 // Opens the OS folder dialog on the machine running the server (which is this
 // one). Resolves to '' if it was cancelled; throws where there is no picker.
 export const pickFolder = () =>
