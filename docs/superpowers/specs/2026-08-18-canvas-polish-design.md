@@ -8,7 +8,6 @@ Seven complaints from using the packaged app, unrelated in cause but all of the 
 kind: the canvas shows something it should not, or refuses a gesture the rest of it
 accepts.
 
-- A blue rectangle stays on screen after a box-select is released.
 - Hovering a picture raises a tooltip nobody asked for — and in the packaged Electron
   app it lands in a corner of the window rather than on the picture.
 - An image node can be picked up by its picture. A video node cannot be picked up by
@@ -26,29 +25,9 @@ surface was last reasoned about. Read it first; this one assumes its two rules �
 
 ## 1. The rectangle that stays after release
 
-The leftover box is React Flow's `.react-flow__nodesselection-rect`: the handle it
-draws around a multi-node selection so the group can be dragged as one.
-
-**It is a hitbox, not a decoration.** It spans the bounding box of the whole selection
-— every gap and every patch of empty canvas between the outermost nodes included — and
-it sits above the pane. Styling away its border and background would leave an invisible
-rectangle that keeps eating presses on empty canvas, which is precisely the failure the
-canvas-interaction spec was written about: a gesture the canvas silently ignores, with
-nothing on screen to explain it. So the element goes, not its paint:
-
-```css
-.react-flow__nodesselection { display: none; }
-```
-
-**Group dragging survives.** React Flow's node drag handler collects every selected
-node when the one under the pointer is selected, so dragging any member still moves the
-whole group. The rect was the second way to do it, not the only one.
-
-**What is actually lost**, and is accepted rather than rebuilt: arrow-key nudging of a
-multi-selection. Its `onKeyDown` lives on that rect and its `tabIndex` is what made the
-rect focusable, so both go with it. Nobody has asked for it, and re-implementing it
-would mean a keyboard handler on the pane that has to not fire while a text area has
-focus — more surface than the feature is worth.
+This rule is not owned here. `docs/superpowers/specs/2026-08-18-shift-pane-selection-design.md`
+owns the group-selection rectangle, and the fix shipped from there. This spec's original
+section 1 reasoned its way to a different answer and was wrong; nothing of it is kept.
 
 ## 2. Tooltips on media
 
@@ -301,8 +280,6 @@ work.
 
 ## Rejected
 
-- **Hiding the group-selection rect with CSS rather than removing it.** Leaves an
-  invisible hitbox over the empty canvas inside a selection; see section 1.
 - **Gating the video drag on where the press landed.** Toggling `nodrag` on mousedown
   depending on whether the pointer is in the bottom control strip preserves both native
   scrubbing and dragging, and needs a pixel height that has to be scaled by the canvas
@@ -314,8 +291,6 @@ work.
   reference holds beyond its first frame.
 - **A `requestAnimationFrame` loop for the scrubber position.** Smoother than
   `timeupdate` and not worth a frame loop per video node on a canvas.
-- **Rebuilding arrow-key nudging** of a multi-selection after the group rect is
-  removed; see section 1.
 - **Bounding-box hit-testing for edges.** Over-selects on diagonals; see section 4.
 - **A `ResizeObserver` for the field sizes.** Fires on the initial layout and on every
   font and container change, so it needs a guard to tell a user's drag from a reflow,

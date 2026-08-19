@@ -430,7 +430,10 @@ div:has(> .add-node-menu) {
 .xnode-video {
   width: 100%;
   height: auto;
-  border-radius: 8px;
+  /* <video> is inline by default and .xnode-result sets no line-height, so an
+     inline clip sits on a baseline and shows a descender gap under it. */
+  display: block;
+  border-radius: var(--radius-element);
   background: var(--color-background-body);
 }
 /* The clip's controls, moved out of the <video> so the frame itself can be dragged
@@ -439,6 +442,10 @@ div:has(> .add-node-menu) {
 .xnode-player {
   width: 100%;
   padding-block-start: var(--spacing-1);
+  /* .xnode-media sets line-height: 0 to kill the inline gap under the clip; the
+     control row inherits it and collapses the time readout's line box, throwing
+     it out of line with the play button. Same reason as .xnode-media-remove. */
+  line-height: normal;
 }
 .xnode-player-track {
   flex: 1;
