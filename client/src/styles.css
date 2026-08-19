@@ -693,10 +693,18 @@ div:has(> .add-node-menu) {
   min-height: 0;
   resize: none;
 }
-/* The textarea has to FILL that wrapper: Astryx 0.4.3 made the wrapper display: block
-   (0.1.6 was flex, where align-items: stretch grew the textarea for free), so without
-   height: 100% a taller node grows the bordered box while the text keeps its rows
-   height and scrolls in a strip at the top. */
+/* The field's own bordered box has to GO, not just be filled. Astryx draws the border,
+   the 10px radius and the white fill on the `.astryx-textarea` WRAPPER — not on the
+   <textarea> — so stripping the inner element left the wrapper's rounded box sitting
+   1px inside the card's square one: a double border, made obvious by the two corners
+   disagreeing. The card's border is now the field's only border, which is the whole
+   point of "the field IS the node". */
+.xnode-prompt .astryx-textarea {
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
 .xnode-prompt .astryx-textarea textarea {
   width: 100%;
   height: 100%;
@@ -709,6 +717,12 @@ div:has(> .add-node-menu) {
 .xnode-prompt .astryx-textarea textarea:focus {
   outline: none;
   box-shadow: none;
+}
+/* Focus moved with the border: with nothing of its own left to ring, the field's focus
+   is the card's. Same colour as selection, which is correct — a focused prompt IS the
+   selected node. */
+.react-flow__node-prompt:focus-within > .astryx-card {
+  border-color: var(--color-accent);
 }
 
 /* Text node fields resize in both axes, same as the prompt node's — handle on the
