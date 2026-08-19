@@ -68,6 +68,7 @@ export default function VideoNode({ id, data }) {
     <>
       <Card
         width="100%"
+        elevation="low"
         padding={0}
         onDrop={onDrop}
         onDragOver={(e) => {

@@ -529,7 +529,7 @@ export default function ImageOutputNode({ id, data }) {
   const isRunning = status === 'running' || Boolean(data.running);
 
   return (
-    <Card width={300} padding={0}>
+    <Card width={300} padding={0} elevation="low">
       <Handle type="target" position={Position.Left} />
       <NodeHeader kind="imageOutput" title="image" family="output" />
 

@@ -6,7 +6,7 @@ import '@astryxdesign/theme-neutral/theme.css';
 import '@xyflow/react/dist/style.css';
 import { Theme } from '@astryxdesign/core/theme';
 import { ToastViewport } from '@astryxdesign/core/Toast';
-import { neutralTheme } from '@astryxdesign/theme-neutral/built';
+import { unframedTheme } from './theme.js';
 import App from './App.jsx';
 import './styles.css';
 
@@ -20,7 +20,7 @@ if (import.meta.env.DEV) import('./debug/nodragCheck.js');
 
 createRoot(document.getElementById('root')).render(
   <React.StrictMode>
-    <Theme theme={neutralTheme}>
+    <Theme theme={unframedTheme}>
       {/* Explicit viewport (vs useToast's self-mounted fallback) for one reason:
           position. Toasts go bottom-left, clear of the tools rail and the FABs,
           which own the bottom-right corner. */}
