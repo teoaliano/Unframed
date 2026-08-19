@@ -683,17 +683,15 @@ export default function ImageOutputNode({ id, data }) {
         )}
       </VStack>
       </Card>
-      {/* The cost and the result count report on the node as a whole, so they sit below
-          it beside where an input node shows its connection role. Clear could not
-          follow them out: it is a control, and a control on the canvas has no `nodrag`
-          ancestor to opt out of the drag surface — it moved up into the body, beside
-          the strip it empties. */}
-      <div className="xnode-under">
-        <CostFoot
-          cost={hasSpend ? spent : null}
-          extra={hasSpend && shown.length > 1 ? `${shown.length} images` : null}
-        />
-      </div>
+      {/* The cost and the result count report on the node as a whole, so they sit in the
+          name row opposite the tab, where an input node shows its connection role. Clear
+          could not follow them out: it is a control, and a control on the canvas has no
+          `nodrag` ancestor to opt out of the drag surface — it moved up into the body,
+          beside the strip it empties. */}
+      <CostFoot
+        cost={hasSpend ? spent : null}
+        extra={hasSpend && shown.length > 1 ? `${shown.length} images` : null}
+      />
 
       {/* Keyed by batchId so a second staging mounts a FRESH dialog: its textarea seeds
           from staged.listText once, and React Flow's habit of reusing an instance for a

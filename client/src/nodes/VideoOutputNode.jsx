@@ -569,19 +569,17 @@ export default function VideoOutputNode({ id, data }) {
       </VStack>
       </Card>
 
-      {/* Cost and estimate report on the node as a whole and sit below it, beside
-          where an input shows its connection role. Clear stayed inside: it is a
-          control, and a control on the canvas has no `nodrag` ancestor to opt out of
-          the drag surface. */}
-      <div className="xnode-under">
-        <CostFoot
-          cost={shown?.cost != null ? shown.cost : null}
-          // The upcoming click's price, from the model's per-second rate. Images get no
-          // estimate: their pricing is per token, and a guess dressed as a number would
-          // be worse than silence.
-          extra={!shown && estimate ? `est. ~$${estimate.toFixed(2)}` : null}
-        />
-      </div>
+      {/* Cost and estimate report on the node as a whole and sit in the name row
+          opposite the tab, where an input shows its connection role. Clear stayed
+          inside: it is a control, and a control on the canvas has no `nodrag` ancestor
+          to opt out of the drag surface. */}
+      <CostFoot
+        cost={shown?.cost != null ? shown.cost : null}
+        // The upcoming click's price, from the model's per-second rate. Images get no
+        // estimate: their pricing is per token, and a guess dressed as a number would
+        // be worse than silence.
+        extra={!shown && estimate ? `est. ~$${estimate.toFixed(2)}` : null}
+      />
     </>
   );
 }

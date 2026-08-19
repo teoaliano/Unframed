@@ -187,10 +187,8 @@ export default function TextOutputNode({ id, data }) {
 
       </Card>
       {/* A text output is referenceable by @id like a prompt, and it also spends money,
-          so its line below carries both. */}
-      <div className="xnode-under">
-        <CostFoot cost={data.cost ?? null} extra={`@${id}`} />
-      </div>
+          so its line carries both. */}
+      <CostFoot cost={data.cost ?? null} extra={`@${id}`} />
     </>
   );
 }

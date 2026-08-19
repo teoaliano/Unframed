@@ -162,7 +162,7 @@ export function ParamControls({ params, data, onChange, children }) {
 
 // What the run cost reports on is the node as a WHOLE, not the last result above it —
 // the same kind of fact as an input node's connection role, so it lives in the same
-// place: NodeLine, on the canvas below the card. See
+// place: NodeLine, at the right end of the node's name row. See
 // docs/superpowers/specs/2026-08-20-node-anatomy-redesign-design.md.
 //
 // Only LABELS come here. The Clear button each output used to pass through this

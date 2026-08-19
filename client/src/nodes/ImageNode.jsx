@@ -99,13 +99,12 @@ export default function ImageNode({ id, data }) {
           )}
         </div>
       </Card>
-      {/* Outside the card on purpose: a badge on the picture needs a scrim to survive an
-          arbitrary photograph, and the scrim is then the thing covering the photograph.
-          Out here it needs neither. `xnode-under` takes it out of the wrapper's flow —
-          see styles.css for why the wrapper has to stay exactly the card's box. */}
-      <div className="xnode-under">
-        <NodeLine live={roles.length > 0}>{role}</NodeLine>
-      </div>
+      {/* The right end of the name row, opposite the tab. Outside the card on purpose:
+          a badge on the picture needs a scrim to survive an arbitrary photograph, and
+          the scrim is then the thing covering the photograph. Out here it needs neither.
+          It is absolutely positioned (styles.css) so the node wrapper stays exactly the
+          card's box. */}
+      <NodeLine live={roles.length > 0}>{role}</NodeLine>
       {/* Resizable from any edge once it holds something — nodes/MediaResize.jsx owns
           why that includes the right one, where the handle also lives. */}
       {data.dataUrl && <MediaResize />}

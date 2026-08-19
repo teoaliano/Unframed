@@ -218,10 +218,25 @@ div:has(> .add-node-menu) {
    it. Out of flow, `width`/`height` from node data size the card, the four resize edges
    hug the card, and the handle centres on the card rather than on a box that happens to
    include its own labels. */
+/* The strip above the card is the node's name row: the tab docked at the left, the one
+   volatile fact right-aligned at the other end of the same 22px band. `.xnode-under` is
+   what still has to go BELOW — only the video transport, which is a control and cannot
+   sit on the clip. */
 .xnode-tab {
   position: absolute;
   inset-block-end: 100%;
   inset-inline-start: 0;
+}
+.xnode-line {
+  position: absolute;
+  inset-block-end: 100%;
+  inset-inline-end: 0;
+  height: 22px;
+  /* Ellipsis rather than wrap: the row is one band tall, and a two-line cost would
+     push the tab's baseline out of alignment with it. */
+  max-width: 62%;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .xnode-under {
   position: absolute;
@@ -279,19 +294,15 @@ div:has(> .add-node-menu) {
   color: var(--color-text-primary);
 }
 
-/* The one line under a node: a connection role, an @id, what a run cost. Outside the
-   card so nothing is ever drawn over the content — a badge on a picture needs a scrim
-   to survive an arbitrary photograph, and the scrim is then the thing covering the
-   photograph. */
+/* The node's one volatile fact — a connection role, an @id, what a run cost — sitting
+   at the right end of the name row. Outside the card so nothing is ever drawn over the
+   content: a badge on a picture needs a scrim to survive an arbitrary photograph, and
+   the scrim is then the thing covering the photograph. */
 .xnode-line {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  margin-top: 7px;
   padding-inline: 2px;
-  max-width: 100%;
-  overflow: hidden;
-  text-overflow: ellipsis;
   text-transform: uppercase;
   letter-spacing: 0.06em;
   flex-shrink: 0;
@@ -621,10 +632,11 @@ div:has(> .add-node-menu) {
 .xnode-body > .xnode-media .xnode-video {
   object-fit: cover;
 }
-/* On an INPUT node the transport is a sibling of the card, out on the canvas between
-   the clip and the role line — see nodes/VideoNode.jsx for why it cannot sit on the
-   clip. It is the full width of the node and needs no padding of its own; the 2px
-   matches the line below it so the two align on the same left edge. */
+/* On an INPUT node the transport is a sibling of the card, out on the canvas below the
+   clip — see nodes/VideoNode.jsx for why it cannot sit on the clip, and why it is the
+   only part of a node still down there. It is the full width of the node and needs no
+   padding of its own; the 2px matches the tab above so the two align on the same left
+   edge. */
 .xnode-under > .xnode-player {
   width: 100%;
   margin-top: var(--spacing-1);

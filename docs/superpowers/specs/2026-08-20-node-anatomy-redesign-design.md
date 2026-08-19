@@ -1,4 +1,4 @@
-# Node anatomy: a docked tab, an empty box, and a line below
+# Node anatomy: a name row, and an empty box under it
 
 *2026-08-20*
 
@@ -17,7 +17,7 @@ is the picture, the clip, the prompt field, or the output's controls — and not
 
 That move is worth more than the pixels it recovers. It is what lets an image run edge
 to edge, and it is what makes all six node types the same shape as each other for the
-first time: a **tab**, a **box**, and a **line below**.
+first time: a **name row** above a **box**.
 
 The design was worked out on a canvas of eleven boards
 (prompt/image/video directions A, C, D, E; states; zoom; and four boards on C alone).
@@ -26,16 +26,19 @@ which is scaffolding.
 
 ## The anatomy
 
-Every node — all six types, both families — is three parts stacked in a column:
+Every node — all six types, both families — is a name row and a box:
 
 ```
-[tab]                 <- docked on the card's top edge, shares its border
-+---------------+
-|               |     <- the card: content only
-|               |
-+---------------+
-· role / @id / cost   <- one line, left-aligned under the tab
+[tab]              · role / @id / cost   <- the name row, above the card
++--------------------------------+
+|                                |      <- the card: content only
+|                                |
++--------------------------------+
 ```
+
+The tab docks onto the card's top edge and shares its border; the fact is right-aligned
+to the card's other edge, in the same 22px band. Only the video transport goes below the
+card, and only because it is a control that cannot sit on the clip.
 
 ### The tab
 
@@ -80,12 +83,15 @@ the tab over `--duration-fast` — otherwise a tabless card reads as chipped. Th
 types have no such transition: they are square in both states, which is the second thing
 squaring them bought.
 
-### The line below
+### The fact, at the right of the name row
 
-`margin-top: 7px`, left-aligned under the tab, same `11px`/uppercase/`0.06em` type as
-the tab. It carries exactly one fact, and which fact depends on what the node has:
+Right-aligned to the card's right edge, in the tab's own 22px band, same
+`11px`/uppercase/`0.06em` type as the tab. It ellipsises rather than wraps: the row is
+one band tall, and a second line would push the tab's baseline out of alignment.
 
-| Node | Line below |
+It carries exactly one fact, and which fact depends on what the node has:
+
+| Node | Its one fact |
 | --- | --- |
 | `image`, `video` | the connection role from `sourceRoles` — `image 1`, `image 1 / 2`, `first frame`, `image 1 / —`; `not connected`; absent when the node holds no file |
 | `prompt` | its `@id` |
@@ -95,7 +101,7 @@ A live role gets a `5px` accent dot and weight 500. Everything else — `not con
 an `@id`, a cost — is `--color-text-secondary` at weight 400 with no dot, so "this feeds
 something" and "this is just a fact about the node" never read alike.
 
-**`sourceRoles` returns a bare `"1"`, and the line below spells it out** — `image 1`
+**`sourceRoles` returns a bare `"1"`, and the name row spells it out** — `image 1`
 rather than `1`. In the old header the word "image" sat two inches to the left; out here
 there is nothing nearby to say what is being counted. The two-consumer case is where it
 pays: `image 1 / 2` is legible where `1 / 2` is a riddle.
@@ -114,8 +120,9 @@ That constraint is **load-bearing for this design and is easy to undo by acciden
 the obvious "clean" move is a transport overlaid on the bottom of the clip, and it costs
 the node its drag surface.
 
-So the transport sits between the card and the line below. A video node reads: tab,
-clip, transport, role. Nothing pressable is ever drawn on top of the media.
+So the transport sits **below** the card — the one thing that does. It is also far too
+wide for the name row. A video node reads: tab and role above, clip, transport below.
+Nothing pressable is ever drawn on top of the media.
 
 ## The output footer is dismantled
 
@@ -125,22 +132,22 @@ same place.
 
 - **The cost, the result count and the video estimate are labels** reporting on the node
   as a whole. They are the same kind of thing as an input's connection role, so they go
-  where that goes: the line below.
+  where that goes: the name row.
 - **`ImageOutputNode`'s Clear button is a control.** It cannot follow them out. A
   control loose on the canvas sits on the pane rather than on any node, so it has to
   fight the drag surface for its own press and has no `nodrag` ancestor to opt out of.
   It moves *into* the body, next to the results strip it empties — which is where it
   belonged anyway, since it acts on that strip and nothing else. It stays labelled
-  `Clear`; the count is already on the line below and saying it twice is worse than
+  `Clear`; the count is already in the name row and saying it twice is worse than
   saying it once.
 
 `CostFoot` therefore stops being a footer and becomes the same small component the input
-nodes use for their role line. `.xnode-foot`, `.xnode-foot-end` and the accent
+nodes use for their role. `.xnode-foot`, `.xnode-foot-end` and the accent
 `border-top` go with it.
 
 ## Zoom
 
-The tab and the line below are **part of the node**: they scale with the canvas, like
+The tab and the fact beside it are **part of the node**: they scale with the canvas, like
 everything else in it. No counter-scaling, no chrome that stays `11px` while the node it
 names becomes a thumbnail.
 
@@ -148,7 +155,7 @@ What that costs is that a label stops being *readable* well before it stops bein
 *drawn* — at `0.35×` an `11px` tab is under `4px` — so the show/hide threshold is really
 "the zoom at which this type still resolves":
 
-| Zoom | Tab and line below |
+| Zoom | Name row |
 | --- | --- |
 | below `0.5` | hidden |
 | `0.5` – `0.75` | hidden at rest, shown on hover |
@@ -251,8 +258,12 @@ real use, not more drawing.
   cannot hide, so video breaks the pattern.
 - **The role badge inside the frame** on a scrim (the first version of the chosen
   direction). It needs a scrim to survive an arbitrary picture, and the scrim is the
-  thing covering the picture. Moving it below removed the contrast problem and the
-  overlay in one step.
+  thing covering the picture. Moving it out removed the contrast problem and the overlay
+  in one step.
+- **The fact on its own line UNDER the card**, which is where it first shipped. It read
+  as a caption belonging to whatever sat below the node rather than to the node, and it
+  cost a row of clearance beneath every one. Pulled up into the name row on the first
+  day of use — which is also where the original sketch had it, opposite the name.
 - **A solid pill for the role line.** Legible, and far too much ink repeated under every
   wired node once it no longer needs to survive on top of a photograph.
 - **The role line right-aligned.** Tab top-left and role bottom-right makes a diagonal

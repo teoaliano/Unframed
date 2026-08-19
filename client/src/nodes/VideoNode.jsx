@@ -145,10 +145,15 @@ export default function VideoNode({ id, data }) {
           exactly this reason — a press on a scrubber retargets to the video element and
           nothing downstream can tell a scrub from a node drag. Inside the card it ate
           10px of frame on every side and made the clip stop short of the node's edge. */}
-      <div className="xnode-under">
-        {data.dataUrl && <VideoControls player={player} />}
-        <NodeLine live={roles.length > 0}>{role}</NodeLine>
-      </div>
+      <NodeLine live={roles.length > 0}>{role}</NodeLine>
+      {/* The transport is the one thing that still has to go BELOW: it is a control, so
+          it cannot sit on the clip (a press there is indistinguishable from a node drag
+          — see VideoPlayer.jsx), and it is far too wide for the name row. */}
+      {data.dataUrl && (
+        <div className="xnode-under">
+          <VideoControls player={player} />
+        </div>
+      )}
       {/* Resizable from any edge once it holds something — nodes/MediaResize.jsx owns
           why that includes the right one, where the handle also lives. */}
       {data.dataUrl && <MediaResize />}

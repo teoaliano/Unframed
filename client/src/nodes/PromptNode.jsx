@@ -104,11 +104,9 @@ export default function PromptNode({ id, data }) {
         </div>
       </Card>
       {/* A prompt has no connection role — sourceRoles answers only for media — so its
-          line below carries the one other fact worth having on the canvas: the id every
-          @reference is written against. */}
-      <div className="xnode-under">
-        <NodeLine>{`@${id}`}</NodeLine>
-      </div>
+          slot in the name row carries the one other fact worth having on the canvas: the
+          id every @reference is written against. */}
+      <NodeLine>{`@${id}`}</NodeLine>
       {/* Both axes, unlike media: there is no aspect ratio here to preserve. */}
       <MediaResize free />
       {list.length > 0 && (

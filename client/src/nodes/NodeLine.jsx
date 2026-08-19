@@ -1,8 +1,9 @@
 import { Text } from '@astryxdesign/core/Text';
 
-// The one line under a node. Every node type has exactly one fact that reports on the
-// node as a whole rather than being part of its content, and this is where that fact
-// goes — outside the card, so nothing is ever drawn over a picture, a clip or a field.
+// The right end of a node's name row, opposite the tab. Every node type has exactly one
+// fact that reports on the node as a whole rather than being part of its content, and
+// this is where that fact goes — outside the card, so nothing is ever drawn over a
+// picture, a clip or a field.
 //
 //   image / video  the connection role from sourceRoles ("image 1", "first frame", …)
 //   prompt         its @id
