@@ -1668,8 +1668,12 @@ function Canvas() {
           )}
           {/* Three sections, one heading style each, dividers between. The field
               labels themselves are hidden where the heading already names the
-              field, but stay in the DOM for screen readers. */}
-          {(cfg.hasKey || cfgDlg?.showPaste) && (
+              field, but stay in the DOM for screen readers. !connecting hides
+              this during a pending flow: leaving it up would offer two ways
+              in at once, and saving a pasted key while a browser approval is
+              still in flight changes keyHint -- which the poll treats as that
+              flow having succeeded. */}
+          {(cfg.hasKey || cfgDlg?.showPaste) && !connecting && (
           <VStack gap={2}>
             <Text type="label">API key</Text>
             {/* Remove sits next to the field it acts on, like Browse… does for the
@@ -1843,7 +1847,7 @@ function Canvas() {
             {/* Nothing to save on the bare Connect screen or mid-wait -- the key
                 field is the only thing Save ever writes there, and it's not shown
                 until an existing key or "or paste a key instead" reveals it. */}
-            {(cfg.hasKey || cfgDlg?.showPaste) && (
+            {(cfg.hasKey || cfgDlg?.showPaste) && !connecting && (
               <Button
                 label="Save"
                 variant="primary"
