@@ -494,10 +494,10 @@ function graph(nodes, edges) {
 
   // The fast path this module's own doc comment promises: when nothing about a
   // node's markers actually changes, keepLiveRunMarkers must hand back the SAME
-  // object rather than a rebuilt copy. Task 5 feeds the result straight into React
-  // Flow's setNodes on every undo -- an implementation that always rebuilds would
-  // pass every value-only assertion above while still churning referential
-  // equality for the whole canvas on each undo, which is exactly the re-render
+  // object rather than a rebuilt copy. The undo handler feeds the result straight
+  // into React Flow's setNodes on every undo -- an implementation that always
+  // rebuilds would pass every value-only assertion above while still churning
+  // referential equality for the whole canvas on each undo, which is exactly the re-render
   // this path exists to avoid.
   const untouchedLive = [{ id: 'u', data: { text: 'plain' } }];
   const untouchedRestored = [{ id: 'u', data: { text: 'plain' } }];
