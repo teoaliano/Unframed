@@ -753,12 +753,15 @@ app.post('/api/text', async (req, res) => {
       raw.slice(0, 300);
     // is_free_tier (in /api/oauth/status) doesn't catch a user who paid once and
     // ran dry, so it still needs naming here where it actually happens: the 402.
-    // OpenRouter also answers 402 for a key's own spending cap -- the same one
-    // this dialog shows -- where adding credit isn't the fix, so msg is kept
-    // alongside the guidance rather than replaced by it.
+    // OpenRouter also answers 402 for a key's own spending cap, where adding
+    // credit is NOT the fix -- so this names both causes rather than asserting
+    // one. Verified 2026-08-20: its authorization page offers a cap while you
+    // approve, so a capped key is the common case for anyone who connects, not
+    // the exotic one the docs imply. msg is kept alongside the guidance because
+    // it is the only thing that says which of the two actually happened.
     if (orRes.status === 402) {
       return res.status(402).json({
-        error: `OpenRouter says this account is out of credit. Add some at openrouter.ai/credits. (${msg})`,
+        error: `OpenRouter refused this as unpaid: either the account is out of credit, or this key has hit its own spending cap. Add credit at openrouter.ai/credits, or check the key's cap at openrouter.ai/settings/keys. (${msg})`,
       });
     }
     return res.status(orRes.status).json({ error: `OpenRouter (${orRes.status}): ${msg}` });
@@ -1141,7 +1144,7 @@ app.post('/api/video', async (req, res) => {
       raw.slice(0, 300);
     if (orRes.status === 402) {
       return res.status(402).json({
-        error: `OpenRouter says this account is out of credit. Add some at openrouter.ai/credits. (${msg})`,
+        error: `OpenRouter refused this as unpaid: either the account is out of credit, or this key has hit its own spending cap. Add credit at openrouter.ai/credits, or check the key's cap at openrouter.ai/settings/keys. (${msg})`,
       });
     }
     return res.status(orRes.status).json({ error: `OpenRouter (${orRes.status}): ${msg}` });
@@ -1738,7 +1741,7 @@ app.post('/api/generate', async (req, res) => {
       raw.slice(0, 300);
     if (orRes.status === 402) {
       return res.status(402).json({
-        error: `OpenRouter says this account is out of credit. Add some at openrouter.ai/credits. (${msg})`,
+        error: `OpenRouter refused this as unpaid: either the account is out of credit, or this key has hit its own spending cap. Add credit at openrouter.ai/credits, or check the key's cap at openrouter.ai/settings/keys. (${msg})`,
       });
     }
     return res.status(orRes.status).json({ error: `OpenRouter (${orRes.status}): ${msg}` });

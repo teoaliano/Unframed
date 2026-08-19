@@ -482,3 +482,40 @@ would be odd if it were handing back an existing key it could not re-read, *but 
 inference and not a documented behaviour.* Stays in the unknowns list (item 7); resolve it by
 authorizing twice against a real account and counting rows in
 <https://openrouter.ai/settings/keys>.
+
+---
+
+## Empirically resolved, 2026-08-20
+
+Everything above is what OpenRouter's documentation says, with each claim cited.
+This section is different: it is what the flow was **observed** to do, by running
+it against a real account on a real approval. Where the two disagree, the
+observation wins and the discrepancy is named, because the docs were not merely
+silent — on two points they are misleading.
+
+**Resolved as documented (or as inferred):**
+
+- **The consent screen names a localhost app `127.0.0.1:<port>`.** Confirms the
+  inference drawn from the guide's attribution note, which stated only that such
+  apps get "a fixed title matching the host and port" without saying the approval
+  page renders it. It does.
+- **Re-authorizing mints a new key each time** (unknowns item 7). Two
+  authorizations took an account from three keys to five. The inference recorded
+  above — that a response returning a `key` implies a fresh one — was correct.
+
+**Contradicts the documentation:**
+
+- **The browser flow accepts a key name.** Recorded above as available only via
+  `key_label` on the management route `POST /auth/keys/code`. In fact the
+  authorization page asks the user to name the key, and stores it prefixed:
+  a name of `my-laptop` appears as `OAuth: my-laptop`. This materially softens the
+  accumulation problem — rows are identifiable rather than anonymous.
+- **The browser flow accepts a spending cap.** Unknowns item 5 asked whether the
+  plain `/auth` URL accepts `limit`; the documented answer was that `limit` lives
+  only on the management routes. In practice the approval page offers a cap, and a
+  key created that way returns a non-null `limit` from `GET /api/v1/key`. Any
+  design that assumes a connected key is uncapped is wrong.
+
+**Still unresolved:** whether the approval page also offers an expiry; whether a
+name or cap can be supplied as `/auth` query parameters rather than only through
+the page's own fields; and everything else in the unknowns list above.

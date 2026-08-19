@@ -91,11 +91,11 @@ Keep that shape: the website's What's new page parses this file.
 
 ### Changed
 
-- Generating, running a text prompt, or rendering a video when the account is out
-  of credit now says so plainly, with a link to add credit, instead of showing
-  OpenRouter's generic error. The same message can also mean the key has hit its
-  own spending cap, where adding credit won't help; the underlying reason from
-  OpenRouter is included alongside it.
+- When OpenRouter refuses a generation, text run or video as unpaid, the message
+  now names both things it can mean — the account being out of credit, or the key
+  reaching a spending cap you set — and links to the page for each, instead of
+  showing OpenRouter's generic error. Its own reason is included, since that is
+  what tells the two apart.
 
 - **A selection box adds to the selection when a modifier is held**, the way
   Figma, Sketch and Illustrator do; without one it still replaces, as before.

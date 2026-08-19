@@ -161,10 +161,12 @@ user's credit balance.** The display is built from what is reachable:
 | `is_free_tier` | "Add credit before generating", with a link | when true |
 | 401 from the endpoint | "This key no longer works at OpenRouter — reconnect" | on revocation |
 
-The cap is *per key*, and setting one is not a documented parameter on the
-browser flow — so a connected key will most likely return `limit: null` and show
-only spend, while the cap line appears for someone who pasted a key they capped
-themselves. That is the person who wants it.
+The cap is *per key*. The documentation implies it can only be set on the
+management routes, which suggested a connected key would return `limit: null` and
+show spend alone. **That is wrong** — the authorization page offers a cap while
+the user approves (verified 2026-08-20, see the end of this document), so a capped
+key is the ordinary outcome of this flow. The cap line is consequently the main
+warning before generation stops, not a detail for the rare hand-capped key.
 
 `is_free_tier` ("whether the user has paid for credits before") is what moves the
 insufficient-credit discovery from *after a failed generation* to *the moment of
@@ -296,15 +298,44 @@ The only real interaction is cosmetic and later: a dialog holding both an Accoun
 section and a Provider section must keep them visually distinct, so nobody reads
 "signed out" as "my key is gone".
 
+## What the flow actually does — verified 2026-08-20
+
+Three of this spec's open questions were answered by running the flow against a
+real account. Two of the answers contradict the documentation, so they are
+recorded here rather than left to be rediscovered.
+
+- **The consent screen names the app `127.0.0.1:<port>`.** Confirmed, exactly as
+  the docs' attribution note implied and as this design assumed. **This is what
+  justifies the bounce page**: without it, users are asked to grant API access to
+  a bare IP and port. The one inference the whole approach rested on holds.
+- **Re-authorizing mints a new key every time.** Two authorizations took the
+  account from three keys to five. Keys accumulate, so a user who reconnects
+  repeatedly collects rows — which is a reason not to invite needless reconnects,
+  and why the revoked state is the only place that offers one.
+- **The browser flow lets the user name the key, and set a spending cap.** Both
+  contradict the research: it recorded `key_label` and `limit` as available only
+  on the management routes. In fact the authorization page asks for a name (stored
+  prefixed, e.g. `OAuth: my-laptop`) and offers a cap while you approve.
+
+Two consequences worth stating, because the code depends on them:
+
+1. **A capped key is the common case, not the exotic one.** This spec previously
+   predicted `limit: null` for a connected key and treated the cap line as
+   something only a hand-capped pasted key would show. Wrong: anyone who accepts
+   the cap offered during approval has one. The cap display is therefore the main
+   warning a user gets before generation stops, not a nicety.
+2. **A 402 has two plausible causes, and they need different fixes.** An empty
+   account balance and an exhausted per-key cap both return 402, and adding credit
+   only clears the first. The generation routes name both rather than asserting
+   one, and pass OpenRouter's own reason through, since it is the only thing that
+   distinguishes them.
+
 ## Open questions the documentation does not answer
 
-Carried from the research notes because they affect implementation:
-
-- **Does re-authorizing mint an additional key each time?** Unknown; resolvable
-  only by doing it twice and counting. If keys accumulate, there is no documented
-  lever to name or replace them from the browser flow.
 - **Are custom URI schemes supported?** Never mentioned. Irrelevant here — the
   design deliberately avoids them, since registering one would require changes in
   the shell repo and break the one-way dependency.
-- **Can the browser flow set a cap or expiry?** `limit` and `expires_at` are
-  documented only on the management routes. Assume not.
+- **Does a key from this flow ever expire on its own?** The authorization page
+  offers a cap and a name; whether it also sets an expiry was not exercised. If it
+  does, nothing here renews a key — by design, since the credential is documented
+  as long-lived and has no refresh mechanism.
