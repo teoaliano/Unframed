@@ -133,7 +133,7 @@ export const clearKey = () =>
   });
 
 // The server builds the authorize URL, because only it knows the port the
-// callback has to come back to -- in a clone this client talks to Vite's proxy
+// callback has to come back to — in a clone this client talks to Vite's proxy
 // and has no idea what it is.
 export const startOauth = () =>
   fetch('/api/oauth/start', { method: 'POST' }).then(async (r) => {
@@ -143,10 +143,13 @@ export const startOauth = () =>
   });
 
 // Cancelling drops the attempt on the server too, so approving in the browser
-// afterwards is refused rather than quietly saving a key.
+// afterwards is refused rather than quietly saving a key — when the request
+// itself fails, though, the attempt is left live and an approval still saves
+// a key; that is the swallow below, and it is the better failure mode of the
+// two.
 export const cancelOauth = () => fetch('/api/oauth/pending', { method: 'DELETE' }).catch(() => {});
 
-// null means "could not ask" -- the dialog then shows nothing about the
+// null means "could not ask" — the dialog then shows nothing about the
 // connection rather than claiming zero spend.
 export const oauthStatus = () =>
   fetch('/api/oauth/status')

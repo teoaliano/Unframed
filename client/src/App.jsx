@@ -264,13 +264,17 @@ function Canvas() {
   const [cfgDlg, setCfgDlg] = useState(null); // { key, imageModel, …, error, saving, saved } | null
   // Not part of cfgDlg: the dialog is closable mid-flow, and the callback still
   // lands on the server, so this poll must outlive the dialog's own state.
-  const [connecting, setConnecting] = useState(null); // { since, slow, url, opened } | null
+  const [connecting, setConnecting] = useState(null); // { since, slow, url, keyHint } | null
   // Read inside the poll's interval callback (which fires long after the render
   // that scheduled it) to decide whether the dialog is open right now, without
-  // making cfgDlg a dependency of that effect -- that would restart the
-  // interval on every keystroke in the dialog.
+  // making cfgDlg a dependency of that effect — that would restart the
+  // interval on every keystroke in the dialog. Assigned from an effect, not the
+  // render body, so a render that gets discarded before committing can't leave
+  // this pointing at state that was never actually shown.
   const cfgDlgRef = useRef(null);
-  cfgDlgRef.current = cfgDlg;
+  useEffect(() => {
+    cfgDlgRef.current = cfgDlg;
+  });
   // The three model catalogues, for the pickers. { image: [...], text: [...], video: [...] }
   const [catalogues, setCatalogues] = useState({});
   // Gate auto-save until the initial load finishes, so we don't overwrite a saved
@@ -444,7 +448,7 @@ function Canvas() {
   }, []);
 
   // Polls while a connection is pending. Depends on `connecting`, which lives
-  // outside `cfgDlg` (see its declaration above) -- so closing the dialog
+  // outside `cfgDlg` (see its declaration above) — so closing the dialog
   // cannot cancel this: the callback still lands on the server, and this is
   // what notices.
   //
@@ -454,15 +458,21 @@ function Canvas() {
   useEffect(() => {
     const pending = connecting;
     if (!pending) return;
+    // clearInterval on cleanup can't cancel a getHealth already in flight, so
+    // a resolution can still land after Cancel or the timeout has fired for
+    // this same attempt — `live` is what stops it from acting on it anyway.
+    let live = true;
     const id = setInterval(async () => {
       const elapsed = Date.now() - pending.since;
       const h = await getHealth().catch(() => null);
-      if (h?.hasKey) {
+      if (!live) return;
+      // hasKey alone is already true when reconnecting or replacing a key, so
+      // it can't tell "this flow finished" from "a key was already there" —
+      // only a keyHint that changed from what was captured at the start can.
+      if (h?.hasKey && h.keyHint !== pending.keyHint) {
         setConnecting(null);
         setCfg((c) => ({ ...c, ...h, hasKey: true, keyHint: h.keyHint || '' }));
-        // The toast fires whether or not the dialog is open -- when it was
-        // closed mid-flow it is the only feedback the user gets at all.
-        if (cfgDlgRef.current) setCfgDlg(null);
+        setCfgDlg(null);
         toast({ body: 'Connected to OpenRouter.', uniqueID: 'oauth-connected' });
         return;
       }
@@ -473,17 +483,19 @@ function Canvas() {
           setCfgDlg((d) => (d ? { ...d, error: msg } : d));
         } else {
           // Dialog is closed, so the inline banner above would say this to
-          // nobody -- a toast is the only way the failure is ever seen.
+          // nobody — a toast is the only way the failure is ever seen.
           toast({ body: msg, uniqueID: 'oauth-timeout' });
         }
         return;
       }
-      // After two minutes the copy softens, but the polling does not stop.
       if (elapsed > 2 * 60 * 1000 && !pending.slow) {
         setConnecting((c) => (c ? { ...c, slow: true } : c));
       }
     }, 1500);
-    return () => clearInterval(id);
+    return () => {
+      live = false;
+      clearInterval(id);
+    };
   }, [connecting, toast]);
 
   // Open with the saved values as the draft, so the pickers show what is in use.
@@ -544,16 +556,20 @@ function Canvas() {
 
   // Opens OpenRouter in the user's real browser: a plain _blank navigation, which
   // the packaged shell turns into shell.openExternal via setWindowOpenHandler and
-  // a clone treats as an ordinary tab. One code path for both.
+  // a clone treats as an ordinary tab. One code path for both. 'noopener' is kept
+  // for the security posture of handing a URL to another origin, even though —
+  // on both paths — it also means the return value can never tell a blocked
+  // popup from an opened one; the link is always shown as a fallback because of
+  // that, not because either path is detected.
   async function connectOpenRouter() {
     setCfgDlg((d) => ({ ...d, error: undefined, saved: false }));
     try {
       const url = await startOauth();
-      // A blocked popup returns null. The flow is still perfectly valid -- the
-      // attempt is live on the server -- so the URL is kept and shown rather than
-      // failing, which is also the answer for an environment with no browser.
-      const opened = window.open(url, '_blank', 'noopener');
-      setConnecting({ since: Date.now(), slow: false, url, opened: !!opened });
+      window.open(url, '_blank', 'noopener');
+      // keyHint captured now, not read back off `cfg` later: the poll's success
+      // check needs to tell "this flow finished" from "a key was already
+      // there" when reconnecting, and only a hint that has since changed can.
+      setConnecting({ since: Date.now(), slow: false, url, keyHint: cfg.keyHint });
     } catch (err) {
       setCfgDlg((d) => ({ ...d, error: err.message }));
     }
@@ -1609,21 +1625,23 @@ function Canvas() {
           {connecting && (
             <VStack gap={2}>
               <Text type="supporting" as="p">
-                {!connecting.opened
-                  ? 'Your browser did not open. Open this link to approve Unframed:'
-                  : connecting.slow
-                    ? 'Still waiting. Finish approving in your browser, or cancel and try again.'
-                    : 'Waiting for OpenRouter in your browser…'}
+                {connecting.slow
+                  ? 'Still waiting. Finish approving in your browser, or cancel and try again.'
+                  : 'Waiting for OpenRouter in your browser…'}
               </Text>
-              {!connecting.opened && (
-                <TextInput
-                  label="Authorization link"
-                  isLabelHidden
-                  value={connecting.url}
-                  isReadOnly
-                  onChange={() => {}}
-                />
-              )}
+              {/* Whether the tab actually opened can't be detected on either
+                  path (see connectOpenRouter's comment) — this link is a
+                  permanent fallback, not a reaction to a failed open. */}
+              <Text type="supporting" as="p">
+                Didn't open? Open this link to approve Unframed:
+              </Text>
+              <TextInput
+                label="Authorization link"
+                isLabelHidden
+                value={connecting.url}
+                isReadOnly
+                onChange={() => {}}
+              />
               <Button label="Cancel" variant="ghost" onClick={cancelConnect} />
             </VStack>
           )}
