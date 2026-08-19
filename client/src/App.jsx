@@ -77,6 +77,7 @@ import {
   clearKey,
   startOauth,
   cancelOauth,
+  oauthStatus,
   pickFolder,
   listModels,
   revealFiles,
@@ -265,6 +266,10 @@ function Canvas() {
   // Not part of cfgDlg: the dialog is closable mid-flow, and the callback still
   // lands on the server, so this poll must outlive the dialog's own state.
   const [connecting, setConnecting] = useState(null); // { since, slow, url, keyHint } | null
+  // What GET /api/oauth/status last answered, or null if it hasn't been asked
+  // (or the ask failed) — fetched fresh each time the dialog opens, never on a
+  // timer, since inference responses carry no quota information of their own.
+  const [orStatus, setOrStatus] = useState(null);
   // Read inside the poll's interval callback (which fires long after the render
   // that scheduled it) to decide whether the dialog is open right now, without
   // making cfgDlg a dependency of that effect — that would restart the
@@ -513,6 +518,10 @@ function Canvas() {
         listModels(type).then((d) => setCatalogues((c) => ({ ...c, [type]: d.models || [] }))),
       );
     }
+    // On open, not on a timer: inference responses carry no quota information, so
+    // asking is the only way to know, and nothing outside this dialog needs it.
+    setOrStatus(null);
+    if (cfg.hasKey) oauthStatus().then(setOrStatus);
   }
 
   async function saveSettings() {
@@ -1705,11 +1714,41 @@ function Canvas() {
                 />
               )}
             </HStack>
-            <Text type="supporting" as="p">
-              {cfg.hasKey
-                ? `A key is already saved${cfg.keyHint ? ` (…${cfg.keyHint})` : ''}. Entering a new one replaces it.`
-                : 'Paste it here. It starts with sk-or-'}
-            </Text>
+            {orStatus?.revoked ? (
+              <VStack gap={2}>
+                <Text type="supporting" as="p">
+                  This key no longer works at OpenRouter — it may have been deleted or disabled
+                  there.
+                </Text>
+                <Button label="Reconnect OpenRouter" variant="primary" onClick={connectOpenRouter} />
+              </VStack>
+            ) : orStatus?.hasKey ? (
+              <VStack gap={2}>
+                <Text type="supporting" as="p">
+                  Connected to OpenRouter{orStatus.label ? ` as ${orStatus.label}` : ''}. $
+                  {orStatus.usage.toFixed(2)} spent with this key
+                  {orStatus.limit != null
+                    ? `, $${(orStatus.limitRemaining ?? 0).toFixed(2)} of $${orStatus.limit.toFixed(2)} remaining${orStatus.limitReset ? ` (resets ${orStatus.limitReset})` : ''}`
+                    : ''}
+                  .
+                </Text>
+                {orStatus.isFreeTier && (
+                  <Text type="supporting" as="p">
+                    You have not bought any credit yet, so generating will fail. Add some under{' '}
+                    <Link href="https://openrouter.ai/credits" isExternalLink>
+                      Credits
+                    </Link>
+                    .
+                  </Text>
+                )}
+              </VStack>
+            ) : (
+              <Text type="supporting" as="p">
+                {cfg.hasKey
+                  ? `A key is already saved${cfg.keyHint ? ` (…${cfg.keyHint})` : ''}. Entering a new one replaces it.`
+                  : 'Paste it here. It starts with sk-or-'}
+              </Text>
+            )}
           </VStack>
           )}
 

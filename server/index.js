@@ -734,6 +734,13 @@ app.post('/api/text', async (req, res) => {
   }
 
   if (!orRes.ok) {
+    // is_free_tier (in /api/oauth/status) doesn't catch a user who paid once and
+    // ran dry, so it still needs naming here where it actually happens: the 402.
+    if (orRes.status === 402) {
+      return res.status(402).json({
+        error: 'OpenRouter says this account is out of credit. Add some at openrouter.ai/credits.',
+      });
+    }
     const msg = data?.error?.message || data?.error || raw.slice(0, 300);
     return res.status(orRes.status).json({ error: `OpenRouter (${orRes.status}): ${msg}` });
   }
@@ -1106,6 +1113,12 @@ app.post('/api/video', async (req, res) => {
   }
   if (!orRes.ok) {
     for (const t of mintedTokens) revokeShare(t);
+    // Same 402 special-case as /api/text and /api/generate; see the comment there.
+    if (orRes.status === 402) {
+      return res.status(402).json({
+        error: 'OpenRouter says this account is out of credit. Add some at openrouter.ai/credits.',
+      });
+    }
     const msg = data?.error?.message || data?.error || raw.slice(0, 300);
     return res.status(orRes.status).json({ error: `OpenRouter (${orRes.status}): ${msg}` });
   }
@@ -1692,6 +1705,12 @@ app.post('/api/generate', async (req, res) => {
   }
 
   if (!orRes.ok) {
+    // Same 402 special-case as /api/text and /api/video; see the comment there.
+    if (orRes.status === 402) {
+      return res.status(402).json({
+        error: 'OpenRouter says this account is out of credit. Add some at openrouter.ai/credits.',
+      });
+    }
     const msg = data?.error?.message || data?.error || raw.slice(0, 300);
     return res.status(orRes.status).json({ error: `OpenRouter (${orRes.status}): ${msg}` });
   }
