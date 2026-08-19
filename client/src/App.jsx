@@ -1840,13 +1840,18 @@ function Canvas() {
 
           <HStack gap={2} justify="end">
             <Button label="Close" variant="ghost" onClick={() => setCfgDlg(null)} />
-            <Button
-              label="Save"
-              variant="primary"
-              isDisabled={cfgDlg?.saving}
-              isLoading={cfgDlg?.saving}
-              onClick={saveSettings}
-            />
+            {/* Nothing to save on the bare Connect screen or mid-wait -- the key
+                field is the only thing Save ever writes there, and it's not shown
+                until an existing key or "or paste a key instead" reveals it. */}
+            {(cfg.hasKey || cfgDlg?.showPaste) && (
+              <Button
+                label="Save"
+                variant="primary"
+                isDisabled={cfgDlg?.saving}
+                isLoading={cfgDlg?.saving}
+                onClick={saveSettings}
+              />
+            )}
           </HStack>
         </VStack>
       </Dialog>

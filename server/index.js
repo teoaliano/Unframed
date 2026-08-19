@@ -358,8 +358,14 @@ const AUTH_KEYS_URL =
 const escapeHtml = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 const oauthPage = (heading, detail) =>
   `<!doctype html><meta charset="utf-8"><title>Unframed</title>` +
+  // Explicit background + text colour, not left to prefers-color-scheme: a
+  // transparent body over a browser defaulting to dark paints black text on a
+  // dark canvas. Matching Unframed's own dark surface (#111112 / #DFE2E5,
+  // from the design system's dark tokens) makes the tab feel like part of the
+  // app instead of an unstyled page; color-scheme keeps form controls in step.
+  `<body style="background:#111112;color:#DFE2E5;color-scheme:dark;margin:0">` +
   `<div style="font:16px/1.5 system-ui;margin:12vh auto;max-width:32em;padding:0 1.5em">` +
-  `<h1 style="font-size:1.3em">${escapeHtml(heading)}</h1><p>${escapeHtml(detail)}</p></div>`;
+  `<h1 style="font-size:1.3em">${escapeHtml(heading)}</h1><p>${escapeHtml(detail)}</p></div></body>`;
 
 app.get('/api/oauth/callback/:nonce', async (req, res) => {
   // Single-use: claim() deletes whatever it finds, so a replayed callback and a
