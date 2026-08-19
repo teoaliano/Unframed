@@ -11,6 +11,7 @@ import { resetModelParams } from './output/defaults.js';
 import { ModelPicker, CostFoot } from './output/controls.jsx';
 import { buildRequest } from '../graph/resolve.js';
 import { runText, getProject, SESSION_ID } from '../api.js';
+import { useFieldResize } from './fieldResize.js';
 
 // An output node that emits text instead of an image. It consumes edges exactly like
 // the image output node — same buildRequest — and its answer lives in data.result so
@@ -112,13 +113,23 @@ export default function TextOutputNode({ id, data }) {
     });
   }
 
+  // See fieldResize.js for why this needs a mousedown-armed window listener rather
+  // than a plain mouseup handler on the field. This node has two resizable fields,
+  // told apart by the `xnode-text-result` class on the Result field.
+  const onResizeMouseDown = useFieldResize({
+    id,
+    data,
+    updateNodeData,
+    keyFor: (box) => (box.classList.contains('xnode-text-result') ? 'resultSize' : 'size'),
+  });
+
   return (
     <Card width="fit-content" padding={0} className="xnode-text">
       <Handle type="target" position={Position.Left} />
       <Handle type="source" position={Position.Right} />
       <NodeHeader kind="textOutput" title="text" family="output" right={`@${id}`} />
 
-      <VStack gap={3} padding={3}>
+      <VStack gap={3} padding={3} onMouseDown={onResizeMouseDown}>
         <ModelPicker
           models={models}
           value={model}
@@ -128,6 +139,7 @@ export default function TextOutputNode({ id, data }) {
 
         <TextArea
           className="xnode-text-field nodrag"
+          style={data.size}
           label="Instructions"
           rows={3}
           hasSpellCheck={false}
@@ -154,6 +166,7 @@ export default function TextOutputNode({ id, data }) {
           <VStack gap={1}>
             <TextArea
               className="xnode-text-field xnode-text-result nodrag"
+              style={data.resultSize}
               label="Result"
               rows={6}
               hasSpellCheck={false}

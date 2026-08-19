@@ -58,6 +58,7 @@ import { PromptIcon, ImageIcon, VideoIcon, TextIcon } from './nodes/nodeIcons.js
 import { bucketSources, isOutput, isReferenceable } from './graph/resolve.js';
 import { canSource, canTarget, selectedIds, connections, dropInternal } from './graph/bulkWire.js';
 import { keepLiveRunMarkers } from './graph/runMarkers.js';
+import { hitEdges, samplePaths } from './graph/edgeHits.js';
 import LibraryDialog from './library/LibraryDialog.jsx';
 import { instantiateFragment, centerOffset } from './library/insert.js';
 import { selectionFragment, presetFromSelection } from './library/save.js';
@@ -658,6 +659,38 @@ function Canvas() {
   // never reaches onConnect, and a stale origin would fan out the NEXT drag.
   const onConnectStart = useCallback((_, params) => { connectFrom.current = params; }, []);
   const onConnectEnd = useCallback(() => { connectFrom.current = null; }, []);
+
+  // Where the selection rectangle started, in flow coordinates. Read off React Flow's
+  // own store rather than the pointer event: by the time a drag is recognised as a
+  // selection the pointer has already travelled past the origin, and the store holds
+  // the exact starting point. (`store` is the one declared above for the selection latch.)
+  const lassoFrom = useRef(null);
+  const onSelectionStart = useCallback(() => {
+    const rect = store.getState().userSelectionRect;
+    lassoFrom.current = rect ? { x: rect.startX, y: rect.startY } : null;
+  }, [store]);
+
+  // React Flow selects an edge whenever one of its nodes lands in the box, and it has
+  // already done so by the time this runs -- so marking hits here ADDS the connectors
+  // the box crossed in empty canvas, rather than replacing anything.
+  const onSelectionEnd = useCallback(
+    (e) => {
+      const from = lassoFrom.current;
+      lassoFrom.current = null;
+      if (!from) return;
+      const to = screenToFlowPosition({ x: e.clientX, y: e.clientY });
+      const rect = {
+        x: Math.min(from.x, to.x),
+        y: Math.min(from.y, to.y),
+        width: Math.abs(to.x - from.x),
+        height: Math.abs(to.y - from.y),
+      };
+      const hits = hitEdges(rect, samplePaths());
+      if (!hits.size) return;
+      setEdges((es) => es.map((edge) => (hits.has(edge.id) ? { ...edge, selected: true } : edge)));
+    },
+    [screenToFlowPosition, setEdges],
+  );
 
   // The two bulk items in the right-click menu. Both read the selection straight
   // from `nodes`, so they work on whatever the right-click left selected.
@@ -1309,6 +1342,16 @@ function Canvas() {
           // mouse. pan tool: drag anywhere pans, like a hand tool.
           panOnDrag={tool === 'pan' ? true : [1]}
           selectionOnDrag={tool === 'select'}
+          // A node need only TOUCH the selection box, not sit entirely inside it.
+          selectionMode="partial"
+          onSelectionStart={onSelectionStart}
+          onSelectionEnd={onSelectionEnd}
+          // How far from a handle a release still connects, in flow pixels. React
+          // Flow's default of 20 is about the size of the handle itself, which is why
+          // connecting felt like it wanted a bull's-eye. The radius also applies over
+          // empty canvas, so this is set where a deliberate miss still reads as a miss
+          // rather than as large as it could be.
+          connectionRadius={70}
         >
           <Background gap={26} size={1} color="var(--color-border)" />
         </ReactFlow>

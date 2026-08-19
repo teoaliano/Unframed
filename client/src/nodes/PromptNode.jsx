@@ -4,6 +4,7 @@ import { Card } from '@astryxdesign/core/Card';
 import { TextArea } from '@astryxdesign/core/TextArea';
 import NodeHeader from './NodeHeader.jsx';
 import { isReferenceable } from '../graph/resolve.js';
+import { useFieldResize } from './fieldResize.js';
 
 // Match a partial "@query" ending exactly at the caret, so the menu only shows
 // while you're actively typing a reference.
@@ -67,6 +68,10 @@ export default function PromptNode({ id, data }) {
 
   const list = candidates(query);
 
+  // See fieldResize.js for why this needs a mousedown-armed window listener rather
+  // than a plain mouseup handler on the field.
+  const onResizeMouseDown = useFieldResize({ id, data, updateNodeData, keyFor: () => 'size' });
+
   // The menu is a sibling of the Card, not a child of it: the Card clips to its
   // rounded corners (overflow: clip), and the menu hangs below the Card's box, so
   // nested it was laid out correctly and then clipped away — present in the DOM,
@@ -77,9 +82,15 @@ export default function PromptNode({ id, data }) {
       <Card width="fit-content" padding={0} className="xnode-prompt">
         <Handle type="source" position={Position.Right} />
         <NodeHeader kind="prompt" family="input" right={`@${id}`} />
-        <div className="xnode-body" onKeyDown={onKeyDown} onClick={() => syncMenu(ref.current)}>
+        <div
+          className="xnode-body"
+          onKeyDown={onKeyDown}
+          onClick={() => syncMenu(ref.current)}
+          onMouseDown={onResizeMouseDown}
+        >
           <TextArea
             className="nodrag"
+            style={data.size}
             ref={ref}
             label="Prompt text"
             isLabelHidden

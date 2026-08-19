@@ -7,13 +7,11 @@ Keep that shape: the website's What's new page parses this file.
 
 ## 2026-08-19
 
-### Fixed
+### Added
 
-- **Missing a node while building a selection no longer costs you the group.**
-  Holding Shift (or Cmd/Ctrl) and clicking a gap between nodes used to throw
-  away everything selected so far, so picking quickly across a grid left some
-  nodes behind. A press on empty canvas with the key held now does nothing at
-  all — whether it lands perfectly still or wobbles a few pixels.
+- Video reference and result nodes have their own play/scrub controls, built into
+  the node instead of the browser's native ones. A clip now drags by its frame like
+  a picture does — scrubbing the new controls moves the playhead, not the node.
 
 ### Changed
 
@@ -26,6 +24,25 @@ Keep that shape: the website's What's new page parses this file.
   inside, so a node in the middle of a group could not be clicked off, dragged on
   its own, or used at all until you cleared the selection. Dragging any selected
   node still moves the whole group, and arrow keys still nudge it.
+
+- Box-select is more forgiving: a rectangle that only touches a node now selects
+  it (it used to have to enclose the whole node), and one drawn across a bare
+  connection — touching neither of its nodes — now selects that connection too.
+- Connection handles are bigger, and a release nearby now connects instead of
+  demanding a precise drop on the dot.
+
+### Fixed
+
+- **Missing a node while building a selection no longer costs you the group.**
+  Holding Shift (or Cmd/Ctrl) and clicking a gap between nodes used to throw
+  away everything selected so far, so picking quickly across a grid left some
+  nodes behind. A press on empty canvas with the key held now does nothing at
+  all — whether it lands perfectly still or wobbles a few pixels.
+- Hovering a reference picture, a generated result or a reference clip no longer
+  raises a tooltip — one that, in the packaged app, could land in the corner of
+  the window instead of on the picture.
+- A prompt or text field resized by its corner keeps that size after a reload or
+  a project switch, instead of snapping back to its default.
 
 ## 2026-08-18
 
