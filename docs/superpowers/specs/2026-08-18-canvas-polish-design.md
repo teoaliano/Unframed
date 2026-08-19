@@ -220,16 +220,36 @@ them. So the size is real, and it is entirely outside React's knowledge — whic
 it does not survive a reload, a project switch, or anything else that rebuilds the node
 from `graph.json`.
 
-**Save on release, restore as a prop.** On `mouseup` inside the node body — the
-gesture's own end, since a CSS resize has no event of its own — read the inline
-`width`/`height` off the wrapper and write them into node data. Restore by passing them
-straight back as the text area's `style`.
+**Save on release, restore as a prop.** Read the inline `width`/`height` a CSS resize
+wrote onto the wrapper and write them into node data; restore by passing them straight
+back as the text area's `style`.
 
-Three things make that as small as it looks:
+**A CSS resize sets no pointer capture, so `mouseup` cannot be trusted to land on the
+wrapper.** The obvious version — a `mouseup` handler on the node body, reading the size
+off `e.target.closest('.astryx-textarea')` — works for growing a field, because the
+corner tracks the cursor the whole way. It fails for shrinking: once the box hits the
+`min-width`/`min-height` floor in `styles.css` it stops while the cursor keeps
+travelling, so the release lands on the canvas behind the field and a handler on the
+field itself never fires. That silently drops the resize, and only for the direction
+that is easy to not notice in a quick check.
 
-- The wrapper is reachable without a ref. `mouseup` from a resize gripper targets the
-  wrapper itself, so `e.target.closest('.astryx-textarea')` finds it, and the node body
-  already has handlers on it in `PromptNode`.
+The shipped mechanism sidesteps the target instead of trusting it: on `mousedown`,
+`onResizeMouseDown` stashes the `.astryx-textarea` wrapper (found from the mousedown's
+own event target, which is still reliable) in a ref and arms a one-shot `mouseup`
+listener on `window` — a target the gesture cannot miss regardless of where it ends.
+That listener reads the size off the STASHED wrapper, not off its own event target, so
+where the release lands no longer matters. Two more things keep it correct across the
+gestures a text field actually sees:
+
+- A second `mousedown` before the first's `mouseup` — a resize restarted, or a plain
+  click that follows one — replaces the pending listener rather than stacking it, so
+  nothing accumulates on `window`.
+- A `useEffect` cleanup removes it on unmount, since a node can unmount mid-drag (the
+  node is deleted, or a project switch remounts every node), and firing later against a
+  detached wrapper would write against a stale closure.
+
+Two things from the simpler version still hold:
+
 - Astryx's `TextArea` forwards both `className` and `style` to that same wrapper, so
   restoring needs no DOM access at all.
 - Autosave and undo already do the persisting. Both are debounced on `nodes`, and a
@@ -302,3 +322,5 @@ work.
   and then writing the size back re-enters it. `mouseup` is the gesture's actual end.
 - **`node.style` or React Flow's `NodeResizer` for the field sizes.** Both resize the
   card, which is a different feature from the one that regressed; see section 6.
+- **`setPointerCapture` on the field for the resize gesture.** It contends with
+  Blink's own handling of the native resizer; see section 6.
