@@ -28,7 +28,7 @@ npm run client        # client only (vite)
 npm test              # assert-based self-checks, no framework
 ```
 
-Requires Node 18+ (server relies on built-in `fetch`). No lint setup exists. `npm test` runs `client/src/graph/resolve.test.js` and `client/src/graph/bulkWire.test.js` plus `server/env.test.js`, `share.test.js`, `presets.test.js`, `jobs.test.js` and `host.test.js` — plain `node`, no test framework, no fixtures.
+Requires Node 18+ (server relies on built-in `fetch`). No lint setup exists. `npm test` runs `client/src/graph/resolve.test.js`, `bulkWire.test.js` and `edgeHits.test.js`, `client/src/nodes/fieldResize.test.js`, plus `server/env.test.js`, `share.test.js`, `presets.test.js`, `jobs.test.js` and `host.test.js` — plain `node`, no test framework, no fixtures.
 
 Config lives in `.env` at the project root (copy from `.env.example`): `OPENROUTER_API_KEY`, `OPENROUTER_IMAGE_MODEL` (was `OPENROUTER_MODEL`, still read as a fallback and retired from the file the first time the new name is written), `OPENROUTER_TEXT_MODEL`, `OPENROUTER_VIDEO_MODEL`, `OUTPUT_DIR`, `PORT`. Everything except `PORT` is editable in the app's settings dialog. The client dev server proxies `/api` → `http://localhost:8787` (see `client/vite.config.js`), so both must be running.
 
