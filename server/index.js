@@ -312,6 +312,10 @@ app.delete('/api/key', async (req, res) => {
 
 // Begins the browser flow. Nothing here awaits, so there is nothing to catch --
 // the code_verifier is minted and held in oauth.js and never reaches the client.
+// The response carries the nonce and the code challenge. Reachable cross-origin,
+// a hostile page could read it, start its own approval, and have this server
+// write someone else's key into the user's .env -- the loopback CORS
+// restriction is what stops that, not anything in this handler.
 app.post('/api/oauth/start', (req, res) => {
   const { nonce, challenge } = oauthStart();
   const callback = callbackUrl({
@@ -344,10 +348,15 @@ const AUTH_KEYS_URL =
 // page rather than JSON. Self-contained on purpose: this server does not know
 // where the canvas lives -- :5173 in a clone, its own port in the packaged app --
 // so it cannot redirect anywhere, and says so instead.
+//
+// Escaped here rather than at each call site: two call sites interpolate text
+// that did not originate in this code (OpenRouter's error string, err.message),
+// and this page is served from the same origin as every /api route.
+const escapeHtml = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 const oauthPage = (heading, detail) =>
   `<!doctype html><meta charset="utf-8"><title>Unframed</title>` +
   `<div style="font:16px/1.5 system-ui;margin:12vh auto;max-width:32em;padding:0 1.5em">` +
-  `<h1 style="font-size:1.3em">${heading}</h1><p>${detail}</p></div>`;
+  `<h1 style="font-size:1.3em">${escapeHtml(heading)}</h1><p>${escapeHtml(detail)}</p></div>`;
 
 app.get('/api/oauth/callback/:nonce', async (req, res) => {
   // Single-use: claim() deletes whatever it finds, so a replayed callback and a
@@ -378,7 +387,9 @@ app.get('/api/oauth/callback/:nonce', async (req, res) => {
         .send(
           oauthPage(
             'OpenRouter could not complete the connection',
-            data.error?.message || data.error || `It answered ${orRes.status}. Try connecting again.`,
+            (typeof data.error?.message === 'string' && data.error.message) ||
+              (typeof data.error === 'string' && data.error) ||
+              `It answered ${orRes.status}. Try connecting again.`,
           ),
         );
     }

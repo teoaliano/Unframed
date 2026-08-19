@@ -322,6 +322,12 @@ try {
   const malformed = await fetch(`${base}${badPath}?code=malformed-key-code`);
   assert.equal(malformed.status, 502);
   assert.match(await malformed.text(), /shape/i);
+  // Nothing was saved -- the page's own promise, and the point of validating
+  // before writing at all.
+  assert.doesNotMatch(
+    await fs.readFile(path.join(dataDir, '.env'), 'utf8'),
+    /not-a-key/,
+  );
 
   // An upstream refusal is reported, not swallowed, and still as a page.
   const refusedStart = await (await fetch(`${base}/api/oauth/start`, { method: 'POST' })).json();
