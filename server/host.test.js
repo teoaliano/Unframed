@@ -299,6 +299,19 @@ try {
   assert.match(await done.text(), /close this tab/i);
   assert.match(await fs.readFile(path.join(dataDir, '.env'), 'utf8'), /OPENROUTER_API_KEY=sk-or-v1-stubbedkey1234/);
 
+  // Depends on the happy-path block just above having already written a key into
+  // .env: the stub key `sk-or-v1-stubbedkey1234` is not one OpenRouter has ever
+  // issued, so this makes a real call to openrouter.ai/api/v1/key and gets back a
+  // 401 -- which is exactly the revoked branch this asserts. Do not reorder this
+  // above the block that writes the key, or the route would see no key at all
+  // and this would assert the wrong branch.
+  const status = await fetch(`${base}/api/oauth/status`);
+  assert.equal(status.status, 200);
+  const statusBody = await status.json();
+  assert.equal(statusBody.hasKey, true);
+  assert.equal(statusBody.revoked, true);
+  assert.equal('usage' in statusBody, false, 'no spend is claimed for a key that does not work');
+
   // ...and the same nonce cannot be replayed.
   assert.equal((await fetch(`${base}${okPath}?code=good-code`)).status, 400);
 

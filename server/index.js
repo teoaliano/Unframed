@@ -422,6 +422,47 @@ app.get('/api/oauth/callback/:nonce', async (req, res) => {
   }
 });
 
+// What the settings dialog shows about the connection. Separate from
+// /api/health on purpose: health runs on every page load and must answer
+// without OpenRouter, while this one is opened deliberately and may be slow.
+//
+// This is the ONLY account information a user's own key can read. The purchased
+// balance lives behind GET /api/v1/credits, which is management-key-only -- and a
+// management key is OURS, not theirs -- so there is no way to show a balance. What
+// is reachable: all-time spend on this key, its cap if it has one, and whether
+// the user has ever bought credit, which is what makes the first-run warning
+// possible before a generation fails instead of after.
+app.get('/api/oauth/status', async (req, res) => {
+  if (!API_KEY) return res.json({ hasKey: false });
+  try {
+    const orRes = await fetch('https://openrouter.ai/api/v1/key', {
+      headers: { Authorization: `Bearer ${API_KEY}` },
+      signal: AbortSignal.timeout(10_000),
+    });
+    // Revoked or disabled upstream. Today this surfaces as a mystery generation
+    // failure; here the dialog can name it and offer to reconnect.
+    if (orRes.status === 401) return res.json({ hasKey: true, revoked: true });
+    const body = await orRes.json().catch(() => ({}));
+    if (!orRes.ok || !body.data) {
+      return res.status(502).json({ error: `OpenRouter answered ${orRes.status}.` });
+    }
+    const d = body.data;
+    res.json({
+      hasKey: true,
+      label: d.label || '',
+      usage: d.usage ?? 0,
+      // null for an uncapped key, which is what the browser flow produces --
+      // setting a cap is documented only on the management routes.
+      limit: d.limit ?? null,
+      limitRemaining: d.limit_remaining ?? null,
+      limitReset: d.limit_reset ?? null,
+      isFreeTier: Boolean(d.is_free_tier),
+    });
+  } catch (err) {
+    res.status(502).json({ error: err.message });
+  }
+});
+
 // Native folder chooser for the output directory. The browser cannot hand back a
 // real filesystem path -- showDirectoryPicker yields a sandboxed handle, and the
 // server needs somewhere to write -- but the server is local, so it can open the
