@@ -141,6 +141,17 @@ export default function TextOutputNode({ id, data }) {
     pendingResizeUp.current = onUp;
     window.addEventListener('mouseup', onUp, { once: true });
   }
+  // A node can unmount mid-drag (deleted, or a project switch remounts every
+  // node) with the listener still armed; without this it fires later against a
+  // detached box and a stale updateNodeData/data closure.
+  useEffect(() => {
+    return () => {
+      if (pendingResizeUp.current) {
+        window.removeEventListener('mouseup', pendingResizeUp.current);
+        pendingResizeUp.current = null;
+      }
+    };
+  }, []);
 
   return (
     <Card width="fit-content" padding={0} className="xnode-text">

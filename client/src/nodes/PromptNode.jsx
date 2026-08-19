@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useRef, useState, useEffect } from 'react';
 import { Handle, Position, useReactFlow } from '@xyflow/react';
 import { Card } from '@astryxdesign/core/Card';
 import { TextArea } from '@astryxdesign/core/TextArea';
@@ -94,6 +94,17 @@ export default function PromptNode({ id, data }) {
     pendingResizeUp.current = onUp;
     window.addEventListener('mouseup', onUp, { once: true });
   }
+  // A node can unmount mid-drag (deleted, or a project switch remounts every
+  // node) with the listener still armed; without this it fires later against a
+  // detached box and a stale updateNodeData/data closure.
+  useEffect(() => {
+    return () => {
+      if (pendingResizeUp.current) {
+        window.removeEventListener('mouseup', pendingResizeUp.current);
+        pendingResizeUp.current = null;
+      }
+    };
+  }, []);
 
   // The menu is a sibling of the Card, not a child of it: the Card clips to its
   // rounded corners (overflow: clip), and the menu hangs below the Card's box, so
