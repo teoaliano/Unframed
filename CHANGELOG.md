@@ -102,6 +102,15 @@ Keep that shape: the website's What's new page parses this file.
   holds even when the approval was already being exchanged at the moment you removed
   the key: the connection is refused and says so, rather than saving anyway.
 
+- **Connecting now finishes properly.** A successful connect confirms itself, and if
+  the account has never bought credit it says so right there, with a link, instead of
+  letting the first generation fail. Onboarding closes itself once there is nothing
+  left to say, and the model pickers fill in rather than reading *Loading models…*.
+
+- **A connection that gets lost says so within seconds.** Cancelling from another
+  window, or restarting the app mid-approval, used to leave *Waiting for OpenRouter*
+  on screen for ten minutes about an attempt that no longer existed.
+
 - **Connecting tells you when it fails, instead of waiting ten minutes and blaming
   OpenRouter.** If the approval is refused, expires, or comes back as something
   Unframed can't save, the reason appears in settings as soon as it happens — and

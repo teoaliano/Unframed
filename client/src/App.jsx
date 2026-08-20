@@ -281,6 +281,12 @@ function Canvas() {
   const [orStatus, setOrStatus] = useState(null);
   // Which key-info request is the current one; see openSettings.
   const orStatusRun = useRef(0);
+  // A Cancel's DELETE and the next Connect's POST are independent requests with no
+  // ordering guarantee between them, so a Cancel served second wipes the attempt
+  // the new Connect just created — and the tab that opened is then dead on arrival
+  // while the poll waits on a nonce the server has forgotten. Connect waits for a
+  // cancel still in flight instead of racing it.
+  const cancelling = useRef(Promise.resolve());
   // Read inside the poll's interval callback (which fires long after the render
   // that scheduled it) to decide whether the dialog is open right now, without
   // making cfgDlg a dependency of that effect — that would restart the
@@ -468,9 +474,8 @@ function Canvas() {
   // cannot cancel this: the callback still lands on the server, and this is
   // what notices.
   //
-  // Ten minutes, not two: that is how long OpenRouter's code is valid, and
-  // giving up sooner reports failure on a flow that is still perfectly
-  // completable. After two minutes the copy softens, but polling continues.
+  // Ten minutes: that is how long OpenRouter's code is valid, and giving up sooner
+  // reports failure on a flow that is still perfectly completable.
   useEffect(() => {
     const pending = connecting;
     if (!pending) return;
@@ -478,6 +483,12 @@ function Canvas() {
     // resolution can still land after Cancel or the timeout has fired for this
     // same attempt — `live` is what stops it from acting on it anyway.
     let live = true;
+    // Where a terminal outcome goes. The dialog is closable mid-flow, so the inline
+    // banner reaches nobody when it is shut, and a toast is the only thing that does.
+    const report = (msg) => {
+      if (cfgDlgRef.current) setCfgDlg((d) => (d ? { ...d, error: msg } : d));
+      else toast({ body: msg, uniqueID: 'oauth-failed' });
+    };
     const id = setInterval(async () => {
       const elapsed = Date.now() - pending.since;
       // The server's own account of how the attempt ended. `null` is a dropped
@@ -487,14 +498,37 @@ function Canvas() {
 
       if (outcome?.state === 'failed') {
         setConnecting(null);
-        const msg = outcome.reason || 'Connecting failed. Try again.';
-        if (cfgDlgRef.current) setCfgDlg((d) => (d ? { ...d, error: msg } : d));
-        else toast({ body: msg, uniqueID: 'oauth-failed' });
+        report(outcome.reason || 'Connecting failed. Try again.');
+        return;
+      }
+
+      // The server has no record of any attempt at all. Cancelled from a second
+      // window, superseded by one, or the engine restarted — `node --watch` does
+      // that on any file save in development, and the store is in memory by design.
+      // None of those can ever complete, so this is terminal. Falling through to
+      // the next tick, as it used to, left the dialog saying "Waiting for OpenRouter
+      // in your browser" for the full ten minutes about an attempt the server had
+      // already told it did not exist.
+      if (outcome?.state === 'none') {
+        setConnecting(null);
+        report('That connection was lost before it finished. Try connecting again.');
         return;
       }
 
       if (outcome?.state === 'done') {
-        const h = await getHealth().catch(() => null);
+        // BOTH requests before setConnecting(null), and together, since neither
+        // needs the other's answer.
+        //
+        // The order is the whole point. setConnecting(null) changes this effect's
+        // own dependency, so React tears the effect down and the cleanup below sets
+        // `live = false` — within a frame, while a request is still out on the
+        // network. Anything awaited after that resolves into a `!live` check that is
+        // already false, so the entire tail of this branch was dead code: no toast,
+        // no free-tier warning, and a dialog that never closed. `live` exists to
+        // ignore a resolution after a real Cancel, and the branch was tripping it on
+        // itself. Everything below this await is synchronous, so it cannot happen
+        // again.
+        const [h, status] = await Promise.all([getHealth().catch(() => null), oauthStatus()]);
         if (!live) return;
         setConnecting(null);
         // Only the settings `cfg` carries, not the whole health payload: that
@@ -504,21 +538,19 @@ function Canvas() {
         // that failed cannot turn a finished connection back into "no key".
         const { ok, model, ...settings } = h || {};
         setCfg((c) => ({ ...c, ...settings, hasKey: true, keyHint: h?.keyHint || c.keyHint }));
-        // Fetched here, not left to the next openSettings(): on a first connect
-        // this is the ONLY chance to warn that no credit has been bought, which
-        // is the entire reason the route reports is_free_tier. Closing the dialog
-        // first, as this used to, meant that warning could never appear and the
-        // user met the problem as a failed generation instead.
-        const status = await oauthStatus();
-        if (!live) return;
+        // Not left to the next openSettings(): on a first connect this is the ONLY
+        // chance to warn that no credit has been bought, which is the entire reason
+        // the route reports is_free_tier.
         setOrStatus(status);
         toast({ body: 'Connected to OpenRouter.', uniqueID: 'oauth-connected' });
         // Onboarding closes, for the same reason saveSettings closes: the rest of
-        // the form was hidden while there was no key, so leaving it open shows
-        // pickers still stuck on "Loading models…". Unless there is something to
-        // say -- then the dialog stays and loads them, because a toast cannot
-        // carry the link to buy credit.
+        // the form was hidden while there was no key. Unless there is something to
+        // say -- then the dialog stays, because a toast cannot carry the link to buy
+        // credit.
         if (pending.wasKeyless && !status?.isFreeTier) return setCfgDlg(null);
+        // The keyless dialog is opened directly (see the initial load), not through
+        // openSettings, so nothing has fetched the catalogues. Without this the
+        // three pickers sit on "Loading models…" for as long as the dialog is open.
         if (pending.wasKeyless) loadCatalogues();
         // A reconnect keeps whatever the user had typed into the models and folder
         // fields. Clearing the draft here is what the old unconditional close did
@@ -532,14 +564,7 @@ function Canvas() {
       // been failing — which is why it does not depend on having heard anything.
       if (elapsed > 10 * 60 * 1000) {
         setConnecting(null);
-        const msg = 'Nothing came back from OpenRouter. Try connecting again.';
-        if (cfgDlgRef.current) {
-          setCfgDlg((d) => (d ? { ...d, error: msg } : d));
-        } else {
-          // Dialog is closed, so the inline banner above would say this to
-          // nobody — a toast is the only way the failure is ever seen.
-          toast({ body: msg, uniqueID: 'oauth-timeout' });
-        }
+        report('Nothing came back from OpenRouter. Try connecting again.');
         return;
       }
     }, 1500);
@@ -654,6 +679,10 @@ function Canvas() {
     const tab = window.open('', '_blank');
     if (tab) tab.opener = null;
     try {
+      // Before starting, so a Cancel still in flight cannot arrive after this
+      // attempt is created and wipe it. cancelOauth swallows its own failures, so
+      // this never rejects.
+      await cancelling.current;
       const url = await startOauth();
       // Still null when popups are blocked outright, which is why the link in the
       // waiting state is permanent rather than a reaction to a failed open.
@@ -669,7 +698,7 @@ function Canvas() {
   }
 
   function cancelConnect() {
-    cancelOauth();
+    cancelling.current = cancelOauth();
     setConnecting(null);
   }
 
