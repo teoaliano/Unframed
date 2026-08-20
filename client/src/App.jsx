@@ -533,11 +533,18 @@ function Canvas() {
         setConnecting(null);
         // Only the settings `cfg` carries, not the whole health payload: that
         // also holds `ok` and the legacy `model` alias, and spreading them in
-        // leaves cfg with members nothing declares and nothing reads. hasKey is
-        // set from the server's `done`, not from this call, so a health request
-        // that failed cannot turn a finished connection back into "no key".
+        // leaves cfg with members nothing declares and nothing reads.
         const { ok, model, ...settings } = h || {};
-        setCfg((c) => ({ ...c, ...settings, hasKey: true, keyHint: h?.keyHint || c.keyHint }));
+        // Trust the server when it answered. The old code forced `hasKey: true`
+        // here, on the theory that a failed health request must not undo a finished
+        // connection -- but a failed request yields h === null and an empty
+        // `settings`, so there was nothing to force. The hardcode only ever bit the
+        // case it was not meant to: a health request that SUCCEEDED and correctly
+        // said "no key" -- a Remove key in the gap between the poll reading 'done'
+        // and this merge -- which it then overwrote back to "a key is saved". Only
+        // when h is null (the request itself failed) do we default true, since the
+        // server did just report the connection done.
+        setCfg((c) => ({ ...c, ...settings, hasKey: h?.hasKey ?? true, keyHint: h?.keyHint ?? c.keyHint }));
         // Not left to the next openSettings(): on a first connect this is the ONLY
         // chance to warn that no credit has been bought, which is the entire reason
         // the route reports is_free_tier.
@@ -629,6 +636,13 @@ function Canvas() {
     try {
       const r = await saveConfig(fields);
       setCfg((c) => ({ ...c, ...r }));
+      // Saving a key settles which credential the app uses, so PUT /api/config
+      // cancels any attempt still in flight server-side. Stop the poll here too, or
+      // its next tick reads the now-empty store as 'none' -- which is terminal since
+      // finding 08 -- and reports "That connection was lost" about a key that in
+      // fact just saved. Only when a key was sent: a model or folder save must leave
+      // a connect in flight running.
+      if (fields.key) setConnecting(null);
       // Onboarding ends by closing. The rest of the form -- the model pickers and
       // the output folder -- was hidden while there was no key, and their
       // catalogues are only fetched by openSettings(), so leaving the dialog open
