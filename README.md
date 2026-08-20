@@ -186,6 +186,7 @@ These are the obvious next steps if you want to grow it, each small:
 ## Notes
 
 - Your key lives server-side. If you set it in `.env` the browser never sees it at all; if you paste it into the dialog it is POSTed once to the local server over loopback and never stored in the browser or sent back to it — the app only ever receives the last 4 characters, to show you which key is in use.
+- **The server answers this machine only.** It listens on `127.0.0.1`, refuses any request whose `Origin` is not loopback, and refuses any whose `Host` is not loopback either — so another device on your network cannot reach it, and a website you happen to have open cannot make it act on your behalf. Every route either spends your money, reads your output folder, or writes your key, so none of them are meant to be reachable from anywhere else. Sharing a *result* is a separate, deliberate act, and it runs its own server rather than opening this one up.
 - OpenRouter bills per completed image (a failed generation isn't charged), so each output-node run maps to one billable image.
 - Verify current per-image pricing on the model's OpenRouter page before running large batches.
 
