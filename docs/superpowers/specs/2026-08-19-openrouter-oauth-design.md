@@ -343,9 +343,9 @@ recorded here rather than left to be rediscovered.
 
   **The name is visible in OpenRouter's console and NOT returned to us**, which is
   a distinction this section originally blurred. `GET /api/v1/key` reports `label`,
-  and `label` is a truncated form of the key itself (`sk-or-v1-464...845`) even for
-  a key the user named — confirmed 2026-08-20 against a key whose console row reads
-  `OAuth: oauth test 2`. The routes that would return the name (`/api/v1/keys`,
+  and `label` is a truncated form of the key itself (`sk-or-v1-xxx...yyy`) even for
+  a key the user named — confirmed 2026-08-20 against a key the console shows under
+  the name given while approving. The routes that would return the name (`/api/v1/keys`,
   `/api/v1/keys/current`) answer `401 Invalid management key`. So no display can
   say "connected as my-laptop", `label` is not forwarded past the server, and the
   code comment saying the field only ever holds key material was right all along.
