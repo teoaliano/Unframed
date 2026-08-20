@@ -1,7 +1,7 @@
 {
   "name": "unframed",
   "private": true,
-  "version": "0.2.5",
+  "version": "0.3.0",
   "type": "module",
   "description": "A tiny local node-based image generator (GPT Image 2 via OpenRouter).",
   "license": "MIT",
