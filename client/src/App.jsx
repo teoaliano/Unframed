@@ -270,6 +270,8 @@ function Canvas() {
   // What GET /api/oauth/status last answered, or null if it hasn't been asked
   // (or the ask failed).
   const [orStatus, setOrStatus] = useState(null);
+  // Which key-info request is the current one; see openSettings.
+  const orStatusRun = useRef(0);
   // Read inside the poll's interval callback (which fires long after the render
   // that scheduled it) to decide whether the dialog is open right now, without
   // making cfgDlg a dependency of that effect — that would restart the
@@ -476,9 +478,32 @@ function Canvas() {
       // only a keyHint that changed from what was captured at the start can.
       if (h?.hasKey && h.keyHint !== pending.keyHint) {
         setConnecting(null);
-        setCfg((c) => ({ ...c, ...h, hasKey: true, keyHint: h.keyHint || '' }));
-        setCfgDlg(null);
+        // Only the settings `cfg` carries, not the whole health payload: that
+        // also holds `ok` and the legacy `model` alias, and spreading them in
+        // leaves cfg with members nothing declares and nothing reads.
+        const { ok, model, ...settings } = h;
+        setCfg((c) => ({ ...c, ...settings, hasKey: true, keyHint: h.keyHint || '' }));
+        // Fetched here, not left to the next openSettings(): on a first connect
+        // this is the ONLY chance to warn that no credit has been bought, which
+        // is the entire reason the route reports is_free_tier. Closing the dialog
+        // first, as this used to, meant that warning could never appear and the
+        // user met the problem as a failed generation instead.
+        const status = await oauthStatus();
+        if (!live) return;
+        setOrStatus(status);
         toast({ body: 'Connected to OpenRouter.', uniqueID: 'oauth-connected' });
+        // Onboarding closes, for the same reason saveSettings closes: the rest of
+        // the form was hidden while there was no key, so leaving it open shows
+        // pickers still stuck on "Loading models…". Unless there is something to
+        // say -- then the dialog stays and loads them, because a toast cannot
+        // carry the link to buy credit.
+        if (pending.wasKeyless && !status?.isFreeTier) return setCfgDlg(null);
+        if (pending.wasKeyless) loadCatalogues();
+        // A reconnect keeps whatever the user had typed into the models and folder
+        // fields. Clearing the draft here is what the old unconditional close did
+        // by accident, and the Save button was deliberately left live during a
+        // connect precisely so those edits had a way out.
+        setCfgDlg((d) => (d ? { ...d, key: '', error: undefined } : d));
         return;
       }
       if (elapsed > 10 * 60 * 1000) {
@@ -503,6 +528,17 @@ function Canvas() {
     };
   }, [connecting, toast]);
 
+  // Cached in api.js, so calling this twice costs nothing. Extracted because the
+  // poll above needs it too: a first connect that keeps the dialog open would
+  // otherwise leave the model pickers reading "Loading models…" forever, since
+  // nothing else ever fetches them.
+  function loadCatalogues() {
+    if (catalogues.image) return;
+    ['image', 'text', 'video'].forEach((type) =>
+      listModels(type).then((d) => setCatalogues((c) => ({ ...c, [type]: d.models || [] }))),
+    );
+  }
+
   // Open with the saved values as the draft, so the pickers show what is in use.
   function openSettings() {
     setCfgDlg({
@@ -512,16 +548,19 @@ function Canvas() {
       videoModel: cfg.videoModel,
       outputDir: cfg.outputDir,
     });
-    // The catalogues are cached in api.js, so reopening the dialog costs nothing.
-    if (!catalogues.image) {
-      ['image', 'text', 'video'].forEach((type) =>
-        listModels(type).then((d) => setCatalogues((c) => ({ ...c, [type]: d.models || [] }))),
-      );
-    }
+    loadCatalogues();
     // On open, not on a timer: inference responses carry no quota information, so
     // asking is the only way to know, and nothing outside this dialog needs it.
     setOrStatus(null);
-    if (cfg.hasKey) oauthStatus().then(setOrStatus);
+    // Guarded like useModels in nodes/output/core.js: open, close, reopen quickly
+    // and two of these are in flight, and the older one resolving last would
+    // overwrite the newer answer.
+    if (cfg.hasKey) {
+      const mine = ++orStatusRun.current;
+      oauthStatus().then((d) => {
+        if (orStatusRun.current === mine) setOrStatus(d);
+      });
+    }
   }
 
   async function saveSettings() {
@@ -579,14 +618,36 @@ function Canvas() {
     // key mid-flow would change keyHint -- which the poll below reads as the
     // browser approval having come back.
     setCfgDlg((d) => ({ ...d, key: '', error: undefined, saved: false }));
+    // Opened BEFORE the await, while the click's user activation is still live.
+    // Chrome's activation survives a fast fetch, which is why opening it after
+    // worked in testing, but Safari and Firefox are stricter about a popup opened
+    // outside the gesture's own task and block it silently -- leaving the user
+    // reading "waiting for OpenRouter in your browser" with no browser tab.
+    //
+    // Without 'noopener', because that makes window.open return null and there
+    // would be nothing to navigate. about:blank is same-origin until it is
+    // navigated, so the opener can be severed here instead, which is what
+    // 'noopener' would have bought.
+    const tab = window.open('', '_blank');
+    if (tab) tab.opener = null;
     try {
       const url = await startOauth();
-      window.open(url, '_blank', 'noopener');
+      // Still null when popups are blocked outright, which is why the link in the
+      // waiting state is permanent rather than a reaction to a failed open.
+      if (tab) tab.location = url;
       // keyHint captured now, not read back off `cfg` later: the poll's success
       // check needs to tell "this flow finished" from "a key was already
       // there" when reconnecting, and only a hint that has since changed can.
-      setConnecting({ since: Date.now(), slow: false, url, keyHint: cfg.keyHint });
+      // wasKeyless likewise, since cfg.hasKey flips before the poll reads it.
+      setConnecting({
+        since: Date.now(),
+        slow: false,
+        url,
+        keyHint: cfg.keyHint,
+        wasKeyless: !cfg.hasKey,
+      });
     } catch (err) {
+      if (tab) tab.close();
       setCfgDlg((d) => ({ ...d, error: err.message }));
     }
   }
@@ -1648,19 +1709,19 @@ function Canvas() {
                   ? 'Still waiting. Finish approving in your browser, or cancel and try again.'
                   : 'Waiting for OpenRouter in your browser…'}
               </Text>
-              {/* Whether the tab actually opened can't be detected on either
-                  path (see connectOpenRouter's comment) — this link is a
-                  permanent fallback, not a reaction to a failed open. */}
+              {/* A real link, not the URL in a read-only field. Popups can be
+                  blocked outright, and this is the whole recovery path when they
+                  are — a 200-character URL to select by hand out of a one-line
+                  input was the worst possible thing to offer there. Permanent
+                  rather than a reaction to a failed open, because whether the tab
+                  opened cannot be detected (see connectOpenRouter). */}
               <Text type="supporting" as="p">
-                Didn't open? Open this link to approve Unframed:
+                Didn't open?{' '}
+                <Link href={connecting.url} isExternalLink>
+                  Approve Unframed at OpenRouter
+                </Link>
+                .
               </Text>
-              <TextInput
-                label="Authorization link"
-                isLabelHidden
-                value={connecting.url}
-                isReadOnly
-                onChange={() => {}}
-              />
               <Button label="Cancel" variant="ghost" onClick={cancelConnect} />
             </VStack>
           )}
