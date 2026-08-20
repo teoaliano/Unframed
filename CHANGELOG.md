@@ -9,11 +9,41 @@ Keep that shape: the website's What's new page parses this file.
 
 ### Fixed
 
+- **Removing your key now removes every copy of it.** If your `.env` had ended up
+  with the key on more than one line — easy to do if you added a line by hand
+  rather than editing the existing one — *Remove key* cleared only the first, and
+  the key came back the next time the app started. It also meant entering a new key
+  left the old one able to win. Both now act on every matching line.
+
+- **A key can no longer be lost to an unreadable `.env`.** If the file could not be
+  read for any reason other than not existing — a permissions problem, a disk
+  fault — saving a setting used to treat it as empty and rewrite it with only that
+  one setting, silently dropping the key and everything else. Saving now refuses
+  with an error instead of writing over what it could not read.
+
 - **Removing your key while changing the output folder no longer strands a render.**
   If the two happened at the same moment, a video still rendering could be copied
   into the new folder and left there marked as still-in-progress, where nothing
   would ever check on it or tell you it had stopped — even though removing the key
   ends every render in progress. It is now ended and reported like the rest.
+
+- **A box selection no longer picks up a node it does not touch.** One node could
+  join every rectangle you drew, anywhere on the canvas, however far away it sat,
+  which looked as though the canvas on screen were not the one being selected. It
+  was always a node whose drag had been interrupted rather than finished: switch
+  macOS spaces or apps mid-drag and the mouse release never reaches the window, so
+  the node stays marked as being dragged long after it stopped moving, and a node
+  marked that way is exempt from the box's geometry. That mark is now cleared when
+  a gesture ends without a release, and is no longer written into the project, so a
+  graph already carrying one is corrected the next time you open it.
+
+- **A generated image added to the canvas is the size of every other node again.**
+  Using "add to canvas" on a result landed a node the full pixel width of the
+  picture — a 1024px image became a 1024px node, dwarfing the rest of the flow —
+  and the same went for adding a clip from a video output or a text answer as a
+  prompt node. They now arrive at the standard node width, resizable from their
+  edges as before. Nodes already saved oversized correct themselves the next time
+  the project is opened.
 
 - **Unframed now answers only the machine it runs on.** It used to accept
   connections on every network interface, so any other device on your network

@@ -10,6 +10,7 @@ import { useModels, freeSpot } from './output/core.js';
 import { resetModelParams } from './output/defaults.js';
 import { ModelPicker, CostFoot } from './output/controls.jsx';
 import { buildRequest } from '../graph/resolve.js';
+import { withDrag } from '../graph/starter.js';
 import { runText, getProject, SESSION_ID } from '../api.js';
 import { useFieldResize } from './fieldResize.js';
 
@@ -104,12 +105,16 @@ export default function TextOutputNode({ id, data }) {
   // re-running the model.
   function addResultAsPrompt() {
     const spot = freeSpot(getNode, getNodes, id);
-    addNodes({
-      id: `p-${Date.now()}`,
-      type: 'prompt',
-      position: spot,
-      data: { text: data.result },
-    });
+    // withDrag for the wrapper size — see ImageOutputNode.addToCanvas. A prompt needs
+    // both axes seeded, since it has no ratio to compute a height from.
+    addNodes(
+      withDrag({
+        id: `p-${Date.now()}`,
+        type: 'prompt',
+        position: spot,
+        data: { text: data.result },
+      }),
+    );
   }
 
   // See fieldResize.js for why this needs a mousedown-armed window listener rather
