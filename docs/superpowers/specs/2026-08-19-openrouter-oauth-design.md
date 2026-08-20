@@ -255,8 +255,26 @@ be baffling to read immediately after a successful approval.
 
 Four defences, each against something specific.
 
-1. **The verifier never leaves the engine.** Makes the public bounce safe, and
-   makes a code in a CDN log unexploitable.
+1. **The verifier never leaves the engine.** Makes a code in a CDN log
+   unexploitable — verified, not assumed: OpenRouter refuses an exchange whose
+   verifier does not match the challenge the code was issued for (probed
+   2026-08-20, `docs/research/2026-08-19-openrouter-oauth.md`).
+
+   **This section used to say it "makes the public bounce safe", and that is too
+   strong.** It stops the bounce page *redeeming* the code. It does not stop the
+   page *substituting* one: given the challenge, that page can approve it against
+   its own OpenRouter account and hand the engine a code that redeems correctly,
+   and the user's `.env` ends up holding someone else's key — every prompt and
+   generated frame then visible in that account, with billing and cap under its
+   control. The nonce is no defence here, because the bounce page knows the nonce
+   by design and always gets to navigate first.
+
+   So there is a fifth invariant, and it is the one whose enforcement lives outside
+   this repo: **the challenge must never reach the bounce origin.** Today that
+   holds because browsers default to `strict-origin-when-cross-origin`, so
+   OpenRouter's redirect carries no query string onward. That is a third party's
+   behaviour. Before `UNFRAMED_OAUTH_BOUNCE` is ever set, the page must carry no
+   third-party script and must not log or forward what it receives.
 2. **The nonce is 128-bit, single-use, and in the path.** It substitutes for the
    `state` parameter OpenRouter does not offer. The callback is a top-level
    browser navigation, which CORS does not protect, so an unguessable single-use

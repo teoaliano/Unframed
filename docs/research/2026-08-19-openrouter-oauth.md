@@ -63,6 +63,11 @@ Body (all three fields flat JSON):
 if a challenge was used (<https://openrouter.ai/docs/api/api-reference/oauth/exchange-authorization-code-for-api-key>,
 field table).
 
+**"Optional" describes the field, not the enforcement — probed 2026-08-20.** Read on its
+own, that sentence leaves open whether a code issued FOR a challenge can be redeemed
+WITHOUT one, which is the question the whole bounce-page design rests on. It cannot: see
+the probe at the end of this document.
+
 Response, 200: `{ "key": string, "user_id": string | null }`
 (<https://openrouter.ai/docs/api/api-reference/oauth/exchange-authorization-code-for-api-key>). The guide only
 destructures `key` (<https://openrouter.ai/docs/guides/overview/auth/oauth>).
@@ -516,6 +521,40 @@ silent — on two points they are misleading.
   key created that way returns a non-null `limit` from `GET /api/v1/key`. Any
   design that assumes a connected key is uncapped is wrong.
 
-**Still unresolved:** whether the approval page also offers an expiry; whether a
-name or cap can be supplied as `/auth` query parameters rather than only through
-the page's own fields; and everything else in the unknowns list above.
+**Still unresolved:** whether a name or cap can be supplied as `/auth` query parameters
+rather than only through the page's own fields, and everything else in the unknowns list
+above. (The expiry question is answered: the approval page offers one, and
+`GET /api/v1/key` returns `expires_at`.)
+
+## PKCE enforcement — probed 2026-08-20
+
+The one fact the public bounce page's safety depends on, and the only way to establish it
+was to try. A throwaway script minted a verifier and challenge, ran its own loopback
+callback server, and put the returned code through three exchanges against a real account.
+
+| Sent | Status | Answer |
+| --- | --- | --- |
+| `{code}` alone | 400 | `Invalid code_challenge_method` |
+| `{code, code_verifier: <wrong>, code_challenge_method: S256}` | 403 | `Invalid code or code_verifier` |
+| `{code, code_verifier: <correct>, code_challenge_method: S256}` | 200 | a key |
+
+**The binding is enforced.** Row two is the result that matters, and it is clean: the only
+thing that changed between it and row three is the verifier's VALUE, and 200 became 403. So
+a code is not redeemable without the verifier it was issued against.
+
+Row one proves less than it appears to. Omitting the verifier also omitted
+`code_challenge_method`, so it failed on the method and does not isolate the verifier. Row
+two carries the finding alone; a cleaner row one would send the method and omit only the
+verifier.
+
+**What this does and does not license.** It licenses the code travelling through a page we
+do not control: a code in that host's access log, or in a CDN log, is not a key, because
+the verifier never leaves the engine process. It does NOT license treating the bounce page
+as fully untrusted. A page that learns the CHALLENGE can approve it against its own
+OpenRouter account and hand the engine a code that redeems correctly, leaving the user's
+`.env` holding someone else's key — and the single-use nonce does not help, because the
+bounce page knows the nonce by design and always navigates first. What prevents that is the
+challenge never reaching the bounce origin, which today rests on the browser's default
+`strict-origin-when-cross-origin` referrer policy on OpenRouter's own redirect. That is a
+third party's behaviour, so it is an invariant to state and re-check, not one to rely on
+silently.

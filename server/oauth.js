@@ -6,9 +6,19 @@ import crypto from 'node:crypto';
 // which CORS does not protect, so an unguessable single-use value is what makes a
 // hostile local page's navigation pointless.
 //
-// The `code_verifier` never leaves this process. That is what lets the code
-// travel back through a public web page without that page being able to do
-// anything with it.
+// The `code_verifier` never leaves this process, and OpenRouter really does refuse
+// an exchange without it (probed 2026-08-20, recorded in
+// docs/research/2026-08-19-openrouter-oauth.md). That is what lets the code travel
+// back through a public web page: a code in that host's logs cannot be redeemed.
+//
+// It does NOT make the bounce page harmless. A page that learns the CHALLENGE can
+// approve it against its OWN OpenRouter account and hand this engine a code that
+// redeems correctly, leaving the user's .env holding someone else's key -- and the
+// nonce cannot stop that, since the bounce page knows the nonce by design and always
+// navigates first. What prevents it is the challenge never reaching the bounce
+// origin, which rests on the browser's default referrer policy on OpenRouter's
+// redirect. Anything that would put the challenge in the bounce page's reach --
+// forwarding it, logging it there, third-party script on that page -- breaks this.
 const b64url = (buf) => buf.toString('base64url');
 
 export const challengeFrom = (verifier) =>
