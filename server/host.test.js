@@ -199,10 +199,31 @@ try {
   });
   assert.equal(drive.status, 403, 'a bodiless cross-origin POST is refused');
 
-  // The dev client's own origin is reflected, so local tooling keeps working.
+  // A loopback origin reaches the route -- the middleware below only refuses a
+  // NON-loopback one -- but nothing is echoed back, so no page can read the reply.
+  // This used to reflect the origin "so local tooling keeps working", and that was
+  // the hole: neither real consumer is ever cross-origin, so the echo served
+  // nobody except a page on some other loopback port. The dev client's calls are
+  // all relative, so the browser talks to Vite same-origin and Vite proxies
+  // server-side, where no browser CORS check exists; the packaged app is
+  // same-origin with the engine outright.
   const dev = await fetch(`${base}/api/health`, { headers: { Origin: 'http://localhost:5173' } });
-  assert.equal(dev.status, 200);
-  assert.equal(dev.headers.get('access-control-allow-origin'), 'http://localhost:5173');
+  assert.equal(dev.status, 200, 'a loopback origin is not refused');
+  assert.equal(dev.headers.get('access-control-allow-origin'), null, 'but nothing is readable');
+
+  // The payload that makes this worth closing. Any page on any loopback port --
+  // another dev server, or an XSS in some locally-hosted tool's web UI -- passes
+  // the Origin check. If it could READ this reply it would have the nonce and the
+  // challenge, which is everything needed to approve that challenge against its
+  // own OpenRouter account and have this server write the resulting key into the
+  // user's .env: every later prompt and frame billed to, and visible in, someone
+  // else's account. It cannot read it, so the 128-bit nonce stays unguessable.
+  const nosy = await fetch(`${base}/api/oauth/start`, {
+    method: 'POST',
+    headers: { Origin: 'http://localhost:3000' },
+  });
+  assert.equal(nosy.headers.get('access-control-allow-origin'), null, 'no cross-origin read of a nonce');
+  await fetch(`${base}/api/oauth/pending`, { method: 'DELETE' }); // that attempt superseded a real one
 
   // Same case rule on the Origin side, which matters more than it looks: this
   // check refuses the REQUEST, so a case mismatch here is a 403 rather than a

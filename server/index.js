@@ -56,15 +56,28 @@ let API_KEY = process.env.OPENROUTER_API_KEY;
 let OUTPUT_DIR = outputPath(ROOT, process.env.OUTPUT_DIR);
 
 const app = express();
-// Loopback only. A wide-open ACAO let any page the user happened to be visiting
-// read this API cross-origin -- /api/health alone carries the key hint, the model
-// settings and the output path -- and call DELETE /api/key. Neither real consumer
-// needs CORS at all: Vite proxies server-side, so no browser origin is involved,
-// and a packaged app is same-origin (see the note below). The allowlist rather
-// than nothing is for local tooling, and it is a real boundary because the browser
-// sets Origin, not the page.
+// NOTHING is readable cross-origin. Not an allowlist of loopback origins, which
+// is what this was: a wide-open ACAO let any page the user was visiting read this
+// API -- /api/health alone carries the key hint, the model settings and the output
+// path -- and narrowing it to loopback still handed a readable API to any page on
+// any other loopback port, which is another dev server, or an XSS in some
+// locally-hosted tool's web UI. POST /api/oauth/start is what made that worth
+// closing rather than documenting: its reply carries the nonce and the challenge,
+// and anything that can read those can approve the challenge against its OWN
+// OpenRouter account and have this server write the resulting key into the user's
+// .env.
+//
+// Echoing nothing costs nothing, because neither real consumer is EVER cross-origin
+// from the browser's point of view. Every client call is relative, so the browser
+// talks to Vite same-origin and Vite proxies server-side, where no CORS check
+// exists -- the Origin the engine sees there is one the proxy forwarded, and the
+// browser never looks for a matching ACAO. The packaged app is same-origin with the
+// engine outright. share.js is its own http server, so the tunnel is untouched.
+//
+// LOOPBACK_ORIGIN stays, for the middleware below, which does a different job:
+// refusing the REQUEST rather than declining to make the reply readable.
 const LOOPBACK_ORIGIN = /^https?:\/\/(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$/i;
-app.use(cors({ origin: (origin, cb) => cb(null, !origin || LOOPBACK_ORIGIN.test(origin)) }));
+app.use(cors({ origin: false }));
 // Two things the line above cannot do. Neither is redundant with it, and neither
 // is redundant with the other.
 //
@@ -360,10 +373,17 @@ app.delete('/api/key', async (req, res) => {
 // Begins the browser flow. Nothing here awaits, so there is nothing to catch --
 // the code_verifier is minted and held in oauth.js and never reaches the client.
 //
-// This is the response the three request guards at the top of this file exist
-// for: it carries the nonce and the challenge, which is everything needed to
-// approve that challenge against someone else's OpenRouter account and have this
-// server write THEIR key into the user's .env.
+// This is the response the request guards at the top of this file exist for: it
+// carries the nonce and the challenge, which is everything needed to approve that
+// challenge against someone else's OpenRouter account and have this server write
+// THEIR key into the user's .env. Nothing is echoed cross-origin, so no page can
+// read it and the nonce stays a 128-bit secret.
+//
+// One residual, stated because it is real and small: a page on some other loopback
+// port can still FIRE this route without reading the reply -- a cross-origin POST
+// with no body and no custom header needs no preflight. That supersedes a pending
+// attempt, so a user mid-connect could be told the connection was lost. It cannot
+// learn the nonce, so it cannot install a key, which is the part that mattered.
 app.post('/api/oauth/start', (req, res) => {
   const { nonce, challenge } = oauthStart();
   const callback = callbackUrl({
