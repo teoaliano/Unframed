@@ -130,8 +130,9 @@ Four routes and one module.
   dialog opens and is allowed to be slow or to fail.
 
 **`server/oauth.js`** holds the pure parts — `challengeFrom`, `authorizeUrl`,
-`callbackUrl`, and the pending-attempt store (`start` / `claim` / `expire`, 10
-minute window, matching OpenRouter's code lifetime). Same trigger that produced
+`callbackUrl`, and the pending-attempt store (`start` / `claim` / `cancel`, 10
+minute window, matching OpenRouter's code lifetime; expiry is checked inside
+`claim` rather than swept, since nothing needs to act the moment an attempt dies). Same trigger that produced
 `env.js`, `presets.js` and `jobs.js`: rules load-bearing enough to want tests.
 `claim` must succeed exactly once — a nonce claimable twice is a replayable
 callback, and that failure is invisible from the outside, which is the whole
@@ -148,11 +149,20 @@ server down.
 
 ## What the settings dialog shows
 
-`GET /api/v1/key` is the only account information an OAuth-obtained key may read.
-`GET /api/v1/credits` — which returns the actual purchased balance — is documented
-as management-key-only, and a management key belongs to our account, not the
-user's. **There is no path for a local app holding a user's key to read that
-user's credit balance.** The display is built from what is reachable:
+`GET /api/v1/key` is what the display is built from. It reports the KEY: what it
+has spent, its cap, its expiry.
+
+**A correction, 2026-08-20.** This section used to assert that `GET /api/v1/credits`
+is management-key-only and that "there is no path for a local app holding a user's
+key to read that user's credit balance." That is false — it answers 200 for an
+ordinary user key and returns the real account balance. The claim shaped the whole
+display, so it is struck rather than softened. Unframed still does not show the
+balance, which is a choice now instead of a limitation: `is_free_tier` answers the
+only question the dialog actually asks ("can this account generate at all"), and a
+second number beside a per-key cap invites reading one for the other. If that
+changes, the endpoint is there.
+
+What IS unreachable is the key's human name. See the end of this document.
 
 | Field | Shown as | When |
 | --- | --- | --- |
@@ -220,7 +230,7 @@ Every one of these answers; none leaves a spinner running.
 | Approval arrives after Cancel | Refused cleanly |
 | Nonce unknown, stale, or replayed | Callback page says so; no exchange attempted |
 | Upstream exchange errors | Its reason on the callback page |
-| Code expired | "That took too long — try connecting again" |
+| Code expired | OpenRouter's own reason on the callback page. There is deliberately no special-cased copy: the generic upstream-error branch already shows what it said, and a hand-written sentence for one upstream status is a second thing to keep true. |
 | Key later revoked upstream | Settings says so on open, offers reconnect |
 
 **The key returned by OpenRouter still passes `PATTERNS.OPENROUTER_API_KEY`.** A
@@ -269,11 +279,14 @@ feature branch.
   well-formed URL, and the callback rejecting an unknown nonce. Both fit its
   existing fork-into-a-temp-dir shape and neither reaches OpenRouter, so the rule
   that nothing spending money goes there holds.
-- **The exchange is verified in the running app, not mocked.** A mocked exchange
-  would prove only that the mock matches our reading of the docs, which is exactly
-  the thing that might be wrong. Doing it live also settles an open question for
-  free: connect twice and count the rows at openrouter.ai/settings/keys to learn
-  whether reconnecting litters the user's account.
+- **The exchange is verified in the running app, AND mocked.** Live first, because
+  a mock proves only that it matches our reading of the docs, which is exactly the
+  thing that might be wrong — and doing it live settled an open question for free
+  (connect twice, count the rows at openrouter.ai/settings/keys: reconnecting does
+  litter the account). The stub in `host.test.js` came after, and earns its place
+  for the opposite reason: it makes the route's branches — a refused code, a
+  malformed key, a replayed nonce, a cancelled attempt, a key removed mid-flow —
+  reachable on demand and without network egress, which no live test can be.
 - **No dialog tests.** Node components have no tests here by design; verified in
   the browser and said so.
 
@@ -312,10 +325,26 @@ recorded here rather than left to be rediscovered.
   account from three keys to five. Keys accumulate, so a user who reconnects
   repeatedly collects rows — which is a reason not to invite needless reconnects,
   and why the revoked state is the only place that offers one.
-- **The browser flow lets the user name the key, and set a spending cap.** Both
-  contradict the research: it recorded `key_label` and `limit` as available only
-  on the management routes. In fact the authorization page asks for a name (stored
-  prefixed, e.g. `OAuth: my-laptop`) and offers a cap while you approve.
+- **The browser flow lets the user name the key, set a spending cap, and set an
+  expiry.** All three contradict the research, which recorded `key_label` and
+  `limit` as available only on the management routes. The authorization page asks
+  for a name (stored prefixed, e.g. `OAuth: my-laptop`), offers a cap, and offers
+  an expiry, all while you approve.
+
+  **The name is visible in OpenRouter's console and NOT returned to us**, which is
+  a distinction this section originally blurred. `GET /api/v1/key` reports `label`,
+  and `label` is a truncated form of the key itself (`sk-or-v1-464...845`) even for
+  a key the user named — confirmed 2026-08-20 against a key whose console row reads
+  `OAuth: oauth test 2`. The routes that would return the name (`/api/v1/keys`,
+  `/api/v1/keys/current`) answer `401 Invalid management key`. So no display can
+  say "connected as my-laptop", `label` is not forwarded past the server, and the
+  code comment saying the field only ever holds key material was right all along.
+
+  **The expiry has to be surfaced, not just recorded.** A key that lapses is
+  indistinguishable from a revoked one afterwards — the 401 reads as `revoked`,
+  which is accurate and arrives too late — so `expires_at` is reported and
+  `client/src/keyExpiry.js` turns it into a warning while there is still time to
+  act. Silent past a fortnight, since a warning nobody can act on yet is noise.
 
 Two consequences worth stating, because the code depends on them:
 
@@ -335,7 +364,8 @@ Two consequences worth stating, because the code depends on them:
 - **Are custom URI schemes supported?** Never mentioned. Irrelevant here — the
   design deliberately avoids them, since registering one would require changes in
   the shell repo and break the one-way dependency.
-- **Does a key from this flow ever expire on its own?** The authorization page
-  offers a cap and a name; whether it also sets an expiry was not exercised. If it
-  does, nothing here renews a key — by design, since the credential is documented
-  as long-lived and has no refresh mechanism.
+- ~~**Does a key from this flow ever expire on its own?**~~ **Answered
+  2026-08-20.** Not on its own, but the authorization page offers an expiry
+  alongside the name and the cap, so a connected key can carry one. Nothing here
+  renews it — the credential has no refresh mechanism — so the expiry is displayed
+  while it can still be acted on, and reconnecting is the only fix.

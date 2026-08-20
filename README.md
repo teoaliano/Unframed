@@ -12,7 +12,7 @@ A tiny, local, node-based image generator. Wire prompt and image nodes into an o
 
 - **Node.js 18 or newer** — the server relies on the built-in `fetch`. Check with `node -v`.
 - **npm** (ships with Node).
-- An **OpenRouter API key** — create one at https://openrouter.ai/keys and put a few dollars of credit on the account. You are billed per generated image, so nothing is charged until you press Generate.
+- An **OpenRouter account** with a few dollars of credit on it — https://openrouter.ai. You connect it from inside Unframed in one click; there is no key to create or copy by hand. You are billed per generated image, so nothing is charged until you press Generate.
 
 ## Install and run
 
@@ -46,11 +46,13 @@ npm run dev
 
 This runs both processes together — the backend on **8787** and the canvas on **5173**. Both must be running; the client proxies `/api` to the server.
 
-### 4. Add your API key
+### 4. Connect OpenRouter
 
-Open **http://localhost:5173** and click the **settings icon** in the top right. Paste your OpenRouter key and save — that's it. The key is sent to the local server, which writes it to a `.env` file next to the code so it survives a restart, and keeps it server-side from then on. The browser never stores it.
+Open **http://localhost:5173** and click the **settings icon** in the top right, then **Connect OpenRouter**. That opens openrouter.ai in a new tab, where you approve Unframed — and, if you want, name the key and give it a spending cap. The key comes back on its own and is written to a `.env` file next to the code, so it survives a restart. It is held by the local server from then on; the browser never sees more than its last four characters.
 
-The same dialog replaces the key later, or removes it with **Remove key** (two clicks, since the key can't be read back out).
+If the tab does not open, the dialog has a link to the same page. Prefer to do it by hand? **or paste a key instead** reveals a field for a key you made yourself at openrouter.ai/keys. Either way the key ends up in the same place, and nothing afterwards can tell them apart.
+
+The same dialog replaces the key later, or removes it with **Remove key** (two clicks, since the key can't be read back out). Removing it also cancels an approval still in flight, so a browser tab you left open cannot put the key back.
 
 `.env` is gitignored, so your key is never committed.
 
@@ -58,7 +60,7 @@ The same dialog replaces the key later, or removes it with **Remove key** (two c
 
 Everything configurable lives in that one dialog, and every change is written to `.env` and applied immediately — no restart:
 
-- **API key** — paste to set or replace, **Remove key** to delete the line.
+- **OpenRouter** — **Connect OpenRouter** to approve the app in your browser, or paste a key by hand under *or paste a key instead*. Once connected it reports what that key has spent, its cap if you set one, and when it expires if you gave it an expiry. **Remove key** deletes the line.
 - **Default models** — one picker each for image, text and video, listing what OpenRouter actually offers for that kind.
 - **Output folder** — type a path, or press **Browse…** to pick one in Finder / File Explorer. The dialog opens on this machine because the server is local; the folder is created if it doesn't exist. Projects live *inside* this folder, so pointing it somewhere new starts you with an empty project list — the old work is still in the old folder.
 
@@ -133,11 +135,13 @@ Your `.env` and `output/` are gitignored, so neither is touched. The app shows a
 
 | Symptom | Cause and fix |
 | --- | --- |
-| `api key:  MISSING` on startup | No key saved yet — add one with the key icon in the top right (it becomes a settings gear once a key is saved). If you set it by hand, it must be `OPENROUTER_API_KEY` in a `.env` at the repo root, not inside `server/`. |
+| `api key:  MISSING` on startup | No key yet — click the key icon in the top right (it becomes a settings gear once there is one) and press **Connect OpenRouter**. If you set it by hand instead, it must be `OPENROUTER_API_KEY` in a `.env` at the repo root, not inside `server/`. |
 | "That does not look like an OpenRouter key" | The key must start with `sk-or-`, with no spaces or line breaks. Copy it again from openrouter.ai/keys. |
 | `EADDRINUSE` on 8787 or 5173 | Something else holds the port. Find it with `lsof -ti tcp:8787` (macOS/Linux) and stop it, or set a different `PORT` in `.env`. |
 | Generate returns a 401 | The key is wrong or revoked. Test it: `curl -H "Authorization: Bearer $OPENROUTER_API_KEY" https://openrouter.ai/api/v1/key` |
-| Generate returns a 402 | No credit on the OpenRouter account. |
+| Generate returns a 402 | Either the account is out of credit, or the key hit its own spending cap — the two need different fixes, so the message names both and passes OpenRouter's own reason through. Add credit at openrouter.ai/credits, or check the cap at openrouter.ai/settings/keys. |
+| Settings says the key no longer works | It was deleted or disabled at OpenRouter, or it reached the expiry you gave it. Nothing renews a key, so press **Reconnect OpenRouter**. |
+| Connecting never finishes | The approval has ten minutes, which is how long OpenRouter's code stays valid. If the browser tab never opened, use the link in the dialog. Pressing **Cancel** ends the attempt server-side too, so approving afterwards will not quietly save a key. |
 | The canvas loads but Generate does nothing | The backend isn't up. Check http://localhost:8787/api/health — it returns the model, whether the key loaded, and the output folder. |
 | A parameter seems ignored | The chosen model doesn't support it. See [Switching models](#switching-models). |
 | `SyntaxError` / unsupported syntax on startup | Node is older than 18. `node -v` to confirm. |

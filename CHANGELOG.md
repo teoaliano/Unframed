@@ -76,9 +76,15 @@ Keep that shape: the website's What's new page parses this file.
 ### Added
 
 - Connect your OpenRouter account with one button instead of creating and pasting
-  an API key by hand. Settings now shows what you have spent with the key, its
-  spending cap if it has one, and a prompt to add credit before your first
-  generation rather than after it fails. Pasting a key still works.
+  an API key by hand. You approve Unframed in your browser, where you can also name
+  the key and give it a spending cap, and it arrives on its own. Pasting a key still
+  works, under *or paste a key instead*.
+
+- Settings tells you where that key stands: what it has spent, its cap if you set
+  one, and **a warning while there is still time to act if you gave it an expiry** —
+  nothing renews a key, so the only fix is to reconnect. If the account has never
+  bought credit, it says so, with a link, before your first generation instead of
+  after it fails.
 
 - Video reference and result nodes have their own play/scrub controls, built into
   the node instead of the browser's native ones. A clip now drags by its frame like
@@ -90,6 +96,9 @@ Keep that shape: the website's What's new page parses this file.
   saved with the project.
 
 ### Changed
+
+- Removing your key now also cancels an approval still in flight, so a browser tab
+  left open cannot put the key back minutes after the app said it was gone.
 
 - When OpenRouter refuses a generation, text run or video as unpaid, the message
   now names both things it can mean — the account being out of credit, or the key
