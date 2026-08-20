@@ -48,6 +48,29 @@ assert.equal(
   'https://example.com/connect/51423-abc123',
 );
 
+// The round trip, which is the half nothing else can check: the bounce page that
+// parses `<port>-<nonce>` lives in another repo and has not been written, so this
+// producer currently has no consumer to catch a mismatch. Doing here what that
+// page must do -- parse the segment, rebuild the loopback URL from a template,
+// never from anything in the path -- pins the format on this side, so the two
+// ends cannot drift apart before the page exists.
+{
+  const bounced = callbackUrl({ port: 51423, nonce: 'a'.repeat(32), bounce: 'https://example.com/connect' });
+  const segment = new URL(bounced).pathname.split('/').pop();
+  // The page's own validation: digits in the ephemeral range, then a fixed-length
+  // hex nonce. Anything else it must refuse rather than redirect, or it is an open
+  // redirect on the domain that serves the installers.
+  const parsed = /^(\d{4,5})-([0-9a-f]{32})$/.exec(segment);
+  assert.ok(parsed, 'the segment is parseable by a plain character class');
+  const [, port, nonce] = parsed;
+  assert.ok(Number(port) >= 1024 && Number(port) <= 65535, 'the port is in range');
+  assert.equal(
+    `http://127.0.0.1:${port}/api/oauth/callback/${nonce}`,
+    callbackUrl({ port: Number(port), nonce }),
+    'rebuilding from the template reaches the same URL direct loopback would',
+  );
+}
+
 // The nonce is 128 bits and alphanumeric, so the bounce page can validate it
 // with a plain character class.
 cancel();

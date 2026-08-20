@@ -338,13 +338,11 @@ app.delete('/api/key', async (req, res) => {
 
 // Begins the browser flow. Nothing here awaits, so there is nothing to catch --
 // the code_verifier is minted and held in oauth.js and never reaches the client.
-// This response carries the nonce and the code challenge, so it must not be
-// readable cross-origin -- that depends on CORS being restricted to loopback
-// origins. Without that restriction, a hostile page in the user's browser can
-// read this response, run its own OpenRouter approval against the leaked
-// challenge and callback, then navigate the user's browser to the callback --
-// and this server writes SOMEONE ELSE'S key into the user's .env, quietly
-// routing their prompts through an account they do not control.
+//
+// This is the response the three request guards at the top of this file exist
+// for: it carries the nonce and the challenge, which is everything needed to
+// approve that challenge against someone else's OpenRouter account and have this
+// server write THEIR key into the user's .env.
 app.post('/api/oauth/start', (req, res) => {
   const { nonce, challenge } = oauthStart();
   const callback = callbackUrl({
@@ -432,9 +430,10 @@ app.get('/api/oauth/callback/:nonce', async (req, res) => {
         .send(
           oauthPage(
             'OpenRouter could not complete the connection',
-            (typeof data.error?.message === 'string' && data.error.message) ||
-              (typeof data.error === 'string' && data.error) ||
-              `It answered ${orRes.status}. Try connecting again.`,
+            // Same extraction as the generation routes, but its own fallback: the
+            // body here is JSON already parsed, so there is no raw text to fall
+            // back on, and a status number alone is not a sentence.
+            upstreamMessage(data) || `It answered ${orRes.status}. Try connecting again.`,
           ),
         );
     }
@@ -720,6 +719,39 @@ const CHAT_COMPLETIONS_URL =
 // Only the /api/text call site is pinned by a test (its stub can die
 // mid-body); /api/generate and /api/video hit hardcoded URLs, so their
 // identical two-line call sites are covered by inspection, not by a test.
+// A non-2xx from OpenRouter, turned into something a route can answer with. Both
+// halves were copied into /api/text, /api/video and /api/generate, and the copies
+// had already drifted -- two of the three had lost the comment explaining why the
+// 402 names two causes. One home, because that sentence carries two different
+// fixes for two different problems and must not disagree with itself.
+function upstreamMessage(data, raw = '') {
+  // Guarded rather than a bare `||`: an object-shaped upstream error would
+  // otherwise render as [object Object] inside a sentence.
+  return (
+    (typeof data?.error?.message === 'string' && data.error.message) ||
+    (typeof data?.error === 'string' && data.error) ||
+    raw.slice(0, 300)
+  );
+}
+
+// is_free_tier (in /api/oauth/status) doesn't catch a user who paid once and ran
+// dry, so the 402 is still where that arrives. OpenRouter answers 402 for a key's
+// own spending cap too, where adding credit is NOT the fix -- and a capped key is
+// the common case, not the exotic one the docs imply, since the authorization page
+// offers a cap while the user approves (verified 2026-08-20). So this names both
+// causes rather than asserting one, and keeps the upstream message, which is the
+// only thing that says which of the two actually happened.
+function upstreamError(orRes, data, raw) {
+  const msg = upstreamMessage(data, raw);
+  if (orRes.status === 402) {
+    return {
+      status: 402,
+      error: `OpenRouter refused this as unpaid: either the account is out of credit, or this key has hit its own spending cap. Add credit at openrouter.ai/credits, or check the key's cap at openrouter.ai/settings/keys. (${msg})`,
+    };
+  }
+  return { status: orRes.status, error: `OpenRouter (${orRes.status}): ${msg}` };
+}
+
 async function readUpstreamBody(orRes, what) {
   try {
     return { raw: await orRes.text() };
@@ -799,27 +831,8 @@ app.post('/api/text', async (req, res) => {
   }
 
   if (!orRes.ok) {
-    // Guarded rather than a bare `||`: an object-shaped upstream error would
-    // otherwise render as [object Object] inside the sentences below. Same
-    // guard as the OAuth callback route.
-    const msg =
-      (typeof data?.error?.message === 'string' && data.error.message) ||
-      (typeof data?.error === 'string' && data.error) ||
-      raw.slice(0, 300);
-    // is_free_tier (in /api/oauth/status) doesn't catch a user who paid once and
-    // ran dry, so it still needs naming here where it actually happens: the 402.
-    // OpenRouter also answers 402 for a key's own spending cap, where adding
-    // credit is NOT the fix -- so this names both causes rather than asserting
-    // one. Verified 2026-08-20: its authorization page offers a cap while you
-    // approve, so a capped key is the common case for anyone who connects, not
-    // the exotic one the docs imply. msg is kept alongside the guidance because
-    // it is the only thing that says which of the two actually happened.
-    if (orRes.status === 402) {
-      return res.status(402).json({
-        error: `OpenRouter refused this as unpaid: either the account is out of credit, or this key has hit its own spending cap. Add credit at openrouter.ai/credits, or check the key's cap at openrouter.ai/settings/keys. (${msg})`,
-      });
-    }
-    return res.status(orRes.status).json({ error: `OpenRouter (${orRes.status}): ${msg}` });
+    const fail = upstreamError(orRes, data, raw);
+    return res.status(fail.status).json({ error: fail.error });
   }
 
   const text = data?.choices?.[0]?.message?.content;
@@ -1190,19 +1203,8 @@ app.post('/api/video', async (req, res) => {
   }
   if (!orRes.ok) {
     for (const t of mintedTokens) revokeShare(t);
-    // Guarded rather than a bare `||`: an object-shaped upstream error would
-    // otherwise render as [object Object] inside the sentences below. Same
-    // guard as the OAuth callback route.
-    const msg =
-      (typeof data?.error?.message === 'string' && data.error.message) ||
-      (typeof data?.error === 'string' && data.error) ||
-      raw.slice(0, 300);
-    if (orRes.status === 402) {
-      return res.status(402).json({
-        error: `OpenRouter refused this as unpaid: either the account is out of credit, or this key has hit its own spending cap. Add credit at openrouter.ai/credits, or check the key's cap at openrouter.ai/settings/keys. (${msg})`,
-      });
-    }
-    return res.status(orRes.status).json({ error: `OpenRouter (${orRes.status}): ${msg}` });
+    const fail = upstreamError(orRes, data, raw);
+    return res.status(fail.status).json({ error: fail.error });
   }
   if (!data?.id) {
     for (const t of mintedTokens) revokeShare(t);
@@ -1787,19 +1789,8 @@ app.post('/api/generate', async (req, res) => {
   }
 
   if (!orRes.ok) {
-    // Guarded rather than a bare `||`: an object-shaped upstream error would
-    // otherwise render as [object Object] inside the sentences below. Same
-    // guard as the OAuth callback route.
-    const msg =
-      (typeof data?.error?.message === 'string' && data.error.message) ||
-      (typeof data?.error === 'string' && data.error) ||
-      raw.slice(0, 300);
-    if (orRes.status === 402) {
-      return res.status(402).json({
-        error: `OpenRouter refused this as unpaid: either the account is out of credit, or this key has hit its own spending cap. Add credit at openrouter.ai/credits, or check the key's cap at openrouter.ai/settings/keys. (${msg})`,
-      });
-    }
-    return res.status(orRes.status).json({ error: `OpenRouter (${orRes.status}): ${msg}` });
+    const fail = upstreamError(orRes, data, raw);
+    return res.status(fail.status).json({ error: fail.error });
   }
 
   const first = data?.data?.[0];
