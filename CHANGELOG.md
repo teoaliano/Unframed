@@ -9,6 +9,12 @@ Keep that shape: the website's What's new page parses this file.
 
 ### Fixed
 
+- **Removing your key while changing the output folder no longer strands a render.**
+  If the two happened at the same moment, a video still rendering could be copied
+  into the new folder and left there marked as still-in-progress, where nothing
+  would ever check on it or tell you it had stopped — even though removing the key
+  ends every render in progress. It is now ended and reported like the rest.
+
 - **Unframed now answers only the machine it runs on.** It used to accept
   connections on every network interface, so any other device on your network
   could reach the API and read your output path, your model settings and the last
