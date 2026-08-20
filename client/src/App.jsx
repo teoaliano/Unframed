@@ -264,10 +264,18 @@ function Canvas() {
   // Settings dialog. cfg mirrors what the server has on disk; cfgDlg is the open
   // dialog's draft, so nothing is applied until Save.
   const [cfg, setCfg] = useState({ hasKey: true, keyHint: '', imageModel: '', textModel: '', videoModel: '', outputDir: '' });
-  const [cfgDlg, setCfgDlg] = useState(null); // { key, imageModel, …, error, saving, saved, showPaste } | null
+  const [cfgDlg, setCfgDlg] = useState(null); // { key, imageModel, …, error, saving, saved } | null
+  // Outside cfgDlg, for the same class of reason `connecting` is: the draft is
+  // rebuilt on every keystroke and every save, and three render branches read
+  // this -- the reveal button, the key section, and Save. Riding along in that
+  // object meant Save's visibility was derived from state that churned, and the
+  // two conditions getting out of step is what stranded Save once and made the
+  // paste fallback vanish once. Reset by openSettings, so revealing the field
+  // does not persist into the next time the dialog is opened.
+  const [showPaste, setShowPaste] = useState(false);
   // Not part of cfgDlg: the dialog is closable mid-flow, and the callback still
   // lands on the server, so this poll must outlive the dialog's own state.
-  const [connecting, setConnecting] = useState(null); // { since, slow, url, wasKeyless } | null
+  const [connecting, setConnecting] = useState(null); // { since, url, wasKeyless } | null
   // What GET /api/oauth/status last answered, or null if it hasn't been asked
   // (or the ask failed).
   const [orStatus, setOrStatus] = useState(null);
@@ -534,9 +542,6 @@ function Canvas() {
         }
         return;
       }
-      if (elapsed > 2 * 60 * 1000 && !pending.slow) {
-        setConnecting((c) => (c ? { ...c, slow: true } : c));
-      }
     }, 1500);
     return () => {
       live = false;
@@ -557,6 +562,7 @@ function Canvas() {
 
   // Open with the saved values as the draft, so the pickers show what is in use.
   function openSettings() {
+    setShowPaste(false);
     setCfgDlg({
       key: '',
       imageModel: cfg.imageModel,
@@ -655,7 +661,7 @@ function Canvas() {
       // wasKeyless captured now, not read off `cfg` later, since cfg.hasKey flips
       // the moment the connection lands and this decides whether the dialog was
       // the key-only onboarding one.
-      setConnecting({ since: Date.now(), slow: false, url, wasKeyless: !cfg.hasKey });
+      setConnecting({ since: Date.now(), url, wasKeyless: !cfg.hasKey });
     } catch (err) {
       if (tab) tab.close();
       setCfgDlg((d) => ({ ...d, error: err.message }));
@@ -1715,9 +1721,7 @@ function Canvas() {
           {connecting && (
             <VStack gap={2}>
               <Text type="supporting" as="p">
-                {connecting.slow
-                  ? 'Still waiting. Finish approving in your browser, or cancel and try again.'
-                  : 'Waiting for OpenRouter in your browser…'}
+                Waiting for OpenRouter in your browser…
               </Text>
               {/* A real link, not the URL in a read-only field. Popups can be
                   blocked outright, and this is the whole recovery path when they
@@ -1735,11 +1739,11 @@ function Canvas() {
               <Button label="Cancel" variant="ghost" onClick={cancelConnect} />
             </VStack>
           )}
-          {!cfg.hasKey && !cfgDlg?.showPaste && (
+          {!cfg.hasKey && !showPaste && (
             <Button
               label="or paste a key instead"
               variant="ghost"
-              onClick={() => setCfgDlg((d) => ({ ...d, showPaste: true }))}
+              onClick={() => setShowPaste(true)}
             />
           )}
           {/* Three sections, one heading style each, dividers between. The field
@@ -1753,7 +1757,7 @@ function Canvas() {
               the browser approval landing; the poll asks the server now, so the
               two paths no longer collide. Whichever finishes first wins, and the
               other is refused rather than misreported. */}
-          {(cfg.hasKey || cfgDlg?.showPaste) && (
+          {(cfg.hasKey || showPaste) && (
           <VStack gap={2}>
             {/* Named for the account once there is one: with a key saved this
                 section is about the connection, and the key is one field in it. */}
@@ -1953,7 +1957,7 @@ function Canvas() {
                 models and Output folder stay rendered and editable through a
                 reconnect, so Save has to stay too; gating it on !connecting left
                 those edits with no way out. */}
-            {(cfg.hasKey || cfgDlg?.showPaste) && (
+            {(cfg.hasKey || showPaste) && (
               <Button
                 label="Save"
                 variant="primary"
