@@ -166,10 +166,20 @@ What IS unreachable is the key's human name. See the end of this document.
 
 | Field | Shown as | When |
 | --- | --- | --- |
-| `usage` | "$1.34 spent with this key" | always |
-| `limit` / `limit_remaining` / `limit_reset` | "$3.66 of $5.00 remaining" | when `limit` is non-null |
-| `is_free_tier` | "Add credit before generating", with a link | when true |
-| 401 from the endpoint | "This key no longer works at OpenRouter — reconnect" | on revocation |
+| `usage` | "$1.34 spent with this key" | when `is_free_tier` is false |
+| `limit` / `limit_remaining` | "of a $5.00 cap — $3.66 still available" | with the above, when `limit` is non-null |
+| `is_free_tier` | "Add credit before generating", with a link | when true, and then INSTEAD of the two above |
+| `expires_at` | "expires in 14 hours, and nothing renews it" | when set, and within a fortnight |
+| 401 or 403 from the endpoint | "This key no longer works at OpenRouter — reconnect" | on revocation or expiry |
+
+`limit_reset` is deliberately not shown: an undocumented upstream string, in
+whatever shape and units OpenRouter happens to send, is not something to drop into
+a sentence. It is not forwarded past the server either, so nothing downstream can
+be tempted.
+
+Spend and free-tier are mutually exclusive rather than stacked. With no credit
+bought, what the key has spent against its cap is noise in front of the one thing
+that has to happen next.
 
 The cap is *per key*. The documentation implies it can only be set on the
 management routes, which suggested a connected key would return `limit: null` and
