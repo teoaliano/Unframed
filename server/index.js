@@ -55,6 +55,41 @@ const app = express();
 // sets Origin, not the page.
 const LOOPBACK_ORIGIN = /^https?:\/\/(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$/;
 app.use(cors({ origin: (origin, cb) => cb(null, !origin || LOOPBACK_ORIGIN.test(origin)) }));
+// Two things the line above cannot do. Neither is redundant with it, and neither
+// is redundant with the other.
+//
+// cors() only decides whether to ECHO Access-Control-Allow-Origin. For any
+// method but OPTIONS it calls next() whichever way that went, so the handler
+// runs regardless -- and a cross-origin POST carrying no body and no custom
+// header is a CORS *simple* request, so there is no preflight to refuse either.
+// Any page the user happens to be visiting can therefore fire one and cause its
+// side effect while being unable to read the reply. POST /api/pick-folder is the
+// live example: a native folder dialog, on the user's desktop, opened by a
+// website. Refusing a present non-loopback Origin is what stops the handler from
+// being reached at all.
+//
+// Under DNS rebinding there is no Origin to refuse: a page whose OWN hostname
+// resolves to 127.0.0.1 is same-origin with this server, so the browser sends
+// none, no CORS check runs, and every response is readable. Host is the name the
+// browser actually dialled, so requiring it to be loopback is what rejects a
+// rebound one.
+//
+// Both real consumers pass. Vite proxies without changeOrigin, so the forwarded
+// Host stays localhost:5173 and the page's own Origin is loopback too; the
+// packaged app loads 127.0.0.1 on its assigned port. share.js is its own http
+// server rather than an Express route, so the tunnel -- which must answer a
+// public hostname -- is untouched by this.
+const LOOPBACK_HOST = /^(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$/;
+app.use((req, res, next) => {
+  const { origin, host } = req.headers;
+  if (origin && !LOOPBACK_ORIGIN.test(origin)) {
+    return res.status(403).json({ error: 'Unframed answers only same-machine requests.' });
+  }
+  if (!LOOPBACK_HOST.test(host || '')) {
+    return res.status(403).json({ error: 'Unframed answers only requests addressed to localhost.' });
+  }
+  next();
+});
 // References are sent as base64 data URLs. Video is the sizing case: the client
 // caps a clip at 25MB raw, which is ~33MB as base64, plus prompt and images.
 app.use(express.json({ limit: '60mb' }));
@@ -1605,7 +1640,16 @@ setInterval(() => {
 // PORT=0 asks the OS for any free port, which is how the packaged app avoids
 // fighting whatever else is on 8787. The parent cannot guess it, so it is reported
 // back over the IPC channel fork() provides.
-const server = app.listen(PORT, () => {
+// Bound to loopback, not every interface. The two guards above are browser-side:
+// they read headers a browser sets honestly and a non-browser client simply
+// writes itself, so `curl -H 'Host: localhost'` from any other machine on the
+// network satisfies both. Refusing the connection is the only check that holds
+// against a client that is not a browser -- and every route here either spends
+// the user's money, reads their output folder, or writes their key. share.js
+// already binds this way; this is the same reasoning, for the API the app itself
+// uses. There is deliberately no opt-in to widen it: nothing in Unframed is
+// meant to be reached from another device.
+const server = app.listen(PORT, '127.0.0.1', () => {
   const { port } = server.address();
   console.log(`\n  Unframed server  →  http://localhost:${port}`);
   console.log(`  image:    ${IMAGE_MODEL}`);

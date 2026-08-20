@@ -7,6 +7,19 @@ Keep that shape: the website's What's new page parses this file.
 
 ## 2026-08-20
 
+### Fixed
+
+- **Unframed now answers only the machine it runs on.** It used to accept
+  connections on every network interface, so any other device on your network
+  could reach the API and read your output path, your model settings and the last
+  four characters of your key — or spend your credit. It also acted on requests
+  from websites you happened to have open: they could not read the reply, but the
+  action still happened, which for the folder picker meant a site could pop a
+  native folder dialog on your desktop. All three doors are shut: the server
+  listens on `127.0.0.1` only, and refuses requests whose `Origin` or `Host` is
+  not loopback. Nothing about normal use changes; reaching the dev server from a
+  phone or another computer no longer works, and is no longer meant to.
+
 ### Changed
 
 - **New canvas palette, in both light and dark.** The canvas is a near-black in

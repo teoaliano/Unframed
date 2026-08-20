@@ -8,6 +8,7 @@ import assert from 'node:assert/strict';
 import { fork } from 'node:child_process';
 import fs from 'node:fs/promises';
 import http from 'node:http';
+import net from 'node:net';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -121,28 +122,95 @@ try {
   // The API answers on that port.
   assert.equal((await fetch(`${base}/api/health`)).status, 200);
 
-  // CORS is loopback-only. Wide open, any site the user happened to have open
-  // could read this API cross-origin -- /api/health alone carries the key hint,
-  // the model settings and the output path -- and call DELETE /api/key. The
-  // browser sets Origin, not the page, so an allowlist is a real boundary here.
+  // A request with no Origin at all is the ordinary case -- the packaged app's
+  // GETs, the Vite proxy, curl -- and must keep working.
+  assert.equal((await fetch(`${base}/api/health`)).status, 200, 'no Origin is not suspicious');
+
+  // A non-loopback Origin is refused before the handler runs, not merely denied
+  // the ACAO header. cors() decides only whether to echo that header; for any
+  // method but OPTIONS it calls next() either way, so a handler with a side
+  // effect still fires. And a POST with no body and no custom header is a CORS
+  // simple request, so there is no preflight to refuse either -- which is how a
+  // website reaches POST /api/pick-folder and opens a native folder dialog on
+  // the user's desktop while being unable to read the reply. 403 is the fix.
   const evil = await fetch(`${base}/api/health`, { headers: { Origin: 'https://evil.example' } });
-  assert.equal(evil.status, 200, 'a cross-origin GET still answers');
-  assert.equal(
-    evil.headers.get('access-control-allow-origin'),
-    null,
-    'but the browser is not told the page may read the answer',
-  );
+  assert.equal(evil.status, 403, 'a cross-origin request never reaches the route');
+  assert.equal(evil.headers.get('access-control-allow-origin'), null);
+
+  // Specifically for the side-effect shape the header check exists to stop.
+  const drive = await fetch(`${base}/api/pick-folder`, {
+    method: 'POST',
+    headers: { Origin: 'https://evil.example' },
+  });
+  assert.equal(drive.status, 403, 'a bodiless cross-origin POST is refused');
 
   // The dev client's own origin is reflected, so local tooling keeps working.
   const dev = await fetch(`${base}/api/health`, { headers: { Origin: 'http://localhost:5173' } });
+  assert.equal(dev.status, 200);
   assert.equal(dev.headers.get('access-control-allow-origin'), 'http://localhost:5173');
 
-  // And a preflight for a destructive method is refused the same way.
+  // And a preflight for a destructive method is refused the same way. cors()
+  // answers OPTIONS itself and does not call next(), so this one is settled
+  // before the guard above ever sees it -- hence a 2xx with no ACAO rather than
+  // a 403, which fails in the browser just as firmly.
   const preflight = await fetch(`${base}/api/key`, {
     method: 'OPTIONS',
     headers: { Origin: 'https://evil.example', 'Access-Control-Request-Method': 'DELETE' },
   });
   assert.equal(preflight.headers.get('access-control-allow-origin'), null);
+
+  // DNS rebinding sends no Origin at all: a page whose own hostname resolves to
+  // 127.0.0.1 is same-origin with this server, so the check above cannot see it.
+  // Host is the name the browser actually dialled.
+  //
+  // Sent with http.request rather than fetch: undici treats `host` as a
+  // forbidden header and drops it silently, so a fetch-based version of this
+  // test passes while asserting nothing.
+  const withHost = (host) =>
+    new Promise((resolve, reject) => {
+      const req = http.request(
+        { host: '127.0.0.1', port: ready.port, path: '/api/health', headers: { Host: host } },
+        (res) => {
+          res.resume();
+          resolve(res.statusCode);
+        },
+      );
+      req.on('error', reject);
+      req.end();
+    });
+
+  assert.equal(await withHost('attacker.example'), 403, 'a rebound hostname is refused');
+  assert.equal(await withHost('attacker.example:1234'), 403, 'with a port too');
+
+  // The two consumers that must keep passing it: the packaged app's window, and
+  // a Vite proxy forwarding the dev page's own Host unchanged.
+  assert.equal(await withHost(`127.0.0.1:${ready.port}`), 200, 'the packaged app');
+  assert.equal(await withHost('localhost:5173'), 200, 'the Vite proxy');
+
+  // The socket itself, which is the only check the two above cannot make: both
+  // read headers, and a client that is not a browser writes its own. Tested by
+  // dialling a real non-loopback address of this machine rather than by asking
+  // the server what it thinks it bound -- a listener on 0.0.0.0 answers here,
+  // and one on 127.0.0.1 refuses the connection. Skipped where the machine has
+  // no such address to dial, which is a missing test, not a passing one.
+  const lan = Object.values(os.networkInterfaces())
+    .flat()
+    .find((n) => n && n.family === 'IPv4' && !n.internal);
+  if (!lan) {
+    console.log('host.test.js: no non-loopback interface, bind assertion skipped');
+  } else {
+    const reachable = await new Promise((resolve) => {
+      const sock = net.connect({ host: lan.address, port: ready.port });
+      const done = (answer) => {
+        sock.destroy();
+        resolve(answer);
+      };
+      sock.setTimeout(2000, () => done(false));
+      sock.on('connect', () => done(true));
+      sock.on('error', () => done(false));
+    });
+    assert.equal(reachable, false, `the API is not listening on ${lan.address}`);
+  }
 
   // ...and the built canvas is served from the same origin, which is what
   // spares the window CORS and file:// handling.
