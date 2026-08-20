@@ -60,6 +60,7 @@ import { bucketSources, isOutput, isReferenceable } from './graph/resolve.js';
 import { canSource, canTarget, selectedIds, connections, dropInternal } from './graph/bulkWire.js';
 import { keepLiveRunMarkers } from './graph/runMarkers.js';
 import { hitEdges, samplePaths } from './graph/edgeHits.js';
+import { expiryNote } from './keyExpiry.js';
 import LibraryDialog from './library/LibraryDialog.jsx';
 import { instantiateFragment, centerOffset } from './library/insert.js';
 import { selectionFragment, presetFromSelection } from './library/save.js';
@@ -1745,31 +1746,35 @@ function Canvas() {
               )
             ) : orStatus?.hasKey ? (
               <VStack gap={2}>
-                {/* No `label`: the only value ever observed for it is a truncated
-                    display form of the key itself, so "Connected as
-                    sk-or-v1-abc...123" says nothing and puts key material on
-                    screen. `limitReset` is skipped for its own reason -- an
-                    undocumented upstream string, in whatever shape and units
-                    OpenRouter happens to send, is not something to drop into a
-                    sentence. */}
-                <Text type="supporting" as="p">
-                  {`Connected to OpenRouter. $${(Number(orStatus.usage) || 0).toFixed(2)} spent with this key`}
-                  {orStatus.limit != null
-                    ? `, of a $${orStatus.limit.toFixed(2)} cap${
-                        orStatus.limitRemaining != null
-                          ? ` — $${orStatus.limitRemaining.toFixed(2)} still available`
-                          : ''
-                      }`
-                    : ''}
-                  .
-                </Text>
-                {orStatus.isFreeTier && (
+                {/* Free tier and spend are mutually exclusive, not stacked: with
+                    no credit bought, what the key has spent against its cap is
+                    noise in front of the one thing that has to happen next. The
+                    key's own NAME is in neither branch because it is not
+                    reachable -- see the route's comment in server/index.js. */}
+                {orStatus.isFreeTier ? (
                   <Text type="supporting" as="p">
                     You have not bought any credit yet, so generating will fail. Add some under{' '}
                     <Link href="https://openrouter.ai/credits" isExternalLink>
                       Credits
                     </Link>
                     .
+                  </Text>
+                ) : (
+                  <Text type="supporting" as="p">
+                    {`Connected to OpenRouter. $${orStatus.usage.toFixed(2)} spent with this key`}
+                    {orStatus.limit != null
+                      ? `, of a $${orStatus.limit.toFixed(2)} cap${
+                          orStatus.limitRemaining != null
+                            ? ` — $${orStatus.limitRemaining.toFixed(2)} still available`
+                            : ''
+                        }`
+                      : ''}
+                    .
+                  </Text>
+                )}
+                {expiryNote(orStatus.expiresAt) && (
+                  <Text type="supporting" as="p">
+                    {expiryNote(orStatus.expiresAt)}
                   </Text>
                 )}
               </VStack>

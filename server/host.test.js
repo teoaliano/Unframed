@@ -75,16 +75,19 @@ const AUTH_KEY_STUB_RESPONSES = {
 // Counts the key-info reads below, so the revoked assertion can prove it resolved
 // here rather than at openrouter.ai.
 let keyInfoReads = 0;
+// What the key-info stub answers next. Mutable so one forked server can exercise
+// every branch of /api/oauth/status: a dead key, and the success path that shapes
+// the payload. Asserting any of it against the real endpoint would need network
+// egress and would assume OpenRouter's answers never change shape -- which this
+// feature has already been wrong about twice.
+let keyInfoAnswer = { status: 401, body: { error: { message: 'no auth credentials found' } } };
 const authKeyStub = http.createServer((req, res) => {
   // GET /api/v1/key, the key-info route /api/oauth/status reads, on the same stub
-  // because it is the same upstream. 401 is the revoked branch. Asserting that
-  // branch against the real endpoint made the suite need network egress -- offline
-  // it got the route's 502 catch -- and assumed OpenRouter answers 401 rather than
-  // 403 forever, which this file's own convention says not to do.
+  // because it is the same upstream.
   if (req.url.startsWith('/api/v1/key')) {
     keyInfoReads += 1;
-    res.writeHead(401, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ error: { message: 'no auth credentials found' } }));
+    res.writeHead(keyInfoAnswer.status, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify(keyInfoAnswer.body));
     return;
   }
   let raw = '';
@@ -351,6 +354,59 @@ try {
   assert.equal(statusBody.revoked, true);
   assert.equal(keyInfoReads, readsBefore + 1, 'the key was read from the local stub, not openrouter.ai');
   assert.equal('usage' in statusBody, false, 'no spend is claimed for a key that does not work');
+
+  // 403 is the same outcome as 401. Which one a dead key earns is not documented,
+  // and treating only 401 as revoked left the dialog saying "a key is already
+  // saved" about a key that no longer works, with nothing offering a reconnect.
+  keyInfoAnswer = { status: 403, body: { error: { message: 'forbidden' } } };
+  const forbidden = await (await fetch(`${base}/api/oauth/status`)).json();
+  assert.equal(forbidden.revoked, true, '403 is revoked too');
+
+  // The success path, which is the only branch that SHAPES anything and had no
+  // test at all. The values here are deliberately awkward: a cap sent as a
+  // string, which the client would call .toFixed on and crash the whole canvas
+  // since client/src has no error boundary; a label that is a truncated form of
+  // the key, which is what OpenRouter really returns even for a key the user
+  // named while approving; and a limit_reset in an undocumented shape.
+  keyInfoAnswer = {
+    status: 200,
+    body: {
+      data: {
+        label: 'sk-or-v1-abc...123',
+        usage: 1.5,
+        limit: '5.00',
+        limit_remaining: 3.5,
+        limit_reset: 'monthly',
+        expires_at: '2026-09-01T00:00:00.000Z',
+        is_free_tier: false,
+      },
+    },
+  };
+  const live = await (await fetch(`${base}/api/oauth/status`)).json();
+  assert.equal(live.hasKey, true);
+  assert.equal(live.revoked, undefined);
+  assert.equal(live.usage, 1.5);
+  assert.equal(live.limitRemaining, 3.5);
+  assert.equal(live.limit, null, 'a cap that is not a number becomes null, never a string');
+  assert.equal(live.expiresAt, '2026-09-01T00:00:00.000Z');
+  assert.equal('label' in live, false, 'the name is unreachable, so the field is not forwarded');
+  assert.equal('limitReset' in live, false, 'and neither is a value nothing renders');
+
+  // A key with no cap and no expiry, which is what declining both at the
+  // authorization page produces. Both read as null rather than as absent, so the
+  // dialog can tell "no cap" from "we could not ask".
+  keyInfoAnswer = { status: 200, body: { data: { usage: 0, is_free_tier: true } } };
+  const bare = await (await fetch(`${base}/api/oauth/status`)).json();
+  assert.deepEqual(bare, {
+    hasKey: true,
+    usage: 0,
+    limit: null,
+    limitRemaining: null,
+    expiresAt: null,
+    isFreeTier: true,
+  });
+
+  keyInfoAnswer = { status: 401, body: { error: { message: 'no auth credentials found' } } };
 
   // ...and the same nonce cannot be replayed.
   assert.equal((await fetch(`${base}${okPath}?code=good-code`)).status, 400);

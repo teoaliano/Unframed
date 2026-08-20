@@ -436,12 +436,20 @@ app.get('/api/oauth/callback/:nonce', async (req, res) => {
 // /api/health on purpose: health runs on every page load and must answer
 // without OpenRouter, while this one is opened deliberately and may be slow.
 //
-// This is the ONLY account information a user's own key can read. The purchased
-// balance lives behind GET /api/v1/credits, which is management-key-only -- and a
-// management key is OURS, not theirs -- so there is no way to show a balance. What
-// is reachable: all-time spend on this key, its cap if it has one, and whether
-// the user has ever bought credit, which is what makes the first-run warning
-// possible before a generation fails instead of after.
+// Everything here is PER KEY, not per account: the spend, the cap and the expiry
+// all belong to this one credential, and a $1 cap can sit inside an account
+// holding $30. The account's own balance is a second call (GET /api/v1/credits,
+// which a user's key CAN read -- verified 2026-08-20 against a real account,
+// contradicting the docs and this feature's own spec) and is deliberately not
+// folded in here, because it answers a different question and nothing in the
+// dialog distinguishes the two numbers yet.
+//
+// The key's human NAME is not reachable. The console shows one, but
+// GET /api/v1/key returns `label` as a truncated form of the key itself even for
+// a key the user named while approving, and the routes that would return the name
+// (/api/v1/keys, /api/v1/keys/current) answer 401 Invalid management key -- a
+// management key being ours, not theirs. So nothing here can say "connected as
+// my-laptop", and the field is not forwarded.
 app.get('/api/oauth/status', async (req, res) => {
   if (!API_KEY) return res.json({ hasKey: false });
   try {
@@ -449,23 +457,38 @@ app.get('/api/oauth/status', async (req, res) => {
       headers: { Authorization: `Bearer ${API_KEY}` },
       signal: AbortSignal.timeout(10_000),
     });
-    // Revoked or disabled upstream. Today this surfaces as a mystery generation
-    // failure; here the dialog can name it and offer to reconnect.
-    if (orRes.status === 401) return res.json({ hasKey: true, revoked: true });
+    // Revoked, disabled or expired upstream. Today that surfaces as a mystery
+    // generation failure; here the dialog can name it and offer to reconnect.
+    // 403 counts as well as 401: which one a dead key earns is not a documented
+    // contract, and the difference decides whether the user is told to reconnect
+    // or shown "a key is already saved" about a key that no longer works.
+    if (orRes.status === 401 || orRes.status === 403) {
+      return res.json({ hasKey: true, revoked: true });
+    }
     const body = await orRes.json().catch(() => ({}));
     if (!orRes.ok || !body.data) {
       return res.status(502).json({ error: `OpenRouter answered ${orRes.status}.` });
     }
     const d = body.data;
+    // Coerced here rather than trusted in the render: the client does arithmetic
+    // on these, there is no error boundary in client/src, and a string where a
+    // number was expected would blank the whole canvas rather than one line of
+    // copy. This field's shape has already surprised us once -- the spec
+    // predicted null for a connected key and a real one came back capped.
+    const num = (v) => (Number.isFinite(v) ? v : null);
     res.json({
       hasKey: true,
-      label: d.label || '',
-      usage: d.usage ?? 0,
-      // null for an uncapped key, which is what the browser flow produces --
-      // setting a cap is documented only on the management routes.
-      limit: d.limit ?? null,
-      limitRemaining: d.limit_remaining ?? null,
-      limitReset: d.limit_reset ?? null,
+      usage: num(d.usage) ?? 0,
+      // A cap is the ORDINARY outcome, not the exotic one: the authorization page
+      // offers one while the user approves. So this is the main warning before
+      // generation stops, and null means they declined it rather than that the
+      // flow cannot produce one.
+      limit: num(d.limit),
+      limitRemaining: num(d.limit_remaining),
+      // Set when the user gave the key an expiry while approving. Nothing renews
+      // it -- the credential has no refresh mechanism -- so the only useful thing
+      // to do with it is say so before the key lapses instead of after.
+      expiresAt: typeof d.expires_at === 'string' ? d.expires_at : null,
       isFreeTier: Boolean(d.is_free_tier),
     });
   } catch (err) {
