@@ -6,7 +6,15 @@ import { instantiateFragment, centerOffset } from '../library/insert.js';
 import { selectionFragment, presetFromSelection } from '../library/save.js';
 import { MODEL_PARAM_KEYS, resetModelParams } from '../nodes/output/defaults.js';
 import { RUN_MARKERS, stripRunMarkers, keepLiveRunMarkers } from './runMarkers.js';
-import { nextId, bumpCounter, slug, initialNodes, initialEdges, withDrag } from './starter.js';
+import {
+  nextId,
+  bumpCounter,
+  slug,
+  initialNodes,
+  initialEdges,
+  withDrag,
+  clearDragging,
+} from './starter.js';
 
 const out = { id: 'out', type: 'imageOutput', position: { x: 400, y: 0 }, data: {} };
 
@@ -923,6 +931,44 @@ function videoGraph(inputMode, imageCount, extra = []) {
   const output = withDrag({ id: '5', type: 'imageOutput' });
   assert.equal(output.width, undefined, 'output nodes are left to size themselves');
   assert.equal(output.height, undefined);
+}
+
+// `dragging` is React Flow's own in-gesture flag, and it is the fifth thing withDrag
+// decides. It matters because getNodesInside() -- the ONLY geometry test a box
+// selection runs -- ends with `if (isVisible || node.dragging)`, so a node carrying a
+// stale `true` joins every selection rectangle drawn anywhere on the canvas, forever.
+// It reaches graph.json because autosave writes the node objects as they are, so a
+// save that lands mid-drag persists it and every later load restores it.
+{
+  assert.equal(
+    withDrag({ id: '6', type: 'image', dragging: true }).dragging,
+    undefined,
+    'a dragging flag saved mid-drag never survives a load',
+  );
+  assert.equal(
+    withDrag({ id: '7', type: 'image', dragging: false }).dragging,
+    undefined,
+    'and the flag is dropped rather than passed through, whichever way it points',
+  );
+}
+
+// The same flag, stuck the other way: no save, no load, just a drag whose end never
+// arrived -- switch macOS spaces or apps mid-drag and the mouseup lands somewhere else,
+// so d3-drag's `end` handler (which is what clears the flag) never runs. App.jsx sweeps
+// on the events that mean "that gesture is over": pointercancel and window blur.
+//
+// The identity rule is load-bearing, not tidiness: those events fire constantly, and a
+// fresh array from every one of them would push an undo entry and trigger an autosave
+// each time you clicked away from the window.
+{
+  const clean = [{ id: '1' }, { id: '2', dragging: false }];
+  assert.equal(clearDragging(clean), clean, 'nothing to clear returns the same array');
+
+  const stuck = [{ id: '1', dragging: true }, { id: '2' }];
+  const swept = clearDragging(stuck);
+  assert.notEqual(swept, stuck, 'a stuck flag returns a new array, so React re-renders');
+  assert.equal(swept[0].dragging, false, 'the stuck node is no longer dragging');
+  assert.equal(swept[1], stuck[1], 'and every untouched node keeps its identity');
 }
 
 // slug is a hand-kept copy of the server's slugify (server/index.js): the client

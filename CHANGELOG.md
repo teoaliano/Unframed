@@ -21,6 +21,24 @@ Keep that shape: the website's What's new page parses this file.
   one setting, silently dropping the key and everything else. Saving now refuses
   with an error instead of writing over what it could not read.
 
+- **A box selection no longer picks up a node it does not touch.** One node could
+  join every rectangle you drew, anywhere on the canvas, however far away it sat,
+  which looked as though the canvas on screen were not the one being selected. It
+  was always a node whose drag had been interrupted rather than finished: switch
+  macOS spaces or apps mid-drag and the mouse release never reaches the window, so
+  the node stays marked as being dragged long after it stopped moving, and a node
+  marked that way is exempt from the box's geometry. That mark is now cleared when
+  a gesture ends without a release, and is no longer written into the project, so a
+  graph already carrying one is corrected the next time you open it.
+
+- **A generated image added to the canvas is the size of every other node again.**
+  Using "add to canvas" on a result landed a node the full pixel width of the
+  picture — a 1024px image became a 1024px node, dwarfing the rest of the flow —
+  and the same went for adding a clip from a video output or a text answer as a
+  prompt node. They now arrive at the standard node width, resizable from their
+  edges as before. Nodes already saved oversized correct themselves the next time
+  the project is opened.
+
 - **Unframed now answers only the machine it runs on.** It used to accept
   connections on every network interface, so any other device on your network
   could reach the API and read your output path, your model settings and the last
