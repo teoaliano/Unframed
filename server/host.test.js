@@ -149,6 +149,12 @@ try {
   assert.equal(dev.status, 200);
   assert.equal(dev.headers.get('access-control-allow-origin'), 'http://localhost:5173');
 
+  // Same case rule on the Origin side, which matters more than it looks: this
+  // check refuses the REQUEST, so a case mismatch here is a 403 rather than a
+  // missing response header.
+  const shouty = await fetch(`${base}/api/health`, { headers: { Origin: 'HTTP://LOCALHOST:5173' } });
+  assert.equal(shouty.status, 200, 'an upper-case loopback origin is still loopback');
+
   // And a preflight for a destructive method is refused the same way. cors()
   // answers OPTIONS itself and does not call next(), so this one is settled
   // before the guard above ever sees it -- hence a 2xx with no ACAO rather than
@@ -181,6 +187,16 @@ try {
 
   assert.equal(await withHost('attacker.example'), 403, 'a rebound hostname is refused');
   assert.equal(await withHost('attacker.example:1234'), 403, 'with a port too');
+
+  // Host names are case-insensitive, so LOCALHOST names the same machine and
+  // refusing it rejects a request that was always legitimate. Paired with the
+  // suffix trick immediately below, spelled in caps on purpose: what does the
+  // refusing is the anchors and the digits-only port group, not the letter case,
+  // so the `i` flag cannot widen what gets through.
+  assert.equal(await withHost('LOCALHOST:5173'), 200, 'the name is matched case-insensitively');
+  assert.equal(await withHost('127.0.0.1'), 200);
+  assert.equal(await withHost('LOCALHOST.evil.example'), 403, 'and a suffix is still no match');
+  assert.equal(await withHost('evil.example.localhost'), 403, 'nor a prefix');
 
   // The two consumers that must keep passing it: the packaged app's window, and
   // a Vite proxy forwarding the dev page's own Host unchanged.

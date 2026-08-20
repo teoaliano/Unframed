@@ -53,7 +53,7 @@ const app = express();
 // and a packaged app is same-origin (see the note below). The allowlist rather
 // than nothing is for local tooling, and it is a real boundary because the browser
 // sets Origin, not the page.
-const LOOPBACK_ORIGIN = /^https?:\/\/(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$/;
+const LOOPBACK_ORIGIN = /^https?:\/\/(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$/i;
 app.use(cors({ origin: (origin, cb) => cb(null, !origin || LOOPBACK_ORIGIN.test(origin)) }));
 // Two things the line above cannot do. Neither is redundant with it, and neither
 // is redundant with the other.
@@ -79,7 +79,14 @@ app.use(cors({ origin: (origin, cb) => cb(null, !origin || LOOPBACK_ORIGIN.test(
 // packaged app loads 127.0.0.1 on its assigned port. share.js is its own http
 // server rather than an Express route, so the tunnel -- which must answer a
 // public hostname -- is untouched by this.
-const LOOPBACK_HOST = /^(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$/;
+//
+// Both patterns are case-INSENSITIVE, because host names are: LOCALHOST is the
+// same machine, and 403ing it rejects a request that was always legitimate.
+// Dropping the flag looks like tightening a security check and is not -- it only
+// ever refuses a name DNS already resolves to 127.0.0.1. What does the refusing
+// is the anchors plus the digits-only port group, and those are untouched, so
+// LOCALHOST.evil.example is still no match.
+const LOOPBACK_HOST = /^(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$/i;
 app.use((req, res, next) => {
   const { origin, host } = req.headers;
   if (origin && !LOOPBACK_ORIGIN.test(origin)) {
