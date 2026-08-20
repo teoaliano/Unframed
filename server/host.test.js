@@ -69,6 +69,10 @@ const midBodyStubBase = `http://127.0.0.1:${midBodyStub.address().port}/api/v1/c
 // environment. The `code` decides which answer comes back.
 const AUTH_KEY_STUB_RESPONSES = {
   'good-code': { status: 200, body: { key: 'sk-or-v1-stubbedkey1234', user_id: 'u_1' } },
+  // Answers after a delay, which is the only way to test the window between
+  // claim() taking the verifier and the key reaching disk. Every other stub here
+  // answers instantly, so that window is microseconds wide and unhittable.
+  'slow-code': { status: 200, body: { key: 'sk-or-v1-slowexchangekey', user_id: 'u_1' }, delayMs: 700 },
   'malformed-key-code': { status: 200, body: { key: 'not-a-key\nHost: evil' } },
   'refused-code': { status: 400, body: { error: 'invalid code' } },
 };
@@ -98,9 +102,11 @@ const authKeyStub = http.createServer((req, res) => {
     const answer = sent.code_verifier
       ? AUTH_KEY_STUB_RESPONSES[sent.code]
       : { status: 400, body: { error: 'no code_verifier sent' } };
-    const { status, body } = answer || { status: 404, body: { error: `no stub for ${sent.code}` } };
-    res.writeHead(status, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify(body));
+    const { status, body, delayMs } = answer || { status: 404, body: { error: `no stub for ${sent.code}` } };
+    setTimeout(() => {
+      res.writeHead(status, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify(body));
+    }, delayMs || 0);
   });
 });
 await new Promise((resolve) => authKeyStub.listen(0, '127.0.0.1', resolve));
@@ -477,6 +483,54 @@ try {
     await fs.readFile(path.join(dataDir, '.env'), 'utf8'),
     /^OPENROUTER_API_KEY=/m,
     'and nothing wrote it back',
+  );
+
+  // The SAME case as the orphan block above, in the ordering that block does not
+  // cover: DELETE /api/key arriving AFTER the callback has claimed the verifier and
+  // while the exchange is still in flight. oauthCancel() only empties the store, and
+  // the store is not what the write path consults -- so before the liveness check
+  // the callback wrote the key back to a .env the app had just reported empty, and
+  // said "Connected to OpenRouter" while doing it. Three documents promise this
+  // cannot happen (README, CHANGELOG, and CLAUDE.md), and the assertion above agreed
+  // with them because it only ever tested the easy half.
+  const cancelRace = await (await fetch(`${base}/api/oauth/start`, { method: 'POST' })).json();
+  const cancelRacePath = new URL(new URL(cancelRace.authorizeUrl).searchParams.get('callback_url')).pathname;
+  // Not awaited: the callback has to be mid-exchange when the delete lands.
+  const inFlight = fetch(`${base}${cancelRacePath}?code=slow-code`);
+  await new Promise((r) => setTimeout(r, 250)); // inside the stub's 700ms
+  assert.equal((await fetch(`${base}/api/key`, { method: 'DELETE' })).status, 200);
+  const lateExchange = await inFlight;
+  assert.equal(lateExchange.status, 409, 'a cancelled attempt does not get to save a key');
+  assert.match(await lateExchange.text(), /cancell?ed/i);
+  assert.doesNotMatch(
+    await fs.readFile(path.join(dataDir, '.env'), 'utf8'),
+    /^OPENROUTER_API_KEY=/m,
+    'and the key the user removed stays removed',
+  );
+  // The live process too, not just the file -- generations read the binding.
+  assert.equal((await (await fetch(`${base}/api/health`)).json()).hasKey, false);
+
+  // Saving a pasted key is the same act as removing one: it settles which
+  // credential the app uses, so an approval still in flight must not overwrite it.
+  // PUT /api/config had no cancel at all, so the later exchange silently won -- and
+  // it always won, because a network round trip is slower than a local PUT.
+  const pasted = await (await fetch(`${base}/api/oauth/start`, { method: 'POST' })).json();
+  const pastedPath = new URL(new URL(pasted.authorizeUrl).searchParams.get('callback_url')).pathname;
+  assert.equal(
+    (
+      await fetch(`${base}/api/config`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ key: 'sk-or-v1-thepastedonewins' }),
+      })
+    ).status,
+    200,
+  );
+  assert.equal((await fetch(`${base}${pastedPath}?code=good-code`)).status, 400, 'the approval is refused');
+  assert.match(
+    await fs.readFile(path.join(dataDir, '.env'), 'utf8'),
+    /^OPENROUTER_API_KEY=sk-or-v1-thepastedonewins$/m,
+    'the key the user typed is the key that survives',
   );
 
   // Restored, because the assertions after this block expect a key to exist --

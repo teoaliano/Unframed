@@ -25,6 +25,7 @@ import {
   claim as oauthClaim,
   resolve as oauthResolve,
   peek as oauthPeek,
+  isCurrent as oauthIsCurrent,
   authorizeUrl,
   callbackUrl,
 } from './oauth.js';
@@ -253,6 +254,15 @@ app.put('/api/config', async (req, res) => {
       });
     }
   }
+
+  // A pasted key is the same act as removing one: it settles which credential this
+  // app uses, so an approval still on its way back must not overwrite it. Without
+  // this the later write won, and it ALWAYS won, because a network round trip is
+  // slower than a local PUT -- so the key the user deliberately typed was the one
+  // that lost. Here rather than at the top of the route, so a request that fails
+  // validation or cannot use its new output folder does not cancel a legitimate
+  // attempt on its way out.
+  if (updates.OPENROUTER_API_KEY) oauthCancel();
 
   // 2. Commit the setting. If this fails the copies are rolled back, so the old
   // store is still the only place those records live -- exactly as before the
@@ -500,6 +510,31 @@ app.get('/api/oauth/callback/:nonce', async (req, res) => {
   // "could not reach OpenRouter" points them at the wrong system entirely -- and
   // since nothing can re-fetch the key and every reconnect mints another, the row
   // it left behind is worth telling them about.
+  // Between claim() above and this line, the process has been out on the network
+  // for up to thirty seconds, and in that time two things can have settled which
+  // key this app uses: DELETE /api/key, or a key pasted through PUT /api/config.
+  // Both cancel the attempt, and both were invisible here, because cancelling
+  // empties oauth.js and oauth.js is not what the write path reads -- so the
+  // callback wrote the key back into a .env the app had just reported empty, and
+  // rendered "Connected to OpenRouter" while doing it. That undoes the one action
+  // DELETE /api/key's own comment calls a security act.
+  //
+  // Asked here rather than earlier, and with NO await between the question and the
+  // writeEnv call below: writeEnv takes its slot on the queue synchronously, so
+  // nothing can interleave between the two. A cancel that lands after the slot is
+  // taken is harmless -- its own null-write queues behind this one, so the key ends
+  // up removed either way, which is what was asked for.
+  if (!oauthIsCurrent(nonce)) {
+    return res
+      .status(409)
+      .send(
+        oauthPage(
+          'That connection was cancelled',
+          'Nothing was saved, and Unframed is still using whichever key you chose instead. ' +
+            'OpenRouter did create a key just now, so delete that row at openrouter.ai/settings/keys.',
+        ),
+      );
+  }
   try {
     await writeEnv({ OPENROUTER_API_KEY: data.key });
   } catch (err) {

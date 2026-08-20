@@ -1755,8 +1755,10 @@ function Canvas() {
               and that is the one case where it used to disappear. It was hidden
               because saving a pasted key changed keyHint, which the poll read as
               the browser approval landing; the poll asks the server now, so the
-              two paths no longer collide. Whichever finishes first wins, and the
-              other is refused rather than misreported. */}
+              two paths no longer collide. Saving here cancels a pending attempt
+              server-side, so an approval that lands afterwards is refused rather
+              than quietly replacing the key you typed -- the same reasoning, and
+              the same one-line cancel, that Remove key already had. */}
           {(cfg.hasKey || showPaste) && (
           <VStack gap={2}>
             {/* Named for the account once there is one: with a key saved this

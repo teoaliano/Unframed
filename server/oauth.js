@@ -119,6 +119,14 @@ export function peek(now = Date.now()) {
   return { state: attempt.state, reason: attempt.reason };
 }
 
+// Whether `nonce` still names the attempt in flight, and it has not already
+// ended. The callback asks between claiming the verifier and writing the key,
+// which is the one window `cancel` cannot reach on its own: cancelling empties
+// this module, and this module is not what the write path reads. It has to be
+// asked SYNCHRONOUSLY, with no await between the answer and the act, or the
+// answer is stale by the time anything uses it.
+export const isCurrent = (nonce) => current(nonce) && attempt.state === WAITING;
+
 export function cancel() {
   attempt = null;
 }

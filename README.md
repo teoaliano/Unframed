@@ -52,7 +52,7 @@ Open **http://localhost:5173** and click the **settings icon** in the top right,
 
 If the tab does not open, the dialog has a link to the same page. Prefer to do it by hand? **or paste a key instead** reveals a field for a key you made yourself at openrouter.ai/keys. Either way the key ends up in the same place, and nothing afterwards can tell them apart.
 
-The same dialog replaces the key later, or removes it with **Remove key** (two clicks, since the key can't be read back out). Removing it also cancels an approval still in flight, so a browser tab you left open cannot put the key back.
+The same dialog replaces the key later, or removes it with **Remove key** (two clicks, since the key can't be read back out). Removing it also cancels an approval still in flight, so a browser tab you left open cannot put the key back — including an approval already being exchanged at that moment, which is refused rather than saved. Pasting a key does the same, since choosing a key settles which one the app uses.
 
 `.env` is gitignored, so your key is never committed.
 
