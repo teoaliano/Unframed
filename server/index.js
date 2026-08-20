@@ -221,6 +221,18 @@ app.put('/api/config', async (req, res) => {
   // .env doesn't keep two lines that disagree.
   if (updates.OPENROUTER_IMAGE_MODEL) updates.OPENROUTER_MODEL = null;
 
+  // A pasted key is the same act as removing one: it settles which credential this
+  // app uses, so an approval still on its way back must not overwrite it. It always
+  // won before, because a network round trip is slower than a local PUT. Done HERE,
+  // synchronously, after validation and BEFORE any await: placed later -- behind the
+  // mkdir and the job-copy below, as it first was -- a Save issued just before the
+  // user pressed Connect could land its cancel AFTER that Connect created a fresh
+  // attempt and kill it. The only cost of the early spot is that a save which then
+  // fails on an unusable folder has already cancelled the attempt; that needs a key
+  // AND a bad folder AND a connect in flight at once, and cancelling is the right
+  // call the moment a key is deliberately chosen anyway.
+  if (updates.OPENROUTER_API_KEY) oauthCancel();
+
   // The folder has to be usable before it is saved, or every later generation
   // fails with a disk error instead of a message you can act on.
   if (updates.OUTPUT_DIR) {
@@ -270,15 +282,6 @@ app.put('/api/config', async (req, res) => {
       });
     }
   }
-
-  // A pasted key is the same act as removing one: it settles which credential this
-  // app uses, so an approval still on its way back must not overwrite it. Without
-  // this the later write won, and it ALWAYS won, because a network round trip is
-  // slower than a local PUT -- so the key the user deliberately typed was the one
-  // that lost. Here rather than at the top of the route, so a request that fails
-  // validation or cannot use its new output folder does not cancel a legitimate
-  // attempt on its way out.
-  if (updates.OPENROUTER_API_KEY) oauthCancel();
 
   // 2. Commit the setting. If this fails the copies are rolled back, so the old
   // store is still the only place those records live -- exactly as before the
