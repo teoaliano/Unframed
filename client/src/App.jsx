@@ -61,6 +61,7 @@ import { bucketSources, isOutput, isReferenceable } from './graph/resolve.js';
 import { canSource, canTarget, selectedIds, connections, dropInternal } from './graph/bulkWire.js';
 import { keepLiveRunMarkers } from './graph/runMarkers.js';
 import { hitEdges, samplePaths } from './graph/edgeHits.js';
+import { expiryNote } from './keyExpiry.js';
 import LibraryDialog from './library/LibraryDialog.jsx';
 import { instantiateFragment, centerOffset } from './library/insert.js';
 import { selectionFragment, presetFromSelection } from './library/save.js';
@@ -76,6 +77,10 @@ import {
   getHealth,
   saveConfig,
   clearKey,
+  startOauth,
+  cancelOauth,
+  oauthPending,
+  oauthStatus,
   pickFolder,
   listModels,
   revealFiles,
@@ -285,6 +290,38 @@ function Canvas() {
   // dialog's draft, so nothing is applied until Save.
   const [cfg, setCfg] = useState({ hasKey: true, keyHint: '', imageModel: '', textModel: '', videoModel: '', outputDir: '' });
   const [cfgDlg, setCfgDlg] = useState(null); // { key, imageModel, …, error, saving, saved } | null
+  // Outside cfgDlg, for the same class of reason `connecting` is: the draft is
+  // rebuilt on every keystroke and every save, and three render branches read
+  // this -- the reveal button, the key section, and Save. Riding along in that
+  // object meant Save's visibility was derived from state that churned, and the
+  // two conditions getting out of step is what stranded Save once and made the
+  // paste fallback vanish once. Reset by openSettings, so revealing the field
+  // does not persist into the next time the dialog is opened.
+  const [showPaste, setShowPaste] = useState(false);
+  // Not part of cfgDlg: the dialog is closable mid-flow, and the callback still
+  // lands on the server, so this poll must outlive the dialog's own state.
+  const [connecting, setConnecting] = useState(null); // { since, url, wasKeyless } | null
+  // What GET /api/oauth/status last answered, or null if it hasn't been asked
+  // (or the ask failed).
+  const [orStatus, setOrStatus] = useState(null);
+  // Which key-info request is the current one; see openSettings.
+  const orStatusRun = useRef(0);
+  // A Cancel's DELETE and the next Connect's POST are independent requests with no
+  // ordering guarantee between them, so a Cancel served second wipes the attempt
+  // the new Connect just created — and the tab that opened is then dead on arrival
+  // while the poll waits on a nonce the server has forgotten. Connect waits for a
+  // cancel still in flight instead of racing it.
+  const cancelling = useRef(Promise.resolve());
+  // Read inside the poll's interval callback (which fires long after the render
+  // that scheduled it) to decide whether the dialog is open right now, without
+  // making cfgDlg a dependency of that effect — that would restart the
+  // interval on every keystroke in the dialog. Assigned from an effect, not the
+  // render body, so a render that gets discarded before committing can't leave
+  // this pointing at state that was never actually shown.
+  const cfgDlgRef = useRef(null);
+  useEffect(() => {
+    cfgDlgRef.current = cfgDlg;
+  });
   // The three model catalogues, for the pickers. { image: [...], text: [...], video: [...] }
   const [catalogues, setCatalogues] = useState({});
   // Gate auto-save until the initial load finishes, so we don't overwrite a saved
@@ -457,8 +494,132 @@ function Canvas() {
       .catch(() => {});
   }, []);
 
+  // Polls while a connection is pending. Depends on `connecting`, which lives
+  // outside `cfgDlg` (see its declaration above) — so closing the dialog
+  // cannot cancel this: the callback still lands on the server, and this is
+  // what notices.
+  //
+  // Ten minutes: that is how long OpenRouter's code is valid, and giving up sooner
+  // reports failure on a flow that is still perfectly completable.
+  useEffect(() => {
+    const pending = connecting;
+    if (!pending) return;
+    // clearInterval on cleanup can't cancel a request already in flight, so a
+    // resolution can still land after Cancel or the timeout has fired for this
+    // same attempt — `live` is what stops it from acting on it anyway.
+    let live = true;
+    // Where a terminal outcome goes. The dialog is closable mid-flow, so the inline
+    // banner reaches nobody when it is shut, and a toast is the only thing that does.
+    const report = (msg) => {
+      if (cfgDlgRef.current) setCfgDlg((d) => (d ? { ...d, error: msg } : d));
+      else toast({ body: msg, uniqueID: 'oauth-failed' });
+    };
+    const id = setInterval(async () => {
+      const elapsed = Date.now() - pending.since;
+      // The server's own account of how the attempt ended. `null` is a dropped
+      // request, not an answer, so it falls through to the next tick.
+      const outcome = await oauthPending();
+      if (!live) return;
+
+      if (outcome?.state === 'failed') {
+        setConnecting(null);
+        report(outcome.reason || 'Connecting failed. Try again.');
+        return;
+      }
+
+      // The server has no record of any attempt at all. Cancelled from a second
+      // window, superseded by one, or the engine restarted — `node --watch` does
+      // that on any file save in development, and the store is in memory by design.
+      // None of those can ever complete, so this is terminal. Falling through to
+      // the next tick, as it used to, left the dialog saying "Waiting for OpenRouter
+      // in your browser" for the full ten minutes about an attempt the server had
+      // already told it did not exist.
+      if (outcome?.state === 'none') {
+        setConnecting(null);
+        report('That connection was lost before it finished. Try connecting again.');
+        return;
+      }
+
+      if (outcome?.state === 'done') {
+        // BOTH requests before setConnecting(null), and together, since neither
+        // needs the other's answer.
+        //
+        // The order is the whole point. setConnecting(null) changes this effect's
+        // own dependency, so React tears the effect down and the cleanup below sets
+        // `live = false` — within a frame, while a request is still out on the
+        // network. Anything awaited after that resolves into a `!live` check that is
+        // already false, so the entire tail of this branch was dead code: no toast,
+        // no free-tier warning, and a dialog that never closed. `live` exists to
+        // ignore a resolution after a real Cancel, and the branch was tripping it on
+        // itself. Everything below this await is synchronous, so it cannot happen
+        // again.
+        const [h, status] = await Promise.all([getHealth().catch(() => null), oauthStatus()]);
+        if (!live) return;
+        setConnecting(null);
+        // Only the settings `cfg` carries, not the whole health payload: that
+        // also holds `ok` and the legacy `model` alias, and spreading them in
+        // leaves cfg with members nothing declares and nothing reads.
+        const { ok, model, ...settings } = h || {};
+        // Trust the server when it answered. The old code forced `hasKey: true`
+        // here, on the theory that a failed health request must not undo a finished
+        // connection -- but a failed request yields h === null and an empty
+        // `settings`, so there was nothing to force. The hardcode only ever bit the
+        // case it was not meant to: a health request that SUCCEEDED and correctly
+        // said "no key" -- a Remove key in the gap between the poll reading 'done'
+        // and this merge -- which it then overwrote back to "a key is saved". Only
+        // when h is null (the request itself failed) do we default true, since the
+        // server did just report the connection done.
+        setCfg((c) => ({ ...c, ...settings, hasKey: h?.hasKey ?? true, keyHint: h?.keyHint ?? c.keyHint }));
+        // Not left to the next openSettings(): on a first connect this is the ONLY
+        // chance to warn that no credit has been bought, which is the entire reason
+        // the route reports is_free_tier.
+        setOrStatus(status);
+        toast({ body: 'Connected to OpenRouter.', uniqueID: 'oauth-connected' });
+        // Onboarding closes, for the same reason saveSettings closes: the rest of
+        // the form was hidden while there was no key. Unless there is something to
+        // say -- then the dialog stays, because a toast cannot carry the link to buy
+        // credit.
+        if (pending.wasKeyless && !status?.isFreeTier) return setCfgDlg(null);
+        // The keyless dialog is opened directly (see the initial load), not through
+        // openSettings, so nothing has fetched the catalogues. Without this the
+        // three pickers sit on "Loading models…" for as long as the dialog is open.
+        if (pending.wasKeyless) loadCatalogues();
+        // A reconnect keeps whatever the user had typed into the models and folder
+        // fields. Clearing the draft here is what the old unconditional close did
+        // by accident, and the Save button was deliberately left live during a
+        // connect precisely so those edits had a way out.
+        setCfgDlg((d) => (d ? { ...d, key: '', error: undefined } : d));
+        return;
+      }
+      // A backstop now rather than the mechanism: the server fails its own attempt
+      // on the same ten-minute clock, so this only fires if the poll itself has
+      // been failing — which is why it does not depend on having heard anything.
+      if (elapsed > 10 * 60 * 1000) {
+        setConnecting(null);
+        report('Nothing came back from OpenRouter. Try connecting again.');
+        return;
+      }
+    }, 1500);
+    return () => {
+      live = false;
+      clearInterval(id);
+    };
+  }, [connecting, toast]);
+
+  // Cached in api.js, so calling this twice costs nothing. Extracted because the
+  // poll above needs it too: a first connect that keeps the dialog open would
+  // otherwise leave the model pickers reading "Loading models…" forever, since
+  // nothing else ever fetches them.
+  function loadCatalogues() {
+    if (catalogues.image) return;
+    ['image', 'text', 'video'].forEach((type) =>
+      listModels(type).then((d) => setCatalogues((c) => ({ ...c, [type]: d.models || [] }))),
+    );
+  }
+
   // Open with the saved values as the draft, so the pickers show what is in use.
   function openSettings() {
+    setShowPaste(false);
     setCfgDlg({
       key: '',
       imageModel: cfg.imageModel,
@@ -466,11 +627,18 @@ function Canvas() {
       videoModel: cfg.videoModel,
       outputDir: cfg.outputDir,
     });
-    // The catalogues are cached in api.js, so reopening the dialog costs nothing.
-    if (!catalogues.image) {
-      ['image', 'text', 'video'].forEach((type) =>
-        listModels(type).then((d) => setCatalogues((c) => ({ ...c, [type]: d.models || [] }))),
-      );
+    loadCatalogues();
+    // On open, not on a timer: inference responses carry no quota information, so
+    // asking is the only way to know, and nothing outside this dialog needs it.
+    setOrStatus(null);
+    // Guarded like useModels in nodes/output/core.js: open, close, reopen quickly
+    // and two of these are in flight, and the older one resolving last would
+    // overwrite the newer answer.
+    if (cfg.hasKey) {
+      const mine = ++orStatusRun.current;
+      oauthStatus().then((d) => {
+        if (orStatusRun.current === mine) setOrStatus(d);
+      });
     }
   }
 
@@ -493,6 +661,13 @@ function Canvas() {
     try {
       const r = await saveConfig(fields);
       setCfg((c) => ({ ...c, ...r }));
+      // Saving a key settles which credential the app uses, so PUT /api/config
+      // cancels any attempt still in flight server-side. Stop the poll here too, or
+      // its next tick reads the now-empty store as 'none' -- which is terminal since
+      // finding 08 -- and reports "That connection was lost" about a key that in
+      // fact just saved. Only when a key was sent: a model or folder save must leave
+      // a connect in flight running.
+      if (fields.key) setConnecting(null);
       // Onboarding ends by closing. The rest of the form -- the model pickers and
       // the output folder -- was hidden while there was no key, and their
       // catalogues are only fetched by openSettings(), so leaving the dialog open
@@ -507,10 +682,72 @@ function Canvas() {
         toast({ body: 'Key saved. Unframed is ready to generate.', uniqueID: 'key-saved' });
         return setCfgDlg(null);
       }
+      // A new key was just saved over the old one, but the dialog stays open --
+      // the status fetched at open time now describes a key that's gone.
+      if (fields.key) setOrStatus(null);
       setCfgDlg((s) => ({ ...s, key: '', saving: false, saved: true }));
     } catch (err) {
       setCfgDlg((s) => ({ ...s, saving: false, error: err.message }));
     }
+  }
+
+  // Opens OpenRouter in the user's real browser: a plain _blank navigation, which
+  // the packaged shell turns into shell.openExternal via setWindowOpenHandler and
+  // a clone treats as an ordinary tab. One code path for both. 'noopener' is kept
+  // for the security posture of handing a URL to another origin, even though —
+  // on both paths — it also means the return value can never tell a blocked
+  // popup from an opened one; the link is always shown as a fallback because of
+  // that, not because either path is detected.
+  async function connectOpenRouter() {
+    // key: '' drops any draft in the field this hides. Pasting a key during a
+    // pending connect is allowed again now that the poll asks the server how the
+    // attempt ended instead of inferring it from a changed key hint -- which a
+    // pasted key also changed, so the flow used to report someone else's paste as
+    // its own success.
+    setCfgDlg((d) => ({ ...d, key: '', error: undefined, saved: false }));
+    // Opened BEFORE the await, while the click's user activation is still live.
+    // Chrome's activation survives a fast fetch, which is why opening it after
+    // worked in testing, but Safari and Firefox are stricter about a popup opened
+    // outside the gesture's own task and block it silently -- leaving the user
+    // reading "waiting for OpenRouter in your browser" with no browser tab.
+    //
+    // Without 'noopener', because that makes window.open return null and there
+    // would be nothing to navigate. about:blank is same-origin until it is
+    // navigated, so the opener can be severed here instead, which is what
+    // 'noopener' would have bought.
+    const tab = window.open('', '_blank');
+    if (tab) tab.opener = null;
+    try {
+      // Before starting, so a Cancel still in flight cannot arrive after this
+      // attempt is created and wipe it. cancelOauth swallows its own failures, so
+      // this never rejects.
+      await cancelling.current;
+      const url = await startOauth();
+      // Still null when popups are blocked outright, which is why the link in the
+      // waiting state is permanent rather than a reaction to a failed open.
+      if (tab) tab.location = url;
+      // wasKeyless captured now, not read off `cfg` later, since cfg.hasKey flips
+      // the moment the connection lands and this decides whether the dialog was
+      // the key-only onboarding one.
+      setConnecting({ since: Date.now(), url, wasKeyless: !cfg.hasKey });
+    } catch (err) {
+      if (tab) tab.close();
+      setCfgDlg((d) => ({ ...d, error: err.message }));
+    }
+  }
+
+  function cancelConnect() {
+    // The DELETE can remove a key server-side -- if the callback had already
+    // committed one, Cancel undoes it (see the route). So resync cfg from health
+    // once it lands, or the dialog would go on claiming a key is saved that Cancel
+    // just removed. cancelOauth swallows its own failure, so this never rejects,
+    // and cancelling.current is what a fast re-Connect waits on before starting.
+    cancelling.current = cancelOauth().then(() =>
+      getHealth()
+        .then((h) => setCfg((c) => ({ ...c, hasKey: Boolean(h.hasKey), keyHint: h.keyHint || '' })))
+        .catch(() => {}),
+    );
+    setConnecting(null);
   }
 
   // The picker runs on the server, which is this machine — a browser can't hand
@@ -535,6 +772,9 @@ function Canvas() {
     try {
       const r = await clearKey();
       setCfg((c) => ({ ...c, ...r }));
+      // The key just described by orStatus is gone; null falls back to the
+      // honest "not asked" copy instead of reporting a deleted key's spend.
+      setOrStatus(null);
       // The key is gone either way -- removed stays true even when the cleanup
       // below failed. renderCleanupError, when present, reuses the banner slot
       // below (shared with save results) rather than implying the removal itself
@@ -1530,7 +1770,7 @@ function Canvas() {
         width={480}
       >
         <DialogHeader
-          title={cfg.hasKey ? 'Settings' : 'Add your OpenRouter key to start'}
+          title={cfg.hasKey ? 'Settings' : 'Connect OpenRouter to start'}
         />
         {/* Two regions, not one: the form scrolls, the buttons do not. Dialog caps
             itself at 75vh and its wrapper hides the overflow, so on a short window
@@ -1541,38 +1781,66 @@ function Canvas() {
             hands the overflow back to the clipped parent. */}
         <VStack gap={3} padding={4} style={{ minHeight: 0 }}>
           <VStack gap={3} style={{ overflowY: 'auto', minHeight: 0 }}>
-          {!cfg.hasKey && (
+          {!cfg.hasKey && !connecting && (
             <VStack gap={2}>
               <Text type="supporting" as="p">
                 Unframed has no image model of its own. It sends your prompts to{' '}
                 <Link href="https://openrouter.ai" isExternalLink>
                   OpenRouter
                 </Link>
-                , which runs the model and bills your account per image (a few cents for most
-                models). It needs your own key to do that.
+                , which runs the model and bills your OpenRouter account per image (a few cents for
+                most models). Connecting takes you there to approve Unframed; the key it gives back
+                is saved on this machine and used only by your local server.
               </Text>
-              <Text type="supporting" as="p">
-                To get one: sign in at{' '}
-                <Link href="https://openrouter.ai/keys" isExternalLink>
-                  openrouter.ai/keys
-                </Link>
-                , press <strong>Create key</strong>, and copy it. Add a few dollars of credit under{' '}
-                <Link href="https://openrouter.ai/credits" isExternalLink>
-                  Credits
-                </Link>{' '}
-                or generating will fail with "insufficient credits".
-              </Text>
-              <Text type="supporting" as="p">
-                The key is saved to a <code>.env</code> file on this machine, is used only by your
-                local server to call OpenRouter, and is never sent anywhere else.
-              </Text>
+              <Button label="Connect OpenRouter" variant="primary" onClick={connectOpenRouter} />
             </VStack>
+          )}
+          {connecting && (
+            <VStack gap={2}>
+              <Text type="supporting" as="p">
+                Waiting for OpenRouter in your browser…
+              </Text>
+              {/* A real link, not the URL in a read-only field. Popups can be
+                  blocked outright, and this is the whole recovery path when they
+                  are — a 200-character URL to select by hand out of a one-line
+                  input was the worst possible thing to offer there. Permanent
+                  rather than a reaction to a failed open, because whether the tab
+                  opened cannot be detected (see connectOpenRouter). */}
+              <Text type="supporting" as="p">
+                Didn't open?{' '}
+                <Link href={connecting.url} isExternalLink>
+                  Approve Unframed at OpenRouter
+                </Link>
+                .
+              </Text>
+              <Button label="Cancel" variant="ghost" onClick={cancelConnect} />
+            </VStack>
+          )}
+          {!cfg.hasKey && !showPaste && (
+            <Button
+              label="or paste a key instead"
+              variant="ghost"
+              onClick={() => setShowPaste(true)}
+            />
           )}
           {/* Three sections, one heading style each, dividers between. The field
               labels themselves are hidden where the heading already names the
-              field, but stay in the DOM for screen readers. */}
+              field, but stay in the DOM for screen readers.
+              
+              Visible during a pending connect, which it was not: the spec's own
+              failure table promises the paste fallback for "browser never opens",
+              and that is the one case where it used to disappear. It was hidden
+              because saving a pasted key changed keyHint, which the poll read as
+              the browser approval landing; the poll asks the server now, so the
+              two paths no longer collide. Saving here cancels a pending attempt
+              server-side, so an approval that lands afterwards is refused rather
+              than quietly replacing the key you typed -- the same reasoning, and
+              the same one-line cancel, that Remove key already had. */}
+          {(cfg.hasKey || showPaste) && (
           <VStack gap={2}>
-            <Text type="label">API key</Text>
+            {/* Named for the account once there is one: with a key saved this
+                section is about the connection, and the key is one field in it. */}
+            <Text type="label">{cfg.hasKey ? 'OpenRouter' : 'API key'}</Text>
             {/* Remove sits next to the field it acts on, like Browse… does for the
                 folder below. */}
             <HStack gap={2} align="center">
@@ -1620,12 +1888,74 @@ function Canvas() {
                 />
               )}
             </HStack>
-            <Text type="supporting" as="p">
-              {cfg.hasKey
-                ? `A key is already saved${cfg.keyHint ? ` (…${cfg.keyHint})` : ''}. Entering a new one replaces it.`
-                : 'Paste it here. It starts with sk-or-'}
-            </Text>
+            {orStatus?.revoked ? (
+              // Hidden while a reconnect is already live -- its own waiting block
+              // above already covers this, and a second click here would call
+              // startOauth() again and clear the pending attempt out from under
+              // an approval that's already on its way back.
+              !connecting && (
+                <VStack gap={2}>
+                  <Text type="supporting" as="p">
+                    This key no longer works at OpenRouter — it may have been deleted or disabled
+                    there.
+                  </Text>
+                  <Button label="Reconnect OpenRouter" variant="primary" onClick={connectOpenRouter} />
+                </VStack>
+              )
+            ) : orStatus?.hasKey ? (
+              <VStack gap={2}>
+                {/* Free tier and spend are mutually exclusive, not stacked: with
+                    no credit bought, what the key has spent against its cap is
+                    noise in front of the one thing that has to happen next. The
+                    key's own NAME is in neither branch because it is not
+                    reachable -- see the route's comment in server/index.js. */}
+                {orStatus.isFreeTier ? (
+                  <Text type="supporting" as="p">
+                    You have not bought any credit yet, so generating will fail. Add some under{' '}
+                    <Link href="https://openrouter.ai/credits" isExternalLink>
+                      Credits
+                    </Link>
+                    .
+                  </Text>
+                ) : (
+                  <Text type="supporting" as="p">
+                    {`Connected to OpenRouter. $${orStatus.usage.toFixed(2)} spent with this key`}
+                    {orStatus.limit != null
+                      ? `, of a $${orStatus.limit.toFixed(2)} cap${
+                          orStatus.limitRemaining != null
+                            ? ` — $${orStatus.limitRemaining.toFixed(2)} still available`
+                            : ''
+                        }`
+                      : ''}
+                    .
+                  </Text>
+                )}
+                {expiryNote(orStatus.expiresAt) && (
+                  <Text type="supporting" as="p">
+                    {expiryNote(orStatus.expiresAt)}
+                  </Text>
+                )}
+              </VStack>
+            ) : (
+              <Text type="supporting" as="p">
+                {cfg.hasKey ? (
+                  `A key is already saved${cfg.keyHint ? ` (…${cfg.keyHint})` : ''}. Entering a new one replaces it.`
+                ) : (
+                  // Whoever is reading this is whoever Connect did not work for, so
+                  // the manual route has to be complete on its own: where the key
+                  // comes from, not just what it looks like.
+                  <>
+                    Make a key at{' '}
+                    <Link href="https://openrouter.ai/keys" isExternalLink>
+                      openrouter.ai/keys
+                    </Link>{' '}
+                    and paste it here. It starts with sk-or-.
+                  </>
+                )}
+              </Text>
+            )}
           </VStack>
+          )}
 
           {/* Everything below needs a key to be worth showing. The catalogues are
               fetched from OpenRouter WITH the key, so before there is one the three
@@ -1700,13 +2030,21 @@ function Canvas() {
 
           <HStack gap={2} justify="end">
             <Button label="Close" variant="ghost" onClick={() => setCfgDlg(null)} />
-            <Button
-              label="Save"
-              variant="primary"
-              isDisabled={cfgDlg?.saving}
-              isLoading={cfgDlg?.saving}
-              onClick={saveSettings}
-            />
+            {/* Nothing to save until something saveable is on screen. Keyless,
+                that is the key field alone, and it isn't shown until an existing
+                key or "or paste a key instead" reveals it. With a key, Default
+                models and Output folder stay rendered and editable through a
+                reconnect, so Save has to stay too; gating it on !connecting left
+                those edits with no way out. */}
+            {(cfg.hasKey || showPaste) && (
+              <Button
+                label="Save"
+                variant="primary"
+                isDisabled={cfgDlg?.saving}
+                isLoading={cfgDlg?.saving}
+                onClick={saveSettings}
+              />
+            )}
           </HStack>
         </VStack>
       </Dialog>

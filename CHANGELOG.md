@@ -111,6 +111,17 @@ Keep that shape: the website's What's new page parses this file.
 
 ### Added
 
+- Connect your OpenRouter account with one button instead of creating and pasting
+  an API key by hand. You approve Unframed in your browser, where you can also name
+  the key and give it a spending cap, and it arrives on its own. Pasting a key still
+  works, under *or paste a key instead*.
+
+- Settings tells you where that key stands: what it has spent, its cap if you set
+  one, and **a warning while there is still time to act if you gave it an expiry** —
+  nothing renews a key, so the only fix is to reconnect. If the account has never
+  bought credit, it says so, with a link, before your first generation instead of
+  after it fails.
+
 - Video reference and result nodes have their own play/scrub controls, built into
   the node instead of the browser's native ones. A clip now drags by its frame like
   a picture does — scrubbing the new controls moves the playhead, not the node.
@@ -121,6 +132,33 @@ Keep that shape: the website's What's new page parses this file.
   saved with the project.
 
 ### Changed
+
+- Removing your key now also cancels an approval still in flight, so a browser tab
+  left open cannot put the key back minutes after the app said it was gone. That
+  holds even when the approval was already being exchanged at the moment you removed
+  the key: the connection is refused and says so, rather than saving anyway.
+
+- **Connecting now finishes properly.** A successful connect confirms itself, and if
+  the account has never bought credit it says so right there, with a link, instead of
+  letting the first generation fail. Onboarding closes itself once there is nothing
+  left to say, and the model pickers fill in rather than reading *Loading models…*.
+
+- **A connection that gets lost says so within seconds.** Cancelling from another
+  window, or restarting the app mid-approval, used to leave *Waiting for OpenRouter*
+  on screen for ten minutes about an attempt that no longer existed.
+
+- **Connecting tells you when it fails, instead of waiting ten minutes and blaming
+  OpenRouter.** If the approval is refused, expires, or comes back as something
+  Unframed can't save, the reason appears in settings as soon as it happens — and
+  it is OpenRouter's own reason, not a guess. Pasting a key by hand also works
+  while an approval is pending now. Saving a key settles the question, so an approval
+  that turns up afterwards is refused instead of replacing what you typed.
+
+- When OpenRouter refuses a generation, text run or video as unpaid, the message
+  now names both things it can mean — the account being out of credit, or the key
+  reaching a spending cap you set — and links to the page for each, instead of
+  showing OpenRouter's generic error. Its own reason is included, since that is
+  what tells the two apart.
 
 - **A selection box adds to the selection when a modifier is held**, the way
   Figma, Sketch and Illustrator do; without one it still replaces, as before.

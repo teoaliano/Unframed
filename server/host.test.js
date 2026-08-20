@@ -61,6 +61,59 @@ const midBodyStub = http.createServer((req, res) => {
 await new Promise((resolve) => midBodyStub.listen(0, '127.0.0.1', resolve));
 const midBodyStubBase = `http://127.0.0.1:${midBodyStub.address().port}/api/v1/chat/completions`;
 
+// Stands in for OpenRouter's key-exchange endpoint. The real exchange needs a
+// real human approving in a real browser, so this is what lets the callback
+// route's actual logic -- nonce claim, exchange, key validation, writeEnv -- be
+// tested at all. Same override pattern as the two stubs above:
+// UNFRAMED_TEST_AUTH_KEYS_URL is unset, and therefore inert, in every real
+// environment. The `code` decides which answer comes back.
+const AUTH_KEY_STUB_RESPONSES = {
+  'good-code': { status: 200, body: { key: 'sk-or-v1-stubbedkey1234', user_id: 'u_1' } },
+  // Answers after a delay, which is the only way to test the window between
+  // claim() taking the verifier and the key reaching disk. Every other stub here
+  // answers instantly, so that window is microseconds wide and unhittable.
+  'slow-code': { status: 200, body: { key: 'sk-or-v1-slowexchangekey', user_id: 'u_1' }, delayMs: 700 },
+  'malformed-key-code': { status: 200, body: { key: 'not-a-key\nHost: evil' } },
+  'refused-code': { status: 400, body: { error: 'invalid code' } },
+};
+// Counts the key-info reads below, so the revoked assertion can prove it resolved
+// here rather than at openrouter.ai.
+let keyInfoReads = 0;
+// What the key-info stub answers next. Mutable so one forked server can exercise
+// every branch of /api/oauth/status: a dead key, and the success path that shapes
+// the payload. Asserting any of it against the real endpoint would need network
+// egress and would assume OpenRouter's answers never change shape -- which this
+// feature has already been wrong about twice.
+let keyInfoAnswer = { status: 401, body: { error: { message: 'no auth credentials found' } } };
+const authKeyStub = http.createServer((req, res) => {
+  // GET /api/v1/key, the key-info route /api/oauth/status reads, on the same stub
+  // because it is the same upstream.
+  if (req.url.startsWith('/api/v1/key')) {
+    keyInfoReads += 1;
+    res.writeHead(keyInfoAnswer.status, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify(keyInfoAnswer.body));
+    return;
+  }
+  let raw = '';
+  req.on('data', (c) => (raw += c));
+  req.on('end', () => {
+    const sent = JSON.parse(raw || '{}');
+    // The verifier must arrive, or PKCE is decorative.
+    const answer = sent.code_verifier
+      ? AUTH_KEY_STUB_RESPONSES[sent.code]
+      : { status: 400, body: { error: 'no code_verifier sent' } };
+    const { status, body, delayMs } = answer || { status: 404, body: { error: `no stub for ${sent.code}` } };
+    setTimeout(() => {
+      res.writeHead(status, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify(body));
+    }, delayMs || 0);
+  });
+});
+await new Promise((resolve) => authKeyStub.listen(0, '127.0.0.1', resolve));
+const authKeyStubBase = `http://127.0.0.1:${authKeyStub.address().port}`;
+const authKeyStubUrl = `${authKeyStubBase}/api/v1/auth/keys`;
+const keyInfoStubUrl = `${authKeyStubBase}/api/v1/key`;
+
 const child = fork(path.join(here, 'index.js'), {
   env: {
     ...process.env,
@@ -70,6 +123,8 @@ const child = fork(path.join(here, 'index.js'), {
     PORT: '0',
     UNFRAMED_TEST_VIDEOS_STATUS_BASE: statusStubBase,
     UNFRAMED_TEST_CHAT_COMPLETIONS_URL: midBodyStubBase,
+    UNFRAMED_TEST_AUTH_KEYS_URL: authKeyStubUrl,
+    UNFRAMED_TEST_KEY_URL: keyInfoStubUrl,
   },
   stdio: 'ignore',
 });
@@ -144,10 +199,31 @@ try {
   });
   assert.equal(drive.status, 403, 'a bodiless cross-origin POST is refused');
 
-  // The dev client's own origin is reflected, so local tooling keeps working.
+  // A loopback origin reaches the route -- the middleware below only refuses a
+  // NON-loopback one -- but nothing is echoed back, so no page can read the reply.
+  // This used to reflect the origin "so local tooling keeps working", and that was
+  // the hole: neither real consumer is ever cross-origin, so the echo served
+  // nobody except a page on some other loopback port. The dev client's calls are
+  // all relative, so the browser talks to Vite same-origin and Vite proxies
+  // server-side, where no browser CORS check exists; the packaged app is
+  // same-origin with the engine outright.
   const dev = await fetch(`${base}/api/health`, { headers: { Origin: 'http://localhost:5173' } });
-  assert.equal(dev.status, 200);
-  assert.equal(dev.headers.get('access-control-allow-origin'), 'http://localhost:5173');
+  assert.equal(dev.status, 200, 'a loopback origin is not refused');
+  assert.equal(dev.headers.get('access-control-allow-origin'), null, 'but nothing is readable');
+
+  // The payload that makes this worth closing. Any page on any loopback port --
+  // another dev server, or an XSS in some locally-hosted tool's web UI -- passes
+  // the Origin check. If it could READ this reply it would have the nonce and the
+  // challenge, which is everything needed to approve that challenge against its
+  // own OpenRouter account and have this server write the resulting key into the
+  // user's .env: every later prompt and frame billed to, and visible in, someone
+  // else's account. It cannot read it, so the 128-bit nonce stays unguessable.
+  const nosy = await fetch(`${base}/api/oauth/start`, {
+    method: 'POST',
+    headers: { Origin: 'http://localhost:3000' },
+  });
+  assert.equal(nosy.headers.get('access-control-allow-origin'), null, 'no cross-origin read of a nonce');
+  await fetch(`${base}/api/oauth/pending`, { method: 'DELETE' }); // that attempt superseded a real one
 
   // Same case rule on the Origin side, which matters more than it looks: this
   // check refuses the REQUEST, so a case mismatch here is a 403 rather than a
@@ -165,50 +241,73 @@ try {
   });
   assert.equal(preflight.headers.get('access-control-allow-origin'), null);
 
-  // DNS rebinding sends no Origin at all: a page whose own hostname resolves to
-  // 127.0.0.1 is same-origin with this server, so the check above cannot see it.
-  // Host is the name the browser actually dialled.
-  //
-  // Sent with http.request rather than fetch: undici treats `host` as a
-  // forbidden header and drops it silently, so a fetch-based version of this
-  // test passes while asserting nothing.
-  const withHost = (host) =>
+  // The Host check, which is NOT the origin check above in another form. A page
+  // served from a hostname the attacker resolves to 127.0.0.1 is same-origin with
+  // this server: no Origin is sent, so nothing above runs, and the response is
+  // readable. Host is the name the browser actually dialled. Raw http.request
+  // because fetch does not let Host be set.
+  const withHost = (host, path = '/api/health', method = 'GET') =>
     new Promise((resolve, reject) => {
       const req = http.request(
-        { host: '127.0.0.1', port: ready.port, path: '/api/health', headers: { Host: host } },
+        { host: '127.0.0.1', port: ready.port, path, method, headers: { Host: host } },
         (res) => {
-          res.resume();
-          resolve(res.statusCode);
+          let body = '';
+          res.on('data', (c) => (body += c));
+          res.on('end', () => resolve({ status: res.statusCode, body }));
         },
       );
       req.on('error', reject);
       req.end();
     });
 
-  assert.equal(await withHost('attacker.example'), 403, 'a rebound hostname is refused');
-  assert.equal(await withHost('attacker.example:1234'), 403, 'with a port too');
+  // Both real consumers: Vite proxies without changeOrigin, so the Host it
+  // forwards is its own, and the packaged app loads 127.0.0.1 on the port above.
+  assert.equal((await withHost('localhost:5173')).status, 200, 'the dev proxy passes');
+  assert.equal((await withHost(`127.0.0.1:${ready.port}`)).status, 200, 'the packaged app passes');
+  assert.equal((await withHost('[::1]')).status, 200);
+  assert.equal((await withHost('rebound.evil.example')).status, 403);
+  assert.equal((await withHost('rebound.evil.example:1234')).status, 403, 'with a port too');
 
   // Host names are case-insensitive, so LOCALHOST names the same machine and
   // refusing it rejects a request that was always legitimate. Paired with the
-  // suffix trick immediately below, spelled in caps on purpose: what does the
+  // prefix and suffix tricks below, spelled in caps on purpose: what does the
   // refusing is the anchors and the digits-only port group, not the letter case,
   // so the `i` flag cannot widen what gets through.
-  assert.equal(await withHost('LOCALHOST:5173'), 200, 'the name is matched case-insensitively');
-  assert.equal(await withHost('127.0.0.1'), 200);
-  assert.equal(await withHost('LOCALHOST.evil.example'), 403, 'and a suffix is still no match');
-  assert.equal(await withHost('evil.example.localhost'), 403, 'nor a prefix');
+  assert.equal((await withHost('LOCALHOST:5173')).status, 200, 'the name is matched case-insensitively');
+  assert.equal((await withHost('127.0.0.1')).status, 200);
+  assert.equal((await withHost('LOCALHOST.evil.example')).status, 403, 'and a suffix is still no match');
+  assert.equal((await withHost('evil.example.localhost')).status, 403, 'nor a prefix');
 
-  // The two consumers that must keep passing it: the packaged app's window, and
-  // a Vite proxy forwarding the dev page's own Host unchanged.
-  assert.equal(await withHost(`127.0.0.1:${ready.port}`), 200, 'the packaged app');
-  assert.equal(await withHost('localhost:5173'), 200, 'the Vite proxy');
+  // A request with NO Host at all, which http.request will not send -- it
+  // substitutes the address it dialled -- so this one goes down a raw socket.
+  // HTTP/1.1 requires the header, and Node's own parser refuses the request with
+  // a 400 before any middleware runs. Asserted so a future change that starts
+  // tolerating a missing Host cannot slip past the middleware above, which reads
+  // an absent Host as '' and would refuse it too.
+  const hostless = await new Promise((resolve, reject) => {
+    const sock = net.connect(ready.port, '127.0.0.1', () =>
+      sock.write('GET /api/health HTTP/1.1\r\nConnection: close\r\n\r\n'),
+    );
+    let raw = '';
+    sock.on('data', (c) => (raw += c));
+    sock.on('end', () => resolve(raw));
+    sock.on('error', reject);
+  });
+  assert.match(hostless.split('\r\n')[0], /^HTTP\/1\.1 (400|403) /, 'a Host-less request is refused');
 
-  // The socket itself, which is the only check the two above cannot make: both
-  // read headers, and a client that is not a browser writes its own. Tested by
-  // dialling a real non-loopback address of this machine rather than by asking
-  // the server what it thinks it bound -- a listener on 0.0.0.0 answers here,
-  // and one on 127.0.0.1 refuses the connection. Skipped where the machine has
-  // no such address to dial, which is a missing test, not a passing one.
+  // And the payload that makes this worth checking: /api/oauth/start's nonce and
+  // challenge are what let an attacker approve their own OpenRouter account
+  // against this flow and have the victim's .env receive THEIR key.
+  const rebound = await withHost('rebound.evil.example', '/api/oauth/start', 'POST');
+  assert.equal(rebound.status, 403);
+  assert.doesNotMatch(rebound.body, /code_challenge/, 'no challenge leaks to a rebound host');
+
+  // The socket itself, which is the only check every assertion above cannot make:
+  // they all read headers, and a client that is not a browser writes its own.
+  // Tested by dialling a real non-loopback address of this machine rather than by
+  // asking the server what it thinks it bound -- a listener on 0.0.0.0 answers
+  // here, and one on 127.0.0.1 refuses the connection. Skipped where the machine
+  // has no such address to dial, which is a missing test, not a passing one.
   const lan = Object.values(os.networkInterfaces())
     .flat()
     .find((n) => n && n.family === 'IPv4' && !n.internal);
@@ -233,6 +332,322 @@ try {
   const page = await fetch(`${base}/index.html`);
   assert.equal(page.status, 200);
   assert.match(await page.text(), /canvas/);
+
+  // The server builds the authorize URL, because only it knows its own port --
+  // the client reaches the API through Vite's proxy in a clone.
+  const startRes = await fetch(`${base}/api/oauth/start`, { method: 'POST' });
+  assert.equal(startRes.status, 200);
+  const { authorizeUrl: started } = await startRes.json();
+  const parsed = new URL(started);
+  assert.equal(parsed.origin + parsed.pathname, 'https://openrouter.ai/auth');
+  assert.equal(parsed.searchParams.get('code_challenge_method'), 'S256');
+  assert.ok(parsed.searchParams.get('code_challenge'), 'a challenge is sent');
+
+  // The callback points back at THIS server, on the port it was actually given
+  // -- PORT=0 means it cannot be a constant.
+  const cb = new URL(parsed.searchParams.get('callback_url'));
+  assert.equal(cb.port, String(ready.port));
+  assert.match(cb.pathname, /^\/api\/oauth\/callback\/[0-9a-f]{32}$/);
+
+  // Cancel answers. That a cancelled attempt cannot then be COMPLETED needs the
+  // callback route, so it is asserted further down, after the happy path has
+  // established that the route works at all.
+  assert.equal((await fetch(`${base}/api/oauth/pending`, { method: 'DELETE' })).status, 200);
+
+  // A nonce nobody issued is refused, and the answer is a PAGE -- this is the
+  // one route a human's browser lands on, and a bare JSON 400 is a dead end.
+  const unknown = await fetch(`${base}/api/oauth/callback/${'0'.repeat(32)}?code=good-code`);
+  assert.equal(unknown.status, 400);
+  assert.match(unknown.headers.get('content-type') || '', /text\/html/);
+
+  // The happy path: start, then complete, and the key lands in the data dir's
+  // .env through the same funnel a pasted key uses.
+  const okStart = await (await fetch(`${base}/api/oauth/start`, { method: 'POST' })).json();
+  const okPath = new URL(new URL(okStart.authorizeUrl).searchParams.get('callback_url')).pathname;
+  const done = await fetch(`${base}${okPath}?code=good-code`);
+  assert.equal(done.status, 200);
+  assert.match(await done.text(), /close this tab/i);
+  assert.match(await fs.readFile(path.join(dataDir, '.env'), 'utf8'), /OPENROUTER_API_KEY=sk-or-v1-stubbedkey1234/);
+
+  // Depends on the happy-path block just above having already written a key into
+  // .env: the route returns before asking anything when there is no key, so
+  // reordering this above that block would assert the wrong branch. The key-info
+  // read goes to the local stub, which answers 401 -- the revoked branch.
+  const readsBefore = keyInfoReads;
+  const status = await fetch(`${base}/api/oauth/status`);
+  assert.equal(status.status, 200);
+  const statusBody = await status.json();
+  assert.equal(statusBody.hasKey, true);
+  assert.equal(statusBody.revoked, true);
+  assert.equal(keyInfoReads, readsBefore + 1, 'the key was read from the local stub, not openrouter.ai');
+  assert.equal('usage' in statusBody, false, 'no spend is claimed for a key that does not work');
+
+  // 403 is the same outcome as 401. Which one a dead key earns is not documented,
+  // and treating only 401 as revoked left the dialog saying "a key is already
+  // saved" about a key that no longer works, with nothing offering a reconnect.
+  keyInfoAnswer = { status: 403, body: { error: { message: 'forbidden' } } };
+  const forbidden = await (await fetch(`${base}/api/oauth/status`)).json();
+  assert.equal(forbidden.revoked, true, '403 is revoked too');
+
+  // The success path, which is the only branch that SHAPES anything and had no
+  // test at all. The values here are deliberately awkward: a cap sent as a
+  // string, which the client would call .toFixed on and crash the whole canvas
+  // since client/src has no error boundary; a label that is a truncated form of
+  // the key, which is what OpenRouter really returns even for a key the user
+  // named while approving; and a limit_reset in an undocumented shape.
+  keyInfoAnswer = {
+    status: 200,
+    body: {
+      data: {
+        label: 'sk-or-v1-abc...123',
+        usage: 1.5,
+        limit: '5.00',
+        limit_remaining: 3.5,
+        limit_reset: 'monthly',
+        expires_at: '2026-09-01T00:00:00.000Z',
+        is_free_tier: false,
+      },
+    },
+  };
+  const live = await (await fetch(`${base}/api/oauth/status`)).json();
+  assert.equal(live.hasKey, true);
+  assert.equal(live.revoked, undefined);
+  assert.equal(live.usage, 1.5);
+  assert.equal(live.limitRemaining, 3.5);
+  assert.equal(live.limit, null, 'a cap that is not a number becomes null, never a string');
+  assert.equal(live.expiresAt, '2026-09-01T00:00:00.000Z');
+  assert.equal('label' in live, false, 'the name is unreachable, so the field is not forwarded');
+  assert.equal('limitReset' in live, false, 'and neither is a value nothing renders');
+
+  // A key with no cap and no expiry, which is what declining both at the
+  // authorization page produces. Both read as null rather than as absent, so the
+  // dialog can tell "no cap" from "we could not ask".
+  keyInfoAnswer = { status: 200, body: { data: { usage: 0, is_free_tier: true } } };
+  const bare = await (await fetch(`${base}/api/oauth/status`)).json();
+  assert.deepEqual(bare, {
+    hasKey: true,
+    usage: 0,
+    limit: null,
+    limitRemaining: null,
+    expiresAt: null,
+    isFreeTier: true,
+  });
+
+  keyInfoAnswer = { status: 401, body: { error: { message: 'no auth credentials found' } } };
+
+  // ...and the same nonce cannot be replayed.
+  assert.equal((await fetch(`${base}${okPath}?code=good-code`)).status, 400);
+
+  // A cancelled attempt cannot be completed either: approving in the browser
+  // after pressing Cancel must not quietly write a key.
+  const abandoned = await (await fetch(`${base}/api/oauth/start`, { method: 'POST' })).json();
+  const abandonedPath = new URL(new URL(abandoned.authorizeUrl).searchParams.get('callback_url')).pathname;
+  await fetch(`${base}/api/oauth/pending`, { method: 'DELETE' });
+  assert.equal((await fetch(`${base}${abandonedPath}?code=good-code`)).status, 400);
+
+  // What the app polls, end to end. Before this route existed it watched
+  // /api/health for a changed key hint, which could only ever detect success -- so
+  // every failure below left the app saying "waiting for OpenRouter in your
+  // browser" for ten minutes about an attempt that was already dead.
+  const poll = () => fetch(`${base}/api/oauth/pending`).then((r) => r.json());
+
+  await fetch(`${base}/api/oauth/pending`, { method: 'DELETE' });
+  assert.deepEqual(await poll(), { state: 'none' }, 'nothing in flight');
+
+  const watched = await (await fetch(`${base}/api/oauth/start`, { method: 'POST' })).json();
+  const watchedPath = new URL(new URL(watched.authorizeUrl).searchParams.get('callback_url')).pathname;
+  const waiting = await poll();
+  assert.equal(waiting.state, 'waiting');
+  // The one function in oauth.js whose output a client reads. Neither the verifier
+  // nor the key may appear in it, whatever else changes about the shape.
+  const waitingRaw = JSON.stringify(waiting);
+  assert.equal(/verifier/i.test(waitingRaw), false, 'no verifier reaches the client');
+  assert.equal(/sk-or-/.test(waitingRaw), false, 'and no key material');
+  assert.deepEqual(Object.keys(waiting).sort(), ['reason', 'state']);
+
+  // A refused code fails the attempt, with OpenRouter's own reason, instead of
+  // leaving the app to time out.
+  assert.equal((await fetch(`${base}${watchedPath}?code=refused-code`)).status, 502);
+  const refusedOutcome = await poll();
+  assert.equal(refusedOutcome.state, 'failed');
+  assert.match(refusedOutcome.reason, /invalid code/, "the upstream reason reaches the app, not just 'it failed'");
+
+  // A callback for a nonce this process never issued must not touch the live
+  // attempt -- otherwise anyone who can reach the callback can strand a flow.
+  await fetch(`${base}/api/oauth/pending`, { method: 'DELETE' });
+  const guarded = await (await fetch(`${base}/api/oauth/start`, { method: 'POST' })).json();
+  const guardedPath = new URL(new URL(guarded.authorizeUrl).searchParams.get('callback_url')).pathname;
+  assert.equal((await fetch(`${base}/api/oauth/callback/${'f'.repeat(32)}?code=good-code`)).status, 400);
+  assert.equal((await poll()).state, 'waiting', 'a stranger cannot fail my attempt');
+
+  // And the happy path reports done, once, even if the callback is replayed.
+  assert.equal((await fetch(`${base}${guardedPath}?code=good-code`)).status, 200);
+  assert.deepEqual(await poll(), { state: 'done', reason: '' });
+  assert.equal((await fetch(`${base}${guardedPath}?code=good-code`)).status, 400, 'the replay is refused');
+  assert.deepEqual(await poll(), { state: 'done', reason: '' }, 'and does not rewrite the outcome');
+
+  // Removing the key cancels a live attempt too, which is the case Cancel does
+  // not cover: the attempt outlives the client state that started it, so a user
+  // who presses Connect, reloads, then removes the key still has an approval on
+  // its way back. Without this the key returns minutes after the app said it was
+  // gone -- and the renders this route just failed stay failed.
+  const orphan = await (await fetch(`${base}/api/oauth/start`, { method: 'POST' })).json();
+  const orphanPath = new URL(new URL(orphan.authorizeUrl).searchParams.get('callback_url')).pathname;
+  assert.equal((await fetch(`${base}/api/key`, { method: 'DELETE' })).status, 200);
+  assert.doesNotMatch(
+    await fs.readFile(path.join(dataDir, '.env'), 'utf8'),
+    /^OPENROUTER_API_KEY=/m,
+    'the key line is gone',
+  );
+  assert.equal((await fetch(`${base}${orphanPath}?code=good-code`)).status, 400, 'the approval is refused');
+  assert.doesNotMatch(
+    await fs.readFile(path.join(dataDir, '.env'), 'utf8'),
+    /^OPENROUTER_API_KEY=/m,
+    'and nothing wrote it back',
+  );
+
+  // The SAME case as the orphan block above, in the ordering that block does not
+  // cover: DELETE /api/key arriving AFTER the callback has claimed the verifier and
+  // while the exchange is still in flight. oauthCancel() only empties the store, and
+  // the store is not what the write path consults -- so before the liveness check
+  // the callback wrote the key back to a .env the app had just reported empty, and
+  // said "Connected to OpenRouter" while doing it. Three documents promise this
+  // cannot happen (README, CHANGELOG, and CLAUDE.md), and the assertion above agreed
+  // with them because it only ever tested the easy half.
+  const cancelRace = await (await fetch(`${base}/api/oauth/start`, { method: 'POST' })).json();
+  const cancelRacePath = new URL(new URL(cancelRace.authorizeUrl).searchParams.get('callback_url')).pathname;
+  // Not awaited: the callback has to be mid-exchange when the delete lands.
+  const inFlight = fetch(`${base}${cancelRacePath}?code=slow-code`);
+  await new Promise((r) => setTimeout(r, 250)); // inside the stub's 700ms
+  assert.equal((await fetch(`${base}/api/key`, { method: 'DELETE' })).status, 200);
+  const lateExchange = await inFlight;
+  assert.equal(lateExchange.status, 409, 'a cancelled attempt does not get to save a key');
+  assert.match(await lateExchange.text(), /cancell?ed/i);
+  assert.doesNotMatch(
+    await fs.readFile(path.join(dataDir, '.env'), 'utf8'),
+    /^OPENROUTER_API_KEY=/m,
+    'and the key the user removed stays removed',
+  );
+  // The live process too, not just the file -- generations read the binding.
+  assert.equal((await (await fetch(`${base}/api/health`)).json()).hasKey, false);
+
+  // Saving a pasted key is the same act as removing one: it settles which
+  // credential the app uses, so an approval still in flight must not overwrite it.
+  // PUT /api/config had no cancel at all, so the later exchange silently won -- and
+  // it always won, because a network round trip is slower than a local PUT.
+  const pasted = await (await fetch(`${base}/api/oauth/start`, { method: 'POST' })).json();
+  const pastedPath = new URL(new URL(pasted.authorizeUrl).searchParams.get('callback_url')).pathname;
+  assert.equal(
+    (
+      await fetch(`${base}/api/config`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ key: 'sk-or-v1-thepastedonewins' }),
+      })
+    ).status,
+    200,
+  );
+  assert.equal((await fetch(`${base}${pastedPath}?code=good-code`)).status, 400, 'the approval is refused');
+  assert.match(
+    await fs.readFile(path.join(dataDir, '.env'), 'utf8'),
+    /^OPENROUTER_API_KEY=sk-or-v1-thepastedonewins$/m,
+    'the key the user typed is the key that survives',
+  );
+
+  // Finding 01: DELETE /api/oauth/pending -- what the Cancel button calls -- must
+  // undo a key the callback already committed, the way DELETE /api/key does.
+  // Before the fix it only emptied the store and wrote no null, so a key the user
+  // cancelled stayed live on disk while the poll, seeing the emptied store, told
+  // them the connection was lost. The callback runs to completion here, then the
+  // cancel lands: the write's async fs I/O lets a cancel interleave after the
+  // commit check, and the outcome is the same whether it lands during the write or
+  // just after it -- the store carries no way to undo a committed key.
+  await fetch(`${base}/api/key`, { method: 'DELETE' }); // keyless precondition
+  const installStart = await (await fetch(`${base}/api/oauth/start`, { method: 'POST' })).json();
+  const installPath = new URL(new URL(installStart.authorizeUrl).searchParams.get('callback_url')).pathname;
+  assert.equal((await fetch(`${base}${installPath}?code=good-code`)).status, 200, 'the callback commits a key');
+  assert.equal((await fetch(`${base}/api/oauth/pending`, { method: 'DELETE' })).status, 200);
+  assert.doesNotMatch(
+    await fs.readFile(path.join(dataDir, '.env'), 'utf8'),
+    /^OPENROUTER_API_KEY=/m,
+    'Cancel undoes the key it caused to be written, so none is left on disk',
+  );
+  assert.equal((await (await fetch(`${base}/api/health`)).json()).hasKey, false,
+    'and the live process is not holding it either');
+
+  // The other half of that fix must NOT over-reach: cancelling an attempt that was
+  // never approved leaves a PRE-EXISTING key untouched. This is the case a blunt
+  // "Cancel always clears the key" would break -- a reconnect the user abandons.
+  await fetch(`${base}/api/config`, {
+    method: 'PUT', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ key: 'sk-or-v1-preexistingkeepme00' }),
+  });
+  await fetch(`${base}/api/oauth/start`, { method: 'POST' }); // waiting, never approved
+  assert.equal((await fetch(`${base}/api/oauth/pending`, { method: 'DELETE' })).status, 200);
+  assert.match(
+    await fs.readFile(path.join(dataDir, '.env'), 'utf8'),
+    /^OPENROUTER_API_KEY=sk-or-v1-preexistingkeepme00$/m,
+    'cancelling an unapproved attempt does not touch the key already saved',
+  );
+
+  // Restored, because the assertions after this block expect a key to exist --
+  // and sent as four CONCURRENT writes, which is the point. Every .env write is a
+  // read-modify-write, so without a queue two of them racing drop one's update
+  // silently: each reads the same text and the last writer wins. Four at once
+  // makes that near-certain rather than occasional. The OAuth callback is what
+  // brought this within reach, since it lands on browser timing rather than on a
+  // click, while Save stays deliberately live during a connect.
+  const settled = await Promise.all(
+    [
+      { key: 'sk-or-v1-restoredforlatertests' },
+      { imageModel: 'stub/concurrent-image' },
+      { textModel: 'stub/concurrent-text' },
+      { videoModel: 'stub/concurrent-video' },
+    ].map((body) =>
+      fetch(`${base}/api/config`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      }).then((r) => r.status),
+    ),
+  );
+  assert.deepEqual(settled, [200, 200, 200, 200]);
+  const raced = await fs.readFile(path.join(dataDir, '.env'), 'utf8');
+  for (const line of [
+    'OPENROUTER_API_KEY=sk-or-v1-restoredforlatertests',
+    'OPENROUTER_IMAGE_MODEL=stub/concurrent-image',
+    'OPENROUTER_TEXT_MODEL=stub/concurrent-text',
+    'OPENROUTER_VIDEO_MODEL=stub/concurrent-video',
+  ]) {
+    assert.match(raced, new RegExp(`^${line.replace('/', '\\/')}$`, 'm'), `${line} survived the race`);
+  }
+
+  // A callback with no code at all is refused before anything is exchanged.
+  const codeless = await (await fetch(`${base}/api/oauth/start`, { method: 'POST' })).json();
+  const codelessPath = new URL(new URL(codeless.authorizeUrl).searchParams.get('callback_url')).pathname;
+  assert.equal((await fetch(`${base}${codelessPath}`)).status, 400);
+
+  // A key in a shape we cannot safely write is refused. It would otherwise reach
+  // .env and an HTTP header -- the trust boundary applies to a provider's answer
+  // exactly as it does to a paste.
+  const badStart = await (await fetch(`${base}/api/oauth/start`, { method: 'POST' })).json();
+  const badPath = new URL(new URL(badStart.authorizeUrl).searchParams.get('callback_url')).pathname;
+  const malformed = await fetch(`${base}${badPath}?code=malformed-key-code`);
+  assert.equal(malformed.status, 502);
+  assert.match(await malformed.text(), /shape/i);
+  // Nothing was saved -- the page's own promise, and the point of validating
+  // before writing at all.
+  assert.doesNotMatch(
+    await fs.readFile(path.join(dataDir, '.env'), 'utf8'),
+    /not-a-key/,
+  );
+
+  // An upstream refusal is reported, not swallowed, and still as a page.
+  const refusedStart = await (await fetch(`${base}/api/oauth/start`, { method: 'POST' })).json();
+  const refusedPath = new URL(new URL(refusedStart.authorizeUrl).searchParams.get('callback_url')).pathname;
+  const refusedCallback = await fetch(`${base}${refusedPath}?code=refused-code`);
+  assert.equal(refusedCallback.status, 502);
+  assert.match(refusedCallback.headers.get('content-type') || '', /text\/html/);
 
   // A setting saved from the UI lands in the data dir, not in the repo.
   const put = await fetch(`${base}/api/config`, {
@@ -878,6 +1293,7 @@ try {
   child.kill();
   await new Promise((resolve) => statusStub.close(resolve));
   await new Promise((resolve) => midBodyStub.close(resolve));
+  await new Promise((resolve) => authKeyStub.close(resolve));
   await fs.rm(dataDir, { recursive: true, force: true });
 }
 

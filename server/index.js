@@ -5,7 +5,7 @@ import dotenv from 'dotenv';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { upsertEnv, PATTERNS, envFile, outputPath } from './env.js';
+import { upsertEnv, PATTERNS, envFile, outputPath, writeEnvFile } from './env.js';
 import { readPresets, writePresets } from './presets.js';
 import {
   readJobs,
@@ -19,6 +19,16 @@ import {
   reassignPendingJobs,
 } from './jobs.js';
 import { ensureTunnel, mintShare, revokeShare, waitUntilPublic, stopTunnel } from './share.js';
+import {
+  start as oauthStart,
+  cancel as oauthCancel,
+  claim as oauthClaim,
+  resolve as oauthResolve,
+  peek as oauthPeek,
+  commit as oauthCommit,
+  authorizeUrl,
+  callbackUrl,
+} from './oauth.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, '..');
@@ -46,15 +56,28 @@ let API_KEY = process.env.OPENROUTER_API_KEY;
 let OUTPUT_DIR = outputPath(ROOT, process.env.OUTPUT_DIR);
 
 const app = express();
-// Loopback only. A wide-open ACAO let any page the user happened to be visiting
-// read this API cross-origin -- /api/health alone carries the key hint, the model
-// settings and the output path -- and call DELETE /api/key. Neither real consumer
-// needs CORS at all: Vite proxies server-side, so no browser origin is involved,
-// and a packaged app is same-origin (see the note below). The allowlist rather
-// than nothing is for local tooling, and it is a real boundary because the browser
-// sets Origin, not the page.
+// NOTHING is readable cross-origin. Not an allowlist of loopback origins, which
+// is what this was: a wide-open ACAO let any page the user was visiting read this
+// API -- /api/health alone carries the key hint, the model settings and the output
+// path -- and narrowing it to loopback still handed a readable API to any page on
+// any other loopback port, which is another dev server, or an XSS in some
+// locally-hosted tool's web UI. POST /api/oauth/start is what made that worth
+// closing rather than documenting: its reply carries the nonce and the challenge,
+// and anything that can read those can approve the challenge against its OWN
+// OpenRouter account and have this server write the resulting key into the user's
+// .env.
+//
+// Echoing nothing costs nothing, because neither real consumer is EVER cross-origin
+// from the browser's point of view. Every client call is relative, so the browser
+// talks to Vite same-origin and Vite proxies server-side, where no CORS check
+// exists -- the Origin the engine sees there is one the proxy forwarded, and the
+// browser never looks for a matching ACAO. The packaged app is same-origin with the
+// engine outright. share.js is its own http server, so the tunnel is untouched.
+//
+// LOOPBACK_ORIGIN stays, for the middleware below, which does a different job:
+// refusing the REQUEST rather than declining to make the reply readable.
 const LOOPBACK_ORIGIN = /^https?:\/\/(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$/i;
-app.use(cors({ origin: (origin, cb) => cb(null, !origin || LOOPBACK_ORIGIN.test(origin)) }));
+app.use(cors({ origin: false }));
 // Two things the line above cannot do. Neither is redundant with it, and neither
 // is redundant with the other.
 //
@@ -134,20 +157,41 @@ app.get('/api/health', (req, res) => {
   res.json({ ok: true, model: IMAGE_MODEL, ...settings() });
 });
 
-async function writeEnv(updates) {
-  const file = envFile(ROOT);
-  // ENOENT is the normal first run -- no .env yet -- so treat that as empty and
-  // create one. Any OTHER read error (a permissions problem, an I/O fault) must
-  // NOT become "": upsertEnv on an empty string emits only this request's fields
-  // and drops every existing line, the key included, and the route would answer
-  // 200 while the key vanished from disk, surfacing as a dead key at the next
-  // restart with nothing able to re-fetch it. Rethrow, and the route's try/catch
-  // turns it into a 500 the user can act on.
-  const text = await fs.readFile(file, 'utf8').catch((err) => {
-    if (err.code === 'ENOENT') return '';
-    throw err;
+// Queued onto one promise chain, the way persistJob queues jobs.json writes and
+// for the same reason: this is a read-modify-write, and two of them interleaving
+// drop one's update silently. Every caller used to be a click in the one open
+// settings dialog, so overlap was not really reachable -- the OAuth callback
+// changed that, since it lands whenever the user approves in a browser tab while
+// Save stays deliberately live. The two orders lose different things and neither
+// announces itself: the key written but OUTPUT_DIR reverted on disk while memory
+// holds the new one (which strands the pending video records that were already
+// moved), or the folder saved and the key line gone while API_KEY is set.
+let envWrites = Promise.resolve();
+function writeEnv(updates) {
+  const result = envWrites.then(async () => {
+    const file = envFile(ROOT);
+    // ENOENT is the normal first run -- no .env yet -- so treat that as empty and
+    // create one. Any OTHER read error (a permissions problem, an I/O fault) must
+    // NOT become "": upsertEnv on an empty string emits only this request's fields
+    // and drops every existing line, the key included, and the route would answer
+    // 200 while the key vanished from disk, surfacing as a dead key at the next
+    // restart with nothing able to re-fetch it. Rethrow, and the route's try/catch
+    // turns it into a 500 the user can act on.
+    const text = await fs.readFile(file, 'utf8').catch((err) => {
+      if (err.code === 'ENOENT') return '';
+      throw err;
+    });
+    // 0600 and temp-then-rename, both in env.js with the rest of the funnel's
+    // rules. See writeEnvFile: the queue below stops two writes interleaving,
+    // which is a different failure from a write that is interrupted partway.
+    await writeEnvFile(file, upsertEnv(text, updates));
   });
-  await fs.writeFile(file, upsertEnv(text, updates));
+  // The chain the NEXT write waits on never carries a rejection, so one failed
+  // write cannot poison every later one. The caller still sees its own failure,
+  // through `result`; both branches are handled, so a rejection here can never
+  // reach the unhandled-rejection handler and take the process down.
+  envWrites = result.catch(() => {});
+  return result;
 }
 
 // Save settings typed into the UI, so a fresh clone doesn't have to hand-edit
@@ -186,6 +230,18 @@ app.put('/api/config', async (req, res) => {
   // Writing the image model retires the old OPENROUTER_MODEL name, so an upgraded
   // .env doesn't keep two lines that disagree.
   if (updates.OPENROUTER_IMAGE_MODEL) updates.OPENROUTER_MODEL = null;
+
+  // A pasted key is the same act as removing one: it settles which credential this
+  // app uses, so an approval still on its way back must not overwrite it. It always
+  // won before, because a network round trip is slower than a local PUT. Done HERE,
+  // synchronously, after validation and BEFORE any await: placed later -- behind the
+  // mkdir and the job-copy below, as it first was -- a Save issued just before the
+  // user pressed Connect could land its cancel AFTER that Connect created a fresh
+  // attempt and kill it. The only cost of the early spot is that a save which then
+  // fails on an unusable folder has already cancelled the attempt; that needs a key
+  // AND a bad folder AND a connect in flight at once, and cancelling is the right
+  // call the moment a key is deliberately chosen anyway.
+  if (updates.OPENROUTER_API_KEY) oauthCancel();
 
   // The folder has to be usable before it is saved, or every later generation
   // fails with a disk error instead of a message you can act on.
@@ -298,6 +354,14 @@ app.put('/api/config', async (req, res) => {
 });
 
 app.delete('/api/key', async (req, res) => {
+  // First, and server-side rather than in whichever client asked, because a live
+  // OAuth attempt outlives the client state that started it: the browser tab is
+  // still open, `connecting` is gone after a reload, and a second window never
+  // had it. Without this, approving after Remove key writes a key straight back
+  // and the app has said it was removed -- undoing, minutes later, the one action
+  // whose own comment below calls it a security act. Cancel is idempotent, so
+  // there is nothing to check first.
+  oauthCancel();
   try {
     // null drops the whole line rather than blanking the value, so a
     // shell-provided OPENROUTER_API_KEY isn't overridden with an empty string on
@@ -334,6 +398,291 @@ app.delete('/api/key', async (req, res) => {
     console.log(`  ${renderCleanupError}`);
   }
   res.json({ ok: true, endedRenders: ended, ...(renderCleanupError ? { renderCleanupError } : {}), ...settings() });
+});
+
+// Begins the browser flow. Nothing here awaits, so there is nothing to catch --
+// the code_verifier is minted and held in oauth.js and never reaches the client.
+//
+// This is the response the request guards at the top of this file exist for: it
+// carries the nonce and the challenge, which is everything needed to approve that
+// challenge against someone else's OpenRouter account and have this server write
+// THEIR key into the user's .env. Nothing is echoed cross-origin, so no page can
+// read it and the nonce stays a 128-bit secret.
+//
+// One residual, stated because it is real and small: a page on some other loopback
+// port can still FIRE this route without reading the reply -- a cross-origin POST
+// with no body and no custom header needs no preflight. That supersedes a pending
+// attempt, so a user mid-connect could be told the connection was lost. It cannot
+// learn the nonce, so it cannot install a key, which is the part that mattered.
+app.post('/api/oauth/start', (req, res) => {
+  const { nonce, challenge } = oauthStart();
+  const callback = callbackUrl({
+    port: server.address().port,
+    nonce,
+    // Unset in a clone, which means direct loopback: the development mode, and
+    // the fallback when the public page is unreachable. Set, it names the public
+    // bounce page, which exists only so the consent screen can say "Unframed"
+    // instead of "127.0.0.1:51423".
+    bounce: process.env.UNFRAMED_OAUTH_BOUNCE,
+  });
+  res.json({ authorizeUrl: authorizeUrl({ callback, challenge }) });
+});
+
+// Cancel is a real action, not just a UI reset: without it, approving in the
+// browser after pressing Cancel would still write a key, and the app would have
+// said the attempt was cancelled.
+app.delete('/api/oauth/pending', async (req, res) => {
+  // Cancel is what the button sends, and it has to be able to UNDO a key the
+  // callback already committed -- otherwise a key the user cancelled stays live on
+  // disk while the poll, seeing the emptied store, reports the connection lost.
+  // oauthCancel returns whether a committed write is in flight (or landed); only
+  // then is a null-write queued, the same one DELETE /api/key uses, so it lands
+  // behind the callback's key-write and removes it. A not-yet-approved attempt
+  // wrote nothing, so this leaves any pre-existing key alone.
+  if (oauthCancel()) {
+    try {
+      await writeEnv({ OPENROUTER_API_KEY: null });
+      API_KEY = '';
+    } catch (err) {
+      return res
+        .status(500)
+        .json({ error: `Could not remove the key the cancelled connection had written: ${err.message}` });
+    }
+  }
+  res.json({ ok: true });
+});
+
+// What the app polls while a connection is pending. It used to watch /api/health
+// for a changed key hint, which had two problems: a hint is the last 4 characters
+// of the key, so a reconnect that happened to mint a key ending the same way read
+// as a failure and told the user to try again -- minting yet another key -- and a
+// hint can only ever go up, so none of the callback's failures were visible at all
+// and the app waited out ten minutes on an attempt that was already dead.
+//
+// Answers the state and a sentence, nothing else: peek() is the one function in
+// oauth.js whose output is shaped for a client, and neither the verifier nor the
+// key may leave this process. No nonce is needed, because there is only ever one
+// attempt -- which also means the client never has to parse one back out of the
+// authorize URL it was handed.
+app.get('/api/oauth/pending', (req, res) => {
+  res.json(oauthPeek() || { state: 'none' });
+});
+
+// Unset -- and therefore inert -- in every real environment; the forked test
+// server points it at a local stub, because the real exchange needs a human
+// approving in a browser. Same pattern as UNFRAMED_TEST_VIDEOS_STATUS_BASE.
+const AUTH_KEYS_URL =
+  process.env.UNFRAMED_TEST_AUTH_KEYS_URL || 'https://openrouter.ai/api/v1/auth/keys';
+
+// Same pattern, for the key-info route /api/oauth/status reads. Unset, and
+// therefore inert, in every real environment.
+const KEY_INFO_URL = process.env.UNFRAMED_TEST_KEY_URL || 'https://openrouter.ai/api/v1/key';
+
+// The callback lands in a browser tab, so every branch answers with a readable
+// page rather than JSON. Self-contained on purpose: this server does not know
+// where the canvas lives -- :5173 in a clone, its own port in the packaged app --
+// so it cannot redirect anywhere, and says so instead.
+//
+// Escaped here rather than at each call site: two call sites interpolate text
+// that did not originate in this code (OpenRouter's error string, err.message),
+// and this page is served from the same origin as every /api route.
+const escapeHtml = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+const oauthPage = (heading, detail) =>
+  `<!doctype html><meta charset="utf-8"><title>Unframed</title>` +
+  // Explicit background + text colour, not left to prefers-color-scheme: a
+  // transparent body over a browser defaulting to dark paints black text on a
+  // dark canvas. Matching Unframed's own dark surface (#111112 / #DFE2E5,
+  // from the design system's dark tokens) makes the tab feel like part of the
+  // app instead of an unstyled page; color-scheme keeps form controls in step.
+  `<body style="background:#111112;color:#DFE2E5;color-scheme:dark;margin:0">` +
+  `<div style="font:16px/1.5 system-ui;margin:12vh auto;max-width:32em;padding:0 1.5em">` +
+  `<h1 style="font-size:1.3em">${escapeHtml(heading)}</h1><p>${escapeHtml(detail)}</p></div></body>`;
+
+app.get('/api/oauth/callback/:nonce', async (req, res) => {
+  const { nonce } = req.params;
+  // Every exit below records how the attempt ended, because this page is read in a
+  // browser tab and the app is a separate window that the user may already have
+  // gone back to. Before the record existed, the app watched /api/health for a
+  // changed key hint -- which only ever detects success -- so all five failures
+  // here left it saying "waiting for OpenRouter in your browser" for the full ten
+  // minutes about an attempt that was already dead.
+  //
+  // resolve() is a no-op for a nonce this process never issued, so the unknown-
+  // nonce branch cannot fail a legitimate attempt someone is waiting on, and a
+  // no-op once an outcome is recorded, so a replay cannot rewrite a success.
+  const fail = (status, heading, detail) => {
+    oauthResolve(nonce, 'failed', detail);
+    return res.status(status).send(oauthPage(heading, detail));
+  };
+
+  // Single-use: claim() hands the verifier out once, so a replayed callback and a
+  // superseded one both land here.
+  const verifier = oauthClaim(nonce);
+  if (!verifier) {
+    return res
+      .status(400)
+      .send(oauthPage('That link is no longer valid', 'Close this tab and press Connect in Unframed again.'));
+  }
+  const code = String(req.query.code || '');
+  if (!code) {
+    return fail(
+      400,
+      'OpenRouter did not send a code',
+      'Close this tab and press Connect in Unframed again.',
+    );
+  }
+  let data;
+  let orRes;
+  try {
+    orRes = await fetch(AUTH_KEYS_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      // The method must match what the authorize URL declared, or this 400s.
+      body: JSON.stringify({ code, code_verifier: verifier, code_challenge_method: 'S256' }),
+      // Node's fetch has no default timeout, and this is the least recoverable
+      // place to hang: the nonce was consumed by claim() above, so the attempt is
+      // already spent, and a human is watching the tab it would spin in. Longer
+      // than the status route's 10s because this one is minting a credential and
+      // a retry costs the user another approval.
+      signal: AbortSignal.timeout(30_000),
+    });
+    data = await orRes.json().catch(() => ({}));
+  } catch (err) {
+    // The fetch can reject, and an unhandled rejection exits the process -- not a
+    // failed request but a dead server.
+    return fail(502, 'Could not reach OpenRouter', err.message);
+  }
+
+  if (!orRes.ok || !data.key) {
+    return fail(
+      502,
+      'OpenRouter could not complete the connection',
+      // Same extraction as the generation routes, but its own fallback: the body
+      // here is JSON already parsed, so there is no raw text to fall back on, and
+      // a status number alone is not a sentence.
+      upstreamMessage(data) || `It answered ${orRes.status}. Try connecting again.`,
+    );
+  }
+  // Same trust boundary as a paste: this value reaches .env and an auth header.
+  // The message differs because "sk-or-v1-" is not a documented contract, so a
+  // failure here is about OUR expectations, not the user's typing.
+  if (!PATTERNS.OPENROUTER_API_KEY.test(data.key)) {
+    return fail(
+      502,
+      'OpenRouter returned a key in a shape Unframed does not recognise',
+      'Nothing was saved. You can paste a key manually in Unframed’s settings instead.',
+    );
+  }
+
+  // Its own catch, and its own wording. By this point OpenRouter HAS been reached
+  // and HAS minted a key on the user's account, so reporting a write failure as
+  // "could not reach OpenRouter" points them at the wrong system entirely -- and
+  // since nothing can re-fetch the key and every reconnect mints another, the row
+  // it left behind is worth telling them about.
+  // Between claim() above and this line, the process has been out on the network
+  // for up to thirty seconds, and in that time two things can have settled which
+  // key this app uses: DELETE /api/key, or a key pasted through PUT /api/config.
+  // Both cancel the attempt, and both were invisible here, because cancelling
+  // empties oauth.js and oauth.js is not what the write path reads -- so the
+  // callback wrote the key back into a .env the app had just reported empty, and
+  // rendered "Connected to OpenRouter" while doing it. That undoes the one action
+  // DELETE /api/key's own comment calls a security act.
+  //
+  // Asked here rather than earlier, and with NO await between the question and the
+  // writeEnv call below: writeEnv takes its slot on the queue synchronously, so
+  // nothing can interleave between the two. A cancel that lands after the slot is
+  // taken is harmless -- its own null-write queues behind this one, so the key ends
+  // up removed either way, which is what was asked for.
+  if (!oauthCommit(nonce)) {
+    return res
+      .status(409)
+      .send(
+        oauthPage(
+          'That connection was cancelled',
+          'Nothing was saved, and Unframed is still using whichever key you chose instead. ' +
+            'OpenRouter did create a key just now, so delete that row at openrouter.ai/settings/keys.',
+        ),
+      );
+  }
+  try {
+    await writeEnv({ OPENROUTER_API_KEY: data.key });
+  } catch (err) {
+    return fail(
+      500,
+      'OpenRouter created a key, but Unframed could not save it',
+      `${err.message}. The key exists in your OpenRouter account — you can delete it at openrouter.ai/settings/keys and try connecting again.`,
+    );
+  }
+  API_KEY = data.key;
+  oauthResolve(nonce, 'done');
+  console.log('  oauth:    connected, key saved');
+  return res.send(
+    oauthPage('Connected to OpenRouter', 'You can close this tab and return to Unframed.'),
+  );
+});
+
+// What the settings dialog shows about the connection. Separate from
+// /api/health on purpose: health runs on every page load and must answer
+// without OpenRouter, while this one is opened deliberately and may be slow.
+//
+// Everything here is PER KEY, not per account: the spend, the cap and the expiry
+// all belong to this one credential, and a $1 cap can sit inside an account
+// holding $30. The account's own balance is a second call (GET /api/v1/credits,
+// which a user's key CAN read -- verified 2026-08-20 against a real account,
+// contradicting the docs and this feature's own spec) and is deliberately not
+// folded in here, because it answers a different question and nothing in the
+// dialog distinguishes the two numbers yet.
+//
+// The key's human NAME is not reachable. The console shows one, but
+// GET /api/v1/key returns `label` as a truncated form of the key itself even for
+// a key the user named while approving, and the routes that would return the name
+// (/api/v1/keys, /api/v1/keys/current) answer 401 Invalid management key -- a
+// management key being ours, not theirs. So nothing here can say "connected as
+// my-laptop", and the field is not forwarded.
+app.get('/api/oauth/status', async (req, res) => {
+  if (!API_KEY) return res.json({ hasKey: false });
+  try {
+    const orRes = await fetch(KEY_INFO_URL, {
+      headers: { Authorization: `Bearer ${API_KEY}` },
+      signal: AbortSignal.timeout(10_000),
+    });
+    // Revoked, disabled or expired upstream. Today that surfaces as a mystery
+    // generation failure; here the dialog can name it and offer to reconnect.
+    // 403 counts as well as 401: which one a dead key earns is not a documented
+    // contract, and the difference decides whether the user is told to reconnect
+    // or shown "a key is already saved" about a key that no longer works.
+    if (orRes.status === 401 || orRes.status === 403) {
+      return res.json({ hasKey: true, revoked: true });
+    }
+    const body = await orRes.json().catch(() => ({}));
+    if (!orRes.ok || !body.data) {
+      return res.status(502).json({ error: `OpenRouter answered ${orRes.status}.` });
+    }
+    const d = body.data;
+    // Coerced here rather than trusted in the render: the client does arithmetic
+    // on these, there is no error boundary in client/src, and a string where a
+    // number was expected would blank the whole canvas rather than one line of
+    // copy. This field's shape has already surprised us once -- the spec
+    // predicted null for a connected key and a real one came back capped.
+    const num = (v) => (Number.isFinite(v) ? v : null);
+    res.json({
+      hasKey: true,
+      usage: num(d.usage) || 0,
+      // A cap is the ORDINARY outcome, not the exotic one: the authorization page
+      // offers one while the user approves. So this is the main warning before
+      // generation stops, and null means they declined it rather than that the
+      // flow cannot produce one.
+      limit: num(d.limit),
+      limitRemaining: num(d.limit_remaining),
+      // Set when the user gave the key an expiry while approving. Nothing renews
+      // it -- the credential has no refresh mechanism -- so the only useful thing
+      // to do with it is say so before the key lapses instead of after.
+      expiresAt: typeof d.expires_at === 'string' ? d.expires_at : null,
+      isFreeTier: Boolean(d.is_free_tier),
+    });
+  } catch (err) {
+    res.status(502).json({ error: err.message });
+  }
 });
 
 // Native folder chooser for the output directory. The browser cannot hand back a
@@ -528,6 +877,39 @@ const CHAT_COMPLETIONS_URL =
 // Only the /api/text call site is pinned by a test (its stub can die
 // mid-body); /api/generate and /api/video hit hardcoded URLs, so their
 // identical two-line call sites are covered by inspection, not by a test.
+// A non-2xx from OpenRouter, turned into something a route can answer with. Both
+// halves were copied into /api/text, /api/video and /api/generate, and the copies
+// had already drifted -- two of the three had lost the comment explaining why the
+// 402 names two causes. One home, because that sentence carries two different
+// fixes for two different problems and must not disagree with itself.
+function upstreamMessage(data, raw = '') {
+  // Guarded rather than a bare `||`: an object-shaped upstream error would
+  // otherwise render as [object Object] inside a sentence.
+  return (
+    (typeof data?.error?.message === 'string' && data.error.message) ||
+    (typeof data?.error === 'string' && data.error) ||
+    raw.slice(0, 300)
+  );
+}
+
+// is_free_tier (in /api/oauth/status) doesn't catch a user who paid once and ran
+// dry, so the 402 is still where that arrives. OpenRouter answers 402 for a key's
+// own spending cap too, where adding credit is NOT the fix -- and a capped key is
+// the common case, not the exotic one the docs imply, since the authorization page
+// offers a cap while the user approves (verified 2026-08-20). So this names both
+// causes rather than asserting one, and keeps the upstream message, which is the
+// only thing that says which of the two actually happened.
+function upstreamError(orRes, data, raw) {
+  const msg = upstreamMessage(data, raw);
+  if (orRes.status === 402) {
+    return {
+      status: 402,
+      error: `OpenRouter refused this as unpaid: either the account is out of credit, or this key has hit its own spending cap. Add credit at openrouter.ai/credits, or check the key's cap at openrouter.ai/settings/keys. (${msg})`,
+    };
+  }
+  return { status: orRes.status, error: `OpenRouter (${orRes.status}): ${msg}` };
+}
+
 async function readUpstreamBody(orRes, what) {
   try {
     return { raw: await orRes.text() };
@@ -607,8 +989,8 @@ app.post('/api/text', async (req, res) => {
   }
 
   if (!orRes.ok) {
-    const msg = data?.error?.message || data?.error || raw.slice(0, 300);
-    return res.status(orRes.status).json({ error: `OpenRouter (${orRes.status}): ${msg}` });
+    const fail = upstreamError(orRes, data, raw);
+    return res.status(fail.status).json({ error: fail.error });
   }
 
   const text = data?.choices?.[0]?.message?.content;
@@ -979,8 +1361,8 @@ app.post('/api/video', async (req, res) => {
   }
   if (!orRes.ok) {
     for (const t of mintedTokens) revokeShare(t);
-    const msg = data?.error?.message || data?.error || raw.slice(0, 300);
-    return res.status(orRes.status).json({ error: `OpenRouter (${orRes.status}): ${msg}` });
+    const fail = upstreamError(orRes, data, raw);
+    return res.status(fail.status).json({ error: fail.error });
   }
   if (!data?.id) {
     for (const t of mintedTokens) revokeShare(t);
@@ -1122,8 +1504,11 @@ async function fetchVideoStatus(id) {
     return { ok: false, httpStatus: 502, upstreamError: `Unexpected response from OpenRouter: ${raw.slice(0, 300)}` };
   }
   if (!r.ok) {
-    const msg = data?.error?.message || data?.error || raw.slice(0, 300);
-    return { ok: false, httpStatus: r.status, upstreamError: `OpenRouter (${r.status}): ${msg}` };
+    return {
+      ok: false,
+      httpStatus: r.status,
+      upstreamError: `OpenRouter (${r.status}): ${upstreamMessage(data, raw)}`,
+    };
   }
   return { ok: true, data };
 }
@@ -1565,8 +1950,8 @@ app.post('/api/generate', async (req, res) => {
   }
 
   if (!orRes.ok) {
-    const msg = data?.error?.message || data?.error || raw.slice(0, 300);
-    return res.status(orRes.status).json({ error: `OpenRouter (${orRes.status}): ${msg}` });
+    const fail = upstreamError(orRes, data, raw);
+    return res.status(fail.status).json({ error: fail.error });
   }
 
   const first = data?.data?.[0];
