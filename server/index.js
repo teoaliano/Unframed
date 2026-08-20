@@ -5,7 +5,7 @@ import dotenv from 'dotenv';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { upsertEnv, PATTERNS, envFile, outputPath } from './env.js';
+import { upsertEnv, PATTERNS, envFile, outputPath, writeEnvFile } from './env.js';
 import { readPresets, writePresets } from './presets.js';
 import {
   readJobs,
@@ -158,7 +158,10 @@ function writeEnv(updates) {
   const result = envWrites.then(async () => {
     const file = envFile(ROOT);
     const text = await fs.readFile(file, 'utf8').catch(() => '');
-    await fs.writeFile(file, upsertEnv(text, updates));
+    // 0600 and temp-then-rename, both in env.js with the rest of the funnel's
+    // rules. See writeEnvFile: the queue below stops two writes interleaving,
+    // which is a different failure from a write that is interrupted partway.
+    await writeEnvFile(file, upsertEnv(text, updates));
   });
   // The chain the NEXT write waits on never carries a rejection, so one failed
   // write cannot poison every later one. The caller still sees its own failure,

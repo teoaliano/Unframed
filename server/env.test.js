@@ -1,6 +1,9 @@
 // node server/env.test.js  (also runs as part of `npm test`)
 import assert from 'node:assert/strict';
-import { upsertEnv, PATTERNS, envFile, outputPath } from './env.js';
+import fs from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
+import { upsertEnv, PATTERNS, envFile, outputPath, writeEnvFile } from './env.js';
 
 // Replaces in place, leaves the rest of the file alone.
 assert.equal(
@@ -68,5 +71,34 @@ assert.equal(envFile('/repo'), '/data/.env');
 assert.equal(outputPath('/repo', './output'), '/data/output');
 assert.equal(outputPath('/repo', '/abs'), '/abs');
 delete process.env.UNFRAMED_DATA_DIR;
+
+// --- writeEnvFile ---------------------------------------------------------
+// The file this writes holds a payment credential that nothing can re-fetch, so
+// two properties matter beyond the content: who can read it, and whether an
+// interrupted write can destroy what was already there.
+{
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'unframed-env-'));
+  const file = path.join(dir, '.env');
+
+  await writeEnvFile(file, 'OPENROUTER_API_KEY=sk-or-v1-secretone\n');
+  assert.equal(await fs.readFile(file, 'utf8'), 'OPENROUTER_API_KEY=sk-or-v1-secretone\n');
+  // 0600. A plain fs.writeFile lands at 0644 under the usual umask, which makes
+  // the key readable by every other account on the machine.
+  assert.equal((await fs.stat(file)).mode & 0o777, 0o600, 'a new .env is private');
+
+  // And an .env that ALREADY exists world-readable is tightened by the next
+  // write, which is what every install predating this has. The rename is what
+  // does it: the destination inherits the temp file's mode, so this needs no
+  // separate chmod pass and no migration step.
+  await fs.chmod(file, 0o644);
+  await writeEnvFile(file, 'OPENROUTER_API_KEY=sk-or-v1-secrettwo\n');
+  assert.equal((await fs.stat(file)).mode & 0o777, 0o600, 'an existing 0644 .env is tightened');
+
+  // Nothing left behind. A stray .tmp beside .env would be a second copy of the
+  // key, at whatever mode it happened to get.
+  assert.deepEqual(await fs.readdir(dir), ['.env'], 'no temp file survives');
+
+  await fs.rm(dir, { recursive: true, force: true });
+}
 
 console.log('env.test.js: ok');

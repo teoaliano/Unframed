@@ -1,3 +1,4 @@
+import fs from 'node:fs/promises';
 import path from 'node:path';
 
 // The one place that edits .env. Every setting the UI can change is written here,
@@ -50,3 +51,28 @@ export const envFile = (root) => path.join(process.env.UNFRAMED_DATA_DIR || root
 // the packaged app both hand in; a relative one lands under the data dir.
 export const outputPath = (root, dir) =>
   path.resolve(process.env.UNFRAMED_DATA_DIR || root, dir || './output');
+
+// The only thing that writes .env, and it does two things a plain fs.writeFile
+// does not. Mirrors writeJobs in jobs.js -- pure logic above, thin I/O here.
+//
+// 0600, because this file holds a payment credential. fs.writeFile with no mode
+// lands at 0644 under the usual umask, so every other account on the machine can
+// read the key. The mode goes on the TEMP file, and the rename carries it to the
+// destination -- which means an .env that already exists at 0644, as it does for
+// every install predating this, is tightened by the next write with no migration
+// step and no separate chmod pass.
+//
+// Write-then-rename, because rename is atomic on the same filesystem while a
+// direct write is not. jobs.js takes this precaution for a job record; the case
+// here is stronger. A truncated jobs.json costs resumability, which the sweep can
+// often recover. A truncated .env costs a key that NOTHING can re-fetch -- every
+// reconnect mints a new one at OpenRouter -- plus the output folder and the three
+// model slugs, all in one line-buffered instant.
+//
+// The temp name carries pid and time, so two processes writing at once cannot
+// collide on it; the rename is what actually makes this safe.
+export async function writeEnvFile(file, text) {
+  const tmp = `${file}.${process.pid}-${Date.now()}.tmp`;
+  await fs.writeFile(tmp, text, { mode: 0o600 });
+  await fs.rename(tmp, file);
+}
