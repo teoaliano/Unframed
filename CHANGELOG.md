@@ -9,6 +9,18 @@ Keep that shape: the website's What's new page parses this file.
 
 ### Fixed
 
+- **Removing your key now removes every copy of it.** If your `.env` had ended up
+  with the key on more than one line — easy to do if you added a line by hand
+  rather than editing the existing one — *Remove key* cleared only the first, and
+  the key came back the next time the app started. It also meant entering a new key
+  left the old one able to win. Both now act on every matching line.
+
+- **A key can no longer be lost to an unreadable `.env`.** If the file could not be
+  read for any reason other than not existing — a permissions problem, a disk
+  fault — saving a setting used to treat it as empty and rewrite it with only that
+  one setting, silently dropping the key and everything else. Saving now refuses
+  with an error instead of writing over what it could not read.
+
 - **Unframed now answers only the machine it runs on.** It used to accept
   connections on every network interface, so any other device on your network
   could reach the API and read your output path, your model settings and the last
