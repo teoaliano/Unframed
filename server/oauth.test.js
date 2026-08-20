@@ -6,6 +6,8 @@ import {
   callbackUrl,
   start,
   claim,
+  resolve,
+  peek,
   cancel,
   pendingCount,
   PENDING_TTL_MS,
@@ -90,7 +92,10 @@ const verifier = claim(second.nonce);
 assert.equal(typeof verifier, 'string');
 assert.equal(challengeFrom(verifier), second.challenge, 'the stored verifier matches the challenge sent');
 assert.equal(claim(second.nonce), null, 'the second claim fails');
-assert.equal(pendingCount(), 0);
+// The record SURVIVES the claim now -- only the verifier is dropped. It used to be
+// deleted outright, and this assertion pinned that; the record is what lets the
+// app be told how the attempt ended, rather than only ever detecting success.
+assert.equal(pendingCount(), 1);
 
 // An unknown nonce is refused rather than throwing.
 assert.equal(claim('deadbeef'), null);
@@ -99,12 +104,70 @@ assert.equal(claim('deadbeef'), null);
 // an attempt must not outlive the code it is waiting for.
 const third = start();
 assert.equal(claim(third.nonce, Date.now() + PENDING_TTL_MS + 1), null, 'expired');
-assert.equal(pendingCount(), 0, 'and an expired attempt is not left behind');
+// Left behind deliberately, as a failed record rather than as a live attempt: the
+// app has to be able to learn that the code expired instead of waiting out the
+// full ten minutes for one that is already dead. start() and cancel() clear it.
+assert.equal(pendingCount(), 1, 'kept, but not as something claimable');
+assert.equal(claim(third.nonce), null, 'and it stays unclaimable');
 
 // Cancel drops the attempt, so an approval that arrives after the user pressed
 // Cancel is refused instead of silently writing a key.
 const fourth = start();
 cancel();
 assert.equal(claim(fourth.nonce), null);
+
+// --- the outcome record ---------------------------------------------------
+// The app polls `peek` instead of watching /api/health for a changed key hint,
+// which only ever detected success. Everything below is about the failures it
+// could not see, and about `peek` never handing out anything it must not.
+
+cancel();
+assert.equal(peek(), null, 'nothing in flight, nothing to report');
+
+// A live attempt reads as waiting, and carries no key material of any kind.
+const live = start();
+assert.deepEqual(peek(), { state: 'waiting', reason: '' });
+assert.equal(JSON.stringify(peek()).includes(claim(live.nonce)), false, 'the verifier is not in what a client reads');
+
+// claim() took the verifier just above, so a replay gets nothing -- but the
+// record survives, which is the change that makes an outcome reportable.
+assert.equal(claim(live.nonce), null, 'the verifier is handed out exactly once');
+assert.equal(pendingCount(), 1, 'and the record is still there to hold the outcome');
+
+resolve(live.nonce, 'done');
+assert.deepEqual(peek(), { state: 'done', reason: '' });
+
+// The first outcome wins. A replayed callback must not rewrite a success into a
+// failure, or approving twice would report the flow as broken.
+resolve(live.nonce, 'failed', 'a later attempt');
+assert.deepEqual(peek(), { state: 'done', reason: '' }, 'a second outcome is ignored');
+
+// A nonce this process never issued cannot touch anything, so a stranger dialling
+// the callback with a guess cannot fail an attempt the user is waiting on.
+cancel();
+const mine = start();
+resolve('f'.repeat(32), 'failed', 'not yours');
+assert.deepEqual(peek(), { state: 'waiting', reason: '' }, 'an unknown nonce resolves nothing');
+
+// A failure is reported with its reason rather than leaving the app waiting.
+resolve(mine.nonce, 'failed', 'OpenRouter refused the code.');
+assert.deepEqual(peek(), { state: 'failed', reason: 'OpenRouter refused the code.' });
+
+// An expired attempt fails on its own, both ways in. Through claim, because that
+// is the callback arriving too late; through peek, because that is the app asking
+// while no callback ever came. Neither may sit at 'waiting' forever.
+cancel();
+const stale = start();
+const afterTtl = Date.now() + PENDING_TTL_MS + 1;
+assert.match(peek(afterTtl).reason, /Nothing came back/);
+assert.equal(peek(afterTtl).state, 'failed');
+assert.equal(claim(stale.nonce, afterTtl), null, 'and the code cannot be exchanged');
+assert.match(peek().reason, /took too long/, 'claim records why, not just that');
+
+// Cancel still wipes everything, including a recorded outcome, so Remove key and
+// Cancel both leave nothing for a later poll to find.
+cancel();
+assert.equal(peek(), null);
+assert.equal(pendingCount(), 0);
 
 console.log('oauth.test.js: ok');

@@ -78,6 +78,7 @@ import {
   clearKey,
   startOauth,
   cancelOauth,
+  oauthPending,
   oauthStatus,
   pickFolder,
   listModels,
@@ -465,24 +466,36 @@ function Canvas() {
   useEffect(() => {
     const pending = connecting;
     if (!pending) return;
-    // clearInterval on cleanup can't cancel a getHealth already in flight, so
-    // a resolution can still land after Cancel or the timeout has fired for
-    // this same attempt — `live` is what stops it from acting on it anyway.
+    // clearInterval on cleanup can't cancel a request already in flight, so a
+    // resolution can still land after Cancel or the timeout has fired for this
+    // same attempt — `live` is what stops it from acting on it anyway.
     let live = true;
     const id = setInterval(async () => {
       const elapsed = Date.now() - pending.since;
-      const h = await getHealth().catch(() => null);
+      // The server's own account of how the attempt ended. `null` is a dropped
+      // request, not an answer, so it falls through to the next tick.
+      const outcome = await oauthPending();
       if (!live) return;
-      // hasKey alone is already true when reconnecting or replacing a key, so
-      // it can't tell "this flow finished" from "a key was already there" —
-      // only a keyHint that changed from what was captured at the start can.
-      if (h?.hasKey && h.keyHint !== pending.keyHint) {
+
+      if (outcome?.state === 'failed') {
+        setConnecting(null);
+        const msg = outcome.reason || 'Connecting failed. Try again.';
+        if (cfgDlgRef.current) setCfgDlg((d) => (d ? { ...d, error: msg } : d));
+        else toast({ body: msg, uniqueID: 'oauth-failed' });
+        return;
+      }
+
+      if (outcome?.state === 'done') {
+        const h = await getHealth().catch(() => null);
+        if (!live) return;
         setConnecting(null);
         // Only the settings `cfg` carries, not the whole health payload: that
         // also holds `ok` and the legacy `model` alias, and spreading them in
-        // leaves cfg with members nothing declares and nothing reads.
-        const { ok, model, ...settings } = h;
-        setCfg((c) => ({ ...c, ...settings, hasKey: true, keyHint: h.keyHint || '' }));
+        // leaves cfg with members nothing declares and nothing reads. hasKey is
+        // set from the server's `done`, not from this call, so a health request
+        // that failed cannot turn a finished connection back into "no key".
+        const { ok, model, ...settings } = h || {};
+        setCfg((c) => ({ ...c, ...settings, hasKey: true, keyHint: h?.keyHint || c.keyHint }));
         // Fetched here, not left to the next openSettings(): on a first connect
         // this is the ONLY chance to warn that no credit has been bought, which
         // is the entire reason the route reports is_free_tier. Closing the dialog
@@ -506,6 +519,9 @@ function Canvas() {
         setCfgDlg((d) => (d ? { ...d, key: '', error: undefined } : d));
         return;
       }
+      // A backstop now rather than the mechanism: the server fails its own attempt
+      // on the same ten-minute clock, so this only fires if the poll itself has
+      // been failing — which is why it does not depend on having heard anything.
       if (elapsed > 10 * 60 * 1000) {
         setConnecting(null);
         const msg = 'Nothing came back from OpenRouter. Try connecting again.';
@@ -613,10 +629,11 @@ function Canvas() {
   // popup from an opened one; the link is always shown as a fallback because of
   // that, not because either path is detected.
   async function connectOpenRouter() {
-    // key: '' drops any draft in the field this hides. Save stays available during
-    // a reconnect (the models and folder are still editable), and saving a pasted
-    // key mid-flow would change keyHint -- which the poll below reads as the
-    // browser approval having come back.
+    // key: '' drops any draft in the field this hides. Pasting a key during a
+    // pending connect is allowed again now that the poll asks the server how the
+    // attempt ended instead of inferring it from a changed key hint -- which a
+    // pasted key also changed, so the flow used to report someone else's paste as
+    // its own success.
     setCfgDlg((d) => ({ ...d, key: '', error: undefined, saved: false }));
     // Opened BEFORE the await, while the click's user activation is still live.
     // Chrome's activation survives a fast fetch, which is why opening it after
@@ -635,17 +652,10 @@ function Canvas() {
       // Still null when popups are blocked outright, which is why the link in the
       // waiting state is permanent rather than a reaction to a failed open.
       if (tab) tab.location = url;
-      // keyHint captured now, not read back off `cfg` later: the poll's success
-      // check needs to tell "this flow finished" from "a key was already
-      // there" when reconnecting, and only a hint that has since changed can.
-      // wasKeyless likewise, since cfg.hasKey flips before the poll reads it.
-      setConnecting({
-        since: Date.now(),
-        slow: false,
-        url,
-        keyHint: cfg.keyHint,
-        wasKeyless: !cfg.hasKey,
-      });
+      // wasKeyless captured now, not read off `cfg` later, since cfg.hasKey flips
+      // the moment the connection lands and this decides whether the dialog was
+      // the key-only onboarding one.
+      setConnecting({ since: Date.now(), slow: false, url, wasKeyless: !cfg.hasKey });
     } catch (err) {
       if (tab) tab.close();
       setCfgDlg((d) => ({ ...d, error: err.message }));
@@ -1725,7 +1735,7 @@ function Canvas() {
               <Button label="Cancel" variant="ghost" onClick={cancelConnect} />
             </VStack>
           )}
-          {!cfg.hasKey && !connecting && !cfgDlg?.showPaste && (
+          {!cfg.hasKey && !cfgDlg?.showPaste && (
             <Button
               label="or paste a key instead"
               variant="ghost"
@@ -1734,12 +1744,16 @@ function Canvas() {
           )}
           {/* Three sections, one heading style each, dividers between. The field
               labels themselves are hidden where the heading already names the
-              field, but stay in the DOM for screen readers. !connecting hides
-              this during a pending flow: leaving it up would offer two ways
-              in at once, and saving a pasted key while a browser approval is
-              still in flight changes keyHint -- which the poll treats as that
-              flow having succeeded. */}
-          {(cfg.hasKey || cfgDlg?.showPaste) && !connecting && (
+              field, but stay in the DOM for screen readers.
+              
+              Visible during a pending connect, which it was not: the spec's own
+              failure table promises the paste fallback for "browser never opens",
+              and that is the one case where it used to disappear. It was hidden
+              because saving a pasted key changed keyHint, which the poll read as
+              the browser approval landing; the poll asks the server now, so the
+              two paths no longer collide. Whichever finishes first wins, and the
+              other is refused rather than misreported. */}
+          {(cfg.hasKey || cfgDlg?.showPaste) && (
           <VStack gap={2}>
             {/* Named for the account once there is one: with a key saved this
                 section is about the connection, and the key is one field in it. */}
@@ -1933,13 +1947,13 @@ function Canvas() {
 
           <HStack gap={2} justify="end">
             <Button label="Close" variant="ghost" onClick={() => setCfgDlg(null)} />
-            {/* Nothing to save until something saveable is on screen. Keyless, that
-                is the key field alone, and it isn't shown until an existing key or
-                "or paste a key instead" reveals it -- hence !connecting on that
-                side only. With a key, Default models and Output folder stay
-                rendered and editable through a reconnect, so Save has to stay too;
-                gating it on !connecting left those edits with no way out. */}
-            {(cfg.hasKey || (cfgDlg?.showPaste && !connecting)) && (
+            {/* Nothing to save until something saveable is on screen. Keyless,
+                that is the key field alone, and it isn't shown until an existing
+                key or "or paste a key instead" reveals it. With a key, Default
+                models and Output folder stay rendered and editable through a
+                reconnect, so Save has to stay too; gating it on !connecting left
+                those edits with no way out. */}
+            {(cfg.hasKey || cfgDlg?.showPaste) && (
               <Button
                 label="Save"
                 variant="primary"

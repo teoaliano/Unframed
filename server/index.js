@@ -19,7 +19,15 @@ import {
   reassignPendingJobs,
 } from './jobs.js';
 import { ensureTunnel, mintShare, revokeShare, waitUntilPublic, stopTunnel } from './share.js';
-import { start as oauthStart, cancel as oauthCancel, claim as oauthClaim, authorizeUrl, callbackUrl } from './oauth.js';
+import {
+  start as oauthStart,
+  cancel as oauthCancel,
+  claim as oauthClaim,
+  resolve as oauthResolve,
+  peek as oauthPeek,
+  authorizeUrl,
+  callbackUrl,
+} from './oauth.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, '..');
@@ -365,6 +373,22 @@ app.delete('/api/oauth/pending', (req, res) => {
   res.json({ ok: true });
 });
 
+// What the app polls while a connection is pending. It used to watch /api/health
+// for a changed key hint, which had two problems: a hint is the last 4 characters
+// of the key, so a reconnect that happened to mint a key ending the same way read
+// as a failure and told the user to try again -- minting yet another key -- and a
+// hint can only ever go up, so none of the callback's failures were visible at all
+// and the app waited out ten minutes on an attempt that was already dead.
+//
+// Answers the state and a sentence, nothing else: peek() is the one function in
+// oauth.js whose output is shaped for a client, and neither the verifier nor the
+// key may leave this process. No nonce is needed, because there is only ever one
+// attempt -- which also means the client never has to parse one back out of the
+// authorize URL it was handed.
+app.get('/api/oauth/pending', (req, res) => {
+  res.json(oauthPeek() || { state: 'none' });
+});
+
 // Unset -- and therefore inert -- in every real environment; the forked test
 // server points it at a local stub, because the real exchange needs a human
 // approving in a browser. Same pattern as UNFRAMED_TEST_VIDEOS_STATUS_BASE.
@@ -396,9 +420,25 @@ const oauthPage = (heading, detail) =>
   `<h1 style="font-size:1.3em">${escapeHtml(heading)}</h1><p>${escapeHtml(detail)}</p></div></body>`;
 
 app.get('/api/oauth/callback/:nonce', async (req, res) => {
-  // Single-use: claim() deletes whatever it finds, so a replayed callback and a
+  const { nonce } = req.params;
+  // Every exit below records how the attempt ended, because this page is read in a
+  // browser tab and the app is a separate window that the user may already have
+  // gone back to. Before the record existed, the app watched /api/health for a
+  // changed key hint -- which only ever detects success -- so all five failures
+  // here left it saying "waiting for OpenRouter in your browser" for the full ten
+  // minutes about an attempt that was already dead.
+  //
+  // resolve() is a no-op for a nonce this process never issued, so the unknown-
+  // nonce branch cannot fail a legitimate attempt someone is waiting on, and a
+  // no-op once an outcome is recorded, so a replay cannot rewrite a success.
+  const fail = (status, heading, detail, reason = detail) => {
+    oauthResolve(nonce, 'failed', reason);
+    return res.status(status).send(oauthPage(heading, detail));
+  };
+
+  // Single-use: claim() hands the verifier out once, so a replayed callback and a
   // superseded one both land here.
-  const verifier = oauthClaim(req.params.nonce);
+  const verifier = oauthClaim(nonce);
   if (!verifier) {
     return res
       .status(400)
@@ -406,12 +446,16 @@ app.get('/api/oauth/callback/:nonce', async (req, res) => {
   }
   const code = String(req.query.code || '');
   if (!code) {
-    return res
-      .status(400)
-      .send(oauthPage('OpenRouter did not send a code', 'Close this tab and press Connect in Unframed again.'));
+    return fail(
+      400,
+      'OpenRouter did not send a code',
+      'Close this tab and press Connect in Unframed again.',
+    );
   }
+  let data;
+  let orRes;
   try {
-    const orRes = await fetch(AUTH_KEYS_URL, {
+    orRes = await fetch(AUTH_KEYS_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       // The method must match what the authorize URL declared, or this 400s.
@@ -423,44 +467,54 @@ app.get('/api/oauth/callback/:nonce', async (req, res) => {
       // a retry costs the user another approval.
       signal: AbortSignal.timeout(30_000),
     });
-    const data = await orRes.json().catch(() => ({}));
-    if (!orRes.ok || !data.key) {
-      return res
-        .status(502)
-        .send(
-          oauthPage(
-            'OpenRouter could not complete the connection',
-            // Same extraction as the generation routes, but its own fallback: the
-            // body here is JSON already parsed, so there is no raw text to fall
-            // back on, and a status number alone is not a sentence.
-            upstreamMessage(data) || `It answered ${orRes.status}. Try connecting again.`,
-          ),
-        );
-    }
-    // Same trust boundary as a paste: this value reaches .env and an auth header.
-    // The message differs because "sk-or-v1-" is not a documented contract, so a
-    // failure here is about OUR expectations, not the user's typing.
-    if (!PATTERNS.OPENROUTER_API_KEY.test(data.key)) {
-      return res
-        .status(502)
-        .send(
-          oauthPage(
-            'OpenRouter returned a key in a shape Unframed does not recognise',
-            'Nothing was saved. You can paste a key manually in Unframed’s settings instead.',
-          ),
-        );
-    }
-    await writeEnv({ OPENROUTER_API_KEY: data.key });
-    API_KEY = data.key;
-    console.log('  oauth:    connected, key saved');
-    return res.send(
-      oauthPage('Connected to OpenRouter', 'You can close this tab and return to Unframed.'),
-    );
+    data = await orRes.json().catch(() => ({}));
   } catch (err) {
-    // Both awaits above can reject, and an unhandled rejection exits the process
-    // -- not a failed request but a dead server.
-    return res.status(502).send(oauthPage('Could not reach OpenRouter', err.message));
+    // The fetch can reject, and an unhandled rejection exits the process -- not a
+    // failed request but a dead server.
+    return fail(502, 'Could not reach OpenRouter', err.message);
   }
+
+  if (!orRes.ok || !data.key) {
+    return fail(
+      502,
+      'OpenRouter could not complete the connection',
+      // Same extraction as the generation routes, but its own fallback: the body
+      // here is JSON already parsed, so there is no raw text to fall back on, and
+      // a status number alone is not a sentence.
+      upstreamMessage(data) || `It answered ${orRes.status}. Try connecting again.`,
+    );
+  }
+  // Same trust boundary as a paste: this value reaches .env and an auth header.
+  // The message differs because "sk-or-v1-" is not a documented contract, so a
+  // failure here is about OUR expectations, not the user's typing.
+  if (!PATTERNS.OPENROUTER_API_KEY.test(data.key)) {
+    return fail(
+      502,
+      'OpenRouter returned a key in a shape Unframed does not recognise',
+      'Nothing was saved. You can paste a key manually in Unframed’s settings instead.',
+    );
+  }
+
+  // Its own catch, and its own wording. By this point OpenRouter HAS been reached
+  // and HAS minted a key on the user's account, so reporting a write failure as
+  // "could not reach OpenRouter" points them at the wrong system entirely -- and
+  // since nothing can re-fetch the key and every reconnect mints another, the row
+  // it left behind is worth telling them about.
+  try {
+    await writeEnv({ OPENROUTER_API_KEY: data.key });
+  } catch (err) {
+    return fail(
+      500,
+      'OpenRouter created a key, but Unframed could not save it',
+      `${err.message}. The key exists in your OpenRouter account — you can delete it at openrouter.ai/settings/keys and try connecting again.`,
+    );
+  }
+  API_KEY = data.key;
+  oauthResolve(nonce, 'done');
+  console.log('  oauth:    connected, key saved');
+  return res.send(
+    oauthPage('Connected to OpenRouter', 'You can close this tab and return to Unframed.'),
+  );
 });
 
 // What the settings dialog shows about the connection. Separate from

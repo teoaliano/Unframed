@@ -418,6 +418,47 @@ try {
   await fetch(`${base}/api/oauth/pending`, { method: 'DELETE' });
   assert.equal((await fetch(`${base}${abandonedPath}?code=good-code`)).status, 400);
 
+  // What the app polls, end to end. Before this route existed it watched
+  // /api/health for a changed key hint, which could only ever detect success -- so
+  // every failure below left the app saying "waiting for OpenRouter in your
+  // browser" for ten minutes about an attempt that was already dead.
+  const poll = () => fetch(`${base}/api/oauth/pending`).then((r) => r.json());
+
+  await fetch(`${base}/api/oauth/pending`, { method: 'DELETE' });
+  assert.deepEqual(await poll(), { state: 'none' }, 'nothing in flight');
+
+  const watched = await (await fetch(`${base}/api/oauth/start`, { method: 'POST' })).json();
+  const watchedPath = new URL(new URL(watched.authorizeUrl).searchParams.get('callback_url')).pathname;
+  const waiting = await poll();
+  assert.equal(waiting.state, 'waiting');
+  // The one function in oauth.js whose output a client reads. Neither the verifier
+  // nor the key may appear in it, whatever else changes about the shape.
+  const waitingRaw = JSON.stringify(waiting);
+  assert.equal(/verifier/i.test(waitingRaw), false, 'no verifier reaches the client');
+  assert.equal(/sk-or-/.test(waitingRaw), false, 'and no key material');
+  assert.deepEqual(Object.keys(waiting).sort(), ['reason', 'state']);
+
+  // A refused code fails the attempt, with OpenRouter's own reason, instead of
+  // leaving the app to time out.
+  assert.equal((await fetch(`${base}${watchedPath}?code=refused-code`)).status, 502);
+  const refusedOutcome = await poll();
+  assert.equal(refusedOutcome.state, 'failed');
+  assert.match(refusedOutcome.reason, /invalid code/, "the upstream reason reaches the app, not just 'it failed'");
+
+  // A callback for a nonce this process never issued must not touch the live
+  // attempt -- otherwise anyone who can reach the callback can strand a flow.
+  await fetch(`${base}/api/oauth/pending`, { method: 'DELETE' });
+  const guarded = await (await fetch(`${base}/api/oauth/start`, { method: 'POST' })).json();
+  const guardedPath = new URL(new URL(guarded.authorizeUrl).searchParams.get('callback_url')).pathname;
+  assert.equal((await fetch(`${base}/api/oauth/callback/${'f'.repeat(32)}?code=good-code`)).status, 400);
+  assert.equal((await poll()).state, 'waiting', 'a stranger cannot fail my attempt');
+
+  // And the happy path reports done, once, even if the callback is replayed.
+  assert.equal((await fetch(`${base}${guardedPath}?code=good-code`)).status, 200);
+  assert.deepEqual(await poll(), { state: 'done', reason: '' });
+  assert.equal((await fetch(`${base}${guardedPath}?code=good-code`)).status, 400, 'the replay is refused');
+  assert.deepEqual(await poll(), { state: 'done', reason: '' }, 'and does not rewrite the outcome');
+
   // Removing the key cancels a live attempt too, which is the case Cancel does
   // not cover: the attempt outlives the client state that started it, so a user
   // who presses Connect, reloads, then removes the key still has an approval on

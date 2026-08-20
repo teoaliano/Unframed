@@ -149,6 +149,14 @@ export const startOauth = () =>
 // two.
 export const cancelOauth = () => fetch('/api/oauth/pending', { method: 'DELETE' }).catch(() => {});
 
+// How the pending attempt ended, as {state: 'waiting'|'done'|'failed'|'none',
+// reason}. null means the request itself failed, which the poll treats as "ask
+// again" rather than as an answer — a dropped poll must not read as a failure.
+export const oauthPending = () =>
+  fetch('/api/oauth/pending')
+    .then((r) => (r.ok ? r.json() : null))
+    .catch(() => null);
+
 // null means "could not ask" — the dialog then shows nothing about the
 // connection rather than claiming zero spend.
 export const oauthStatus = () =>
