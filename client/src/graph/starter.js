@@ -30,6 +30,12 @@ import { OUTPUT_DEFAULTS } from '../nodes/output/defaults.js';
 // docs/superpowers/specs/2026-08-18-canvas-interaction-design.md.
 const RESIZABLE_INPUT = new Set(['image', 'video', 'prompt']);
 
+// EVERY node that reaches the canvas goes through this, without exception — a node
+// handed straight to addNodes has no wrapper width, and an input node's Card is
+// width: 100%, so its picture renders at its own natural pixel size (a 1024px image
+// became a 1024px node; shipped 2026-08-19 in 82b966b, found 2026-08-20). The three
+// output nodes' add-to-canvas buttons are the call sites that are easy to miss, since
+// they mint nodes themselves rather than through App.jsx's addNode.
 export const withDrag = (n) => ({
   ...n,
   dragHandle: undefined,
@@ -53,6 +59,15 @@ export const withDrag = (n) => ({
   // honoured forever and quietly letterbox the picture. Everything that is not a prompt
   // and not media has no wrapper size at all.
   height: n.type === 'prompt' ? n.height ?? 160 : undefined,
+  // React Flow's in-gesture flag, dropped for the same reason as the two above and with
+  // a worse failure: `getNodesInside()` is the only geometry test a box selection runs,
+  // and it ends with `if (isVisible || node.dragging)`. A node carrying a stale `true`
+  // is therefore inside EVERY rectangle, wherever you draw it -- which reads as the
+  // canvas you see not matching the one being selected. It reaches graph.json because
+  // autosave writes the node objects as they are, so a save landing mid-drag persists
+  // it and every later load restores it. App.jsx clears the in-memory case; see
+  // clearDragging below.
+  dragging: undefined,
 });
 
 let counter = 100;
@@ -109,3 +124,18 @@ export const initialNodes = [
 ].map(withDrag);
 
 export const initialEdges = [{ id: `e-${SCENE_ID}`, source: SCENE_ID, target: OUTPUT_ID }];
+
+// The same flag as withDrag's, stuck without a save or a load in between: a drag whose
+// end never arrived. d3-drag clears `dragging` from its `end` handler, and `end` needs a
+// mouseup on the window -- so switching macOS spaces or apps mid-drag, or any gesture
+// the OS takes over, leaves the flag true with nothing left to clear it. App.jsx sweeps
+// on pointercancel and window blur, the two events that mean "that gesture is over".
+//
+// Returns the SAME array when there is nothing to clear, and that is load-bearing rather
+// than tidy: those events fire every time you click away from the window, and a fresh
+// array from each one would push an undo entry and trigger an autosave. Untouched nodes
+// keep their identity too, so React Flow's own `checkEquality` reuses their internals.
+export const clearDragging = (nodes) =>
+  nodes.some((n) => n.dragging)
+    ? nodes.map((n) => (n.dragging ? { ...n, dragging: false } : n))
+    : nodes;

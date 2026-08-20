@@ -1010,6 +1010,32 @@ try {
   });
   await fs.writeFile(path.join(outDir, 'jobs.json'), '[]');
 
+  // An unreadable .env must not be silently treated as empty. writeEnv reads the
+  // file, edits it and writes it back; if the read failure becomes "" the write
+  // emits only this request's fields and DELETES every other line, the key
+  // included, while the route answers 200. Mode 0o200 is the exact repro: the
+  // owner can write (so the erasing write would succeed) but not read (so the
+  // read fails for a reason that is NOT "file absent"). The key must survive
+  // whichever way the route resolves.
+  {
+    const envPath = path.join(dataDir, '.env');
+    assert.match(await fs.readFile(envPath, 'utf8'), /^OPENROUTER_API_KEY=/m, 'precondition: a key is on disk');
+    await fs.chmod(envPath, 0o200); // write-only: read fails EACCES, a write would still land
+    const put = await fetch(`${base}/api/config`, {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ imageModel: 'openai/gpt-image-2' }),
+    });
+    await fs.chmod(envPath, 0o600); // restore before reading, and for later tests + cleanup
+    assert.equal(put.status, 500, 'a read that failed for anything but ENOENT is refused, not treated as empty');
+    assert.match(
+      await fs.readFile(envPath, 'utf8'),
+      /^OPENROUTER_API_KEY=/m,
+      'and the key the read could not see is still on disk',
+    );
+    // The live process still holds it too, so nothing downstream broke.
+    assert.equal((await (await fetch(`${base}/api/health`)).json()).hasKey, true);
+  }
+
   // A response body that dies mid-read must produce an ERROR, not a hang.
   // Express 4 with no error middleware sends nothing at all for a rejected
   // async handler -- the request just sits until the client gives up, which for
@@ -1119,6 +1145,39 @@ try {
     200,
     'server survived a null frame_images on /api/video',
   );
+
+  // A folder change that finds the key already gone must not carry a pending render
+  // into the new store and leave it there unswept. That is the state a DELETE
+  // /api/key racing this move produces: the delete fails the pending records in the
+  // OLD store it can see, the move copies them into the NEW store as pending, and
+  // with no key the sweep never touches them -- a paid render stranded in the live
+  // store while the app said it ended every render. Seeded directly here (pending
+  // records + no key) rather than raced, because that is the state to guard and it
+  // is deterministic; the interleavings that reach it are argued in the commit.
+  await fetch(`${base}/api/key`, { method: 'DELETE' }); // key gone: API_KEY = ''
+  assert.equal((await (await fetch(`${base}/api/health`)).json()).hasKey, false, 'precondition: no key');
+  const strandOut = path.join(dataDir, 'strand-src');
+  const strandDest = path.join(dataDir, 'strand-dst');
+  await fs.mkdir(strandOut, { recursive: true });
+  // Point the live store at strand-src, then seed a pending record into it.
+  assert.equal((await fetch(`${base}/api/config`, {
+    method: 'PUT', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ outputDir: strandOut }),
+  })).status, 200);
+  await fs.writeFile(path.join(strandOut, 'jobs.json'), JSON.stringify([
+    { id: 'paid-1', project: '', status: 'pending', startedAt: Date.now(), params: {} },
+  ]));
+  // Now move the folder while keyless. The record travels; without the fix it lands
+  // pending in the new store and stays there.
+  assert.equal((await fetch(`${base}/api/config`, {
+    method: 'PUT', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ outputDir: strandDest }),
+  })).status, 200);
+  const strandedMoved = JSON.parse(await fs.readFile(path.join(strandDest, 'jobs.json'), 'utf8')).find((j) => j.id === 'paid-1');
+  assert.ok(strandedMoved, 'the record moved to the new store');
+  assert.equal(strandedMoved.status, 'failed',
+    'a render moved with no key to poll it is failed, not left pending where nothing sweeps it');
+
 } finally {
   child.kill();
   await new Promise((resolve) => statusStub.close(resolve));

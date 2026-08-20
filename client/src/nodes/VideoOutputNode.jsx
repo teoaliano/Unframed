@@ -15,6 +15,7 @@ import { useModels, useModelParams, freeSpot } from './output/core.js';
 import { resetModelParams } from './output/defaults.js';
 import { ModelPicker, ParamControls, CostFoot, NativeSelect } from './output/controls.jsx';
 import { buildRequest, bucketSources } from '../graph/resolve.js';
+import { withDrag } from '../graph/starter.js';
 import { startVideo, pollVideo } from '../api.js';
 import VideoPlayer from './VideoPlayer.jsx';
 import { ExternalLink as AddToCanvasIcon } from 'lucide-react';
@@ -176,12 +177,15 @@ export default function VideoOutputNode({ id, data }) {
         reader.onerror = () => reject(new Error('could not read the file'));
         reader.readAsDataURL(blob);
       });
-      addNodes({
-        id: `gen-${Date.now()}-v`,
-        type: 'video',
-        position: freeSpot(getNode, getNodes, id),
-        data: { fileName: url.split('/').pop() || 'generated.mp4', dataUrl },
-      });
+      // withDrag for the wrapper size — see ImageOutputNode.addToCanvas.
+      addNodes(
+        withDrag({
+          id: `gen-${Date.now()}-v`,
+          type: 'video',
+          position: freeSpot(getNode, getNodes, id),
+          data: { fileName: url.split('/').pop() || 'generated.mp4', dataUrl },
+        }),
+      );
     } catch (err) {
       toast({ body: `Could not add the video: ${err.message}`, uniqueID: `add-video-${id}` });
     } finally {

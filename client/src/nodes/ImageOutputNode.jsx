@@ -16,6 +16,7 @@ import { useModels, useModelParams, freeSpot } from './output/core.js';
 import { resetModelParams } from './output/defaults.js';
 import { ModelPicker, ParamControls, CostFoot } from './output/controls.jsx';
 import { buildRequest, splitSections, findFreeSource, freeSourceText, freeBatch, bucketSources, isTextOutput } from '../graph/resolve.js';
+import { withDrag } from '../graph/starter.js';
 import { generate, runText, getProject, SESSION_ID } from '../api.js';
 // Arrow leaving a frame: "send this out onto the canvas". From lucide-react, like
 // every other icon here, so it shares the set's grid and stroke.
@@ -124,15 +125,20 @@ export default function ImageOutputNode({ id, data }) {
     setAddingKeys((s) => new Set(s).add(result.runIndex));
     try {
       const dataUrl = await toDataUrl(result);
-      addNodes({
-        id: `gen-${Date.now()}-${index}`,
-        type: 'image',
-        position: { x: base.x, y: base.y + 48 * index },
-        data: {
-          fileName: (result.savedPath || result.url)?.split('/').pop() || 'generated',
-          dataUrl,
-        },
-      });
+      // withDrag, not a bare node: an input node's Card is width: 100%, so it needs the
+      // wrapper size withDrag seeds or the picture renders at its own natural width.
+      // Every other way a node reaches the canvas goes through it too (App.jsx).
+      addNodes(
+        withDrag({
+          id: `gen-${Date.now()}-${index}`,
+          type: 'image',
+          position: { x: base.x, y: base.y + 48 * index },
+          data: {
+            fileName: (result.savedPath || result.url)?.split('/').pop() || 'generated',
+            dataUrl,
+          },
+        }),
+      );
     } catch (err) {
       toast({ body: `Could not add the image: ${err.message}`, uniqueID: `add-image-${id}-${result.runIndex}` });
     } finally {

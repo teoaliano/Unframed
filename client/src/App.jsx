@@ -52,6 +52,7 @@ import {
   NEW_NODE,
   initialNodes,
   initialEdges,
+  clearDragging,
 } from './graph/starter.js';
 import ProjectMenu from './ProjectMenu.jsx';
 import IgnoredEdge from './nodes/IgnoredEdge.jsx';
@@ -226,6 +227,30 @@ function Canvas() {
       window.removeEventListener('pointerup', up);
     };
   }, [getNodes, store]);
+
+  // A drag's END is what clears React Flow's `dragging` flag, and the end needs a
+  // mouseup on this window -- d3-drag listens for nothing else. Switch macOS spaces or
+  // apps mid-drag and the mouseup lands somewhere else, so the flag stays true on a node
+  // nobody is dragging any more, and `getNodesInside()` -- the only geometry test a box
+  // selection runs -- ends with `if (isVisible || node.dragging)`. That one node is then
+  // inside every rectangle you draw, anywhere on the canvas, until you drag it again.
+  // It looks exactly like a coordinate bug -- the canvas on screen not being the one the
+  // selection reads -- and is not one: every other node's hits and misses stay exact.
+  //
+  // pointercancel and blur are the two events that mean "that gesture is over without a
+  // mouseup": the OS taking a gesture over fires the first, focus leaving the window the
+  // second. The sweep is a no-op on every ordinary click -- clearDragging returns the
+  // same array when there is nothing stuck -- so nothing here touches the happy path.
+  // graph/starter.js owns the other half of the same flag, the one that reaches disk.
+  useEffect(() => {
+    const sweep = () => setNodes(clearDragging);
+    window.addEventListener('pointercancel', sweep);
+    window.addEventListener('blur', sweep);
+    return () => {
+      window.removeEventListener('pointercancel', sweep);
+      window.removeEventListener('blur', sweep);
+    };
+  }, [setNodes]);
   const handleNodesChange = useCallback(
     (changes) => {
       const kept = keepSelected.current;
