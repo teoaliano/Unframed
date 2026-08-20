@@ -698,7 +698,16 @@ function Canvas() {
   }
 
   function cancelConnect() {
-    cancelling.current = cancelOauth();
+    // The DELETE can remove a key server-side -- if the callback had already
+    // committed one, Cancel undoes it (see the route). So resync cfg from health
+    // once it lands, or the dialog would go on claiming a key is saved that Cancel
+    // just removed. cancelOauth swallows its own failure, so this never rejects,
+    // and cancelling.current is what a fast re-Connect waits on before starting.
+    cancelling.current = cancelOauth().then(() =>
+      getHealth()
+        .then((h) => setCfg((c) => ({ ...c, hasKey: Boolean(h.hasKey), keyHint: h.keyHint || '' })))
+        .catch(() => {}),
+    );
     setConnecting(null);
   }
 

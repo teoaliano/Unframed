@@ -25,7 +25,7 @@ import {
   claim as oauthClaim,
   resolve as oauthResolve,
   peek as oauthPeek,
-  isCurrent as oauthIsCurrent,
+  commit as oauthCommit,
   authorizeUrl,
   callbackUrl,
 } from './oauth.js';
@@ -401,8 +401,24 @@ app.post('/api/oauth/start', (req, res) => {
 // Cancel is a real action, not just a UI reset: without it, approving in the
 // browser after pressing Cancel would still write a key, and the app would have
 // said the attempt was cancelled.
-app.delete('/api/oauth/pending', (req, res) => {
-  oauthCancel();
+app.delete('/api/oauth/pending', async (req, res) => {
+  // Cancel is what the button sends, and it has to be able to UNDO a key the
+  // callback already committed -- otherwise a key the user cancelled stays live on
+  // disk while the poll, seeing the emptied store, reports the connection lost.
+  // oauthCancel returns whether a committed write is in flight (or landed); only
+  // then is a null-write queued, the same one DELETE /api/key uses, so it lands
+  // behind the callback's key-write and removes it. A not-yet-approved attempt
+  // wrote nothing, so this leaves any pre-existing key alone.
+  if (oauthCancel()) {
+    try {
+      await writeEnv({ OPENROUTER_API_KEY: null });
+      API_KEY = '';
+    } catch (err) {
+      return res
+        .status(500)
+        .json({ error: `Could not remove the key the cancelled connection had written: ${err.message}` });
+    }
+  }
   res.json({ ok: true });
 });
 
@@ -547,7 +563,7 @@ app.get('/api/oauth/callback/:nonce', async (req, res) => {
   // nothing can interleave between the two. A cancel that lands after the slot is
   // taken is harmless -- its own null-write queues behind this one, so the key ends
   // up removed either way, which is what was asked for.
-  if (!oauthIsCurrent(nonce)) {
+  if (!oauthCommit(nonce)) {
     return res
       .status(409)
       .send(

@@ -6,6 +6,7 @@ import {
   callbackUrl,
   start,
   claim,
+  commit,
   resolve,
   peek,
   cancel,
@@ -135,19 +136,22 @@ assert.equal(JSON.stringify(peek()).includes(claim(live.nonce)), false, 'the ver
 assert.equal(claim(live.nonce), null, 'the verifier is handed out exactly once');
 assert.notEqual(peek(), null, 'and the record is still there to hold the outcome');
 
-assert.equal(resolve(live.nonce, 'done'), true, 'recording an outcome reports success');
-assert.deepEqual(peek(), { state: 'done', reason: '' });
+// resolve is void: its guarantee is observable through peek, which is the only
+// thing a client reads. Asserting the return value was testing an implementation
+// detail no caller consumed.
+resolve(live.nonce, 'done');
+assert.deepEqual(peek(), { state: 'done', reason: '' }, 'recording an outcome shows through peek');
 
 // The first outcome wins. A replayed callback must not rewrite a success into a
 // failure, or approving twice would report the flow as broken.
-assert.equal(resolve(live.nonce, 'failed', 'a later attempt'), false, 'a second outcome is refused');
-assert.deepEqual(peek(), { state: 'done', reason: '' }, 'and does not overwrite the first');
+resolve(live.nonce, 'failed', 'a later attempt');
+assert.deepEqual(peek(), { state: 'done', reason: '' }, 'a second outcome does not overwrite the first');
 
 // A nonce this process never issued cannot touch anything, so a stranger dialling
 // the callback with a guess cannot fail an attempt the user is waiting on.
 cancel();
 const mine = start();
-assert.equal(resolve('f'.repeat(32), 'failed', 'not yours'), false, 'a stranger records nothing');
+resolve('f'.repeat(32), 'failed', 'not yours');
 assert.deepEqual(peek(), { state: 'waiting', reason: '' }, 'an unknown nonce resolves nothing');
 
 // A failure is reported with its reason rather than leaving the app waiting.
@@ -169,5 +173,48 @@ assert.match(peek().reason, /took too long/, 'claim records why, not just that')
 // Cancel both leave nothing for a later poll to find.
 cancel();
 assert.equal(peek(), null);
+
+// --- commit, the write gate --------------------------------------------------
+// commit() is what the callback asks between claiming the verifier and writing the
+// key. It marks the attempt so a later cancel can tell a key write is in flight.
+
+cancel();
+const c1 = start();
+assert.equal(commit('deadbeef'), false, 'a nonce that is not current cannot commit');
+assert.equal(commit(c1.nonce), true, 'the live attempt commits');
+assert.equal(commit(c1.nonce), false, 'and only once -- a replay past commit is refused');
+// While committed, the client still sees waiting; it resolves to done/failed next.
+assert.deepEqual(peek(), { state: 'waiting', reason: '' }, 'committed reads as waiting to the client');
+resolve(c1.nonce, 'done');
+assert.deepEqual(peek(), { state: 'done', reason: '' });
+
+// An attempt that expires between claim and commit cannot commit -- the expiry
+// check the old isCurrent lacked (finding 08). peek and the gate now agree.
+cancel();
+const c2 = start();
+const past = Date.now() + PENDING_TTL_MS + 1;
+assert.equal(commit(c2.nonce, past), false, 'an expired attempt does not commit');
+assert.equal(peek(past).state, 'failed', 'and peek agrees it failed');
+
+// --- cancel reports whether a committed key needs undoing --------------------
+// This is what lets DELETE /api/oauth/pending match DELETE /api/key: undo a key the
+// callback committed, but leave a pre-existing key that no attempt ever wrote.
+
+cancel();
+start();
+assert.equal(cancel(), false, 'cancelling a waiting attempt needs no key undo');
+
+cancel();
+const c3 = start();
+commit(c3.nonce);
+assert.equal(cancel(), true, 'cancelling a committed attempt signals the key must be undone');
+
+cancel();
+const c4 = start();
+commit(c4.nonce);
+resolve(c4.nonce, 'done');
+assert.equal(cancel(), true, 'and a done attempt too -- the key is on disk');
+
+assert.equal(cancel(), false, 'nothing in flight needs no undo');
 
 console.log('oauth.test.js: ok');

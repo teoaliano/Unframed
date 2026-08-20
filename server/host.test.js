@@ -554,6 +554,42 @@ try {
     'the key the user typed is the key that survives',
   );
 
+  // Finding 01: DELETE /api/oauth/pending -- what the Cancel button calls -- must
+  // undo a key the callback already committed, the way DELETE /api/key does.
+  // Before the fix it only emptied the store and wrote no null, so a key the user
+  // cancelled stayed live on disk while the poll, seeing the emptied store, told
+  // them the connection was lost. The callback runs to completion here, then the
+  // cancel lands: the write's async fs I/O lets a cancel interleave after the
+  // commit check, and the outcome is the same whether it lands during the write or
+  // just after it -- the store carries no way to undo a committed key.
+  await fetch(`${base}/api/key`, { method: 'DELETE' }); // keyless precondition
+  const installStart = await (await fetch(`${base}/api/oauth/start`, { method: 'POST' })).json();
+  const installPath = new URL(new URL(installStart.authorizeUrl).searchParams.get('callback_url')).pathname;
+  assert.equal((await fetch(`${base}${installPath}?code=good-code`)).status, 200, 'the callback commits a key');
+  assert.equal((await fetch(`${base}/api/oauth/pending`, { method: 'DELETE' })).status, 200);
+  assert.doesNotMatch(
+    await fs.readFile(path.join(dataDir, '.env'), 'utf8'),
+    /^OPENROUTER_API_KEY=/m,
+    'Cancel undoes the key it caused to be written, so none is left on disk',
+  );
+  assert.equal((await (await fetch(`${base}/api/health`)).json()).hasKey, false,
+    'and the live process is not holding it either');
+
+  // The other half of that fix must NOT over-reach: cancelling an attempt that was
+  // never approved leaves a PRE-EXISTING key untouched. This is the case a blunt
+  // "Cancel always clears the key" would break -- a reconnect the user abandons.
+  await fetch(`${base}/api/config`, {
+    method: 'PUT', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ key: 'sk-or-v1-preexistingkeepme00' }),
+  });
+  await fetch(`${base}/api/oauth/start`, { method: 'POST' }); // waiting, never approved
+  assert.equal((await fetch(`${base}/api/oauth/pending`, { method: 'DELETE' })).status, 200);
+  assert.match(
+    await fs.readFile(path.join(dataDir, '.env'), 'utf8'),
+    /^OPENROUTER_API_KEY=sk-or-v1-preexistingkeepme00$/m,
+    'cancelling an unapproved attempt does not touch the key already saved',
+  );
+
   // Restored, because the assertions after this block expect a key to exist --
   // and sent as four CONCURRENT writes, which is the point. Every .env write is a
   // read-modify-write, so without a queue two of them racing drop one's update

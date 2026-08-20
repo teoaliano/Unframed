@@ -67,9 +67,16 @@ export const PENDING_TTL_MS = 10 * 60 * 1000;
 // already dead. Keeping the record is what lets `peek` answer "what happened".
 let attempt = null; // { nonce, verifier, expiresAt, state, reason }
 
-// What `peek` reports. 'waiting' is the only non-terminal one, and the first
-// terminal outcome to arrive is the one that sticks.
+// The states an attempt moves through: 'waiting' until the callback commits to
+// writing the key, 'committed' for the brief window while that write is in flight,
+// then the terminal 'done' or 'failed'. 'committed' exists for exactly one reader,
+// cancel(): it has to undo a key the callback already began writing, and must NOT
+// touch a pre-existing key when the attempt never got that far.
 const WAITING = 'waiting';
+const COMMITTED = 'committed';
+const DONE = 'done';
+const FAILED = 'failed';
+const terminal = (s) => s === DONE || s === FAILED;
 
 // True only for the attempt currently in flight. Every entry point takes a nonce
 // and asks this first, so a callback or a poll naming a superseded, cancelled or
@@ -105,16 +112,14 @@ export function claim(nonce, now = Date.now()) {
 
 // Records how an attempt ended. A no-op for a nonce that is not the current
 // attempt, so a stranger guessing at the callback cannot fail a legitimate one,
-// and a no-op once an outcome is already recorded, so a replayed callback cannot
-// rewrite a success into a failure. Returns whether it actually recorded, because
-// the callback needs to know: it is the one caller that must not persist a key for
-// an attempt someone cancelled while the exchange was in flight.
+// and a no-op once terminal, so a replayed callback cannot rewrite a success into a
+// failure. Transitions from 'waiting' (the pre-commit failure branches) or from
+// 'committed' (after the write succeeds or fails).
 export function resolve(nonce, state, reason = '') {
-  if (!current(nonce) || attempt.state !== WAITING) return false;
+  if (!current(nonce) || terminal(attempt.state)) return;
   attempt.state = state;
   attempt.reason = reason;
   attempt.verifier = null;
-  return true;
 }
 
 // What the app polls. Deliberately returns the state and a sentence and NOTHING
@@ -124,19 +129,39 @@ export function resolve(nonce, state, reason = '') {
 export function peek(now = Date.now()) {
   if (!attempt) return null;
   if (attempt.state === WAITING && attempt.expiresAt <= now) {
-    return { state: 'failed', reason: 'Nothing came back from OpenRouter. Try connecting again.' };
+    return { state: FAILED, reason: 'Nothing came back from OpenRouter. Try connecting again.' };
   }
-  return { state: attempt.state, reason: attempt.reason };
+  // 'committed' is the in-flight write; to the client that is still waiting, and it
+  // becomes 'done' or 'failed' the moment the write settles.
+  const state = attempt.state === COMMITTED ? WAITING : attempt.state;
+  return { state, reason: attempt.reason };
 }
 
-// Whether `nonce` still names the attempt in flight, and it has not already
-// ended. The callback asks between claiming the verifier and writing the key,
-// which is the one window `cancel` cannot reach on its own: cancelling empties
-// this module, and this module is not what the write path reads. It has to be
-// asked SYNCHRONOUSLY, with no await between the answer and the act, or the
-// answer is stale by the time anything uses it.
-export const isCurrent = (nonce) => current(nonce) && attempt.state === WAITING;
+// The gate between claiming the verifier and writing the key. Returns true only if
+// this nonce is still the live attempt AND it has not expired while the exchange
+// was out on the network -- the expiry check the old `isCurrent` lacked, which let
+// a write land for an attempt `peek` had already reported expired. Marks the
+// attempt 'committed' in the same synchronous call, so a cancel arriving afterwards
+// can tell a key write is in flight and undo it. Must be called synchronously
+// before writeEnv, with no await between the answer and the write.
+export function commit(nonce, now = Date.now()) {
+  if (!current(nonce) || attempt.state !== WAITING) return false;
+  if (attempt.expiresAt <= now) {
+    attempt.state = FAILED;
+    attempt.reason = 'That took too long \u2014 the approval expired. Try connecting again.';
+    return false;
+  }
+  attempt.state = COMMITTED;
+  return true;
+}
 
+// Drops the attempt, and reports whether a key write for it had already committed.
+// A committed or done attempt means the callback has put, or is putting, a key on
+// disk -- so DELETE /api/oauth/pending has to null it, the way DELETE /api/key
+// does, or Cancel leaves a live key the app reports as absent. A 'waiting' attempt
+// wrote nothing, so cancelling it must NOT touch a pre-existing key.
 export function cancel() {
+  const undoNeeded = Boolean(attempt) && (attempt.state === COMMITTED || attempt.state === DONE);
   attempt = null;
+  return undoNeeded;
 }
