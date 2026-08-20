@@ -21,6 +21,12 @@ Keep that shape: the website's What's new page parses this file.
   one setting, silently dropping the key and everything else. Saving now refuses
   with an error instead of writing over what it could not read.
 
+- **Removing your key while changing the output folder no longer strands a render.**
+  If the two happened at the same moment, a video still rendering could be copied
+  into the new folder and left there marked as still-in-progress, where nothing
+  would ever check on it or tell you it had stopped — even though removing the key
+  ends every render in progress. It is now ended and reported like the rest.
+
 - **A box selection no longer picks up a node it does not touch.** One node could
   join every rectangle you drew, anywhere on the canvas, however far away it sat,
   which looked as though the canvas on screen were not the one being selected. It
