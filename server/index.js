@@ -135,10 +135,28 @@ app.get('/api/health', (req, res) => {
   res.json({ ok: true, model: IMAGE_MODEL, ...settings() });
 });
 
-async function writeEnv(updates) {
-  const file = envFile(ROOT);
-  const text = await fs.readFile(file, 'utf8').catch(() => '');
-  await fs.writeFile(file, upsertEnv(text, updates));
+// Queued onto one promise chain, the way persistJob queues jobs.json writes and
+// for the same reason: this is a read-modify-write, and two of them interleaving
+// drop one's update silently. Every caller used to be a click in the one open
+// settings dialog, so overlap was not really reachable -- the OAuth callback
+// changed that, since it lands whenever the user approves in a browser tab while
+// Save stays deliberately live. The two orders lose different things and neither
+// announces itself: the key written but OUTPUT_DIR reverted on disk while memory
+// holds the new one (which strands the pending video records that were already
+// moved), or the folder saved and the key line gone while API_KEY is set.
+let envWrites = Promise.resolve();
+function writeEnv(updates) {
+  const result = envWrites.then(async () => {
+    const file = envFile(ROOT);
+    const text = await fs.readFile(file, 'utf8').catch(() => '');
+    await fs.writeFile(file, upsertEnv(text, updates));
+  });
+  // The chain the NEXT write waits on never carries a rejection, so one failed
+  // write cannot poison every later one. The caller still sees its own failure,
+  // through `result`; both branches are handled, so a rejection here can never
+  // reach the unhandled-rejection handler and take the process down.
+  envWrites = result.catch(() => {});
+  return result;
 }
 
 // Save settings typed into the UI, so a fresh clone doesn't have to hand-edit
@@ -272,6 +290,14 @@ app.put('/api/config', async (req, res) => {
 });
 
 app.delete('/api/key', async (req, res) => {
+  // First, and server-side rather than in whichever client asked, because a live
+  // OAuth attempt outlives the client state that started it: the browser tab is
+  // still open, `connecting` is gone after a reload, and a second window never
+  // had it. Without this, approving after Remove key writes a key straight back
+  // and the app has said it was removed -- undoing, minutes later, the one action
+  // whose own comment below calls it a security act. Cancel is idempotent, so
+  // there is nothing to check first.
+  oauthCancel();
   try {
     // null drops the whole line rather than blanking the value, so a
     // shell-provided OPENROUTER_API_KEY isn't overridden with an empty string on
@@ -392,6 +418,12 @@ app.get('/api/oauth/callback/:nonce', async (req, res) => {
       headers: { 'Content-Type': 'application/json' },
       // The method must match what the authorize URL declared, or this 400s.
       body: JSON.stringify({ code, code_verifier: verifier, code_challenge_method: 'S256' }),
+      // Node's fetch has no default timeout, and this is the least recoverable
+      // place to hang: the nonce was consumed by claim() above, so the attempt is
+      // already spent, and a human is watching the tab it would spin in. Longer
+      // than the status route's 10s because this one is minting a credential and
+      // a retry costs the user another approval.
+      signal: AbortSignal.timeout(30_000),
     });
     const data = await orRes.json().catch(() => ({}));
     if (!orRes.ok || !data.key) {

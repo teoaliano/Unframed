@@ -418,6 +418,58 @@ try {
   await fetch(`${base}/api/oauth/pending`, { method: 'DELETE' });
   assert.equal((await fetch(`${base}${abandonedPath}?code=good-code`)).status, 400);
 
+  // Removing the key cancels a live attempt too, which is the case Cancel does
+  // not cover: the attempt outlives the client state that started it, so a user
+  // who presses Connect, reloads, then removes the key still has an approval on
+  // its way back. Without this the key returns minutes after the app said it was
+  // gone -- and the renders this route just failed stay failed.
+  const orphan = await (await fetch(`${base}/api/oauth/start`, { method: 'POST' })).json();
+  const orphanPath = new URL(new URL(orphan.authorizeUrl).searchParams.get('callback_url')).pathname;
+  assert.equal((await fetch(`${base}/api/key`, { method: 'DELETE' })).status, 200);
+  assert.doesNotMatch(
+    await fs.readFile(path.join(dataDir, '.env'), 'utf8'),
+    /^OPENROUTER_API_KEY=/m,
+    'the key line is gone',
+  );
+  assert.equal((await fetch(`${base}${orphanPath}?code=good-code`)).status, 400, 'the approval is refused');
+  assert.doesNotMatch(
+    await fs.readFile(path.join(dataDir, '.env'), 'utf8'),
+    /^OPENROUTER_API_KEY=/m,
+    'and nothing wrote it back',
+  );
+
+  // Restored, because the assertions after this block expect a key to exist --
+  // and sent as four CONCURRENT writes, which is the point. Every .env write is a
+  // read-modify-write, so without a queue two of them racing drop one's update
+  // silently: each reads the same text and the last writer wins. Four at once
+  // makes that near-certain rather than occasional. The OAuth callback is what
+  // brought this within reach, since it lands on browser timing rather than on a
+  // click, while Save stays deliberately live during a connect.
+  const settled = await Promise.all(
+    [
+      { key: 'sk-or-v1-restoredforlatertests' },
+      { imageModel: 'stub/concurrent-image' },
+      { textModel: 'stub/concurrent-text' },
+      { videoModel: 'stub/concurrent-video' },
+    ].map((body) =>
+      fetch(`${base}/api/config`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      }).then((r) => r.status),
+    ),
+  );
+  assert.deepEqual(settled, [200, 200, 200, 200]);
+  const raced = await fs.readFile(path.join(dataDir, '.env'), 'utf8');
+  for (const line of [
+    'OPENROUTER_API_KEY=sk-or-v1-restoredforlatertests',
+    'OPENROUTER_IMAGE_MODEL=stub/concurrent-image',
+    'OPENROUTER_TEXT_MODEL=stub/concurrent-text',
+    'OPENROUTER_VIDEO_MODEL=stub/concurrent-video',
+  ]) {
+    assert.match(raced, new RegExp(`^${line.replace('/', '\\/')}$`, 'm'), `${line} survived the race`);
+  }
+
   // A callback with no code at all is refused before anything is exchanged.
   const codeless = await (await fetch(`${base}/api/oauth/start`, { method: 'POST' })).json();
   const codelessPath = new URL(new URL(codeless.authorizeUrl).searchParams.get('callback_url')).pathname;
