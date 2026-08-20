@@ -9,6 +9,15 @@ Keep that shape: the website's What's new page parses this file.
 
 ### Fixed
 
+- **A box selection no longer picks up a node it does not touch.** One node could
+  join every rectangle you drew, anywhere on the canvas, however far away it sat,
+  which looked as though the canvas on screen were not the one being selected. It
+  was always a node whose drag had been interrupted rather than finished: switch
+  macOS spaces or apps mid-drag and the mouse release never reaches the window, so
+  the node stays marked as being dragged long after it stopped moving, and a node
+  marked that way is exempt from the box's geometry. That mark is now cleared when
+  a gesture ends without a release, and is no longer written into the project, so a
+  graph already carrying one is corrected the next time you open it.
 - **A generated image added to the canvas is the size of every other node again.**
   Using "add to canvas" on a result landed a node the full pixel width of the
   picture — a 1024px image became a 1024px node, dwarfing the rest of the flow —
