@@ -706,6 +706,32 @@ try {
   });
   await fs.writeFile(path.join(outDir, 'jobs.json'), '[]');
 
+  // An unreadable .env must not be silently treated as empty. writeEnv reads the
+  // file, edits it and writes it back; if the read failure becomes "" the write
+  // emits only this request's fields and DELETES every other line, the key
+  // included, while the route answers 200. Mode 0o200 is the exact repro: the
+  // owner can write (so the erasing write would succeed) but not read (so the
+  // read fails for a reason that is NOT "file absent"). The key must survive
+  // whichever way the route resolves.
+  {
+    const envPath = path.join(dataDir, '.env');
+    assert.match(await fs.readFile(envPath, 'utf8'), /^OPENROUTER_API_KEY=/m, 'precondition: a key is on disk');
+    await fs.chmod(envPath, 0o200); // write-only: read fails EACCES, a write would still land
+    const put = await fetch(`${base}/api/config`, {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ imageModel: 'openai/gpt-image-2' }),
+    });
+    await fs.chmod(envPath, 0o600); // restore before reading, and for later tests + cleanup
+    assert.equal(put.status, 500, 'a read that failed for anything but ENOENT is refused, not treated as empty');
+    assert.match(
+      await fs.readFile(envPath, 'utf8'),
+      /^OPENROUTER_API_KEY=/m,
+      'and the key the read could not see is still on disk',
+    );
+    // The live process still holds it too, so nothing downstream broke.
+    assert.equal((await (await fetch(`${base}/api/health`)).json()).hasKey, true);
+  }
+
   // A response body that dies mid-read must produce an ERROR, not a hang.
   // Express 4 with no error middleware sends nothing at all for a rejected
   // async handler -- the request just sits until the client gives up, which for

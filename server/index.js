@@ -136,7 +136,17 @@ app.get('/api/health', (req, res) => {
 
 async function writeEnv(updates) {
   const file = envFile(ROOT);
-  const text = await fs.readFile(file, 'utf8').catch(() => '');
+  // ENOENT is the normal first run -- no .env yet -- so treat that as empty and
+  // create one. Any OTHER read error (a permissions problem, an I/O fault) must
+  // NOT become "": upsertEnv on an empty string emits only this request's fields
+  // and drops every existing line, the key included, and the route would answer
+  // 200 while the key vanished from disk, surfacing as a dead key at the next
+  // restart with nothing able to re-fetch it. Rethrow, and the route's try/catch
+  // turns it into a 500 the user can act on.
+  const text = await fs.readFile(file, 'utf8').catch((err) => {
+    if (err.code === 'ENOENT') return '';
+    throw err;
+  });
   await fs.writeFile(file, upsertEnv(text, updates));
 }
 
