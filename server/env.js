@@ -26,15 +26,26 @@ export const PATTERNS = {
 export function upsertEnv(text, updates) {
   let out = text;
   for (const [key, value] of Object.entries(updates)) {
-    const re = new RegExp(`^${key}=.*$`, 'm');
+    // Global on purpose. A key can end up on more than one line -- the manual
+    // setup path tells the user to add one, and appending rather than editing is
+    // the ordinary mistake -- and dotenv keeps the LAST assignment, so acting on
+    // only the first is how "Remove key" reports success with the key still live
+    // after a restart, and how "replace" leaves the stale value winning.
     if (value === null) {
-      out = out.replace(new RegExp(`^${key}=.*\\r?\\n?`, 'm'), '');
+      out = out.replace(new RegExp(`^${key}=.*\\r?\\n?`, 'mg'), '');
       continue;
     }
     const line = `${key}=${value}`;
-    out = re.test(out)
-      ? out.replace(re, line)
-      : `${out}${out && !out.endsWith('\n') ? '\n' : ''}${line}\n`;
+    // One pass replaces the first occurrence in place and drops every later one,
+    // so a file with duplicates collapses to a single line where the first was.
+    let found = false;
+    out = out.replace(new RegExp(`^${key}=.*\\r?\\n?`, 'mg'), (m) => {
+      if (found) return '';
+      found = true;
+      const nl = m.match(/\r?\n$/); // preserve the line's own ending
+      return line + (nl ? nl[0] : '');
+    });
+    if (!found) out = `${out}${out && !out.endsWith('\n') ? '\n' : ''}${line}\n`;
   }
   return out;
 }

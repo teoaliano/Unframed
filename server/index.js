@@ -170,7 +170,17 @@ let envWrites = Promise.resolve();
 function writeEnv(updates) {
   const result = envWrites.then(async () => {
     const file = envFile(ROOT);
-    const text = await fs.readFile(file, 'utf8').catch(() => '');
+    // ENOENT is the normal first run -- no .env yet -- so treat that as empty and
+    // create one. Any OTHER read error (a permissions problem, an I/O fault) must
+    // NOT become "": upsertEnv on an empty string emits only this request's fields
+    // and drops every existing line, the key included, and the route would answer
+    // 200 while the key vanished from disk, surfacing as a dead key at the next
+    // restart with nothing able to re-fetch it. Rethrow, and the route's try/catch
+    // turns it into a 500 the user can act on.
+    const text = await fs.readFile(file, 'utf8').catch((err) => {
+      if (err.code === 'ENOENT') return '';
+      throw err;
+    });
     // 0600 and temp-then-rename, both in env.js with the rest of the funnel's
     // rules. See writeEnvFile: the queue below stops two writes interleaving,
     // which is a different failure from a write that is interrupted partway.
@@ -308,6 +318,23 @@ app.put('/api/config', async (req, res) => {
   if (nextOutputDir) {
     const previousDir = OUTPUT_DIR;
     OUTPUT_DIR = nextOutputDir; // 3. the new store is authoritative from here
+    // 3b. If the key was removed while this move was in flight, the records just
+    // copied into the new store will never be swept -- the sweep needs a key -- and
+    // the DELETE /api/key that removed it failed only the OLD store it could see, so
+    // the copies here are still pending. That is a paid render stranded in the live
+    // store while the app reported every render ended. Fail them now, the same thing
+    // DELETE /api/key would have done had it seen this store. Keyless, every pending
+    // record is doomed anyway, so failing all of them matches that route's own
+    // semantics; a later step failing changes nothing already made consistent here.
+    if (!API_KEY && copied.count) {
+      try {
+        await failPendingJobs(nextOutputDir, {
+          error: 'The OpenRouter key was removed while this render was being moved to a new folder.',
+        });
+      } catch (err) {
+        console.log(`  could not fail moved renders after a key removal: ${err.message}`);
+      }
+    }
     // 4. Strip the source last, and only the ids that actually travelled -- a
     // render started between the copy and now has not been copied anywhere.
     // Failure here is the one step allowed to be best-effort: the record exists

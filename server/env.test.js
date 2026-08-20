@@ -24,6 +24,25 @@ assert.equal(
   'A=1\nB=2\n',
 );
 
+// Duplicate lines: dotenv's last assignment wins at load, so upsertEnv has to act
+// on ALL of them, not just the first. A key left on disk twice is how "Remove key"
+// reports success and the key is back after a restart, and how "replace" leaves the
+// stale one winning.
+assert.equal(
+  upsertEnv('OPENROUTER_API_KEY=sk-or-first\nPORT=8787\nOPENROUTER_API_KEY=sk-or-second\n', {
+    OPENROUTER_API_KEY: null,
+  }),
+  'PORT=8787\n',
+  'deleting a key removes every duplicate line, not just the first',
+);
+assert.equal(
+  upsertEnv('OPENROUTER_API_KEY=sk-or-first\nPORT=8787\nOPENROUTER_API_KEY=sk-or-second\n', {
+    OPENROUTER_API_KEY: 'sk-or-new',
+  }),
+  'OPENROUTER_API_KEY=sk-or-new\nPORT=8787\n',
+  'setting a key collapses duplicates to one, in the first line\'s place',
+);
+
 // Several keys in one pass, mixing update, insert and delete.
 assert.equal(
   upsertEnv('OPENROUTER_IMAGE_MODEL=a/b\nOPENROUTER_API_KEY=sk-or-x\n', {
