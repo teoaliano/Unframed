@@ -74,5 +74,14 @@ export const outputPath = (root, dir) =>
 export async function writeEnvFile(file, text) {
   const tmp = `${file}.${process.pid}-${Date.now()}.tmp`;
   await fs.writeFile(tmp, text, { mode: 0o600 });
-  await fs.rename(tmp, file);
+  try {
+    await fs.rename(tmp, file);
+  } catch (err) {
+    // The temp holds the full key at 0600, and nothing else ever deletes it. A
+    // failed rename would leave a plaintext copy on disk -- another with every
+    // retry -- that "Remove key" does not touch. Clean it up, best-effort, and
+    // surface the original failure.
+    await fs.rm(tmp, { force: true }).catch(() => {});
+    throw err;
+  }
 }

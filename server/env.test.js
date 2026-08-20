@@ -98,6 +98,17 @@ delete process.env.UNFRAMED_DATA_DIR;
   // key, at whatever mode it happened to get.
   assert.deepEqual(await fs.readdir(dir), ['.env'], 'no temp file survives');
 
+  // A rename that FAILS must not leave the temp behind -- that temp holds the full
+  // key, and nothing else ever deletes it, so every failed write would add another
+  // plaintext copy while "Remove key" reported success. Forced by pointing the
+  // write at a path that is a directory, so the rename onto it cannot succeed.
+  const dir2 = await fs.mkdtemp(path.join(os.tmpdir(), 'unframed-env-fail-'));
+  const asDir = path.join(dir2, '.env');
+  await fs.mkdir(asDir); // .env is a directory here: rename onto it must fail
+  await assert.rejects(writeEnvFile(asDir, 'OPENROUTER_API_KEY=sk-or-v1-mustnotleak'), 'the failed write rejects');
+  assert.deepEqual(await fs.readdir(dir2), ['.env'], 'and leaves no .tmp copy of the key behind');
+  await fs.rm(dir2, { recursive: true, force: true });
+
   await fs.rm(dir, { recursive: true, force: true });
 }
 
