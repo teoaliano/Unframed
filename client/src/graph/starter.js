@@ -30,6 +30,12 @@ import { OUTPUT_DEFAULTS } from '../nodes/output/defaults.js';
 // docs/superpowers/specs/2026-08-18-canvas-interaction-design.md.
 const RESIZABLE_INPUT = new Set(['image', 'video', 'prompt']);
 
+// EVERY node that reaches the canvas goes through this, without exception — a node
+// handed straight to addNodes has no wrapper width, and an input node's Card is
+// width: 100%, so its picture renders at its own natural pixel size (a 1024px image
+// became a 1024px node; shipped 2026-08-19 in 82b966b, found 2026-08-20). The three
+// output nodes' add-to-canvas buttons are the call sites that are easy to miss, since
+// they mint nodes themselves rather than through App.jsx's addNode.
 export const withDrag = (n) => ({
   ...n,
   dragHandle: undefined,

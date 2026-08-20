@@ -9,6 +9,13 @@ Keep that shape: the website's What's new page parses this file.
 
 ### Fixed
 
+- **A generated image added to the canvas is the size of every other node again.**
+  Using "add to canvas" on a result landed a node the full pixel width of the
+  picture — a 1024px image became a 1024px node, dwarfing the rest of the flow —
+  and the same went for adding a clip from a video output or a text answer as a
+  prompt node. They now arrive at the standard node width, resizable from their
+  edges as before. Nodes already saved oversized correct themselves the next time
+  the project is opened.
 - **Unframed now answers only the machine it runs on.** It used to accept
   connections on every network interface, so any other device on your network
   could reach the API and read your output path, your model settings and the last
