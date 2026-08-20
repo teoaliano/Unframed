@@ -264,10 +264,10 @@ function Canvas() {
   // Settings dialog. cfg mirrors what the server has on disk; cfgDlg is the open
   // dialog's draft, so nothing is applied until Save.
   const [cfg, setCfg] = useState({ hasKey: true, keyHint: '', imageModel: '', textModel: '', videoModel: '', outputDir: '' });
-  const [cfgDlg, setCfgDlg] = useState(null); // { key, imageModel, …, error, saving, saved } | null
+  const [cfgDlg, setCfgDlg] = useState(null); // { key, imageModel, …, error, saving, saved, showPaste } | null
   // Not part of cfgDlg: the dialog is closable mid-flow, and the callback still
   // lands on the server, so this poll must outlive the dialog's own state.
-  const [connecting, setConnecting] = useState(null); // { since, slow, url, keyHint } | null
+  const [connecting, setConnecting] = useState(null); // { since, slow, url, wasKeyless } | null
   // What GET /api/oauth/status last answered, or null if it hasn't been asked
   // (or the ask failed).
   const [orStatus, setOrStatus] = useState(null);

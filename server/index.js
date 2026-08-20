@@ -431,8 +431,8 @@ app.get('/api/oauth/callback/:nonce', async (req, res) => {
   // resolve() is a no-op for a nonce this process never issued, so the unknown-
   // nonce branch cannot fail a legitimate attempt someone is waiting on, and a
   // no-op once an outcome is recorded, so a replay cannot rewrite a success.
-  const fail = (status, heading, detail, reason = detail) => {
-    oauthResolve(nonce, 'failed', reason);
+  const fail = (status, heading, detail) => {
+    oauthResolve(nonce, 'failed', detail);
     return res.status(status).send(oauthPage(heading, detail));
   };
 
@@ -563,7 +563,7 @@ app.get('/api/oauth/status', async (req, res) => {
     const num = (v) => (Number.isFinite(v) ? v : null);
     res.json({
       hasKey: true,
-      usage: num(d.usage) ?? 0,
+      usage: num(d.usage) || 0,
       // A cap is the ORDINARY outcome, not the exotic one: the authorization page
       // offers one while the user approves. So this is the main warning before
       // generation stops, and null means they declined it rather than that the
@@ -1400,8 +1400,11 @@ async function fetchVideoStatus(id) {
     return { ok: false, httpStatus: 502, upstreamError: `Unexpected response from OpenRouter: ${raw.slice(0, 300)}` };
   }
   if (!r.ok) {
-    const msg = data?.error?.message || data?.error || raw.slice(0, 300);
-    return { ok: false, httpStatus: r.status, upstreamError: `OpenRouter (${r.status}): ${msg}` };
+    return {
+      ok: false,
+      httpStatus: r.status,
+      upstreamError: `OpenRouter (${r.status}): ${upstreamMessage(data, raw)}`,
+    };
   }
   return { ok: true, data };
 }

@@ -9,7 +9,6 @@ import {
   resolve,
   peek,
   cancel,
-  pendingCount,
   PENDING_TTL_MS,
 } from './oauth.js';
 
@@ -82,8 +81,10 @@ assert.equal(typeof first.challenge, 'string');
 
 // Starting again supersedes: two clicks on Connect leave exactly one live
 // attempt, and the abandoned one cannot be completed.
+// Superseding is structural now -- `attempt` is a single binding, so two live
+// attempts cannot exist to be counted. What still needs asserting is the half that
+// is not free: the abandoned nonce must be refused rather than merely forgotten.
 const second = start();
-assert.equal(pendingCount(), 1);
 assert.equal(claim(first.nonce), null, 'the superseded attempt is dead');
 
 // claim succeeds exactly once. A nonce that can be claimed twice is a
@@ -95,7 +96,7 @@ assert.equal(claim(second.nonce), null, 'the second claim fails');
 // The record SURVIVES the claim now -- only the verifier is dropped. It used to be
 // deleted outright, and this assertion pinned that; the record is what lets the
 // app be told how the attempt ended, rather than only ever detecting success.
-assert.equal(pendingCount(), 1);
+assert.notEqual(peek(), null, 'the record outlives the claim');
 
 // An unknown nonce is refused rather than throwing.
 assert.equal(claim('deadbeef'), null);
@@ -107,7 +108,7 @@ assert.equal(claim(third.nonce, Date.now() + PENDING_TTL_MS + 1), null, 'expired
 // Left behind deliberately, as a failed record rather than as a live attempt: the
 // app has to be able to learn that the code expired instead of waiting out the
 // full ten minutes for one that is already dead. start() and cancel() clear it.
-assert.equal(pendingCount(), 1, 'kept, but not as something claimable');
+assert.notEqual(peek(), null, 'kept, but not as something claimable');
 assert.equal(claim(third.nonce), null, 'and it stays unclaimable');
 
 // Cancel drops the attempt, so an approval that arrives after the user pressed
@@ -132,21 +133,21 @@ assert.equal(JSON.stringify(peek()).includes(claim(live.nonce)), false, 'the ver
 // claim() took the verifier just above, so a replay gets nothing -- but the
 // record survives, which is the change that makes an outcome reportable.
 assert.equal(claim(live.nonce), null, 'the verifier is handed out exactly once');
-assert.equal(pendingCount(), 1, 'and the record is still there to hold the outcome');
+assert.notEqual(peek(), null, 'and the record is still there to hold the outcome');
 
-resolve(live.nonce, 'done');
+assert.equal(resolve(live.nonce, 'done'), true, 'recording an outcome reports success');
 assert.deepEqual(peek(), { state: 'done', reason: '' });
 
 // The first outcome wins. A replayed callback must not rewrite a success into a
 // failure, or approving twice would report the flow as broken.
-resolve(live.nonce, 'failed', 'a later attempt');
-assert.deepEqual(peek(), { state: 'done', reason: '' }, 'a second outcome is ignored');
+assert.equal(resolve(live.nonce, 'failed', 'a later attempt'), false, 'a second outcome is refused');
+assert.deepEqual(peek(), { state: 'done', reason: '' }, 'and does not overwrite the first');
 
 // A nonce this process never issued cannot touch anything, so a stranger dialling
 // the callback with a guess cannot fail an attempt the user is waiting on.
 cancel();
 const mine = start();
-resolve('f'.repeat(32), 'failed', 'not yours');
+assert.equal(resolve('f'.repeat(32), 'failed', 'not yours'), false, 'a stranger records nothing');
 assert.deepEqual(peek(), { state: 'waiting', reason: '' }, 'an unknown nonce resolves nothing');
 
 // A failure is reported with its reason rather than leaving the app waiting.
@@ -168,6 +169,5 @@ assert.match(peek().reason, /took too long/, 'claim records why, not just that')
 // Cancel both leave nothing for a later poll to find.
 cancel();
 assert.equal(peek(), null);
-assert.equal(pendingCount(), 0);
 
 console.log('oauth.test.js: ok');

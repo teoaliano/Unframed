@@ -36,9 +36,17 @@ export function callbackUrl({ port, nonce, bounce }) {
 // OpenRouter's codes live 10 minutes; an attempt must not outlive one.
 export const PENDING_TTL_MS = 10 * 60 * 1000;
 
-// At most one attempt, in memory. A restart mid-flow is a flow the user retries,
-// and unlike jobs.json there is no paid work in flight -- so persisting a
-// code_verifier to disk would solve a problem nobody has.
+// At most one attempt, and the variable says so rather than a comment: a Map
+// keyed by nonce had exactly one entry by construction -- `start` cleared it
+// first and `peek` returned inside its first iteration -- so "exactly one live
+// attempt" was a runtime invariant three functions had to keep. A single binding
+// makes it unbreakable instead of asserted. The nonce moves into the record,
+// which is what still refuses a callback for an attempt that is no longer the
+// current one.
+//
+// In memory, not on disk. A restart mid-flow is a flow the user retries, and
+// unlike jobs.json there is no paid work in flight -- so persisting a
+// code_verifier would solve a problem nobody has.
 //
 // The record OUTLIVES the exchange, which it did not use to. The callback lands
 // in a browser tab, so every one of its outcomes -- success, an unknown nonce, a
@@ -47,17 +55,22 @@ export const PENDING_TTL_MS = 10 * 60 * 1000;
 // watched /api/health for a changed key hint, which only ever detects success, so
 // a failed attempt left the app claiming to be waiting for a flow that was
 // already dead. Keeping the record is what lets `peek` answer "what happened".
-const pending = new Map(); // nonce -> { verifier, expiresAt, state, reason }
+let attempt = null; // { nonce, verifier, expiresAt, state, reason }
 
 // What `peek` reports. 'waiting' is the only non-terminal one, and the first
 // terminal outcome to arrive is the one that sticks.
 const WAITING = 'waiting';
 
+// True only for the attempt currently in flight. Every entry point takes a nonce
+// and asks this first, so a callback or a poll naming a superseded, cancelled or
+// never-issued attempt is refused by the same test rather than by three.
+const current = (nonce) => Boolean(attempt) && attempt.nonce === nonce;
+
 export function start(now = Date.now()) {
-  pending.clear(); // two clicks on Connect leave exactly one live attempt
   const verifier = b64url(crypto.randomBytes(32)); // 43 chars, PKCE's range
   const nonce = crypto.randomBytes(16).toString('hex'); // 128-bit, alphanumeric
-  pending.set(nonce, { verifier, expiresAt: now + PENDING_TTL_MS, state: WAITING, reason: '' });
+  // Assignment, not insertion: two clicks on Connect cannot leave two live.
+  attempt = { nonce, verifier, expiresAt: now + PENDING_TTL_MS, state: WAITING, reason: '' };
   return { nonce, challenge: challengeFrom(verifier) };
 }
 
@@ -69,28 +82,29 @@ export function start(now = Date.now()) {
 // otherwise the app waits out the full ten minutes for a code that is already
 // dead.
 export function claim(nonce, now = Date.now()) {
-  const attempt = pending.get(nonce);
-  if (!attempt || attempt.verifier === null) return null;
+  if (!current(nonce) || attempt.verifier === null) return null;
   const { verifier } = attempt;
   attempt.verifier = null;
   if (attempt.expiresAt <= now) {
     attempt.state = 'failed';
-    attempt.reason = 'That took too long — the approval expired. Try connecting again.';
+    attempt.reason = 'That took too long \u2014 the approval expired. Try connecting again.';
     return null;
   }
   return verifier;
 }
 
-// Records how an attempt ended. A no-op for a nonce this process never issued, so
-// a stranger guessing at the callback cannot fail a legitimate attempt, and a
-// no-op once an outcome is already recorded, so a replayed callback cannot rewrite
-// a success into a failure.
+// Records how an attempt ended. A no-op for a nonce that is not the current
+// attempt, so a stranger guessing at the callback cannot fail a legitimate one,
+// and a no-op once an outcome is already recorded, so a replayed callback cannot
+// rewrite a success into a failure. Returns whether it actually recorded, because
+// the callback needs to know: it is the one caller that must not persist a key for
+// an attempt someone cancelled while the exchange was in flight.
 export function resolve(nonce, state, reason = '') {
-  const attempt = pending.get(nonce);
-  if (!attempt || attempt.state !== WAITING) return;
+  if (!current(nonce) || attempt.state !== WAITING) return false;
   attempt.state = state;
   attempt.reason = reason;
   attempt.verifier = null;
+  return true;
 }
 
 // What the app polls. Deliberately returns the state and a sentence and NOTHING
@@ -98,17 +112,13 @@ export function resolve(nonce, state, reason = '') {
 // one function whose output is shaped for a client to read. null means there is
 // nothing in flight and nothing to report.
 export function peek(now = Date.now()) {
-  for (const attempt of pending.values()) {
-    if (attempt.state === WAITING && attempt.expiresAt <= now) {
-      return { state: 'failed', reason: 'Nothing came back from OpenRouter. Try connecting again.' };
-    }
-    return { state: attempt.state, reason: attempt.reason };
+  if (!attempt) return null;
+  if (attempt.state === WAITING && attempt.expiresAt <= now) {
+    return { state: 'failed', reason: 'Nothing came back from OpenRouter. Try connecting again.' };
   }
-  return null;
+  return { state: attempt.state, reason: attempt.reason };
 }
 
 export function cancel() {
-  pending.clear();
+  attempt = null;
 }
-
-export const pendingCount = () => pending.size;
