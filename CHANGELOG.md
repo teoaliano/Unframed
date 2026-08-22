@@ -5,6 +5,32 @@ is no release artifact to number. Headings are `## YYYY-MM-DD`, groups are
 `### Added` / `### Changed` / `### Fixed`, one bullet per user-visible change.
 Keep that shape: the website's What's new page parses this file.
 
+## 2026-08-22
+
+### Added
+
+- **Image output nodes now estimate what a click will cost**, beside the model name,
+  before you press Generate — the same place a finished run shows what it actually
+  cost. It appears only for models sold at a flat price per image (Recraft, Seedream,
+  Qwen, Grok, Riverflow) and accounts for the run count and for models that charge per
+  reference image. Models priced per token or per megapixel — GPT Image, Gemini, Flux —
+  show nothing, because for those the price genuinely is not knowable until the image
+  exists, and a made-up number would be worse than none.
+
+- **A Format control**, on the models that offer a choice of one. Recraft's vector
+  models list only `svg`, which is now visible on the card rather than something you
+  discover from the saved file.
+
+- **A warning when more images are wired in than the model accepts.** Each model
+  states its own limit — Recraft takes one reference image, GPT Image takes sixteen —
+  and the node now names yours before you spend anything on finding out.
+
+### Fixed
+
+- **The saved file's extension now follows the image that came back**, rather than the
+  format the app asked for. Every generation used to request PNG regardless of the
+  model, including models that produce only SVG and ignored the request.
+
 ## 2026-08-20
 
 ### Fixed

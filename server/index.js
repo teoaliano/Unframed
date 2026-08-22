@@ -138,6 +138,14 @@ function slugify(text) {
   );
 }
 
+// The file extension for the bytes a generation actually returned. `image/svg+xml`
+// is why the subtype is cut at the `+`; anything unrecognisable falls back to png
+// rather than becoming a filename with a slash or a plus in it.
+function extFor(mediaType) {
+  const sub = String(mediaType || '').split('/')[1]?.split('+')[0]?.toLowerCase();
+  return /^[a-z0-9]+$/.test(sub || '') ? sub : 'png';
+}
+
 // Everything the settings dialog shows. The key itself is never included -- only
 // its last 4 chars, enough to tell which key is in use.
 function settings() {
@@ -858,6 +866,38 @@ app.get('/api/models', async (req, res) => {
     res.json({ models, default: fallback });
   } catch {
     res.json({ models: [{ id: fallback, name: fallback }], default: fallback });
+  }
+});
+
+// The price of one image, for the ONE model a node has selected. Its own route
+// because pricing is absent from the image catalogue entirely -- unlike video, whose
+// listing carries `pricing_skus` inline -- and lives only in OpenRouter's per-model
+// `endpoints` sub-resource. Fetching all 43 on every catalogue load to fill in a
+// number most models cannot answer anyway is 43 requests for nothing; a node knows
+// its model, so it asks about that one.
+//
+// Returns the endpoints' raw SKU arrays. Deciding whether they add up to a number
+// worth showing belongs in one tested place, and that place is the client's
+// pricing.js -- the server would only be a second opinion that can disagree with it.
+app.get('/api/model-pricing', async (req, res) => {
+  const id = String(req.query.id || '');
+  // A trust boundary, not tidiness: `id` is interpolated into an upstream URL path,
+  // so anything with a `.` segment or a query of its own would let a caller aim this
+  // server's fetch at another OpenRouter endpoint entirely. A slug is exactly two
+  // segments of word characters, dots, hyphens and tildes (OpenRouter's floating
+  // `-latest` aliases carry a leading `~`).
+  if (!/^~?[\w.-]+\/[\w.-]+$/.test(id) || id.includes('..')) {
+    return res.status(400).json({ error: 'Not a model slug.' });
+  }
+  try {
+    const r = await fetch(`https://openrouter.ai/api/v1/images/models/${id}/endpoints`);
+    const d = await r.json();
+    res.json({ endpoints: (d?.endpoints || []).map((e) => e.pricing || []) });
+  } catch {
+    // An empty list reads downstream as "no estimate", which is what an unreachable
+    // catalogue should look like: the click still works, it just says nothing about
+    // the price first. Never a status the node has to branch on.
+    res.json({ endpoints: [] });
   }
 });
 
@@ -1898,7 +1938,7 @@ app.post('/api/generate', async (req, res) => {
     resolution,
     quality,
     aspect_ratio,
-    output_format = 'png',
+    output_format,
     background,
     model,
     project,
@@ -1916,7 +1956,14 @@ app.post('/api/generate', async (req, res) => {
       .json({ error: 'Prompt is empty. Wire at least one prompt node into the output node.' });
   }
 
-  const payload = { model: model || IMAGE_MODEL, prompt, output_format };
+  const payload = { model: model || IMAGE_MODEL, prompt };
+  // Only 10 of the 43 image models declare output_format, and the client now offers
+  // the control only where the catalogue does -- so a value arrives here only when
+  // the selected model has one. It used to default to 'png' and go out on EVERY
+  // request, which sent 'png' to Recraft's vector models, whose only accepted value
+  // is 'svg'. They ignored it; the rule the rest of this handler follows (and
+  // docs/models.md states) is that a value the model does not declare is never sent.
+  if (output_format) payload.output_format = output_format;
   if (resolution) payload.resolution = resolution;
   if (quality && quality !== 'auto') payload.quality = quality;
   if (aspect_ratio) payload.aspect_ratio = aspect_ratio;
@@ -1959,9 +2006,12 @@ app.post('/api/generate', async (req, res) => {
     return res.status(502).json({ error: 'OpenRouter returned no image data.' });
   }
 
-  const isSvg = first.media_type && first.media_type.includes('svg');
-  const ext = isSvg ? 'svg' : output_format;
-  const mediaType = first.media_type || `image/${output_format}`;
+  // The bytes decide the extension, not what was asked for: output_format is now
+  // absent on most requests, and a model free to choose its own format is exactly the
+  // case where the two would disagree. `media_type` is what the response says it
+  // returned, so an SVG lands as .svg without a special case for it.
+  const mediaType = first.media_type || `image/${output_format || 'png'}`;
+  const ext = extFor(mediaType);
   const cost = data?.usage?.cost ?? null;
 
   try {

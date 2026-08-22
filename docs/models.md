@@ -57,6 +57,61 @@ pair is hard to choose by.
 near-universal params are omitted, so an empty row means "nothing unusual" rather
 than "nothing known".
 
+**`output_format` is a control, not a default.** Only 10 of the 43 image models
+declare it, and where they do it is load-bearing: Recraft's vector models accept
+nothing but `svg`, Riverflow Fast nothing but `jpeg`. The server used to default it
+to `png` and send it on every request — including to those models, which ignored it
+— so it was the one image param breaking the rule above. It is now sent only when
+the model declares it, and the saved file's extension comes from the response's
+`media_type` rather than from what was asked for.
+
+**A model states how many references it takes, and the node says so before the
+click.** `input_references` is a `{type:'range', min, max}` rather than an enum;
+every image model declares one, and the ceilings run from 1 (Recraft, MAI, Krea) to
+16 (GPT Image). Over the cap, the image output node warns and names the number.
+It does not truncate: the "image 2" badge on an input node comes from `sourceRoles`,
+which knows the edges but not which model each consuming output has selected, so
+silently sending fewer than the badges promise would break the one rule
+`bucketSources` exists to keep. Teaching the badges the cap would mean every image
+node fetching the image catalogue to learn its consumers' models.
+
+## Cost estimates, and when there is honestly none
+
+The video node's estimate is a multiplication — every video model is sold by the
+second, and `pricing_skus` rides along in the video catalogue. Image is neither.
+
+**Image pricing is not in the image catalogue at all.** `/api/v1/images/models` has
+no pricing field; it lives only in the per-model `endpoints` sub-resource. Fetching
+all 43 on every catalogue load would be 43 upstream requests to fill in a number
+most models cannot answer, so `GET /api/model-pricing?id=<slug>` asks about the one
+model a node has selected, cached per model in `api.js`. Its `id` is interpolated
+into an upstream URL **path**, so the slug regex there is a trust boundary, not
+tidiness — pinned in `host.test.js`.
+
+**Three billing shapes, and only one is knowable in advance** (surveyed 2026-08-22):
+per output **image** (21 of 43 — Recraft, Seedream, Qwen, Grok, Riverflow), per
+**token** (16 — GPT Image, Gemini, MAI), per **megapixel** (4 — Flux); three models
+publish no pricing at all. `estimateImageCost` in `client/src/nodes/output/pricing.js`
+returns a number only for the first, and `null` — which renders as nothing —
+otherwise. The rule it enforces is the one the video estimate has carried since it
+was written: **a guess dressed as a number is worse than silence.**
+
+Three details there are easy to get wrong, and each has a test:
+
+- **Variants.** A model with tiered pricing tags each SKU (`4k`, `medium_2k`). A
+  variant matches when every one of its underscore-separated parts matches a control
+  actually set on the node. Riverflow publishes a bare SKU beside its variants, so an
+  unset control falls back to it; Grok publishes only variants, so an unset control
+  gets silence rather than the cheapest row.
+- **References are billed.** Grok charges $0.01 per reference, Riverflow $0.20 — at
+  which point a four-reference run is $0.80 of estimate that would otherwise be
+  missing.
+- **One non-image unit anywhere disqualifies the whole endpoint**, and endpoints that
+  disagree on price have no single answer. Both yield silence.
+
+Free mode has no run count until its list has been split (which costs a text call),
+so it prices one image and labels the figure `/ image`.
+
 ## The picker is a dialog
 
 `ModelDialog.jsx`, not an anchored popup — a centered `Dialog` cannot be

@@ -109,7 +109,7 @@ export function ModelPicker({ models, value, onChange, kind }) {
 // still space beside Size. One row, wrapping, is the only arrangement where every control
 // shares the same space budget.
 export function ParamControls({ params, data, onChange, children }) {
-  const { exactSizes, resolutionTiers, qualities, backgrounds, ratios } = params;
+  const { exactSizes, resolutionTiers, qualities, backgrounds, ratios, outputFormats } = params;
   return (
     <HStack gap={2} align="end" wrap="wrap">
       {exactSizes && (
@@ -153,6 +153,17 @@ export function ParamControls({ params, data, onChange, children }) {
           options={ratios}
           value={ratios.includes(data.aspect_ratio) ? data.aspect_ratio : undefined}
           onChange={(v) => onChange({ aspect_ratio: v })}
+        />
+      )}
+      {/* Shown even when the model offers exactly one value, which is most of them:
+          Recraft's vector models take only 'svg' and that single row is the clearest
+          statement on the card that this model does not produce a raster at all. */}
+      {outputFormats && (
+        <NativeSelect
+          label="Format"
+          options={outputFormats}
+          value={outputFormats.includes(data.output_format) ? data.output_format : undefined}
+          onChange={(v) => onChange({ output_format: v })}
         />
       )}
       {children}

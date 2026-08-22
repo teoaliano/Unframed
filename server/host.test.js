@@ -241,6 +241,30 @@ try {
   });
   assert.equal(preflight.headers.get('access-control-allow-origin'), null);
 
+  // /api/model-pricing interpolates its `id` into an upstream OpenRouter URL PATH,
+  // so the slug check is a trust boundary rather than input tidiness: anything with a
+  // traversal segment, a second slash or a query of its own would let a caller aim
+  // this server's fetch somewhere else entirely. Refused before the fetch, so none of
+  // these touches the network.
+  for (const bad of [
+    '',
+    'not-a-slug',
+    'a/../../b',
+    'recraft/recraft-v4-vector/endpoints?x=1',
+    '../../v1/key',
+    'https://evil.example/x',
+  ]) {
+    const res = await fetch(`${base}/api/model-pricing?id=${encodeURIComponent(bad)}`);
+    assert.equal(res.status, 400, `slug refused: ${JSON.stringify(bad)}`);
+  }
+
+  // A well-formed slug OpenRouter has never heard of must come back as "no pricing",
+  // not as an error the node has to branch on -- no estimate is a legitimate answer
+  // here, since most image models are priced per token and get none either way.
+  const noSuchModel = await fetch(`${base}/api/model-pricing?id=nobody/no-such-model`);
+  assert.equal(noSuchModel.status, 200);
+  assert.deepEqual((await noSuchModel.json()).endpoints, []);
+
   // The Host check, which is NOT the origin check above in another form. A page
   // served from a hostname the attacker resolves to 127.0.0.1 is same-origin with
   // this server: no Origin is sent, so nothing above runs, and the response is

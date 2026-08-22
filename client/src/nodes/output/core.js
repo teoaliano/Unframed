@@ -65,6 +65,14 @@ export function useModelParams(entry, kind) {
     if (Array.isArray(p)) return p.length ? p.map(String) : undefined;
     return p?.type === 'enum' && p.values?.length ? p.values : undefined;
   };
+  // The catalogue's third shape, beside the typed enum and video's plain arrays: a
+  // range, which is how a model states how MANY of something it takes rather than
+  // which values. Only its ceiling is read -- a floor of 0 is every model's, and a
+  // node cannot wire a negative number of images.
+  const rangeMax = (name) => {
+    const p = params?.[name];
+    return p?.type === 'range' && Number.isFinite(p.max) ? p.max : undefined;
+  };
 
   const resolutions = enumOf('resolution');
   const allRatios = enumOf('aspect_ratio');
@@ -81,6 +89,14 @@ export function useModelParams(entry, kind) {
     ratios: exactSizes ? undefined : allRatios,
     qualities: enumOf('quality'),
     backgrounds: kind === 'image' ? enumOf('background') : undefined,
+    // Every image model declares one, and the ceilings run from 1 (Recraft, MAI,
+    // Krea) to 16 (GPT Image). Wiring more than this used to send them all and let
+    // OpenRouter decide, which is a paid click finding out.
+    maxReferences: kind === 'image' ? rangeMax('input_references') : undefined,
+    // Only 10 of 43 image models declare this, and where they do it is not cosmetic:
+    // Recraft's vector models accept nothing but 'svg', Riverflow Fast nothing but
+    // 'jpeg'. The rest get no control and no value sent.
+    outputFormats: kind === 'image' ? enumOf('output_format') : undefined,
     durations: kind === 'video' ? enumOf('duration') : undefined,
     canAudio: kind === 'video' && Boolean(params?.generate_audio),
     // Only send a value the model declares, so a graph saved against another model

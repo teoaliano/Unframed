@@ -21,7 +21,7 @@ export const OUTPUT_DEFAULTS = {
 // confirmed, not model traits), shareLocalVideos (consent about a wired clip),
 // text/result/model itself.
 export const MODEL_PARAM_KEYS = {
-  imageOutput: ['quality', 'background', 'resolution', 'aspect_ratio', 'size'],
+  imageOutput: ['quality', 'background', 'resolution', 'aspect_ratio', 'size', 'output_format'],
   videoOutput: ['size', 'resolution', 'aspect_ratio', 'duration', 'generateAudio', 'quality', 'inputMode'],
   textOutput: [],
 };
