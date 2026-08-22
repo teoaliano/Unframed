@@ -579,9 +579,12 @@ export default function VideoOutputNode({ id, data }) {
           to opt out of the drag surface. */}
       <CostFoot
         cost={shown?.cost != null ? shown.cost : null}
-        // The upcoming click's price, from the model's per-second rate. Images get no
-        // estimate: their pricing is per token, and a guess dressed as a number would
-        // be worse than silence.
+        // The upcoming click's price, from the model's per-second rate. The image node
+        // has its own answer to the same question (output/pricing.js), which is a
+        // separate module because most image models price per output TOKEN and it has
+        // to decide whether an estimate can honestly be shown at all -- a guess dressed
+        // as a number would be worse than silence. Video never has that problem: every
+        // video model is sold by the second.
         extra={!shown && estimate ? `est. ~$${estimate.toFixed(2)}` : null}
       />
     </>

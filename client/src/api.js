@@ -198,6 +198,26 @@ export const listModels = (type = 'image') => {
   return modelsCache.get(type);
 };
 
+// The selected image model's billing SKUs, for the pre-run estimate. Cached like the
+// catalogue and for the same reason -- prices do not move within a session -- but keyed
+// per model, since this is one upstream request per model rather than one per
+// catalogue. A failure resolves to an empty list rather than rejecting: no estimate is
+// a legitimate answer here (most image models are priced per token), so the node has
+// one branch instead of two.
+const pricingCache = new Map();
+export const getModelPricing = (id) => {
+  if (!pricingCache.has(id)) {
+    pricingCache.set(
+      id,
+      fetch(`/api/model-pricing?id=${encodeURIComponent(id)}`)
+        .then((r) => (r.ok ? r.json() : { endpoints: [] }))
+        .then((d) => d.endpoints || [])
+        .catch(() => []),
+    );
+  }
+  return pricingCache.get(id);
+};
+
 // Migrated on the way in, here rather than at the two call sites, because this is the
 // only place a graph is read and one of those sites would eventually be forgotten. A
 // graph saved before the output split names types nothing on the canvas registers any

@@ -13,11 +13,12 @@ import RunsControl, { clampRuns } from './RunsControl.jsx';
 import StatusLine from './StatusLine.jsx';
 import FreePreviewDialog, { droppedImagesNote } from './FreePreviewDialog.jsx';
 import { useModels, useModelParams, freeSpot } from './output/core.js';
+import { estimateImageCost, formatEstimate } from './output/pricing.js';
 import { resetModelParams } from './output/defaults.js';
 import { ModelPicker, ParamControls, CostFoot } from './output/controls.jsx';
 import { buildRequest, splitSections, findFreeSource, freeSourceText, freeBatch, bucketSources, isTextOutput } from '../graph/resolve.js';
 import { withDrag } from '../graph/starter.js';
-import { generate, runText, getProject, SESSION_ID } from '../api.js';
+import { generate, runText, getProject, getModelPricing, SESSION_ID } from '../api.js';
 // Arrow leaving a frame: "send this out onto the canvas". From lucide-react, like
 // every other icon here, so it shares the set's grid and stroke.
 import { ExternalLink as AddToCanvasIcon } from 'lucide-react';
@@ -98,7 +99,7 @@ export default function ImageOutputNode({ id, data }) {
 
   const entry = models.find((m) => m.id === model);
   const params = useModelParams(entry, 'image');
-  const { resolutionTiers, ratios, qualities, backgrounds, supported } = params;
+  const { resolutionTiers, ratios, qualities, backgrounds, supported, maxReferences, outputFormats } = params;
 
   // A just-finished result already carries its bytes; a reopened one (seeded from
   // data.results after a reload or a project switch) only has a file url and needs
@@ -177,6 +178,48 @@ export default function ImageOutputNode({ id, data }) {
     .filter((e) => liveNodes.some((n) => n.id === e.source && n.type === 'video' && n.data?.dataUrl))
     .length;
 
+  // Read off bucketSources rather than the edges, so this counts exactly what
+  // buildRequest will put in input_references.
+  const wiredImages = bucketSources(liveNodes, liveEdges, id)
+    .references.filter((n) => n.type === 'image').length;
+  // Not truncated here on purpose. The badge an input node shows ("image 2") comes
+  // from sourceRoles, which knows the edges but not which model each consuming output
+  // has selected -- and teaching it would mean every image node fetching the image
+  // catalogue. So the request keeps matching the badges, and the node says plainly
+  // that the model will not use them all. Capacity is a property of the model, and it
+  // changes under the wiring without a single edge moving.
+  const overCap = maxReferences != null && wiredImages > maxReferences;
+
+  // SKUs for the selected model only, and only once per model per session — see
+  // getModelPricing. The live guard is the same one useModels carries: switching
+  // models while a reply is out would otherwise price the new model with the old
+  // model's answer.
+  const [pricing, setPricing] = useState(null);
+  useEffect(() => {
+    if (!model) return undefined;
+    let live = true;
+    getModelPricing(model).then((endpoints) => {
+      if (live) setPricing(endpoints);
+    });
+    return () => {
+      live = false;
+    };
+  }, [model]);
+
+  // Free mode's run count is not known until the list has been split, which needs a
+  // paid text call, so it prices ONE image and says so. Everything else multiplies by
+  // the run count already on the card.
+  const estimate = estimateImageCost(pricing, {
+    quality: data.quality,
+    resolution: data.resolution,
+    runs: freeRuns ? 1 : runs,
+    // What will actually be SENT, which over the cap is still every wired image --
+    // nothing truncates. On the models that bill per reference this makes the estimate
+    // an upper bound in exactly the case the warning above is already telling the user
+    // to fix.
+    referenceCount: wiredImages,
+  });
+
   // The paid half of a run, split out so the preview gate can sit between building a
   // batch and sending it -- and so confirming a preview reuses this exact code rather
   // than a second copy that drifts. The caller sets `status`, the `running` marker and
@@ -197,6 +240,7 @@ export default function ImageOutputNode({ id, data }) {
             quality: supported(qualities, data.quality),
             aspect_ratio: supported(ratios, data.aspect_ratio),
             background: supported(backgrounds, data.background),
+            output_format: supported(outputFormats, data.output_format),
             batchId,
             runIndex: i + 1,
             runCount: batch.length,
@@ -607,6 +651,19 @@ export default function ImageOutputNode({ id, data }) {
           </StatusLine>
         )}
 
+        {/* Said before the click, because after it the money is gone either way —
+            whether OpenRouter refuses the request or the model quietly uses the
+            first few. The number is the model's own `input_references` ceiling
+            from the catalogue, so it follows a model change with no list here to
+            keep up to date. */}
+        {overCap && (
+          <StatusLine type="warning">
+            {wiredImages} images are wired in, but this model takes{' '}
+            {maxReferences === 1 ? 'only one' : `at most ${maxReferences}`}. Unwire the
+            rest, or pick a model that takes more.
+          </StatusLine>
+        )}
+
         {freeRuns && !liveFreeSource && (
           <StatusLine type="info">
             Wire a prompt or text node in. Each item turns into one generation
@@ -696,7 +753,19 @@ export default function ImageOutputNode({ id, data }) {
           beside the strip it empties. */}
       <CostFoot
         cost={hasSpend ? spent : null}
-        extra={hasSpend && shown.length > 1 ? `${shown.length} images` : null}
+        extra={
+          hasSpend
+            ? shown.length > 1
+              ? `${shown.length} images`
+              : null
+            : // What the next click costs, but only where that is a real number rather
+              // than a guess — see pricing.js. Most image models are priced per output
+              // TOKEN, and for those this stays empty, which is the same rule the video
+              // node's estimate has always followed.
+              estimate != null
+              ? `est. ~${formatEstimate(estimate)}${freeRuns ? ' / image' : ''}`
+              : null
+        }
       />
 
       {/* Keyed by batchId so a second staging mounts a FRESH dialog: its textarea seeds
