@@ -5,7 +5,7 @@
 // @ref references another PROMPT or TEXT node by its id (word chars + hyphens).
 // Images are not referenced this way — they are sent as an ordered array and named
 // positionally ("image 1", "image 2") which the user types as plain text.
-const TOKEN_RE = /@([\w-]+)/g;
+export const TOKEN_RE = /@([\w-]+)/g;
 
 // The engine's one rule — inputs only feed edges, outputs consume them — as a
 // predicate rather than a list of type strings repeated down this file. Output type
@@ -21,7 +21,8 @@ export const isTextOutput = (n) => n?.type === 'textOutput';
 // is asked in one place: the @ menu that offers candidates while typing, and the
 // right-click item that copies a reference. Those two disagreeing is a menu offering an
 // id nothing will substitute, or an id you can copy but never insert.
-export const isReferenceable = (n) => n?.type === 'prompt' || isTextOutput(n);
+export const isCharacter = (n) => n?.type === 'character';
+export const isReferenceable = (n) => n?.type === 'prompt' || isTextOutput(n) || isCharacter(n);
 
 // Its own predicate for the same reason isTextOutput has one: only a video output
 // carries an input mode, and asking the wrong node type for one silently changes
@@ -36,10 +37,27 @@ const MODE_FRAMES = {
   first_last: ['first_frame', 'last_frame'],
 };
 
-function substitute(text, refs, stack) {
+export function formatImageIndices(indices) {
+  if (!indices || !indices.length) return '';
+  if (indices.length === 1) return `image ${indices[0]}`;
+  if (indices.length === 2) return `images ${indices[0]} and ${indices[1]}`;
+  return `images ${indices.slice(0, -1).join(', ')}, and ${indices[indices.length - 1]}`;
+}
+
+export function resolveCharacterText(charNode, indices = []) {
+  const desc = (charNode?.data?.text || '').trim();
+  if (!indices.length) return desc;
+
+  const imgStr = formatImageIndices(indices);
+  const lock = `Keep character appearance, face, and identity from ${imgStr} unchanged.`;
+  if (!desc) return lock;
+  return `${lock} ${desc}`;
+}
+
+function substitute(text, refs, stack, charImageMap) {
   return (text || '').replace(TOKEN_RE, (all, raw) => {
     const ref = raw.trim();
-    if (refs.has(ref)) return resolveRef(ref, refs, stack);
+    if (refs.has(ref)) return resolveRef(ref, refs, stack, charImageMap);
     return all; // unknown ref -> left as typed, same as insert.js's rewriter
   });
 }
@@ -48,13 +66,37 @@ function substitute(text, refs, stack) {
 // node's model output is inserted literally — re-scanning it for @tokens would let
 // model output pull in arbitrary prompts, and makes cycles unresolvable.
 // Throws on circular prompt references (A -> B -> A).
-function resolveRef(id, refs, stack) {
+function resolveRef(id, refs, stack, charImageMap) {
   const node = refs.get(id);
   if (isTextOutput(node)) return node.data?.result || '';
   if (stack.includes(id)) {
     throw new Error(`Circular reference: ${[...stack, id].join(' -> ')}`);
   }
-  return substitute(node.data?.text, refs, [...stack, id]);
+  if (isCharacter(node)) {
+    const indices = charImageMap?.get(id) || [];
+    const text = resolveCharacterText(node, indices);
+    return substitute(text, refs, [...stack, id], charImageMap);
+  }
+  return substitute(node.data?.text, refs, [...stack, id], charImageMap);
+}
+
+// Helper to recursively collect all nodes referenced via @id in text
+function collectReferencedNodes(startNode, refs, visited = new Set()) {
+  if (!startNode || visited.has(startNode.id)) return [];
+  visited.add(startNode.id);
+  const result = [];
+  const text = isTextOutput(startNode) ? startNode.data?.result || '' : startNode.data?.text || '';
+  TOKEN_RE.lastIndex = 0;
+  let match;
+  while ((match = TOKEN_RE.exec(text)) !== null) {
+    const refId = match[1].trim();
+    const targetNode = refs.get(refId);
+    if (targetNode && !visited.has(refId)) {
+      result.push(targetNode);
+      result.push(...collectReferencedNodes(targetNode, refs, visited));
+    }
+  }
+  return result;
 }
 
 // Every source wired into one output, split by the role its mode gives them.
@@ -62,6 +104,9 @@ function resolveRef(id, refs, stack) {
 // badges read it, so what a node claims and what is sent cannot drift.
 export function bucketSources(nodes, edges, outputId) {
   const byId = new Map(nodes.map((n) => [n.id, n]));
+  const refs = new Map(
+    nodes.filter((n) => n.type === 'prompt' || isTextOutput(n) || isCharacter(n)).map((n) => [n.id, n]),
+  );
   const output = byId.get(outputId);
   const sources = edges
     .filter((e) => e.target === outputId)
@@ -69,9 +114,49 @@ export function bucketSources(nodes, edges, outputId) {
     .filter(Boolean)
     .sort((a, b) => (a.position?.y ?? 0) - (b.position?.y ?? 0));
 
-  const media = sources.filter(
-    (n) => (n.type === 'image' || n.type === 'video') && n.data?.dataUrl,
-  );
+  // Character nodes tagged via @id in wired prompt/text nodes also contribute their
+  // reference images to the generation request without requiring redundant wire edges.
+  const referencedChars = [];
+  const seenCharIds = new Set(sources.filter(isCharacter).map((n) => n.id));
+  for (const src of sources) {
+    if (src.type === 'prompt' || isTextOutput(src)) {
+      const refNodes = collectReferencedNodes(src, refs);
+      for (const r of refNodes) {
+        if (isCharacter(r) && !seenCharIds.has(r.id)) {
+          seenCharIds.add(r.id);
+          referencedChars.push(r);
+        }
+      }
+    }
+  }
+
+  const allMediaSources = [
+    ...sources,
+    ...referencedChars,
+  ].sort((a, b) => (a.position?.y ?? 0) - (b.position?.y ?? 0));
+
+  // A character node carries its own images inside data.images. Flatten each one
+  // into a virtual image node so the rest of the pipeline (numbering, frames,
+  // input_references) can treat it like any other reference image. Keep the parent
+  // id so sourceRoles can report back on the character node as a whole.
+  const media = allMediaSources.flatMap((n) => {
+    if ((n.type === 'image' || n.type === 'video') && n.data?.dataUrl) return [n];
+    if (isCharacter(n) && Array.isArray(n.data?.images)) {
+      return n.data.images
+        .filter((img) => Boolean(img?.dataUrl))
+        .map((img, i) => ({
+          type: 'image',
+          id: `${n.id}-img-${i}`,
+          data: {
+            dataUrl: img.dataUrl,
+            fileName: img.fileName,
+            aspect: img.aspect,
+          },
+          __characterId: n.id,
+        }));
+    }
+    return [];
+  });
   const mode = isVideoOutput(output) ? output?.data?.inputMode : undefined;
   const wanted = MODE_FRAMES[mode];
   if (!wanted) return { sources, references: media, frames: [], excess: [] };
@@ -87,7 +172,9 @@ export function bucketSources(nodes, edges, outputId) {
     sources,
     references: [],
     frames,
-    excess: media.filter((n) => !used.has(n.id)).map((n) => n.id),
+    excess: media
+      .filter((n) => !used.has(n.id))
+      .map((n) => n.__characterId || n.id),
   };
 }
 
@@ -106,9 +193,24 @@ function toReferences(media) {
 // the output is a video node asking for a frame mode.
 export function buildRequest(nodes, edges, outputId) {
   const refs = new Map(
-    nodes.filter((n) => n.type === 'prompt' || isTextOutput(n)).map((n) => [n.id, n]),
+    nodes.filter((n) => n.type === 'prompt' || isTextOutput(n) || isCharacter(n)).map((n) => [n.id, n]),
   );
   const { sources, references, frames } = bucketSources(nodes, edges, outputId);
+
+  // Map each character node to its 1-based image indices in references
+  const charImageMap = new Map();
+  const sameKindImages = references.filter((n) => n.type === 'image');
+  for (const [id, node] of refs.entries()) {
+    if (isCharacter(node)) {
+      const indices = [];
+      sameKindImages.forEach((img, i) => {
+        if (img.__characterId === id || img.id === id) {
+          indices.push(i + 1);
+        }
+      });
+      charImageMap.set(id, indices);
+    }
+  }
 
   const input_references = toReferences(references);
   const frame_images = frames.map(({ node, frame_type }) => ({
@@ -119,8 +221,8 @@ export function buildRequest(nodes, edges, outputId) {
 
   const promptParts = [];
   for (const node of sources) {
-    if (node.type !== 'prompt' && !isTextOutput(node)) continue;
-    const text = resolveRef(node.id, refs, []).trim();
+    if (node.type !== 'prompt' && !isTextOutput(node) && !isCharacter(node)) continue;
+    const text = resolveRef(node.id, refs, [], charImageMap).trim();
     if (text) promptParts.push(text);
   }
 
@@ -135,7 +237,7 @@ export function buildRequest(nodes, edges, outputId) {
 // badge and the request cannot disagree. `nodes`/`edges` are the live arrays.
 export function sourceRoles(nodes, edges, nodeId) {
   const self = nodes.find((n) => n.id === nodeId);
-  if (!self || (self.type !== 'image' && self.type !== 'video') || !self.data?.dataUrl) return [];
+  if (!self) return [];
 
   const roles = [];
   // Consumers in canvas order, top to bottom -- the same rule that orders prompts and
@@ -144,6 +246,33 @@ export function sourceRoles(nodes, edges, nodeId) {
   const consumers = nodes
     .filter(isOutput)
     .sort((a, b) => (a.position?.y ?? 0) - (b.position?.y ?? 0));
+
+  if (isCharacter(self)) {
+    if (!self.data?.images?.length) return [];
+    for (const consumer of consumers) {
+      const { references, frames, excess } = bucketSources(nodes, edges, consumer.id);
+      const frameTypes = frames
+        .filter((f) => f.node.__characterId === nodeId)
+        .map((f) => (f.frame_type === 'first_frame' ? 'first' : 'last'));
+      if (frameTypes.length) {
+        roles.push(...frameTypes);
+        continue;
+      }
+      if (excess.includes(nodeId)) {
+        roles.push('—');
+        continue;
+      }
+      const sameKind = references.filter((n) => n.type === 'image');
+      const indices = sameKind
+        .map((n, i) => ({ n, i: i + 1 }))
+        .filter(({ n }) => n.__characterId === nodeId)
+        .map(({ i }) => String(i));
+      roles.push(...indices);
+    }
+    return [...new Set(roles)];
+  }
+
+  if ((self.type !== 'image' && self.type !== 'video') || !self.data?.dataUrl) return [];
   for (const consumer of consumers) {
     const { references, frames, excess } = bucketSources(nodes, edges, consumer.id);
     const frame = frames.find((f) => f.node.id === nodeId);
@@ -187,7 +316,7 @@ export function freeSourceText(node, nodes) {
   if (!node) return '';
   if (isTextOutput(node)) return node.data?.result || '';
   const refs = new Map(
-    nodes.filter((n) => n.type === 'prompt' || isTextOutput(n)).map((n) => [n.id, n]),
+    nodes.filter((n) => n.type === 'prompt' || isTextOutput(n) || isCharacter(n)).map((n) => [n.id, n]),
   );
   // Seeded with the source's own id so @itself throws Circular instead of recursing,
   // the same guard resolveRef applies.

@@ -755,46 +755,77 @@ div:has(> .add-node-menu) {
   flex: 1 1 auto;
   min-height: 0;
 }
-/* Astryx wraps a TextArea in a Field and one unnamed div, so filling the card means
-   filling FOUR boxes, not one — the field, its inner wrapper, the textarea's own
-   wrapper and the textarea. Miss any of them and the card grows while the text keeps
-   its `rows` height and sits in a strip at the top, which is exactly what the old
-   field-corner resize did before this. `min-height: 0` on each is what lets a flex item
-   shrink below its content, so dragging the bottom edge UP works as well as down. */
-.xnode-prompt .xnode-body > .astryx-field,
-.xnode-prompt .astryx-field > div,
-.xnode-prompt .astryx-textarea {
+.prompt-editor-container {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+  position: relative;
+}
+.prompt-editor {
   width: 100%;
   height: 100%;
   flex: 1 1 auto;
   min-height: 0;
-  resize: none;
-}
-/* The field's own bordered box has to GO, not just be filled. Astryx draws the border,
-   the 10px radius and the white fill on the `.astryx-textarea` WRAPPER — not on the
-   <textarea> — so stripping the inner element left the wrapper's rounded box sitting
-   1px inside the card's square one: a double border, made obvious by the two corners
-   disagreeing. The card's border is now the field's only border, which is the whole
-   point of "the field IS the node". */
-.xnode-prompt .astryx-textarea {
-  border: none;
-  border-radius: 0;
-  background: transparent;
-  box-shadow: none;
-}
-.xnode-prompt .astryx-textarea textarea {
-  width: 100%;
-  height: 100%;
-  resize: none;
-  border: none;
-  border-radius: 0;
-  background: transparent;
+  box-sizing: border-box;
   padding: 10px;
-}
-.xnode-prompt .astryx-textarea textarea:focus {
   outline: none;
-  box-shadow: none;
+  border: none;
+  background: transparent;
+  color: var(--color-text-primary);
+  font-family: var(--font-family-body);
+  font-size: var(--text-body-size, 14px);
+  line-height: var(--text-body-leading, 1.4);
+  overflow-y: auto;
+  word-break: break-word;
+  white-space: pre-wrap;
+  user-select: text;
 }
+.prompt-editor:empty::before {
+  content: attr(data-placeholder);
+  color: var(--color-text-secondary);
+  opacity: 0.6;
+  pointer-events: none;
+}
+
+/* Mention tags */
+.mention-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  vertical-align: baseline;
+  margin-inline: 2px;
+  padding: 1px 6px 1px 4px;
+  border-radius: var(--radius-element);
+  background: color-mix(in srgb, var(--color-accent) 14%, var(--color-background-surface));
+  border: 1px solid color-mix(in srgb, var(--color-accent) 35%, transparent);
+  color: var(--color-accent);
+  font-size: 0.85em;
+  font-weight: 500;
+  line-height: 1.2;
+  user-select: none;
+  cursor: default;
+  box-sizing: border-box;
+  transition: background var(--duration-fast) ease, border-color var(--duration-fast) ease;
+}
+.mention-tag:hover {
+  background: color-mix(in srgb, var(--color-accent) 22%, var(--color-background-surface));
+  border-color: var(--color-accent);
+}
+.mention-tag-icon-wrap {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  color: var(--color-accent);
+  opacity: 0.9;
+}
+.mention-tag-label {
+  white-space: nowrap;
+}
+
 /* Focus moved with the border: with nothing of its own left to ring, the field's focus
    is the card's. Same colour as selection, which is correct — a focused prompt IS the
    selected node. */
@@ -826,7 +857,7 @@ div:has(> .add-node-menu) {
   margin: -4px 0 0;
   padding: 4px;
   list-style: none;
-  z-index: 10;
+  z-index: 20;
   max-height: 168px;
   overflow-y: auto;
   /* Fill and blur come from the menu rule near the top of this file. */
@@ -834,31 +865,41 @@ div:has(> .add-node-menu) {
   border-radius: var(--radius-element);
   box-shadow: var(--shadow-med);
 }
-.mention-menu li {
+.mention-item {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   gap: 8px;
-  padding: 5px 8px;
+  padding: 6px 8px;
   border-radius: 4px;
   cursor: pointer;
   font-size: 12px;
   color: var(--color-text-primary);
+  transition: background var(--duration-fast) ease;
 }
-.mention-menu li.active,
-.mention-menu li:hover {
+.mention-item.active,
+.mention-item:hover {
   background: var(--color-overlay-hover);
 }
-.mention-id {
+.mention-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
   flex: none;
-  color: var(--color-text-accent);
+  color: var(--color-accent);
 }
-.mention-preview {
+.mention-label {
+  flex: none;
+  font-weight: 500;
+  color: var(--color-text-primary);
+}
+.mention-hint {
   flex: 1;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   color: var(--color-text-secondary);
+  font-size: 0.9em;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -1209,4 +1250,58 @@ div:has(> .add-node-menu) {
 .react-flow__resize-control.xnode-resize.line.top,
 .react-flow__resize-control.xnode-resize.line.bottom {
   height: 10px;
+}
+
+/* Character node: resizable like the prompt node, with a small thumbnail grid for its
+   reference images. */
+.react-flow__node-character .react-flow__handle {
+  z-index: 2;
+}
+.react-flow__node-character > .astryx-card {
+  width: 100%;
+  min-height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+.xnode-character .xnode-body {
+  flex: 1 1 auto;
+  overflow-y: auto;
+}
+.xnode-character-name textarea {
+  min-height: 0;
+  resize: none;
+  overflow: hidden;
+}
+.xnode-character-thumb {
+  position: relative;
+  width: 72px;
+  line-height: 0;
+}
+.xnode-character-thumb .xnode-thumb {
+  aspect-ratio: auto;
+}
+.xnode-character-remove {
+  position: absolute;
+  top: var(--spacing-1);
+  right: var(--spacing-1);
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+.xnode-character-thumb:hover .xnode-character-remove,
+.xnode-character-thumb:focus-within .xnode-character-remove {
+  opacity: 1;
+}
+@media (prefers-reduced-motion: reduce) {
+  .xnode-character-remove {
+    transition: none;
+  }
+}
+.xnode-character-remove > button {
+  width: 20px;
+  height: 20px;
+  min-width: 20px;
+  border-radius: 0;
+  background: var(--color-background-popover);
+  border: 1px solid var(--color-border-emphasized);
+  color: var(--color-icon-primary);
 }

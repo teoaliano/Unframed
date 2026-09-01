@@ -6,11 +6,12 @@
 // registers for the design system's own semantic icons (`icon="info"` and friends).
 // One pack means one grid, one stroke weight, one optical size — which hand-drawn
 // paths never quite matched.
-import { AlignLeft, Image, Type, PanelTop, Workflow, SquarePlay } from 'lucide-react';
+import { AlignLeft, Image, Type, User, PanelTop, Workflow, SquarePlay } from 'lucide-react';
 
 export const PromptIcon = AlignLeft;
 export const ImageIcon = Image;
 export const TextIcon = Type;
+export const CharacterIcon = User;
 
 // Not node types — the Library's chips.
 export const BlockIcon = PanelTop;
@@ -27,6 +28,7 @@ export const NODE_ICONS = {
   prompt: PromptIcon,
   image: ImageIcon,
   video: VideoIcon,
+  character: CharacterIcon,
   imageOutput: ImageIcon,
   videoOutput: VideoIcon,
   textOutput: TextIcon,

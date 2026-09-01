@@ -5,6 +5,13 @@ is no release artifact to number. Headings are `## YYYY-MM-DD`, groups are
 `### Added` / `### Changed` / `### Fixed`, one bullet per user-visible change.
 Keep that shape: the website's What's new page parses this file.
 
+## 2026-09-01
+
+### Added
+
+- **Character nodes** hold a written description and multiple reference images in one place. The description can be pulled into any prompt with `@id`, and the images wire into image or video outputs like regular references — numbered, badge-ranked, and usable with Free-mode `images:` directives.
+- **Prompt nodes display character names in inline tags** while keeping underlying references tied to node IDs. Autocomplete suggestions when typing `@` can now be clicked with the mouse or navigated by keyboard, and renaming a character node automatically updates its name across all prompt tags on the canvas without losing the reference link.
+
 ## 2026-08-22
 
 ### Added

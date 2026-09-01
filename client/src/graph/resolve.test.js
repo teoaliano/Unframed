@@ -8,7 +8,6 @@ import { MODEL_PARAM_KEYS, resetModelParams } from '../nodes/output/defaults.js'
 import { RUN_MARKERS, stripRunMarkers, keepLiveRunMarkers } from './runMarkers.js';
 import {
   nextId,
-  bumpCounter,
   slug,
   initialNodes,
   initialEdges,
@@ -149,6 +148,87 @@ function graph(nodes, edges) {
     [{ id: 'e1', source: 'p1', target: 'out' }],
   );
   assert.throws(() => buildRequest(nodes, edges, 'out'), /Circular reference/);
+}
+
+// --- character node ---
+
+const charNode = (id, y, text, images) => ({
+  id,
+  type: 'character',
+  position: { x: 0, y },
+  data: { text, images: images.map((url, i) => ({ dataUrl: url, fileName: `ref${i + 1}.png`, aspect: 1 })) },
+});
+
+// A character node's text is substituted by @id like a prompt node, and its reference
+// images are automatically included in input_references with an identity lock prompt naming the image.
+{
+  const { nodes, edges } = graph(
+    [
+      charNode('c1', 0, 'a red-haired elf in a green cloak', ['data:image/png;base64,CHAR_REF']),
+      { id: 'p1', type: 'prompt', position: { x: 0, y: 10 }, data: { text: 'portrait of @c1, smiling' } },
+    ],
+    [{ id: 'e1', source: 'p1', target: 'out' }],
+  );
+  const { prompt, input_references } = buildRequest(nodes, edges, 'out');
+  assert.equal(
+    prompt,
+    'portrait of Keep character appearance, face, and identity from image 1 unchanged. a red-haired elf in a green cloak, smiling',
+  );
+  assert.equal(input_references.length, 1);
+  assert.equal(input_references[0].image_url.url, 'data:image/png;base64,CHAR_REF');
+  assert.deepEqual(sourceRoles(nodes, edges, 'c1'), ['1']);
+}
+
+// A character node with no images contributes its description text without a lock prefix.
+{
+  const { nodes, edges } = graph(
+    [
+      charNode('c1', 0, 'a red-haired elf in a green cloak', []),
+      { id: 'p1', type: 'prompt', position: { x: 0, y: 10 }, data: { text: 'portrait of @c1, smiling' } },
+    ],
+    [{ id: 'e1', source: 'p1', target: 'out' }],
+  );
+  const { prompt, input_references } = buildRequest(nodes, edges, 'out');
+  assert.equal(prompt, 'portrait of a red-haired elf in a green cloak, smiling');
+  assert.equal(input_references.length, 0);
+}
+
+// A wired character node with multiple images lists all its image numbers in the lock prompt.
+{
+  const { nodes, edges } = graph(
+    [
+      charNode('c1', 0, 'a red-haired elf in a green cloak', ['data:image/png;base64,REF1', 'data:image/png;base64,REF2']),
+    ],
+    [{ id: 'e1', source: 'c1', target: 'out' }],
+  );
+  const { prompt, input_references } = buildRequest(nodes, edges, 'out');
+  assert.equal(
+    prompt,
+    'Keep character appearance, face, and identity from images 1 and 2 unchanged. a red-haired elf in a green cloak',
+  );
+  assert.equal(input_references.length, 2);
+  assert.deepEqual(
+    input_references.map((r) => r.image_url.url),
+    ['data:image/png;base64,REF1', 'data:image/png;base64,REF2'],
+  );
+}
+
+// Character images are numbered alongside regular image nodes, and lock refers to the correct index.
+{
+  const { nodes, edges } = graph(
+    [
+      { id: 'i1', type: 'image', position: { x: 0, y: 0 }, data: { dataUrl: 'data:image/png;base64,IMG' } },
+      charNode('c1', 10, 'elf', ['data:image/png;base64,REF']),
+    ],
+    [
+      { id: 'e1', source: 'i1', target: 'out' },
+      { id: 'e2', source: 'c1', target: 'out' },
+    ],
+  );
+  const { prompt } = buildRequest(nodes, edges, 'out');
+  assert.equal(prompt, 'Keep character appearance, face, and identity from image 2 unchanged. elf');
+  assert.deepEqual(sourceRoles(nodes, edges, 'i1'), ['1']);
+  assert.deepEqual(sourceRoles(nodes, edges, 'c1'), ['2']);
 }
 
 // --- splitSections ---
@@ -834,6 +914,36 @@ function videoGraph(inputMode, imageCount, extra = []) {
   assert.deepEqual(forwards, ['1', '2']);
 }
 
+// A character node with multiple images reports all the reference numbers its images occupy.
+{
+  const nodes = [
+    { id: 'out', type: 'imageOutput', position: { x: 400, y: 0 }, data: {} },
+    charNode('c1', 0, 'elf', ['data:,a', 'data:,b']),
+    { id: 'i1', type: 'image', position: { x: 0, y: 100 }, data: { dataUrl: 'data:,x' } },
+  ];
+  const edges = [
+    { id: 'e1', source: 'c1', target: 'out' },
+    { id: 'e2', source: 'i1', target: 'out' },
+  ];
+  assert.deepEqual(sourceRoles(nodes, edges, 'c1'), ['1', '2']);
+  assert.deepEqual(sourceRoles(nodes, edges, 'i1'), ['3']);
+}
+
+// Character images can serve video frame slots too.
+{
+  const nodes = [
+    { id: 'v1', type: 'videoOutput', position: { x: 400, y: 0 }, data: { inputMode: 'first_last' } },
+    charNode('c1', 0, 'elf', ['data:,a', 'data:,b']),
+    { id: 'i1', type: 'image', position: { x: 0, y: 100 }, data: { dataUrl: 'data:,x' } },
+  ];
+  const edges = [
+    { id: 'e1', source: 'c1', target: 'v1' },
+    { id: 'e2', source: 'i1', target: 'v1' },
+  ];
+  assert.deepEqual(sourceRoles(nodes, edges, 'c1'), ['first', 'last']);
+  assert.deepEqual(sourceRoles(nodes, edges, 'i1'), ['—']);
+}
+
 // ---- resetModelParams ----
 
 // Critical regression guard: a naive "clear the model keys, then spread the WHOLE
@@ -882,22 +992,13 @@ function videoGraph(inputMode, imageCount, extra = []) {
 // so plain `node` cannot import it. Moving them out is what makes them testable,
 // and both have a rule worth pinning.
 
-// bumpCounter must clear every numeric id in a loaded graph. Ids are reference
-// keys (@id in a prompt), so a counter that reissues one lets a newly added node
-// silently capture a reference meant for an existing node.
-// No counter reset is exported on purpose -- a test-only setter would be API
-// nobody else wants. These assertions hold from whatever value the counter is
-// already at, since bumpCounter only ever moves it forward.
+// nextId mints UUIDs. Collision probability is negligible, so there is no counter
+// to bump after loading a graph.
 {
-  bumpCounter([{ id: '500' }, { id: 'not-a-number' }, { id: '7' }]);
-  assert.equal(nextId(), '501', 'bumpCounter clears the highest numeric id in the graph');
-  assert.equal(nextId(), '502', 'and keeps counting from there');
-  // The property that actually matters: a graph whose ids are all non-numeric
-  // must never drag the counter BACKWARDS onto an id already in use. (It does
-  // advance by one here -- Math.max(counter) + 1 with nothing to compare -- so
-  // one id is skipped. Harmless: ids only have to be unique, never dense.)
-  bumpCounter([{ id: 'a' }, { id: 'b' }]);
-  assert.ok(Number(nextId()) > 502, 'a graph with no numeric ids never reissues a used id');
+  const a = nextId();
+  const b = nextId();
+  assert.ok(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(a), 'nextId returns a UUID');
+  assert.notEqual(a, b, 'consecutive ids are different');
 }
 
 // withDrag decides four things per node, and each has a way of going wrong that
@@ -1191,6 +1292,30 @@ const img = (i, y) => ({ id: `i${i}`, type: 'image', position: { x: 0, y }, data
   assert.equal(splitSections(many).blocks.length, MAX_RUNS, 'splitSections defaults to the cap');
   assert.equal(splitSections(many).truncated, 3);
   assert.equal(freeBatch(nodes, edges, 'out', 'p-list', many).runs.length, MAX_RUNS, 'and so does freeBatch');
+}
+
+// Character images participate in Free-mode directives by their badge numbers.
+{
+  const src = { id: 'p-list', type: 'prompt', position: { x: 0, y: 50 }, data: { text: '' } };
+  const { nodes, edges } = graph(
+    [
+      src,
+      charNode('c1', 0, 'elf', ['data:image/png;base64,REF1', 'data:image/png;base64,REF2']),
+      img(1, 100),
+    ],
+    [
+      { id: 'e1', source: 'p-list', target: 'out' },
+      { id: 'e2', source: 'c1', target: 'out' },
+      { id: 'e3', source: 'i1', target: 'out' },
+    ],
+  );
+  // c1 occupies image 1 and 2; i1 is image 3. Pick 2 and 3 -> the second character image and the plain image.
+  const { runs } = freeBatch(nodes, edges, 'out', 'p-list', 'images: 2, 3\nfirst');
+  assert.equal(runs.length, 1);
+  assert.deepEqual(runs[0].used, [2, 3]);
+  assert.equal(runs[0].input_references.length, 2);
+  assert.equal(runs[0].input_references[0].image_url.url, 'data:image/png;base64,REF2');
+  assert.equal(runs[0].input_references[1].image_url.url, 'data:image/png;base64,IMG1');
 }
 
 // --- expandSlots ---

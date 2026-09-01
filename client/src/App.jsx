@@ -44,10 +44,10 @@ import VideoNode, { MAX_VIDEO_BYTES } from './nodes/VideoNode.jsx';
 import ImageOutputNode from './nodes/ImageOutputNode.jsx';
 import VideoOutputNode from './nodes/VideoOutputNode.jsx';
 import TextOutputNode from './nodes/TextOutputNode.jsx';
+import CharacterNode from './nodes/CharacterNode.jsx';
 import {
   withDrag,
   nextId,
-  bumpCounter,
   slug,
   NEW_NODE,
   initialNodes,
@@ -56,7 +56,7 @@ import {
 } from './graph/starter.js';
 import ProjectMenu from './ProjectMenu.jsx';
 import IgnoredEdge from './nodes/IgnoredEdge.jsx';
-import { PromptIcon, ImageIcon, VideoIcon, TextIcon } from './nodes/nodeIcons.jsx';
+import { PromptIcon, ImageIcon, VideoIcon, TextIcon, CharacterIcon } from './nodes/nodeIcons.jsx';
 import { bucketSources, isOutput, isReferenceable } from './graph/resolve.js';
 import { canSource, canTarget, selectedIds, connections, dropInternal } from './graph/bulkWire.js';
 import { keepLiveRunMarkers } from './graph/runMarkers.js';
@@ -90,6 +90,7 @@ const nodeTypes = {
   prompt: PromptNode,
   image: ImageNode,
   video: VideoNode,
+  character: CharacterNode,
   imageOutput: ImageOutputNode,
   videoOutput: VideoOutputNode,
   textOutput: TextOutputNode,
@@ -392,7 +393,6 @@ function Canvas() {
       if (g?.nodes) {
         setNodes(g.nodes.map(withDrag));
         setEdges(g.edges || []);
-        bumpCounter(g.nodes);
       }
       activate(current);
       ready.current = true;
@@ -799,7 +799,6 @@ function Canvas() {
     const loaded = g?.nodes || initialNodes;
     setNodes(loaded.map(withDrag));
     setEdges(g?.nodes ? g.edges || [] : initialEdges);
-    bumpCounter(loaded);
     activate(name);
     // A genuinely different graph just landed — remount every node component
     // rather than reuse instances by id. See the comment on canvasGeneration.
@@ -1047,6 +1046,7 @@ function Canvas() {
         { label: 'Prompt', icon: PromptIcon, onClick: () => addNode('prompt', NEW_NODE.prompt, at?.()) },
         { label: 'Image', icon: ImageIcon, onClick: () => addNode('image', NEW_NODE.image, at?.()) },
         { label: 'Video', icon: VideoIcon, onClick: () => addNode('video', NEW_NODE.video, at?.()) },
+        { label: 'Character', icon: CharacterIcon, onClick: () => addNode('character', NEW_NODE.character, at?.()) },
       ],
     },
     {
@@ -1325,9 +1325,10 @@ function Canvas() {
     // cannot drift apart. Keyed off the right-clicked node rather than the selection:
     // a reference names ONE node, and a group of them has no single answer.
     if (menuCtx && isReferenceable(menuCtx)) {
+      const refLabel = menuCtx.data?.name?.trim() || menuCtx.id;
       sections.push({
         title: 'Reference',
-        items: [{ label: `Copy @${menuCtx.id}`, onClick: () => copyReference(menuCtx.id) }],
+        items: [{ label: `Copy @${refLabel}`, onClick: () => copyReference(menuCtx.id) }],
       });
     }
 

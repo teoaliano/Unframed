@@ -28,7 +28,7 @@ import { OUTPUT_DEFAULTS } from '../nodes/output/defaults.js';
 // handle" to React Flow, which is what makes the whole card the drag surface; the
 // controls opt out individually with `nodrag`. See
 // docs/superpowers/specs/2026-08-18-canvas-interaction-design.md.
-const RESIZABLE_INPUT = new Set(['image', 'video', 'prompt']);
+const RESIZABLE_INPUT = new Set(['image', 'video', 'prompt', 'character']);
 
 // EVERY node that reaches the canvas goes through this, without exception — a node
 // handed straight to addNodes has no wrapper width, and an input node's Card is
@@ -56,9 +56,11 @@ export const withDrag = (n) => ({
   width: RESIZABLE_INPUT.has(n.type) ? n.width ?? 240 : n.width,
   // Media is the DERIVED case, so its height is dropped rather than passed through: a
   // height saved by an older build, or by a hand-edited graph.json, would otherwise be
-  // honoured forever and quietly letterbox the picture. Everything that is not a prompt
-  // and not media has no wrapper size at all.
-  height: n.type === 'prompt' ? n.height ?? 160 : undefined,
+  // honoured forever and quietly letterbox the picture. The character node is the other
+  // height-seeded input: it holds stacked fields and a thumbnail grid, so it needs a
+  // starting height to be clickable before the user resizes it.
+  height:
+    n.type === 'prompt' ? n.height ?? 160 : n.type === 'character' ? n.height ?? 240 : undefined,
   // React Flow's in-gesture flag, dropped for the same reason as the two above and with
   // a worse failure: `getNodesInside()` is the only geometry test a box selection runs,
   // and it ends with `if (isVisible || node.dragging)`. A node carrying a stale `true`
@@ -70,13 +72,7 @@ export const withDrag = (n) => ({
   dragging: undefined,
 });
 
-let counter = 100;
-export const nextId = () => String(counter++);
-// ponytail: keep counter-issued ids from colliding with ids in a loaded graph,
-// since ids are now reference keys.
-export const bumpCounter = (nodes) => {
-  counter = Math.max(counter, ...nodes.map((n) => parseInt(n.id, 10)).filter(Number.isFinite)) + 1;
-};
+export const nextId = () => crypto.randomUUID();
 
 // Same rule as the server's slugify, so the name the client tracks matches the
 // folder the server writes. ponytail: kept in sync by hand; two call sites.
@@ -89,6 +85,7 @@ export const NEW_NODE = {
   prompt: { text: '' },
   image: { fileName: '', dataUrl: '' },
   video: { fileName: '', dataUrl: '' },
+  character: { name: '', text: '', images: [] },
   imageOutput: OUTPUT_DEFAULTS.imageOutput,
   videoOutput: OUTPUT_DEFAULTS.videoOutput,
   textOutput: OUTPUT_DEFAULTS.textOutput,
