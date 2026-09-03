@@ -38,10 +38,21 @@ Direct pushes to `main` are not the process, even for a one-line fix. The shell
 pins tags from `main`, so anything that reaches `main` is a candidate for shipping
 to users.
 
+This is enforced rather than conventional. A repository ruleset requires a pull
+request for `main` and blocks deletions and force-pushes, with an empty bypass list
+— maintainers included, which is the point: a rule with an exception for the person
+most likely to be in a hurry is not a rule. A second ruleset covers `refs/tags/engine-*`
+and `refs/tags/v*` with the same two rules, because deleting a `v*` tag drafts its
+Release and takes the installers and `latest.yml` offline for every installed copy,
+and moving an `engine-*` tag silently changes what a shell's pin resolves to. Neither
+ruleset restricts tag *creation* — tagging a release must stay a normal operation.
+
 1. Branch from an up-to-date `main`. Name it for the work, not the person.
 2. Commit in reviewable steps. Run `npm test` before each commit.
 3. Open a PR against `main`. Describe what a *user* would notice, and what was
-   verified beyond the test suite.
+   verified beyond the test suite. `.github/workflows/test.yml` runs `npm test` on
+   Node 18 and 22 for every PR, including PRs from forks; step 2 is still yours,
+   because a red check after review costs a round trip.
 4. Merge the PR.
 5. **Only if the engine changed in a way the shell needs**, tag it. The version bump
    is itself a change, so it goes through a PR like everything else — rule 1 has no
