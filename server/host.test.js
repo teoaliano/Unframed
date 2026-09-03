@@ -2109,10 +2109,14 @@ if (process.platform !== 'win32') {
       if (spawned) break;
       await new Promise((r) => setTimeout(r, 50));
     }
-    assert.match(
-      spawned,
-      /shot\.png/,
-      `with no shell marker, reveal must drive ${opener} on this machine -- not post a message nobody reads`,
+    // What "revealed" MEANS is per-platform, and index.js says so: only Finder can
+    // select a file, so the Linux branch opens the containing folder by design.
+    // Asserting shot.png everywhere made this pass on a maintainer's Mac and fail
+    // on any Linux clone -- the assertion was the bug, not the route.
+    const revealTarget = process.platform === 'darwin' ? 'shot.png' : outDir7;
+    assert.ok(
+      spawned.includes(revealTarget),
+      `with no shell marker, reveal must drive ${opener} on ${revealTarget} -- not post a message nobody reads (got ${JSON.stringify(spawned)})`,
     );
     assert.equal(
       hostedMessage,

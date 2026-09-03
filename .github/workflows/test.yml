@@ -1,0 +1,28 @@
+name: tests
+
+# `pull_request`, never `pull_request_target`: this runs code from forks, and only
+# `pull_request` denies it repository secrets and a writable token.
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # 18 is the floor CLAUDE.md advertises (server/index.js relies on built-in
+        # fetch); 22 is what maintainers run. Both, so the floor is a fact.
+        node: ['18', '22']
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+      - run: npm run install:all
+      - run: npm test
