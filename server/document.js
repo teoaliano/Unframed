@@ -20,6 +20,7 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { applyOp, emptyGraph } from './graph.js';
+import { extractFromOp, extractMedia } from './media.js';
 
 export const snapshotPath = (dir) => path.join(dir, 'graph.json');
 export const journalPath = (dir) => path.join(dir, 'graph.log');
@@ -116,6 +117,19 @@ export async function openDocument(dir) {
     snapshotVersion: snap?.version ?? 0,
   };
   open.set(dir, doc);
+
+  // A graph saved before media left the document still carries data: URLs. Move the bytes
+  // to files now, as one journaled system commit, so the rewrite is visible to every
+  // subscriber and never silently different from what a reopen would produce. The
+  // extraction happens BEFORE the commit so a crash between the two costs a stray file,
+  // not a graph pointing at a file that was never written.
+  const { ops } = await extractMedia(graph, dir, { source: 'legacy-graph' });
+  if (ops.length) {
+    // Not undoable: the inverse would have to carry the bytes back into the graph, which
+    // is the one thing this commit exists to stop, and a user has no reason to want their
+    // images turned back into base64.
+    await commit(doc, { type: 'batch', ops }, { kind: 'system', reason: 'media-extraction' }, {}, { extracted: true, undoable: false });
+  }
   return doc;
 }
 
@@ -171,22 +185,28 @@ function scheduleSnapshot(doc) {
 // for a structural problem, because the caller has to answer an HTTP request either way.
 // The append is awaited BEFORE the in-memory graph advances, so a version a caller has
 // been told about is always on disk.
-export function commit(doc, op, origin, extra = {}) {
-  return commitWith(doc, () => ({ op, origin, extra }));
+export function commit(doc, op, origin, extra = {}, { extracted = false, undoable = true } = {}) {
+  return commitWith(doc, () => ({ op, origin, extra }), { extracted, undoable });
 }
 
 // The general form: `decide` runs INSIDE the document's chain, so anything it reads from
 // doc.entries is current when the op is applied. undo/redo need that -- their target is a
 // function of the journal, and two undos racing each other must not pick the same entry.
 // `decide` returning null means "nothing to do", which resolves to null.
-function commitWith(doc, decide) {
+//
+// Every op is passed through extractFromOp first, so bytes never reach the journal or a
+// subscriber -- unless the caller says the op is already extracted (the open-time batch,
+// and undo/redo, whose ops come from the journal and so cannot carry any).
+function commitWith(doc, decide, { extracted = false, undoable = true } = {}) {
   const run = async () => {
     const decision = decide();
     if (!decision) return null;
-    const { op, origin, extra = {} } = decision;
+    const { origin, extra = {} } = decision;
+    const op = extracted ? decision.op : await extractFromOp(decision.op, doc.dir);
     const r = applyOp(doc.graph, op);
     if (r.rejected) return { rejected: r.rejected };
-    const entry = { version: doc.version + 1, op, inverse: r.inverse, origin, at: Date.now(), ...extra };
+    // inverse: null marks an entry undo must skip (see undoTarget).
+    const entry = { version: doc.version + 1, op, inverse: undoable ? r.inverse : null, origin, at: Date.now(), ...extra };
     await fs.mkdir(doc.dir, { recursive: true });
     await fs.appendFile(journalPath(doc.dir), `${JSON.stringify(entry)}\n`);
     doc.graph = r.graph;
@@ -241,12 +261,13 @@ function undoneSet(entries) {
   return undone;
 }
 
-// The newest entry that applied something (a plain op or a redo) and is not undone.
+// The newest entry that applied something (a plain op or a redo), is not undone, and has
+// an inverse to apply -- a system commit with `inverse: null` is skipped over.
 function undoTarget(entries) {
   const undone = undoneSet(entries);
   for (let i = entries.length - 1; i >= 0; i--) {
     const e = entries[i];
-    if (e.undoes !== undefined) continue;
+    if (e.undoes !== undefined || e.inverse === null) continue;
     if (!undone.has(e.version)) return e;
   }
   return null;
@@ -265,18 +286,26 @@ function redoTarget(entries) {
 }
 
 export function undo(doc, by = {}) {
-  return commitWith(doc, () => {
-    const target = undoTarget(doc.entries);
-    if (!target) return null;
-    return { op: target.inverse, origin: { kind: 'undo', ...by }, extra: { undoes: target.version } };
-  });
+  return commitWith(
+    doc,
+    () => {
+      const target = undoTarget(doc.entries);
+      if (!target) return null;
+      return { op: target.inverse, origin: { kind: 'undo', ...by }, extra: { undoes: target.version } };
+    },
+    { extracted: true },
+  );
 }
 
 export function redo(doc, by = {}) {
-  return commitWith(doc, () => {
-    const u = redoTarget(doc.entries);
-    if (!u) return null;
-    // Re-apply what the undo reverted: the undo's inverse IS the original op.
-    return { op: u.inverse, origin: { kind: 'redo', ...by }, extra: { redoes: u.version } };
-  });
+  return commitWith(
+    doc,
+    () => {
+      const u = redoTarget(doc.entries);
+      if (!u) return null;
+      // Re-apply what the undo reverted: the undo's inverse IS the original op.
+      return { op: u.inverse, origin: { kind: 'redo', ...by }, extra: { redoes: u.version } };
+    },
+    { extracted: true },
+  );
 }

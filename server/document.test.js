@@ -247,5 +247,46 @@ const origin = { kind: 'session', id: 'test' };
   await closeDocument(dir);
 }
 
+// ---- media leaves the document: on open (legacy graph) and on the way in (an op) ----
+{
+  const PNG_1PX =
+    'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==';
+  const dir = fresh('media');
+  await fs.mkdir(dir);
+  await fs.writeFile(
+    snapshotPath(dir),
+    JSON.stringify({ nodes: [{ id: 'i', type: 'image', position: { x: 0, y: 0 }, data: { dataUrl: PNG_1PX, fileName: 'old.png' } }], edges: [] }),
+  );
+  let doc = await openDocument(dir);
+  // The legacy bytes are on disk as a file and gone from the graph, and the rewrite is a
+  // journaled system commit -- version 1, visible to any subscriber like any other change.
+  assert.equal(doc.graph.nodes[0].data.dataUrl, undefined);
+  assert.match(doc.graph.nodes[0].data.file, /-old\.png$/);
+  assert.equal(doc.version, 1);
+  assert.equal(doc.entries[0].origin.kind, 'system');
+  const bytes = await fs.readFile(path.join(dir, doc.graph.nodes[0].data.file));
+  assert.equal(bytes.length, 70);
+  // Extraction is not undoable: its inverse would carry the bytes back in.
+  assert.equal(doc.entries[0].inverse, null);
+  assert.equal(await undo(doc), null);
+  // An op that arrives with inline media is rewritten before it is applied or journaled.
+  const seen = [];
+  subscribe(doc, (e) => seen.push(e));
+  const entry = await commit(
+    doc,
+    { type: 'addNode', node: { id: 'j', type: 'image', position: { x: 0, y: 0 }, data: { dataUrl: PNG_1PX, fileName: 'new.png' } } },
+    origin,
+  );
+  assert.equal(entry.op.node.data.dataUrl, undefined);
+  assert.match(entry.op.node.data.file, /-new\.png$/);
+  assert.equal(seen[0].op.node.data.dataUrl, undefined, 'subscribers never see the bytes either');
+  const journal = await fs.readFile(journalPath(dir), 'utf8');
+  assert.equal(journal.includes('base64'), false, 'no bytes in the journal');
+  await closeDocument(dir);
+  doc = await openDocument(dir);
+  assert.equal(doc.version, 2, 'nothing left to extract on the second open');
+  await closeDocument(dir);
+}
+
 await fs.rm(root, { recursive: true, force: true });
 console.log('document.test.js: ok');
