@@ -1197,12 +1197,13 @@ try {
   // each write fail (the presets.test.js / jobs.test.js trick); the timeout on
   // each fetch is the hang detector.
 
-  // PUT /api/projects/:name -- autosave.
-  await fs.mkdir(path.join(outDir, 'wrapcheck', 'graph.json'), { recursive: true });
-  const saveBlocked = await fetch(`${base}/api/projects/wrapcheck`, {
-    method: 'PUT',
+  // POST /api/projects/:name/ops -- the save path. A directory where graph.log belongs
+  // makes the journal append fail.
+  await fs.mkdir(path.join(outDir, 'wrapcheck', 'graph.log'), { recursive: true });
+  const saveBlocked = await fetch(`${base}/api/projects/wrapcheck/ops`, {
+    method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ nodes: [], edges: [] }),
+    body: JSON.stringify({ ops: [{ type: 'addNode', node: { id: 'z', type: 'prompt', position: { x: 0, y: 0 }, data: {} } }], origin: { id: 't' } }),
     signal: AbortSignal.timeout(5000),
   });
   assert.equal(saveBlocked.status, 500, 'a save that cannot write answers 500 instead of hanging');
@@ -1231,6 +1232,145 @@ try {
   assert.equal(listBlocked.status, 500, 'an unlistable output folder answers 500 instead of hanging');
   await fs.rm(outDir);
   await fs.rename(`${outDir}-moved`, outDir);
+
+  // ---- the document (2026-09-04): create, ops, events, undo/redo, files, rename ----
+  // The server owns the graph; the browser sends ops and listens on an SSE stream.
+  // Everything here goes through the real routes against the forked server.
+  {
+    const docBase = `${base}/api/projects/docproj`;
+    const json = (method, url, body) =>
+      fetch(url, {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        body: body === undefined ? undefined : JSON.stringify(body),
+        signal: AbortSignal.timeout(5000),
+      });
+    const dn = (id) => ({ id, type: 'prompt', position: { x: 0, y: 0 }, data: { text: id } });
+
+    // Create with a starter graph: one system commit, version 1. A second create is a 409.
+    const created = await json('POST', docBase, { nodes: [dn('a')], edges: [] });
+    assert.equal(created.status, 200);
+    assert.equal((await created.json()).version, 1);
+    assert.equal((await json('POST', docBase, {})).status, 409, 'creating over an existing project is refused');
+    const got = await (await fetch(docBase)).json();
+    assert.equal(got.version, 1);
+    assert.deepEqual(got.nodes.map((n) => n.id), ['a']);
+
+    // Ops: applied and rejected reported separately; the origin's kind is forced to
+    // `session` whatever the body claimed.
+    const opsRes = await json('POST', `${docBase}/ops`, {
+      ops: [{ type: 'addNode', node: dn('b') }, { type: 'moveNode', id: 'ghost', position: { x: 0, y: 0 } }],
+      origin: { kind: 'thread', id: 'tab-1' },
+    });
+    const o = await opsRes.json();
+    assert.equal(o.version, 2);
+    assert.equal(o.applied.length, 1);
+    assert.deepEqual(o.applied[0].origin, { kind: 'session', id: 'tab-1' });
+    assert.equal(o.rejected.length, 1);
+    assert.match(o.rejected[0].reason, /no node/);
+    assert.equal((await json('POST', `${docBase}/ops`, { ops: [], origin: { id: 'x' } })).status, 400);
+    assert.equal((await json('POST', `${docBase}/ops`, { ops: [{ type: 'moveNode', id: 'a', position: { x: 1, y: 1 } }] })).status, 400, 'origin is required');
+
+    // The event stream: replay from `since`, then a version marker, then live entries.
+    const streamAbort = new AbortController();
+    const ev = await fetch(`${docBase}/events?since=0`, { signal: streamAbort.signal });
+    assert.equal(ev.status, 200);
+    assert.ok(ev.headers.get('content-type').startsWith('text/event-stream'));
+    const reader = ev.body.getReader();
+    const decoder = new TextDecoder();
+    let sseBuffer = '';
+    // Reads until `until(events)` is satisfied; returns the events read by THIS call.
+    const readEvents = (until) =>
+      withDeadline(
+        (async () => {
+          const events = [];
+          for (;;) {
+            let sep;
+            while ((sep = sseBuffer.indexOf('\n\n')) !== -1) {
+              const frame = sseBuffer.slice(0, sep);
+              sseBuffer = sseBuffer.slice(sep + 2);
+              if (frame.startsWith(':')) continue; // heartbeat comment
+              const event = /^event: (.*)$/m.exec(frame)?.[1];
+              const data = /^data: (.*)$/m.exec(frame)?.[1];
+              events.push({ event, data: data ? JSON.parse(data) : null });
+            }
+            if (until(events)) return events;
+            const { value, done } = await reader.read();
+            if (done) return events;
+            sseBuffer += decoder.decode(value, { stream: true });
+          }
+        })(),
+        5000,
+        'the event stream did not deliver in time',
+      );
+    const replay = await readEvents((evs) => evs.some((e) => e.event === 'version'));
+    assert.deepEqual(replay.filter((e) => e.event === 'entry').map((e) => e.data.version), [1, 2], 'replay from 0 delivers both entries');
+    assert.equal(replay.at(-1).data.version, 2, 'then the live marker');
+    await json('POST', `${docBase}/ops`, { ops: [{ type: 'moveNode', id: 'a', position: { x: 7, y: 7 } }], origin: { id: 'tab-2' } });
+    const live = await readEvents((evs) => evs.some((e) => e.event === 'entry'));
+    assert.equal(live[0].data.version, 3);
+    assert.equal(live[0].data.origin.id, 'tab-2', 'a live entry names who made it');
+
+    // Undo and redo through the routes, broadcast like anything else; 204 when idle.
+    const u = await json('POST', `${docBase}/undo`, { origin: { id: 'tab-2' } });
+    assert.equal(u.status, 200);
+    assert.equal((await u.json()).undoes, 3);
+    assert.deepEqual((await (await fetch(docBase)).json()).nodes.find((n) => n.id === 'a').position, { x: 0, y: 0 });
+    assert.equal((await json('POST', `${docBase}/redo`, {})).status, 200);
+    assert.equal((await json('POST', `${docBase}/redo`, {})).status, 204, 'nothing left to redo');
+    const walked = await readEvents((evs) => evs.filter((e) => e.event === 'entry').length >= 2);
+    assert.deepEqual(walked.map((e) => e.data.origin.kind), ['undo', 'redo']);
+
+    // Files: raw bytes in, a named file plus sidecar out, served back by /api/file.
+    const png = Buffer.from(
+      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==',
+      'base64',
+    );
+    const up = await fetch(`${docBase}/files?name=Hero%20Shot.png`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'image/png' },
+      body: png,
+      signal: AbortSignal.timeout(5000),
+    });
+    assert.equal(up.status, 200);
+    const uploaded = await up.json();
+    assert.match(uploaded.file, /^\d+-hero-shot\.png$/);
+    assert.equal(uploaded.bytes, 70);
+    await fs.access(path.join(outDir, 'docproj', uploaded.file));
+    const sidecar = JSON.parse(await fs.readFile(path.join(outDir, 'docproj', uploaded.file.replace(/\.png$/, '.json')), 'utf8'));
+    assert.equal(sidecar.source, 'upload');
+    assert.equal(sidecar.fileName, 'Hero Shot.png');
+    assert.equal((await fetch(`${base}/api/file/docproj/${uploaded.file}`)).status, 200);
+    assert.equal((await fetch(`${docBase}/files`, { method: 'POST', body: '', signal: AbortSignal.timeout(5000) })).status, 400, 'no bytes is a 400');
+
+    // Rename ends the stream (the tab reconnects under the new name) and the graph,
+    // journal included, follows the folder.
+    assert.equal((await json('POST', `${docBase}/rename`, { to: 'docproj-2' })).status, 200);
+    const ended = await withDeadline(reader.read(), 5000, 'the stream did not end on rename');
+    assert.equal(ended.done, true, 'the event stream ended when the project was renamed');
+    const moved = await (await fetch(`${base}/api/projects/docproj-2`)).json();
+    assert.equal(moved.version, 5, 'create, add, move, undo, redo');
+    assert.deepEqual(moved.nodes.map((n) => n.id), ['a', 'b']);
+    streamAbort.abort();
+
+    // A graph saved before media left the document is rewritten on first open: the bytes
+    // become a file, the node keeps the name, and the rewrite is version 1.
+    const legacyDir = path.join(outDir, 'legacy-media');
+    await fs.mkdir(legacyDir, { recursive: true });
+    await fs.writeFile(
+      path.join(legacyDir, 'graph.json'),
+      JSON.stringify({
+        nodes: [{ id: 'img', type: 'image', position: { x: 0, y: 0 }, data: { dataUrl: `data:image/png;base64,${png.toString('base64')}`, fileName: 'old.png' } }],
+        edges: [],
+      }),
+    );
+    const legacy = await (await fetch(`${base}/api/projects/legacy-media`)).json();
+    assert.equal(legacy.version, 1);
+    assert.equal(legacy.nodes[0].data.dataUrl, undefined);
+    assert.match(legacy.nodes[0].data.file, /-old\.png$/);
+    assert.equal((await fs.readFile(path.join(legacyDir, legacy.nodes[0].data.file))).length, 70);
+    assert.equal((await fs.readFile(path.join(legacyDir, 'graph.log'), 'utf8')).includes('base64'), false, 'no bytes in the journal');
+  }
 
   // The fourth hardened call site: the poll route's terminal-failure persistJob.
   // A store write CAN be made to fail on demand -- the same

@@ -20,6 +20,16 @@ import {
 } from './jobs.js';
 import { ensureTunnel, mintShare, revokeShare, waitUntilPublic, stopTunnel } from './share.js';
 import {
+  openDocument,
+  closeDocument,
+  openDocuments,
+  commit as commitOp,
+  undo as undoOp,
+  redo as redoOp,
+  subscribe as subscribeDocument,
+} from './document.js';
+import { saveMedia } from './media.js';
+import {
   start as oauthStart,
   cancel as oauthCancel,
   claim as oauthClaim,
@@ -325,6 +335,17 @@ app.put('/api/config', async (req, res) => {
 
   if (nextOutputDir) {
     const previousDir = OUTPUT_DIR;
+    // Every open document belongs to the OLD folder: flush its snapshot and end its
+    // streams before anything resolves a project name against the new one. Not
+    // fatal if one fails -- the journal already holds every commit -- so this
+    // does not gate the change.
+    for (const dir of openDocuments()) {
+      try {
+        await closeProject(dir);
+      } catch (err) {
+        console.log(`  could not flush ${dir} before changing the output folder: ${err.message}`);
+      }
+    }
     OUTPUT_DIR = nextOutputDir; // 3. the new store is authoritative from here
     // 3b. If the key was removed while this move was in flight, the records just
     // copied into the new store will never be swept -- the sweep needs a key -- and
@@ -1095,26 +1116,158 @@ app.get('/api/projects', async (req, res) => {
   }
 });
 
+// ---- the document ----
+// The server owns each project's graph (server/document.js); the browser holds a live
+// replica and sends operations, never snapshots. There is no autosave any more: every
+// accepted op is on disk before its version is reported, and every open tab hears about
+// it on the event stream below. Design: docs/superpowers/specs/2026-09-04-agent-canvas-slice-1-design.md.
+
+// Open event streams per project folder, so a rename, a delete or an output-folder
+// change can end them before the folder moves out from under the document.
+const documentStreams = new Map(); // dir -> Set<() => void>
+
+async function closeProject(dir) {
+  for (const end of documentStreams.get(dir) ?? []) end();
+  documentStreams.delete(dir);
+  await closeDocument(dir);
+}
+
+const graphOf = (doc) => ({ version: doc.version, nodes: doc.graph.nodes, edges: doc.graph.edges });
+
 app.get('/api/projects/:name', async (req, res) => {
   try {
-    const raw = await fs.readFile(path.join(projectDir(req.params.name), 'graph.json'), 'utf8');
-    res.json(JSON.parse(raw));
-  } catch {
-    res.json({}); // no graph saved yet
+    res.json(graphOf(await openDocument(projectDir(req.params.name))));
+  } catch (err) {
+    res.status(500).json({ error: `Could not open the project: ${err.message}` });
   }
 });
 
-app.put('/api/projects/:name', async (req, res) => {
-  // This is AUTOSAVE. Unwrapped, a full disk or a permissions change hung every
-  // save while the canvas looked fine -- silently lost work, the worst version
-  // of the no-error-middleware hang.
+// Create, with an optional starting graph (the browser sends its starter). One system
+// commit, not undoable: nobody wants to Cmd-Z their way to an empty project.
+app.post('/api/projects/:name', async (req, res) => {
+  const dir = projectDir(req.params.name);
+  try {
+    const taken = await fs.access(dir).then(
+      () => true,
+      () => false,
+    );
+    if (taken) return res.status(409).json({ error: `A project named "${slugify(req.params.name)}" already exists.` });
+    await fs.mkdir(dir, { recursive: true });
+    const doc = await openDocument(dir);
+    const { nodes = [], edges = [] } = req.body || {};
+    const ops = [
+      ...(Array.isArray(nodes) ? nodes : []).map((node) => ({ type: 'addNode', node })),
+      ...(Array.isArray(edges) ? edges : []).map((edge) => ({ type: 'addEdge', edge })),
+    ];
+    if (ops.length) {
+      const entry = await commitOp(doc, { type: 'batch', ops }, { kind: 'system', reason: 'create' }, {}, { undoable: false });
+      if (entry.rejected) return res.status(400).json({ error: entry.rejected });
+    }
+    res.json(graphOf(doc));
+  } catch (err) {
+    res.status(500).json({ error: `Could not create the project: ${err.message}` });
+  }
+});
+
+// The write path. Each op is its own journal entry (the browser already coalesces a
+// drag into one move), applied in order; a structurally invalid one is reported, not
+// thrown, and the rest still apply. The origin's kind is forced to `session`: a request
+// body must not be able to claim it is a thread or the system, since undo and the sidecars
+// read that field.
+app.post('/api/projects/:name/ops', async (req, res) => {
+  const { ops, origin } = req.body || {};
+  if (!Array.isArray(ops) || !ops.length) return res.status(400).json({ error: 'ops must be a non-empty array.' });
+  if (!origin || typeof origin.id !== 'string' || !origin.id) return res.status(400).json({ error: 'origin.id is required.' });
+  const by = { kind: 'session', id: origin.id };
+  try {
+    const doc = await openDocument(projectDir(req.params.name));
+    const applied = [];
+    const rejected = [];
+    for (const op of ops) {
+      const entry = await commitOp(doc, op, by);
+      if (entry.rejected) rejected.push({ op, reason: entry.rejected });
+      else applied.push(entry);
+    }
+    res.json({ version: doc.version, applied, rejected });
+  } catch (err) {
+    // This is the SAVE path. Unwrapped, a full disk or a permissions change would hang
+    // every edit while the canvas looked fine -- silently lost work, the worst version
+    // of the no-error-middleware hang.
+    res.status(500).json({ error: `Could not save the change: ${err.message}` });
+  }
+});
+
+// Server-Sent Events: every accepted entry, to every open tab. `since` replays what the
+// tab missed (the journal is never truncated, so any version can be caught up from),
+// then a `version` marker says the stream is live. Same origin and loopback, so the
+// request guards above apply unchanged and it goes through the Vite proxy untouched.
+app.get('/api/projects/:name/events', async (req, res) => {
+  const dir = projectDir(req.params.name);
+  let doc;
+  try {
+    doc = await openDocument(dir);
+  } catch (err) {
+    return res.status(500).json({ error: `Could not open the project: ${err.message}` });
+  }
+  res.writeHead(200, {
+    'Content-Type': 'text/event-stream',
+    'Cache-Control': 'no-cache, no-transform',
+    Connection: 'keep-alive',
+    'X-Accel-Buffering': 'no',
+  });
+  const send = (entry) => res.write(`id: ${entry.version}\nevent: entry\ndata: ${JSON.stringify(entry)}\n\n`);
+  const since = Number.parseInt(req.query.since, 10);
+  if (Number.isInteger(since)) for (const e of doc.entries) if (e.version > since) send(e);
+  res.write(`event: version\ndata: ${JSON.stringify({ version: doc.version })}\n\n`);
+  const off = subscribeDocument(doc, send);
+  // Comments are legal SSE and keep an idle proxy from closing the socket.
+  const beat = setInterval(() => res.write(': ping\n\n'), 15000);
+  let ended = false;
+  const end = () => {
+    if (ended) return;
+    ended = true;
+    off();
+    clearInterval(beat);
+    documentStreams.get(dir)?.delete(end);
+    res.end();
+  };
+  if (!documentStreams.has(dir)) documentStreams.set(dir, new Set());
+  documentStreams.get(dir).add(end);
+  req.on('close', end);
+});
+
+// Undo and redo are server-side walks of the journal (document.js), so they survive a
+// reload and one timeline covers the user and the agent alike. 204 means nothing to do.
+for (const [route, fn] of [
+  ['undo', undoOp],
+  ['redo', redoOp],
+]) {
+  app.post(`/api/projects/:name/${route}`, async (req, res) => {
+    try {
+      const doc = await openDocument(projectDir(req.params.name));
+      const entry = await fn(doc, { id: typeof req.body?.origin?.id === 'string' ? req.body.origin.id : undefined });
+      if (!entry) return res.status(204).end();
+      if (entry.rejected) return res.status(409).json({ error: entry.rejected });
+      res.json(entry);
+    } catch (err) {
+      res.status(500).json({ error: `Could not ${route}: ${err.message}` });
+    }
+  });
+}
+
+// Media bytes travel here, never in node data. Raw body, so no multipart dependency;
+// the name and type come from the query and the Content-Type. The file lands with the
+// same naming and sidecar as every generation, and the node then references it by name.
+app.post('/api/projects/:name/files', express.raw({ type: () => true, limit: '500mb' }), async (req, res) => {
+  if (!Buffer.isBuffer(req.body) || !req.body.length) return res.status(400).json({ error: 'No file bytes in the request body.' });
+  const fileName = typeof req.query.name === 'string' ? path.basename(req.query.name) : '';
+  const mime = String(req.headers['content-type'] || 'application/octet-stream').split(';')[0].trim();
   try {
     const dir = projectDir(req.params.name);
-    await fs.mkdir(dir, { recursive: true });
-    await fs.writeFile(path.join(dir, 'graph.json'), JSON.stringify(req.body, null, 2));
-    res.json({ ok: true });
+    const file = await saveMedia(dir, { bytes: req.body, mime, fileName, source: 'upload' });
+    res.json({ file, fileName, bytes: req.body.length, mime });
   } catch (err) {
-    res.status(500).json({ error: `Could not save the project: ${err.message}` });
+    res.status(500).json({ error: `Could not save the file: ${err.message}` });
   }
 });
 
@@ -1152,6 +1305,10 @@ app.post('/api/projects/:name/rename', async (req, res) => {
     });
   }
   try {
+    // Flush the document and end its event streams first: a snapshot written after the
+    // folder moved would recreate the old folder, and a stream would be watching a
+    // document nobody can reach any more. Tabs reconnect under the new name.
+    await closeProject(from);
     await fs.rename(from, dest);
   } catch (err) {
     // Put the records back, or they point at a name with no folder and the next
@@ -1220,6 +1377,8 @@ app.delete('/api/projects/:name', async (req, res) => {
     for (const job of pending) revokeJobShares(job.id);
   }
   try {
+    // Same order as rename: document and streams first, then the folder.
+    await closeProject(projectDir(name));
     await fs.rm(projectDir(name), { recursive: true, force: true });
   } catch (err) {
     // The one partial outcome with no compensation worth having: un-failing a

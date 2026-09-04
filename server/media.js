@@ -72,15 +72,21 @@ async function freshName(dir, ts, fileName, ext) {
   }
 }
 
-async function writeMedia(dir, dataUrl, fileName, { now, source }) {
-  const decoded = decodeDataUrl(dataUrl);
-  const ext = extOf(decoded.mime, fileName);
+// The one place media bytes become a file: extraction below and the upload route in
+// index.js both come through here, so naming and the sidecar cannot drift apart.
+export async function saveMedia(dir, { bytes, mime, fileName, source, now = Date.now }) {
+  const ext = extOf(mime, fileName);
   await fs.mkdir(dir, { recursive: true });
   const file = await freshName(dir, now(), fileName, ext);
-  await fs.writeFile(path.join(dir, file), decoded.bytes);
-  const sidecar = { source, fileName: fileName || '', mime: decoded.mime, bytes: decoded.bytes.length, at: new Date().toISOString() };
+  await fs.writeFile(path.join(dir, file), bytes);
+  const sidecar = { source, fileName: fileName || '', mime, bytes: bytes.length, at: new Date().toISOString() };
   await fs.writeFile(path.join(dir, file.replace(/\.[^.]+$/, '.json')), JSON.stringify(sidecar, null, 2));
   return file;
+}
+
+function writeMedia(dir, dataUrl, fileName, { now, source }) {
+  const { mime, bytes } = decodeDataUrl(dataUrl);
+  return saveMedia(dir, { bytes, mime, fileName, source, now });
 }
 
 const defaults = (opts) => ({ now: opts.now ?? Date.now, source: opts.source ?? 'upload' });
