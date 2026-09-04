@@ -1509,6 +1509,29 @@ try {
     );
     assert.match(text, /event: state\ndata: \{"status":"failed"/);
     assert.match(text, /event: event\ndata: \{[^\n]*"type":"error"/);
+    // The composer's message shape rides along and is kept on the record.
+    const composed = await (await json('POST', tBase, { provider: 'claude' })).json();
+    await json('POST', `${tBase}/${composed.thread.id}/messages`, { text: 'swap the hero', selection: ['104', '100'], target: '104', with: ['100'] });
+    const kept = (await (await fetch(`${tBase}/${composed.thread.id}`)).json()).thread.messages[0];
+    assert.equal(kept.target, '104');
+    assert.deepEqual(kept.with, ['100']);
+    // A target that is not a node id is dropped, not stored.
+    const odd = await (await json('POST', tBase, { provider: 'claude' })).json();
+    await json('POST', `${tBase}/${odd.thread.id}/messages`, { text: 'x', target: 'not a node id!' });
+    assert.equal('target' in (await (await fetch(`${tBase}/${odd.thread.id}`)).json()).thread.messages[0], false);
+    // Artifact threads (slice 2): about one node, listable by it.
+    assert.equal((await json('POST', tBase, { provider: 'claude', kind: 'sticky' })).status, 400, 'unknown kind');
+    assert.equal((await json('POST', tBase, { provider: 'claude', kind: 'artifact', artifactId: '../x' })).status, 400, 'artifactId must be a node id');
+    const art = await (await json('POST', tBase, { provider: 'claude', kind: 'artifact', artifactId: '104' })).json();
+    assert.equal(art.thread.kind, 'artifact');
+    assert.equal(art.thread.artifactId, '104');
+    const pending = await (await json('POST', tBase, { provider: 'claude', kind: 'artifact' })).json();
+    assert.equal(pending.thread.artifactId, null, 'bound later, when the agent creates the node');
+    const byArtifact = await (await fetch(`${tBase}?artifact=104`)).json();
+    assert.deepEqual(byArtifact.threads.map((t) => t.id), [art.thread.id]);
+    assert.equal((await (await fetch(`${tBase}?artifact=999`)).json()).threads.length, 0);
+    assert.ok((await (await fetch(tBase)).json()).threads.length >= 4, 'unfiltered lists everything');
+    for (const t of [composed, odd, art, pending]) await fetch(`${tBase}/${t.thread.id}`, { method: 'DELETE' });
     assert.equal((await fetch(`${tBase}/${created.thread.id}`, { method: 'DELETE' })).status, 200);
     assert.deepEqual((await (await fetch(tBase)).json()).threads, []);
   }
