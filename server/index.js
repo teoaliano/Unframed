@@ -29,7 +29,10 @@ import {
   subscribe as subscribeDocument,
 } from './document.js';
 import { saveMedia, inlineFileRefs } from './media.js';
-import { providerStatuses, forgetProviderStatus } from './providers.js';
+import { providerStatuses, forgetProviderStatus, PROVIDERS } from './providers.js';
+import { newThread, writeThread, readThread, listThreads, deleteThread, eventsSince } from './threads.js';
+import { sendToThread, interruptThread, subscribeThread, closeThreadSession, closeSessionsFor } from './agent.js';
+import crypto from 'node:crypto';
 import {
   start as oauthStart,
   cancel as oauthCancel,
@@ -1183,6 +1186,7 @@ const documentStreams = new Map(); // dir -> Set<() => void>
 async function closeProject(dir) {
   for (const end of documentStreams.get(dir) ?? []) end();
   documentStreams.delete(dir);
+  closeSessionsFor(dir);
   await closeDocument(dir);
 }
 
@@ -1308,6 +1312,100 @@ for (const [route, fn] of [
     }
   });
 }
+
+// ---- agent threads ----
+// One conversation with the agent about one project (server/threads.js holds the
+// record, server/agent.js runs the session). Nested under the project because the
+// record lives in its folder and follows it through a rename.
+const threadDir = (req) => projectDir(req.params.name);
+
+app.post('/api/projects/:name/threads', async (req, res) => {
+  const { provider = 'claude', model = '', kind = 'canvas' } = req.body || {};
+  if (!PROVIDERS[provider]) return res.status(400).json({ error: `Unknown provider "${provider}".` });
+  if (typeof model !== 'string' || model.length > 200) return res.status(400).json({ error: 'That does not look like a model id.' });
+  try {
+    const id = `t-${Date.now().toString(36)}-${crypto.randomBytes(4).toString('hex')}`;
+    const thread = newThread({ id, project: slugify(req.params.name), provider, model, kind: kind === 'canvas' ? 'canvas' : 'canvas' });
+    await writeThread(threadDir(req), thread);
+    res.json({ thread });
+  } catch (err) {
+    res.status(500).json({ error: `Could not create the thread: ${err.message}` });
+  }
+});
+
+app.get('/api/projects/:name/threads', async (req, res) => {
+  try {
+    res.json({ threads: await listThreads(threadDir(req)) });
+  } catch (err) {
+    res.status(500).json({ error: `Could not list the threads: ${err.message}` });
+  }
+});
+
+app.get('/api/projects/:name/threads/:id', async (req, res) => {
+  try {
+    res.json({ thread: await readThread(threadDir(req), req.params.id) });
+  } catch (err) {
+    res.status(404).json({ error: err.message });
+  }
+});
+
+// One turn. The selection travels with the message: it is the browser's, the server
+// never holds it otherwise, and canvas_read reports the latest one for this thread.
+app.post('/api/projects/:name/threads/:id/messages', async (req, res) => {
+  const text = String(req.body?.text ?? '').trim();
+  if (!text) return res.status(400).json({ error: 'Say something first.' });
+  if (text.length > 20000) return res.status(400).json({ error: 'That message is too long.' });
+  const selection = Array.isArray(req.body?.selection) ? req.body.selection.slice(0, 500).map(String) : [];
+  try {
+    await sendToThread(threadDir(req), req.params.id, { text, selection }, { settings: providerSettings });
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(err.status || (/not found/i.test(err.message) ? 404 : 500)).json({ error: err.message });
+  }
+});
+
+// The thread's live stream: its state, every stored event past `since`, then whatever
+// happens next including text deltas. Same SSE shape as the document's.
+app.get('/api/projects/:name/threads/:id/events', async (req, res) => {
+  let thread;
+  try {
+    thread = await readThread(threadDir(req), req.params.id);
+  } catch (err) {
+    return res.status(404).json({ error: err.message });
+  }
+  res.writeHead(200, {
+    'Content-Type': 'text/event-stream',
+    'Cache-Control': 'no-cache, no-transform',
+    Connection: 'keep-alive',
+    'X-Accel-Buffering': 'no',
+  });
+  const send = (name, data) => res.write(`event: ${name}\ndata: ${JSON.stringify(data)}\n\n`);
+  const since = Number.parseInt(req.query.since, 10);
+  send('state', { status: thread.status, error: thread.error, turns: thread.turns, seq: thread.seq, messages: thread.messages });
+  for (const e of eventsSince(thread, Number.isInteger(since) ? since : 0)) send('event', e);
+  send('live', { seq: thread.seq });
+  const off = subscribeThread(req.params.id, (e) => send('event', e));
+  const beat = setInterval(() => res.write(': ping\n\n'), 15000);
+  req.on('close', () => {
+    off();
+    clearInterval(beat);
+    res.end();
+  });
+});
+
+app.post('/api/projects/:name/threads/:id/interrupt', async (req, res) => {
+  res.json({ interrupted: await interruptThread(threadDir(req), req.params.id) });
+});
+
+app.delete('/api/projects/:name/threads/:id', async (req, res) => {
+  try {
+    closeThreadSession(threadDir(req), req.params.id);
+    await deleteThread(threadDir(req), req.params.id);
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: `Could not delete the thread: ${err.message}` });
+  }
+});
 
 // Media bytes travel here, never in node data. Raw body, so no multipart dependency;
 // the name and type come from the query and the Content-Type. The file lands with the

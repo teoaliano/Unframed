@@ -311,6 +311,81 @@ export const deleteProject = (name, { confirmRenders } = {}) =>
     return d;
   });
 
+// ---- local agent providers and threads ----
+
+// { providers: { claude: status, codex: status } } -- each { kind, name, status,
+// installed, version, auth?, message?, install }. Cached five minutes server-side;
+// `refresh` asks the CLIs again. null means the request itself failed.
+export const listProviders = (refresh = false) =>
+  fetch(`/api/providers${refresh ? '?refresh=1' : ''}`)
+    .then((r) => (r.ok ? r.json() : null))
+    .then((d) => d?.providers ?? null)
+    .catch(() => null);
+
+export const createThread = (project, { provider = 'claude', model = '' } = {}) =>
+  postJson(`/api/projects/${enc(project)}/threads`, { provider, model }).then((d) => d.thread);
+
+export const listThreads = (project) =>
+  fetch(`/api/projects/${enc(project)}/threads`)
+    .then((r) => (r.ok ? r.json() : { threads: [] }))
+    .then((d) => d.threads ?? [])
+    .catch(() => []);
+
+export const getThread = (project, id) =>
+  fetch(`/api/projects/${enc(project)}/threads/${enc(id)}`).then(async (r) => {
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(d.error || `Could not open the thread (${r.status})`);
+    return d.thread;
+  });
+
+// One turn. Resolves when the server has accepted the message; the answer arrives on
+// the thread's event stream. A 409 means the previous turn is still running.
+export const sendThreadMessage = (project, id, { text, selection = [] }) =>
+  postJson(`/api/projects/${enc(project)}/threads/${enc(id)}/messages`, { text, selection });
+
+export const interruptThread = (project, id) =>
+  postJson(`/api/projects/${enc(project)}/threads/${enc(id)}/interrupt`, {}).catch(() => ({ interrupted: false }));
+
+export const deleteThread = (project, id) =>
+  fetch(`/api/projects/${enc(project)}/threads/${enc(id)}`, { method: 'DELETE' }).then((r) => {
+    if (!r.ok) throw new Error(`Could not delete the thread (${r.status})`);
+  });
+
+// The thread's stream: `state` once (status, messages so far), stored events past
+// `since`, a `live` marker, then everything as it happens -- text deltas included. Same
+// reconnect rule as subscribeProject: a drop reopens from the last sequence seen.
+export function subscribeThreadEvents(project, id, since, { onState, onEvent, onLive } = {}) {
+  let es = null;
+  let closed = false;
+  let last = since;
+  let retry = 1000;
+  const connect = () => {
+    es = new EventSource(`/api/projects/${enc(project)}/threads/${enc(id)}/events?since=${last}`);
+    es.addEventListener('state', (e) => onState?.(JSON.parse(e.data)));
+    es.addEventListener('event', (e) => {
+      const ev = JSON.parse(e.data);
+      if (typeof ev.seq === 'number') last = Math.max(last, ev.seq);
+      onEvent?.(ev);
+    });
+    es.addEventListener('live', (e) => {
+      last = Math.max(last, JSON.parse(e.data).seq ?? last);
+      retry = 1000;
+      onLive?.(last);
+    });
+    es.onerror = () => {
+      es.close();
+      if (closed) return;
+      setTimeout(connect, retry);
+      retry = Math.min(retry * 2, 10000);
+    };
+  };
+  connect();
+  return () => {
+    closed = true;
+    es?.close();
+  };
+}
+
 // Your saved library presets — one array, one file. This one throws on failure
 // instead of falling back to []: savePresets replaces the whole file, so a
 // swallowed error here would let the next save quietly erase presets that are

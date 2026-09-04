@@ -1440,6 +1440,62 @@ try {
     assert.equal((await providers()).codex.status, 'ready');
   }
 
+  // ---- agent threads (2026-09-04): the record and the routes, without a real agent ----
+  // The fake claude on PATH answers --version and nothing else, so a turn cannot start;
+  // what is tested here is everything around the turn: creation, listing, the record,
+  // the stream's replay, and that a provider that is not ready fails the turn loudly and
+  // leaves the thread marked failed rather than hanging.
+  {
+    const tBase = `${base}/api/projects/threadproj/threads`;
+    const json = (method, url, body) =>
+      fetch(url, {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        body: body === undefined ? undefined : JSON.stringify(body),
+        signal: AbortSignal.timeout(30000),
+      });
+    assert.equal((await json('POST', tBase, { provider: 'grok' })).status, 400, 'unknown provider');
+    const created = await (await json('POST', tBase, { provider: 'claude', model: 'claude-opus-5' })).json();
+    assert.match(created.thread.id, /^t-/);
+    assert.equal(created.thread.status, 'idle');
+    assert.equal(created.thread.provider, 'claude');
+    const list = await (await fetch(`${tBase}`)).json();
+    assert.deepEqual(list.threads.map((t) => t.id), [created.thread.id]);
+    assert.equal((await fetch(`${tBase}/nope`)).status, 404);
+    assert.equal((await json('POST', `${tBase}/${created.thread.id}/messages`, { text: '  ' })).status, 400, 'an empty message is refused');
+    // The provider is not ready (the fake cannot answer the auth probe), so the turn
+    // fails before anything is spawned for real -- and says why.
+    const turn = await json('POST', `${tBase}/${created.thread.id}/messages`, { text: 'hello', selection: ['1'] });
+    assert.equal(turn.status, 500);
+    assert.match((await turn.json()).error, /could not verify|not ready/i);
+    const after = (await (await fetch(`${tBase}/${created.thread.id}`)).json()).thread;
+    assert.equal(after.status, 'failed', 'a turn that could not start leaves the thread failed, not running');
+    assert.equal(after.messages.length, 1, 'the user message is kept');
+    assert.deepEqual(after.messages[0].selection, ['1']);
+    assert.ok(after.events.some((e) => e.type === 'error'), 'and the failure is an event on the record');
+    // The stream replays the record: state first, the stored events, then a live marker.
+    const ev = await fetch(`${tBase}/${created.thread.id}/events?since=0`, { signal: AbortSignal.timeout(5000) });
+    const text = await withDeadline(
+      (async () => {
+        const reader = ev.body.getReader();
+        let got = '';
+        while (!got.includes('event: live')) {
+          const { value, done } = await reader.read();
+          if (done) break;
+          got += new TextDecoder().decode(value);
+        }
+        reader.cancel();
+        return got;
+      })(),
+      5000,
+      'the thread stream did not replay',
+    );
+    assert.match(text, /event: state\ndata: \{"status":"failed"/);
+    assert.match(text, /event: event\ndata: \{[^\n]*"type":"error"/);
+    assert.equal((await fetch(`${tBase}/${created.thread.id}`, { method: 'DELETE' })).status, 200);
+    assert.deepEqual((await (await fetch(tBase)).json()).threads, []);
+  }
+
   // The fourth hardened call site: the poll route's terminal-failure persistJob.
   // A store write CAN be made to fail on demand -- the same
   // directory-where-a-file-belongs trick as above makes writeJobs' rename fail
