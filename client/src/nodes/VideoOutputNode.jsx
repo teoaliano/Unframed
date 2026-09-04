@@ -8,6 +8,7 @@ import { Icon } from '@astryxdesign/core/Icon';
 import { VStack } from '@astryxdesign/core/Stack';
 import { useToast } from '@astryxdesign/core/Toast';
 import NodeHeader from './NodeHeader.jsx';
+import { useNodeCommand } from './nodeCommands.js';
 import StatusLine from './StatusLine.jsx';
 import ExpandableNote from './ExpandableNote.jsx';
 import { MAX_VIDEO_BYTES } from './VideoNode.jsx';
@@ -323,6 +324,9 @@ export default function VideoOutputNode({ id, data }) {
     setStatus('idle');
     setError(null);
   }
+
+  // The selection toolbar's button runs the same thing this node's own does (nodes/nodeCommands.js).
+  useNodeCommand(id, 'run', onGenerate);
 
   async function onGenerate() {
     setStatus('running');

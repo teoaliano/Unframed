@@ -24,6 +24,7 @@ import {
   closeDocument,
   openDocuments,
   commit as commitOp,
+  nextUndo,
   undo as undoOp,
   redo as redoOp,
   subscribe as subscribeDocument,
@@ -1265,6 +1266,18 @@ app.post('/api/projects/:name/ops', async (req, res) => {
 // tab missed (the journal is never truncated, so any version can be caught up from),
 // then a `version` marker says the stream is live. Same origin and loopback, so the
 // request guards above apply unchanged and it goes through the Vite proxy untouched.
+// The entry the next undo would revert: its version and origin, or null. The anchored
+// reply offers Undo only while the agent's batch is that entry (server/document.js).
+app.get('/api/projects/:name/undo', async (req, res) => {
+  try {
+    const doc = await openDocument(projectDir(req.params.name));
+    const next = nextUndo(doc);
+    res.json({ next: next ? { version: next.version, origin: next.origin, at: next.at } : null });
+  } catch (err) {
+    res.status(500).json({ error: `Could not read the journal: ${err.message}` });
+  }
+});
+
 app.get('/api/projects/:name/events', async (req, res) => {
   const dir = projectDir(req.params.name);
   let doc;

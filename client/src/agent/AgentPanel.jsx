@@ -29,7 +29,17 @@ import {
 
 const PROVIDER_ORDER = ['claude', 'codex'];
 
-export default function AgentPanel({ project, selection, providers, onCheckProviders, checking, onClose }) {
+// What the panel says while each tool runs.
+const ACTIVITY = {
+  mcp__unframed__canvas_read: 'Reading the canvas…',
+  mcp__unframed__canvas_write: 'Changing the canvas…',
+  mcp__unframed__page_write: 'Writing the page…',
+  mcp__unframed__page_read: 'Reading the page…',
+};
+
+// `initialThreadId` opens the panel on a particular thread -- the anchored reply's
+// "Open thread". Tabs per thread are slice 3.
+export default function AgentPanel({ project, selection, providers, onCheckProviders, checking, onClose, initialThreadId = null }) {
   const [threads, setThreads] = useState([]);
   const [threadId, setThreadId] = useState(null);
   const [messages, setMessages] = useState([]);
@@ -55,12 +65,14 @@ export default function AgentPanel({ project, selection, providers, onCheckProvi
     listThreads(project).then((list) => {
       if (!alive) return;
       setThreads(list);
-      if (list[0]) setThreadId(list[0].id);
+      const wanted = initialThreadId && list.find((t) => t.id === initialThreadId);
+      if (wanted) setThreadId(wanted.id);
+      else if (list[0]) setThreadId(list[0].id);
     });
     return () => {
       alive = false;
     };
-  }, [project]);
+  }, [project, initialThreadId]);
 
   // One stream per open thread. `state` seeds the transcript; events after it are
   // applied as they come, so a panel opened mid-turn picks the turn up where it is.
@@ -88,7 +100,14 @@ export default function AgentPanel({ project, selection, providers, onCheckProvi
             setActivity(null);
             break;
           case 'tool_use':
-            setActivity('Reading the canvas…');
+            setActivity(ACTIVITY[e.name] || 'Working…');
+            break;
+          case 'ops_applied':
+            // A change the agent made, as a line in the transcript. Live only: a reopened
+            // panel reads the record's messages, and the events behind these lines are
+            // in the record too, so nothing is lost -- they are just not re-rendered
+            // here until slice 3 redoes the panel around threads.
+            setMessages((ms) => [...ms, { role: 'note', text: e.summary, at: e.at }]);
             break;
           case 'tool_result':
             setActivity(null);
@@ -171,7 +190,7 @@ export default function AgentPanel({ project, selection, providers, onCheckProvi
         <HStack gap={2} align="center">
           <Icon icon={Sparkles} size="sm" />
           <Text type="label">Agent</Text>
-          <span className="agent-chip">Canvas</span>
+          <span className="agent-chip">{threads.find((t) => t.id === threadId)?.kind === 'artifact' ? 'Artifact' : 'Canvas'}</span>
           <StackItem size="fill" />
           <IconButton variant="ghost" size="sm" label="New thread" tooltip="New thread" icon={<Icon icon={Plus} />} onClick={newThread} isDisabled={!provider} />
           <IconButton variant="ghost" size="sm" label="Close" icon={<Icon icon={X} />} onClick={onClose} />
@@ -213,19 +232,26 @@ export default function AgentPanel({ project, selection, providers, onCheckProvi
         {provider && messages.length === 0 && !draft && (
           <div className="agent-empty">
             <Text type="supporting">
-              Ask about the board — what is on it, what feeds what, what a prompt says. The agent reads the canvas through one tool and cannot change it yet.
+              Ask about the board — what is on it, what feeds what, what a prompt says — or tell the agent what to change or make. Select things on the canvas and use the toolbar's Agent button to say what to do with them.
             </Text>
           </div>
         )}
-        {messages.map((m, i) => (
-          <div key={`${m.at}-${i}`} className={`agent-msg agent-msg-${m.role}`}>
-            <Text type="supporting" className="agent-msg-role">
-              {m.role === 'user' ? 'You' : provider?.name ?? 'Agent'}
-              {m.role === 'user' && m.selection?.length ? ` · ${m.selection.length} selected` : ''}
+        {messages.map((m, i) =>
+          m.role === 'note' ? (
+            <Text key={`${m.at}-${i}`} type="supporting" className="agent-note">
+              {m.text}
             </Text>
-            <div className="agent-msg-text">{m.text}</div>
-          </div>
-        ))}
+          ) : (
+            <div key={`${m.at}-${i}`} className={`agent-msg agent-msg-${m.role}`}>
+              <Text type="supporting" className="agent-msg-role">
+                {m.role === 'user' ? 'You' : provider?.name ?? 'Agent'}
+                {m.role === 'user' && m.target ? (m.target === 'new' ? ' · to a new asset' : ` · to ${m.target}`) : ''}
+                {m.role === 'user' && m.selection?.length ? ` · ${m.selection.length} selected` : ''}
+              </Text>
+              <div className="agent-msg-text">{m.text}</div>
+            </div>
+          ),
+        )}
         {draft && (
           <div className="agent-msg agent-msg-assistant">
             <Text type="supporting" className="agent-msg-role">

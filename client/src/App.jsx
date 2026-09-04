@@ -71,8 +71,20 @@ import { selectionFragment, presetFromSelection } from './library/save.js';
 import { useDocument } from './graph/useDocument.js';
 import { ProjectContext } from './graph/project.js';
 import AgentPanel from './agent/AgentPanel.jsx';
+import SelectionToolbar from './toolbar/SelectionToolbar.jsx';
+import AnchoredReply from './toolbar/AnchoredReply.jsx';
+import { messageTarget, addToTarget } from './toolbar/target.js';
+import { sendNodeCommand } from './nodes/nodeCommands.js';
 import {
   listProjects,
+  createThread,
+  listThreads,
+  sendThreadMessage,
+  interruptThread,
+  subscribeThreadEvents,
+  nextUndo,
+  undoProject,
+  previewUrl,
   renameProject,
   deleteProject,
   listPresets,
@@ -318,9 +330,159 @@ function Canvas() {
     }
   }, []);
   const [agentOpen, setAgentOpen] = useState(false);
-  const openAgent = () => {
+  // Which thread the panel opens on: the anchored reply's "Open thread" sets it.
+  const [agentThread, setAgentThread] = useState(null);
+  const openAgent = (threadId = null) => {
+    setAgentThread(threadId);
     setAgentOpen(true);
     if (!providers) checkProviders();
+  };
+
+  // ---- the selection toolbar and its composer (toolbar/SelectionToolbar.jsx) ----
+  // `composer` is null (the toolbar shows tools) or the message's shape from
+  // toolbar/target.js. Two canvas gestures change it -- clicking another node adds it to
+  // "with", clicking empty canvas collapses it -- which is why it lives here and not in
+  // the component. `reply` is the agent's answer anchored on the node it worked on.
+  const [composer, setComposer] = useState(null);
+  const [reply, setReply] = useState(null);
+  const replyClose = useRef(null); // the reply's event subscription
+  const [panning, setPanning] = useState(false);
+  const [boxSelecting, setBoxSelecting] = useState(false);
+  const readyProvider = ['claude', 'codex'].map((k) => providers?.[k]).find((p) => p?.status === 'ready') ?? null;
+  const providerMessage = providers
+    ? 'No Claude or Codex signed in on this Mac. Open the Agent panel to see what was checked.'
+    : 'Checking for Claude and Codex…';
+
+  const openComposer = useCallback(() => {
+    setComposer(messageTarget(nodes.filter((n) => n.selected)));
+  }, [nodes]);
+  const closeComposer = useCallback(() => setComposer(null), []);
+
+  // Clicking another node while the composer is open adds it rather than replacing the
+  // selection: React Flow has already selected the clicked node alone by the time this
+  // runs, so the whole set the composer names is re-selected.
+  const onNodeClick = useCallback(
+    (e, node) => {
+      if (!composer) return;
+      const next = addToTarget(composer, node);
+      setComposer(next);
+      const ids = new Set([...next.with, ...(next.target !== 'new' && next.target !== 'ask' ? [next.target] : [])]);
+      setNodes((ns) => ns.map((n) => (n.selected === ids.has(n.id) ? n : { ...n, selected: ids.has(n.id) })));
+    },
+    [composer, setNodes],
+  );
+  const onPaneClick = useCallback(() => {
+    if (composer) setComposer(null);
+  }, [composer]);
+
+  // A selection that goes away takes the composer with it; a different selection (not
+  // just none, and not the node the reply is about) dismisses the reply.
+  const selectionKey = nodes.filter((n) => n.selected).map((n) => n.id).sort().join(',');
+  useEffect(() => {
+    if (composer && !selectionKey) setComposer(null);
+    if (reply && selectionKey && selectionKey !== reply.selectionKey && selectionKey !== reply.nodeId) dismissReply();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectionKey]);
+
+  function dismissReply() {
+    replyClose.current?.();
+    replyClose.current = null;
+    setReply(null);
+  }
+
+  // The thread a composer message goes to: about the target artifact (reused when one
+  // exists and is idle), a fresh one for a new asset, the board's own when the agent has
+  // to ask which artifact is meant.
+  async function composerThread(c) {
+    const provider = readyProvider.kind;
+    if (c.target === 'ask') {
+      const list = await listThreads(project);
+      return list.find((t) => t.kind === 'canvas' && t.status !== 'running') ?? createThread(project, { provider });
+    }
+    if (c.target === 'new') return createThread(project, { provider, kind: 'artifact' });
+    const list = await listThreads(project, { artifactId: c.target });
+    return list.find((t) => t.status !== 'running') ?? createThread(project, { provider, kind: 'artifact', artifactId: c.target });
+  }
+
+  async function sendComposer(text) {
+    const c = composer;
+    if (!c || !readyProvider) return;
+    const selection = nodes.filter((n) => n.selected).map((n) => n.id);
+    dismissReply();
+    setComposer(null);
+    let thread;
+    try {
+      thread = await composerThread(c);
+    } catch (err) {
+      toast({ body: `Could not start the agent: ${err.message}`, uniqueID: 'composer-failed', type: 'error' });
+      return;
+    }
+    const isNode = c.target !== 'new' && c.target !== 'ask';
+    const initial = { threadId: thread.id, status: 'running', text: '', nodeId: isNode ? c.target : null, selection, selectionKey, activity: null };
+    setReply(initial);
+    let draft = '';
+    replyClose.current?.();
+    replyClose.current = subscribeThreadEvents(project, thread.id, 0, {
+      onEvent: (e) => {
+        switch (e.type) {
+          case 'text_delta':
+            draft += e.text;
+            setReply((r) => (r && r.threadId === thread.id ? { ...r, text: draft, activity: null } : r));
+            break;
+          case 'tool_use':
+            setReply((r) => (r && r.threadId === thread.id ? { ...r, activity: e.name?.includes('page') ? 'Writing the page…' : e.name?.includes('write') ? 'Changing the canvas…' : 'Reading the canvas…' } : r));
+            break;
+          case 'ops_applied':
+            setReply((r) =>
+              r && r.threadId === thread.id
+                ? { ...r, version: e.version, summary: e.summary, nodeId: e.page?.created ? e.page.nodeId : r.nodeId, canUndo: true }
+                : r,
+            );
+            break;
+          case 'result':
+            setReply((r) => (r && r.threadId === thread.id ? { ...r, status: e.ok ? 'idle' : 'failed', text: e.text || r.text, activity: null } : r));
+            break;
+          case 'error':
+            setReply((r) => (r && r.threadId === thread.id ? { ...r, status: 'failed', text: e.message, activity: null } : r));
+            break;
+          default:
+            break;
+        }
+      },
+    });
+    try {
+      await sendThreadMessage(project, thread.id, { text, selection, ...(isNode || c.target === 'new' ? { target: c.target, with: c.with } : {}) });
+    } catch (err) {
+      setReply((r) => (r && r.threadId === thread.id ? { ...r, status: 'failed', text: err.message } : r));
+    }
+  }
+
+  // Undo is offered only while the agent's batch is what Cmd-Z would revert next; asked
+  // again after the canvas settles, since any later edit takes that place.
+  useEffect(() => {
+    if (!reply || reply.version == null || reply.status === 'running' || reply.undone) return undefined;
+    const t = setTimeout(() => {
+      nextUndo(project).then((next) => {
+        setReply((r) => (r && r.version === reply.version ? { ...r, canUndo: next?.version === r.version } : r));
+      });
+    }, 450);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [reply?.version, reply?.status, reply?.undone, nodes, edges, project]);
+
+  async function undoReply() {
+    try {
+      await doc.flush();
+      await undoProject(project);
+      setReply((r) => (r ? { ...r, undone: true, canUndo: false } : r));
+    } catch (err) {
+      toast({ body: `Could not undo: ${err.message}`, uniqueID: 'undo-failed', type: 'error' });
+    }
+  }
+
+  const openPage = (nodeId) => {
+    const n = nodes.find((x) => x.id === nodeId);
+    if (n?.data?.file && cfg.previewPort) window.open(previewUrl(cfg.previewPort, project, n.data.file), '_blank', 'noopener,noreferrer');
   };
   const [cfgDlg, setCfgDlg] = useState(null); // { key, imageModel, …, error, saving, saved } | null
   // Outside cfgDlg, for the same class of reason `connecting` is: the draft is
@@ -918,6 +1080,7 @@ function Canvas() {
   // the exact starting point. (`store` is the one declared above for the selection latch.)
   const lassoFrom = useRef(null);
   const onSelectionStart = useCallback(() => {
+    setBoxSelecting(true);
     const rect = store.getState().userSelectionRect;
     lassoFrom.current = rect ? { x: rect.startX, y: rect.startY } : null;
   }, [store]);
@@ -927,6 +1090,7 @@ function Canvas() {
   // the box crossed in empty canvas, rather than replacing anything.
   const onSelectionEnd = useCallback(
     (e) => {
+      setBoxSelecting(false);
       const from = lassoFrom.current;
       lassoFrom.current = null;
       if (!from) return;
@@ -1631,6 +1795,10 @@ function Canvas() {
           selectionOnDrag={tool === 'select'}
           // A node need only TOUCH the selection box, not sit entirely inside it.
           selectionMode="partial"
+          onMoveStart={() => setPanning(true)}
+          onMoveEnd={() => setPanning(false)}
+          onNodeClick={onNodeClick}
+          onPaneClick={onPaneClick}
           onSelectionStart={onSelectionStart}
           onSelectionEnd={onSelectionEnd}
           // How far from a handle a release still connects, in flow pixels. React
@@ -1644,6 +1812,33 @@ function Canvas() {
           <CanvasBackground />
         </ReactFlow>
         </ProjectContext.Provider>
+        {/* The floating toolbar over a selection, its composer, and the agent's anchored
+            reply (toolbar/). Hidden while the selection is being dragged, box-selected or
+            the canvas panned; back where the selection now is afterwards. */}
+        <SelectionToolbar
+          nodes={nodes}
+          hidden={panning || boxSelecting || nodes.some((n) => n.dragging)}
+          canvasEl={canvasRef.current}
+          composer={composer}
+          onOpenComposer={openComposer}
+          onCloseComposer={closeComposer}
+          provider={readyProvider}
+          providerMessage={providerMessage}
+          busy={reply?.status === 'running'}
+          onSend={sendComposer}
+          onStop={() => reply?.threadId && interruptThread(project, reply.threadId)}
+          onRun={(id) => sendNodeCommand(id, 'run')}
+          onOpenPage={openPage}
+        />
+        <AnchoredReply
+          reply={reply}
+          nodes={nodes}
+          canvasEl={canvasRef.current}
+          onDismiss={dismissReply}
+          onUndo={undoReply}
+          onOpenThread={(id) => openAgent(id)}
+          onOpenPage={openPage}
+        />
         {agentOpen && (
           <AgentPanel
             project={project}
@@ -1652,6 +1847,7 @@ function Canvas() {
             checking={providersChecking}
             onCheckProviders={() => checkProviders(true)}
             onClose={() => setAgentOpen(false)}
+            initialThreadId={agentThread}
           />
         )}
 

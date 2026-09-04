@@ -223,6 +223,13 @@ export const undoProject = (name) =>
     body: JSON.stringify({ origin: { id: SESSION_ID } }),
   }).then((r) => (r.ok ? null : Promise.reject(new Error(`Could not undo (${r.status})`))));
 
+// What Cmd-Z would revert next: { version, origin } or null.
+export const nextUndo = (name) =>
+  fetch(`/api/projects/${enc(name)}/undo`)
+    .then((r) => (r.ok ? r.json() : { next: null }))
+    .then((d) => d.next ?? null)
+    .catch(() => null);
+
 export const redoProject = (name) =>
   fetch(`/api/projects/${enc(name)}/redo`, {
     method: 'POST',
