@@ -13,6 +13,8 @@ import {
   commit,
   snapshot,
   subscribe,
+  undo,
+  redo,
   journalPath,
   snapshotPath,
 } from './document.js';
@@ -170,6 +172,78 @@ const origin = { kind: 'session', id: 'test' };
   const a = await openDocument(dir);
   const b = await openDocument(dir);
   assert.equal(a, b, 'one in-memory document per folder');
+  await closeDocument(dir);
+}
+
+// ---- undo / redo walk the journal ----
+{
+  const dir = fresh('undo');
+  let doc = await openDocument(dir);
+  const ids = (d) => d.graph.nodes.map((n) => n.id);
+  await commit(doc, { type: 'addNode', node: node('1') }, origin); // v1
+  await commit(doc, { type: 'addNode', node: node('2') }, origin); // v2
+  await commit(doc, { type: 'moveNode', id: '1', position: { x: 9, y: 9 } }, origin); // v3
+
+  const u1 = await undo(doc); // reverts v3
+  assert.equal(u1.undoes, 3);
+  assert.equal(u1.origin.kind, 'undo');
+  assert.deepEqual(doc.graph.nodes[0].position, { x: 0, y: 0 });
+  const u2 = await undo(doc); // reverts v2
+  assert.equal(u2.undoes, 2);
+  assert.deepEqual(ids(doc), ['1']);
+
+  const r1 = await redo(doc); // re-applies v2
+  assert.equal(r1.redoes, u2.version);
+  assert.deepEqual(ids(doc), ['1', '2']);
+  // Undoing a redo undoes the same thing again.
+  const u3 = await undo(doc);
+  assert.equal(u3.undoes, r1.version);
+  assert.deepEqual(ids(doc), ['1']);
+  await redo(doc); // back to ['1','2']
+  assert.deepEqual(ids(doc), ['1', '2']);
+
+  // A fresh op after an undo drops the redo branch.
+  await undo(doc); // ['1']
+  await commit(doc, { type: 'addNode', node: node('3') }, origin);
+  assert.equal(await redo(doc), null);
+  assert.deepEqual(ids(doc), ['1', '3']);
+
+  // Undo all the way down, then one more is a no-op, not an error.
+  await undo(doc);
+  await undo(doc);
+  assert.deepEqual(ids(doc), []);
+  assert.equal(await undo(doc), null);
+
+  // The pointer is derived from the journal, so a reopen keeps the redo branch.
+  await closeDocument(dir);
+  doc = await openDocument(dir);
+  assert.deepEqual(ids(doc), []);
+  await redo(doc);
+  assert.deepEqual(ids(doc), ['1']);
+  await closeDocument(dir);
+}
+
+// ---- an agent's batch is one undo step ----
+{
+  const dir = fresh('undo-batch');
+  const doc = await openDocument(dir);
+  await commit(doc, { type: 'addNode', node: node('1') }, origin);
+  await commit(
+    doc,
+    {
+      type: 'batch',
+      ops: [
+        { type: 'addNode', node: node('a') },
+        { type: 'addNode', node: node('b') },
+        { type: 'addEdge', edge: { id: 'e', source: 'a', target: 'b' } },
+      ],
+    },
+    { kind: 'thread', id: 't1' },
+  );
+  assert.equal(doc.graph.nodes.length, 3);
+  await undo(doc);
+  assert.deepEqual(doc.graph.nodes.map((n) => n.id), ['1']);
+  assert.equal(doc.graph.edges.length, 0);
   await closeDocument(dir);
 }
 

@@ -172,7 +172,18 @@ function scheduleSnapshot(doc) {
 // The append is awaited BEFORE the in-memory graph advances, so a version a caller has
 // been told about is always on disk.
 export function commit(doc, op, origin, extra = {}) {
+  return commitWith(doc, () => ({ op, origin, extra }));
+}
+
+// The general form: `decide` runs INSIDE the document's chain, so anything it reads from
+// doc.entries is current when the op is applied. undo/redo need that -- their target is a
+// function of the journal, and two undos racing each other must not pick the same entry.
+// `decide` returning null means "nothing to do", which resolves to null.
+function commitWith(doc, decide) {
   const run = async () => {
+    const decision = decide();
+    if (!decision) return null;
+    const { op, origin, extra = {} } = decision;
     const r = applyOp(doc.graph, op);
     if (r.rejected) return { rejected: r.rejected };
     const entry = { version: doc.version + 1, op, inverse: r.inverse, origin, at: Date.now(), ...extra };
@@ -202,4 +213,70 @@ export function commit(doc, op, origin, extra = {}) {
 export function subscribe(doc, fn) {
   doc.subscribers.add(fn);
   return () => doc.subscribers.delete(fn);
+}
+
+// ---- undo / redo ----
+//
+// Both are ordinary commits whose op is taken from the journal, so they are journaled,
+// broadcast and replayed like anything else -- a tab that was not open when the undo
+// happened still converges. An undo entry carries `undoes: <version>` (the entry whose
+// effect it reverts; its op is that entry's inverse); a redo entry carries `redoes:
+// <version of the undo it cancels>` and re-applies the original op. A redo entry is
+// itself undoable, which is what lets undo/redo ping-pong.
+//
+// The pointer is not stored; it is derived from the journal each time, which is what
+// makes it survive a restart for free. One timeline for everyone: a user's undo reverts
+// an agent's batch as one step, and vice versa. That is what a single-user canvas wants;
+// per-origin undo would need a merge story this design deliberately does not have.
+
+const isPlain = (e) => e.undoes === undefined && e.redoes === undefined;
+
+// Versions whose effect is no longer the live one. Every undo adds its target -- and a
+// redo does NOT take it back out, because the redo entry itself now carries that effect
+// and is the thing a later undo has to revert. (Removing it here was the bug where, after
+// undo → redo → undo, the original showed as live again and got undone a second time.)
+function undoneSet(entries) {
+  const undone = new Set();
+  for (const e of entries) if (e.undoes !== undefined) undone.add(e.undoes);
+  return undone;
+}
+
+// The newest entry that applied something (a plain op or a redo) and is not undone.
+function undoTarget(entries) {
+  const undone = undoneSet(entries);
+  for (let i = entries.length - 1; i >= 0; i--) {
+    const e = entries[i];
+    if (e.undoes !== undefined) continue;
+    if (!undone.has(e.version)) return e;
+  }
+  return null;
+}
+
+// The newest undo that has not been redone, unless a plain op has happened since -- a
+// fresh edit after an undo is the universal "drop the redo branch" gesture.
+function redoTarget(entries) {
+  const redone = new Set(entries.filter((e) => e.redoes !== undefined).map((e) => e.redoes));
+  for (let i = entries.length - 1; i >= 0; i--) {
+    const e = entries[i];
+    if (isPlain(e)) return null;
+    if (e.undoes !== undefined && !redone.has(e.version)) return e;
+  }
+  return null;
+}
+
+export function undo(doc, by = {}) {
+  return commitWith(doc, () => {
+    const target = undoTarget(doc.entries);
+    if (!target) return null;
+    return { op: target.inverse, origin: { kind: 'undo', ...by }, extra: { undoes: target.version } };
+  });
+}
+
+export function redo(doc, by = {}) {
+  return commitWith(doc, () => {
+    const u = redoTarget(doc.entries);
+    if (!u) return null;
+    // Re-apply what the undo reverted: the undo's inverse IS the original op.
+    return { op: u.inverse, origin: { kind: 'redo', ...by }, extra: { redoes: u.version } };
+  });
 }
