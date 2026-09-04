@@ -20,6 +20,20 @@ import {
 } from './jobs.js';
 import { ensureTunnel, mintShare, revokeShare, waitUntilPublic, stopTunnel } from './share.js';
 import {
+  openDocument,
+  closeDocument,
+  openDocuments,
+  commit as commitOp,
+  undo as undoOp,
+  redo as redoOp,
+  subscribe as subscribeDocument,
+} from './document.js';
+import { saveMedia, inlineFileRefs } from './media.js';
+import { providerStatuses, forgetProviderStatus, PROVIDERS } from './providers.js';
+import { newThread, writeThread, readThread, listThreads, deleteThread, eventsSince } from './threads.js';
+import { sendToThread, interruptThread, subscribeThread, closeThreadSession, closeSessionsFor } from './agent.js';
+import crypto from 'node:crypto';
+import {
   start as oauthStart,
   cancel as oauthCancel,
   claim as oauthClaim,
@@ -54,6 +68,13 @@ let TEXT_MODEL = process.env.OPENROUTER_TEXT_MODEL || 'google/gemini-3.5-flash-l
 let VIDEO_MODEL = process.env.OPENROUTER_VIDEO_MODEL || 'bytedance/seedance-2.0';
 let API_KEY = process.env.OPENROUTER_API_KEY;
 let OUTPUT_DIR = outputPath(ROOT, process.env.OUTPUT_DIR);
+// Where the local agent CLIs are (empty: found on PATH) and, for Claude, a separate
+// config dir. All three are optional and editable in settings (server/providers.js).
+let CLAUDE_PATH = process.env.CLAUDE_PATH || '';
+let CODEX_PATH = process.env.CODEX_PATH || '';
+let CLAUDE_CONFIG_DIR = process.env.CLAUDE_CONFIG_DIR || '';
+const providerSettings = (kind) =>
+  kind === 'claude' ? { binaryPath: CLAUDE_PATH, configDir: CLAUDE_CONFIG_DIR } : { binaryPath: CODEX_PATH };
 
 const app = express();
 // NOTHING is readable cross-origin. Not an allowlist of loopback origins, which
@@ -156,6 +177,9 @@ function settings() {
     textModel: TEXT_MODEL,
     videoModel: VIDEO_MODEL,
     outputDir: OUTPUT_DIR,
+    claudePath: CLAUDE_PATH,
+    codexPath: CODEX_PATH,
+    claudeConfigDir: CLAUDE_CONFIG_DIR,
   };
 }
 
@@ -163,6 +187,20 @@ app.get('/api/health', (req, res) => {
   // `model` is the old field name for the image model, kept so a stale tab running
   // an older client bundle still reads something sensible.
   res.json({ ok: true, model: IMAGE_MODEL, ...settings() });
+});
+
+// ---- local agent providers ----
+// Which of Claude and Codex are installed and signed in on this machine, so the agent
+// can run on the user's own subscription (server/providers.js). Detection spawns the
+// CLIs, so the answer is cached for five minutes; `?refresh=1` asks again. The probe
+// itself never sends a prompt anywhere and costs no tokens.
+app.get('/api/providers', async (req, res) => {
+  try {
+    const providers = await providerStatuses(providerSettings, { refresh: req.query.refresh === '1' });
+    res.json({ providers });
+  } catch (err) {
+    res.status(500).json({ error: `Could not check the local agents: ${err.message}` });
+  }
 });
 
 // Queued onto one promise chain, the way persistJob queues jobs.json writes and
@@ -214,11 +252,21 @@ app.put('/api/config', async (req, res) => {
     textModel: 'OPENROUTER_TEXT_MODEL',
     videoModel: 'OPENROUTER_VIDEO_MODEL',
     outputDir: 'OUTPUT_DIR',
+    claudePath: 'CLAUDE_PATH',
+    codexPath: 'CODEX_PATH',
+    claudeConfigDir: 'CLAUDE_CONFIG_DIR',
   };
+  // The three provider settings may be cleared: an empty string deletes the line, so
+  // the CLI goes back to being found on PATH (or the default config dir).
+  const clearable = new Set(['CLAUDE_PATH', 'CODEX_PATH', 'CLAUDE_CONFIG_DIR']);
   const updates = {};
   for (const [field, envKey] of Object.entries(fields)) {
     if (body[field] === undefined) continue;
     const value = String(body[field]).trim();
+    if (clearable.has(envKey) && value === '') {
+      updates[envKey] = null;
+      continue;
+    }
     // Trust boundary: these strings get written into .env, and the key is sent as
     // an HTTP header. Only single clean tokens pass -- see PATTERNS in env.js.
     if (!PATTERNS[envKey].test(value)) {
@@ -228,7 +276,11 @@ app.put('/api/config', async (req, res) => {
             ? 'That does not look like an OpenRouter key. Keys start with "sk-or-".'
             : field === 'outputDir'
               ? 'That folder path has characters that cannot be saved.'
-              : 'That does not look like a model slug. Expected something like "openai/gpt-image-2".',
+              : field === 'claudePath' || field === 'codexPath'
+                ? 'That does not look like a command name or a path to one.'
+                : field === 'claudeConfigDir'
+                  ? 'The config folder has to be an absolute path.'
+                  : 'That does not look like a model slug. Expected something like "openai/gpt-image-2".',
       });
     }
     updates[envKey] = value;
@@ -322,9 +374,27 @@ app.put('/api/config', async (req, res) => {
   if (updates.OPENROUTER_IMAGE_MODEL) IMAGE_MODEL = updates.OPENROUTER_IMAGE_MODEL;
   if (updates.OPENROUTER_TEXT_MODEL) TEXT_MODEL = updates.OPENROUTER_TEXT_MODEL;
   if (updates.OPENROUTER_VIDEO_MODEL) VIDEO_MODEL = updates.OPENROUTER_VIDEO_MODEL;
+  // null means the line was deleted: back to the default. A change here invalidates
+  // whatever the provider probe last concluded.
+  if ('CLAUDE_PATH' in updates) CLAUDE_PATH = updates.CLAUDE_PATH || '';
+  if ('CODEX_PATH' in updates) CODEX_PATH = updates.CODEX_PATH || '';
+  if ('CLAUDE_CONFIG_DIR' in updates) CLAUDE_CONFIG_DIR = updates.CLAUDE_CONFIG_DIR || '';
+  if ('CLAUDE_PATH' in updates || 'CLAUDE_CONFIG_DIR' in updates) forgetProviderStatus('claude');
+  if ('CODEX_PATH' in updates) forgetProviderStatus('codex');
 
   if (nextOutputDir) {
     const previousDir = OUTPUT_DIR;
+    // Every open document belongs to the OLD folder: flush its snapshot and end its
+    // streams before anything resolves a project name against the new one. Not
+    // fatal if one fails -- the journal already holds every commit -- so this
+    // does not gate the change.
+    for (const dir of openDocuments()) {
+      try {
+        await closeProject(dir);
+      } catch (err) {
+        console.log(`  could not flush ${dir} before changing the output folder: ${err.message}`);
+      }
+    }
     OUTPUT_DIR = nextOutputDir; // 3. the new store is authoritative from here
     // 3b. If the key was removed while this move was in flight, the records just
     // copied into the new store will never be swept -- the sweep needs a key -- and
@@ -987,7 +1057,15 @@ app.post('/api/text', async (req, res) => {
       .status(400)
       .json({ error: 'Prompt is empty. Wire a prompt node into this text node, or type one in.' });
   }
-  const refs = Array.isArray(input_references) ? input_references : [];
+  // References name project files; the bytes are read in here, at the boundary
+  // (server/media.js). A marker for a file that is gone is the caller's mistake, not
+  // something to send upstream.
+  let refs;
+  try {
+    refs = await inlineFileRefs(Array.isArray(input_references) ? input_references : [], project ? projectDir(project) : OUTPUT_DIR);
+  } catch (err) {
+    return res.status(400).json({ error: err.message });
+  }
 
   const content = [{ type: 'text', text: p }];
   for (const ref of refs) {
@@ -1095,26 +1173,253 @@ app.get('/api/projects', async (req, res) => {
   }
 });
 
+// ---- the document ----
+// The server owns each project's graph (server/document.js); the browser holds a live
+// replica and sends operations, never snapshots. There is no autosave any more: every
+// accepted op is on disk before its version is reported, and every open tab hears about
+// it on the event stream below. Design: docs/superpowers/specs/2026-09-04-agent-canvas-slice-1-design.md.
+
+// Open event streams per project folder, so a rename, a delete or an output-folder
+// change can end them before the folder moves out from under the document.
+const documentStreams = new Map(); // dir -> Set<() => void>
+
+async function closeProject(dir) {
+  for (const end of documentStreams.get(dir) ?? []) end();
+  documentStreams.delete(dir);
+  closeSessionsFor(dir);
+  await closeDocument(dir);
+}
+
+const graphOf = (doc) => ({ version: doc.version, nodes: doc.graph.nodes, edges: doc.graph.edges });
+
 app.get('/api/projects/:name', async (req, res) => {
   try {
-    const raw = await fs.readFile(path.join(projectDir(req.params.name), 'graph.json'), 'utf8');
-    res.json(JSON.parse(raw));
-  } catch {
-    res.json({}); // no graph saved yet
+    res.json(graphOf(await openDocument(projectDir(req.params.name))));
+  } catch (err) {
+    res.status(500).json({ error: `Could not open the project: ${err.message}` });
   }
 });
 
-app.put('/api/projects/:name', async (req, res) => {
-  // This is AUTOSAVE. Unwrapped, a full disk or a permissions change hung every
-  // save while the canvas looked fine -- silently lost work, the worst version
-  // of the no-error-middleware hang.
+// Create, with an optional starting graph (the browser sends its starter). One system
+// commit, not undoable: nobody wants to Cmd-Z their way to an empty project.
+app.post('/api/projects/:name', async (req, res) => {
+  const dir = projectDir(req.params.name);
   try {
-    const dir = projectDir(req.params.name);
+    const taken = await fs.access(dir).then(
+      () => true,
+      () => false,
+    );
+    if (taken) return res.status(409).json({ error: `A project named "${slugify(req.params.name)}" already exists.` });
     await fs.mkdir(dir, { recursive: true });
-    await fs.writeFile(path.join(dir, 'graph.json'), JSON.stringify(req.body, null, 2));
+    const doc = await openDocument(dir);
+    const { nodes = [], edges = [] } = req.body || {};
+    const ops = [
+      ...(Array.isArray(nodes) ? nodes : []).map((node) => ({ type: 'addNode', node })),
+      ...(Array.isArray(edges) ? edges : []).map((edge) => ({ type: 'addEdge', edge })),
+    ];
+    if (ops.length) {
+      const entry = await commitOp(doc, { type: 'batch', ops }, { kind: 'system', reason: 'create' }, {}, { undoable: false });
+      if (entry.rejected) return res.status(400).json({ error: entry.rejected });
+    }
+    res.json(graphOf(doc));
+  } catch (err) {
+    res.status(500).json({ error: `Could not create the project: ${err.message}` });
+  }
+});
+
+// The write path. Each op is its own journal entry (the browser already coalesces a
+// drag into one move), applied in order; a structurally invalid one is reported, not
+// thrown, and the rest still apply. The origin's kind is forced to `session`: a request
+// body must not be able to claim it is a thread or the system, since undo and the sidecars
+// read that field.
+app.post('/api/projects/:name/ops', async (req, res) => {
+  const { ops, origin } = req.body || {};
+  if (!Array.isArray(ops) || !ops.length) return res.status(400).json({ error: 'ops must be a non-empty array.' });
+  if (!origin || typeof origin.id !== 'string' || !origin.id) return res.status(400).json({ error: 'origin.id is required.' });
+  const by = { kind: 'session', id: origin.id };
+  try {
+    const doc = await openDocument(projectDir(req.params.name));
+    const applied = [];
+    const rejected = [];
+    for (const op of ops) {
+      const entry = await commitOp(doc, op, by);
+      if (entry.rejected) rejected.push({ op, reason: entry.rejected });
+      else applied.push(entry);
+    }
+    res.json({ version: doc.version, applied, rejected });
+  } catch (err) {
+    // This is the SAVE path. Unwrapped, a full disk or a permissions change would hang
+    // every edit while the canvas looked fine -- silently lost work, the worst version
+    // of the no-error-middleware hang.
+    res.status(500).json({ error: `Could not save the change: ${err.message}` });
+  }
+});
+
+// Server-Sent Events: every accepted entry, to every open tab. `since` replays what the
+// tab missed (the journal is never truncated, so any version can be caught up from),
+// then a `version` marker says the stream is live. Same origin and loopback, so the
+// request guards above apply unchanged and it goes through the Vite proxy untouched.
+app.get('/api/projects/:name/events', async (req, res) => {
+  const dir = projectDir(req.params.name);
+  let doc;
+  try {
+    doc = await openDocument(dir);
+  } catch (err) {
+    return res.status(500).json({ error: `Could not open the project: ${err.message}` });
+  }
+  res.writeHead(200, {
+    'Content-Type': 'text/event-stream',
+    'Cache-Control': 'no-cache, no-transform',
+    Connection: 'keep-alive',
+    'X-Accel-Buffering': 'no',
+  });
+  const send = (entry) => res.write(`id: ${entry.version}\nevent: entry\ndata: ${JSON.stringify(entry)}\n\n`);
+  const since = Number.parseInt(req.query.since, 10);
+  if (Number.isInteger(since)) for (const e of doc.entries) if (e.version > since) send(e);
+  res.write(`event: version\ndata: ${JSON.stringify({ version: doc.version })}\n\n`);
+  const off = subscribeDocument(doc, send);
+  // Comments are legal SSE and keep an idle proxy from closing the socket.
+  const beat = setInterval(() => res.write(': ping\n\n'), 15000);
+  let ended = false;
+  const end = () => {
+    if (ended) return;
+    ended = true;
+    off();
+    clearInterval(beat);
+    documentStreams.get(dir)?.delete(end);
+    res.end();
+  };
+  if (!documentStreams.has(dir)) documentStreams.set(dir, new Set());
+  documentStreams.get(dir).add(end);
+  req.on('close', end);
+});
+
+// Undo and redo are server-side walks of the journal (document.js), so they survive a
+// reload and one timeline covers the user and the agent alike. 204 means nothing to do.
+for (const [route, fn] of [
+  ['undo', undoOp],
+  ['redo', redoOp],
+]) {
+  app.post(`/api/projects/:name/${route}`, async (req, res) => {
+    try {
+      const doc = await openDocument(projectDir(req.params.name));
+      const entry = await fn(doc, { id: typeof req.body?.origin?.id === 'string' ? req.body.origin.id : undefined });
+      if (!entry) return res.status(204).end();
+      if (entry.rejected) return res.status(409).json({ error: entry.rejected });
+      res.json(entry);
+    } catch (err) {
+      res.status(500).json({ error: `Could not ${route}: ${err.message}` });
+    }
+  });
+}
+
+// ---- agent threads ----
+// One conversation with the agent about one project (server/threads.js holds the
+// record, server/agent.js runs the session). Nested under the project because the
+// record lives in its folder and follows it through a rename.
+const threadDir = (req) => projectDir(req.params.name);
+
+app.post('/api/projects/:name/threads', async (req, res) => {
+  const { provider = 'claude', model = '', kind = 'canvas' } = req.body || {};
+  if (!PROVIDERS[provider]) return res.status(400).json({ error: `Unknown provider "${provider}".` });
+  if (typeof model !== 'string' || model.length > 200) return res.status(400).json({ error: 'That does not look like a model id.' });
+  try {
+    const id = `t-${Date.now().toString(36)}-${crypto.randomBytes(4).toString('hex')}`;
+    const thread = newThread({ id, project: slugify(req.params.name), provider, model, kind: kind === 'canvas' ? 'canvas' : 'canvas' });
+    await writeThread(threadDir(req), thread);
+    res.json({ thread });
+  } catch (err) {
+    res.status(500).json({ error: `Could not create the thread: ${err.message}` });
+  }
+});
+
+app.get('/api/projects/:name/threads', async (req, res) => {
+  try {
+    res.json({ threads: await listThreads(threadDir(req)) });
+  } catch (err) {
+    res.status(500).json({ error: `Could not list the threads: ${err.message}` });
+  }
+});
+
+app.get('/api/projects/:name/threads/:id', async (req, res) => {
+  try {
+    res.json({ thread: await readThread(threadDir(req), req.params.id) });
+  } catch (err) {
+    res.status(404).json({ error: err.message });
+  }
+});
+
+// One turn. The selection travels with the message: it is the browser's, the server
+// never holds it otherwise, and canvas_read reports the latest one for this thread.
+app.post('/api/projects/:name/threads/:id/messages', async (req, res) => {
+  const text = String(req.body?.text ?? '').trim();
+  if (!text) return res.status(400).json({ error: 'Say something first.' });
+  if (text.length > 20000) return res.status(400).json({ error: 'That message is too long.' });
+  const selection = Array.isArray(req.body?.selection) ? req.body.selection.slice(0, 500).map(String) : [];
+  try {
+    await sendToThread(threadDir(req), req.params.id, { text, selection }, { settings: providerSettings });
     res.json({ ok: true });
   } catch (err) {
-    res.status(500).json({ error: `Could not save the project: ${err.message}` });
+    res.status(err.status || (/not found/i.test(err.message) ? 404 : 500)).json({ error: err.message });
+  }
+});
+
+// The thread's live stream: its state, every stored event past `since`, then whatever
+// happens next including text deltas. Same SSE shape as the document's.
+app.get('/api/projects/:name/threads/:id/events', async (req, res) => {
+  let thread;
+  try {
+    thread = await readThread(threadDir(req), req.params.id);
+  } catch (err) {
+    return res.status(404).json({ error: err.message });
+  }
+  res.writeHead(200, {
+    'Content-Type': 'text/event-stream',
+    'Cache-Control': 'no-cache, no-transform',
+    Connection: 'keep-alive',
+    'X-Accel-Buffering': 'no',
+  });
+  const send = (name, data) => res.write(`event: ${name}\ndata: ${JSON.stringify(data)}\n\n`);
+  const since = Number.parseInt(req.query.since, 10);
+  send('state', { status: thread.status, error: thread.error, turns: thread.turns, seq: thread.seq, messages: thread.messages });
+  for (const e of eventsSince(thread, Number.isInteger(since) ? since : 0)) send('event', e);
+  send('live', { seq: thread.seq });
+  const off = subscribeThread(req.params.id, (e) => send('event', e));
+  const beat = setInterval(() => res.write(': ping\n\n'), 15000);
+  req.on('close', () => {
+    off();
+    clearInterval(beat);
+    res.end();
+  });
+});
+
+app.post('/api/projects/:name/threads/:id/interrupt', async (req, res) => {
+  res.json({ interrupted: await interruptThread(threadDir(req), req.params.id) });
+});
+
+app.delete('/api/projects/:name/threads/:id', async (req, res) => {
+  try {
+    closeThreadSession(threadDir(req), req.params.id);
+    await deleteThread(threadDir(req), req.params.id);
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: `Could not delete the thread: ${err.message}` });
+  }
+});
+
+// Media bytes travel here, never in node data. Raw body, so no multipart dependency;
+// the name and type come from the query and the Content-Type. The file lands with the
+// same naming and sidecar as every generation, and the node then references it by name.
+app.post('/api/projects/:name/files', express.raw({ type: () => true, limit: '500mb' }), async (req, res) => {
+  if (!Buffer.isBuffer(req.body) || !req.body.length) return res.status(400).json({ error: 'No file bytes in the request body.' });
+  const fileName = typeof req.query.name === 'string' ? path.basename(req.query.name) : '';
+  const mime = String(req.headers['content-type'] || 'application/octet-stream').split(';')[0].trim();
+  try {
+    const dir = projectDir(req.params.name);
+    const file = await saveMedia(dir, { bytes: req.body, mime, fileName, source: 'upload' });
+    res.json({ file, fileName, bytes: req.body.length, mime });
+  } catch (err) {
+    res.status(500).json({ error: `Could not save the file: ${err.message}` });
   }
 });
 
@@ -1152,6 +1457,10 @@ app.post('/api/projects/:name/rename', async (req, res) => {
     });
   }
   try {
+    // Flush the document and end its event streams first: a snapshot written after the
+    // folder moved would recreate the old folder, and a stream would be watching a
+    // document nobody can reach any more. Tabs reconnect under the new name.
+    await closeProject(from);
     await fs.rename(from, dest);
   } catch (err) {
     // Put the records back, or they point at a name with no folder and the next
@@ -1220,6 +1529,8 @@ app.delete('/api/projects/:name', async (req, res) => {
     for (const job of pending) revokeJobShares(job.id);
   }
   try {
+    // Same order as rename: document and streams first, then the folder.
+    await closeProject(projectDir(name));
     await fs.rm(projectDir(name), { recursive: true, force: true });
   } catch (err) {
     // The one partial outcome with no compensation worth having: un-failing a
@@ -1290,10 +1601,18 @@ app.post('/api/video', async (req, res) => {
   // would reach .length below and throw -- and a throw in an async handler is not a
   // failed request but a dead server, since Express 4 leaves the rejection unhandled
   // and `node --watch` restarts on file changes, never after a crash.
-  const refs = Array.isArray(input_references) ? input_references : [];
-  // Same reason as refs: a destructuring default only fills in for undefined, so a
+  // Same reason for frames: a destructuring default only fills in for undefined, so a
   // literal null would reach .length and take the process down rather than the request.
-  const frames = Array.isArray(frame_images) ? frame_images : [];
+  // Both name project files by marker and are inlined here (server/media.js).
+  let refs;
+  let frames;
+  try {
+    const dir = project ? projectDir(project) : OUTPUT_DIR;
+    refs = await inlineFileRefs(Array.isArray(input_references) ? input_references : [], dir);
+    frames = await inlineFileRefs(Array.isArray(frame_images) ? frame_images : [], dir);
+  } catch (err) {
+    return res.status(400).json({ error: err.message });
+  }
 
   if (!prompt || !prompt.trim()) {
     return res
@@ -1947,8 +2266,14 @@ app.post('/api/generate', async (req, res) => {
     runCount,
   } = req.body || {};
 
-  // Same reason as /api/video: a null here is a dead server, not a failed request.
-  const refs = Array.isArray(input_references) ? input_references : [];
+  // Same reason as /api/video: a null here is a dead server, not a failed request. And
+  // the same inlining: references name project files, the bytes are read in here.
+  let refs;
+  try {
+    refs = await inlineFileRefs(Array.isArray(input_references) ? input_references : [], project ? projectDir(project) : OUTPUT_DIR);
+  } catch (err) {
+    return res.status(400).json({ error: err.message });
+  }
 
   if (!prompt || !prompt.trim()) {
     return res

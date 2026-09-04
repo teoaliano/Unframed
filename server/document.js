@@ -1,0 +1,321 @@
+// The document's I/O half: one in-memory document per project folder, an append-only
+// journal (graph.log, one JSON entry per line) that is the truth, and a snapshot
+// (graph.json) that only makes the next open fast. graph.js is the pure half; index.js
+// turns these into routes; tests in document.test.js.
+//
+// Three rules, each with a reason:
+//
+//   The journal is never truncated. It is what undo walks (server-side, so it survives a
+//   reload), and it is what rebuilds the graph when the snapshot turns out unreadable.
+//   At a few hundred bytes an entry it grows slower than the media folder next to it.
+//
+//   Commits are serialised per document through one promise chain, the persistJob shape
+//   from jobs.js: two writers -- a tab and an agent -- can never interleave a
+//   read-modify-write and drop one another's op, and versions are dense and ordered.
+//
+//   The snapshot is written temp-then-rename, so a crash mid-save leaves either the old
+//   file or the new one, never half of one. A leftover .tmp is ignored on open. The
+//   journal's own failure mode is a torn last line, which replay skips: an append that
+//   did not finish was not a commit.
+import fs from 'node:fs/promises';
+import path from 'node:path';
+import { applyOp, emptyGraph } from './graph.js';
+import { extractFromOp, extractMedia } from './media.js';
+
+export const snapshotPath = (dir) => path.join(dir, 'graph.json');
+export const journalPath = (dir) => path.join(dir, 'graph.log');
+
+// Snapshot after this many commits since the last one, or after this long quiet. Both
+// are cheap to change; neither affects correctness, only how much replay an open does.
+const SNAPSHOT_EVERY = 50;
+const SNAPSHOT_QUIET_MS = 5000;
+
+const open = new Map(); // dir -> document
+
+async function readSnapshot(dir) {
+  let raw;
+  try {
+    raw = await fs.readFile(snapshotPath(dir), 'utf8');
+  } catch {
+    return null; // nothing saved yet
+  }
+  try {
+    const parsed = JSON.parse(raw);
+    if (!parsed || !Array.isArray(parsed.nodes)) return null;
+    // A graph saved before the journal existed has no version: it is the version-0 base
+    // and every later entry in a (then still empty) journal applies on top of it.
+    return {
+      version: Number.isInteger(parsed.version) ? parsed.version : 0,
+      legacy: !Number.isInteger(parsed.version),
+      graph: { nodes: parsed.nodes, edges: Array.isArray(parsed.edges) ? parsed.edges : [] },
+    };
+  } catch {
+    return undefined; // present but unreadable: rebuild from the journal
+  }
+}
+
+async function readJournal(dir) {
+  let raw;
+  try {
+    raw = await fs.readFile(journalPath(dir), 'utf8');
+  } catch {
+    return [];
+  }
+  const entries = [];
+  for (const line of raw.split('\n')) {
+    if (!line.trim()) continue;
+    try {
+      entries.push(JSON.parse(line));
+    } catch {
+      // Only the LAST line can legitimately be torn (a crash mid-append). Anything
+      // unparsable earlier means the file was damaged from outside; stopping here keeps
+      // whatever prefix is consistent rather than skipping a hole and applying ops that
+      // assumed it.
+      break;
+    }
+  }
+  return entries;
+}
+
+export async function openDocument(dir) {
+  const existing = open.get(dir);
+  if (existing) return existing;
+
+  const snap = await readSnapshot(dir);
+  let entries = await readJournal(dir);
+  // A snapshot with no version next to a non-empty journal means an OLDER server -- one
+  // that still wrote the whole graph on autosave -- saved this project after the
+  // journal had started (two checkouts sharing one output folder). Its snapshot is the
+  // truth as that server left it; replaying the journal on top would apply every op a
+  // second time. Keep the snapshot, set the journal aside, start a fresh one.
+  if (snap?.legacy && entries.length) {
+    await fs.rename(journalPath(dir), `${journalPath(dir)}.stale-${Date.now()}`).catch(() => {});
+    entries = [];
+  }
+  let version = 0;
+  let graph = emptyGraph();
+  if (snap) {
+    version = snap.version;
+    graph = snap.graph;
+  }
+  // Replay everything the snapshot does not already contain. With no usable snapshot this
+  // is the whole journal from an empty graph, which is exactly how the project began.
+  for (const entry of entries) {
+    if (entry.version <= version) continue;
+    const r = applyOp(graph, entry.op);
+    if (r.rejected) {
+      // A journal entry that no longer applies means the base it was recorded against is
+      // not the base we have -- an externally edited snapshot, most likely. Keep going:
+      // losing one op is recoverable, refusing to open the project is not.
+      continue;
+    }
+    graph = r.graph;
+    version = entry.version;
+  }
+
+  const doc = {
+    dir,
+    version,
+    graph,
+    entries,
+    subscribers: new Set(),
+    // Serialisation and snapshot bookkeeping. `chain` is the promise every commit queues
+    // onto; `sinceSnapshot` and `quietTimer` drive the snapshot policy.
+    chain: Promise.resolve(),
+    sinceSnapshot: entries.filter((e) => e.version > (snap?.version ?? 0)).length,
+    quietTimer: null,
+    snapshotVersion: snap?.version ?? 0,
+  };
+  open.set(dir, doc);
+
+  // A graph saved before media left the document still carries data: URLs. Move the bytes
+  // to files now, as one journaled system commit, so the rewrite is visible to every
+  // subscriber and never silently different from what a reopen would produce. The
+  // extraction happens BEFORE the commit so a crash between the two costs a stray file,
+  // not a graph pointing at a file that was never written.
+  const { ops } = await extractMedia(graph, dir, { source: 'legacy-graph' });
+  if (ops.length) {
+    // Not undoable: the inverse would have to carry the bytes back into the graph, which
+    // is the one thing this commit exists to stop, and a user has no reason to want their
+    // images turned back into base64.
+    await commit(doc, { type: 'batch', ops }, { kind: 'system', reason: 'media-extraction' }, {}, { extracted: true, undoable: false });
+  }
+  return doc;
+}
+
+// Flushes a snapshot and forgets the in-memory document, so the next openDocument reads
+// the folder again. Rename, delete and OUTPUT_DIR changes call this before touching the
+// folder; tests call it to simulate a restart.
+export async function closeDocument(dir) {
+  const doc = open.get(dir);
+  if (!doc) return;
+  await doc.chain;
+  if (doc.quietTimer) clearTimeout(doc.quietTimer);
+  if (doc.version > doc.snapshotVersion) await writeSnapshot(doc);
+  open.delete(dir);
+}
+
+export const openDocuments = () => [...open.keys()];
+
+async function writeSnapshot(doc) {
+  await fs.mkdir(doc.dir, { recursive: true });
+  const file = snapshotPath(doc.dir);
+  const tmp = `${file}.${process.pid}-${Date.now()}.tmp`;
+  const body = { version: doc.version, nodes: doc.graph.nodes, edges: doc.graph.edges };
+  await fs.writeFile(tmp, JSON.stringify(body, null, 2));
+  await fs.rename(tmp, file);
+  doc.snapshotVersion = doc.version;
+  doc.sinceSnapshot = 0;
+}
+
+// Public so a caller (or a test) can force one; the policy below calls it on its own.
+export async function snapshot(doc) {
+  await doc.chain;
+  await writeSnapshot(doc);
+}
+
+function scheduleSnapshot(doc) {
+  if (doc.quietTimer) clearTimeout(doc.quietTimer);
+  if (doc.sinceSnapshot >= SNAPSHOT_EVERY) {
+    doc.quietTimer = null;
+    // Queued behind the commit that triggered it, never racing it.
+    doc.chain = doc.chain.then(() => writeSnapshot(doc)).catch(() => {});
+    return;
+  }
+  doc.quietTimer = setTimeout(() => {
+    doc.quietTimer = null;
+    doc.chain = doc.chain.then(() => writeSnapshot(doc)).catch(() => {});
+  }, SNAPSHOT_QUIET_MS);
+  // A pending snapshot must not keep the process alive on its own.
+  if (typeof doc.quietTimer.unref === 'function') doc.quietTimer.unref();
+}
+
+// Applies one op, appends it to the journal, and tells subscribers. Resolves to the
+// journal entry ({ version, op, inverse, origin, at }) or { rejected } -- never rejects
+// for a structural problem, because the caller has to answer an HTTP request either way.
+// The append is awaited BEFORE the in-memory graph advances, so a version a caller has
+// been told about is always on disk.
+export function commit(doc, op, origin, extra = {}, { extracted = false, undoable = true } = {}) {
+  return commitWith(doc, () => ({ op, origin, extra }), { extracted, undoable });
+}
+
+// The general form: `decide` runs INSIDE the document's chain, so anything it reads from
+// doc.entries is current when the op is applied. undo/redo need that -- their target is a
+// function of the journal, and two undos racing each other must not pick the same entry.
+// `decide` returning null means "nothing to do", which resolves to null.
+//
+// Every op is passed through extractFromOp first, so bytes never reach the journal or a
+// subscriber -- unless the caller says the op is already extracted (the open-time batch,
+// and undo/redo, whose ops come from the journal and so cannot carry any).
+function commitWith(doc, decide, { extracted = false, undoable = true } = {}) {
+  const run = async () => {
+    const decision = decide();
+    if (!decision) return null;
+    const { origin, extra = {} } = decision;
+    const op = extracted ? decision.op : await extractFromOp(decision.op, doc.dir);
+    const r = applyOp(doc.graph, op);
+    if (r.rejected) return { rejected: r.rejected };
+    // inverse: null marks an entry undo must skip (see undoTarget).
+    const entry = { version: doc.version + 1, op, inverse: undoable ? r.inverse : null, origin, at: Date.now(), ...extra };
+    await fs.mkdir(doc.dir, { recursive: true });
+    await fs.appendFile(journalPath(doc.dir), `${JSON.stringify(entry)}\n`);
+    doc.graph = r.graph;
+    doc.version = entry.version;
+    doc.entries.push(entry);
+    doc.sinceSnapshot += 1;
+    for (const fn of doc.subscribers) {
+      try {
+        fn(entry);
+      } catch {
+        // A broken subscriber must not fail the commit that already reached disk.
+      }
+    }
+    scheduleSnapshot(doc);
+    return entry;
+  };
+  // One chain per document. A rejection in `run` is turned into a value above; a real
+  // I/O failure propagates to THIS caller and leaves the chain healthy for the next.
+  const result = doc.chain.then(run);
+  doc.chain = result.catch(() => {});
+  return result;
+}
+
+export function subscribe(doc, fn) {
+  doc.subscribers.add(fn);
+  return () => doc.subscribers.delete(fn);
+}
+
+// ---- undo / redo ----
+//
+// Both are ordinary commits whose op is taken from the journal, so they are journaled,
+// broadcast and replayed like anything else -- a tab that was not open when the undo
+// happened still converges. An undo entry carries `undoes: <version>` (the entry whose
+// effect it reverts; its op is that entry's inverse); a redo entry carries `redoes:
+// <version of the undo it cancels>` and re-applies the original op. A redo entry is
+// itself undoable, which is what lets undo/redo ping-pong.
+//
+// The pointer is not stored; it is derived from the journal each time, which is what
+// makes it survive a restart for free. One timeline for everyone: a user's undo reverts
+// an agent's batch as one step, and vice versa. That is what a single-user canvas wants;
+// per-origin undo would need a merge story this design deliberately does not have.
+
+const isPlain = (e) => e.undoes === undefined && e.redoes === undefined;
+
+// Versions whose effect is no longer the live one. Every undo adds its target -- and a
+// redo does NOT take it back out, because the redo entry itself now carries that effect
+// and is the thing a later undo has to revert. (Removing it here was the bug where, after
+// undo → redo → undo, the original showed as live again and got undone a second time.)
+function undoneSet(entries) {
+  const undone = new Set();
+  for (const e of entries) if (e.undoes !== undefined) undone.add(e.undoes);
+  return undone;
+}
+
+// The newest entry that applied something (a plain op or a redo), is not undone, and has
+// an inverse to apply -- a system commit with `inverse: null` is skipped over.
+function undoTarget(entries) {
+  const undone = undoneSet(entries);
+  for (let i = entries.length - 1; i >= 0; i--) {
+    const e = entries[i];
+    if (e.undoes !== undefined || e.inverse === null) continue;
+    if (!undone.has(e.version)) return e;
+  }
+  return null;
+}
+
+// The newest undo that has not been redone, unless a plain op has happened since -- a
+// fresh edit after an undo is the universal "drop the redo branch" gesture.
+function redoTarget(entries) {
+  const redone = new Set(entries.filter((e) => e.redoes !== undefined).map((e) => e.redoes));
+  for (let i = entries.length - 1; i >= 0; i--) {
+    const e = entries[i];
+    if (isPlain(e)) return null;
+    if (e.undoes !== undefined && !redone.has(e.version)) return e;
+  }
+  return null;
+}
+
+export function undo(doc, by = {}) {
+  return commitWith(
+    doc,
+    () => {
+      const target = undoTarget(doc.entries);
+      if (!target) return null;
+      return { op: target.inverse, origin: { kind: 'undo', ...by }, extra: { undoes: target.version } };
+    },
+    { extracted: true },
+  );
+}
+
+export function redo(doc, by = {}) {
+  return commitWith(
+    doc,
+    () => {
+      const u = redoTarget(doc.entries);
+      if (!u) return null;
+      // Re-apply what the undo reverted: the undo's inverse IS the original op.
+      return { op: u.inverse, origin: { kind: 'redo', ...by }, extra: { redoes: u.version } };
+    },
+    { extracted: true },
+  );
+}

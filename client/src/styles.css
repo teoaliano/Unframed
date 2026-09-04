@@ -1210,3 +1210,119 @@ div:has(> .add-node-menu) {
 .react-flow__resize-control.xnode-resize.line.bottom {
   height: 10px;
 }
+
+/* ---- the agent panel (agent/AgentPanel.jsx) ----
+   Floats over the canvas on the right like the toolbar cards, and takes the same
+   material: the chrome recipe above (translucent surface, blur, border, shadow), so a
+   third floating thing does not read as a third kind of thing. It is a column: head,
+   the scrolling thread, the composer. Below the toolbar, above the tools rail's top. */
+.agent-panel {
+  position: absolute;
+  top: 60px;
+  right: 12px;
+  bottom: 12px;
+  width: 380px;
+  z-index: 8;
+  display: flex;
+  flex-direction: column;
+  background: color-mix(in srgb, var(--color-background-surface) 92%, transparent);
+  backdrop-filter: blur(var(--unframed-chrome-blur));
+  border: var(--border-width) solid var(--color-border);
+  border-radius: var(--radius-container);
+  box-shadow: var(--shadow-med);
+  overflow: hidden;
+}
+.agent-panel-head {
+  padding: var(--spacing-2) var(--spacing-3);
+  border-bottom: var(--border-width) solid var(--color-border);
+}
+.agent-panel-thread {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-3);
+  padding: var(--spacing-3);
+}
+.agent-panel-composer {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-2);
+  padding: var(--spacing-3);
+  border-top: var(--border-width) solid var(--color-border);
+}
+.agent-empty {
+  padding: var(--spacing-3);
+  border: var(--border-width) dashed var(--color-border-emphasized);
+  border-radius: var(--radius-element);
+}
+.agent-msg {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.agent-msg-role {
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--color-text-secondary);
+}
+.agent-msg-text {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  line-height: 1.45;
+}
+.agent-msg-user .agent-msg-text {
+  color: var(--color-text-primary);
+}
+.agent-msg-assistant .agent-msg-text {
+  color: color-mix(in srgb, var(--color-text-primary) 85%, var(--color-text-secondary));
+}
+.agent-activity {
+  color: var(--color-text-secondary);
+  font-style: italic;
+}
+.agent-error {
+  padding: var(--spacing-2) var(--spacing-3);
+  border-radius: var(--radius-element);
+  background: var(--color-error);
+  color: var(--color-text-primary);
+  white-space: pre-wrap;
+}
+.agent-meta {
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--color-text-secondary);
+}
+/* Small facts on the panel and in settings: the scope, the provider, a status. */
+.agent-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 22px;
+  padding: 0 var(--spacing-2);
+  border-radius: var(--radius-element);
+  border: var(--border-width) solid var(--color-border-emphasized);
+  background: var(--color-background-card);
+  font-size: 11px;
+  color: var(--color-text-primary);
+  white-space: nowrap;
+}
+.agent-dot,
+.provider-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: var(--radius-full);
+  background: var(--color-accent);
+  flex: none;
+}
+/* Three states, two channels (the dot AND the text beside it say the same thing). */
+.provider-dot-ok {
+  background: var(--color-accent);
+}
+.provider-dot-warn {
+  background: var(--color-border-red, var(--color-text-secondary));
+}
+.provider-dot-unknown {
+  background: var(--color-border-emphasized);
+}

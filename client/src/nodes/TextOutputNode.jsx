@@ -11,13 +11,15 @@ import { resetModelParams } from './output/defaults.js';
 import { ModelPicker, CostFoot } from './output/controls.jsx';
 import { buildRequest } from '../graph/resolve.js';
 import { withDrag } from '../graph/starter.js';
-import { runText, getProject, SESSION_ID } from '../api.js';
+import { runText, SESSION_ID } from '../api.js';
+import { useProject } from '../graph/project.js';
 import { useFieldResize } from './fieldResize.js';
 
 // An output node that emits text instead of an image. It consumes edges exactly like
 // the image output node — same buildRequest — and its answer lives in data.result so
 // prompts downstream can pull it in with @id.
 export default function TextOutputNode({ id, data }) {
+  const { ref: projectRef } = useProject();
   const { getNodes, getEdges, updateNodeData, getNode, addNodes } = useReactFlow();
   const [status, setStatus] = useState('idle'); // idle | running | error
   const [error, setError] = useState(null);
@@ -50,7 +52,7 @@ export default function TextOutputNode({ id, data }) {
     // (not a genuine switch) reuses this very instance, and even when a switch
     // DOES remount it, updateNodeData still reaches into whichever project is
     // CURRENTLY loaded — never the one this closure started in.
-    const startedIn = getProject();
+    const startedIn = projectRef.current;
     // Persisted before the request: local `status` alone is wiped by a genuine
     // switch's remount, so without this a switch-and-back would show an enabled
     // Run button for a request still in flight — a second click would be a
@@ -66,8 +68,8 @@ export default function TextOutputNode({ id, data }) {
       if (!full.trim()) {
         throw new Error('Nothing to run. Wire a prompt node in, or type one below.');
       }
-      const resp = await runText({ prompt: full, input_references, model });
-      if (getProject() !== startedIn) {
+      const resp = await runText({ prompt: full, input_references, model }, startedIn);
+      if (projectRef.current !== startedIn) {
         // A run outlives a project switch, and node ids come from one counter
         // shared by every project, so this id may now belong to a DIFFERENT
         // project's node. Writing would attribute someone else's answer to it —
@@ -80,7 +82,7 @@ export default function TextOutputNode({ id, data }) {
       updateNodeData(id, { result: resp.text, cost: resp.cost, running: undefined });
       setStatus('idle');
     } catch (err) {
-      if (getProject() !== startedIn) {
+      if (projectRef.current !== startedIn) {
         // Same reasoning as the success path: an error belonging to a run
         // started somewhere else must not surface on whatever node is showing
         // now, and the marker it left behind is not this node's to keep either.

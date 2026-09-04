@@ -69,9 +69,7 @@ export function bucketSources(nodes, edges, outputId) {
     .filter(Boolean)
     .sort((a, b) => (a.position?.y ?? 0) - (b.position?.y ?? 0));
 
-  const media = sources.filter(
-    (n) => (n.type === 'image' || n.type === 'video') && n.data?.dataUrl,
-  );
+  const media = sources.filter((n) => (n.type === 'image' || n.type === 'video') && hasMedia(n));
   const mode = isVideoOutput(output) ? output?.data?.inputMode : undefined;
   const wanted = MODE_FRAMES[mode];
   if (!wanted) return { sources, references: media, frames: [], excess: [] };
@@ -91,13 +89,24 @@ export function bucketSources(nodes, edges, outputId) {
   };
 }
 
+// Where a media node's bytes are. `file` names a file in the project folder -- the
+// normal case since media left the document (server/media.js) -- and `dataUrl` is kept
+// for the one thing that is not a file: a hosted https video link. A node with neither
+// is an empty reference slot.
+export const hasMedia = (n) => Boolean(n?.data?.file || n?.data?.dataUrl);
+
+// What a request carries for a media node. A file travels as a `project-file:` marker
+// the server inlines to base64 at the OpenRouter boundary (server/media.js), so the
+// browser never round-trips bytes that already sit on disk next to the server.
+export const mediaRef = (n) => (n.data?.file ? `project-file:${n.data.file}` : n.data?.dataUrl);
+
 // Media nodes -> the array the API takes. Shared by buildRequest and runReferences so a
 // new reference kind cannot be added to one and silently forgotten in the other.
 function toReferences(media) {
   return media.map((n) =>
     n.type === 'video'
-      ? { type: 'video_url', video_url: { url: n.data.dataUrl } }
-      : { type: 'image_url', image_url: { url: n.data.dataUrl } },
+      ? { type: 'video_url', video_url: { url: mediaRef(n) } }
+      : { type: 'image_url', image_url: { url: mediaRef(n) } },
   );
 }
 
@@ -113,7 +122,7 @@ export function buildRequest(nodes, edges, outputId) {
   const input_references = toReferences(references);
   const frame_images = frames.map(({ node, frame_type }) => ({
     type: 'image_url',
-    image_url: { url: node.data.dataUrl },
+    image_url: { url: mediaRef(node) },
     frame_type,
   }));
 
@@ -135,7 +144,7 @@ export function buildRequest(nodes, edges, outputId) {
 // badge and the request cannot disagree. `nodes`/`edges` are the live arrays.
 export function sourceRoles(nodes, edges, nodeId) {
   const self = nodes.find((n) => n.id === nodeId);
-  if (!self || (self.type !== 'image' && self.type !== 'video') || !self.data?.dataUrl) return [];
+  if (!self || (self.type !== 'image' && self.type !== 'video') || !hasMedia(self)) return [];
 
   const roles = [];
   // Consumers in canvas order, top to bottom -- the same rule that orders prompts and

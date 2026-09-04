@@ -69,6 +69,20 @@ assert.ok(PATTERNS.OPENROUTER_TEXT_MODEL.test('anthropic/claude-3.5-sonnet:beta'
 assert.ok(!PATTERNS.OPENROUTER_IMAGE_MODEL.test('no-slash'));
 assert.ok(!PATTERNS.OPENROUTER_IMAGE_MODEL.test('a/b\nPORT=1'));
 assert.ok(PATTERNS.OUTPUT_DIR.test('/Users/me/Pictures/Unframed output'));
+// A local agent CLI: a bare command or a path, and nothing a shell would interpret --
+// the spawn is shell-less, but `claude; rm -rf ~` must never be accepted as a name.
+assert.ok(PATTERNS.CLAUDE_PATH.test('claude'));
+assert.ok(PATTERNS.CLAUDE_PATH.test('/opt/homebrew/bin/claude'));
+assert.ok(PATTERNS.CODEX_PATH.test('C:\\Users\\me\\AppData\\Roaming\\npm\\codex.cmd'));
+assert.ok(!PATTERNS.CLAUDE_PATH.test('claude; rm -rf ~'));
+assert.ok(!PATTERNS.CLAUDE_PATH.test('$(evil)'));
+assert.ok(!PATTERNS.CLAUDE_PATH.test('claude\nPORT=1'));
+assert.ok(!PATTERNS.CLAUDE_PATH.test(' claude'));
+assert.ok(!PATTERNS.CLAUDE_PATH.test(''));
+assert.ok(PATTERNS.CLAUDE_CONFIG_DIR.test('/Users/me/.claude-unframed'));
+assert.ok(PATTERNS.CLAUDE_CONFIG_DIR.test('C:\\Users\\me\\.claude'));
+assert.ok(!PATTERNS.CLAUDE_CONFIG_DIR.test('relative/dir'), 'a config dir must be absolute');
+assert.ok(!PATTERNS.CLAUDE_CONFIG_DIR.test('/x\ny'));
 assert.ok(PATTERNS.OUTPUT_DIR.test('./output'));
 assert.ok(!PATTERNS.OUTPUT_DIR.test('./out\nPORT=1'));
 assert.ok(!PATTERNS.OUTPUT_DIR.test(''));

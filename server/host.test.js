@@ -114,9 +114,30 @@ const authKeyStubBase = `http://127.0.0.1:${authKeyStub.address().port}`;
 const authKeyStubUrl = `${authKeyStubBase}/api/v1/auth/keys`;
 const keyInfoStubUrl = `${authKeyStubBase}/api/v1/key`;
 
+// Fake `claude` and `codex` on PATH, ahead of any real install, so the provider
+// detection route can be driven through every outcome without a subscription. The
+// fake claude answers --version and fails anything else, so the Agent SDK's auth probe
+// cannot get an answer from it (that is the "runs, auth unknown" outcome). The fake
+// codex reads its login status from a file the tests rewrite.
+const fakeBin = path.join(dataDir, 'fakebin');
+await fs.mkdir(fakeBin);
+await fs.writeFile(
+  path.join(fakeBin, 'claude'),
+  '#!/bin/sh\nif [ "$1" = "--version" ]; then echo "9.9.9 (Claude Code)"; exit 0; fi\nexit 1\n',
+  { mode: 0o755 },
+);
+await fs.writeFile(
+  path.join(fakeBin, 'codex'),
+  `#!/bin/sh\nif [ "$1" = "--version" ]; then echo "codex-cli 8.8.8"; exit 0; fi\nif [ "$1" = "login" ] && [ "$2" = "status" ]; then cat "${path.join(fakeBin, 'codex-status')}"; exit 0; fi\nexit 1\n`,
+  { mode: 0o755 },
+);
+await fs.writeFile(path.join(fakeBin, 'codex-status'), 'Not logged in\n');
+await fs.writeFile(path.join(fakeBin, 'broken'), '#!/bin/sh\nexit 1\n', { mode: 0o755 });
+
 const child = fork(path.join(here, 'index.js'), {
   env: {
     ...process.env,
+    PATH: `${fakeBin}:${process.env.PATH}`,
     UNFRAMED_DATA_DIR: dataDir,
     UNFRAMED_CLIENT_DIST: distDir,
     OUTPUT_DIR: outDir,
@@ -1197,12 +1218,13 @@ try {
   // each write fail (the presets.test.js / jobs.test.js trick); the timeout on
   // each fetch is the hang detector.
 
-  // PUT /api/projects/:name -- autosave.
-  await fs.mkdir(path.join(outDir, 'wrapcheck', 'graph.json'), { recursive: true });
-  const saveBlocked = await fetch(`${base}/api/projects/wrapcheck`, {
-    method: 'PUT',
+  // POST /api/projects/:name/ops -- the save path. A directory where graph.log belongs
+  // makes the journal append fail.
+  await fs.mkdir(path.join(outDir, 'wrapcheck', 'graph.log'), { recursive: true });
+  const saveBlocked = await fetch(`${base}/api/projects/wrapcheck/ops`, {
+    method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ nodes: [], edges: [] }),
+    body: JSON.stringify({ ops: [{ type: 'addNode', node: { id: 'z', type: 'prompt', position: { x: 0, y: 0 }, data: {} } }], origin: { id: 't' } }),
     signal: AbortSignal.timeout(5000),
   });
   assert.equal(saveBlocked.status, 500, 'a save that cannot write answers 500 instead of hanging');
@@ -1231,6 +1253,248 @@ try {
   assert.equal(listBlocked.status, 500, 'an unlistable output folder answers 500 instead of hanging');
   await fs.rm(outDir);
   await fs.rename(`${outDir}-moved`, outDir);
+
+  // ---- the document (2026-09-04): create, ops, events, undo/redo, files, rename ----
+  // The server owns the graph; the browser sends ops and listens on an SSE stream.
+  // Everything here goes through the real routes against the forked server.
+  {
+    const docBase = `${base}/api/projects/docproj`;
+    const json = (method, url, body) =>
+      fetch(url, {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        body: body === undefined ? undefined : JSON.stringify(body),
+        signal: AbortSignal.timeout(5000),
+      });
+    const dn = (id) => ({ id, type: 'prompt', position: { x: 0, y: 0 }, data: { text: id } });
+
+    // Create with a starter graph: one system commit, version 1. A second create is a 409.
+    const created = await json('POST', docBase, { nodes: [dn('a')], edges: [] });
+    assert.equal(created.status, 200);
+    assert.equal((await created.json()).version, 1);
+    assert.equal((await json('POST', docBase, {})).status, 409, 'creating over an existing project is refused');
+    const got = await (await fetch(docBase)).json();
+    assert.equal(got.version, 1);
+    assert.deepEqual(got.nodes.map((n) => n.id), ['a']);
+
+    // Ops: applied and rejected reported separately; the origin's kind is forced to
+    // `session` whatever the body claimed.
+    const opsRes = await json('POST', `${docBase}/ops`, {
+      ops: [{ type: 'addNode', node: dn('b') }, { type: 'moveNode', id: 'ghost', position: { x: 0, y: 0 } }],
+      origin: { kind: 'thread', id: 'tab-1' },
+    });
+    const o = await opsRes.json();
+    assert.equal(o.version, 2);
+    assert.equal(o.applied.length, 1);
+    assert.deepEqual(o.applied[0].origin, { kind: 'session', id: 'tab-1' });
+    assert.equal(o.rejected.length, 1);
+    assert.match(o.rejected[0].reason, /no node/);
+    assert.equal((await json('POST', `${docBase}/ops`, { ops: [], origin: { id: 'x' } })).status, 400);
+    assert.equal((await json('POST', `${docBase}/ops`, { ops: [{ type: 'moveNode', id: 'a', position: { x: 1, y: 1 } }] })).status, 400, 'origin is required');
+
+    // The event stream: replay from `since`, then a version marker, then live entries.
+    const streamAbort = new AbortController();
+    const ev = await fetch(`${docBase}/events?since=0`, { signal: streamAbort.signal });
+    assert.equal(ev.status, 200);
+    assert.ok(ev.headers.get('content-type').startsWith('text/event-stream'));
+    const reader = ev.body.getReader();
+    const decoder = new TextDecoder();
+    let sseBuffer = '';
+    // Reads until `until(events)` is satisfied; returns the events read by THIS call.
+    const readEvents = (until) =>
+      withDeadline(
+        (async () => {
+          const events = [];
+          for (;;) {
+            let sep;
+            while ((sep = sseBuffer.indexOf('\n\n')) !== -1) {
+              const frame = sseBuffer.slice(0, sep);
+              sseBuffer = sseBuffer.slice(sep + 2);
+              if (frame.startsWith(':')) continue; // heartbeat comment
+              const event = /^event: (.*)$/m.exec(frame)?.[1];
+              const data = /^data: (.*)$/m.exec(frame)?.[1];
+              events.push({ event, data: data ? JSON.parse(data) : null });
+            }
+            if (until(events)) return events;
+            const { value, done } = await reader.read();
+            if (done) return events;
+            sseBuffer += decoder.decode(value, { stream: true });
+          }
+        })(),
+        5000,
+        'the event stream did not deliver in time',
+      );
+    const replay = await readEvents((evs) => evs.some((e) => e.event === 'version'));
+    assert.deepEqual(replay.filter((e) => e.event === 'entry').map((e) => e.data.version), [1, 2], 'replay from 0 delivers both entries');
+    assert.equal(replay.at(-1).data.version, 2, 'then the live marker');
+    await json('POST', `${docBase}/ops`, { ops: [{ type: 'moveNode', id: 'a', position: { x: 7, y: 7 } }], origin: { id: 'tab-2' } });
+    const live = await readEvents((evs) => evs.some((e) => e.event === 'entry'));
+    assert.equal(live[0].data.version, 3);
+    assert.equal(live[0].data.origin.id, 'tab-2', 'a live entry names who made it');
+
+    // Undo and redo through the routes, broadcast like anything else; 204 when idle.
+    const u = await json('POST', `${docBase}/undo`, { origin: { id: 'tab-2' } });
+    assert.equal(u.status, 200);
+    assert.equal((await u.json()).undoes, 3);
+    assert.deepEqual((await (await fetch(docBase)).json()).nodes.find((n) => n.id === 'a').position, { x: 0, y: 0 });
+    assert.equal((await json('POST', `${docBase}/redo`, {})).status, 200);
+    assert.equal((await json('POST', `${docBase}/redo`, {})).status, 204, 'nothing left to redo');
+    const walked = await readEvents((evs) => evs.filter((e) => e.event === 'entry').length >= 2);
+    assert.deepEqual(walked.map((e) => e.data.origin.kind), ['undo', 'redo']);
+
+    // Files: raw bytes in, a named file plus sidecar out, served back by /api/file.
+    const png = Buffer.from(
+      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==',
+      'base64',
+    );
+    const up = await fetch(`${docBase}/files?name=Hero%20Shot.png`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'image/png' },
+      body: png,
+      signal: AbortSignal.timeout(5000),
+    });
+    assert.equal(up.status, 200);
+    const uploaded = await up.json();
+    assert.match(uploaded.file, /^\d+-hero-shot\.png$/);
+    assert.equal(uploaded.bytes, 70);
+    await fs.access(path.join(outDir, 'docproj', uploaded.file));
+    const sidecar = JSON.parse(await fs.readFile(path.join(outDir, 'docproj', uploaded.file.replace(/\.png$/, '.json')), 'utf8'));
+    assert.equal(sidecar.source, 'upload');
+    assert.equal(sidecar.fileName, 'Hero Shot.png');
+    assert.equal((await fetch(`${base}/api/file/docproj/${uploaded.file}`)).status, 200);
+    assert.equal((await fetch(`${docBase}/files`, { method: 'POST', body: '', signal: AbortSignal.timeout(5000) })).status, 400, 'no bytes is a 400');
+
+    // Rename ends the stream (the tab reconnects under the new name) and the graph,
+    // journal included, follows the folder.
+    assert.equal((await json('POST', `${docBase}/rename`, { to: 'docproj-2' })).status, 200);
+    const ended = await withDeadline(reader.read(), 5000, 'the stream did not end on rename');
+    assert.equal(ended.done, true, 'the event stream ended when the project was renamed');
+    const moved = await (await fetch(`${base}/api/projects/docproj-2`)).json();
+    assert.equal(moved.version, 5, 'create, add, move, undo, redo');
+    assert.deepEqual(moved.nodes.map((n) => n.id), ['a', 'b']);
+    streamAbort.abort();
+
+    // A graph saved before media left the document is rewritten on first open: the bytes
+    // become a file, the node keeps the name, and the rewrite is version 1.
+    const legacyDir = path.join(outDir, 'legacy-media');
+    await fs.mkdir(legacyDir, { recursive: true });
+    await fs.writeFile(
+      path.join(legacyDir, 'graph.json'),
+      JSON.stringify({
+        nodes: [{ id: 'img', type: 'image', position: { x: 0, y: 0 }, data: { dataUrl: `data:image/png;base64,${png.toString('base64')}`, fileName: 'old.png' } }],
+        edges: [],
+      }),
+    );
+    const legacy = await (await fetch(`${base}/api/projects/legacy-media`)).json();
+    assert.equal(legacy.version, 1);
+    assert.equal(legacy.nodes[0].data.dataUrl, undefined);
+    assert.match(legacy.nodes[0].data.file, /-old\.png$/);
+    assert.equal((await fs.readFile(path.join(legacyDir, legacy.nodes[0].data.file))).length, 70);
+    assert.equal((await fs.readFile(path.join(legacyDir, 'graph.log'), 'utf8')).includes('base64'), false, 'no bytes in the journal');
+  }
+
+  // ---- local agent providers (2026-09-04): detection against the fake binaries ----
+  {
+    const providers = async (q = '') => (await (await fetch(`${base}/api/providers${q}`, { signal: AbortSignal.timeout(30000) })).json()).providers;
+    const config = (body) =>
+      fetch(`${base}/api/config`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body), signal: AbortSignal.timeout(5000) });
+
+    let pv = await providers();
+    assert.equal(pv.claude.status, 'auth_unknown', 'fake claude runs but cannot answer the SDK probe');
+    assert.equal(pv.claude.installed, true);
+    assert.equal(pv.claude.version, '9.9.9');
+    assert.match(pv.claude.message, /could not verify/i);
+    assert.equal(pv.codex.status, 'signed_out');
+    assert.equal(pv.codex.version, '8.8.8');
+    assert.match(pv.codex.message, /codex login/);
+
+    // Signing in is not noticed until asked: the answer is cached for five minutes.
+    await fs.writeFile(path.join(fakeBin, 'codex-status'), 'Logged in using ChatGPT\n');
+    assert.equal((await providers()).codex.status, 'signed_out', 'cached');
+    pv = await providers('?refresh=1');
+    assert.equal(pv.codex.status, 'ready');
+    assert.deepEqual(pv.codex.auth, { plan: 'ChatGPT' });
+    assert.equal(pv.codex.message, undefined);
+
+    // A configured path that does not exist: not installed. Changing the setting drops
+    // the cache on its own. The setting is validated like every other, and clearing it
+    // goes back to PATH.
+    assert.equal((await config({ claudePath: '/nonexistent/claude' })).status, 200);
+    assert.equal((await (await fetch(`${base}/api/health`)).json()).claudePath, '/nonexistent/claude');
+    pv = await providers();
+    assert.equal(pv.claude.status, 'not_installed');
+    assert.equal(pv.claude.installed, false);
+    assert.equal((await config({ claudePath: 'claude; rm -rf ~' })).status, 400, 'a shell-shaped name is refused');
+    assert.equal((await config({ claudeConfigDir: 'relative/dir' })).status, 400, 'a config dir must be absolute');
+    assert.equal((await config({ claudePath: '' })).status, 200, 'empty clears the override');
+    assert.equal((await (await fetch(`${base}/api/health`)).json()).claudePath, '');
+    assert.equal((await providers()).claude.status, 'auth_unknown', 'back on PATH');
+
+    // A binary that is there but fails: installed, will not run.
+    assert.equal((await config({ codexPath: path.join(fakeBin, 'broken') })).status, 200);
+    pv = await providers();
+    assert.equal(pv.codex.status, 'wont_run');
+    assert.equal(pv.codex.installed, true);
+    assert.match(pv.codex.message, /failed to run/);
+    assert.equal((await config({ codexPath: '' })).status, 200);
+    assert.equal((await providers()).codex.status, 'ready');
+  }
+
+  // ---- agent threads (2026-09-04): the record and the routes, without a real agent ----
+  // The fake claude on PATH answers --version and nothing else, so a turn cannot start;
+  // what is tested here is everything around the turn: creation, listing, the record,
+  // the stream's replay, and that a provider that is not ready fails the turn loudly and
+  // leaves the thread marked failed rather than hanging.
+  {
+    const tBase = `${base}/api/projects/threadproj/threads`;
+    const json = (method, url, body) =>
+      fetch(url, {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        body: body === undefined ? undefined : JSON.stringify(body),
+        signal: AbortSignal.timeout(30000),
+      });
+    assert.equal((await json('POST', tBase, { provider: 'grok' })).status, 400, 'unknown provider');
+    const created = await (await json('POST', tBase, { provider: 'claude', model: 'claude-opus-5' })).json();
+    assert.match(created.thread.id, /^t-/);
+    assert.equal(created.thread.status, 'idle');
+    assert.equal(created.thread.provider, 'claude');
+    const list = await (await fetch(`${tBase}`)).json();
+    assert.deepEqual(list.threads.map((t) => t.id), [created.thread.id]);
+    assert.equal((await fetch(`${tBase}/nope`)).status, 404);
+    assert.equal((await json('POST', `${tBase}/${created.thread.id}/messages`, { text: '  ' })).status, 400, 'an empty message is refused');
+    // The provider is not ready (the fake cannot answer the auth probe), so the turn
+    // fails before anything is spawned for real -- and says why.
+    const turn = await json('POST', `${tBase}/${created.thread.id}/messages`, { text: 'hello', selection: ['1'] });
+    assert.equal(turn.status, 500);
+    assert.match((await turn.json()).error, /could not verify|not ready/i);
+    const after = (await (await fetch(`${tBase}/${created.thread.id}`)).json()).thread;
+    assert.equal(after.status, 'failed', 'a turn that could not start leaves the thread failed, not running');
+    assert.equal(after.messages.length, 1, 'the user message is kept');
+    assert.deepEqual(after.messages[0].selection, ['1']);
+    assert.ok(after.events.some((e) => e.type === 'error'), 'and the failure is an event on the record');
+    // The stream replays the record: state first, the stored events, then a live marker.
+    const ev = await fetch(`${tBase}/${created.thread.id}/events?since=0`, { signal: AbortSignal.timeout(5000) });
+    const text = await withDeadline(
+      (async () => {
+        const reader = ev.body.getReader();
+        let got = '';
+        while (!got.includes('event: live')) {
+          const { value, done } = await reader.read();
+          if (done) break;
+          got += new TextDecoder().decode(value);
+        }
+        reader.cancel();
+        return got;
+      })(),
+      5000,
+      'the thread stream did not replay',
+    );
+    assert.match(text, /event: state\ndata: \{"status":"failed"/);
+    assert.match(text, /event: event\ndata: \{[^\n]*"type":"error"/);
+    assert.equal((await fetch(`${tBase}/${created.thread.id}`, { method: 'DELETE' })).status, 200);
+    assert.deepEqual((await (await fetch(tBase)).json()).threads, []);
+  }
 
   // The fourth hardened call site: the poll route's terminal-failure persistJob.
   // A store write CAN be made to fail on demand -- the same

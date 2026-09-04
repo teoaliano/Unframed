@@ -16,9 +16,10 @@ import { useModels, useModelParams, freeSpot } from './output/core.js';
 import { estimateImageCost, formatEstimate } from './output/pricing.js';
 import { resetModelParams } from './output/defaults.js';
 import { ModelPicker, ParamControls, CostFoot } from './output/controls.jsx';
-import { buildRequest, splitSections, findFreeSource, freeSourceText, freeBatch, bucketSources, isTextOutput } from '../graph/resolve.js';
+import { buildRequest, splitSections, findFreeSource, freeSourceText, freeBatch, bucketSources, isTextOutput, hasMedia } from '../graph/resolve.js';
 import { withDrag } from '../graph/starter.js';
-import { generate, runText, getProject, getModelPricing, SESSION_ID } from '../api.js';
+import { generate, runText, getModelPricing, SESSION_ID } from '../api.js';
+import { useProject } from '../graph/project.js';
 // Arrow leaving a frame: "send this out onto the canvas". From lucide-react, like
 // every other icon here, so it shares the set's grid and stroke.
 import { ExternalLink as AddToCanvasIcon } from 'lucide-react';
@@ -44,6 +45,7 @@ function emptyNote(empty) {
 // tab: the medium picked the catalogue, the controls and the order of magnitude of
 // the bill, which is too much to hide behind a segmented control.
 export default function ImageOutputNode({ id, data }) {
+  const { ref: projectRef } = useProject();
   const { getNodes, getEdges, updateNodeData, getNode, addNodes } = useReactFlow();
   const toast = useToast();
   const [status, setStatus] = useState('idle'); // idle | running | done | error | partial
@@ -101,23 +103,6 @@ export default function ImageOutputNode({ id, data }) {
   const params = useModelParams(entry, 'image');
   const { resolutionTiers, ratios, qualities, backgrounds, supported, maxReferences, outputFormats } = params;
 
-  // A just-finished result already carries its bytes; a reopened one (seeded from
-  // data.results after a reload or a project switch) only has a file url and needs
-  // fetching — same reasoning as VideoOutputNode.addVideoToCanvas: a reference has
-  // to travel to OpenRouter, which cannot reach this machine, so it must be inlined.
-  async function toDataUrl(result) {
-    if (result.image) return result.image;
-    const res = await fetch(result.url);
-    if (!res.ok) throw new Error(`could not read the saved file (${res.status})`);
-    const blob = await res.blob();
-    return await new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => resolve(reader.result);
-      reader.onerror = () => reject(new Error('could not read the file'));
-      reader.readAsDataURL(blob);
-    });
-  }
-
   // Put a generated image on the canvas as an image node, so it can be wired back
   // in as a reference for the next generation. Results no longer land here on their
   // own: a ten-run batch used to bury the canvas in nodes nobody asked for, so this
@@ -125,7 +110,11 @@ export default function ImageOutputNode({ id, data }) {
   async function addToCanvas(result, index, base) {
     setAddingKeys((s) => new Set(s).add(result.runIndex));
     try {
-      const dataUrl = await toDataUrl(result);
+      // The generated file is already in the project folder and `url` is its
+      // /api/file/<project>/<name> pointer, so the new node just names the file --
+      // no bytes are pulled back in (media left the document, server/media.js).
+      const file = decodeURIComponent(String(result.url || '').split('/').pop() || '');
+      if (!file) throw new Error('the result has no file');
       // withDrag, not a bare node: an input node's Card is width: 100%, so it needs the
       // wrapper size withDrag seeds or the picture renders at its own natural width.
       // Every other way a node reaches the canvas goes through it too (App.jsx).
@@ -134,10 +123,7 @@ export default function ImageOutputNode({ id, data }) {
           id: `gen-${Date.now()}-${index}`,
           type: 'image',
           position: { x: base.x, y: base.y + 48 * index },
-          data: {
-            fileName: (result.savedPath || result.url)?.split('/').pop() || 'generated',
-            dataUrl,
-          },
+          data: { fileName: file, file },
         }),
       );
     } catch (err) {
@@ -175,7 +161,7 @@ export default function ImageOutputNode({ id, data }) {
 
   const wiredVideos = liveEdges
     .filter((e) => e.target === id)
-    .filter((e) => liveNodes.some((n) => n.id === e.source && n.type === 'video' && n.data?.dataUrl))
+    .filter((e) => liveNodes.some((n) => n.id === e.source && n.type === 'video' && hasMedia(n)))
     .length;
 
   // Read off bucketSources rather than the edges, so this counts exactly what
@@ -227,12 +213,15 @@ export default function ImageOutputNode({ id, data }) {
   async function fire(batch, batchId) {
     // Captured before anything is awaited, same reasoning as onGenerate's copy: a write
     // after an await reaches whichever project is CURRENTLY loaded, never this one.
-    const startedIn = getProject();
+    const startedIn = projectRef.current;
+    // Every run in the batch is written under the project it STARTED in, whatever is
+    // showing when it lands.
+    const gen = (body) => generate(body, startedIn);
     try {
       setTotal(batch.length);
       const settled = await Promise.allSettled(
         batch.map((run, i) =>
-          generate({
+          gen({
             prompt: run.prompt,
             input_references: run.input_references,
             model,
@@ -253,7 +242,7 @@ export default function ImageOutputNode({ id, data }) {
             // attributing it to whatever node now sits at this id would be
             // attributing it to the wrong project's node — see the task's own
             // account of why this guard exists.
-            if (getProject() !== startedIn) return resp;
+            if (projectRef.current !== startedIn) return resp;
             setDone((d) => d + 1);
             // runIndex travels with the result so thumbnails, canvas placement, and
             // labels all agree on run order regardless of completion order.
@@ -277,7 +266,7 @@ export default function ImageOutputNode({ id, data }) {
         ),
       );
 
-      if (getProject() !== startedIn) {
+      if (projectRef.current !== startedIn) {
         // The switch outlasted the whole batch, not just one result in it —
         // every individual write above already skipped itself. Nothing left here
         // is this project's to touch; only clear the marker, so whatever node
@@ -296,7 +285,7 @@ export default function ImageOutputNode({ id, data }) {
       }
       updateNodeData(id, { running: undefined });
     } catch (err) {
-      if (getProject() !== startedIn) {
+      if (projectRef.current !== startedIn) {
         updateNodeData(id, { running: undefined });
         return;
       }
@@ -356,11 +345,11 @@ export default function ImageOutputNode({ id, data }) {
     setDone(0);
     // fire() handles its own failures; this is the backstop, because a throw escaping here
     // would leave `running` set with nothing in flight and Generate disabled until remount.
-    const startedIn = getProject();
+    const startedIn = projectRef.current;
     try {
       await fire(built, batchId);
     } catch (err) {
-      if (getProject() === startedIn) {
+      if (projectRef.current === startedIn) {
         setError(err.message);
         setStatus('error');
       }
@@ -385,7 +374,7 @@ export default function ImageOutputNode({ id, data }) {
     // switch DOES remount it, updateNodeData still reaches into whichever
     // project is CURRENTLY loaded — never the one this closure started in — so a
     // write after an await needs its own check regardless of what remounted.
-    const startedIn = getProject();
+    const startedIn = projectRef.current;
     // A fresh run's persisted pointer starts empty too, same reasoning as
     // clearResults: a run interrupted before its first result lands must not leave
     // the PREVIOUS batch's images to reappear on the next reload of a blank node.
@@ -502,7 +491,7 @@ export default function ImageOutputNode({ id, data }) {
             prompt: `Text to rewrite:\n\n${listText}`,
             model: isTextOutput(source) ? source.data.model || undefined : undefined,
             batchId,
-          });
+          }, projectRef.current);
           setRepairCost(Number(repaired.cost) || 0);
           const again = splitSections(repaired.text);
           if (again.blocks.length > 1) {
@@ -548,7 +537,7 @@ export default function ImageOutputNode({ id, data }) {
       setNote(allNotes.length ? allNotes.join(' · ') : null);
       await fire(batch, batchId);
     } catch (err) {
-      if (getProject() !== startedIn) {
+      if (projectRef.current !== startedIn) {
         updateNodeData(id, { running: undefined });
         return;
       }

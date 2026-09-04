@@ -1,59 +1,38 @@
-import { migrateNodes } from './graph/migrate.js';
+// Every request that writes into a project names it explicitly -- the caller reads
+// it from graph/project.js's context. There used to be a module-level currentProject
+// here, set by App.jsx on every switch; it was the third copy of the active project
+// and the one that drifted (CLAUDE.md, the activate() story).
 
-// Current project name — kept here so generate() tags every request without
-// threading it through the node components. Canvas sets it on load/switch.
-let currentProject = 'default';
-export const setProject = (name) => {
-  currentProject = name;
-};
-// Read back by anything whose result outlives the request: a run started in one
-// project must not write its answer into whatever project is open when it lands.
-export const getProject = () => currentProject;
-
-// One id per app session (i.e. per page load), never persisted anywhere itself.
-// Stamped into a node's in-flight marker (ImageOutputNode.onGenerate,
-// TextOutputNode.onRun) so a marker left behind by a closed or reloaded tab reads
-// as abandoned rather than disabling that node's button forever: an image or text
-// run is a single request nothing can resume, so a marker from any OTHER session
-// is stale by definition and gets cleared on mount instead of trusted.
+// One id per app session (i.e. per page load), never persisted anywhere itself. Two
+// jobs: stamped into a node's in-flight marker (ImageOutputNode.onGenerate,
+// TextOutputNode.onRun) so a marker left behind by a closed or reloaded tab reads as
+// abandoned rather than disabling that node's button forever; and the origin of every
+// op this tab sends, so the event stream's echo of our own changes can be told apart
+// from everyone else's.
 export const SESSION_ID = `s-${Date.now()}-${Math.random().toString(36).slice(2)}`;
 
-export async function generate(body) {
-  const res = await fetch('/api/generate', {
+const enc = encodeURIComponent;
+
+async function postJson(url, body) {
+  const res = await fetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ ...body, project: currentProject }),
+    body: JSON.stringify(body),
   });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(data.error || `Request failed (${res.status})`);
   return data;
 }
 
-export async function runText(body) {
-  const res = await fetch('/api/text', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ ...body, project: currentProject }),
-  });
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(data.error || `Request failed (${res.status})`);
-  return data;
-}
+export const generate = (body, project) => postJson('/api/generate', { ...body, project });
+
+export const runText = (body, project) => postJson('/api/text', { ...body, project });
 
 // Starts a video job and returns immediately with its id — nothing here waits on
 // the render. Split out from polling (which used to live in one function together
-// with this) so the id can be written to node data, and therefore graph.json,
+// with this) so the id can be written to node data, and therefore the document,
 // before any polling begins: a tab that dies one line later still has it.
-export async function startVideo(body) {
-  const res = await fetch('/api/video', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ ...body, project: currentProject }),
-  });
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(data.error || `Request failed (${res.status})`);
-  return data;
-}
+export const startVideo = (body, project) => postJson('/api/video', { ...body, project });
 
 // Polls one job. `params` is exactly what the server needs to name the file and
 // its sidecar once the job lands — the same shape a caller stores in a node's
@@ -70,9 +49,9 @@ export async function startVideo(body) {
 // reporting failed. A bad response or a failure to even reach our own server
 // (it could just be restarting) says nothing about the job, so it is treated the
 // same as still-pending rather than costing the id its only reference.
-export async function pollVideo(id, params, onStatus, { until = 15 * 60 * 1000 } = {}) {
+export async function pollVideo(id, params, onStatus, { until = 15 * 60 * 1000, project = '' } = {}) {
   const q = new URLSearchParams({
-    project: currentProject,
+    project,
     prompt: params.prompt || '',
     model: params.model || '',
     duration: params.duration ?? '',
@@ -97,16 +76,7 @@ export async function pollVideo(id, params, onStatus, { until = 15 * 60 * 1000 }
 }
 
 // Ask the OS to show generated files (or the project folder) in its file manager.
-export async function revealFiles(fileNames) {
-  const res = await fetch('/api/reveal', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ fileNames, project: currentProject }),
-  });
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(data.error || `Request failed (${res.status})`);
-  return data;
-}
+export const revealFiles = (fileNames, project) => postJson('/api/reveal', { fileNames, project });
 
 // { ok, hasKey, keyHint, imageModel, textModel, videoModel, outputDir } — keyHint
 // is the last 4 chars; the key itself never leaves the server.
@@ -218,32 +188,99 @@ export const getModelPricing = (id) => {
   return pricingCache.get(id);
 };
 
-// Migrated on the way in, here rather than at the two call sites, because this is the
-// only place a graph is read and one of those sites would eventually be forgotten. A
-// graph saved before the output split names types nothing on the canvas registers any
-// more; the next autosave writes the migrated shape back, so each project self-heals
-// the first time it is opened.
-export const loadProject = (name) =>
-  fetch(`/api/projects/${encodeURIComponent(name)}`)
-    .then((r) => r.json())
-    .then((g) => (g?.nodes ? { ...g, nodes: migrateNodes(g.nodes) } : g));
+// ---- the document ----
+// The server owns the graph; this tab holds a replica and sends ops (graph/ops.js,
+// graph/useDocument.js). Every graph read goes through openProject/createProject, and
+// the type migration (graph/migrate.js) is applied by useDocument on the way in --
+// still one funnel, still nothing rewritten on disk until an edit happens.
 
-// This is AUTOSAVE, so a failure here is a real one -- the canvas keeps
-// editing whether or not the last change actually reached disk. Same shape as
-// deleteProject below: returning the bare fetch (as this did) meant a 500 from
-// the server's own wrap (a full disk, a permissions change) read as success,
-// so the failure this fixed on the server (2026-08-17) stayed invisible on the
-// client -- the canvas just never told you it stopped saving.
-export const saveProject = (name, graph) =>
-  fetch(`/api/projects/${encodeURIComponent(name)}`, {
-    method: 'PUT',
+// { version, nodes, edges }. A project that has never been saved answers version 0
+// and an empty graph; the folder appears on the first op.
+const readGraph = async (r) => {
+  const d = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(d.error || `Could not open the project (${r.status})`);
+  return d;
+};
+export const openProject = (name) => fetch(`/api/projects/${enc(name)}`).then(readGraph);
+
+// Create with a starting graph; 409 if the name is taken.
+export const createProject = (name, graph = { nodes: [], edges: [] }) =>
+  fetch(`/api/projects/${enc(name)}`, {
+    method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(graph),
+  }).then(readGraph);
+
+// This is the SAVE path, so a failure here is a real one -- the canvas keeps editing
+// whether or not the change reached disk, and useDocument surfaces the error. Answers
+// { version, applied: [entry], rejected: [{ op, reason }] }.
+export const sendOps = (name, ops) => postJson(`/api/projects/${enc(name)}/ops`, { ops, origin: { id: SESSION_ID } });
+
+export const undoProject = (name) =>
+  fetch(`/api/projects/${enc(name)}/undo`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ origin: { id: SESSION_ID } }),
+  }).then((r) => (r.ok ? null : Promise.reject(new Error(`Could not undo (${r.status})`))));
+
+export const redoProject = (name) =>
+  fetch(`/api/projects/${enc(name)}/redo`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ origin: { id: SESSION_ID } }),
+  }).then((r) => (r.ok ? null : Promise.reject(new Error(`Could not redo (${r.status})`))));
+
+// Raw bytes in, { file, fileName, bytes, mime } out; the node then references `file`.
+// Media never travels inside node data any more (server/media.js).
+export const uploadFile = (name, file) =>
+  fetch(`/api/projects/${enc(name)}/files?name=${enc(file.name || '')}`, {
+    method: 'POST',
+    headers: { 'Content-Type': file.type || 'application/octet-stream' },
+    body: file,
   }).then(async (r) => {
     const d = await r.json().catch(() => ({}));
-    if (!r.ok) throw new Error(d.error || `Could not save the project (${r.status})`);
+    if (!r.ok) throw new Error(d.error || `Could not upload the file (${r.status})`);
     return d;
   });
+
+// Where a project's files are served from, for <img>/<video> src and for references
+// the server inlines at the OpenRouter boundary.
+export const fileUrl = (project, file) => `/api/file/${enc(project)}/${enc(file)}`;
+
+// The event stream: every accepted entry from version `since` onward, then live.
+// EventSource reconnects on its own but cannot change its URL, so a drop is handled
+// here by reopening from the last version seen -- the replay then covers exactly the
+// gap. Returns a function that closes the stream for good.
+export function subscribeProject(name, since, { onEntry, onLive } = {}) {
+  let es = null;
+  let closed = false;
+  let last = since;
+  let retry = 1000;
+  const connect = () => {
+    es = new EventSource(`/api/projects/${enc(name)}/events?since=${last}`);
+    es.addEventListener('entry', (e) => {
+      const entry = JSON.parse(e.data);
+      last = Math.max(last, entry.version);
+      onEntry?.(entry);
+    });
+    es.addEventListener('version', (e) => {
+      last = Math.max(last, JSON.parse(e.data).version);
+      retry = 1000;
+      onLive?.(last);
+    });
+    es.onerror = () => {
+      es.close();
+      if (closed) return;
+      setTimeout(connect, retry);
+      retry = Math.min(retry * 2, 10000);
+    };
+  };
+  connect();
+  return () => {
+    closed = true;
+    es?.close();
+  };
+}
 
 export const renameProject = (name, to) =>
   fetch(`/api/projects/${encodeURIComponent(name)}/rename`, {
@@ -273,6 +310,81 @@ export const deleteProject = (name, { confirmRenders } = {}) =>
     }
     return d;
   });
+
+// ---- local agent providers and threads ----
+
+// { providers: { claude: status, codex: status } } -- each { kind, name, status,
+// installed, version, auth?, message?, install }. Cached five minutes server-side;
+// `refresh` asks the CLIs again. null means the request itself failed.
+export const listProviders = (refresh = false) =>
+  fetch(`/api/providers${refresh ? '?refresh=1' : ''}`)
+    .then((r) => (r.ok ? r.json() : null))
+    .then((d) => d?.providers ?? null)
+    .catch(() => null);
+
+export const createThread = (project, { provider = 'claude', model = '' } = {}) =>
+  postJson(`/api/projects/${enc(project)}/threads`, { provider, model }).then((d) => d.thread);
+
+export const listThreads = (project) =>
+  fetch(`/api/projects/${enc(project)}/threads`)
+    .then((r) => (r.ok ? r.json() : { threads: [] }))
+    .then((d) => d.threads ?? [])
+    .catch(() => []);
+
+export const getThread = (project, id) =>
+  fetch(`/api/projects/${enc(project)}/threads/${enc(id)}`).then(async (r) => {
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(d.error || `Could not open the thread (${r.status})`);
+    return d.thread;
+  });
+
+// One turn. Resolves when the server has accepted the message; the answer arrives on
+// the thread's event stream. A 409 means the previous turn is still running.
+export const sendThreadMessage = (project, id, { text, selection = [] }) =>
+  postJson(`/api/projects/${enc(project)}/threads/${enc(id)}/messages`, { text, selection });
+
+export const interruptThread = (project, id) =>
+  postJson(`/api/projects/${enc(project)}/threads/${enc(id)}/interrupt`, {}).catch(() => ({ interrupted: false }));
+
+export const deleteThread = (project, id) =>
+  fetch(`/api/projects/${enc(project)}/threads/${enc(id)}`, { method: 'DELETE' }).then((r) => {
+    if (!r.ok) throw new Error(`Could not delete the thread (${r.status})`);
+  });
+
+// The thread's stream: `state` once (status, messages so far), stored events past
+// `since`, a `live` marker, then everything as it happens -- text deltas included. Same
+// reconnect rule as subscribeProject: a drop reopens from the last sequence seen.
+export function subscribeThreadEvents(project, id, since, { onState, onEvent, onLive } = {}) {
+  let es = null;
+  let closed = false;
+  let last = since;
+  let retry = 1000;
+  const connect = () => {
+    es = new EventSource(`/api/projects/${enc(project)}/threads/${enc(id)}/events?since=${last}`);
+    es.addEventListener('state', (e) => onState?.(JSON.parse(e.data)));
+    es.addEventListener('event', (e) => {
+      const ev = JSON.parse(e.data);
+      if (typeof ev.seq === 'number') last = Math.max(last, ev.seq);
+      onEvent?.(ev);
+    });
+    es.addEventListener('live', (e) => {
+      last = Math.max(last, JSON.parse(e.data).seq ?? last);
+      retry = 1000;
+      onLive?.(last);
+    });
+    es.onerror = () => {
+      es.close();
+      if (closed) return;
+      setTimeout(connect, retry);
+      retry = Math.min(retry * 2, 10000);
+    };
+  };
+  connect();
+  return () => {
+    closed = true;
+    es?.close();
+  };
+}
 
 // Your saved library presets — one array, one file. This one throws on failure
 // instead of falling back to []: savePresets replaces the whole file, so a

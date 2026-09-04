@@ -5,6 +5,31 @@ is no release artifact to number. Headings are `## YYYY-MM-DD`, groups are
 `### Added` / `### Changed` / `### Fixed`, one bullet per user-visible change.
 Keep that shape: the website's What's new page parses this file.
 
+## 2026-09-04
+
+### Added
+
+- **An agent that reads your canvas, on your own Claude subscription.** The new Agent
+  button opens a panel where you can ask what is on the board — what feeds what, what a
+  prompt says, which node is selected — and Claude answers by reading the canvas itself.
+  It runs through the Claude Code you already have installed and signed into: nothing to
+  connect, nothing sent to OpenRouter, no metered cost. Settings has a new Local agents
+  section showing whether Claude and Codex were found and signed in, with a place to
+  point at the binary when PATH does not find it. Reading only for now; editing the canvas
+  and creating pages come next.
+
+### Changed
+
+- **Undo now survives a reload**, and there is one timeline for everything that changes
+  the canvas — you, another tab, the agent. Every change is saved the moment it settles
+  rather than as a whole-graph autosave, so a large project no longer rewrites megabytes
+  when you nudge a node.
+
+- **Reference images and clips live as files in the project folder** instead of inside
+  the graph. Dropping or pasting one uploads it there; existing projects are converted
+  the first time they are opened, with nothing lost. Generated images added back to the
+  canvas now reference their file directly.
+
 ## 2026-08-22
 
 ### Added
