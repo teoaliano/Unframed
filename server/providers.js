@@ -5,6 +5,10 @@
 // and (against fake binaries) host.test.js. Ported from what t3code learned the hard
 // way: docs/research/2026-08-21-local-agent-cli-providers.md.
 import path from 'node:path';
+import fs from 'node:fs';
+import os from 'node:os';
+import { spawn } from 'node:child_process';
+import { query } from '@anthropic-ai/claude-agent-sdk';
 
 export const PROVIDERS = {
   claude: {
@@ -77,13 +81,14 @@ export function providerEnv(base, { configDir, homedir } = {}) {
 }
 
 // A GUI-launched app does not inherit the shell's PATH, so `claude` is invisible to it
-// even though the terminal finds it instantly. The login shell's PATH goes first, then
-// whatever the process had, without duplicates. Empty or missing shell answer: unchanged.
+// even though the terminal finds it instantly. The process's own PATH stays first --
+// whoever launched it chose that order -- and the login shell's entries are appended,
+// without duplicates. Empty or missing shell answer: unchanged.
 export function hydratedPath(loginShellPath, currentPath, platform) {
   const sep = platform === 'win32' ? ';' : ':';
   const seen = new Set();
   const out = [];
-  for (const part of `${loginShellPath || ''}${sep}${currentPath || ''}`.split(sep)) {
+  for (const part of `${currentPath || ''}${sep}${loginShellPath || ''}`.split(sep)) {
     if (!part || seen.has(part)) continue;
     seen.add(part);
     out.push(part);
@@ -142,4 +147,170 @@ export function classify(kind, { version, probe }) {
     return { ...base, status: 'signed_out', installed: true, version: parsed, message: `${p.name} is installed but not signed in. Sign in with \`${p.binary} login\`, then check again.` };
   }
   return { ...base, status: 'auth_unknown', installed: true, version: parsed, message: `${p.name} runs, but Unframed could not verify who is signed in.` };
+}
+
+// ---- I/O: running the probes ----
+// Thin, and every failure is a VALUE, not a rejection: the route has to answer either
+// way, and classify() above is what reads these shapes.
+
+const isFile = (p) => {
+  try {
+    return fs.statSync(p).isFile();
+  } catch {
+    return false;
+  }
+};
+
+// Runs a command with no shell and a deadline. Resolves { ok: true, exitCode, stdout,
+// stderr } when the process ran at all, { ok: false, code } when it could not be
+// spawned (ENOENT: not installed) or did not finish in time (ETIMEDOUT).
+export function runCommand(cmd, args, { env, cwd, timeoutMs = 3000, input } = {}) {
+  return new Promise((resolve) => {
+    let child;
+    try {
+      child = spawn(cmd, args, { env, cwd, stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true });
+    } catch (err) {
+      return resolve({ ok: false, code: err.code || 'ESPAWN' });
+    }
+    let stdout = '';
+    let stderr = '';
+    let done = false;
+    const finish = (value) => {
+      if (done) return;
+      done = true;
+      clearTimeout(timer);
+      resolve(value);
+    };
+    const timer = setTimeout(() => {
+      child.kill('SIGKILL');
+      finish({ ok: false, code: 'ETIMEDOUT' });
+    }, timeoutMs);
+    child.stdout.on('data', (d) => (stdout += d));
+    child.stderr.on('data', (d) => (stderr += d));
+    child.on('error', (err) => finish({ ok: false, code: err.code || 'ESPAWN' }));
+    child.on('close', (exitCode) => finish({ ok: true, exitCode, stdout, stderr }));
+    if (input !== undefined) child.stdin.end(input);
+    else child.stdin.end();
+  });
+}
+
+// The login shell's PATH, asked once per process. A GUI-launched app inherits launchd's
+// PATH, which has none of the Homebrew or npm directories the CLIs are installed into.
+let shellPathPromise = null;
+export function loginShellPath({ platform = process.platform, shell = process.env.SHELL, env = process.env } = {}) {
+  if (platform === 'win32') return Promise.resolve(null);
+  if (!shellPathPromise) {
+    const sh = shell && shell.trim() ? shell : '/bin/sh';
+    shellPathPromise = runCommand(sh, ['-lc', 'echo "$PATH"'], { env, timeoutMs: 4000 }).then((r) => {
+      if (!r.ok || r.exitCode !== 0) return null;
+      const lines = r.stdout.trim().split('\n').filter(Boolean);
+      return lines.length ? lines[lines.length - 1].trim() : null;
+    });
+  }
+  return shellPathPromise;
+}
+
+const withTimeout = (promise, ms) =>
+  new Promise((resolve, reject) => {
+    const t = setTimeout(() => reject(new Error('probe timed out')), ms);
+    promise.then(
+      (v) => {
+        clearTimeout(t);
+        resolve(v);
+      },
+      (e) => {
+        clearTimeout(t);
+        reject(e);
+      },
+    );
+  });
+
+// Who is signed in to Claude, for zero tokens: an Agent SDK session whose prompt never
+// yields a message, read for its initialization result and then closed. No prompt ever
+// reaches Anthropic. `signedOut` is claimed only when the CLI answered with an account
+// that has nothing in it; any other failure is "could not tell".
+export async function probeClaude(executable, env, { cwd = os.homedir(), timeoutMs = 15000 } = {}) {
+  const abort = new AbortController();
+  const prompt = (async function* neverYields() {
+    await new Promise((resolve) => abort.signal.addEventListener('abort', resolve, { once: true }));
+  })();
+  let q;
+  try {
+    q = query({
+      prompt,
+      options: {
+        pathToClaudeCodeExecutable: executable,
+        env,
+        cwd,
+        settingSources: [],
+        tools: [],
+        permissionMode: 'default',
+        persistSession: false,
+        abortController: abort,
+      },
+    });
+    const init = await withTimeout(q.initializationResult(), timeoutMs);
+    const a = init?.account || {};
+    if (!a.email && !a.subscriptionType && !a.apiKeySource && !a.tokenSource && !init?.apiKeySource) {
+      return { ok: false, signedOut: true };
+    }
+    return { ok: true, email: a.email, plan: a.subscriptionType || (a.apiKeySource || init?.apiKeySource ? 'API key' : undefined), tokenSource: a.tokenSource };
+  } catch {
+    return { ok: false, signedOut: false };
+  } finally {
+    abort.abort();
+    try {
+      q?.close?.();
+    } catch {
+      // already gone
+    }
+  }
+}
+
+export async function probeCodex(executable, env) {
+  const r = await runCommand(executable, ['login', 'status'], { env, timeoutMs: 8000 });
+  if (!r.ok) return { ok: false, signedOut: false };
+  return parseCodexLoginStatus(`${r.stdout}\n${r.stderr}`);
+}
+
+// The whole detection for one provider: PATH hydrated from the login shell, the
+// executable resolved, `--version` run, then the auth probe if it ran. Never rejects.
+export async function detectProvider(kind, { binaryPath, configDir } = {}, { platform = process.platform, env = process.env } = {}) {
+  const p = PROVIDERS[kind];
+  const shellPath = await loginShellPath({ platform, env });
+  const penv = providerEnv(
+    { ...env, PATH: hydratedPath(shellPath, env.PATH, platform) },
+    { configDir: kind === 'claude' ? configDir : undefined, homedir: os.homedir() },
+  );
+  const cmd = typeof binaryPath === 'string' && binaryPath.trim() ? binaryPath.trim() : p.binary;
+  const executable = resolveExecutable(cmd, { platform, env: penv, isFile });
+  const version = await runCommand(executable, ['--version'], { env: penv, timeoutMs: 5000 });
+  let probe;
+  if (version.ok && version.exitCode === 0) {
+    probe = kind === 'claude' ? await probeClaude(executable, penv) : await probeCodex(executable, penv);
+  }
+  return { ...classify(kind, { version, probe }), executable, checkedAt: new Date().toISOString() };
+}
+
+// Five minutes, per provider. A refresh, or a settings change, throws the cache away.
+const STATUS_TTL_MS = 5 * 60 * 1000;
+const statusCache = new Map(); // kind -> { at, promise }
+
+export function forgetProviderStatus(kind) {
+  if (kind) statusCache.delete(kind);
+  else statusCache.clear();
+}
+
+export function providerStatus(kind, settings, { refresh = false } = {}) {
+  const hit = statusCache.get(kind);
+  if (!refresh && hit && Date.now() - hit.at < STATUS_TTL_MS) return hit.promise;
+  const promise = detectProvider(kind, settings);
+  statusCache.set(kind, { at: Date.now(), promise });
+  return promise;
+}
+
+export async function providerStatuses(settingsFor, opts) {
+  const kinds = Object.keys(PROVIDERS);
+  const results = await Promise.all(kinds.map((k) => providerStatus(k, settingsFor(k), opts)));
+  return Object.fromEntries(kinds.map((k, i) => [k, results[i]]));
 }

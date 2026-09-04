@@ -29,6 +29,7 @@ import {
   subscribe as subscribeDocument,
 } from './document.js';
 import { saveMedia, inlineFileRefs } from './media.js';
+import { providerStatuses, forgetProviderStatus } from './providers.js';
 import {
   start as oauthStart,
   cancel as oauthCancel,
@@ -64,6 +65,13 @@ let TEXT_MODEL = process.env.OPENROUTER_TEXT_MODEL || 'google/gemini-3.5-flash-l
 let VIDEO_MODEL = process.env.OPENROUTER_VIDEO_MODEL || 'bytedance/seedance-2.0';
 let API_KEY = process.env.OPENROUTER_API_KEY;
 let OUTPUT_DIR = outputPath(ROOT, process.env.OUTPUT_DIR);
+// Where the local agent CLIs are (empty: found on PATH) and, for Claude, a separate
+// config dir. All three are optional and editable in settings (server/providers.js).
+let CLAUDE_PATH = process.env.CLAUDE_PATH || '';
+let CODEX_PATH = process.env.CODEX_PATH || '';
+let CLAUDE_CONFIG_DIR = process.env.CLAUDE_CONFIG_DIR || '';
+const providerSettings = (kind) =>
+  kind === 'claude' ? { binaryPath: CLAUDE_PATH, configDir: CLAUDE_CONFIG_DIR } : { binaryPath: CODEX_PATH };
 
 const app = express();
 // NOTHING is readable cross-origin. Not an allowlist of loopback origins, which
@@ -166,6 +174,9 @@ function settings() {
     textModel: TEXT_MODEL,
     videoModel: VIDEO_MODEL,
     outputDir: OUTPUT_DIR,
+    claudePath: CLAUDE_PATH,
+    codexPath: CODEX_PATH,
+    claudeConfigDir: CLAUDE_CONFIG_DIR,
   };
 }
 
@@ -173,6 +184,20 @@ app.get('/api/health', (req, res) => {
   // `model` is the old field name for the image model, kept so a stale tab running
   // an older client bundle still reads something sensible.
   res.json({ ok: true, model: IMAGE_MODEL, ...settings() });
+});
+
+// ---- local agent providers ----
+// Which of Claude and Codex are installed and signed in on this machine, so the agent
+// can run on the user's own subscription (server/providers.js). Detection spawns the
+// CLIs, so the answer is cached for five minutes; `?refresh=1` asks again. The probe
+// itself never sends a prompt anywhere and costs no tokens.
+app.get('/api/providers', async (req, res) => {
+  try {
+    const providers = await providerStatuses(providerSettings, { refresh: req.query.refresh === '1' });
+    res.json({ providers });
+  } catch (err) {
+    res.status(500).json({ error: `Could not check the local agents: ${err.message}` });
+  }
 });
 
 // Queued onto one promise chain, the way persistJob queues jobs.json writes and
@@ -224,11 +249,21 @@ app.put('/api/config', async (req, res) => {
     textModel: 'OPENROUTER_TEXT_MODEL',
     videoModel: 'OPENROUTER_VIDEO_MODEL',
     outputDir: 'OUTPUT_DIR',
+    claudePath: 'CLAUDE_PATH',
+    codexPath: 'CODEX_PATH',
+    claudeConfigDir: 'CLAUDE_CONFIG_DIR',
   };
+  // The three provider settings may be cleared: an empty string deletes the line, so
+  // the CLI goes back to being found on PATH (or the default config dir).
+  const clearable = new Set(['CLAUDE_PATH', 'CODEX_PATH', 'CLAUDE_CONFIG_DIR']);
   const updates = {};
   for (const [field, envKey] of Object.entries(fields)) {
     if (body[field] === undefined) continue;
     const value = String(body[field]).trim();
+    if (clearable.has(envKey) && value === '') {
+      updates[envKey] = null;
+      continue;
+    }
     // Trust boundary: these strings get written into .env, and the key is sent as
     // an HTTP header. Only single clean tokens pass -- see PATTERNS in env.js.
     if (!PATTERNS[envKey].test(value)) {
@@ -238,7 +273,11 @@ app.put('/api/config', async (req, res) => {
             ? 'That does not look like an OpenRouter key. Keys start with "sk-or-".'
             : field === 'outputDir'
               ? 'That folder path has characters that cannot be saved.'
-              : 'That does not look like a model slug. Expected something like "openai/gpt-image-2".',
+              : field === 'claudePath' || field === 'codexPath'
+                ? 'That does not look like a command name or a path to one.'
+                : field === 'claudeConfigDir'
+                  ? 'The config folder has to be an absolute path.'
+                  : 'That does not look like a model slug. Expected something like "openai/gpt-image-2".',
       });
     }
     updates[envKey] = value;
@@ -332,6 +371,13 @@ app.put('/api/config', async (req, res) => {
   if (updates.OPENROUTER_IMAGE_MODEL) IMAGE_MODEL = updates.OPENROUTER_IMAGE_MODEL;
   if (updates.OPENROUTER_TEXT_MODEL) TEXT_MODEL = updates.OPENROUTER_TEXT_MODEL;
   if (updates.OPENROUTER_VIDEO_MODEL) VIDEO_MODEL = updates.OPENROUTER_VIDEO_MODEL;
+  // null means the line was deleted: back to the default. A change here invalidates
+  // whatever the provider probe last concluded.
+  if ('CLAUDE_PATH' in updates) CLAUDE_PATH = updates.CLAUDE_PATH || '';
+  if ('CODEX_PATH' in updates) CODEX_PATH = updates.CODEX_PATH || '';
+  if ('CLAUDE_CONFIG_DIR' in updates) CLAUDE_CONFIG_DIR = updates.CLAUDE_CONFIG_DIR || '';
+  if ('CLAUDE_PATH' in updates || 'CLAUDE_CONFIG_DIR' in updates) forgetProviderStatus('claude');
+  if ('CODEX_PATH' in updates) forgetProviderStatus('codex');
 
   if (nextOutputDir) {
     const previousDir = OUTPUT_DIR;

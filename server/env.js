@@ -18,6 +18,14 @@ export const PATTERNS = {
   // A path, absolute or relative to the project root. Anything but the line
   // breaks and quotes that would corrupt the file.
   OUTPUT_DIR: /^[^\n\r"'#]{1,400}$/,
+  // Where a local agent CLI lives: a bare command name resolved on PATH, or a path.
+  // These are SPAWNED, so beyond the file-corruption characters above nothing that a
+  // shell would interpret is allowed either -- the spawn is shell-less, but a value
+  // like `claude; rm -rf ~` must never be accepted as a binary name in the first place.
+  CLAUDE_PATH: /^[^\n\r"'#;&|$`<>(){}\s][^\n\r"'#;&|$`<>(){}]{0,399}$/,
+  CODEX_PATH: /^[^\n\r"'#;&|$`<>(){}\s][^\n\r"'#;&|$`<>(){}]{0,399}$/,
+  // A separate Claude config dir (CLAUDE_CONFIG_DIR): an absolute path only.
+  CLAUDE_CONFIG_DIR: /^(\/|[A-Za-z]:\\)[^\n\r"'#]{0,399}$/,
 };
 
 // Rewrite `text` so each key in `updates` holds its new value. A null value

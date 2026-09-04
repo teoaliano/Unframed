@@ -114,9 +114,30 @@ const authKeyStubBase = `http://127.0.0.1:${authKeyStub.address().port}`;
 const authKeyStubUrl = `${authKeyStubBase}/api/v1/auth/keys`;
 const keyInfoStubUrl = `${authKeyStubBase}/api/v1/key`;
 
+// Fake `claude` and `codex` on PATH, ahead of any real install, so the provider
+// detection route can be driven through every outcome without a subscription. The
+// fake claude answers --version and fails anything else, so the Agent SDK's auth probe
+// cannot get an answer from it (that is the "runs, auth unknown" outcome). The fake
+// codex reads its login status from a file the tests rewrite.
+const fakeBin = path.join(dataDir, 'fakebin');
+await fs.mkdir(fakeBin);
+await fs.writeFile(
+  path.join(fakeBin, 'claude'),
+  '#!/bin/sh\nif [ "$1" = "--version" ]; then echo "9.9.9 (Claude Code)"; exit 0; fi\nexit 1\n',
+  { mode: 0o755 },
+);
+await fs.writeFile(
+  path.join(fakeBin, 'codex'),
+  `#!/bin/sh\nif [ "$1" = "--version" ]; then echo "codex-cli 8.8.8"; exit 0; fi\nif [ "$1" = "login" ] && [ "$2" = "status" ]; then cat "${path.join(fakeBin, 'codex-status')}"; exit 0; fi\nexit 1\n`,
+  { mode: 0o755 },
+);
+await fs.writeFile(path.join(fakeBin, 'codex-status'), 'Not logged in\n');
+await fs.writeFile(path.join(fakeBin, 'broken'), '#!/bin/sh\nexit 1\n', { mode: 0o755 });
+
 const child = fork(path.join(here, 'index.js'), {
   env: {
     ...process.env,
+    PATH: `${fakeBin}:${process.env.PATH}`,
     UNFRAMED_DATA_DIR: dataDir,
     UNFRAMED_CLIENT_DIST: distDir,
     OUTPUT_DIR: outDir,
@@ -1370,6 +1391,53 @@ try {
     assert.match(legacy.nodes[0].data.file, /-old\.png$/);
     assert.equal((await fs.readFile(path.join(legacyDir, legacy.nodes[0].data.file))).length, 70);
     assert.equal((await fs.readFile(path.join(legacyDir, 'graph.log'), 'utf8')).includes('base64'), false, 'no bytes in the journal');
+  }
+
+  // ---- local agent providers (2026-09-04): detection against the fake binaries ----
+  {
+    const providers = async (q = '') => (await (await fetch(`${base}/api/providers${q}`, { signal: AbortSignal.timeout(30000) })).json()).providers;
+    const config = (body) =>
+      fetch(`${base}/api/config`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body), signal: AbortSignal.timeout(5000) });
+
+    let pv = await providers();
+    assert.equal(pv.claude.status, 'auth_unknown', 'fake claude runs but cannot answer the SDK probe');
+    assert.equal(pv.claude.installed, true);
+    assert.equal(pv.claude.version, '9.9.9');
+    assert.match(pv.claude.message, /could not verify/i);
+    assert.equal(pv.codex.status, 'signed_out');
+    assert.equal(pv.codex.version, '8.8.8');
+    assert.match(pv.codex.message, /codex login/);
+
+    // Signing in is not noticed until asked: the answer is cached for five minutes.
+    await fs.writeFile(path.join(fakeBin, 'codex-status'), 'Logged in using ChatGPT\n');
+    assert.equal((await providers()).codex.status, 'signed_out', 'cached');
+    pv = await providers('?refresh=1');
+    assert.equal(pv.codex.status, 'ready');
+    assert.deepEqual(pv.codex.auth, { plan: 'ChatGPT' });
+    assert.equal(pv.codex.message, undefined);
+
+    // A configured path that does not exist: not installed. Changing the setting drops
+    // the cache on its own. The setting is validated like every other, and clearing it
+    // goes back to PATH.
+    assert.equal((await config({ claudePath: '/nonexistent/claude' })).status, 200);
+    assert.equal((await (await fetch(`${base}/api/health`)).json()).claudePath, '/nonexistent/claude');
+    pv = await providers();
+    assert.equal(pv.claude.status, 'not_installed');
+    assert.equal(pv.claude.installed, false);
+    assert.equal((await config({ claudePath: 'claude; rm -rf ~' })).status, 400, 'a shell-shaped name is refused');
+    assert.equal((await config({ claudeConfigDir: 'relative/dir' })).status, 400, 'a config dir must be absolute');
+    assert.equal((await config({ claudePath: '' })).status, 200, 'empty clears the override');
+    assert.equal((await (await fetch(`${base}/api/health`)).json()).claudePath, '');
+    assert.equal((await providers()).claude.status, 'auth_unknown', 'back on PATH');
+
+    // A binary that is there but fails: installed, will not run.
+    assert.equal((await config({ codexPath: path.join(fakeBin, 'broken') })).status, 200);
+    pv = await providers();
+    assert.equal(pv.codex.status, 'wont_run');
+    assert.equal(pv.codex.installed, true);
+    assert.match(pv.codex.message, /failed to run/);
+    assert.equal((await config({ codexPath: '' })).status, 200);
+    assert.equal((await providers()).codex.status, 'ready');
   }
 
   // The fourth hardened call site: the poll route's terminal-failure persistJob.

@@ -397,7 +397,10 @@ function Canvas() {
       if (activated.current) return;
       activate(current);
       try {
-        await doc.open(current);
+        // A fresh install has no project at all: create the first one from the starter
+        // graph, so the canvas demonstrates an @reference rather than opening blank.
+        if (list.length) await doc.open(current);
+        else await doc.create(current, { nodes: initialNodes, edges: initialEdges });
       } catch (err) {
         toast({ body: `Could not open “${current}”: ${err.message}`, uniqueID: 'project-open-failed', type: 'error' });
       }

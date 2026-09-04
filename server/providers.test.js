@@ -79,13 +79,13 @@ assert.equal(PROVIDERS.codex.binary, 'codex');
   assert.equal(providerEnv(base, { homedir: '/Users/fallback' }).HOME, '/Users/me');
 }
 
-// ---- hydratedPath: the login shell's PATH first, then whatever we had, no duplicates ----
+// ---- hydratedPath: what we had first, the login shell's entries appended, no duplicates ----
 {
-  assert.equal(hydratedPath('/opt/homebrew/bin:/usr/local/bin', '/usr/bin:/bin', 'darwin'), '/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin');
-  assert.equal(hydratedPath('/usr/bin:/opt/homebrew/bin', '/usr/bin:/bin', 'darwin'), '/usr/bin:/opt/homebrew/bin:/bin');
+  assert.equal(hydratedPath('/opt/homebrew/bin:/usr/local/bin', '/usr/bin:/bin', 'darwin'), '/usr/bin:/bin:/opt/homebrew/bin:/usr/local/bin');
+  assert.equal(hydratedPath('/usr/bin:/opt/homebrew/bin', '/usr/bin:/bin', 'darwin'), '/usr/bin:/bin:/opt/homebrew/bin');
   assert.equal(hydratedPath('', '/usr/bin', 'darwin'), '/usr/bin', 'no shell answer: unchanged');
   assert.equal(hydratedPath(undefined, '/usr/bin', 'linux'), '/usr/bin');
-  assert.equal(hydratedPath('C:\\a;C:\\b', 'C:\\b;C:\\c', 'win32'), 'C:\\a;C:\\b;C:\\c', 'Windows separates with ;');
+  assert.equal(hydratedPath('C:\\a;C:\\b', 'C:\\b;C:\\c', 'win32'), 'C:\\b;C:\\c;C:\\a', 'Windows separates with ;');
 }
 
 // ---- parseVersion ----
