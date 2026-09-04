@@ -1,7 +1,11 @@
 # Agent on the canvas — slice 1: the document and the provider layer
 
-Designed 2026-09-04. Status: approved in conversation, section by section; this file is the
-record. Interaction design (the toolbar → composer → panel, states 1–10) lives in a Claude
+Designed 2026-09-04. Status: approved in conversation, section by section, and implemented
+the same day; this file is the record. Two things landed differently from the text below
+and the text was left as approved: the thread routes are nested under the project
+(`/api/projects/:name/threads…`, because the record lives in the project folder and follows
+a rename) rather than under `/api/agent`, and the status set has five entries, not four —
+`signed_out` was split from `auth_unknown` because the two need different messages. Interaction design (the toolbar → composer → panel, states 1–10) lives in a Claude
 Design canvas, not here: <https://claude.ai/code/artifact/5f66d3f2-7375-4916-a8cb-698f7ef73c39>.
 Research behind the provider layer: `docs/research/2026-08-21-local-agent-cli-providers.md`.
 
