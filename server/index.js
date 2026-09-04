@@ -33,6 +33,7 @@ import { providerStatuses, forgetProviderStatus, PROVIDERS } from './providers.j
 import { newThread, writeThread, readThread, listThreads, deleteThread, eventsSince } from './threads.js';
 import { sendToThread, interruptThread, subscribeThread, closeThreadSession, closeSessionsFor } from './agent.js';
 import crypto from 'node:crypto';
+import { startPreviewServer, LOOPBACK_HOST } from './preview.js';
 import {
   start as oauthStart,
   cancel as oauthCancel,
@@ -68,6 +69,8 @@ let TEXT_MODEL = process.env.OPENROUTER_TEXT_MODEL || 'google/gemini-3.5-flash-l
 let VIDEO_MODEL = process.env.OPENROUTER_VIDEO_MODEL || 'bytedance/seedance-2.0';
 let API_KEY = process.env.OPENROUTER_API_KEY;
 let OUTPUT_DIR = outputPath(ROOT, process.env.OUTPUT_DIR);
+// Assigned by the OS when the preview server starts, below, before the API listens.
+let PREVIEW_PORT = 0;
 // Where the local agent CLIs are (empty: found on PATH) and, for Claude, a separate
 // config dir. All three are optional and editable in settings (server/providers.js).
 let CLAUDE_PATH = process.env.CLAUDE_PATH || '';
@@ -130,7 +133,8 @@ app.use(cors({ origin: false }));
 // ever refuses a name DNS already resolves to 127.0.0.1. What does the refusing
 // is the anchors plus the digits-only port group, and those are untouched, so
 // LOCALHOST.evil.example is still no match.
-const LOOPBACK_HOST = /^(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$/i;
+// LOOPBACK_HOST itself is defined once, in preview.js, because the preview origin runs
+// the same check and the two must never drift.
 app.use((req, res, next) => {
   const { origin, host } = req.headers;
   if (origin && !LOOPBACK_ORIGIN.test(origin)) {
@@ -180,6 +184,8 @@ function settings() {
     claudePath: CLAUDE_PATH,
     codexPath: CODEX_PATH,
     claudeConfigDir: CLAUDE_CONFIG_DIR,
+    // The preview origin's port (server/preview.js): where page assets are shown from.
+    previewPort: PREVIEW_PORT,
   };
 }
 
@@ -2443,6 +2449,9 @@ setInterval(() => {
 // already binds this way; this is the same reasoning, for the API the app itself
 // uses. There is deliberately no opt-in to widen it: nothing in Unframed is
 // meant to be reached from another device.
+// The preview origin comes up first so the API never answers a health check without a
+// previewPort to report. Same bind, its own port: docs/superpowers/specs/2026-09-04-agent-canvas-slice-2-design.md.
+PREVIEW_PORT = await startPreviewServer({ outputDir: () => OUTPUT_DIR });
 const server = app.listen(PORT, '127.0.0.1', () => {
   const { port } = server.address();
   console.log(`\n  Unframed server  →  http://localhost:${port}`);
@@ -2452,6 +2461,7 @@ const server = app.listen(PORT, '127.0.0.1', () => {
   console.log(
     `  api key:  ${API_KEY ? 'loaded' : 'MISSING — add one in the app (settings icon, top right)'}`,
   );
+  console.log(`  preview:  http://127.0.0.1:${PREVIEW_PORT}`);
   console.log(`  output:   ${OUTPUT_DIR}\n`);
-  process.send?.({ type: 'ready', port });
+  process.send?.({ type: 'ready', port, previewPort: PREVIEW_PORT });
 });

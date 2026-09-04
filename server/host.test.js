@@ -198,6 +198,23 @@ try {
   // The API answers on that port.
   assert.equal((await fetch(`${base}/api/health`)).status, 200);
 
+  // The preview origin (server/preview.js): its own OS-assigned port, reported both to
+  // the shell and to the canvas, serving the project's pages and nothing of the API.
+  assert.ok(Number.isInteger(ready.previewPort) && ready.previewPort > 0, 'ready carries the preview port');
+  assert.notEqual(ready.previewPort, ready.port, 'a different port is a different origin');
+  assert.equal((await (await fetch(`${base}/api/health`)).json()).previewPort, ready.previewPort, 'health reports it');
+  const previewBase = `http://127.0.0.1:${ready.previewPort}`;
+  await fs.mkdir(path.join(outDir, 'coast'), { recursive: true });
+  await fs.writeFile(path.join(outDir, 'coast', '1-launch.html'), '<h1>coast</h1>');
+  await fs.writeFile(path.join(outDir, 'coast', '1-launch.json'), '{"source":"agent"}');
+  const previewPage = await fetch(`${previewBase}/p/coast/1-launch.html`);
+  assert.equal(previewPage.status, 200);
+  assert.equal(await previewPage.text(), '<h1>coast</h1>');
+  assert.ok(previewPage.headers.get('content-security-policy')?.includes("connect-src 'none'"), 'a page cannot phone home');
+  assert.equal((await fetch(`${previewBase}/p/coast/1-launch.json`)).status, 404, 'a sidecar never leaves the folder');
+  assert.equal((await fetch(`${previewBase}/api/health`)).status, 404, 'the API is not behind the preview origin');
+  assert.equal((await fetch(`${previewBase}/api/oauth/start`, { method: 'POST' })).status, 404);
+
   // A request with no Origin at all is the ordinary case -- the packaged app's
   // GETs, the Vite proxy, curl -- and must keep working.
   assert.equal((await fetch(`${base}/api/health`)).status, 200, 'no Origin is not suspicious');

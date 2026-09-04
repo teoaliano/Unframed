@@ -43,7 +43,7 @@ export function extOf(mime, fileName) {
 
 // Same rules as the client's slug() (graph/starter.js) and the server's slugify: the two
 // have to agree so a file the browser named and a file the server named sort together.
-const slug = (s) =>
+export const slug = (s) =>
   String(s)
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, '-')
