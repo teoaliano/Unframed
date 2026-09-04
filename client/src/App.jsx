@@ -57,7 +57,8 @@ import {
 import ProjectMenu from './ProjectMenu.jsx';
 import IgnoredEdge from './nodes/IgnoredEdge.jsx';
 import { PromptIcon, ImageIcon, VideoIcon, TextIcon } from './nodes/nodeIcons.jsx';
-import { bucketSources, isOutput, isReferenceable } from './graph/resolve.js';
+import { bucketSources, isOutput, isReferenceable, hasMedia } from './graph/resolve.js';
+import { mediaSrc } from './nodes/ImageNode.jsx';
 import { canSource, canTarget, selectedIds, connections, dropInternal } from './graph/bulkWire.js';
 import { keepLiveRunMarkers } from './graph/runMarkers.js';
 import { hitEdges, samplePaths } from './graph/edgeHits.js';
@@ -65,11 +66,10 @@ import { expiryNote } from './keyExpiry.js';
 import LibraryDialog from './library/LibraryDialog.jsx';
 import { instantiateFragment, centerOffset } from './library/insert.js';
 import { selectionFragment, presetFromSelection } from './library/save.js';
+import { useDocument } from './graph/useDocument.js';
+import { ProjectContext } from './graph/project.js';
 import {
-  setProject,
   listProjects,
-  loadProject,
-  saveProject,
   renameProject,
   deleteProject,
   listPresets,
@@ -324,9 +324,10 @@ function Canvas() {
   });
   // The three model catalogues, for the pickers. { image: [...], text: [...], video: [...] }
   const [catalogues, setCatalogues] = useState({});
-  // Gate auto-save until the initial load finishes, so we don't overwrite a saved
-  // project with the starter graph on first render.
-  const ready = useRef(false);
+  // The server owns the graph; this is the tab's replica (graph/useDocument.js). It
+  // replaced the debounced whole-graph autosave, the in-memory undo stack and the
+  // `ready` gate that kept the first render from overwriting a saved project.
+  const doc = useDocument({ nodes, edges, setNodes, setEdges, onError: reportSaveFailure });
   // Set once any project has been activated. The initial load is async, so a switch
   // made while it is still in flight would otherwise be silently overwritten when it
   // lands — you would be looking at one project while writes went to another.
@@ -348,17 +349,23 @@ function Canvas() {
   // "remount everything" scoped to genuine switches.
   const [canvasGeneration, setCanvasGeneration] = useState(0);
 
-  // The one place a project becomes the active one. Three things have to move
-  // together — React state (what you see), the API layer's currentProject (where
-  // generations are written), and the remembered name (where the next reload
-  // lands). They drifted before, which is how a video was written into a project
-  // the toolbar was not showing.
+  // The one place a project becomes the active one: React state (what you see, and
+  // what the nodes read through ProjectContext to tag their requests) and the
+  // remembered name (where the next reload lands). There used to be a third copy in
+  // api.js, and the three drifted, which is how a video was written into a project
+  // the toolbar was not showing. Which document the tab is subscribed to is not a
+  // fourth copy: useDocument's open() is only ever called right next to this.
   const activate = useCallback((name) => {
     activated.current = true;
     setCurrent(name);
-    setProject(name);
     localStorage.setItem(ACTIVE_PROJECT_KEY, name);
   }, []);
+  // The live value for code that resumes after an await (graph/project.js).
+  const projectRef = useRef(project);
+  useEffect(() => {
+    projectRef.current = project;
+  }, [project]);
+  const projectValue = useMemo(() => ({ name: project, ref: projectRef }), [project]);
 
   useEffect(() => {
     (async () => {
@@ -385,101 +392,21 @@ function Canvas() {
       // remembered one is gone (deleted, renamed, or a fresh clone).
       const remembered = localStorage.getItem(ACTIVE_PROJECT_KEY);
       const current = remembered && list.includes(remembered) ? remembered : list[0] || 'default';
-      const g = await loadProject(current);
       // The list always applies; the rest must not, if a switch beat us here.
       setProjects(list.length ? list : [current]);
       if (activated.current) return;
-      if (g?.nodes) {
-        setNodes(g.nodes.map(withDrag));
-        setEdges(g.edges || []);
-        bumpCounter(g.nodes);
-      }
       activate(current);
-      ready.current = true;
-    })();
-  }, [setNodes, setEdges, activate, toast]);
-
-  useEffect(() => {
-    if (!ready.current) return;
-    const t = setTimeout(() => {
-      saveProject(project, { nodes, edges }).catch(reportSaveFailure);
-    }, 500);
-    return () => clearTimeout(t);
-  }, [nodes, edges, project, reportSaveFailure]);
-
-  // ---- undo / redo ----
-  // A stack of settled graph states with a cursor, rather than one entry per
-  // change: a drag emits a state per pixel and typing one per keystroke, so
-  // recording every change would make undo a frame-by-frame rewind. The 400ms
-  // pause is the unit of work — one drag, one word, one delete.
-  //
-  // Entries hold the arrays as they are, no deep copy: React Flow replaces them
-  // on every change instead of mutating, and a project's nodes can carry megabytes
-  // of base64 image data that would be ruinous to clone (or to compare with
-  // JSON.stringify) several times a minute.
-  const history = useRef({ stack: [], at: -1 });
-  const restoring = useRef(false);
-
-  useEffect(() => {
-    if (!ready.current) return;
-    const t = setTimeout(() => {
-      // An undo/redo applied its own state; recording it would bury the entry we
-      // just moved off, and the next undo would land back where we started.
-      if (restoring.current) {
-        restoring.current = false;
-        return;
+      try {
+        await doc.open(current);
+      } catch (err) {
+        toast({ body: `Could not open “${current}”: ${err.message}`, uniqueID: 'project-open-failed', type: 'error' });
       }
-      const h = history.current;
-      const current = h.stack[h.at];
-      if (current && current.nodes === nodes && current.edges === edges) return;
-      h.stack = h.stack.slice(0, h.at + 1);
-      h.stack.push({ nodes, edges });
-      // Far more than anyone reaches for, and cheap: entries share the node
-      // objects they point at.
-      if (h.stack.length > 100) h.stack.shift();
-      h.at = h.stack.length - 1;
-    }, 400);
-    return () => clearTimeout(t);
-  }, [nodes, edges]);
+    })();
+  }, [doc, activate, toast]);
 
-  // Switching projects starts a new timeline: undoing across a switch would paste
-  // one project's graph into another.
-  useEffect(() => {
-    history.current = { stack: [], at: -1 };
-  }, [project]);
-
-  useEffect(() => {
-    function onKeyDown(e) {
-      const undo = (e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'z';
-      const redoY = (e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'y';
-      if (!undo && !redoY) return;
-      // Inside a text field the browser's own undo is the right one: it steps
-      // through what you typed, and stealing it would rewind the whole canvas
-      // mid-sentence.
-      const el = e.target;
-      const typing =
-        el instanceof HTMLElement &&
-        (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable);
-      if (typing) return;
-
-      const h = history.current;
-      const forward = redoY || e.shiftKey;
-      const to = forward ? h.at + 1 : h.at - 1;
-      if (to < 0 || to >= h.stack.length) return;
-      e.preventDefault();
-      h.at = to;
-      restoring.current = true;
-      // Undo deliberately does not own the in-flight run markers (data.job,
-      // data.running): they are pointers at paid network traffic happening
-      // right now, and a snapshot from before a run started must not strand it
-      // -- nor may one from during a run resurrect it after it finished. The
-      // policy and its receipts live in graph/runMarkers.js.
-      setNodes((live) => keepLiveRunMarkers(h.stack[to].nodes, live));
-      setEdges(h.stack[to].edges);
-    }
-    window.addEventListener('keydown', onKeyDown);
-    return () => window.removeEventListener('keydown', onKeyDown);
-  }, [setNodes, setEdges]);
+  // Saving and undo/redo both live in useDocument now: every settled change becomes
+  // ops the server journals, and Cmd-Z walks that journal server-side, so one timeline
+  // covers this tab, other tabs and the agent, and survives a reload.
 
   // Ask the server what it has. With no key, open the dialog straight away:
   // nothing on the canvas can produce an image yet, so setup is the only useful
@@ -794,40 +721,33 @@ function Canvas() {
 
   async function switchProject(name) {
     if (name === project) return;
-    ready.current = false;
-    const g = await loadProject(name);
-    const loaded = g?.nodes || initialNodes;
-    setNodes(loaded.map(withDrag));
-    setEdges(g?.nodes ? g.edges || [] : initialEdges);
-    bumpCounter(loaded);
+    // Any edit still inside the settle window belongs to the project we are leaving.
+    await doc.flush();
     activate(name);
-    // A genuinely different graph just landed — remount every node component
+    // A genuinely different graph is about to land — remount every node component
     // rather than reuse instances by id. See the comment on canvasGeneration.
     setCanvasGeneration((n) => n + 1);
-    // A timeout, not requestAnimationFrame: rAF never fires in a hidden tab, so a
-    // switch made while backgrounded left autosave off for the rest of the session
-    // and silently dropped every edit after it.
-    setTimeout(() => {
-      ready.current = true;
-    }, 0);
+    try {
+      await doc.open(name);
+    } catch (err) {
+      toast({ body: `Could not open “${name}”: ${err.message}`, uniqueID: 'project-open-failed', type: 'error' });
+    }
   }
 
-  // Switch to a fresh in-memory project seeded with the starter graph. It only
-  // gets a folder on disk once something is edited (auto-save).
-  function openFresh(name) {
-    ready.current = false;
-    setNodes(initialNodes);
-    setEdges(initialEdges);
+  // A new project: created on the server with the starter graph, so it exists on disk
+  // (survives reload, can be renamed) from the first moment rather than after the
+  // first edit.
+  async function openFresh(name) {
+    await doc.flush();
     activate(name);
     // Same reasoning as switchProject: a fresh starter graph is still a different
     // graph than whatever was on screen before.
     setCanvasGeneration((n) => n + 1);
-    // A timeout, not requestAnimationFrame: rAF never fires in a hidden tab, so a
-    // switch made while backgrounded left autosave off for the rest of the session
-    // and silently dropped every edit after it.
-    setTimeout(() => {
-      ready.current = true;
-    }, 0);
+    try {
+      await doc.create(name, { nodes: initialNodes, edges: initialEdges });
+    } catch (err) {
+      reportSaveFailure(err);
+    }
   }
 
   function newProject() {
@@ -847,16 +767,8 @@ function Canvas() {
         return;
       }
       setProjects((ps) => [...ps, s]);
+      // Not awaited -- the dialog closes regardless; openFresh reports its own failure.
       openFresh(s);
-      // Persist immediately so the project exists on disk (survives reload, can be
-      // renamed right away) instead of only after the first edit. Not awaited --
-      // the dialog closes regardless -- so a failure here has to be caught rather
-      // than left to become an unhandled rejection, which in the browser is just
-      // a console error and nothing more: the same silence this whole fix is for,
-      // relocated rather than closed. The debounced autosave above will retry the
-      // same save within 500ms regardless (nodes/edges just changed via
-      // openFresh), so this shares its toast rather than risking two.
-      saveProject(s, { nodes: initialNodes, edges: initialEdges }).catch(reportSaveFailure);
       setNameDlg(null);
       return;
     }
@@ -1165,8 +1077,8 @@ function Canvas() {
     // anywhere else as a real PNG. Promise values keep the write inside the
     // user gesture while the re-encode runs.
     const faces = { 'text/plain': new Blob([NODE_CLIP_MARK], { type: 'text/plain' }) };
-    const pics = chosen.filter((n) => n.type === 'image' && n.data?.dataUrl);
-    if (pics.length === 1) faces['image/png'] = pngBlob(pics[0].data.dataUrl);
+    const pics = chosen.filter((n) => n.type === 'image' && hasMedia(n));
+    if (pics.length === 1) faces['image/png'] = pngBlob(mediaSrc(pics[0].data, project));
     navigator.clipboard?.write([new ClipboardItem(faces)]).catch(() => {});
   }
 
@@ -1184,13 +1096,12 @@ function Canvas() {
     );
   }
 
-  // Where a node's pictures actually live, in the order the node shows them. An input
-  // node carries its own bytes; an output node deliberately does not — inlining a data
-  // URL into node data would rewrite it into graph.json on every edit (CLAUDE.md) — so
-  // it holds `/api/file/...` pointers instead, which an <img> loads just the same, and
+  // Where a node's pictures actually live, in the order the node shows them. Neither
+  // kind carries bytes any more: an input node names a file in the project folder, an
+  // output node holds `/api/file/...` pointers, and an <img> loads either just the same,
   // which is what makes one copy path serve both.
   function picturesOf(node) {
-    if (node?.type === 'image') return node.data?.dataUrl ? [node.data.dataUrl] : [];
+    if (node?.type === 'image') return hasMedia(node) ? [mediaSrc(node.data, project)] : [];
     if (node?.type !== 'imageOutput') return [];
     return [...(node.data?.results || [])]
       .sort((a, b) => a.runIndex - b.runIndex)
@@ -1297,7 +1208,7 @@ function Canvas() {
         // same reason reportSaveFailure above has one, so clicking a reveal
         // that keeps failing updates one toast instead of stacking per click.
         onClick: () =>
-          revealFiles(names).catch((err) =>
+          revealFiles(names, project).catch((err) =>
             toast({
               body: `Could not show ${names.length > 1 ? `those ${names.length} files` : 'that file'}: ${err.message}`,
               uniqueID: 'reveal-failed',
@@ -1418,15 +1329,20 @@ function Canvas() {
     );
     if (!files.length) return;
     e.preventDefault();
+    const at = { x: e.clientX, y: e.clientY };
     files.forEach((file, i) => {
-      const reader = new FileReader();
-      reader.onload = () =>
-        addNode(
-          file.type.startsWith('video/') ? 'video' : 'image',
-          { fileName: file.name, dataUrl: reader.result },
-          { x: e.clientX + i * 24, y: e.clientY + i * 24 },
-        );
-      reader.readAsDataURL(file);
+      // Bytes to the project folder first, then a node that names the file
+      // (server/media.js); the drop point is captured now because the event is gone
+      // by the time the upload answers.
+      uploadFile(project, file)
+        .then((saved) =>
+          addNode(
+            file.type.startsWith('video/') ? 'video' : 'image',
+            { fileName: saved.fileName || file.name, file: saved.file },
+            { x: at.x + i * 24, y: at.y + i * 24 },
+          ),
+        )
+        .catch((err) => toast({ body: `Could not add ${file.name}: ${err.message}`, uniqueID: 'upload-failed', type: 'error' }));
     });
   }
 
@@ -1452,39 +1368,42 @@ function Canvas() {
         e.preventDefault();
         const kind = media.type.startsWith('video/') ? 'video' : 'image';
         const file = media.getAsFile();
-        if (kind === 'video' && file && file.size > MAX_VIDEO_BYTES) return;
-        const reader = new FileReader();
-        reader.onload = () => {
-          const fileName = file?.name || `pasted-${kind}`;
-          // Read the live nodes through getNodes() rather than from inside a
-          // setNodes updater. This used to decide inside the updater and call
-          // addNode -- itself a setNodes -- from in there, then return `ns`
-          // unchanged. React bails out when an updater returns the same
-          // reference, and the nested update queued during that bailed-out pass
-          // went with it, so pasting an image did nothing. Only in a PRODUCTION
-          // build: StrictMode runs updaters twice in dev, and the second run
-          // queued the update again somewhere it survived, which is why `npm run
-          // dev` looked fine while the packaged app did not. An updater must be
-          // pure; this one now is.
-          const chosen = getNodes().filter((n) => n.selected && n.type === kind);
+        if (!file || (kind === 'video' && file.size > MAX_VIDEO_BYTES)) return;
+        const at = pointer.current;
+        // A pasted screenshot has no name; give the file one so the folder reads.
+        const named = file.name ? file : new File([file], `pasted-${kind}.${(file.type.split('/')[1] || 'png').replace('jpeg', 'jpg')}`, { type: file.type });
+        uploadFile(project, named)
+          .then((saved) => {
+            const fileName = saved.fileName || named.name;
+            // Read the live nodes through getNodes() rather than from inside a
+            // setNodes updater. This used to decide inside the updater and call
+            // addNode -- itself a setNodes -- from in there, then return `ns`
+            // unchanged. React bails out when an updater returns the same
+            // reference, and the nested update queued during that bailed-out pass
+            // went with it, so pasting an image did nothing. Only in a PRODUCTION
+            // build: StrictMode runs updaters twice in dev, and the second run
+            // queued the update again somewhere it survived, which is why `npm run
+            // dev` looked fine while the packaged app did not. An updater must be
+            // pure; this one now is.
+            const chosen = getNodes().filter((n) => n.selected && n.type === kind);
 
-          // A selected node of the same kind claims the paste: fill it instead of
-          // spawning a new node, so "select the empty reference, hit paste" just
-          // works.
-          if (!chosen.length) {
-            addNode(kind, { fileName, dataUrl: reader.result }, pointer.current);
-            return;
-          }
-          const hit = new Set(chosen.map((n) => n.id));
-          setNodes((ns) =>
-            ns.map((n) =>
-              hit.has(n.id)
-                ? { ...n, data: { ...n.data, fileName, dataUrl: reader.result, aspect: null } }
-                : n,
-            ),
-          );
-        };
-        reader.readAsDataURL(file);
+            // A selected node of the same kind claims the paste: fill it instead of
+            // spawning a new node, so "select the empty reference, hit paste" just
+            // works.
+            if (!chosen.length) {
+              addNode(kind, { fileName, file: saved.file }, at);
+              return;
+            }
+            const hit = new Set(chosen.map((n) => n.id));
+            setNodes((ns) =>
+              ns.map((n) =>
+                hit.has(n.id)
+                  ? { ...n, data: { ...n.data, fileName, file: saved.file, dataUrl: undefined, aspect: null } }
+                  : n,
+              ),
+            );
+          })
+          .catch((err) => toast({ body: `Could not paste ${named.name}: ${err.message}`, uniqueID: 'upload-failed', type: 'error' }));
         return;
       }
 
@@ -1580,12 +1499,13 @@ function Canvas() {
           flushSync(() =>
             setMenuCtx(
               node
-                ? { id: node.id, type: node.type, hasImage: Boolean(node.data?.dataUrl), fileName: node.data?.fileName }
+                ? { id: node.id, type: node.type, hasImage: Boolean(node.data?.file || node.data?.dataUrl), fileName: node.data?.fileName }
                 : null,
             ),
           );
         }}
       >
+        <ProjectContext.Provider value={projectValue}>
         <ReactFlow
           // Keyed by canvasGeneration so a genuine project switch remounts every
           // node component. Node ids come from one counter shared across projects,
@@ -1657,6 +1577,7 @@ function Canvas() {
           <ChromeZoom />
           <CanvasBackground />
         </ReactFlow>
+        </ProjectContext.Provider>
 
         <div className="tools">
           <IconButton

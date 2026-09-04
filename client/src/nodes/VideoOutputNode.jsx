@@ -14,9 +14,10 @@ import { MAX_VIDEO_BYTES } from './VideoNode.jsx';
 import { useModels, useModelParams, freeSpot } from './output/core.js';
 import { resetModelParams } from './output/defaults.js';
 import { ModelPicker, ParamControls, CostFoot, NativeSelect } from './output/controls.jsx';
-import { buildRequest, bucketSources } from '../graph/resolve.js';
+import { buildRequest, bucketSources, hasMedia } from '../graph/resolve.js';
 import { withDrag } from '../graph/starter.js';
 import { startVideo, pollVideo } from '../api.js';
+import { useProject } from '../graph/project.js';
 import VideoPlayer from './VideoPlayer.jsx';
 import { ExternalLink as AddToCanvasIcon } from 'lucide-react';
 
@@ -24,6 +25,7 @@ import { ExternalLink as AddToCanvasIcon } from 'lucide-react';
 // run counter, because a clip takes minutes and is billed by the second — a Runs
 // control here would be a way to spend ten dollars by mistake.
 export default function VideoOutputNode({ id, data }) {
+  const { ref: projectRef } = useProject();
   const { getNodes, getEdges, updateNodeData, getNode, addNodes } = useReactFlow();
   const toast = useToast();
   const [status, setStatus] = useState('idle'); // idle | running | done | error
@@ -145,45 +147,36 @@ export default function VideoOutputNode({ id, data }) {
   // instead -- see bucketSources), and counting from the edges directly ignored that,
   // which is how one card ended up claiming a video would be sent, ignored, AND shared
   // over a tunnel all at once.
-  const wiredVideoSources = buckets.references.filter((n) => n.type === 'video' && n.data?.dataUrl);
+  const wiredVideoSources = buckets.references.filter((n) => n.type === 'video' && hasMedia(n));
   const wiredVideos = wiredVideoSources.length;
-  const wiredLocalVideos = wiredVideoSources.filter((n) =>
-    String(n.data.dataUrl).startsWith('data:'),
+  // Local means the bytes are on this machine: a project file, or (older graphs) a
+  // data URL. Only a hosted https link is not.
+  const wiredLocalVideos = wiredVideoSources.filter(
+    (n) => n.data.file || String(n.data.dataUrl).startsWith('data:'),
   ).length;
   // On by default: without it a wired local clip can only fail, so the useful
   // default is the one that works. Explicit `false` is the user turning it off.
   const shareLocalVideos = data.shareLocalVideos !== false;
 
-  // Same idea as the image node's add button, with one extra step: the video plays
-  // from disk (a URL), but a reference node has to carry base64, because OpenRouter
-  // fetches nothing from this machine. So the file is pulled back in and inlined —
-  // which is also why the 25MB cap applies here exactly as it does to an upload.
+  // Same idea as the image node's add button: the clip is already a file in the
+  // project folder (`url` is its /api/file pointer), so the reference node just names
+  // it. The bytes are inlined at the OpenRouter boundary by the server when a request
+  // actually needs them (server/media.js), which is also where the 25MB cap bites.
   // Takes the url to add explicitly rather than closing over `result`: the only
   // caller passes `shown.url`, since a reopened node's clip lives in `data.result`
   // with no local `result` of its own (see `shown` below).
   async function addVideoToCanvas(url) {
     setAddingVideo(true);
     try {
-      const blob = await fetch(url).then((r) => {
-        if (!r.ok) throw new Error(`could not read the saved file (${r.status})`);
-        return r.blob();
-      });
-      if (blob.size > MAX_VIDEO_BYTES) {
-        throw new Error(`it is ${(blob.size / 1024 / 1024).toFixed(0)}MB, over the 25MB reference cap`);
-      }
-      const dataUrl = await new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve(reader.result);
-        reader.onerror = () => reject(new Error('could not read the file'));
-        reader.readAsDataURL(blob);
-      });
+      const file = decodeURIComponent(String(url || '').split('/').pop() || '');
+      if (!file) throw new Error('the result has no file');
       // withDrag for the wrapper size — see ImageOutputNode.addToCanvas.
       addNodes(
         withDrag({
           id: `gen-${Date.now()}-v`,
           type: 'video',
           position: freeSpot(getNode, getNodes, id),
-          data: { fileName: url.split('/').pop() || 'generated.mp4', dataUrl },
+          data: { fileName: file, file },
         }),
       );
     } catch (err) {
@@ -237,7 +230,7 @@ export default function VideoOutputNode({ id, data }) {
     setStatus('running');
     setError(null);
     try {
-      const d = await pollVideo(jobId, jobParams, () => stillOurs() && bump((n) => n + 1), pollOpts);
+      const d = await pollVideo(jobId, jobParams, () => stillOurs() && bump((n) => n + 1), { ...pollOpts, project: projectRef.current });
       if (!stillOurs()) return;
       if (d.pending) {
         // Not a failure, and not a reason to touch data.job — the node stays
@@ -361,7 +354,7 @@ export default function VideoOutputNode({ id, data }) {
         // Consent re-sent per request: the server refuses local clips without it.
         ...(shareLocalVideos ? { shareLocalVideos: true } : {}),
         ...(canAudio ? { generate_audio: Boolean(data.generateAudio) } : {}),
-      });
+      }, projectRef.current);
 
       // What a poll needs to name the file, kept next to the id so a resumed
       // poll after a reload has everything it needs from data.job alone.

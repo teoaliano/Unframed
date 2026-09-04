@@ -39,6 +39,12 @@ assert.deepEqual(diffGraphs(g([node('1')]), g([{ ...node('1'), data: { ...node('
   assert.deepEqual(diffGraphs(before, patched), [{ type: 'updateNode', id: '1', patch: { text: 'new', extra: 1 } }]);
   const keyGone = g([node('1', { width: 100, data: {} })]);
   assert.deepEqual(diffGraphs(before, keyGone), [{ type: 'updateNode', id: '1', patch: { text: null } }], 'a removed key patches to null');
+  // A key set to undefined is the same as no key: stripRunMarkers and withDrag write
+  // undefined to mean "not set".
+  const undef = g([node('1', { width: 100, data: { text: '1', running: undefined } })]);
+  assert.deepEqual(diffGraphs(before, undef), []);
+  const wasSet = g([node('1', { width: 100, data: { text: '1', running: { startedAt: 1 } } })]);
+  assert.deepEqual(diffGraphs(wasSet, undef), [{ type: 'updateNode', id: '1', patch: { running: null } }], 'undefined after a value is a delete');
   // Deep-equal data values are not a change even when the reference differs.
   const sameDeep = g([node('1', { width: 100, data: { text: '1', list: [1, 2] } })]);
   const sameDeep2 = g([node('1', { width: 100, data: { text: '1', list: [1, 2] } })]);

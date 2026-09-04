@@ -85,18 +85,22 @@ export function diffGraphs(before, after) {
 }
 
 // Shallow patch: changed and added keys carry the new value, removed keys carry null
-// (the server's updateNode deletes on null). null when nothing differs.
+// (the server's updateNode deletes on null). null when nothing differs. A key holding
+// `undefined` counts as absent on both sides -- stripRunMarkers and withDrag write
+// undefined to mean "not set", and JSON would drop it anyway.
+const present = (obj, k) => Object.hasOwn(obj, k) && obj[k] !== undefined;
 function dataPatch(prev, next) {
   const patch = {};
   let changed = false;
   for (const k of Object.keys(next)) {
-    if (!Object.hasOwn(prev, k) || !deepEqual(prev[k], next[k])) {
+    if (!present(next, k)) continue;
+    if (!present(prev, k) || !deepEqual(prev[k], next[k])) {
       patch[k] = next[k];
       changed = true;
     }
   }
   for (const k of Object.keys(prev)) {
-    if (!Object.hasOwn(next, k)) {
+    if (present(prev, k) && !present(next, k)) {
       patch[k] = null;
       changed = true;
     }

@@ -28,7 +28,7 @@ import {
   redo as redoOp,
   subscribe as subscribeDocument,
 } from './document.js';
-import { saveMedia } from './media.js';
+import { saveMedia, inlineFileRefs } from './media.js';
 import {
   start as oauthStart,
   cancel as oauthCancel,
@@ -1008,7 +1008,15 @@ app.post('/api/text', async (req, res) => {
       .status(400)
       .json({ error: 'Prompt is empty. Wire a prompt node into this text node, or type one in.' });
   }
-  const refs = Array.isArray(input_references) ? input_references : [];
+  // References name project files; the bytes are read in here, at the boundary
+  // (server/media.js). A marker for a file that is gone is the caller's mistake, not
+  // something to send upstream.
+  let refs;
+  try {
+    refs = await inlineFileRefs(Array.isArray(input_references) ? input_references : [], project ? projectDir(project) : OUTPUT_DIR);
+  } catch (err) {
+    return res.status(400).json({ error: err.message });
+  }
 
   const content = [{ type: 'text', text: p }];
   for (const ref of refs) {
@@ -1449,10 +1457,18 @@ app.post('/api/video', async (req, res) => {
   // would reach .length below and throw -- and a throw in an async handler is not a
   // failed request but a dead server, since Express 4 leaves the rejection unhandled
   // and `node --watch` restarts on file changes, never after a crash.
-  const refs = Array.isArray(input_references) ? input_references : [];
-  // Same reason as refs: a destructuring default only fills in for undefined, so a
+  // Same reason for frames: a destructuring default only fills in for undefined, so a
   // literal null would reach .length and take the process down rather than the request.
-  const frames = Array.isArray(frame_images) ? frame_images : [];
+  // Both name project files by marker and are inlined here (server/media.js).
+  let refs;
+  let frames;
+  try {
+    const dir = project ? projectDir(project) : OUTPUT_DIR;
+    refs = await inlineFileRefs(Array.isArray(input_references) ? input_references : [], dir);
+    frames = await inlineFileRefs(Array.isArray(frame_images) ? frame_images : [], dir);
+  } catch (err) {
+    return res.status(400).json({ error: err.message });
+  }
 
   if (!prompt || !prompt.trim()) {
     return res
@@ -2106,8 +2122,14 @@ app.post('/api/generate', async (req, res) => {
     runCount,
   } = req.body || {};
 
-  // Same reason as /api/video: a null here is a dead server, not a failed request.
-  const refs = Array.isArray(input_references) ? input_references : [];
+  // Same reason as /api/video: a null here is a dead server, not a failed request. And
+  // the same inlining: references name project files, the bytes are read in here.
+  let refs;
+  try {
+    refs = await inlineFileRefs(Array.isArray(input_references) ? input_references : [], project ? projectDir(project) : OUTPUT_DIR);
+  } catch (err) {
+    return res.status(400).json({ error: err.message });
+  }
 
   if (!prompt || !prompt.trim()) {
     return res

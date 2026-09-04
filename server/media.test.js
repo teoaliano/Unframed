@@ -7,7 +7,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { decodeDataUrl, extOf, findInlineMedia, mediaFileName, extractMedia, extractFromOp } from './media.js';
+import { decodeDataUrl, extOf, findInlineMedia, mediaFileName, extractMedia, extractFromOp, fileRef, inlineFileRefs } from './media.js';
 
 const PNG_1PX =
   'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==';
@@ -127,6 +127,39 @@ const MP4_STUB = `data:video/mp4;base64,${Buffer.from('not really an mp4').toStr
   assert.equal(await extractFromOp(move, dir, { now: () => 8 }), move);
   const hosted = { type: 'updateNode', id: 'n', patch: { dataUrl: 'https://cdn/x.mp4' } };
   assert.equal(await extractFromOp(hosted, dir, { now: () => 9 }), hosted);
+  await fs.rm(dir, { recursive: true, force: true });
+}
+
+// ---- inlineFileRefs: project-file: markers become data: URLs at the boundary ----
+{
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'unframed-media-refs-test-'));
+  const png = decodeDataUrl(PNG_1PX).bytes;
+  await fs.writeFile(path.join(dir, '1-hero.png'), png);
+  await fs.writeFile(path.join(dir, '2-clip.mp4'), Buffer.from('mp4 bytes'));
+  assert.equal(fileRef('1-hero.png'), 'project-file:1-hero.png');
+  const hosted = { type: 'video_url', video_url: { url: 'https://cdn.example/x.mp4' } };
+  const already = { type: 'image_url', image_url: { url: PNG_1PX } };
+  const refs = [
+    { type: 'image_url', image_url: { url: fileRef('1-hero.png') } },
+    hosted,
+    { type: 'video_url', video_url: { url: fileRef('2-clip.mp4') } },
+    already,
+    { type: 'image_url', image_url: { url: fileRef('1-hero.png') }, frame_type: 'first_frame' },
+  ];
+  const out = await inlineFileRefs(refs, dir);
+  assert.equal(out[0].image_url.url, PNG_1PX, 'the file comes back as exactly the data URL it was written from');
+  assert.equal(out[1], hosted, 'a hosted URL is untouched, by identity');
+  assert.match(out[2].video_url.url, /^data:video\/mp4;base64,/);
+  assert.equal(out[3], already);
+  assert.equal(out[4].frame_type, 'first_frame', 'frame entries keep their extra fields');
+  // A path in the marker cannot escape the project folder.
+  await fs.writeFile(path.join(dir, 'safe.png'), png);
+  const escaped = await inlineFileRefs([{ type: 'image_url', image_url: { url: fileRef('../../etc/safe.png') } }], dir);
+  assert.match(escaped[0].image_url.url, /^data:image\/png/);
+  // A missing file is an error the route can report, not a broken reference sent upstream.
+  await assert.rejects(() => inlineFileRefs([{ type: 'image_url', image_url: { url: fileRef('nope.png') } }], dir), /not found/);
+  // Non-arrays pass through.
+  assert.equal(await inlineFileRefs(undefined, dir), undefined);
   await fs.rm(dir, { recursive: true, force: true });
 }
 

@@ -1,6 +1,6 @@
 // Assert-based self-check. Run with: node client/src/graph/resolve.test.js
 import assert from 'node:assert/strict';
-import { buildRequest, bucketSources, sourceRoles, splitSections, findFreeSource, freeSourceText, freeShared, freeRunPrompts, parseImagePicks, expandSlots, runReferences, freeBatch, isOutput, isTextOutput, isReferenceable, MAX_RUNS } from './resolve.js';
+import { buildRequest, bucketSources, sourceRoles, splitSections, findFreeSource, freeSourceText, freeShared, freeRunPrompts, parseImagePicks, expandSlots, runReferences, freeBatch, isOutput, isTextOutput, isReferenceable, MAX_RUNS, hasMedia, mediaRef } from './resolve.js';
 import { migrateNodes } from './migrate.js';
 import { instantiateFragment, centerOffset } from '../library/insert.js';
 import { selectionFragment, presetFromSelection } from '../library/save.js';
@@ -1208,6 +1208,38 @@ const img = (i, y) => ({ id: `i${i}`, type: 'image', position: { x: 0, y }, data
   const { text, picks } = parseImagePicks('images: 1, 3\nBlend [1] into [2].');
   assert.deepEqual(picks, [1, 3]);
   assert.equal(text, 'Blend image 1 into image 2.');
+}
+
+// ---- media by file: a node names a project file, the request carries a marker ----
+// Media left the document (server/media.js): image/video nodes hold `data.file` and the
+// server inlines the bytes at the OpenRouter boundary. dataUrl stays valid for the one
+// non-file case, a hosted https video link -- and, until a legacy graph is reopened,
+// for the bytes it still carries.
+{
+  const byFile = { id: 'i1', type: 'image', position: { x: 0, y: 0 }, data: { file: '1-hero.png', fileName: 'hero.png' } };
+  const hosted = { id: 'v1', type: 'video', position: { x: 0, y: 10 }, data: { dataUrl: 'https://cdn.example/clip.mp4' } };
+  const empty = { id: 'i2', type: 'image', position: { x: 0, y: 20 }, data: { fileName: '' } };
+  const out = { id: 'o', type: 'imageOutput', position: { x: 100, y: 0 }, data: {} };
+  const p = { id: 'p', type: 'prompt', position: { x: 0, y: 30 }, data: { text: 'hi' } };
+  assert.equal(hasMedia(byFile), true);
+  assert.equal(hasMedia(hosted), true);
+  assert.equal(hasMedia(empty), false);
+  assert.equal(mediaRef(byFile), 'project-file:1-hero.png');
+  assert.equal(mediaRef(hosted), 'https://cdn.example/clip.mp4');
+  const edges = ['i1', 'v1', 'i2', 'p'].map((s) => ({ id: `e-${s}`, source: s, target: 'o' }));
+  const req = buildRequest([byFile, hosted, empty, out, p], edges, 'o');
+  assert.deepEqual(req.input_references, [
+    { type: 'image_url', image_url: { url: 'project-file:1-hero.png' } },
+    { type: 'video_url', video_url: { url: 'https://cdn.example/clip.mp4' } },
+  ]);
+  // The empty slot is not a reference and gets no number; the file-backed one is image 1.
+  assert.deepEqual(sourceRoles([byFile, hosted, empty, out, p], edges, 'i1'), ['1']);
+  assert.deepEqual(sourceRoles([byFile, hosted, empty, out, p], edges, 'i2'), []);
+  // A frame mode carries the marker too.
+  const vout = { id: 'vo', type: 'videoOutput', position: { x: 100, y: 0 }, data: { inputMode: 'first_last' } };
+  const second = { id: 'i3', type: 'image', position: { x: 0, y: 5 }, data: { file: '2-end.png' } };
+  const vreq = buildRequest([byFile, second, vout], [{ id: 'a', source: 'i1', target: 'vo' }, { id: 'b', source: 'i3', target: 'vo' }], 'vo');
+  assert.deepEqual(vreq.frame_images.map((f) => f.image_url.url), ['project-file:1-hero.png', 'project-file:2-end.png']);
 }
 
 console.log('resolve.js: all checks passed');

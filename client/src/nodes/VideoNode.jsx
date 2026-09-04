@@ -10,17 +10,23 @@ import NodeLine from './NodeLine.jsx';
 import MediaResize from './MediaResize.jsx';
 import StatusLine from './StatusLine.jsx';
 import { useVideoPlayback, VideoFrame, VideoControls } from './VideoPlayer.jsx';
-import { sourceRoles } from '../graph/resolve.js';
+import { sourceRoles, hasMedia } from '../graph/resolve.js';
+import { mediaSrc } from './ImageNode.jsx';
+import { useProject } from '../graph/project.js';
+import { uploadFile } from '../api.js';
 
-// Base64 inflates ~4/3 and the whole graph rides in one JSON body (and lands in
-// graph.json on every autosave), so a hard cap keeps a single clip from blowing
-// the server's body limit or making saves crawl.
+// A local clip is inlined to base64 at the OpenRouter boundary (server/media.js) and
+// shared over the tunnel for video-to-video, so the cap is what keeps one clip from
+// blowing a request body or a share. Bytes no longer ride in the graph (media left the
+// document), so the cap is no longer about saves.
 export const MAX_VIDEO_BYTES = 25 * 1024 * 1024;
 export const VIDEO_TOO_BIG = 'Video is too large. Keep it under 25MB.';
 
 export default function VideoNode({ id, data }) {
   const { updateNodeData } = useReactFlow();
+  const { name: project } = useProject();
   const [error, setError] = useState('');
+  const src = mediaSrc(data, project);
   // Draft of the "paste a link" field, only until it is applied.
   const [link, setLink] = useState('');
   // Same per-consumer role reporting as images, read off this node's own type, so
@@ -30,19 +36,24 @@ export default function VideoNode({ id, data }) {
   // it — see VideoPlayer.jsx.
   const player = useVideoPlayback();
 
-  function onFile(file) {
+  // The bytes go to the project folder and the node keeps the file's name -- see
+  // ImageNode.onFile.
+  async function onFile(file) {
     if (!file) return;
     if (file.size > MAX_VIDEO_BYTES) return setError(VIDEO_TOO_BIG);
     setError('');
-    const reader = new FileReader();
-    reader.onload = () => updateNodeData(id, { dataUrl: reader.result, fileName: file.name });
-    reader.readAsDataURL(file);
+    try {
+      const saved = await uploadFile(project, file);
+      updateNodeData(id, { file: saved.file, fileName: saved.fileName || file.name, dataUrl: undefined });
+    } catch (err) {
+      setError(err.message);
+    }
   }
 
   // A clip that is already hosted needs no file at all: dataUrl holds the https
   // URL, everything downstream treats it as opaque, and video generation can use
   // it directly — that path takes only public https links. The 25MB cap is a
-  // base64-in-the-graph concern, so it does not apply here.
+  // local-bytes concern, so it does not apply here.
   function onLink() {
     const url = link.trim();
     if (!/^https:\/\/.+/.test(url)) {
@@ -51,7 +62,7 @@ export default function VideoNode({ id, data }) {
     setError('');
     setLink('');
     const name = url.split('/').pop()?.split('?')[0] || 'linked video';
-    updateNodeData(id, { dataUrl: url, fileName: name });
+    updateNodeData(id, { dataUrl: url, file: undefined, fileName: name });
   }
 
   // sourceRoles answers with bare ranks ("1", "1 / 2") for reference mode and with
@@ -65,7 +76,7 @@ export default function VideoNode({ id, data }) {
     ? numeric
       ? `video ${roles.join(' / ')}`
       : roles.map((r) => (r === 'first' || r === 'last' ? `${r} frame` : r)).join(' / ')
-    : data.dataUrl
+    : hasMedia({ data })
       ? 'not connected'
       : null;
 
@@ -95,19 +106,19 @@ export default function VideoNode({ id, data }) {
       >
         <Handle type="source" position={Position.Right} />
         <div className="xnode-body">
-          {data.dataUrl ? (
+          {src ? (
             // Same shape as an image reference: the clip fills the node and remove is
             // an X over its corner. The file name is on the Thumbnail's alt, and the
             // transport is OUTSIDE the card entirely — see below.
             <span className="xnode-media">
-              <VideoFrame player={player} src={data.dataUrl} />
+              <VideoFrame player={player} src={src} />
               <span className="xnode-media-remove nodrag">
                 <Button
                   label={`Remove ${data.fileName || 'video'}`}
                   isIconOnly
                   icon={<Icon icon="close" size="xsm" />}
                   size="sm"
-                  onClick={() => updateNodeData(id, { dataUrl: '', fileName: '' })}
+                  onClick={() => updateNodeData(id, { file: undefined, dataUrl: undefined, fileName: '' })}
                 />
               </span>
             </span>
@@ -150,14 +161,14 @@ export default function VideoNode({ id, data }) {
       {/* The transport is the one thing that still has to go BELOW: it is a control, so
           it cannot sit on the clip (a press there is indistinguishable from a node drag
           — see VideoPlayer.jsx), and it is far too wide for the name row. */}
-      {data.dataUrl && (
+      {src && (
         <div className="xnode-under">
           <VideoControls player={player} />
         </div>
       )}
       {/* Resizable from any edge once it holds something — nodes/MediaResize.jsx owns
           why that includes the right one, where the handle also lives. */}
-      {data.dataUrl && <MediaResize />}
+      {src && <MediaResize />}
     </>
   );
 }

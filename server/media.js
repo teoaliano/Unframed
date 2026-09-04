@@ -57,6 +57,50 @@ export function mediaFileName(ts, fileName, ext, n) {
 
 const isInline = (node) => MEDIA_TYPES.has(node.type) && decodeDataUrl(node.data?.dataUrl) !== null;
 
+// ---- references by file ----
+// A request's input_references / frame_images name a project file with this marker
+// instead of carrying its bytes (client/src/graph/resolve.js builds it). The bytes are
+// read back in HERE, at the one boundary where they have to leave the machine, so the
+// browser never round-trips megabytes it already has on disk next door.
+export const FILE_REF = /^project-file:(.+)$/;
+export const fileRef = (file) => `project-file:${file}`;
+
+const MIME_BY_EXT = Object.fromEntries(Object.entries(EXT_BY_MIME).map(([mime, ext]) => [ext, mime]));
+MIME_BY_EXT.jpeg = 'image/jpeg';
+const mimeOf = (file) => MIME_BY_EXT[(/\.([a-z0-9]+)$/i.exec(file)?.[1] || '').toLowerCase()] || 'application/octet-stream';
+
+async function inlineUrl(url, dir) {
+  const m = typeof url === 'string' ? FILE_REF.exec(url) : null;
+  if (!m) return url;
+  // Basename only: the name came from a request body, and a path in it must not escape.
+  const file = path.basename(m[1]);
+  let bytes;
+  try {
+    bytes = await fs.readFile(path.join(dir, file));
+  } catch {
+    throw new Error(`Reference file not found in this project: ${file}`);
+  }
+  return `data:${mimeOf(file)};base64,${bytes.toString('base64')}`;
+}
+
+// Returns a new array with every project-file: marker replaced by a data: URL. Entries
+// without a marker come back by identity. A marker naming a file that is not there
+// throws, so the route can answer 400 instead of sending OpenRouter a broken reference.
+export async function inlineFileRefs(refs, dir) {
+  if (!Array.isArray(refs)) return refs;
+  const out = [];
+  for (const ref of refs) {
+    const key = ref?.image_url ? 'image_url' : ref?.video_url ? 'video_url' : null;
+    const url = key ? ref[key]?.url : undefined;
+    if (!key || typeof url !== 'string' || !FILE_REF.test(url)) {
+      out.push(ref);
+      continue;
+    }
+    out.push({ ...ref, [key]: { ...ref[key], url: await inlineUrl(url, dir) } });
+  }
+  return out;
+}
+
 export const findInlineMedia = (nodes) => nodes.filter(isInline);
 
 // Picks a name nobody else in the folder has. Two drops in the same millisecond, or a
