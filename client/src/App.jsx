@@ -355,7 +355,10 @@ function Canvas() {
 
   const openComposer = useCallback(() => {
     setComposer(messageTarget(nodes.filter((n) => n.selected)));
-  }, [nodes]);
+    // The composer is the first place many people meet the agent, so the check the panel
+    // would have run happens here too.
+    if (!providers) checkProviders();
+  }, [nodes, providers, checkProviders]);
   const closeComposer = useCallback(() => setComposer(null), []);
 
   // Clicking another node while the composer is open adds it rather than replacing the

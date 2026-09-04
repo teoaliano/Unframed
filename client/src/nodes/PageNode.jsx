@@ -16,9 +16,14 @@ import { uploadFile, previewUrl } from '../api.js';
 // The frame is the safety boundary on this side, and every attribute is deliberate:
 //   - the src is the preview ORIGIN (server/preview.js), never /api/file -- a page shown
 //     from the API's origin would be Unframed to the browser;
-//   - sandbox="allow-scripts" and nothing else: no allow-same-origin (the document runs
-//     in an opaque origin even within its own port), no popups, no top navigation, no
-//     forms, no modals;
+//   - sandbox="allow-scripts allow-same-origin" and nothing else: no popups, no top
+//     navigation, no forms, no modals. allow-same-origin keeps the document on the
+//     PREVIEW origin rather than an opaque one, and that is required, not a loosening:
+//     the preview server answers `Cross-Origin-Resource-Policy: same-origin`, and an
+//     opaque-origin page is cross-origin to its own folder, so its pictures would not
+//     load (found in the headless probe, 2026-09-05). The wall is that the preview origin
+//     is not the API's, and a sandboxed page that is same-origin with itself but not with
+//     the canvas cannot lift its own sandbox;
 //   - referrerpolicy and an empty allow list, so a page learns nothing about the canvas
 //     and gets no device permissions.
 // Files are never overwritten: an edit is a new file and a new `data.file`, which is
@@ -75,7 +80,7 @@ export default function PageNode({ id, data, dragging, selected }) {
               className={`xnode-frame${selected && !dragging ? ' xnode-frame--live' : ''}`}
               src={src}
               title={title || 'page'}
-              sandbox="allow-scripts"
+              sandbox="allow-scripts allow-same-origin"
               referrerPolicy="no-referrer"
               allow=""
               loading="lazy"

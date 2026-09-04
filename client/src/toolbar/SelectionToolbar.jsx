@@ -200,7 +200,7 @@ export default function SelectionToolbar({
           </div>
           <HStack gap={2} align="center">
             <Text type="supporting" className="agent-meta">
-              {provider ? `${provider.name} · reply lands on the ${composer.target === 'new' ? 'new asset' : 'node'}` : ''}
+              {provider ? `${provider.name} · not metered` : ''}
             </Text>
             <StackItem size="fill" />
             {busy ? (

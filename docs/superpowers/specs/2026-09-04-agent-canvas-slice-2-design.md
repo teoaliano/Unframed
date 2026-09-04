@@ -139,13 +139,18 @@ the IP literal, not `localhost`, so the origin is the same string in every brows
 ### The frame, on the canvas side
 
 ```html
-<iframe sandbox="allow-scripts" referrerpolicy="no-referrer" allow="" …>
+<iframe sandbox="allow-scripts allow-same-origin" referrerpolicy="no-referrer" allow="" …>
 ```
 
-No `allow-same-origin`, so the document runs in an opaque origin even within its own
-port — a second wall. No `allow-popups`, `allow-top-navigation`, `allow-forms`,
-`allow-modals`: a page cannot open windows, navigate the canvas tab, submit anywhere,
-or raise a dialog. Pointer events are off on the frame while the node is being dragged
+`allow-same-origin` is required, not a loosening, and the first draft of this spec had it
+wrong: without it the document runs in an *opaque* origin, which is cross-origin to its
+own folder, so `Cross-Origin-Resource-Policy: same-origin` blocks the page's own
+pictures (found by the headless probe on 2026-09-05: every attack probe blocked, and the
+sibling `<img>` too). With it the document is on the preview origin — still not the
+API's, which is the wall — and a sandboxed page that is same-origin with itself but not
+with the canvas cannot lift its own sandbox. No `allow-popups`, `allow-top-navigation`,
+`allow-forms`, `allow-modals`: a page cannot open windows, navigate the canvas tab,
+submit anywhere, or raise a dialog. Pointer events are off on the frame while the node is being dragged
 or resized, so a page cannot swallow the canvas's gestures.
 
 ### Testing
@@ -351,9 +356,11 @@ result arrives on that thread's event stream, the same subscription the panel us
 
 A card anchored below the target node — or beside the selection for a new asset —
 with the assistant's text, **Undo**, **Open thread**, and the artifact's own action
-(Open for a page). It stays until dismissed, until the next message, or until the
-selection changes; it does not fade on a timer (the question slice 1 left open, decided:
-a reply you did not see yet should still be there when you look). **Undo is offered
+(Open for a page). It stays until dismissed, until the next message, or until a
+*different* selection is made — clearing the selection (a click on empty canvas, the
+most common gesture after a reply) keeps it, and so does selecting the node it is about;
+it does not fade on a timer (the question slice 1 left open, decided: a reply you did not
+see yet should still be there when you look). **Undo is offered
 only while the agent's batch is the newest undoable journal entry**, because undo is
 one server-side ladder by design; once you have edited after it, the button goes and
 the card says to use Cmd-Z. Open thread opens the panel on that thread (a new
