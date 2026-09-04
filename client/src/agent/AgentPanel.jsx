@@ -261,22 +261,27 @@ export default function AgentPanel({ project, selection, providers, onCheckProvi
             </span>
           )}
         </HStack>
-        <TextArea
-          className="nowheel"
-          label="Message"
-          isLabelHidden
-          rows={3}
-          value={text}
-          placeholder={provider ? 'Ask about the board…' : 'Connect Claude or Codex to start'}
-          isDisabled={!provider}
-          onChange={setText}
+        {/* Cmd/Ctrl+Enter sends. Caught on a wrapper, since keydown bubbles and the
+            TextArea component does not promise to forward it. */}
+        <div
           onKeyDown={(e) => {
             if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
               e.preventDefault();
               send();
             }
           }}
-        />
+        >
+          <TextArea
+            className="nowheel"
+            label="Message"
+            isLabelHidden
+            rows={3}
+            value={text}
+            placeholder={provider ? 'Ask about the board… (⌘↵ to send)' : 'Connect Claude or Codex to start'}
+            isDisabled={!provider}
+            onChange={setText}
+          />
+        </div>
         <HStack gap={2} align="center">
           <Text type="supporting" className="agent-meta">
             {provider ? 'Subscription · not metered' : ''}
