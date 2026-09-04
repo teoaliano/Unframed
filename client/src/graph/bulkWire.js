@@ -5,14 +5,14 @@
 // edge ids are React Flow's format to own, so App.jsx folds these through its
 // addEdge. That leaves this file with no dependency heavier than resolve.js, so
 // `node bulkWire.test.js` runs it with no DOM and no bundler.
-import { isOutput, isTextOutput } from './resolve.js';
+import { isOutput, isTextOutput, isArtifact } from './resolve.js';
 
 // Which end of an edge a node can BE, derived from the same two predicates the
 // resolver uses rather than a list of type strings -- the list is the thing that
 // gets forgotten when a fourth output type arrives. Handles mirror this exactly:
 // inputs render a source, image/video outputs a target, and a text output both,
 // since its answer feeds the next node by edge.
-export const canSource = (n) => !isOutput(n) || isTextOutput(n);
+export const canSource = (n) => (!isOutput(n) && !isArtifact(n)) || isTextOutput(n);
 export const canTarget = (n) => isOutput(n);
 
 export const selectedIds = (nodes, can) =>

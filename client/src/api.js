@@ -247,6 +247,11 @@ export const uploadFile = (name, file) =>
 // the server inlines at the OpenRouter boundary.
 export const fileUrl = (project, file) => `/api/file/${enc(project)}/${enc(file)}`;
 
+// Where a page asset is shown from: the preview origin (server/preview.js), a different
+// port and therefore a different origin from the API. The IP literal rather than
+// `localhost`, so the origin is the same string in every browser.
+export const previewUrl = (previewPort, project, file) => `http://127.0.0.1:${previewPort}/p/${enc(project)}/${enc(file)}`;
+
 // The event stream: every accepted entry from version `since` onward, then live.
 // EventSource reconnects on its own but cannot change its URL, so a drop is handled
 // here by reopening from the last version seen -- the replay then covers exactly the

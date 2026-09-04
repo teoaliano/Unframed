@@ -45,6 +45,7 @@ import VideoNode, { MAX_VIDEO_BYTES } from './nodes/VideoNode.jsx';
 import ImageOutputNode from './nodes/ImageOutputNode.jsx';
 import VideoOutputNode from './nodes/VideoOutputNode.jsx';
 import TextOutputNode from './nodes/TextOutputNode.jsx';
+import PageNode from './nodes/PageNode.jsx';
 import {
   withDrag,
   nextId,
@@ -57,7 +58,7 @@ import {
 } from './graph/starter.js';
 import ProjectMenu from './ProjectMenu.jsx';
 import IgnoredEdge from './nodes/IgnoredEdge.jsx';
-import { PromptIcon, ImageIcon, VideoIcon, TextIcon } from './nodes/nodeIcons.jsx';
+import { PromptIcon, ImageIcon, VideoIcon, TextIcon, PageIcon } from './nodes/nodeIcons.jsx';
 import { bucketSources, isOutput, isReferenceable, hasMedia } from './graph/resolve.js';
 import { mediaSrc } from './nodes/ImageNode.jsx';
 import { canSource, canTarget, selectedIds, connections, dropInternal } from './graph/bulkWire.js';
@@ -96,6 +97,7 @@ const nodeTypes = {
   imageOutput: ImageOutputNode,
   videoOutput: VideoOutputNode,
   textOutput: TextOutputNode,
+  page: PageNode,
 };
 
 const edgeTypes = { ignored: IgnoredEdge };
@@ -396,7 +398,7 @@ function Canvas() {
   useEffect(() => {
     projectRef.current = project;
   }, [project]);
-  const projectValue = useMemo(() => ({ name: project, ref: projectRef }), [project]);
+  const projectValue = useMemo(() => ({ name: project, ref: projectRef, previewPort: cfg.previewPort || 0 }), [project, cfg.previewPort]);
 
   useEffect(() => {
     (async () => {
@@ -1018,6 +1020,12 @@ function Canvas() {
         { label: 'Text', icon: TextIcon, onClick: () => addNode('textOutput', NEW_NODE.textOutput, at?.()) },
       ],
     },
+    {
+      // The third family: things on the board that reference the others by file.
+      type: 'section',
+      title: 'Artifacts',
+      items: [{ label: 'Page', icon: PageIcon, onClick: () => addNode('page', NEW_NODE.page, at?.()) }],
+    },
   ];
 
   // Drop a preset onto the canvas: fresh ids, rewritten references, bounding box
@@ -1367,10 +1375,12 @@ function Canvas() {
   // videos are skipped silently here — the node's own picker explains the cap, and
   // a drop has nowhere sane to surface an error.
   function onDrop(e) {
+    const isHtml = (f) => f.type === 'text/html' || /\.html?$/i.test(f.name || '');
     const files = [...(e.dataTransfer?.files || [])].filter(
       (f) =>
         f.type.startsWith('image/') ||
-        (f.type.startsWith('video/') && f.size <= MAX_VIDEO_BYTES),
+        (f.type.startsWith('video/') && f.size <= MAX_VIDEO_BYTES) ||
+        isHtml(f),
     );
     if (!files.length) return;
     e.preventDefault();
@@ -1382,8 +1392,10 @@ function Canvas() {
       uploadFile(project, file)
         .then((saved) =>
           addNode(
-            file.type.startsWith('video/') ? 'video' : 'image',
-            { fileName: saved.fileName || file.name, file: saved.file },
+            isHtml(file) ? 'page' : file.type.startsWith('video/') ? 'video' : 'image',
+            isHtml(file)
+              ? { fileName: file.name, file: saved.file, title: file.name.replace(/\.html?$/i, '') }
+              : { fileName: saved.fileName || file.name, file: saved.file },
             { x: at.x + i * 24, y: at.y + i * 24 },
           ),
         )

@@ -24,6 +24,8 @@ const EXT_BY_MIME = {
   'video/mp4': 'mp4',
   'video/quicktime': 'mov',
   'video/webm': 'webm',
+  // The page asset (slice 2): an HTML file the agent or the person supplies.
+  'text/html': 'html',
 };
 
 // Only base64 data URLs count: that is the only form FileReader.readAsDataURL produces,

@@ -1,0 +1,101 @@
+import { useState } from 'react';
+import { useReactFlow } from '@xyflow/react';
+import { Card } from '@astryxdesign/core/Card';
+import { FileInput } from '@astryxdesign/core/FileInput';
+import NodeHeader from './NodeHeader.jsx';
+import NodeLine from './NodeLine.jsx';
+import MediaResize from './MediaResize.jsx';
+import StatusLine from './StatusLine.jsx';
+import { useProject } from '../graph/project.js';
+import { uploadFile, previewUrl } from '../api.js';
+
+// The page asset: an HTML file in the project folder, shown live. The third node family
+// ("artifact"): it neither feeds an output nor consumes one, so it has no handles. Design:
+// docs/superpowers/specs/2026-09-04-agent-canvas-slice-2-design.md, section 2.
+//
+// The frame is the safety boundary on this side, and every attribute is deliberate:
+//   - the src is the preview ORIGIN (server/preview.js), never /api/file -- a page shown
+//     from the API's origin would be Unframed to the browser;
+//   - sandbox="allow-scripts" and nothing else: no allow-same-origin (the document runs
+//     in an opaque origin even within its own port), no popups, no top navigation, no
+//     forms, no modals;
+//   - referrerpolicy and an empty allow list, so a page learns nothing about the canvas
+//     and gets no device permissions.
+// Files are never overwritten: an edit is a new file and a new `data.file`, which is
+// what lets Cmd-Z show the previous page (the spec, "files are immutable").
+const isHtml = (file) => file && (file.type === 'text/html' || /\.html?$/i.test(file.name || ''));
+
+export default function PageNode({ id, data, dragging, selected }) {
+  const { updateNodeData } = useReactFlow();
+  const { name: project, previewPort } = useProject();
+  const [error, setError] = useState('');
+  const src = data.file && previewPort ? previewUrl(previewPort, project, data.file) : '';
+  const title = data.title || data.fileName?.replace(/\.html?$/i, '') || '';
+
+  async function onFile(file) {
+    if (!isHtml(file)) return;
+    setError('');
+    try {
+      const saved = await uploadFile(project, file);
+      updateNodeData(id, { file: saved.file, fileName: file.name, title: data.title || file.name.replace(/\.html?$/i, '') });
+    } catch (err) {
+      setError(err.message);
+    }
+  }
+
+  function onDrop(e) {
+    const file = [...(e.dataTransfer?.files || [])].find(isHtml);
+    if (!file) return;
+    e.preventDefault();
+    e.stopPropagation();
+    onFile(file);
+  }
+
+  return (
+    <>
+      <NodeHeader kind="page" family="artifact" />
+      <Card
+        width="100%"
+        elevation="low"
+        padding={0}
+        className="xnode-page"
+        onDrop={onDrop}
+        onDragOver={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+        }}
+      >
+        <div className="xnode-body">
+          {src ? (
+            // Inert until the node is selected, so a click lands on the node (selecting
+            // it) rather than inside the page; the same rule keeps a drag from being
+            // swallowed by the frame. Keyed by file so a new version is a fresh document.
+            <iframe
+              key={data.file}
+              className={`xnode-frame${selected && !dragging ? ' xnode-frame--live' : ''}`}
+              src={src}
+              title={title || 'page'}
+              sandbox="allow-scripts"
+              referrerPolicy="no-referrer"
+              allow=""
+              loading="lazy"
+            />
+          ) : (
+            <FileInput
+              className="nodrag"
+              label="HTML page"
+              isLabelHidden
+              accept=".html,.htm,text/html"
+              value={null}
+              onChange={onFile}
+            />
+          )}
+          {error && <StatusLine type="error">{error}</StatusLine>}
+        </div>
+      </Card>
+      <NodeLine>{title || null}</NodeLine>
+      {/* Both axes are the user's: a page has no ratio to keep. */}
+      <MediaResize free />
+    </>
+  );
+}
