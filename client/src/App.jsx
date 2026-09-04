@@ -35,6 +35,7 @@ import {
   KeyRound,
   Settings,
   Folder,
+  Sparkles,
 } from 'lucide-react';
 import Logo from './Logo.jsx';
 import CanvasBackground from './CanvasBackground.jsx';
@@ -68,6 +69,7 @@ import { instantiateFragment, centerOffset } from './library/insert.js';
 import { selectionFragment, presetFromSelection } from './library/save.js';
 import { useDocument } from './graph/useDocument.js';
 import { ProjectContext } from './graph/project.js';
+import AgentPanel from './agent/AgentPanel.jsx';
 import {
   listProjects,
   renameProject,
@@ -84,6 +86,7 @@ import {
   pickFolder,
   listModels,
   revealFiles,
+  listProviders,
 } from './api.js';
 
 const nodeTypes = {
@@ -288,7 +291,35 @@ function Canvas() {
   const [deletingPreset, setDeletingPreset] = useState(null); // preset | null
   // Settings dialog. cfg mirrors what the server has on disk; cfgDlg is the open
   // dialog's draft, so nothing is applied until Save.
-  const [cfg, setCfg] = useState({ hasKey: true, keyHint: '', imageModel: '', textModel: '', videoModel: '', outputDir: '' });
+  const [cfg, setCfg] = useState({
+    hasKey: true,
+    keyHint: '',
+    imageModel: '',
+    textModel: '',
+    videoModel: '',
+    outputDir: '',
+    claudePath: '',
+    codexPath: '',
+    claudeConfigDir: '',
+  });
+  // The local agent CLIs: what GET /api/providers last said, fetched when the settings
+  // dialog or the agent panel opens, never on a timer (detection spawns the CLIs).
+  const [providers, setProviders] = useState(null);
+  const [providersChecking, setProvidersChecking] = useState(false);
+  const checkProviders = useCallback(async (refresh = false) => {
+    setProvidersChecking(true);
+    try {
+      const p = await listProviders(refresh);
+      if (p) setProviders(p);
+    } finally {
+      setProvidersChecking(false);
+    }
+  }, []);
+  const [agentOpen, setAgentOpen] = useState(false);
+  const openAgent = () => {
+    setAgentOpen(true);
+    if (!providers) checkProviders();
+  };
   const [cfgDlg, setCfgDlg] = useState(null); // { key, imageModel, …, error, saving, saved } | null
   // Outside cfgDlg, for the same class of reason `connecting` is: the draft is
   // rebuilt on every keystroke and every save, and three render branches read
@@ -556,8 +587,12 @@ function Canvas() {
       textModel: cfg.textModel,
       videoModel: cfg.videoModel,
       outputDir: cfg.outputDir,
+      claudePath: cfg.claudePath ?? '',
+      codexPath: cfg.codexPath ?? '',
+      claudeConfigDir: cfg.claudeConfigDir ?? '',
     });
     loadCatalogues();
+    checkProviders();
     // On open, not on a timer: inference responses carry no quota information, so
     // asking is the only way to know, and nothing outside this dialog needs it.
     setOrStatus(null);
@@ -581,6 +616,11 @@ function Canvas() {
     for (const f of ['imageModel', 'textModel', 'videoModel', 'outputDir']) {
       if (d[f] && d[f] !== cfg[f]) fields[f] = d[f];
     }
+    // The provider settings may be cleared: an empty string is a real value here (back
+    // to PATH, back to the default config dir), so it is sent when it changed.
+    for (const f of ['claudePath', 'codexPath', 'claudeConfigDir']) {
+      if ((d[f] ?? '') !== (cfg[f] ?? '')) fields[f] = d[f] ?? '';
+    }
     if (!Object.keys(fields).length) return setCfgDlg(null);
 
     // Read BEFORE the save: `cfg.hasKey` is about to flip, and this decides
@@ -591,6 +631,8 @@ function Canvas() {
     try {
       const r = await saveConfig(fields);
       setCfg((c) => ({ ...c, ...r }));
+      // A changed binary or config dir means what was detected no longer applies.
+      if (fields.claudePath !== undefined || fields.codexPath !== undefined || fields.claudeConfigDir !== undefined) checkProviders();
       // Saving a key settles which credential the app uses, so PUT /api/config
       // cancels any attempt still in flight server-side. Stop the poll here too, or
       // its next tick reads the now-empty store as 'none' -- which is terminal since
@@ -1457,6 +1499,15 @@ function Canvas() {
         />
       </div>
       <div className="toolbar-card toolbar-card-right">
+        {/* The agent: a right-hand panel with the project's Canvas thread (agent/AgentPanel.jsx). */}
+        <IconButton
+          variant={agentOpen ? 'secondary' : 'ghost'}
+          size="sm"
+          label="Agent"
+          tooltip="Agent: ask about the board"
+          icon={<Icon icon={Sparkles} />}
+          onClick={() => (agentOpen ? setAgentOpen(false) : openAgent())}
+        />
         {/* A Canvas / Generation mode switch lands here — see status.md. */}
         <IconButton
           variant={cfg.hasKey ? 'ghost' : 'primary'}
@@ -1581,6 +1632,16 @@ function Canvas() {
           <CanvasBackground />
         </ReactFlow>
         </ProjectContext.Provider>
+        {agentOpen && (
+          <AgentPanel
+            project={project}
+            selection={nodes.filter((n) => n.selected).map((n) => n.id)}
+            providers={providers}
+            checking={providersChecking}
+            onCheckProviders={() => checkProviders(true)}
+            onClose={() => setAgentOpen(false)}
+          />
+        )}
 
         <div className="tools">
           <IconButton
@@ -1939,6 +2000,70 @@ function Canvas() {
                 onClick={browseFolder}
               />
             </HStack>
+          </VStack>
+
+          <Divider />
+
+          {/* The local agent CLIs. Detection is the server's (GET /api/providers); this
+              only shows what it found and lets a binary be pointed at when PATH does
+              not find it. A run route never takes a path -- only this setting does. */}
+          <VStack gap={2}>
+            <HStack gap={2} align="center">
+              <Text type="label">Local agents</Text>
+              <StackItem size="fill" />
+              <Button
+                label="Check again"
+                variant="ghost"
+                size="sm"
+                isLoading={providersChecking}
+                onClick={() => checkProviders(true)}
+              />
+            </HStack>
+            <Text type="supporting">
+              Claude Code or Codex installed and signed in on this Mac lets the agent run on your own plan. Nothing here is sent to OpenRouter.
+            </Text>
+            {[
+              { kind: 'claude', field: 'claudePath', label: 'Claude', placeholder: 'claude (found on PATH)' },
+              { kind: 'codex', field: 'codexPath', label: 'Codex', placeholder: 'codex (found on PATH)' },
+            ].map(({ kind, field, label, placeholder }) => {
+              const p = providers?.[kind];
+              const tone = p?.status === 'ready' ? 'ok' : p ? 'warn' : 'unknown';
+              return (
+                <VStack key={kind} gap={1}>
+                  <HStack gap={2} align="center" wrap>
+                    <span className={`provider-dot provider-dot-${tone}`} />
+                    <Text weight="medium">{label}</Text>
+                    <Text type="supporting">
+                      {!p
+                        ? providersChecking
+                          ? 'checking…'
+                          : 'not checked yet'
+                        : p.status === 'ready'
+                          ? `ready${p.version ? ` · ${p.version}` : ''}${p.auth?.plan ? ` · ${p.auth.plan}` : ''}${p.auth?.email ? ` · ${p.auth.email}` : ''}`
+                          : p.message}
+                    </Text>
+                    {p?.install && p.status === 'not_installed' && (
+                      <Link href={p.install} target="_blank" rel="noreferrer">
+                        How to install
+                      </Link>
+                    )}
+                  </HStack>
+                  <TextInput
+                    label={`${label} command or path`}
+                    isLabelHidden
+                    placeholder={placeholder}
+                    value={cfgDlg?.[field] ?? ''}
+                    onChange={(v) => setCfgDlg((d) => ({ ...d, [field]: v, error: undefined, saved: false }))}
+                  />
+                </VStack>
+              );
+            })}
+            <TextInput
+              label="Claude config folder (optional)"
+              placeholder="Leave empty for the default ~/.claude"
+              value={cfgDlg?.claudeConfigDir ?? ''}
+              onChange={(v) => setCfgDlg((d) => ({ ...d, claudeConfigDir: v, error: undefined, saved: false }))}
+            />
           </VStack>
           </>
           )}
