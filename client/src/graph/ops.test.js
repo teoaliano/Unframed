@@ -106,4 +106,27 @@ assert.deepEqual(
 // ---- persistentNode is what an addNode carries ----
 assert.deepEqual(persistentNode(node('1', { selected: true, dragging: false, measured: { width: 2, height: 2 } })), node('1'));
 
+// ---- groups ----
+{
+  const G = node('G', { type: 'group', data: { name: 'hero' } });
+  // Into a group: the parent change stands in for the move, carrying the new (relative)
+  // position. Never a moveNode beside it, which would replay absolute coordinates as
+  // relative ones.
+  const free = g([G, node('1', { position: { x: 100, y: 100 } })]);
+  const grouped = g([G, node('1', { parentId: 'G', position: { x: 20, y: 20 } })]);
+  assert.deepEqual(diffGraphs(free, grouped), [{ type: 'reparentNode', id: '1', parentId: 'G', position: { x: 20, y: 20 } }]);
+  // Out again: parentId null, the absolute position the tab computed.
+  assert.deepEqual(diffGraphs(grouped, free), [{ type: 'reparentNode', id: '1', parentId: null, position: { x: 100, y: 100 } }]);
+  // A plain drag inside the box is still a move.
+  const nudged = g([G, node('1', { parentId: 'G', position: { x: 25, y: 20 } })]);
+  assert.deepEqual(diffGraphs(grouped, nudged), [{ type: 'moveNode', id: '1', position: { x: 25, y: 20 } }]);
+  // Deleting a group: React Flow drops the members from the tab's array too, but the
+  // server cascades, so only the group's removeNode is sent -- a member's would bounce
+  // as "no node" and take the whole batch with it.
+  const withMembers = g([G, node('1', { parentId: 'G' }), node('2', { parentId: 'G' }), node('free')]);
+  assert.deepEqual(diffGraphs(withMembers, g([node('free')])), [{ type: 'removeNode', id: 'G' }]);
+  // A member removed on its own is still sent.
+  assert.deepEqual(diffGraphs(withMembers, g([G, node('2', { parentId: 'G' }), node('free')])), [{ type: 'removeNode', id: '1' }]);
+}
+
 console.log('ops.test.js: ok');

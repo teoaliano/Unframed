@@ -133,6 +133,87 @@ function roundTrips(graph, op) {
   assert.equal(bad.graph, undefined, 'a rejected batch must not hand back a partial graph');
 }
 
+// ---- groups: reparentNode ----
+// A group is a container. Members carry parentId and a position relative to the box;
+// React Flow needs a parent AHEAD of its members in the array, so the ops keep it there.
+{
+  const group = (id, extra = {}) => node(id, { type: 'group', data: { name: id }, ...extra });
+  let g = emptyGraph();
+  // Member-to-be first, group second: the child is ahead of its parent in the array.
+  g = applyOp(g, { type: 'addNode', node: node('1', { position: { x: 100, y: 100 } }) }).graph;
+  g = applyOp(g, { type: 'addNode', node: group('G', { position: { x: 80, y: 80 } }) }).graph;
+  g = applyOp(g, { type: 'addNode', node: node('out', { type: 'imageOutput' }) }).graph;
+  g = applyOp(g, { type: 'addEdge', edge: edge('e1', '1', 'out') }).graph;
+
+  const into = roundTrips(g, { type: 'reparentNode', id: '1', parentId: 'G', position: { x: 20, y: 20 } });
+  const member = into.graph.nodes.find((n) => n.id === '1');
+  assert.equal(member.parentId, 'G');
+  assert.deepEqual(member.position, { x: 20, y: 20 }, 'the position travels with the reparent: it is now relative');
+  assert.deepEqual(into.graph.nodes.map((n) => n.id), ['G', '1', 'out'], 'moved to just after its group, nothing else disturbed');
+  assert.deepEqual(into.graph.edges, [], 'a member has no handle, so its edges go');
+  // The inverse is a batch: put it back where it was (index 0, absolute position), then the edge.
+  assert.equal(into.inverse.type, 'batch');
+  assert.deepEqual(into.inverse.ops[0], { type: 'reparentNode', id: '1', parentId: null, position: { x: 100, y: 100 }, index: 0 });
+  assert.equal(into.inverse.ops[1].type, 'addEdge');
+
+  // Out again, to an absolute position the caller computed. No edges to restore, so a
+  // plain inverse rather than a batch. It stays where it is in the array.
+  const outOf = roundTrips(into.graph, { type: 'reparentNode', id: '1', parentId: null, position: { x: 300, y: 300 } });
+  assert.equal(outOf.graph.nodes.find((n) => n.id === '1').parentId, undefined, 'no parentId key at all, not null');
+  assert.equal(outOf.inverse.type, 'reparentNode');
+  assert.deepEqual(outOf.graph.nodes.map((n) => n.id), ['G', '1', 'out']);
+
+  // Already after its group: it keeps its place, and only parentId/position change.
+  g = applyOp(g, { type: 'addNode', node: node('2') }).graph; // ['1','G','out','2']
+  const stay = roundTrips(g, { type: 'reparentNode', id: '2', parentId: 'G', position: { x: 0, y: 0 } });
+  assert.deepEqual(stay.graph.nodes.map((n) => n.id), ['1', 'G', 'out', '2']);
+
+  // What may not happen, each rejected whole rather than half-applied.
+  const pos = { x: 0, y: 0 };
+  assert.match(applyOp(g, { type: 'reparentNode', id: '1', parentId: 'ghost', position: pos }).rejected, /no group ghost/);
+  assert.match(applyOp(g, { type: 'reparentNode', id: '1', parentId: '2', position: pos }).rejected, /not a group/);
+  assert.match(applyOp(g, { type: 'reparentNode', id: 'out', parentId: 'G', position: pos }).rejected, /cannot be a member/, 'outputs consume edges; a group is a source');
+  g = applyOp(g, { type: 'addNode', node: group('H') }).graph;
+  assert.match(applyOp(g, { type: 'reparentNode', id: 'H', parentId: 'G', position: pos }).rejected, /cannot be a member/, 'no nesting: one level to resolve');
+  assert.match(applyOp(g, { type: 'reparentNode', id: 'G', parentId: 'G', position: pos }).rejected, /contain itself/);
+  assert.match(applyOp(g, { type: 'reparentNode', id: '1', parentId: 'G' }).rejected, /position is required/, 'a frame change without coordinates would jump on screen');
+  assert.match(applyOp(g, { type: 'reparentNode', id: 'x', parentId: 'G', position: pos }).rejected, /no node/);
+}
+
+// ---- groups: addNode with a parentId ----
+{
+  const g = applyOp(emptyGraph(), { type: 'addNode', node: node('G', { type: 'group', data: {} }) }).graph;
+  const ok = applyOp(g, { type: 'addNode', node: node('m', { parentId: 'G' }) });
+  assert.equal(ok.graph.nodes[1].parentId, 'G');
+  assert.match(applyOp(emptyGraph(), { type: 'addNode', node: node('m', { parentId: 'G' }) }).rejected, /no group G/, 'a member arriving before its group is refused, not orphaned');
+  assert.match(applyOp(g, { type: 'addNode', node: node('o', { type: 'videoOutput', parentId: 'G' }) }).rejected, /cannot be a member/);
+  // An index that would put a member ahead of its group is bumped to just after it.
+  const ahead = applyOp(g, { type: 'addNode', node: node('m', { parentId: 'G' }), index: 0 });
+  assert.deepEqual(ahead.graph.nodes.map((n) => n.id), ['G', 'm']);
+}
+
+// ---- groups: removeNode cascades to members, and one undo brings the box back ----
+{
+  let g = emptyGraph();
+  g = applyOp(g, { type: 'addNode', node: node('a') }).graph;
+  g = applyOp(g, { type: 'addNode', node: node('G', { type: 'group', data: {} }) }).graph;
+  g = applyOp(g, { type: 'addNode', node: node('m1', { parentId: 'G', position: { x: 1, y: 1 } }) }).graph;
+  g = applyOp(g, { type: 'addNode', node: node('z') }).graph;
+  g = applyOp(g, { type: 'addNode', node: node('m2', { parentId: 'G', position: { x: 2, y: 2 } }) }).graph;
+  g = applyOp(g, { type: 'addNode', node: node('out', { type: 'imageOutput' }) }).graph;
+  g = applyOp(g, { type: 'addEdge', edge: edge('eG', 'G', 'out') }).graph;
+  g = applyOp(g, { type: 'addEdge', edge: edge('ea', 'a', 'out') }).graph;
+
+  const r = roundTrips(g, { type: 'removeNode', id: 'G' });
+  assert.deepEqual(r.graph.nodes.map((n) => n.id), ['a', 'z', 'out'], 'members went with their group; unrelated nodes kept their order');
+  assert.deepEqual(r.graph.edges.map((e) => e.id), ['ea'], "the group's edge went; a's did not");
+  // Nodes come back in ascending index order, so each member finds its group restored.
+  assert.deepEqual(r.inverse.ops.filter((o) => o.type === 'addNode').map((o) => o.node.id), ['G', 'm1', 'm2']);
+  // Removing a member alone is still just that node.
+  const one = roundTrips(g, { type: 'removeNode', id: 'm1' });
+  assert.deepEqual(one.graph.nodes.map((n) => n.id), ['a', 'G', 'z', 'm2', 'out']);
+}
+
 // ---- unknown op ----
 assert.match(applyOp(emptyGraph(), { type: 'teleport' }).rejected, /unknown op/);
 

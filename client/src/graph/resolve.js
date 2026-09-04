@@ -21,7 +21,27 @@ export const isTextOutput = (n) => n?.type === 'textOutput';
 // is asked in one place: the @ menu that offers candidates while typing, and the
 // right-click item that copies a reference. Those two disagreeing is a menu offering an
 // id nothing will substitute, or an id you can copy but never insert.
-export const isReferenceable = (n) => n?.type === 'prompt' || isTextOutput(n);
+export const isReferenceable = (n) => n?.type === 'prompt' || isTextOutput(n) || isGroup(n);
+
+// A group is a box of input nodes -- prompts, images, videos -- that wires as one source
+// and is @-referenced as one id. It carries none of that content itself: a member is an
+// ordinary node with `parentId` set and a position relative to the box, so there is one
+// way to hold an image and one way to hold a prompt, and everything below that already
+// handles those handles a group by expanding it. The server enforces who may be a member
+// (server/graph.js); this file only has to read the result.
+// Design: docs/superpowers/specs/2026-09-05-group-node-design.md.
+export const isGroup = (n) => n?.type === 'group';
+
+const byY = (a, b) => (a.position?.y ?? 0) - (b.position?.y ?? 0);
+
+// A group's members, top to bottom INSIDE the box. Relative positions all share one
+// parent, so comparing them is the same rule the canvas applies to everything else.
+export const membersOf = (nodes, groupId) => nodes.filter((n) => n.parentId === groupId).sort(byY);
+
+// Every node an @id can resolve to, by id. One helper because the same filter used to
+// be written out in three places, and a third kind of referenceable node meant
+// remembering all three.
+const referenceMap = (nodes) => new Map(nodes.filter(isReferenceable).map((n) => [n.id, n]));
 
 // Its own predicate for the same reason isTextOutput has one: only a video output
 // carries an input mode, and asking the wrong node type for one silently changes
@@ -54,6 +74,16 @@ function resolveRef(id, refs, stack) {
   if (stack.includes(id)) {
     throw new Error(`Circular reference: ${[...stack, id].join(' -> ')}`);
   }
+  // @group is its prompt members, top to bottom, joined the way an output joins its
+  // sources. Media members have no text and are not this path's business: they travel by
+  // wire, never by mention, so a mention can never attach an image the canvas does not
+  // show being sent.
+  if (isGroup(node)) {
+    return membersOf([...refs.values()], id)
+      .map((m) => resolveRef(m.id, refs, [...stack, id]).trim())
+      .filter(Boolean)
+      .join('\n\n');
+  }
   return substitute(node.data?.text, refs, [...stack, id]);
 }
 
@@ -63,11 +93,16 @@ function resolveRef(id, refs, stack) {
 export function bucketSources(nodes, edges, outputId) {
   const byId = new Map(nodes.map((n) => [n.id, n]));
   const output = byId.get(outputId);
+  // A wired group expands IN PLACE into its members: the box takes one slot in the
+  // top-to-bottom order at its own position, and its contents fill that slot in their
+  // order inside it. Contiguous rather than interleaved by absolute position, so "that
+  // box is image 2 and 3" can be read off the canvas without adding coordinates.
   const sources = edges
     .filter((e) => e.target === outputId)
     .map((e) => byId.get(e.source))
     .filter(Boolean)
-    .sort((a, b) => (a.position?.y ?? 0) - (b.position?.y ?? 0));
+    .sort(byY)
+    .flatMap((n) => (isGroup(n) ? membersOf(nodes, n.id) : [n]));
 
   const media = sources.filter((n) => (n.type === 'image' || n.type === 'video') && hasMedia(n));
   const mode = isVideoOutput(output) ? output?.data?.inputMode : undefined;
@@ -114,9 +149,7 @@ function toReferences(media) {
 // Returns { prompt, input_references, frame_images }. frame_images is empty unless
 // the output is a video node asking for a frame mode.
 export function buildRequest(nodes, edges, outputId) {
-  const refs = new Map(
-    nodes.filter((n) => n.type === 'prompt' || isTextOutput(n)).map((n) => [n.id, n]),
-  );
+  const refs = referenceMap(nodes);
   const { sources, references, frames } = bucketSources(nodes, edges, outputId);
 
   const input_references = toReferences(references);
@@ -195,9 +228,7 @@ export function findFreeSource(nodes, edges, outputId) {
 export function freeSourceText(node, nodes) {
   if (!node) return '';
   if (isTextOutput(node)) return node.data?.result || '';
-  const refs = new Map(
-    nodes.filter((n) => n.type === 'prompt' || isTextOutput(n)).map((n) => [n.id, n]),
-  );
+  const refs = referenceMap(nodes);
   // Seeded with the source's own id so @itself throws Circular instead of recursing,
   // the same guard resolveRef applies.
   return substitute(node.data?.text, refs, [node.id]);

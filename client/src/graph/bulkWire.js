@@ -11,8 +11,10 @@ import { isOutput, isTextOutput } from './resolve.js';
 // resolver uses rather than a list of type strings -- the list is the thing that
 // gets forgotten when a fourth output type arrives. Handles mirror this exactly:
 // inputs render a source, image/video outputs a target, and a text output both,
-// since its answer feeds the next node by edge.
-export const canSource = (n) => !isOutput(n) || isTextOutput(n);
+// since its answer feeds the next node by edge. A node inside a group is the one
+// input that is NOT a source: the group holds the handle and wires for everything
+// in it, so a member with its own handle would be two ways to send one image.
+export const canSource = (n) => (!isOutput(n) || isTextOutput(n)) && !n?.parentId;
 export const canTarget = (n) => isOutput(n);
 
 export const selectedIds = (nodes, can) =>

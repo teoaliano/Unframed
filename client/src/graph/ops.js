@@ -50,10 +50,15 @@ export function diffGraphs(before, after) {
 
   for (const [id, prev] of beforeNodes) {
     const next = afterNodes.get(id);
-    if (!next || next.type !== prev.type) {
-      ops.push({ type: 'removeNode', id });
-      removedNodes.add(id);
-    }
+    if (!next || next.type !== prev.type) removedNodes.add(id);
+  }
+  // The server's removeNode takes a group's members with it, so a member whose group is
+  // going is not sent: in a batch it would bounce as "no node" and take the whole batch
+  // down with it.
+  for (const id of removedNodes) {
+    const prev = beforeNodes.get(id);
+    if (prev.parentId && removedNodes.has(prev.parentId)) continue;
+    ops.push({ type: 'removeNode', id });
   }
   for (const [id, next] of afterNodes) {
     const prev = beforeNodes.get(id);
@@ -62,7 +67,13 @@ export function diffGraphs(before, after) {
   for (const [id, next] of afterNodes) {
     const prev = beforeNodes.get(id);
     if (!prev || removedNodes.has(id)) continue;
-    if (!deepEqual(prev.position, next.position)) ops.push({ type: 'moveNode', id, position: next.position });
+    // A parent change carries the position with it (relative to the new frame), so it
+    // stands in for the move rather than travelling beside one.
+    if ((prev.parentId ?? null) !== (next.parentId ?? null)) {
+      ops.push({ type: 'reparentNode', id, parentId: next.parentId ?? null, position: next.position });
+    } else if (!deepEqual(prev.position, next.position)) {
+      ops.push({ type: 'moveNode', id, position: next.position });
+    }
     if (prev.width !== next.width || prev.height !== next.height) {
       ops.push({ type: 'resizeNode', id, width: next.width ?? null, height: next.height ?? null });
     }

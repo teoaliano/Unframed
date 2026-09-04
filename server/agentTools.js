@@ -7,6 +7,7 @@ import { tool } from '@anthropic-ai/claude-agent-sdk';
 
 const KIND = {
   prompt: 'prompt',
+  group: 'group',
   image: 'image',
   video: 'video',
   imageOutput: 'image output',
@@ -24,9 +25,15 @@ function describeNode(n) {
     if (n.width !== undefined) out.size.width = n.width;
     if (n.height !== undefined) out.size.height = n.height;
   }
+  // A member's position is relative to its group's top-left corner, not the canvas --
+  // said here rather than converted, so what the model reads is what the document holds.
+  if (n.parentId) out.inGroup = n.parentId;
   switch (n.type) {
     case 'prompt':
       out.text = d.text ?? '';
+      break;
+    case 'group':
+      out.name = d.name ?? '';
       break;
     case 'image':
     case 'video':
@@ -73,7 +80,7 @@ export function canvasTools({ getGraph, getSelection }) {
   return [
     tool(
       'canvas_read',
-      'Read the whole canvas: every node with its id, kind, position, text or file, the edges between them (what feeds what), and which node ids the person currently has selected. Call this before answering anything about what is on the canvas.',
+      'Read the whole canvas: every node with its id, kind, position, text or file, the edges between them (what feeds what), and which node ids the person currently has selected. A node with inGroup sits inside that group node, positioned relative to it; a wired group sends every node inside it. Call this before answering anything about what is on the canvas.',
       {},
       async () => {
         const description = describeCanvas(await getGraph(), getSelection());

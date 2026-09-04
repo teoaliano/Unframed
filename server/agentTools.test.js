@@ -15,6 +15,8 @@ const graph = {
     { id: '104', type: 'video', position: { x: 0, y: 200 }, data: { dataUrl: 'https://cdn.example/clip.mp4', fileName: 'clip.mp4' } },
     { id: '105', type: 'video', position: { x: 0, y: 400 }, data: { dataUrl: 'data:video/mp4;base64,AAAA', fileName: 'old.mp4' } },
     { id: '106', type: 'textOutput', position: { x: 500, y: 400 }, data: { text: 'Summarise', result: 'A fox.', model: 'anthropic/claude-sonnet-5', running: { startedAt: 1 } } },
+    { id: '107', type: 'group', position: { x: 600, y: 0 }, data: { name: 'hero' }, width: 420, height: 280 },
+    { id: '108', type: 'image', parentId: '107', position: { x: 10, y: 10 }, data: { file: '3-face.png' } },
   ],
   edges: [
     { id: 'e1', source: '100', target: '102' },
@@ -24,7 +26,7 @@ const graph = {
 
 const d = describeCanvas(graph, ['101', '103']);
 assert.deepEqual(Object.keys(d).sort(), ['edges', 'nodes', 'selection']);
-assert.equal(d.nodes.length, 7);
+assert.equal(d.nodes.length, 9);
 const byId = Object.fromEntries(d.nodes.map((n) => [n.id, n]));
 // Prompts carry their text; the @reference is left as typed for the model to see.
 assert.deepEqual(byId['100'], { id: '100', kind: 'prompt', position: { x: 40, y: 60 }, size: { width: 240, height: 160 }, text: 'A @101 on a cliff' });
@@ -35,6 +37,13 @@ assert.deepEqual(byId['102'].settings, { quality: 'low', aspect_ratio: '1:1', ru
 assert.deepEqual(byId['102'].results, ['1-a.png']);
 // A reference image: the file name in the project folder, never bytes.
 assert.deepEqual(byId['103'], { id: '103', kind: 'image', position: { x: 0, y: 0 }, size: { width: 300 }, file: '2-hero.png', fileName: 'hero.png', aspect: 1.5 });
+// A group is named; a member says which group it is in, and its position is left
+// relative to that group rather than converted -- what the model reads is what the
+// document holds.
+assert.deepEqual(byId['107'], { id: '107', kind: 'group', position: { x: 600, y: 0 }, size: { width: 420, height: 280 }, name: 'hero' });
+assert.equal(byId['108'].inGroup, '107');
+assert.deepEqual(byId['108'].position, { x: 10, y: 10 });
+assert.equal(byId['103'].inGroup, undefined, 'a free node has no inGroup key at all');
 // A hosted video keeps its URL; a legacy inline one is described, not dumped.
 assert.equal(byId['104'].url, 'https://cdn.example/clip.mp4');
 assert.equal(byId['104'].file, undefined);
@@ -71,7 +80,7 @@ assert.deepEqual(describeCanvas({ nodes: [], edges: [] }, []), { nodes: [], edge
   assert.equal(out.content[0].type, 'text');
   const parsed = JSON.parse(out.content[0].text);
   assert.deepEqual(parsed.selection, ['101']);
-  assert.equal(parsed.nodes.length, 7);
+  assert.equal(parsed.nodes.length, 9);
 }
 
 console.log('agentTools.test.js: ok');

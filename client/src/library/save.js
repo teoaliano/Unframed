@@ -13,6 +13,31 @@ export function selectionFragment(nodes, edges, fallbackId) {
   if (!chosen.length && fallbackId != null) chosen = nodes.filter((n) => n.id === fallbackId);
   if (!chosen.length) return null;
   const ids = new Set(chosen.map((n) => n.id));
+  // A group brings its members: the box is nothing without its contents, and a member's
+  // position is meaningless without its box. Appended after the selection, so a parent
+  // is always ahead of its members in the fragment (React Flow needs that order).
+  for (const n of nodes) {
+    if (n.parentId && ids.has(n.parentId) && !ids.has(n.id)) {
+      chosen.push(n);
+      ids.add(n.id);
+    }
+  }
+  // A member taken WITHOUT its group leaves the group behind: it becomes a free node at
+  // the absolute position it appeared at, so pasting it does not land it at the
+  // top-left of the canvas.
+  const byId = new Map(nodes.map((n) => [n.id, n]));
+  const detach = (n) => {
+    if (!n.parentId || ids.has(n.parentId)) return n;
+    const parent = byId.get(n.parentId);
+    const { parentId, extent, ...free } = n;
+    return {
+      ...free,
+      position: {
+        x: (n.position?.x ?? 0) + (parent?.position?.x ?? 0),
+        y: (n.position?.y ?? 0) + (parent?.position?.y ?? 0),
+      },
+    };
+  };
   return {
     // `selected` is stripped because it's UI state, not graph shape. The
     // in-flight run markers are stripped for a sharper reason: presets.json is
@@ -24,7 +49,7 @@ export function selectionFragment(nodes, edges, fallbackId) {
     // sites. This same function backs the node clipboard (App.jsx's
     // copySelection/pasteNodeClipboard), so the strip covers a mid-render
     // copy-paste too, not just a saved preset.
-    nodes: chosen.map((n) => ({ ...n, selected: undefined, data: stripRunMarkers(n.data) })),
+    nodes: chosen.map((n) => ({ ...detach(n), selected: undefined, data: stripRunMarkers(n.data) })),
     edges: edges.filter((e) => ids.has(e.source) && ids.has(e.target)),
   };
 }

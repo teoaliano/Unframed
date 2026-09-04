@@ -53,12 +53,18 @@ export const withDrag = (n) => ({
   // are the user's and a height has to be seeded — before this it resized by a CSS
   // handle on the field itself (the old data.size + fieldResize.js), which is what the
   // 2026-08-20 node-anatomy redesign replaced with a border drag on the card.
-  width: RESIZABLE_INPUT.has(n.type) ? n.width ?? 240 : n.width,
+  //
+  // A GROUP is a box other nodes sit in, so it starts large enough to hold two of them
+  // side by side and keeps both axes, like a prompt.
+  width: n.type === 'group' ? n.width ?? 420 : RESIZABLE_INPUT.has(n.type) ? n.width ?? 240 : n.width,
   // Media is the DERIVED case, so its height is dropped rather than passed through: a
   // height saved by an older build, or by a hand-edited graph.json, would otherwise be
   // honoured forever and quietly letterbox the picture. Everything that is not a prompt
   // and not media has no wrapper size at all.
-  height: n.type === 'prompt' ? n.height ?? 160 : undefined,
+  height: n.type === 'prompt' ? n.height ?? 160 : n.type === 'group' ? n.height ?? 280 : undefined,
+  // A member stays inside its box while dragged. Derived from parentId on every load
+  // and add, like the two above, so nothing saved can disagree with the membership.
+  extent: n.parentId ? 'parent' : undefined,
   // React Flow's in-gesture flag, dropped for the same reason as the two above and with
   // a worse failure: `getNodesInside()` is the only geometry test a box selection runs,
   // and it ends with `if (isVisible || node.dragging)`. A node carrying a stale `true`
@@ -87,6 +93,8 @@ export const slug = (s) => s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/
 // you asked for it.
 export const NEW_NODE = {
   prompt: { text: '' },
+  // The name is what an @ tag shows for the group; the id stays the reference key.
+  group: { name: '' },
   image: { fileName: '', dataUrl: '' },
   video: { fileName: '', dataUrl: '' },
   imageOutput: OUTPUT_DEFAULTS.imageOutput,

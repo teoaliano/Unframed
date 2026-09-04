@@ -1,6 +1,6 @@
 // Assert-based self-check. Run with: node client/src/graph/resolve.test.js
 import assert from 'node:assert/strict';
-import { buildRequest, bucketSources, sourceRoles, splitSections, findFreeSource, freeSourceText, freeShared, freeRunPrompts, parseImagePicks, expandSlots, runReferences, freeBatch, isOutput, isTextOutput, isReferenceable, MAX_RUNS, hasMedia, mediaRef } from './resolve.js';
+import { buildRequest, bucketSources, sourceRoles, splitSections, findFreeSource, freeSourceText, freeShared, freeRunPrompts, parseImagePicks, expandSlots, runReferences, freeBatch, isOutput, isTextOutput, isReferenceable, isGroup, membersOf, MAX_RUNS, hasMedia, mediaRef } from './resolve.js';
 import { migrateNodes } from './migrate.js';
 import { instantiateFragment, centerOffset } from '../library/insert.js';
 import { selectionFragment, presetFromSelection } from '../library/save.js';
@@ -1240,6 +1240,139 @@ const img = (i, y) => ({ id: `i${i}`, type: 'image', position: { x: 0, y }, data
   const second = { id: 'i3', type: 'image', position: { x: 0, y: 5 }, data: { file: '2-end.png' } };
   const vreq = buildRequest([byFile, second, vout], [{ id: 'a', source: 'i1', target: 'vo' }, { id: 'b', source: 'i3', target: 'vo' }], 'vo');
   assert.deepEqual(vreq.frame_images.map((f) => f.image_url.url), ['project-file:1-hero.png', 'project-file:2-end.png']);
+}
+
+// ---- groups ----
+// A group is a box of inputs that wires as one source and is @-referenced as one id. Its
+// members are ordinary nodes with parentId and a RELATIVE position; the resolver expands
+// the box in place. Design: docs/superpowers/specs/2026-09-05-group-node-design.md.
+const pic = (id, y, extra = {}) => ({ id, type: 'image', position: { x: 0, y }, data: { file: `${id}.png` }, ...extra });
+const box = (id, y, name = id) => ({ id, type: 'group', position: { x: 0, y }, data: { name } });
+
+// Wired group expands CONTIGUOUSLY at the box's own slot, members in their order inside
+// the box -- not interleaved with outside nodes by absolute position.
+{
+  const nodes = [
+    out,
+    pic('A', 0),
+    box('G', 50),
+    pic('g1', 30, { parentId: 'G' }), // lower in the box than g2, though its absolute Y (80) is below B's
+    pic('g2', 5, { parentId: 'G' }),
+    pic('B', 60),
+  ];
+  const edges = [
+    { id: 'eA', source: 'A', target: 'out' },
+    { id: 'eG', source: 'G', target: 'out' },
+    { id: 'eB', source: 'B', target: 'out' },
+  ];
+  const { sources, references } = bucketSources(nodes, edges, 'out');
+  assert.deepEqual(sources.map((n) => n.id), ['A', 'g2', 'g1', 'B']);
+  assert.deepEqual(references.map((n) => n.id), ['A', 'g2', 'g1', 'B']);
+  // So the badges read off the canvas: the box is image 2 and 3, and the group itself
+  // has no number -- it is not a reference, its contents are.
+  assert.deepEqual(sourceRoles(nodes, edges, 'g2'), ['2']);
+  assert.deepEqual(sourceRoles(nodes, edges, 'g1'), ['3']);
+  assert.deepEqual(sourceRoles(nodes, edges, 'B'), ['4']);
+  assert.deepEqual(sourceRoles(nodes, edges, 'G'), []);
+  assert.deepEqual(membersOf(nodes, 'G').map((n) => n.id), ['g2', 'g1']);
+  // The request carries the member images, as ordinary references.
+  const { input_references } = buildRequest(nodes, edges, 'out');
+  assert.equal(input_references.length, 4);
+  assert.equal(input_references[1].image_url.url, 'project-file:g2.png');
+}
+
+// A wired group's prompt members are prompt parts in place; @group in a prompt is those
+// same members joined, media ignored -- text by mention, media by wire, never crossed.
+{
+  const nodes = [
+    out,
+    { id: 'p', type: 'prompt', position: { x: 0, y: 0 }, data: { text: 'a portrait of @G on a beach' } },
+    box('G', 50),
+    { id: 'd2', type: 'prompt', position: { x: 0, y: 20 }, data: { text: 'red hair' }, parentId: 'G' },
+    { id: 'd1', type: 'prompt', position: { x: 0, y: 10 }, data: { text: 'a tall woman' }, parentId: 'G' },
+    pic('face', 30, { parentId: 'G' }),
+  ];
+  // Mentioned only: text arrives, the image does not.
+  let r = buildRequest(nodes, [{ id: 'e', source: 'p', target: 'out' }], 'out');
+  assert.equal(r.prompt, 'a portrait of a tall woman\n\nred hair on a beach');
+  assert.equal(r.input_references.length, 0, 'a mention never attaches media the canvas does not show being sent');
+  // Wired only: prompts in place, image attached.
+  r = buildRequest(nodes, [{ id: 'e', source: 'G', target: 'out' }], 'out');
+  assert.equal(r.prompt, 'a tall woman\n\nred hair');
+  assert.equal(r.input_references.length, 1);
+  assert.equal(isReferenceable(nodes[2]), true, 'the @ menu offers a group');
+  assert.equal(isGroup(nodes[2]), true);
+  // A member that mentions its own group is a cycle, caught like any other.
+  const loop = nodes.map((n) => (n.id === 'd1' ? { ...n, data: { text: 'see @G' } } : n));
+  assert.throws(() => buildRequest(loop, [{ id: 'e', source: 'p', target: 'out' }], 'out'), /Circular reference/);
+  // Free mode sees through a mention too.
+  assert.equal(freeSourceText(nodes[1], nodes), 'a portrait of a tall woman\n\nred hair on a beach');
+}
+
+// Frame modes treat a group's images like any wired images: the first take the slots,
+// the rest are excess and badge as such. The same rule as ten videos into first/last.
+{
+  const vout = { id: 'v', type: 'videoOutput', position: { x: 0, y: 0 }, data: { inputMode: 'first_last' } };
+  const nodes = [vout, box('G', 0), pic('a', 0, { parentId: 'G' }), pic('b', 10, { parentId: 'G' }), pic('c', 20, { parentId: 'G' })];
+  const edges = [{ id: 'e', source: 'G', target: 'v' }];
+  const { frames, excess } = bucketSources(nodes, edges, 'v');
+  assert.deepEqual(frames.map((f) => [f.node.id, f.frame_type]), [['a', 'first_frame'], ['b', 'last_frame']]);
+  assert.deepEqual(excess, ['c']);
+  assert.deepEqual(sourceRoles(nodes, edges, 'a'), ['first']);
+  assert.deepEqual(sourceRoles(nodes, edges, 'c'), ['—']);
+}
+
+// Library: membership is a reference and follows the id map; a parent missing from the
+// fragment is dropped rather than left dangling (the server would refuse the member).
+{
+  let n = 900;
+  const mint = () => String(n++);
+  const fragment = {
+    nodes: [box('G', 0), pic('m', 5, { parentId: 'G' }), pic('orphan', 5, { parentId: 'gone' })],
+    edges: [],
+  };
+  const { nodes } = instantiateFragment(fragment, mint);
+  assert.equal(nodes[1].parentId, nodes[0].id);
+  assert.equal('parentId' in nodes[2], false);
+  // The bounding box is measured from top-level nodes: a member's relative (5,5) must not
+  // drag the centre toward the origin.
+  const spread = { nodes: [box('G', 1000), pic('m', 5, { parentId: 'G' })], edges: [] };
+  const only = { nodes: [box('G', 1000)], edges: [] };
+  assert.deepEqual(centerOffset(spread, { x: 0, y: 0 }), centerOffset(only, { x: 0, y: 0 }));
+}
+
+// Saving or copying: a group brings its members; a member taken alone leaves the group
+// behind and becomes a free node at its absolute position.
+{
+  const nodes = [
+    { ...box('G', 100), position: { x: 50, y: 100 }, selected: true },
+    pic('m', 10, { parentId: 'G', position: { x: 5, y: 10 }, extent: 'parent' }),
+    pic('free', 0),
+  ];
+  let frag = selectionFragment(nodes, [], null);
+  assert.deepEqual(frag.nodes.map((n) => n.id), ['G', 'm'], 'the box carries its contents, parent first');
+  assert.equal(frag.nodes[1].parentId, 'G');
+  const alone = nodes.map((x) => ({ ...x, selected: x.id === 'm' }));
+  frag = selectionFragment(alone, [], null);
+  assert.deepEqual(frag.nodes.map((x) => x.id), ['m']);
+  assert.equal('parentId' in frag.nodes[0], false);
+  assert.equal('extent' in frag.nodes[0], false);
+  assert.deepEqual(frag.nodes[0].position, { x: 55, y: 110 }, 'relative + group = absolute');
+}
+
+// withDrag: a group starts as a box big enough for two nodes and keeps both axes; a
+// member is kept inside its box while dragged, derived from parentId on every pass.
+{
+  const g = withDrag({ id: 'G', type: 'group', position: { x: 0, y: 0 }, data: {} });
+  assert.equal(g.width, 420);
+  assert.equal(g.height, 280);
+  assert.equal(g.extent, undefined);
+  const kept = withDrag({ id: 'G', type: 'group', position: { x: 0, y: 0 }, data: {}, width: 600, height: 100 });
+  assert.equal(kept.width, 600);
+  assert.equal(kept.height, 100);
+  const m = withDrag({ id: 'm', type: 'image', parentId: 'G', position: { x: 0, y: 0 }, data: {} });
+  assert.equal(m.extent, 'parent');
+  assert.equal(withDrag({ id: 'f', type: 'image', position: { x: 0, y: 0 }, data: {} }).extent, undefined);
 }
 
 console.log('resolve.js: all checks passed');
