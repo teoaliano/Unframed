@@ -46,6 +46,7 @@ async function readSnapshot(dir) {
     // and every later entry in a (then still empty) journal applies on top of it.
     return {
       version: Number.isInteger(parsed.version) ? parsed.version : 0,
+      legacy: !Number.isInteger(parsed.version),
       graph: { nodes: parsed.nodes, edges: Array.isArray(parsed.edges) ? parsed.edges : [] },
     };
   } catch {
@@ -81,7 +82,16 @@ export async function openDocument(dir) {
   if (existing) return existing;
 
   const snap = await readSnapshot(dir);
-  const entries = await readJournal(dir);
+  let entries = await readJournal(dir);
+  // A snapshot with no version next to a non-empty journal means an OLDER server -- one
+  // that still wrote the whole graph on autosave -- saved this project after the
+  // journal had started (two checkouts sharing one output folder). Its snapshot is the
+  // truth as that server left it; replaying the journal on top would apply every op a
+  // second time. Keep the snapshot, set the journal aside, start a fresh one.
+  if (snap?.legacy && entries.length) {
+    await fs.rename(journalPath(dir), `${journalPath(dir)}.stale-${Date.now()}`).catch(() => {});
+    entries = [];
+  }
   let version = 0;
   let graph = emptyGraph();
   if (snap) {

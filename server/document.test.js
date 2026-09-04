@@ -101,6 +101,27 @@ const origin = { kind: 'session', id: 'test' };
   await closeDocument(dir);
 }
 
+// ---- an older server overwrote the snapshot after the journal started ----
+{
+  const dir = fresh('mixed');
+  let doc = await openDocument(dir);
+  await commit(doc, { type: 'addNode', node: node('1') }, origin);
+  await commit(doc, { type: 'addNode', node: node('2') }, origin);
+  await closeDocument(dir);
+  // An old autosave: the whole graph, no version, written on top of our snapshot.
+  await fs.writeFile(snapshotPath(dir), JSON.stringify({ nodes: [node('1'), node('2'), node('3')], edges: [] }));
+  doc = await openDocument(dir);
+  assert.deepEqual(doc.graph.nodes.map((n) => n.id), ['1', '2', '3'], 'the old server\'s snapshot is the truth');
+  assert.equal(doc.version, 0, 'and the journal was not replayed on top of it');
+  const files = await fs.readdir(dir);
+  assert.ok(files.some((f) => f.startsWith('graph.log.stale-')), 'the journal is set aside, not deleted');
+  await commit(doc, { type: 'addNode', node: node('4') }, origin);
+  await closeDocument(dir);
+  doc = await openDocument(dir);
+  assert.deepEqual(doc.graph.nodes.map((n) => n.id), ['1', '2', '3', '4']);
+  await closeDocument(dir);
+}
+
 // ---- crash safety: a torn last journal line and a leftover snapshot temp file ----
 {
   const dir = fresh('torn');
