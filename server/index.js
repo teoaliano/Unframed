@@ -1325,13 +1325,17 @@ for (const [route, fn] of [
 // record lives in its folder and follows it through a rename.
 const threadDir = (req) => projectDir(req.params.name);
 
+// `kind` is 'canvas' (the panel's thread about the board) or 'artifact' (the composer's,
+// about one node -- `artifactId`, or null when the agent is about to create it).
 app.post('/api/projects/:name/threads', async (req, res) => {
-  const { provider = 'claude', model = '', kind = 'canvas' } = req.body || {};
+  const { provider = 'claude', model = '', kind = 'canvas', artifactId = null } = req.body || {};
   if (!PROVIDERS[provider]) return res.status(400).json({ error: `Unknown provider "${provider}".` });
   if (typeof model !== 'string' || model.length > 200) return res.status(400).json({ error: 'That does not look like a model id.' });
+  if (kind !== 'canvas' && kind !== 'artifact') return res.status(400).json({ error: `Unknown thread kind "${kind}".` });
+  if (artifactId !== null && (typeof artifactId !== 'string' || !/^[\w-]{1,80}$/.test(artifactId))) return res.status(400).json({ error: 'artifactId must be a node id.' });
   try {
     const id = `t-${Date.now().toString(36)}-${crypto.randomBytes(4).toString('hex')}`;
-    const thread = newThread({ id, project: slugify(req.params.name), provider, model, kind: kind === 'canvas' ? 'canvas' : 'canvas' });
+    const thread = newThread({ id, project: slugify(req.params.name), provider, model, kind, artifactId });
     await writeThread(threadDir(req), thread);
     res.json({ thread });
   } catch (err) {
@@ -1341,7 +1345,9 @@ app.post('/api/projects/:name/threads', async (req, res) => {
 
 app.get('/api/projects/:name/threads', async (req, res) => {
   try {
-    res.json({ threads: await listThreads(threadDir(req)) });
+    const all = await listThreads(threadDir(req));
+    const artifact = typeof req.query.artifact === 'string' ? req.query.artifact : null;
+    res.json({ threads: artifact ? all.filter((t) => t.artifactId === artifact) : all });
   } catch (err) {
     res.status(500).json({ error: `Could not list the threads: ${err.message}` });
   }
@@ -1362,8 +1368,12 @@ app.post('/api/projects/:name/threads/:id/messages', async (req, res) => {
   if (!text) return res.status(400).json({ error: 'Say something first.' });
   if (text.length > 20000) return res.status(400).json({ error: 'That message is too long.' });
   const selection = Array.isArray(req.body?.selection) ? req.body.selection.slice(0, 500).map(String) : [];
+  // The composer's intent: which node this is about ("new" for one the agent should
+  // create) and what it came with. Node ids, so the same shape as the selection.
+  const target = typeof req.body?.target === 'string' && /^(new|[\w-]{1,80})$/.test(req.body.target) ? req.body.target : undefined;
+  const withIds = Array.isArray(req.body?.with) ? req.body.with.slice(0, 500).map(String) : [];
   try {
-    await sendToThread(threadDir(req), req.params.id, { text, selection }, { settings: providerSettings });
+    await sendToThread(threadDir(req), req.params.id, { text, selection, target, with: withIds }, { settings: providerSettings, previewPort: PREVIEW_PORT });
     res.json({ ok: true });
   } catch (err) {
     res.status(err.status || (/not found/i.test(err.message) ? 404 : 500)).json({ error: err.message });

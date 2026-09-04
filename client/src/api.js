@@ -327,11 +327,12 @@ export const listProviders = (refresh = false) =>
     .then((d) => d?.providers ?? null)
     .catch(() => null);
 
-export const createThread = (project, { provider = 'claude', model = '' } = {}) =>
-  postJson(`/api/projects/${enc(project)}/threads`, { provider, model }).then((d) => d.thread);
+export const createThread = (project, { provider = 'claude', model = '', kind = 'canvas', artifactId = null } = {}) =>
+  postJson(`/api/projects/${enc(project)}/threads`, { provider, model, kind, artifactId }).then((d) => d.thread);
 
-export const listThreads = (project) =>
-  fetch(`/api/projects/${enc(project)}/threads`)
+// `artifactId` narrows the list to the threads about one node (the composer's lookup).
+export const listThreads = (project, { artifactId } = {}) =>
+  fetch(`/api/projects/${enc(project)}/threads${artifactId ? `?artifact=${enc(artifactId)}` : ''}`)
     .then((r) => (r.ok ? r.json() : { threads: [] }))
     .then((d) => d.threads ?? [])
     .catch(() => []);
@@ -345,8 +346,15 @@ export const getThread = (project, id) =>
 
 // One turn. Resolves when the server has accepted the message; the answer arrives on
 // the thread's event stream. A 409 means the previous turn is still running.
-export const sendThreadMessage = (project, id, { text, selection = [] }) =>
-  postJson(`/api/projects/${enc(project)}/threads/${enc(id)}/messages`, { text, selection });
+// `target` and `with` are the composer's: the node the message is about (or "new") and
+// the rest of the selection. The panel sends neither.
+export const sendThreadMessage = (project, id, { text, selection = [], target, with: withIds }) =>
+  postJson(`/api/projects/${enc(project)}/threads/${enc(id)}/messages`, {
+    text,
+    selection,
+    ...(target ? { target } : {}),
+    ...(withIds?.length ? { with: withIds } : {}),
+  });
 
 export const interruptThread = (project, id) =>
   postJson(`/api/projects/${enc(project)}/threads/${enc(id)}/interrupt`, {}).catch(() => ({ interrupted: false }));
