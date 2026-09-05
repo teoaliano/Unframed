@@ -983,12 +983,45 @@ div:has(> .add-node-menu) {
 .react-flow__node.selected > .astryx-card {
   box-shadow: inset 0 0 0 1px var(--color-accent), var(--shadow-low);
 }
-/* The agent's focus ring (slice 3): the artifact the panel's active thread is about. A
-   second fact beside selection, so it is a second visual -- an outline standing OFF the
-   card rather than the selection's inset border -- and both can be on at once. */
-.react-flow__node.agent-focus > .astryx-card {
-  outline: 2px solid var(--color-accent);
-  outline-offset: 4px;
+/* The agent's focus mark (slice 3, design option E): the artifact the panel's active
+   thread is about. Selection owns the card border, so focus lives on the NAME ROW -- the
+   tag fills bright and carries a live dot -- and the two facts never share a surface. */
+.react-flow__node.agent-focus .xnode-tab {
+  background: var(--color-text-primary);
+  border-color: var(--color-text-primary);
+  color: var(--color-background-body);
+}
+.react-flow__node.agent-focus .xnode-tab .astryx-text,
+.react-flow__node.agent-focus .xnode-tab svg {
+  color: var(--color-background-body);
+}
+.react-flow__node.agent-focus .xnode-tab::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: var(--radius-full);
+  background: var(--color-background-body);
+  animation: agent-pulse 1.6s ease-in-out infinite;
+}
+/* The same mark in the panel's scope row, with the Locate action beside the name. */
+.agent-chip--focus {
+  border-color: var(--color-text-primary);
+}
+.agent-dot--focus {
+  background: var(--color-text-primary);
+}
+.agent-locate {
+  display: inline-flex;
+  align-items: center;
+  margin-inline-start: 2px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+}
+.agent-locate:hover {
+  color: var(--color-text-primary);
 }
 /* Three sides, because the fourth is shared with the card's top edge. */
 .react-flow__node.selected .xnode-tab--input {

@@ -1542,6 +1542,16 @@ try {
     assert.deepEqual(byArtifact.threads.map((t) => t.id), [art.thread.id]);
     assert.equal((await (await fetch(`${tBase}?artifact=999`)).json()).threads.length, 0);
     assert.ok((await (await fetch(tBase)).json()).threads.length >= 4, 'unfiltered lists everything');
+    // Model and effort for the next turn (slice 3): PATCH validates, persists, and lists.
+    assert.equal((await json('POST', tBase, { provider: 'claude', effort: 'ultra' })).status, 400, 'unknown effort at creation');
+    const tuned = await json('PATCH', `${tBase}/${art.thread.id}`, { model: 'claude-sonnet-5', effort: 'high' });
+    assert.equal(tuned.status, 200);
+    assert.equal((await tuned.json()).thread.effort, 'high');
+    const tunedRec = (await (await fetch(`${tBase}/${art.thread.id}`)).json()).thread;
+    assert.equal(tunedRec.model, 'claude-sonnet-5');
+    assert.equal((await (await fetch(`${tBase}?artifact=104`)).json()).threads[0].effort, 'high', 'the summary carries it');
+    assert.equal((await json('PATCH', `${tBase}/${art.thread.id}`, { effort: 'ultra' })).status, 400);
+    assert.equal((await json('PATCH', `${tBase}/nope`, { effort: 'low' })).status, 404);
     for (const t of [composed, odd, art, pending]) await fetch(`${tBase}/${t.thread.id}`, { method: 'DELETE' });
     assert.equal((await fetch(`${tBase}/${created.thread.id}`, { method: 'DELETE' })).status, 200);
     assert.deepEqual((await (await fetch(tBase)).json()).threads, []);

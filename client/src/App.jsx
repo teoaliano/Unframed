@@ -1985,6 +1985,7 @@ function Canvas() {
             initialThreadId={agentThread}
             refreshKey={threadsBump}
             onFocus={onAgentFocus}
+            onLocate={(id) => fitView({ nodes: [{ id }], duration: 400, padding: 0.6, maxZoom: 1.5 })}
           />
         )}
 

@@ -161,8 +161,14 @@ a rename:
 | `GET /api/projects/:name/threads/:id` | the record |
 | `POST …/:id/messages` | one turn: `{ text, selection, target?, with? }`; 409 while the previous one runs |
 | `GET …/:id/events?since=` | SSE: `state`, stored events past `since`, `live`, then everything as it happens |
+| `PATCH …/:id` | model and effort for the next turn: `{ model?, effort? }`, `''` resets to the default; 409 mid-turn; closes the live session so the next message resumes with the new values |
 | `POST …/:id/interrupt` | stop the running turn |
 | `DELETE …/:id` | remove the record |
+
+`effort` is one of the Agent SDK's levels (`low` … `max`, `EFFORTS` in `threads.js`) and is
+passed straight to the session's options; the models an account can run, each with the
+effort levels it accepts, come from the Claude probe (`supportedModels()` on the same
+zero-token handshake) as `models` on the provider's ready status.
 
 The browser's selection travels with each message. The server never holds it otherwise;
 `canvas_read` reports the latest one for that thread.
@@ -180,9 +186,17 @@ a re-filter it is part of, else the newest visible one takes over, else none —
 none, Send creates a thread bound to the one selected artifact (or a canvas thread when
 none is; with several selected, Send is disabled and says why). The composer sends to the
 active tab: the thread's artifact is fixed for life, the selection at send time is the
-message's `with`. The active thread's artifact wears the **focus ring** on the canvas
+message's `with`. The active thread's artifact wears the **focus mark** on the canvas
 (`onFocus` → `className: 'agent-focus'` on that node — the node alone, not what the thread
-touched), a second visual beside selection so both can be on at once. Everything durable
+touched): its name tag fills bright with a live dot, design option E, chosen over a ring
+around the card because selection already owns the card border and the two read as one
+fact when they share it. The scope row names the same artifact with a **Locate** action
+that pans and zooms to it (`onLocate` → `fitView` on that node). The composer's bottom
+row sets the thread's **model and effort** for the next turn (Astryx `Selector` and
+`SegmentedControl`, `PATCH …/threads/:id`); with no thread yet they apply to the one the
+next message creates. **Enter sends, Shift+Enter or Option+Enter breaks the line**, in
+the panel and the toolbar's composer alike. The header's trash button deletes the active
+thread after a confirmation; the canvas changes it made stay. Everything durable
 is the server's; the panel mirrors the record and applies the stream, stored `ops_applied`
 events included, so a reopened thread shows what changed and not only what was said. With
 no provider ready it shows what was checked, how to install, and Check again, with Send

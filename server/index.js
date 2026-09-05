@@ -31,7 +31,7 @@ import {
 } from './document.js';
 import { saveMedia, copyMedia, inlineFileRefs } from './media.js';
 import { providerStatuses, forgetProviderStatus, PROVIDERS } from './providers.js';
-import { newThread, writeThread, readThread, listThreads, deleteThread, eventsSince } from './threads.js';
+import { newThread, writeThread, readThread, listThreads, deleteThread, eventsSince, persistThread, applySettings, EFFORTS } from './threads.js';
 import { sendToThread, interruptThread, subscribeThread, closeThreadSession, closeSessionsFor } from './agent.js';
 import crypto from 'node:crypto';
 import { startPreviewServer, LOOPBACK_HOST } from './preview.js';
@@ -1341,18 +1341,36 @@ const threadDir = (req) => projectDir(req.params.name);
 // `kind` is 'canvas' (the panel's thread about the board) or 'artifact' (the composer's,
 // about one node -- `artifactId`, or null when the agent is about to create it).
 app.post('/api/projects/:name/threads', async (req, res) => {
-  const { provider = 'claude', model = '', kind = 'canvas', artifactId = null } = req.body || {};
+  const { provider = 'claude', model = '', effort = '', kind = 'canvas', artifactId = null } = req.body || {};
   if (!PROVIDERS[provider]) return res.status(400).json({ error: `Unknown provider "${provider}".` });
   if (typeof model !== 'string' || model.length > 200) return res.status(400).json({ error: 'That does not look like a model id.' });
+  if (effort !== '' && !EFFORTS.has(effort)) return res.status(400).json({ error: `Effort must be one of ${[...EFFORTS].join(', ')}.` });
   if (kind !== 'canvas' && kind !== 'artifact') return res.status(400).json({ error: `Unknown thread kind "${kind}".` });
   if (artifactId !== null && (typeof artifactId !== 'string' || !/^[\w-]{1,80}$/.test(artifactId))) return res.status(400).json({ error: 'artifactId must be a node id.' });
   try {
     const id = `t-${Date.now().toString(36)}-${crypto.randomBytes(4).toString('hex')}`;
-    const thread = newThread({ id, project: slugify(req.params.name), provider, model, kind, artifactId });
+    const thread = newThread({ id, project: slugify(req.params.name), provider, model, effort, kind, artifactId });
     await writeThread(threadDir(req), thread);
     res.json({ thread });
   } catch (err) {
     res.status(500).json({ error: `Could not create the thread: ${err.message}` });
+  }
+});
+
+// Model and effort for the thread's next turn (threads.js applySettings validates and
+// refuses mid-turn). The live session was built with the old values, so it is closed;
+// the next message resumes the SDK session with the new ones and keeps the context.
+app.patch('/api/projects/:name/threads/:id', async (req, res) => {
+  const { model, effort } = req.body || {};
+  try {
+    const thread = await persistThread(threadDir(req), req.params.id, (cur) => {
+      if (!cur) throw Object.assign(new Error('Thread not found.'), { status: 404 });
+      return applySettings(cur, { model, effort });
+    });
+    closeThreadSession(threadDir(req), req.params.id);
+    res.json({ thread });
+  } catch (err) {
+    res.status(err.status || (/not found/i.test(err.message) ? 404 : 500)).json({ error: err.message });
   }
 });
 

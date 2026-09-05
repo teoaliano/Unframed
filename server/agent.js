@@ -105,6 +105,7 @@ class Session {
     this.threadId = thread.id;
     this.provider = thread.provider;
     this.model = thread.model;
+    this.effort = thread.effort || '';
     this.settings = settings;
     this.env = env;
     this.previewPort = previewPort;
@@ -187,6 +188,7 @@ class Session {
         env: penv,
         cwd: this.dir,
         ...(this.model ? { model: this.model } : {}),
+        ...(this.effort ? { effort: this.effort } : {}),
         systemPrompt: { type: 'custom', prompt: SYSTEM_PROMPT },
         settingSources: [],
         strictMcpConfig: true,

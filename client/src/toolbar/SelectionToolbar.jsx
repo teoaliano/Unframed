@@ -175,7 +175,8 @@ export default function SelectionToolbar({
           )}
           <div
             onKeyDown={(e) => {
-              if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
+              // Enter sends; Shift+Enter or Option+Enter breaks the line (same as the panel).
+              if (e.key === 'Enter' && !e.shiftKey && !e.altKey && !e.isComposing) {
                 e.preventDefault();
                 send();
               }
@@ -191,8 +192,8 @@ export default function SelectionToolbar({
               placeholder={
                 provider
                   ? composer.target === 'new'
-                    ? 'What should the agent make from these? (⌘↵ to send)'
-                    : 'What should change? (⌘↵ to send)'
+                    ? 'What should the agent make from these? (↵ to send)'
+                    : 'What should change? (↵ to send)'
                   : 'Connect Claude or Codex to start'
               }
               isDisabled={!provider}

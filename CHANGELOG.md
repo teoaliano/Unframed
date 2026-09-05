@@ -23,8 +23,13 @@ Keep that shape: the website's What's new page parses this file.
 - **One tab per thread in the Agent panel, filtered by what you select.** With nothing
   selected the panel lists every conversation, newest first. Select a page and it shows
   only the threads about that page; select several and it shows theirs. The page the open
-  thread is about wears a ring on the canvas, and with the panel open on a page's thread,
+  thread is about lights up its name tag on the canvas, the panel's Scope row names it
+  with a Locate button that pans to it, and with the panel open on a page's thread,
   selecting other assets turns the toolbar's Agent button into **Add to <page>**.
+- **Pick the model and effort per thread.** The panel's composer has a model picker and
+  an effort control; they apply to the next message and stay with the thread. Threads can
+  be deleted from the panel header. Enter now sends, and Shift+Enter or Option+Enter
+  starts a new line, in the panel and the toolbar's composer alike.
 - **Copying a page copies its file**, so a pasted page is a separate version you can hand
   to a separate thread. Deleting a page is undoable like any other node and its threads
   come back with it; the only time it asks first is when the agent is mid-turn on it.

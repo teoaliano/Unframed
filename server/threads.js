@@ -24,7 +24,8 @@ const ID_RE = /^[\w-]{1,80}$/;
 const STATUSES = new Set(['idle', 'running', 'failed']);
 const KINDS = new Set(['canvas', 'artifact']);
 
-export function newThread({ id, project, kind = 'canvas', artifactId = null, provider, model, now = Date.now() }) {
+export function newThread({ id, project, kind = 'canvas', artifactId = null, provider, model, effort = '', now = Date.now() }) {
+  if (effort && !EFFORTS.has(effort)) throw new Error(`unknown effort "${effort}"`);
   if (!ID_RE.test(String(id))) throw new Error('thread id must be a short token');
   if (!PROVIDERS[provider]) throw new Error(`unknown provider ${provider}`);
   if (!KINDS.has(kind)) throw new Error(`unknown thread kind ${kind}`);
@@ -36,6 +37,7 @@ export function newThread({ id, project, kind = 'canvas', artifactId = null, pro
     artifactId: kind === 'artifact' ? artifactId : null,
     provider,
     model: model || '',
+    effort: effort || '',
     status: 'idle',
     title: '',
     messages: [],
@@ -85,6 +87,28 @@ export function bindArtifact(thread, artifactId, now = Date.now()) {
   return { ...thread, artifactId, updatedAt: now };
 }
 
+// The Agent SDK's effort levels; '' means the model's default. Validated here because
+// the string reaches the SDK's options.
+export const EFFORTS = new Set(['low', 'medium', 'high', 'xhigh', 'max']);
+
+// Model and effort for the NEXT turn. Each is optional; an absent key leaves the field
+// alone, '' resets it to the default. Refused while a turn is running, since the live
+// session was built with the old values and closing it mid-turn would cut the answer.
+export function applySettings(thread, { model, effort } = {}, now = Date.now()) {
+  if (thread.status === 'running') throw Object.assign(new Error('A turn is running; change the model when it finishes.'), { status: 409 });
+  const next = { ...thread };
+  if (model !== undefined) {
+    if (typeof model !== 'string' || model.length > 200) throw Object.assign(new Error('That does not look like a model id.'), { status: 400 });
+    next.model = model;
+  }
+  if (effort !== undefined) {
+    if (effort !== '' && !EFFORTS.has(effort)) throw Object.assign(new Error(`Effort must be one of ${[...EFFORTS].join(', ')}.`), { status: 400 });
+    next.effort = effort;
+  }
+  if (next.model === thread.model && next.effort === (thread.effort ?? '')) return thread;
+  return { ...next, updatedAt: now };
+}
+
 export function threadSummary(thread) {
   return {
     id: thread.id,
@@ -92,6 +116,7 @@ export function threadSummary(thread) {
     artifactId: thread.artifactId ?? null,
     provider: thread.provider,
     model: thread.model,
+    effort: thread.effort ?? '',
     status: thread.status,
     title: thread.title || thread.messages.find((m) => m.role === 'user')?.text.slice(0, 80) || '',
     turns: thread.turns,

@@ -6,13 +6,18 @@ import { Text } from '@astryxdesign/core/Text';
 import { TextArea } from '@astryxdesign/core/TextArea';
 import { Link } from '@astryxdesign/core/Link';
 import { HStack, VStack, StackItem } from '@astryxdesign/core/Stack';
-import { X, Plus, RefreshCw, Sparkles, Square } from 'lucide-react';
+import { Selector } from '@astryxdesign/core/Selector';
+import { SegmentedControl, SegmentedControlItem } from '@astryxdesign/core/SegmentedControl';
+import { AlertDialog } from '@astryxdesign/core/AlertDialog';
+import { X, Plus, RefreshCw, Sparkles, Square, Trash2, Crosshair } from 'lucide-react';
 import {
   createThread,
   listThreads,
   getThread,
   sendThreadMessage,
   interruptThread,
+  updateThread,
+  deleteThread,
   subscribeThreadEvents,
 } from '../api.js';
 import { isArtifact } from '../graph/resolve.js';
@@ -31,6 +36,7 @@ import { visibleThreads, nextActive, tabLabel } from './tabs.js';
 // server and the transcript is there when the panel reopens.
 
 const PROVIDER_ORDER = ['claude', 'codex'];
+const EFFORT_LABEL = { low: 'Low', medium: 'Med', high: 'High', xhigh: 'XHigh', max: 'Max' };
 
 // What the panel says while each tool runs.
 const ACTIVITY = {
@@ -44,7 +50,9 @@ const ACTIVITY = {
 // "Open thread". `refreshKey` changes when something outside the panel (the toolbar's
 // composer) created a thread, so the strip re-reads the list. `onFocus` receives the
 // active thread's artifact id, or null.
-export default function AgentPanel({ project, nodes, providers, onCheckProviders, checking, onClose, initialThreadId = null, refreshKey = 0, onFocus }) {
+// `onLocate(nodeId)` pans and zooms the canvas to a node -- the Locate action beside the
+// artifact's name in the scope row.
+export default function AgentPanel({ project, nodes, providers, onCheckProviders, checking, onClose, initialThreadId = null, refreshKey = 0, onFocus, onLocate }) {
   const selection = nodes.filter((n) => n.selected).map((n) => n.id);
   const [threads, setThreads] = useState([]);
   const [chosenId, setChosenId] = useState(null);
@@ -69,10 +77,44 @@ export default function AgentPanel({ project, nodes, providers, onCheckProviders
   const [activity, setActivity] = useState(null); // "Reading the canvas…" while a tool runs
   const [text, setText] = useState('');
   const [sending, setSending] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  // Model and effort for a thread that does not exist yet; a thread carries its own.
+  const [pending, setPending] = useState({ model: '', effort: '' });
   const scroller = useRef(null);
 
   const ready = PROVIDER_ORDER.map((k) => providers?.[k]).filter((p) => p?.status === 'ready');
   const provider = ready[0] ?? null;
+  // What the provider's account can run (providers.js probe); '' is the provider default.
+  const models = provider?.models ?? [];
+  const settings = thread ? { model: thread.model || '', effort: thread.effort || '' } : pending;
+  // The SDK lists the provider's default under the id 'default', so '' looks it up there.
+  const efforts = models.find((m) => m.id === (settings.model || 'default'))?.efforts ?? [];
+
+  async function changeSettings(patch) {
+    if (!thread) {
+      setPending((p) => ({ ...p, ...patch }));
+      return;
+    }
+    try {
+      const t = await updateThread(project, thread.id, patch);
+      setThreads((ts) => ts.map((x) => (x.id === t.id ? { ...x, model: t.model, effort: t.effort ?? '' } : x)));
+    } catch (err) {
+      setError(err.message);
+    }
+  }
+
+  async function removeThread() {
+    setConfirmDelete(false);
+    if (!thread) return;
+    const id = thread.id;
+    try {
+      await deleteThread(project, id);
+      setThreads((ts) => ts.filter((t) => t.id !== id));
+      setChosenId(null);
+    } catch (err) {
+      setError(err.message);
+    }
+  }
 
   // The project's threads, newest first. Which one is active is the strip's business
   // above; `initialThreadId` (the anchored reply's "Open thread") is honoured when it is
@@ -188,7 +230,7 @@ export default function AgentPanel({ project, nodes, providers, onCheckProviders
   const newKind = selectedArtifacts.length === 1 ? { kind: 'artifact', artifactId: selectedArtifacts[0].id } : selectedArtifacts.length === 0 ? { kind: 'canvas' } : null;
 
   async function startThread() {
-    const t = await createThread(project, { provider: provider.kind, ...newKind });
+    const t = await createThread(project, { provider: provider.kind, model: pending.model, effort: pending.effort, ...newKind });
     setThreads((ts) => [{ ...t, title: '' }, ...ts]);
     setChosenId(t.id);
     return t;
@@ -227,6 +269,7 @@ export default function AgentPanel({ project, nodes, providers, onCheckProviders
 
   const scope = selection.length ? `${selection.length} selected` : 'whole canvas';
   const running = status === 'running';
+  const focusArtifact = thread?.kind === 'artifact' && thread.artifactId && nodes.some((n) => n.id === thread.artifactId) ? thread.artifactId : null;
   // The transcript: messages and the agent's change notes, in time order.
   const lines = [...messages, ...notes.map((n) => ({ role: 'note', text: n.text, at: n.at }))].sort((a, b) => (a.at ?? 0) - (b.at ?? 0));
 
@@ -246,6 +289,7 @@ export default function AgentPanel({ project, nodes, providers, onCheckProviders
             onClick={newThread}
             isDisabled={!provider || !newKind}
           />
+          <IconButton variant="ghost" size="sm" label="Delete thread" tooltip="Delete this thread" icon={<Icon icon={Trash2} />} onClick={() => setConfirmDelete(true)} isDisabled={!thread || running} />
           <IconButton variant="ghost" size="sm" label="Close" icon={<Icon icon={X} />} onClick={onClose} />
         </HStack>
         {/* The strip: one tab per visible thread (tabs.js decides which). Empty when the
@@ -356,20 +400,22 @@ export default function AgentPanel({ project, nodes, providers, onCheckProviders
           <Text type="supporting" className="agent-meta">
             Scope
           </Text>
-          <span className="agent-chip">{scope}</span>
-          {provider && (
-            <span className="agent-chip">
-              <span className="agent-dot" />
-              {provider.name}
-              {provider.auth?.plan ? ` · ${provider.auth.plan}` : ''}
+          {focusArtifact && (
+            <span className="agent-chip agent-chip--focus">
+              <span className="agent-dot agent-dot--focus" />
+              {tabLabel(thread, nodes)}
+              <button type="button" className="agent-locate" title="Locate on canvas" aria-label="Locate on canvas" onClick={() => onLocate?.(focusArtifact)}>
+                <Icon icon={Crosshair} size="sm" />
+              </button>
             </span>
           )}
+          <span className="agent-chip">{scope}</span>
         </HStack>
-        {/* Cmd/Ctrl+Enter sends. Caught on a wrapper, since keydown bubbles and the
-            TextArea component does not promise to forward it. */}
+        {/* Enter sends; Shift+Enter or Option+Enter breaks the line. Caught on a wrapper,
+            since keydown bubbles and the TextArea component does not promise to forward it. */}
         <div
           onKeyDown={(e) => {
-            if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
+            if (e.key === 'Enter' && !e.shiftKey && !e.altKey && !e.isComposing) {
               e.preventDefault();
               send();
             }
@@ -387,13 +433,39 @@ export default function AgentPanel({ project, nodes, providers, onCheckProviders
                 : !thread && !newKind
                   ? 'Several artifacts are selected — select one to start a thread about it'
                   : thread?.kind === 'artifact' || newKind?.kind === 'artifact'
-                    ? 'What should change? (⌘↵ to send)'
-                    : 'Ask about the board… (⌘↵ to send)'
+                    ? 'What should change? (↵ to send, ⇧↵ for a new line)'
+                    : 'Ask about the board… (↵ to send, ⇧↵ for a new line)'
             }
             isDisabled={!provider || (!thread && !newKind)}
             onChange={setText}
           />
         </div>
+        <HStack gap={2} align="center" wrap>
+          {/* Model and effort for the next turn (the thread's own, or the next thread's).
+              Astryx controls: the Selector's popover anchors fine here, outside React
+              Flow's transform -- the native-select exception is for the nodes only. */}
+          {provider && (
+            <Selector
+              label="Model"
+              isLabelHidden
+              size="sm"
+              variant="ghost"
+              placeholder={provider.name}
+              value={settings.model || '__auto'}
+              options={[{ value: '__auto', label: `${provider.name} default` }, ...models.map((m) => ({ value: m.id, label: m.name }))]}
+              onChange={(v) => changeSettings({ model: v === '__auto' ? '' : v, effort: '' })}
+              isDisabled={running}
+            />
+          )}
+          {provider && efforts.length > 0 && (
+            <SegmentedControl label="Effort" size="sm" value={settings.effort || '__auto'} onChange={(v) => changeSettings({ effort: v === '__auto' ? '' : v })} isDisabled={running}>
+              <SegmentedControlItem value="__auto" label="Auto" />
+              {efforts.map((e) => (
+                <SegmentedControlItem key={e} value={e} label={EFFORT_LABEL[e] ?? e} />
+              ))}
+            </SegmentedControl>
+          )}
+        </HStack>
         <HStack gap={2} align="center">
           <Text type="supporting" className="agent-meta">
             {provider ? 'Subscription · not metered' : ''}
@@ -406,6 +478,14 @@ export default function AgentPanel({ project, nodes, providers, onCheckProviders
           )}
         </HStack>
       </div>
+      <AlertDialog
+        isOpen={confirmDelete}
+        onOpenChange={(open) => !open && setConfirmDelete(false)}
+        title="Delete this thread?"
+        description="The conversation is removed for good. What the agent changed on the canvas stays, and Cmd-Z still undoes it."
+        actionLabel="Delete thread"
+        onAction={removeThread}
+      />
     </aside>
   );
 }

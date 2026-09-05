@@ -141,7 +141,7 @@ export function classify(kind, { version, probe }) {
     const auth = {};
     if (probe.email) auth.email = probe.email;
     if (probe.plan) auth.plan = probe.plan;
-    return { ...base, status: 'ready', installed: true, version: parsed, auth };
+    return { ...base, status: 'ready', installed: true, version: parsed, auth, ...(probe.models ? { models: probe.models } : {}) };
   }
   if (probe?.signedOut) {
     return { ...base, status: 'signed_out', installed: true, version: parsed, message: `${p.name} is installed but not signed in. Sign in with \`${p.binary} login\`, then check again.` };
@@ -254,7 +254,13 @@ export async function probeClaude(executable, env, { cwd = os.homedir(), timeout
     if (!a.email && !a.subscriptionType && !a.apiKeySource && !a.tokenSource && !init?.apiKeySource) {
       return { ok: false, signedOut: true };
     }
-    return { ok: true, email: a.email, plan: a.subscriptionType || (a.apiKeySource || init?.apiKeySource ? 'API key' : undefined), tokenSource: a.tokenSource };
+    // The models this account can run, with the effort levels each accepts -- the
+    // panel's model and effort controls are built from this. Still zero tokens: it is
+    // a control request on the same handshake, not a prompt.
+    const models = await withTimeout(q.supportedModels(), timeoutMs)
+      .then((list) => (list ?? []).map((m) => ({ id: m.value, name: m.displayName || m.value, description: m.description || '', efforts: m.supportedEffortLevels ?? [] })))
+      .catch(() => []);
+    return { ok: true, email: a.email, plan: a.subscriptionType || (a.apiKeySource || init?.apiKeySource ? 'API key' : undefined), tokenSource: a.tokenSource, models };
   } catch {
     return { ok: false, signedOut: false };
   } finally {

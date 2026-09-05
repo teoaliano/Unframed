@@ -367,6 +367,14 @@ export const sendThreadMessage = (project, id, { text, selection = [], target, w
     ...(withIds?.length ? { with: withIds } : {}),
   });
 
+// Model and effort for the thread's next turn; either key may be omitted, '' resets.
+export const updateThread = (project, id, patch) =>
+  fetch(`/api/projects/${enc(project)}/threads/${enc(id)}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(patch) }).then(async (r) => {
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(d.error || `Could not update the thread (${r.status})`);
+    return d.thread;
+  });
+
 export const interruptThread = (project, id) =>
   postJson(`/api/projects/${enc(project)}/threads/${enc(id)}/interrupt`, {}).catch(() => ({ interrupted: false }));
 
