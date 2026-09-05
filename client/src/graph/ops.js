@@ -50,10 +50,28 @@ export function diffGraphs(before, after) {
 
   for (const [id, prev] of beforeNodes) {
     const next = afterNodes.get(id);
-    if (!next || next.type !== prev.type) {
-      ops.push({ type: 'removeNode', id });
-      removedNodes.add(id);
-    }
+    if (!next || next.type !== prev.type) removedNodes.add(id);
+  }
+  // A surviving member of a group that is GOING must escape before the group does, and
+  // this ordering is the whole of it. The server's removeNode cascades to members, so a
+  // removeNode sent first deletes the very nodes the next op is about: Ungroup lost its
+  // entire contents, and the reparent that followed bounced as "no node" and failed the
+  // batch. Emitted here, ahead of the removals, rather than in the change loop below.
+  const escaped = new Set();
+  for (const [id, next] of afterNodes) {
+    const prev = beforeNodes.get(id);
+    if (!prev || removedNodes.has(id)) continue;
+    const from = prev.parentId ?? null;
+    if (!from || !removedNodes.has(from)) continue;
+    ops.push({ type: 'reparentNode', id, parentId: next.parentId ?? null, position: next.position });
+    escaped.add(id);
+  }
+  // The other side of the same cascade: a member going WITH its group is not sent at
+  // all, since its removeNode would bounce as "no node" once the group took it.
+  for (const id of removedNodes) {
+    const prev = beforeNodes.get(id);
+    if (prev.parentId && removedNodes.has(prev.parentId)) continue;
+    ops.push({ type: 'removeNode', id });
   }
   for (const [id, next] of afterNodes) {
     const prev = beforeNodes.get(id);
@@ -62,7 +80,16 @@ export function diffGraphs(before, after) {
   for (const [id, next] of afterNodes) {
     const prev = beforeNodes.get(id);
     if (!prev || removedNodes.has(id)) continue;
-    if (!deepEqual(prev.position, next.position)) ops.push({ type: 'moveNode', id, position: next.position });
+    // A parent change carries the position with it (relative to the new frame), so it
+    // stands in for the move rather than travelling beside one. Already sent above when
+    // the node was escaping a group that is being removed.
+    if (escaped.has(id)) {
+      // nothing further: the reparent above carried the position too
+    } else if ((prev.parentId ?? null) !== (next.parentId ?? null)) {
+      ops.push({ type: 'reparentNode', id, parentId: next.parentId ?? null, position: next.position });
+    } else if (!deepEqual(prev.position, next.position)) {
+      ops.push({ type: 'moveNode', id, position: next.position });
+    }
     if (prev.width !== next.width || prev.height !== next.height) {
       ops.push({ type: 'resizeNode', id, width: next.width ?? null, height: next.height ?? null });
     }

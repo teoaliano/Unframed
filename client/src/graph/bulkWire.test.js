@@ -21,6 +21,13 @@ const node = (id, type, selected = false) => ({ id, type, selected, position: { 
   assert.equal(canTarget(node('w', 'videoOutput')), true);
   assert.equal(canTarget(node('t', 'textOutput')), true);
   assert.equal(canTarget(node('p', 'prompt')), false);
+
+  // A group is a source; the nodes inside it are not, whatever their type. The group
+  // holds the one handle and wires for its contents.
+  assert.equal(canSource(node('g', 'group')), true);
+  assert.equal(canSource({ ...node('i', 'image'), parentId: 'g' }), false);
+  assert.equal(canSource({ ...node('p', 'prompt'), parentId: 'g' }), false);
+  assert.equal(canTarget(node('g', 'group')), false);
 }
 
 // selectedIds filters by BOTH selection and capability -- an unselected prompt

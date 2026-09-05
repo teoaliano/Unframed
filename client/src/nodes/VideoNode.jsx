@@ -22,7 +22,7 @@ import { uploadFile } from '../api.js';
 export const MAX_VIDEO_BYTES = 25 * 1024 * 1024;
 export const VIDEO_TOO_BIG = 'Video is too large. Keep it under 25MB.';
 
-export default function VideoNode({ id, data }) {
+export default function VideoNode({ id, data, parentId }) {
   const { updateNodeData } = useReactFlow();
   const { name: project } = useProject();
   const [error, setError] = useState('');
@@ -104,7 +104,11 @@ export default function VideoNode({ id, data }) {
           e.stopPropagation();
         }}
       >
-        <Handle type="source" position={Position.Right} />
+        {/* A node inside a group has no handle of its own: the group holds the one
+            handle and wires for everything in it (graph/bulkWire.js canSource). Two
+            handles for one image would be two ways to send it, and the wires would
+            stop saying what a generation carries. */}
+        {!parentId && <Handle type="source" position={Position.Right} />}
         <div className="xnode-body">
           {src ? (
             // Same shape as an image reference: the clip fills the node and remove is

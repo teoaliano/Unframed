@@ -13,9 +13,11 @@ import { NODE_ICONS } from './nodeIcons.jsx';
 // already said by the icon. Everything that reports ON a node rather than being part of
 // it — the connection role, an @id, a run's cost — lives in NodeLine below the card.
 //
-// It carries NO interaction of its own. It used to copy "@<id>" on click, which put a
-// button on the one strip of a node that has to stay grabbable. The reference moved to
-// the right-click menu (App.jsx), where it costs nothing to reach and nothing to avoid.
+// It carries no interaction of its own beyond an optional `onDoubleClick`. It used to
+// copy "@<id>" on single click, which put a button on the one strip of a node that has to
+// stay grabbable; the reference moved to the right-click menu (App.jsx). A DOUBLE click
+// is a different matter and is what a group uses to rename itself: it cannot be hit by
+// accident while dragging, so the strip stays grabbable, which was the whole objection.
 //
 // `family` is the ONLY colour telling the two families apart, and that is deliberate:
 // the accent border that used to ring every output card is gone, so both families share
@@ -33,9 +35,9 @@ import { NODE_ICONS } from './nodeIcons.jsx';
 // internally so they cannot collide with the `image`/`video` INPUT nodes, but they are
 // titled by their medium on the canvas. Defaults to the type id, which is every other
 // node.
-export default function NodeHeader({ kind, title, family = 'input' }) {
+export default function NodeHeader({ kind, title, family = 'input', onDoubleClick }) {
   return (
-    <span className={`xnode-tab xnode-tab--${family}`}>
+    <span className={`xnode-tab xnode-tab--${family}`} onDoubleClick={onDoubleClick}>
       {NODE_ICONS[kind] && <Icon icon={NODE_ICONS[kind]} size="xsm" />}
       <Text type="supporting" weight="medium">{title ?? kind}</Text>
     </span>
