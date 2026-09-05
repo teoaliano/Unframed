@@ -24,11 +24,25 @@ export function nextActive(activeId, visible) {
   return visible[0]?.id ?? null;
 }
 
-// What a tab reads: an artifact thread is named after its node, a canvas thread is
-// "Canvas". A running thread's tab carries the dot; that is the component's business.
-export function tabLabel(thread, nodes) {
-  if (thread.kind !== 'artifact') return 'Canvas';
+// What the page a thread is bound to is called. Separate from the tab's label, and it
+// has to stay that way: the scope row and the focus mark answer "which page am I talking
+// to", and a thread the user has renamed must not be able to change that answer.
+export function artifactLabel(thread, nodes) {
   const n = nodes.find((x) => x.id === thread.artifactId);
   if (!n) return thread.artifactId || 'Artifact';
   return n.data?.title || n.data?.fileName?.replace(/\.html?$/i, '') || n.id;
+}
+
+// What a tab reads: the name the user typed on it, else what the thread is about -- an
+// artifact thread its page, a canvas thread "Canvas". A running thread's tab carries the
+// dot; that is the component's business.
+//
+// The name wins over the page's title on purpose. Two threads about one page are the
+// intended way to explore two directions, and two tabs reading the same page title
+// cannot be told apart -- which is what makes a name worth having at all.
+export function tabLabel(thread, nodes) {
+  const named = (thread.title ?? '').trim();
+  if (named) return named;
+  if (thread.kind !== 'artifact') return 'Canvas';
+  return artifactLabel(thread, nodes);
 }

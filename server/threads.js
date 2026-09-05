@@ -109,6 +109,22 @@ export function applySettings(thread, { model, effort } = {}, now = Date.now()) 
   return { ...next, updatedAt: now };
 }
 
+// The name a user typed on the tab. Separate from `applySettings` because it is a
+// label, not a setting: nothing in the running turn reads it, so renaming mid-turn is
+// fine where changing the model is not. `''` clears the name and the tab falls back to
+// what it says by default. The cap is short because the thing being named is a tab.
+export function renameThread(thread, title, now = Date.now()) {
+  if (typeof title !== 'string') throw Object.assign(new Error('A thread name must be text.'), { status: 400 });
+  const next = title.trim().slice(0, 60);
+  if (next === thread.title) return thread;
+  return { ...thread, title: next, updatedAt: now };
+}
+
+// `title` is the user's own name for the thread and is empty until they give it one --
+// the strip needs to know that, because an unnamed tab says what it is about ("Canvas",
+// the artifact's title) rather than quoting the conversation. `preview` is the quote,
+// for a tooltip. They were one field, and a tab cannot use a field that is sometimes
+// the name and sometimes the first thing anyone said.
 export function threadSummary(thread) {
   return {
     id: thread.id,
@@ -118,7 +134,8 @@ export function threadSummary(thread) {
     model: thread.model,
     effort: thread.effort ?? '',
     status: thread.status,
-    title: thread.title || thread.messages.find((m) => m.role === 'user')?.text.slice(0, 80) || '',
+    title: thread.title,
+    preview: thread.messages.find((m) => m.role === 'user')?.text.slice(0, 80) || '',
     turns: thread.turns,
     createdAt: thread.createdAt,
     updatedAt: thread.updatedAt,

@@ -1470,6 +1470,51 @@ div:has(> .add-node-menu) {
 .astryx-tab-menu > span[aria-hidden='true']:first-child {
   border-radius: inherit;
 }
+/* Astryx measures a tab's label against a hidden bold copy of itself in an overlaid
+   grid, so a crowded strip clips a long name at BOTH ends rather than ending it. Let the
+   grid shrink and the visible copy trail off. Reached by structure, not by class: the
+   label is the tab's only child that is neither hidden from the accessibility tree nor
+   the indicator. Scoped to this strip, since a tab wide enough for its name wants none
+   of this. */
+/* No one tab may take the strip: a long name is capped and the rest keep their share.
+   The overflow trigger never shrinks -- it is the way back to everything not shown, and
+   an "M…" is not a way back. */
+.agent-tabs .astryx-tab {
+  max-width: 12ch;
+}
+.agent-tabs .astryx-tab-menu {
+  flex: none;
+}
+.agent-tabs .astryx-tab > span:not([aria-hidden]):not(.astryx-tab-indicator),
+.agent-tabs .astryx-tab-menu > span:not([aria-hidden]):not(.astryx-tab-indicator) {
+  min-width: 0;
+}
+.agent-tabs .astryx-tab > span:not([aria-hidden]):not(.astryx-tab-indicator) > span,
+.agent-tabs .astryx-tab-menu > span:not([aria-hidden]):not(.astryx-tab-indicator) > span {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+/* Double-clicking a tab renames its thread, in the tab's own box. It wears `astryx-tab
+   selected` so the folder shape comes from theme.js rather than a second copy of it
+   here; what is left for this rule is what Astryx's StyleX layer would have supplied --
+   the box's height and type -- plus stripping the input's own chrome. */
+.agent-tab-rename {
+  display: inline-flex;
+  align-items: center;
+  height: var(--size-element-sm);
+  font-size: var(--text-label-size);
+}
+.agent-tab-rename input {
+  max-width: 16ch;
+  padding: 0;
+  border: 0;
+  outline: none;
+  background: transparent;
+  color: var(--color-text-primary);
+  font: inherit;
+}
 /* The overflow trigger open, which theme.js cannot say: Astryx gives it no selected
    marker but the indicator, and the indicator is what the folder shape replaced. */
 .astryx-tab-menu:has(.astryx-tab-indicator) {

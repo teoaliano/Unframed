@@ -1,6 +1,6 @@
 // Assert-based self-check. Run with: node client/src/agent/tabs.test.js
 import assert from 'node:assert/strict';
-import { visibleThreads, nextActive, tabLabel } from './tabs.js';
+import { visibleThreads, nextActive, tabLabel, artifactLabel } from './tabs.js';
 
 const n = (id, type, data = {}) => ({ id, type, data, position: { x: 0, y: 0 } });
 const nodes = [n('i1', 'image'), n('g1', 'page', { file: 'a.html', title: 'Launch' }), n('g2', 'page', { file: 'b.html', fileName: 'deck.html' })];
@@ -36,5 +36,14 @@ assert.equal(tabLabel(t('t4', 'canvas'), nodes), 'Canvas');
 assert.equal(tabLabel(t('t3', 'artifact', 'g1'), nodes), 'Launch');
 assert.equal(tabLabel(t('t5', 'artifact', 'g2'), nodes), 'deck');
 assert.equal(tabLabel(t('t2', 'artifact', 'gone'), nodes), 'gone');
+// A name the user typed wins over both, for either kind, and a blank one does not.
+assert.equal(tabLabel({ ...t('t3', 'artifact', 'g1'), title: 'Hero copy' }, nodes), 'Hero copy');
+assert.equal(tabLabel({ ...t('t4', 'canvas'), title: 'Cleanup' }, nodes), 'Cleanup');
+assert.equal(tabLabel({ ...t('t4', 'canvas'), title: '   ' }, nodes), 'Canvas');
+assert.equal(tabLabel({ ...t('t3', 'artifact', 'g1'), title: '' }, nodes), 'Launch');
+// Renaming a thread does not rename the page it is about: the scope row and the focus
+// mark read this, and they are the answer to "which page am I talking to".
+assert.equal(artifactLabel({ ...t('t3', 'artifact', 'g1'), title: 'Hero copy' }, nodes), 'Launch');
+assert.equal(artifactLabel(t('t2', 'artifact', 'gone'), nodes), 'gone');
 
 console.log('tabs.test.js: all assertions passed');

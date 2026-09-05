@@ -182,7 +182,15 @@ a border that joins the open tab to the transcript under it) by the `tab` and `t
 overrides in `client/src/theme.js`, which is where that shape has to live: Astryx's own
 base styles come out of StyleX and only the theme's generated rules land in a layer above
 them. Past the third tab the rest go behind the strip's `TabMenu`, which names whichever
-one is active, so a narrow panel never scrolls its tabs out of reach.
+one is active, so a narrow panel never scrolls its tabs out of reach. **Double-clicking a
+tab renames its thread** in the tab's own box -- Enter or clicking away commits, Escape
+abandons, and an empty name clears it so the tab goes back to saying what it is about.
+The name is `title` on the thread record (`renameThread` in `server/threads.js`, sent on
+the same PATCH as model and effort but taken mid-turn, since it changes no session). It
+is deliberately the only thing that outranks the artifact's title on a tab: two threads
+about one page are the intended way to explore two directions, and two tabs reading the
+same page title cannot be told apart. What a thread is bound to is answered by the focus
+mark and the scope row, which read `artifactLabel` and are unmoved by a rename.
 **The selection filters the strip** (`agent/tabs.js`, tested): no artifact
 selected shows every thread; one selected shows only its threads; several show the
 union, and the canvas threads drop out. A thread whose node is not on the canvas is

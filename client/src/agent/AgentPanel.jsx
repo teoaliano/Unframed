@@ -21,7 +21,7 @@ import {
   subscribeThreadEvents,
 } from '../api.js';
 import { isArtifact } from '../graph/resolve.js';
-import { visibleThreads, nextActive, tabLabel } from './tabs.js';
+import { visibleThreads, nextActive, tabLabel, artifactLabel } from './tabs.js';
 
 // The agent panel: a right-hand panel over the project's threads, one tab each. The
 // design's states 1, 8 and 10 (docs/superpowers/specs/2026-09-04-agent-canvas-slice-1-design.md)
@@ -86,6 +86,9 @@ export default function AgentPanel({ project, nodes, providers, onCheckProviders
   const [text, setText] = useState('');
   const [sending, setSending] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  // The tab being renamed, and the draft in its box. Double-click starts it; there is no
+  // rename for a thread sitting in the overflow menu, which has nothing to double-click.
+  const [renaming, setRenaming] = useState(null); // { id, draft } | null
   // Model and effort for a thread that does not exist yet; a thread carries its own.
   const [pending, setPending] = useState({ model: '', effort: '' });
   const scroller = useRef(null);
@@ -107,6 +110,23 @@ export default function AgentPanel({ project, nodes, providers, onCheckProviders
     try {
       const t = await updateThread(project, thread.id, patch);
       setThreads((ts) => ts.map((x) => (x.id === t.id ? { ...x, model: t.model, effort: t.effort ?? '' } : x)));
+    } catch (err) {
+      setError(err.message);
+    }
+  }
+
+  // A name is a label, not a setting: the server takes it mid-turn and closes no session
+  // (server/index.js's PATCH), so this never has to ask whether a turn is running.
+  // Blank clears it and the tab goes back to saying what it is about.
+  async function commitRename() {
+    const { id, draft } = renaming;
+    setRenaming(null);
+    const title = draft.trim();
+    const before = threads.find((t) => t.id === id);
+    if (!before || before.title === title) return;
+    try {
+      const t = await updateThread(project, id, { title });
+      setThreads((ts) => ts.map((x) => (x.id === t.id ? { ...x, title: t.title } : x)));
     } catch (err) {
       setError(err.message);
     }
@@ -308,16 +328,44 @@ export default function AgentPanel({ project, nodes, providers, onCheckProviders
         <div className="agent-tabs">
           {visible.length > 0 && (
             <TabList size="sm" value={threadId ?? ''} onChange={setChosenId} aria-label="Threads">
-              {inlineTabs.map((t) => (
-                <Tab
-                  key={t.id}
-                  value={t.id}
-                  label={tabLabel(t, nodes)}
-                  className={t.kind === 'artifact' ? 'agent-tab--artifact' : undefined}
-                  title={t.title || undefined}
-                  endContent={t.status === 'running' ? <span className="agent-dot agent-dot--live" /> : undefined}
-                />
-              ))}
+              {inlineTabs.map((t) =>
+                renaming?.id === t.id ? (
+                  // Shaped as the tab it replaces -- by wearing Astryx's own theming
+                  // class, so the folder silhouette stays defined in exactly one place
+                  // (theme.js) and this box cannot drift from it.
+                  <span key={t.id} className="astryx-tab selected agent-tab-rename">
+                    <input
+                      value={renaming.draft}
+                      // The box grows with the name rather than scrolling it, capped in
+                      // CSS so a long one cannot push the rest of the strip out.
+                      size={Math.max(6, renaming.draft.length + 1)}
+                      placeholder={tabLabel({ ...t, title: '' }, nodes)}
+                      aria-label="Thread name"
+                      onChange={(e) => setRenaming({ id: t.id, draft: e.target.value })}
+                      onBlur={commitRename}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') commitRename();
+                        // Escape abandons the draft, the one thing that makes a rename
+                        // safe to start by accident.
+                        else if (e.key === 'Escape') setRenaming(null);
+                      }}
+                      autoFocus
+                    />
+                  </span>
+                ) : (
+                  <Tab
+                    key={t.id}
+                    value={t.id}
+                    label={tabLabel(t, nodes)}
+                    className={t.kind === 'artifact' ? 'agent-tab--artifact' : undefined}
+                    // A tab can be narrower than its name, so the tooltip carries the
+                    // name in full, and what the conversation opened with after it.
+                    title={[tabLabel(t, nodes), t.preview].filter(Boolean).join(' — ')}
+                    onDoubleClick={() => setRenaming({ id: t.id, draft: t.title ?? '' })}
+                    endContent={t.status === 'running' ? <span className="agent-dot agent-dot--live" /> : undefined}
+                  />
+                ),
+              )}
               {menuTabs.length > 0 && (
                 <TabMenu
                   label="More"
@@ -425,7 +473,7 @@ export default function AgentPanel({ project, nodes, providers, onCheckProviders
           {focusArtifact && (
             <span className="agent-chip agent-chip--focus">
               <span className="agent-dot agent-dot--focus" />
-              {tabLabel(thread, nodes)}
+              {artifactLabel(thread, nodes)}
               <button type="button" className="agent-locate" title="Locate on canvas" aria-label="Locate on canvas" onClick={() => onLocate?.(focusArtifact)}>
                 <Icon icon={Crosshair} size="sm" />
               </button>

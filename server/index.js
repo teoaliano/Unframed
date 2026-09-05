@@ -31,7 +31,7 @@ import {
 } from './document.js';
 import { saveMedia, copyMedia, inlineFileRefs } from './media.js';
 import { providerStatuses, forgetProviderStatus, PROVIDERS } from './providers.js';
-import { newThread, writeThread, readThread, listThreads, deleteThread, eventsSince, persistThread, applySettings, EFFORTS } from './threads.js';
+import { newThread, writeThread, readThread, listThreads, deleteThread, eventsSince, persistThread, applySettings, renameThread, EFFORTS } from './threads.js';
 import { sendToThread, interruptThread, subscribeThread, closeThreadSession, closeSessionsFor } from './agent.js';
 import crypto from 'node:crypto';
 import { startPreviewServer, LOOPBACK_HOST } from './preview.js';
@@ -1360,14 +1360,20 @@ app.post('/api/projects/:name/threads', async (req, res) => {
 // Model and effort for the thread's next turn (threads.js applySettings validates and
 // refuses mid-turn). The live session was built with the old values, so it is closed;
 // the next message resumes the SDK session with the new ones and keeps the context.
+// `title` rides the same route but is not a setting: it changes no session, so a rename
+// neither closes one nor goes near applySettings -- which refuses mid-turn whether or
+// not a model was actually asked for, and would fail a rename for standing too close.
 app.patch('/api/projects/:name/threads/:id', async (req, res) => {
-  const { model, effort } = req.body || {};
+  const { model, effort, title } = req.body || {};
+  const settings = model !== undefined || effort !== undefined;
   try {
     const thread = await persistThread(threadDir(req), req.params.id, (cur) => {
       if (!cur) throw Object.assign(new Error('Thread not found.'), { status: 404 });
-      return applySettings(cur, { model, effort });
+      let next = settings ? applySettings(cur, { model, effort }) : cur;
+      if (title !== undefined) next = renameThread(next, title);
+      return next;
     });
-    closeThreadSession(threadDir(req), req.params.id);
+    if (settings) closeThreadSession(threadDir(req), req.params.id);
     res.json({ thread });
   } catch (err) {
     res.status(err.status || (/not found/i.test(err.message) ? 404 : 500)).json({ error: err.message });
