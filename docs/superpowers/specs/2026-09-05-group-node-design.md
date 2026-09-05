@@ -1,7 +1,8 @@
 # Group nodes
 
-Designed 2026-09-05, in conversation. Status: approved; the engine half is this PR, the
-canvas half (the container node itself and its interactions) is the next one. Prompted by
+Designed 2026-09-05, in conversation. Status: approved and implemented the same day, in
+one PR — engine and canvas together, deliberately: a merged half would put a node type on
+`main` that nothing can create. Prompted by
 PR #52, an outside contribution that added a `character` node holding a description plus
 reference images. The idea was right and the shape was not; this is the shape.
 
@@ -56,6 +57,19 @@ library, not node types. A new kind costs a name, not a PR.
   is clever and invisible — the one thing on the canvas that would happen without being
   drawn. Removal is visible, and the wires stay truthful.
 - **No nesting.** A group refuses a `parentId`. One level to resolve, everywhere.
+- **⌘G collapses the members' wires onto the box; dragging one node into an existing
+  group drops its wire.** Decided 2026-09-05 after the rule below was written, because
+  wrapping is not the case the rule was written for. Wrapping moves nothing, so severing
+  the wires of three images that already feed an output would destroy work the user never
+  touched; the box takes one wire per target instead, drawn immediately. Dragging a
+  single node into a group that already exists is different: that group may be wired to
+  something else, and collapsing would widen what feeds that output from one node to the
+  whole box — a silent increase in what is sent and paid for. The asymmetry is the
+  principle, not an exception: **collapse when the group is being created from exactly
+  these nodes, drop when joining a group that already means something.** Grouping a
+  partially-wired selection does change what is sent, since a group sends all of it;
+  that is visible the instant it happens, because badges and the request both read
+  `bucketSources`.
 - **Video is in.** Members flatten into the same media list as any wired media, so a
   frame mode takes the first ones and badges the rest with an em dash — the same rule
   as wiring ten videos into first/last. Nothing new to decide.
@@ -113,15 +127,40 @@ round-trips through its inverse, each rejection), `client/src/graph/ops.test.js`
 `resolve.test.js` (contiguous expansion and badges, `@group` text and cycle, frame modes,
 library remap and detach, `withDrag`). Nothing here is visible in the browser yet.
 
-## The canvas (next PR)
+## The canvas
 
-A `GroupNode` container registered in `App.jsx` with the name row and one source handle;
-Inputs menu entry; drag a node in (reparent, drop edges, position becomes relative) and
-out (reparent to `null`, position becomes absolute); Ungroup; members render without
-handles; Delete cascades and one undo restores. A **Character** template in the library
-— an empty description prompt and image slots inside a named group — is how the turnkey
-feel of PR #52's node comes back without the node. Verified in the browser, per
-`CLAUDE.md`'s rule that node components have no tests.
+**`client/src/graph/grouping.js`** — the pure half, under the earns-its-own-tests rule,
+and it earns it twice: wrapping converts every member's ABSOLUTE position into one
+relative to the new box (backwards puts the contents off screen the first time anyone
+groups nodes away from the origin), and the edge rule above is a money rule.
+`groupSelection` returns the box, the re-homed members and the new edge set;
+`ungroup` is its inverse and restores absolute positions exactly, so group-then-ungroup
+leaves the canvas as it was. `absolutePosition` walks `parentId`, so a node already in a
+group is measured — and re-homed — by where it *looks*. Sizes fall back when absent,
+because media deliberately has no height of its own (`withDrag`).
+
+**`client/src/nodes/GroupNode.jsx`** — the box and nothing else: its members are separate
+nodes React Flow positions against it. Editable name, `nodrag` so a caret can be placed;
+deliberately NOT `nowheel`, which React Flow honours for the whole subtree and would kill
+scroll-to-pan over the box and everything in it.
+
+**`App.jsx`** — `nodeTypes` registration, an Inputs-menu entry for an empty box, ⌘G /
+⌘⇧G, and Group / Ungroup in the right-click menu's Edit section, each offered only when
+it would do something. `groupSelected` computes from the current arrays and writes with
+two plain setters rather than nesting `setEdges` inside a `setNodes` updater: React runs
+updaters twice under StrictMode, so a side effect in there fires twice — the same trap
+`addNode`'s minted id documents. Selection lands on the new box, not its contents, or the
+next drag pulls them straight back out.
+
+**The three input node components** render their handle only when `parentId` is absent.
+
+### Left for a follow-up
+
+Dragging a node into or out of an existing box by dragging it. ⌘G and Ungroup cover
+making and unmaking a group, which is the whole loop; `reparentNode` already supports the
+drag case, so it is UI work only. Also the **Character** template in the Library — an
+empty description prompt and image slots inside a named group — which is how the turnkey
+feel of PR #52's node comes back without the node.
 
 ## Left open, deliberately
 

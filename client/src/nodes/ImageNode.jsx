@@ -17,7 +17,7 @@ import { uploadFile, fileUrl } from '../api.js';
 // and is served by /api/file; the only non-file case is a hosted https link (video).
 export const mediaSrc = (data, project) => (data?.file ? fileUrl(project, data.file) : data?.dataUrl || '');
 
-export default function ImageNode({ id, data }) {
+export default function ImageNode({ id, data, parentId }) {
   const { updateNodeData } = useReactFlow();
   const { name: project } = useProject();
   const [error, setError] = useState('');
@@ -81,7 +81,11 @@ export default function ImageNode({ id, data }) {
           e.stopPropagation();
         }}
       >
-        <Handle type="source" position={Position.Right} />
+        {/* A node inside a group has no handle of its own: the group holds the one
+            handle and wires for everything in it (graph/bulkWire.js canSource). Two
+            handles for one image would be two ways to send it, and the wires would
+            stop saying what a generation carries. */}
+        {!parentId && <Handle type="source" position={Position.Right} />}
         <div className="xnode-body">
           {src ? (
             // Thumbnail's own onRemove is not used: its X is translucent, so how

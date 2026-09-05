@@ -1326,3 +1326,43 @@ div:has(> .add-node-menu) {
 .provider-dot-unknown {
   background: var(--color-border-emphasized);
 }
+
+/* The group box. Dashed and barely tinted on purpose: it is a container, not content,
+   and its members are real nodes drawn ON it — a solid filled surface would read as
+   another card and compete with the pictures sitting inside it. It takes no pointer
+   events at all, so clicking the gap between two members still lands on the canvas
+   (box-select, pan) rather than being swallowed by an invisible sheet; the name input
+   opts back in, being the one thing in here you interact with. */
+.xnode-group {
+  border: var(--border-width) dashed var(--color-border);
+  border-radius: var(--radius-container);
+  background: color-mix(in srgb, var(--color-border) 8%, transparent);
+  pointer-events: none;
+  box-sizing: border-box;
+}
+.react-flow__node.selected .xnode-group {
+  border-style: solid;
+}
+/* Sits in the box's top strip — the same margin `TOP` in graph/grouping.js reserves,
+   which is why members never start high enough to collide with it. Borderless until
+   hovered so an unnamed group is a box, not a form. */
+.xnode-group-name {
+  pointer-events: auto;
+  position: absolute;
+  inset-block-start: 8px;
+  inset-inline-start: 10px;
+  inline-size: calc(100% - 20px);
+  border: none;
+  background: transparent;
+  color: var(--color-text-secondary);
+  font: inherit;
+  font-size: 12px;
+  padding: 2px 4px;
+  border-radius: var(--radius-control, 4px);
+}
+.xnode-group-name:hover,
+.xnode-group-name:focus {
+  background: var(--color-surface);
+  color: var(--color-text);
+  outline: none;
+}

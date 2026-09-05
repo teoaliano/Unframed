@@ -11,7 +11,7 @@ import { isReferenceable } from '../graph/resolve.js';
 // while you're actively typing a reference.
 const TRIGGER_RE = /@([\w-]*)$/;
 
-export default function PromptNode({ id, data }) {
+export default function PromptNode({ id, data, parentId }) {
   const { updateNodeData, getNodes } = useReactFlow();
   const ref = useRef(null);
   const [query, setQuery] = useState(null); // null = menu closed; string = open
@@ -86,7 +86,11 @@ export default function PromptNode({ id, data }) {
       {/* width: 100%, not fit-content — the node wrapper now carries the size a border
           drag writes, and the card fills it. */}
       <Card width="100%" padding={0} elevation="low" className="xnode-prompt">
-        <Handle type="source" position={Position.Right} />
+        {/* A node inside a group has no handle of its own: the group holds the one
+            handle and wires for everything in it (graph/bulkWire.js canSource). Two
+            handles for one image would be two ways to send it, and the wires would
+            stop saying what a generation carries. */}
+        {!parentId && <Handle type="source" position={Position.Right} />}
         <div className="xnode-body" onKeyDown={onKeyDown} onClick={() => syncMenu(ref.current)}>
           <TextArea
             className="nodrag nowheel"

@@ -5,6 +5,12 @@ is no release artifact to number. Headings are `## YYYY-MM-DD`, groups are
 `### Added` / `### Changed` / `### Fixed`, one bullet per user-visible change.
 Keep that shape: the website's What's new page parses this file.
 
+## 2026-09-05
+
+### Added
+
+- **Group nodes.** Select any inputs and press ⌘G (or right-click → Group) to wrap them in a named box. The box wires as one source, so connecting it sends everything inside, and `@`-referencing it in a prompt pulls in the text it holds. Renaming the group never breaks a reference, because the tag shows the name while the reference stays tied to the id. ⌘⇧G ungroups, putting the contents back exactly where they look and leaving what you send unchanged. A saved group is how a reusable character, product or outfit lives in the Library.
+
 ## 2026-09-04
 
 ### Added

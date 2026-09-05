@@ -40,6 +40,7 @@ import {
 import Logo from './Logo.jsx';
 import CanvasBackground from './CanvasBackground.jsx';
 import PromptNode from './nodes/PromptNode.jsx';
+import GroupNode from './nodes/GroupNode.jsx';
 import ImageNode from './nodes/ImageNode.jsx';
 import VideoNode, { MAX_VIDEO_BYTES } from './nodes/VideoNode.jsx';
 import ImageOutputNode from './nodes/ImageOutputNode.jsx';
@@ -57,8 +58,9 @@ import {
 } from './graph/starter.js';
 import ProjectMenu from './ProjectMenu.jsx';
 import IgnoredEdge from './nodes/IgnoredEdge.jsx';
-import { PromptIcon, ImageIcon, VideoIcon, TextIcon } from './nodes/nodeIcons.jsx';
+import { PromptIcon, ImageIcon, VideoIcon, TextIcon, GroupIcon } from './nodes/nodeIcons.jsx';
 import { bucketSources, isOutput, isReferenceable, hasMedia } from './graph/resolve.js';
+import { groupSelection, ungroup, groupable } from './graph/grouping.js';
 import { mediaSrc } from './nodes/ImageNode.jsx';
 import { canSource, canTarget, selectedIds, connections, dropInternal } from './graph/bulkWire.js';
 import { keepLiveRunMarkers } from './graph/runMarkers.js';
@@ -91,6 +93,7 @@ import {
 
 const nodeTypes = {
   prompt: PromptNode,
+  group: GroupNode,
   image: ImageNode,
   video: VideoNode,
   imageOutput: ImageOutputNode,
@@ -959,6 +962,53 @@ function Canvas() {
     setEdges((eds) => dropInternal(eds, nodes.filter((n) => n.selected).map((n) => n.id)));
   }, [setEdges, nodes]);
 
+  // Wrap the selection in a box. The pure half is graph/grouping.js; this is the state
+  // write. Computed from the CURRENT arrays and written with two plain setters rather
+  // than a setEdges nested inside a setNodes updater: React runs updaters twice under
+  // StrictMode, so a side effect in there fires twice (the same trap addNode's minted id
+  // documents below).
+  //
+  // Nodes go back in with the group FIRST -- React Flow resolves a child against the
+  // parents it has already seen and renders an orphan at its relative position otherwise
+  // (@xyflow/system's updateChildNode warns and bails). The server's ops keep the same
+  // order, so the tab and the document never disagree about it.
+  const groupSelected = useCallback(() => {
+    const picked = nodes.filter((n) => n.selected);
+    const id = nextId();
+    const r = groupSelection(nodes, edges, picked.map((n) => n.id), id);
+    if (!r) return null;
+    const moved = new Map(r.members.map((m) => [m.id, m]));
+    setEdges(r.edges);
+    setNodes([
+      // Selection lands on the box, not on its contents: the thing you just made is the
+      // thing you are now holding, and leaving members selected means the next drag pulls
+      // them straight back out of the box you just put them in.
+      ...nodes.filter((n) => !moved.has(n.id)).map((n) => (n.selected ? { ...n, selected: false } : n)),
+      withDrag({ ...r.node, selected: true }),
+      ...r.members.map((m) => withDrag({ ...m, selected: false })),
+    ]);
+    return id;
+  }, [nodes, edges, setNodes, setEdges]);
+
+  // The inverse: contents come back where they look, and the box's wires are handed to
+  // each of them, so ungrouping never changes what a generation sends.
+  const ungroupSelected = useCallback(
+    (groupId) => {
+      const target = groupId ?? nodes.find((n) => n.selected && n.type === 'group')?.id;
+      if (!target) return;
+      const r = ungroup(nodes, edges, target);
+      if (!r) return;
+      const freed = new Map(r.members.map((m) => [m.id, m]));
+      setEdges(r.edges);
+      setNodes(
+        nodes
+          .filter((n) => n.id !== target)
+          .map((n) => (freed.has(n.id) ? withDrag({ ...freed.get(n.id), selected: true }) : n)),
+      );
+    },
+    [nodes, edges, setNodes, setEdges],
+  );
+
   const addNode = useCallback(
     (type, data, screenPos) => {
       // Minted out here, not inside the updater: React runs updaters twice under
@@ -1004,6 +1054,7 @@ function Canvas() {
         { label: 'Prompt', icon: PromptIcon, onClick: () => addNode('prompt', NEW_NODE.prompt, at?.()) },
         { label: 'Image', icon: ImageIcon, onClick: () => addNode('image', NEW_NODE.image, at?.()) },
         { label: 'Video', icon: VideoIcon, onClick: () => addNode('video', NEW_NODE.video, at?.()) },
+        { label: 'Group', icon: GroupIcon, onClick: () => addNode('group', NEW_NODE.group, at?.()) },
       ],
     },
     {
@@ -1202,13 +1253,22 @@ function Canvas() {
     function onKeyDown(e) {
       if (!(e.metaKey || e.ctrlKey)) return;
       const key = e.key.toLowerCase();
-      if (key !== 'c' && key !== 'x') return;
+      if (key !== 'c' && key !== 'x' && key !== 'g') return;
       const el = e.target;
       const typing =
         el instanceof HTMLElement &&
         (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable);
       if (typing) return;
       if (!nodes.some((n) => n.selected)) return;
+      // ⌘G / ⌘⇧G, the pair Figma uses. preventDefault matters here where it does not for
+      // copy: ⌘G is the browser's own find-next, so without it the page's find bar
+      // takes the keystroke and the canvas never sees it.
+      if (key === 'g') {
+        e.preventDefault();
+        if (e.shiftKey) ungroupSelected();
+        else groupSelected();
+        return;
+      }
       if (key === 'c') copySelection();
       else cutSelection();
     }
@@ -1298,6 +1358,12 @@ function Canvas() {
       targets: selectedIds(nodes, canTarget),
     }).length;
     const wouldDisconnect = edges.length - dropInternal(edges, selected.map((n) => n.id)).length;
+    // Same judgement as Connect all: offered only when it would do something. Outputs and
+    // groups are skipped rather than refused (graph/grouping.js `groupable`), so a box
+    // drawn round a whole flow groups its inputs instead of doing nothing -- but a
+    // selection of nothing BUT outputs has nothing to wrap and the item goes.
+    const wouldGroup = selected.some(groupable);
+    const ungroupTarget = menuCtx?.type === 'group' ? menuCtx.id : selected.find((n) => n.type === 'group')?.id;
 
     sections.push({
       title: 'Edit',
@@ -1305,6 +1371,8 @@ function Canvas() {
         { label: 'Cut', endContent: kbd('X'), isDisabled: !hasSelection, onClick: cutSelection },
         { label: 'Copy', endContent: kbd('C'), isDisabled: !hasSelection, onClick: copySelection },
         { label: 'Paste', endContent: kbd('V'), isDisabled: !nodeClipboard.current, onClick: () => pasteNodeClipboard() },
+        { label: 'Group', icon: GroupIcon, endContent: kbd('G'), isDisabled: !wouldGroup, onClick: groupSelected },
+        { label: 'Ungroup', endContent: kbd('⇧G'), isDisabled: !ungroupTarget, onClick: () => ungroupSelected(ungroupTarget) },
         { label: 'Connect all', isDisabled: !wouldConnect, onClick: connectSelection },
         { label: 'Disconnect all', isDisabled: !wouldDisconnect, onClick: disconnectSelection },
       ],
