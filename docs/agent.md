@@ -1,8 +1,11 @@
 # The agent, and the local providers it runs on
 
 Owns: how Claude and Codex on the user's machine are detected, how an agent thread runs
-and what it is allowed to touch, and the routes behind the Agent panel. Design and the
-decisions behind it: `docs/superpowers/specs/2026-09-04-agent-canvas-slice-1-design.md`.
+and what it is allowed to touch, the tools it has, the preview origin page assets are
+shown from, and the routes behind the Agent panel and the selection toolbar. Design and
+the decisions behind it: `docs/superpowers/specs/2026-09-04-agent-canvas-slice-1-design.md`
+(the document, providers, threads) and `2026-09-04-agent-canvas-slice-2-design.md` (the
+toolbar, the composer, the page asset, the write tools).
 Research on the vendors' contracts and stated positions:
 `docs/research/2026-08-21-local-agent-cli-providers.md`. What the canvas looks like when
 this is finished: the Claude Design canvas linked from the spec.
@@ -18,8 +21,8 @@ spawning the user's own CLI is a named, accounted-for category — and everythin
 stays on the right side of it.
 
 Neither CLI generates pixels. Images and video stay on OpenRouter; the agent's job is
-everything around them. In this slice it can only **read** the canvas (one tool,
-`canvas_read`). Writing — creating a page asset, editing nodes — is the next slice.
+everything around them: reading the board, arranging and wiring nodes, and writing
+**pages** — HTML files that show the project's images and clips.
 
 ## Providers (`server/providers.js`)
 
@@ -74,6 +77,78 @@ and `billing: "subscription"`. The SDK's dollar estimate is recorded as `estimat
 for information. There is never a `cost` field: a subscription turn has no metered price,
 and a `0` would silently corrupt the sums the generation sidecars exist for.
 
+A thread has a `kind`: `canvas` (the panel's, about the whole board) or `artifact` (the
+composer's, about one node — `artifactId`, bound at creation or by the agent's first
+`page_write` when the message asked for a new asset). A composer message also carries
+`target` (a node id, or `new`) and `with` (the rest of the selection); they are stored on
+the message, reported by `canvas_read`, and prefixed to the model's copy of the text as
+one `To: … With: …` line so the intent is in the transcript, not only in a tool result.
+
+## The tools (`server/agentTools.js`)
+
+Four, all on the in-process `unframed` MCP server, all listed in `allowedTools`, and the
+only things the agent can call:
+
+| Tool | Does |
+| --- | --- |
+| `canvas_read` | the graph as the agent should see it: every node (id, kind, position, text or file), the edges, the selection, the composer's `target`/`with`. Never bytes. |
+| `canvas_write` | one `batch` of the document's own ops (`addNode`, `updateNode`, `moveNode`, `resizeNode`, `removeNode`, `addEdge`, `removeEdge`), committed under the thread's origin — journaled, streamed to every tab, **one undo step**. |
+| `page_write` | a new version of a page: writes `<timestamp>-<slug>.html` plus a sidecar, then one batch (`addNode` beside the selection for a new page, `updateNode { file }` for an existing one). |
+| `page_read` | the current HTML of a page node, so an edit starts from what is there. |
+
+**What `canvas_write` refuses before the document sees it** (`prepareBatch`, tested):
+an unknown node type; any `data:` URL in node data or a patch — bytes never travel
+through the agent; a `file` that is not in the project folder; more than 200 ops; a
+nested `batch`. Run markers (`job`, `running`) are stripped, not refused: they point at
+live paid runs and are the browser's alone. An `addNode` id starting with `new:` is
+replaced by a fresh server id (`a-<time>-<random>`) everywhere the batch names it — the
+browser's counter hands out plain integers, and an agent choosing `105` would silently
+capture an existing `@105`.
+
+**A page is never overwritten.** Every `page_write` is a new file (opened with `wx`, so
+it cannot land on an existing one) and an `updateNode { file }` pointing the node at it.
+That is what makes Cmd-Z honest for page edits: the inverse points back at the previous
+file, which still exists. Cleaning up superseded versions is not built.
+
+The safety block in `agent.js` is unchanged by all of this except `allowedTools` growing
+by three names: still no built-in tools, no shell, no file system, no network. Bytes
+reach disk through `page_write` alone, one extension into one folder; the preview origin
+below is what stops a page the agent wrote from reaching the API even by URL.
+
+## The preview origin (`server/preview.js`)
+
+Pages are HTML and HTML runs code, so a page is never served from the API's origin —
+there it would *be* Unframed to the browser and could read the folder, spend the key or
+install one through the OAuth nonce. A second http server, bound to `127.0.0.1` on an
+OS-assigned port reported as `previewPort` in `/api/health` and in the `ready` message,
+serves `GET/HEAD /p/<project>/<file>` and nothing else. The rules, each pinned in
+`preview.test.js`:
+
+- one path shape; the file name must match the alphabet this server writes
+  (`[A-Za-z0-9._-]`), which disposes of `..`, separators and anything odd;
+- an **extension allow-list** (`html`, images, video, audio, fonts): `.json` sidecars,
+  `graph.json`, `graph.log` and the thread records are never served;
+- the same loopback `Host` check as the API (`LOOPBACK_HOST` is defined here and imported
+  by `index.js`, so the two cannot drift);
+- every response carries `Content-Security-Policy` with `connect-src 'none'` (no fetch,
+  no sockets, no beacons — the API is unreachable even by URL), `frame-ancestors`
+  limited to loopback origins (only the canvas may frame a page),
+  `Cross-Origin-Resource-Policy: same-origin` (no other loopback page can embed the
+  project's pictures), `nosniff`, `no-referrer`, and `Cache-Control: no-cache` with an
+  ETag so a page node re-reads a new version cheaply.
+
+On the canvas side `PageNode` frames the page with `sandbox="allow-scripts
+allow-same-origin"`, `referrerpolicy="no-referrer"` and an empty `allow`. The
+`allow-same-origin` is required: without it the document is opaque-origin and CORP
+blocks its own pictures; with it the document is on the preview origin, which is still
+not the API's, and cannot lift its own sandbox. Verified with a headless probe: fetch to
+the API, an `<img>` at the API's file route, `top.location`, `window.open`,
+`parent.document`, a fetch of a sidecar and an external image all fail; the sibling
+picture loads.
+
+The desktop shell has to let its window frame the preview origin — a follow-up in the
+private repo, named in `status.md`.
+
 ### Routes
 
 Nested under the project, because the record lives in its folder and follows it through
@@ -81,10 +156,10 @@ a rename:
 
 | Route | Does |
 | --- | --- |
-| `POST /api/projects/:name/threads` | create (`{ provider, model }`) |
-| `GET /api/projects/:name/threads` | list, newest first |
+| `POST /api/projects/:name/threads` | create (`{ provider, model, kind?, artifactId? }`) |
+| `GET /api/projects/:name/threads?artifact=` | list, newest first; `artifact` narrows to one node's threads |
 | `GET /api/projects/:name/threads/:id` | the record |
-| `POST …/:id/messages` | one turn: `{ text, selection }`; 409 while the previous one runs |
+| `POST …/:id/messages` | one turn: `{ text, selection, target?, with? }`; 409 while the previous one runs |
 | `GET …/:id/events?since=` | SSE: `state`, stored events past `since`, `live`, then everything as it happens |
 | `POST …/:id/interrupt` | stop the running turn |
 | `DELETE …/:id` | remove the record |
@@ -98,7 +173,28 @@ The Agent button in the chrome opens a right-hand panel with the project's Canva
 thread. Everything durable is the server's; the panel mirrors the record and applies the
 stream. With no provider ready it shows what was checked, how to install, and Check
 again, with Send disabled — that is the design's state 10. Settings has a Local agents
-section with the same statuses and the path overrides.
+section with the same statuses and the path overrides. The anchored reply's "Open thread"
+opens the panel on that thread (`initialThreadId`); tabs per thread are slice 3.
+
+## The selection toolbar and the composer (`client/src/toolbar/`)
+
+A floating toolbar over any selection (design canvas "E · States", boards 2–4): the
+selection's own action first — Generate with its size hint on one output, Open on one
+page, the count on several, nothing on a lone input — then the filled **Agent** button.
+Agent morphs the toolbar into a composer on the same centre and bottom edge
+(`placement.js`: centred above, clamped to the sides, flipped below when there is no
+room). The composer's target comes from the selection (`target.js`): exactly one
+artifact → it is "To" and the rest come "with"; none → "To" is a new asset the agent
+creates beside the selection; several → the agent must ask, and the composer says so.
+Two rules while it is open: clicking another node adds it to "with" (and keeps it
+selected), clicking empty canvas collapses it; Esc and Back do the same. The message goes
+to the target artifact's newest idle thread (or a new `artifact` thread), and the reply
+lands anchored below the node the agent worked on with **Undo** — offered only while the
+agent's batch is what Cmd-Z would revert next (`GET /api/projects/:name/undo`), because
+undo is one server-side ladder — and **Open thread**. The toolbar's Generate drives the
+output node's own action through one window event (`nodes/nodeCommands.js`), so no run
+logic is duplicated. Pure parts are tested (`placement`, `actions`, `target`); the
+components are verified in the browser.
 
 ## Codex
 

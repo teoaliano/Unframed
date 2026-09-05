@@ -24,6 +24,7 @@ import {
   closeDocument,
   openDocuments,
   commit as commitOp,
+  nextUndo,
   undo as undoOp,
   redo as redoOp,
   subscribe as subscribeDocument,
@@ -33,6 +34,7 @@ import { providerStatuses, forgetProviderStatus, PROVIDERS } from './providers.j
 import { newThread, writeThread, readThread, listThreads, deleteThread, eventsSince } from './threads.js';
 import { sendToThread, interruptThread, subscribeThread, closeThreadSession, closeSessionsFor } from './agent.js';
 import crypto from 'node:crypto';
+import { startPreviewServer, LOOPBACK_HOST } from './preview.js';
 import {
   start as oauthStart,
   cancel as oauthCancel,
@@ -68,6 +70,8 @@ let TEXT_MODEL = process.env.OPENROUTER_TEXT_MODEL || 'google/gemini-3.5-flash-l
 let VIDEO_MODEL = process.env.OPENROUTER_VIDEO_MODEL || 'bytedance/seedance-2.0';
 let API_KEY = process.env.OPENROUTER_API_KEY;
 let OUTPUT_DIR = outputPath(ROOT, process.env.OUTPUT_DIR);
+// Assigned by the OS when the preview server starts, below, before the API listens.
+let PREVIEW_PORT = 0;
 // Where the local agent CLIs are (empty: found on PATH) and, for Claude, a separate
 // config dir. All three are optional and editable in settings (server/providers.js).
 let CLAUDE_PATH = process.env.CLAUDE_PATH || '';
@@ -130,7 +134,8 @@ app.use(cors({ origin: false }));
 // ever refuses a name DNS already resolves to 127.0.0.1. What does the refusing
 // is the anchors plus the digits-only port group, and those are untouched, so
 // LOCALHOST.evil.example is still no match.
-const LOOPBACK_HOST = /^(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$/i;
+// LOOPBACK_HOST itself is defined once, in preview.js, because the preview origin runs
+// the same check and the two must never drift.
 app.use((req, res, next) => {
   const { origin, host } = req.headers;
   if (origin && !LOOPBACK_ORIGIN.test(origin)) {
@@ -180,6 +185,8 @@ function settings() {
     claudePath: CLAUDE_PATH,
     codexPath: CODEX_PATH,
     claudeConfigDir: CLAUDE_CONFIG_DIR,
+    // The preview origin's port (server/preview.js): where page assets are shown from.
+    previewPort: PREVIEW_PORT,
   };
 }
 
@@ -1259,6 +1266,18 @@ app.post('/api/projects/:name/ops', async (req, res) => {
 // tab missed (the journal is never truncated, so any version can be caught up from),
 // then a `version` marker says the stream is live. Same origin and loopback, so the
 // request guards above apply unchanged and it goes through the Vite proxy untouched.
+// The entry the next undo would revert: its version and origin, or null. The anchored
+// reply offers Undo only while the agent's batch is that entry (server/document.js).
+app.get('/api/projects/:name/undo', async (req, res) => {
+  try {
+    const doc = await openDocument(projectDir(req.params.name));
+    const next = nextUndo(doc);
+    res.json({ next: next ? { version: next.version, origin: next.origin, at: next.at } : null });
+  } catch (err) {
+    res.status(500).json({ error: `Could not read the journal: ${err.message}` });
+  }
+});
+
 app.get('/api/projects/:name/events', async (req, res) => {
   const dir = projectDir(req.params.name);
   let doc;
@@ -1319,13 +1338,17 @@ for (const [route, fn] of [
 // record lives in its folder and follows it through a rename.
 const threadDir = (req) => projectDir(req.params.name);
 
+// `kind` is 'canvas' (the panel's thread about the board) or 'artifact' (the composer's,
+// about one node -- `artifactId`, or null when the agent is about to create it).
 app.post('/api/projects/:name/threads', async (req, res) => {
-  const { provider = 'claude', model = '', kind = 'canvas' } = req.body || {};
+  const { provider = 'claude', model = '', kind = 'canvas', artifactId = null } = req.body || {};
   if (!PROVIDERS[provider]) return res.status(400).json({ error: `Unknown provider "${provider}".` });
   if (typeof model !== 'string' || model.length > 200) return res.status(400).json({ error: 'That does not look like a model id.' });
+  if (kind !== 'canvas' && kind !== 'artifact') return res.status(400).json({ error: `Unknown thread kind "${kind}".` });
+  if (artifactId !== null && (typeof artifactId !== 'string' || !/^[\w-]{1,80}$/.test(artifactId))) return res.status(400).json({ error: 'artifactId must be a node id.' });
   try {
     const id = `t-${Date.now().toString(36)}-${crypto.randomBytes(4).toString('hex')}`;
-    const thread = newThread({ id, project: slugify(req.params.name), provider, model, kind: kind === 'canvas' ? 'canvas' : 'canvas' });
+    const thread = newThread({ id, project: slugify(req.params.name), provider, model, kind, artifactId });
     await writeThread(threadDir(req), thread);
     res.json({ thread });
   } catch (err) {
@@ -1335,7 +1358,9 @@ app.post('/api/projects/:name/threads', async (req, res) => {
 
 app.get('/api/projects/:name/threads', async (req, res) => {
   try {
-    res.json({ threads: await listThreads(threadDir(req)) });
+    const all = await listThreads(threadDir(req));
+    const artifact = typeof req.query.artifact === 'string' ? req.query.artifact : null;
+    res.json({ threads: artifact ? all.filter((t) => t.artifactId === artifact) : all });
   } catch (err) {
     res.status(500).json({ error: `Could not list the threads: ${err.message}` });
   }
@@ -1356,8 +1381,12 @@ app.post('/api/projects/:name/threads/:id/messages', async (req, res) => {
   if (!text) return res.status(400).json({ error: 'Say something first.' });
   if (text.length > 20000) return res.status(400).json({ error: 'That message is too long.' });
   const selection = Array.isArray(req.body?.selection) ? req.body.selection.slice(0, 500).map(String) : [];
+  // The composer's intent: which node this is about ("new" for one the agent should
+  // create) and what it came with. Node ids, so the same shape as the selection.
+  const target = typeof req.body?.target === 'string' && /^(new|[\w-]{1,80})$/.test(req.body.target) ? req.body.target : undefined;
+  const withIds = Array.isArray(req.body?.with) ? req.body.with.slice(0, 500).map(String) : [];
   try {
-    await sendToThread(threadDir(req), req.params.id, { text, selection }, { settings: providerSettings });
+    await sendToThread(threadDir(req), req.params.id, { text, selection, target, with: withIds }, { settings: providerSettings, previewPort: PREVIEW_PORT });
     res.json({ ok: true });
   } catch (err) {
     res.status(err.status || (/not found/i.test(err.message) ? 404 : 500)).json({ error: err.message });
@@ -2443,6 +2472,9 @@ setInterval(() => {
 // already binds this way; this is the same reasoning, for the API the app itself
 // uses. There is deliberately no opt-in to widen it: nothing in Unframed is
 // meant to be reached from another device.
+// The preview origin comes up first so the API never answers a health check without a
+// previewPort to report. Same bind, its own port: docs/superpowers/specs/2026-09-04-agent-canvas-slice-2-design.md.
+PREVIEW_PORT = await startPreviewServer({ outputDir: () => OUTPUT_DIR });
 const server = app.listen(PORT, '127.0.0.1', () => {
   const { port } = server.address();
   console.log(`\n  Unframed server  →  http://localhost:${port}`);
@@ -2452,6 +2484,7 @@ const server = app.listen(PORT, '127.0.0.1', () => {
   console.log(
     `  api key:  ${API_KEY ? 'loaded' : 'MISSING — add one in the app (settings icon, top right)'}`,
   );
+  console.log(`  preview:  http://127.0.0.1:${PREVIEW_PORT}`);
   console.log(`  output:   ${OUTPUT_DIR}\n`);
-  process.send?.({ type: 'ready', port });
+  process.send?.({ type: 'ready', port, previewPort: PREVIEW_PORT });
 });

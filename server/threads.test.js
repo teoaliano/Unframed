@@ -21,6 +21,8 @@ import {
   deleteThread,
   threadPath,
   agentSidecar,
+  bindArtifact,
+  findArtifactThread,
 } from './threads.js';
 
 const root = await fs.mkdtemp(path.join(os.tmpdir(), 'unframed-threads-test-'));
@@ -38,6 +40,32 @@ assert.equal(t0.seq, 0, 'event sequence starts empty');
 assert.equal(t0.turns, 0);
 assert.throws(() => newThread({ id: 'x', project: 'p', provider: 'grok', model: 'm' }), /provider/);
 assert.throws(() => newThread({ id: '../evil', project: 'p', provider: 'claude', model: 'm' }), /id/);
+assert.equal(t0.artifactId, null, 'a canvas thread is about the board, not a node');
+
+// ---- an artifact thread: about one node, bound now or when the agent creates it ----
+{
+  const bound = newThread({ id: 'ta', project: 'coast', provider: 'claude', model: '', kind: 'artifact', artifactId: '107', now: 1 });
+  assert.equal(bound.kind, 'artifact');
+  assert.equal(bound.artifactId, '107');
+  const pending = newThread({ id: 'tb', project: 'coast', provider: 'claude', model: '', kind: 'artifact', now: 1 });
+  assert.equal(pending.artifactId, null);
+  const later = bindArtifact(pending, 'a-1', 5);
+  assert.equal(later.artifactId, 'a-1');
+  assert.equal(later.updatedAt, 5);
+  assert.equal(bindArtifact(later, 'a-2', 6).artifactId, 'a-1', 'bound once');
+  assert.equal(bindArtifact(t0, 'a-1', 6).artifactId, null, 'a canvas thread never binds');
+  assert.equal(newThread({ id: 'tc', project: 'p', provider: 'claude', model: '', artifactId: '107', now: 1 }).artifactId, null, 'a canvas thread ignores an artifactId');
+  assert.throws(() => newThread({ id: 'td', project: 'p', provider: 'claude', model: '', kind: 'sticky' }), /kind/);
+  assert.throws(() => newThread({ id: 'te', project: 'p', provider: 'claude', model: '', kind: 'artifact', artifactId: '../x' }), /artifactId/);
+  assert.equal(threadSummary(bound).artifactId, '107');
+  // The composer's context is kept on the message.
+  const m = appendMessage(bound, { role: 'user', text: 'swap the hero', selection: ['107', '103'], target: '107', with: ['103'] }, 2).messages[0];
+  assert.equal(m.target, '107');
+  assert.deepEqual(m.with, ['103']);
+  const plain = appendMessage(bound, { role: 'user', text: 'hi', selection: [] }, 2).messages[0];
+  assert.equal('target' in plain, false);
+  assert.equal('with' in plain, false);
+}
 
 // ---- messages and events are appended immutably, with a sequence and a timestamp ----
 const t1 = appendMessage(t0, { role: 'user', text: 'What is on the canvas?', selection: ['1', '2'] }, 2000);
@@ -78,7 +106,7 @@ assert.deepEqual(eventsSince(t3, 2), []);
 
 // ---- the list shows a summary, not the transcript ----
 const s = threadSummary(t5);
-assert.deepEqual(Object.keys(s).sort(), ['createdAt', 'id', 'kind', 'model', 'provider', 'status', 'title', 'turns', 'updatedAt']);
+assert.deepEqual(Object.keys(s).sort(), ['artifactId', 'createdAt', 'id', 'kind', 'model', 'provider', 'status', 'title', 'turns', 'updatedAt']);
 assert.equal(s.title, 'What is on the canvas?', 'the first user message titles the thread until it is renamed');
 assert.equal(threadSummary(t0).title, '');
 

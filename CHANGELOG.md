@@ -5,6 +5,22 @@ is no release artifact to number. Headings are `## YYYY-MM-DD`, groups are
 `### Added` / `### Changed` / `### Fixed`, one bullet per user-visible change.
 Keep that shape: the website's What's new page parses this file.
 
+## 2026-09-05
+
+### Added
+
+- **The agent can now change the canvas and write pages.** Select anything and a small
+  toolbar appears over it: the selection's own action (Generate on an output, Open on a
+  page) and an **Agent** button. Agent turns the toolbar into a composer right there: say
+  what to make from the selected assets, or what to change about the selected page, and
+  the reply lands on the node with Undo and Open thread. Clicking another asset while the
+  composer is open adds it; clicking empty canvas closes it. Every change the agent makes
+  is one undo step.
+- **Page assets.** A new node type: an HTML page that shows your project's images and
+  clips. Drop an `.html` file onto the canvas, or ask the agent to make one. Pages are
+  shown live from their own sandboxed origin, so a page can never reach your key or your
+  files; every edit is a new version, and Cmd-Z steps back through them.
+
 ## 2026-09-04
 
 ### Added

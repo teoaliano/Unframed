@@ -5,9 +5,13 @@
 // that fills a thread is server/agent.js; the routes are in index.js.
 //
 // A thread is
-// { id, project, kind, provider, model, status, error?, title, messages, events, seq,
-//   turns, createdAt, updatedAt }.
-// messages: [{ role, text, at, turn, selection? }] -- the transcript.
+// { id, project, kind, artifactId, provider, model, status, error?, title, messages,
+//   events, seq, turns, createdAt, updatedAt }.
+// kind: 'canvas' (about the whole board) or 'artifact' (about one page or motion, the
+//       node in `artifactId`; null until the agent creates that node).
+// messages: [{ role, text, at, turn, selection?, target?, with? }] -- the transcript.
+//           target/with are what the composer sent: the node the message is about (or
+//           "new") and the rest of the selection.
 // events:   [{ seq, at, turn, type, ... }]         -- what happened during turns (tool
 //           calls, ops applied, results, errors), replayable from ?since=seq. Text
 //           deltas are streamed live and never stored; the assistant message holds the
@@ -18,14 +22,18 @@ import { PROVIDERS } from './providers.js';
 
 const ID_RE = /^[\w-]{1,80}$/;
 const STATUSES = new Set(['idle', 'running', 'failed']);
+const KINDS = new Set(['canvas', 'artifact']);
 
-export function newThread({ id, project, kind = 'canvas', provider, model, now = Date.now() }) {
+export function newThread({ id, project, kind = 'canvas', artifactId = null, provider, model, now = Date.now() }) {
   if (!ID_RE.test(String(id))) throw new Error('thread id must be a short token');
   if (!PROVIDERS[provider]) throw new Error(`unknown provider ${provider}`);
+  if (!KINDS.has(kind)) throw new Error(`unknown thread kind ${kind}`);
+  if (artifactId !== null && (typeof artifactId !== 'string' || !ID_RE.test(artifactId))) throw new Error('artifactId must be a node id');
   return {
     id,
     project,
     kind,
+    artifactId: kind === 'artifact' ? artifactId : null,
     provider,
     model: model || '',
     status: 'idle',
@@ -40,10 +48,12 @@ export function newThread({ id, project, kind = 'canvas', provider, model, now =
 }
 
 // A user message opens a turn; an assistant message closes the current one.
-export function appendMessage(thread, { role, text, selection }, now = Date.now()) {
+export function appendMessage(thread, { role, text, selection, target, with: withIds }, now = Date.now()) {
   const turns = role === 'user' ? thread.turns + 1 : thread.turns;
   const message = { role, text: String(text ?? ''), at: now, turn: turns };
   if (selection) message.selection = selection;
+  if (target) message.target = target;
+  if (Array.isArray(withIds) && withIds.length) message.with = withIds;
   return { ...thread, messages: [...thread.messages, message], turns, updatedAt: now };
 }
 
@@ -69,10 +79,17 @@ export function setStatus(thread, status, { error } = {}, now = Date.now()) {
 
 export const eventsSince = (thread, seq) => thread.events.filter((e) => e.seq > seq);
 
+// An artifact thread that has no node yet takes the one the agent just created.
+export function bindArtifact(thread, artifactId, now = Date.now()) {
+  if (thread.kind !== 'artifact' || thread.artifactId) return thread;
+  return { ...thread, artifactId, updatedAt: now };
+}
+
 export function threadSummary(thread) {
   return {
     id: thread.id,
     kind: thread.kind,
+    artifactId: thread.artifactId ?? null,
     provider: thread.provider,
     model: thread.model,
     status: thread.status,
@@ -150,6 +167,13 @@ export async function listThreads(dir) {
     }
   }
   return out.sort((a, b) => b.updatedAt - a.updatedAt);
+}
+
+// The thread a composer message about `artifactId` goes to: the newest one about that
+// node that is not mid-turn, or null when there is none and one should be created.
+export async function findArtifactThread(dir, artifactId) {
+  const all = await listThreads(dir);
+  return all.find((t) => t.kind === 'artifact' && t.artifactId === artifactId && t.status !== 'running') ?? null;
 }
 
 export async function deleteThread(dir, id) {

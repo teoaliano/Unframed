@@ -223,6 +223,13 @@ export const undoProject = (name) =>
     body: JSON.stringify({ origin: { id: SESSION_ID } }),
   }).then((r) => (r.ok ? null : Promise.reject(new Error(`Could not undo (${r.status})`))));
 
+// What Cmd-Z would revert next: { version, origin } or null.
+export const nextUndo = (name) =>
+  fetch(`/api/projects/${enc(name)}/undo`)
+    .then((r) => (r.ok ? r.json() : { next: null }))
+    .then((d) => d.next ?? null)
+    .catch(() => null);
+
 export const redoProject = (name) =>
   fetch(`/api/projects/${enc(name)}/redo`, {
     method: 'POST',
@@ -246,6 +253,11 @@ export const uploadFile = (name, file) =>
 // Where a project's files are served from, for <img>/<video> src and for references
 // the server inlines at the OpenRouter boundary.
 export const fileUrl = (project, file) => `/api/file/${enc(project)}/${enc(file)}`;
+
+// Where a page asset is shown from: the preview origin (server/preview.js), a different
+// port and therefore a different origin from the API. The IP literal rather than
+// `localhost`, so the origin is the same string in every browser.
+export const previewUrl = (previewPort, project, file) => `http://127.0.0.1:${previewPort}/p/${enc(project)}/${enc(file)}`;
 
 // The event stream: every accepted entry from version `since` onward, then live.
 // EventSource reconnects on its own but cannot change its URL, so a drop is handled
@@ -322,11 +334,12 @@ export const listProviders = (refresh = false) =>
     .then((d) => d?.providers ?? null)
     .catch(() => null);
 
-export const createThread = (project, { provider = 'claude', model = '' } = {}) =>
-  postJson(`/api/projects/${enc(project)}/threads`, { provider, model }).then((d) => d.thread);
+export const createThread = (project, { provider = 'claude', model = '', kind = 'canvas', artifactId = null } = {}) =>
+  postJson(`/api/projects/${enc(project)}/threads`, { provider, model, kind, artifactId }).then((d) => d.thread);
 
-export const listThreads = (project) =>
-  fetch(`/api/projects/${enc(project)}/threads`)
+// `artifactId` narrows the list to the threads about one node (the composer's lookup).
+export const listThreads = (project, { artifactId } = {}) =>
+  fetch(`/api/projects/${enc(project)}/threads${artifactId ? `?artifact=${enc(artifactId)}` : ''}`)
     .then((r) => (r.ok ? r.json() : { threads: [] }))
     .then((d) => d.threads ?? [])
     .catch(() => []);
@@ -340,8 +353,15 @@ export const getThread = (project, id) =>
 
 // One turn. Resolves when the server has accepted the message; the answer arrives on
 // the thread's event stream. A 409 means the previous turn is still running.
-export const sendThreadMessage = (project, id, { text, selection = [] }) =>
-  postJson(`/api/projects/${enc(project)}/threads/${enc(id)}/messages`, { text, selection });
+// `target` and `with` are the composer's: the node the message is about (or "new") and
+// the rest of the selection. The panel sends neither.
+export const sendThreadMessage = (project, id, { text, selection = [], target, with: withIds }) =>
+  postJson(`/api/projects/${enc(project)}/threads/${enc(id)}/messages`, {
+    text,
+    selection,
+    ...(target ? { target } : {}),
+    ...(withIds?.length ? { with: withIds } : {}),
+  });
 
 export const interruptThread = (project, id) =>
   postJson(`/api/projects/${enc(project)}/threads/${enc(id)}/interrupt`, {}).catch(() => ({ interrupted: false }));

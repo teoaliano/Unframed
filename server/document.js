@@ -295,6 +295,10 @@ function redoTarget(entries) {
   return null;
 }
 
+// What the next undo would revert, for a client that wants to offer Undo only while a
+// particular entry is still the newest (the anchored reply's rule).
+export const nextUndo = (doc) => undoTarget(doc.entries);
+
 export function undo(doc, by = {}) {
   return commitWith(
     doc,

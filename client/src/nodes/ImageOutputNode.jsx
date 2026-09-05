@@ -9,6 +9,7 @@ import { VStack } from '@astryxdesign/core/Stack';
 import { useToast } from '@astryxdesign/core/Toast';
 import { CheckboxInput } from '@astryxdesign/core/CheckboxInput';
 import NodeHeader from './NodeHeader.jsx';
+import { useNodeCommand } from './nodeCommands.js';
 import RunsControl, { clampRuns } from './RunsControl.jsx';
 import StatusLine from './StatusLine.jsx';
 import FreePreviewDialog, { droppedImagesNote } from './FreePreviewDialog.jsx';
@@ -356,6 +357,9 @@ export default function ImageOutputNode({ id, data }) {
       updateNodeData(id, { running: undefined });
     }
   }
+
+  // The selection toolbar's button runs the same thing this node's own does (nodes/nodeCommands.js).
+  useNodeCommand(id, 'run', onGenerate);
 
   async function onGenerate() {
     setStatus('running');

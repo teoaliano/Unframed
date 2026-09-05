@@ -9,6 +9,8 @@
 // and this context derived from it, and nothing else.
 import { createContext, useContext } from 'react';
 
-export const ProjectContext = createContext({ name: 'default', ref: { current: 'default' } });
+// `previewPort` is where page assets are shown from (server/preview.js), read off
+// /api/health; 0 until the first health answer, and PageNode shows nothing until then.
+export const ProjectContext = createContext({ name: 'default', ref: { current: 'default' }, previewPort: 0 });
 
 export const useProject = () => useContext(ProjectContext);

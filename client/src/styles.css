@@ -352,6 +352,18 @@ div:has(> .add-node-menu) {
 .xnode-tab--input svg {
   color: var(--color-text-secondary);
 }
+/* The third family, artifacts (a page; the motion in slice 4): a filled tab like an
+   output's, so it reads as a made thing rather than a supplied one, in the success hue
+   so it is not mistaken for an output either. */
+.xnode-tab--artifact {
+  background: var(--color-success);
+  border-color: var(--color-success);
+  color: var(--color-on-success);
+}
+.xnode-tab--artifact .astryx-text,
+.xnode-tab--artifact svg {
+  color: var(--color-on-success);
+}
 .react-flow__node:hover .xnode-tab--input .astryx-text,
 .react-flow__node:hover .xnode-tab--input svg,
 .react-flow__node.selected .xnode-tab--input .astryx-text,
@@ -1163,7 +1175,8 @@ div:has(> .add-node-menu) {
    what. */
 .react-flow__node-image > .astryx-card,
 .react-flow__node-video > .astryx-card,
-.react-flow__node-prompt > .astryx-card {
+.react-flow__node-prompt > .astryx-card,
+.react-flow__node-page > .astryx-card {
   width: 100%;
   /* Both filled, and flex column, so a height-resize has a chain of "leftover
      space goes here" all the way down to the picture: the header stays its own
@@ -1325,4 +1338,113 @@ div:has(> .add-node-menu) {
 }
 .provider-dot-unknown {
   background: var(--color-border-emphasized);
+}
+
+/* The page asset (nodes/PageNode.jsx). The frame fills the card; it is inert until the
+   node is selected so a click selects the node and a drag moves it, and it comes alive
+   once selected so the page can be scrolled and used. The card clips its corners. */
+.xnode-page .xnode-body {
+  padding: 0;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+.xnode-frame {
+  display: block;
+  width: 100%;
+  height: 100%;
+  flex: 1 1 auto;
+  min-height: 0;
+  border: 0;
+  background: #fff;
+  pointer-events: none;
+}
+.xnode-frame--live {
+  pointer-events: auto;
+}
+.react-flow__node-page.dragging .xnode-frame {
+  pointer-events: none;
+}
+
+/* ---- the selection toolbar, its composer, and the anchored reply (toolbar/) ----
+   Floating chrome over the canvas, the same material as the tools rail and the agent
+   panel. Positioned by toolbar/placement.js in the canvas element's pixels; the
+   composer is the same box grown upward on the same centre and bottom edge, which
+   the transition below is what makes read as one element changing shape. */
+.sel-toolbar {
+  position: absolute;
+  z-index: 7;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px;
+  background: color-mix(in srgb, var(--color-background-surface) 92%, transparent);
+  backdrop-filter: blur(var(--unframed-chrome-blur));
+  border: var(--border-width) solid var(--color-border);
+  border-radius: var(--radius-container);
+  box-shadow: var(--shadow-med);
+  transition:
+    width var(--duration-fast) ease,
+    height var(--duration-fast) ease;
+}
+.sel-toolbar--composer {
+  width: 380px;
+  padding: var(--spacing-2) var(--spacing-3) var(--spacing-3);
+  align-items: stretch;
+}
+.sel-toolbar-hint {
+  padding-inline: var(--spacing-1);
+  white-space: nowrap;
+}
+.sel-toolbar-sep {
+  width: 1px;
+  height: 20px;
+  background: var(--color-border);
+  margin-inline: 2px;
+}
+.sel-toolbar-fill {
+  flex: 1;
+}
+.sel-composer {
+  width: 100%;
+}
+.sel-composer-key {
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--color-text-secondary);
+}
+.agent-chip--warn {
+  border-color: var(--color-warning);
+}
+.sel-reply {
+  position: absolute;
+  z-index: 6;
+  width: 360px;
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-2);
+  padding: var(--spacing-2) var(--spacing-3) var(--spacing-3);
+  background: color-mix(in srgb, var(--color-background-surface) 92%, transparent);
+  backdrop-filter: blur(var(--unframed-chrome-blur));
+  border: var(--border-width) solid var(--color-border);
+  border-radius: var(--radius-container);
+  box-shadow: var(--shadow-med);
+}
+.sel-reply--running {
+  border-color: var(--color-accent);
+}
+.sel-reply--failed {
+  border-color: var(--color-error);
+}
+.sel-reply-text {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  line-height: 1.45;
+  max-height: 200px;
+  overflow-y: auto;
+}
+/* A line in the panel's transcript for a change the agent made. */
+.agent-note {
+  color: var(--color-text-secondary);
+  padding-inline: var(--spacing-2);
+  border-inline-start: 2px solid var(--color-success);
 }

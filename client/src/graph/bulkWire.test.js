@@ -13,6 +13,9 @@ const node = (id, type, selected = false) => ({ id, type, selected, position: { 
   assert.equal(canSource(node('t', 'textOutput')), true);
   assert.equal(canSource(node('o', 'imageOutput')), false);
   assert.equal(canSource(node('w', 'videoOutput')), false);
+  // An artifact is neither end: it is a thing on the board, not a step in a chain.
+  assert.equal(canSource(node('g', 'page')), false);
+  assert.equal(canTarget(node('g', 'page')), false);
 
   assert.equal(canTarget(node('o', 'imageOutput')), true);
   assert.equal(canTarget(node('w', 'videoOutput')), true);

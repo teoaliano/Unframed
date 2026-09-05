@@ -22,6 +22,10 @@ export const isTextOutput = (n) => n?.type === 'textOutput';
 // right-click item that copies a reference. Those two disagreeing is a menu offering an
 // id nothing will substitute, or an id you can copy but never insert.
 export const isReferenceable = (n) => n?.type === 'prompt' || isTextOutput(n);
+// The third family. An artifact (a page; slice 4 adds the motion) neither feeds an
+// output nor consumes one, so it is neither end of an edge -- said here rather than left
+// to the `Output` suffix test, which would silently make it a source.
+export const isArtifact = (n) => n?.type === 'page';
 
 // Its own predicate for the same reason isTextOutput has one: only a video output
 // carries an input mode, and asking the wrong node type for one silently changes

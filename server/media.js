@@ -24,6 +24,8 @@ const EXT_BY_MIME = {
   'video/mp4': 'mp4',
   'video/quicktime': 'mov',
   'video/webm': 'webm',
+  // The page asset (slice 2): an HTML file the agent or the person supplies.
+  'text/html': 'html',
 };
 
 // Only base64 data URLs count: that is the only form FileReader.readAsDataURL produces,
@@ -43,7 +45,7 @@ export function extOf(mime, fileName) {
 
 // Same rules as the client's slug() (graph/starter.js) and the server's slugify: the two
 // have to agree so a file the browser named and a file the server named sort together.
-const slug = (s) =>
+export const slug = (s) =>
   String(s)
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, '-')

@@ -29,6 +29,8 @@ import { OUTPUT_DEFAULTS } from '../nodes/output/defaults.js';
 // controls opt out individually with `nodrag`. See
 // docs/superpowers/specs/2026-08-18-canvas-interaction-design.md.
 const RESIZABLE_INPUT = new Set(['image', 'video', 'prompt']);
+// A page is free on both axes like a prompt, and starts large enough to read.
+const PAGE_SIZE = { width: 480, height: 320 };
 
 // EVERY node that reaches the canvas goes through this, without exception — a node
 // handed straight to addNodes has no wrapper width, and an input node's Card is
@@ -53,12 +55,12 @@ export const withDrag = (n) => ({
   // are the user's and a height has to be seeded — before this it resized by a CSS
   // handle on the field itself (the old data.size + fieldResize.js), which is what the
   // 2026-08-20 node-anatomy redesign replaced with a border drag on the card.
-  width: RESIZABLE_INPUT.has(n.type) ? n.width ?? 240 : n.width,
+  width: n.type === 'page' ? n.width ?? PAGE_SIZE.width : RESIZABLE_INPUT.has(n.type) ? n.width ?? 240 : n.width,
   // Media is the DERIVED case, so its height is dropped rather than passed through: a
   // height saved by an older build, or by a hand-edited graph.json, would otherwise be
   // honoured forever and quietly letterbox the picture. Everything that is not a prompt
   // and not media has no wrapper size at all.
-  height: n.type === 'prompt' ? n.height ?? 160 : undefined,
+  height: n.type === 'prompt' ? n.height ?? 160 : n.type === 'page' ? n.height ?? PAGE_SIZE.height : undefined,
   // React Flow's in-gesture flag, dropped for the same reason as the two above and with
   // a worse failure: `getNodesInside()` is the only geometry test a box selection runs,
   // and it ends with `if (isVisible || node.dragging)`. A node carrying a stale `true`
@@ -92,6 +94,7 @@ export const NEW_NODE = {
   imageOutput: OUTPUT_DEFAULTS.imageOutput,
   videoOutput: OUTPUT_DEFAULTS.videoOutput,
   textOutput: OUTPUT_DEFAULTS.textOutput,
+  page: { file: '', title: '', fileName: '' },
 };
 
 // A small starter graph that demonstrates the @id reference: the scene prompt
