@@ -2311,9 +2311,7 @@ app.get('/api/elevenlabs/voices', async (req, res) => {
     const orRes = await fetch('https://api.elevenlabs.io/v2/voices', {
       headers: { 'xi-api-key': ELEVENLABS_API_KEY },
     });
-    const { raw, error: bodyError } = await readUpstreamBody(orRes, 'run');
-    if (bodyError) return res.status(502).json({ error: bodyError });
-    const data = JSON.parse(raw);
+    const data = JSON.parse(await orRes.text());
     if (!orRes.ok) return res.status(orRes.status).json({ error: data?.detail?.message || 'Could not fetch voices.' });
     const voices = (data.voices || []).map((v) => ({ voice_id: v.voice_id, name: v.name }));
     res.json({ voices });
@@ -2332,9 +2330,7 @@ app.get('/api/elevenlabs/models', async (req, res) => {
     const orRes = await fetch('https://api.elevenlabs.io/v1/models', {
       headers: { 'xi-api-key': ELEVENLABS_API_KEY },
     });
-    const { raw, error: bodyError } = await readUpstreamBody(orRes, 'run');
-    if (bodyError) return res.status(502).json({ error: bodyError });
-    const data = JSON.parse(raw);
+    const data = JSON.parse(await orRes.text());
     if (!orRes.ok) return res.status(orRes.status).json({ error: data?.detail?.message || 'Could not fetch models.' });
     const models = (Array.isArray(data) ? data : [])
       .filter((m) => m.can_do_text_to_speech)
@@ -2373,12 +2369,11 @@ app.post('/api/audio', async (req, res) => {
   }
 
   if (!orRes.ok) {
-    const { raw } = await readUpstreamBody(orRes, 'run');
     let message = `ElevenLabs returned ${orRes.status}.`;
     try {
-      message = JSON.parse(raw)?.detail?.message || message;
+      message = JSON.parse(await orRes.text())?.detail?.message || message;
     } catch {
-      // raw wasn't JSON -- keep the generic message.
+      // The body wasn't readable JSON -- keep the generic message.
     }
     return res.status(orRes.status).json({ error: message });
   }

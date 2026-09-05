@@ -25,9 +25,7 @@ export default function AudioOutputNode({ id, data }) {
   const [status, setStatus] = useState('idle'); // idle | running | error
   const [error, setError] = useState(null);
   const [voices, setVoices] = useState([]);
-  const [voicesError, setVoicesError] = useState(null);
   const [models, setModels] = useState([]);
-  const [modelsError, setModelsError] = useState(null);
   const [hasKey, setHasKey] = useState(true); // optimistic until health answers
   const [defaultModel, setDefaultModel] = useState('');
 
@@ -48,17 +46,13 @@ export default function AudioOutputNode({ id, data }) {
   useEffect(() => {
     if (!hasKey) return;
     let live = true;
-    listVoices()
-      .then((v) => live && setVoices(v))
-      .catch((err) => live && setVoicesError(err.message));
+    listVoices().then((v) => live && setVoices(v));
     // ElevenLabs' models are account-wide, not fetched from OpenRouter's
     // catalogue the way the other outputs' ModelPicker is -- see
     // GET /api/elevenlabs/models, which already filters to
     // can_do_text_to_speech so this node never offers a voice-conversion or
     // sound-effects model that would 422 on a plain `text` field.
-    listAudioModels()
-      .then((m) => live && setModels(m))
-      .catch((err) => live && setModelsError(err.message));
+    listAudioModels().then((m) => live && setModels(m));
     return () => {
       live = false;
     };
@@ -162,7 +156,6 @@ export default function AudioOutputNode({ id, data }) {
                 value={voices.some((v) => v.voice_id === data.voice_id) ? data.voice_id : undefined}
                 onChange={(v) => updateNodeData(id, { voice_id: v })}
               />
-              {voicesError && <StatusLine type="error">{voicesError}</StatusLine>}
 
               <NativeSelect
                 label="Model"
@@ -170,7 +163,6 @@ export default function AudioOutputNode({ id, data }) {
                 value={models.some((m) => m.model_id === model) ? model : undefined}
                 onChange={(v) => updateNodeData(id, { model_id: v })}
               />
-              {modelsError && <StatusLine type="error">{modelsError}</StatusLine>}
             </>
           )}
 
