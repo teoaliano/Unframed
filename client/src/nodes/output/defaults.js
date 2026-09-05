@@ -12,6 +12,10 @@ export const OUTPUT_DEFAULTS = {
   imageOutput: Object.freeze({ resolution: '1K', quality: 'low', aspect_ratio: '1:1' }),
   videoOutput: Object.freeze({}),
   textOutput: Object.freeze({ text: '', result: '' }),
+  // voice_id has no universal default the way an OpenRouter model slug does --
+  // ElevenLabs voices are per-account -- so a fresh node starts empty and the
+  // picker's own "pick a voice first" guard is what stands in for a fallback.
+  audioOutput: Object.freeze({ voice_id: '' }),
 };
 
 // Every data key a model's capabilities decide. Add to this when you add a control, or
@@ -24,6 +28,10 @@ export const MODEL_PARAM_KEYS = {
   imageOutput: ['quality', 'background', 'resolution', 'aspect_ratio', 'size', 'output_format'],
   videoOutput: ['size', 'resolution', 'aspect_ratio', 'duration', 'generateAudio', 'quality', 'inputMode'],
   textOutput: [],
+  // voice_id is a choice, not a model trait a switch should reset -- there is
+  // only one "model" concept here (model_id, itself not model-dependent) and
+  // no capability the voice needs to be checked against.
+  audioOutput: [],
 };
 
 // Every model-dependent key, set to this type's fresh-node value or cleared when it has

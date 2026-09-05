@@ -102,6 +102,27 @@ export const clearKey = () =>
     return d;
   });
 
+export const generateAudio = (body, project) => postJson('/api/audio', { ...body, project });
+
+export const listVoices = () =>
+  fetch('/api/elevenlabs/voices')
+    .then((r) => r.json())
+    .then((d) => d.voices || [])
+    .catch(() => []);
+
+export const listAudioModels = () =>
+  fetch('/api/elevenlabs/models')
+    .then((r) => r.json())
+    .then((d) => d.models || [])
+    .catch(() => []);
+
+export const clearElevenLabsKey = () =>
+  fetch('/api/elevenlabs/key', { method: 'DELETE' }).then(async (r) => {
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(d.error || `Could not remove the key (${r.status})`);
+    return d;
+  });
+
 // The server builds the authorize URL, because only it knows the port the
 // callback has to come back to — in a clone this client talks to Vite's proxy
 // and has no idea what it is.

@@ -69,6 +69,11 @@ let TEXT_MODEL = process.env.OPENROUTER_TEXT_MODEL || 'google/gemini-3.5-flash-l
 // than the most capable one.
 let VIDEO_MODEL = process.env.OPENROUTER_VIDEO_MODEL || 'bytedance/seedance-2.0';
 let API_KEY = process.env.OPENROUTER_API_KEY;
+// A second vendor, not a fourth OpenRouter call: ElevenLabs text-to-speech has no
+// OpenRouter route, so it gets its own credential and settings-dialog section,
+// entirely independent of API_KEY/hasKey.
+let ELEVENLABS_API_KEY = process.env.ELEVENLABS_API_KEY || '';
+let AUDIO_MODEL = process.env.ELEVENLABS_MODEL_ID || 'eleven_v3';
 let OUTPUT_DIR = outputPath(ROOT, process.env.OUTPUT_DIR);
 // Assigned by the OS when the preview server starts, below, before the API listens.
 let PREVIEW_PORT = 0;
@@ -187,6 +192,9 @@ function settings() {
     claudeConfigDir: CLAUDE_CONFIG_DIR,
     // The preview origin's port (server/preview.js): where page assets are shown from.
     previewPort: PREVIEW_PORT,
+    hasElevenLabsKey: Boolean(ELEVENLABS_API_KEY),
+    elevenLabsKeyHint: ELEVENLABS_API_KEY ? ELEVENLABS_API_KEY.slice(-4) : '',
+    audioModel: AUDIO_MODEL,
   };
 }
 
@@ -262,6 +270,8 @@ app.put('/api/config', async (req, res) => {
     claudePath: 'CLAUDE_PATH',
     codexPath: 'CODEX_PATH',
     claudeConfigDir: 'CLAUDE_CONFIG_DIR',
+    elevenLabsKey: 'ELEVENLABS_API_KEY',
+    audioModel: 'ELEVENLABS_MODEL_ID',
   };
   // The three provider settings may be cleared: an empty string deletes the line, so
   // the CLI goes back to being found on PATH (or the default config dir).
@@ -287,7 +297,11 @@ app.put('/api/config', async (req, res) => {
                 ? 'That does not look like a command name or a path to one.'
                 : field === 'claudeConfigDir'
                   ? 'The config folder has to be an absolute path.'
-                  : 'That does not look like a model slug. Expected something like "openai/gpt-image-2".',
+                  : field === 'elevenLabsKey'
+                    ? 'That does not look like an ElevenLabs key.'
+                    : field === 'audioModel'
+                      ? 'That does not look like an ElevenLabs model id.'
+                      : 'That does not look like a model slug. Expected something like "openai/gpt-image-2".',
       });
     }
     updates[envKey] = value;
@@ -381,6 +395,8 @@ app.put('/api/config', async (req, res) => {
   if (updates.OPENROUTER_IMAGE_MODEL) IMAGE_MODEL = updates.OPENROUTER_IMAGE_MODEL;
   if (updates.OPENROUTER_TEXT_MODEL) TEXT_MODEL = updates.OPENROUTER_TEXT_MODEL;
   if (updates.OPENROUTER_VIDEO_MODEL) VIDEO_MODEL = updates.OPENROUTER_VIDEO_MODEL;
+  if (updates.ELEVENLABS_API_KEY) ELEVENLABS_API_KEY = updates.ELEVENLABS_API_KEY;
+  if (updates.ELEVENLABS_MODEL_ID) AUDIO_MODEL = updates.ELEVENLABS_MODEL_ID;
   // null means the line was deleted: back to the default. A change here invalidates
   // whatever the provider probe last concluded.
   if ('CLAUDE_PATH' in updates) CLAUDE_PATH = updates.CLAUDE_PATH || '';
@@ -483,6 +499,19 @@ app.delete('/api/key', async (req, res) => {
     console.log(`  ${renderCleanupError}`);
   }
   res.json({ ok: true, endedRenders: ended, ...(renderCleanupError ? { renderCleanupError } : {}), ...settings() });
+});
+
+// ElevenLabs is a separate vendor with no render-lifecycle concept of its own --
+// no pending jobs to fail, no OAuth flow to cancel -- so removal is the plain
+// half of DELETE /api/key alone.
+app.delete('/api/elevenlabs/key', async (req, res) => {
+  try {
+    await writeEnv({ ELEVENLABS_API_KEY: null });
+  } catch (err) {
+    return res.status(500).json({ error: `Could not write .env: ${err.message}` });
+  }
+  ELEVENLABS_API_KEY = '';
+  res.json({ ok: true, ...settings() });
 });
 
 // Begins the browser flow. Nothing here awaits, so there is nothing to catch --
@@ -2271,6 +2300,133 @@ app.get('/api/file/:project/:name', (req, res) => {
   res.sendFile(file, (err) => {
     if (err && !res.headersSent) res.status(404).json({ error: 'File not found.' });
   });
+});
+
+// Trimmed to what the picker uses -- labels, not sharing metadata or preview_url.
+app.get('/api/elevenlabs/voices', async (req, res) => {
+  if (!ELEVENLABS_API_KEY) {
+    return res.status(400).json({ error: 'No ElevenLabs key yet. Add one in Settings.' });
+  }
+  try {
+    const orRes = await fetch('https://api.elevenlabs.io/v2/voices', {
+      headers: { 'xi-api-key': ELEVENLABS_API_KEY },
+    });
+    const data = JSON.parse(await orRes.text());
+    if (!orRes.ok) return res.status(orRes.status).json({ error: data?.detail?.message || 'Could not fetch voices.' });
+    const voices = (data.voices || []).map((v) => ({ voice_id: v.voice_id, name: v.name }));
+    res.json({ voices });
+  } catch (err) {
+    res.status(502).json({ error: `Could not reach ElevenLabs: ${err.message}` });
+  }
+});
+
+// Filtered to can_do_text_to_speech, so a voice-conversion or sound-effects model --
+// which takes no `text` field -- never reaches this node's picker.
+app.get('/api/elevenlabs/models', async (req, res) => {
+  if (!ELEVENLABS_API_KEY) {
+    return res.status(400).json({ error: 'No ElevenLabs key yet. Add one in Settings.' });
+  }
+  try {
+    const orRes = await fetch('https://api.elevenlabs.io/v1/models', {
+      headers: { 'xi-api-key': ELEVENLABS_API_KEY },
+    });
+    const data = JSON.parse(await orRes.text());
+    if (!orRes.ok) return res.status(orRes.status).json({ error: data?.detail?.message || 'Could not fetch models.' });
+    const models = (Array.isArray(data) ? data : [])
+      .filter((m) => m.can_do_text_to_speech)
+      .map((m) => ({ model_id: m.model_id, name: m.name }));
+    res.json({ models });
+  } catch (err) {
+    res.status(502).json({ error: `Could not reach ElevenLabs: ${err.message}` });
+  }
+});
+
+app.post('/api/audio', async (req, res) => {
+  if (!ELEVENLABS_API_KEY) {
+    return res.status(400).json({ error: 'No ElevenLabs key yet. Add one in Settings.' });
+  }
+
+  const { text, voice_id, model_id, project } = req.body || {};
+  if (!text || !text.trim()) {
+    return res.status(400).json({ error: 'Nothing to speak. Wire a prompt node in, or type one in the node.' });
+  }
+  if (!voice_id) {
+    return res.status(400).json({ error: 'Pick a voice first.' });
+  }
+
+  let orRes;
+  try {
+    orRes = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${encodeURIComponent(voice_id)}`, {
+      method: 'POST',
+      headers: {
+        'xi-api-key': ELEVENLABS_API_KEY,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ text, model_id: model_id || AUDIO_MODEL }),
+    });
+  } catch (err) {
+    return res.status(502).json({ error: `Could not reach ElevenLabs: ${err.message}` });
+  }
+
+  if (!orRes.ok) {
+    let message = `ElevenLabs returned ${orRes.status}.`;
+    try {
+      message = JSON.parse(await orRes.text())?.detail?.message || message;
+    } catch {
+      // The body wasn't readable JSON -- keep the generic message.
+    }
+    return res.status(orRes.status).json({ error: message });
+  }
+
+  try {
+    const buffer = Buffer.from(await orRes.arrayBuffer());
+    const dir = project ? projectDir(project) : OUTPUT_DIR;
+    await fs.mkdir(dir, { recursive: true });
+    const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+    let base = `${stamp}-${slugify(text)}`;
+
+    let audioPath;
+    let attempt = 1;
+    let candidate = base;
+    for (;;) {
+      audioPath = path.join(dir, `${candidate}.mp3`);
+      try {
+        await fs.writeFile(audioPath, buffer, { flag: 'wx' });
+        base = candidate;
+        break;
+      } catch (err) {
+        if (err.code !== 'EEXIST' || attempt >= 5) throw err;
+        attempt += 1;
+        candidate = `${base}-${attempt}`;
+      }
+    }
+
+    try {
+      const metaPath = path.join(dir, `${base}.json`);
+      await fs.writeFile(
+        metaPath,
+        JSON.stringify(
+          {
+            text,
+            voice_id,
+            model: model_id || AUDIO_MODEL,
+            createdAt: new Date().toISOString(),
+            file: path.basename(audioPath),
+          },
+          null,
+          2,
+        ),
+      );
+    } catch (err) {
+      console.log(`  sidecar failed: ${err.message}`);
+    }
+
+    console.log(`  spoke → ${audioPath}`);
+
+    res.json({ savedPath: audioPath, url: fileUrl(project, audioPath) });
+  } catch (err) {
+    res.status(500).json({ error: `Generated the audio but failed to write it: ${err.message}` });
+  }
 });
 
 app.post('/api/generate', async (req, res) => {

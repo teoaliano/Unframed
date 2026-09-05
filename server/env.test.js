@@ -86,6 +86,12 @@ assert.ok(!PATTERNS.CLAUDE_CONFIG_DIR.test('/x\ny'));
 assert.ok(PATTERNS.OUTPUT_DIR.test('./output'));
 assert.ok(!PATTERNS.OUTPUT_DIR.test('./out\nPORT=1'));
 assert.ok(!PATTERNS.OUTPUT_DIR.test(''));
+assert.ok(PATTERNS.ELEVENLABS_API_KEY.test('el-abcd12345678'));
+assert.ok(!PATTERNS.ELEVENLABS_API_KEY.test('short'));
+assert.ok(!PATTERNS.ELEVENLABS_API_KEY.test('has spaces here'));
+assert.ok(PATTERNS.ELEVENLABS_MODEL_ID.test('eleven_v3'));
+assert.ok(!PATTERNS.ELEVENLABS_MODEL_ID.test('Eleven_V3'));
+assert.ok(!PATTERNS.ELEVENLABS_MODEL_ID.test('eleven v3'));
 
 // Path rules. The default keeps a clone writing exactly where it always did;
 // UNFRAMED_DATA_DIR moves both, because in a packaged app the project root is a
