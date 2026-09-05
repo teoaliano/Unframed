@@ -21,7 +21,8 @@ Keep that shape: the website's What's new page parses this file.
   shown live from their own sandboxed origin, so a page can never reach your key or your
   files; every edit is a new version, and Cmd-Z steps back through them.
 - **One tab per thread in the Agent panel, filtered by what you select.** With nothing
-  selected the panel lists every conversation, newest first. Select a page and it shows
+  selected the panel lists every conversation, newest first, the oldest tucked behind a
+  More menu that names whichever conversation is open. Select a page and it shows
   only the threads about that page; select several and it shows theirs. The page the open
   thread is about lights up its name tag on the canvas, the panel's Scope row names it
   with a Locate button that pans to it, and with the panel open on a page's thread,

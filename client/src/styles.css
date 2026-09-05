@@ -1442,53 +1442,29 @@ div:has(> .add-node-menu) {
   overflow: hidden;
 }
 .agent-panel-head {
-  padding: var(--spacing-2) var(--spacing-3);
-  border-bottom: var(--border-width) solid var(--color-border);
+  padding: var(--spacing-2) var(--spacing-3) 0;
 }
-/* The tab strip: one tab per thread the selection lets through (agent/tabs.js). Scrolls
-   sideways rather than wrapping, so the panel's height is the transcript's. */
+/* The tab strip: one tab per thread the selection lets through (agent/tabs.js), the rest
+   behind the strip's overflow menu. The tabs themselves are Astryx's (TabList), shaped
+   into folder tabs by theme.js; what belongs here is the rule they sit on, which runs
+   the full width of the panel rather than stopping at the head's padding, and so
+   replaces the head's own bottom border. */
 .agent-tabs {
   display: flex;
-  gap: var(--spacing-1);
-  margin-top: var(--spacing-2);
-  overflow-x: auto;
-  scrollbar-width: none;
-  min-height: 26px;
+  align-items: flex-end;
+  min-height: 32px;
+  margin-inline: calc(-1 * var(--spacing-3));
+  padding: var(--spacing-2) var(--spacing-3) 0;
+  border-bottom: var(--border-width) solid var(--color-border);
 }
-.agent-tabs::-webkit-scrollbar {
-  display: none;
-}
-.agent-tab {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  height: 26px;
-  padding: 0 var(--spacing-2);
-  border-radius: var(--radius-element);
-  border: var(--border-width) solid transparent;
-  background: transparent;
-  color: var(--color-text-secondary);
-  font: inherit;
-  font-size: 12px;
-  white-space: nowrap;
-  cursor: pointer;
-  flex: none;
-}
-.agent-tab:hover {
-  background: var(--color-background-card);
-  color: var(--color-text-primary);
-}
-.agent-tab--active {
-  border-color: var(--color-border-emphasized);
-  background: var(--color-background-card);
-  color: var(--color-text-primary);
-}
-.agent-tab--artifact.agent-tab--active {
+/* An artifact thread's tab is marked by the colour of its join, so which conversations
+   are about a page and which about the board reads off the strip. */
+.astryx-tab.agent-tab--artifact.selected {
   border-color: var(--color-accent);
 }
 .agent-tabs-empty {
   align-self: center;
-  padding-inline: var(--spacing-1);
+  padding: var(--spacing-1) 0 var(--spacing-2);
 }
 .agent-dot--live {
   animation: agent-pulse 1.2s ease-in-out infinite;

@@ -6,6 +6,7 @@ import { Text } from '@astryxdesign/core/Text';
 import { TextArea } from '@astryxdesign/core/TextArea';
 import { Link } from '@astryxdesign/core/Link';
 import { HStack, VStack, StackItem } from '@astryxdesign/core/Stack';
+import { TabList, Tab, TabMenu } from '@astryxdesign/core/TabList';
 import { ModelPicker, EffortPicker } from './ModelPicker.jsx';
 import { AlertDialog } from '@astryxdesign/core/AlertDialog';
 import { X, Plus, RefreshCw, Sparkles, Square, Trash2, Crosshair } from 'lucide-react';
@@ -36,6 +37,13 @@ import { visibleThreads, nextActive, tabLabel } from './tabs.js';
 
 const PROVIDER_ORDER = ['claude', 'codex'];
 
+// How many threads get a tab of their own before the rest go behind the strip's overflow
+// menu. Three is what fits the 380px panel without the tabs shrinking; Astryx's own
+// advice is 6-8, which is for a page header, not a side panel. The active thread does
+// not have to be among them -- TabMenu shows the selected option's label as its trigger,
+// so an older thread you switch to reads on the strip either way.
+const INLINE_TABS = 3;
+
 // What the panel says while each tool runs.
 const ACTIVITY = {
   mcp__unframed__canvas_read: 'Reading the canvas…',
@@ -59,6 +67,8 @@ export default function AgentPanel({ project, nodes, providers, onCheckProviders
   // re-filter hid the chosen one.
   const visible = visibleThreads(threads, selection, nodes);
   const threadId = nextActive(chosenId, visible);
+  const inlineTabs = visible.slice(0, INLINE_TABS);
+  const menuTabs = visible.slice(INLINE_TABS);
   const thread = threads.find((t) => t.id === threadId) ?? null;
   useEffect(() => {
     if (threadId !== chosenId) setChosenId(threadId);
@@ -291,23 +301,36 @@ export default function AgentPanel({ project, nodes, providers, onCheckProviders
           <IconButton variant="ghost" size="sm" label="Delete thread" tooltip="Delete this thread" icon={<Icon icon={Trash2} />} onClick={() => setConfirmDelete(true)} isDisabled={!thread || running} />
           <IconButton variant="ghost" size="sm" label="Close" icon={<Icon icon={X} />} onClick={onClose} />
         </HStack>
-        {/* The strip: one tab per visible thread (tabs.js decides which). Empty when the
-            selection names artifacts nobody has talked about yet. */}
-        <div className="agent-tabs" role="tablist" aria-label="Threads">
-          {visible.map((t) => (
-            <button
-              key={t.id}
-              type="button"
-              role="tab"
-              aria-selected={t.id === threadId}
-              className={`agent-tab${t.id === threadId ? ' agent-tab--active' : ''}${t.kind === 'artifact' ? ' agent-tab--artifact' : ''}`}
-              onClick={() => setChosenId(t.id)}
-              title={t.title || undefined}
-            >
-              {t.status === 'running' && <span className="agent-dot agent-dot--live" />}
-              {tabLabel(t, nodes)}
-            </button>
-          ))}
+        {/* The strip: one tab per visible thread (tabs.js decides which), the oldest behind
+            the overflow menu. Empty when the selection names artifacts nobody has talked
+            about yet. The rule under it belongs to this wrapper rather than to the tabs,
+            so it runs the full width of the panel and the selected tab notches it. */}
+        <div className="agent-tabs">
+          {visible.length > 0 && (
+            <TabList size="sm" value={threadId ?? ''} onChange={setChosenId} aria-label="Threads">
+              {inlineTabs.map((t) => (
+                <Tab
+                  key={t.id}
+                  value={t.id}
+                  label={tabLabel(t, nodes)}
+                  className={t.kind === 'artifact' ? 'agent-tab--artifact' : undefined}
+                  title={t.title || undefined}
+                  endContent={t.status === 'running' ? <span className="agent-dot agent-dot--live" /> : undefined}
+                />
+              ))}
+              {menuTabs.length > 0 && (
+                <TabMenu
+                  label="More"
+                  options={menuTabs.map((t) => ({
+                    value: t.id,
+                    label: tabLabel(t, nodes),
+                    // A menu option has no end slot, so a running thread's dot leads it.
+                    icon: t.status === 'running' ? <span className="agent-dot agent-dot--live" /> : undefined,
+                  }))}
+                />
+              )}
+            </TabList>
+          )}
           {visible.length === 0 && (
             <Text type="supporting" color="secondary" className="agent-tabs-empty">
               {selectedArtifacts.length > 1 ? 'No thread yet about these' : selectedArtifacts.length === 1 ? 'No thread yet about this artifact — your first message starts one' : 'No threads yet'}

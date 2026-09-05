@@ -177,7 +177,13 @@ The browser's selection travels with each message. The server never holds it oth
 
 The Agent button in the chrome opens a right-hand panel over the project's threads, one
 tab each, newest first — a canvas thread's tab reads "Canvas", an artifact thread's the
-node's title. **The selection filters the strip** (`agent/tabs.js`, tested): no artifact
+node's title. The strip is Astryx's `TabList`, shaped into folder tabs (a rounded top and
+a border that joins the open tab to the transcript under it) by the `tab` and `tab-list`
+overrides in `client/src/theme.js`, which is where that shape has to live: Astryx's own
+base styles come out of StyleX and only the theme's generated rules land in a layer above
+them. Past the third tab the rest go behind the strip's `TabMenu`, which names whichever
+one is active, so a narrow panel never scrolls its tabs out of reach.
+**The selection filters the strip** (`agent/tabs.js`, tested): no artifact
 selected shows every thread; one selected shows only its threads; several show the
 union, and the canvas threads drop out. A thread whose node is not on the canvas is
 hidden in every state and kept on disk; it reappears the moment undo or redo brings the
