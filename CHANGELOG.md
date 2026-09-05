@@ -17,6 +17,15 @@ Keep that shape: the website's What's new page parses this file.
   the canvas as an ordinary video node. Rendering runs locally in the Chrome (or Chromium,
   Edge, Brave) you already have and uses no credits; without one, Render says so.
 
+### Changed
+
+- **Prompts are now plain text on the canvas**, the way text works in FigJam or Miro: no
+  card, no border, no type label — just the words, with the `@id` above them. One click
+  selects the text and shows a thin outline with a grip at each corner; a double-click or
+  Enter starts editing (the text comes up selected, so typing replaces it), and Escape
+  leaves editing with the element still selected. Drag it from anywhere, resize from a
+  corner or an edge, and double-click an edge to shrink the box to fit its text.
+
 ## 2026-09-05
 
 ### Added
