@@ -30,6 +30,8 @@ const graph = {
     { id: '105', type: 'video', position: { x: 0, y: 400 }, data: { dataUrl: 'data:video/mp4;base64,AAAA', fileName: 'old.mp4' } },
     { id: '106', type: 'textOutput', position: { x: 500, y: 400 }, data: { text: 'Summarise', result: 'A fox.', model: 'anthropic/claude-sonnet-5', running: { startedAt: 1 } } },
     { id: '107', type: 'page', position: { x: 900, y: 0 }, data: { file: '3-launch.html', title: 'Launch page', fileName: '' }, width: 480, height: 320 },
+    { id: '108', type: 'group', position: { x: 600, y: 0 }, data: { name: 'hero' }, width: 420, height: 280 },
+    { id: '109', type: 'image', parentId: '108', position: { x: 10, y: 10 }, data: { file: '4-face.png' } },
   ],
   edges: [
     { id: 'e1', source: '100', target: '102' },
@@ -41,7 +43,7 @@ const graph = {
 
 const d = describeCanvas(graph, ['101', '103']);
 assert.deepEqual(Object.keys(d).sort(), ['edges', 'nodes', 'selection']);
-assert.equal(d.nodes.length, 8);
+assert.equal(d.nodes.length, 10);
 const byId = Object.fromEntries(d.nodes.map((n) => [n.id, n]));
 assert.deepEqual(byId['100'], { id: '100', kind: 'prompt', position: { x: 40, y: 60 }, size: { width: 240, height: 160 }, text: 'A @101 on a cliff' });
 assert.equal(byId['102'].kind, 'image output');
@@ -55,6 +57,14 @@ assert.equal(byId['106'].kind, 'text output');
 assert.equal(byId['106'].running, true);
 // A page: its file and its title.
 assert.deepEqual(byId['107'], { id: '107', kind: 'page', position: { x: 900, y: 0 }, size: { width: 480, height: 320 }, file: '3-launch.html', title: 'Launch page' });
+// A group is named; a member says which group it is in, and its position is left
+// relative to that group rather than converted -- what the model reads is what the
+// document holds, and converting it would make every position the agent reads back
+// disagree with every position it must write.
+assert.deepEqual(byId['108'], { id: '108', kind: 'group', position: { x: 600, y: 0 }, size: { width: 420, height: 280 }, name: 'hero' });
+assert.equal(byId['109'].inGroup, '108');
+assert.deepEqual(byId['109'].position, { x: 10, y: 10 });
+assert.equal(byId['103'].inGroup, undefined, 'a free node has no inGroup key at all');
 assert.deepEqual(d.edges, [{ from: '100', to: '102' }, { from: '103', to: '102' }]);
 assert.deepEqual(d.selection, ['101', '103']);
 assert.deepEqual(describeCanvas(graph, ['101', 'ghost']).selection, ['101']);

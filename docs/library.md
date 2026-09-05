@@ -14,6 +14,15 @@ never clips `@p10`. It also runs `migrateNodes` over the fragment, which is how 
 preset saved before a node-type change still inserts correctly. Inserted nodes are
 plain copies with no link back to their preset. Tested in `resolve.test.js`.
 
+Group membership is a reference too: `parentId` goes through the same id map, and a
+member whose group is not in the fragment loses it rather than dangling — the server
+refuses a member without its group, and the whole insertion would bounce. `centerOffset`
+measures top-level nodes only, since a member's position is relative to its box. On the
+way out, `selectionFragment` pulls a selected group's members in after it (React Flow
+needs the parent first), and a member selected without its group is detached at its
+absolute position. A saved group is how "a character" or "a product" lives in the
+library: a name on a box, not a node type (`docs/superpowers/specs/2026-09-05-group-node-design.md`).
+
 ## Your own presets are the same data, on disk
 
 Right-click → *Add to library* saves the selection through `library/save.js`:

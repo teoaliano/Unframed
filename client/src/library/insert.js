@@ -37,7 +37,16 @@ export function instantiateFragment(fragment, nextId) {
         idMap.has(ref) ? `@${idMap.get(ref)}` : all,
       );
     }
-    return { ...n, id: idMap.get(n.id), position: { ...n.position }, data };
+    const node = { ...n, id: idMap.get(n.id), position: { ...n.position }, data };
+    // Membership is a reference too, and follows the same map. A parent that is not in
+    // the fragment (a hand-edited preset, or one saved before save.js pulled members in
+    // with their group) is dropped rather than left dangling: the server refuses a
+    // member whose group does not exist, and the whole insertion would bounce.
+    if (n.parentId) {
+      if (idMap.has(n.parentId)) node.parentId = idMap.get(n.parentId);
+      else delete node.parentId;
+    }
+    return node;
   });
 
   const edges = fragment.edges.map((e) => ({
@@ -54,8 +63,12 @@ export function instantiateFragment(fragment, nextId) {
 // (a flow coordinate). Positions in fragments are relative to (0,0), but nothing
 // requires them to start there, so this measures rather than assumes.
 export function centerOffset(fragment, centre, nodeSize = { w: 300, h: 150 }) {
-  const xs = fragment.nodes.map((n) => n.position.x);
-  const ys = fragment.nodes.map((n) => n.position.y);
+  // Members are measured by their box, not by themselves: their positions are relative
+  // to the group and would drag the bounding box toward (0,0).
+  const top = fragment.nodes.filter((n) => !n.parentId);
+  const measured = top.length ? top : fragment.nodes;
+  const xs = measured.map((n) => n.position.x);
+  const ys = measured.map((n) => n.position.y);
   const box = {
     x: Math.min(...xs),
     y: Math.min(...ys),

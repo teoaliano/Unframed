@@ -13,8 +13,8 @@
 //
 // Ops: { type: 'addNode', node } | { type: 'updateNode', id, patch } |
 //      { type: 'moveNode', id, position } | { type: 'resizeNode', id, width, height } |
-//      { type: 'removeNode', id } | { type: 'addEdge', edge } | { type: 'removeEdge', id } |
-//      { type: 'batch', ops }
+//      { type: 'reparentNode', id, parentId, position } | { type: 'removeNode', id } |
+//      { type: 'addEdge', edge } | { type: 'removeEdge', id } | { type: 'batch', ops }
 //
 // Every op has an inverse that restores the exact prior graph, and the test pins that
 // for each one. That is what makes undo a journal walk instead of a stack of snapshots.
@@ -34,6 +34,29 @@ function persistent(node) {
 const reject = (reason) => ({ rejected: reason });
 const findNode = (graph, id) => graph.nodes.find((n) => n.id === id);
 
+// A group is a container: its members carry `parentId` and a position RELATIVE to it,
+// which React Flow resolves -- the document stores what it is given and never adds the
+// two. Three rules keep that cheap. Only inputs can be members, so wiring stays
+// "sources -> output" with the group standing in for what it holds (resolve.js expands
+// it). A group cannot be a member, so there is exactly one level to resolve. And a
+// parent precedes its members in the array, because React Flow resolves a child against
+// the parents it has already seen and renders an orphan at its relative position
+// otherwise -- so the ops maintain that order rather than trusting callers to.
+// Design: docs/superpowers/specs/2026-09-05-group-node-design.md.
+export const isGroup = (n) => n?.type === 'group';
+const isOutput = (n) => Boolean(n?.type?.endsWith('Output'));
+const canBeMember = (n) => Boolean(n) && !isOutput(n) && !isGroup(n);
+
+// null when the node may take `parentId`, else the reason it may not.
+function parentProblem(graph, node, parentId) {
+  if (parentId === undefined || parentId === null) return null;
+  const parent = findNode(graph, parentId);
+  if (!parent) return `no group ${parentId}`;
+  if (!isGroup(parent)) return `${parentId} is not a group`;
+  if (!canBeMember(node)) return `a ${node?.type} cannot be a member of a group`;
+  return null;
+}
+
 // Array order is z-order on the canvas and the order edges are drawn, so an inverse that
 // re-appended a removed node would put it back on top of everything. `index` is where it
 // goes; absent means append, which is every ordinary add.
@@ -45,8 +68,13 @@ const insertAt = (list, item, index) => {
 function addNode(graph, { node, index }) {
   if (!node || typeof node.id !== 'string') return reject('addNode: node needs a string id');
   if (findNode(graph, node.id)) return reject(`addNode: node ${node.id} already exists`);
+  const problem = parentProblem(graph, node, node.parentId);
+  if (problem) return reject(`addNode: ${problem}`);
+  // Wherever the caller wanted it, but never ahead of its own group.
+  const parentAt = node.parentId ? graph.nodes.findIndex((n) => n.id === node.parentId) : -1;
+  const at = index !== undefined && index !== null && index <= parentAt ? parentAt + 1 : index;
   return {
-    graph: { ...graph, nodes: insertAt(graph.nodes, persistent(node), index) },
+    graph: { ...graph, nodes: insertAt(graph.nodes, persistent(node), at) },
     inverse: { type: 'removeNode', id: node.id },
   };
 }
@@ -99,27 +127,82 @@ function resizeNode(graph, { id, width, height }) {
   };
 }
 
+// Into a group, out of one (parentId null), or between two. Position travels with it
+// because its meaning changes -- relative to the new parent, absolute when there is none
+// -- and a node that changed frame without changing coordinates would jump on screen.
+// Its edges go: a member has no handle (bulkWire.js canSource), the group wires for it,
+// and re-pointing them to the group would be the one thing on the canvas that happened
+// without being drawn. The node may move in the array to land after its group; `index`
+// says where, so the inverse can put it back exactly, and is otherwise for the inverse
+// alone to write.
+function reparentNode(graph, { id, parentId, position, index }) {
+  const from = graph.nodes.findIndex((n) => n.id === id);
+  if (from === -1) return reject(`reparentNode: no node ${id}`);
+  const node = graph.nodes[from];
+  const parent = parentId ?? null;
+  if (parent === id) return reject('reparentNode: a node cannot contain itself');
+  const problem = parentProblem(graph, node, parent);
+  if (problem) return reject(`reparentNode: ${problem}`);
+  if (!position || typeof position.x !== 'number' || typeof position.y !== 'number') {
+    return reject('reparentNode: position is required');
+  }
+
+  const moved = { ...node, position };
+  if (parent === null) delete moved.parentId;
+  else moved.parentId = parent;
+
+  const without = graph.nodes.filter((n) => n.id !== id);
+  const parentAt = parent === null ? -1 : without.findIndex((n) => n.id === parent);
+  let at = index !== undefined && index !== null ? index : from;
+  if (at <= parentAt) at = parentAt + 1;
+
+  const gone = graph.edges
+    .map((edge, i) => ({ edge, index: i }))
+    .filter(({ edge }) => parent !== null && (edge.source === id || edge.target === id));
+  const edges = gone.length ? graph.edges.filter((e) => e.source !== id && e.target !== id) : graph.edges;
+
+  const back = { type: 'reparentNode', id, parentId: node.parentId ?? null, position: node.position, index: from };
+  return {
+    graph: { ...graph, nodes: insertAt(without, moved, at), edges },
+    inverse: gone.length
+      ? { type: 'batch', ops: [back, ...gone.map(({ edge, index: i }) => ({ type: 'addEdge', edge, index: i }))] }
+      : back,
+  };
+}
+
 // Removing a node removes every edge touching it, and the inverse is a batch that puts
 // the node back first and then each edge -- in that order, because addEdge refuses an
-// edge to a node that is not there yet.
+// edge to a node that is not there yet. Removing a GROUP removes its members with it:
+// a member's position means nothing without the box it is relative to, and a delete
+// that left the contents behind at their relative coordinates would scatter them over
+// the top-left of the canvas. One undo step brings the whole box back, which is what
+// makes cascade the safe default rather than the destructive one. Nodes go back in
+// ascending index order -- a group always precedes its members, so each member finds
+// its parent already restored.
 function removeNode(graph, { id }) {
   const index = graph.nodes.findIndex((n) => n.id === id);
   if (index === -1) return reject(`removeNode: no node ${id}`);
   const node = graph.nodes[index];
+  const ids = new Set([id]);
+  if (isGroup(node)) for (const n of graph.nodes) if (n.parentId === id) ids.add(n.id);
+  const nodesGone = graph.nodes.map((n, i) => ({ node: n, index: i })).filter(({ node: n }) => ids.has(n.id));
   const gone = graph.edges
     .map((edge, i) => ({ edge, index: i }))
-    .filter(({ edge }) => edge.source === id || edge.target === id);
+    .filter(({ edge }) => ids.has(edge.source) || ids.has(edge.target));
   return {
     graph: {
       ...graph,
-      nodes: graph.nodes.filter((n) => n.id !== id),
-      edges: graph.edges.filter((e) => e.source !== id && e.target !== id),
+      nodes: graph.nodes.filter((n) => !ids.has(n.id)),
+      edges: graph.edges.filter((e) => !ids.has(e.source) && !ids.has(e.target)),
     },
     // Edges go back in ascending index order so each lands where it was relative to the
     // ones already restored -- inserting them out of order would shift the later ones.
     inverse: {
       type: 'batch',
-      ops: [{ type: 'addNode', node, index }, ...gone.map(({ edge, index: i }) => ({ type: 'addEdge', edge, index: i }))],
+      ops: [
+        ...nodesGone.map(({ node: n, index: i }) => ({ type: 'addNode', node: n, index: i })),
+        ...gone.map(({ edge, index: i }) => ({ type: 'addEdge', edge, index: i })),
+      ],
     },
   };
 }
@@ -161,7 +244,7 @@ function batch(graph, { ops }) {
   return { graph: working, inverse: { type: 'batch', ops: inverses.reverse() } };
 }
 
-const HANDLERS = { addNode, updateNode, moveNode, resizeNode, removeNode, addEdge, removeEdge, batch };
+const HANDLERS = { addNode, updateNode, moveNode, resizeNode, reparentNode, removeNode, addEdge, removeEdge, batch };
 
 export function applyOp(graph, op) {
   const handler = op && HANDLERS[op.type];

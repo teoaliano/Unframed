@@ -28,6 +28,7 @@ Keep that shape: the website's What's new page parses this file.
 - **Copying a page copies its file**, so a pasted page is a separate version you can hand
   to a separate thread. Deleting a page is undoable like any other node and its threads
   come back with it; the only time it asks first is when the agent is mid-turn on it.
+- **Group nodes.** Select any inputs and press ⌘G (or right-click → Group) to wrap them in a named box. The box wires as one source, so connecting it sends everything inside, and `@`-referencing it in a prompt pulls in the text it holds. Double-click the box's label (or press F2) to rename it; renaming never breaks a reference, because the label shows the name while the reference stays tied to the id. Groups resize from any edge. ⌘⇧G ungroups, putting the contents back exactly where they look and leaving what you send unchanged. A saved group is how a reusable character, product or outfit lives in the Library.
 
 ## 2026-09-04
 
