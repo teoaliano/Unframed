@@ -421,7 +421,8 @@ div:has(> .add-node-menu) {
 @media (prefers-reduced-motion: reduce) {
   .xnode-tab,
   .xnode-line,
-  .astryx-card {
+  .astryx-card,
+  .xnode-group {
     transition: none;
   }
 }
@@ -1351,6 +1352,17 @@ div:has(> .add-node-menu) {
   background: color-mix(in srgb, var(--color-border) 8%, transparent);
   pointer-events: none;
   box-sizing: border-box;
+  /* Square where the tab docks, so the two share one unbroken edge -- the same rule the
+     node cards follow above, and the reason a group's silhouette reads as one shape
+     rather than a chip floating over a rounded box. The box is not an .astryx-card, so
+     none of the card rules reach it and the corner has to be said again here. */
+  border-start-start-radius: 0;
+  transition: border-start-start-radius var(--duration-fast) ease;
+}
+/* ...and rounds back as the tab fades, exactly as a card does: with nothing docked into
+   it, a square corner is just a defect. */
+.react-flow[data-chrome='off'] .react-flow__node > .xnode-group {
+  border-start-start-radius: var(--radius-container);
 }
 /* Selection follows the same rule as every other node (see the .selected block above):
    the accent border, plus the inset ring that keeps the shape reading as one silhouette
