@@ -1003,6 +1003,163 @@ div:has(> .add-node-menu) {
   background: var(--color-background-body);
   animation: agent-pulse 1.6s ease-in-out infinite;
 }
+/* ---- the composer's footer pickers (agent/ModelPicker.jsx) ----
+   Trigger: a small ghost control. Popup: a provider rail down the left, a search field,
+   two-line rows with a jump key and a star. Effort reuses the rows without the rail. */
+.mp-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 var(--spacing-2);
+  border: var(--border-width) solid transparent;
+  border-radius: var(--radius-element);
+  background: transparent;
+  color: var(--color-text-primary);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+  max-width: 200px;
+}
+.mp-trigger:hover:not(:disabled) {
+  background: var(--color-background-card);
+}
+.mp-trigger:disabled {
+  color: var(--color-text-secondary);
+  cursor: default;
+}
+.mp-trigger-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.mp-mark--claude {
+  color: var(--color-accent);
+}
+.mp {
+  display: flex;
+  min-height: 0;
+  max-height: 420px;
+}
+.mp-rail {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-1);
+  padding: var(--spacing-2) var(--spacing-1);
+  border-inline-end: var(--border-width) solid var(--color-border);
+  background: color-mix(in srgb, var(--color-background-card) 50%, transparent);
+}
+.mp-rail-btn {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border: 0;
+  border-radius: var(--radius-element);
+  background: transparent;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+}
+.mp-rail-btn:hover,
+.mp-rail-btn--on {
+  background: var(--color-background-card);
+  color: var(--color-text-primary);
+}
+.mp-rail-btn--on::after {
+  content: '';
+  position: absolute;
+  inset-inline-end: -5px;
+  top: 8px;
+  bottom: 8px;
+  width: 3px;
+  border-radius: var(--radius-full);
+  background: var(--color-accent);
+}
+.mp-main {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  flex: 1;
+}
+.mp-search {
+  padding: var(--spacing-2) var(--spacing-2) 0;
+  border-bottom: var(--border-width) solid var(--color-border);
+}
+.mp-heading {
+  padding: var(--spacing-2) var(--spacing-3) 0;
+}
+.mp-list {
+  overflow-y: auto;
+  padding: var(--spacing-1);
+}
+.mp-row {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-2);
+  padding: var(--spacing-2);
+  border-radius: var(--radius-element);
+  cursor: pointer;
+}
+.mp-row:hover,
+.mp-row:focus-visible {
+  background: var(--color-background-card);
+  outline: none;
+}
+.mp-row--on {
+  background: color-mix(in srgb, var(--color-text-primary) 8%, transparent);
+}
+.mp-row-text {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+  flex: 1;
+}
+.mp-row-name {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-2);
+  font-size: 13px;
+  color: var(--color-text-primary);
+}
+.mp-row-sub {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  color: var(--color-text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.mp-row--flat .mp-row-sub {
+  white-space: normal;
+}
+.mp-star {
+  display: inline-flex;
+  padding: 4px;
+  border: 0;
+  border-radius: var(--radius-element);
+  background: transparent;
+  color: var(--color-text-secondary);
+  opacity: 0.5;
+  cursor: pointer;
+}
+.mp-row:hover .mp-star,
+.mp-star--on {
+  opacity: 1;
+}
+.mp-star--on {
+  color: var(--color-warning);
+}
+.mp-empty {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-1);
+  padding: var(--spacing-3);
+}
 /* The same mark in the panel's scope row, with the Locate action beside the name. */
 .agent-chip--focus {
   border-color: var(--color-text-primary);
