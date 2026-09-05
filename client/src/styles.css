@@ -1130,25 +1130,8 @@ div:has(> .add-node-menu) {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.mp-row--flat .mp-row-sub {
+.mp-row-sub {
   white-space: normal;
-}
-.mp-star {
-  display: inline-flex;
-  padding: 4px;
-  border: 0;
-  border-radius: var(--radius-element);
-  background: transparent;
-  color: var(--color-text-secondary);
-  opacity: 0.5;
-  cursor: pointer;
-}
-.mp-row:hover .mp-star,
-.mp-star--on {
-  opacity: 1;
-}
-.mp-star--on {
-  color: var(--color-warning);
 }
 .mp-empty {
   display: flex;
