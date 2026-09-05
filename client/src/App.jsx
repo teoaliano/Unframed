@@ -1929,7 +1929,13 @@ function Canvas() {
           selectionOnDrag={tool === 'select'}
           // A node need only TOUCH the selection box, not sit entirely inside it.
           selectionMode="partial"
-          onMoveStart={() => setPanning(true)}
+          // Only a DRAG of the canvas hides the floating toolbar, which is what hiding
+          // it was ever for. These two also fire once per wheel burst, so hiding on any
+          // move made the bar blink off and on through every scroll and every zoom --
+          // and a wheel move needs no hiding at all, since the bar is placed from the
+          // viewport transform and simply travels with the selection. `null` is a
+          // programmatic move (fitView), which likewise leaves it alone.
+          onMoveStart={(e) => setPanning(Boolean(e) && e.type !== 'wheel')}
           onMoveEnd={() => setPanning(false)}
           onNodeClick={onNodeClick}
           onPaneClick={onPaneClick}
@@ -1948,7 +1954,8 @@ function Canvas() {
         </ProjectContext.Provider>
         {/* The floating toolbar over a selection, its composer, and the agent's anchored
             reply (toolbar/). Hidden while the selection is being dragged, box-selected or
-            the canvas panned; back where the selection now is afterwards. */}
+            the canvas DRAGGED; back where the selection now is afterwards. A wheel pan or
+            zoom leaves it alone -- see onMoveStart above. */}
         <SelectionToolbar
           nodes={nodes}
           hidden={panning || boxSelecting || nodes.some((n) => n.dragging)}
