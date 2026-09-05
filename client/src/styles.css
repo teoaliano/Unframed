@@ -1060,8 +1060,6 @@ div:has(> .add-node-menu) {
   display: flex;
   flex: none;
   gap: var(--spacing-1);
-  /* Below the rule, not inside the list: a gap on the list would scroll away with it. */
-  margin-block-end: var(--spacing-1);
   border-bottom: var(--border-width) solid var(--color-border);
 }
 .mp-tab {
