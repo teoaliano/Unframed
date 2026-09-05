@@ -140,9 +140,16 @@ group is measured — and re-homed — by where it *looks*. Sizes fall back when
 because media deliberately has no height of its own (`withDrag`).
 
 **`client/src/nodes/GroupNode.jsx`** — the box and nothing else: its members are separate
-nodes React Flow positions against it. Editable name, `nodrag` so a caret can be placed;
-deliberately NOT `nowheel`, which React Flow honours for the whole subtree and would kill
-scroll-to-pan over the box and everything in it.
+nodes React Flow positions against it. **The name is the node's one label.** The first
+build showed a "GROUP" tab *and* a name field inside the box, which said the same thing
+twice and spent the box's top strip on a form; the tab now reads the name, exactly as an
+image node's tab reads its medium. Renaming is in place — double-click the tab, or F2
+while selected. Not ⌘R, the other candidate: it is the browser's reload, so taking it
+would leave a user with a box selected unable to refresh the page. The editing input is
+`nodrag` so a caret can be placed, stops Backspace from reaching the canvas (which would
+delete the box you are naming), and abandons its draft on Escape. Resizable from any
+edge via `MediaResize`, which gained a per-type `max` — a box wrapping three images
+starts wider than the 900 ceiling a single node has.
 
 **`App.jsx`** — `nodeTypes` registration, an Inputs-menu entry for an empty box, ⌘G /
 ⌘⇧G, and Group / Ungroup in the right-click menu's Edit section, each offered only when
@@ -153,6 +160,23 @@ updaters twice under StrictMode, so a side effect in there fires twice — the s
 next drag pulls them straight back out.
 
 **The three input node components** render their handle only when `parentId` is absent.
+
+### Fixed after the first browser pass
+
+Four things the tests could not have caught, three of them cosmetic and one not:
+
+- **Ungroup deleted the contents.** `diffGraphs` emitted the group's `removeNode` before
+  the `reparentNode` ops freeing its members, and the server's `removeNode` cascades — so
+  the members were deleted server-side, the cascade came back over SSE and emptied the
+  tab, and the reparents that followed bounced as "no node". A member escaping a group
+  that is being removed is now reparented FIRST, and `ops.test.js` pins the order (the
+  test fails against the old ordering, verified by reverting it).
+- Groups could not be resized. `MediaResize` now takes a per-type `max`.
+- Two labels for one thing, fixed as described above.
+- No selection border: the box is not an `.astryx-card`, so the `.selected` rules did not
+  reach it. It now takes the same accent border and inset ring, and goes solid as well as
+  accent — a dashed accent border at 1px is nearly invisible at low zoom, which is
+  exactly when you need to see what is selected.
 
 ### Left for a follow-up
 

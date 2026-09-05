@@ -29,7 +29,11 @@ const EDGES = ['top', 'right', 'bottom', 'left'];
 //                 graph/starter.js now has to seed a height for prompt nodes and not
 //                 only a width: for media, an undefined height is what makes the ratio
 //                 rule above work, so the two cases genuinely differ.
-export default function MediaResize({ free = false }) {
+// `max` follows the same rule as `free`: a per-TYPE constant, never a value that flips
+// while the node is mounted. A group is a box drawn AROUND other nodes, so it routinely
+// needs to be larger than any single node ever is -- 900 would have clamped a box the
+// moment you tried to widen one wrapping three images.
+export default function MediaResize({ free = false, max = 900 }) {
   return EDGES.map((pos) => (
     <NodeResizeControl
       key={pos}
@@ -51,9 +55,9 @@ export default function MediaResize({ free = false }) {
       keepAspectRatio={!free}
       resizeDirection={free ? undefined : 'horizontal'}
       minWidth={free ? 180 : 140}
-      maxWidth={900}
+      maxWidth={max}
       minHeight={free ? 96 : 100}
-      maxHeight={900}
+      maxHeight={max}
     />
   ));
 }

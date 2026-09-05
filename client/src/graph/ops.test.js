@@ -129,4 +129,28 @@ assert.deepEqual(persistentNode(node('1', { selected: true, dragging: false, mea
   assert.deepEqual(diffGraphs(withMembers, g([G, node('2', { parentId: 'G' }), node('free')])), [{ type: 'removeNode', id: '1' }]);
 }
 
+// ---- ungroup: members must escape BEFORE the box is removed ----
+// The server's removeNode cascades to a group's members, so op ORDER is the whole of
+// this: a removeNode sent first deletes the very nodes the reparent is about. Shipped
+// that way and caught in the browser -- ungrouping emptied the box instead of freeing it.
+{
+  const G = node('G', { type: 'group', data: { name: 'hero' } });
+  const before = g([G, node('1', { parentId: 'G', position: { x: 20, y: 20 } }), node('2', { parentId: 'G', position: { x: 20, y: 200 } })]);
+  // What ungroup leaves behind: the box gone, the members loose at absolute positions.
+  const after = g([node('1', { position: { x: 120, y: 120 } }), node('2', { position: { x: 120, y: 300 } })]);
+  const ops = diffGraphs(before, after);
+
+  const removeAt = ops.findIndex((o) => o.type === 'removeNode' && o.id === 'G');
+  const reparents = ops.filter((o) => o.type === 'reparentNode');
+  assert.equal(reparents.length, 2, 'both members are freed');
+  for (const r of reparents) {
+    assert.equal(r.parentId, null);
+    assert.ok(ops.indexOf(r) < removeAt, `${r.id} must be reparented out before the group is removed`);
+  }
+  // The reparent carries the new absolute position, so no moveNode travels beside it.
+  assert.deepEqual(reparents.find((r) => r.id === '1').position, { x: 120, y: 120 });
+  assert.equal(ops.some((o) => o.type === 'moveNode'), false);
+  assert.deepEqual(ops.filter((o) => o.type === 'removeNode').map((o) => o.id), ['G']);
+}
+
 console.log('ops.test.js: ok');

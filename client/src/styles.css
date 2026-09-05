@@ -1328,11 +1328,10 @@ div:has(> .add-node-menu) {
 }
 
 /* The group box. Dashed and barely tinted on purpose: it is a container, not content,
-   and its members are real nodes drawn ON it — a solid filled surface would read as
+   and its members are real nodes drawn ON it -- a solid filled surface would read as
    another card and compete with the pictures sitting inside it. It takes no pointer
-   events at all, so clicking the gap between two members still lands on the canvas
-   (box-select, pan) rather than being swallowed by an invisible sheet; the name input
-   opts back in, being the one thing in here you interact with. */
+   events, so clicking the gap between two members still lands on the canvas (box-select,
+   pan) rather than being swallowed by an invisible sheet. */
 .xnode-group {
   border: var(--border-width) dashed var(--color-border);
   border-radius: var(--radius-container);
@@ -1340,29 +1339,30 @@ div:has(> .add-node-menu) {
   pointer-events: none;
   box-sizing: border-box;
 }
+/* Selection follows the same rule as every other node (see the .selected block above):
+   the accent border, plus the inset ring that keeps the shape reading as one silhouette
+   with its tab. The box carries no elevation of its own, so unlike a card there is no
+   shadow to repeat here. It goes solid as well as accent -- a dashed accent border at
+   1px is nearly invisible against the canvas at low zoom, which is exactly when you need
+   to see what you have selected. */
 .react-flow__node.selected .xnode-group {
   border-style: solid;
+  border-color: var(--color-accent);
+  box-shadow: inset 0 0 0 1px var(--color-accent);
 }
-/* Sits in the box's top strip — the same margin `TOP` in graph/grouping.js reserves,
-   which is why members never start high enough to collide with it. Borderless until
-   hovered so an unnamed group is a box, not a form. */
-.xnode-group-name {
-  pointer-events: auto;
-  position: absolute;
-  inset-block-start: 8px;
-  inset-inline-start: 10px;
-  inline-size: calc(100% - 20px);
+/* The name, while it is being edited: shaped as the tab it replaces so the label does
+   not jump between reading and editing. */
+.xnode-tab--editing {
+  padding-block: 0;
+}
+.xnode-group-input {
   border: none;
   background: transparent;
-  color: var(--color-text-secondary);
+  color: inherit;
   font: inherit;
-  font-size: 12px;
-  padding: 2px 4px;
-  border-radius: var(--radius-control, 4px);
-}
-.xnode-group-name:hover,
-.xnode-group-name:focus {
-  background: var(--color-surface);
-  color: var(--color-text);
+  padding: 0;
+  margin: 0;
   outline: none;
+  inline-size: 12ch;
+  min-inline-size: 4ch;
 }
