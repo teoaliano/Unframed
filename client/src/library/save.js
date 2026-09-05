@@ -80,7 +80,10 @@ export function presetFromSelection(fragment, { name, summary }) {
     savedAt: new Date().toISOString(),
     name: name.trim(),
     summary: summary.trim(),
-    type: fragment.nodes.length > 1 ? 'flow' : 'block',
+    // Counted over TOP-LEVEL nodes, not every node: a group is one thing on the canvas
+    // whatever it holds, so a saved character is a block. Counting all of them made
+    // every group a "flow" -- a chip that says the opposite of what you selected.
+    type: fragment.nodes.filter((n) => !n.parentId).length > 1 ? 'flow' : 'block',
     kind,
     fragment,
   };

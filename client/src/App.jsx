@@ -68,7 +68,7 @@ import { keepLiveRunMarkers } from './graph/runMarkers.js';
 import { hitEdges, samplePaths } from './graph/edgeHits.js';
 import { expiryNote } from './keyExpiry.js';
 import LibraryDialog from './library/LibraryDialog.jsx';
-import { instantiateFragment, centerOffset } from './library/insert.js';
+import { instantiateFragment, centerOffset, placeFragment } from './library/insert.js';
 import { selectionFragment, presetFromSelection } from './library/save.js';
 import { useDocument } from './graph/useDocument.js';
 import { ProjectContext } from './graph/project.js';
@@ -1254,10 +1254,7 @@ function Canvas() {
     const r = canvasRef.current.getBoundingClientRect();
     const centre = screenToFlowPosition({ x: r.x + r.width / 2, y: r.y + r.height / 2 });
     const { dx, dy } = centerOffset(preset.fragment, centre);
-    setNodes((ns) => [
-      ...ns,
-      ...fresh.map((n) => withDrag({ ...n, position: { x: n.position.x + dx, y: n.position.y + dy } })),
-    ]);
+    setNodes((ns) => [...ns, ...placeFragment(fresh, dx, dy).map(withDrag)]);
     setEdges((es) => [...es, ...freshEdges]);
     setLibraryOpen(false);
   }

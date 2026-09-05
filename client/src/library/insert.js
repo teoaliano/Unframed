@@ -59,6 +59,19 @@ export function instantiateFragment(fragment, nextId) {
   return { nodes, edges };
 }
 
+// Move a fragment to where it was measured to go. ONLY top-level nodes take the offset:
+// a member's position is relative to its group, so adding a canvas offset to one pushes
+// it out of the box by exactly that much -- and `extent: 'parent'` then clamps it to the
+// edge, so the failure reads as a preset whose contents piled into one corner rather than
+// as arithmetic. It lives here, next to centerOffset which measures the same way, because
+// in App.jsx it was a line of JSX that bare `node` cannot reach: this is the rule the test
+// below exists for.
+export function placeFragment(nodes, dx, dy) {
+  return nodes.map((n) =>
+    n.parentId ? n : { ...n, position: { x: n.position.x + dx, y: n.position.y + dy } },
+  );
+}
+
 // Where the fragment's nodes should land so its bounding box centres on `centre`
 // (a flow coordinate). Positions in fragments are relative to (0,0), but nothing
 // requires them to start there, so this measures rather than assumes.

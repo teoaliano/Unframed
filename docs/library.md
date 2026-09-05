@@ -22,6 +22,9 @@ way out, `selectionFragment` pulls a selected group's members in after it (React
 needs the parent first), and a member selected without its group is detached at its
 absolute position. A saved group is how "a character" or "a product" lives in the
 library: a name on a box, not a node type (`docs/superpowers/specs/2026-09-05-group-node-design.md`).
+The whole round trip -- select a box, Add to library, insert it back with fresh ids and
+its members still inside it -- is pinned in `resolve.test.js`. That is what makes a
+reusable character or product a preset a user saves rather than a template we ship.
 
 ## Your own presets are the same data, on disk
 
@@ -33,7 +36,15 @@ Right-click → *Add to library* saves the selection through `library/save.js`:
 - `presetFromSelection` — asks only for a name and a description and *derives* the
   two chips: several nodes is a `flow`, one is a `block`, and `kind` comes from the
   consuming node's **type** (`imageOutput` → image, and so on). Two more dropdowns
-  would only let you contradict the graph you just selected.
+  would only let you contradict the graph you just selected. `flow` vs `block` counts
+  **top-level** nodes: a group is one thing on the canvas whatever it holds, so a saved
+  character is a block, not a three-node flow.
+- `placeFragment` — moves an instantiated fragment to where `centerOffset` measured it
+  should go, and only top-level nodes take the offset. A member's position is relative
+  to its group, so offsetting one pushes it out of the box by exactly that much; being
+  clamped to the parent's edge, the failure reads as a preset whose contents piled into
+  a corner rather than as arithmetic. It is a function here rather than a line in
+  `App.jsx` so `resolve.test.js` can pin it — which is how the bug was found.
 
 They carry `source: 'user'`, get a *Custom* chip and a delete button, sort ahead of
 the bundled ones, and otherwise go back in through `instantiateFragment` exactly like

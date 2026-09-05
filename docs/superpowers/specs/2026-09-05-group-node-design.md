@@ -178,13 +178,30 @@ Four things the tests could not have caught, three of them cosmetic and one not:
   accent — a dashed accent border at 1px is nearly invisible at low zoom, which is
   exactly when you need to see what is selected.
 
+### The Library round trip
+
+Saving a group and inserting it back is the whole point of the shape — it is how a
+reusable character or product exists without a `character` node — so it is pinned end to
+end in `resolve.test.js`. Selecting only the box brings its members (parent first);
+`instantiateFragment` remaps `parentId` through the id map; `placeFragment` centres the
+copy. One bug shipped in the group PR and was found here: `insertPreset` offset EVERY
+node to centre the fragment, but a member's position is relative to its box, so members
+were pushed out by the offset and clamped to the box's edge — the contents of a pasted
+preset piled into one corner. The rule now lives in `insert.js` as `placeFragment`,
+where a test can reach it, rather than as a line of JSX that bare `node` cannot run.
+`presetFromSelection` counts top-level nodes too, so a saved group is a **block**, not a
+three-node flow.
+
+This also retires the "Character template in the Library" follow-up below: there is
+nothing to ship, because a user builds the character as a group and saves it.
+
 ### Left for a follow-up
 
 Dragging a node into or out of an existing box by dragging it. ⌘G and Ungroup cover
 making and unmaking a group, which is the whole loop; `reparentNode` already supports the
-drag case, so it is UI work only. Also the **Character** template in the Library — an
-empty description prompt and image slots inside a named group — which is how the turnkey
-feel of PR #52's node comes back without the node.
+drag case, so it is UI work only. The **Character** template is no longer one of them: with the Library round trip
+working, a character is a group a user saves, which is better than a template we ship
+because it is theirs to shape.
 
 ## Left open, deliberately
 

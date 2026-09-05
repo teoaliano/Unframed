@@ -2,7 +2,7 @@
 import assert from 'node:assert/strict';
 import { buildRequest, bucketSources, sourceRoles, splitSections, findFreeSource, freeSourceText, freeShared, freeRunPrompts, parseImagePicks, expandSlots, runReferences, freeBatch, isOutput, isTextOutput, isReferenceable, isGroup, membersOf, MAX_RUNS, hasMedia, mediaRef } from './resolve.js';
 import { migrateNodes } from './migrate.js';
-import { instantiateFragment, centerOffset } from '../library/insert.js';
+import { instantiateFragment, centerOffset, placeFragment } from '../library/insert.js';
 import { selectionFragment, presetFromSelection } from '../library/save.js';
 import { MODEL_PARAM_KEYS, resetModelParams } from '../nodes/output/defaults.js';
 import { RUN_MARKERS, stripRunMarkers, keepLiveRunMarkers } from './runMarkers.js';
@@ -1373,6 +1373,54 @@ const box = (id, y, name = id) => ({ id, type: 'group', position: { x: 0, y }, d
   const m = withDrag({ id: 'm', type: 'image', parentId: 'G', position: { x: 0, y: 0 }, data: {} });
   assert.equal(m.extent, 'parent');
   assert.equal(withDrag({ id: 'f', type: 'image', position: { x: 0, y: 0 }, data: {} }).extent, undefined);
+}
+
+// ---- a saved group survives the round trip through the Library ----
+// Right-click a box -> Add to library -> insert it back. This is how a reusable
+// character, product or outfit lives in the Library, so every step of it is pinned.
+{
+  const source = [
+    { id: '10', type: 'group', position: { x: 200, y: 100 }, width: 420, height: 320, data: { name: 'Hero' }, selected: true },
+    { id: '11', type: 'prompt', parentId: '10', extent: 'parent', position: { x: 20, y: 60 }, data: { text: 'red hair' } },
+    { id: '12', type: 'image', parentId: '10', extent: 'parent', position: { x: 20, y: 200 }, data: { file: '1-face.png' } },
+    { id: '99', type: 'imageOutput', position: { x: 800, y: 100 }, data: {} },
+  ];
+  // Only the BOX is selected, and it brings its contents -- parent first, since React
+  // Flow resolves a child against the parents it has already seen.
+  const frag = selectionFragment(source, [{ id: 'e', source: '10', target: '99' }], null);
+  assert.deepEqual(frag.nodes.map((n) => n.id), ['10', '11', '12']);
+  assert.deepEqual(frag.edges, [], 'half an edge is not a thing: the output was not selected');
+
+  // A group is ONE thing on the canvas whatever it holds, so a saved character is a
+  // block. Counting every node made it a "flow" -- a chip saying the opposite of what
+  // you selected.
+  const preset = presetFromSelection(frag, { name: 'Hero', summary: 'A character' });
+  assert.equal(preset.type, 'block');
+
+  let next = 700;
+  const { nodes: fresh } = instantiateFragment(preset.fragment, () => String(next++));
+  const box = fresh.find(isGroup);
+  assert.deepEqual(membersOf(fresh, box.id).map((m) => m.id), fresh.filter((n) => n.parentId).map((m) => m.id));
+  assert.equal(box.data.name, 'Hero', 'the name is what the @ tag reads');
+
+  // The offset centres the fragment on the view, and ONLY top-level nodes take it. A
+  // member's position is relative to its box, so offsetting one pushes it out by exactly
+  // that much -- and extent:'parent' clamps it to the edge, so it looked like a preset
+  // whose contents had piled into a corner rather than like arithmetic. Shipped that way
+  // in the group PR and caught while testing the Library path.
+  const { dx, dy } = centerOffset(preset.fragment, { x: 1000, y: 1000 });
+  assert.ok(dx !== 0 && dy !== 0, 'a centring offset that is zero would prove nothing');
+  const placed = placeFragment(fresh, dx, dy);
+  const placedBox = placed.find(isGroup);
+  for (const m of placed.filter((n) => n.parentId)) {
+    const before = fresh.find((f) => f.id === m.id).position;
+    assert.deepEqual(m.position, before, 'a member keeps its position: it is relative to the box, which moved');
+    assert.ok(
+      m.position.x >= 0 && m.position.y >= 0 && m.position.x < placedBox.width && m.position.y < placedBox.height,
+      `member ${m.id} at ${JSON.stringify(m.position)} must still be inside its ${placedBox.width}x${placedBox.height} box`,
+    );
+  }
+  assert.deepEqual(placedBox.position, { x: 200 + dx, y: 100 + dy }, 'the box itself does move');
 }
 
 console.log('resolve.js: all checks passed');
