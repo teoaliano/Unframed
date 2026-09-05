@@ -1036,17 +1036,30 @@ div:has(> .add-node-menu) {
 .mp-mark--claude {
   color: var(--color-accent);
 }
+/* One 8px inset for the whole popup, and it comes from the popover itself: Astryx pads
+   12px, and the strip and list used to add their own on top of it. Scoped with :has so
+   every other popover in the app keeps the stock padding. */
+.astryx-popover:has(.mp) {
+  padding: var(--spacing-2);
+}
 .mp {
   display: flex;
   flex-direction: column;
   min-height: 0;
-  max-height: 420px;
+  /* Shorter than the full catalogue on purpose: the list scrolls rather than growing a
+     popup taller than the panel it hangs off. */
+  max-height: 320px;
+}
+/* The effort list is six short rows at most, so it is never capped -- clipping "Max" by
+   a few pixels to gain a scrollbar reads as a bug. */
+.mp--effort {
+  max-height: none;
 }
 /* Providers as tabs across the top; the active one underlined. */
 .mp-tabs {
   display: flex;
+  flex: none;
   gap: var(--spacing-1);
-  padding: var(--spacing-1) var(--spacing-2) 0;
   border-bottom: var(--border-width) solid var(--color-border);
 }
 .mp-tab {
@@ -1081,14 +1094,20 @@ div:has(> .add-node-menu) {
   display: flex;
   flex-direction: column;
   min-width: 0;
+  /* min-height, or the list cannot shrink below its content and never scrolls: a flex
+     child's default `min-height: auto` is its content. */
+  min-height: 0;
   flex: 1;
 }
+/* Inline padding matches a row's, so the heading's text starts where the names do; block
+   because Astryx renders it as a span, whose vertical padding would reserve no space. */
 .mp-heading {
-  padding: var(--spacing-2) var(--spacing-3) 0;
+  display: block;
+  padding: var(--spacing-2) var(--spacing-2) var(--spacing-1);
 }
 .mp-list {
   overflow-y: auto;
-  padding: var(--spacing-1);
+  min-height: 0;
 }
 .mp-row {
   display: flex;

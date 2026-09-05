@@ -439,7 +439,8 @@ export default function AgentPanel({ project, nodes, providers, onCheckProviders
             onChange={setText}
           />
         </div>
-        <HStack gap={2} align="center" wrap>
+        {/* One footer line: what the turn will run on, then Send. */}
+        <HStack gap={2} align="center">
           {/* Model and effort for the next turn (the thread's own, or the next thread's),
               after T3 Code's composer footer: two small ghost controls, the model picker
               searchable and grouped by provider with a description under each name, the
@@ -448,11 +449,6 @@ export default function AgentPanel({ project, nodes, providers, onCheckProviders
               native-select exception is for the nodes only. */}
           {provider && <ModelPicker provider={provider} codex={codex} models={models} value={settings.model} onChange={(id) => changeSettings({ model: id, effort: '' })} disabled={running} />}
           {provider && efforts.length > 0 && <EffortPicker efforts={efforts} value={settings.effort} onChange={(e) => changeSettings({ effort: e })} disabled={running} />}
-        </HStack>
-        <HStack gap={2} align="center">
-          <Text type="supporting" className="agent-meta">
-            {provider ? 'Subscription · not metered' : ''}
-          </Text>
           <StackItem size="fill" />
           {running ? (
             <Button label="Stop" variant="secondary" size="sm" icon={<Icon icon={Square} />} onClick={() => interruptThread(project, threadId)} />
