@@ -1617,6 +1617,42 @@ try {
   assert.equal(strandedMoved.status, 'failed',
     'a render moved with no key to poll it is failed, not left pending where nothing sweeps it');
 
+  // ElevenLabs is a second, independent vendor/credential -- these routes must
+  // refuse keyless without ever reaching the network, and its key must save,
+  // report and clear through the same funnel as OpenRouter's, without touching it.
+  assert.equal((await (await fetch(`${base}/api/health`)).json()).hasElevenLabsKey, false,
+    'precondition: no ElevenLabs key yet');
+  assert.equal((await fetch(`${base}/api/elevenlabs/voices`)).status, 400,
+    'no key yet -- refused before any network call');
+  assert.equal((await fetch(`${base}/api/elevenlabs/models`)).status, 400,
+    'no key yet -- refused before any network call');
+  assert.equal((await fetch(`${base}/api/audio`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ text: 'hello', voice_id: 'v1' }),
+  })).status, 400, 'no key yet -- refused before any network call');
+
+  const fakeElevenLabsKey = 'el-fakekeyfaketesting123456';
+  const savedEl = await fetch(`${base}/api/config`, {
+    method: 'PUT', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ elevenLabsKey: fakeElevenLabsKey }),
+  });
+  assert.equal(savedEl.status, 200);
+  assert.match(await fs.readFile(path.join(dataDir, '.env'), 'utf8'), /^ELEVENLABS_API_KEY=el-fakekeyfaketesting123456$/m,
+    'the key lands in .env under its own name, not OPENROUTER_API_KEY');
+  const healthWithEl = await (await fetch(`${base}/api/health`)).json();
+  assert.equal(healthWithEl.hasElevenLabsKey, true);
+  assert.equal(healthWithEl.elevenLabsKeyHint, '3456');
+  // And it must not disturb OpenRouter's own key/state.
+  assert.equal(healthWithEl.hasKey, false, 'saving an ElevenLabs key must not touch the OpenRouter key');
+
+  const removedEl = await fetch(`${base}/api/elevenlabs/key`, { method: 'DELETE' });
+  assert.equal(removedEl.status, 200);
+  assert.equal((await removedEl.json()).hasElevenLabsKey, false);
+  assert.doesNotMatch(await fs.readFile(path.join(dataDir, '.env'), 'utf8'), /ELEVENLABS_API_KEY=/,
+    'DELETE drops the whole line, same as /api/key');
+  assert.equal((await (await fetch(`${base}/api/health`)).json()).hasElevenLabsKey, false,
+    'and the live process reflects it without a restart');
+
 } finally {
   child.kill();
   await new Promise((resolve) => statusStub.close(resolve));

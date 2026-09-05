@@ -43,9 +43,11 @@ import PromptNode from './nodes/PromptNode.jsx';
 import GroupNode from './nodes/GroupNode.jsx';
 import ImageNode from './nodes/ImageNode.jsx';
 import VideoNode, { MAX_VIDEO_BYTES } from './nodes/VideoNode.jsx';
+import AudioNode from './nodes/AudioNode.jsx';
 import ImageOutputNode from './nodes/ImageOutputNode.jsx';
 import VideoOutputNode from './nodes/VideoOutputNode.jsx';
 import TextOutputNode from './nodes/TextOutputNode.jsx';
+import AudioOutputNode from './nodes/AudioOutputNode.jsx';
 import PageNode from './nodes/PageNode.jsx';
 import {
   withDrag,
@@ -59,10 +61,11 @@ import {
 } from './graph/starter.js';
 import ProjectMenu from './ProjectMenu.jsx';
 import IgnoredEdge from './nodes/IgnoredEdge.jsx';
-import { PromptIcon, ImageIcon, VideoIcon, TextIcon, PageIcon, GroupIcon } from './nodes/nodeIcons.jsx';
+import { PromptIcon, ImageIcon, VideoIcon, TextIcon, PageIcon, GroupIcon, AudioIcon } from './nodes/nodeIcons.jsx';
 import { bucketSources, isOutput, isReferenceable, hasMedia } from './graph/resolve.js';
 import { groupSelection, ungroup, groupable } from './graph/grouping.js';
 import { mediaSrc } from './nodes/ImageNode.jsx';
+import { NativeSelect } from './nodes/output/controls.jsx';
 import { canSource, canTarget, selectedIds, connections, dropInternal } from './graph/bulkWire.js';
 import { keepLiveRunMarkers } from './graph/runMarkers.js';
 import { hitEdges, samplePaths } from './graph/edgeHits.js';
@@ -94,12 +97,14 @@ import {
   getHealth,
   saveConfig,
   clearKey,
+  clearElevenLabsKey,
   startOauth,
   cancelOauth,
   oauthPending,
   oauthStatus,
   pickFolder,
   listModels,
+  listAudioModels,
   revealFiles,
   listProviders,
 } from './api.js';
@@ -109,9 +114,11 @@ const nodeTypes = {
   group: GroupNode,
   image: ImageNode,
   video: VideoNode,
+  audio: AudioNode,
   imageOutput: ImageOutputNode,
   videoOutput: VideoOutputNode,
   textOutput: TextOutputNode,
+  audioOutput: AudioOutputNode,
   page: PageNode,
 };
 
@@ -318,7 +325,14 @@ function Canvas() {
     claudePath: '',
     codexPath: '',
     claudeConfigDir: '',
+    hasElevenLabsKey: false,
+    elevenLabsKeyHint: '',
+    audioModel: '',
   });
+  // ElevenLabs' models, for the audio default-model picker -- fetched separately
+  // from the OpenRouter catalogues above since they come from a different vendor
+  // and need that vendor's own key to answer at all.
+  const [audioModels, setAudioModels] = useState([]);
   // The local agent CLIs: what GET /api/providers last said, fetched when the settings
   // dialog or the agent panel opens, never on a timer (detection spawns the CLIs).
   const [providers, setProviders] = useState(null);
@@ -760,9 +774,16 @@ function Canvas() {
       claudePath: cfg.claudePath ?? '',
       codexPath: cfg.codexPath ?? '',
       claudeConfigDir: cfg.claudeConfigDir ?? '',
+      elevenLabsKey: '',
+      audioModel: cfg.audioModel,
     });
     loadCatalogues();
     checkProviders();
+    // Only worth asking when there is a key to answer with -- same reasoning as
+    // loadCatalogues() being skipped without an OpenRouter one. A 400 (no key
+    // yet) is left as [], which falls back to the current value as the only
+    // option, same as the OpenRouter pickers before their catalogue loads.
+    if (cfg.hasElevenLabsKey) listAudioModels().then(setAudioModels).catch(() => setAudioModels([]));
     // On open, not on a timer: inference responses carry no quota information, so
     // asking is the only way to know, and nothing outside this dialog needs it.
     setOrStatus(null);
@@ -783,7 +804,11 @@ function Canvas() {
     // lines and an empty key field doesn't wipe the saved key.
     const fields = {};
     if (d.key?.trim()) fields.key = d.key.trim();
-    for (const f of ['imageModel', 'textModel', 'videoModel', 'outputDir']) {
+    // A second vendor, a second key, entirely independent of the OpenRouter one
+    // above -- it does not participate in `wasKeyless`/`setConnecting` below,
+    // which are about OpenRouter's own onboarding-and-OAuth flow.
+    if (d.elevenLabsKey?.trim()) fields.elevenLabsKey = d.elevenLabsKey.trim();
+    for (const f of ['imageModel', 'textModel', 'videoModel', 'outputDir', 'audioModel']) {
       if (d[f] && d[f] !== cfg[f]) fields[f] = d[f];
     }
     // The provider settings may be cleared: an empty string is a real value here (back
@@ -794,8 +819,10 @@ function Canvas() {
     if (!Object.keys(fields).length) return setCfgDlg(null);
 
     // Read BEFORE the save: `cfg.hasKey` is about to flip, and this decides
-    // whether the dialog was the key-only onboarding one.
-    const wasKeyless = !cfg.hasKey;
+    // whether the dialog was the key-only onboarding one. Gated on `fields.key`
+    // too -- an ElevenLabs-only save while OpenRouter is still keyless must not
+    // read as "onboarding finished" and close the dialog out from under it.
+    const wasKeyless = !cfg.hasKey && Boolean(fields.key);
 
     setCfgDlg((s) => ({ ...s, saving: true, error: undefined }));
     try {
@@ -827,7 +854,7 @@ function Canvas() {
       // A new key was just saved over the old one, but the dialog stays open --
       // the status fetched at open time now describes a key that's gone.
       if (fields.key) setOrStatus(null);
-      setCfgDlg((s) => ({ ...s, key: '', saving: false, saved: true }));
+      setCfgDlg((s) => ({ ...s, key: '', elevenLabsKey: '', saving: false, saved: true }));
     } catch (err) {
       setCfgDlg((s) => ({ ...s, saving: false, error: err.message }));
     }
@@ -931,6 +958,20 @@ function Canvas() {
       }));
     } catch (err) {
       setCfgDlg((d) => ({ ...d, saving: false, confirmRemove: false, error: err.message }));
+    }
+  }
+
+  // One click, not two: unlike removeKey, there is no pending render this could
+  // ever strand -- an ElevenLabs call is a single request already answered by
+  // the time anyone could click this.
+  async function removeElevenLabsKey() {
+    setCfgDlg((d) => ({ ...d, savingElevenLabs: true }));
+    try {
+      const r = await clearElevenLabsKey();
+      setCfg((c) => ({ ...c, ...r }));
+      setCfgDlg((d) => ({ ...d, elevenLabsKey: '', savingElevenLabs: false }));
+    } catch (err) {
+      setCfgDlg((d) => ({ ...d, savingElevenLabs: false, error: err.message }));
     }
   }
 
@@ -1223,6 +1264,7 @@ function Canvas() {
         { label: 'Prompt', icon: PromptIcon, onClick: () => addNode('prompt', NEW_NODE.prompt, at?.()) },
         { label: 'Image', icon: ImageIcon, onClick: () => addNode('image', NEW_NODE.image, at?.()) },
         { label: 'Video', icon: VideoIcon, onClick: () => addNode('video', NEW_NODE.video, at?.()) },
+        { label: 'Audio', icon: AudioIcon, onClick: () => addNode('audio', NEW_NODE.audio, at?.()) },
         { label: 'Group', icon: GroupIcon, onClick: () => addNode('group', NEW_NODE.group, at?.()) },
       ],
     },
@@ -1236,6 +1278,7 @@ function Canvas() {
         { label: 'Image', icon: ImageIcon, onClick: () => addNode('imageOutput', NEW_NODE.imageOutput, at?.()) },
         { label: 'Video', icon: VideoIcon, onClick: () => addNode('videoOutput', NEW_NODE.videoOutput, at?.()) },
         { label: 'Text', icon: TextIcon, onClick: () => addNode('textOutput', NEW_NODE.textOutput, at?.()) },
+        { label: 'Audio', icon: AudioIcon, onClick: () => addNode('audioOutput', NEW_NODE.audioOutput, at?.()) },
       ],
     },
     {
@@ -2343,6 +2386,57 @@ function Canvas() {
           </VStack>
           </>
           )}
+
+          {/* Unconditional, unlike everything above: ElevenLabs is a second vendor
+              with its own key, entirely independent of whether OpenRouter is
+              connected -- an audio output node has no use for OpenRouter's key at
+              all, so gating this section on `cfg.hasKey` would hide it from anyone
+              who only ever wants text-to-speech. */}
+          <Divider />
+
+          <VStack gap={2}>
+            <Text type="label">ElevenLabs (audio)</Text>
+            <HStack gap={2} align="center">
+              <StackItem size="fill">
+                <TextInput
+                  label="ElevenLabs API key"
+                  isLabelHidden
+                  type="password"
+                  placeholder={
+                    cfg.hasElevenLabsKey
+                      ? `A key is saved (…${cfg.elevenLabsKeyHint}). Entering a new one replaces it.`
+                      : 'Paste your ElevenLabs API key'
+                  }
+                  value={cfgDlg?.elevenLabsKey ?? ''}
+                  onChange={(v) =>
+                    setCfgDlg((d) => ({ ...d, elevenLabsKey: v, error: undefined, saved: false }))
+                  }
+                />
+              </StackItem>
+              {cfg.hasElevenLabsKey && (
+                <Button
+                  label="Remove"
+                  variant="ghost"
+                  isDisabled={cfgDlg?.savingElevenLabs}
+                  isLoading={cfgDlg?.savingElevenLabs}
+                  onClick={removeElevenLabsKey}
+                />
+              )}
+            </HStack>
+            {cfg.hasElevenLabsKey && (
+              <NativeSelect
+                label="Default audio model"
+                options={
+                  audioModels.length
+                    ? audioModels.map((m) => ({ value: m.model_id, label: m.name }))
+                    : [{ value: cfgDlg?.audioModel, label: cfgDlg?.audioModel }].filter((o) => o.value)
+                }
+                value={cfgDlg?.audioModel || undefined}
+                onChange={(v) => setCfgDlg((d) => ({ ...d, audioModel: v, error: undefined, saved: false }))}
+              />
+            )}
+          </VStack>
+
           </VStack>
 
           {(cfgDlg?.error || cfgDlg?.saved) && (
@@ -2360,8 +2454,10 @@ function Canvas() {
                 key or "or paste a key instead" reveals it. With a key, Default
                 models and Output folder stay rendered and editable through a
                 reconnect, so Save has to stay too; gating it on !connecting left
-                those edits with no way out. */}
-            {(cfg.hasKey || showPaste) && (
+                those edits with no way out. The ElevenLabs section is always on
+                screen (unconditional, see above), so its own draft alone is
+                enough to show Save even with no OpenRouter key at all. */}
+            {(cfg.hasKey || showPaste || cfg.hasElevenLabsKey || cfgDlg?.elevenLabsKey) && (
               <Button
                 label="Save"
                 variant="primary"

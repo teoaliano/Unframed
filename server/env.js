@@ -26,6 +26,8 @@ export const PATTERNS = {
   CODEX_PATH: /^[^\n\r"'#;&|$`<>(){}\s][^\n\r"'#;&|$`<>(){}]{0,399}$/,
   // A separate Claude config dir (CLAUDE_CONFIG_DIR): an absolute path only.
   CLAUDE_CONFIG_DIR: /^(\/|[A-Za-z]:\\)[^\n\r"'#]{0,399}$/,
+  ELEVENLABS_API_KEY: /^[\w-]{8,200}$/,
+  ELEVENLABS_MODEL_ID: /^[a-z0-9_]+$/,
 };
 
 // Rewrite `text` so each key in `updates` holds its new value. A null value

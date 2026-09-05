@@ -5,6 +5,16 @@ is no release artifact to number. Headings are `## YYYY-MM-DD`, groups are
 `### Added` / `### Changed` / `### Fixed`, one bullet per user-visible change.
 Keep that shape: the website's What's new page parses this file.
 
+## 2026-09-06
+
+### Added
+
+- **Audio nodes.** An Audio output node speaks whatever's wired into it using ElevenLabs
+  text-to-speech (defaults to Eleven v3) — pick a voice and model from your account,
+  fetched live. It needs its own key (Settings → ElevenLabs), independent of OpenRouter's.
+  An Audio input node holds a clip you supply, for future features to build on — it isn't
+  yet usable as a generation reference.
+
 ## 2026-09-05
 
 ### Added

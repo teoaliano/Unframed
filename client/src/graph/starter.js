@@ -28,7 +28,7 @@ import { OUTPUT_DEFAULTS } from '../nodes/output/defaults.js';
 // handle" to React Flow, which is what makes the whole card the drag surface; the
 // controls opt out individually with `nodrag`. See
 // docs/superpowers/specs/2026-08-18-canvas-interaction-design.md.
-const RESIZABLE_INPUT = new Set(['image', 'video', 'prompt']);
+const RESIZABLE_INPUT = new Set(['image', 'video', 'audio', 'prompt']);
 // A page is free on both axes like a prompt, and starts large enough to read.
 const PAGE_SIZE = { width: 480, height: 320 };
 
@@ -107,9 +107,11 @@ export const NEW_NODE = {
   group: { name: '' },
   image: { fileName: '', dataUrl: '' },
   video: { fileName: '', dataUrl: '' },
+  audio: { fileName: '', dataUrl: '' },
   imageOutput: OUTPUT_DEFAULTS.imageOutput,
   videoOutput: OUTPUT_DEFAULTS.videoOutput,
   textOutput: OUTPUT_DEFAULTS.textOutput,
+  audioOutput: OUTPUT_DEFAULTS.audioOutput,
   page: { file: '', title: '', fileName: '' },
 };
 
