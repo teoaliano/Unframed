@@ -237,7 +237,12 @@ artifact → it is "To" and the rest come "with"; none → "To" is a new asset t
 creates beside the selection; several → the agent must ask, and the composer says so.
 One more when the panel is open on an artifact thread and the selection has no artifact:
 "To" is that thread's artifact, and the button reads **Add to <title>** — a selected
-artifact still wins over an open tab. Two rules while it is open: clicking another node adds it to "with" (and keeps it
+artifact still wins over an open tab. Both the bar and the anchored reply float over React Flow as ordinary DOM, so a wheel
+over them would otherwise reach nothing and the canvas would sit frozen wherever they
+happen to be: `toolbar/canvasWheel.js` forwards the event to `.react-flow__pane`, on a
+timeout (d3-zoom ignores a wheel dispatched inside another wheel's dispatch) and with
+`view: window` (d3-zoom reads `event.view.document`), leaving the wheel alone only when
+something under the pointer can scroll itself. Two rules while it is open: clicking another node adds it to "with" (and keeps it
 selected), clicking empty canvas collapses it; Esc and Back do the same. The message goes
 to the target artifact's newest idle thread (or a new `artifact` thread), and the reply
 lands anchored below the node the agent worked on with **Undo** — offered only while the

@@ -8,6 +8,7 @@ import { TextArea } from '@astryxdesign/core/TextArea';
 import { HStack, VStack, StackItem } from '@astryxdesign/core/Stack';
 import { Sparkles, ArrowLeft, ExternalLink, Play, Square } from 'lucide-react';
 import { place, selectionBox, toScreen } from './placement.js';
+import { useCanvasWheel } from './canvasWheel.js';
 import { toolbarActions } from './actions.js';
 import { targetLabel } from './target.js';
 
@@ -72,6 +73,9 @@ export default function SelectionToolbar({
   useEffect(() => {
     if (!composer) setText('');
   }, [composer]);
+
+  // The bar floats over the canvas, so it must not swallow the canvas's own gestures.
+  useCanvasWheel(el, canvasEl);
 
   if (!flowBox || hidden || !canvasEl) return null;
 
