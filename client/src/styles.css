@@ -1549,10 +1549,18 @@ div:has(> .add-node-menu) {
   padding: var(--spacing-3);
   border-top: var(--border-width) solid var(--color-border);
 }
+/* The no-provider state: a real panel with a heading, links and a button, so it keeps
+   its box. The empty-transcript hint below is not that and does not. */
 .agent-empty {
   padding: var(--spacing-3);
   border: var(--border-width) dashed var(--color-border-emphasized);
   border-radius: var(--radius-element);
+}
+/* `margin-top: auto` is what puts the hint at the foot of the column rather than the
+   top: the transcript is a flex column, so the free space collects above it, exactly
+   where the messages will appear. */
+.agent-hint {
+  margin-top: auto;
 }
 .agent-msg {
   display: flex;

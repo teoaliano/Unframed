@@ -204,8 +204,14 @@ message's `with`. The active thread's artifact wears the **focus mark** on the c
 (`onFocus` → `className: 'agent-focus'` on that node — the node alone, not what the thread
 touched): its name tag fills bright with a live dot, design option E, chosen over a ring
 around the card because selection already owns the card border and the two read as one
-fact when they share it. The scope row names the same artifact with a **Locate** action
-that pans and zooms to it (`onLocate` → `fitView` on that node). The composer's bottom
+fact when they share it. The row above the composer names the same artifact with a
+**Locate** action that pans and zooms to it (`onLocate` → `fitView` on that node), beside
+a count of whatever else is selected. It shows only what the next message actually
+carries and is absent when that is nothing: an empty selection IS the whole canvas, so a
+chip announcing it was a label on the default, and the "Scope" heading over it was a
+label on a label. A thread with nothing in it yet says what to say in plain text at the
+FOOT of the transcript, next to the composer it is about -- in a box and at the top it
+read as the first message. The composer's bottom
 row sets the thread's **model and effort** for the next turn, after T3 Code's composer
 footer (`agent/ModelPicker.jsx`): two small ghost triggers with a popup each. The model
 popup has provider tabs across the top (Claude, Codex — the last says sessions on it do

@@ -296,7 +296,6 @@ export default function AgentPanel({ project, nodes, providers, onCheckProviders
     }
   }
 
-  const scope = selection.length ? `${selection.length} selected` : 'whole canvas';
   const running = status === 'running';
   const focusArtifact = thread?.kind === 'artifact' && thread.artifactId && nodes.some((n) => n.id === thread.artifactId) ? thread.artifactId : null;
   // The transcript: messages and the agent's change notes, in time order.
@@ -419,14 +418,15 @@ export default function AgentPanel({ project, nodes, providers, onCheckProviders
             </VStack>
           </div>
         )}
+        {/* What to say, for a thread with nothing in it yet. It sits at the FOOT of the
+            transcript, next to the composer it is about, and is drawn as plain text: a
+            box would read as the first message, and there isn't one. */}
         {provider && lines.length === 0 && !draft && (
-          <div className="agent-empty">
-            <Text type="supporting">
-              {thread?.kind === 'artifact' || newKind?.kind === 'artifact'
-                ? 'Tell the agent what to change on this artifact. Whatever else is selected when you send comes with the message.'
-                : 'Ask about the board — what is on it, what feeds what, what a prompt says — or tell the agent what to change or make. Select an artifact to talk about it alone.'}
-            </Text>
-          </div>
+          <Text type="supporting" color="secondary" className="agent-hint">
+            {thread?.kind === 'artifact' || newKind?.kind === 'artifact'
+              ? 'Tell the agent what to change on this artifact. Whatever else is selected when you send comes with the message.'
+              : 'Ask about the board — what is on it, what feeds what, what a prompt says — or tell the agent what to change or make. Select an artifact to talk about it alone.'}
+          </Text>
         )}
         {lines.map((m, i) =>
           m.role === 'note' ? (
@@ -466,21 +466,24 @@ export default function AgentPanel({ project, nodes, providers, onCheckProviders
       </div>
 
       <div className="agent-panel-composer">
-        <HStack gap={1} align="center" wrap>
-          <Text type="supporting" className="agent-meta">
-            Scope
-          </Text>
-          {focusArtifact && (
-            <span className="agent-chip agent-chip--focus">
-              <span className="agent-dot agent-dot--focus" />
-              {artifactLabel(thread, nodes)}
-              <button type="button" className="agent-locate" title="Locate on canvas" aria-label="Locate on canvas" onClick={() => onLocate?.(focusArtifact)}>
-                <Icon icon={Crosshair} size="sm" />
-              </button>
-            </span>
-          )}
-          <span className="agent-chip">{scope}</span>
-        </HStack>
+        {/* What the next message carries besides its own text: the page this thread is
+            about, and whatever else is selected. Both absent means the row is absent --
+            an empty selection IS the whole canvas, so a chip saying so was a label on
+            the default, and a heading over one chip was a label on a label. */}
+        {(focusArtifact || selection.length > 0) && (
+          <HStack gap={1} align="center" wrap>
+            {focusArtifact && (
+              <span className="agent-chip agent-chip--focus">
+                <span className="agent-dot agent-dot--focus" />
+                {artifactLabel(thread, nodes)}
+                <button type="button" className="agent-locate" title="Locate on canvas" aria-label="Locate on canvas" onClick={() => onLocate?.(focusArtifact)}>
+                  <Icon icon={Crosshair} size="sm" />
+                </button>
+              </span>
+            )}
+            {selection.length > 0 && <span className="agent-chip">{selection.length} selected</span>}
+          </HStack>
+        )}
         {/* Enter sends; Shift+Enter or Option+Enter breaks the line. Caught on a wrapper,
             since keydown bubbles and the TextArea component does not promise to forward it. */}
         <div

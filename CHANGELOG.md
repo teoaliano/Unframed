@@ -26,7 +26,7 @@ Keep that shape: the website's What's new page parses this file.
   conversation — useful when two of them are about the same page — and clear the name to
   get the default back. Select a page and it shows
   only the threads about that page; select several and it shows theirs. The page the open
-  thread is about lights up its name tag on the canvas, the panel's Scope row names it
+  thread is about lights up its name tag on the canvas, a chip over the composer names it
   with a Locate button that pans to it, and with the panel open on a page's thread,
   selecting other assets turns the toolbar's Agent button into **Add to <page>**.
 - **Pick the model and effort per thread.** The panel's composer has a model picker and
