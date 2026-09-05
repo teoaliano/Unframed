@@ -194,14 +194,15 @@ fact when they share it. The scope row names the same artifact with a **Locate**
 that pans and zooms to it (`onLocate` → `fitView` on that node). The composer's bottom
 row sets the thread's **model and effort** for the next turn, after T3 Code's composer
 footer (`agent/ModelPicker.jsx`): two small ghost triggers with a popup each. The model
-popup has a provider rail down the left (favourites, Claude, Codex — the last says
-sessions on it do not exist yet), a search field, and two-line rows with a ⌘N jump key
-and a favourite star (favourites in `localStorage`); the effort popup is a short list
-headed Reasoning, Auto marked Default, a hint under each level. Astryx has no component
-of that shape, so they are Astryx `Popover`, `TextInput`, `Kbd` and `Badge` around our
-own rows, styled from tokens (`.mp-*` in `styles.css`); the provider logos are the SVG
-paths t3code ships (MIT). Saved through `PATCH …/threads/:id`; with no thread yet they
-apply to the one the next message creates. **Enter sends, Shift+Enter or Option+Enter breaks the line**, in
+popup has provider tabs across the top (favourites, Claude, Codex — the last says
+sessions on it do not exist yet) and one-line rows, every model the SDK reports, with a
+⌘N jump key and a favourite star (favourites in `localStorage`); the SDK's "default"
+alias is folded into the model it stands for, so the trigger always reads a real model
+name. The effort popup is a short list headed Reasoning, Auto marked Default, a hint
+under each level. Astryx has no component of that shape, so they are Astryx `Popover`,
+`Kbd` and `Badge` around our own rows, styled from tokens (`.mp-*` in `styles.css`); the
+provider logos are the SVG paths t3code ships (MIT). Saved through
+`PATCH …/threads/:id`; with no thread yet they apply to the one the next message creates. **Enter sends, Shift+Enter or Option+Enter breaks the line**, in
 the panel and the toolbar's composer alike. The header's trash button deletes the active
 thread after a confirmation; the canvas changes it made stay. Everything durable
 is the server's; the panel mirrors the record and applies the stream, stored `ops_applied`

@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Popover } from '@astryxdesign/core/Popover';
-import { TextInput } from '@astryxdesign/core/TextInput';
 import { Kbd } from '@astryxdesign/core/Kbd';
 import { Badge } from '@astryxdesign/core/Badge';
 import { Icon } from '@astryxdesign/core/Icon';
@@ -13,8 +12,10 @@ import { ChevronDown, Star } from 'lucide-react';
 // left (favourites first), a search field, and two-line rows -- model name, then the
 // provider under it -- with a ⌘N jump key and a favourite star on the right. The effort
 // popup is a short list headed "Reasoning". Astryx has no component with this shape, so
-// the popup is Astryx's Popover, TextInput, Kbd and Badge around our own rows, styled
-// from tokens only (styles.css, `.mp-*`).
+// the popup is Astryx's Popover, Kbd and Badge around our own rows, styled from tokens
+// only (styles.css, `.mp-*`). Departures from T3, asked for: the providers are tabs
+// across the top rather than a rail, there is no search, rows are one line, and the
+// SDK's "default" alias is folded into the model it stands for.
 //
 // Rows come from the provider probe (server/providers.js: the account's models, with a
 // description and the effort levels each accepts). Codex is on the rail because it is
@@ -70,28 +71,22 @@ function Trigger({ children, disabled, label }) {
 // `models` is the Claude probe's list; `value` '' is the provider's default.
 export function ModelPicker({ provider, codex, models, value, onChange, disabled }) {
   const [open, setOpen] = useState(false);
-  const [query, setQuery] = useState('');
   const [rail, setRail] = useState('claude');
   const [favorites, setFavorites] = useState(readFavorites);
 
-  const rows = useMemo(() => {
+  // Every model the SDK lists, by name. The SDK's own "default" row is an alias for one
+  // of the others (same description), so it is folded into that row rather than shown:
+  // a thread with no model set reads as the model it will actually run.
+  const rows = useMemo(() => models.filter((m) => m.id !== 'default'), [models]);
+  const defaultRow = useMemo(() => {
     const def = models.find((m) => m.id === 'default');
-    const list = [
-      { id: '', name: 'Default', description: def?.description || `Whatever ${provider.name} picks`, provider: 'claude' },
-      ...models.filter((m) => m.id !== 'default').map((m) => ({ ...m, provider: 'claude' })),
-    ];
-    return list;
-  }, [models, provider.name]);
+    return (def && rows.find((r) => r.description && r.description === def.description)) ?? rows[0] ?? null;
+  }, [models, rows]);
 
-  const shown = useMemo(() => {
-    const base = rail === 'favorites' ? rows.filter((r) => favorites.includes(r.id)) : rail === 'claude' ? rows : [];
-    const q = query.trim().toLowerCase();
-    return q ? base.filter((r) => `${r.name} ${r.description ?? ''} ${r.id}`.toLowerCase().includes(q)) : base;
-  }, [rows, rail, favorites, query]);
+  const shown = useMemo(() => (rail === 'favorites' ? rows.filter((r) => favorites.includes(r.id)) : rail === 'claude' ? rows : []), [rows, rail, favorites]);
 
   useEffect(() => {
     if (!open) return undefined;
-    setQuery('');
     setRail(favorites.length && favorites.includes(value) ? 'favorites' : 'claude');
     // ⌘1…⌘9 pick the Nth visible row, as T3 Code's picker does.
     const onKey = (e) => {
@@ -117,27 +112,26 @@ export function ModelPicker({ provider, codex, models, value, onChange, disabled
     }
   };
 
-  const selected = rows.find((r) => r.id === value) ?? rows[0];
+  const selected = (value ? rows.find((r) => r.id === value) : null) ?? defaultRow;
 
   const content = (
     <div className="mp" role="none">
-      <div className="mp-rail" role="tablist" aria-label="Providers">
-        <button type="button" role="tab" aria-selected={rail === 'favorites'} className={`mp-rail-btn${rail === 'favorites' ? ' mp-rail-btn--on' : ''}`} onClick={() => setRail('favorites')} title="Favourites">
+      <div className="mp-tabs" role="tablist" aria-label="Providers">
+        <button type="button" role="tab" aria-selected={rail === 'favorites'} className={`mp-tab${rail === 'favorites' ? ' mp-tab--on' : ''}`} onClick={() => setRail('favorites')} title="Favourites">
           <Icon icon={Star} size="sm" />
         </button>
-        <button type="button" role="tab" aria-selected={rail === 'claude'} className={`mp-rail-btn${rail === 'claude' ? ' mp-rail-btn--on' : ''}`} onClick={() => setRail('claude')} title={provider.name}>
-          <ProviderMark kind="claude" size={18} />
+        <button type="button" role="tab" aria-selected={rail === 'claude'} className={`mp-tab${rail === 'claude' ? ' mp-tab--on' : ''}`} onClick={() => setRail('claude')}>
+          <ProviderMark kind="claude" size={14} />
+          {provider.name}
         </button>
         {codex?.installed && (
-          <button type="button" role="tab" aria-selected={rail === 'codex'} className={`mp-rail-btn${rail === 'codex' ? ' mp-rail-btn--on' : ''}`} onClick={() => setRail('codex')} title={codex.name}>
-            <ProviderMark kind="codex" size={18} />
+          <button type="button" role="tab" aria-selected={rail === 'codex'} className={`mp-tab${rail === 'codex' ? ' mp-tab--on' : ''}`} onClick={() => setRail('codex')}>
+            <ProviderMark kind="codex" size={14} />
+            {codex.name}
           </button>
         )}
       </div>
       <div className="mp-main">
-        <div className="mp-search">
-          <TextInput label="Search models" isLabelHidden size="sm" value={query} onChange={setQuery} placeholder="Search models…" />
-        </div>
         <div className="mp-list" role="listbox" aria-label="Models">
           {rail === 'codex' ? (
             <div className="mp-empty">
@@ -149,17 +143,17 @@ export function ModelPicker({ provider, codex, models, value, onChange, disabled
           ) : shown.length === 0 ? (
             <div className="mp-empty">
               <Text type="supporting" color="secondary">
-                {rail === 'favorites' && !query ? 'Star a model to keep it here.' : 'No model matches.'}
+                {rail === 'favorites' ? 'Star a model to keep it here.' : 'No models reported.'}
               </Text>
             </div>
           ) : (
             shown.map((r, i) => (
               <div
-                key={r.id || '__default'}
+                key={r.id}
                 role="option"
-                aria-selected={r.id === value}
+                aria-selected={r.id === selected?.id}
                 tabIndex={0}
-                className={`mp-row${r.id === value ? ' mp-row--on' : ''}`}
+                className={`mp-row${r.id === selected?.id ? ' mp-row--on' : ''}`}
                 onClick={() => {
                   onChange(r.id);
                   setOpen(false);
@@ -172,13 +166,8 @@ export function ModelPicker({ provider, codex, models, value, onChange, disabled
                   }
                 }}
               >
-                <div className="mp-row-text">
+                <div className="mp-row-text" title={r.description || undefined}>
                   <span className="mp-row-name">{r.name}</span>
-                  <span className="mp-row-sub">
-                    <ProviderMark kind="claude" size={11} />
-                    {provider.name}
-                    {r.description ? ` · ${r.description}` : ''}
-                  </span>
                 </div>
                 {i < 9 && <Kbd keys={`mod+${i + 1}`} />}
                 <button
@@ -202,9 +191,9 @@ export function ModelPicker({ provider, codex, models, value, onChange, disabled
 
   return (
     <Popover content={content} isOpen={open} onOpenChange={setOpen} isEnabled={!disabled} placement="above" alignment="start" label="Choose a model" width={420}>
-      <Trigger disabled={disabled} label={`Model: ${selected.name}`}>
+      <Trigger disabled={disabled} label={`Model: ${selected?.name ?? provider.name}`}>
         <ProviderMark kind="claude" />
-        <span className="mp-trigger-label">{selected.name}</span>
+        <span className="mp-trigger-label">{selected?.name ?? provider.name}</span>
       </Trigger>
     </Popover>
   );
