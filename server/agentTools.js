@@ -251,7 +251,11 @@ export function canvasTools({ getGraph, getSelection, getContext = () => ({}), c
         '{type:"addEdge", edge:{source, target}} ; {type:"removeEdge", id}.',
         'Node types: prompt (data.text), image and video (data.file names an existing project file), imageOutput, videoOutput, textOutput (data.text is the instruction), page (data.file, data.title). Never put bytes or data: URLs in node data.',
       ].join(' '),
-      { ops: z.array(z.record(z.string(), z.unknown())).describe('The operations, in order.') },
+      // looseObject, not z.record: the SDK converts these to JSON Schema for the CLI, and a
+      // record made that conversion throw -- which registered NO tools at all, silently,
+      // and the model went looking elsewhere (2026-09-05). agentTools.test.js lists the
+      // tools through a real MCP client so this cannot regress unseen.
+      { ops: z.array(z.looseObject({ type: z.string() })).describe('The operations, in order.') },
       async ({ ops }) => {
         const graph = await getGraph();
         const prepared = prepareBatch(ops, { graph, files: await fileSet() });

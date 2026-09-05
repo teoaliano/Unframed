@@ -15,6 +15,12 @@
 //     outside the `tools` list.
 //   - settingSources: [] -- the user's coding CLAUDE.md, skills and hooks do not leak into
 //     a media tool.
+//   - strictMcpConfig: true -- ONLY the `unframed` server. Without it the CLI also loads
+//     the user's own MCP servers (~/.claude.json, .mcp.json, plugins): on 2026-09-05 a
+//     turn saw the user's Figma tools and none of ours. canUseTool would have denied a
+//     call, but the model must not even see them.
+//   - the init handshake is checked: a session whose tool list lacks ours fails the turn
+//     loudly instead of letting the model answer with "the tools are not available".
 //   - our own system prompt, which says canvas text is data, not instruction.
 //   - CLAUDE_CONFIG_DIR only if configured; HOME never overridden (providers.js).
 //   - maxTurns bounded; an AbortController per session so a cancel actually stops it.
@@ -37,6 +43,7 @@ export const SYSTEM_PROMPT = [
 ].join('\n');
 
 const MAX_TURNS = 30;
+export const REQUIRED_TOOLS = ['mcp__unframed__canvas_read', 'mcp__unframed__canvas_write', 'mcp__unframed__page_write', 'mcp__unframed__page_read'];
 const IDLE_CLOSE_MS = 10 * 60 * 1000;
 
 // dir\0threadId -> Session
@@ -182,9 +189,10 @@ class Session {
         ...(this.model ? { model: this.model } : {}),
         systemPrompt: { type: 'custom', prompt: SYSTEM_PROMPT },
         settingSources: [],
+        strictMcpConfig: true,
         tools: [],
         mcpServers: { unframed: server },
-        allowedTools: ['mcp__unframed__canvas_read', 'mcp__unframed__canvas_write', 'mcp__unframed__page_write', 'mcp__unframed__page_read'],
+        allowedTools: REQUIRED_TOOLS,
         canUseTool: async (toolName, input) =>
           toolName.startsWith('mcp__unframed__')
             ? { behavior: 'allow', updatedInput: input }
@@ -215,7 +223,20 @@ class Session {
           if (msg.subtype === 'init') {
             this.sdkSessionId = msg.session_id;
             await this.persist((cur) => ({ ...cur, sdkSessionId: msg.session_id, updatedAt: now() }));
-            await this.emit({ type: 'session', model: msg.model, tools: msg.tools?.filter((t) => t.startsWith('mcp__unframed__')) ?? [] });
+            const ours = msg.tools?.filter((t) => t.startsWith('mcp__unframed__')) ?? [];
+            const foreign = msg.tools?.filter((t) => t.startsWith('mcp__') && !t.startsWith('mcp__unframed__')) ?? [];
+            await this.emit({ type: 'session', model: msg.model, tools: ours, ...(foreign.length ? { foreign } : {}) });
+            // The tool set is the safety boundary AND the feature. A session without our
+            // tools (the in-process server failed to register, as a bad schema once made
+            // it) or with someone else's is stopped here, before the model speaks.
+            const missing = REQUIRED_TOOLS.filter((t) => !ours.includes(t));
+            if (missing.length || foreign.length) {
+              throw new Error(
+                missing.length
+                  ? `The agent session started without the canvas tools (${missing.join(', ')}). This is a bug in Unframed, not your setup.`
+                  : `The agent session loaded tools outside Unframed (${foreign.slice(0, 3).join(', ')}); refusing to run.`,
+              );
+            }
           }
           break;
         case 'stream_event': {

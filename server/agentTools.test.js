@@ -5,6 +5,9 @@
 // the document's own ops with no bytes, no run markers, known types, files that exist,
 // and placeholder ids rewritten; a page as a new file that is never overwritten.
 import assert from 'node:assert/strict';
+import { createSdkMcpServer } from '@anthropic-ai/claude-agent-sdk';
+import { Client } from '@modelcontextprotocol/sdk/client/index.js';
+import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import {
   describeCanvas,
   canvasTools,
@@ -273,6 +276,38 @@ assert.deepEqual(placeBeside(graph, []), { x: 80, y: 80 });
   assert.match((await call('page_read', { nodeId: 'empty' })).error, /no file yet/);
   state.graph.nodes.push({ id: 'lost', type: 'page', position: { x: 0, y: 0 }, data: { file: '8-gone.html' } });
   assert.match((await call('page_read', { nodeId: 'lost' })).error, /could not be read/);
+}
+
+// ---- the server the SDK sees ----
+// Every tool must survive the SDK's schema conversion and come back from listTools: a
+// schema it cannot convert made the whole server register nothing, and the model told
+// the user the tools were unavailable (2026-09-05). This is the check the session's init
+// guard (agent.js, REQUIRED_TOOLS) relies on never firing.
+{
+  const tools = canvasTools({
+    getGraph: async () => graph,
+    getSelection: () => [],
+    getContext: () => ({}),
+    commit: async () => ({ version: 1 }),
+    files: { list: async () => [], writePage: async () => 'x.html', readPage: async () => '' },
+    previewUrl: (f) => f,
+  });
+  const server = createSdkMcpServer({ name: 'unframed', version: '2', tools });
+  const [a, b] = InMemoryTransport.createLinkedPair();
+  await server.instance.connect(a);
+  const client = new Client({ name: 'test', version: '0' });
+  await client.connect(b);
+  const listed = await client.listTools();
+  assert.deepEqual(listed.tools.map((t) => t.name).sort(), ['canvas_read', 'canvas_write', 'page_read', 'page_write']);
+  const write = listed.tools.find((t) => t.name === 'canvas_write');
+  assert.equal(write.inputSchema.properties.ops.type, 'array');
+  assert.deepEqual(write.inputSchema.required, ['ops']);
+  const pw = listed.tools.find((t) => t.name === 'page_write');
+  assert.deepEqual(pw.inputSchema.required, ['html']);
+  // And a call through the client reaches the handler.
+  const res = await client.callTool({ name: 'canvas_read', arguments: {} });
+  assert.equal(JSON.parse(res.content[0].text).nodes.length, graph.nodes.length);
+  await client.close();
 }
 
 console.log('agentTools.test.js: ok');
