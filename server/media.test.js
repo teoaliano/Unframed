@@ -32,6 +32,7 @@ const MP4_STUB = `data:video/mp4;base64,${Buffer.from('not really an mp4').toStr
   assert.equal(extOf('image/webp', ''), 'webp');
   assert.equal(extOf('video/mp4', 'clip.mp4'), 'mp4');
   assert.equal(extOf('video/quicktime', 'clip.mov'), 'mov');
+  assert.equal(extOf('text/html', 'launch.html'), 'html');
   assert.equal(extOf('application/octet-stream', 'thing.gif'), 'gif', 'falls back to the name');
   assert.equal(extOf('application/octet-stream', 'thing'), 'bin');
 }

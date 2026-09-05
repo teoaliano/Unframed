@@ -198,6 +198,23 @@ try {
   // The API answers on that port.
   assert.equal((await fetch(`${base}/api/health`)).status, 200);
 
+  // The preview origin (server/preview.js): its own OS-assigned port, reported both to
+  // the shell and to the canvas, serving the project's pages and nothing of the API.
+  assert.ok(Number.isInteger(ready.previewPort) && ready.previewPort > 0, 'ready carries the preview port');
+  assert.notEqual(ready.previewPort, ready.port, 'a different port is a different origin');
+  assert.equal((await (await fetch(`${base}/api/health`)).json()).previewPort, ready.previewPort, 'health reports it');
+  const previewBase = `http://127.0.0.1:${ready.previewPort}`;
+  await fs.mkdir(path.join(outDir, 'coast'), { recursive: true });
+  await fs.writeFile(path.join(outDir, 'coast', '1-launch.html'), '<h1>coast</h1>');
+  await fs.writeFile(path.join(outDir, 'coast', '1-launch.json'), '{"source":"agent"}');
+  const previewPage = await fetch(`${previewBase}/p/coast/1-launch.html`);
+  assert.equal(previewPage.status, 200);
+  assert.equal(await previewPage.text(), '<h1>coast</h1>');
+  assert.ok(previewPage.headers.get('content-security-policy')?.includes("connect-src 'none'"), 'a page cannot phone home');
+  assert.equal((await fetch(`${previewBase}/p/coast/1-launch.json`)).status, 404, 'a sidecar never leaves the folder');
+  assert.equal((await fetch(`${previewBase}/api/health`)).status, 404, 'the API is not behind the preview origin');
+  assert.equal((await fetch(`${previewBase}/api/oauth/start`, { method: 'POST' })).status, 404);
+
   // A request with no Origin at all is the ordinary case -- the packaged app's
   // GETs, the Vite proxy, curl -- and must keep working.
   assert.equal((await fetch(`${base}/api/health`)).status, 200, 'no Origin is not suspicious');
@@ -1492,6 +1509,29 @@ try {
     );
     assert.match(text, /event: state\ndata: \{"status":"failed"/);
     assert.match(text, /event: event\ndata: \{[^\n]*"type":"error"/);
+    // The composer's message shape rides along and is kept on the record.
+    const composed = await (await json('POST', tBase, { provider: 'claude' })).json();
+    await json('POST', `${tBase}/${composed.thread.id}/messages`, { text: 'swap the hero', selection: ['104', '100'], target: '104', with: ['100'] });
+    const kept = (await (await fetch(`${tBase}/${composed.thread.id}`)).json()).thread.messages[0];
+    assert.equal(kept.target, '104');
+    assert.deepEqual(kept.with, ['100']);
+    // A target that is not a node id is dropped, not stored.
+    const odd = await (await json('POST', tBase, { provider: 'claude' })).json();
+    await json('POST', `${tBase}/${odd.thread.id}/messages`, { text: 'x', target: 'not a node id!' });
+    assert.equal('target' in (await (await fetch(`${tBase}/${odd.thread.id}`)).json()).thread.messages[0], false);
+    // Artifact threads (slice 2): about one node, listable by it.
+    assert.equal((await json('POST', tBase, { provider: 'claude', kind: 'sticky' })).status, 400, 'unknown kind');
+    assert.equal((await json('POST', tBase, { provider: 'claude', kind: 'artifact', artifactId: '../x' })).status, 400, 'artifactId must be a node id');
+    const art = await (await json('POST', tBase, { provider: 'claude', kind: 'artifact', artifactId: '104' })).json();
+    assert.equal(art.thread.kind, 'artifact');
+    assert.equal(art.thread.artifactId, '104');
+    const pending = await (await json('POST', tBase, { provider: 'claude', kind: 'artifact' })).json();
+    assert.equal(pending.thread.artifactId, null, 'bound later, when the agent creates the node');
+    const byArtifact = await (await fetch(`${tBase}?artifact=104`)).json();
+    assert.deepEqual(byArtifact.threads.map((t) => t.id), [art.thread.id]);
+    assert.equal((await (await fetch(`${tBase}?artifact=999`)).json()).threads.length, 0);
+    assert.ok((await (await fetch(tBase)).json()).threads.length >= 4, 'unfiltered lists everything');
+    for (const t of [composed, odd, art, pending]) await fetch(`${tBase}/${t.thread.id}`, { method: 'DELETE' });
     assert.equal((await fetch(`${tBase}/${created.thread.id}`, { method: 'DELETE' })).status, 200);
     assert.deepEqual((await (await fetch(tBase)).json()).threads, []);
   }

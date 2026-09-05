@@ -22,12 +22,17 @@ export const isTextOutput = (n) => n?.type === 'textOutput';
 // right-click item that copies a reference. Those two disagreeing is a menu offering an
 // id nothing will substitute, or an id you can copy but never insert.
 export const isReferenceable = (n) => n?.type === 'prompt' || isTextOutput(n) || isGroup(n);
+// The third family. An artifact (a page; slice 4 adds the motion) neither feeds an
+// output nor consumes one, so it is neither end of an edge -- said here rather than left
+// to the `Output` suffix test, which would silently make it a source.
+export const isArtifact = (n) => n?.type === 'page';
 
-// A group is a box of input nodes -- prompts, images, videos -- that wires as one source
-// and is @-referenced as one id. It carries none of that content itself: a member is an
-// ordinary node with `parentId` set and a position relative to the box, so there is one
-// way to hold an image and one way to hold a prompt, and everything below that already
-// handles those handles a group by expanding it. The server enforces who may be a member
+// A group is a box of nodes that wires as one source and is @-referenced as one id. It
+// carries none of that content itself: a member is an ordinary node with `parentId` set
+// and a position relative to the box, so there is one way to hold an image and one way
+// to hold a prompt, and everything below already handles those. An artifact may sit in a
+// box like anything else; it simply contributes nothing to a request, exactly as it
+// contributes nothing when loose. The server enforces who may be a member
 // (server/graph.js); this file only has to read the result.
 // Design: docs/superpowers/specs/2026-09-05-group-node-design.md.
 export const isGroup = (n) => n?.type === 'group';

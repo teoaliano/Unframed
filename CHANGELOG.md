@@ -9,6 +9,17 @@ Keep that shape: the website's What's new page parses this file.
 
 ### Added
 
+- **The agent can now change the canvas and write pages.** Select anything and a small
+  toolbar appears over it: the selection's own action (Generate on an output, Open on a
+  page) and an **Agent** button. Agent turns the toolbar into a composer right there: say
+  what to make from the selected assets, or what to change about the selected page, and
+  the reply lands on the node with Undo and Open thread. Clicking another asset while the
+  composer is open adds it; clicking empty canvas closes it. Every change the agent makes
+  is one undo step.
+- **Page assets.** A new node type: an HTML page that shows your project's images and
+  clips. Drop an `.html` file onto the canvas, or ask the agent to make one. Pages are
+  shown live from their own sandboxed origin, so a page can never reach your key or your
+  files; every edit is a new version, and Cmd-Z steps back through them.
 - **Group nodes.** Select any inputs and press ⌘G (or right-click → Group) to wrap them in a named box. The box wires as one source, so connecting it sends everything inside, and `@`-referencing it in a prompt pulls in the text it holds. Double-click the box's label (or press F2) to rename it; renaming never breaks a reference, because the label shows the name while the reference stays tied to the id. Groups resize from any edge. ⌘⇧G ungroups, putting the contents back exactly where they look and leaving what you send unchanged. A saved group is how a reusable character, product or outfit lives in the Library.
 
 ## 2026-09-04

@@ -5,6 +5,7 @@ import { Button } from '@astryxdesign/core/Button';
 import { TextArea } from '@astryxdesign/core/TextArea';
 import { VStack } from '@astryxdesign/core/Stack';
 import NodeHeader from './NodeHeader.jsx';
+import { useNodeCommand } from './nodeCommands.js';
 import StatusLine from './StatusLine.jsx';
 import { useModels, freeSpot } from './output/core.js';
 import { resetModelParams } from './output/defaults.js';
@@ -43,6 +44,9 @@ export default function TextOutputNode({ id, data }) {
     // race onRun's own marker, clearing a session-matched one the instant it sets
     // it.
   }, []);
+
+  // The selection toolbar's button runs the same thing this node's own does (nodes/nodeCommands.js).
+  useNodeCommand(id, 'run', onRun);
 
   async function onRun() {
     setStatus('running');
