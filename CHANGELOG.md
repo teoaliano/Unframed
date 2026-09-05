@@ -20,6 +20,14 @@ Keep that shape: the website's What's new page parses this file.
   clips. Drop an `.html` file onto the canvas, or ask the agent to make one. Pages are
   shown live from their own sandboxed origin, so a page can never reach your key or your
   files; every edit is a new version, and Cmd-Z steps back through them.
+- **One tab per thread in the Agent panel, filtered by what you select.** With nothing
+  selected the panel lists every conversation, newest first. Select a page and it shows
+  only the threads about that page; select several and it shows theirs. The page the open
+  thread is about wears a ring on the canvas, and with the panel open on a page's thread,
+  selecting other assets turns the toolbar's Agent button into **Add to <page>**.
+- **Copying a page copies its file**, so a pasted page is a separate version you can hand
+  to a separate thread. Deleting a page is undoable like any other node and its threads
+  come back with it; the only time it asks first is when the agent is mid-turn on it.
 
 ## 2026-09-04
 

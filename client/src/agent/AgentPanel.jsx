@@ -15,13 +15,16 @@ import {
   interruptThread,
   subscribeThreadEvents,
 } from '../api.js';
+import { isArtifact } from '../graph/resolve.js';
+import { visibleThreads, nextActive, tabLabel } from './tabs.js';
 
-// The agent panel, slice 1: a right-hand panel with the project's Canvas thread. The
-// design's states 1, 8 and 10 (docs/superpowers/specs/2026-09-04-agent-canvas-slice-1-design.md):
-// an Agent button opens it; the conversation streams from the thread's event stream
-// (server/agent.js); when no local agent is ready the panel says what was checked and
-// how to fix it, and Send is disabled. Tabs, the focus ring and select-while-open are
-// slice 3; the toolbar and composer are slice 2.
+// The agent panel: a right-hand panel over the project's threads, one tab each. The
+// design's states 1, 8 and 10 (docs/superpowers/specs/2026-09-04-agent-canvas-slice-1-design.md)
+// and the tab strip of the slice-3 design (2026-09-05-agent-canvas-slice-3-design.md,
+// section 1): the selection filters which tabs show (tabs.js), the active tab is always
+// one of them, and the composer sends to the active tab -- creating a thread when none is
+// visible, bound to the one selected artifact if there is one. The active thread's
+// artifact is reported up through `onFocus` so App.jsx can ring it on the canvas.
 //
 // Everything durable is the server's: the record is the transcript, this component only
 // mirrors it. Closing the panel mid-turn changes nothing -- the turn finishes on the
@@ -38,11 +41,28 @@ const ACTIVITY = {
 };
 
 // `initialThreadId` opens the panel on a particular thread -- the anchored reply's
-// "Open thread". Tabs per thread are slice 3.
-export default function AgentPanel({ project, selection, providers, onCheckProviders, checking, onClose, initialThreadId = null }) {
+// "Open thread". `refreshKey` changes when something outside the panel (the toolbar's
+// composer) created a thread, so the strip re-reads the list. `onFocus` receives the
+// active thread's artifact id, or null.
+export default function AgentPanel({ project, nodes, providers, onCheckProviders, checking, onClose, initialThreadId = null, refreshKey = 0, onFocus }) {
+  const selection = nodes.filter((n) => n.selected).map((n) => n.id);
   const [threads, setThreads] = useState([]);
-  const [threadId, setThreadId] = useState(null);
+  const [chosenId, setChosenId] = useState(null);
+  // The strip and the active tab, from the selection (tabs.js). `chosenId` is what was
+  // last active; `threadId` is what is active now, which differs only when the
+  // re-filter hid the chosen one.
+  const visible = visibleThreads(threads, selection, nodes);
+  const threadId = nextActive(chosenId, visible);
+  const thread = threads.find((t) => t.id === threadId) ?? null;
+  useEffect(() => {
+    if (threadId !== chosenId) setChosenId(threadId);
+  }, [threadId, chosenId]);
+  useEffect(() => {
+    onFocus?.(thread?.kind === 'artifact' ? thread.artifactId ?? null : null);
+  }, [thread?.id, thread?.kind, thread?.artifactId, onFocus]);
+  useEffect(() => () => onFocus?.(null), [onFocus]);
   const [messages, setMessages] = useState([]);
+  const [notes, setNotes] = useState([]); // the agent's changes, from stored and live ops_applied events
   const [status, setStatus] = useState('idle');
   const [error, setError] = useState(null);
   const [draft, setDraft] = useState(''); // the assistant's answer as it streams
@@ -54,34 +74,44 @@ export default function AgentPanel({ project, selection, providers, onCheckProvi
   const ready = PROVIDER_ORDER.map((k) => providers?.[k]).filter((p) => p?.status === 'ready');
   const provider = ready[0] ?? null;
 
-  // The project's threads, newest first; the newest is opened. No thread yet is fine:
-  // the first message creates one.
+  // The project's threads, newest first. Which one is active is the strip's business
+  // above; `initialThreadId` (the anchored reply's "Open thread") is honoured when it is
+  // among them. No thread yet is fine: the first message creates one.
   useEffect(() => {
     let alive = true;
-    setThreadId(null);
-    setMessages([]);
-    setDraft('');
-    setError(null);
     listThreads(project).then((list) => {
       if (!alive) return;
       setThreads(list);
-      const wanted = initialThreadId && list.find((t) => t.id === initialThreadId);
-      if (wanted) setThreadId(wanted.id);
-      else if (list[0]) setThreadId(list[0].id);
+      if (initialThreadId && list.some((t) => t.id === initialThreadId)) setChosenId(initialThreadId);
     });
     return () => {
       alive = false;
     };
-  }, [project, initialThreadId]);
+  }, [project, initialThreadId, refreshKey]);
 
   // One stream per open thread. `state` seeds the transcript; events after it are
   // applied as they come, so a panel opened mid-turn picks the turn up where it is.
   useEffect(() => {
-    if (!threadId) return undefined;
+    if (!threadId) {
+      setMessages([]);
+      setNotes([]);
+      setStatus('idle');
+      setError(null);
+      setDraft('');
+      setActivity(null);
+      return undefined;
+    }
     let draftText = '';
+    // The tab's dot and the strip's order follow the record, so its summary is re-read
+    // when this thread's status changes.
+    const refresh = () =>
+      listThreads(project)
+        .then((list) => setThreads(list))
+        .catch(() => {});
     const close = subscribeThreadEvents(project, threadId, 0, {
       onState: (s) => {
         setMessages(s.messages ?? []);
+        setNotes([]);
         setStatus(s.status ?? 'idle');
         setError(s.error ?? null);
         draftText = '';
@@ -93,6 +123,7 @@ export default function AgentPanel({ project, selection, providers, onCheckProvi
           case 'turn':
             setStatus('running');
             setError(null);
+            setThreads((ts) => ts.map((t) => (t.id === threadId ? { ...t, status: 'running' } : t)));
             break;
           case 'text_delta':
             draftText += e.text;
@@ -103,11 +134,13 @@ export default function AgentPanel({ project, selection, providers, onCheckProvi
             setActivity(ACTIVITY[e.name] || 'Working…');
             break;
           case 'ops_applied':
-            // A change the agent made, as a line in the transcript. Live only: a reopened
-            // panel reads the record's messages, and the events behind these lines are
-            // in the record too, so nothing is lost -- they are just not re-rendered
-            // here until slice 3 redoes the panel around threads.
-            setMessages((ms) => [...ms, { role: 'note', text: e.summary, at: e.at }]);
+            // A change the agent made, as a line in the transcript. The stream replays
+            // stored events before going live, so a reopened panel gets these too;
+            // keyed by journal version so a reconnect cannot double one.
+            setNotes((ns) => (ns.some((x) => x.version === e.version) ? ns : [...ns, { version: e.version, text: e.summary, at: e.at }]));
+            // The agent's first page_write binds an unbound artifact thread to the node
+            // it made; the strip learns that here rather than on the next list read.
+            if (e.page?.created) setThreads((ts) => ts.map((t) => (t.id === threadId && !t.artifactId ? { ...t, artifactId: e.page.nodeId } : t)));
             break;
           case 'tool_result':
             setActivity(null);
@@ -125,6 +158,7 @@ export default function AgentPanel({ project, selection, providers, onCheckProvi
             draftText = '';
             setDraft('');
             setActivity(null);
+            refresh();
             break;
           case 'error':
             setStatus('failed');
@@ -132,6 +166,7 @@ export default function AgentPanel({ project, selection, providers, onCheckProvi
             draftText = '';
             setDraft('');
             setActivity(null);
+            refresh();
             break;
           default:
             break;
@@ -146,23 +181,34 @@ export default function AgentPanel({ project, selection, providers, onCheckProvi
     if (el) el.scrollTop = el.scrollHeight;
   }, [messages, draft, activity]);
 
+  // What a new thread would be about, when none is active: the one selected artifact,
+  // or the board. With several artifacts selected and no thread among them there is no
+  // answer, and Send says so instead of guessing.
+  const selectedArtifacts = nodes.filter((n) => n.selected && isArtifact(n));
+  const newKind = selectedArtifacts.length === 1 ? { kind: 'artifact', artifactId: selectedArtifacts[0].id } : selectedArtifacts.length === 0 ? { kind: 'canvas' } : null;
+
+  async function startThread() {
+    const t = await createThread(project, { provider: provider.kind, ...newKind });
+    setThreads((ts) => [{ ...t, title: '' }, ...ts]);
+    setChosenId(t.id);
+    return t;
+  }
+
   async function send() {
     const body = text.trim();
     if (!body || !provider || sending || status === 'running') return;
+    if (!thread && !newKind) return;
     setSending(true);
     setError(null);
     try {
-      let id = threadId;
-      if (!id) {
-        const t = await createThread(project, { provider: provider.kind });
-        setThreads((ts) => [{ id: t.id, title: '', updatedAt: t.updatedAt }, ...ts]);
-        setThreadId(t.id);
-        id = t.id;
-      }
+      const t = thread ?? (await startThread());
+      // The thread's artifact is fixed; the selection is this message's "with" (minus the
+      // artifact itself, which is what the message is about).
+      const about = t.kind === 'artifact' && t.artifactId ? { target: t.artifactId, with: selection.filter((id) => id !== t.artifactId) } : {};
       // Optimistic: the user message shows at once; the stream's `turn` event confirms.
-      setMessages((ms) => [...ms, { role: 'user', text: body, at: Date.now(), selection }]);
+      setMessages((ms) => [...ms, { role: 'user', text: body, at: Date.now(), selection, ...about }]);
       setText('');
-      await sendThreadMessage(project, id, { text: body, selection });
+      await sendThreadMessage(project, t.id, { text: body, selection, ...about });
     } catch (err) {
       setError(err.message);
     } finally {
@@ -171,11 +217,9 @@ export default function AgentPanel({ project, selection, providers, onCheckProvi
   }
 
   async function newThread() {
-    if (!provider) return;
+    if (!provider || !newKind) return;
     try {
-      const t = await createThread(project, { provider: provider.kind });
-      setThreads((ts) => [{ id: t.id, title: '', updatedAt: t.updatedAt }, ...ts]);
-      setThreadId(t.id);
+      await startThread();
     } catch (err) {
       setError(err.message);
     }
@@ -183,6 +227,8 @@ export default function AgentPanel({ project, selection, providers, onCheckProvi
 
   const scope = selection.length ? `${selection.length} selected` : 'whole canvas';
   const running = status === 'running';
+  // The transcript: messages and the agent's change notes, in time order.
+  const lines = [...messages, ...notes.map((n) => ({ role: 'note', text: n.text, at: n.at }))].sort((a, b) => (a.at ?? 0) - (b.at ?? 0));
 
   return (
     <aside className="agent-panel" aria-label="Agent">
@@ -190,11 +236,41 @@ export default function AgentPanel({ project, selection, providers, onCheckProvi
         <HStack gap={2} align="center">
           <Icon icon={Sparkles} size="sm" />
           <Text type="label">Agent</Text>
-          <span className="agent-chip">{threads.find((t) => t.id === threadId)?.kind === 'artifact' ? 'Artifact' : 'Canvas'}</span>
           <StackItem size="fill" />
-          <IconButton variant="ghost" size="sm" label="New thread" tooltip="New thread" icon={<Icon icon={Plus} />} onClick={newThread} isDisabled={!provider} />
+          <IconButton
+            variant="ghost"
+            size="sm"
+            label="New thread"
+            tooltip={newKind ? (newKind.kind === 'artifact' ? 'New thread about the selected artifact' : 'New thread about the board') : 'Select one artifact, or none, to start a thread'}
+            icon={<Icon icon={Plus} />}
+            onClick={newThread}
+            isDisabled={!provider || !newKind}
+          />
           <IconButton variant="ghost" size="sm" label="Close" icon={<Icon icon={X} />} onClick={onClose} />
         </HStack>
+        {/* The strip: one tab per visible thread (tabs.js decides which). Empty when the
+            selection names artifacts nobody has talked about yet. */}
+        <div className="agent-tabs" role="tablist" aria-label="Threads">
+          {visible.map((t) => (
+            <button
+              key={t.id}
+              type="button"
+              role="tab"
+              aria-selected={t.id === threadId}
+              className={`agent-tab${t.id === threadId ? ' agent-tab--active' : ''}${t.kind === 'artifact' ? ' agent-tab--artifact' : ''}`}
+              onClick={() => setChosenId(t.id)}
+              title={t.title || undefined}
+            >
+              {t.status === 'running' && <span className="agent-dot agent-dot--live" />}
+              {tabLabel(t, nodes)}
+            </button>
+          ))}
+          {visible.length === 0 && (
+            <Text type="supporting" color="secondary" className="agent-tabs-empty">
+              {selectedArtifacts.length > 1 ? 'No thread yet about these' : selectedArtifacts.length === 1 ? 'No thread yet about this artifact — your first message starts one' : 'No threads yet'}
+            </Text>
+          )}
+        </div>
       </div>
 
       <div className="agent-panel-thread" ref={scroller}>
@@ -229,14 +305,16 @@ export default function AgentPanel({ project, selection, providers, onCheckProvi
             </VStack>
           </div>
         )}
-        {provider && messages.length === 0 && !draft && (
+        {provider && lines.length === 0 && !draft && (
           <div className="agent-empty">
             <Text type="supporting">
-              Ask about the board — what is on it, what feeds what, what a prompt says — or tell the agent what to change or make. Select things on the canvas and use the toolbar's Agent button to say what to do with them.
+              {thread?.kind === 'artifact' || newKind?.kind === 'artifact'
+                ? 'Tell the agent what to change on this artifact. Whatever else is selected when you send comes with the message.'
+                : 'Ask about the board — what is on it, what feeds what, what a prompt says — or tell the agent what to change or make. Select an artifact to talk about it alone.'}
             </Text>
           </div>
         )}
-        {messages.map((m, i) =>
+        {lines.map((m, i) =>
           m.role === 'note' ? (
             <Text key={`${m.at}-${i}`} type="supporting" className="agent-note">
               {m.text}
@@ -303,8 +381,16 @@ export default function AgentPanel({ project, selection, providers, onCheckProvi
             isLabelHidden
             rows={3}
             value={text}
-            placeholder={provider ? 'Ask about the board… (⌘↵ to send)' : 'Connect Claude or Codex to start'}
-            isDisabled={!provider}
+            placeholder={
+              !provider
+                ? 'Connect Claude or Codex to start'
+                : !thread && !newKind
+                  ? 'Several artifacts are selected — select one to start a thread about it'
+                  : thread?.kind === 'artifact' || newKind?.kind === 'artifact'
+                    ? 'What should change? (⌘↵ to send)'
+                    : 'Ask about the board… (⌘↵ to send)'
+            }
+            isDisabled={!provider || (!thread && !newKind)}
             onChange={setText}
           />
         </div>
@@ -316,7 +402,7 @@ export default function AgentPanel({ project, selection, providers, onCheckProvi
           {running ? (
             <Button label="Stop" variant="secondary" size="sm" icon={<Icon icon={Square} />} onClick={() => interruptThread(project, threadId)} />
           ) : (
-            <Button label="Send" variant="primary" size="sm" isDisabled={!provider || !text.trim() || sending} isLoading={sending} onClick={send} />
+            <Button label="Send" variant="primary" size="sm" isDisabled={!provider || !text.trim() || sending || (!thread && !newKind)} isLoading={sending} onClick={send} />
           )}
         </HStack>
       </div>

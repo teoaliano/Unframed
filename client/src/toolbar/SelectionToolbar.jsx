@@ -34,6 +34,7 @@ export default function SelectionToolbar({
   onCloseComposer,
   provider,
   providerMessage,
+  addTo, // the panel's artifact, when the selection has none of its own: "Add to <it>"
   busy,
   onSend,
   onStop,
@@ -128,9 +129,9 @@ export default function SelectionToolbar({
           <Button
             size="sm"
             variant="primary"
-            label="Agent"
+            label={addTo ? `Add to ${addTo}` : 'Agent'}
             icon={<Icon icon={Sparkles} />}
-            tooltip={provider ? undefined : providerMessage}
+            tooltip={provider ? (addTo ? 'Send the selection to the open thread about this artifact' : undefined) : providerMessage}
             onClick={onOpenComposer}
           />
         </>

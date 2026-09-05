@@ -1380,6 +1380,17 @@ try {
     assert.equal(sidecar.fileName, 'Hero Shot.png');
     assert.equal((await fetch(`${base}/api/file/docproj/${uploaded.file}`)).status, 200);
     assert.equal((await fetch(`${docBase}/files`, { method: 'POST', body: '', signal: AbortSignal.timeout(5000) })).status, 400, 'no bytes is a 400');
+    // A copy for a pasted page node: its own file, same bytes, sidecar naming the original.
+    const cp = await json('POST', `${docBase}/files/copy`, { file: uploaded.file });
+    assert.equal(cp.status, 200);
+    const copied = (await cp.json()).file;
+    assert.notEqual(copied, uploaded.file);
+    assert.match(copied, /^\d+-hero-shot\.png$/);
+    assert.deepEqual(await fs.readFile(path.join(outDir, 'docproj', copied)), png);
+    assert.equal(JSON.parse(await fs.readFile(path.join(outDir, 'docproj', copied.replace(/\.png$/, '.json')), 'utf8')).of, uploaded.file);
+    assert.equal((await json('POST', `${docBase}/files/copy`, { file: 'nope.png' })).status, 404);
+    assert.equal((await json('POST', `${docBase}/files/copy`, { file: '../x.png' })).status, 400);
+    assert.equal((await json('POST', `${docBase}/files/copy`, {})).status, 400);
 
     // Rename ends the stream (the tab reconnects under the new name) and the graph,
     // journal included, follows the folder.

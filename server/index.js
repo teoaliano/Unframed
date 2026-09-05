@@ -29,7 +29,7 @@ import {
   redo as redoOp,
   subscribe as subscribeDocument,
 } from './document.js';
-import { saveMedia, inlineFileRefs } from './media.js';
+import { saveMedia, copyMedia, inlineFileRefs } from './media.js';
 import { providerStatuses, forgetProviderStatus, PROVIDERS } from './providers.js';
 import { newThread, writeThread, readThread, listThreads, deleteThread, eventsSince } from './threads.js';
 import { sendToThread, interruptThread, subscribeThread, closeThreadSession, closeSessionsFor } from './agent.js';
@@ -1449,6 +1449,19 @@ app.post('/api/projects/:name/files', express.raw({ type: () => true, limit: '50
     res.json({ file, fileName, bytes: req.body.length, mime });
   } catch (err) {
     res.status(500).json({ error: `Could not save the file: ${err.message}` });
+  }
+});
+
+// A copy of a file already in the project, for pasting a page node: the pasted node must
+// own its file, or an edit through either node moves both (media.js, copyMedia).
+app.post('/api/projects/:name/files/copy', async (req, res) => {
+  const file = typeof req.body?.file === 'string' ? req.body.file : '';
+  if (!file) return res.status(400).json({ error: 'Which file?' });
+  try {
+    const copy = await copyMedia(projectDir(req.params.name), file);
+    res.json({ file: copy });
+  } catch (err) {
+    res.status(err.code === 'ENOENT' ? 404 : 400).json({ error: `Could not copy the file: ${err.message}` });
   }
 });
 

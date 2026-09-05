@@ -982,6 +982,13 @@ div:has(> .add-node-menu) {
 .react-flow__node.selected > .astryx-card {
   box-shadow: inset 0 0 0 1px var(--color-accent), var(--shadow-low);
 }
+/* The agent's focus ring (slice 3): the artifact the panel's active thread is about. A
+   second fact beside selection, so it is a second visual -- an outline standing OFF the
+   card rather than the selection's inset border -- and both can be on at once. */
+.react-flow__node.agent-focus > .astryx-card {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 4px;
+}
 /* Three sides, because the fourth is shared with the card's top edge. */
 .react-flow__node.selected .xnode-tab--input {
   box-shadow:
@@ -1248,6 +1255,59 @@ div:has(> .add-node-menu) {
 .agent-panel-head {
   padding: var(--spacing-2) var(--spacing-3);
   border-bottom: var(--border-width) solid var(--color-border);
+}
+/* The tab strip: one tab per thread the selection lets through (agent/tabs.js). Scrolls
+   sideways rather than wrapping, so the panel's height is the transcript's. */
+.agent-tabs {
+  display: flex;
+  gap: var(--spacing-1);
+  margin-top: var(--spacing-2);
+  overflow-x: auto;
+  scrollbar-width: none;
+  min-height: 26px;
+}
+.agent-tabs::-webkit-scrollbar {
+  display: none;
+}
+.agent-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 26px;
+  padding: 0 var(--spacing-2);
+  border-radius: var(--radius-element);
+  border: var(--border-width) solid transparent;
+  background: transparent;
+  color: var(--color-text-secondary);
+  font: inherit;
+  font-size: 12px;
+  white-space: nowrap;
+  cursor: pointer;
+  flex: none;
+}
+.agent-tab:hover {
+  background: var(--color-background-card);
+  color: var(--color-text-primary);
+}
+.agent-tab--active {
+  border-color: var(--color-border-emphasized);
+  background: var(--color-background-card);
+  color: var(--color-text-primary);
+}
+.agent-tab--artifact.agent-tab--active {
+  border-color: var(--color-accent);
+}
+.agent-tabs-empty {
+  align-self: center;
+  padding-inline: var(--spacing-1);
+}
+.agent-dot--live {
+  animation: agent-pulse 1.2s ease-in-out infinite;
+}
+@keyframes agent-pulse {
+  50% {
+    opacity: 0.3;
+  }
 }
 .agent-panel-thread {
   flex: 1;

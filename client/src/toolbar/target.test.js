@@ -10,6 +10,11 @@ assert.deepEqual(messageTarget([n('i1', 'image'), page('g', 'Launch'), n('p', 'p
 // None: "To" is a new asset, everything selected comes with.
 assert.deepEqual(messageTarget([n('i1', 'image'), n('v', 'video')]), { target: 'new', with: ['i1', 'v'], artifacts: [] });
 assert.deepEqual(messageTarget([]), { target: 'new', with: [], artifacts: [] });
+// The panel is open on an artifact thread (focus) and no artifact is selected: the
+// message goes to that artifact. A selected artifact still wins over the focus.
+assert.deepEqual(messageTarget([n('i1', 'image')], 'g'), { target: 'g', with: ['i1'], artifacts: ['g'] });
+assert.deepEqual(messageTarget([], 'g'), { target: 'g', with: [], artifacts: ['g'] });
+assert.deepEqual(messageTarget([page('h'), n('i1', 'image')], 'g'), { target: 'h', with: ['i1'], artifacts: ['h'] });
 // Several: the agent must ask before acting.
 assert.deepEqual(messageTarget([page('g1'), page('g2'), n('i', 'image')]), { target: 'ask', with: ['g1', 'g2', 'i'], artifacts: ['g1', 'g2'] });
 

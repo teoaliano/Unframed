@@ -169,12 +169,36 @@ The browser's selection travels with each message. The server never holds it oth
 
 ## The Agent panel (`client/src/agent/AgentPanel.jsx`)
 
-The Agent button in the chrome opens a right-hand panel with the project's Canvas
-thread. Everything durable is the server's; the panel mirrors the record and applies the
-stream. With no provider ready it shows what was checked, how to install, and Check
-again, with Send disabled — that is the design's state 10. Settings has a Local agents
-section with the same statuses and the path overrides. The anchored reply's "Open thread"
-opens the panel on that thread (`initialThreadId`); tabs per thread are slice 3.
+The Agent button in the chrome opens a right-hand panel over the project's threads, one
+tab each, newest first — a canvas thread's tab reads "Canvas", an artifact thread's the
+node's title. **The selection filters the strip** (`agent/tabs.js`, tested): no artifact
+selected shows every thread; one selected shows only its threads; several show the
+union, and the canvas threads drop out. A thread whose node is not on the canvas is
+hidden in every state and kept on disk; it reappears the moment undo or redo brings the
+node back, since the binding is by node id. The active tab is always visible: it survives
+a re-filter it is part of, else the newest visible one takes over, else none — and with
+none, Send creates a thread bound to the one selected artifact (or a canvas thread when
+none is; with several selected, Send is disabled and says why). The composer sends to the
+active tab: the thread's artifact is fixed for life, the selection at send time is the
+message's `with`. The active thread's artifact wears the **focus ring** on the canvas
+(`onFocus` → `className: 'agent-focus'` on that node — the node alone, not what the thread
+touched), a second visual beside selection so both can be on at once. Everything durable
+is the server's; the panel mirrors the record and applies the stream, stored `ops_applied`
+events included, so a reopened thread shows what changed and not only what was said. With
+no provider ready it shows what was checked, how to install, and Check again, with Send
+disabled — that is the design's state 10. Settings has a Local agents section with the
+same statuses and the path overrides. The anchored reply's "Open thread" opens the panel
+on that thread (`initialThreadId`). Design: `2026-09-05-agent-canvas-slice-3-design.md`.
+
+**Deleting a page is the ordinary undoable op**: files and thread records stay on disk,
+and undo brings the node and its tabs back. The one confirmation is a page whose bound
+thread is `running` (React Flow's `onBeforeDelete` asks the thread list): Stop and delete
+interrupts the turn, then removes the node; cancel removes nothing, the rest of the
+selection included. Collecting the files and threads of a page that stays deleted is
+compaction's job, together with superseded page versions — not built. **Pasting a page
+copies its file** (`POST /api/projects/:name/files/copy { file }` → `copyMedia`, sidecar
+`source: 'copy'`, `of: <original>`), so two nodes never share one file and a copy is the
+unit of working on one asset from several threads at once.
 
 ## The selection toolbar and the composer (`client/src/toolbar/`)
 
@@ -186,7 +210,9 @@ Agent morphs the toolbar into a composer on the same centre and bottom edge
 room). The composer's target comes from the selection (`target.js`): exactly one
 artifact → it is "To" and the rest come "with"; none → "To" is a new asset the agent
 creates beside the selection; several → the agent must ask, and the composer says so.
-Two rules while it is open: clicking another node adds it to "with" (and keeps it
+One more when the panel is open on an artifact thread and the selection has no artifact:
+"To" is that thread's artifact, and the button reads **Add to <title>** — a selected
+artifact still wins over an open tab. Two rules while it is open: clicking another node adds it to "with" (and keeps it
 selected), clicking empty canvas collapses it; Esc and Back do the same. The message goes
 to the target artifact's newest idle thread (or a new `artifact` thread), and the reply
 lands anchored below the node the agent worked on with **Undo** — offered only while the

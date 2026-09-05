@@ -130,6 +130,26 @@ export async function saveMedia(dir, { bytes, mime, fileName, source, now = Date
   return file;
 }
 
+// A second file with the same bytes, for pasting a page node: two nodes must never
+// share one file, or an edit through either moves both (slice-3 design, section 4).
+// Same naming and sidecar shape as every other file here; `of` names the original.
+export async function copyMedia(dir, file, { now = Date.now } = {}) {
+  const name = path.basename(String(file));
+  if (!name || name !== file) throw new Error('That is not a file in this project.');
+  const bytes = await fs.readFile(path.join(dir, name));
+  let mime = 'application/octet-stream';
+  try {
+    mime = JSON.parse(await fs.readFile(path.join(dir, name.replace(/\.[^.]+$/, '.json')), 'utf8')).mime || mime;
+  } catch {
+    // no sidecar (a hand-placed file): the extension carries the type well enough
+  }
+  const fileName = name.replace(/^\d+-/, '');
+  const copy = await saveMedia(dir, { bytes, mime, fileName, source: 'copy', now });
+  const side = path.join(dir, copy.replace(/\.[^.]+$/, '.json'));
+  await fs.writeFile(side, JSON.stringify({ ...JSON.parse(await fs.readFile(side, 'utf8')), of: name }, null, 2));
+  return copy;
+}
+
 function writeMedia(dir, dataUrl, fileName, { now, source }) {
   const { mime, bytes } = decodeDataUrl(dataUrl);
   return saveMedia(dir, { bytes, mime, fileName, source, now });
