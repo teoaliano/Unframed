@@ -251,7 +251,8 @@ export const uploadFile = (name, file) =>
   });
 
 // A copy of a project file, for pasting a page node so the paste owns its own file.
-export const copyFile = (project, file) => postJson(`/api/projects/${enc(project)}/files/copy`, { file }).then((d) => d.file);
+// `from` is the project the original lives in, when pasting across projects.
+export const copyFile = (project, file, from = null) => postJson(`/api/projects/${enc(project)}/files/copy`, { file, ...(from ? { from } : {}) }).then((d) => d.file);
 
 // Where a project's files are served from, for <img>/<video> src and for references
 // the server inlines at the OpenRouter boundary.

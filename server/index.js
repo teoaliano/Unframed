@@ -1457,8 +1457,10 @@ app.post('/api/projects/:name/files', express.raw({ type: () => true, limit: '50
 app.post('/api/projects/:name/files/copy', async (req, res) => {
   const file = typeof req.body?.file === 'string' ? req.body.file : '';
   if (!file) return res.status(400).json({ error: 'Which file?' });
+  // `from` names the project the original belongs to, for a paste across projects.
+  const from = typeof req.body?.from === 'string' && req.body.from ? projectDir(req.body.from) : undefined;
   try {
-    const copy = await copyMedia(projectDir(req.params.name), file);
+    const copy = await copyMedia(projectDir(req.params.name), file, { from });
     res.json({ file: copy });
   } catch (err) {
     res.status(err.code === 'ENOENT' ? 404 : 400).json({ error: `Could not copy the file: ${err.message}` });

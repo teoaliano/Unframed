@@ -176,6 +176,12 @@ const MP4_STUB = `data:video/mp4;base64,${Buffer.from('not really an mp4').toStr
   assert.equal(side.source, 'copy');
   assert.equal(side.of, '1700000000000-launch.html');
   assert.equal(side.mime, 'text/html');
+  // Across projects: the original is read from `from`, the copy lands in `dir`.
+  const other = await fs.mkdtemp(path.join(os.tmpdir(), 'unframed-copy-to-'));
+  const across = await copyMedia(other, '1700000000000-launch.html', { from: dir, now: () => 1700000002000 });
+  assert.equal(across, '1700000002000-launch.html');
+  assert.equal(await fs.readFile(path.join(other, across), 'utf8'), '<h1>hi</h1>');
+  await fs.rm(other, { recursive: true, force: true });
   await assert.rejects(copyMedia(dir, '../elsewhere.html'), /not a file in this project/, 'no path segments');
   await assert.rejects(copyMedia(dir, 'missing.html'), 'a missing file rejects');
   await fs.rm(dir, { recursive: true, force: true });

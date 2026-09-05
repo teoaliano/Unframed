@@ -1384,7 +1384,9 @@ function Canvas() {
     // node did nothing at all.
     const fragment = selectionFragment(nodes, edges, menuCtx?.id);
     if (!fragment) return;
-    nodeClipboard.current = fragment;
+    // Stamped with the project, because a file name means nothing outside its folder: a
+    // paste into another project has to copy the bytes across (pasteNodeClipboard).
+    nodeClipboard.current = { ...fragment, project };
     const chosen = fragment.nodes;
     // One clipboard item, two faces. The text face is the routing marker that
     // makes our own ⌘V paste nodes; the image face is the picture itself when
@@ -1457,14 +1459,17 @@ function Canvas() {
     const { nodes: fresh, edges: freshEdges } = instantiateFragment(clip, nextId);
     // A pasted page gets its own copy of the file: two nodes on one file would mean an
     // edit through either moves both, and a copy is the unit of working in parallel
-    // (slice-3 design, section 4). A failed copy pastes an empty page rather than nothing.
+    // (slice-3 design, section 4). Across projects EVERY file-backed node is copied,
+    // since a name only resolves inside its own folder. A failed copy pastes an empty
+    // node rather than nothing.
+    const from = clip.project && clip.project !== project ? clip.project : null;
     await Promise.all(
-      fresh.filter((n) => isArtifact(n) && n.data?.file).map(async (n) => {
+      fresh.filter((n) => n.data?.file && (isArtifact(n) || from)).map(async (n) => {
         try {
-          n.data = { ...n.data, file: await copyFile(project, n.data.file) };
+          n.data = { ...n.data, file: await copyFile(project, n.data.file, from) };
         } catch (err) {
           n.data = { ...n.data, file: null };
-          toast({ body: `Could not copy the page's file: ${err.message}`, uniqueID: 'copy-failed', type: 'error' });
+          toast({ body: `Could not copy the ${n.type}'s file: ${err.message}`, uniqueID: 'copy-failed', type: 'error' });
         }
       }),
     );
