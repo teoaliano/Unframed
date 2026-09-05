@@ -9,6 +9,10 @@ Keep that shape: the website's What's new page parses this file.
 
 ### Added
 
+- **Save a group to the Library.** Right-click a box → *Add to library* and it is stored
+  with everything inside it; insert it back and you get a fresh copy, contents in place.
+  This is how a reusable character, product or outfit lives in the Library — a preset you
+  save, not a template we ship.
 - **The agent can now change the canvas and write pages.** Select anything and a small
   toolbar appears over it: the selection's own action (Generate on an output, Open on a
   page) and an **Agent** button. Agent turns the toolbar into a composer right there: say
