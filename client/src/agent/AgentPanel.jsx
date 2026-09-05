@@ -6,8 +6,7 @@ import { Text } from '@astryxdesign/core/Text';
 import { TextArea } from '@astryxdesign/core/TextArea';
 import { Link } from '@astryxdesign/core/Link';
 import { HStack, VStack, StackItem } from '@astryxdesign/core/Stack';
-import { Selector } from '@astryxdesign/core/Selector';
-import { SegmentedControl, SegmentedControlItem } from '@astryxdesign/core/SegmentedControl';
+import { Selector, SelectorOption } from '@astryxdesign/core/Selector';
 import { AlertDialog } from '@astryxdesign/core/AlertDialog';
 import { X, Plus, RefreshCw, Sparkles, Square, Trash2, Crosshair } from 'lucide-react';
 import {
@@ -36,7 +35,14 @@ import { visibleThreads, nextActive, tabLabel } from './tabs.js';
 // server and the transcript is there when the panel reopens.
 
 const PROVIDER_ORDER = ['claude', 'codex'];
-const EFFORT_LABEL = { low: 'Low', medium: 'Med', high: 'High', xhigh: 'XHigh', max: 'Max' };
+const EFFORT_LABEL = { low: 'Low', medium: 'Medium', high: 'High', xhigh: 'Extra high', max: 'Max' };
+const EFFORT_HINT = {
+  low: 'Fastest; little reasoning',
+  medium: 'Balanced',
+  high: 'More reasoning before acting',
+  xhigh: 'Long reasoning; slower',
+  max: 'Everything the model has',
+};
 
 // What the panel says while each tool runs.
 const ACTIVITY = {
@@ -89,6 +95,25 @@ export default function AgentPanel({ project, nodes, providers, onCheckProviders
   const settings = thread ? { model: thread.model || '', effort: thread.effort || '' } : pending;
   // The SDK lists the provider's default under the id 'default', so '' looks it up there.
   const efforts = models.find((m) => m.id === (settings.model || 'default'))?.efforts ?? [];
+  // One list, a section per provider, as T3 Code's picker. Claude's rows are the
+  // account's real catalogue; Codex is detection-only in this repo (docs/agent.md), so
+  // its section says so rather than listing models a session cannot run yet.
+  const codex = providers?.codex;
+  const modelOptions = !provider
+    ? []
+    : [
+    {
+      type: 'section',
+      title: provider.name,
+      options: [
+        { value: '__auto', label: 'Default', description: `Whatever ${provider.name} picks` },
+        ...models.filter((m) => m.id !== 'default').map((m) => ({ value: m.id, label: m.name, description: m.description })),
+      ],
+    },
+    ...(codex?.installed
+      ? [{ type: 'section', title: codex.name, options: [{ value: '__codex', label: 'Codex models', description: codex.status === 'ready' ? 'Sessions on Codex are not supported yet' : codex.message || 'Not signed in', disabled: true }] }]
+      : []),
+  ];
 
   async function changeSettings(patch) {
     if (!thread) {
@@ -441,29 +466,39 @@ export default function AgentPanel({ project, nodes, providers, onCheckProviders
           />
         </div>
         <HStack gap={2} align="center" wrap>
-          {/* Model and effort for the next turn (the thread's own, or the next thread's).
-              Astryx controls: the Selector's popover anchors fine here, outside React
-              Flow's transform -- the native-select exception is for the nodes only. */}
+          {/* Model and effort for the next turn (the thread's own, or the next thread's),
+              after T3 Code's composer footer: two small ghost controls, the model picker
+              searchable and grouped by provider with a description under each name, the
+              effort a short list with what each level means. Astryx Selectors: their
+              popovers anchor fine here, outside React Flow's transform -- the
+              native-select exception is for the nodes only. */}
           {provider && (
             <Selector
               label="Model"
               isLabelHidden
               size="sm"
               variant="ghost"
-              placeholder={provider.name}
+              hasSearch
+              searchPlaceholder="Search models…"
               value={settings.model || '__auto'}
-              options={[{ value: '__auto', label: `${provider.name} default` }, ...models.map((m) => ({ value: m.id, label: m.name }))]}
+              options={modelOptions}
+              renderOption={(o) => <SelectorOption label={o.label} description={o.description} />}
               onChange={(v) => changeSettings({ model: v === '__auto' ? '' : v, effort: '' })}
               isDisabled={running}
             />
           )}
           {provider && efforts.length > 0 && (
-            <SegmentedControl label="Effort" size="sm" value={settings.effort || '__auto'} onChange={(v) => changeSettings({ effort: v === '__auto' ? '' : v })} isDisabled={running}>
-              <SegmentedControlItem value="__auto" label="Auto" />
-              {efforts.map((e) => (
-                <SegmentedControlItem key={e} value={e} label={EFFORT_LABEL[e] ?? e} />
-              ))}
-            </SegmentedControl>
+            <Selector
+              label="Effort"
+              isLabelHidden
+              size="sm"
+              variant="ghost"
+              value={settings.effort || '__auto'}
+              options={[{ value: '__auto', label: 'Auto', description: 'The model decides how much to think' }, ...efforts.map((e) => ({ value: e, label: EFFORT_LABEL[e] ?? e, description: EFFORT_HINT[e] ?? '' }))]}
+              renderOption={(o) => <SelectorOption label={o.label} description={o.description} />}
+              onChange={(v) => changeSettings({ effort: v === '__auto' ? '' : v })}
+              isDisabled={running}
+            />
           )}
         </HStack>
         <HStack gap={2} align="center">

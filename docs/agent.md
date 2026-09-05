@@ -192,9 +192,11 @@ touched): its name tag fills bright with a live dot, design option E, chosen ove
 around the card because selection already owns the card border and the two read as one
 fact when they share it. The scope row names the same artifact with a **Locate** action
 that pans and zooms to it (`onLocate` → `fitView` on that node). The composer's bottom
-row sets the thread's **model and effort** for the next turn (Astryx `Selector` and
-`SegmentedControl`, `PATCH …/threads/:id`); with no thread yet they apply to the one the
-next message creates. **Enter sends, Shift+Enter or Option+Enter breaks the line**, in
+row sets the thread's **model and effort** for the next turn, after T3 Code's composer
+footer: two small ghost Astryx `Selector`s, the model one searchable and grouped by
+provider with a description per row (Codex appears as a disabled group until sessions
+exist), the effort one a short list with what each level means (`PATCH …/threads/:id`);
+with no thread yet they apply to the one the next message creates. **Enter sends, Shift+Enter or Option+Enter breaks the line**, in
 the panel and the toolbar's composer alike. The header's trash button deletes the active
 thread after a confirmation; the canvas changes it made stay. Everything durable
 is the server's; the panel mirrors the record and applies the stream, stored `ops_applied`
