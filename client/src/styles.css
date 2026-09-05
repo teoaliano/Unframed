@@ -1462,6 +1462,20 @@ div:has(> .add-node-menu) {
 .astryx-tab.agent-tab--artifact.selected {
   border-color: var(--color-accent);
 }
+/* Astryx draws hover as an absolutely positioned pill of its own, rounded on all four
+   corners; left alone it rounds off the bottom of a shape whose bottom is meant to be
+   open. `inherit` keeps it whatever shape the tab is. It has no class of its own -- it
+   is the tab's first child, hidden from the accessibility tree. */
+.astryx-tab > span[aria-hidden='true']:first-child,
+.astryx-tab-menu > span[aria-hidden='true']:first-child {
+  border-radius: inherit;
+}
+/* The overflow trigger open, which theme.js cannot say: Astryx gives it no selected
+   marker but the indicator, and the indicator is what the folder shape replaced. */
+.astryx-tab-menu:has(.astryx-tab-indicator) {
+  border-color: var(--color-border-emphasized);
+  background: var(--color-background-surface);
+}
 .agent-tabs-empty {
   align-self: center;
   padding: var(--spacing-1) 0 var(--spacing-2);

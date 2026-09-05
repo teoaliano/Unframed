@@ -7,6 +7,23 @@
 import { defineTheme } from '@astryxdesign/core/theme';
 import { neutralTheme } from '@astryxdesign/theme-neutral/built';
 
+// The folder silhouette, shared by a tab and by the overflow menu's trigger -- which IS
+// a tab whenever the thread it names is the active one. Why it is here and not in a
+// stylesheet: the comment on `components` below.
+const folderTab = {
+  minWidth: 0,
+  overflow: 'hidden',
+  paddingInline: 'var(--spacing-2)',
+  borderRadius: 'var(--radius-element) var(--radius-element) 0 0',
+  border: 'var(--border-width) solid transparent',
+  borderBottom: 'none',
+  marginBottom: 'calc(-1 * var(--border-width))',
+};
+const folderTabOpen = {
+  borderColor: 'var(--color-border-emphasized)',
+  background: 'var(--color-background-surface)',
+};
+
 export const unframedTheme = defineTheme({
   name: 'unframed',
   extends: neutralTheme,
@@ -51,19 +68,15 @@ export const unframedTheme = defineTheme({
       },
     },
     tab: {
-      base: {
-        minWidth: 0,
-        overflow: 'hidden',
-        paddingInline: 'var(--spacing-2)',
-        borderRadius: 'var(--radius-element) var(--radius-element) 0 0',
-        border: 'var(--border-width) solid transparent',
-        borderBottom: 'none',
-        marginBottom: 'calc(-1 * var(--border-width))',
-      },
-      selected: {
-        borderColor: 'var(--color-border-emphasized)',
-        background: 'var(--color-background-surface)',
-      },
+      base: folderTab,
+      selected: folderTabOpen,
+    },
+    // The overflow trigger takes the same shape, because Astryx makes it wear the active
+    // tab's label when the active tab is one of the ones it holds. Its open state cannot
+    // come from here -- it renders no `selected` marker of its own, only the indicator --
+    // so styles.css picks it out by that indicator's presence.
+    'tab-menu': {
+      base: folderTab,
     },
     // The underline the folder shape replaces.
     'tab-indicator': {
