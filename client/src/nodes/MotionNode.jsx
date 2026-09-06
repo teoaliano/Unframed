@@ -110,14 +110,20 @@ export default function MotionNode({ id, data, dragging, selected }) {
 
   const rendering = render !== null;
 
+  // Bare once it holds a composition, for the reasons PageNode gives: the composition
+  // fills the box, so a card around it frames the thing you are watching. The Render row
+  // below stays where it is — it is a control, and cannot sit on the picture, the same
+  // rule the video transport follows.
+  const bare = Boolean(src);
+
   return (
     <>
-      <NodeHeader kind="motion" family="artifact" />
+      {!bare && <NodeHeader kind="motion" family="artifact" />}
       <Card
         width="100%"
         elevation="low"
         padding={0}
-        className="xnode-motion"
+        className={`xnode-motion${bare ? ' xnode-bare' : ''}`}
         onDrop={onDrop}
         onDragOver={(e) => {
           e.preventDefault();
@@ -144,7 +150,7 @@ export default function MotionNode({ id, data, dragging, selected }) {
           {error && <StatusLine type="error">{error}</StatusLine>}
         </div>
       </Card>
-      <NodeLine>{title || null}</NodeLine>
+      <NodeLine className="xnode-line--start">{title || null}</NodeLine>
       {data.file && (
         <div className="xnode-motion-render nodrag">
           <Button label="Render" variant="secondary" size="sm" icon={<Icon icon={Clapperboard} />} isLoading={rendering} isDisabled={rendering || !data.file} onClick={renderClip} />

@@ -71,7 +71,7 @@ import { expiryNote } from './keyExpiry.js';
 import LibraryDialog from './library/LibraryDialog.jsx';
 import { instantiateFragment, centerOffset, placeFragment } from './library/insert.js';
 import { selectionFragment, presetFromSelection } from './library/save.js';
-import { useDocument } from './graph/useDocument.js';
+import { useDocument, DocumentContext } from './graph/useDocument.js';
 import { ProjectContext } from './graph/project.js';
 import AgentPanel from './agent/AgentPanel.jsx';
 import SelectionToolbar from './toolbar/SelectionToolbar.jsx';
@@ -1300,7 +1300,7 @@ function Canvas() {
   // centred on the current view. Inserted nodes are plain copies — nothing links
   // back to the preset, so editing them is just editing nodes.
   function insertPreset(preset) {
-    const { nodes: fresh, edges: freshEdges } = instantiateFragment(preset.fragment, nextId);
+    const { nodes: fresh, edges: freshEdges } = instantiateFragment(preset.fragment, nextId, new Set(nodes.map((n) => n.id)));
     const r = canvasRef.current.getBoundingClientRect();
     const centre = screenToFlowPosition({ x: r.x + r.width / 2, y: r.y + r.height / 2 });
     const { dx, dy } = centerOffset(preset.fragment, centre);
@@ -1459,7 +1459,7 @@ function Canvas() {
   async function pasteNodeClipboard(at) {
     const clip = nodeClipboard.current;
     if (!clip?.nodes.length) return;
-    const { nodes: fresh, edges: freshEdges } = instantiateFragment(clip, nextId);
+    const { nodes: fresh, edges: freshEdges } = instantiateFragment(clip, nextId, new Set(nodes.map((n) => n.id)));
     // A pasted page gets its own copy of the file: two nodes on one file would mean an
     // edit through either moves both, and a copy is the unit of working in parallel
     // (slice-3 design, section 4). Across projects EVERY file-backed node is copied,
@@ -1872,6 +1872,10 @@ function Canvas() {
         }}
       >
         <ProjectContext.Provider value={projectValue}>
+        {/* Composed ops (a group's rename) reach the node that raises them through here;
+            everything else on the canvas is written into React Flow state and found by
+            the diff. `doc` is one stable object, so this re-renders nothing extra. */}
+        <DocumentContext.Provider value={doc}>
         <ReactFlow
           // Keyed by canvasGeneration so a genuine project switch remounts every
           // node component. Node ids come from one counter shared across projects,
@@ -1954,6 +1958,7 @@ function Canvas() {
           <ChromeZoom />
           <CanvasBackground />
         </ReactFlow>
+        </DocumentContext.Provider>
         </ProjectContext.Provider>
         {/* The floating toolbar over a selection, its composer, and the agent's anchored
             reply (toolbar/). Hidden while the selection is being dragged, box-selected or

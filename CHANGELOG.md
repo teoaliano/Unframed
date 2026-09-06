@@ -17,8 +17,41 @@ Keep that shape: the website's What's new page parses this file.
   the canvas as an ordinary video node. Rendering runs locally in the Chrome (or Chromium,
   Edge, Brave) you already have and uses no credits; without one, Render says so.
 
+### Changed
+
+- **Prompts are now plain text on the canvas**, the way text works in FigJam or Miro: no
+  card, no border, no type label — just the words, with the `@id` above them. One click
+  selects the text and shows a thin outline with a grip at each corner; a double-click or
+  Enter starts editing (the text comes up selected, so typing replaces it), and Escape
+  leaves editing with the element still selected. Drag it from anywhere.
+- **A group is named by its reference, and renaming it renames the reference.** The box
+  now shows one label — `@104` — instead of a "GROUP" tag and an id at opposite ends.
+  Double-click that label (or press F2) and type a name: the box becomes `@character`,
+  and every prompt that referenced the old name is rewritten to match, in one step that
+  one Undo takes back. The box keeps its dashed outline; selecting it looks like
+  selecting any other element. A group you named before this shows its id until you
+  rename it.
+- **Reference images and clips are bare on the canvas too**, framed by nothing: no card,
+  no border, no type label — just the picture, with its "image 1" role above it. Selecting
+  one draws the same thin outline and corner grips, and the remove X comes with the
+  selection instead of appearing under your pointer. An empty one still looks like a box
+  asking for a file, because that is what it is.
+- **Pages and motions follow the same rule**: once one holds a file it is just the page or
+  the composition on the canvas, with its title above it. Empty, it stays a box asking for
+  a file, and a motion keeps its Render button below the frame.
+- **A prompt is now exactly the size of its text**, growing as you type and never leaving
+  an empty box around the words. Drag a corner or an edge if you want a particular size
+  and it keeps it; double-click an edge to hand it back to the text.
+
 ### Fixed
 
+- **No more squared-off corner with nothing above it.** Between roughly 50% and 75% zoom
+  a node's name tag is hidden until you point at it, but the card underneath kept the
+  square corner the tag docks into — so the corner looked chipped for no reason. It now
+  rounds and squares with the tag.
+- **One Undo takes back one edit again.** A pause in your work is a single step, so
+  typing a word (which also resizes the box around it) or dragging three nodes at once no
+  longer needs two or three presses of Cmd-Z to take back.
 - **Pasting or dropping an image onto the canvas works again.** Since 2026-09-04 both did
   nothing at all: the code that saves the file into your project was calling something
   the file never imported, so it failed on the first byte. Dropping onto an existing

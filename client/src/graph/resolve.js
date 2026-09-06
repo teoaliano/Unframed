@@ -61,6 +61,15 @@ const MODE_FRAMES = {
   first_last: ['first_frame', 'last_frame'],
 };
 
+// Rewrite the @tokens that point at one id. Renaming a node renames the thing every
+// reference points AT, so the references have to move with it or a prompt silently loses
+// what it was composing (an unknown token is left as typed -- see substitute below --
+// so the failure is a stale word in a prompt, not an error anyone would see).
+// Deliberately the same TOKEN_RE the resolver uses: a rewriter with its own idea of what
+// a token is would miss exactly the ones the resolver finds.
+export const renameRefs = (text, from, to) =>
+  (text || '').replace(TOKEN_RE, (all, raw) => (raw.trim() === from ? `@${to}` : all));
+
 function substitute(text, refs, stack) {
   return (text || '').replace(TOKEN_RE, (all, raw) => {
     const ref = raw.trim();
