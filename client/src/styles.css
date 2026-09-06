@@ -438,15 +438,17 @@ div:has(> .add-node-menu) {
 }
 /* With no tab docked into it, a square top-left corner is just a defect — so the card
    rounds back as the tab fades. Only the types that HAVE a container radius need this;
-   image and video are square in both states, which is the second thing squaring the
-   media bought.
+   image, video, page and motion are square in both states, which is the second thing
+   squaring the content-filled nodes bought.
    It follows the TAB, not the chrome level, and that distinction is the whole rule: the
    tab is hidden in the `hover` band too, at rest, so keying this on `off` alone left the
    0.5–0.75 zoom range showing a squared corner with nothing docked into it. Every state
    where the tab is invisible is a state where the corner is round. */
-.react-flow[data-chrome='off'] .react-flow__node:not(.react-flow__node-image):not(.react-flow__node-video) > .astryx-card,
+.react-flow[data-chrome='off']
+  .react-flow__node:not(.react-flow__node-image):not(.react-flow__node-video):not(.react-flow__node-page):not(.react-flow__node-motion)
+  > .astryx-card,
 .react-flow[data-chrome='hover']
-  .react-flow__node:not(:hover):not(.selected):not(.react-flow__node-image):not(.react-flow__node-video)
+  .react-flow__node:not(:hover):not(.selected):not(.react-flow__node-image):not(.react-flow__node-video):not(.react-flow__node-page):not(.react-flow__node-motion)
   > .astryx-card {
   border-start-start-radius: var(--radius-container);
 }
@@ -469,10 +471,14 @@ div:has(> .add-node-menu) {
 }
 /* A container radius softens CHROME. A reference image is not chrome — it is the thing
    being judged, and four rounded corners are four small bites out of every picture on
-   the canvas. So the media nodes square off entirely, and everything with nothing
-   reaching its corner keeps --radius-container. */
+   the canvas. The artifacts are the same case: a page and a composition fill their box
+   edge to edge too, so a radius eats their corners rather than softening a frame. All
+   four square off entirely, and everything with nothing reaching its corner keeps
+   --radius-container. */
 .react-flow__node-image > .astryx-card,
-.react-flow__node-video > .astryx-card {
+.react-flow__node-video > .astryx-card,
+.react-flow__node-page > .astryx-card,
+.react-flow__node-motion > .astryx-card {
   border-radius: 0;
 }
 /* Hover steps the border up one stop, so the resize edges stop being invisible without
