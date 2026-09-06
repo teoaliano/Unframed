@@ -24,6 +24,22 @@ Keep that shape: the website's What's new page parses this file.
   clips. Drop an `.html` file onto the canvas, or ask the agent to make one. Pages are
   shown live from their own sandboxed origin, so a page can never reach your key or your
   files; every edit is a new version, and Cmd-Z steps back through them.
+- **One tab per thread in the Agent panel, filtered by what you select.** With nothing
+  selected the panel lists every conversation, newest first, the oldest tucked behind a
+  More menu that names whichever conversation is open. Double-click a tab to name that
+  conversation — useful when two of them are about the same page — and clear the name to
+  get the default back. Select a page and it shows
+  only the threads about that page; select several and it shows theirs. The page the open
+  thread is about lights up its name tag on the canvas, a chip over the composer names it
+  with a Locate button that pans to it, and with the panel open on a page's thread,
+  selecting other assets turns the toolbar's Agent button into **Add to <page>**.
+- **Pick the model and effort per thread.** The panel's composer has a model picker and
+  an effort control; they apply to the next message and stay with the thread. Threads can
+  be deleted from the panel header. Enter now sends, and Shift+Enter or Option+Enter
+  starts a new line, in the panel and the toolbar's composer alike.
+- **Copying a page copies its file**, so a pasted page is a separate version you can hand
+  to a separate thread. Deleting a page is undoable like any other node and its threads
+  come back with it; the only time it asks first is when the agent is mid-turn on it.
 - **Group nodes.** Select any inputs and press ⌘G (or right-click → Group) to wrap them in a named box. The box wires as one source, so connecting it sends everything inside, and `@`-referencing it in a prompt pulls in the text it holds. Double-click the box's label (or press F2) to rename it; renaming never breaks a reference, because the label shows the name while the reference stays tied to the id. Groups resize from any edge. ⌘⇧G ungroups, putting the contents back exactly where they look and leaving what you send unchanged. A saved group is how a reusable character, product or outfit lives in the Library.
 
 ## 2026-09-04

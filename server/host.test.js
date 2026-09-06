@@ -1380,6 +1380,17 @@ try {
     assert.equal(sidecar.fileName, 'Hero Shot.png');
     assert.equal((await fetch(`${base}/api/file/docproj/${uploaded.file}`)).status, 200);
     assert.equal((await fetch(`${docBase}/files`, { method: 'POST', body: '', signal: AbortSignal.timeout(5000) })).status, 400, 'no bytes is a 400');
+    // A copy for a pasted page node: its own file, same bytes, sidecar naming the original.
+    const cp = await json('POST', `${docBase}/files/copy`, { file: uploaded.file });
+    assert.equal(cp.status, 200);
+    const copied = (await cp.json()).file;
+    assert.notEqual(copied, uploaded.file);
+    assert.match(copied, /^\d+-hero-shot\.png$/);
+    assert.deepEqual(await fs.readFile(path.join(outDir, 'docproj', copied)), png);
+    assert.equal(JSON.parse(await fs.readFile(path.join(outDir, 'docproj', copied.replace(/\.png$/, '.json')), 'utf8')).of, uploaded.file);
+    assert.equal((await json('POST', `${docBase}/files/copy`, { file: 'nope.png' })).status, 404);
+    assert.equal((await json('POST', `${docBase}/files/copy`, { file: '../x.png' })).status, 400);
+    assert.equal((await json('POST', `${docBase}/files/copy`, {})).status, 400);
 
     // Rename ends the stream (the tab reconnects under the new name) and the graph,
     // journal included, follows the folder.
@@ -1531,6 +1542,16 @@ try {
     assert.deepEqual(byArtifact.threads.map((t) => t.id), [art.thread.id]);
     assert.equal((await (await fetch(`${tBase}?artifact=999`)).json()).threads.length, 0);
     assert.ok((await (await fetch(tBase)).json()).threads.length >= 4, 'unfiltered lists everything');
+    // Model and effort for the next turn (slice 3): PATCH validates, persists, and lists.
+    assert.equal((await json('POST', tBase, { provider: 'claude', effort: 'ultra' })).status, 400, 'unknown effort at creation');
+    const tuned = await json('PATCH', `${tBase}/${art.thread.id}`, { model: 'claude-sonnet-5', effort: 'high' });
+    assert.equal(tuned.status, 200);
+    assert.equal((await tuned.json()).thread.effort, 'high');
+    const tunedRec = (await (await fetch(`${tBase}/${art.thread.id}`)).json()).thread;
+    assert.equal(tunedRec.model, 'claude-sonnet-5');
+    assert.equal((await (await fetch(`${tBase}?artifact=104`)).json()).threads[0].effort, 'high', 'the summary carries it');
+    assert.equal((await json('PATCH', `${tBase}/${art.thread.id}`, { effort: 'ultra' })).status, 400);
+    assert.equal((await json('PATCH', `${tBase}/nope`, { effort: 'low' })).status, 404);
     for (const t of [composed, odd, art, pending]) await fetch(`${tBase}/${t.thread.id}`, { method: 'DELETE' });
     assert.equal((await fetch(`${tBase}/${created.thread.id}`, { method: 'DELETE' })).status, 200);
     assert.deepEqual((await (await fetch(tBase)).json()).threads, []);

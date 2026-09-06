@@ -8,6 +8,7 @@ import { TextArea } from '@astryxdesign/core/TextArea';
 import { HStack, VStack, StackItem } from '@astryxdesign/core/Stack';
 import { Sparkles, ArrowLeft, ExternalLink, Play, Square } from 'lucide-react';
 import { place, selectionBox, toScreen } from './placement.js';
+import { useCanvasWheel } from './canvasWheel.js';
 import { toolbarActions } from './actions.js';
 import { targetLabel } from './target.js';
 
@@ -34,6 +35,7 @@ export default function SelectionToolbar({
   onCloseComposer,
   provider,
   providerMessage,
+  addTo, // the panel's artifact, when the selection has none of its own: "Add to <it>"
   busy,
   onSend,
   onStop,
@@ -71,6 +73,9 @@ export default function SelectionToolbar({
   useEffect(() => {
     if (!composer) setText('');
   }, [composer]);
+
+  // The bar floats over the canvas, so it must not swallow the canvas's own gestures.
+  useCanvasWheel(el, canvasEl);
 
   if (!flowBox || hidden || !canvasEl) return null;
 
@@ -128,9 +133,9 @@ export default function SelectionToolbar({
           <Button
             size="sm"
             variant="primary"
-            label="Agent"
+            label={addTo ? `Add to ${addTo}` : 'Agent'}
             icon={<Icon icon={Sparkles} />}
-            tooltip={provider ? undefined : providerMessage}
+            tooltip={provider ? (addTo ? 'Send the selection to the open thread about this artifact' : undefined) : providerMessage}
             onClick={onOpenComposer}
           />
         </>
@@ -174,7 +179,8 @@ export default function SelectionToolbar({
           )}
           <div
             onKeyDown={(e) => {
-              if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
+              // Enter sends; Shift+Enter or Option+Enter breaks the line (same as the panel).
+              if (e.key === 'Enter' && !e.shiftKey && !e.altKey && !e.isComposing) {
                 e.preventDefault();
                 send();
               }
@@ -190,8 +196,8 @@ export default function SelectionToolbar({
               placeholder={
                 provider
                   ? composer.target === 'new'
-                    ? 'What should the agent make from these? (⌘↵ to send)'
-                    : 'What should change? (⌘↵ to send)'
+                    ? 'What should the agent make from these? (↵ to send)'
+                    : 'What should change? (↵ to send)'
                   : 'Connect Claude or Codex to start'
               }
               isDisabled={!provider}

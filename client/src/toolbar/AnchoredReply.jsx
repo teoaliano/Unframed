@@ -7,6 +7,7 @@ import { Text } from '@astryxdesign/core/Text';
 import { HStack, StackItem } from '@astryxdesign/core/Stack';
 import { X, Undo2, MessageSquare, ExternalLink } from 'lucide-react';
 import { place, selectionBox, toScreen } from './placement.js';
+import { useCanvasWheel } from './canvasWheel.js';
 
 // The agent's reply, anchored below the node it worked on (design canvas board 4): the
 // text, Undo, Open thread, and the artifact's own action. It stays until dismissed,
@@ -24,6 +25,8 @@ export default function AnchoredReply({ reply, nodes, canvasEl, onDismiss, onUnd
     const r = el.current?.getBoundingClientRect();
     if (r && (r.width !== size.width || r.height !== size.height)) setSize({ width: r.width, height: r.height });
   });
+  // The card floats over the canvas, so it must not swallow the canvas's own gestures.
+  useCanvasWheel(el, canvasEl);
   if (!reply || !canvasEl) return null;
 
   // Below the node it worked on; below the selection it came from when there is none.

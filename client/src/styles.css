@@ -983,6 +983,201 @@ div:has(> .add-node-menu) {
 .react-flow__node.selected > .astryx-card {
   box-shadow: inset 0 0 0 1px var(--color-accent), var(--shadow-low);
 }
+/* The agent's focus mark (slice 3, design option E): the artifact the panel's active
+   thread is about. Selection owns the card border, so focus lives on the NAME ROW -- the
+   tag fills bright and carries a live dot -- and the two facts never share a surface. */
+.react-flow__node.agent-focus .xnode-tab {
+  background: var(--color-text-primary);
+  border-color: var(--color-text-primary);
+  color: var(--color-background-body);
+}
+.react-flow__node.agent-focus .xnode-tab .astryx-text,
+.react-flow__node.agent-focus .xnode-tab svg {
+  color: var(--color-background-body);
+}
+.react-flow__node.agent-focus .xnode-tab::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: var(--radius-full);
+  background: var(--color-background-body);
+  animation: agent-pulse 1.6s ease-in-out infinite;
+}
+/* ---- the composer's footer pickers (agent/ModelPicker.jsx) ----
+   Trigger: a small ghost control. Popup: a provider rail down the left, a search field,
+   two-line rows with a jump key and a star. Effort reuses the rows without the rail. */
+.mp-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 var(--spacing-2);
+  border: var(--border-width) solid transparent;
+  border-radius: var(--radius-element);
+  background: transparent;
+  color: var(--color-text-primary);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+  max-width: 200px;
+}
+.mp-trigger:hover:not(:disabled) {
+  background: var(--color-background-card);
+}
+.mp-trigger:disabled {
+  color: var(--color-text-secondary);
+  cursor: default;
+}
+.mp-trigger-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.mp-mark--claude {
+  color: var(--color-accent);
+}
+/* One 8px inset for the whole popup, and it comes from the popover itself: Astryx pads
+   12px, and the strip and list used to add their own on top of it. Scoped with :has so
+   every other popover in the app keeps the stock padding. */
+.astryx-popover:has(.mp) {
+  padding: var(--spacing-2);
+}
+.mp {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  /* Shorter than the full catalogue on purpose: the list scrolls rather than growing a
+     popup taller than the panel it hangs off. */
+  max-height: 320px;
+}
+/* The effort list is six short rows at most, so it is never capped -- clipping "Max" by
+   a few pixels to gain a scrollbar reads as a bug. */
+.mp--effort {
+  max-height: none;
+}
+/* Providers as tabs across the top; the active one underlined. */
+.mp-tabs {
+  display: flex;
+  flex: none;
+  gap: var(--spacing-1);
+  border-bottom: var(--border-width) solid var(--color-border);
+}
+.mp-tab {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 32px;
+  padding: 0 var(--spacing-2);
+  border: 0;
+  background: transparent;
+  color: var(--color-text-secondary);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+.mp-tab:hover,
+.mp-tab--on {
+  color: var(--color-text-primary);
+}
+.mp-tab--on::after {
+  content: '';
+  position: absolute;
+  left: var(--spacing-2);
+  right: var(--spacing-2);
+  bottom: -1px;
+  height: 2px;
+  border-radius: var(--radius-full);
+  background: var(--color-accent);
+}
+.mp-main {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  /* min-height, or the list cannot shrink below its content and never scrolls: a flex
+     child's default `min-height: auto` is its content. */
+  min-height: 0;
+  flex: 1;
+}
+/* Inline padding matches a row's, so the heading's text starts where the names do; block
+   because Astryx renders it as a span, whose vertical padding would reserve no space. */
+.mp-heading {
+  display: block;
+  padding: var(--spacing-2) var(--spacing-2) var(--spacing-1);
+}
+.mp-list {
+  overflow-y: auto;
+  min-height: 0;
+}
+.mp-row {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-2);
+  padding: var(--spacing-2);
+  border-radius: var(--radius-element);
+  cursor: pointer;
+}
+.mp-row:hover,
+.mp-row:focus-visible {
+  background: var(--color-background-card);
+  outline: none;
+}
+.mp-row--on {
+  background: color-mix(in srgb, var(--color-text-primary) 8%, transparent);
+}
+.mp-row-text {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+  flex: 1;
+}
+.mp-row-name {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-2);
+  font-size: 13px;
+  color: var(--color-text-primary);
+}
+.mp-row-sub {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  color: var(--color-text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.mp-row-sub {
+  white-space: normal;
+}
+.mp-empty {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-1);
+  padding: var(--spacing-3);
+}
+/* The same mark in the panel's scope row, with the Locate action beside the name. */
+.agent-chip--focus {
+  border-color: var(--color-text-primary);
+}
+.agent-dot--focus {
+  background: var(--color-text-primary);
+}
+.agent-locate {
+  display: inline-flex;
+  align-items: center;
+  margin-inline-start: 2px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+}
+.agent-locate:hover {
+  color: var(--color-text-primary);
+}
 /* Three sides, because the fourth is shared with the card's top edge. */
 .react-flow__node.selected .xnode-tab--input {
   box-shadow:
@@ -1247,8 +1442,96 @@ div:has(> .add-node-menu) {
   overflow: hidden;
 }
 .agent-panel-head {
-  padding: var(--spacing-2) var(--spacing-3);
+  padding: var(--spacing-2) var(--spacing-3) 0;
+}
+/* The tab strip: one tab per thread the selection lets through (agent/tabs.js), the rest
+   behind the strip's overflow menu. The tabs themselves are Astryx's (TabList), shaped
+   into folder tabs by theme.js; what belongs here is the rule they sit on, which runs
+   the full width of the panel rather than stopping at the head's padding, and so
+   replaces the head's own bottom border. */
+.agent-tabs {
+  display: flex;
+  align-items: flex-end;
+  min-height: 32px;
+  margin-inline: calc(-1 * var(--spacing-3));
+  padding: var(--spacing-2) var(--spacing-3) 0;
   border-bottom: var(--border-width) solid var(--color-border);
+}
+/* An artifact thread's tab is marked by the colour of its join, so which conversations
+   are about a page and which about the board reads off the strip. */
+.astryx-tab.agent-tab--artifact.selected {
+  border-color: var(--color-accent);
+}
+/* Astryx draws hover as an absolutely positioned pill of its own, rounded on all four
+   corners; left alone it rounds off the bottom of a shape whose bottom is meant to be
+   open. `inherit` keeps it whatever shape the tab is. It has no class of its own -- it
+   is the tab's first child, hidden from the accessibility tree. */
+.astryx-tab > span[aria-hidden='true']:first-child,
+.astryx-tab-menu > span[aria-hidden='true']:first-child {
+  border-radius: inherit;
+}
+/* Astryx measures a tab's label against a hidden bold copy of itself in an overlaid
+   grid, so a crowded strip clips a long name at BOTH ends rather than ending it. Let the
+   grid shrink and the visible copy trail off. Reached by structure, not by class: the
+   label is the tab's only child that is neither hidden from the accessibility tree nor
+   the indicator. Scoped to this strip, since a tab wide enough for its name wants none
+   of this. */
+/* No one tab may take the strip: a long name is capped and the rest keep their share.
+   The overflow trigger never shrinks -- it is the way back to everything not shown, and
+   an "M…" is not a way back. */
+.agent-tabs .astryx-tab {
+  max-width: 12ch;
+}
+.agent-tabs .astryx-tab-menu {
+  flex: none;
+}
+.agent-tabs .astryx-tab > span:not([aria-hidden]):not(.astryx-tab-indicator),
+.agent-tabs .astryx-tab-menu > span:not([aria-hidden]):not(.astryx-tab-indicator) {
+  min-width: 0;
+}
+.agent-tabs .astryx-tab > span:not([aria-hidden]):not(.astryx-tab-indicator) > span,
+.agent-tabs .astryx-tab-menu > span:not([aria-hidden]):not(.astryx-tab-indicator) > span {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+/* Double-clicking a tab renames its thread, in the tab's own box. It wears `astryx-tab
+   selected` so the folder shape comes from theme.js rather than a second copy of it
+   here; what is left for this rule is what Astryx's StyleX layer would have supplied --
+   the box's height and type -- plus stripping the input's own chrome. */
+.agent-tab-rename {
+  display: inline-flex;
+  align-items: center;
+  height: var(--size-element-sm);
+  font-size: var(--text-label-size);
+}
+.agent-tab-rename input {
+  max-width: 16ch;
+  padding: 0;
+  border: 0;
+  outline: none;
+  background: transparent;
+  color: var(--color-text-primary);
+  font: inherit;
+}
+/* The overflow trigger open, which theme.js cannot say: Astryx gives it no selected
+   marker but the indicator, and the indicator is what the folder shape replaced. */
+.astryx-tab-menu:has(.astryx-tab-indicator) {
+  border-color: var(--color-border-emphasized);
+  background: var(--color-background-surface);
+}
+.agent-tabs-empty {
+  align-self: center;
+  padding: var(--spacing-1) 0 var(--spacing-2);
+}
+.agent-dot--live {
+  animation: agent-pulse 1.2s ease-in-out infinite;
+}
+@keyframes agent-pulse {
+  50% {
+    opacity: 0.3;
+  }
 }
 .agent-panel-thread {
   flex: 1;
@@ -1266,10 +1549,18 @@ div:has(> .add-node-menu) {
   padding: var(--spacing-3);
   border-top: var(--border-width) solid var(--color-border);
 }
+/* The no-provider state: a real panel with a heading, links and a button, so it keeps
+   its box. The empty-transcript hint below is not that and does not. */
 .agent-empty {
   padding: var(--spacing-3);
   border: var(--border-width) dashed var(--color-border-emphasized);
   border-radius: var(--radius-element);
+}
+/* `margin-top: auto` is what puts the hint at the foot of the column rather than the
+   top: the transcript is a flex column, so the free space collects above it, exactly
+   where the messages will appear. */
+.agent-hint {
+  margin-top: auto;
 }
 .agent-msg {
   display: flex;

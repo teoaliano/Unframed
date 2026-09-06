@@ -7,7 +7,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { decodeDataUrl, extOf, findInlineMedia, mediaFileName, extractMedia, extractFromOp, fileRef, inlineFileRefs } from './media.js';
+import { decodeDataUrl, extOf, findInlineMedia, mediaFileName, extractMedia, extractFromOp, fileRef, inlineFileRefs, copyMedia } from './media.js';
 
 const PNG_1PX =
   'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==';
@@ -161,6 +161,29 @@ const MP4_STUB = `data:video/mp4;base64,${Buffer.from('not really an mp4').toStr
   await assert.rejects(() => inlineFileRefs([{ type: 'image_url', image_url: { url: fileRef('nope.png') } }], dir), /not found/);
   // Non-arrays pass through.
   assert.equal(await inlineFileRefs(undefined, dir), undefined);
+  await fs.rm(dir, { recursive: true, force: true });
+}
+
+// ---- copyMedia: a pasted page gets its own file, same bytes, sidecar naming the original ----
+{
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'unframed-copy-'));
+  await fs.writeFile(path.join(dir, '1700000000000-launch.html'), '<h1>hi</h1>');
+  await fs.writeFile(path.join(dir, '1700000000000-launch.json'), JSON.stringify({ source: 'agent', mime: 'text/html' }));
+  const copy = await copyMedia(dir, '1700000000000-launch.html', { now: () => 1700000001000 });
+  assert.equal(copy, '1700000001000-launch.html');
+  assert.equal(await fs.readFile(path.join(dir, copy), 'utf8'), '<h1>hi</h1>');
+  const side = JSON.parse(await fs.readFile(path.join(dir, '1700000001000-launch.json'), 'utf8'));
+  assert.equal(side.source, 'copy');
+  assert.equal(side.of, '1700000000000-launch.html');
+  assert.equal(side.mime, 'text/html');
+  // Across projects: the original is read from `from`, the copy lands in `dir`.
+  const other = await fs.mkdtemp(path.join(os.tmpdir(), 'unframed-copy-to-'));
+  const across = await copyMedia(other, '1700000000000-launch.html', { from: dir, now: () => 1700000002000 });
+  assert.equal(across, '1700000002000-launch.html');
+  assert.equal(await fs.readFile(path.join(other, across), 'utf8'), '<h1>hi</h1>');
+  await fs.rm(other, { recursive: true, force: true });
+  await assert.rejects(copyMedia(dir, '../elsewhere.html'), /not a file in this project/, 'no path segments');
+  await assert.rejects(copyMedia(dir, 'missing.html'), 'a missing file rejects');
   await fs.rm(dir, { recursive: true, force: true });
 }
 

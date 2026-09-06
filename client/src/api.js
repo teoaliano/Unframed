@@ -250,6 +250,10 @@ export const uploadFile = (name, file) =>
     return d;
   });
 
+// A copy of a project file, for pasting a page node so the paste owns its own file.
+// `from` is the project the original lives in, when pasting across projects.
+export const copyFile = (project, file, from = null) => postJson(`/api/projects/${enc(project)}/files/copy`, { file, ...(from ? { from } : {}) }).then((d) => d.file);
+
 // Where a project's files are served from, for <img>/<video> src and for references
 // the server inlines at the OpenRouter boundary.
 export const fileUrl = (project, file) => `/api/file/${enc(project)}/${enc(file)}`;
@@ -361,6 +365,14 @@ export const sendThreadMessage = (project, id, { text, selection = [], target, w
     selection,
     ...(target ? { target } : {}),
     ...(withIds?.length ? { with: withIds } : {}),
+  });
+
+// Model and effort for the thread's next turn; either key may be omitted, '' resets.
+export const updateThread = (project, id, patch) =>
+  fetch(`/api/projects/${enc(project)}/threads/${enc(id)}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(patch) }).then(async (r) => {
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(d.error || `Could not update the thread (${r.status})`);
+    return d.thread;
   });
 
 export const interruptThread = (project, id) =>
