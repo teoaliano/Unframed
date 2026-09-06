@@ -15,9 +15,8 @@ assert.deepEqual(messageTarget([]), { target: 'new', with: [], artifacts: [] });
 assert.deepEqual(messageTarget([n('i1', 'image')], 'g'), { target: 'g', with: ['i1'], artifacts: ['g'] });
 assert.deepEqual(messageTarget([], 'g'), { target: 'g', with: [], artifacts: ['g'] });
 assert.deepEqual(messageTarget([page('h'), n('i1', 'image')], 'g'), { target: 'h', with: ['i1'], artifacts: ['h'] });
-// Several: a new asset from them -- "stitch these" -- with every selected node along.
-// (Until 2026-09-06 this was 'ask'; the slice-4 spec has the reversal.)
-assert.deepEqual(messageTarget([page('g1'), page('g2'), n('i', 'image')]), { target: 'new', with: ['g1', 'g2', 'i'], artifacts: ['g1', 'g2'] });
+// Several: the agent must ask before acting.
+assert.deepEqual(messageTarget([page('g1'), page('g2'), n('i', 'image')]), { target: 'ask', with: ['g1', 'g2', 'i'], artifacts: ['g1', 'g2'] });
 
 // Clicking another node while the composer is open.
 {
@@ -29,22 +28,21 @@ assert.deepEqual(messageTarget([page('g1'), page('g2'), n('i', 'image')]), { tar
   const s2 = addToTarget(s1, page('g', 'Launch'));
   assert.deepEqual(s2, { target: 'g', with: ['i1', 'p'], artifacts: ['g'] });
   assert.equal(addToTarget(s2, page('g')), s2, 'the target itself is not added again');
-  // A second artifact turns it into a new asset from both, and both come along.
+  // A second artifact makes it ambiguous, and both are in the list.
   const s3 = addToTarget(s2, page('h'));
-  assert.equal(s3.target, 'new');
+  assert.equal(s3.target, 'ask');
   assert.deepEqual(s3.artifacts, ['g', 'h']);
   assert.deepEqual([...s3.with].sort(), ['g', 'h', 'i1', 'p']);
   const s4 = addToTarget(s3, page('k'));
-  assert.equal(s4.target, 'new');
+  assert.equal(s4.target, 'ask');
   assert.deepEqual(s4.artifacts, ['g', 'h', 'k']);
-  assert.deepEqual([...s4.with].sort(), ['g', 'h', 'i1', 'k', 'p']);
   assert.equal(new Set(s4.with).size, s4.with.length, 'no duplicates');
 }
 
 // The "To" line.
 const nodes = [page('g', 'Launch'), n('i', 'image', { fileName: 'hero.png' })];
 assert.equal(targetLabel({ target: 'new', with: [], artifacts: [] }, nodes), 'new asset');
-assert.equal(targetLabel({ target: 'new', with: ['g', 'h'], artifacts: ['g', 'h'] }, nodes), 'new asset from 2 artifacts');
+assert.equal(targetLabel({ target: 'ask', with: [], artifacts: ['g', 'h'] }, nodes), '2 artifacts selected — pick one');
 assert.equal(targetLabel({ target: 'g', with: [], artifacts: ['g'] }, nodes), 'page · Launch');
 assert.equal(targetLabel({ target: 'zz', with: [], artifacts: ['zz'] }, nodes), 'zz');
 

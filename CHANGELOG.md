@@ -16,10 +16,6 @@ Keep that shape: the website's What's new page parses this file.
   plays it live, and **Render** turns it into an MP4 in your project folder that lands on
   the canvas as an ordinary video node. Rendering runs locally in the Chrome (or Chromium,
   Edge, Brave) you already have and uses no credits; without one, Render says so.
-- **Select several pages or motions and ask for one thing from them.** The toolbar's
-  composer used to stop at "pick one"; now the message goes to a new asset made from all
-  of them — select your scenes and say "stitch these in order", and the agent writes one
-  motion that plays them back to back. To edit one of them, select it alone.
 
 ## 2026-09-05
 

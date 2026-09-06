@@ -38,8 +38,7 @@ Nothing in 1 or 2 is torn out by 3 or 4.
   bottom command bar (⌘K) was rejected as a second surface doing the toolbar's job.
 - **Selection decides the target.** One artifact in the selection → it is "To". None → "To"
   is a new asset the agent creates beside the selection. Several → the agent must ask before
-  acting, and the composer says so before you type. *(Superseded 2026-09-06: several is now
-  also "a new asset from these" — see the slice-4 spec, "Stitching".)*
+  acting, and the composer says so before you type.
 - **While the composer is open, clicking another asset adds it to "with"; clicking empty
   canvas collapses the composer.**
 - **Server-authoritative document, not a browser relay** (section 1). Chosen for stability:
