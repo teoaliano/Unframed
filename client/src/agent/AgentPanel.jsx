@@ -23,6 +23,7 @@ import {
 import { isArtifact } from '../graph/resolve.js';
 import { visibleThreads, nextActive, tabLabel, nodeLabel, touchedArtifacts } from './tabs.js';
 import { NODE_ICONS } from '../nodes/nodeIcons.jsx';
+import ChatMarkdown from './Markdown.jsx';
 
 // The agent panel: a right-hand panel over the project's chats, one tab each. The
 // design's states 1, 8 and 10 (docs/superpowers/specs/2026-09-04-agent-canvas-slice-1-design.md),
@@ -504,7 +505,11 @@ export default function AgentPanel({ project, nodes, providers, onCheckProviders
               {m.role === 'user' ? 'You' : provider?.name ?? 'Agent'}
               {m.role === 'user' && m.selection?.length ? ` · ${m.selection.length} selected` : ''}
             </Text>
-            <div className="agent-msg-text">{m.text}</div>
+            {/* The agent writes markdown, so its replies are rendered as markdown. What
+                the PERSON typed is not: they typed prose, and running it through a parser
+                would eat their asterisks and turn a line starting with "#" into a heading.
+                Their own words are shown exactly as they wrote them. */}
+            {m.role === 'user' ? <div className="agent-msg-text">{m.text}</div> : <ChatMarkdown text={m.text} />}
           </div>
         ))}
         {draft && (
@@ -512,7 +517,9 @@ export default function AgentPanel({ project, nodes, providers, onCheckProviders
             <Text type="supporting" className="agent-msg-role">
               {provider?.name ?? 'Agent'}
             </Text>
-            <div className="agent-msg-text">{draft}</div>
+            {/* Rendered by the same component while it streams, so formatting appears as
+                it arrives rather than snapping in when the turn ends. */}
+            <ChatMarkdown text={draft} />
           </div>
         )}
         {activity && (

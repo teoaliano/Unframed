@@ -29,7 +29,7 @@ await assert.rejects(() => loadScript(path.join(root, 'nope.json')), /no such pa
 
 {
   const dir = await loadScript(FIXTURES);
-  assert.deepEqual(dir.scripts.map((s) => s.name).sort(), ['bad-node', 'bulk-edit', 'question', 'revise', 'stitch', 'title']);
+  assert.deepEqual(dir.scripts.map((s) => s.name).sort(), ['bad-node', 'bulk-edit', 'markdown', 'question', 'revise', 'stitch', 'title']);
   // A chat picks its fixture from its first message, which is how ONE env var serves a
   // flow that starts several different conversations.
   assert.equal(pickScript(dir, 'make both titles red').name, 'bulk-edit');
@@ -37,6 +37,7 @@ await assert.rejects(() => loadScript(path.join(root, 'nope.json')), /no such pa
   assert.equal(pickScript(dir, 'polish it').name, 'bad-node');
   assert.equal(pickScript(dir, 'name this chat').name, 'title');
   assert.equal(pickScript(dir, 'revise the outro').name, 'revise');
+  assert.equal(pickScript(dir, 'show me some markdown').name, 'markdown');
   assert.equal(pickScript(dir, 'how many nodes are there?').name, 'question');
   assert.equal(pickScript(dir, 'something nothing matches'), null, 'no fallback: an unmatched message fails loudly');
   // Only the FIRST message chooses; a later turn of the same chat is not re-matched

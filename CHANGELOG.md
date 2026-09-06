@@ -14,6 +14,9 @@ Keep that shape: the website's What's new page parses this file.
   works — no picking one of them first, no "which did you mean". Whatever you have
   selected comes along as context and the agent works out what you meant from what you
   said.
+- **The agent's replies are formatted.** Headings, lists, tables, quotes, task lists and
+  code blocks (with a copy button) all render properly instead of arriving as one wall of
+  plain text. Links open in a new tab.
 - **Chats name themselves.** After the first exchange the agent writes a short name on the
   tab, so the strip says what a conversation was about instead of quoting its first words.
   Double-click a tab to rename it yourself, and yours always wins.

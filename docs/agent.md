@@ -367,6 +367,36 @@ listing everything would bury what the turn was about.
 
 `ArtifactRow` in `AgentPanel.jsx` is that row.
 
+### The agent's replies are markdown (`client/src/agent/Markdown.jsx`)
+
+The agent writes markdown, so the panel renders it: `react-markdown` with `remark-gfm` and
+`remark-breaks`, and the prose typography of t3code's chat
+(`apps/web/src/components/ChatMarkdown.tsx` and the `.chat-markdown` rules in
+`apps/web/src/index.css`, MIT — the same source as the model manifest and the provider
+logos). Their measurements are kept and their theme variables swapped for Astryx tokens, so
+a theme change carries and no hex lands in the stylesheet. Their code-block copy button is
+kept too.
+
+**What the PERSON typed is not parsed.** They typed prose; running it through markdown would
+eat their asterisks and turn a line beginning `#` into a heading. Only the agent's side is
+rendered, and the streaming draft goes through the same component so formatting appears as
+it arrives rather than snapping in at the end.
+
+**Raw HTML is never parsed, and that is the one deliberate divergence from t3code**, which
+pairs `rehype-raw` with `rehype-sanitize` and does render it. Neither plugin is loaded here,
+so markup in a reply is shown as the text it is. It is the same rule that gives page assets
+their own origin (`server/preview.js`, below): HTML the model wrote must not execute where it
+would BE Unframed to the browser, and the panel is as same-origin as it gets. A sanitiser is
+a filter with a history of bypasses; not parsing the HTML at all has none. Without
+`rehype-raw` there are no raw nodes to sanitise, and react-markdown's own `urlTransform`
+already drops `javascript:` from hrefs and image sources. Links additionally open in a new
+tab with `noopener noreferrer`, since a reply's links come from a model and may point
+anywhere.
+
+Shiki syntax highlighting is deliberately not adopted: it is most of t3code's markdown
+weight, and replies here are prose about the canvas rather than code listings. The three
+markdown packages cost about 158KB raw (48KB gzipped) in the client bundle.
+
 **The transcript is the messages, and only the messages.** Each change the agent made
 briefly got a block of its own here — the summary, expandable to the artifacts it touched,
 with Undo — and it went on 2026-09-06: with the recap card listing the same files, a block
