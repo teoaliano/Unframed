@@ -1757,6 +1757,10 @@ div:has(> .add-node-menu) {
 .react-flow__node.selected .xnode-group {
   border-style: solid;
   border-color: var(--color-accent);
+  /* Square while selected: the grips sit ON the corners, and a radius pushes the box's
+     own corner away from the handle that drags it -- the one place the rounding costs
+     something rather than softening it. */
+  border-radius: 0;
 }
 /* The name while it is being edited, in place in the label: the @ is text beside the
    field, so the caret sits exactly where the name reads. */
