@@ -9,6 +9,14 @@ Keep that shape: the website's What's new page parses this file.
 
 ### Added
 
+- **The agent's conversations are chats you can talk to about several things at once.**
+  Select two motions and say "make both titles red", or "stitch these in order", and it
+  works — no picking one of them first, no "which did you mean". Whatever you have
+  selected comes along as context and the agent works out what you meant from what you
+  said.
+- **Chats name themselves.** After the first exchange the agent writes a short name on the
+  tab, so the strip says what a conversation was about instead of quoting its first words.
+  Double-click a tab to rename it yourself, and yours always wins.
 - **Motion assets.** A new node type: a HyperFrames composition — an HTML video that
   animates your project's images and clips with timed elements and a GSAP timeline. Ask
   the agent for a video, an animation or motion graphics and it writes one beside the
@@ -16,6 +24,19 @@ Keep that shape: the website's What's new page parses this file.
   plays it live, and **Render** turns it into an MP4 in your project folder that lands on
   the canvas as an ordinary video node. Rendering runs locally in the Chrome (or Chromium,
   Edge, Brave) you already have and uses no credits; without one, Render says so.
+
+### Changed
+
+- **The agent's reply lives in the panel now**, not in a card floating over the node it
+  worked on. Send from the toolbar and the panel opens on that conversation with the
+  answer streaming into it. Each change the agent made is a line you can expand to see
+  exactly which pages or motions it touched, with **Open**, **Locate** and **Undo** — and
+  a change to several things undoes in one step.
+- **The composer says which conversation your message joins** before you send it —
+  "continues *Title fixes*" or "new chat" — with a button to switch.
+- **A conversation outlives the things it was about.** Deleting a page or motion the agent
+  worked on no longer asks you anything and no longer hides the chat: it stays, with the
+  deleted thing greyed out in its list. Nothing is thrown away with the file.
 
 ## 2026-09-05
 

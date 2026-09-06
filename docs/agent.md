@@ -52,9 +52,9 @@ Rules that are expensive to rediscover, each ported from t3code:
   would read; an empty value clears the line. No run route ever takes a path — a page
   that can fire a bodiless POST must not be able to choose the binary.
 
-## Threads (`server/threads.js`, `server/agent.js`)
+## Chats (`server/threads.js`, `server/agent.js`)
 
-A thread is one conversation about one project. Its record lives at
+A thread is one **chat** about one project — not a thing about an artifact. Its record lives at
 `<project>/threads/<id>.json` — messages, events with a sequence for replay, status —
 written temp-then-rename before a turn starts, the `jobs.json` rule, so a turn in flight
 survives the tab that asked for it and a reopened panel reads the transcript back. Text
@@ -77,12 +77,62 @@ and `billing: "subscription"`. The SDK's dollar estimate is recorded as `estimat
 for information. There is never a `cost` field: a subscription turn has no metered price,
 and a `0` would silently corrupt the sums the generation sidecars exist for.
 
-A thread has a `kind`: `canvas` (the panel's, about the whole board) or `artifact` (the
-composer's, about one node — `artifactId`, bound at creation or by the agent's first
-`page_write` when the message asked for a new asset). A composer message also carries
-`target` (a node id, or `new`) and `with` (the rest of the selection); they are stored on
-the message, reported by `canvas_read`, and prefixed to the model's copy of the text as
-one `To: … With: …` line so the intent is in the transcript, not only in a tool result.
+### Tags, and why there is no `kind`
+
+A chat carries **`tags`**: the node ids of the artifacts (pages, motions) it has touched.
+They come from two places and nowhere else — the artifacts among the selection at its
+**first** message (`tagFirstMessage` in `index.js`, which asks the *document* which of the
+selected nodes are artifacts rather than trusting the browser), and every artifact the
+agent writes to thereafter, created **or** updated (`onWrite` → `tagThread`). Adding a tag
+a chat already has returns the same record, so a turn that rewrites one page five times
+does not write the record five times.
+
+**Tags are pointers, never dependencies.** Deleting every file a chat touched leaves the
+chat intact and its tags in place; a stale tag simply stops matching, and the panel greys
+its chip. This is why there is no confirmation for deleting an artifact the agent is
+mid-turn on: the write fails and the agent says so.
+
+There used to be a `kind` (`canvas` | `artifact`) and one `artifactId`, and a composer
+message carried `target` and `with`. All four are gone. A chat bound to one node could not
+be about two, so two motions selected had no target and the composer asked the person to
+pick one — a mode picker doing the agent's job. The selection now travels as **context**
+and the agent decides what the sentence means about it. Old records migrate on read
+(`migrateThread`: `artifactId` becomes the one tag, a title becomes the person's since the
+agent could not write one yet), permanently, the way `migrateNodes` does.
+
+Two more fields ride along. **`titledBy`** (`'user' | 'agent' | null`) says who named the
+chat: the agent names it once after the first turn, the person can rename a tab at any
+time, and the person wins in **either order** — which one field could not express.
+Clearing a name drops the credit with it, so the agent may name it again. Naming is one
+small request on the person's own plan per new chat, with no tools and one turn, run
+**after** the turn is settled and broadcast so a reply never waits behind a label; any
+failure is silent and the tab falls back to the opening words.
+
+**`lastVersion`** is the document version when the chat's last turn ended, stamped in
+`settleTurn` and nowhere else. It is what the next turn's preamble measures "what changed"
+from.
+
+### What the model is told before the message
+
+`contextPreamble` (`agentTools.js`, tested) prefixes the model's copy of a message with
+what the person had selected — `Selected: motion m1 ("Intro"), motion m2 ("Outro").` —
+and, when the board moved since the last turn, a sentence saying so:
+
+> Since your last turn the canvas changed: 4 changes by the person, including an undo of a
+> change from this chat. Read it again before acting.
+
+`summarizeChanges` counts journal entries past `lastVersion` by `origin.kind`: `session`
+and `undo`/`redo` are the person, another `thread` is another chat, `system` entries
+(media extraction, project creation) are bookkeeping and are not counted — telling the
+agent the canvas "changed" because a data URL was rewritten would send it re-reading for
+nothing. An entry whose `undoes` names a version this chat committed is called out
+separately, because an undo of the agent's own work is the case where carrying on
+regardless is most obviously wrong.
+
+The preamble goes in the transcript rather than only in a tool result the model might never
+ask for. It is context, not an instruction: the system prompt tells the agent to decide
+from the sentence what is meant, and to call `canvas_read` again whenever the preamble
+says the board moved.
 
 ## The tools (`server/agentTools.js`)
 
@@ -208,10 +258,10 @@ a rename:
 
 | Route | Does |
 | --- | --- |
-| `POST /api/projects/:name/threads` | create (`{ provider, model, kind?, artifactId? }`) |
-| `GET /api/projects/:name/threads?artifact=` | list, newest first; `artifact` narrows to one node's threads |
+| `POST /api/projects/:name/threads` | start a chat (`{ provider, model, effort?, tags? }`); `kind`/`artifactId` are **refused with a 400** naming the new field, not ignored — a client still sending them would silently get an untagged chat, which looks exactly like the feature working |
+| `GET /api/projects/:name/threads?tag=` | list, newest first; `tag` narrows to the chats tagged with that artifact, any-of when repeated |
 | `GET /api/projects/:name/threads/:id` | the record |
-| `POST …/:id/messages` | one turn: `{ text, selection, target?, with? }`; 409 while the previous one runs |
+| `POST …/:id/messages` | one turn: `{ text, selection }`; 409 while the previous one runs. The first message tags the chat with the artifacts among `selection` |
 | `GET …/:id/events?since=` | SSE: `state`, stored events past `since`, `live`, then everything as it happens |
 | `PATCH …/:id` | model and effort for the next turn: `{ model?, effort? }`, `''` resets to the default; 409 mid-turn; closes the live session so the next message resumes with the new values |
 | `POST …/:id/interrupt` | stop the running turn |
@@ -223,13 +273,41 @@ effort levels it accepts, come from the Claude probe (`supportedModels()` on the
 zero-token handshake) as `models` on the provider's ready status.
 
 The browser's selection travels with each message. The server never holds it otherwise;
-`canvas_read` reports the latest one for that thread.
+`canvas_read` reports the latest one for that chat, and only that — there is no `target`
+or `with` to report any more.
+
+### The scripted agent (`server/agentScript.js`)
+
+`UNFRAMED_TEST_AGENT_SCRIPT=<path>` — unset in a clone and therefore inert, the same
+marker rule as `UNFRAMED_DATA_DIR` — makes a turn come from a JSON script instead of a
+model. It replaces **the model and nothing else**: the same `Session`, the same tool
+handlers, the same document, the same events (`session`, `tool_use`, `ops_applied`,
+`tool_result`, `text_delta`, `result`, `titled`), so a fixture commits real ops and writes
+real files in milliseconds.
+
+It exists because every interesting claim about a turn spans several modules — that a bulk
+edit is one undo step, that a tag survives deleting the node it names, that the next turn
+is told about an undo of its own change — and a real turn can show that once, expensively,
+and never the same way twice. A script is `{ when?, turns: [...] }`; a turn is
+`{ text, tools?, title?, isError?, expectPreamble? }` and turn N answers the chat's Nth
+message. `when` is matched against a chat's first message, which is how one folder of
+fixtures (`server/fixtures/agent/`) serves a flow that starts several conversations from
+one env var; the choice is made once and kept, so turn 2 cannot wander into another
+fixture. `expectPreamble` asserts what the agent was actually handed, which is what makes
+the change-note contract checkable **from the agent's side**: drop the note and the turn
+fails. Tested in `agentScript.test.js`; `agentFlow.test.js` drives the real forked server
+through the routes with it, and is the acceptance test for chats and tags.
+
+There is deliberately no route, header or body field that can turn any of this on.
 
 ## The Agent panel (`client/src/agent/AgentPanel.jsx`)
 
-The Agent button in the chrome opens a right-hand panel over the project's threads, one
-tab each, newest first — a canvas thread's tab reads "Canvas", an artifact thread's the
-node's title. The strip is Astryx's `TabList`, shaped into folder tabs (a rounded top and
+The Agent button in the chrome opens a right-hand panel over the project's chats, one tab
+each, newest first. **This is where a reply lives** — there used to be a second place, a
+card anchored on the node the agent worked on, and it could not survive the subject being
+two artifacts at once. A tab reads the name the person typed, else the name the agent
+wrote after the first turn, else the opening words of the first message (32 characters,
+then an ellipsis), else "Chat" (`tabLabel` in `agent/tabs.js`). The strip is Astryx's `TabList`, shaped into folder tabs (a rounded top and
 a border that joins the open tab to the transcript under it) by the `tab` and `tab-list`
 overrides in `client/src/theme.js`, which is where that shape has to live: Astryx's own
 base styles come out of StyleX and only the theme's generated rules land in a layer above
@@ -238,32 +316,46 @@ one is active, so a narrow panel never scrolls its tabs out of reach. **Double-c
 tab renames its thread** in the tab's own box -- Enter or clicking away commits, Escape
 abandons, and an empty name clears it so the tab goes back to saying what it is about.
 The name is `title` on the thread record (`renameThread` in `server/threads.js`, sent on
-the same PATCH as model and effort but taken mid-turn, since it changes no session). It
-is deliberately the only thing that outranks the artifact's title on a tab: two threads
-about one page are the intended way to explore two directions, and two tabs reading the
-same page title cannot be told apart. What a thread is bound to is answered by the focus
-mark and the scope row, which read `artifactLabel` and are unmoved by a rename.
-**The selection filters the strip** (`agent/tabs.js`, tested): no artifact
-selected shows every thread; one selected shows only its threads; several show the
-union, and the canvas threads drop out. A thread whose node is not on the canvas is
-hidden in every state and kept on disk; it reappears the moment undo or redo brings the
-node back, since the binding is by node id. The active tab is always visible: it survives
-a re-filter it is part of, else the newest visible one takes over, else none — and with
-none, Send creates a thread bound to the one selected artifact (or a canvas thread when
-none is; with several selected, Send is disabled and says why). The composer sends to the
-active tab: the thread's artifact is fixed for life, the selection at send time is the
-message's `with`. The active thread's artifact wears the **focus mark** on the canvas
-(`onFocus` → `className: 'agent-focus'` on that node — the node alone, not what the thread
-touched): its name tag fills bright with a live dot, design option E, chosen over a ring
-around the card because selection already owns the card border and the two read as one
-fact when they share it. The row above the composer names the same artifact with a
-**Locate** action that pans and zooms to it (`onLocate` → `fitView` on that node), beside
-a count of whatever else is selected. It shows only what the next message actually
-carries and is absent when that is nothing: an empty selection IS the whole canvas, so a
-chip announcing it was a label on the default, and the "Scope" heading over it was a
-label on a label. A thread with nothing in it yet says what to say in plain text at the
-FOOT of the transcript, next to the composer it is about -- in a box and at the top it
-read as the first message. The composer's bottom
+the same PATCH as model and effort but taken mid-turn, since it changes no session). Two chats about one page are the intended way to explore two directions, and a name is
+what tells their tabs apart.
+
+**The selection filters the strip** (`agent/tabs.js`, tested): nothing selected shows every
+chat; an artifact selected shows the chats tagged with **any** selected artifact.
+`visibleThreads` no longer hides a chat whose artifacts have all been deleted — the
+conversation may be the only record of why the thing was made, so its chips grey out
+instead. The active tab is always visible: it survives a re-filter it is part of, else the
+newest visible one takes over, else none — and with none the next message starts a chat.
+**A chat can always be started**, whatever is selected: `newKind` and the disabled Send
+with "select one artifact to start a thread about it" are gone, because any selection is a
+fine thing to talk about.
+
+**Every artifact the active chat has touched wears the focus mark** — `onFocus` hands
+App.jsx the chat's whole `tags` array and each matching node gets `className:
+'agent-focus'`. Its name tag fills bright with a live dot: design option E, chosen over a
+ring around the card because selection already owns the card border and the two read as
+one fact when they share it. A tag whose node is gone matches nothing, which is what makes
+a stale tag harmless. The row above the composer lists those tags as chips, each with a
+**Locate** action that pans and zooms to it (`onLocate` → `fitView`), beside a count of
+whatever else is selected; a stale chip is dashed and greyed with **no Locate**, since
+there is nowhere to locate it to. The row is absent when there is nothing to say: an empty
+selection IS the whole canvas, so a chip announcing it was a label on the default.
+
+**A change the agent made is a small block in the transcript, not a line** (`.agent-change`):
+the summary, a disclosure that expands to the artifacts it touched — each with **Open**
+(the editor) and **Locate** — and **Undo** while that change is still what Cmd-Z would
+revert next (`GET /api/projects/:name/undo`, re-asked 450ms after the canvas settles,
+because undo is one server-side ladder and any later edit takes that place). A bulk edit
+is one journal entry, so it is one undo step. After an undo the line reads **"Undone"** and
+keeps its place with a neutral rule rather than disappearing: removing it would make the
+transcript disagree with the canvas. **No chat message is written for an undo** — a message
+would claim the agent said something it did not. Which artifacts a batch touched comes from
+the `ops_applied` event: `page.nodeId` for a single artifact write, and `artifacts` for a
+`canvas_write` batch (`batchArtifacts`, read from the ops rather than the graph afterwards,
+because a `removeNode`'s node is gone by then).
+
+A chat with nothing in it yet says what to say in one sentence, in plain text at the FOOT
+of the transcript next to the composer it is about — in a box and at the top it read as the
+first message. The composer's bottom
 row sets the thread's **model and effort** for the next turn, after T3 Code's composer
 footer (`agent/ModelPicker.jsx`): two small ghost triggers with a popup each. The model
 popup has provider tabs across the top (Claude, Codex — the last says sessions on it do
@@ -279,20 +371,23 @@ a hint under each level. Astryx has no component of that shape, so they are Astr
 the provider logos are the SVG paths t3code ships (MIT). Saved through
 `PATCH …/threads/:id`; with no thread yet they apply to the one the next message creates. **Enter sends, Shift+Enter or Option+Enter breaks the line**, in
 the panel and the toolbar's composer alike. The header's trash button deletes the active
-thread after a confirmation; the canvas changes it made stay. Everything durable
+chat after a confirmation; the canvas changes it made stay. Everything durable
 is the server's; the panel mirrors the record and applies the stream, stored `ops_applied`
-events included, so a reopened thread shows what changed and not only what was said. With
+events included, so a reopened chat shows what changed and not only what was said. The
+`titled` event updates the tab the moment the agent names the chat. With
 no provider ready it shows what was checked, how to install, and Check again, with Send
 disabled — that is the design's state 10. Settings has a Local agents section with the
-same statuses and the path overrides. The anchored reply's "Open thread" opens the panel
-on that thread (`initialThreadId`). Design: `2026-09-05-agent-canvas-slice-3-design.md`.
+same statuses and the path overrides. The toolbar's Send opens the panel on the chat it
+started (`initialThreadId`). Design:
+`2026-09-06-chats-and-tags-design.md`, and `2026-09-05-agent-canvas-slice-3-design.md`
+for the strip's shape.
 
-**Deleting a page is the ordinary undoable op**: files and thread records stay on disk,
-and undo brings the node and its tabs back. The one confirmation is a page whose bound
-thread is `running` (React Flow's `onBeforeDelete` asks the thread list): Stop and delete
-interrupts the turn, then removes the node; cancel removes nothing, the rest of the
-selection included. Collecting the files and threads of a page that stays deleted is
-compaction's job, together with superseded page versions — not built. **Pasting a page
+**Deleting an artifact is the ordinary undoable op**, with **no confirmation at all**:
+files and chat records stay on disk, and undo brings the node and its tabs back. The
+mid-turn confirmation is gone — a chat is not a dependency of what it touched, so the
+write simply fails and the agent says so in its reply. Collecting the files and chats of
+an artifact that stays deleted is compaction's job, together with superseded versions —
+not built. **Pasting a page
 copies its file** (`POST /api/projects/:name/files/copy { file }` → `copyMedia`, sidecar
 `source: 'copy'`, `of: <original>`), so two nodes never share one file and a copy is the
 unit of working on one asset from several threads at once.
@@ -304,25 +399,44 @@ selection's own action first — Generate with its size hint on one output, Open
 page, the count on several, nothing on a lone input — then the filled **Agent** button.
 Agent morphs the toolbar into a composer on the same centre and bottom edge
 (`placement.js`: centred above, clamped to the sides, flipped below when there is no
-room). The composer's target comes from the selection (`target.js`): exactly one
-artifact → it is "To" and the rest come "with"; none → "To" is a new asset the agent
-creates beside the selection; several → the agent must ask, and the composer says so.
-One more when the panel is open on an artifact thread and the selection has no artifact:
-"To" is that thread's artifact, and the button reads **Add to <title>** — a selected
-artifact still wins over an open tab. Both the bar and the anchored reply float over React Flow as ordinary DOM, so a wheel
+room).
+
+**The card only starts a chat.** Send opens the panel on it and the reply lives there, so
+there is no Stop here and no answer here — there used to be both, in a card anchored on
+the node, and neither survived the subject being two artifacts at once. "Add to \<page\>"
+is gone with it.
+
+The composer shows **one chip** saying what the agent is about to be shown
+(`contextLabel` in `target.js`): "2 motions — Intro, Outro · with 1 image", "3 inputs",
+"nothing selected". It names the artifacts, because "which two motions" is worth answering
+before you type, and only counts the rest, because "which three images" is not; the kind is
+the nodes' own when they are all one kind and the generic word when they are mixed. That
+replaced a "To" line plus a chip per node, which turned a selection into a sentence about a
+target — and two artifacts into an error the person had to resolve. `messageContext` returns
+`{ selection, artifacts }` and there is no `target`, no `'new'` and no `'ask'` anywhere in
+it; nothing may re-invent one.
+
+Under the chip, **which chat this joins**: "continues *Title fixes*" or "new chat", with a
+button to switch. `continuableChat` (`agent/tabs.js`, tested) picks the newest idle chat
+whose tags include **every** selected artifact — all-of, unlike the strip's any-of,
+because a chat that never saw B must not answer a message about A and B. It is the client
+mirror of the server's `findChatFor`, and it exists twice on purpose: rendering that label
+from the server would be a request per keystroke.
+
+The bar floats over React Flow as ordinary DOM, so a wheel
 over them would otherwise reach nothing and the canvas would sit frozen wherever they
 happen to be: `toolbar/canvasWheel.js` forwards the event to `.react-flow__pane`, on a
 timeout (d3-zoom ignores a wheel dispatched inside another wheel's dispatch) and with
 `view: window` (d3-zoom reads `event.view.document`), leaving the wheel alone only when
-something under the pointer can scroll itself. Two rules while it is open: clicking another node adds it to "with" (and keeps it
-selected), clicking empty canvas collapses it; Esc and Back do the same. The message goes
-to the target artifact's newest idle thread (or a new `artifact` thread), and the reply
-lands anchored below the node the agent worked on with **Undo** — offered only while the
-agent's batch is what Cmd-Z would revert next (`GET /api/projects/:name/undo`), because
-undo is one server-side ladder — and **Open thread**. The toolbar's Generate drives the
-output node's own action through one window event (`nodes/nodeCommands.js`), so no run
-logic is duplicated. Pure parts are tested (`placement`, `actions`, `target`); the
-components are verified in the browser.
+something under the pointer can scroll itself. Two rules while it is open: clicking another
+node adds it to the context (`addToContext`, idempotent, and it keeps the node selected),
+clicking empty canvas collapses it; Esc and Back do the same. Send starts or continues the
+chat, opens the panel on it **before** the message goes out so the reply streams into
+somewhere the person is already looking, then posts the message. The toolbar's Generate
+drives the output node's own action through one window event (`nodes/nodeCommands.js`), so
+no run logic is duplicated. Pure parts are tested (`placement`, `actions`, `target`,
+`tabs`); the components are verified in the browser, and with
+`UNFRAMED_TEST_AGENT_SCRIPT` set that verification is deterministic.
 
 ## Codex
 

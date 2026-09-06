@@ -172,7 +172,7 @@ function ChromeZoom() {
 function Canvas() {
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
-  const { screenToFlowPosition, zoomIn, zoomOut, fitView, getNodes, deleteElements } = useReactFlow();
+  const { screenToFlowPosition, zoomIn, zoomOut, fitView, getNodes } = useReactFlow();
   const toast = useToast();
   // Shared by every saveProject call site (the debounced autosave below, and
   // the immediate save `confirmName` fires right after creating a project):
