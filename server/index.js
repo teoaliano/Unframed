@@ -30,6 +30,7 @@ import {
   subscribe as subscribeDocument,
 } from './document.js';
 import { saveMedia, copyMedia, inlineFileRefs } from './media.js';
+import { ensureLibrary, startRender, getRender, withRuntime } from './motion.js';
 import { providerStatuses, forgetProviderStatus, PROVIDERS } from './providers.js';
 import { newThread, writeThread, readThread, listThreads, deleteThread, eventsSince, persistThread, applySettings, renameThread, EFFORTS } from './threads.js';
 import { sendToThread, interruptThread, subscribeThread, closeThreadSession, closeSessionsFor } from './agent.js';
@@ -1489,6 +1490,68 @@ app.post('/api/projects/:name/files/copy', async (req, res) => {
   } catch (err) {
     res.status(err.code === 'ENOENT' ? 404 : 400).json({ error: `Could not copy the file: ${err.message}` });
   }
+});
+
+// ---- motion assets (server/motion.js) ----
+// The library a composition plays with sits beside it. The agent's motion_write brings
+// it; the browser asks here after uploading a composition of its own, so a dropped-in
+// file plays too. Idempotent.
+app.post('/api/projects/:name/motion/library', async (req, res) => {
+  try {
+    res.json({ written: await ensureLibrary(projectDir(req.params.name)) });
+  } catch (err) {
+    res.status(500).json({ error: `Could not prepare the motion library: ${err.message}` });
+  }
+});
+
+// A composition the person brings (dropped on a motion node). It lands like any upload,
+// with two things the agent's motion_write also does: the HyperFrames runtime tag goes
+// into the document (motion.js, withRuntime -- without it the player drives the GSAP
+// timeline but shows no timed clip), and the library lands beside it.
+app.post('/api/projects/:name/motion/files', express.text({ type: () => true, limit: '20mb' }), async (req, res) => {
+  if (typeof req.body !== 'string' || !req.body.trim()) return res.status(400).json({ error: 'No composition in the request body.' });
+  const fileName = typeof req.query.name === 'string' ? path.basename(req.query.name) : '';
+  try {
+    const dir = projectDir(req.params.name);
+    await ensureLibrary(dir);
+    const bytes = Buffer.from(withRuntime(req.body), 'utf8');
+    const file = await saveMedia(dir, { bytes, mime: 'text/html', fileName: fileName || 'motion.html', source: 'upload' });
+    res.json({ file, fileName, bytes: bytes.length, mime: 'text/html' });
+  } catch (err) {
+    res.status(500).json({ error: `Could not save the composition: ${err.message}` });
+  }
+});
+
+// The same alphabet the preview origin serves; a name outside it is not a file here.
+const COMPOSITION_RE = /^[A-Za-z0-9][A-Za-z0-9._-]*\.html?$/;
+
+// Render a composition to an MP4. Answers at once with the render's id; the browser polls
+// the route below. Local compute on local files, so no jobs.json -- a render lost to a
+// restart costs a click, not money (motion.js).
+app.post('/api/projects/:name/motion/render', async (req, res) => {
+  const file = typeof req.body?.file === 'string' ? req.body.file : '';
+  const title = typeof req.body?.title === 'string' ? req.body.title.slice(0, 120) : '';
+  if (!COMPOSITION_RE.test(file)) return res.status(400).json({ error: 'Which composition? Pass its .html file name.' });
+  const dir = projectDir(req.params.name);
+  const exists = await fs.access(path.join(dir, file)).then(
+    () => true,
+    () => false,
+  );
+  if (!exists) return res.status(404).json({ error: `No file ${file} in this project.` });
+  try {
+    await ensureLibrary(dir);
+  } catch (err) {
+    return res.status(500).json({ error: `Could not prepare the motion library: ${err.message}` });
+  }
+  const job = startRender({ dir, file, title });
+  res.json({ id: job.id, status: job.status });
+});
+
+app.get('/api/projects/:name/motion/render/:id', (req, res) => {
+  const job = getRender(req.params.id);
+  if (!job) return res.status(404).json({ error: 'No such render.' });
+  const { id, file, status, progress, message, output, error } = job;
+  res.json({ id, file, status, progress, message, output, error });
 });
 
 app.post('/api/projects/:name/rename', async (req, res) => {
