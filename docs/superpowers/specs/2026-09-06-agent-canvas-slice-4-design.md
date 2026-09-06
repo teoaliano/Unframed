@@ -68,6 +68,24 @@ the page tools' twins); a person can also drop one onto a motion node.
   fails cleanly with the producer's own message. The desktop shell can hand its own
   Chromium over the same variable.
 
+## Stitching, and a reversed decision
+
+Matteo's workflow (2026-09-06): split scenes into separate motion nodes to A/B them, then
+select several on the canvas and ask the agent to stitch them into one new composition.
+The mechanism was already there -- `motion_read` on each scene, HyperFrames' inline nested
+compositions with `data-start="<previous-id>"` chaining -- but the composer refused the
+starting selection: slice 1 decided *several artifacts selected → the agent must ask*, and
+the To line read "pick one". That rule was written for the edit ("which page do you
+mean?"); several motions and "stitch these" is not ambiguous. Reversed: several artifacts
+→ target `new`, all of them "with", To reads "new asset from N artifacts", and the agent
+is told that several motions "with" a stitch/combine/sequence message means one new motion
+containing them in order -- and to ask in its reply when a message reads as an edit,
+which is a better place for that question than a warning under the composer.
+
+Inline nesting first (one self-contained file), not `data-composition-src`: referenced
+scenes must be `<template>`-wrapped, which agent-written compositions are not. A
+"sequence" whose scenes stay live is the follow-up.
+
 ## Rejected
 
 - **Letting puppeteer download Chrome for Testing on install** — the first cut, for

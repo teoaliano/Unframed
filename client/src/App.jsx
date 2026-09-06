@@ -416,7 +416,7 @@ function Canvas() {
       if (!composer) return;
       const next = addToTarget(composer, node);
       setComposer(next);
-      const ids = new Set([...next.with, ...(next.target !== 'new' && next.target !== 'ask' ? [next.target] : [])]);
+      const ids = new Set([...next.with, ...(next.target !== 'new' ? [next.target] : [])]);
       setNodes((ns) => ns.map((n) => (n.selected === ids.has(n.id) ? n : { ...n, selected: ids.has(n.id) })));
     },
     [composer, setNodes],
@@ -447,10 +447,6 @@ function Canvas() {
     const provider = readyProvider.kind;
     // A thread made here is one the panel's strip has not seen; the bump makes it re-read.
     const fresh = (opts) => createThread(project, { provider, ...opts }).then((t) => (setThreadsBump((b) => b + 1), t));
-    if (c.target === 'ask') {
-      const list = await listThreads(project);
-      return list.find((t) => t.kind === 'canvas' && t.status !== 'running') ?? fresh({});
-    }
     if (c.target === 'new') return fresh({ kind: 'artifact' });
     const list = await listThreads(project, { artifactId: c.target });
     return list.find((t) => t.status !== 'running') ?? fresh({ kind: 'artifact', artifactId: c.target });
@@ -469,7 +465,7 @@ function Canvas() {
       toast({ body: `Could not start the agent: ${err.message}`, uniqueID: 'composer-failed', type: 'error' });
       return;
     }
-    const isNode = c.target !== 'new' && c.target !== 'ask';
+    const isNode = c.target !== 'new';
     const initial = { threadId: thread.id, status: 'running', text: '', nodeId: isNode ? c.target : null, selection, selectionKey, activity: null };
     setReply(initial);
     let draft = '';
