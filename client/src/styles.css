@@ -266,7 +266,16 @@ div:has(> .add-node-menu) {
    it was a dot sitting ON a photograph, or halfway into a line of text. Out here it is
    plainly a separate thing you pull a wire from, and the edge underneath is left whole:
    the right resize strip no longer has to share its pixels with the dot, which is what
-   the z-index rules below were for. GAP is measured from the node's edge to the dot. */
+   the z-index rules further down were for.
+   The `transform` is ours, not a tidy-up: React Flow's own is `translate(±50%, -50%)`,
+   and that half-width sideways shift is added to whatever `right`/`left` says — so the
+   first version of this rule, which looked like 8px of arithmetic, drew a 16px gap.
+   Overriding it with the vertical half only leaves `right`/`left` meaning exactly the
+   clear canvas you can see, and keeps the dot centred on the edge it belongs to. */
+.react-flow__handle.react-flow__handle-right,
+.react-flow__handle.react-flow__handle-left {
+  transform: translate(0, -50%);
+}
 .react-flow__handle.react-flow__handle-right {
   right: calc(-1 * (16px + var(--unframed-handle-gap)));
 }
