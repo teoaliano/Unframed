@@ -52,6 +52,10 @@ Keep that shape: the website's What's new page parses this file.
 - **One Undo takes back one edit again.** A pause in your work is a single step, so
   typing a word (which also resizes the box around it) or dragging three nodes at once no
   longer needs two or three presses of Cmd-Z to take back.
+- **Pasting or dropping an image onto the canvas works again.** Since 2026-09-04 both did
+  nothing at all: the code that saves the file into your project was calling something
+  the file never imported, so it failed on the first byte. Dropping onto an existing
+  image node was never affected, which is why it looked like only some drops worked.
 
 ## 2026-09-05
 
