@@ -42,6 +42,10 @@ Keep that shape: the website's What's new page parses this file.
 
 ### Fixed
 
+- **No more squared-off corner with nothing above it.** Between roughly 50% and 75% zoom
+  a node's name tag is hidden until you point at it, but the card underneath kept the
+  square corner the tag docks into — so the corner looked chipped for no reason. It now
+  rounds and squares with the tag.
 - **One Undo takes back one edit again.** A pause in your work is a single step, so
   typing a word (which also resizes the box around it) or dragging three nodes at once no
   longer needs two or three presses of Cmd-Z to take back.

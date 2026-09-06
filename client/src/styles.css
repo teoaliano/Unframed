@@ -439,8 +439,15 @@ div:has(> .add-node-menu) {
 /* With no tab docked into it, a square top-left corner is just a defect — so the card
    rounds back as the tab fades. Only the types that HAVE a container radius need this;
    image and video are square in both states, which is the second thing squaring the
-   media bought. */
-.react-flow[data-chrome='off'] .react-flow__node:not(.react-flow__node-image):not(.react-flow__node-video) > .astryx-card {
+   media bought.
+   It follows the TAB, not the chrome level, and that distinction is the whole rule: the
+   tab is hidden in the `hover` band too, at rest, so keying this on `off` alone left the
+   0.5–0.75 zoom range showing a squared corner with nothing docked into it. Every state
+   where the tab is invisible is a state where the corner is round. */
+.react-flow[data-chrome='off'] .react-flow__node:not(.react-flow__node-image):not(.react-flow__node-video) > .astryx-card,
+.react-flow[data-chrome='hover']
+  .react-flow__node:not(:hover):not(.selected):not(.react-flow__node-image):not(.react-flow__node-video)
+  > .astryx-card {
   border-start-start-radius: var(--radius-container);
 }
 @media (prefers-reduced-motion: reduce) {
