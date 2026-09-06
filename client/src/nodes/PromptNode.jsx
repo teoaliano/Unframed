@@ -10,6 +10,10 @@ import { isReferenceable } from '../graph/resolve.js';
 // while you're actively typing a reference.
 const TRIGGER_RE = /@([\w-]*)$/;
 
+// How wide an auto-sized prompt may get before it wraps instead of growing. Content
+// pixels, i.e. before the field's padding and the node's border.
+const AUTO_MAX_WIDTH = 320;
+
 export default function PromptNode({ id, data, parentId, selected }) {
   const { updateNodeData, getNodes, setNodes } = useReactFlow();
   const ref = useRef(null);
@@ -21,10 +25,14 @@ export default function PromptNode({ id, data, parentId, selected }) {
   // drag moves it, rather than placing a caret.
   const [editing, setEditing] = useState(false);
 
-  // Shrink-wrap the box to its text, on a double-click of any resize edge. The text is
-  // measured in a throwaway mirror element on document.body — OUTSIDE React Flow's zoom
-  // transform — so every measurement is in layout pixels whatever the canvas is zoomed
-  // to. Measuring the real textarea instead would read a transform-scaled box and
+  // A prompt HUGS its text. There is no default box size to speak of: the node is
+  // measured from what it says and rewritten on every keystroke, so it is never larger
+  // than its own words. `data.sized` is the one thing that stops it — see the drag
+  // effect below.
+  //
+  // The measuring is done in a throwaway mirror element on document.body — OUTSIDE React
+  // Flow's zoom transform — so every number is a layout pixel whatever the canvas is
+  // zoomed to. Measuring the real textarea instead would read a transform-scaled box and
   // mis-size the node at any zoom other than 1.
   function fitToText() {
     const el = ref.current;
@@ -34,6 +42,10 @@ export default function PromptNode({ id, data, parentId, selected }) {
     const cs = getComputedStyle(el);
     const padX = parseFloat(cs.paddingLeft) + parseFloat(cs.paddingRight);
     const padY = parseFloat(cs.paddingTop) + parseFloat(cs.paddingBottom);
+    // The node box is a little wider than the field inside it, and the difference has to
+    // be carried through or the fit writes a box one wrap short and clips the last line.
+    const chromeX = wrapper.offsetWidth - el.offsetWidth;
+    const chromeY = wrapper.offsetHeight - el.offsetHeight;
 
     const mirror = document.createElement('div');
     Object.assign(mirror.style, {
@@ -57,34 +69,45 @@ export default function PromptNode({ id, data, parentId, selected }) {
       lineHeight: cs.lineHeight,
       letterSpacing: cs.letterSpacing,
     });
-    // The node box is a little wider than the field inside it, and the difference has to
-    // be carried through or the fit writes a width one wrap short: measure at the FIELD's
-    // content width, then add the chrome back at the end.
-    const chromeX = wrapper.offsetWidth - el.offsetWidth;
-    const chromeY = wrapper.offsetHeight - el.offsetHeight;
-
-    // Wrap at the field's CURRENT content width, so fitting only removes empty space and
-    // never reflows the text the user is looking at. A single space keeps an empty node
-    // one line tall rather than collapsing to nothing.
-    mirror.style.width = `${Math.max(1, el.clientWidth - padX)}px`;
-    mirror.textContent = el.value || ' ';
+    // `max-content` is the whole trick: with pre-wrap it lays the text out as its own
+    // longest line, breaking only where the text itself does. An EMPTY node is measured
+    // from the placeholder instead, so the hint has room to be read rather than being
+    // clipped by a 40px box.
+    mirror.style.width = 'max-content';
+    mirror.textContent = el.value || el.placeholder || ' ';
     document.body.appendChild(mirror);
-
-    // Widest wrapped line = the tightest width that keeps the current wrapping. Range
-    // rects give one rect per rendered line.
-    let maxLine = 0;
-    const range = document.createRange();
-    range.selectNodeContents(mirror);
-    for (const r of range.getClientRects()) maxLine = Math.max(maxLine, r.width);
-    const contentHeight = mirror.offsetHeight;
+    // Fractional, via the rect, and rounded UP — offsetWidth rounds to the nearest pixel,
+    // and rounding a line's width DOWN gives it a box a fraction narrower than the text,
+    // which wraps the last word onto a line the fitted height has no room for. (That is
+    // what turned an empty node's "Add text…" into "Add".)
+    let contentW = Math.ceil(mirror.getBoundingClientRect().width);
+    // Past the ceiling it stops growing sideways and grows down instead, like every
+    // canvas text tool: one 900px line of prose is not a shape anybody wants.
+    if (contentW > AUTO_MAX_WIDTH) {
+      mirror.style.width = `${AUTO_MAX_WIDTH}px`;
+      contentW = AUTO_MAX_WIDTH;
+    }
+    const contentH = Math.ceil(mirror.getBoundingClientRect().height);
     document.body.removeChild(mirror);
 
     // The floors match MediaResize's `text` minimums; a fit must not write a size a drag
     // would refuse to reproduce.
-    const width = Math.max(40, Math.ceil(maxLine + padX + chromeX));
-    const height = Math.max(28, Math.ceil(contentHeight + padY + chromeY));
-    setNodes((nodes) => nodes.map((n) => (n.id === id ? { ...n, width, height } : n)));
+    const width = Math.max(40, Math.ceil(contentW + padX + chromeX));
+    const height = Math.max(28, Math.ceil(contentH + padY + chromeY));
+    setNodes((nodes) =>
+      nodes.map((n) => (n.id === id ? { ...n, width, height } : n)),
+    );
   }
+
+  // Hug the text, on mount and on every change to it — unless the user has taken the
+  // size for themselves. `data.sized` is persisted with the node, so a box someone sized
+  // by hand stays that size across a reload; everything else is measured fresh, which is
+  // also how a prompt written by the agent or restored from a preset ends up the size of
+  // its words rather than the size it was saved at.
+  useEffect(() => {
+    if (data.sized) return;
+    fitToText();
+  }, [data.text, data.sized]);
 
   function enterEdit() {
     setEditing(true);
@@ -134,22 +157,48 @@ export default function PromptNode({ id, data, parentId, selected }) {
     return () => wrapper.removeEventListener('keydown', onKey);
   }, [editing, selected]);
 
-  // Double-click a resize EDGE to shrink-wrap. The edges are React Flow's own
-  // NodeResizeControl elements (MediaResize), so the listener is delegated from the node
-  // wrapper and filtered to the line variant — a corner grip keeps its plain drag. That
-  // also means it survives the controls remounting.
+  // Dragging a resize control hands the size to the user for good: the box stops hugging
+  // the text and keeps whatever it is dragged to. The flag is set on the first pointer
+  // MOVE rather than on the press, which is what keeps a double-click (two presses, no
+  // movement) from claiming the size a moment before it asks to give it back.
+  //
+  // The controls are React Flow's own elements (MediaResize), so both listeners are
+  // delegated from the node wrapper — which also means they survive a control remounting.
   useEffect(() => {
     const wrapper = ref.current?.closest('.react-flow__node');
     if (!wrapper) return;
-    const onDbl = (e) => {
-      if (e.target.closest('.xnode-resize.line')) {
-        e.preventDefault();
-        e.stopPropagation();
-        fitToText();
-      }
+    const onDown = (e) => {
+      if (!e.target.closest('.xnode-resize')) return;
+      const from = { x: e.clientX, y: e.clientY };
+      const stop = () => {
+        window.removeEventListener('pointermove', onMove);
+        window.removeEventListener('pointerup', stop);
+      };
+      const onMove = (m) => {
+        if (Math.abs(m.clientX - from.x) < 2 && Math.abs(m.clientY - from.y) < 2) return;
+        stop();
+        updateNodeData(id, { sized: true });
+      };
+      window.addEventListener('pointermove', onMove);
+      window.addEventListener('pointerup', stop);
     };
+    // ...and double-clicking an edge gives it back: the box returns to hugging its text.
+    // Both halves of that are needed — clearing the flag re-arms the effect above for
+    // every later keystroke, and the direct call is what resizes the box now, since a
+    // node that was already hugging sees no state change to fit on.
+    const onDbl = (e) => {
+      if (!e.target.closest('.xnode-resize.line')) return;
+      e.preventDefault();
+      e.stopPropagation();
+      updateNodeData(id, { sized: false });
+      fitToText();
+    };
+    wrapper.addEventListener('pointerdown', onDown);
     wrapper.addEventListener('dblclick', onDbl);
-    return () => wrapper.removeEventListener('dblclick', onDbl);
+    return () => {
+      wrapper.removeEventListener('pointerdown', onDown);
+      wrapper.removeEventListener('dblclick', onDbl);
+    };
   }, [id]);
 
   // Other prompt and text output nodes whose id starts with the current @query, with a

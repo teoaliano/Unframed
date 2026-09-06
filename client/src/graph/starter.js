@@ -56,7 +56,10 @@ export const withDrag = (n) => ({
   // keep the media's proportions exactly. A PROMPT has no ratio to keep, so both axes
   // are the user's and a height has to be seeded — before this it resized by a CSS
   // handle on the field itself (the old data.size + fieldResize.js), which is what the
-  // 2026-08-20 node-anatomy redesign replaced with a border drag on the card.
+  // 2026-08-20 node-anatomy redesign replaced with a border drag on the card. The
+  // prompt's two numbers are now only the frame before PromptNode measures itself: it
+  // hugs its text on mount and overwrites both, unless `data.sized` says the size is the
+  // user's. They still have to be here — the box needs A size to be measured inside.
   //
   // A GROUP is a box other nodes sit in, so it starts large enough to hold two of them
   // side by side and keeps both axes, like a prompt.

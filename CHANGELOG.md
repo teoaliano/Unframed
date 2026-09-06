@@ -23,8 +23,10 @@ Keep that shape: the website's What's new page parses this file.
   card, no border, no type label — just the words, with the `@id` above them. One click
   selects the text and shows a thin outline with a grip at each corner; a double-click or
   Enter starts editing (the text comes up selected, so typing replaces it), and Escape
-  leaves editing with the element still selected. Drag it from anywhere, resize from a
-  corner or an edge, and double-click an edge to shrink the box to fit its text.
+  leaves editing with the element still selected. Drag it from anywhere.
+- **A prompt is now exactly the size of its text**, growing as you type and never leaving
+  an empty box around the words. Drag a corner or an edge if you want a particular size
+  and it keeps it; double-click an edge to hand it back to the text.
 
 ## 2026-09-05
 

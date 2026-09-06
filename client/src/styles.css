@@ -841,10 +841,15 @@ div:has(> .add-node-menu) {
   box-shadow: none;
 }
 /* The @id takes the LEFT end of the name row — the corner the type tab used to own —
-   rather than NodeLine's default right. Bare text, no chip: it is a quiet label. */
+   rather than NodeLine's default right. Bare text, no chip: it is a quiet label.
+   The 62% cap it inherits is there to leave room for a docked tab; there is none here,
+   and a prompt hugs its text, so a short one is a box narrower than its own id and the
+   cap would ellipsis the label away entirely. It may overhang instead — the name row is
+   absolutely positioned above the box and paints nothing of its own. */
 .xnode-line.xnode-line--start {
   inset-inline-start: 0;
   inset-inline-end: auto;
+  max-width: none;
 }
 /* The two-step selection. Until the node is being edited the field is pointer-transparent
    so the first click passes THROUGH it to the card and selects the node instead of
