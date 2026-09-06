@@ -1,6 +1,6 @@
 // Assert-based self-check. Run with: node client/src/graph/resolve.test.js
 import assert from 'node:assert/strict';
-import { buildRequest, bucketSources, sourceRoles, splitSections, findFreeSource, freeSourceText, freeShared, freeRunPrompts, parseImagePicks, expandSlots, runReferences, freeBatch, isOutput, isTextOutput, isReferenceable, isGroup, membersOf, MAX_RUNS, hasMedia, mediaRef } from './resolve.js';
+import { buildRequest, renameRefs, bucketSources, sourceRoles, splitSections, findFreeSource, freeSourceText, freeShared, freeRunPrompts, parseImagePicks, expandSlots, runReferences, freeBatch, isOutput, isTextOutput, isReferenceable, isGroup, membersOf, MAX_RUNS, hasMedia, mediaRef } from './resolve.js';
 import { migrateNodes } from './migrate.js';
 import { instantiateFragment, centerOffset, placeFragment } from '../library/insert.js';
 import { selectionFragment, presetFromSelection } from '../library/save.js';
@@ -1380,15 +1380,15 @@ const box = (id, y, name = id) => ({ id, type: 'group', position: { x: 0, y }, d
 // character, product or outfit lives in the Library, so every step of it is pinned.
 {
   const source = [
-    { id: '10', type: 'group', position: { x: 200, y: 100 }, width: 420, height: 320, data: { name: 'Hero' }, selected: true },
-    { id: '11', type: 'prompt', parentId: '10', extent: 'parent', position: { x: 20, y: 60 }, data: { text: 'red hair' } },
-    { id: '12', type: 'image', parentId: '10', extent: 'parent', position: { x: 20, y: 200 }, data: { file: '1-face.png' } },
+    { id: 'hero', type: 'group', position: { x: 200, y: 100 }, width: 420, height: 320, data: {}, selected: true },
+    { id: '11', type: 'prompt', parentId: 'hero', extent: 'parent', position: { x: 20, y: 60 }, data: { text: 'red hair' } },
+    { id: '12', type: 'image', parentId: 'hero', extent: 'parent', position: { x: 20, y: 200 }, data: { file: '1-face.png' } },
     { id: '99', type: 'imageOutput', position: { x: 800, y: 100 }, data: {} },
   ];
   // Only the BOX is selected, and it brings its contents -- parent first, since React
   // Flow resolves a child against the parents it has already seen.
-  const frag = selectionFragment(source, [{ id: 'e', source: '10', target: '99' }], null);
-  assert.deepEqual(frag.nodes.map((n) => n.id), ['10', '11', '12']);
+  const frag = selectionFragment(source, [{ id: 'e', source: 'hero', target: '99' }], null);
+  assert.deepEqual(frag.nodes.map((n) => n.id), ['hero', '11', '12']);
   assert.deepEqual(frag.edges, [], 'half an edge is not a thing: the output was not selected');
 
   // A group is ONE thing on the canvas whatever it holds, so a saved character is a
@@ -1401,7 +1401,13 @@ const box = (id, y, name = id) => ({ id, type: 'group', position: { x: 0, y }, d
   const { nodes: fresh } = instantiateFragment(preset.fragment, () => String(next++));
   const box = fresh.find(isGroup);
   assert.deepEqual(membersOf(fresh, box.id).map((m) => m.id), fresh.filter((n) => n.parentId).map((m) => m.id));
-  assert.equal(box.data.name, 'Hero', 'the name is what the @ tag reads');
+  // A group's id IS its name, so it is the one id an insertion keeps: a saved character
+  // has to come back as @hero, not as whatever the counter says next. Its members and
+  // the references to it follow, exactly as they do for a re-minted id.
+  assert.equal(box.id, 'hero', 'the name survives the round trip');
+  // ...and a second copy does not steal the name of the first.
+  const twice = instantiateFragment(preset.fragment, () => String(next++), new Set(['hero'])).nodes.find(isGroup);
+  assert.equal(twice.id, 'hero-2');
 
   // The offset centres the fragment on the view, and ONLY top-level nodes take it. A
   // member's position is relative to its box, so offsetting one pushes it out by exactly
@@ -1421,6 +1427,30 @@ const box = (id, y, name = id) => ({ id, type: 'group', position: { x: 0, y }, d
     );
   }
   assert.deepEqual(placedBox.position, { x: 200 + dx, y: 100 + dy }, 'the box itself does move');
+}
+
+// ---- renameRefs: a group's rename moves the references with it ----
+{
+  // Only the token that names the renamed node moves; a longer id that merely starts the
+  // same way is a different node and stays put.
+  assert.equal(renameRefs('a @104 in @1040 light', '104', 'fox'), 'a @fox in @1040 light');
+  assert.equal(renameRefs('@104@104', '104', 'fox'), '@fox@fox');
+  assert.equal(renameRefs('', '104', 'fox'), '');
+  assert.equal(renameRefs(undefined, '104', 'fox'), '');
+
+  // The point of the rewrite: a prompt that referenced the box by its old id still
+  // resolves after the box is renamed. Without it the token is unknown, and an unknown
+  // token is left as typed -- so the failure would be a stale "@104" in the prompt that
+  // gets SENT, with nothing anywhere saying so.
+  const { nodes, edges } = graph(
+    [
+      { id: 'fox', type: 'group', position: { x: 0, y: 0 }, data: {} },
+      { id: 'm1', type: 'prompt', parentId: 'fox', position: { x: 0, y: 0 }, data: { text: 'a red fox' } },
+      { id: 'p1', type: 'prompt', position: { x: 0, y: 40 }, data: { text: renameRefs('draw @104', '104', 'fox') } },
+    ],
+    [{ id: 'e1', source: 'p1', target: 'out' }],
+  );
+  assert.equal(buildRequest(nodes, edges, 'out').prompt, 'draw a red fox');
 }
 
 console.log('resolve.js: all checks passed');

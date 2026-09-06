@@ -13,7 +13,7 @@
 // what lets a remote entry land mid-typing without either side losing anything.
 //
 // Design: docs/superpowers/specs/2026-09-04-agent-canvas-slice-1-design.md, section 1.
-import { useCallback, useEffect, useMemo, useRef } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef } from 'react';
 import { migrateNodes } from './migrate.js';
 import { withDrag, bumpCounter } from './starter.js';
 import { diffGraphs, applyEntry, persistentNode } from './ops.js';
@@ -30,6 +30,11 @@ import {
 
 // The same pause the old undo stack used as its unit of work: one drag, one word.
 const SETTLE_MS = 400;
+
+// How a node deep in the tree reaches `send` below. Only composed ops need it; everything
+// else on the canvas is written by editing React Flow state and letting the diff find it.
+export const DocumentContext = createContext({ send: async () => {} });
+export const useDoc = () => useContext(DocumentContext);
 
 const settle = (nodes, edges) => ({ nodes: nodes.map(persistentNode), edges: edges.map(persistentNode) });
 
@@ -156,7 +161,13 @@ export function useDocument({ nodes, edges, setNodes, setEdges, onError }) {
     const project = s.project;
     s.inflight = true;
     try {
-      const res = await sendOps(project, ops);
+      // One settled pause is ONE undo step, which is what the 400ms means -- a unit of
+      // work, the same one the old undo stack used. The route commits each op it is
+      // given as its own journal entry, so a pause that produced two ops (typing into a
+      // prompt writes the text AND the size it hugs to; dragging a selection moves
+      // several nodes) would take two presses of Cmd-Z to take back, the second of them
+      // undoing something nobody did on purpose.
+      const res = await sendOps(project, ops.length > 1 ? [{ type: 'batch', ops }] : ops);
       if (s.project !== project) return;
       let base = s.baseline;
       for (const entry of res.applied) base = applyEntry(base, entry);
@@ -176,6 +187,42 @@ export function useDocument({ nodes, edges, setNodes, setEdges, onError }) {
       }
     }
   }, [s, reconcileMedia, reopen, onError]);
+
+  // An op this tab COMPOSES, rather than one the diff discovers. The diff works by
+  // comparing two settled graphs, and there are changes it cannot see for what they are:
+  // a renamed node id reads as a delete and an add, and the server's removeNode cascades
+  // to a group's members -- so a rename left to the diff would take the box's contents
+  // with it. Such an op goes straight to the server and is landed here from the response,
+  // exactly as a remote entry is landed by receive().
+  const send = useCallback(
+    async (op) => {
+      if (!s.project || !s.ready) return;
+      // Unsent edits first, or the op is written against a graph the server has not seen
+      // yet and the ops arrive in the wrong order.
+      await flush();
+      const project = s.project;
+      try {
+        const res = await sendOps(project, [op]);
+        if (s.project !== project) return;
+        // It did not apply -- a name taken in another tab since we looked, say. Re-read
+        // rather than guess, the same answer flush() gives a rejection.
+        if (res.rejected.length) return reopen();
+        s.version = Math.max(s.version, res.version);
+        for (const entry of res.applied) {
+          s.baseline = applyEntry(s.baseline, entry);
+          const before = s.live;
+          s.live = applyEntry(before, entry);
+          setNodes((live) => applyEntry({ nodes: live, edges: before.edges }, entry).nodes.map(withDrag));
+          setEdges((live) => applyEntry({ nodes: s.live.nodes, edges: live }, entry).edges);
+        }
+      } catch (err) {
+        onError?.(err);
+      }
+      return undefined;
+    },
+    [s, flush, reopen, setNodes, setEdges, onError],
+  );
+
 
   // Mirror every render; diff after a pause.
   useEffect(() => {
@@ -224,5 +271,5 @@ export function useDocument({ nodes, edges, setNodes, setEdges, onError }) {
   useEffect(() => () => s.close?.(), [s]);
 
   // One stable object, so an effect that lists `doc` as a dependency runs once.
-  return useMemo(() => ({ open, create, flush, reopen }), [open, create, flush, reopen]);
+  return useMemo(() => ({ open, create, flush, reopen, send }), [open, create, flush, reopen, send]);
 }

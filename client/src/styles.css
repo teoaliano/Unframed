@@ -1748,39 +1748,30 @@ div:has(> .add-node-menu) {
   background: color-mix(in srgb, var(--color-border) 8%, transparent);
   pointer-events: none;
   box-sizing: border-box;
-  /* Square where the tab docks, so the two share one unbroken edge -- the same rule the
-     node cards follow above, and the reason a group's silhouette reads as one shape
-     rather than a chip floating over a rounded box. The box is not an .astryx-card, so
-     none of the card rules reach it and the corner has to be said again here. */
-  border-start-start-radius: 0;
-  transition: border-start-start-radius var(--duration-fast) ease;
 }
-/* ...and rounds back as the tab fades, exactly as a card does: with nothing docked into
-   it, a square corner is just a defect. */
-.react-flow[data-chrome='off'] .react-flow__node > .xnode-group {
-  border-start-start-radius: var(--radius-container);
-}
-/* Selection follows the same rule as every other node (see the .selected block above):
-   the accent border, plus the inset ring that keeps the shape reading as one silhouette
-   with its tab. The box carries no elevation of its own, so unlike a card there is no
-   shadow to repeat here. It goes solid as well as accent -- a dashed accent border at
-   1px is nearly invisible against the canvas at low zoom, which is exactly when you need
-   to see what you have selected. */
+/* Selected, it is the same thin accent rectangle a prompt draws and nothing else: no
+   inset ring, no fill, no shadow. It does go SOLID, which is the one place the box
+   differs from the text element -- a dashed accent border at 1px is nearly invisible
+   against the canvas at low zoom, which is exactly when you need to see what you have
+   selected. Idle it stays dashed: a container is not content. */
 .react-flow__node.selected .xnode-group {
   border-style: solid;
   border-color: var(--color-accent);
-  box-shadow: inset 0 0 0 1px var(--color-accent);
 }
-/* The name, while it is being edited: shaped as the tab it replaces so the label does
-   not jump between reading and editing. */
-.xnode-tab--editing {
-  padding-block: 0;
+/* The name while it is being edited, in place in the label: the @ is text beside the
+   field, so the caret sits exactly where the name reads. */
+.xnode-group-name {
+  display: inline-flex;
+  align-items: center;
 }
 .xnode-group-input {
   border: none;
   background: transparent;
   color: inherit;
   font: inherit;
+  /* The label is uppercased for display; the field must not be, or what you type and
+     what you get disagree by the case of every letter. */
+  text-transform: none;
   padding: 0;
   margin: 0;
   outline: none;

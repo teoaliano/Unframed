@@ -109,7 +109,7 @@ export const slug = (s) => s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/
 export const NEW_NODE = {
   prompt: { text: '' },
   // The name is what an @ tag shows for the group; the id stays the reference key.
-  group: { name: '' },
+  group: {},
   image: { fileName: '', dataUrl: '' },
   video: { fileName: '', dataUrl: '' },
   imageOutput: OUTPUT_DEFAULTS.imageOutput,

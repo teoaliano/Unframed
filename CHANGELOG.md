@@ -24,6 +24,13 @@ Keep that shape: the website's What's new page parses this file.
   selects the text and shows a thin outline with a grip at each corner; a double-click or
   Enter starts editing (the text comes up selected, so typing replaces it), and Escape
   leaves editing with the element still selected. Drag it from anywhere.
+- **A group is named by its reference, and renaming it renames the reference.** The box
+  now shows one label — `@104` — instead of a "GROUP" tag and an id at opposite ends.
+  Double-click that label (or press F2) and type a name: the box becomes `@character`,
+  and every prompt that referenced the old name is rewritten to match, in one step that
+  one Undo takes back. The box keeps its dashed outline; selecting it looks like
+  selecting any other element. A group you named before this shows its id until you
+  rename it.
 - **Reference images and clips are bare on the canvas too**, framed by nothing: no card,
   no border, no type label — just the picture, with its "image 1" role above it. Selecting
   one draws the same thin outline and corner grips, and the remove X comes with the
@@ -32,6 +39,12 @@ Keep that shape: the website's What's new page parses this file.
 - **A prompt is now exactly the size of its text**, growing as you type and never leaving
   an empty box around the words. Drag a corner or an edge if you want a particular size
   and it keeps it; double-click an edge to hand it back to the text.
+
+### Fixed
+
+- **One Undo takes back one edit again.** A pause in your work is a single step, so
+  typing a word (which also resizes the box around it) or dragging three nodes at once no
+  longer needs two or three presses of Cmd-Z to take back.
 
 ## 2026-09-05
 

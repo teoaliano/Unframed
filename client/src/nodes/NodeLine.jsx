@@ -16,11 +16,12 @@ import { Text } from '@astryxdesign/core/Text';
 //
 // Nothing renders when there is nothing to say (an empty image node has no role), so
 // the line takes no space at all rather than reserving an empty strip.
-export default function NodeLine({ live = false, className = '', children }) {
+export default function NodeLine({ live = false, className = '', onDoubleClick, children }) {
   if (children == null || children === '') return null;
   return (
     <span
       className={`xnode-line${live ? ' xnode-line--live' : ''}${className ? ` ${className}` : ''}`}
+      onDoubleClick={onDoubleClick}
     >
       {live && <span className="xnode-line-dot" />}
       <Text type="supporting" weight={live ? 'medium' : undefined} color={live ? undefined : 'secondary'}>
