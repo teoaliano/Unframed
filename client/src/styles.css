@@ -485,16 +485,17 @@ div:has(> .add-node-menu) {
    outline is chrome drawn over the very thing it frames; the corner grips that appear on
    selection are the whole resize affordance. */
 .react-flow__node-prompt:hover > .astryx-card.xnode-prompt--bare,
-.react-flow__node:hover > .astryx-card.xnode-media-bare {
+.react-flow__node:hover > .astryx-card.xnode-bare {
   border-color: transparent;
 }
 
-/* ---- a reference is its picture (nodes/ImageNode.jsx, nodes/VideoNode.jsx) ----
-   The same rule as the prompt one node down: a media node that HOLDS something wears no
-   card at all — the picture or the clip sits directly on the canvas, and only selection
-   draws anything around it. The class is only on the card while there is media; an empty
-   node is a box asking for a file and keeps its frame and its tab. */
-.react-flow__node > .astryx-card.xnode-media-bare {
+/* ---- a node that holds something IS that thing ----
+   (nodes/ImageNode.jsx, VideoNode.jsx, PageNode.jsx, MotionNode.jsx.) The same rule as
+   the prompt one node down: a node whose content fills its box wears no card at all —
+   the picture, the clip, the page or the composition sits directly on the canvas, and
+   only selection draws anything around it. The class is on the card only while there IS
+   content; an empty node is a box asking for a file and keeps its frame and its tab. */
+.react-flow__node > .astryx-card.xnode-bare {
   background: transparent;
   border-color: transparent;
   box-shadow: none;
@@ -502,7 +503,7 @@ div:has(> .add-node-menu) {
 /* Selection is the thin accent rectangle, with none of the card's inset ring: at 1px
    that ring sits ON the photograph, taking a pixel off every edge of the thing being
    judged, which is the whole reason media squares its corners in the first place. */
-.react-flow__node.selected > .astryx-card.xnode-media-bare {
+.react-flow__node.selected > .astryx-card.xnode-bare {
   border-color: var(--color-accent);
   box-shadow: none;
 }

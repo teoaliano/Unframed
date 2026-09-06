@@ -102,7 +102,7 @@ export default function VideoNode({ id, data, parentId }) {
         width="100%"
         elevation="low"
         padding={0}
-        className={bare ? 'xnode-media-bare' : undefined}
+        className={bare ? 'xnode-bare' : undefined}
         onDrop={onDrop}
         onDragOver={(e) => {
           e.preventDefault();

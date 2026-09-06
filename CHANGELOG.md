@@ -36,6 +36,9 @@ Keep that shape: the website's What's new page parses this file.
   one draws the same thin outline and corner grips, and the remove X comes with the
   selection instead of appearing under your pointer. An empty one still looks like a box
   asking for a file, because that is what it is.
+- **Pages and motions follow the same rule**: once one holds a file it is just the page or
+  the composition on the canvas, with its title above it. Empty, it stays a box asking for
+  a file, and a motion keeps its Render button below the frame.
 - **A prompt is now exactly the size of its text**, growing as you type and never leaving
   an empty box around the words. Drag a corner or an edge if you want a particular size
   and it keeps it; double-click an edge to hand it back to the text.
