@@ -306,10 +306,7 @@ Agent morphs the toolbar into a composer on the same centre and bottom edge
 (`placement.js`: centred above, clamped to the sides, flipped below when there is no
 room). The composer's target comes from the selection (`target.js`): exactly one
 artifact → it is "To" and the rest come "with"; none → "To" is a new asset the agent
-creates beside the selection; several → also a new asset, from all of them (the To line
-reads "new asset from N artifacts"), which is how "select three scenes, say stitch these"
-becomes one motion. Until 2026-09-06 several meant "the agent must ask"; the slice-4 spec
-has the reversal, and the agent still asks in its reply when a message reads as an edit.
+creates beside the selection; several → the agent must ask, and the composer says so.
 One more when the panel is open on an artifact thread and the selection has no artifact:
 "To" is that thread's artifact, and the button reads **Add to <title>** — a selected
 artifact still wins over an open tab. Both the bar and the anchored reply float over React Flow as ordinary DOM, so a wheel
