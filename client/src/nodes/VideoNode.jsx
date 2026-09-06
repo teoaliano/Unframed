@@ -91,13 +91,18 @@ export default function VideoNode({ id, data, parentId }) {
     onFile(file);
   }
 
+  // Bare on the canvas once it holds a clip, for the reasons ImageNode gives; an empty
+  // one keeps its tab and its frame, because it is a box asking for a file.
+  const bare = Boolean(src);
+
   return (
     <>
-      <NodeHeader kind="video" family="input" />
+      {!bare && <NodeHeader kind="video" family="input" />}
       <Card
         width="100%"
         elevation="low"
         padding={0}
+        className={bare ? 'xnode-media-bare' : undefined}
         onDrop={onDrop}
         onDragOver={(e) => {
           e.preventDefault();
@@ -161,7 +166,7 @@ export default function VideoNode({ id, data, parentId }) {
           exactly this reason — a press on a scrubber retargets to the video element and
           nothing downstream can tell a scrub from a node drag. Inside the card it ate
           10px of frame on every side and made the clip stop short of the node's edge. */}
-      <NodeLine live={roles.length > 0}>{role}</NodeLine>
+      <NodeLine className="xnode-line--start" live={roles.length > 0}>{role}</NodeLine>
       {/* The transport is the one thing that still has to go BELOW: it is a control, so
           it cannot sit on the clip (a press there is indistinguishable from a node drag
           — see VideoPlayer.jsx), and it is far too wide for the name row. */}
@@ -172,7 +177,7 @@ export default function VideoNode({ id, data, parentId }) {
       )}
       {/* Resizable from any edge once it holds something — nodes/MediaResize.jsx owns
           why that includes the right one, where the handle also lives. */}
-      {src && <MediaResize />}
+      {src && <MediaResize grips />}
     </>
   );
 }

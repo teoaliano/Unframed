@@ -448,11 +448,31 @@ div:has(> .add-node-menu) {
 .react-flow__node:hover > .astryx-card {
   border-color: var(--color-text-secondary);
 }
-/* ...except the prompt, which is bare text rather than a card (see the block further
-   down). A hover outline there is chrome drawn over free text; the corner grips that
-   appear on selection are the whole resize affordance. */
-.react-flow__node-prompt:hover > .astryx-card.xnode-prompt--bare {
+/* ...except the canvas elements — a prompt, and a media node holding something (see the
+   two blocks further down). They are bare on the canvas rather than cards, so a hover
+   outline is chrome drawn over the very thing it frames; the corner grips that appear on
+   selection are the whole resize affordance. */
+.react-flow__node-prompt:hover > .astryx-card.xnode-prompt--bare,
+.react-flow__node:hover > .astryx-card.xnode-media-bare {
   border-color: transparent;
+}
+
+/* ---- a reference is its picture (nodes/ImageNode.jsx, nodes/VideoNode.jsx) ----
+   The same rule as the prompt one node down: a media node that HOLDS something wears no
+   card at all — the picture or the clip sits directly on the canvas, and only selection
+   draws anything around it. The class is only on the card while there is media; an empty
+   node is a box asking for a file and keeps its frame and its tab. */
+.react-flow__node > .astryx-card.xnode-media-bare {
+  background: transparent;
+  border-color: transparent;
+  box-shadow: none;
+}
+/* Selection is the thin accent rectangle, with none of the card's inset ring: at 1px
+   that ring sits ON the photograph, taking a pixel off every edge of the thing being
+   judged, which is the whole reason media squares its corners in the first place. */
+.react-flow__node.selected > .astryx-card.xnode-media-bare {
+  border-color: var(--color-accent);
+  box-shadow: none;
 }
 
 .xnode-body {
@@ -740,8 +760,11 @@ div:has(> .add-node-menu) {
   opacity: 0;
   transition: opacity 120ms ease;
 }
-.xnode-media:hover .xnode-media-remove,
-/* focus-within, so it is reachable by keyboard and not only by pointer. */
+/* Shown on SELECTION rather than on hover: an unselected reference is just its picture,
+   the same two-step the prompt follows — the first click selects, and the controls come
+   with the selection. (Only the two input nodes carry this chip; an output's result strip
+   has its own.) focus-within so it stays reachable by keyboard. */
+.react-flow__node.selected .xnode-media-remove,
 .xnode-media:focus-within .xnode-media-remove {
   opacity: 1;
 }
@@ -864,10 +887,11 @@ div:has(> .add-node-menu) {
   cursor: default;
   user-select: none;
 }
-/* The square corner grips of a selected text element (MediaResize's `text` case). Hidden
-   until selection — an unselected text element is just text — and scoped to the prompt,
-   since it is the only node that asks for them. */
-.react-flow__node-prompt .react-flow__resize-control.xnode-resize--corner.handle {
+/* The square corner grips of a selected canvas element — the prompt and the two media
+   nodes (MediaResize's `text` and `grips`). Hidden until selection: an unselected element
+   is just its text or its picture. No node-type scope is needed, because those are the
+   only callers that draw a corner at all. */
+.react-flow__resize-control.xnode-resize--corner.handle {
   width: 8px;
   height: 8px;
   border-radius: 2px;
@@ -877,12 +901,12 @@ div:has(> .add-node-menu) {
   pointer-events: none;
   transition: opacity var(--duration-fast) ease;
 }
-.react-flow__node-prompt.selected .react-flow__resize-control.xnode-resize--corner.handle {
+.react-flow__node.selected .react-flow__resize-control.xnode-resize--corner.handle {
   opacity: 1;
   pointer-events: all;
 }
 @media (prefers-reduced-motion: reduce) {
-  .react-flow__node-prompt .react-flow__resize-control.xnode-resize--corner.handle {
+  .react-flow__resize-control.xnode-resize--corner.handle {
     transition: none;
   }
 }
@@ -1472,10 +1496,13 @@ div:has(> .add-node-menu) {
 .react-flow__resize-control.xnode-resize:hover {
   border-color: var(--color-accent);
 }
-/* ...but not on the prompt: a line lighting up along bare text is the card border coming
-   back by another name. Its edges still resize (and still shrink-wrap on a double-click);
-   the corner grips are what says so. The corner handles keep their own styling above. */
-.react-flow__node-prompt .react-flow__resize-control.xnode-resize.line:hover {
+/* ...but not on the canvas elements: a line lighting up along bare text, or along the
+   edge of a photograph, is the card border coming back by another name. Their edges still
+   resize; the corner grips on selection are what says so. The corner handles keep their
+   own styling above. */
+.react-flow__node-prompt .react-flow__resize-control.xnode-resize.line:hover,
+.react-flow__node-image .react-flow__resize-control.xnode-resize.line:hover,
+.react-flow__node-video .react-flow__resize-control.xnode-resize.line:hover {
   border-color: transparent;
 }
 @media (prefers-reduced-motion: reduce) {
