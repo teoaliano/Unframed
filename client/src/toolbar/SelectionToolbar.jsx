@@ -150,7 +150,7 @@ export default function SelectionToolbar({
             <Text type="supporting" className="sel-composer-key">
               To
             </Text>
-            <span className={`agent-chip${composer.target === 'ask' ? ' agent-chip--warn' : ''}`}>{targetLabel(composer, nodes)}</span>
+            <span className="agent-chip">{targetLabel(composer, nodes)}</span>
             {composer.with.length > 0 && (
               <>
                 <Text type="supporting" className="sel-composer-key">
@@ -167,9 +167,9 @@ export default function SelectionToolbar({
               </>
             )}
           </HStack>
-          {composer.target === 'ask' && (
+          {composer.artifacts.length > 1 && (
             <Text type="supporting" color="secondary">
-              Two or more artifacts are selected, so the agent will ask which one you mean before changing anything. Select one to skip the question.
+              The agent makes a new asset from these — say how: stitch them in order, compare them, combine them. To edit one of them, select it alone.
             </Text>
           )}
           {!provider && (
