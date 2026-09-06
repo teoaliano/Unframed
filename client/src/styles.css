@@ -1522,6 +1522,19 @@ div:has(> .add-node-menu) {
   gap: var(--spacing-3);
   padding: var(--spacing-3);
 }
+/* The transcript is a COLUMN FLEX container that scrolls, and that combination has one
+   trap: a child of it is a flex item, so it may be shrunk. What normally prevents that is
+   `min-height: auto` -- except an item with its own `overflow` set loses that automatic
+   minimum and becomes the thing that gets squashed. The recap card sets `overflow: hidden`
+   for its rounded corners, and as soon as a chat grew past the panel it collapsed to a
+   single line while every message kept its height.
+   Fixed here, on every child, rather than on the one card that tripped it: anything added
+   to this transcript later that happens to clip its own content would hit exactly the
+   same thing, and would look like a bug in that component. Nothing in here ever wants to
+   grow or shrink -- the scroller is what absorbs the difference. */
+.agent-panel-thread > * {
+  flex-shrink: 0;
+}
 .agent-panel-composer {
   display: flex;
   flex-direction: column;
