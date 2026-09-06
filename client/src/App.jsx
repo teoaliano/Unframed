@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, Suspense, lazy } from 'react';
 import { flushSync } from 'react-dom';
 import {
   ReactFlow,
@@ -76,6 +76,9 @@ import { ProjectContext } from './graph/project.js';
 import AgentPanel from './agent/AgentPanel.jsx';
 import SelectionToolbar from './toolbar/SelectionToolbar.jsx';
 import { messageContext, addToContext } from './toolbar/target.js';
+// The editor replaces the canvas, so it is never needed until it is opened -- and it
+// pulls the agent panel and the markdown renderer with it.
+const Editor = lazy(() => import('./editor/Editor.jsx'));
 import { continuableChat } from './agent/tabs.js';
 import { sendNodeCommand } from './nodes/nodeCommands.js';
 import {
@@ -172,7 +175,7 @@ function ChromeZoom() {
 function Canvas() {
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
-  const { screenToFlowPosition, zoomIn, zoomOut, fitView, getNodes } = useReactFlow();
+  const { screenToFlowPosition, zoomIn, zoomOut, fitView, getNodes, getViewport } = useReactFlow();
   const toast = useToast();
   // Shared by every saveProject call site (the debounced autosave below, and
   // the immediate save `confirmName` fires right after creating a project):
@@ -347,6 +350,13 @@ function Canvas() {
   const onAgentFocus = useCallback((ids) => setAgentFocus(Array.isArray(ids) ? ids : []), []);
   // Bumped when the toolbar's composer starts a chat, so the panel's strip re-reads.
   const [threadsBump, setThreadsBump] = useState(0);
+  // ---- the editor (editor/Editor.jsx) ----
+  // Which artifact is open in it, and the viewport to put back on the way out. The editor
+  // REPLACES the canvas rather than covering it, so React Flow unmounts: a canvas
+  // underneath would keep every node's frame and every clip alive for nothing. The
+  // document does not care -- the server owns it and this tab only holds a replica.
+  const [editorId, setEditorId] = useState(null);
+  const [restoreViewport, setRestoreViewport] = useState(null);
   const focusKey = agentOpen ? agentFocus.join(',') : '';
   // The mark is a class on the React Flow wrapper, which `className` on the node reaches;
   // memoised so a render without a focus change hands React Flow the same array. A tag
@@ -356,6 +366,22 @@ function Canvas() {
     if (!marked.size) return nodes;
     return nodes.map((n) => (marked.has(n.id) ? { ...n, className: `${n.className ? `${n.className} ` : ''}agent-focus` } : n));
   }, [nodes, focusKey]);
+  // The artifact the editor is on. Looked up rather than held, so a rename or a new
+  // version follows it; if the node goes (the agent or another tab deleted it) there is
+  // nothing to edit and the editor closes itself rather than framing a dead file.
+  const editorNode = editorId ? nodes.find((n) => n.id === editorId) ?? null : null;
+  useEffect(() => {
+    if (editorId && !editorNode) setEditorId(null);
+  }, [editorId, editorNode]);
+  // React Flow reads `fitView` and `defaultViewport` on MOUNT only, so the viewport is
+  // handed back through the remount and then dropped -- left set, the next genuine project
+  // switch would restore this project's viewport instead of fitting the new graph.
+  useEffect(() => {
+    if (editorId || !restoreViewport) return undefined;
+    const t = setTimeout(() => setRestoreViewport(null), 0);
+    return () => clearTimeout(t);
+  }, [editorId, restoreViewport]);
+
   // Deleting an artifact the agent is mid-turn on used to ask first. It does not any
   // more (the chats-and-tags design, decision 1): a chat is not a dependency of the
   // thing it touched, so the write simply fails and the agent says so. Asking was
@@ -463,6 +489,26 @@ function Canvas() {
       toast({ body: `Could not send that: ${err.message}`, uniqueID: 'composer-failed', type: 'error' });
     }
   }
+
+  // Open an artifact in the editor. The viewport is saved first, the node is selected
+  // alone (the editor is about ONE artifact, and the panel's strip filters on the
+  // selection), and the composer closes -- it belongs to a canvas that is about to go.
+  const openEditor = useCallback(
+    (nodeId) => {
+      const n = nodes.find((x) => x.id === nodeId);
+      if (!n || !isArtifact(n)) return;
+      setRestoreViewport(getViewport());
+      setNodes((ns) => ns.map((x) => (x.selected === (x.id === nodeId) ? x : { ...x, selected: x.id === nodeId })));
+      setComposer(null);
+      setEditorId(nodeId);
+      // The editor's left column IS the agent panel, so the check it would have run on
+      // opening happens here too -- otherwise the panel greets you with "not checked yet"
+      // for an agent that is in fact ready.
+      if (!providers) checkProviders();
+    },
+    [nodes, getViewport, setNodes, providers, checkProviders],
+  );
+  const closeEditor = useCallback(() => setEditorId(null), []);
 
   const openPage = (nodeId) => {
     const n = nodes.find((x) => x.id === nodeId);
@@ -1729,6 +1775,31 @@ function Canvas() {
         pointer.current = { x: e.clientX, y: e.clientY };
       }}
     >
+      {/* The editor REPLACES the chrome and the canvas -- React Flow leaves the DOM
+          entirely while it is open (the dialogs below stay mounted and closed). */}
+      {editorNode ? (
+        <Suspense fallback={null}>
+          <Editor
+            node={editorNode}
+            project={project}
+            previewPort={cfg.previewPort}
+            onClose={closeEditor}
+            onOpenExternal={openPage}
+            agent={{
+              project,
+              nodes,
+              providers,
+              checking: providersChecking,
+              onCheckProviders: () => checkProviders(true),
+              initialThreadId: agentThread,
+              refreshKey: threadsBump,
+              onFocus: onAgentFocus,
+              onOpenEditor: openEditor,
+            }}
+          />
+        </Suspense>
+      ) : (
+        <>
       {/* No topbar — two cards floating over the canvas corners, Figma-style. */}
       <div className="toolbar-card toolbar-card-left">
         <Logo size={28} />
@@ -1847,7 +1918,11 @@ function Canvas() {
           selectionKeyCode={null}
           nodeTypes={nodeTypes}
           edgeTypes={edgeTypes}
-          fitView
+          // On a normal mount the graph is fitted; on the mount that follows closing the
+          // editor the exact viewport is handed back instead. React Flow reads both only
+          // on mount, which is why this is a remount and not an imperative call.
+          fitView={!restoreViewport}
+          defaultViewport={restoreViewport ?? undefined}
           minZoom={0.1}
           maxZoom={4}
           defaultEdgeOptions={{ animated: true }}
@@ -1860,6 +1935,12 @@ function Canvas() {
           panOnScroll
           zoomOnScroll={false}
           zoomOnDoubleClick={false}
+          // Double-clicking an artifact opens it in the editor. Every other type owns its
+          // own double-click since the canvas redesign (a prompt starts editing, a group
+          // renames), so this only ever fires for a page or a motion.
+          onNodeDoubleClick={(_e, node) => {
+            if (isArtifact(node)) openEditor(node.id);
+          }}
           // select tool: drag empty canvas draws a selection box, pan with the middle
           // mouse. pan tool: drag anywhere pans, like a hand tool.
           panOnDrag={tool === 'pan' ? true : [1]}
@@ -1907,7 +1988,10 @@ function Canvas() {
           onToggleContinue={continues ? () => setForceNew((v) => !v) : null}
           onSend={sendComposer}
           onRun={(id) => sendNodeCommand(id, 'run')}
-          onOpenPage={openPage}
+          // The selection toolbar's Open opens the artifact IN THE EDITOR (the plan's
+          // B1). "Open in a new tab" is the editor header's job, so there is one place
+          // that leaves the app and it is not the first thing you land on.
+          onOpenPage={openEditor}
         />
         {agentOpen && (
           <AgentPanel
@@ -1921,9 +2005,9 @@ function Canvas() {
             refreshKey={threadsBump}
             onFocus={onAgentFocus}
             onLocate={(id) => fitView({ nodes: [{ id }], duration: 400, padding: 0.6, maxZoom: 1.5 })}
-            // The recap card's "Open". Part B1 repoints this at the editor; until then
-            // it is what the reply card's Open was -- the artifact in a browser tab.
-            onOpenEditor={openPage}
+            // The recap card's "Open" opens the artifact in the editor; the editor's own
+            // header is where "Open in a new tab" lives.
+            onOpenEditor={openEditor}
           />
         )}
 
@@ -1978,6 +2062,8 @@ function Canvas() {
         </div>
       </div>
       </ContextMenu>
+        </>
+      )}
 
       <LibraryDialog
         isOpen={libraryOpen}
