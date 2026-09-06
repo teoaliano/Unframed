@@ -104,6 +104,7 @@ import {
   listModels,
   revealFiles,
   listProviders,
+  uploadFile,
 } from './api.js';
 
 const nodeTypes = {

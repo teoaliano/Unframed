@@ -17,6 +17,13 @@ Keep that shape: the website's What's new page parses this file.
   the canvas as an ordinary video node. Rendering runs locally in the Chrome (or Chromium,
   Edge, Brave) you already have and uses no credits; without one, Render says so.
 
+### Fixed
+
+- **Pasting or dropping an image onto the canvas works again.** Since 2026-09-04 both did
+  nothing at all: the code that saves the file into your project was calling something
+  the file never imported, so it failed on the first byte. Dropping onto an existing
+  image node was never affected, which is why it looked like only some drops worked.
+
 ## 2026-09-05
 
 ### Added
