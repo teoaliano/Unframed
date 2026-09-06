@@ -83,7 +83,6 @@ import {
   createThread,
   listThreads,
   sendThreadMessage,
-  undoProject,
   previewUrl, artifactUrl,
   copyFile,
   renameProject,
@@ -462,14 +461,6 @@ function Canvas() {
     } catch (err) {
       toast({ body: `Could not send that: ${err.message}`, uniqueID: 'composer-failed', type: 'error' });
     }
-  }
-
-  // Undo one of the agent's changes, from a change line in the panel. The pending local
-  // edits are flushed first: undo is a server-side journal walk, so a change this tab has
-  // not sent yet would otherwise land AFTER the undo and look like it was not undone.
-  async function undoAgentChange() {
-    await doc.flush();
-    await undoProject(project);
   }
 
   const openPage = (nodeId) => {
@@ -1924,10 +1915,9 @@ function Canvas() {
             refreshKey={threadsBump}
             onFocus={onAgentFocus}
             onLocate={(id) => fitView({ nodes: [{ id }], duration: 400, padding: 0.6, maxZoom: 1.5 })}
-            // A change line's "Open". Part B1 repoints this at the editor; until then it
-            // is what the reply card's Open was -- the artifact in a browser tab.
+            // The recap card's "Open". Part B1 repoints this at the editor; until then
+            // it is what the reply card's Open was -- the artifact in a browser tab.
             onOpenEditor={openPage}
-            onUndo={undoAgentChange}
           />
         )}
 

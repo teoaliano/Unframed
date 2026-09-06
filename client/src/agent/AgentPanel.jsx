@@ -9,7 +9,7 @@ import { HStack, VStack, StackItem } from '@astryxdesign/core/Stack';
 import { TabList, Tab, TabMenu } from '@astryxdesign/core/TabList';
 import { ModelPicker, EffortPicker } from './ModelPicker.jsx';
 import { AlertDialog } from '@astryxdesign/core/AlertDialog';
-import { X, Plus, RefreshCw, Sparkles, Square, Trash2, Crosshair, Undo2, ExternalLink, ChevronRight } from 'lucide-react';
+import { X, Plus, RefreshCw, Sparkles, Square, Trash2, Crosshair, ExternalLink, ChevronRight } from 'lucide-react';
 import {
   createThread,
   listThreads,
@@ -19,7 +19,6 @@ import {
   updateThread,
   deleteThread,
   subscribeThreadEvents,
-  nextUndo,
 } from '../api.js';
 import { isArtifact } from '../graph/resolve.js';
 import { visibleThreads, nextActive, tabLabel, nodeLabel, touchedArtifacts } from './tabs.js';
@@ -99,7 +98,7 @@ function ArtifactRow({ row, onOpen, onLocate, embedded }) {
 // `embedded` is the editor's column (editor/Editor.jsx): the panel is the page's left
 // third rather than a card floating over the canvas, so it has no Close of its own (the
 // editor's Back is the way out) and no Locate (there is no canvas to pan).
-export default function AgentPanel({ project, nodes, providers, onCheckProviders, checking, onClose, initialThreadId = null, refreshKey = 0, onFocus, onLocate, onOpenEditor, onUndo, embedded = false }) {
+export default function AgentPanel({ project, nodes, providers, onCheckProviders, checking, onClose, initialThreadId = null, refreshKey = 0, onFocus, onLocate, onOpenEditor, embedded = false }) {
   const selection = nodes.filter((n) => n.selected).map((n) => n.id);
   const [threads, setThreads] = useState([]);
   const [chosenId, setChosenId] = useState(null);
@@ -125,13 +124,6 @@ export default function AgentPanel({ project, nodes, providers, onCheckProviders
   }, [tagKey, onFocus]);
   useEffect(() => () => onFocus?.([]), [onFocus]);
   const [messages, setMessages] = useState([]);
-  // The agent's changes, from stored and live ops_applied events:
-  // { version, text, at, artifacts: [ids], undone }
-  const [notes, setNotes] = useState([]);
-  // Which change lines the person has expanded, and which journal entry undo would
-  // revert next (the server's answer -- the same question the reply card used to ask).
-  const [openNotes, setOpenNotes] = useState(() => new Set());
-  const [undoableVersion, setUndoableVersion] = useState(null);
   // Every artifact this chat has touched, in first-touch order, accumulated from the same
   // event stream the transcript comes from (`touchedArtifacts`). It feeds the recap card
   // at the foot, and it is NOT the record's `tags`: tags answer which chats the strip
@@ -224,7 +216,6 @@ export default function AgentPanel({ project, nodes, providers, onCheckProviders
   useEffect(() => {
     if (!threadId) {
       setMessages([]);
-      setNotes([]);
       setTouched([]);
       setStatus('idle');
       setError(null);
@@ -242,7 +233,6 @@ export default function AgentPanel({ project, nodes, providers, onCheckProviders
     const close = subscribeThreadEvents(project, threadId, 0, {
       onState: (s) => {
         setMessages(s.messages ?? []);
-        setNotes([]);
         setTouched([]);
         setStatus(s.status ?? 'idle');
         setError(s.error ?? null);
@@ -273,14 +263,6 @@ export default function AgentPanel({ project, nodes, providers, onCheckProviders
             setActivity(ACTIVITY[e.name] || 'Working…');
             break;
           case 'ops_applied':
-            // A change the agent made, as a line in the transcript. The stream replays
-            // stored events before going live, so a reopened panel gets these too;
-            // keyed by journal version so a reconnect cannot double one.
-            setNotes((ns) =>
-              ns.some((x) => x.version === e.version)
-                ? ns
-                : [...ns, { version: e.version, text: e.summary, at: e.at, artifacts: e.page ? [e.page.nodeId] : e.artifacts ?? [] }],
-            );
             // The chat picks up a tag for whatever the agent just wrote to; the strip
             // learns it here rather than waiting for the next list read.
             if (e.page?.nodeId) {
@@ -372,13 +354,7 @@ export default function AgentPanel({ project, nodes, providers, onCheckProviders
     }
   }
 
-  // Undo is offered on a change only while it is still what Cmd-Z would revert next --
-  // one server-side ladder, so once anything has been edited after it the offer goes and
-  // the line points at Cmd-Z instead. Asked after a pause, the same 450ms the reply card
-  // used, so a burst of ops asks once. `nodes` is a dependency because an edit of your
-  // own is exactly what takes that place.
   const running = status === 'running';
-  const latestNote = notes.at(-1) ?? null;
   // The row above the composer is the LIVE SELECTION -- the conventional "what is
   // attached to this message" row. It used to list the chat's accumulated tags, which
   // wore the same shape while answering a different question, and the two read as noise.
@@ -388,28 +364,14 @@ export default function AgentPanel({ project, nodes, providers, onCheckProviders
   // First-touch order, with what each is called now; a deleted one is greyed and has no
   // Locate, since there is nowhere to locate it to.
   const recap = touched.map((id) => nodeLabel(id, nodes));
-  useEffect(() => {
-    if (!latestNote || running) return undefined;
-    const t = setTimeout(() => {
-      nextUndo(project)
-        .then((next) => setUndoableVersion(next?.version ?? null))
-        .catch(() => {});
-    }, 450);
-    return () => clearTimeout(t);
-  }, [project, latestNote?.version, running, nodes]);
-
-  async function undoNote(note) {
-    try {
-      await onUndo?.(note.version);
-      setNotes((ns) => ns.map((x) => (x.version === note.version ? { ...x, undone: true } : x)));
-      setUndoableVersion(null);
-    } catch (err) {
-      setError(err.message);
-    }
-  }
-
-  // The transcript: messages and the agent's change blocks, in time order.
-  const lines = [...messages, ...notes.map((n) => ({ role: 'note', ...n }))].sort((a, b) => (a.at ?? 0) - (b.at ?? 0));
+  // The transcript is the messages, and only the messages. Each change the agent made
+  // used to get a block of its own here -- what changed, expandable to the artifacts it
+  // touched, with Undo. It went, on 2026-09-06: with the recap card at the foot listing
+  // the same files, a block per message said the same thing over and over up the
+  // transcript, and what a chat is FOR is what was said in it. The agent still gets told
+  // what changed (the preamble); the person still has Cmd-Z, which walks the same
+  // server-side journal and is what the button called anyway.
+  const lines = messages;
 
   return (
     <aside className={`agent-panel${embedded ? ' agent-panel--embedded' : ''}`} aria-label="Agent">
@@ -536,63 +498,15 @@ export default function AgentPanel({ project, nodes, providers, onCheckProviders
             Ask about what is on the canvas, or say what should change or be made — whatever is selected comes with the message as context.
           </Text>
         )}
-        {lines.map((m, i) =>
-          m.role === 'note' ? (
-            /* A change the agent made: what changed, expandable to the artifacts it
-               touched, with Undo while it is still the newest entry. There is no chat
-               message for an undo -- the line says "Undone" instead, because a message
-               would claim the agent said something it did not. */
-            <div key={`${m.at}-${i}`} className={`agent-change${m.undone ? ' agent-change--undone' : ''}`}>
-              <HStack gap={1} align="center" wrap>
-                {m.artifacts.length > 0 ? (
-                  <button
-                    type="button"
-                    className="agent-change-toggle"
-                    aria-expanded={openNotes.has(m.version)}
-                    onClick={() =>
-                      setOpenNotes((set) => {
-                        const next = new Set(set);
-                        if (next.has(m.version)) next.delete(m.version);
-                        else next.add(m.version);
-                        return next;
-                      })
-                    }
-                  >
-                    <Icon icon={ChevronRight} size="sm" />
-                    <Text type="supporting">{m.text}</Text>
-                  </button>
-                ) : (
-                  <Text type="supporting" className="agent-note">
-                    {m.text}
-                  </Text>
-                )}
-                <StackItem size="fill" />
-                {m.undone ? (
-                  <Text type="supporting" color="secondary">
-                    Undone
-                  </Text>
-                ) : undoableVersion === m.version ? (
-                  <Button size="sm" variant="ghost" label="Undo" icon={<Icon icon={Undo2} />} onClick={() => undoNote(m)} />
-                ) : null}
-              </HStack>
-              {openNotes.has(m.version) && (
-                <VStack gap={0} className="agent-change-list">
-                  {m.artifacts.map((id) => (
-                    <ArtifactRow key={id} row={nodeLabel(id, nodes)} onOpen={onOpenEditor} onLocate={onLocate} embedded={embedded} />
-                  ))}
-                </VStack>
-              )}
-            </div>
-          ) : (
-            <div key={`${m.at}-${i}`} className={`agent-msg agent-msg-${m.role}`}>
-              <Text type="supporting" className="agent-msg-role">
-                {m.role === 'user' ? 'You' : provider?.name ?? 'Agent'}
-                {m.role === 'user' && m.selection?.length ? ` · ${m.selection.length} selected` : ''}
-              </Text>
-              <div className="agent-msg-text">{m.text}</div>
-            </div>
-          ),
-        )}
+        {lines.map((m, i) => (
+          <div key={`${m.at}-${i}`} className={`agent-msg agent-msg-${m.role}`}>
+            <Text type="supporting" className="agent-msg-role">
+              {m.role === 'user' ? 'You' : provider?.name ?? 'Agent'}
+              {m.role === 'user' && m.selection?.length ? ` · ${m.selection.length} selected` : ''}
+            </Text>
+            <div className="agent-msg-text">{m.text}</div>
+          </div>
+        ))}
         {draft && (
           <div className="agent-msg agent-msg-assistant">
             <Text type="supporting" className="agent-msg-role">

@@ -1767,52 +1767,6 @@ div:has(> .add-node-menu) {
 .sel-composer {
   width: 100%;
 }
-/* A change the agent made, in the panel's transcript: the summary, expandable to the
-   artifacts it touched, with Undo while it is still the newest entry. The green rule on
-   the inline edge is what distinguishes it from a message at a glance -- a change is
-   something that HAPPENED, not something that was said. */
-.agent-note,
-.agent-change {
-  color: var(--color-text-secondary);
-  padding-inline: var(--spacing-2);
-  border-inline-start: 2px solid var(--color-success);
-}
-/* An undone change keeps its place in the transcript and loses its emphasis: the rule
-   goes neutral rather than away, so the line still reads as a change, just a cancelled
-   one. Removing it would make the transcript disagree with the canvas. */
-.agent-change--undone {
-  border-inline-start-color: var(--color-border-emphasized);
-}
-.agent-change--undone .agent-change-toggle {
-  text-decoration: line-through;
-}
-.agent-change-toggle {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 0;
-  border: 0;
-  background: transparent;
-  color: inherit;
-  font: inherit;
-  text-align: start;
-  cursor: pointer;
-}
-.agent-change-toggle:hover {
-  color: var(--color-text-primary);
-}
-/* The disclosure arrow turns rather than swapping icon, so the two states are one
-   element and cannot disagree about which is showing. */
-.agent-change-toggle svg {
-  transition: transform 120ms ease;
-}
-.agent-change-toggle[aria-expanded='true'] svg {
-  transform: rotate(90deg);
-}
-.agent-change-list {
-  padding-block: var(--spacing-1);
-  padding-inline-start: var(--spacing-3);
-}
 /* What the conversation involved, at the foot of the transcript: a header line with the
    count and a Hide/Show toggle, then one row per artifact -- the shape of T3 Code's
    changed-files card, minus the diff, because here what matters is WHICH things were
@@ -1858,7 +1812,6 @@ div:has(> .add-node-menu) {
   padding: 2px var(--spacing-2);
   min-height: 28px;
 }
-.agent-recap-row + .agent-recap-row,
 .agent-recap-list .agent-artifact-row + .agent-artifact-row {
   border-block-start: var(--border-width) solid color-mix(in srgb, var(--color-border) 60%, transparent);
 }

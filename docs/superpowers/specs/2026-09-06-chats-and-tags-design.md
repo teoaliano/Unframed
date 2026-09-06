@@ -77,11 +77,29 @@ It broke in four places at once, all of them the same break:
    composer continues the newest idle chat tagged with **every** selected artifact, else
    starts one, and says which before you type, with a toggle.
 
-6. **Change lines in the panel** say what changed, expand to the artifacts touched (each
-   with Open and Locate), and carry Undo on the most recent change while it is still what
-   Cmd-Z would revert next. A bulk edit is one undo step. After an undo the line reads
-   "Undone". **No chat message is written for an undo** — a message would claim the agent
-   said something it did not.
+6. ~~**Change lines in the panel** say what changed, expand to the artifacts touched, and
+   carry Undo on the most recent change.~~
+
+   **Reversed 2026-09-06, after testing: there are no change lines.** The transcript is
+   the messages, and only the messages.
+
+   Once the recap card existed (decision 4's revision), a block per change said the same
+   thing again for every message — the same file names, up the whole transcript — and what
+   a chat is *for* is what was said in it. Two things it carried are accounted for
+   elsewhere:
+
+   - **What was touched** is the recap card, once, at the foot.
+   - **Undo** is Cmd-Z, which walks the same server-side journal the button called and
+     flushes pending local edits first (`graph/useDocument.js`). A bulk edit is still one
+     journal entry, so it is still one undo step — that guarantee is in the document, not
+     in the button.
+
+   Dropping the button loses discoverability: nothing in the panel now says the agent's
+   change can be undone. That was weighed and accepted — Cmd-Z is the undo people already
+   reach for, and a button repeated per message to advertise it cost more than it taught.
+
+   **No chat message is written for an undo**, which was the other half of this decision
+   and still holds: a message would claim the agent said something it did not.
 
 7. **The agent is told what changed** since its last turn, in the next message's preamble,
    and keeps its rule to read before acting.
@@ -157,8 +175,11 @@ rather than a log line quietly changing shape.
   intents. "Make these both red" would have made a third thing.
 - **Hiding the chats of deleted artifacts.** Loses the record of why something was made
   precisely when it is most wanted. A greyed chip costs one line of CSS.
-- **A chat message per undo.** Puts words in the agent's mouth. The change line reads
-  "Undone", which is a fact about the change, said where the change is.
+- **A chat message per undo.** Puts words in the agent's mouth. Nothing is written at all;
+  the canvas is the record of what is and is not there.
+- **Keeping a bare one-line change indicator** under the newest answer, with Undo, once the
+  blocks were dropped. Rejected as the worst of both: still a per-turn artifact in the
+  transcript, still duplicating the recap, for one button that Cmd-Z already is.
 - **Tag chips and the selection count sharing the composer row** (the original decision 4).
   Two questions, one shape, one row: it read as neither. See the revision above.
 - **Splitting the recap into "Changed" and "Read".** More precise and less useful: it turns

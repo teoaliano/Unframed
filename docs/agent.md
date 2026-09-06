@@ -365,20 +365,20 @@ for a selection, and a chat that read a file once should not thereby be filed un
 forever. `canvas_read` contributes nothing — it reads the whole board, every turn, and
 listing everything would bury what the turn was about.
 
-One row shape serves both the recap and a change line's expansion (`ArtifactRow` in
-`AgentPanel.jsx`), because they ARE the same row and writing it twice is how the two would
-drift apart.
+`ArtifactRow` in `AgentPanel.jsx` is that row.
 
-**A change the agent made is a small block in the transcript, not a line** (`.agent-change`):
-the summary, a disclosure that expands to the artifacts it touched — each with **Open**
-(the editor) and **Locate** — and **Undo** while that change is still what Cmd-Z would
-revert next (`GET /api/projects/:name/undo`, re-asked 450ms after the canvas settles,
-because undo is one server-side ladder and any later edit takes that place). A bulk edit
-is one journal entry, so it is one undo step. After an undo the line reads **"Undone"** and
-keeps its place with a neutral rule rather than disappearing: removing it would make the
-transcript disagree with the canvas. **No chat message is written for an undo** — a message
-would claim the agent said something it did not. Which artifacts a batch touched comes from
-the `ops_applied` event: `page.nodeId` for a single artifact write, and `artifacts` for a
+**The transcript is the messages, and only the messages.** Each change the agent made
+briefly got a block of its own here — the summary, expandable to the artifacts it touched,
+with Undo — and it went on 2026-09-06: with the recap card listing the same files, a block
+per message repeated itself up the whole transcript, and what a chat is FOR is what was
+said in it. **Undo is Cmd-Z**, which walks the same server-side journal the button called
+and flushes pending local edits first (`graph/useDocument.js`); a bulk edit is one journal
+entry, so it is still one undo step — that guarantee lives in the document, not in a
+button. **No chat message is written for an undo** either: it would claim the agent said
+something it did not.
+
+Which artifacts a change touched still travels on the `ops_applied` event, because the
+recap is folded out of it: `page.nodeId` for a single artifact write, and `artifacts` for a
 `canvas_write` batch (`batchArtifacts`, read from the ops rather than the graph afterwards,
 because a `removeNode`'s node is gone by then).
 

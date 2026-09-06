@@ -29,9 +29,8 @@ Keep that shape: the website's What's new page parses this file.
 
 - **The agent's reply lives in the panel now**, not in a card floating over the node it
   worked on. Send from the toolbar and the panel opens on that conversation with the
-  answer streaming into it. Each change the agent made is a line you can expand to see
-  exactly which pages or motions it touched, with **Open**, **Locate** and **Undo** — and
-  a change to several things undoes in one step.
+  answer streaming into it. ⌘Z undoes what the agent changed, and a change to several
+  things undoes in one step.
 - **The composer says which conversation your message joins** before you send it —
   "continues *Title fixes*" or "new chat" — with a button to switch.
 - **A chat ends with a recap of the files it involved** — a small card after the last
