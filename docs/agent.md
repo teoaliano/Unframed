@@ -86,7 +86,7 @@ one `To: … With: …` line so the intent is in the transcript, not only in a t
 
 ## The tools (`server/agentTools.js`)
 
-Four, all on the in-process `unframed` MCP server, all listed in `allowedTools`, and the
+Six, all on the in-process `unframed` MCP server, all listed in `allowedTools`, and the
 only things the agent can call:
 
 | Tool | Does |
@@ -95,6 +95,7 @@ only things the agent can call:
 | `canvas_write` | one `batch` of the document's own ops (`addNode`, `updateNode`, `moveNode`, `resizeNode`, `removeNode`, `addEdge`, `removeEdge`), committed under the thread's origin — journaled, streamed to every tab, **one undo step**. |
 | `page_write` | a new version of a page: writes `<timestamp>-<slug>.html` plus a sidecar, then one batch (`addNode` beside the selection for a new page, `updateNode { file }` for an existing one). |
 | `page_read` | the current HTML of a page node, so an edit starts from what is there. |
+| `motion_write` / `motion_read` | the same pair for a motion asset (a HyperFrames composition); see "The motion asset" below. |
 
 **What `canvas_write` refuses before the document sees it** (`prepareBatch`, tested):
 an unknown node type; any `data:` URL in node data or a patch — bytes never travel
@@ -115,6 +116,54 @@ by three names: still no built-in tools, no shell, no file system, no network. B
 reach disk through `page_write` alone, one extension into one folder; the preview origin
 below is what stops a page the agent wrote from reaching the API even by URL.
 
+## The motion asset (`server/motion.js`, `client/src/nodes/MotionNode.jsx`)
+
+A **motion** is a HyperFrames composition: one HTML file, timed by `data-start` /
+`data-duration` on `class="clip"` elements under a root `#root[data-composition-id]`,
+animated by one paused GSAP timeline registered as `window.__timelines.main`. It is a page
+at the file level — same folder, same preview origin, same frame, a new file on every
+write — with two things a page does not have: a player, and a render. Design and the
+rejected alternatives: `docs/superpowers/specs/2026-09-06-agent-canvas-slice-4-design.md`.
+
+**The library sits beside the compositions as plain files**, under fixed names:
+`hyperframes-viewer.html`, `hyperframes-player.js`, `hyperframes-runtime.js`, `gsap.js`
+(`ensureLibrary`, idempotent, refreshed when a source's size changes). The node frames
+the viewer with the composition's name in its query (`?c=<file>`, checked against the
+same alphabet the preview origin serves); the viewer mounts `<hyperframes-player
+runtime-src="hyperframes-runtime.js">` on it. Same-origin with the composition is what
+lets the player drive it, and not being the canvas's origin is what keeps the canvas
+safe — the preview origin's rules below hold unchanged, plus two additions made for
+this: `js` in the extension allow-list, and `frame-src 'self'` in the policy (a sibling
+may frame a sibling; with `default-src 'none'` alone Chrome refused the inner frame).
+
+**The runtime tag goes in at write time.** The player injects HyperFrames' runtime only
+into a composition with no timeline of its own, and a real composition has one — without
+the runtime inside the file the player drives GSAP and shows no timed clip. `withRuntime`
+adds `<script src="hyperframes-runtime.js" data-hyperframes-preview-runtime>` once, on
+`motion_write` and on `POST …/motion/files` (a composition the person drops on a motion
+node); the attribute is the marker `@hyperframes/core` strips by, so the renderer removes
+this copy and injects its own.
+
+**Render** (`POST /api/projects/:name/motion/render { file, title? }` → `{ id }`, then
+`GET …/motion/render/:id` → `{ status, progress, message, output, error }`) runs
+`@hyperframes/producer` — a headless Chrome captured frame by frame through the BeginFrame
+API, ffmpeg encoding — imported only when a render starts, since it is the heaviest
+module in the package. The MP4 is rendered into a temp folder and only then placed in the
+project as `<timestamp>-<slug>.mp4` with a sidecar (`source: 'render'`, `of` names the
+composition, **no `cost`**), so a failed render leaves nothing behind; the node then adds a
+`video` node beside itself naming the file, as a video output's Add to canvas does. Jobs
+are an in-memory Map, not `jobs.js`: a render is local compute on files still on disk, so
+one lost to a restart costs a click, not money. Chrome is the one puppeteer installs with
+`@hyperframes/producer`; the desktop shell has to bring its own (`status.md`).
+
+**The agent's two tools**, `motion_write` and `motion_read`, are `page_write` and
+`page_read` with the noun changed — one factory in `agentTools.js` builds both pairs, so
+the new-file rule, placement, the node it becomes and the `ops_applied` event cannot
+drift between them. `motion_write`'s description carries the composition contract
+(root attributes, clips, one paused timeline, `gsap.js` by sibling name, no external
+loads, no imperative media control); the runtime tag is added for it. The event's
+artifact field is still named `page` for both kinds, with `kind` inside it.
+
 ## The preview origin (`server/preview.js`)
 
 Pages are HTML and HTML runs code, so a page is never served from the API's origin —
@@ -126,7 +175,7 @@ serves `GET/HEAD /p/<project>/<file>` and nothing else. The rules, each pinned i
 
 - one path shape; the file name must match the alphabet this server writes
   (`[A-Za-z0-9._-]`), which disposes of `..`, separators and anything odd;
-- an **extension allow-list** (`html`, images, video, audio, fonts): `.json` sidecars,
+- an **extension allow-list** (`html`, `js` — for the motion library beside a composition — images, video, audio, fonts): `.json` sidecars,
   `graph.json`, `graph.log` and the thread records are never served;
 - the same loopback `Host` check as the API (`LOOPBACK_HOST` is defined here and imported
   by `index.js`, so the two cannot drift);

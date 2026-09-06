@@ -50,6 +50,8 @@ const ACTIVITY = {
   mcp__unframed__canvas_write: 'Changing the canvas…',
   mcp__unframed__page_write: 'Writing the page…',
   mcp__unframed__page_read: 'Reading the page…',
+  mcp__unframed__motion_write: 'Writing the motion…',
+  mcp__unframed__motion_read: 'Reading the motion…',
 };
 
 // `initialThreadId` opens the panel on a particular thread -- the anchored reply's

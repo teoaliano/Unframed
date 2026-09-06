@@ -25,7 +25,7 @@ export const isReferenceable = (n) => n?.type === 'prompt' || isTextOutput(n) ||
 // The third family. An artifact (a page; slice 4 adds the motion) neither feeds an
 // output nor consumes one, so it is neither end of an edge -- said here rather than left
 // to the `Output` suffix test, which would silently make it a source.
-export const isArtifact = (n) => n?.type === 'page';
+export const isArtifact = (n) => n?.type === 'page' || n?.type === 'motion';
 
 // A group is a box of nodes that wires as one source and is @-referenced as one id. It
 // carries none of that content itself: a member is an ordinary node with `parentId` set

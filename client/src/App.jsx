@@ -47,6 +47,7 @@ import ImageOutputNode from './nodes/ImageOutputNode.jsx';
 import VideoOutputNode from './nodes/VideoOutputNode.jsx';
 import TextOutputNode from './nodes/TextOutputNode.jsx';
 import PageNode from './nodes/PageNode.jsx';
+import MotionNode from './nodes/MotionNode.jsx';
 import {
   withDrag,
   nextId,
@@ -59,7 +60,7 @@ import {
 } from './graph/starter.js';
 import ProjectMenu from './ProjectMenu.jsx';
 import IgnoredEdge from './nodes/IgnoredEdge.jsx';
-import { PromptIcon, ImageIcon, VideoIcon, TextIcon, PageIcon, GroupIcon } from './nodes/nodeIcons.jsx';
+import { PromptIcon, ImageIcon, VideoIcon, TextIcon, PageIcon, MotionIcon, GroupIcon } from './nodes/nodeIcons.jsx';
 import { bucketSources, isOutput, isArtifact, isReferenceable, hasMedia } from './graph/resolve.js';
 import { groupSelection, ungroup, groupable } from './graph/grouping.js';
 import { mediaSrc } from './nodes/ImageNode.jsx';
@@ -86,7 +87,7 @@ import {
   subscribeThreadEvents,
   nextUndo,
   undoProject,
-  previewUrl,
+  previewUrl, artifactUrl,
   copyFile,
   renameProject,
   deleteProject,
@@ -114,6 +115,7 @@ const nodeTypes = {
   videoOutput: VideoOutputNode,
   textOutput: TextOutputNode,
   page: PageNode,
+  motion: MotionNode,
 };
 
 const edgeTypes = { ignored: IgnoredEdge };
@@ -480,7 +482,7 @@ function Canvas() {
             setReply((r) => (r && r.threadId === thread.id ? { ...r, text: draft, activity: null } : r));
             break;
           case 'tool_use':
-            setReply((r) => (r && r.threadId === thread.id ? { ...r, activity: e.name?.includes('page') ? 'Writing the page…' : e.name?.includes('write') ? 'Changing the canvas…' : 'Reading the canvas…' } : r));
+            setReply((r) => (r && r.threadId === thread.id ? { ...r, activity: e.name?.includes('motion') ? 'Writing the motion…' : e.name?.includes('page') ? 'Writing the page…' : e.name?.includes('write') ? 'Changing the canvas…' : 'Reading the canvas…' } : r));
             break;
           case 'ops_applied':
             setReply((r) =>
@@ -532,7 +534,7 @@ function Canvas() {
 
   const openPage = (nodeId) => {
     const n = nodes.find((x) => x.id === nodeId);
-    if (n?.data?.file && cfg.previewPort) window.open(previewUrl(cfg.previewPort, project, n.data.file), '_blank', 'noopener,noreferrer');
+    if (n?.data?.file && cfg.previewPort) window.open(artifactUrl(cfg.previewPort, project, n), '_blank', 'noopener,noreferrer');
   };
   const [cfgDlg, setCfgDlg] = useState(null); // { key, imageModel, …, error, saving, saved } | null
   // Outside cfgDlg, for the same class of reason `connecting` is: the draft is
@@ -1286,7 +1288,10 @@ function Canvas() {
       // The third family: things on the board that reference the others by file.
       type: 'section',
       title: 'Artifacts',
-      items: [{ label: 'Page', icon: PageIcon, onClick: () => addNode('page', NEW_NODE.page, at?.()) }],
+      items: [
+        { label: 'Page', icon: PageIcon, onClick: () => addNode('page', NEW_NODE.page, at?.()) },
+        { label: 'Motion', icon: MotionIcon, onClick: () => addNode('motion', NEW_NODE.motion, at?.()) },
+      ],
     },
   ];
 

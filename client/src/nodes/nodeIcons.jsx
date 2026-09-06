@@ -6,7 +6,7 @@
 // registers for the design system's own semantic icons (`icon="info"` and friends).
 // One pack means one grid, one stroke weight, one optical size — which hand-drawn
 // paths never quite matched.
-import { AlignLeft, Image, Type, PanelTop, Workflow, SquarePlay, AppWindow, Group } from 'lucide-react';
+import { AlignLeft, Image, Type, PanelTop, Workflow, SquarePlay, AppWindow, Group, Clapperboard } from 'lucide-react';
 
 export const PromptIcon = AlignLeft;
 export const ImageIcon = Image;
@@ -14,6 +14,8 @@ export const TextIcon = Type;
 export const GroupIcon = Group;
 // The page asset: a window, because that is what it is -- a web page on the board.
 export const PageIcon = AppWindow;
+// The motion asset: a clapperboard -- a video that is made, not one that was shot.
+export const MotionIcon = Clapperboard;
 
 // Not node types — the Library's chips.
 export const BlockIcon = PanelTop;
@@ -35,4 +37,5 @@ export const NODE_ICONS = {
   videoOutput: VideoIcon,
   textOutput: TextIcon,
   page: PageIcon,
+  motion: MotionIcon,
 };

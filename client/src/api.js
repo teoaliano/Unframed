@@ -263,6 +263,31 @@ export const fileUrl = (project, file) => `/api/file/${enc(project)}/${enc(file)
 // `localhost`, so the origin is the same string in every browser.
 export const previewUrl = (previewPort, project, file) => `http://127.0.0.1:${previewPort}/p/${enc(project)}/${enc(file)}`;
 
+// A motion is shown through the viewer that sits beside it in the folder
+// (server/motion.js): the player, mounted on the composition named in the query.
+export const motionUrl = (previewPort, project, file) => `http://127.0.0.1:${previewPort}/p/${enc(project)}/hyperframes-viewer.html?c=${enc(file)}`;
+
+// Where an artifact node is shown from, by kind.
+export const artifactUrl = (previewPort, project, node) => (node.type === 'motion' ? motionUrl : previewUrl)(previewPort, project, node.data.file);
+
+// A composition the person brings, saved with the runtime tag and the library beside it
+// -- the two things the agent's motion_write does for its own (server/motion.js).
+export const uploadMotion = (project, file) =>
+  fetch(`/api/projects/${enc(project)}/motion/files?name=${enc(file.name || '')}`, { method: 'POST', headers: { 'Content-Type': 'text/html' }, body: file }).then(async (r) => {
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(d.error || `Could not upload the composition (${r.status})`);
+    return d;
+  });
+
+// Render a composition to an MP4: start, then poll until `status` is done or failed.
+export const startMotionRender = (project, file, title = '') => postJson(`/api/projects/${enc(project)}/motion/render`, { file, title });
+export const pollMotionRender = (project, id) =>
+  fetch(`/api/projects/${enc(project)}/motion/render/${enc(id)}`).then(async (r) => {
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(d.error || `Could not read the render (${r.status})`);
+    return d;
+  });
+
 // The event stream: every accepted entry from version `since` onward, then live.
 // EventSource reconnects on its own but cannot change its URL, so a drop is handled
 // here by reopening from the last version seen -- the replay then covers exactly the
