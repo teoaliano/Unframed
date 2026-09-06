@@ -4,14 +4,22 @@
 // back from disk. Pure transitions first, thin I/O below, the sidecar last. The session
 // that fills a thread is server/agent.js; the routes are in index.js.
 //
-// A thread is
-// { id, project, kind, artifactId, provider, model, status, error?, title, messages,
-//   events, seq, turns, createdAt, updatedAt }.
-// kind: 'canvas' (about the whole board) or 'artifact' (about one page or motion, the
-//       node in `artifactId`; null until the agent creates that node).
-// messages: [{ role, text, at, turn, selection?, target?, with? }] -- the transcript.
-//           target/with are what the composer sent: the node the message is about (or
-//           "new") and the rest of the selection.
+// A thread is a CHAT, not a thing about an artifact:
+// { id, project, tags, provider, model, status, error?, title, titledBy, lastVersion,
+//   messages, events, seq, turns, createdAt, updatedAt }.
+// tags:     node ids of the artifacts (pages, motions) this chat has touched -- the ones
+//           selected at its first message, plus every artifact the agent writes to.
+//           Tags are POINTERS, never dependencies: deleting every file a chat touched
+//           leaves the chat intact, and a stale tag simply stops matching. This is why
+//           there is no `kind`/`artifactId` any more -- a chat bound to one node could
+//           not be about two, and a chat about a deleted node vanished from the strip.
+// titledBy: who named the chat -- 'user' (typed on the tab), 'agent' (written once after
+//           the first turn) or null. A user name always beats an agent one, in either
+//           order, which is why the two cannot share one field.
+// lastVersion: the document version when the agent's last turn ended, so the next turn's
+//           preamble can say what changed in between (agent.js, contextPreamble).
+// messages: [{ role, text, at, turn, selection? }] -- the transcript. `selection` is what
+//           the person had selected when they sent it: context, not a target.
 // events:   [{ seq, at, turn, type, ... }]         -- what happened during turns (tool
 //           calls, ops applied, results, errors), replayable from ?since=seq. Text
 //           deltas are streamed live and never stored; the assistant message holds the
@@ -22,24 +30,35 @@ import { PROVIDERS } from './providers.js';
 
 const ID_RE = /^[\w-]{1,80}$/;
 const STATUSES = new Set(['idle', 'running', 'failed']);
-const KINDS = new Set(['canvas', 'artifact']);
 
-export function newThread({ id, project, kind = 'canvas', artifactId = null, provider, model, effort = '', now = Date.now() }) {
+// Tags as they may be given: node ids, deduplicated, order kept. Validated here because
+// a tag reaches a URL (`GET ...threads?tag=`) and a file-name-shaped comparison.
+function cleanTags(tags) {
+  if (!Array.isArray(tags)) throw new Error('tags must be an array of node ids');
+  const out = [];
+  for (const raw of tags) {
+    const id = String(raw);
+    if (!ID_RE.test(id)) throw new Error(`tag must be a node id: ${id}`);
+    if (!out.includes(id)) out.push(id);
+  }
+  return out;
+}
+
+export function newThread({ id, project, tags = [], provider, model, effort = '', now = Date.now() }) {
   if (effort && !EFFORTS.has(effort)) throw new Error(`unknown effort "${effort}"`);
   if (!ID_RE.test(String(id))) throw new Error('thread id must be a short token');
   if (!PROVIDERS[provider]) throw new Error(`unknown provider ${provider}`);
-  if (!KINDS.has(kind)) throw new Error(`unknown thread kind ${kind}`);
-  if (artifactId !== null && (typeof artifactId !== 'string' || !ID_RE.test(artifactId))) throw new Error('artifactId must be a node id');
   return {
     id,
     project,
-    kind,
-    artifactId: kind === 'artifact' ? artifactId : null,
+    tags: cleanTags(tags),
     provider,
     model: model || '',
     effort: effort || '',
     status: 'idle',
     title: '',
+    titledBy: null,
+    lastVersion: null,
     messages: [],
     events: [],
     seq: 0,
@@ -50,12 +69,10 @@ export function newThread({ id, project, kind = 'canvas', artifactId = null, pro
 }
 
 // A user message opens a turn; an assistant message closes the current one.
-export function appendMessage(thread, { role, text, selection, target, with: withIds }, now = Date.now()) {
+export function appendMessage(thread, { role, text, selection }, now = Date.now()) {
   const turns = role === 'user' ? thread.turns + 1 : thread.turns;
   const message = { role, text: String(text ?? ''), at: now, turn: turns };
   if (selection) message.selection = selection;
-  if (target) message.target = target;
-  if (Array.isArray(withIds) && withIds.length) message.with = withIds;
   return { ...thread, messages: [...thread.messages, message], turns, updatedAt: now };
 }
 
@@ -81,10 +98,15 @@ export function setStatus(thread, status, { error } = {}, now = Date.now()) {
 
 export const eventsSince = (thread, seq) => thread.events.filter((e) => e.seq > seq);
 
-// An artifact thread that has no node yet takes the one the agent just created.
-export function bindArtifact(thread, artifactId, now = Date.now()) {
-  if (thread.kind !== 'artifact' || thread.artifactId) return thread;
-  return { ...thread, artifactId, updatedAt: now };
+// The chat picks up a tag for every artifact it touches -- the selection at its first
+// message, then every page or motion the agent writes to, created or updated. Adding a
+// tag it already has returns the SAME object, so a turn that rewrites one artifact five
+// times does not write the record five times.
+export function tagThread(thread, ids, now = Date.now()) {
+  const have = thread.tags ?? [];
+  const add = cleanTags(ids).filter((id) => !have.includes(id));
+  if (!add.length) return thread;
+  return { ...thread, tags: [...have, ...add], updatedAt: now };
 }
 
 // The Agent SDK's effort levels; '' means the model's default. Validated here because
@@ -116,25 +138,36 @@ export function applySettings(thread, { model, effort } = {}, now = Date.now()) 
 export function renameThread(thread, title, now = Date.now()) {
   if (typeof title !== 'string') throw Object.assign(new Error('A thread name must be text.'), { status: 400 });
   const next = title.trim().slice(0, 60);
-  if (next === thread.title) return thread;
-  return { ...thread, title: next, updatedAt: now };
+  const by = next ? 'user' : null;
+  if (next === thread.title && by === (thread.titledBy ?? null)) return thread;
+  return { ...thread, title: next, titledBy: by, updatedAt: now };
 }
 
-// `title` is the user's own name for the thread and is empty until they give it one --
-// the strip needs to know that, because an unnamed tab says what it is about ("Canvas",
-// the artifact's title) rather than quoting the conversation. `preview` is the quote,
-// for a tooltip. They were one field, and a tab cannot use a field that is sometimes
-// the name and sometimes the first thing anyone said.
+// The agent's own name for the chat, written once after the first turn (agent.js). It
+// never overwrites a name the person typed -- in either order, which is the whole reason
+// `titledBy` exists: an agent title arriving after a rename must lose, and a rename
+// arriving after an agent title must win.
+export function titleThread(thread, title, now = Date.now()) {
+  if (thread.titledBy === 'user') return thread;
+  const next = String(title ?? '').trim().slice(0, 60);
+  if (!next || next === thread.title) return thread;
+  return { ...thread, title: next, titledBy: 'agent', updatedAt: now };
+}
+
+// `title` is the chat's name -- the person's or the agent's, with `titledBy` saying
+// which -- and is empty until one of them gives it one. `preview` is the first thing
+// anyone said, which is what the tab falls back to. They were one field, and a tab
+// cannot use a field that is sometimes the name and sometimes the opening quote.
 export function threadSummary(thread) {
   return {
     id: thread.id,
-    kind: thread.kind,
-    artifactId: thread.artifactId ?? null,
+    tags: thread.tags ?? [],
     provider: thread.provider,
     model: thread.model,
     effort: thread.effort ?? '',
     status: thread.status,
     title: thread.title,
+    titledBy: thread.titledBy ?? null,
     preview: thread.messages.find((m) => m.role === 'user')?.text.slice(0, 80) || '',
     turns: thread.turns,
     createdAt: thread.createdAt,
@@ -147,6 +180,24 @@ export function threadSummary(thread) {
 export const threadsDir = (dir) => path.join(dir, 'threads');
 export const threadPath = (dir, id) => path.join(threadsDir(dir), `${path.basename(String(id))}.json`);
 
+// A pre-2026-09-06 record was one chat about one node: `kind: 'canvas' | 'artifact'` and
+// an `artifactId`. It becomes a chat tagged with that node, and a title it carried was
+// necessarily the person's (the agent could not write one yet). Migrated on the way IN,
+// never rewritten on disk -- the same rule as `migrateNodes`, and permanent for the same
+// reason: the old fields are dropped the next time the record is written, and a chat
+// nobody has opened since must still open.
+export function migrateThread(record) {
+  if (!record || Array.isArray(record.tags)) return record;
+  const { kind, artifactId, ...rest } = record;
+  return {
+    ...rest,
+    tags: artifactId ? [String(artifactId)] : [],
+    title: record.title ?? '',
+    titledBy: record.titledBy ?? (record.title ? 'user' : null),
+    lastVersion: record.lastVersion ?? null,
+  };
+}
+
 export async function readThread(dir, id) {
   let raw;
   try {
@@ -154,7 +205,7 @@ export async function readThread(dir, id) {
   } catch {
     throw new Error(`Thread not found: ${id}`);
   }
-  return JSON.parse(raw);
+  return migrateThread(JSON.parse(raw));
 }
 
 // Temp-then-rename, the jobs.json rule: a crash mid-save leaves the old record or the
@@ -203,7 +254,7 @@ export async function listThreads(dir) {
   for (const name of names) {
     if (!name.endsWith('.json')) continue;
     try {
-      out.push(threadSummary(JSON.parse(await fs.readFile(path.join(threadsDir(dir), name), 'utf8'))));
+      out.push(threadSummary(migrateThread(JSON.parse(await fs.readFile(path.join(threadsDir(dir), name), 'utf8')))));
     } catch {
       // a half-written or hand-damaged record: skip it rather than hide every other one
     }
@@ -211,11 +262,17 @@ export async function listThreads(dir) {
   return out.sort((a, b) => b.updatedAt - a.updatedAt);
 }
 
-// The thread a composer message about `artifactId` goes to: the newest one about that
-// node that is not mid-turn, or null when there is none and one should be created.
-export async function findArtifactThread(dir, artifactId) {
+// The chat a composer message continues: the newest one not mid-turn whose tags include
+// EVERY selected artifact, or null when there is none and one should be started. All-of,
+// not any-of: continuing a chat about A in a message about A and B would carry over an
+// answer that never saw B. With nothing selected it is the newest idle UNTAGGED chat --
+// a general conversation, not whichever artifact chat happens to be newest.
+export async function findChatFor(dir, artifactIds = []) {
+  const want = cleanTags(artifactIds);
   const all = await listThreads(dir);
-  return all.find((t) => t.kind === 'artifact' && t.artifactId === artifactId && t.status !== 'running') ?? null;
+  const idle = all.filter((t) => t.status !== 'running');
+  if (!want.length) return idle.find((t) => !(t.tags ?? []).length) ?? null;
+  return idle.find((t) => want.every((id) => (t.tags ?? []).includes(id))) ?? null;
 }
 
 export async function deleteThread(dir, id) {

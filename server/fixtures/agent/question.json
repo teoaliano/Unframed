@@ -1,0 +1,10 @@
+{
+  "when": "what is|how many|\\?$",
+  "turns": [
+    {
+      "title": "What is on the board",
+      "text": "Three nodes: motion m1 (\"Intro\"), motion m2 (\"Outro\") and image i3 (\"hero.png\").",
+      "tools": [{ "name": "canvas_read", "input": {} }]
+    }
+  ]
+}

@@ -12,7 +12,10 @@ import {
   describeCanvas,
   canvasTools,
   prepareBatch,
-  messagePreamble,
+  batchArtifacts,
+  contextPreamble,
+  summarizeChanges,
+  changeSentence,
   pageFileName,
   pageSidecar,
   placeBeside,
@@ -70,19 +73,71 @@ assert.deepEqual(d.edges, [{ from: '100', to: '102' }, { from: '103', to: '102' 
 assert.deepEqual(d.selection, ['101', '103']);
 assert.deepEqual(describeCanvas(graph, ['101', 'ghost']).selection, ['101']);
 assert.deepEqual(describeCanvas({ nodes: [], edges: [] }, []), { nodes: [], edges: [], selection: [] });
-// The composer's context rides along: a target that exists, "new", or nothing.
-assert.equal(describeCanvas(graph, [], { target: '107', with: ['103', 'ghost'] }).target, '107');
-assert.deepEqual(describeCanvas(graph, [], { target: '107', with: ['103', 'ghost'] }).with, ['103']);
-assert.equal(describeCanvas(graph, [], { target: 'new' }).target, 'new');
-assert.equal(describeCanvas(graph, [], { target: 'ghost' }).target, null, 'a target that is gone is said to be gone');
-assert.equal('target' in describeCanvas(graph, [], {}), false, 'the panel sends none, so none is reported');
+// The selection is the ONLY context: no target, because the agent decides what a
+// message means about what is selected (a mode picker was rejected).
+assert.equal('target' in describeCanvas(graph, ['101']), false);
+assert.equal('with' in describeCanvas(graph, ['101']), false);
 
-// ---- messagePreamble ----
+// ---- what changed since the last turn ----
+// origin kinds: `session` is a browser tab (the person), `thread` an agent chat,
+// `system` bookkeeping, `undo`/`redo` whoever pressed it -- the agent has no undo tool.
+{
+  const entries = [
+    { version: 1, origin: { kind: 'thread', id: 'mine' } },
+    { version: 2, origin: { kind: 'session', id: 'tab' } },
+    { version: 3, origin: { kind: 'system', reason: 'media-extraction' } },
+    { version: 4, origin: { kind: 'undo', id: 'tab' }, undoes: 1 },
+    { version: 5, origin: { kind: 'thread', id: 'other' } },
+    { version: 6, origin: { kind: 'session', id: 'tab' } },
+  ];
+  const all = summarizeChanges(entries, { since: 0, threadId: 'mine' });
+  assert.equal(all.person, 3, 'two tab edits and the undo; the extraction is not an edit');
+  assert.equal(all.otherChats, 1);
+  assert.equal(all.undoneFromThisChat, 1, 'version 4 undid version 1, which was ours');
+  assert.equal(all.total, 4);
+  // `since` is the thread's lastVersion: what it already knows about is not a change.
+  const later = summarizeChanges(entries, { since: 4, threadId: 'mine' });
+  assert.deepEqual(later, { person: 1, otherChats: 1, undoneFromThisChat: 0, total: 2 });
+  assert.equal(summarizeChanges(entries, { since: 6, threadId: 'mine' }).total, 0);
+  // Its OWN entries are never news to it.
+  assert.equal(summarizeChanges([{ version: 9, origin: { kind: 'thread', id: 'mine' } }], { since: 0, threadId: 'mine' }).total, 0);
+  assert.equal(summarizeChanges([], { since: 0 }).total, 0);
+  assert.equal(summarizeChanges(undefined, {}).total, 0);
+  // An undo of somebody else's change is still a change, just not one of ours.
+  assert.equal(summarizeChanges([
+    { version: 1, origin: { kind: 'session', id: 'tab' } },
+    { version: 2, origin: { kind: 'undo', id: 'tab' }, undoes: 1 },
+  ], { since: 0, threadId: 'mine' }).undoneFromThisChat, 0);
+}
 
-assert.equal(messagePreamble({}, graph), '');
-assert.equal(messagePreamble({ target: 'new' }, graph), 'To: a new asset.');
-assert.equal(messagePreamble({ target: '107', with: ['103', '101'] }, graph), 'To: page 107 ("Launch page"). With: image 103 ("hero.png"), prompt 101 ("lone red fox").');
-assert.equal(messagePreamble({ target: 'ghost' }, graph), 'To: ghost.');
+// ---- the sentence that sends the agent back to read ----
+assert.equal(changeSentence({ total: 0 }), '', 'nothing changed: nothing is said');
+assert.equal(
+  changeSentence({ person: 4, undoneFromThisChat: 1, total: 4 }),
+  'Since your last turn the canvas changed: 4 changes by the person, including an undo of a change from this chat. Read it again before acting.',
+);
+assert.equal(
+  changeSentence({ person: 1, total: 1 }),
+  'Since your last turn the canvas changed: 1 change by the person. Read it again before acting.',
+);
+assert.equal(
+  changeSentence({ person: 2, otherChats: 1, undoneFromThisChat: 2, total: 3 }),
+  'Since your last turn the canvas changed: 2 changes by the person, 1 change by another chat, including 2 undos of changes from this chat. Read it again before acting.',
+);
+
+// ---- contextPreamble ----
+
+assert.equal(contextPreamble({}, graph), '', 'nothing selected, nothing changed: no preamble');
+assert.equal(
+  contextPreamble({ selection: ['107', '103', '101'] }, graph),
+  'Selected: page 107 ("Launch page"), image 103 ("hero.png"), prompt 101 ("lone red fox").',
+);
+assert.equal(contextPreamble({ selection: ['ghost'] }, graph), '', 'a node that is gone is not reported as selected');
+assert.equal(
+  contextPreamble({ selection: ['101'], changes: { person: 1, total: 1 } }, graph),
+  'Selected: prompt 101 ("lone red fox"). Since your last turn the canvas changed: 1 change by the person. Read it again before acting.',
+);
+assert.match(contextPreamble({ changes: { person: 2, total: 2 } }, graph), /^Since your last turn/, 'the note stands alone when nothing is selected');
 
 // ---- prepareBatch ----
 
@@ -179,6 +234,25 @@ assert.deepEqual(placeBeside(graph, ['103', '104']), { x: 300 + 60, y: 0 });
 assert.deepEqual(placeBeside(graph, ['101']), { x: 40 + 240 + 60, y: 320 }, 'an unsized node is taken as the default width');
 assert.deepEqual(placeBeside(graph, []), { x: 80, y: 80 });
 
+// ---- which artifacts a batch touched ----
+// Read from the OPS, not from the graph afterwards: a removeNode's node is gone by then,
+// and a change line that could not name what it deleted would be the least useful one.
+{
+  const ops = (list) => batchArtifacts(list, graph);
+  assert.deepEqual(ops([{ type: 'updateNode', id: '107', patch: {} }]), ['107']);
+  assert.deepEqual(ops([{ type: 'updateNode', id: '101', patch: {} }]), [], 'a prompt is not an artifact');
+  assert.deepEqual(ops([{ type: 'removeNode', id: '107' }]), ['107'], 'what it deleted is exactly what it should name');
+  assert.deepEqual(ops([{ type: 'moveNode', id: '107', position: { x: 0, y: 0 } }, { type: 'resizeNode', id: '107', width: 10, height: 10 }]), ['107'], 'named once');
+  // A node added in this same batch counts, read from the op rather than the graph --
+  // it is not in the graph yet.
+  assert.deepEqual(ops([{ type: 'addNode', node: { id: 'z', type: 'motion', position: { x: 0, y: 0 }, data: {} } }]), ['z']);
+  assert.deepEqual(ops([{ type: 'addNode', node: { id: 'z', type: 'prompt', position: { x: 0, y: 0 }, data: {} } }]), []);
+  assert.deepEqual(ops([{ type: 'addEdge', edge: { source: '100', target: '102' } }]), [], 'an edge names no node of its own');
+  assert.deepEqual(ops([]), []);
+  // Order follows the ops, so the list reads the way the change happened.
+  assert.deepEqual(ops([{ type: 'updateNode', id: '107', patch: {} }, { type: 'addNode', node: { id: 'z', type: 'page', position: { x: 0, y: 0 }, data: {} } }]), ['107', 'z']);
+}
+
 // ---- the tools, wired to fakes ----
 
 {
@@ -186,11 +260,10 @@ assert.deepEqual(placeBeside(graph, []), { x: 80, y: 80 });
   const written = [];
   const events = [];
   let version = 10;
-  const state = { graph: JSON.parse(JSON.stringify(graph)), selection: ['103'], context: { target: 'new', with: ['103', '101'] } };
+  const state = { graph: JSON.parse(JSON.stringify(graph)), selection: ['103'] };
   const tools = canvasTools({
     getGraph: async () => state.graph,
     getSelection: () => state.selection,
-    getContext: () => state.context,
     commit: async (batch) => {
       committed.push(batch);
       if (batch.ops.some((o) => o.type === 'removeNode' && o.id === 'ghost')) return { rejected: 'removeNode: no node ghost' };
@@ -224,11 +297,11 @@ assert.deepEqual(placeBeside(graph, []), { x: 80, y: 80 });
     return { ...JSON.parse(out.content[0].text), isError: Boolean(out.isError) };
   };
 
-  // canvas_read carries the composer's context.
+  // canvas_read reports the selection, and only the selection.
   const read = await call('canvas_read', {});
-  assert.equal(read.target, 'new');
-  assert.deepEqual(read.with, ['103', '101']);
   assert.deepEqual(read.selection, ['103']);
+  assert.equal('target' in read, false);
+  assert.equal('with' in read, false);
 
   // canvas_write: prepared, committed as one batch, reported.
   const w = await call('canvas_write', { ops: [{ type: 'addNode', node: { id: 'new:p', type: 'prompt', position: { x: 0, y: 0 }, data: { text: 'hi' } } }] });
@@ -237,12 +310,23 @@ assert.deepEqual(placeBeside(graph, []), { x: 80, y: 80 });
   assert.ok(w.ids['new:p'].startsWith('a-'));
   assert.equal(committed.length, 1);
   assert.equal(committed[0].type, 'batch');
-  assert.deepEqual(events.at(-1), { version: 11, summary: '1 change', opCount: 1 });
+  assert.deepEqual(events.at(-1), { version: 11, summary: '1 change', opCount: 1 }, 'a change touching no artifact says nothing about artifacts');
+  // A batch that touches artifacts names them, so the panel's change line can expand to
+  // them with Open and Locate.
+  const two = await call('canvas_write', {
+    ops: [
+      { type: 'updateNode', id: '107', patch: { title: 'Launch v2' } },
+      { type: 'moveNode', id: '101', position: { x: 9, y: 9 } },
+    ],
+  });
+  assert.equal(two.ok, true);
+  assert.deepEqual(events.at(-1).artifacts, ['107'], 'the page, not the prompt beside it');
   // A refusal is an error result, and nothing was committed.
+  const settled = committed.length;
   const bad = await call('canvas_write', { ops: [{ type: 'addNode', node: { id: 'new:x', type: 'sticker', position: { x: 0, y: 0 } } }] });
   assert.equal(bad.isError, true);
   assert.match(bad.error, /unknown node type/);
-  assert.equal(committed.length, 1);
+  assert.equal(committed.length, settled, 'a refused batch commits nothing');
   // The document's own rejection comes back verbatim.
   const rej = await call('canvas_write', { ops: [{ type: 'removeNode', id: 'ghost' }] });
   assert.equal(rej.isError, true);

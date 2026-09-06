@@ -1,0 +1,21 @@
+{
+  "when": "revise",
+  "turns": [
+    {
+      "title": "Revising the outro",
+      "text": "Rewrote motion m2 (\"Outro\"). It is a new version of the file, so the previous one is still there to undo to.",
+      "tools": [
+        { "name": "canvas_read", "input": {} },
+        { "name": "motion_read", "input": { "nodeId": "m2" } },
+        {
+          "name": "motion_write",
+          "input": {
+            "nodeId": "m2",
+            "title": "Outro, revised",
+            "html": "<html><body><div id=\"root\" data-composition-id=\"main\" data-start=\"0\" data-duration=\"3\" data-width=\"640\" data-height=\"360\"><div id=\"c\" class=\"clip\" data-start=\"0\" data-duration=\"3\">Outro, revised</div></div></body></html>"
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -1,8 +1,9 @@
 // node server/threads.test.js  (also runs as part of `npm test`)
 //
-// A thread is one conversation with the agent about a project, durable like a video job:
-// the record is on disk before a turn starts, so a turn in flight survives the tab that
-// asked for it. Pure transitions here, thin I/O below them, the sidecar every turn leaves.
+// A thread is a CHAT with the agent about a project, tagged by the artifacts it has
+// touched and durable like a video job: the record is on disk before a turn starts, so a
+// turn in flight survives the tab that asked for it. Pure transitions here, thin I/O
+// below them, the sidecar every turn leaves.
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import os from 'node:os';
@@ -21,10 +22,12 @@ import {
   deleteThread,
   threadPath,
   agentSidecar,
-  bindArtifact,
   applySettings,
   renameThread,
-  findArtifactThread,
+  titleThread,
+  tagThread,
+  findChatFor,
+  migrateThread,
 } from './threads.js';
 
 const root = await fs.mkdtemp(path.join(os.tmpdir(), 'unframed-threads-test-'));
@@ -32,7 +35,6 @@ const root = await fs.mkdtemp(path.join(os.tmpdir(), 'unframed-threads-test-'));
 // ---- a new thread ----
 const t0 = newThread({ id: 't1', project: 'coast', provider: 'claude', model: 'claude-opus-5', now: 1000 });
 assert.equal(t0.id, 't1');
-assert.equal(t0.kind, 'canvas');
 assert.equal(t0.status, 'idle');
 assert.deepEqual(t0.messages, []);
 assert.deepEqual(t0.events, []);
@@ -42,22 +44,88 @@ assert.equal(t0.seq, 0, 'event sequence starts empty');
 assert.equal(t0.turns, 0);
 assert.throws(() => newThread({ id: 'x', project: 'p', provider: 'grok', model: 'm' }), /provider/);
 assert.throws(() => newThread({ id: '../evil', project: 'p', provider: 'claude', model: 'm' }), /id/);
-assert.equal(t0.artifactId, null, 'a canvas thread is about the board, not a node');
+assert.deepEqual(t0.tags, [], 'a chat starts tagged with nothing');
+assert.equal(t0.titledBy, null);
+assert.equal(t0.lastVersion, null);
 
-// ---- an artifact thread: about one node, bound now or when the agent creates it ----
+// ---- a chat is tagged by the artifacts it touches; tags are pointers, not bindings ----
 {
-  const bound = newThread({ id: 'ta', project: 'coast', provider: 'claude', model: '', kind: 'artifact', artifactId: '107', now: 1 });
-  assert.equal(bound.kind, 'artifact');
-  assert.equal(bound.artifactId, '107');
-  const pending = newThread({ id: 'tb', project: 'coast', provider: 'claude', model: '', kind: 'artifact', now: 1 });
-  assert.equal(pending.artifactId, null);
-  const later = bindArtifact(pending, 'a-1', 5);
-  assert.equal(later.artifactId, 'a-1');
-  assert.equal(later.updatedAt, 5);
-  assert.equal(bindArtifact(later, 'a-2', 6).artifactId, 'a-1', 'bound once');
+  const chat = newThread({ id: 'ta', project: 'coast', provider: 'claude', model: '', tags: ['107', '108'], now: 1 });
+  assert.deepEqual(chat.tags, ['107', '108']);
+  assert.deepEqual(newThread({ id: 'tb', project: 'p', provider: 'claude', tags: ['107', '107'], now: 1 }).tags, ['107'], 'deduplicated');
+  assert.throws(() => newThread({ id: 'tc', project: 'p', provider: 'claude', tags: ['../x'], now: 1 }), /tag must be a node id/);
+  assert.throws(() => newThread({ id: 'td', project: 'p', provider: 'claude', tags: '107', now: 1 }), /tags must be an array/);
 
-  // Model and effort for the next turn: each optional, '' resets, refused mid-turn.
-  const set = applySettings(later, { model: 'claude-opus-5', effort: 'high' }, 7);
+  // A tag is added once; adding one it already has is not a record change, so a turn
+  // that rewrites the same page five times does not write the record five times.
+  const more = tagThread(chat, ['109'], 5);
+  assert.deepEqual(more.tags, ['107', '108', '109'], 'appended, order kept');
+  assert.equal(more.updatedAt, 5);
+  assert.equal(tagThread(more, ['108'], 6), more, 'a tag it already has returns the same object');
+  assert.equal(tagThread(more, [], 6), more);
+  assert.deepEqual(tagThread(more, ['110', '110'], 7).tags, ['107', '108', '109', '110']);
+  // A tag whose node is gone stays: the chat outlives the artifact (decision 1).
+  assert.deepEqual(tagThread({ ...more, tags: [] }, ['107'], 8).tags, ['107']);
+
+  assert.deepEqual(threadSummary(chat).tags, ['107', '108']);
+  // The selection travels on the message as context, not as a target.
+  const m = appendMessage(chat, { role: 'user', text: 'swap the hero', selection: ['107', '103'] }, 2).messages[0];
+  assert.deepEqual(m.selection, ['107', '103']);
+  assert.equal('target' in m, false, 'no target: the agent decides what a message means');
+  assert.equal('with' in m, false);
+}
+
+// ---- who named the chat: a person always beats the agent, in either order ----
+{
+  const base = newThread({ id: 'tn', project: 'p', provider: 'claude', now: 1 });
+  const byAgent = titleThread(base, '  Title fixes  ', 2);
+  assert.equal(byAgent.title, 'Title fixes', 'trimmed');
+  assert.equal(byAgent.titledBy, 'agent');
+  assert.equal(titleThread(byAgent, 'Something else', 3).title, 'Something else', 'the agent may still retitle its own');
+  // agent first, then the person: the person wins.
+  const renamed = renameThread(byAgent, 'Hero copy', 4);
+  assert.equal(renamed.title, 'Hero copy');
+  assert.equal(renamed.titledBy, 'user');
+  assert.equal(titleThread(renamed, 'Agent guess', 5), renamed, 'an agent title never overwrites the person\'s');
+  // the person first, then the agent: the person still wins.
+  const userFirst = renameThread(base, 'Mine', 4);
+  assert.equal(titleThread(userFirst, 'Agent guess', 5), userFirst);
+  // Clearing a name drops the credit with it, so the agent may name it again.
+  const cleared = renameThread(renamed, '', 6);
+  assert.equal(cleared.title, '');
+  assert.equal(cleared.titledBy, null);
+  assert.equal(titleThread(cleared, 'Agent guess', 7).titledBy, 'agent');
+  assert.equal(titleThread(base, '   ', 7), base, 'an empty agent title is not a change');
+  assert.equal(titleThread(byAgent, 'x'.repeat(200), 7).title.length, 60, 'capped like a rename');
+}
+
+// ---- a pre-2026-09-06 record: one chat about one node becomes a chat with one tag ----
+{
+  const canvas = { id: 'old1', project: 'p', kind: 'canvas', artifactId: null, title: '', messages: [], events: [], seq: 0, turns: 2 };
+  const mig = migrateThread(canvas);
+  assert.deepEqual(mig.tags, [], 'a canvas thread was about the board: no tags');
+  assert.equal('kind' in mig, false, 'the old fields are dropped');
+  assert.equal('artifactId' in mig, false);
+  assert.equal(mig.titledBy, null);
+  assert.equal(mig.lastVersion, null);
+  assert.equal(mig.turns, 2, 'everything else survives');
+
+  const artifact = { id: 'old2', project: 'p', kind: 'artifact', artifactId: 'a-7', title: 'Hero copy', messages: [], events: [], seq: 0, turns: 1 };
+  const mig2 = migrateThread(artifact);
+  assert.deepEqual(mig2.tags, ['a-7'], 'the node it was bound to becomes its one tag');
+  assert.equal(mig2.titledBy, 'user', 'a title on an old record can only have been typed: the agent could not write one');
+  const unbound = migrateThread({ id: 'old3', project: 'p', kind: 'artifact', artifactId: null, title: '', messages: [], events: [], seq: 0 });
+  assert.deepEqual(unbound.tags, [], 'an artifact thread whose node was never created');
+  // Already migrated, or absent: left exactly alone.
+  const fresh = newThread({ id: 'new1', project: 'p', provider: 'claude', tags: ['x'], now: 1 });
+  assert.equal(migrateThread(fresh), fresh, 'a current record is not copied');
+  assert.equal(migrateThread(null), null);
+}
+
+// ---- model and effort for the next turn: each optional, '' resets, refused mid-turn ----
+{
+  const base = newThread({ id: 'ts', project: 'p', provider: 'claude', model: '', now: 1 });
+  const set = applySettings(base, { model: 'claude-opus-5', effort: 'high' }, 7);
   assert.equal(set.model, 'claude-opus-5');
   assert.equal(set.effort, 'high');
   assert.equal(set.updatedAt, 7);
@@ -69,18 +137,6 @@ assert.equal(t0.artifactId, null, 'a canvas thread is about the board, not a nod
   assert.throws(() => applySettings({ ...set, status: 'running' }, { effort: 'low' }), /turn is running/);
   assert.equal(newThread({ id: 't-e', project: 'p', provider: 'claude', effort: 'medium', now: 1 }).effort, 'medium');
   assert.throws(() => newThread({ id: 't-e', project: 'p', provider: 'claude', effort: 'silly', now: 1 }), /unknown effort/);
-  assert.equal(bindArtifact(t0, 'a-1', 6).artifactId, null, 'a canvas thread never binds');
-  assert.equal(newThread({ id: 'tc', project: 'p', provider: 'claude', model: '', artifactId: '107', now: 1 }).artifactId, null, 'a canvas thread ignores an artifactId');
-  assert.throws(() => newThread({ id: 'td', project: 'p', provider: 'claude', model: '', kind: 'sticky' }), /kind/);
-  assert.throws(() => newThread({ id: 'te', project: 'p', provider: 'claude', model: '', kind: 'artifact', artifactId: '../x' }), /artifactId/);
-  assert.equal(threadSummary(bound).artifactId, '107');
-  // The composer's context is kept on the message.
-  const m = appendMessage(bound, { role: 'user', text: 'swap the hero', selection: ['107', '103'], target: '107', with: ['103'] }, 2).messages[0];
-  assert.equal(m.target, '107');
-  assert.deepEqual(m.with, ['103']);
-  const plain = appendMessage(bound, { role: 'user', text: 'hi', selection: [] }, 2).messages[0];
-  assert.equal('target' in plain, false);
-  assert.equal('with' in plain, false);
 }
 
 // ---- messages and events are appended immutably, with a sequence and a timestamp ----
@@ -122,7 +178,7 @@ assert.deepEqual(eventsSince(t3, 2), []);
 
 // ---- the list shows a summary, not the transcript ----
 const s = threadSummary(t5);
-assert.deepEqual(Object.keys(s).sort(), ['artifactId', 'createdAt', 'effort', 'id', 'kind', 'model', 'preview', 'provider', 'status', 'title', 'turns', 'updatedAt']);
+assert.deepEqual(Object.keys(s).sort(), ['createdAt', 'effort', 'id', 'model', 'preview', 'provider', 'status', 'tags', 'title', 'titledBy', 'turns', 'updatedAt']);
 assert.equal(s.preview, 'What is on the canvas?', 'the first user message previews the thread');
 assert.equal(s.title, '', 'an unnamed thread has no title, however much was said in it');
 assert.equal(threadSummary(t0).preview, '');
@@ -132,6 +188,7 @@ const named = renameThread(t5, '  Hero copy  ', 3000);
 assert.equal(named.title, 'Hero copy', 'the name is trimmed');
 assert.equal(threadSummary(named).title, 'Hero copy');
 assert.equal(threadSummary(named).preview, 'What is on the canvas?', 'a name does not replace the preview');
+assert.equal(named.titledBy, 'user');
 assert.equal(renameThread(named, 'Hero copy', 4000), named, 'renaming to the same name does not touch the record');
 assert.equal(renameThread(named, '', 4000).title, '', 'an empty name clears it');
 assert.equal(renameThread(t5, 'x'.repeat(200), 3000).title.length, 60, 'a name is capped');
@@ -163,6 +220,34 @@ assert.throws(() => renameThread(t5, 42), /text/);
   await deleteThread(dir, 't2');
   assert.deepEqual((await listThreads(dir)).map((x) => x.id), ['t1']);
   await deleteThread(dir, 't2'); // idempotent
+}
+
+// ---- findChatFor: the chat a composer message continues ----
+{
+  const dir = path.join(root, 'continue');
+  const chat = (id, tags, status = 'idle', at = 100) => writeThread(dir, {
+    ...newThread({ id, project: 'p', provider: 'claude', tags, now: at }),
+    status,
+    updatedAt: at,
+  });
+  await chat('untagged-old', [], 'idle', 100);
+  await chat('ab', ['m1', 'm2'], 'idle', 200);
+  await chat('a', ['m1'], 'idle', 300);
+  await chat('untagged-new', [], 'idle', 400);
+  await chat('abc-running', ['m1', 'm2', 'm3'], 'running', 500);
+
+  // All-of, not any-of: a chat about m1 alone must not answer a message about m1 AND m2,
+  // or it would carry over an answer that never saw m2.
+  assert.equal((await findChatFor(dir, ['m1', 'm2']))?.id, 'ab');
+  assert.equal((await findChatFor(dir, ['m1']))?.id, 'a', 'the newest whose tags include m1');
+  assert.equal(await findChatFor(dir, ['m9']), null, 'nothing tagged with it: start one');
+  // A superset matches: a chat that has touched m1, m2 and m3 is about m1 and m2 too --
+  // but this one is mid-turn, so it is not offered.
+  assert.equal((await findChatFor(dir, ['m3'])), null, 'a running chat is never continued');
+  // Nothing selected continues the newest idle UNTAGGED chat, not whichever is newest.
+  assert.equal((await findChatFor(dir, []))?.id, 'untagged-new');
+  assert.equal((await findChatFor(dir))?.id, 'untagged-new', 'no argument is the same as none selected');
+  assert.equal(await findChatFor(path.join(root, 'no-such'), ['m1']), null);
 }
 
 // ---- every turn leaves a sidecar, and a subscription turn is not a cost ----

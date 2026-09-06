@@ -8,9 +8,9 @@ import AgentPanel from '../agent/AgentPanel.jsx';
 import { artifactUrl } from '../api.js';
 import { NODE_ICONS } from '../nodes/nodeIcons.jsx';
 
-// The editor: one artifact, full window, three columns -- the agent's thread about it,
-// the artifact itself, its parameters. Design: docs/superpowers/specs/2026-09-06-agent-canvas-slice-4-design.md,
-// "The editor".
+// The editor: one artifact, full window, three columns -- the chats about it, the artifact
+// itself, its parameters. Design: docs/superpowers/specs/2026-09-06-chats-and-tags-design.md,
+// decision 8.
 //
 // It REPLACES the canvas rather than covering it (App.jsx renders one or the other): a
 // canvas underneath would keep every node's frame and every clip alive for nothing, and

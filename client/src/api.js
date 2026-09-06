@@ -363,15 +363,20 @@ export const listProviders = (refresh = false) =>
     .then((d) => d?.providers ?? null)
     .catch(() => null);
 
-export const createThread = (project, { provider = 'claude', model = '', kind = 'canvas', artifactId = null } = {}) =>
-  postJson(`/api/projects/${enc(project)}/threads`, { provider, model, kind, artifactId }).then((d) => d.thread);
+// `tags` are the artifact node ids the chat is about -- the artifacts in the selection
+// when it was started. The agent adds one for every artifact it writes to.
+export const createThread = (project, { provider = 'claude', model = '', effort = '', tags = [] } = {}) =>
+  postJson(`/api/projects/${enc(project)}/threads`, { provider, model, effort, tags }).then((d) => d.thread);
 
-// `artifactId` narrows the list to the threads about one node (the composer's lookup).
-export const listThreads = (project, { artifactId } = {}) =>
-  fetch(`/api/projects/${enc(project)}/threads${artifactId ? `?artifact=${enc(artifactId)}` : ''}`)
+// `tags` narrows the list to the chats tagged with any of those artifacts (the strip's
+// rule). Omitted, it is every chat in the project.
+export const listThreads = (project, { tags = [] } = {}) => {
+  const q = tags.length ? `?${tags.map((id) => `tag=${enc(id)}`).join('&')}` : '';
+  return fetch(`/api/projects/${enc(project)}/threads${q}`)
     .then((r) => (r.ok ? r.json() : { threads: [] }))
     .then((d) => d.threads ?? [])
     .catch(() => []);
+};
 
 export const getThread = (project, id) =>
   fetch(`/api/projects/${enc(project)}/threads/${enc(id)}`).then(async (r) => {
@@ -382,15 +387,10 @@ export const getThread = (project, id) =>
 
 // One turn. Resolves when the server has accepted the message; the answer arrives on
 // the thread's event stream. A 409 means the previous turn is still running.
-// `target` and `with` are the composer's: the node the message is about (or "new") and
-// the rest of the selection. The panel sends neither.
-export const sendThreadMessage = (project, id, { text, selection = [], target, with: withIds }) =>
-  postJson(`/api/projects/${enc(project)}/threads/${enc(id)}/messages`, {
-    text,
-    selection,
-    ...(target ? { target } : {}),
-    ...(withIds?.length ? { with: withIds } : {}),
-  });
+// The selection is the only thing that travels with it, and it is context: the agent
+// decides what the sentence means about it, so there is no target to send.
+export const sendThreadMessage = (project, id, { text, selection = [] }) =>
+  postJson(`/api/projects/${enc(project)}/threads/${enc(id)}/messages`, { text, selection });
 
 // Model and effort for the thread's next turn; either key may be omitted, '' resets.
 export const updateThread = (project, id, patch) =>
