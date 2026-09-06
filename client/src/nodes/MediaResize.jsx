@@ -13,6 +13,15 @@ import { NodeResizeControl } from '@xyflow/react';
 // pointer (styles.css) — see
 // docs/superpowers/specs/2026-08-20-node-anatomy-redesign-design.md.
 const EDGES = ['top', 'right', 'bottom', 'left'];
+// The four corners: a selection rectangle with a square grip in each, the FigJam/Miro
+// shape, on every node that resizes at all. They are the only resize affordance there
+// is — the edges below deliberately draw nothing (styles.css) — so a node that skipped
+// them would be one nothing says you can resize.
+//
+// A corner is not a second kind of drag: it takes the SAME props as the edges below, so
+// on media it still writes width only under the aspect-ratio lock and cannot letterbox
+// a picture, and where nothing is locked it moves both axes.
+const CORNERS = ['top-left', 'top-right', 'bottom-left', 'bottom-right'];
 
 // `free` is a per-TYPE constant, never a value that flips while a node is mounted, and
 // that is load-bearing rather than incidental — see the props warning below.
@@ -29,12 +38,16 @@ const EDGES = ['top', 'right', 'bottom', 'left'];
 //                 graph/starter.js now has to seed a height for prompt nodes and not
 //                 only a width: for media, an undefined height is what makes the ratio
 //                 rule above work, so the two cases genuinely differ.
+// `text` follows the same rule again, and is narrower than `free`: a page and a group
+// are free on both axes too, but only the prompt is bare text ON the canvas, so only it
+// may shrink to a single short line (40x28 rather than 180x96 — hugging one word has to
+// be allowed to get that small).
 // `max` follows the same rule as `free`: a per-TYPE constant, never a value that flips
 // while the node is mounted. A group is a box drawn AROUND other nodes, so it routinely
 // needs to be larger than any single node ever is -- 900 would have clamped a box the
 // moment you tried to widen one wrapping three images.
-export default function MediaResize({ free = false, max = 900 }) {
-  return EDGES.map((pos) => (
+export default function MediaResize({ free = false, text = false, max = 900 }) {
+  const edges = EDGES.map((pos) => (
     <NodeResizeControl
       key={pos}
       className="xnode-resize"
@@ -54,10 +67,27 @@ export default function MediaResize({ free = false, max = 900 }) {
       // and so would deriving `free` from anything but the node's type.
       keepAspectRatio={!free}
       resizeDirection={free ? undefined : 'horizontal'}
-      minWidth={free ? 180 : 140}
+      minWidth={text ? 40 : free ? 180 : 140}
       maxWidth={max}
-      minHeight={free ? 96 : 100}
+      minHeight={text ? 28 : free ? 96 : 100}
       maxHeight={max}
     />
   ));
+  // React Flow's `handle` variant draws a box at the corner; styles.css turns it into the
+  // small square that appears only while the node is selected.
+  const corners = CORNERS.map((pos) => (
+    <NodeResizeControl
+      key={pos}
+      className="xnode-resize xnode-resize--corner"
+      position={pos}
+      variant="handle"
+      keepAspectRatio={!free}
+      resizeDirection={free ? undefined : 'horizontal'}
+      minWidth={text ? 40 : free ? 180 : 140}
+      maxWidth={max}
+      minHeight={text ? 28 : free ? 96 : 100}
+      maxHeight={max}
+    />
+  ));
+  return [...edges, ...corners];
 }

@@ -55,9 +55,6 @@ function describeNode(n) {
     case 'prompt':
       out.text = d.text ?? '';
       break;
-    case 'group':
-      out.name = d.name ?? '';
-      break;
     case 'image':
     case 'video':
       if (d.file) out.file = d.file;
