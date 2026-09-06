@@ -1815,3 +1815,71 @@ div:has(> .add-node-menu) {
   padding-inline: var(--spacing-2);
   border-inline-start: 2px solid var(--color-success);
 }
+
+/* ---- the editor (editor/Editor.jsx) ----
+   Replaces the canvas while open (App.jsx renders one or the other): three columns on
+   the body colour, each column a card in the chrome recipe. The agent panel is the left
+   column's whole content, so its floating-card styling is undone here and the column
+   provides the card instead. */
+.editor {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  grid-template-columns: 360px minmax(0, 1fr) 320px;
+  gap: 12px;
+  padding: 12px;
+  background: var(--color-background-body);
+}
+.editor-col,
+.editor-head,
+.editor-frame-wrap {
+  background: color-mix(in srgb, var(--color-background-surface) 92%, transparent);
+  border: var(--border-width) solid var(--color-border);
+  border-radius: var(--radius-container);
+}
+.editor-col {
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.editor-col .agent-panel--embedded {
+  position: static;
+  width: auto;
+  height: 100%;
+  background: transparent;
+  backdrop-filter: none;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+}
+.editor-stage {
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.editor-head,
+.editor-col-head {
+  padding: var(--spacing-2) var(--spacing-3);
+}
+.editor-col-head {
+  border-bottom: var(--border-width) solid var(--color-border);
+}
+.editor-frame-wrap {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+}
+.editor-frame {
+  display: block;
+  flex: 1 1 auto;
+  width: 100%;
+  height: 100%;
+  border: 0;
+}
+.editor-hint {
+  padding: var(--spacing-3);
+}
