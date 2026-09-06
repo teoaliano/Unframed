@@ -12,6 +12,7 @@ import {
   describeCanvas,
   canvasTools,
   prepareBatch,
+  batchArtifacts,
   contextPreamble,
   summarizeChanges,
   changeSentence,
@@ -232,6 +233,25 @@ assert.deepEqual(placeBeside(graph, ['103', '104']), { x: 300 + 60, y: 0 });
 assert.deepEqual(placeBeside(graph, ['101']), { x: 40 + 240 + 60, y: 320 }, 'an unsized node is taken as the default width');
 assert.deepEqual(placeBeside(graph, []), { x: 80, y: 80 });
 
+// ---- which artifacts a batch touched ----
+// Read from the OPS, not from the graph afterwards: a removeNode's node is gone by then,
+// and a change line that could not name what it deleted would be the least useful one.
+{
+  const ops = (list) => batchArtifacts(list, graph);
+  assert.deepEqual(ops([{ type: 'updateNode', id: '107', patch: {} }]), ['107']);
+  assert.deepEqual(ops([{ type: 'updateNode', id: '101', patch: {} }]), [], 'a prompt is not an artifact');
+  assert.deepEqual(ops([{ type: 'removeNode', id: '107' }]), ['107'], 'what it deleted is exactly what it should name');
+  assert.deepEqual(ops([{ type: 'moveNode', id: '107', position: { x: 0, y: 0 } }, { type: 'resizeNode', id: '107', width: 10, height: 10 }]), ['107'], 'named once');
+  // A node added in this same batch counts, read from the op rather than the graph --
+  // it is not in the graph yet.
+  assert.deepEqual(ops([{ type: 'addNode', node: { id: 'z', type: 'motion', position: { x: 0, y: 0 }, data: {} } }]), ['z']);
+  assert.deepEqual(ops([{ type: 'addNode', node: { id: 'z', type: 'prompt', position: { x: 0, y: 0 }, data: {} } }]), []);
+  assert.deepEqual(ops([{ type: 'addEdge', edge: { source: '100', target: '102' } }]), [], 'an edge names no node of its own');
+  assert.deepEqual(ops([]), []);
+  // Order follows the ops, so the list reads the way the change happened.
+  assert.deepEqual(ops([{ type: 'updateNode', id: '107', patch: {} }, { type: 'addNode', node: { id: 'z', type: 'page', position: { x: 0, y: 0 }, data: {} } }]), ['107', 'z']);
+}
+
 // ---- the tools, wired to fakes ----
 
 {
@@ -289,12 +309,23 @@ assert.deepEqual(placeBeside(graph, []), { x: 80, y: 80 });
   assert.ok(w.ids['new:p'].startsWith('a-'));
   assert.equal(committed.length, 1);
   assert.equal(committed[0].type, 'batch');
-  assert.deepEqual(events.at(-1), { version: 11, summary: '1 change', opCount: 1 });
+  assert.deepEqual(events.at(-1), { version: 11, summary: '1 change', opCount: 1 }, 'a change touching no artifact says nothing about artifacts');
+  // A batch that touches artifacts names them, so the panel's change line can expand to
+  // them with Open and Locate.
+  const two = await call('canvas_write', {
+    ops: [
+      { type: 'updateNode', id: '107', patch: { title: 'Launch v2' } },
+      { type: 'moveNode', id: '101', position: { x: 9, y: 9 } },
+    ],
+  });
+  assert.equal(two.ok, true);
+  assert.deepEqual(events.at(-1).artifacts, ['107'], 'the page, not the prompt beside it');
   // A refusal is an error result, and nothing was committed.
+  const settled = committed.length;
   const bad = await call('canvas_write', { ops: [{ type: 'addNode', node: { id: 'new:x', type: 'sticker', position: { x: 0, y: 0 } } }] });
   assert.equal(bad.isError, true);
   assert.match(bad.error, /unknown node type/);
-  assert.equal(committed.length, 1);
+  assert.equal(committed.length, settled, 'a refused batch commits nothing');
   // The document's own rejection comes back verbatim.
   const rej = await call('canvas_write', { ops: [{ type: 'removeNode', id: 'ghost' }] });
   assert.equal(rej.isError, true);

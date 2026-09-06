@@ -75,17 +75,14 @@ import { useDocument } from './graph/useDocument.js';
 import { ProjectContext } from './graph/project.js';
 import AgentPanel from './agent/AgentPanel.jsx';
 import SelectionToolbar from './toolbar/SelectionToolbar.jsx';
-import AnchoredReply from './toolbar/AnchoredReply.jsx';
-import { messageTarget, addToTarget } from './toolbar/target.js';
+import { messageContext, addToContext } from './toolbar/target.js';
+import { continuableChat } from './agent/tabs.js';
 import { sendNodeCommand } from './nodes/nodeCommands.js';
 import {
   listProjects,
   createThread,
   listThreads,
   sendThreadMessage,
-  interruptThread,
-  subscribeThreadEvents,
-  nextUndo,
   undoProject,
   previewUrl, artifactUrl,
   copyFile,
@@ -343,54 +340,44 @@ function Canvas() {
     setAgentOpen(true);
     if (!providers) checkProviders();
   };
-  // The artifact the panel's active thread is about (slice 3): ringed on the canvas, and
-  // the toolbar's Agent button becomes "Add to <it>" when the selection has no artifact.
-  const [agentFocus, setAgentFocus] = useState(null);
-  const onAgentFocus = useCallback((id) => setAgentFocus(id), []);
-  // Bumped when the toolbar's composer creates a thread, so the panel's strip re-reads.
+  // EVERY artifact the panel's active chat has touched wears the mark -- a chat can be
+  // about two motions, and marking one of them would say something false about the other.
+  // It was a single id until chats got tags.
+  const [agentFocus, setAgentFocus] = useState([]);
+  const onAgentFocus = useCallback((ids) => setAgentFocus(Array.isArray(ids) ? ids : []), []);
+  // Bumped when the toolbar's composer starts a chat, so the panel's strip re-reads.
   const [threadsBump, setThreadsBump] = useState(0);
-  const focusNode = agentOpen && agentFocus ? nodes.find((n) => n.id === agentFocus) : null;
-  const focusId = focusNode?.id ?? null;
-  // The ring is a class on the React Flow wrapper, which `className` on the node reaches;
-  // memoised so a render without a focus change hands React Flow the same array.
-  const flowNodes = useMemo(() => (focusId ? nodes.map((n) => (n.id === focusId ? { ...n, className: `${n.className ? `${n.className} ` : ''}agent-focus` } : n)) : nodes), [nodes, focusId]);
-  // Deleting a page whose agent is mid-turn asks first (slice-3 design, section 4); every
-  // other delete is the ordinary undoable op. `deleteBusy` holds what was asked about.
-  const [deleteBusy, setDeleteBusy] = useState(null); // { nodes, edges, threads } | null
-  const deleteCleared = useRef(false);
-  const onBeforeDelete = useCallback(
-    async ({ nodes: dn, edges: de }) => {
-      if (deleteCleared.current) {
-        deleteCleared.current = false;
-        return true;
-      }
-      const pages = dn.filter(isArtifact);
-      if (!pages.length) return true;
-      const lists = await Promise.all(pages.map((n) => listThreads(project, { artifactId: n.id })));
-      const running = lists.flat().filter((t) => t.status === 'running');
-      if (!running.length) return true;
-      setDeleteBusy({ nodes: dn, edges: de, threads: running });
-      return false;
-    },
-    [project],
-  );
-  async function confirmDeleteBusy() {
-    const d = deleteBusy;
-    setDeleteBusy(null);
-    if (!d) return;
-    await Promise.all(d.threads.map((t) => interruptThread(project, t.id)));
-    deleteCleared.current = true;
-    deleteElements({ nodes: d.nodes, edges: d.edges });
-  }
+  const focusKey = agentOpen ? agentFocus.join(',') : '';
+  // The mark is a class on the React Flow wrapper, which `className` on the node reaches;
+  // memoised so a render without a focus change hands React Flow the same array. A tag
+  // whose node is gone simply matches nothing, which is what makes a stale tag harmless.
+  const flowNodes = useMemo(() => {
+    const marked = new Set(focusKey ? focusKey.split(',') : []);
+    if (!marked.size) return nodes;
+    return nodes.map((n) => (marked.has(n.id) ? { ...n, className: `${n.className ? `${n.className} ` : ''}agent-focus` } : n));
+  }, [nodes, focusKey]);
+  // Deleting an artifact the agent is mid-turn on used to ask first. It does not any
+  // more (the chats-and-tags design, decision 1): a chat is not a dependency of the
+  // thing it touched, so the write simply fails and the agent says so. Asking was
+  // protecting a binding that no longer exists, and it made deleting a node a question
+  // about a conversation the person may not even have open.
 
   // ---- the selection toolbar and its composer (toolbar/SelectionToolbar.jsx) ----
-  // `composer` is null (the toolbar shows tools) or the message's shape from
-  // toolbar/target.js. Two canvas gestures change it -- clicking another node adds it to
-  // "with", clicking empty canvas collapses it -- which is why it lives here and not in
-  // the component. `reply` is the agent's answer anchored on the node it worked on.
+  // `composer` is null (the toolbar shows tools) or the selection this message carries,
+  // from toolbar/target.js. Two canvas gestures change it -- clicking another node adds
+  // it, clicking empty canvas collapses it -- which is why it lives here and not in the
+  // component.
+  //
+  // The toolbar card only STARTS a chat: Send opens the panel on the thread and the reply
+  // lives there. There used to be a reply card anchored on the node the agent worked on,
+  // and it could not survive several artifacts being the subject at once -- a card has
+  // one anchor, and "which of these two is this reply about" has no answer.
   const [composer, setComposer] = useState(null);
-  const [reply, setReply] = useState(null);
-  const replyClose = useRef(null); // the reply's event subscription
+  // Which chat the composer would continue, and whether the person has overridden it.
+  // { thread } | null, plus a flag: "new chat" is a deliberate choice, so it survives the
+  // list being re-read.
+  const [continues, setContinues] = useState(null);
+  const [forceNew, setForceNew] = useState(false);
   const [panning, setPanning] = useState(false);
   const [boxSelecting, setBoxSelecting] = useState(false);
   const readyProvider = ['claude', 'codex'].map((k) => providers?.[k]).find((p) => p?.status === 'ready') ?? null;
@@ -399,13 +386,19 @@ function Canvas() {
     : 'Checking for Claude and Codex…';
 
   const openComposer = useCallback(() => {
-    // With the panel open on an artifact thread and no artifact selected, the message is
-    // "Add to <that artifact>" (target.js); a selected artifact still wins.
-    setComposer(messageTarget(nodes.filter((n) => n.selected), focusId));
+    const ctx = messageContext(nodes.filter((n) => n.selected));
+    setComposer(ctx);
+    setForceNew(false);
+    setContinues(null);
+    // Which chat this would continue, said before you type rather than discovered after
+    // you send. The list is read once, on open: a keystroke must not cost a request.
+    listThreads(project)
+      .then((list) => setContinues(continuableChat(list, ctx.artifacts)))
+      .catch(() => setContinues(null));
     // The composer is the first place many people meet the agent, so the check the panel
     // would have run happens here too.
     if (!providers) checkProviders();
-  }, [nodes, focusId, providers, checkProviders]);
+  }, [nodes, project, providers, checkProviders]);
   const closeComposer = useCallback(() => setComposer(null), []);
 
   // Clicking another node while the composer is open adds it rather than replacing the
@@ -414,53 +407,44 @@ function Canvas() {
   const onNodeClick = useCallback(
     (e, node) => {
       if (!composer) return;
-      const next = addToTarget(composer, node);
+      const next = addToContext(composer, node);
+      if (next === composer) return;
       setComposer(next);
-      const ids = new Set([...next.with, ...(next.target !== 'new' && next.target !== 'ask' ? [next.target] : [])]);
+      const ids = new Set(next.selection);
       setNodes((ns) => ns.map((n) => (n.selected === ids.has(n.id) ? n : { ...n, selected: ids.has(n.id) })));
+      // The selection changed, so which chat it would continue may have too.
+      listThreads(project)
+        .then((list) => setContinues(continuableChat(list, next.artifacts)))
+        .catch(() => setContinues(null));
     },
-    [composer, setNodes],
+    [composer, project, setNodes],
   );
   const onPaneClick = useCallback(() => {
     if (composer) setComposer(null);
   }, [composer]);
 
-  // A selection that goes away takes the composer with it; a different selection (not
-  // just none, and not the node the reply is about) dismisses the reply.
+  // A selection that goes away takes the composer with it.
   const selectionKey = nodes.filter((n) => n.selected).map((n) => n.id).sort().join(',');
   useEffect(() => {
     if (composer && !selectionKey) setComposer(null);
-    if (reply && selectionKey && selectionKey !== reply.selectionKey && selectionKey !== reply.nodeId) dismissReply();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectionKey]);
 
-  function dismissReply() {
-    replyClose.current?.();
-    replyClose.current = null;
-    setReply(null);
-  }
-
-  // The thread a composer message goes to: about the target artifact (reused when one
-  // exists and is idle), a fresh one for a new asset, the board's own when the agent has
-  // to ask which artifact is meant.
+  // The chat a composer message goes to: the one the indicator named, unless the person
+  // chose "new chat". A fresh one is tagged with the artifacts in the selection, which is
+  // what makes it findable from those artifacts next time.
   async function composerThread(c) {
-    const provider = readyProvider.kind;
-    // A thread made here is one the panel's strip has not seen; the bump makes it re-read.
-    const fresh = (opts) => createThread(project, { provider, ...opts }).then((t) => (setThreadsBump((b) => b + 1), t));
-    if (c.target === 'ask') {
-      const list = await listThreads(project);
-      return list.find((t) => t.kind === 'canvas' && t.status !== 'running') ?? fresh({});
-    }
-    if (c.target === 'new') return fresh({ kind: 'artifact' });
-    const list = await listThreads(project, { artifactId: c.target });
-    return list.find((t) => t.status !== 'running') ?? fresh({ kind: 'artifact', artifactId: c.target });
+    if (continues && !forceNew) return continues;
+    // A chat started here is one the panel's strip has not seen; the bump makes it re-read.
+    const t = await createThread(project, { provider: readyProvider.kind, tags: c.artifacts });
+    setThreadsBump((b) => b + 1);
+    return t;
   }
 
   async function sendComposer(text) {
     const c = composer;
     if (!c || !readyProvider) return;
     const selection = nodes.filter((n) => n.selected).map((n) => n.id);
-    dismissReply();
     setComposer(null);
     let thread;
     try {
@@ -469,67 +453,23 @@ function Canvas() {
       toast({ body: `Could not start the agent: ${err.message}`, uniqueID: 'composer-failed', type: 'error' });
       return;
     }
-    const isNode = c.target !== 'new' && c.target !== 'ask';
-    const initial = { threadId: thread.id, status: 'running', text: '', nodeId: isNode ? c.target : null, selection, selectionKey, activity: null };
-    setReply(initial);
-    let draft = '';
-    replyClose.current?.();
-    replyClose.current = subscribeThreadEvents(project, thread.id, 0, {
-      onEvent: (e) => {
-        switch (e.type) {
-          case 'text_delta':
-            draft += e.text;
-            setReply((r) => (r && r.threadId === thread.id ? { ...r, text: draft, activity: null } : r));
-            break;
-          case 'tool_use':
-            setReply((r) => (r && r.threadId === thread.id ? { ...r, activity: e.name?.includes('motion') ? 'Writing the motion…' : e.name?.includes('page') ? 'Writing the page…' : e.name?.includes('write') ? 'Changing the canvas…' : 'Reading the canvas…' } : r));
-            break;
-          case 'ops_applied':
-            setReply((r) =>
-              r && r.threadId === thread.id
-                ? { ...r, version: e.version, summary: e.summary, nodeId: e.page?.created ? e.page.nodeId : r.nodeId, canUndo: true }
-                : r,
-            );
-            break;
-          case 'result':
-            setReply((r) => (r && r.threadId === thread.id ? { ...r, status: e.ok ? 'idle' : 'failed', text: e.text || r.text, activity: null } : r));
-            break;
-          case 'error':
-            setReply((r) => (r && r.threadId === thread.id ? { ...r, status: 'failed', text: e.message, activity: null } : r));
-            break;
-          default:
-            break;
-        }
-      },
-    });
+    // The panel opens on the chat BEFORE the message is sent, so the reply streams into
+    // somewhere the person is already looking. This is the whole of the "the panel is
+    // where a reply lives" decision: no card, no second transcript, one place.
+    openAgent(thread.id);
     try {
-      await sendThreadMessage(project, thread.id, { text, selection, ...(isNode || c.target === 'new' ? { target: c.target, with: c.with } : {}) });
+      await sendThreadMessage(project, thread.id, { text, selection });
     } catch (err) {
-      setReply((r) => (r && r.threadId === thread.id ? { ...r, status: 'failed', text: err.message } : r));
+      toast({ body: `Could not send that: ${err.message}`, uniqueID: 'composer-failed', type: 'error' });
     }
   }
 
-  // Undo is offered only while the agent's batch is what Cmd-Z would revert next; asked
-  // again after the canvas settles, since any later edit takes that place.
-  useEffect(() => {
-    if (!reply || reply.version == null || reply.status === 'running' || reply.undone) return undefined;
-    const t = setTimeout(() => {
-      nextUndo(project).then((next) => {
-        setReply((r) => (r && r.version === reply.version ? { ...r, canUndo: next?.version === r.version } : r));
-      });
-    }, 450);
-    return () => clearTimeout(t);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [reply?.version, reply?.status, reply?.undone, nodes, edges, project]);
-
-  async function undoReply() {
-    try {
-      await doc.flush();
-      await undoProject(project);
-      setReply((r) => (r ? { ...r, undone: true, canUndo: false } : r));
-    } catch (err) {
-      toast({ body: `Could not undo: ${err.message}`, uniqueID: 'undo-failed', type: 'error' });
-    }
+  // Undo one of the agent's changes, from a change line in the panel. The pending local
+  // edits are flushed first: undo is a server-side journal walk, so a change this tab has
+  // not sent yet would otherwise land AFTER the undo and look like it was not undone.
+  async function undoAgentChange() {
+    await doc.flush();
+    await undoProject(project);
   }
 
   const openPage = (nodeId) => {
@@ -1885,7 +1825,6 @@ function Canvas() {
           nodes={flowNodes}
           edges={displayEdges}
           onNodesChange={handleNodesChange}
-          onBeforeDelete={onBeforeDelete}
           onEdgesChange={onEdgesChange}
           onConnect={onConnect}
           onConnectStart={onConnectStart}
@@ -1954,10 +1893,10 @@ function Canvas() {
           <CanvasBackground />
         </ReactFlow>
         </ProjectContext.Provider>
-        {/* The floating toolbar over a selection, its composer, and the agent's anchored
-            reply (toolbar/). Hidden while the selection is being dragged, box-selected or
-            the canvas DRAGGED; back where the selection now is afterwards. A wheel pan or
-            zoom leaves it alone -- see onMoveStart above. */}
+        {/* The floating toolbar over a selection, and its composer (toolbar/). Hidden
+            while the selection is being dragged, box-selected or the canvas DRAGGED; back
+            where the selection now is afterwards. A wheel pan or zoom leaves it alone --
+            see onMoveStart above. The card only starts a chat; the reply is the panel's. */}
         <SelectionToolbar
           nodes={nodes}
           hidden={panning || boxSelecting || nodes.some((n) => n.dragging)}
@@ -1967,20 +1906,10 @@ function Canvas() {
           onCloseComposer={closeComposer}
           provider={readyProvider}
           providerMessage={providerMessage}
-          addTo={focusNode && !nodes.some((n) => n.selected && isArtifact(n)) ? focusNode.data?.title || focusNode.data?.fileName?.replace(/\.html?$/i, '') || 'artifact' : null}
-          busy={reply?.status === 'running'}
+          continues={continues && !forceNew ? continues : null}
+          onToggleContinue={continues ? () => setForceNew((v) => !v) : null}
           onSend={sendComposer}
-          onStop={() => reply?.threadId && interruptThread(project, reply.threadId)}
           onRun={(id) => sendNodeCommand(id, 'run')}
-          onOpenPage={openPage}
-        />
-        <AnchoredReply
-          reply={reply}
-          nodes={nodes}
-          canvasEl={canvasRef.current}
-          onDismiss={dismissReply}
-          onUndo={undoReply}
-          onOpenThread={(id) => openAgent(id)}
           onOpenPage={openPage}
         />
         {agentOpen && (
@@ -1995,6 +1924,10 @@ function Canvas() {
             refreshKey={threadsBump}
             onFocus={onAgentFocus}
             onLocate={(id) => fitView({ nodes: [{ id }], duration: 400, padding: 0.6, maxZoom: 1.5 })}
+            // A change line's "Open". Part B1 repoints this at the editor; until then it
+            // is what the reply card's Open was -- the artifact in a browser tab.
+            onOpenEditor={openPage}
+            onUndo={undoAgentChange}
           />
         )}
 
@@ -2485,15 +2418,6 @@ function Canvas() {
           </HStack>
         </VStack>
       </Dialog>
-
-      <AlertDialog
-        isOpen={!!deleteBusy}
-        onOpenChange={(open) => !open && setDeleteBusy(null)}
-        title="The agent is working on this page"
-        description={`${deleteBusy?.threads.length === 1 ? 'A thread is' : `${deleteBusy?.threads.length ?? 0} threads are`} mid-turn on ${deleteBusy?.nodes.filter(isArtifact).length === 1 ? 'this page' : 'these pages'}. Deleting stops the turn. The delete itself can be undone; the interrupted turn cannot be resumed.`}
-        actionLabel="Stop and delete"
-        onAction={confirmDeleteBusy}
-      />
 
       <AlertDialog
         isOpen={!!deleting}

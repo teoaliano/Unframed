@@ -34,6 +34,9 @@ export const MAX_BATCH_OPS = 200;
 export const MAX_PAGE_BYTES = 2 * 1024 * 1024;
 // A placeholder id the agent may use for a node it is adding in this same batch.
 const NEW_ID = /^new:/;
+// The two node types a chat can be tagged with, and the ones a change line can offer to
+// open in the editor.
+const ARTIFACT_TYPES = new Set(['page', 'motion']);
 
 const fileName = (url) => decodeURIComponent(String(url || '').split('/').pop() || '');
 
@@ -265,6 +268,22 @@ export function prepareBatch(ops, { graph, files, now = Date.now, random = () =>
   return { batch: { type: 'batch', ops: out }, idMap };
 }
 
+// Which artifacts a prepared batch touched, so the panel's change line can expand to
+// them ("2 changes" -> the two motions, each with Open and Locate). Read from the ops
+// rather than from the graph after the fact, because a removeNode's node is gone by
+// then. `addNode` is included: a batch that adds a page node is a change to that page.
+export function batchArtifacts(ops, graph) {
+  const added = new Map(ops.filter((o) => o.type === 'addNode').map((o) => [o.node.id, o.node.type]));
+  const typeOf = (id) => added.get(id) ?? graph.nodes.find((n) => n.id === id)?.type;
+  const out = [];
+  for (const op of ops) {
+    const id = op.type === 'addNode' ? op.node.id : op.id;
+    if (typeof id !== 'string' || out.includes(id)) continue;
+    if (ARTIFACT_TYPES.has(typeOf(id))) out.push(id);
+  }
+  return out;
+}
+
 // A page's file name: the same `<timestamp>-<slug>.html` shape every other file in the
 // folder has (media.js), so the preview origin's name rule admits it.
 export const pageFileName = (now, title, n) => mediaFileName(now, `${title || 'page'}.html`, 'html', n);
@@ -424,7 +443,8 @@ export function canvasTools({ getGraph, getSelection, commit, files, previewUrl,
         const entry = await commit(prepared.batch);
         if (!entry || entry.rejected) return failure(entry?.rejected || 'the change could not be applied');
         const summary = `${prepared.batch.ops.length} change${prepared.batch.ops.length === 1 ? '' : 's'}`;
-        await onWrite(entry, { summary, opCount: prepared.batch.ops.length });
+        const artifacts = batchArtifacts(prepared.batch.ops, graph);
+        await onWrite(entry, { summary, opCount: prepared.batch.ops.length, ...(artifacts.length ? { artifacts } : {}) });
         return text({ ok: true, version: entry.version, ids: prepared.idMap });
       },
     ),

@@ -6,23 +6,27 @@ import { Icon } from '@astryxdesign/core/Icon';
 import { Text } from '@astryxdesign/core/Text';
 import { TextArea } from '@astryxdesign/core/TextArea';
 import { HStack, VStack, StackItem } from '@astryxdesign/core/Stack';
-import { Sparkles, ArrowLeft, ExternalLink, Play, Square } from 'lucide-react';
+import { Sparkles, ArrowLeft, ExternalLink, Play } from 'lucide-react';
 import { place, selectionBox, toScreen } from './placement.js';
 import { useCanvasWheel } from './canvasWheel.js';
 import { toolbarActions } from './actions.js';
-import { targetLabel } from './target.js';
+import { contextLabel } from './target.js';
 
 // The floating toolbar over a selection, and the composer it morphs into (design canvas
 // "E · States", boards 2, 2a, 3, 3a). One element, two modes: `tools` shows the
 // selection's own action and the filled Agent button; `composer` is the same box grown
 // upward on the same centre and the same bottom edge -- placement.js keeps that true --
-// with a "To" line, the "with" chips, a field, and Send. Back or Esc returns to tools.
-// Design: docs/superpowers/specs/2026-09-04-agent-canvas-slice-2-design.md, section 4.
+// with one chip saying what the agent will be shown, a field, and Send. Back or Esc
+// returns to tools. Design: docs/superpowers/specs/2026-09-06-chats-and-tags-design.md.
 //
-// The composer's state (`composer`: { target, with, artifacts }) is App.jsx's, because
-// two canvas gestures change it -- clicking another node adds it to "with", clicking
-// empty canvas collapses it -- and those are React Flow callbacks App owns. This
-// component renders it and sends it.
+// The card only STARTS a chat. Send opens the panel on it and the reply lives there, so
+// there is no Stop here and no answer here -- there used to be both, in a card anchored
+// on the node, and neither survived the subject being two artifacts at once.
+//
+// The composer's state (`composer`: { selection, artifacts }) is App.jsx's, because two
+// canvas gestures change it -- clicking another node adds it, clicking empty canvas
+// collapses it -- and those are React Flow callbacks App owns. This component renders it
+// and sends it.
 
 const DEFAULT_SIZE = { tools: { width: 220, height: 40 }, composer: { width: 380, height: 180 } };
 
@@ -35,10 +39,12 @@ export default function SelectionToolbar({
   onCloseComposer,
   provider,
   providerMessage,
-  addTo, // the panel's artifact, when the selection has none of its own: "Add to <it>"
-  busy,
+  // The chat this message would continue (a thread summary), or null for a new one, and
+  // the toggle between them. Said before you type, because "which conversation did that
+  // go into" is not a question anyone should have to answer afterwards.
+  continues,
+  onToggleContinue,
   onSend,
-  onStop,
   onRun,
   onOpenPage,
 }) {
@@ -84,7 +90,7 @@ export default function SelectionToolbar({
   const at = place({ box, size: size ?? DEFAULT_SIZE[mode], viewport });
   const actions = toolbarActions(selected);
 
-  const canSend = Boolean(provider) && text.trim() && !busy;
+  const canSend = Boolean(provider) && Boolean(text.trim());
   const send = () => {
     if (!canSend) return;
     onSend(text.trim());
@@ -133,9 +139,9 @@ export default function SelectionToolbar({
           <Button
             size="sm"
             variant="primary"
-            label={addTo ? `Add to ${addTo}` : 'Agent'}
+            label="Agent"
             icon={<Icon icon={Sparkles} />}
-            tooltip={provider ? (addTo ? 'Send the selection to the open thread about this artifact' : undefined) : providerMessage}
+            tooltip={provider ? undefined : providerMessage}
             onClick={onOpenComposer}
           />
         </>
@@ -146,32 +152,27 @@ export default function SelectionToolbar({
             <Icon icon={Sparkles} size="sm" />
             <Text type="label">Agent</Text>
           </HStack>
+          {/* One chip: what the agent is about to be shown. It used to be a "To" line
+              plus a chip per node, which turned a selection into a sentence about a
+              target -- and two artifacts into an error the person had to resolve. */}
           <HStack gap={1} align="center" wrap>
-            <Text type="supporting" className="sel-composer-key">
-              To
+            <span className="agent-chip">{contextLabel(composer, nodes)}</span>
+          </HStack>
+          {/* Which conversation this joins, and the way out of it. */}
+          <HStack gap={1} align="center" wrap>
+            <Text type="supporting" color="secondary">
+              {continues ? (
+                <>
+                  continues <em>{continues.title?.trim() || continues.preview || 'an earlier chat'}</em>
+                </>
+              ) : (
+                'new chat'
+              )}
             </Text>
-            <span className={`agent-chip${composer.target === 'ask' ? ' agent-chip--warn' : ''}`}>{targetLabel(composer, nodes)}</span>
-            {composer.with.length > 0 && (
-              <>
-                <Text type="supporting" className="sel-composer-key">
-                  with
-                </Text>
-                {composer.with.map((id) => {
-                  const n = nodes.find((x) => x.id === id);
-                  return (
-                    <span key={id} className="agent-chip">
-                      {n ? n.data?.title || n.data?.fileName || `${n.type} ${n.id}` : id}
-                    </span>
-                  );
-                })}
-              </>
+            {onToggleContinue && (
+              <Button size="sm" variant="ghost" label={continues ? 'New chat instead' : 'Continue the earlier chat'} onClick={onToggleContinue} />
             )}
           </HStack>
-          {composer.target === 'ask' && (
-            <Text type="supporting" color="secondary">
-              Two or more artifacts are selected, so the agent will ask which one you mean before changing anything. Select one to skip the question.
-            </Text>
-          )}
           {!provider && (
             <Text type="supporting" color="secondary">
               {providerMessage}
@@ -193,13 +194,7 @@ export default function SelectionToolbar({
               rows={2}
               autoFocus
               value={text}
-              placeholder={
-                provider
-                  ? composer.target === 'new'
-                    ? 'What should the agent make from these? (↵ to send)'
-                    : 'What should change? (↵ to send)'
-                  : 'Connect Claude or Codex to start'
-              }
+              placeholder={provider ? 'Ask, or say what should change… (↵ to send)' : 'Connect Claude or Codex to start'}
               isDisabled={!provider}
               onChange={setText}
             />
@@ -209,11 +204,7 @@ export default function SelectionToolbar({
               {provider ? `${provider.name} · not metered` : ''}
             </Text>
             <StackItem size="fill" />
-            {busy ? (
-              <Button label="Stop" variant="secondary" size="sm" icon={<Icon icon={Square} />} onClick={onStop} />
-            ) : (
-              <Button label="Send" variant="primary" size="sm" isDisabled={!canSend} onClick={send} />
-            )}
+            <Button label="Send" variant="primary" size="sm" isDisabled={!canSend} onClick={send} />
           </HStack>
         </VStack>
       )}

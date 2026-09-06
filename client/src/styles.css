@@ -1774,46 +1774,59 @@ div:has(> .add-node-menu) {
 .sel-composer {
   width: 100%;
 }
-.sel-composer-key {
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: var(--color-text-secondary);
-}
-.agent-chip--warn {
-  border-color: var(--color-warning);
-}
-.sel-reply {
-  position: absolute;
-  z-index: 6;
-  width: 360px;
-  display: flex;
-  flex-direction: column;
-  gap: var(--spacing-2);
-  padding: var(--spacing-2) var(--spacing-3) var(--spacing-3);
-  background: color-mix(in srgb, var(--color-background-surface) 92%, transparent);
-  backdrop-filter: blur(var(--unframed-chrome-blur));
-  border: var(--border-width) solid var(--color-border);
-  border-radius: var(--radius-container);
-  box-shadow: var(--shadow-med);
-}
-.sel-reply--running {
-  border-color: var(--color-accent);
-}
-.sel-reply--failed {
-  border-color: var(--color-error);
-}
-.sel-reply-text {
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-  line-height: 1.45;
-  max-height: 200px;
-  overflow-y: auto;
-}
-/* A line in the panel's transcript for a change the agent made. */
-.agent-note {
+/* A change the agent made, in the panel's transcript: the summary, expandable to the
+   artifacts it touched, with Undo while it is still the newest entry. The green rule on
+   the inline edge is what distinguishes it from a message at a glance -- a change is
+   something that HAPPENED, not something that was said. */
+.agent-note,
+.agent-change {
   color: var(--color-text-secondary);
   padding-inline: var(--spacing-2);
   border-inline-start: 2px solid var(--color-success);
+}
+/* An undone change keeps its place in the transcript and loses its emphasis: the rule
+   goes neutral rather than away, so the line still reads as a change, just a cancelled
+   one. Removing it would make the transcript disagree with the canvas. */
+.agent-change--undone {
+  border-inline-start-color: var(--color-border-emphasized);
+}
+.agent-change--undone .agent-change-toggle {
+  text-decoration: line-through;
+}
+.agent-change-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+}
+.agent-change-toggle:hover {
+  color: var(--color-text-primary);
+}
+/* The disclosure arrow turns rather than swapping icon, so the two states are one
+   element and cannot disagree about which is showing. */
+.agent-change-toggle svg {
+  transition: transform 120ms ease;
+}
+.agent-change-toggle[aria-expanded='true'] svg {
+  transform: rotate(90deg);
+}
+.agent-change-list {
+  padding-block: var(--spacing-1);
+  padding-inline-start: var(--spacing-3);
+}
+/* A tag whose artifact has been deleted. Shown, not hidden: it is the only trace left
+   that the conversation was ever about that thing. Greyed and without Locate, because
+   there is nowhere to locate it to. */
+.agent-chip--stale {
+  border-color: var(--color-border);
+  border-style: dashed;
+  color: var(--color-text-secondary);
 }
 
 /* ---- the editor (editor/Editor.jsx) ----
