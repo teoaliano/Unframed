@@ -50,6 +50,8 @@ const ACTIVITY = {
   mcp__unframed__canvas_write: 'Changing the canvas…',
   mcp__unframed__page_write: 'Writing the page…',
   mcp__unframed__page_read: 'Reading the page…',
+  mcp__unframed__motion_write: 'Writing the motion…',
+  mcp__unframed__motion_read: 'Reading the motion…',
 };
 
 // `initialThreadId` opens the panel on a particular thread -- the anchored reply's
@@ -58,7 +60,10 @@ const ACTIVITY = {
 // active thread's artifact id, or null.
 // `onLocate(nodeId)` pans and zooms the canvas to a node -- the Locate action beside the
 // artifact's name in the scope row.
-export default function AgentPanel({ project, nodes, providers, onCheckProviders, checking, onClose, initialThreadId = null, refreshKey = 0, onFocus, onLocate }) {
+// `embedded` is the editor's column (editor/Editor.jsx): the panel is the page's left
+// third rather than a card floating over the canvas, so it has no Close of its own (the
+// editor's Back is the way out) and no Locate (there is no canvas to pan).
+export default function AgentPanel({ project, nodes, providers, onCheckProviders, checking, onClose, initialThreadId = null, refreshKey = 0, onFocus, onLocate, embedded = false }) {
   const selection = nodes.filter((n) => n.selected).map((n) => n.id);
   const [threads, setThreads] = useState([]);
   const [chosenId, setChosenId] = useState(null);
@@ -302,7 +307,7 @@ export default function AgentPanel({ project, nodes, providers, onCheckProviders
   const lines = [...messages, ...notes.map((n) => ({ role: 'note', text: n.text, at: n.at }))].sort((a, b) => (a.at ?? 0) - (b.at ?? 0));
 
   return (
-    <aside className="agent-panel" aria-label="Agent">
+    <aside className={`agent-panel${embedded ? ' agent-panel--embedded' : ''}`} aria-label="Agent">
       <div className="agent-panel-head">
         <HStack gap={2} align="center">
           <Icon icon={Sparkles} size="sm" />
@@ -318,7 +323,7 @@ export default function AgentPanel({ project, nodes, providers, onCheckProviders
             isDisabled={!provider || !newKind}
           />
           <IconButton variant="ghost" size="sm" label="Delete thread" tooltip="Delete this thread" icon={<Icon icon={Trash2} />} onClick={() => setConfirmDelete(true)} isDisabled={!thread || running} />
-          <IconButton variant="ghost" size="sm" label="Close" icon={<Icon icon={X} />} onClick={onClose} />
+          {!embedded && <IconButton variant="ghost" size="sm" label="Close" icon={<Icon icon={X} />} onClick={onClose} />}
         </HStack>
         {/* The strip: one tab per visible thread (tabs.js decides which), the oldest behind
             the overflow menu. Empty when the selection names artifacts nobody has talked
@@ -476,9 +481,11 @@ export default function AgentPanel({ project, nodes, providers, onCheckProviders
               <span className="agent-chip agent-chip--focus">
                 <span className="agent-dot agent-dot--focus" />
                 {artifactLabel(thread, nodes)}
-                <button type="button" className="agent-locate" title="Locate on canvas" aria-label="Locate on canvas" onClick={() => onLocate?.(focusArtifact)}>
-                  <Icon icon={Crosshair} size="sm" />
-                </button>
+                {!embedded && (
+                  <button type="button" className="agent-locate" title="Locate on canvas" aria-label="Locate on canvas" onClick={() => onLocate?.(focusArtifact)}>
+                    <Icon icon={Crosshair} size="sm" />
+                  </button>
+                )}
               </span>
             )}
             {selection.length > 0 && <span className="agent-chip">{selection.length} selected</span>}

@@ -1,6 +1,6 @@
 // The tools the agent gets, as an in-process MCP server the Agent SDK connects to. Four:
 // canvas_read (the graph as the agent should see it), canvas_write (one batch of the
-// document's own ops), page_write (a new version of a page asset), page_read (its
+// document's own ops), page_write and motion_write (a new version of an artifact), page_read and motion_read (its
 // current HTML). The pure half -- what the model is told, what a batch is allowed to
 // carry, how a page file is named -- is exported for agentTools.test.js; the tools below
 // bind it to callbacks the session supplies (agent.js). Nothing here ever includes
@@ -9,6 +9,7 @@
 import { z } from 'zod';
 import { tool } from '@anthropic-ai/claude-agent-sdk';
 import { mediaFileName } from './media.js';
+import { withRuntime, motionFileName } from './motion.js';
 
 const KIND = {
   prompt: 'prompt',
@@ -19,13 +20,14 @@ const KIND = {
   videoOutput: 'video output',
   textOutput: 'text output',
   page: 'page',
+  motion: 'motion',
 };
 
 // Every node type the canvas can show. An agent-added node of any other type would
 // render as nothing and be undeletable from the canvas, so it is refused up front.
 export const NODE_TYPES = new Set(Object.keys(KIND));
 // Node types whose `data.file` names a file the folder must already hold.
-const FILE_TYPES = new Set(['image', 'video', 'page']);
+const FILE_TYPES = new Set(['image', 'video', 'page', 'motion']);
 // Pointers at live paid runs, the browser's alone (client/src/graph/runMarkers.js).
 const RUN_MARKERS = ['job', 'running'];
 export const MAX_BATCH_OPS = 200;
@@ -62,6 +64,7 @@ function describeNode(n) {
       if (d.aspect) out.aspect = d.aspect;
       break;
     case 'page':
+    case 'motion':
       if (d.file) out.file = d.file;
       if (d.title) out.title = d.title;
       break;
@@ -217,9 +220,10 @@ export function prepareBatch(ops, { graph, files, now = Date.now, random = () =>
 // folder has (media.js), so the preview origin's name rule admits it.
 export const pageFileName = (now, title, n) => mediaFileName(now, `${title || 'page'}.html`, 'html', n);
 
-export function pageSidecar({ threadId, turn, nodeId, title, bytes, now = Date.now() }) {
-  return { source: 'agent', kind: 'page', threadId, turn, nodeId, title: title || '', bytes, at: new Date(now).toISOString() };
+export function pageSidecar({ threadId, turn, nodeId, title, bytes, now = Date.now(), kind = 'page' }) {
+  return { source: 'agent', kind, threadId, turn, nodeId, title: title || '', bytes, at: new Date(now).toISOString() };
 }
+export { motionFileName };
 
 // Where a new page goes: to the right of the selection's bounding box, or at a fixed
 // spot on an empty board. The composer's `with` ids are the selection that mattered.
@@ -233,6 +237,109 @@ export function placeBeside(graph, ids, size = { width: 480, height: 320 }) {
 
 const text = (value) => ({ content: [{ type: 'text', text: typeof value === 'string' ? value : JSON.stringify(value) }] });
 const failure = (message) => ({ content: [{ type: 'text', text: JSON.stringify({ error: message }) }], isError: true });
+
+
+// What the two artifact kinds are, and how they differ. Everything not listed here -- a
+// new file on every write, placement beside the selection, the node it becomes, the
+// event the panel shows -- is shared by construction below, because the two used to be
+// one hand-written tool and a second copy is exactly how they would drift apart.
+const ARTIFACTS = {
+  page: {
+    describeWrite:
+      "Create a page asset or write a new version of one. `html` is the complete, self-contained HTML document: inline its style and script; reference the project's images and clips by the exact file names canvas_read reports (they sit beside the page, so a plain relative name works); nothing external loads. Files are never overwritten -- every write is a new version the person can undo. Omit nodeId to create a page beside the current selection; pass it to update that page.",
+    describeRead: 'Read the current HTML of a page asset, so an edit starts from what is there.',
+    size: { width: 480, height: 320 },
+    prepare: (html) => html,
+    write: (files, bytes, meta) => files.writePage(bytes, meta),
+    read: (files, file) => files.readPage(file),
+  },
+  motion: {
+    describeWrite: [
+      'Create a motion asset -- a HyperFrames composition, an HTML video -- or write a new version of one. `html` is a complete HTML document that follows the HyperFrames contract:',
+      'the root is <div id="root" data-composition-id="main" data-start="0" data-duration="SECONDS" data-width="PX" data-height="PX"> (data-duration is the render length; size #root to those pixels with overflow hidden);',
+      'every timed element inside it has an id, class="clip", data-start and data-duration in seconds (.clip is position:absolute; inset:0 -- a full-frame box you lay out inside);',
+      "<video>, <audio> and <img> clips reference the project's files by the exact names canvas_read reports (they sit beside the composition); a <video> gets muted playsinline, and data-has-audio=\"true\" when its sound should be heard;",
+      'animation is ONE paused GSAP timeline, registered synchronously: window.__timelines = window.__timelines || {}; window.__timelines.main = gsap.timeline({ paused: true }); give tweens explicit positions and prefer fromTo();',
+      'load GSAP with <script src="gsap.js"></script> -- it sits beside the composition -- and nothing else external: no CDNs, fonts or remote images. Never call play(), pause() or set currentTime on media; no wall-clock time, no unseeded randomness, no infinite repeats.',
+      'The HyperFrames runtime is added to the file for you. Files are never overwritten -- every write is a new version the person can undo. Omit nodeId to create a motion beside the current selection; pass it to update that motion. The person renders it to an MP4 from the node.',
+    ].join(' '),
+    describeRead: 'Read the current HTML of a motion asset (its HyperFrames composition), so an edit starts from what is there.',
+    size: { width: 480, height: 300 },
+    prepare: withRuntime,
+    write: (files, bytes, meta) => files.writeMotion(bytes, meta),
+    read: (files, file) => files.readMotion(file),
+  },
+};
+
+// The write and read tools for one artifact kind. `kind` is both the node type and the
+// noun in every message.
+function artifactTools(kind, { getGraph, getSelection, getContext, commit, files, previewUrl, onWrite }) {
+  const A = ARTIFACTS[kind];
+  const notA = (node) => `node ${node.id} is a ${KIND[node.type] || node.type}, not a ${kind}`;
+  return [
+    tool(
+      `${kind}_write`,
+      A.describeWrite,
+      {
+        html: z.string().describe('The whole HTML document.'),
+        nodeId: z.string().optional().describe(`The ${kind} node to update. Omit to create a new ${kind}.`),
+        title: z.string().max(120).optional().describe(`A short name for the ${kind}, shown on the canvas.`),
+      },
+      async ({ html, nodeId, title }) => {
+        if (typeof html !== 'string' || !html.trim()) return failure('html must be a non-empty string');
+        const bytes = Buffer.from(A.prepare(html), 'utf8');
+        if (bytes.length > MAX_PAGE_BYTES) return failure(`the ${kind} is too large (${bytes.length} bytes; the limit is ${MAX_PAGE_BYTES})`);
+        const graph = await getGraph();
+        const existing = nodeId ? graph.nodes.find((n) => n.id === nodeId) : null;
+        if (nodeId && !existing) return failure(`no node ${nodeId}`);
+        if (existing && existing.type !== kind) return failure(notA(existing));
+        const name = (title ?? existing?.data?.title ?? '').trim();
+        const file = await A.write(files, bytes, { title: name, nodeId: existing?.id ?? null });
+        let batch;
+        let id;
+        if (existing) {
+          id = existing.id;
+          const patch = { file };
+          if (title !== undefined && name !== (existing.data?.title ?? '')) patch.title = name;
+          batch = { type: 'batch', ops: [{ type: 'updateNode', id, patch }] };
+        } else {
+          const ctx = getContext();
+          const beside = Array.isArray(ctx.with) && ctx.with.length ? ctx.with : getSelection();
+          id = `a-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+          const node = { id, type: kind, position: placeBeside(graph, beside), ...A.size, data: { file, title: name, fileName: '' } };
+          batch = { type: 'batch', ops: [{ type: 'addNode', node }] };
+        }
+        const entry = await commit(batch);
+        if (!entry || entry.rejected) return failure(entry?.rejected || 'the change could not be applied');
+        // `page` is the event's name for "the artifact this wrote", whichever kind: the
+        // panel and the anchored reply read it to bind a thread and point at the node.
+        await onWrite(entry, {
+          summary: `${existing ? 'Updated' : 'Created'} ${kind}${name ? ` · ${name}` : ''}`,
+          opCount: 1,
+          page: { nodeId: id, file, title: name, kind, created: !existing },
+        });
+        return text({ ok: true, nodeId: id, file, title: name, previewUrl: previewUrl(file, kind), version: entry.version });
+      },
+    ),
+    tool(
+      `${kind}_read`,
+      A.describeRead,
+      { nodeId: z.string().describe(`The ${kind} node.`) },
+      async ({ nodeId }) => {
+        const graph = await getGraph();
+        const node = graph.nodes.find((n) => n.id === nodeId);
+        if (!node) return failure(`no node ${nodeId}`);
+        if (node.type !== kind) return failure(notA(node));
+        if (!node.data?.file) return failure(`${kind} ${nodeId} has no file yet`);
+        try {
+          return text(await A.read(files, node.data.file));
+        } catch {
+          return failure(`the file ${node.data.file} could not be read`);
+        }
+      },
+    ),
+  ];
+}
 
 // `getGraph` reads the server's document (never the browser); `getSelection` and
 // `getContext` are what the browser sent with the latest message of this thread;
@@ -256,7 +363,7 @@ export function canvasTools({ getGraph, getSelection, getContext = () => ({}), c
         '{type:"updateNode", id, patch} -- a shallow patch onto node.data, null deletes a key;',
         '{type:"moveNode", id, position} ; {type:"resizeNode", id, width, height} ; {type:"removeNode", id} ;',
         '{type:"addEdge", edge:{source, target}} ; {type:"removeEdge", id}.',
-        'Node types: prompt (data.text), image and video (data.file names an existing project file), imageOutput, videoOutput, textOutput (data.text is the instruction), page (data.file, data.title). Never put bytes or data: URLs in node data.',
+        'Node types: prompt (data.text), image and video (data.file names an existing project file), imageOutput, videoOutput, textOutput (data.text is the instruction), page and motion (data.file, data.title; make these with page_write and motion_write, not here). Never put bytes or data: URLs in node data.',
       ].join(' '),
       // looseObject, not z.record: the SDK converts these to JSON Schema for the CLI, and a
       // record made that conversion throw -- which registered NO tools at all, silently,
@@ -274,64 +381,7 @@ export function canvasTools({ getGraph, getSelection, getContext = () => ({}), c
         return text({ ok: true, version: entry.version, ids: prepared.idMap });
       },
     ),
-    tool(
-      'page_write',
-      'Create a page asset or write a new version of one. `html` is the complete, self-contained HTML document: inline its style and script; reference the project\'s images and clips by the exact file names canvas_read reports (they sit beside the page, so a plain relative name works); nothing external loads. Files are never overwritten -- every write is a new version the person can undo. Omit nodeId to create a page beside the current selection; pass it to update that page.',
-      {
-        html: z.string().describe('The whole HTML document.'),
-        nodeId: z.string().optional().describe('The page node to update. Omit to create a new page.'),
-        title: z.string().max(120).optional().describe('A short name for the page, shown on the canvas.'),
-      },
-      async ({ html, nodeId, title }) => {
-        if (typeof html !== 'string' || !html.trim()) return failure('html must be a non-empty string');
-        const bytes = Buffer.from(html, 'utf8');
-        if (bytes.length > MAX_PAGE_BYTES) return failure(`the page is too large (${bytes.length} bytes; the limit is ${MAX_PAGE_BYTES})`);
-        const graph = await getGraph();
-        const existing = nodeId ? graph.nodes.find((n) => n.id === nodeId) : null;
-        if (nodeId && !existing) return failure(`no node ${nodeId}`);
-        if (existing && existing.type !== 'page') return failure(`node ${nodeId} is a ${KIND[existing.type] || existing.type}, not a page`);
-        const name = (title ?? existing?.data?.title ?? '').trim();
-        const file = await files.writePage(bytes, { title: name, nodeId: existing?.id ?? null });
-        let batch;
-        let id;
-        if (existing) {
-          id = existing.id;
-          const patch = { file };
-          if (title !== undefined && name !== (existing.data?.title ?? '')) patch.title = name;
-          batch = { type: 'batch', ops: [{ type: 'updateNode', id, patch }] };
-        } else {
-          const ctx = getContext();
-          const beside = Array.isArray(ctx.with) && ctx.with.length ? ctx.with : getSelection();
-          id = `a-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
-          const node = { id, type: 'page', position: placeBeside(graph, beside), width: 480, height: 320, data: { file, title: name, fileName: '' } };
-          batch = { type: 'batch', ops: [{ type: 'addNode', node }] };
-        }
-        const entry = await commit(batch);
-        if (!entry || entry.rejected) return failure(entry?.rejected || 'the change could not be applied');
-        await onWrite(entry, {
-          summary: `${existing ? 'Updated' : 'Created'} page${name ? ` · ${name}` : ''}`,
-          opCount: 1,
-          page: { nodeId: id, file, title: name, created: !existing },
-        });
-        return text({ ok: true, nodeId: id, file, title: name, previewUrl: previewUrl(file), version: entry.version });
-      },
-    ),
-    tool(
-      'page_read',
-      'Read the current HTML of a page asset, so an edit starts from what is there.',
-      { nodeId: z.string().describe('The page node.') },
-      async ({ nodeId }) => {
-        const graph = await getGraph();
-        const node = graph.nodes.find((n) => n.id === nodeId);
-        if (!node) return failure(`no node ${nodeId}`);
-        if (node.type !== 'page') return failure(`node ${nodeId} is a ${KIND[node.type] || node.type}, not a page`);
-        if (!node.data?.file) return failure(`page ${nodeId} has no file yet`);
-        try {
-          return text(await files.readPage(node.data.file));
-        } catch {
-          return failure(`the file ${node.data.file} could not be read`);
-        }
-      },
-    ),
+    ...artifactTools('page', { getGraph, getSelection, getContext, commit, files, previewUrl, onWrite }),
+    ...artifactTools('motion', { getGraph, getSelection, getContext, commit, files, previewUrl, onWrite }),
   ];
 }

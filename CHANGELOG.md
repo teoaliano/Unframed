@@ -5,6 +5,18 @@ is no release artifact to number. Headings are `## YYYY-MM-DD`, groups are
 `### Added` / `### Changed` / `### Fixed`, one bullet per user-visible change.
 Keep that shape: the website's What's new page parses this file.
 
+## 2026-09-06
+
+### Added
+
+- **Motion assets.** A new node type: a HyperFrames composition — an HTML video that
+  animates your project's images and clips with timed elements and a GSAP timeline. Ask
+  the agent for a video, an animation or motion graphics and it writes one beside the
+  selection; drop a composition `.html` onto a Motion node to bring your own. The node
+  plays it live, and **Render** turns it into an MP4 in your project folder that lands on
+  the canvas as an ordinary video node. Rendering runs locally in the Chrome (or Chromium,
+  Edge, Brave) you already have and uses no credits; without one, Render says so.
+
 ## 2026-09-05
 
 ### Added

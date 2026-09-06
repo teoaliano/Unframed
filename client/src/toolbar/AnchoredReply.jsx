@@ -1,4 +1,5 @@
 import { useLayoutEffect, useRef, useState } from 'react';
+import { isArtifact } from '../graph/resolve.js';
 import { useStore } from '@xyflow/react';
 import { Button } from '@astryxdesign/core/Button';
 import { IconButton } from '@astryxdesign/core/IconButton';
@@ -40,7 +41,7 @@ export default function AnchoredReply({ reply, nodes, canvasEl, onDismiss, onUnd
   // the bottom edge, the toolbar wants the top.
   const at = place({ box: { ...box, y: box.y + box.height, height: 0 }, size, viewport, gap: 12 });
   const y = at.below ? at.y : box.y + box.height + 12;
-  const page = anchorNode?.type === 'page' && anchorNode.data?.file ? anchorNode : null;
+  const page = isArtifact(anchorNode) && anchorNode.data?.file ? anchorNode : null;
 
   return (
     <div

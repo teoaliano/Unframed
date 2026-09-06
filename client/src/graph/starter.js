@@ -29,8 +29,10 @@ import { OUTPUT_DEFAULTS } from '../nodes/output/defaults.js';
 // controls opt out individually with `nodrag`. See
 // docs/superpowers/specs/2026-08-18-canvas-interaction-design.md.
 const RESIZABLE_INPUT = new Set(['image', 'video', 'prompt']);
-// A page is free on both axes like a prompt, and starts large enough to read.
+// An artifact (a page, a motion) is free on both axes like a prompt, and starts large
+// enough to read.
 const PAGE_SIZE = { width: 480, height: 320 };
+const ARTIFACT = new Set(['page', 'motion']);
 
 // EVERY node that reaches the canvas goes through this, without exception — a node
 // handed straight to addNodes has no wrapper width, and an input node's Card is
@@ -60,7 +62,7 @@ export const withDrag = (n) => ({
   // side by side and keeps both axes, like a prompt.
   width:
     n.type === 'group' ? n.width ?? 420
-    : n.type === 'page' ? n.width ?? PAGE_SIZE.width
+    : ARTIFACT.has(n.type) ? n.width ?? PAGE_SIZE.width
     : RESIZABLE_INPUT.has(n.type) ? n.width ?? 240
     : n.width,
   // Media is the DERIVED case, so its height is dropped rather than passed through: a
@@ -70,7 +72,7 @@ export const withDrag = (n) => ({
   height:
     n.type === 'prompt' ? n.height ?? 160
     : n.type === 'group' ? n.height ?? 280
-    : n.type === 'page' ? n.height ?? PAGE_SIZE.height
+    : ARTIFACT.has(n.type) ? n.height ?? PAGE_SIZE.height
     : undefined,
   // A member stays inside its box while dragged. Derived from parentId on every load
   // and add, like the two above, so nothing saved can disagree with the membership.
@@ -111,6 +113,7 @@ export const NEW_NODE = {
   videoOutput: OUTPUT_DEFAULTS.videoOutput,
   textOutput: OUTPUT_DEFAULTS.textOutput,
   page: { file: '', title: '', fileName: '' },
+  motion: { file: '', title: '', fileName: '' },
 };
 
 // A small starter graph that demonstrates the @id reference: the scene prompt

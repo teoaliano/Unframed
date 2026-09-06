@@ -25,7 +25,7 @@ for (const ext of Object.keys(ALLOWED_TYPES)) {
 assert.equal(resolvePreview('/p/coast/1-a.HTML', '127.0.0.1:5000', out).ext, 'html', 'extension is case-insensitive');
 
 // Deny by default: the folder's bookkeeping never leaves.
-for (const name of ['graph.json', 'graph.log', '1-a.json', 'x.tmp', 'noext', 'a.js', 'a.css', 'a.txt']) {
+for (const name of ['graph.json', 'graph.log', '1-a.json', 'x.tmp', 'noext', 'a.css', 'a.txt', 'a.mjs', 'a.json.js.json']) {
   assert.equal(resolvePreview(`/p/coast/${name}`, 'localhost', out).status, 404, name);
 }
 

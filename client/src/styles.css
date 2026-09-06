@@ -1686,7 +1686,8 @@ div:has(> .add-node-menu) {
 /* The page asset (nodes/PageNode.jsx). The frame fills the card; it is inert until the
    node is selected so a click selects the node and a drag moves it, and it comes alive
    once selected so the page can be scrolled and used. The card clips its corners. */
-.xnode-page .xnode-body {
+.xnode-page .xnode-body,
+.xnode-motion .xnode-body {
   padding: 0;
   flex: 1 1 auto;
   min-height: 0;
@@ -1704,8 +1705,31 @@ div:has(> .add-node-menu) {
 .xnode-frame--live {
   pointer-events: auto;
 }
-.react-flow__node-page.dragging .xnode-frame {
+.react-flow__node-page.dragging .xnode-frame,
+.react-flow__node-motion.dragging .xnode-frame {
   pointer-events: none;
+}
+/* The motion node's render row sits under the card, like the video transport: a control,
+   so it cannot sit on the clip. */
+.xnode-motion-render {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-2);
+  margin-top: var(--spacing-2);
+  min-height: 28px;
+}
+.xnode-motion-progress {
+  flex: 1 1 auto;
+  height: 4px;
+  border-radius: var(--radius-full);
+  background: color-mix(in srgb, var(--color-border-emphasized) 60%, transparent);
+  overflow: hidden;
+}
+.xnode-motion-progress > span {
+  display: block;
+  height: 100%;
+  background: var(--color-accent);
+  transition: width 0.3s ease;
 }
 
 /* ---- the selection toolbar, its composer, and the anchored reply (toolbar/) ----
@@ -1790,4 +1814,72 @@ div:has(> .add-node-menu) {
   color: var(--color-text-secondary);
   padding-inline: var(--spacing-2);
   border-inline-start: 2px solid var(--color-success);
+}
+
+/* ---- the editor (editor/Editor.jsx) ----
+   Replaces the canvas while open (App.jsx renders one or the other): three columns on
+   the body colour, each column a card in the chrome recipe. The agent panel is the left
+   column's whole content, so its floating-card styling is undone here and the column
+   provides the card instead. */
+.editor {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  grid-template-columns: 360px minmax(0, 1fr) 320px;
+  gap: 12px;
+  padding: 12px;
+  background: var(--color-background-body);
+}
+.editor-col,
+.editor-head,
+.editor-frame-wrap {
+  background: color-mix(in srgb, var(--color-background-surface) 92%, transparent);
+  border: var(--border-width) solid var(--color-border);
+  border-radius: var(--radius-container);
+}
+.editor-col {
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.editor-col .agent-panel--embedded {
+  position: static;
+  width: auto;
+  height: 100%;
+  background: transparent;
+  backdrop-filter: none;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+}
+.editor-stage {
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.editor-head,
+.editor-col-head {
+  padding: var(--spacing-2) var(--spacing-3);
+}
+.editor-col-head {
+  border-bottom: var(--border-width) solid var(--color-border);
+}
+.editor-frame-wrap {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+}
+.editor-frame {
+  display: block;
+  flex: 1 1 auto;
+  width: 100%;
+  height: 100%;
+  border: 0;
+}
+.editor-hint {
+  padding: var(--spacing-3);
 }
