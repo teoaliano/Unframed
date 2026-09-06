@@ -138,9 +138,9 @@ export default function ImageNode({ id, data, parentId }) {
           tab of an empty node. */}
       <NodeLine className="xnode-line--start" live={roles.length > 0}>{role}</NodeLine>
       {/* Resizable from any edge once it holds something — nodes/MediaResize.jsx owns
-          why that includes the right one, where the handle also lives — plus the four
-          corner grips of a selected element. */}
-      {src && <MediaResize grips />}
+          why that includes the right one, where the handle also lives — and from the four
+          corner grips a selected element shows. */}
+      {src && <MediaResize />}
     </>
   );
 }

@@ -125,8 +125,8 @@ export default function GroupNode({ id, data, selected, width, height }) {
       <div className="xnode-group" style={{ width, height }} />
       {/* Both axes are the user's, like a prompt: a box has no ratio to keep. The larger
           max is the point of the prop -- a box wrapping three images starts wider than
-          any single node's ceiling. `grips` gives it the same selection as a prompt. */}
-      <MediaResize free grips max={4000} />
+          any single node's ceiling. */}
+      <MediaResize free max={4000} />
       <Handle type="source" position={Position.Right} />
     </>
   );

@@ -177,7 +177,7 @@ export default function VideoNode({ id, data, parentId }) {
       )}
       {/* Resizable from any edge once it holds something — nodes/MediaResize.jsx owns
           why that includes the right one, where the handle also lives. */}
-      {src && <MediaResize grips />}
+      {src && <MediaResize />}
     </>
   );
 }
