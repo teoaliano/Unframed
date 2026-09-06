@@ -30,13 +30,43 @@ export function nextActive(activeId, visible) {
   return visible[0]?.id ?? null;
 }
 
-// What one of a chat's tags is called, and whether it still points at anything. `stale`
-// is the whole reason this returns an object: a chip for a deleted artifact is shown,
-// greyed, with no Locate -- there is nowhere to locate it to.
-export function tagLabel(id, nodes) {
+// What a node id is called, and whether it still points at anything. `stale` is the whole
+// reason this returns an object: a row for a deleted artifact is shown, greyed, with no
+// Locate -- there is nowhere to locate it to. `type` is carried so the caller can wear
+// the node's own icon (`nodes/nodeIcons.jsx`): the thing on the canvas and the thing in
+// the panel should look like the same thing.
+export function nodeLabel(id, nodes) {
   const n = nodes.find((x) => x.id === id);
-  if (!n) return { id, label: id, stale: true };
-  return { id, label: n.data?.title || n.data?.fileName?.replace(/\.html?$/i, '') || n.id, stale: false };
+  if (!n) return { id, label: id, stale: true, type: null };
+  return { id, label: n.data?.title || n.data?.fileName?.replace(/\.html?$/i, '') || n.id, stale: false, type: n.type };
+}
+
+// Every artifact this chat has touched, in the order it first touched them, derived from
+// the events the record already stores. Reads and writes both count and are NOT
+// distinguished: the question the recap answers is "what did this conversation involve",
+// and splitting it into changed-versus-merely-read made a small card an argument.
+//
+// Derived here rather than kept on the record, because the record's `tags` answer a
+// different question -- which chats the strip shows for a selection -- and a chat that
+// read a file once should not thereby be filed under it forever.
+//
+// `canvas_read` contributes nothing on purpose: it reads the whole board, it is the first
+// thing every turn does, and listing everything would bury what the turn was actually
+// about. Only the artifact tools name a node (`input.nodeId`), and `canvas_write` batches
+// report theirs on the applied event.
+export function touchedArtifacts(events) {
+  const out = [];
+  const add = (id) => {
+    if (typeof id === 'string' && id && !out.includes(id)) out.push(id);
+  };
+  for (const e of events ?? []) {
+    if (e.type === 'tool_use') add(e.input?.nodeId);
+    else if (e.type === 'ops_applied') {
+      add(e.page?.nodeId);
+      for (const id of e.artifacts ?? []) add(id);
+    }
+  }
+  return out;
 }
 
 const PREVIEW = 32;

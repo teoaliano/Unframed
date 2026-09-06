@@ -1158,26 +1158,6 @@ div:has(> .add-node-menu) {
   gap: var(--spacing-1);
   padding: var(--spacing-3);
 }
-/* The same mark in the panel's scope row, with the Locate action beside the name. */
-.agent-chip--focus {
-  border-color: var(--color-text-primary);
-}
-.agent-dot--focus {
-  background: var(--color-text-primary);
-}
-.agent-locate {
-  display: inline-flex;
-  align-items: center;
-  margin-inline-start: 2px;
-  padding: 0;
-  border: 0;
-  background: transparent;
-  color: var(--color-text-secondary);
-  cursor: pointer;
-}
-.agent-locate:hover {
-  color: var(--color-text-primary);
-}
 /* Three sides, because the fourth is shared with the card's top edge. */
 .react-flow__node.selected .xnode-tab--input {
   box-shadow:
@@ -1820,13 +1800,69 @@ div:has(> .add-node-menu) {
   padding-block: var(--spacing-1);
   padding-inline-start: var(--spacing-3);
 }
-/* A tag whose artifact has been deleted. Shown, not hidden: it is the only trace left
-   that the conversation was ever about that thing. Greyed and without Locate, because
-   there is nowhere to locate it to. */
-.agent-chip--stale {
-  border-color: var(--color-border);
-  border-style: dashed;
-  color: var(--color-text-secondary);
+/* What the conversation involved, at the foot of the transcript: a header line with the
+   count and a Hide/Show toggle, then one row per artifact -- the shape of T3 Code's
+   changed-files card, minus the diff, because here what matters is WHICH things were
+   touched rather than by how much. A card rather than a bare list: it is a summary of
+   the whole chat, not another line in it. */
+.agent-recap {
+  margin-block-start: var(--spacing-2);
+  border: var(--border-width) solid var(--color-border);
+  border-radius: var(--radius-container);
+  background: var(--color-background-card);
+  overflow: hidden;
+}
+.agent-recap-head {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-1);
+  width: 100%;
+  padding: var(--spacing-2);
+  border: 0;
+  background: transparent;
+  color: var(--color-text-primary);
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+}
+.agent-recap-head:hover {
+  background: color-mix(in srgb, var(--color-text-primary) 5%, transparent);
+}
+/* The disclosure arrow turns rather than swapping icon, so the two states are one element
+   and cannot disagree about which is showing -- the same rule as a change line's. */
+.agent-recap-head svg {
+  transition: transform 120ms ease;
+}
+.agent-recap-head[aria-expanded='true'] svg {
+  transform: rotate(90deg);
+}
+.agent-recap-list {
+  border-block-start: var(--border-width) solid var(--color-border);
+}
+/* One listed artifact, in a change line's expansion or in the recap card -- one shape for
+   both (AgentPanel's ArtifactRow). */
+.agent-artifact-row {
+  padding: 2px var(--spacing-2);
+  min-height: 28px;
+}
+.agent-recap-row + .agent-recap-row,
+.agent-recap-list .agent-artifact-row + .agent-artifact-row {
+  border-block-start: var(--border-width) solid color-mix(in srgb, var(--color-border) 60%, transparent);
+}
+/* The icon slot is reserved whether or not there is an icon, so a deleted row's name
+   lines up with the rest instead of sliding left. */
+.agent-artifact-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  inline-size: 16px;
+  flex: 0 0 auto;
+}
+/* An artifact the chat touched that is no longer on the canvas. Struck through rather than
+   dropped: the card is a record of what the conversation involved, and quietly shortening
+   it would rewrite that record. */
+.agent-artifact-gone {
+  text-decoration: line-through;
 }
 
 /* ---- the editor (editor/Editor.jsx) ----

@@ -47,8 +47,30 @@ It broke in four places at once, all of them the same break:
    writes **once** after the first turn, else the opening words of the first message.
 
 4. **Every artifact the active chat has touched wears the focus mark** — not one of them.
-   The row above the composer lists the chat's tags as chips with Locate (a stale one
-   greyed, with no Locate) plus the live selection count.
+
+   **Revised 2026-09-06, after testing.** The row above the composer first listed the
+   chat's *tags* as chips, next to a selection count. Both were chips, in one row, in the
+   same shape — while answering two different questions ("what has this chat touched" and
+   "what is attached to this message"), and the result read as noise rather than as either
+   answer. So they are separated by *where* they live:
+
+   - **The row above the composer is the live selection**, named, one chip per artifact
+     plus a count of the rest. This is the conventional "what is attached to this message"
+     row, it changes as you click around the canvas, and it carries no Locate — a selected
+     node is one you have just pointed at.
+   - **What the chat has touched is a recap card at the foot of the transcript**, after the
+     last message: a header with the file count and a Hide/Show toggle, then one row per
+     artifact with its node icon, Open and Locate. Modelled on T3 Code's changed-files
+     card, minus the diff, because here what matters is *which* things were involved rather
+     than by how much.
+
+   Reads and writes are **not** distinguished in that card. The question it answers is what
+   the conversation involved; splitting a small card into changed-versus-merely-read made
+   it an argument rather than a summary.
+
+   The focus mark still follows the chat's tags, and is now the *only* thing on the canvas
+   that says so — which is the job it was always doing, no longer competing with a chip row
+   saying the same thing in words.
 
 5. **The toolbar card only starts a chat.** Send opens the panel on that chat and the reply
    lives there. The anchored reply card is removed, and so is "Add to \<page\>". The
@@ -81,6 +103,21 @@ questions and must not be merged:
 `findChatFor` (server) and `continuableChat` (client, for the label the composer shows
 before you type) are the same rule in two places on purpose: rendering that label from the
 server would be a request per keystroke.
+
+## Why the recap is derived, not stored
+
+The card lists what a chat **read or changed**; the record's `tags` list what it *touched
+by writing* (plus the artifacts selected at its first message). They are deliberately not
+the same set, because they answer different questions: `tags` decide which chats the strip
+shows for a selection, and a chat that read a file once should not thereby be filed under
+it forever.
+
+So `touchedArtifacts` (`client/src/agent/tabs.js`, tested) folds the card out of the events
+the record already stores — `input.nodeId` on the artifact tools for reads and updates,
+`page.nodeId` and `artifacts` on `ops_applied` for writes. Nothing new is persisted, and a
+reopened chat rebuilds the card from its replay exactly as the live turn built it.
+`canvas_read` contributes nothing: it reads the whole board, it is the first thing every
+turn does, and listing everything would bury what the turn was actually about.
 
 ## Why `titledBy` exists rather than one `title` field
 
@@ -122,5 +159,10 @@ rather than a log line quietly changing shape.
   precisely when it is most wanted. A greyed chip costs one line of CSS.
 - **A chat message per undo.** Puts words in the agent's mouth. The change line reads
   "Undone", which is a fact about the change, said where the change is.
+- **Tag chips and the selection count sharing the composer row** (the original decision 4).
+  Two questions, one shape, one row: it read as neither. See the revision above.
+- **Splitting the recap into "Changed" and "Read".** More precise and less useful: it turns
+  a two-line summary into a taxonomy, and the per-change blocks above it already say what
+  each change did.
 - **A dedicated `sequence` node linking several motions** instead of copies. Deferred: it
   needs a story for what happens when a member changes, and copies need none.

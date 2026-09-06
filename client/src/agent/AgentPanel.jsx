@@ -22,7 +22,8 @@ import {
   nextUndo,
 } from '../api.js';
 import { isArtifact } from '../graph/resolve.js';
-import { visibleThreads, nextActive, tabLabel, tagLabel } from './tabs.js';
+import { visibleThreads, nextActive, tabLabel, nodeLabel, touchedArtifacts } from './tabs.js';
+import { NODE_ICONS } from '../nodes/nodeIcons.jsx';
 
 // The agent panel: a right-hand panel over the project's chats, one tab each. The
 // design's states 1, 8 and 10 (docs/superpowers/specs/2026-09-04-agent-canvas-slice-1-design.md),
@@ -60,6 +61,34 @@ const ACTIVITY = {
   mcp__unframed__motion_write: 'Writing the motion…',
   mcp__unframed__motion_read: 'Reading the motion…',
 };
+
+// One artifact, listed: its own node icon, what it is called, and the two things you can
+// do with it. Used by BOTH a change line's expansion and the recap card at the foot --
+// they are the same row, and writing it twice is how the two would drift apart. The icon
+// slot is reserved even when there is no icon to put in it, so a deleted row's name still
+// lines up with the rest.
+function ArtifactRow({ row, onOpen, onLocate, embedded }) {
+  const icon = row.type ? NODE_ICONS[row.type] : null;
+  return (
+    <HStack gap={1} align="center" className="agent-artifact-row">
+      <span className="agent-artifact-icon">{icon && <Icon icon={icon} size="sm" />}</span>
+      <Text type="supporting" color={row.stale ? 'secondary' : undefined} className={row.stale ? 'agent-artifact-gone' : undefined}>
+        {row.label}
+      </Text>
+      <StackItem size="fill" />
+      {row.stale ? (
+        <Text type="supporting" color="secondary">
+          deleted
+        </Text>
+      ) : (
+        <>
+          {onOpen && <Button size="sm" variant="ghost" label="Open" icon={<Icon icon={ExternalLink} />} onClick={() => onOpen(row.id)} />}
+          {!embedded && <IconButton variant="ghost" size="sm" label="Locate on canvas" icon={<Icon icon={Crosshair} />} onClick={() => onLocate?.(row.id)} />}
+        </>
+      )}
+    </HStack>
+  );
+}
 
 // `initialThreadId` opens the panel on a particular chat -- what the toolbar's Send
 // does. `refreshKey` changes when something outside the panel (the toolbar's composer)
@@ -103,6 +132,12 @@ export default function AgentPanel({ project, nodes, providers, onCheckProviders
   // revert next (the server's answer -- the same question the reply card used to ask).
   const [openNotes, setOpenNotes] = useState(() => new Set());
   const [undoableVersion, setUndoableVersion] = useState(null);
+  // Every artifact this chat has touched, in first-touch order, accumulated from the same
+  // event stream the transcript comes from (`touchedArtifacts`). It feeds the recap card
+  // at the foot, and it is NOT the record's `tags`: tags answer which chats the strip
+  // shows for a selection, this answers what this conversation involved.
+  const [touched, setTouched] = useState([]);
+  const [recapOpen, setRecapOpen] = useState(true);
   const [status, setStatus] = useState('idle');
   const [error, setError] = useState(null);
   const [draft, setDraft] = useState(''); // the assistant's answer as it streams
@@ -190,6 +225,7 @@ export default function AgentPanel({ project, nodes, providers, onCheckProviders
     if (!threadId) {
       setMessages([]);
       setNotes([]);
+      setTouched([]);
       setStatus('idle');
       setError(null);
       setDraft('');
@@ -207,6 +243,7 @@ export default function AgentPanel({ project, nodes, providers, onCheckProviders
       onState: (s) => {
         setMessages(s.messages ?? []);
         setNotes([]);
+        setTouched([]);
         setStatus(s.status ?? 'idle');
         setError(s.error ?? null);
         draftText = '';
@@ -214,6 +251,13 @@ export default function AgentPanel({ project, nodes, providers, onCheckProviders
         setActivity(null);
       },
       onEvent: (e) => {
+        // The recap is derived from the events themselves, so the replay of a reopened
+        // chat rebuilds it exactly as the live turn built it. Folded one event at a time
+        // rather than over a growing array, so the order is first-touch and stays stable.
+        setTouched((prev) => {
+          const next = touchedArtifacts([e]).filter((id) => !prev.includes(id));
+          return next.length ? [...prev, ...next] : prev;
+        });
         switch (e.type) {
           case 'turn':
             setStatus('running');
@@ -335,6 +379,15 @@ export default function AgentPanel({ project, nodes, providers, onCheckProviders
   // own is exactly what takes that place.
   const running = status === 'running';
   const latestNote = notes.at(-1) ?? null;
+  // The row above the composer is the LIVE SELECTION -- the conventional "what is
+  // attached to this message" row. It used to list the chat's accumulated tags, which
+  // wore the same shape while answering a different question, and the two read as noise.
+  // What the chat has touched now lives in the recap card at the foot of the transcript.
+  const selectionChips = selectedArtifactIds.map((id) => nodeLabel(id, nodes));
+  const otherSelected = selection.length - selectedArtifactIds.length;
+  // First-touch order, with what each is called now; a deleted one is greyed and has no
+  // Locate, since there is nowhere to locate it to.
+  const recap = touched.map((id) => nodeLabel(id, nodes));
   useEffect(() => {
     if (!latestNote || running) return undefined;
     const t = setTimeout(() => {
@@ -355,8 +408,6 @@ export default function AgentPanel({ project, nodes, providers, onCheckProviders
     }
   }
 
-  // The chat's tags, as chips: what it has touched, and whether each still exists.
-  const chips = tags.map((id) => tagLabel(id, nodes));
   // The transcript: messages and the agent's change blocks, in time order.
   const lines = [...messages, ...notes.map((n) => ({ role: 'note', ...n }))].sort((a, b) => (a.at ?? 0) - (b.at ?? 0));
 
@@ -525,24 +576,10 @@ export default function AgentPanel({ project, nodes, providers, onCheckProviders
                 ) : null}
               </HStack>
               {openNotes.has(m.version) && (
-                <VStack gap={1} className="agent-change-list">
-                  {m.artifacts.map((id) => {
-                    const chip = tagLabel(id, nodes);
-                    return (
-                      <HStack key={id} gap={1} align="center">
-                        <Text type="supporting" color={chip.stale ? 'secondary' : undefined}>
-                          {chip.label}
-                        </Text>
-                        <StackItem size="fill" />
-                        {!chip.stale && onOpenEditor && (
-                          <Button size="sm" variant="ghost" label="Open" icon={<Icon icon={ExternalLink} />} onClick={() => onOpenEditor(id)} />
-                        )}
-                        {!chip.stale && !embedded && (
-                          <IconButton variant="ghost" size="sm" label="Locate on canvas" icon={<Icon icon={Crosshair} />} onClick={() => onLocate?.(id)} />
-                        )}
-                      </HStack>
-                    );
-                  })}
+                <VStack gap={0} className="agent-change-list">
+                  {m.artifacts.map((id) => (
+                    <ArtifactRow key={id} row={nodeLabel(id, nodes)} onOpen={onOpenEditor} onLocate={onLocate} embedded={embedded} />
+                  ))}
                 </VStack>
               )}
             </div>
@@ -574,29 +611,56 @@ export default function AgentPanel({ project, nodes, providers, onCheckProviders
             Thinking…
           </Text>
         )}
+        {/* What this conversation involved, after the last message: every artifact it
+            read or changed, named once, in the order it first touched them. Reads and
+            writes are deliberately NOT distinguished -- the question is what the chat was
+            about, and splitting a small card into changed-versus-merely-read made it an
+            argument. The per-change blocks above already say what each change did; this
+            says what the whole chat came to. */}
+        {recap.length > 0 && !running && (
+          <div className="agent-recap">
+            <button type="button" className="agent-recap-head" aria-expanded={recapOpen} onClick={() => setRecapOpen((v) => !v)}>
+              <Icon icon={ChevronRight} size="sm" />
+              <Text type="supporting" weight="medium">
+                {recap.length} {recap.length === 1 ? 'file' : 'files'}
+              </Text>
+              <StackItem size="fill" />
+              <Text type="supporting" color="secondary">
+                {recapOpen ? 'Hide' : 'Show'}
+              </Text>
+            </button>
+            {recapOpen && (
+              <VStack gap={0} className="agent-recap-list">
+                {recap.map((row) => (
+                  <ArtifactRow key={row.id} row={row} onOpen={onOpenEditor} onLocate={onLocate} embedded={embedded} />
+                ))}
+              </VStack>
+            )}
+          </div>
+        )}
         {error && <div className="agent-error">{error}</div>}
       </div>
 
       <div className="agent-panel-composer">
-        {/* What this chat has touched, and what is selected right now. Both absent means
-            the row is absent -- an empty selection IS the whole canvas, so a chip saying
-            so was a label on the default. A tag whose artifact has been deleted is shown
-            greyed, with no Locate: there is nowhere to locate it to, and hiding it would
-            lose the only trace that the conversation was ever about it. */}
-        {(chips.length > 0 || selection.length > 0) && (
+        {/* What the next message carries: the live selection, named. Absent when nothing
+            is selected -- an empty selection IS the whole canvas, so a chip saying so was
+            a label on the default. Each artifact wears its own node icon, so the chip and
+            the thing on the canvas look like the same thing; whatever else is selected is
+            counted rather than named, the same rule the toolbar's chip follows. There is
+            no Locate here: a selected node is one you have just pointed at. */}
+        {selection.length > 0 && (
           <HStack gap={1} align="center" wrap>
-            {chips.map((chip) => (
-              <span key={chip.id} className={`agent-chip agent-chip--focus${chip.stale ? ' agent-chip--stale' : ''}`} title={chip.stale ? 'No longer on the canvas' : undefined}>
-                {!chip.stale && <span className="agent-dot agent-dot--focus" />}
+            {selectionChips.map((chip) => (
+              <span key={chip.id} className="agent-chip">
+                {chip.type && NODE_ICONS[chip.type] && <Icon icon={NODE_ICONS[chip.type]} size="sm" />}
                 {chip.label}
-                {!chip.stale && !embedded && (
-                  <button type="button" className="agent-locate" title="Locate on canvas" aria-label="Locate on canvas" onClick={() => onLocate?.(chip.id)}>
-                    <Icon icon={Crosshair} size="sm" />
-                  </button>
-                )}
               </span>
             ))}
-            {selection.length > 0 && <span className="agent-chip">{selection.length} selected</span>}
+            {otherSelected > 0 && (
+              <span className="agent-chip">
+                {otherSelected} {otherSelected === 1 ? 'input' : 'inputs'}
+              </span>
+            )}
           </HStack>
         )}
         {/* Enter sends; Shift+Enter or Option+Enter breaks the line. Caught on a wrapper,

@@ -34,6 +34,9 @@ Keep that shape: the website's What's new page parses this file.
   a change to several things undoes in one step.
 - **The composer says which conversation your message joins** before you send it —
   "continues *Title fixes*" or "new chat" — with a button to switch.
+- **A chat ends with a recap of the files it involved** — a small card after the last
+  message listing every page and motion it read or changed, each with Open and Locate. The
+  row above the box you type in shows what you have selected right now, and nothing else.
 - **A conversation outlives the things it was about.** Deleting a page or motion the agent
   worked on no longer asks you anything and no longer hides the chat: it stays, with the
   deleted thing greyed out in its list. Nothing is thrown away with the file.

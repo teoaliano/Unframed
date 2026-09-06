@@ -334,11 +334,40 @@ App.jsx the chat's whole `tags` array and each matching node gets `className:
 'agent-focus'`. Its name tag fills bright with a live dot: design option E, chosen over a
 ring around the card because selection already owns the card border and the two read as
 one fact when they share it. A tag whose node is gone matches nothing, which is what makes
-a stale tag harmless. The row above the composer lists those tags as chips, each with a
-**Locate** action that pans and zooms to it (`onLocate` → `fitView`), beside a count of
-whatever else is selected; a stale chip is dashed and greyed with **no Locate**, since
-there is nowhere to locate it to. The row is absent when there is nothing to say: an empty
-selection IS the whole canvas, so a chip announcing it was a label on the default.
+a stale tag harmless. The mark is now the **only** thing on the canvas that says what the
+chat has touched, which is the job it was always doing.
+
+**The row above the composer is the live selection**, named — one chip per selected
+artifact wearing its own node icon (`NODE_ICONS`, so the chip and the thing on the canvas
+look like the same thing), plus a count of whatever else is selected. It carries no
+Locate: a selected node is one you have just pointed at. The row is absent when nothing is
+selected, since an empty selection IS the whole canvas and a chip announcing it was a label
+on the default.
+
+That row first listed the chat's *tags* instead, next to a selection count — two questions
+in one row wearing one shape, which read as noise rather than as either answer. What the
+chat has touched moved to the recap card below.
+
+**The recap card sits at the foot of the transcript**, after the last message: a header
+with the file count and a Hide/Show toggle, then one row per artifact — its node icon, what
+it is called, **Open** and **Locate**; a deleted one is struck through and reads "deleted".
+It is modelled on T3 Code's changed-files card, minus the diff, because here what matters
+is *which* things were involved rather than by how much. Reads and writes are deliberately
+**not** distinguished: the card answers what the conversation involved, and splitting it
+into changed-versus-merely-read made a summary into a taxonomy.
+
+It is **derived, not stored** — `touchedArtifacts` (`agent/tabs.js`, tested) folds it out of
+the events the record already keeps: `input.nodeId` on the artifact tools for reads and
+updates, `page.nodeId` and `artifacts` on `ops_applied` for writes. So a reopened chat
+rebuilds it from the replay exactly as the live turn built it, and nothing new is persisted.
+That set is deliberately NOT the record's `tags`: tags decide which chats the strip shows
+for a selection, and a chat that read a file once should not thereby be filed under it
+forever. `canvas_read` contributes nothing — it reads the whole board, every turn, and
+listing everything would bury what the turn was about.
+
+One row shape serves both the recap and a change line's expansion (`ArtifactRow` in
+`AgentPanel.jsx`), because they ARE the same row and writing it twice is how the two would
+drift apart.
 
 **A change the agent made is a small block in the transcript, not a line** (`.agent-change`):
 the summary, a disclosure that expands to the artifacts it touched — each with **Open**

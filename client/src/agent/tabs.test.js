@@ -1,6 +1,6 @@
 // Assert-based self-check. Run with: node client/src/agent/tabs.test.js
 import assert from 'node:assert/strict';
-import { visibleThreads, nextActive, tabLabel, tagLabel, continuableChat } from './tabs.js';
+import { visibleThreads, nextActive, tabLabel, nodeLabel, continuableChat, touchedArtifacts } from './tabs.js';
 
 const n = (id, type, data = {}) => ({ id, type, data, position: { x: 0, y: 0 } });
 const nodes = [
@@ -56,12 +56,41 @@ assert.equal(tabLabel(t('t4', [], { title: 'Title fixes', titledBy: 'agent', pre
 assert.equal(tabLabel(t('t4', [], { title: 'Hero copy', titledBy: 'user', preview: 'make both titles red' })), 'Hero copy');
 assert.equal(tabLabel(t('t4', [], { title: '   ', preview: 'still here' })), 'still here', 'a blank name is no name');
 
-// ---- what a tag is called, and whether it still points at anything ----
-assert.deepEqual(tagLabel('g1', nodes), { id: 'g1', label: 'Launch', stale: false });
-assert.deepEqual(tagLabel('g2', nodes), { id: 'g2', label: 'deck', stale: false }, 'the file name, without the extension');
-assert.deepEqual(tagLabel('m1', nodes), { id: 'm1', label: 'm1', stale: false }, 'nothing to call it but its id');
-// The artifact is gone: the chip is shown, greyed, with no Locate.
-assert.deepEqual(tagLabel('gone', nodes), { id: 'gone', label: 'gone', stale: true });
+// ---- what a node is called, and whether it still points at anything ----
+assert.deepEqual(nodeLabel('g1', nodes), { id: 'g1', label: 'Launch', stale: false, type: 'page' });
+assert.deepEqual(nodeLabel('g2', nodes), { id: 'g2', label: 'deck', stale: false, type: 'page' }, 'the file name, without the extension');
+assert.deepEqual(nodeLabel('m1', nodes), { id: 'm1', label: 'm1', stale: false, type: 'motion' }, 'nothing to call it but its id');
+// The artifact is gone: the row is shown, greyed, with no Locate and no icon to wear.
+assert.deepEqual(nodeLabel('gone', nodes), { id: 'gone', label: 'gone', stale: true, type: null });
+
+// ---- what a chat has touched, for the recap card at the foot of the transcript ----
+{
+  const ev = (type, extra) => ({ type, ...extra });
+  const events = [
+    ev('session', {}),
+    // canvas_read names nothing: it reads the whole board, every turn, and listing
+    // everything would bury what the turn was actually about.
+    ev('tool_use', { name: 'mcp__unframed__canvas_read', input: {} }),
+    ev('tool_use', { name: 'mcp__unframed__motion_read', input: { nodeId: 'm1' } }),
+    ev('tool_use', { name: 'mcp__unframed__motion_write', input: { nodeId: 'm1' } }),
+    ev('ops_applied', { version: 4, page: { nodeId: 'm1', kind: 'motion' } }),
+    // A canvas_write batch reports its artifacts on the applied event; its own tool_use
+    // carries ops, not a nodeId.
+    ev('tool_use', { name: 'mcp__unframed__canvas_write', input: { ops: [] } }),
+    ev('ops_applied', { version: 5, artifacts: ['g1', 'g2'] }),
+    ev('result', { ok: true }),
+  ];
+  // First-touch order, each named once: a read and a write of the same thing is one row,
+  // because the card deliberately does not distinguish them.
+  assert.deepEqual(touchedArtifacts(events), ['m1', 'g1', 'g2']);
+  assert.deepEqual(touchedArtifacts([]), []);
+  assert.deepEqual(touchedArtifacts(undefined), []);
+  assert.deepEqual(touchedArtifacts([ev('tool_use', { input: {} }), ev('ops_applied', {})]), [], 'nothing named, nothing listed');
+  // A created artifact is listed, and an artifact that has since been deleted still is:
+  // the card says what the conversation involved, not what survives.
+  assert.deepEqual(touchedArtifacts([ev('ops_applied', { page: { nodeId: 'new-1', created: true } })]), ['new-1']);
+  assert.deepEqual(touchedArtifacts([ev('tool_use', { input: { nodeId: 'gone' } })]), ['gone']);
+}
 
 // ---- which chat the composer would continue ----
 // All-of, unlike the strip's any-of above: continuing a chat about g1 for a message
