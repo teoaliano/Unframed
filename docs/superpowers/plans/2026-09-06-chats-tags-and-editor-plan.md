@@ -161,11 +161,7 @@ styles) belong to Part B and are kept.
 
 ### A9. Verify (Part A)
 
-`npm test`; in the app: start a chat from two selected motions, see the panel open on it
-and the reply stream there; the tab gets a title after the turn; both motions wear the
-mark; select one motion → the chat shows; delete a motion → the chat stays, its chip
-greys; Undo on the change line → "Undone", and the next message's preamble carries the
-note (read the server log). The agent turns are Matteo's to run.
+`npm test` (V1, V2 green) and V3 rows 1–10 with the scripted agent; Matteo runs the ★ rows.
 
 ## Part B — the editor
 
@@ -215,6 +211,79 @@ note (read the server log). The agent turns are Matteo's to run.
   player's timeupdate; clicking a lane at x posts `{ type: 'unframed:seek', t }`.
 - Pages: no timeline. Retiming by drag is a follow-up (a new version through the SDK).
 
+## Part V — verification you can run without a model
+
+Everything in Parts A–B that involves the agent is otherwise checkable only by spending
+Matteo's quota on a non-deterministic turn. These three make the loop reproducible for
+both of us; they are built FIRST in Part A (V1 before A3), because every later task is
+verified through them.
+
+### V1. A scripted agent (`server/agentScript.js`, test)
+
+- `UNFRAMED_TEST_AGENT_SCRIPT=<path>` (unset in a clone, therefore inert — the same
+  marker rule as `UNFRAMED_TEST_*` in `host.test.js`) makes `server/agent.js` run a
+  thread's turns from a JSON script instead of the SDK. A script is a list of turns; a
+  turn is `{ text, tools: [{ name, input }], title? }`. The runner calls the **real**
+  `canvasTools` handlers (so `canvas_write` commits real ops to the real document,
+  `motion_write` writes real files, tags and events happen through the same code) and
+  emits the same events the SDK path emits (`session`, `tool_use`, `ops_applied`,
+  `tool_result`, `text_delta`, `result`, `titled`). No SDK, no network, milliseconds.
+- Scripts live in `server/fixtures/agent/*.json`: `bulk-edit` (updates two pages),
+  `stitch` (reads two motions, writes one), `question` (text only, no tools), `title`
+  (first turn sets a title), `bad-node` (writes to a node that is gone → the failure
+  message). A script's turn N answers the thread's Nth user message; a script can also
+  assert the preamble it received (`expectPreamble: /Since your last turn/`) so the
+  undo-note contract is checked from the agent's side.
+- Test: `agentScript.test.js` runs each fixture against a temp document and asserts the
+  events, the record (tags, title, lastVersion) and the files.
+
+### V2. An end-to-end flow test (`server/agentFlow.test.js`, in `npm test`)
+
+Forks the real server (`host.test.js` harness: `UNFRAMED_DATA_DIR`, `PORT=0`,
+`UNFRAMED_TEST_AGENT_SCRIPT`) and drives it through the routes exactly as the browser
+does, asserting after each step:
+
+1. seed a project with two motions and one image (files + ops);
+2. `POST threads {tags:[m1,m2]}` → `POST messages` "make both titles red" → script
+   `bulk-edit` → both nodes changed in one journal version, thread tagged `[m1, m2]`,
+   `titled` event, `lastVersion` set;
+3. `GET threads?tag=m1` lists it; `?tag=m3` does not;
+4. `POST undo` → `POST messages` "now blue" → the queued preamble (script asserts it)
+   says one undo of this chat's change;
+5. `DELETE` node m1 → the thread is unchanged, `GET thread` still lists tag `m1`;
+6. `POST messages` on a thread tagged with a deleted node, script `bad-node` → turn ends
+   idle with the failure text, no file written;
+7. stitch: `messages` "stitch these" with script `stitch` → a third motion node beside the
+   two, one `ops_applied` with `page.created`, tags now `[m1, m2, m3]`.
+
+Deterministic, no quota, runs in `npm test`. This is the acceptance test for Part A.
+
+### V3. The browser checklist (both of us; me through the pane, Matteo by hand)
+
+Each row: a seed, an action, an observable state. Seeds are one curl each (upload,
+`POST ops`); with `UNFRAMED_TEST_AGENT_SCRIPT` set on the dev server every row is
+deterministic; without it, rows marked ★ spend a real turn and are Matteo's.
+
+| # | Seed | Action | Expect |
+|---|---|---|---|
+| 1 | two motions, one image | select all three, toolbar Agent | chip reads "2 motions — A, B · with 1 image"; indicator "new chat" |
+| 2 | — | type, Send | composer closes, panel opens on the thread, reply streams there, no card on the canvas |
+| 3 | after 2 | look at the strip | the tab reads the agent's title within a second of the turn ending |
+| 4 | after 2 | look at the canvas | A and B wear the focus mark; the image does not |
+| 5 | after 2 | select only A | the chat is in the strip; select the image only → strip shows all chats |
+| 6 | after 2 | change line → expand | two rows, A and B, each with Open and Locate; Undo on the line |
+| 7 | after 6 | click Undo | line reads "Undone"; both motions revert in one step; ⌘⇧Z brings them back |
+| 8 | after 7 (undone) | send another message | server log shows the preamble's "Since your last turn…" note ★(content) |
+| 9 | after 2 | delete motion A | no confirmation; the chat stays; its A chip greys, no Locate |
+| 10 | after 2 | select A and B again, toolbar Agent | indicator "continues *<title>*"; toggle to "new chat" works |
+| 11 | any page | double-click it | editor opens; `.react-flow` is gone from the DOM; Esc returns to the same viewport |
+| 12 | motion in editor | ask "expose accent and speed" ★ / scripted `dials` | two controls in the right column; drag changes the preview live; Render honours them; ⌘Z reverts a tweak |
+| 13 | motion in editor | — | timeline shows one lane per clip; clicking a lane seeks the player |
+| 14 | three scene motions | select, "stitch these in order" ★ / scripted `stitch` | one new motion beside them; Render plays A→B→C |
+
+I run 1–14 with the scripted agent in the pane and report each row; Matteo runs the ★
+rows for real. A row that cannot be made deterministic is stated as such, not skipped.
+
 ## Part C — stitching
 
 Needs nothing beyond A3's prompt once several selected motions can be sent (A6/A7).
@@ -223,5 +292,6 @@ them back to back; Render it.
 
 ## Order and size
 
-A1–A4 (server, one PR-sized commit each or together), A5–A7 (client), A8, A9 — about two
-days. B1 half a day (mostly done), B2 a day, B3 half a day. C is verification only.
+V1 first (half a day), then A1–A4 with V2 growing alongside them, A5–A7 (client) verified
+against V3 rows 1–10, A8, A9 — about two and a half days. B1 half a day (mostly done), B2 a
+day, B3 half a day, V3 rows 11–14. C is V3 row 14.
