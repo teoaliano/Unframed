@@ -8,7 +8,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { LIBRARY, LIBRARY_FILES, VIEWER, isLibraryFile, viewerHtml, viewerPath, ensureLibrary, motionFileName, renderFileName, renderSidecar, startRender, getRender, withRuntime, RUNTIME_TAG } from './motion.js';
+import { LIBRARY, LIBRARY_FILES, VIEWER, isLibraryFile, viewerHtml, viewerPath, ensureLibrary, motionFileName, renderFileName, renderSidecar, startRender, getRender, withRuntime, RUNTIME_TAG, chromeCandidates, findChrome, NO_CHROME } from './motion.js';
 
 const root = await fs.mkdtemp(path.join(os.tmpdir(), 'unframed-motion-test-'));
 
@@ -55,6 +55,25 @@ const once = withRuntime('<html><head></head><body></body></html>');
 assert.equal(withRuntime(once), once);
 assert.equal(withRuntime('<script src="./hyperframe.runtime.iife.js"></script>'), '<script src="./hyperframe.runtime.iife.js"></script>', 'the CLI\'s own name counts as present');
 assert.match(RUNTIME_TAG, /data-hyperframes-preview-runtime/, 'the marker the renderer strips by');
+
+// ---- the browser ----
+// An explicit path comes first; each platform lists its usual installs; the caches come
+// last. Pure, so the list can be checked without those browsers.
+{
+  const mac = chromeCandidates('darwin', '/Users/m', {});
+  assert.equal(mac[0], '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome');
+  assert.ok(mac.includes('/Users/m/Applications/Chromium.app/Contents/MacOS/Chromium'));
+  assert.deepEqual(chromeCandidates('darwin', '/Users/m', { UNFRAMED_CHROME_PATH: '/opt/x/chrome' })[0], '/opt/x/chrome', 'an explicit path is tried first');
+  assert.equal(chromeCandidates('linux', '/home/m', {})[0], '/usr/bin/google-chrome');
+  assert.equal(chromeCandidates('win32', '/u', { PROGRAMFILES: 'C:\\PF' })[0], path.join('C:\\PF', 'Google/Chrome/Application/chrome.exe'));
+  const last = mac.at(-1);
+  assert.equal(typeof last, 'object');
+  assert.match(last.cache, /hyperframes\/chrome\/chrome-headless-shell$/);
+  // findChrome: the first that exists, else null -- and never a throw.
+  assert.equal(findChrome(['/nope/a', '/nope/b', { cache: '/nope/cache', shell: ['x'] }]), null);
+  assert.equal(findChrome(['/nope/a', process.execPath]), process.execPath);
+  assert.match(NO_CHROME, /Install one/);
+}
 
 // ---- names ----
 assert.equal(motionFileName(1700000000000, 'Launch teaser'), '1700000000000-launch-teaser.html');

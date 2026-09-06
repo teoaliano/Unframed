@@ -11,11 +11,15 @@
 // the same kind of thing as a page at the file level -- the same server, the same
 // headers, the same frame. Nothing is fetched from a CDN, in the preview or by the agent.
 //
-// Rendering is the one place a browser other than the user's runs: @hyperframes/producer
-// drives Chrome's BeginFrame API frame by frame and ffmpeg encodes. It is imported only
-// when a render is asked for -- it is by far the heaviest module in this package, and a
-// canvas that never renders a motion should never pay for it.
+// Rendering is the one place a browser runs on the server's behalf: @hyperframes/producer
+// drives Chrome frame by frame and ffmpeg encodes. It is imported only when a render is
+// asked for -- it is by far the heaviest module in this package, and a canvas that never
+// renders a motion should never pay for it. The Chrome is the person's own (findChrome
+// below; `.puppeteerrc.cjs` at the root is what stops puppeteer downloading one), because
+// nearly everyone who will render has one, and a 170MB download on `npm install` is a
+// high price for the few who do not -- they get a message instead (Matteo, 2026-09-06).
 import fs from 'node:fs/promises';
+import { existsSync, readdirSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { createRequire } from 'node:module';
@@ -117,11 +121,75 @@ export function renderSidecar({ of, title, fps, quality, bytes, now = Date.now()
   return { source: 'render', of, title: title || '', mime: 'video/mp4', fps, quality, bytes, at: new Date(now).toISOString() };
 }
 
+// ---- the browser ----
+// Where a Chromium lives on each platform, most likely first. Any of these drives the
+// render (they all speak the same protocol); the puppeteer and HyperFrames caches come
+// last, for a machine that happens to have one from another tool. `UNFRAMED_CHROME_PATH`
+// names a binary outright, for the odd install. Pure, so the list is testable.
+export function chromeCandidates(platform = process.platform, home = os.homedir(), env = process.env) {
+  const out = env.UNFRAMED_CHROME_PATH ? [env.UNFRAMED_CHROME_PATH] : [];
+  if (platform === 'darwin') {
+    for (const root of ['/Applications', path.join(home, 'Applications')]) {
+      out.push(
+        path.join(root, 'Google Chrome.app/Contents/MacOS/Google Chrome'),
+        path.join(root, 'Chromium.app/Contents/MacOS/Chromium'),
+        path.join(root, 'Microsoft Edge.app/Contents/MacOS/Microsoft Edge'),
+        path.join(root, 'Brave Browser.app/Contents/MacOS/Brave Browser'),
+        path.join(root, 'Google Chrome Canary.app/Contents/MacOS/Google Chrome Canary'),
+      );
+    }
+  } else if (platform === 'win32') {
+    const roots = [env.PROGRAMFILES, env['PROGRAMFILES(X86)'], env.LOCALAPPDATA].filter(Boolean);
+    for (const root of roots) {
+      out.push(path.join(root, 'Google/Chrome/Application/chrome.exe'), path.join(root, 'Microsoft/Edge/Application/msedge.exe'), path.join(root, 'BraveSoftware/Brave-Browser/Application/brave.exe'), path.join(root, 'Chromium/Application/chrome.exe'));
+    }
+  } else {
+    for (const name of ['google-chrome', 'google-chrome-stable', 'chromium', 'chromium-browser', 'microsoft-edge', 'brave-browser']) {
+      out.push(`/usr/bin/${name}`, `/usr/local/bin/${name}`, `/snap/bin/${name}`, `/opt/google/chrome/${name}`);
+    }
+  }
+  // Chrome for Testing, if another tool already fetched it.
+  const shell = { darwin: ['chrome-headless-shell-mac-arm64', 'chrome-headless-shell-mac-x64'], linux: ['chrome-headless-shell-linux64'], win32: ['chrome-headless-shell-win64'] }[platform] ?? [];
+  for (const cache of [path.join(home, '.cache/puppeteer/chrome-headless-shell'), path.join(home, '.cache/hyperframes/chrome/chrome-headless-shell')]) {
+    out.push({ cache, shell });
+  }
+  return out;
+}
+
+// The first candidate that exists, or null. A cache entry is searched newest version
+// first; everything else is a plain path.
+export function findChrome(candidates = chromeCandidates()) {
+  for (const c of candidates) {
+    if (typeof c === 'string') {
+      if (existsSync(c)) return c;
+      continue;
+    }
+    let versions = [];
+    try {
+      versions = readdirSync(c.cache).sort().reverse();
+    } catch {
+      continue;
+    }
+    for (const v of versions) {
+      for (const dirName of c.shell) {
+        const bin = path.join(c.cache, v, dirName, platformBinary(dirName));
+        if (existsSync(bin)) return bin;
+      }
+    }
+  }
+  return null;
+}
+const platformBinary = (dirName) => (dirName.includes('win') ? 'chrome-headless-shell.exe' : 'chrome-headless-shell');
+
+export const NO_CHROME = 'Rendering needs a Chromium browser on this Mac -- Google Chrome, Chromium, Edge or Brave. Install one, or point UNFRAMED_CHROME_PATH at its binary, and render again.';
+
 // The producer, behind one function so a test can stand in for it.
 async function produce({ dir, file, fps, quality, out, onProgress }) {
-  const { createRenderJob, executeRenderJob } = await import('@hyperframes/producer');
+  const chromePath = findChrome();
+  if (!chromePath) throw new Error(NO_CHROME);
+  const [{ createRenderJob, executeRenderJob }, { resolveConfig }] = await Promise.all([import('@hyperframes/producer'), import('@hyperframes/engine')]);
   const quiet = { debug() {}, info() {}, warn() {}, error: (m) => console.error('[render]', m) };
-  const job = createRenderJob({ fps, quality, format: 'mp4', entryFile: file, logger: quiet });
+  const job = createRenderJob({ fps, quality, format: 'mp4', entryFile: file, logger: quiet, producerConfig: resolveConfig({ chromePath }) });
   await executeRenderJob(job, dir, out, (j, message) => onProgress(j.progress, message));
 }
 

@@ -153,8 +153,11 @@ project as `<timestamp>-<slug>.mp4` with a sidecar (`source: 'render'`, `of` nam
 composition, **no `cost`**), so a failed render leaves nothing behind; the node then adds a
 `video` node beside itself naming the file, as a video output's Add to canvas does. Jobs
 are an in-memory Map, not `jobs.js`: a render is local compute on files still on disk, so
-one lost to a restart costs a click, not money. Chrome is the one puppeteer installs with
-`@hyperframes/producer`; the desktop shell has to bring its own (`status.md`).
+one lost to a restart costs a click, not money. The Chrome is the person's own
+(`findChrome`: Google Chrome, Chromium, Edge or Brave where each platform installs them,
+then the puppeteer and HyperFrames caches; `UNFRAMED_CHROME_PATH` overrides), and
+`.puppeteerrc.cjs` at the root keeps puppeteer from downloading one on install; with no
+Chromium at all, Render fails with a message saying to install one.
 
 **The agent's two tools**, `motion_write` and `motion_read`, are `page_write` and
 `page_read` with the noun changed — one factory in `agentTools.js` builds both pairs, so

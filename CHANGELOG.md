@@ -14,8 +14,8 @@ Keep that shape: the website's What's new page parses this file.
   the agent for a video, an animation or motion graphics and it writes one beside the
   selection; drop a composition `.html` onto a Motion node to bring your own. The node
   plays it live, and **Render** turns it into an MP4 in your project folder that lands on
-  the canvas as an ordinary video node. Rendering runs locally in a headless Chrome and
-  uses no credits.
+  the canvas as an ordinary video node. Rendering runs locally in the Chrome (or Chromium,
+  Edge, Brave) you already have and uses no credits; without one, Render says so.
 
 ## 2026-09-05
 
