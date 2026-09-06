@@ -56,13 +56,23 @@ the page tools' twins); a person can also drop one onto a motion node.
   failure leaves nothing behind. The browser polls, then adds a `video` node beside the
   motion, the way a video output's Add to canvas does.
 
-- **Chrome is puppeteer's.** `@hyperframes/producer` depends on `puppeteer`, which
-  downloads Chrome for Testing and chrome-headless-shell on `npm install`. That is what
-  makes Render work in a clone with no setup; the price is a slower first install. The
-  desktop shell will need its own answer (it has Chromium, but not this one) — noted in
-  `status.md` as a follow-up outside this repo.
+- **Chrome is the person's own.** The producer needs a Chromium to capture frames;
+  `findChrome` (server/motion.js) looks where each platform installs Google Chrome,
+  Chromium, Edge or Brave, then in the puppeteer and HyperFrames caches, and
+  `UNFRAMED_CHROME_PATH` names a binary outright. `.puppeteerrc.cjs` at the root stops
+  puppeteer (a dependency of the producer) downloading Chrome for Testing on `npm install`
+  -- ~170MB that nearly every user already has an equivalent of. A machine with none gets
+  a plain message from the Render button. Matteo, 2026-09-06: "most users that are going
+  to use it already have Chrome installed anyways, and we can always add an alert."
+  Verified: a render through `/Applications/Google Chrome.app` completes; a wrong path
+  fails cleanly with the producer's own message. The desktop shell can hand its own
+  Chromium over the same variable.
 
 ## Rejected
+
+- **Letting puppeteer download Chrome for Testing on install** — the first cut, for
+  zero-setup rendering. Rejected the same day: ~170MB charged to every install, for the
+  few users without a Chromium of their own.
 
 - **Player in the canvas bundle, pointed at the preview URL.** Cross-origin to the
   composition, so the player cannot drive it; and the `srcdoc` path that would make it
