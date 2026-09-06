@@ -1520,28 +1520,45 @@ try {
     );
     assert.match(text, /event: state\ndata: \{"status":"failed"/);
     assert.match(text, /event: event\ndata: \{[^\n]*"type":"error"/);
-    // The composer's message shape rides along and is kept on the record.
+    // The selection is kept on the record as context, and nothing else rides along:
+    // `target`/`with` are gone, because the agent decides what a message means.
     const composed = await (await json('POST', tBase, { provider: 'claude' })).json();
     await json('POST', `${tBase}/${composed.thread.id}/messages`, { text: 'swap the hero', selection: ['104', '100'], target: '104', with: ['100'] });
     const kept = (await (await fetch(`${tBase}/${composed.thread.id}`)).json()).thread.messages[0];
-    assert.equal(kept.target, '104');
-    assert.deepEqual(kept.with, ['100']);
-    // A target that is not a node id is dropped, not stored.
-    const odd = await (await json('POST', tBase, { provider: 'claude' })).json();
-    await json('POST', `${tBase}/${odd.thread.id}/messages`, { text: 'x', target: 'not a node id!' });
-    assert.equal('target' in (await (await fetch(`${tBase}/${odd.thread.id}`)).json()).thread.messages[0], false);
-    // Artifact threads (slice 2): about one node, listable by it.
-    assert.equal((await json('POST', tBase, { provider: 'claude', kind: 'sticky' })).status, 400, 'unknown kind');
-    assert.equal((await json('POST', tBase, { provider: 'claude', kind: 'artifact', artifactId: '../x' })).status, 400, 'artifactId must be a node id');
-    const art = await (await json('POST', tBase, { provider: 'claude', kind: 'artifact', artifactId: '104' })).json();
-    assert.equal(art.thread.kind, 'artifact');
-    assert.equal(art.thread.artifactId, '104');
-    const pending = await (await json('POST', tBase, { provider: 'claude', kind: 'artifact' })).json();
-    assert.equal(pending.thread.artifactId, null, 'bound later, when the agent creates the node');
-    const byArtifact = await (await fetch(`${tBase}?artifact=104`)).json();
-    assert.deepEqual(byArtifact.threads.map((t) => t.id), [art.thread.id]);
-    assert.equal((await (await fetch(`${tBase}?artifact=999`)).json()).threads.length, 0);
-    assert.ok((await (await fetch(tBase)).json()).threads.length >= 4, 'unfiltered lists everything');
+    assert.deepEqual(kept.selection, ['104', '100']);
+    assert.equal('target' in kept, false, 'a client still sending a target has it ignored, not honoured');
+    assert.equal('with' in kept, false);
+
+    // ---- chats with tags (2026-09-06) ----
+    // A chat is tagged by the artifacts it is about. The OLD shape is refused rather
+    // than ignored: a client still sending kind/artifactId would silently get an
+    // untagged chat, which looks exactly like the feature working.
+    const stale = await json('POST', tBase, { provider: 'claude', kind: 'artifact', artifactId: '104' });
+    assert.equal(stale.status, 400);
+    assert.match((await stale.json()).error, /send `tags`/);
+    assert.equal((await json('POST', tBase, { provider: 'claude', kind: 'canvas' })).status, 400, 'even the harmless old default is refused');
+    assert.equal((await json('POST', tBase, { provider: 'claude', tags: ['../x'] })).status, 400, 'every tag must be a node id');
+    assert.equal((await json('POST', tBase, { provider: 'claude', tags: 'm1' })).status, 400, 'tags must be an array');
+
+    const art = await (await json('POST', tBase, { provider: 'claude', tags: ['104', '105'] })).json();
+    assert.deepEqual(art.thread.tags, ['104', '105']);
+    assert.equal(art.thread.titledBy, null);
+    assert.equal(art.thread.lastVersion, null);
+    const untagged = await (await json('POST', tBase, { provider: 'claude' })).json();
+    assert.deepEqual(untagged.thread.tags, []);
+
+    // ?tag= filters; repeated, it is any-of (the strip's rule with several selected).
+    assert.deepEqual((await (await fetch(`${tBase}?tag=104`)).json()).threads.map((t) => t.id), [art.thread.id]);
+    assert.deepEqual((await (await fetch(`${tBase}?tag=105`)).json()).threads.map((t) => t.id), [art.thread.id]);
+    assert.equal((await (await fetch(`${tBase}?tag=999`)).json()).threads.length, 0);
+    assert.deepEqual((await (await fetch(`${tBase}?tag=999&tag=104`)).json()).threads.map((t) => t.id), [art.thread.id], 'any-of');
+    assert.ok((await (await fetch(tBase)).json()).threads.length >= 3, 'unfiltered lists everything');
+
+    // A name typed on the tab is the person's, and says so.
+    const named = await (await json('PATCH', `${tBase}/${untagged.thread.id}`, { title: '  Hero copy  ' })).json();
+    assert.equal(named.thread.title, 'Hero copy');
+    assert.equal(named.thread.titledBy, 'user');
+    assert.equal((await (await fetch(`${tBase}?tag=104`)).json()).threads[0].titledBy, null);
     // Model and effort for the next turn (slice 3): PATCH validates, persists, and lists.
     assert.equal((await json('POST', tBase, { provider: 'claude', effort: 'ultra' })).status, 400, 'unknown effort at creation');
     const tuned = await json('PATCH', `${tBase}/${art.thread.id}`, { model: 'claude-sonnet-5', effort: 'high' });
@@ -1549,10 +1566,10 @@ try {
     assert.equal((await tuned.json()).thread.effort, 'high');
     const tunedRec = (await (await fetch(`${tBase}/${art.thread.id}`)).json()).thread;
     assert.equal(tunedRec.model, 'claude-sonnet-5');
-    assert.equal((await (await fetch(`${tBase}?artifact=104`)).json()).threads[0].effort, 'high', 'the summary carries it');
+    assert.equal((await (await fetch(`${tBase}?tag=104`)).json()).threads[0].effort, 'high', 'the summary carries it');
     assert.equal((await json('PATCH', `${tBase}/${art.thread.id}`, { effort: 'ultra' })).status, 400);
     assert.equal((await json('PATCH', `${tBase}/nope`, { effort: 'low' })).status, 404);
-    for (const t of [composed, odd, art, pending]) await fetch(`${tBase}/${t.thread.id}`, { method: 'DELETE' });
+    for (const t of [composed, art, untagged]) await fetch(`${tBase}/${t.thread.id}`, { method: 'DELETE' });
     assert.equal((await fetch(`${tBase}/${created.thread.id}`, { method: 'DELETE' })).status, 200);
     assert.deepEqual((await (await fetch(tBase)).json()).threads, []);
   }

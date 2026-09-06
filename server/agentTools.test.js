@@ -12,7 +12,9 @@ import {
   describeCanvas,
   canvasTools,
   prepareBatch,
-  messagePreamble,
+  contextPreamble,
+  summarizeChanges,
+  changeSentence,
   pageFileName,
   pageSidecar,
   placeBeside,
@@ -69,19 +71,71 @@ assert.deepEqual(d.edges, [{ from: '100', to: '102' }, { from: '103', to: '102' 
 assert.deepEqual(d.selection, ['101', '103']);
 assert.deepEqual(describeCanvas(graph, ['101', 'ghost']).selection, ['101']);
 assert.deepEqual(describeCanvas({ nodes: [], edges: [] }, []), { nodes: [], edges: [], selection: [] });
-// The composer's context rides along: a target that exists, "new", or nothing.
-assert.equal(describeCanvas(graph, [], { target: '107', with: ['103', 'ghost'] }).target, '107');
-assert.deepEqual(describeCanvas(graph, [], { target: '107', with: ['103', 'ghost'] }).with, ['103']);
-assert.equal(describeCanvas(graph, [], { target: 'new' }).target, 'new');
-assert.equal(describeCanvas(graph, [], { target: 'ghost' }).target, null, 'a target that is gone is said to be gone');
-assert.equal('target' in describeCanvas(graph, [], {}), false, 'the panel sends none, so none is reported');
+// The selection is the ONLY context: no target, because the agent decides what a
+// message means about what is selected (a mode picker was rejected).
+assert.equal('target' in describeCanvas(graph, ['101']), false);
+assert.equal('with' in describeCanvas(graph, ['101']), false);
 
-// ---- messagePreamble ----
+// ---- what changed since the last turn ----
+// origin kinds: `session` is a browser tab (the person), `thread` an agent chat,
+// `system` bookkeeping, `undo`/`redo` whoever pressed it -- the agent has no undo tool.
+{
+  const entries = [
+    { version: 1, origin: { kind: 'thread', id: 'mine' } },
+    { version: 2, origin: { kind: 'session', id: 'tab' } },
+    { version: 3, origin: { kind: 'system', reason: 'media-extraction' } },
+    { version: 4, origin: { kind: 'undo', id: 'tab' }, undoes: 1 },
+    { version: 5, origin: { kind: 'thread', id: 'other' } },
+    { version: 6, origin: { kind: 'session', id: 'tab' } },
+  ];
+  const all = summarizeChanges(entries, { since: 0, threadId: 'mine' });
+  assert.equal(all.person, 3, 'two tab edits and the undo; the extraction is not an edit');
+  assert.equal(all.otherChats, 1);
+  assert.equal(all.undoneFromThisChat, 1, 'version 4 undid version 1, which was ours');
+  assert.equal(all.total, 4);
+  // `since` is the thread's lastVersion: what it already knows about is not a change.
+  const later = summarizeChanges(entries, { since: 4, threadId: 'mine' });
+  assert.deepEqual(later, { person: 1, otherChats: 1, undoneFromThisChat: 0, total: 2 });
+  assert.equal(summarizeChanges(entries, { since: 6, threadId: 'mine' }).total, 0);
+  // Its OWN entries are never news to it.
+  assert.equal(summarizeChanges([{ version: 9, origin: { kind: 'thread', id: 'mine' } }], { since: 0, threadId: 'mine' }).total, 0);
+  assert.equal(summarizeChanges([], { since: 0 }).total, 0);
+  assert.equal(summarizeChanges(undefined, {}).total, 0);
+  // An undo of somebody else's change is still a change, just not one of ours.
+  assert.equal(summarizeChanges([
+    { version: 1, origin: { kind: 'session', id: 'tab' } },
+    { version: 2, origin: { kind: 'undo', id: 'tab' }, undoes: 1 },
+  ], { since: 0, threadId: 'mine' }).undoneFromThisChat, 0);
+}
 
-assert.equal(messagePreamble({}, graph), '');
-assert.equal(messagePreamble({ target: 'new' }, graph), 'To: a new asset.');
-assert.equal(messagePreamble({ target: '107', with: ['103', '101'] }, graph), 'To: page 107 ("Launch page"). With: image 103 ("hero.png"), prompt 101 ("lone red fox").');
-assert.equal(messagePreamble({ target: 'ghost' }, graph), 'To: ghost.');
+// ---- the sentence that sends the agent back to read ----
+assert.equal(changeSentence({ total: 0 }), '', 'nothing changed: nothing is said');
+assert.equal(
+  changeSentence({ person: 4, undoneFromThisChat: 1, total: 4 }),
+  'Since your last turn the canvas changed: 4 changes by the person, including an undo of a change from this chat. Read it again before acting.',
+);
+assert.equal(
+  changeSentence({ person: 1, total: 1 }),
+  'Since your last turn the canvas changed: 1 change by the person. Read it again before acting.',
+);
+assert.equal(
+  changeSentence({ person: 2, otherChats: 1, undoneFromThisChat: 2, total: 3 }),
+  'Since your last turn the canvas changed: 2 changes by the person, 1 change by another chat, including 2 undos of changes from this chat. Read it again before acting.',
+);
+
+// ---- contextPreamble ----
+
+assert.equal(contextPreamble({}, graph), '', 'nothing selected, nothing changed: no preamble');
+assert.equal(
+  contextPreamble({ selection: ['107', '103', '101'] }, graph),
+  'Selected: page 107 ("Launch page"), image 103 ("hero.png"), prompt 101 ("lone red fox").',
+);
+assert.equal(contextPreamble({ selection: ['ghost'] }, graph), '', 'a node that is gone is not reported as selected');
+assert.equal(
+  contextPreamble({ selection: ['101'], changes: { person: 1, total: 1 } }, graph),
+  'Selected: prompt 101 ("lone red fox"). Since your last turn the canvas changed: 1 change by the person. Read it again before acting.',
+);
+assert.match(contextPreamble({ changes: { person: 2, total: 2 } }, graph), /^Since your last turn/, 'the note stands alone when nothing is selected');
 
 // ---- prepareBatch ----
 
@@ -185,11 +239,10 @@ assert.deepEqual(placeBeside(graph, []), { x: 80, y: 80 });
   const written = [];
   const events = [];
   let version = 10;
-  const state = { graph: JSON.parse(JSON.stringify(graph)), selection: ['103'], context: { target: 'new', with: ['103', '101'] } };
+  const state = { graph: JSON.parse(JSON.stringify(graph)), selection: ['103'] };
   const tools = canvasTools({
     getGraph: async () => state.graph,
     getSelection: () => state.selection,
-    getContext: () => state.context,
     commit: async (batch) => {
       committed.push(batch);
       if (batch.ops.some((o) => o.type === 'removeNode' && o.id === 'ghost')) return { rejected: 'removeNode: no node ghost' };
@@ -223,11 +276,11 @@ assert.deepEqual(placeBeside(graph, []), { x: 80, y: 80 });
     return { ...JSON.parse(out.content[0].text), isError: Boolean(out.isError) };
   };
 
-  // canvas_read carries the composer's context.
+  // canvas_read reports the selection, and only the selection.
   const read = await call('canvas_read', {});
-  assert.equal(read.target, 'new');
-  assert.deepEqual(read.with, ['103', '101']);
   assert.deepEqual(read.selection, ['103']);
+  assert.equal('target' in read, false);
+  assert.equal('with' in read, false);
 
   // canvas_write: prepared, committed as one batch, reported.
   const w = await call('canvas_write', { ops: [{ type: 'addNode', node: { id: 'new:p', type: 'prompt', position: { x: 0, y: 0 }, data: { text: 'hi' } } }] });

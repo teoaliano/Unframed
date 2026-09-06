@@ -32,7 +32,7 @@ import {
 import { saveMedia, copyMedia, inlineFileRefs } from './media.js';
 import { ensureLibrary, startRender, getRender, withRuntime } from './motion.js';
 import { providerStatuses, forgetProviderStatus, PROVIDERS } from './providers.js';
-import { newThread, writeThread, readThread, listThreads, deleteThread, eventsSince, persistThread, applySettings, renameThread, EFFORTS } from './threads.js';
+import { newThread, writeThread, readThread, listThreads, deleteThread, eventsSince, persistThread, applySettings, renameThread, tagThread, EFFORTS } from './threads.js';
 import { sendToThread, interruptThread, subscribeThread, closeThreadSession, closeSessionsFor } from './agent.js';
 import crypto from 'node:crypto';
 import { startPreviewServer, LOOPBACK_HOST } from './preview.js';
@@ -1334,23 +1334,29 @@ for (const [route, fn] of [
 }
 
 // ---- agent threads ----
-// One conversation with the agent about one project (server/threads.js holds the
-// record, server/agent.js runs the session). Nested under the project because the
-// record lives in its folder and follows it through a rename.
+// One CHAT with the agent about one project (server/threads.js holds the record,
+// server/agent.js runs the session). Nested under the project because the record lives
+// in its folder and follows it through a rename.
 const threadDir = (req) => projectDir(req.params.name);
+const NODE_ID_RE = /^[\w-]{1,80}$/;
 
-// `kind` is 'canvas' (the panel's thread about the board) or 'artifact' (the composer's,
-// about one node -- `artifactId`, or null when the agent is about to create it).
+// `tags` are the artifacts (pages, motions) the chat is about at its first message; the
+// agent adds one for every artifact it writes to. The old `kind`/`artifactId` pair is
+// refused rather than ignored: a client still sending them would silently get an
+// untagged chat, which looks like the feature working and is not.
 app.post('/api/projects/:name/threads', async (req, res) => {
-  const { provider = 'claude', model = '', effort = '', kind = 'canvas', artifactId = null } = req.body || {};
+  const { provider = 'claude', model = '', effort = '', tags = [] } = req.body || {};
+  if ('kind' in (req.body || {}) || 'artifactId' in (req.body || {})) {
+    return res.status(400).json({ error: 'A thread is a chat now: send `tags` (artifact node ids), not `kind`/`artifactId`.' });
+  }
   if (!PROVIDERS[provider]) return res.status(400).json({ error: `Unknown provider "${provider}".` });
   if (typeof model !== 'string' || model.length > 200) return res.status(400).json({ error: 'That does not look like a model id.' });
   if (effort !== '' && !EFFORTS.has(effort)) return res.status(400).json({ error: `Effort must be one of ${[...EFFORTS].join(', ')}.` });
-  if (kind !== 'canvas' && kind !== 'artifact') return res.status(400).json({ error: `Unknown thread kind "${kind}".` });
-  if (artifactId !== null && (typeof artifactId !== 'string' || !/^[\w-]{1,80}$/.test(artifactId))) return res.status(400).json({ error: 'artifactId must be a node id.' });
+  if (!Array.isArray(tags) || tags.length > 500) return res.status(400).json({ error: 'tags must be an array of node ids.' });
+  if (tags.some((t) => typeof t !== 'string' || !NODE_ID_RE.test(t))) return res.status(400).json({ error: 'Every tag must be a node id.' });
   try {
     const id = `t-${Date.now().toString(36)}-${crypto.randomBytes(4).toString('hex')}`;
-    const thread = newThread({ id, project: slugify(req.params.name), provider, model, effort, kind, artifactId });
+    const thread = newThread({ id, project: slugify(req.params.name), provider, model, effort, tags });
     await writeThread(threadDir(req), thread);
     res.json({ thread });
   } catch (err) {
@@ -1381,11 +1387,14 @@ app.patch('/api/projects/:name/threads/:id', async (req, res) => {
   }
 });
 
+// `?tag=<id>` narrows to the chats tagged with that artifact; repeated, it is any-of --
+// the strip's rule when several artifacts are selected (docs/agent.md).
 app.get('/api/projects/:name/threads', async (req, res) => {
   try {
     const all = await listThreads(threadDir(req));
-    const artifact = typeof req.query.artifact === 'string' ? req.query.artifact : null;
-    res.json({ threads: artifact ? all.filter((t) => t.artifactId === artifact) : all });
+    const q = req.query.tag;
+    const tags = (Array.isArray(q) ? q : q === undefined ? [] : [q]).filter((t) => typeof t === 'string' && t);
+    res.json({ threads: tags.length ? all.filter((t) => t.tags.some((id) => tags.includes(id))) : all });
   } catch (err) {
     res.status(500).json({ error: `Could not list the threads: ${err.message}` });
   }
@@ -1399,19 +1408,34 @@ app.get('/api/projects/:name/threads/:id', async (req, res) => {
   }
 });
 
+// A chat is tagged by the artifacts selected at its FIRST message (decision 1); every
+// later tag comes from the agent actually writing to one (agent.js, onWrite). Which of
+// the selected ids ARE artifacts is the document's answer, not the browser's -- the
+// browser says what is selected, the server says what those nodes are.
+const ARTIFACT_TYPES = new Set(['page', 'motion']);
+async function tagFirstMessage(dir, threadId, selection) {
+  if (!selection.length) return;
+  const existing = await readThread(dir, threadId);
+  if (existing.messages.length) return;
+  const { graph } = await openDocument(dir);
+  const artifacts = graph.nodes.filter((n) => ARTIFACT_TYPES.has(n.type) && selection.includes(n.id)).map((n) => n.id);
+  if (!artifacts.length) return;
+  await persistThread(dir, threadId, (cur) => (cur ? tagThread(cur, artifacts) : null));
+}
+
 // One turn. The selection travels with the message: it is the browser's, the server
-// never holds it otherwise, and canvas_read reports the latest one for this thread.
+// never holds it otherwise, and canvas_read reports the latest one for this thread. It
+// is CONTEXT, not a target -- the agent decides what the sentence means about it, which
+// is why there is no `target`/`with` any more.
 app.post('/api/projects/:name/threads/:id/messages', async (req, res) => {
   const text = String(req.body?.text ?? '').trim();
   if (!text) return res.status(400).json({ error: 'Say something first.' });
   if (text.length > 20000) return res.status(400).json({ error: 'That message is too long.' });
   const selection = Array.isArray(req.body?.selection) ? req.body.selection.slice(0, 500).map(String) : [];
-  // The composer's intent: which node this is about ("new" for one the agent should
-  // create) and what it came with. Node ids, so the same shape as the selection.
-  const target = typeof req.body?.target === 'string' && /^(new|[\w-]{1,80})$/.test(req.body.target) ? req.body.target : undefined;
-  const withIds = Array.isArray(req.body?.with) ? req.body.with.slice(0, 500).map(String) : [];
+  const dir = threadDir(req);
   try {
-    await sendToThread(threadDir(req), req.params.id, { text, selection, target, with: withIds }, { settings: providerSettings, previewPort: PREVIEW_PORT });
+    await tagFirstMessage(dir, req.params.id, selection);
+    await sendToThread(dir, req.params.id, { text, selection }, { settings: providerSettings, previewPort: PREVIEW_PORT });
     res.json({ ok: true });
   } catch (err) {
     res.status(err.status || (/not found/i.test(err.message) ? 404 : 500)).json({ error: err.message });
