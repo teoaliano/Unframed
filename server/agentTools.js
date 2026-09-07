@@ -308,10 +308,19 @@ const failure = (message) => ({ content: [{ type: 'text', text: JSON.stringify({
 // new file on every write, placement beside the selection, the node it becomes, the
 // event the panel shows -- is shared by construction below, because the two used to be
 // one hand-written tool and a second copy is exactly how they would drift apart.
+// Parameters the person can turn by hand, in the editor's Parameters column. The shapes
+// are the shorthand `server/dials.js` normalises; the sentence is appended to BOTH artifact
+// kinds rather than written twice, since a second copy is how the two would drift.
+const DIALS_CONTRACT = [
+  'Parameters: you can expose values for the person to turn by hand, and they appear as controls beside the artifact. Call `unframed.dials("Scene", { accent: "#a78bfa", speed: [1, 0.5, 2], caption: "Launch day" }, (v) => { /* apply v */ })` -- once, at the end of your script, with a callback that applies the values (set a CSS custom property, a text content, a timeline timeScale).',
+  'The shape of each value decides its control: a hex colour is a colour picker, `[value, min, max]` (optionally a fourth step) a slider, a string a text field, an array of strings a dropdown, a number or true/false itself, a nested object a folder of controls. The callback runs once at startup and again on every change, and the person\'s settings are what a render uses -- so apply them, never hard-code the value you also declared.',
+  'Expose a parameter when the person asks for one, or when a choice is obviously worth tuning (a colour, a duration, a piece of copy). `unframed` is already there; do not add a script tag for it.',
+].join(' ');
+
 const ARTIFACTS = {
   page: {
     describeWrite:
-      "Create a page asset or write a new version of one. `html` is the complete, self-contained HTML document: inline its style and script; reference the project's images and clips by the exact file names canvas_read reports (they sit beside the page, so a plain relative name works); nothing external loads. Files are never overwritten -- every write is a new version the person can undo. Omit nodeId to create a page beside the current selection; pass it to update that page.",
+      `Create a page asset or write a new version of one. \`html\` is the complete, self-contained HTML document: inline its style and script; reference the project's images and clips by the exact file names canvas_read reports (they sit beside the page, so a plain relative name works); nothing external loads. Files are never overwritten -- every write is a new version the person can undo. Omit nodeId to create a page beside the current selection; pass it to update that page. ${DIALS_CONTRACT}`,
     describeRead: 'Read the current HTML of a page asset, so an edit starts from what is there.',
     size: { width: 480, height: 320 },
     prepare: (html) => html,
@@ -327,6 +336,7 @@ const ARTIFACTS = {
       'animation is ONE paused GSAP timeline, registered synchronously: window.__timelines = window.__timelines || {}; window.__timelines.main = gsap.timeline({ paused: true }); give tweens explicit positions and prefer fromTo();',
       'load GSAP with <script src="gsap.js"></script> -- it sits beside the composition -- and nothing else external: no CDNs, fonts or remote images. Never call play(), pause() or set currentTime on media; no wall-clock time, no unseeded randomness, no infinite repeats.',
       'The HyperFrames runtime is added to the file for you. Files are never overwritten -- every write is a new version the person can undo. Omit nodeId to create a motion beside the current selection; pass it to update that motion. The person renders it to an MP4 from the node.',
+      DIALS_CONTRACT,
     ].join(' '),
     describeRead: 'Read the current HTML of a motion asset (its HyperFrames composition), so an edit starts from what is there.',
     size: { width: 480, height: 300 },

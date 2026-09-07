@@ -234,6 +234,25 @@ assert.deepEqual(placeBeside(graph, ['103', '104']), { x: 300 + 60, y: 0 });
 assert.deepEqual(placeBeside(graph, ['101']), { x: 40 + 240 + 60, y: 320 }, 'an unsized node is taken as the default width');
 assert.deepEqual(placeBeside(graph, []), { x: 80, y: 80 });
 
+// ---- the agent is TOLD about parameters, in both artifact kinds and once ----
+// A scripted fixture can hardcode `unframed.dials(...)` and pass while a real model would
+// never write one, because nothing told it the function exists. This is that check.
+{
+  const tools = canvasTools({
+    getGraph: async () => graph,
+    getSelection: () => [],
+    commit: async () => ({ version: 1 }),
+    files: { list: async () => [] },
+    previewUrl: () => '',
+  });
+  const byName = Object.fromEntries(tools.map((t) => [t.name, t]));
+  for (const name of ['page_write', 'motion_write']) {
+    assert.match(byName[name].description, /unframed\.dials\(/, `${name} tells the agent the call`);
+    assert.match(byName[name].description, /\[value, min, max\]/, `${name} tells it the shapes`);
+    assert.match(byName[name].description, /do not add a script tag/, `${name} says the bridge is already there`);
+  }
+}
+
 // ---- which artifacts a batch touched ----
 // Read from the OPS, not from the graph afterwards: a removeNode's node is gone by then,
 // and a change line that could not name what it deleted would be the least useful one.
