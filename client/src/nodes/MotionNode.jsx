@@ -13,6 +13,7 @@ import StatusLine from './StatusLine.jsx';
 import { freeSpot } from './output/core.js';
 import { withDrag } from '../graph/starter.js';
 import { useProject } from '../graph/project.js';
+import { useDialValues } from './useDialValues.js';
 import { uploadMotion, motionUrl, startMotionRender, pollMotionRender } from '../api.js';
 
 // The motion asset: a HyperFrames composition in the project folder, played live and
@@ -50,6 +51,10 @@ export default function MotionNode({ id, data, dragging, selected }) {
     };
   }, []);
   const src = data.file && previewPort ? motionUrl(previewPort, project, data.file) : '';
+  // The frame showing this artifact, and its saved parameter values handed to it, so
+  // the preview here is the artifact as it is TUNED rather than as it was written.
+  const frame = useRef(null);
+  useDialValues(frame, data.dials ?? null);
   const title = data.title || data.fileName?.replace(/\.html?$/i, '') || '';
 
   async function onFile(file) {
@@ -137,6 +142,7 @@ export default function MotionNode({ id, data, dragging, selected }) {
             // Inert until selected, so a click selects the node rather than the player;
             // keyed by file so a new version is a fresh document (PageNode).
             <iframe
+              ref={frame}
               key={data.file}
               className={`xnode-frame${selected && !dragging ? ' xnode-frame--live' : ''}`}
               src={src}

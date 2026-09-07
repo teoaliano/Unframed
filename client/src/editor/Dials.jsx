@@ -126,28 +126,31 @@ export default function Dials({ project, dials, onChange, frameRef }) {
           No parameters yet. Ask the agent to expose some — “expose the accent colour and the intro speed as parameters”.
         </Text>
       )}
-      {/* Making the artifact self-contained. Offered only when it HAS parameters, since
-          that is the only thing the library would be for, and it is a copy rather than a
-          download: the preview origin allows no network, so the files come from the ones
-          the app already has. */}
+      {/* Making the FILE self-contained -- nothing about the controls above, which are
+          already here and working. The first wording led with the mechanism ("install
+          them in the project") while the person was looking at working controls, and read
+          as if they were not installed (Matteo, 2026-09-07). It now leads with the
+          situation it is about: the file, opened somewhere else. */}
       {panel && installed !== null && (
         <VStack gap={1} className="editor-dials-foot">
           {installed ? (
             <HStack gap={1} align="center">
               <Icon icon={Check} size="sm" />
               <Text type="supporting" color="secondary">
-                Controls are installed in this project, so an artifact here carries them when opened on its own.
+                Opened outside Unframed, this file carries these controls with it.
               </Text>
             </HStack>
           ) : (
             <>
+              {/* Stacked, not a row: this column is ~300px and a row of sentence + button
+                  + note wrapped into three narrow ribbons. */}
               <Text type="supporting" color="secondary">
-                These controls live here, in the app. Install them in the project and the artifact carries its own when opened outside it — about 300KB, once per project.
+                Opened outside Unframed, this file plays without these controls. Adding them costs about 300KB, once per project.
               </Text>
               <Button
                 size="sm"
                 variant="secondary"
-                label="Install controls in this project"
+                label={installing ? 'Adding…' : 'Add them to the file'}
                 icon={<Icon icon={Download} />}
                 isLoading={installing}
                 onClick={async () => {

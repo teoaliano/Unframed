@@ -46,6 +46,11 @@ export const DIALS_LIBRARY_FILES = Object.keys(DIALS_LIBRARY);
 
 const HEX = /^#([0-9A-Fa-f]{3}|[0-9A-Fa-f]{6}|[0-9A-Fa-f]{8})$/;
 
+// Which pages may send an artifact its values: whoever framed it, if that is us or a
+// loopback page. The same rule the preview origin's `frame-ancestors` enforces and the
+// API's own Origin check uses, so this adds no reach the CSP does not already allow.
+const LOOPBACK_ORIGIN = /^http:\/\/(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$/i;
+
 // The friendly config as the agent writes it -> the config DialKit wants, and the schema
 // the canvas mirrors. Pure, and exported so the bridge and the tests agree on one
 // definition rather than two that drift.
@@ -196,8 +201,20 @@ export function bridgeSource() {
     '    }',
     '    return out;',
     '  }',
-    '  function fromOurOrigin(event) {',
-    '    return event.origin === window.location.origin;',
+    // The artifact takes values from exactly one place: WHOEVER FRAMED IT. Two topologies
+    // reach here and both are legitimate -- a motion sits inside the viewer, which is
+    // same-origin with it and relays; a page is framed by the canvas directly, which is
+    // NOT same-origin. A same-origin-only rule silently broke pages: their bridge dropped
+    // every value the canvas sent, so a page's parameters did nothing at all.
+    //
+    // So: the sender must be the parent frame, and its origin must be ours or a loopback
+    // page. That is no widening of trust -- the preview origin's `frame-ancestors` already
+    // allows only a loopback page to frame this, so the parent is the viewer or the app and
+    // can be nothing else.
+    `  var LOOPBACK = ${LOOPBACK_ORIGIN.toString()};`,
+    '  function fromOurFramer(event) {',
+    '    if (event.source !== window.parent) return false;',
+    '    return event.origin === window.location.origin || LOOPBACK.test(event.origin || "");',
     '  }',
     '  var api = (window.unframed = window.unframed || {});',
     '  var live = null;',
@@ -245,7 +262,7 @@ export function bridgeSource() {
     '  };',
     '  api.defaultDials = defaultValues;',
     '  window.addEventListener("message", function (event) {',
-    '    if (!fromOurOrigin(event) || !event.data || event.data.type !== "unframed:dials:set") return;',
+    '    if (!fromOurFramer(event) || !event.data || event.data.type !== "unframed:dials:set") return;',
     '    if (!live) return;',
     '    live.values = mergeValues(live.schema, assign(live.values, event.data.values));',
     '    try {',

@@ -114,6 +114,7 @@ assert.match(normalizeConfig({ a: { b: { c: [1, 2] } } }).error, /dials\.a\.b\.c
       ...(hfVariables ? { __hfVariables: hfVariables } : {}),
     };
     win.parent = { postMessage: (msg, origin) => posted.push({ msg, origin }) };
+    win.__parent = win.parent;
     const quiet = { error() {}, log() {}, warn() {} };
     // eslint-disable-next-line no-new-func
     new Function('window', 'console', src)(win, quiet);
@@ -157,18 +158,28 @@ assert.match(normalizeConfig({ a: { b: { c: [1, 2] } } }).error, /dials\.a\.b\.c
     const { win, listeners } = run();
     let applied = null;
     win.unframed.dials('Scene', { accent: '#a78bfa', speed: [1, 0.5, 2], scene: { gap: [8, 0, 40] } }, (v) => (applied = v));
-    listeners.message({ origin: 'http://127.0.0.1:9', data: { type: 'unframed:dials:set', values: { speed: 2 } } });
+    const from = (origin, data, source = win.parent) => listeners.message({ origin, data, source });
+    from('http://127.0.0.1:9', { type: 'unframed:dials:set', values: { speed: 2 } });
     assert.deepEqual(applied, { accent: '#a78bfa', speed: 2, scene: { gap: 8 } });
     // A partial update must not reset what it does not name.
-    listeners.message({ origin: 'http://127.0.0.1:9', data: { type: 'unframed:dials:set', values: { accent: '#000000' } } });
+    from('http://127.0.0.1:9', { type: 'unframed:dials:set', values: { accent: '#000000' } });
     assert.deepEqual(applied, { accent: '#000000', speed: 2, scene: { gap: 8 } }, 'speed survived');
-    listeners.message({ origin: 'http://127.0.0.1:9', data: { type: 'unframed:dials:set', values: { scene: { gap: 20 } } } });
+    from('http://127.0.0.1:9', { type: 'unframed:dials:set', values: { scene: { gap: 20 } } });
     assert.deepEqual(applied, { accent: '#000000', speed: 2, scene: { gap: 20 } }, 'and a folder updates in place');
     const before = JSON.stringify(applied);
-    listeners.message({ origin: 'http://evil.test', data: { type: 'unframed:dials:set', values: { accent: '#ffffff' } } });
-    assert.equal(JSON.stringify(applied), before, 'a message from another origin changes nothing');
-    listeners.message({ origin: 'http://127.0.0.1:9', data: { type: 'something:else', values: { accent: '#ffffff' } } });
+    from('http://evil.test', { type: 'unframed:dials:set', values: { accent: '#ffffff' } });
+    assert.equal(JSON.stringify(applied), before, 'a message from a non-loopback origin changes nothing');
+    from('http://127.0.0.1:9', { type: 'something:else', values: { accent: '#ffffff' } });
     assert.equal(JSON.stringify(applied), before, 'and neither does one that is not ours');
+    // The canvas frames a PAGE directly, so its origin is NOT the artifact's. That has to
+    // work, or a page's parameters do nothing at all -- which is what a same-origin-only
+    // rule did.
+    from('http://localhost:5317', { type: 'unframed:dials:set', values: { speed: 1.25 } });
+    assert.equal(applied.speed, 1.25, 'a loopback framer (the canvas, framing a page) is accepted');
+    // But only the FRAMER. A sibling frame on a loopback port is not who framed this.
+    const sibling = { postMessage() {} };
+    from('http://localhost:5317', { type: 'unframed:dials:set', values: { speed: 2 } }, sibling);
+    assert.equal(applied.speed, 1.25, 'a message from anything but the parent frame is ignored');
   }
 
   // A bad config is reported and registers nothing, rather than half a panel.
