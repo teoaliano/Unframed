@@ -14,6 +14,16 @@ Keep that shape: the website's What's new page parses this file.
   works — no picking one of them first, no "which did you mean". Whatever you have
   selected comes along as context and the agent works out what you meant from what you
   said.
+- **The editor: one artifact, full window.** Double-click a page or a motion (or use Open
+  on the toolbar) and it fills the window in three columns — the chats about it, the thing
+  itself at a size you can actually judge, and its parameters. Escape puts the canvas back
+  exactly where it was.
+- **An artifact can expose parameters you turn by hand.** Ask the agent to "expose the
+  accent colour and the intro speed as parameters" and controls appear in the editor's
+  right-hand column: drag one and the preview follows, and Render uses whatever they are
+  set to. A tweak is an ordinary canvas change, so ⌘Z takes it back, and it survives the
+  agent rewriting the composition. An action in that column installs the controls into the
+  project if you want the file to carry its own when opened outside the app.
 - **The agent's replies are formatted.** Headings, lists, tables, quotes, task lists and
   code blocks (with a copy button) all render properly instead of arriving as one wall of
   plain text. Links open in a new tab.

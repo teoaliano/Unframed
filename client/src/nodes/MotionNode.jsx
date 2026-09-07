@@ -78,7 +78,9 @@ export default function MotionNode({ id, data, dragging, selected }) {
     setError('');
     const started = project;
     try {
-      const { id: renderId } = await startMotionRender(project, data.file, title);
+      // The node's parameter values ride along, so the MP4 is the composition as it is
+      // tuned rather than as it was written (server/dials.js).
+      const { id: renderId } = await startMotionRender(project, data.file, title, data.dials ?? null);
       setRender({ id: renderId, status: 'queued', progress: 0, message: '' });
       for (;;) {
         await new Promise((r) => setTimeout(r, POLL_MS));

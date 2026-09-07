@@ -24,6 +24,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { createRequire } from 'node:module';
 import { mediaFileName } from './media.js';
+import { BRIDGE, BRIDGE_TAG, bridgeSource, DIALS_LIBRARY_FILES, dialsLibraryInstalled } from './dials.js';
 
 const require = createRequire(import.meta.url);
 
@@ -36,27 +37,101 @@ export const LIBRARY = {
   'gsap.js': () => require.resolve('gsap/dist/gsap.min.js'),
 };
 export const VIEWER = 'hyperframes-viewer.html';
-export const LIBRARY_FILES = [VIEWER, ...Object.keys(LIBRARY)];
+// The parameters bridge ships with every composition (it is small, and it is what makes
+// `unframed.dials` exist); DialKit itself is opt-in and installed separately
+// (server/dials.js says why).
+export const LIBRARY_FILES = [VIEWER, BRIDGE, ...Object.keys(LIBRARY), ...DIALS_LIBRARY_FILES];
 export const isLibraryFile = (name) => LIBRARY_FILES.includes(name);
 
 // The same alphabet the preview origin serves (preview.js NAME_RE), so the viewer's
 // query string can only ever name a sibling that could exist.
 const COMPOSITION_RE = /^[A-Za-z0-9][A-Za-z0-9._-]*\.html?$/;
 
+// Which pages above this one may send it parameter values: a loopback page, the same rule
+// the preview origin's `frame-ancestors` allows and the API's own Origin check uses. A
+// known origin on every message is what makes "*" unnecessary in either direction.
+const LOOPBACK_ORIGIN = /^http:\/\/(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$/i;
+
 // The page the node frames. `runtime-src` names the sibling runtime, because the
 // player's default is a CDN the preview origin refuses; `muted` so a node can autoplay
 // under browser policy, with the controls there to unmute.
+//
+// It is also the one place that knows both sides of a parameter change, so it relays
+// them: the composition announces its parameters to whoever framed it (server/dials.js),
+// and the canvas answers with values to apply. Neither end knows the other's origin, so
+// the CANVAS says hello first and the viewer replays the last announcement to it -- which
+// is what lets every message be addressed to a known origin instead of "*".
+//
+// With no canvas above it (the composition opened on its own) the viewer mounts DialKit's
+// own panel, if DialKit has been installed beside the artifact. That is the only reason
+// that library is ever in a project folder.
 export function viewerHtml() {
   return [
     '<!doctype html>',
     '<html><head><meta charset="utf-8"><title>motion</title>',
-    '<style>html,body{margin:0;height:100%;background:#000;overflow:hidden}hyperframes-player{display:block;width:100%;height:100%}</style>',
+    '<style>html,body{margin:0;height:100%;background:#000;overflow:hidden}hyperframes-player{display:block;width:100%;height:100%}',
+    '#dials{position:fixed;inset-block-start:0;inset-inline-end:0;z-index:2}</style>',
     '<script src="hyperframes-player.js"></script></head>',
     '<body><hyperframes-player id="player" runtime-src="hyperframes-runtime.js" controls muted></hyperframes-player>',
     '<script>',
     `var c = new URLSearchParams(location.search).get('c') || '';`,
     `if (${COMPOSITION_RE.toString()}.test(c)) document.getElementById('player').setAttribute('src', c);`,
-    '</script></body></html>',
+    '(function () {',
+    '  "use strict";',
+    `  var LOOPBACK = ${LOOPBACK_ORIGIN.toString()};`,
+    '  var composition = null;',
+    '  var canvas = null;',
+    '  var last = null;',
+    '  var standalone = window.parent === window;',
+    '  function toCanvas(msg) {',
+    '    if (canvas && canvas.win && !canvas.win.closed) canvas.win.postMessage(msg, canvas.origin);',
+    '  }',
+    '  function mountStandalone(msg) {',
+    '    // DialKit is opt-in per project (server/dials.js). Without it there is simply no',
+    '    // panel here, and the composition still plays and still applies its defaults.',
+    '    if (!window.DialKit || !window.DialKit.createDialRoot) return;',
+    '    var host = document.getElementById("dials");',
+    '    if (!host) {',
+    '      host = document.createElement("div");',
+    '      host.id = "dials";',
+    '      document.body.appendChild(host);',
+    '    }',
+    '    if (!window.__dialRoot) window.__dialRoot = window.DialKit.createDialRoot({ target: host, mode: "inline", theme: "dark" });',
+    '    if (window.__dialKit) window.__dialKit.destroy();',
+    '    window.__dialKit = window.DialKit.createDialKit(msg.name || "Parameters", msg.config || {}, {});',
+    '    window.__dialKit.subscribe(function (values) {',
+    '      if (composition) composition.postMessage({ type: "unframed:dials:set", values: values }, window.location.origin);',
+    '    });',
+    '  }',
+    '  window.addEventListener("message", function (event) {',
+    '    var data = event.data;',
+    '    if (!data || typeof data !== "object") return;',
+    '    // From the composition, which is same-origin with this page.',
+    '    if (data.type === "unframed:dials" && event.origin === window.location.origin) {',
+    '      composition = event.source;',
+    '      last = data;',
+    '      if (standalone) mountStandalone(data);',
+    '      else toCanvas(data);',
+    '      return;',
+    '    }',
+    '    // From the canvas, which is a loopback page above this one.',
+    '    if (!LOOPBACK.test(event.origin || "")) return;',
+    '    if (data.type === "unframed:dials:hello") {',
+    '      canvas = { win: event.source, origin: event.origin };',
+    '      if (last) toCanvas(last);',
+    '      return;',
+    '    }',
+    '    if (data.type === "unframed:dials:set" && composition) {',
+    '      composition.postMessage(data, window.location.origin);',
+    '    }',
+    '  });',
+    '})();',
+    '</script>',
+    // Loaded LAST and only if present: an artifact carries its own controls only when
+    // DialKit has been installed beside it.
+    '<script src="dialkit.js" onerror="this.remove()"></script>',
+    '<link rel="stylesheet" href="dialkit.css" onerror="this.remove()">',
+    '</body></html>',
     '',
   ].join('\n');
 }
@@ -71,10 +146,16 @@ export async function ensureLibrary(dir) {
   await fs.mkdir(dir, { recursive: true });
   const written = [];
   const same = async (file, size) => (await fs.stat(path.join(dir, file)).catch(() => null))?.size === size;
-  const viewer = Buffer.from(viewerHtml(), 'utf8');
-  if (!(await same(VIEWER, viewer.length))) {
-    await fs.writeFile(path.join(dir, VIEWER), viewer);
-    written.push(VIEWER);
+  // The two files we generate rather than copy. Compared by size like the rest, which is
+  // what a dependency bump -- or an edit to the generator -- looks like from here.
+  for (const [file, body] of [
+    [VIEWER, viewerHtml()],
+    [BRIDGE, bridgeSource()],
+  ]) {
+    const bytes = Buffer.from(body, 'utf8');
+    if (await same(file, bytes.length)) continue;
+    await fs.writeFile(path.join(dir, file), bytes);
+    written.push(file);
   }
   for (const [file, resolve] of Object.entries(LIBRARY)) {
     const src = resolve();
@@ -93,16 +174,34 @@ export async function ensureLibrary(dir) {
 // for (`RUNTIME_BOOTSTRAP_ATTR` in @hyperframes/core) so it can strip this copy and inject
 // its own. Idempotent: a composition read back and rewritten does not grow a second one.
 export const RUNTIME_TAG = '<script src="hyperframes-runtime.js" data-hyperframes-preview-runtime></script>';
+
+// Both injected tags, in one pass, each skipped if the composition already has it. The
+// parameters bridge goes in unconditionally and not only when a composition calls
+// `unframed.dials`: the agent's contract is one function call, and a composition that
+// called it without remembering a script tag would do nothing at all, silently. It is
+// ~5KB of our own code and defines one function, so the cost of it being there unused is
+// smaller than the cost of the agent having to remember.
 export function withRuntime(html) {
-  if (/data-hyperframes-preview-runtime|hyperframes-runtime\.js|hyperframe\.runtime\.iife\.js/i.test(html)) return html;
-  const head = /<\/head\s*>/i.exec(html);
-  if (head) return `${html.slice(0, head.index)}${RUNTIME_TAG}\n${html.slice(head.index)}`;
-  const body = /<body\b[^>]*>/i.exec(html);
-  if (body) {
-    const at = body.index + body[0].length;
-    return `${html.slice(0, at)}\n${RUNTIME_TAG}${html.slice(at)}`;
+  let out = html;
+  for (const [tag, present] of [
+    [RUNTIME_TAG, /data-hyperframes-preview-runtime|hyperframes-runtime\.js|hyperframe\.runtime\.iife\.js/i],
+    [BRIDGE_TAG, /unframed-dials\.js/i],
+  ]) {
+    if (present.test(out)) continue;
+    const head = /<\/head\s*>/i.exec(out);
+    if (head) {
+      out = `${out.slice(0, head.index)}${tag}\n${out.slice(head.index)}`;
+      continue;
+    }
+    const body = /<body\b[^>]*>/i.exec(out);
+    if (body) {
+      const at = body.index + body[0].length;
+      out = `${out.slice(0, at)}\n${tag}${out.slice(at)}`;
+      continue;
+    }
+    out = `${tag}\n${out}`;
   }
-  return `${RUNTIME_TAG}\n${html}`;
+  return out;
 }
 
 // A composition's file name: the same shape as every file in the folder (media.js).
@@ -117,8 +216,22 @@ export const getRender = (id) => renders.get(id) ?? null;
 
 export const renderFileName = (now, title, n) => mediaFileName(now, `${title || 'motion'}.mp4`, 'mp4', n);
 
-export function renderSidecar({ of, title, fps, quality, bytes, now = Date.now() }) {
-  return { source: 'render', of, title: title || '', mime: 'video/mp4', fps, quality, bytes, at: new Date(now).toISOString() };
+// `dials` records the parameter values the render was made WITH, when there were any. A
+// composition's file is not enough to reproduce an MP4 once its parameters can be tuned:
+// the same file at two settings is two different videos, and the sidecar is the only
+// place that difference is written down.
+export function renderSidecar({ of, title, fps, quality, bytes, dials, now = Date.now() }) {
+  return {
+    source: 'render',
+    of,
+    title: title || '',
+    mime: 'video/mp4',
+    fps,
+    quality,
+    bytes,
+    ...(dials && Object.keys(dials).length ? { dials } : {}),
+    at: new Date(now).toISOString(),
+  };
 }
 
 // ---- the browser ----
@@ -184,19 +297,23 @@ const platformBinary = (dirName) => (dirName.includes('win') ? 'chrome-headless-
 export const NO_CHROME = 'Rendering needs a Chromium browser on this Mac -- Google Chrome, Chromium, Edge or Brave. Install one, or point UNFRAMED_CHROME_PATH at its binary, and render again.';
 
 // The producer, behind one function so a test can stand in for it.
-async function produce({ dir, file, fps, quality, out, onProgress }) {
+async function produce({ dir, file, fps, quality, out, onProgress, variables }) {
   const chromePath = findChrome();
   if (!chromePath) throw new Error(NO_CHROME);
   const [{ createRenderJob, executeRenderJob }, { resolveConfig }] = await Promise.all([import('@hyperframes/producer'), import('@hyperframes/engine')]);
   const quiet = { debug() {}, info() {}, warn() {}, error: (m) => console.error('[render]', m) };
-  const job = createRenderJob({ fps, quality, format: 'mp4', entryFile: file, logger: quiet, producerConfig: resolveConfig({ chromePath }) });
+  const job = createRenderJob({ fps, quality, format: 'mp4', entryFile: file, logger: quiet, producerConfig: resolveConfig({ chromePath }), ...(variables ? { variables } : {}) });
   await executeRenderJob(job, dir, out, (j, message) => onProgress(j.progress, message));
 }
 
 // Start a render and return its record at once; poll `getRender` for the rest. The
 // output is rendered into a temp folder and only then placed in the project, named and
 // sidecarred like every other file, so a failed render leaves nothing behind.
-export function startRender({ dir, file, title = '', fps = 30, quality = 'standard' }, { execute = produce, now = Date.now } = {}) {
+// `dials` are the artifact's parameter values, from the node. They reach the composition
+// as `window.__hfVariables.unframedDials`, which the engine injects before any page
+// script runs -- so the bridge's first apply already has them and the very first captured
+// frame is the tuned one (server/dials.js).
+export function startRender({ dir, file, title = '', fps = 30, quality = 'standard', dials = null }, { execute = produce, now = Date.now } = {}) {
   const id = `r-${now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
   const job = { id, file, status: 'queued', progress: 0, message: '', output: null, error: null, startedAt: now(), resolvedAt: null };
   renders.set(id, job);
@@ -211,12 +328,13 @@ export function startRender({ dir, file, title = '', fps = 30, quality = 'standa
         fps,
         quality,
         out,
+        variables: dials && Object.keys(dials).length ? { unframedDials: dials } : undefined,
         onProgress: (progress, message) => {
           job.progress = Math.max(job.progress, Math.min(99, Math.round(progress)));
           job.message = String(message || '');
         },
       });
-      job.output = await placeRender(dir, out, { of: file, title, fps, quality, now });
+      job.output = await placeRender(dir, out, { of: file, title, fps, quality, dials, now });
       job.status = 'done';
       job.progress = 100;
     } catch (err) {
@@ -232,14 +350,14 @@ export function startRender({ dir, file, title = '', fps = 30, quality = 'standa
 
 // Into the folder under a fresh name (COPYFILE_EXCL, so two renders finishing in the
 // same millisecond cannot land on one name), with its sidecar.
-async function placeRender(dir, src, { of, title, fps, quality, now }) {
+async function placeRender(dir, src, { of, title, fps, quality, dials, now }) {
   const ts = now();
   for (let n = 0; ; n++) {
     const file = renderFileName(ts, title, n || undefined);
     try {
       await fs.copyFile(src, path.join(dir, file), fs.constants.COPYFILE_EXCL);
       const { size } = await fs.stat(path.join(dir, file));
-      await fs.writeFile(path.join(dir, file.replace(/\.mp4$/, '.json')), JSON.stringify(renderSidecar({ of, title, fps, quality, bytes: size, now: ts }), null, 2));
+      await fs.writeFile(path.join(dir, file.replace(/\.mp4$/, '.json')), JSON.stringify(renderSidecar({ of, title, fps, quality, bytes: size, dials, now: ts }), null, 2));
       return file;
     } catch (err) {
       if (err.code !== 'EEXIST') throw err;

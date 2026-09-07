@@ -31,6 +31,7 @@ import {
 } from './document.js';
 import { saveMedia, copyMedia, inlineFileRefs } from './media.js';
 import { ensureLibrary, startRender, getRender, withRuntime } from './motion.js';
+import { ensureDialsLibrary, dialsLibraryInstalled } from './dials.js';
 import { providerStatuses, forgetProviderStatus, PROVIDERS } from './providers.js';
 import { newThread, writeThread, readThread, listThreads, deleteThread, eventsSince, persistThread, applySettings, renameThread, tagThread, EFFORTS } from './threads.js';
 import { sendToThread, interruptThread, subscribeThread, closeThreadSession, closeSessionsFor } from './agent.js';
@@ -1567,8 +1568,33 @@ app.post('/api/projects/:name/motion/render', async (req, res) => {
   } catch (err) {
     return res.status(500).json({ error: `Could not prepare the motion library: ${err.message}` });
   }
-  const job = startRender({ dir, file, title });
+  // The node's parameter values, applied before the first frame is captured
+  // (server/dials.js). A plain object or nothing: the browser holds them on the node, the
+  // server never invents them.
+  const dials = req.body?.dials && typeof req.body.dials === 'object' && !Array.isArray(req.body.dials) ? req.body.dials : null;
+  const job = startRender({ dir, file, title, dials });
   res.json({ id: job.id, status: job.status });
+});
+
+// DialKit beside the artifacts, so a composition opened outside the app carries its own
+// controls. Opt-in and per project: it is 250KB that nothing needs in order to render, and
+// it cannot be fetched on demand from a CDN because the preview origin allows no network.
+// GET says whether it is there, POST puts it there (idempotent).
+app.get('/api/projects/:name/motion/controls', async (req, res) => {
+  try {
+    res.json({ installed: await dialsLibraryInstalled(projectDir(req.params.name)) });
+  } catch (err) {
+    res.status(500).json({ error: `Could not check the controls library: ${err.message}` });
+  }
+});
+
+app.post('/api/projects/:name/motion/controls', async (req, res) => {
+  try {
+    const written = await ensureDialsLibrary(projectDir(req.params.name));
+    res.json({ installed: true, written });
+  } catch (err) {
+    res.status(500).json({ error: `Could not install the controls library: ${err.message}` });
+  }
 });
 
 app.get('/api/projects/:name/motion/render/:id', (req, res) => {

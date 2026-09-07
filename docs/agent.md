@@ -217,6 +217,67 @@ drift between them. `motion_write`'s description carries the composition contrac
 loads, no imperative media control); the runtime tag is added for it. The event's
 artifact field is still named `page` for both kinds, with `kind` inside it.
 
+## Parameters on an artifact (`server/dials.js`, `client/src/editor/Dials.jsx`)
+
+An artifact can expose controls, and the editor's third column is where you turn them. The
+whole contract, from the agent's side, is one call inside the composition or the page:
+
+```js
+unframed.dials('Scene', { accent: '#a78bfa', speed: [1, 0.5, 2], title: 'Launch day' }, (v) => {
+  root.style.setProperty('--accent', v.accent);
+});
+```
+
+**The shorthand is ours, not DialKit's.** A value is read by its shape — a hex is a colour
+picker, `[value, min, max]` (with an optional fourth step) a slider, a plain string a text
+field, a list of strings a select, a number or a boolean itself, a nested object a folder.
+DialKit wants `{ type: 'color', default }` and would render a bare hex as a text field (its
+own `isHexColor` only feeds colour interpolation and never classifies a control), so
+`normalizeConfig` translates and the agent keeps the short form. Anything it cannot read is
+refused **by name** — `dials.a.b.c: an array must be…` — so a typo is a message rather than
+a control that silently does nothing.
+
+**The UI is not in the artifact.** DialKit is imported by the editor's column and rides its
+lazily-loaded chunk; the artifact holds the values and applies them. That is what keeps
+~250KB out of every project folder and out of every render, and a render needs the *values*,
+never a control to drag.
+
+**A parameter is a value on the NODE** (`data.dials`), not an edit to the file. So tuning is
+an ordinary undoable canvas change, it streams to every tab, and it survives the agent
+rewriting the composition: the schema comes from the new file, the values from the node, and
+`mergeValues` keeps what still exists, drops what the new version no longer names, and
+refuses a saved value of the wrong type rather than coercing it. Writes are debounced by the
+same 400ms the document treats as a unit of work, so a drag is one undo step.
+
+**The relay, and why the canvas says hello first.** The bridge announces
+`{ name, config, schema, values }` to whoever framed the artifact; the viewer
+(`server/motion.js`) relays it up and relays values back down. Neither end knows the
+other's origin, so the canvas sends `unframed:dials:hello` and the viewer replays the last
+announcement to it — which is what lets every message be addressed to a known origin
+instead of `*`. The bridge accepts only same-origin messages (the viewer is same-origin with
+the composition); the viewer accepts only loopback ones from above, the same rule as the
+preview origin's `frame-ancestors` and the API's own `Origin` check.
+
+**Rendering.** The node's values reach the engine as `variables.unframedDials`, which it
+injects as `window.__hfVariables` before any page script runs — so the bridge's first apply
+already has them and the very first captured frame is the tuned one. The render's sidecar
+records `dials`, because a composition's file is no longer enough to reproduce an MP4: the
+same file at two settings is two different videos, and this is the only place that
+difference is written down. Absent, not empty, when there were no parameters.
+
+**DialKit beside the artifact is opt-in**, by an action in that column. Installed, the viewer
+mounts its own panel when it is the top-level page, so a composition opened outside the app
+carries its own controls. It cannot be fetched on demand from a CDN — the preview origin
+allows no network — so "on demand" means copying the two files the app already has
+(`POST …/motion/controls`, idempotent; `GET` says whether they are there). The bridge itself
+ships with every composition and is injected by `withRuntime`: the agent's contract is one
+function call, and a composition that called it without remembering a script tag would do
+nothing at all, silently.
+
+The bridge is **generated** from the same functions the engine tests (`bridgeSource()` in
+`server/dials.js`), so the copy in a project folder cannot drift from the tested definition
+— `dials.test.js` evaluates that generated source against a stub window and drives it.
+
 ## The preview origin (`server/preview.js`)
 
 Pages are HTML and HTML runs code, so a page is never served from the API's origin —
@@ -266,6 +327,7 @@ a rename:
 | `PATCH …/:id` | model and effort for the next turn: `{ model?, effort? }`, `''` resets to the default; 409 mid-turn; closes the live session so the next message resumes with the new values |
 | `POST …/:id/interrupt` | stop the running turn |
 | `DELETE …/:id` | remove the record |
+| `GET/POST …/motion/controls` | whether DialKit sits beside this project's artifacts, and putting it there (see Parameters above) |
 
 `effort` is one of the Agent SDK's levels (`low` … `max`, `EFFORTS` in `threads.js`) and is
 passed straight to the session's options; the models an account can run, each with the

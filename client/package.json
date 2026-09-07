@@ -13,6 +13,7 @@
     "@astryxdesign/core": "^0.4.3",
     "@astryxdesign/theme-neutral": "^0.4.3",
     "@xyflow/react": "^12.3.5",
+    "dialkit": "^2.0.0",
     "lucide-react": "^1.24.0",
     "react": "^19.2.7",
     "react-dom": "^19.2.7",

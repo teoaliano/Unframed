@@ -1785,6 +1785,13 @@ function Canvas() {
             previewPort={cfg.previewPort}
             onClose={closeEditor}
             onOpenExternal={openPage}
+            // A parameter change is an ordinary node edit, so it rides the document's own
+            // diff-and-commit (graph/useDocument.js): one undo step, streamed to every
+            // tab, and picked up by the next render. Dials debounces, so this is already
+            // one write per pause rather than one per pixel of a drag.
+            onDials={(nodeId, values) =>
+              setNodes((ns) => ns.map((n) => (n.id === nodeId ? { ...n, data: { ...n.data, dials: values } } : n)))
+            }
             agent={{
               project,
               nodes,

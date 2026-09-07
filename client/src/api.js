@@ -280,7 +280,10 @@ export const uploadMotion = (project, file) =>
   });
 
 // Render a composition to an MP4: start, then poll until `status` is done or failed.
-export const startMotionRender = (project, file, title = '') => postJson(`/api/projects/${enc(project)}/motion/render`, { file, title });
+// `dials` are the node's parameter values, applied before the first frame is captured
+// (server/dials.js). Omitted when the composition has no parameters.
+export const startMotionRender = (project, file, title = '', dials = null) =>
+  postJson(`/api/projects/${enc(project)}/motion/render`, { file, title, ...(dials && Object.keys(dials).length ? { dials } : {}) });
 export const pollMotionRender = (project, id) =>
   fetch(`/api/projects/${enc(project)}/motion/render/${enc(id)}`).then(async (r) => {
     const d = await r.json().catch(() => ({}));
@@ -461,3 +464,15 @@ export const savePresets = (presets) =>
   }).then((r) => {
     if (!r.ok) throw new Error(`HTTP ${r.status}`);
   });
+
+// ---- an artifact's parameters (server/dials.js) ----
+// Whether DialKit sits beside this project's artifacts, and putting it there. Opt-in per
+// project: it is 250KB that nothing needs in order to render, and it is what makes a
+// composition opened outside the app carry its own controls.
+export const dialsControls = (project) =>
+  fetch(`/api/projects/${enc(project)}/motion/controls`)
+    .then((r) => (r.ok ? r.json() : { installed: false }))
+    .then((d) => Boolean(d.installed))
+    .catch(() => false);
+
+export const installDialsControls = (project) => postJson(`/api/projects/${enc(project)}/motion/controls`, {}).then((d) => Boolean(d.installed));

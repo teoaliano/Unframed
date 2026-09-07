@@ -1,0 +1,23 @@
+{
+  "when": "expose|parameter|dial",
+  "turns": [
+    {
+      "title": "Scene parameters",
+      "text": "Exposed three parameters on motion m1 (\"Intro\"): **accent** (colour), **scale** (0.5-2) and **caption** (text). Drag them in the Parameters column and the preview follows; Render uses whatever they are set to.",
+      "tools": [
+        {
+          "name": "canvas_read",
+          "input": {}
+        },
+        {
+          "name": "motion_write",
+          "input": {
+            "nodeId": "m1",
+            "title": "Intro",
+            "html": "<html><head><style>\n#root{position:relative;overflow:hidden;background:#111}\n.clip{position:absolute;inset:0;display:grid;place-items:center}\n#label{font:700 72px system-ui;color:var(--accent,#a78bfa);transform:scale(var(--scale,1))}\n</style></head><body>\n<div id=\"root\" data-composition-id=\"main\" data-start=\"0\" data-duration=\"4\" data-width=\"640\" data-height=\"360\">\n  <div id=\"c\" class=\"clip\" data-start=\"0\" data-duration=\"4\"><span id=\"label\">Tuned</span></div>\n</div>\n<script src=\"gsap.js\"></script>\n<script>\nwindow.__timelines = window.__timelines || {};\nwindow.__timelines.main = gsap.timeline({ paused: true });\nwindow.__timelines.main.fromTo('#label', { opacity: 0 }, { opacity: 1, duration: 1 }, 0);\nunframed.dials('Scene', { accent: '#a78bfa', scale: [1, 0.5, 2], caption: 'Tuned' }, function (v) {\n  var root = document.getElementById('root');\n  root.style.setProperty('--accent', v.accent);\n  root.style.setProperty('--scale', String(v.scale));\n  document.getElementById('label').textContent = v.caption;\n});\n</script></body></html>"
+          }
+        }
+      ]
+    }
+  ]
+}

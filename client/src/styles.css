@@ -1884,6 +1884,21 @@ div:has(> .add-node-menu) {
 .sel-composer {
   width: 100%;
 }
+/* The editor's Parameters column: DialKit's own panel, inline, given the column and
+   nothing else. Its internals are its own (dialkit/vanilla/styles.css, imported by
+   Dials.jsx) -- the only thing here is where it sits and how it scrolls, because a
+   composition with twenty parameters must not push the install action off the bottom. */
+.editor-dials {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+.editor-dials-foot {
+  flex-shrink: 0;
+  padding: var(--spacing-3);
+  border-block-start: var(--border-width) solid var(--color-border);
+}
+
 /* ---- the agent's markdown (agent/Markdown.jsx) ----
    The prose rules are t3code's chat typography (`.chat-markdown` in
    apps/web/src/index.css, MIT), translated: their measurements kept, their theme

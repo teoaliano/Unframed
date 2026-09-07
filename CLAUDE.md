@@ -57,7 +57,7 @@ One home per rule. Never document the same thing in two files — pick the one t
 | `docs/models.md` | catalogues, model-driven controls, multi-run |
 | `docs/video-and-sharing.md` | video references, the two video-to-video modes, the share tunnel |
 | `docs/library.md` | presets, `presets.json`'s write rule, the Library dialog |
-| `docs/agent.md` | the local agent providers, chats and their tags, the agent's tools and safety configuration, the scripted agent, the preview origin, the panel and the selection toolbar, and their routes |
+| `docs/agent.md` | the local agent providers, chats and their tags, the agent's tools and safety configuration, the scripted agent, artifact parameters, the preview origin, the editor, the panel and the selection toolbar, and their routes |
 | `docs/releases.md` | versioning, tagging, the PR workflow, and the invariants that keep this repo consumable by the desktop shell — **read before tagging or touching `package.json`** |
 | `docs/superpowers/specs/` | the reasoning behind one piece of work, including what was rejected |
 | `docs/research/` | findings about an external API, with a citation on every factual claim and an explicit list of what its docs don't answer |

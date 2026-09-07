@@ -387,7 +387,11 @@ assert.deepEqual(placeBeside(graph, []), { x: 80, y: 80 });
   assert.equal(committed.at(-1).ops[0].node.type, 'motion');
   assert.deepEqual(committed.at(-1).ops[0].node.data, { file: '9003-teaser.html', title: 'Teaser', fileName: '' });
   assert.equal(written.at(-1).kind, 'motion');
-  assert.match(written.at(-1).html, /<script src="hyperframes-runtime\.js" data-hyperframes-preview-runtime><\/script>\n<\/head>/);
+  // The runtime AND the parameters bridge are injected at write time (motion.js,
+  // withRuntime): the runtime so the composition plays, the bridge so `unframed.dials`
+  // exists without the agent having to remember a script tag.
+  assert.match(written.at(-1).html, /<script src="hyperframes-runtime\.js" data-hyperframes-preview-runtime><\/script>/);
+  assert.match(written.at(-1).html, /<script src="unframed-dials\.js"><\/script>\n<\/head>/);
   assert.equal(events.at(-1).summary, 'Created motion · Teaser');
   assert.equal(events.at(-1).page.kind, 'motion');
   state.graph.nodes.push({ id: 'm1', type: 'motion', position: { x: 0, y: 0 }, data: { file: '9-teaser.html', title: 'Teaser' } });
