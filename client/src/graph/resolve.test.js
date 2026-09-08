@@ -1,6 +1,6 @@
 // Assert-based self-check. Run with: node client/src/graph/resolve.test.js
 import assert from 'node:assert/strict';
-import { buildRequest, bucketSources, sourceRoles, splitSections, findFreeSource, freeSourceText, freeShared, freeRunPrompts, parseImagePicks, expandSlots, runReferences, freeBatch, isOutput, isTextOutput, isReferenceable, isGroup, membersOf, MAX_RUNS, hasMedia, mediaRef } from './resolve.js';
+import { buildRequest, bucketSources, sourceRoles, rolesIndex, splitSections, findFreeSource, freeSourceText, freeShared, freeRunPrompts, parseImagePicks, expandSlots, runReferences, freeBatch, isOutput, isTextOutput, isReferenceable, isGroup, membersOf, MAX_RUNS, hasMedia, mediaRef } from './resolve.js';
 import { migrateNodes } from './migrate.js';
 import { instantiateFragment, centerOffset, placeFragment } from '../library/insert.js';
 import { selectionFragment, presetFromSelection } from '../library/save.js';
@@ -757,6 +757,57 @@ function videoGraph(inputMode, imageCount, extra = []) {
   const { input_references, frame_images } = buildRequest(nodes, edges, 'out');
   assert.equal(input_references.length, 1);
   assert.deepEqual(frame_images, []);
+}
+
+// ---- rolesIndex ----
+
+// The whole point of the index: ONE call answers for every media node, and it answers
+// exactly what asking per node answers. The canvas relies on that equivalence -- it
+// reads the index and never calls sourceRoles -- so a drift here is a badge that
+// disagrees with the request while every sourceRoles test above still passes.
+{
+  const nodes = [
+    { id: 'out', type: 'imageOutput', position: { x: 400, y: 0 }, data: {} },
+    { id: 'vid', type: 'videoOutput', position: { x: 400, y: 200 }, data: { inputMode: 'first_last' } },
+    { id: 'a', type: 'image', position: { x: 0, y: 0 }, data: { dataUrl: 'data:,a' } },
+    { id: 'b', type: 'image', position: { x: 0, y: 100 }, data: { dataUrl: 'data:,b' } },
+    { id: 'c', type: 'image', position: { x: 0, y: 200 }, data: { dataUrl: 'data:,c' } },
+    { id: 'm', type: 'video', position: { x: 0, y: 300 }, data: { dataUrl: 'https://x/v.mp4' } },
+    { id: 'empty', type: 'image', position: { x: 0, y: 400 }, data: {} },
+    { id: 'p', type: 'prompt', position: { x: 0, y: 500 }, data: { text: 'hi' } },
+  ];
+  const edges = ['a', 'b', 'c', 'm', 'empty', 'p'].flatMap((s) => [
+    { id: `e-${s}-out`, source: s, target: 'out' },
+    { id: `e-${s}-vid`, source: s, target: 'vid' },
+  ]);
+  const index = rolesIndex(nodes, edges);
+  for (const n of nodes) {
+    assert.deepEqual(index.get(n.id) ?? [], sourceRoles(nodes, edges, n.id), `index disagrees for ${n.id}`);
+  }
+  // Not just equal to each other but right: a and b fill the two frame slots, c is
+  // over the frame mode's capacity, the video is numbered among videos only, and a
+  // pictureless image and a prompt are not in the index at all.
+  assert.deepEqual(index.get('a'), ['1', 'first']);
+  assert.deepEqual(index.get('b'), ['2', 'last']);
+  assert.deepEqual(index.get('c'), ['3', '—']);
+  assert.deepEqual(index.get('m'), ['1', '—']);
+  assert.equal(index.has('empty'), false);
+  assert.equal(index.has('p'), false);
+}
+
+// bucketSources caches its node-by-id map on the array's identity, so a second call
+// with a DIFFERENT array must not be answered from the first one's map.
+{
+  const out = { id: 'out', type: 'imageOutput', position: { x: 400, y: 0 }, data: {} };
+  const i1 = { id: 'i1', type: 'image', position: { x: 0, y: 0 }, data: { dataUrl: 'data:,a' } };
+  const i2 = { id: 'i2', type: 'image', position: { x: 0, y: 100 }, data: { dataUrl: 'data:,b' } };
+  const edges = [
+    { id: 'e1', source: 'i1', target: 'out' },
+    { id: 'e2', source: 'i2', target: 'out' },
+  ];
+  assert.deepEqual(sourceRoles([out, i1, i2], edges, 'i2'), ['2']);
+  // i2 moved above i1: a stale map would keep the old positions and still say 2.
+  assert.deepEqual(sourceRoles([out, i1, { ...i2, position: { x: 0, y: -100 } }], edges, 'i2'), ['1']);
 }
 
 // ---- sourceRoles ----

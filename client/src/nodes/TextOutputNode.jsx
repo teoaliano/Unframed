@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { memo, useState, useEffect } from 'react';
 import { Handle, Position, useReactFlow } from '@xyflow/react';
 import { Card } from '@astryxdesign/core/Card';
 import { Button } from '@astryxdesign/core/Button';
@@ -19,7 +19,7 @@ import { useFieldResize } from './fieldResize.js';
 // An output node that emits text instead of an image. It consumes edges exactly like
 // the image output node — same buildRequest — and its answer lives in data.result so
 // prompts downstream can pull it in with @id.
-export default function TextOutputNode({ id, data }) {
+function TextOutputNode({ id, data }) {
   const { ref: projectRef } = useProject();
   const { getNodes, getEdges, updateNodeData, getNode, addNodes } = useReactFlow();
   const [status, setStatus] = useState('idle'); // idle | running | error
@@ -203,3 +203,5 @@ export default function TextOutputNode({ id, data }) {
     </>
   );
 }
+
+export default memo(TextOutputNode);

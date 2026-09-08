@@ -1,5 +1,5 @@
-import { useState, useEffect, useRef } from 'react';
-import { Handle, Position, useReactFlow, useNodes, useEdges } from '@xyflow/react';
+import { memo, useState, useEffect, useRef } from 'react';
+import { Handle, Position, useReactFlow } from '@xyflow/react';
 import { Card } from '@astryxdesign/core/Card';
 import { Text } from '@astryxdesign/core/Text';
 import { Button } from '@astryxdesign/core/Button';
@@ -15,7 +15,8 @@ import { MAX_VIDEO_BYTES } from './VideoNode.jsx';
 import { useModels, useModelParams, freeSpot } from './output/core.js';
 import { resetModelParams } from './output/defaults.js';
 import { ModelPicker, ParamControls, CostFoot, NativeSelect } from './output/controls.jsx';
-import { buildRequest, bucketSources, hasMedia } from '../graph/resolve.js';
+import { buildRequest } from '../graph/resolve.js';
+import { useOutputWiring } from '../graph/live.js';
 import { withDrag } from '../graph/starter.js';
 import { startVideo, pollVideo } from '../api.js';
 import { useProject } from '../graph/project.js';
@@ -25,7 +26,7 @@ import { ExternalLink as AddToCanvasIcon } from 'lucide-react';
 // Makes a video. Runs once per click and reports the job's own status rather than a
 // run counter, because a clip takes minutes and is billed by the second — a Runs
 // control here would be a way to spend ten dollars by mistake.
-export default function VideoOutputNode({ id, data }) {
+function VideoOutputNode({ id, data }) {
   const { ref: projectRef } = useProject();
   const { getNodes, getEdges, updateNodeData, getNode, addNodes } = useReactFlow();
   const toast = useToast();
@@ -45,8 +46,10 @@ export default function VideoOutputNode({ id, data }) {
   const [, bump] = useState(0);
   // Inlining a clip means fetching and base64-ing it, which is not instant.
   const [addingVideo, setAddingVideo] = useState(false);
-  const liveNodes = useNodes();
-  const liveEdges = useEdges();
+  // What is wired in, as counts -- one narrow subscription rather than useNodes()/
+  // useEdges(), which re-rendered this card on every frame of every drag anywhere on
+  // the board (graph/live.js).
+  const wiring = useOutputWiring(id);
   // Every job id this component instance has already started a poll loop for, once
   // each — no matter how many times React StrictMode's dev-only double-mount fires
   // the resume effect below twice, or onGenerate's own call into runJob lands before
@@ -116,13 +119,12 @@ export default function VideoOutputNode({ id, data }) {
     }
   }, [models.length, entry, data.inputMode, inputModes, id, updateNodeData]);
 
-  // Computed once and shared by every count below, so the three things this card can
-  // say about its wired videos -- the ignored-input warning, the "probably ignored"
-  // capability warning, and the sharing block's promises -- describe the same request
-  // bucketSources itself will build, rather than three independent readings of the
-  // edges that can disagree the moment a frame mode is active.
-  const buckets = bucketSources(liveNodes, liveEdges, id);
-  const ignoredCount = buckets.excess.length;
+  // Every count below comes off that one reading of bucketSources, so the three things
+  // this card can say about its wired videos -- the ignored-input warning, the "probably
+  // ignored" capability warning, and the sharing block's promises -- describe the same
+  // request bucketSources itself will build, rather than three independent readings of
+  // the edges that can disagree the moment a frame mode is active.
+  const ignoredCount = wiring.ignored;
 
   // Video is sold by the second, so the price of a click is knowable before it is
   // spent — and worth showing, at a dollar a clip rather than three cents.
@@ -143,18 +145,13 @@ export default function VideoOutputNode({ id, data }) {
   // Files API (which could have hosted one) accepts images, audio and documents but
   // not video.
   //
-  // Read off buckets.references rather than the raw edges: a frame mode sends no
-  // references at all (frames are images only, so any wired video lands in `excess`
+  // Counted off bucketSources' references rather than the raw edges: a frame mode sends
+  // no references at all (frames are images only, so any wired video lands in `excess`
   // instead -- see bucketSources), and counting from the edges directly ignored that,
   // which is how one card ended up claiming a video would be sent, ignored, AND shared
   // over a tunnel all at once.
-  const wiredVideoSources = buckets.references.filter((n) => n.type === 'video' && hasMedia(n));
-  const wiredVideos = wiredVideoSources.length;
-  // Local means the bytes are on this machine: a project file, or (older graphs) a
-  // data URL. Only a hosted https link is not.
-  const wiredLocalVideos = wiredVideoSources.filter(
-    (n) => n.data.file || String(n.data.dataUrl).startsWith('data:'),
-  ).length;
+  const wiredVideos = wiring.videos;
+  const wiredLocalVideos = wiring.localVideos;
   // On by default: without it a wired local clip can only fail, so the useful
   // default is the one that works. Explicit `false` is the user turning it off.
   const shareLocalVideos = data.shareLocalVideos !== false;
@@ -587,3 +584,5 @@ export default function VideoOutputNode({ id, data }) {
     </>
   );
 }
+
+export default memo(VideoOutputNode);

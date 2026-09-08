@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { Handle, Position, useReactFlow, useNodes, useEdges } from '@xyflow/react';
+import { memo, useState } from 'react';
+import { Handle, Position, useReactFlow } from '@xyflow/react';
 import { Card } from '@astryxdesign/core/Card';
 import { FileInput } from '@astryxdesign/core/FileInput';
 import { TextInput } from '@astryxdesign/core/TextInput';
@@ -10,7 +10,8 @@ import NodeLine from './NodeLine.jsx';
 import MediaResize from './MediaResize.jsx';
 import StatusLine from './StatusLine.jsx';
 import { useVideoPlayback, VideoFrame, VideoControls } from './VideoPlayer.jsx';
-import { sourceRoles, hasMedia } from '../graph/resolve.js';
+import { hasMedia } from '../graph/resolve.js';
+import { useSourceRoles } from '../graph/live.js';
 import { mediaSrc } from './ImageNode.jsx';
 import { useProject } from '../graph/project.js';
 import { uploadFile } from '../api.js';
@@ -22,7 +23,7 @@ import { uploadFile } from '../api.js';
 export const MAX_VIDEO_BYTES = 25 * 1024 * 1024;
 export const VIDEO_TOO_BIG = 'Video is too large. Keep it under 25MB.';
 
-export default function VideoNode({ id, data, parentId }) {
+function VideoNode({ id, data, parentId }) {
   const { updateNodeData } = useReactFlow();
   const { name: project } = useProject();
   const [error, setError] = useState('');
@@ -31,7 +32,7 @@ export default function VideoNode({ id, data, parentId }) {
   const [link, setLink] = useState('');
   // Same per-consumer role reporting as images, read off this node's own type, so
   // "image 1" and "video 1" can coexist on one output.
-  const roles = sourceRoles(useNodes(), useEdges(), id);
+  const roles = useSourceRoles(id);
   // One playback state, two placements: the clip inside the card, the transport below
   // it — see VideoPlayer.jsx.
   const player = useVideoPlayback();
@@ -176,3 +177,5 @@ export default function VideoNode({ id, data, parentId }) {
     </>
   );
 }
+
+export default memo(VideoNode);

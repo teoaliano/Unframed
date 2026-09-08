@@ -17,7 +17,9 @@ import { place, selectionBox, toScreen } from './placement.js';
 // the server), because undo is one server-side ladder: once you have edited after it,
 // the button goes and the card points at Cmd-Z instead.
 export default function AnchoredReply({ reply, nodes, canvasEl, onDismiss, onUndo, onOpenThread, onOpenPage }) {
-  const transform = useStore((s) => s.transform);
+  // Only while a reply is on screen -- see SelectionToolbar for why an unconditional
+  // `s.transform` subscription is a render on every frame of every pan.
+  const view = useStore((s) => (reply && canvasEl ? s.transform.join(',') : ''));
   const el = useRef(null);
   const [size, setSize] = useState({ width: 360, height: 120 });
   useLayoutEffect(() => {
@@ -31,7 +33,7 @@ export default function AnchoredReply({ reply, nodes, canvasEl, onDismiss, onUnd
   const anchorNodes = anchorNode ? [{ ...anchorNode, selected: true }] : nodes.filter((n) => reply.selection?.includes(n.id)).map((n) => ({ ...n, selected: true }));
   const flowBox = selectionBox(anchorNodes);
   if (!flowBox) return null;
-  const box = toScreen(flowBox, transform);
+  const box = toScreen(flowBox, view.split(',').map(Number));
   const viewport = { width: canvasEl.clientWidth, height: canvasEl.clientHeight };
   // Ask for "below" by handing place() a box whose top is unreachable: the card wants
   // the bottom edge, the toolbar wants the top.

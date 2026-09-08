@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { memo, useEffect, useRef, useState } from 'react';
 import { Handle, Position, useReactFlow } from '@xyflow/react';
 import NodeHeader from './NodeHeader.jsx';
 import NodeLine from './NodeLine.jsx';
@@ -25,7 +25,7 @@ import MediaResize from './MediaResize.jsx';
 // rename key and collides with nothing here.
 const PLACEHOLDER = 'Group';
 
-export default function GroupNode({ id, data, selected, width, height }) {
+function GroupNode({ id, data, selected, width, height }) {
   const { updateNodeData } = useReactFlow();
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState('');
@@ -100,3 +100,5 @@ export default function GroupNode({ id, data, selected, width, height }) {
     </>
   );
 }
+
+export default memo(GroupNode);
