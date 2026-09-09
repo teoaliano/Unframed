@@ -9,6 +9,13 @@ a rename) rather than under `/api/agent`, and the status set has five entries, n
 Design canvas, not here: <https://claude.ai/code/artifact/5f66d3f2-7375-4916-a8cb-698f7ef73c39>.
 Research behind the provider layer: `docs/research/2026-08-21-local-agent-cli-providers.md`.
 
+> **Superseded in part, 2026-09-06** (`2026-09-06-chats-and-tags-design.md`). A thread is
+> now a **chat tagged by the artifacts it touches**, not a thing about one node: `kind`,
+> `artifactId` and the composer's `target`/`with` are gone, and the selection travels as
+> context the agent interprets. Old records migrate on read. Everything else here — the
+> document and its journal, the op vocabulary, the provider layer, the safety block — stands
+> unchanged.
+
 ## North star, and why this slice is first
 
 Unframed becomes a whiteboard of **assets** — images, videos, HTML pages, motion graphics —

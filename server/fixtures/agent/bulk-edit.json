@@ -1,0 +1,37 @@
+{
+  "when": "titles? (red|blue)",
+  "turns": [
+    {
+      "title": "Title colours",
+      "text": "Set both titles to red: motion m1 (\"Intro\") and motion m2 (\"Outro\").",
+      "tools": [
+        { "name": "canvas_read", "input": {} },
+        {
+          "name": "canvas_write",
+          "input": {
+            "ops": [
+              { "type": "updateNode", "id": "m1", "patch": { "title": "Intro (red)" } },
+              { "type": "updateNode", "id": "m2", "patch": { "title": "Outro (red)" } }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "expectPreamble": "Since your last turn the canvas changed",
+      "text": "Both titles are blue now.",
+      "tools": [
+        { "name": "canvas_read", "input": {} },
+        {
+          "name": "canvas_write",
+          "input": {
+            "ops": [
+              { "type": "updateNode", "id": "m1", "patch": { "title": "Intro (blue)" } },
+              { "type": "updateNode", "id": "m2", "patch": { "title": "Outro (blue)" } }
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

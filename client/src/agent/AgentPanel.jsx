@@ -9,7 +9,7 @@ import { HStack, VStack, StackItem } from '@astryxdesign/core/Stack';
 import { TabList, Tab, TabMenu } from '@astryxdesign/core/TabList';
 import { ModelPicker, EffortPicker } from './ModelPicker.jsx';
 import { AlertDialog } from '@astryxdesign/core/AlertDialog';
-import { X, Plus, RefreshCw, Sparkles, Square, Trash2, Crosshair } from 'lucide-react';
+import { X, Plus, RefreshCw, Sparkles, Square, Trash2, Crosshair, ExternalLink, ChevronRight } from 'lucide-react';
 import {
   createThread,
   listThreads,
@@ -21,15 +21,23 @@ import {
   subscribeThreadEvents,
 } from '../api.js';
 import { isArtifact } from '../graph/resolve.js';
-import { visibleThreads, nextActive, tabLabel, artifactLabel } from './tabs.js';
+import { visibleThreads, nextActive, tabLabel, nodeLabel, touchedArtifacts } from './tabs.js';
+import { NODE_ICONS } from '../nodes/nodeIcons.jsx';
+import ChatMarkdown from './Markdown.jsx';
 
-// The agent panel: a right-hand panel over the project's threads, one tab each. The
-// design's states 1, 8 and 10 (docs/superpowers/specs/2026-09-04-agent-canvas-slice-1-design.md)
-// and the tab strip of the slice-3 design (2026-09-05-agent-canvas-slice-3-design.md,
-// section 1): the selection filters which tabs show (tabs.js), the active tab is always
-// one of them, and the composer sends to the active tab -- creating a thread when none is
-// visible, bound to the one selected artifact if there is one. The active thread's
-// artifact is reported up through `onFocus` so App.jsx can ring it on the canvas.
+// The agent panel: a right-hand panel over the project's chats, one tab each. The
+// design's states 1, 8 and 10 (docs/superpowers/specs/2026-09-04-agent-canvas-slice-1-design.md),
+// the tab strip of the slice-3 design, and the chats-and-tags design
+// (2026-09-06-chats-and-tags-design.md): the selection filters which tabs show (tabs.js),
+// the active tab is always one of them, and the composer sends to the active tab --
+// starting a chat when none is visible, tagged with whichever artifacts are selected.
+// Every artifact the active chat has touched is reported up through `onFocus` so App.jsx
+// can mark them on the canvas.
+//
+// THIS is where a reply lives. There used to be a second place -- a card anchored on the
+// node the agent worked on -- and it could not survive the selection being several
+// artifacts at once: a card has one anchor. The toolbar now only starts a chat, and Send
+// opens the panel on it.
 //
 // Everything durable is the server's: the record is the transcript, this component only
 // mirrors it. Closing the panel mid-turn changes nothing -- the turn finishes on the
@@ -54,16 +62,44 @@ const ACTIVITY = {
   mcp__unframed__motion_read: 'Reading the motion…',
 };
 
-// `initialThreadId` opens the panel on a particular thread -- the anchored reply's
-// "Open thread". `refreshKey` changes when something outside the panel (the toolbar's
-// composer) created a thread, so the strip re-reads the list. `onFocus` receives the
-// active thread's artifact id, or null.
-// `onLocate(nodeId)` pans and zooms the canvas to a node -- the Locate action beside the
-// artifact's name in the scope row.
+// One artifact, listed: its own node icon, what it is called, and the two things you can
+// do with it. Used by BOTH a change line's expansion and the recap card at the foot --
+// they are the same row, and writing it twice is how the two would drift apart. The icon
+// slot is reserved even when there is no icon to put in it, so a deleted row's name still
+// lines up with the rest.
+function ArtifactRow({ row, onOpen, onLocate, embedded }) {
+  const icon = row.type ? NODE_ICONS[row.type] : null;
+  return (
+    <HStack gap={1} align="center" className="agent-artifact-row">
+      <span className="agent-artifact-icon">{icon && <Icon icon={icon} size="sm" />}</span>
+      <Text type="supporting" color={row.stale ? 'secondary' : undefined} className={row.stale ? 'agent-artifact-gone' : undefined}>
+        {row.label}
+      </Text>
+      <StackItem size="fill" />
+      {row.stale ? (
+        <Text type="supporting" color="secondary">
+          deleted
+        </Text>
+      ) : (
+        <>
+          {onOpen && <Button size="sm" variant="ghost" label="Open" icon={<Icon icon={ExternalLink} />} onClick={() => onOpen(row.id)} />}
+          {!embedded && <IconButton variant="ghost" size="sm" label="Locate on canvas" icon={<Icon icon={Crosshair} />} onClick={() => onLocate?.(row.id)} />}
+        </>
+      )}
+    </HStack>
+  );
+}
+
+// `initialThreadId` opens the panel on a particular chat -- what the toolbar's Send
+// does. `refreshKey` changes when something outside the panel (the toolbar's composer)
+// started a chat, so the strip re-reads the list. `onFocus` receives the active chat's
+// tags, as an array of node ids.
+// `onLocate(nodeId)` pans and zooms the canvas to a node; `onOpenEditor(nodeId)` opens
+// the editor on an artifact -- both absent when `embedded`.
 // `embedded` is the editor's column (editor/Editor.jsx): the panel is the page's left
 // third rather than a card floating over the canvas, so it has no Close of its own (the
 // editor's Back is the way out) and no Locate (there is no canvas to pan).
-export default function AgentPanel({ project, nodes, providers, onCheckProviders, checking, onClose, initialThreadId = null, refreshKey = 0, onFocus, onLocate, embedded = false }) {
+export default function AgentPanel({ project, nodes, providers, onCheckProviders, checking, onClose, initialThreadId = null, refreshKey = 0, onFocus, onLocate, onOpenEditor, embedded = false }) {
   const selection = nodes.filter((n) => n.selected).map((n) => n.id);
   const [threads, setThreads] = useState([]);
   const [chosenId, setChosenId] = useState(null);
@@ -78,12 +114,23 @@ export default function AgentPanel({ project, nodes, providers, onCheckProviders
   useEffect(() => {
     if (threadId !== chosenId) setChosenId(threadId);
   }, [threadId, chosenId]);
+  // Every artifact the active chat has touched wears the mark, not just one: a chat can
+  // be about two motions, and marking only the first would say something false about the
+  // second. Joined for the dependency list so a re-read that returns the same tags in the
+  // same order does not re-fire it.
+  const tags = thread?.tags ?? [];
+  const tagKey = tags.join(',');
   useEffect(() => {
-    onFocus?.(thread?.kind === 'artifact' ? thread.artifactId ?? null : null);
-  }, [thread?.id, thread?.kind, thread?.artifactId, onFocus]);
-  useEffect(() => () => onFocus?.(null), [onFocus]);
+    onFocus?.(tagKey ? tagKey.split(',') : []);
+  }, [tagKey, onFocus]);
+  useEffect(() => () => onFocus?.([]), [onFocus]);
   const [messages, setMessages] = useState([]);
-  const [notes, setNotes] = useState([]); // the agent's changes, from stored and live ops_applied events
+  // Every artifact this chat has touched, in first-touch order, accumulated from the same
+  // event stream the transcript comes from (`touchedArtifacts`). It feeds the recap card
+  // at the foot, and it is NOT the record's `tags`: tags answer which chats the strip
+  // shows for a selection, this answers what this conversation involved.
+  const [touched, setTouched] = useState([]);
+  const [recapOpen, setRecapOpen] = useState(true);
   const [status, setStatus] = useState('idle');
   const [error, setError] = useState(null);
   const [draft, setDraft] = useState(''); // the assistant's answer as it streams
@@ -170,7 +217,7 @@ export default function AgentPanel({ project, nodes, providers, onCheckProviders
   useEffect(() => {
     if (!threadId) {
       setMessages([]);
-      setNotes([]);
+      setTouched([]);
       setStatus('idle');
       setError(null);
       setDraft('');
@@ -187,7 +234,7 @@ export default function AgentPanel({ project, nodes, providers, onCheckProviders
     const close = subscribeThreadEvents(project, threadId, 0, {
       onState: (s) => {
         setMessages(s.messages ?? []);
-        setNotes([]);
+        setTouched([]);
         setStatus(s.status ?? 'idle');
         setError(s.error ?? null);
         draftText = '';
@@ -195,6 +242,13 @@ export default function AgentPanel({ project, nodes, providers, onCheckProviders
         setActivity(null);
       },
       onEvent: (e) => {
+        // The recap is derived from the events themselves, so the replay of a reopened
+        // chat rebuilds it exactly as the live turn built it. Folded one event at a time
+        // rather than over a growing array, so the order is first-touch and stays stable.
+        setTouched((prev) => {
+          const next = touchedArtifacts([e]).filter((id) => !prev.includes(id));
+          return next.length ? [...prev, ...next] : prev;
+        });
         switch (e.type) {
           case 'turn':
             setStatus('running');
@@ -210,13 +264,16 @@ export default function AgentPanel({ project, nodes, providers, onCheckProviders
             setActivity(ACTIVITY[e.name] || 'Working…');
             break;
           case 'ops_applied':
-            // A change the agent made, as a line in the transcript. The stream replays
-            // stored events before going live, so a reopened panel gets these too;
-            // keyed by journal version so a reconnect cannot double one.
-            setNotes((ns) => (ns.some((x) => x.version === e.version) ? ns : [...ns, { version: e.version, text: e.summary, at: e.at }]));
-            // The agent's first page_write binds an unbound artifact thread to the node
-            // it made; the strip learns that here rather than on the next list read.
-            if (e.page?.created) setThreads((ts) => ts.map((t) => (t.id === threadId && !t.artifactId ? { ...t, artifactId: e.page.nodeId } : t)));
+            // The chat picks up a tag for whatever the agent just wrote to; the strip
+            // learns it here rather than waiting for the next list read.
+            if (e.page?.nodeId) {
+              setThreads((ts) => ts.map((t) => (t.id === threadId && !(t.tags ?? []).includes(e.page.nodeId) ? { ...t, tags: [...(t.tags ?? []), e.page.nodeId] } : t)));
+            }
+            break;
+          case 'titled':
+            // The agent named the chat after its first turn; the tab says so at once
+            // rather than on the next list read.
+            setThreads((ts) => ts.map((t) => (t.id === threadId ? { ...t, title: e.title, titledBy: 'agent' } : t)));
             break;
           case 'tool_result':
             setActivity(null);
@@ -257,15 +314,16 @@ export default function AgentPanel({ project, nodes, providers, onCheckProviders
     if (el) el.scrollTop = el.scrollHeight;
   }, [messages, draft, activity]);
 
-  // What a new thread would be about, when none is active: the one selected artifact,
-  // or the board. With several artifacts selected and no thread among them there is no
-  // answer, and Send says so instead of guessing.
+  // A chat can ALWAYS be started -- there is no shape it has to have first. It used to
+  // need exactly one artifact selected, or none, and several selected disabled Send with
+  // "select one to start a thread about it". That was the mode picker in disguise: the
+  // selection is context, so any selection is a fine thing to start a chat about.
   const selectedArtifacts = nodes.filter((n) => n.selected && isArtifact(n));
-  const newKind = selectedArtifacts.length === 1 ? { kind: 'artifact', artifactId: selectedArtifacts[0].id } : selectedArtifacts.length === 0 ? { kind: 'canvas' } : null;
+  const selectedArtifactIds = selectedArtifacts.map((n) => n.id);
 
   async function startThread() {
-    const t = await createThread(project, { provider: provider.kind, model: pending.model, effort: pending.effort, ...newKind });
-    setThreads((ts) => [{ ...t, title: '' }, ...ts]);
+    const t = await createThread(project, { provider: provider.kind, model: pending.model, effort: pending.effort, tags: selectedArtifactIds });
+    setThreads((ts) => [t, ...ts]);
     setChosenId(t.id);
     return t;
   }
@@ -273,18 +331,14 @@ export default function AgentPanel({ project, nodes, providers, onCheckProviders
   async function send() {
     const body = text.trim();
     if (!body || !provider || sending || status === 'running') return;
-    if (!thread && !newKind) return;
     setSending(true);
     setError(null);
     try {
       const t = thread ?? (await startThread());
-      // The thread's artifact is fixed; the selection is this message's "with" (minus the
-      // artifact itself, which is what the message is about).
-      const about = t.kind === 'artifact' && t.artifactId ? { target: t.artifactId, with: selection.filter((id) => id !== t.artifactId) } : {};
       // Optimistic: the user message shows at once; the stream's `turn` event confirms.
-      setMessages((ms) => [...ms, { role: 'user', text: body, at: Date.now(), selection, ...about }]);
+      setMessages((ms) => [...ms, { role: 'user', text: body, at: Date.now(), selection }]);
       setText('');
-      await sendThreadMessage(project, t.id, { text: body, selection, ...about });
+      await sendThreadMessage(project, t.id, { text: body, selection });
     } catch (err) {
       setError(err.message);
     } finally {
@@ -293,7 +347,7 @@ export default function AgentPanel({ project, nodes, providers, onCheckProviders
   }
 
   async function newThread() {
-    if (!provider || !newKind) return;
+    if (!provider) return;
     try {
       await startThread();
     } catch (err) {
@@ -302,9 +356,23 @@ export default function AgentPanel({ project, nodes, providers, onCheckProviders
   }
 
   const running = status === 'running';
-  const focusArtifact = thread?.kind === 'artifact' && thread.artifactId && nodes.some((n) => n.id === thread.artifactId) ? thread.artifactId : null;
-  // The transcript: messages and the agent's change notes, in time order.
-  const lines = [...messages, ...notes.map((n) => ({ role: 'note', text: n.text, at: n.at }))].sort((a, b) => (a.at ?? 0) - (b.at ?? 0));
+  // The row above the composer is the LIVE SELECTION -- the conventional "what is
+  // attached to this message" row. It used to list the chat's accumulated tags, which
+  // wore the same shape while answering a different question, and the two read as noise.
+  // What the chat has touched now lives in the recap card at the foot of the transcript.
+  const selectionChips = selectedArtifactIds.map((id) => nodeLabel(id, nodes));
+  const otherSelected = selection.length - selectedArtifactIds.length;
+  // First-touch order, with what each is called now; a deleted one is greyed and has no
+  // Locate, since there is nowhere to locate it to.
+  const recap = touched.map((id) => nodeLabel(id, nodes));
+  // The transcript is the messages, and only the messages. Each change the agent made
+  // used to get a block of its own here -- what changed, expandable to the artifacts it
+  // touched, with Undo. It went, on 2026-09-06: with the recap card at the foot listing
+  // the same files, a block per message said the same thing over and over up the
+  // transcript, and what a chat is FOR is what was said in it. The agent still gets told
+  // what changed (the preamble); the person still has Cmd-Z, which walks the same
+  // server-side journal and is what the button called anyway.
+  const lines = messages;
 
   return (
     <aside className={`agent-panel${embedded ? ' agent-panel--embedded' : ''}`} aria-label="Agent">
@@ -316,13 +384,13 @@ export default function AgentPanel({ project, nodes, providers, onCheckProviders
           <IconButton
             variant="ghost"
             size="sm"
-            label="New thread"
-            tooltip={newKind ? (newKind.kind === 'artifact' ? 'New thread about the selected artifact' : 'New thread about the board') : 'Select one artifact, or none, to start a thread'}
+            label="New chat"
+            tooltip={selectedArtifactIds.length ? 'New chat about the selected artifacts' : 'New chat'}
             icon={<Icon icon={Plus} />}
             onClick={newThread}
-            isDisabled={!provider || !newKind}
+            isDisabled={!provider}
           />
-          <IconButton variant="ghost" size="sm" label="Delete thread" tooltip="Delete this thread" icon={<Icon icon={Trash2} />} onClick={() => setConfirmDelete(true)} isDisabled={!thread || running} />
+          <IconButton variant="ghost" size="sm" label="Delete chat" tooltip="Delete this chat" icon={<Icon icon={Trash2} />} onClick={() => setConfirmDelete(true)} isDisabled={!thread || running} />
           {!embedded && <IconButton variant="ghost" size="sm" label="Close" icon={<Icon icon={X} />} onClick={onClose} />}
         </HStack>
         {/* The strip: one tab per visible thread (tabs.js decides which), the oldest behind
@@ -343,7 +411,7 @@ export default function AgentPanel({ project, nodes, providers, onCheckProviders
                       // The box grows with the name rather than scrolling it, capped in
                       // CSS so a long one cannot push the rest of the strip out.
                       size={Math.max(6, renaming.draft.length + 1)}
-                      placeholder={tabLabel({ ...t, title: '' }, nodes)}
+                      placeholder={tabLabel({ ...t, title: '' })}
                       aria-label="Thread name"
                       onChange={(e) => setRenaming({ id: t.id, draft: e.target.value })}
                       onBlur={commitRename}
@@ -360,11 +428,11 @@ export default function AgentPanel({ project, nodes, providers, onCheckProviders
                   <Tab
                     key={t.id}
                     value={t.id}
-                    label={tabLabel(t, nodes)}
-                    className={t.kind === 'artifact' ? 'agent-tab--artifact' : undefined}
+                    label={tabLabel(t)}
+                    className={(t.tags ?? []).length ? 'agent-tab--artifact' : undefined}
                     // A tab can be narrower than its name, so the tooltip carries the
                     // name in full, and what the conversation opened with after it.
-                    title={[tabLabel(t, nodes), t.preview].filter(Boolean).join(' — ')}
+                    title={[tabLabel(t), t.preview].filter(Boolean).join(' — ')}
                     onDoubleClick={() => setRenaming({ id: t.id, draft: t.title ?? '' })}
                     endContent={t.status === 'running' ? <span className="agent-dot agent-dot--live" /> : undefined}
                   />
@@ -375,7 +443,7 @@ export default function AgentPanel({ project, nodes, providers, onCheckProviders
                   label="More"
                   options={menuTabs.map((t) => ({
                     value: t.id,
-                    label: tabLabel(t, nodes),
+                    label: tabLabel(t),
                     // A menu option has no end slot, so a running thread's dot leads it.
                     icon: t.status === 'running' ? <span className="agent-dot agent-dot--live" /> : undefined,
                   }))}
@@ -385,7 +453,7 @@ export default function AgentPanel({ project, nodes, providers, onCheckProviders
           )}
           {visible.length === 0 && (
             <Text type="supporting" color="secondary" className="agent-tabs-empty">
-              {selectedArtifacts.length > 1 ? 'No thread yet about these' : selectedArtifacts.length === 1 ? 'No thread yet about this artifact — your first message starts one' : 'No threads yet'}
+              {selectedArtifacts.length ? 'Nothing said about this yet — your first message starts a chat' : 'No chats yet'}
             </Text>
           )}
         </div>
@@ -428,33 +496,30 @@ export default function AgentPanel({ project, nodes, providers, onCheckProviders
             box would read as the first message, and there isn't one. */}
         {provider && lines.length === 0 && !draft && (
           <Text type="supporting" color="secondary" className="agent-hint">
-            {thread?.kind === 'artifact' || newKind?.kind === 'artifact'
-              ? 'Tell the agent what to change on this artifact. Whatever else is selected when you send comes with the message.'
-              : 'Ask about the board — what is on it, what feeds what, what a prompt says — or tell the agent what to change or make. Select an artifact to talk about it alone.'}
+            Ask about what is on the canvas, or say what should change or be made — whatever is selected comes with the message as context.
           </Text>
         )}
-        {lines.map((m, i) =>
-          m.role === 'note' ? (
-            <Text key={`${m.at}-${i}`} type="supporting" className="agent-note">
-              {m.text}
+        {lines.map((m, i) => (
+          <div key={`${m.at}-${i}`} className={`agent-msg agent-msg-${m.role}`}>
+            <Text type="supporting" className="agent-msg-role">
+              {m.role === 'user' ? 'You' : provider?.name ?? 'Agent'}
+              {m.role === 'user' && m.selection?.length ? ` · ${m.selection.length} selected` : ''}
             </Text>
-          ) : (
-            <div key={`${m.at}-${i}`} className={`agent-msg agent-msg-${m.role}`}>
-              <Text type="supporting" className="agent-msg-role">
-                {m.role === 'user' ? 'You' : provider?.name ?? 'Agent'}
-                {m.role === 'user' && m.target ? (m.target === 'new' ? ' · to a new asset' : ` · to ${m.target}`) : ''}
-                {m.role === 'user' && m.selection?.length ? ` · ${m.selection.length} selected` : ''}
-              </Text>
-              <div className="agent-msg-text">{m.text}</div>
-            </div>
-          ),
-        )}
+            {/* The agent writes markdown, so its replies are rendered as markdown. What
+                the PERSON typed is not: they typed prose, and running it through a parser
+                would eat their asterisks and turn a line starting with "#" into a heading.
+                Their own words are shown exactly as they wrote them. */}
+            {m.role === 'user' ? <div className="agent-msg-text">{m.text}</div> : <ChatMarkdown text={m.text} />}
+          </div>
+        ))}
         {draft && (
           <div className="agent-msg agent-msg-assistant">
             <Text type="supporting" className="agent-msg-role">
               {provider?.name ?? 'Agent'}
             </Text>
-            <div className="agent-msg-text">{draft}</div>
+            {/* Rendered by the same component while it streams, so formatting appears as
+                it arrives rather than snapping in when the turn ends. */}
+            <ChatMarkdown text={draft} />
           </div>
         )}
         {activity && (
@@ -467,28 +532,56 @@ export default function AgentPanel({ project, nodes, providers, onCheckProviders
             Thinking…
           </Text>
         )}
+        {/* What this conversation involved, after the last message: every artifact it
+            read or changed, named once, in the order it first touched them. Reads and
+            writes are deliberately NOT distinguished -- the question is what the chat was
+            about, and splitting a small card into changed-versus-merely-read made it an
+            argument. The per-change blocks above already say what each change did; this
+            says what the whole chat came to. */}
+        {recap.length > 0 && !running && (
+          <div className="agent-recap">
+            <button type="button" className="agent-recap-head" aria-expanded={recapOpen} onClick={() => setRecapOpen((v) => !v)}>
+              <Icon icon={ChevronRight} size="sm" />
+              <Text type="supporting" weight="medium">
+                {recap.length} {recap.length === 1 ? 'file' : 'files'}
+              </Text>
+              <StackItem size="fill" />
+              <Text type="supporting" color="secondary">
+                {recapOpen ? 'Hide' : 'Show'}
+              </Text>
+            </button>
+            {recapOpen && (
+              <VStack gap={0} className="agent-recap-list">
+                {recap.map((row) => (
+                  <ArtifactRow key={row.id} row={row} onOpen={onOpenEditor} onLocate={onLocate} embedded={embedded} />
+                ))}
+              </VStack>
+            )}
+          </div>
+        )}
         {error && <div className="agent-error">{error}</div>}
       </div>
 
       <div className="agent-panel-composer">
-        {/* What the next message carries besides its own text: the page this thread is
-            about, and whatever else is selected. Both absent means the row is absent --
-            an empty selection IS the whole canvas, so a chip saying so was a label on
-            the default, and a heading over one chip was a label on a label. */}
-        {(focusArtifact || selection.length > 0) && (
+        {/* What the next message carries: the live selection, named. Absent when nothing
+            is selected -- an empty selection IS the whole canvas, so a chip saying so was
+            a label on the default. Each artifact wears its own node icon, so the chip and
+            the thing on the canvas look like the same thing; whatever else is selected is
+            counted rather than named, the same rule the toolbar's chip follows. There is
+            no Locate here: a selected node is one you have just pointed at. */}
+        {selection.length > 0 && (
           <HStack gap={1} align="center" wrap>
-            {focusArtifact && (
-              <span className="agent-chip agent-chip--focus">
-                <span className="agent-dot agent-dot--focus" />
-                {artifactLabel(thread, nodes)}
-                {!embedded && (
-                  <button type="button" className="agent-locate" title="Locate on canvas" aria-label="Locate on canvas" onClick={() => onLocate?.(focusArtifact)}>
-                    <Icon icon={Crosshair} size="sm" />
-                  </button>
-                )}
+            {selectionChips.map((chip) => (
+              <span key={chip.id} className="agent-chip">
+                {chip.type && NODE_ICONS[chip.type] && <Icon icon={NODE_ICONS[chip.type]} size="sm" />}
+                {chip.label}
+              </span>
+            ))}
+            {otherSelected > 0 && (
+              <span className="agent-chip">
+                {otherSelected} {otherSelected === 1 ? 'input' : 'inputs'}
               </span>
             )}
-            {selection.length > 0 && <span className="agent-chip">{selection.length} selected</span>}
           </HStack>
         )}
         {/* Enter sends; Shift+Enter or Option+Enter breaks the line. Caught on a wrapper,
@@ -507,16 +600,8 @@ export default function AgentPanel({ project, nodes, providers, onCheckProviders
             isLabelHidden
             rows={3}
             value={text}
-            placeholder={
-              !provider
-                ? 'Connect Claude or Codex to start'
-                : !thread && !newKind
-                  ? 'Several artifacts are selected — select one to start a thread about it'
-                  : thread?.kind === 'artifact' || newKind?.kind === 'artifact'
-                    ? 'What should change? (↵ to send, ⇧↵ for a new line)'
-                    : 'Ask about the board… (↵ to send, ⇧↵ for a new line)'
-            }
-            isDisabled={!provider || (!thread && !newKind)}
+            placeholder={provider ? 'Ask, or say what should change… (↵ to send, ⇧↵ for a new line)' : 'Connect Claude or Codex to start'}
+            isDisabled={!provider}
             onChange={setText}
           />
         </div>
@@ -534,16 +619,16 @@ export default function AgentPanel({ project, nodes, providers, onCheckProviders
           {running ? (
             <Button label="Stop" variant="secondary" size="sm" icon={<Icon icon={Square} />} onClick={() => interruptThread(project, threadId)} />
           ) : (
-            <Button label="Send" variant="primary" size="sm" isDisabled={!provider || !text.trim() || sending || (!thread && !newKind)} isLoading={sending} onClick={send} />
+            <Button label="Send" variant="primary" size="sm" isDisabled={!provider || !text.trim() || sending} isLoading={sending} onClick={send} />
           )}
         </HStack>
       </div>
       <AlertDialog
         isOpen={confirmDelete}
         onOpenChange={(open) => !open && setConfirmDelete(false)}
-        title="Delete this thread?"
+        title="Delete this chat?"
         description="The conversation is removed for good. What the agent changed on the canvas stays, and Cmd-Z still undoes it."
-        actionLabel="Delete thread"
+        actionLabel="Delete chat"
         onAction={removeThread}
       />
     </aside>

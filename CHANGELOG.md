@@ -33,6 +33,27 @@ Keep that shape: the website's What's new page parses this file.
 
 ### Added
 
+- **The agent's conversations are chats you can talk to about several things at once.**
+  Select two motions and say "make both titles red", or "stitch these in order", and it
+  works — no picking one of them first, no "which did you mean". Whatever you have
+  selected comes along as context and the agent works out what you meant from what you
+  said.
+- **The editor: one artifact, full window.** Double-click a page or a motion (or use Open
+  on the toolbar) and it fills the window in three columns — the chats about it, the thing
+  itself at a size you can actually judge, and its parameters. Escape puts the canvas back
+  exactly where it was.
+- **An artifact can expose parameters you turn by hand.** Ask the agent to "expose the
+  accent colour and the intro speed as parameters" and controls appear in the editor's
+  right-hand column: drag one and the preview follows, and Render uses whatever they are
+  set to. A tweak is an ordinary canvas change, so ⌘Z takes it back, and it survives the
+  agent rewriting the composition. An action in that column installs the controls into the
+  project if you want the file to carry its own when opened outside the app.
+- **The agent's replies are formatted.** Headings, lists, tables, quotes, task lists and
+  code blocks (with a copy button) all render properly instead of arriving as one wall of
+  plain text. Links open in a new tab.
+- **Chats name themselves.** After the first exchange the agent writes a short name on the
+  tab, so the strip says what a conversation was about instead of quoting its first words.
+  Double-click a tab to rename it yourself, and yours always wins.
 - **Motion assets.** A new node type: a HyperFrames composition — an HTML video that
   animates your project's images and clips with timed elements and a GSAP timeline. Ask
   the agent for a video, an animation or motion graphics and it writes one beside the
@@ -80,6 +101,18 @@ Keep that shape: the website's What's new page parses this file.
   nothing at all: the code that saves the file into your project was calling something
   the file never imported, so it failed on the first byte. Dropping onto an existing
   image node was never affected, which is why it looked like only some drops worked.
+- **The agent's reply lives in the panel now**, not in a card floating over the node it
+  worked on. Send from the toolbar and the panel opens on that conversation with the
+  answer streaming into it. ⌘Z undoes what the agent changed, and a change to several
+  things undoes in one step.
+- **The composer says which conversation your message joins** before you send it —
+  "continues *Title fixes*" or "new chat" — with a button to switch.
+- **A chat ends with a recap of the files it involved** — a small card after the last
+  message listing every page and motion it read or changed, each with Open and Locate. The
+  row above the box you type in shows what you have selected right now, and nothing else.
+- **A conversation outlives the things it was about.** Deleting a page or motion the agent
+  worked on no longer asks you anything and no longer hides the chat: it stays, with the
+  deleted thing greyed out in its list. Nothing is thrown away with the file.
 
 ## 2026-09-05
 

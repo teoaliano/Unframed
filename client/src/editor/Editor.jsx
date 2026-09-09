@@ -1,16 +1,17 @@
-import { useEffect } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import { IconButton } from '@astryxdesign/core/IconButton';
 import { Icon } from '@astryxdesign/core/Icon';
 import { Text } from '@astryxdesign/core/Text';
 import { HStack, StackItem } from '@astryxdesign/core/Stack';
-import { ArrowLeft, ExternalLink, SlidersHorizontal } from 'lucide-react';
+import { ArrowLeft, ExternalLink } from 'lucide-react';
 import AgentPanel from '../agent/AgentPanel.jsx';
+import Dials from './Dials.jsx';
 import { artifactUrl } from '../api.js';
 import { NODE_ICONS } from '../nodes/nodeIcons.jsx';
 
-// The editor: one artifact, full window, three columns -- the agent's thread about it,
-// the artifact itself, its parameters. Design: docs/superpowers/specs/2026-09-06-agent-canvas-slice-4-design.md,
-// "The editor".
+// The editor: one artifact, full window, three columns -- the chats about it, the artifact
+// itself, its parameters. Design: docs/superpowers/specs/2026-09-06-chats-and-tags-design.md,
+// decision 8.
 //
 // It REPLACES the canvas rather than covering it (App.jsx renders one or the other): a
 // canvas underneath would keep every node's frame and every clip alive for nothing, and
@@ -18,7 +19,12 @@ import { NODE_ICONS } from '../nodes/nodeIcons.jsx';
 // the viewport is put back on the way out. The frame here is the same one the node
 // shows, same origin, same sandbox (PageNode says why each attribute is there), just
 // given the room it deserves and live from the start.
-export default function Editor({ node, project, previewPort, onClose, onOpenExternal, agent }) {
+export default function Editor({ node, project, previewPort, onClose, onOpenExternal, onDials, agent }) {
+  // The artifact's frame. Dials talks to it directly (postMessage through the viewer),
+  // which is why the ref lives here rather than inside that column.
+  const frame = useRef(null);
+  // Stable, so the parameters column is not rebuilt on every render of this one.
+  const onDialsChange = useCallback((values) => onDials(node.id, values), [onDials, node.id]);
   // Escape goes back to the canvas, unless it is typed into a field -- the composer and
   // the rename box own their own Escape.
   useEffect(() => {
@@ -56,7 +62,7 @@ export default function Editor({ node, project, previewPort, onClose, onOpenExte
         </header>
         <div className="editor-frame-wrap">
           {src ? (
-            <iframe key={node.data.file} className="editor-frame" src={src} title={title} sandbox="allow-scripts allow-same-origin" referrerPolicy="no-referrer" allow="" />
+            <iframe ref={frame} key={node.data.file} className="editor-frame" src={src} title={title} sandbox="allow-scripts allow-same-origin" referrerPolicy="no-referrer" allow="" />
           ) : (
             <Text type="supporting" color="secondary" className="editor-hint">
               This {node.type} has no file yet — ask the agent to write one.
@@ -65,15 +71,9 @@ export default function Editor({ node, project, previewPort, onClose, onOpenExte
         </div>
       </section>
       <aside className="editor-col">
-        <div className="editor-col-head">
-          <HStack gap={2} align="center">
-            <Icon icon={SlidersHorizontal} size="sm" />
-            <Text type="label">Parameters</Text>
-          </HStack>
-        </div>
-        <Text type="supporting" color="secondary" className="editor-hint">
-          No parameters yet. Ask the agent to expose some — "expose the accent colour and the intro speed as parameters".
-        </Text>
+        {/* Keyed by the FILE: a new version of the composition is a new set of parameters,
+            so the panel is rebuilt rather than left showing the previous one's. */}
+        <Dials key={node.data?.file || node.id} project={project} dials={node.data?.dials ?? null} onChange={onDialsChange} frameRef={frame} />
       </aside>
     </div>
   );

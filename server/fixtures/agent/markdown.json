@@ -1,0 +1,36 @@
+{
+  "when": "markdown|formatting|show me",
+  "turns": [
+    {
+      "title": "Markdown formatting",
+      "text": "## What I changed\n\nSet both titles to red, in **one batch** so `\u2318Z` reverts them together.\n\n### The two motions\n\n| Node | Title | Duration |\n| --- | --- | --- |\n| `m1` | Intro (red) | 2s |\n| `m2` | Outro (red) | 2s |\n\nSteps I took:\n\n1. Read the canvas with `canvas_read`\n2. Wrote both `updateNode` ops in a single `canvas_write`\n   - one per motion\n   - nested so they share an undo step\n3. Confirmed the new titles\n\n- [x] Intro retitled\n- [ ] Colour applied inside the composition\n\n> The titles are node labels, not text inside the compositions. Say the word and\n> I will edit the compositions themselves.\n\nThe op I sent:\n\n```json\n{\n  \"ops\": [\n    { \"type\": \"updateNode\", \"id\": \"m1\", \"patch\": { \"title\": \"Intro (red)\" } },\n    { \"type\": \"updateNode\", \"id\": \"m2\", \"patch\": { \"title\": \"Outro (red)\" } }\n  ]\n}\n```\n\nSee the [HyperFrames contract](https://example.com/contract) for what a composition may contain.\n\n---\n\nNothing else on the canvas was touched.",
+      "tools": [
+        {
+          "name": "canvas_read",
+          "input": {}
+        },
+        {
+          "name": "canvas_write",
+          "input": {
+            "ops": [
+              {
+                "type": "updateNode",
+                "id": "m1",
+                "patch": {
+                  "title": "Intro (red)"
+                }
+              },
+              {
+                "type": "updateNode",
+                "id": "m2",
+                "patch": {
+                  "title": "Outro (red)"
+                }
+              }
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}
