@@ -498,7 +498,19 @@ prioritized" (<https://github.com/xyflow/xyflow/discussions/5446>).
 ## Measured on this app, 2026-09-09
 
 Everything above is other people's claims with a citation. This section is ours, so it
-has a method instead: a production `vite build` served by the engine
+has a method instead.
+
+To take a reading by hand, on a real board, load the canvas with **`?fps=1`**
+(`client/src/debug/fps.js`). It reports per gesture rather than continuously, because an
+idle canvas sits at the refresh rate and that number answers nothing — the question is
+whether DRAGGING drops frames, and the answer has to survive letting go of the mouse to
+be read. It learns the display's own frame time from idle frames instead of assuming
+16.7ms, which on a 120Hz screen is already two frames late. `window.__fps.dump()` gives
+the settled gestures. Chrome's Rendering → Frame Rendering Stats is the zero-code
+alternative and gives an instantaneous FPS number only.
+
+The numbers below came from the automated version of the same thing: a production
+`vite build` served by the engine
 (`UNFRAMED_CLIENT_DIST`, so no dev server, no HMR and no StrictMode double-render),
 driven in headless Chrome over CDP with real `Input.dispatchMouseEvent` gestures, frame
 gaps sampled with `requestAnimationFrame` and component renders counted by temporary
