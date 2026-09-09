@@ -20,6 +20,14 @@ Keep that shape: the website's What's new page parses this file.
 - **An image output now warns about a video wired in inside a group.** It only noticed
   loose video nodes before, so a box containing a clip was sent to an image model with no
   warning that the clip would be ignored.
+- **Opening a project no longer lands you on empty canvas.** The view was framed on the
+  starter graph that shows for an instant while your project loads, and never re-framed
+  once the project arrived — so any board whose nodes sit away from the origin opened
+  off-screen, at the wrong zoom, and looked empty until you pressed Fit view. Every
+  project now opens framed on its own contents. Switching projects was already correct.
+  A side effect worth having: the starter graph no longer flashes up before your project
+  appears, and if the local server cannot be reached the canvas stays empty and says so
+  instead of showing a starter graph that could not have been saved anywhere.
 
 ## 2026-09-06
 
