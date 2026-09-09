@@ -68,13 +68,21 @@ export default function ImageNode({ id, data, parentId }) {
     onFile(file);
   }
 
+  // A reference wearing a picture is bare on the canvas, the same way a prompt is bare
+  // text: no tab, no border, no fill — the picture IS the node, and a frame around one
+  // only ever made the node bigger than the thing it shows. An EMPTY one keeps both,
+  // because an empty one is not a picture at all, it is a box asking for a file, and a
+  // box asking for something has to look like a box and say what it wants.
+  const bare = Boolean(src);
+
   return (
     <>
-      <NodeHeader kind="image" family="input" />
+      {!bare && <NodeHeader kind="image" family="input" />}
       <Card
         width="100%"
         elevation="low"
         padding={0}
+        className={bare ? 'xnode-bare' : undefined}
         onDrop={onDrop}
         onDragOver={(e) => {
           e.preventDefault();
@@ -121,14 +129,17 @@ export default function ImageNode({ id, data, parentId }) {
           {error && <StatusLine type="error">{error}</StatusLine>}
         </div>
       </Card>
-      {/* The right end of the name row, opposite the tab. Outside the card on purpose:
-          a badge on the picture needs a scrim to survive an arbitrary photograph, and
-          the scrim is then the thing covering the photograph. Out here it needs neither.
-          It is absolutely positioned (styles.css) so the node wrapper stays exactly the
-          card's box. */}
-      <NodeLine live={roles.length > 0}>{role}</NodeLine>
+      {/* The name row. Outside the card on purpose: a badge on the picture needs a scrim
+          to survive an arbitrary photograph, and the scrim is then the thing covering the
+          photograph. Out here it needs neither. It is absolutely positioned (styles.css)
+          so the node wrapper stays exactly the card's box. `--start` puts it in the
+          corner the tab used to own, which is free once the node is bare — and a role
+          only ever exists once there is media, so it is never there to collide with the
+          tab of an empty node. */}
+      <NodeLine className="xnode-line--start" live={roles.length > 0}>{role}</NodeLine>
       {/* Resizable from any edge once it holds something — nodes/MediaResize.jsx owns
-          why that includes the right one, where the handle also lives. */}
+          why that includes the right one, where the handle also lives — and from the four
+          corner grips a selected element shows. */}
       {src && <MediaResize />}
     </>
   );

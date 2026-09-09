@@ -29,9 +29,10 @@ import {
   redo as redoOp,
   subscribe as subscribeDocument,
 } from './document.js';
-import { saveMedia, inlineFileRefs } from './media.js';
+import { saveMedia, copyMedia, inlineFileRefs } from './media.js';
+import { ensureLibrary, startRender, getRender, withRuntime } from './motion.js';
 import { providerStatuses, forgetProviderStatus, PROVIDERS } from './providers.js';
-import { newThread, writeThread, readThread, listThreads, deleteThread, eventsSince } from './threads.js';
+import { newThread, writeThread, readThread, listThreads, deleteThread, eventsSince, persistThread, applySettings, renameThread, EFFORTS } from './threads.js';
 import { sendToThread, interruptThread, subscribeThread, closeThreadSession, closeSessionsFor } from './agent.js';
 import crypto from 'node:crypto';
 import { startPreviewServer, LOOPBACK_HOST } from './preview.js';
@@ -1341,18 +1342,42 @@ const threadDir = (req) => projectDir(req.params.name);
 // `kind` is 'canvas' (the panel's thread about the board) or 'artifact' (the composer's,
 // about one node -- `artifactId`, or null when the agent is about to create it).
 app.post('/api/projects/:name/threads', async (req, res) => {
-  const { provider = 'claude', model = '', kind = 'canvas', artifactId = null } = req.body || {};
+  const { provider = 'claude', model = '', effort = '', kind = 'canvas', artifactId = null } = req.body || {};
   if (!PROVIDERS[provider]) return res.status(400).json({ error: `Unknown provider "${provider}".` });
   if (typeof model !== 'string' || model.length > 200) return res.status(400).json({ error: 'That does not look like a model id.' });
+  if (effort !== '' && !EFFORTS.has(effort)) return res.status(400).json({ error: `Effort must be one of ${[...EFFORTS].join(', ')}.` });
   if (kind !== 'canvas' && kind !== 'artifact') return res.status(400).json({ error: `Unknown thread kind "${kind}".` });
   if (artifactId !== null && (typeof artifactId !== 'string' || !/^[\w-]{1,80}$/.test(artifactId))) return res.status(400).json({ error: 'artifactId must be a node id.' });
   try {
     const id = `t-${Date.now().toString(36)}-${crypto.randomBytes(4).toString('hex')}`;
-    const thread = newThread({ id, project: slugify(req.params.name), provider, model, kind, artifactId });
+    const thread = newThread({ id, project: slugify(req.params.name), provider, model, effort, kind, artifactId });
     await writeThread(threadDir(req), thread);
     res.json({ thread });
   } catch (err) {
     res.status(500).json({ error: `Could not create the thread: ${err.message}` });
+  }
+});
+
+// Model and effort for the thread's next turn (threads.js applySettings validates and
+// refuses mid-turn). The live session was built with the old values, so it is closed;
+// the next message resumes the SDK session with the new ones and keeps the context.
+// `title` rides the same route but is not a setting: it changes no session, so a rename
+// neither closes one nor goes near applySettings -- which refuses mid-turn whether or
+// not a model was actually asked for, and would fail a rename for standing too close.
+app.patch('/api/projects/:name/threads/:id', async (req, res) => {
+  const { model, effort, title } = req.body || {};
+  const settings = model !== undefined || effort !== undefined;
+  try {
+    const thread = await persistThread(threadDir(req), req.params.id, (cur) => {
+      if (!cur) throw Object.assign(new Error('Thread not found.'), { status: 404 });
+      let next = settings ? applySettings(cur, { model, effort }) : cur;
+      if (title !== undefined) next = renameThread(next, title);
+      return next;
+    });
+    if (settings) closeThreadSession(threadDir(req), req.params.id);
+    res.json({ thread });
+  } catch (err) {
+    res.status(err.status || (/not found/i.test(err.message) ? 404 : 500)).json({ error: err.message });
   }
 });
 
@@ -1450,6 +1475,83 @@ app.post('/api/projects/:name/files', express.raw({ type: () => true, limit: '50
   } catch (err) {
     res.status(500).json({ error: `Could not save the file: ${err.message}` });
   }
+});
+
+// A copy of a file already in the project, for pasting a page node: the pasted node must
+// own its file, or an edit through either node moves both (media.js, copyMedia).
+app.post('/api/projects/:name/files/copy', async (req, res) => {
+  const file = typeof req.body?.file === 'string' ? req.body.file : '';
+  if (!file) return res.status(400).json({ error: 'Which file?' });
+  // `from` names the project the original belongs to, for a paste across projects.
+  const from = typeof req.body?.from === 'string' && req.body.from ? projectDir(req.body.from) : undefined;
+  try {
+    const copy = await copyMedia(projectDir(req.params.name), file, { from });
+    res.json({ file: copy });
+  } catch (err) {
+    res.status(err.code === 'ENOENT' ? 404 : 400).json({ error: `Could not copy the file: ${err.message}` });
+  }
+});
+
+// ---- motion assets (server/motion.js) ----
+// The library a composition plays with sits beside it. The agent's motion_write brings
+// it; the browser asks here after uploading a composition of its own, so a dropped-in
+// file plays too. Idempotent.
+app.post('/api/projects/:name/motion/library', async (req, res) => {
+  try {
+    res.json({ written: await ensureLibrary(projectDir(req.params.name)) });
+  } catch (err) {
+    res.status(500).json({ error: `Could not prepare the motion library: ${err.message}` });
+  }
+});
+
+// A composition the person brings (dropped on a motion node). It lands like any upload,
+// with two things the agent's motion_write also does: the HyperFrames runtime tag goes
+// into the document (motion.js, withRuntime -- without it the player drives the GSAP
+// timeline but shows no timed clip), and the library lands beside it.
+app.post('/api/projects/:name/motion/files', express.text({ type: () => true, limit: '20mb' }), async (req, res) => {
+  if (typeof req.body !== 'string' || !req.body.trim()) return res.status(400).json({ error: 'No composition in the request body.' });
+  const fileName = typeof req.query.name === 'string' ? path.basename(req.query.name) : '';
+  try {
+    const dir = projectDir(req.params.name);
+    await ensureLibrary(dir);
+    const bytes = Buffer.from(withRuntime(req.body), 'utf8');
+    const file = await saveMedia(dir, { bytes, mime: 'text/html', fileName: fileName || 'motion.html', source: 'upload' });
+    res.json({ file, fileName, bytes: bytes.length, mime: 'text/html' });
+  } catch (err) {
+    res.status(500).json({ error: `Could not save the composition: ${err.message}` });
+  }
+});
+
+// The same alphabet the preview origin serves; a name outside it is not a file here.
+const COMPOSITION_RE = /^[A-Za-z0-9][A-Za-z0-9._-]*\.html?$/;
+
+// Render a composition to an MP4. Answers at once with the render's id; the browser polls
+// the route below. Local compute on local files, so no jobs.json -- a render lost to a
+// restart costs a click, not money (motion.js).
+app.post('/api/projects/:name/motion/render', async (req, res) => {
+  const file = typeof req.body?.file === 'string' ? req.body.file : '';
+  const title = typeof req.body?.title === 'string' ? req.body.title.slice(0, 120) : '';
+  if (!COMPOSITION_RE.test(file)) return res.status(400).json({ error: 'Which composition? Pass its .html file name.' });
+  const dir = projectDir(req.params.name);
+  const exists = await fs.access(path.join(dir, file)).then(
+    () => true,
+    () => false,
+  );
+  if (!exists) return res.status(404).json({ error: `No file ${file} in this project.` });
+  try {
+    await ensureLibrary(dir);
+  } catch (err) {
+    return res.status(500).json({ error: `Could not prepare the motion library: ${err.message}` });
+  }
+  const job = startRender({ dir, file, title });
+  res.json({ id: job.id, status: job.status });
+});
+
+app.get('/api/projects/:name/motion/render/:id', (req, res) => {
+  const job = getRender(req.params.id);
+  if (!job) return res.status(404).json({ error: 'No such render.' });
+  const { id, file, status, progress, message, output, error } = job;
+  res.json({ id, file, status, progress, message, output, error });
 });
 
 app.post('/api/projects/:name/rename', async (req, res) => {

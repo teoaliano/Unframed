@@ -1,4 +1,5 @@
 import { useLayoutEffect, useRef, useState } from 'react';
+import { isArtifact } from '../graph/resolve.js';
 import { useStore } from '@xyflow/react';
 import { Button } from '@astryxdesign/core/Button';
 import { IconButton } from '@astryxdesign/core/IconButton';
@@ -7,6 +8,7 @@ import { Text } from '@astryxdesign/core/Text';
 import { HStack, StackItem } from '@astryxdesign/core/Stack';
 import { X, Undo2, MessageSquare, ExternalLink } from 'lucide-react';
 import { place, selectionBox, toScreen } from './placement.js';
+import { useCanvasWheel } from './canvasWheel.js';
 
 // The agent's reply, anchored below the node it worked on (design canvas board 4): the
 // text, Undo, Open thread, and the artifact's own action. It stays until dismissed,
@@ -24,6 +26,8 @@ export default function AnchoredReply({ reply, nodes, canvasEl, onDismiss, onUnd
     const r = el.current?.getBoundingClientRect();
     if (r && (r.width !== size.width || r.height !== size.height)) setSize({ width: r.width, height: r.height });
   });
+  // The card floats over the canvas, so it must not swallow the canvas's own gestures.
+  useCanvasWheel(el, canvasEl);
   if (!reply || !canvasEl) return null;
 
   // Below the node it worked on; below the selection it came from when there is none.
@@ -37,7 +41,7 @@ export default function AnchoredReply({ reply, nodes, canvasEl, onDismiss, onUnd
   // the bottom edge, the toolbar wants the top.
   const at = place({ box: { ...box, y: box.y + box.height, height: 0 }, size, viewport, gap: 12 });
   const y = at.below ? at.y : box.y + box.height + 12;
-  const page = anchorNode?.type === 'page' && anchorNode.data?.file ? anchorNode : null;
+  const page = isArtifact(anchorNode) && anchorNode.data?.file ? anchorNode : null;
 
   return (
     <div

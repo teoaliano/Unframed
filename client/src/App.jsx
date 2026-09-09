@@ -47,6 +47,7 @@ import ImageOutputNode from './nodes/ImageOutputNode.jsx';
 import VideoOutputNode from './nodes/VideoOutputNode.jsx';
 import TextOutputNode from './nodes/TextOutputNode.jsx';
 import PageNode from './nodes/PageNode.jsx';
+import MotionNode from './nodes/MotionNode.jsx';
 import {
   withDrag,
   nextId,
@@ -59,8 +60,8 @@ import {
 } from './graph/starter.js';
 import ProjectMenu from './ProjectMenu.jsx';
 import IgnoredEdge from './nodes/IgnoredEdge.jsx';
-import { PromptIcon, ImageIcon, VideoIcon, TextIcon, PageIcon, GroupIcon } from './nodes/nodeIcons.jsx';
-import { bucketSources, isOutput, isReferenceable, hasMedia } from './graph/resolve.js';
+import { PromptIcon, ImageIcon, VideoIcon, TextIcon, PageIcon, MotionIcon, GroupIcon } from './nodes/nodeIcons.jsx';
+import { bucketSources, isOutput, isArtifact, isReferenceable, hasMedia } from './graph/resolve.js';
 import { groupSelection, ungroup, groupable } from './graph/grouping.js';
 import { mediaSrc } from './nodes/ImageNode.jsx';
 import { canSource, canTarget, selectedIds, connections, dropInternal } from './graph/bulkWire.js';
@@ -70,7 +71,7 @@ import { expiryNote } from './keyExpiry.js';
 import LibraryDialog from './library/LibraryDialog.jsx';
 import { instantiateFragment, centerOffset, placeFragment } from './library/insert.js';
 import { selectionFragment, presetFromSelection } from './library/save.js';
-import { useDocument } from './graph/useDocument.js';
+import { useDocument, DocumentContext } from './graph/useDocument.js';
 import { ProjectContext } from './graph/project.js';
 import AgentPanel from './agent/AgentPanel.jsx';
 import SelectionToolbar from './toolbar/SelectionToolbar.jsx';
@@ -86,7 +87,8 @@ import {
   subscribeThreadEvents,
   nextUndo,
   undoProject,
-  previewUrl,
+  previewUrl, artifactUrl,
+  copyFile,
   renameProject,
   deleteProject,
   listPresets,
@@ -102,6 +104,7 @@ import {
   listModels,
   revealFiles,
   listProviders,
+  uploadFile,
 } from './api.js';
 
 const nodeTypes = {
@@ -113,6 +116,7 @@ const nodeTypes = {
   videoOutput: VideoOutputNode,
   textOutput: TextOutputNode,
   page: PageNode,
+  motion: MotionNode,
 };
 
 const edgeTypes = { ignored: IgnoredEdge };
@@ -189,7 +193,7 @@ function Canvas() {
   // render acquires a SECOND poll loop (see canvasGeneration's own comment).
   const [nodes, setNodes, onNodesChange] = useNodesState([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
-  const { screenToFlowPosition, zoomIn, zoomOut, fitView, getNodes } = useReactFlow();
+  const { screenToFlowPosition, zoomIn, zoomOut, fitView, getNodes, deleteElements } = useReactFlow();
   const toast = useToast();
   // Shared by every saveProject call site (the debounced autosave below, and
   // the immediate save `confirmName` fires right after creating a project):
@@ -357,6 +361,45 @@ function Canvas() {
     setAgentOpen(true);
     if (!providers) checkProviders();
   };
+  // The artifact the panel's active thread is about (slice 3): ringed on the canvas, and
+  // the toolbar's Agent button becomes "Add to <it>" when the selection has no artifact.
+  const [agentFocus, setAgentFocus] = useState(null);
+  const onAgentFocus = useCallback((id) => setAgentFocus(id), []);
+  // Bumped when the toolbar's composer creates a thread, so the panel's strip re-reads.
+  const [threadsBump, setThreadsBump] = useState(0);
+  const focusNode = agentOpen && agentFocus ? nodes.find((n) => n.id === agentFocus) : null;
+  const focusId = focusNode?.id ?? null;
+  // The ring is a class on the React Flow wrapper, which `className` on the node reaches;
+  // memoised so a render without a focus change hands React Flow the same array.
+  const flowNodes = useMemo(() => (focusId ? nodes.map((n) => (n.id === focusId ? { ...n, className: `${n.className ? `${n.className} ` : ''}agent-focus` } : n)) : nodes), [nodes, focusId]);
+  // Deleting a page whose agent is mid-turn asks first (slice-3 design, section 4); every
+  // other delete is the ordinary undoable op. `deleteBusy` holds what was asked about.
+  const [deleteBusy, setDeleteBusy] = useState(null); // { nodes, edges, threads } | null
+  const deleteCleared = useRef(false);
+  const onBeforeDelete = useCallback(
+    async ({ nodes: dn, edges: de }) => {
+      if (deleteCleared.current) {
+        deleteCleared.current = false;
+        return true;
+      }
+      const pages = dn.filter(isArtifact);
+      if (!pages.length) return true;
+      const lists = await Promise.all(pages.map((n) => listThreads(project, { artifactId: n.id })));
+      const running = lists.flat().filter((t) => t.status === 'running');
+      if (!running.length) return true;
+      setDeleteBusy({ nodes: dn, edges: de, threads: running });
+      return false;
+    },
+    [project],
+  );
+  async function confirmDeleteBusy() {
+    const d = deleteBusy;
+    setDeleteBusy(null);
+    if (!d) return;
+    await Promise.all(d.threads.map((t) => interruptThread(project, t.id)));
+    deleteCleared.current = true;
+    deleteElements({ nodes: d.nodes, edges: d.edges });
+  }
 
   // ---- the selection toolbar and its composer (toolbar/SelectionToolbar.jsx) ----
   // `composer` is null (the toolbar shows tools) or the message's shape from
@@ -374,11 +417,13 @@ function Canvas() {
     : 'Checking for Claude and Codex…';
 
   const openComposer = useCallback(() => {
-    setComposer(messageTarget(nodes.filter((n) => n.selected)));
+    // With the panel open on an artifact thread and no artifact selected, the message is
+    // "Add to <that artifact>" (target.js); a selected artifact still wins.
+    setComposer(messageTarget(nodes.filter((n) => n.selected), focusId));
     // The composer is the first place many people meet the agent, so the check the panel
     // would have run happens here too.
     if (!providers) checkProviders();
-  }, [nodes, providers, checkProviders]);
+  }, [nodes, focusId, providers, checkProviders]);
   const closeComposer = useCallback(() => setComposer(null), []);
 
   // Clicking another node while the composer is open adds it rather than replacing the
@@ -418,13 +463,15 @@ function Canvas() {
   // to ask which artifact is meant.
   async function composerThread(c) {
     const provider = readyProvider.kind;
+    // A thread made here is one the panel's strip has not seen; the bump makes it re-read.
+    const fresh = (opts) => createThread(project, { provider, ...opts }).then((t) => (setThreadsBump((b) => b + 1), t));
     if (c.target === 'ask') {
       const list = await listThreads(project);
-      return list.find((t) => t.kind === 'canvas' && t.status !== 'running') ?? createThread(project, { provider });
+      return list.find((t) => t.kind === 'canvas' && t.status !== 'running') ?? fresh({});
     }
-    if (c.target === 'new') return createThread(project, { provider, kind: 'artifact' });
+    if (c.target === 'new') return fresh({ kind: 'artifact' });
     const list = await listThreads(project, { artifactId: c.target });
-    return list.find((t) => t.status !== 'running') ?? createThread(project, { provider, kind: 'artifact', artifactId: c.target });
+    return list.find((t) => t.status !== 'running') ?? fresh({ kind: 'artifact', artifactId: c.target });
   }
 
   async function sendComposer(text) {
@@ -453,7 +500,7 @@ function Canvas() {
             setReply((r) => (r && r.threadId === thread.id ? { ...r, text: draft, activity: null } : r));
             break;
           case 'tool_use':
-            setReply((r) => (r && r.threadId === thread.id ? { ...r, activity: e.name?.includes('page') ? 'Writing the page…' : e.name?.includes('write') ? 'Changing the canvas…' : 'Reading the canvas…' } : r));
+            setReply((r) => (r && r.threadId === thread.id ? { ...r, activity: e.name?.includes('motion') ? 'Writing the motion…' : e.name?.includes('page') ? 'Writing the page…' : e.name?.includes('write') ? 'Changing the canvas…' : 'Reading the canvas…' } : r));
             break;
           case 'ops_applied':
             setReply((r) =>
@@ -505,7 +552,7 @@ function Canvas() {
 
   const openPage = (nodeId) => {
     const n = nodes.find((x) => x.id === nodeId);
-    if (n?.data?.file && cfg.previewPort) window.open(previewUrl(cfg.previewPort, project, n.data.file), '_blank', 'noopener,noreferrer');
+    if (n?.data?.file && cfg.previewPort) window.open(artifactUrl(cfg.previewPort, project, n), '_blank', 'noopener,noreferrer');
   };
   const [cfgDlg, setCfgDlg] = useState(null); // { key, imageModel, …, error, saving, saved } | null
   // Outside cfgDlg, for the same class of reason `connecting` is: the draft is
@@ -1259,7 +1306,10 @@ function Canvas() {
       // The third family: things on the board that reference the others by file.
       type: 'section',
       title: 'Artifacts',
-      items: [{ label: 'Page', icon: PageIcon, onClick: () => addNode('page', NEW_NODE.page, at?.()) }],
+      items: [
+        { label: 'Page', icon: PageIcon, onClick: () => addNode('page', NEW_NODE.page, at?.()) },
+        { label: 'Motion', icon: MotionIcon, onClick: () => addNode('motion', NEW_NODE.motion, at?.()) },
+      ],
     },
   ];
 
@@ -1267,7 +1317,7 @@ function Canvas() {
   // centred on the current view. Inserted nodes are plain copies — nothing links
   // back to the preset, so editing them is just editing nodes.
   function insertPreset(preset) {
-    const { nodes: fresh, edges: freshEdges } = instantiateFragment(preset.fragment, nextId);
+    const { nodes: fresh, edges: freshEdges } = instantiateFragment(preset.fragment, nextId, new Set(nodes.map((n) => n.id)));
     const r = canvasRef.current.getBoundingClientRect();
     const centre = screenToFlowPosition({ x: r.x + r.width / 2, y: r.y + r.height / 2 });
     const { dx, dy } = centerOffset(preset.fragment, centre);
@@ -1354,7 +1404,9 @@ function Canvas() {
     // node did nothing at all.
     const fragment = selectionFragment(nodes, edges, menuCtx?.id);
     if (!fragment) return;
-    nodeClipboard.current = fragment;
+    // Stamped with the project, because a file name means nothing outside its folder: a
+    // paste into another project has to copy the bytes across (pasteNodeClipboard).
+    nodeClipboard.current = { ...fragment, project };
     const chosen = fragment.nodes;
     // One clipboard item, two faces. The text face is the routing marker that
     // makes our own ⌘V paste nodes; the image face is the picture itself when
@@ -1421,10 +1473,26 @@ function Canvas() {
   // Same machinery as inserting a preset: fresh ids, @token rewrite, centred on
   // the right-click point — so pasted prompts keep referencing their co-pasted
   // neighbours instead of the originals.
-  function pasteNodeClipboard(at) {
+  async function pasteNodeClipboard(at) {
     const clip = nodeClipboard.current;
     if (!clip?.nodes.length) return;
-    const { nodes: fresh, edges: freshEdges } = instantiateFragment(clip, nextId);
+    const { nodes: fresh, edges: freshEdges } = instantiateFragment(clip, nextId, new Set(nodes.map((n) => n.id)));
+    // A pasted page gets its own copy of the file: two nodes on one file would mean an
+    // edit through either moves both, and a copy is the unit of working in parallel
+    // (slice-3 design, section 4). Across projects EVERY file-backed node is copied,
+    // since a name only resolves inside its own folder. A failed copy pastes an empty
+    // node rather than nothing.
+    const from = clip.project && clip.project !== project ? clip.project : null;
+    await Promise.all(
+      fresh.filter((n) => n.data?.file && (isArtifact(n) || from)).map(async (n) => {
+        try {
+          n.data = { ...n.data, file: await copyFile(project, n.data.file, from) };
+        } catch (err) {
+          n.data = { ...n.data, file: null };
+          toast({ body: `Could not copy the ${n.type}'s file: ${err.message}`, uniqueID: 'copy-failed', type: 'error' });
+        }
+      }),
+    );
     const centre = screenToFlowPosition(at ?? menuPoint.current ?? { x: 300, y: 300 });
     const { dx, dy } = centerOffset(clip, centre);
     setNodes((ns) => [
@@ -1821,6 +1889,10 @@ function Canvas() {
         }}
       >
         <ProjectContext.Provider value={projectValue}>
+        {/* Composed ops (a group's rename) reach the node that raises them through here;
+            everything else on the canvas is written into React Flow state and found by
+            the diff. `doc` is one stable object, so this re-renders nothing extra. */}
+        <DocumentContext.Provider value={doc}>
         <ReactFlow
           // Keyed by canvasGeneration so a genuine project switch remounts every
           // node component. Node ids come from one counter shared across projects,
@@ -1832,9 +1904,10 @@ function Canvas() {
           // while a video job is mid-poll would start a second poll loop for that
           // same job (see canvasGeneration's own comment above).
           key={canvasGeneration}
-          nodes={nodes}
+          nodes={flowNodes}
           edges={displayEdges}
           onNodesChange={handleNodesChange}
+          onBeforeDelete={onBeforeDelete}
           onEdgesChange={onEdgesChange}
           onConnect={onConnect}
           onConnectStart={onConnectStart}
@@ -1880,7 +1953,13 @@ function Canvas() {
           selectionOnDrag={tool === 'select'}
           // A node need only TOUCH the selection box, not sit entirely inside it.
           selectionMode="partial"
-          onMoveStart={() => setPanning(true)}
+          // Only a DRAG of the canvas hides the floating toolbar, which is what hiding
+          // it was ever for. These two also fire once per wheel burst, so hiding on any
+          // move made the bar blink off and on through every scroll and every zoom --
+          // and a wheel move needs no hiding at all, since the bar is placed from the
+          // viewport transform and simply travels with the selection. `null` is a
+          // programmatic move (fitView), which likewise leaves it alone.
+          onMoveStart={(e) => setPanning(Boolean(e) && e.type !== 'wheel')}
           onMoveEnd={() => setPanning(false)}
           onNodeClick={onNodeClick}
           onPaneClick={onPaneClick}
@@ -1896,10 +1975,12 @@ function Canvas() {
           <ChromeZoom />
           <CanvasBackground />
         </ReactFlow>
+        </DocumentContext.Provider>
         </ProjectContext.Provider>
         {/* The floating toolbar over a selection, its composer, and the agent's anchored
             reply (toolbar/). Hidden while the selection is being dragged, box-selected or
-            the canvas panned; back where the selection now is afterwards. */}
+            the canvas DRAGGED; back where the selection now is afterwards. A wheel pan or
+            zoom leaves it alone -- see onMoveStart above. */}
         <SelectionToolbar
           nodes={nodes}
           hidden={panning || boxSelecting || nodes.some((n) => n.dragging)}
@@ -1909,6 +1990,7 @@ function Canvas() {
           onCloseComposer={closeComposer}
           provider={readyProvider}
           providerMessage={providerMessage}
+          addTo={focusNode && !nodes.some((n) => n.selected && isArtifact(n)) ? focusNode.data?.title || focusNode.data?.fileName?.replace(/\.html?$/i, '') || 'artifact' : null}
           busy={reply?.status === 'running'}
           onSend={sendComposer}
           onStop={() => reply?.threadId && interruptThread(project, reply.threadId)}
@@ -1927,12 +2009,15 @@ function Canvas() {
         {agentOpen && (
           <AgentPanel
             project={project}
-            selection={nodes.filter((n) => n.selected).map((n) => n.id)}
+            nodes={nodes}
             providers={providers}
             checking={providersChecking}
             onCheckProviders={() => checkProviders(true)}
             onClose={() => setAgentOpen(false)}
             initialThreadId={agentThread}
+            refreshKey={threadsBump}
+            onFocus={onAgentFocus}
+            onLocate={(id) => fitView({ nodes: [{ id }], duration: 400, padding: 0.6, maxZoom: 1.5 })}
           />
         )}
 
@@ -2423,6 +2508,15 @@ function Canvas() {
           </HStack>
         </VStack>
       </Dialog>
+
+      <AlertDialog
+        isOpen={!!deleteBusy}
+        onOpenChange={(open) => !open && setDeleteBusy(null)}
+        title="The agent is working on this page"
+        description={`${deleteBusy?.threads.length === 1 ? 'A thread is' : `${deleteBusy?.threads.length ?? 0} threads are`} mid-turn on ${deleteBusy?.nodes.filter(isArtifact).length === 1 ? 'this page' : 'these pages'}. Deleting stops the turn. The delete itself can be undone; the interrupted turn cannot be resumed.`}
+        actionLabel="Stop and delete"
+        onAction={confirmDeleteBusy}
+      />
 
       <AlertDialog
         isOpen={!!deleting}

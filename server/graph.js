@@ -13,7 +13,8 @@
 //
 // Ops: { type: 'addNode', node } | { type: 'updateNode', id, patch } |
 //      { type: 'moveNode', id, position } | { type: 'resizeNode', id, width, height } |
-//      { type: 'reparentNode', id, parentId, position } | { type: 'removeNode', id } |
+//      { type: 'reparentNode', id, parentId, position } | { type: 'renameNode', id, to } |
+//      { type: 'removeNode', id } |
 //      { type: 'addEdge', edge } | { type: 'removeEdge', id } | { type: 'batch', ops }
 //
 // Every op has an inverse that restores the exact prior graph, and the test pins that
@@ -170,6 +171,49 @@ function reparentNode(graph, { id, parentId, position, index }) {
   };
 }
 
+// A node id is not private plumbing: it is the token a prompt writes to reference the
+// node (@id), which is what lets a GROUP be renamed at all -- its name IS its id, so
+// renaming it is renaming the thing every reference points at. One op rewrites every
+// STRUCTURAL mention: the node itself, the parentId of its members, and both ends of
+// every edge. Two things it deliberately does not touch:
+//
+//   The @tokens sitting in prompt TEXT. What a reference looks like is resolve.js's
+//   business, not the document's, so the caller composes those updateNodes into the same
+//   batch and the whole rename stays one undo step (nodes/GroupNode.jsx).
+//
+//   Edge IDS, which embed the endpoints they were minted from ("xy-edge__104-out").
+//   Rewriting them would be cosmetic -- nothing reads an edge id but the edge -- and it
+//   could collide with an id already in the graph, which is a real failure traded for an
+//   imaginary one.
+//
+// The name is held to the same character set a reference can address, so a rename can
+// never produce a node no prompt is able to mention.
+const RENAMEABLE = /^[\w-]+$/;
+function renameNode(graph, { id, to }) {
+  if (!findNode(graph, id)) return reject(`renameNode: no node ${id}`);
+  if (typeof to !== 'string' || !RENAMEABLE.test(to)) {
+    return reject('renameNode: a name may only hold letters, digits, - and _');
+  }
+  if (to === id) return reject('renameNode: the name is unchanged');
+  if (findNode(graph, to)) return reject(`renameNode: ${to} is taken`);
+  return {
+    graph: {
+      ...graph,
+      nodes: graph.nodes.map((n) => {
+        if (n.id === id) return { ...n, id: to };
+        if (n.parentId === id) return { ...n, parentId: to };
+        return n;
+      }),
+      edges: graph.edges.map((e) =>
+        e.source === id || e.target === id
+          ? { ...e, source: e.source === id ? to : e.source, target: e.target === id ? to : e.target }
+          : e,
+      ),
+    },
+    inverse: { type: 'renameNode', id: to, to: id },
+  };
+}
+
 // Removing a node removes every edge touching it, and the inverse is a batch that puts
 // the node back first and then each edge -- in that order, because addEdge refuses an
 // edge to a node that is not there yet. Removing a GROUP removes its members with it:
@@ -244,7 +288,7 @@ function batch(graph, { ops }) {
   return { graph: working, inverse: { type: 'batch', ops: inverses.reverse() } };
 }
 
-const HANDLERS = { addNode, updateNode, moveNode, resizeNode, reparentNode, removeNode, addEdge, removeEdge, batch };
+const HANDLERS = { addNode, updateNode, moveNode, resizeNode, reparentNode, renameNode, removeNode, addEdge, removeEdge, batch };
 
 export function applyOp(graph, op) {
   const handler = op && HANDLERS[op.type];

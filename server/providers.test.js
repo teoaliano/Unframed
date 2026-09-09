@@ -6,6 +6,8 @@
 // exercised against fake binaries in host.test.js.
 import assert from 'node:assert/strict';
 import {
+  mergeClaudeModels,
+  CLAUDE_CATALOGUE,
   resolveExecutable,
   providerEnv,
   hydratedPath,
@@ -138,6 +140,33 @@ assert.deepEqual(parseCodexLoginStatus('something unexpected'), { ok: false, sig
   // The provider's display name travels with it.
   assert.equal(r.name, PROVIDERS.claude.name);
   assert.equal(classify('codex', { version: { ok: false, code: 'ENOENT' } }).name, PROVIDERS.codex.name);
+}
+
+// ---- mergeClaudeModels: the SDK's aliases, named from the catalogue, then the rest ----
+{
+  const sdk = [
+    { value: 'default', displayName: 'Default (recommended)', description: 'Opus 5 with 1M context', supportedEffortLevels: ['low', 'high'] },
+    { value: 'opus[1m]', displayName: 'Opus (1M context)', description: 'Opus 5 with 1M context', supportedEffortLevels: ['low', 'high'] },
+    { value: 'sonnet', displayName: 'Sonnet', description: 'Sonnet 5', supportedEffortLevels: ['low'] },
+    { value: 'haiku', displayName: 'Haiku', description: 'Haiku 4.5', supportedEffortLevels: [] },
+    { value: 'mystery-9', displayName: 'Mystery', description: '', supportedEffortLevels: [] },
+  ];
+  const rows = mergeClaudeModels(sdk);
+  assert.equal(rows.some((r) => r.id === 'default'), false, 'the default alias is folded away');
+  assert.deepEqual(rows.slice(0, 4).map((r) => [r.id, r.name, r.legacy]), [
+    ['opus[1m]', 'Opus 5 · 1M', false],
+    ['sonnet', 'Sonnet 5', false],
+    ['haiku', 'Haiku 4.5', false],
+    ['mystery-9', 'Mystery', false],
+  ]);
+  assert.deepEqual(rows[0].efforts, ['low', 'high'], 'an SDK row keeps the levels the SDK reported');
+  const rest = rows.slice(4);
+  assert.ok(rest.every((r) => CLAUDE_CATALOGUE.some((c) => c.id === r.id)), 'the rest is the catalogue');
+  assert.equal(rest.some((r) => r.id === 'claude-opus-5' || r.id === 'claude-sonnet-5' || r.id === 'claude-haiku-4-5'), false, 'models the SDK covered are not repeated');
+  assert.ok(rest.some((r) => r.id === 'claude-fable-5-1' && !r.legacy), 'a current model the SDK did not list is still offered, as current');
+  assert.ok(rest.some((r) => r.id === 'claude-opus-4-8' && r.legacy), 'and the older ones as legacy');
+  assert.deepEqual(rest.find((r) => r.id === 'claude-opus-4-8').efforts, ['low', 'medium', 'high', 'xhigh', 'max']);
+  assert.deepEqual(mergeClaudeModels([]).map((r) => r.id), CLAUDE_CATALOGUE.map((c) => c.id), 'no SDK list: the catalogue alone');
 }
 
 console.log('providers.test.js: ok');

@@ -11,7 +11,8 @@ reference images. The idea was right and the shape was not; this is the shape.
 A **group** is a box on the canvas that holds input nodes — prompts, images, videos — and
 stands for them: it has the one handle, so wiring the group wires its contents, and it has
 the one id, so `@group` in a prompt is its prompts' text. It has a name, shown by the `@`
-tag and the name row, and nothing else of its own.
+tag and the name row, and nothing else of its own. (From 2026-09-06 that name and that id
+are one string — see the note under GroupNode.jsx below.)
 
 A member is an ordinary node with `parentId` set and a position relative to the box
 (React Flow's own container model). Nothing about a member changes except that it loses
@@ -140,7 +141,13 @@ group is measured — and re-homed — by where it *looks*. Sizes fall back when
 because media deliberately has no height of its own (`withDrag`).
 
 **`client/src/nodes/GroupNode.jsx`** — the box and nothing else: its members are separate
-nodes React Flow positions against it. **The name is the node's one label.** The first
+nodes React Flow positions against it. **The name is the node's one label.**
+
+> Superseded 2026-09-06, in the FigJam/Miro node redesign: the name is no longer held in
+> `data.name` beside a separate id — the id IS the name, so the box is referenced as
+> `@character` and renaming it rewrites the references through a `renameNode` op. The
+> paragraph below is why the tab read the name; the tab itself is gone. CLAUDE.md's group
+> bullet holds the current rule. The first
 build showed a "GROUP" tab *and* a name field inside the box, which said the same thing
 twice and spent the box's top strip on a form; the tab now reads the name, exactly as an
 image node's tab reads its medium. Renaming is in place — double-click the tab, or F2

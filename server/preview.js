@@ -30,9 +30,12 @@ export const LOOPBACK_HOST = /^(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$/i;
 
 // Deny by default: what is NOT here never leaves the folder -- `.json` (every sidecar,
 // graph.json, the thread records), `.log` (the journal), `.tmp`. The next kind this server
-// should hand out is added here on purpose.
+// should hand out is added here on purpose. `js` was the first such addition (slice 4):
+// a motion's player, runtime and GSAP sit beside it as plain files (server/motion.js), and
+// `script-src 'self'` below is what lets a page load a sibling script and nothing else.
 export const ALLOWED_TYPES = {
   html: 'text/html; charset=utf-8',
+  js: 'text/javascript; charset=utf-8',
   png: 'image/png',
   jpg: 'image/jpeg',
   jpeg: 'image/jpeg',
@@ -55,6 +58,9 @@ export const CONTENT_SECURITY_POLICY = [
   "font-src 'self' data:",
   "style-src 'self' 'unsafe-inline'",
   "script-src 'self' 'unsafe-inline'",
+  // A sibling file may be framed (the motion viewer frames its composition); with
+  // `default-src 'none'` and no frame-src, Chrome refused the frame outright.
+  "frame-src 'self'",
   "connect-src 'none'",
   "form-action 'none'",
   "base-uri 'none'",

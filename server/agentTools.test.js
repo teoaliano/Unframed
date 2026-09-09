@@ -30,8 +30,8 @@ const graph = {
     { id: '105', type: 'video', position: { x: 0, y: 400 }, data: { dataUrl: 'data:video/mp4;base64,AAAA', fileName: 'old.mp4' } },
     { id: '106', type: 'textOutput', position: { x: 500, y: 400 }, data: { text: 'Summarise', result: 'A fox.', model: 'anthropic/claude-sonnet-5', running: { startedAt: 1 } } },
     { id: '107', type: 'page', position: { x: 900, y: 0 }, data: { file: '3-launch.html', title: 'Launch page', fileName: '' }, width: 480, height: 320 },
-    { id: '108', type: 'group', position: { x: 600, y: 0 }, data: { name: 'hero' }, width: 420, height: 280 },
-    { id: '109', type: 'image', parentId: '108', position: { x: 10, y: 10 }, data: { file: '4-face.png' } },
+    { id: 'hero', type: 'group', position: { x: 600, y: 0 }, data: {}, width: 420, height: 280 },
+    { id: '109', type: 'image', parentId: 'hero', position: { x: 10, y: 10 }, data: { file: '4-face.png' } },
   ],
   edges: [
     { id: 'e1', source: '100', target: '102' },
@@ -57,12 +57,13 @@ assert.equal(byId['106'].kind, 'text output');
 assert.equal(byId['106'].running, true);
 // A page: its file and its title.
 assert.deepEqual(byId['107'], { id: '107', kind: 'page', position: { x: 900, y: 0 }, size: { width: 480, height: 320 }, file: '3-launch.html', title: 'Launch page' });
-// A group is named; a member says which group it is in, and its position is left
+// A group's name IS its id, so there is nothing extra to report; a member says which
+// group it is in, and its position is left
 // relative to that group rather than converted -- what the model reads is what the
 // document holds, and converting it would make every position the agent reads back
 // disagree with every position it must write.
-assert.deepEqual(byId['108'], { id: '108', kind: 'group', position: { x: 600, y: 0 }, size: { width: 420, height: 280 }, name: 'hero' });
-assert.equal(byId['109'].inGroup, '108');
+assert.deepEqual(byId.hero, { id: 'hero', kind: 'group', position: { x: 600, y: 0 }, size: { width: 420, height: 280 } });
+assert.equal(byId['109'].inGroup, 'hero');
 assert.deepEqual(byId['109'].position, { x: 10, y: 10 });
 assert.equal(byId['103'].inGroup, undefined, 'a free node has no inGroup key at all');
 assert.deepEqual(d.edges, [{ from: '100', to: '102' }, { from: '103', to: '102' }]);
@@ -205,12 +206,19 @@ assert.deepEqual(placeBeside(graph, []), { x: 80, y: 80 });
         return file;
       },
       readPage: async (file) => (file === '3-launch.html' ? '<h1>launch</h1>' : Promise.reject(new Error('nope'))),
+      writeMotion: async (bytes, meta) => {
+        const file = `${9000 + written.length}-${(meta.title || 'motion').toLowerCase().replace(/\s+/g, '-')}.html`;
+        written.push({ file, html: bytes.toString('utf8'), meta, kind: 'motion' });
+        files.add(file);
+        return file;
+      },
+      readMotion: async (file) => (file === '9-teaser.html' ? '<div id="root"></div>' : Promise.reject(new Error('nope'))),
     },
     previewUrl: (file) => `http://127.0.0.1:5/p/coast/${file}`,
     onWrite: async (entry, summary) => events.push({ version: entry.version, ...summary }),
   });
   const byName = Object.fromEntries(tools.map((t) => [t.name, t]));
-  assert.deepEqual(Object.keys(byName).sort(), ['canvas_read', 'canvas_write', 'page_read', 'page_write']);
+  assert.deepEqual(Object.keys(byName).sort(), ['canvas_read', 'canvas_write', 'motion_read', 'motion_write', 'page_read', 'page_write']);
   const call = async (name, input) => {
     const out = await byName[name].handler(input, {});
     return { ...JSON.parse(out.content[0].text), isError: Boolean(out.isError) };
@@ -254,7 +262,7 @@ assert.deepEqual(placeBeside(graph, []), { x: 80, y: 80 });
   assert.deepEqual(addOp.node.data, { file: '9000-hello-page.html', title: 'Hello page', fileName: '' });
   assert.deepEqual(addOp.node.position, placeBeside(graph, ['103', '101']));
   assert.equal(events.at(-1).summary, 'Created page · Hello page');
-  assert.deepEqual(events.at(-1).page, { nodeId: created.nodeId, file: '9000-hello-page.html', title: 'Hello page', created: true });
+  assert.deepEqual(events.at(-1).page, { nodeId: created.nodeId, file: '9000-hello-page.html', title: 'Hello page', kind: 'page', created: true });
 
   // page_write, existing: a NEW file and an updateNode pointing at it -- the old file is untouched.
   const updated = await call('page_write', { nodeId: '107', html: '<h1>v2</h1>' });
@@ -286,6 +294,28 @@ assert.deepEqual(placeBeside(graph, []), { x: 80, y: 80 });
   assert.match((await call('page_read', { nodeId: 'empty' })).error, /no file yet/);
   state.graph.nodes.push({ id: 'lost', type: 'page', position: { x: 0, y: 0 }, data: { file: '8-gone.html' } });
   assert.match((await call('page_read', { nodeId: 'lost' })).error, /could not be read/);
+
+  // motion_write: the same contract as page_write, a `motion` node, and the HyperFrames
+  // runtime tag added to the document on the way in -- once.
+  const motion = await call('motion_write', { html: '<html><head></head><body><div id="root" data-composition-id="main"></div></body></html>', title: 'Teaser' });
+  assert.equal(motion.ok, true);
+  assert.equal(motion.file, '9003-teaser.html');
+  assert.equal(committed.at(-1).ops[0].node.type, 'motion');
+  assert.deepEqual(committed.at(-1).ops[0].node.data, { file: '9003-teaser.html', title: 'Teaser', fileName: '' });
+  assert.equal(written.at(-1).kind, 'motion');
+  assert.match(written.at(-1).html, /<script src="hyperframes-runtime\.js" data-hyperframes-preview-runtime><\/script>\n<\/head>/);
+  assert.equal(events.at(-1).summary, 'Created motion · Teaser');
+  assert.equal(events.at(-1).page.kind, 'motion');
+  state.graph.nodes.push({ id: 'm1', type: 'motion', position: { x: 0, y: 0 }, data: { file: '9-teaser.html', title: 'Teaser' } });
+  const again = await call('motion_write', { nodeId: 'm1', html: written.at(-1).html });
+  assert.equal(again.ok, true);
+  assert.equal((written.at(-1).html.match(/data-hyperframes-preview-runtime/g) || []).length, 1, 'a rewritten composition keeps one runtime tag');
+  assert.deepEqual(committed.at(-1).ops, [{ type: 'updateNode', id: 'm1', patch: { file: '9004-teaser.html' } }]);
+  // The kinds do not cross.
+  assert.match((await call('motion_write', { nodeId: '107', html: '<p>' })).error, /is a page, not a motion/);
+  assert.match((await call('page_write', { nodeId: 'm1', html: '<p>' })).error, /is a motion, not a page/);
+  assert.equal((await byName.motion_read.handler({ nodeId: 'm1' }, {})).content[0].text, '<div id="root"></div>');
+  assert.match((await call('motion_read', { nodeId: '107' })).error, /not a motion/);
 }
 
 // ---- the server the SDK sees ----
@@ -308,7 +338,7 @@ assert.deepEqual(placeBeside(graph, []), { x: 80, y: 80 });
   const client = new Client({ name: 'test', version: '0' });
   await client.connect(b);
   const listed = await client.listTools();
-  assert.deepEqual(listed.tools.map((t) => t.name).sort(), ['canvas_read', 'canvas_write', 'page_read', 'page_write']);
+  assert.deepEqual(listed.tools.map((t) => t.name).sort(), ['canvas_read', 'canvas_write', 'motion_read', 'motion_write', 'page_read', 'page_write']);
   const write = listed.tools.find((t) => t.name === 'canvas_write');
   assert.equal(write.inputSchema.properties.ops.type, 'array');
   assert.deepEqual(write.inputSchema.required, ['ops']);

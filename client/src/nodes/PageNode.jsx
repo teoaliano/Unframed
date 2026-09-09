@@ -56,14 +56,20 @@ export default function PageNode({ id, data, dragging, selected }) {
     onFile(file);
   }
 
+  // A page IS the page it shows, the same way a reference is its picture: once it holds
+  // a file the card around it is chrome over the very thing being looked at, so it goes.
+  // An EMPTY one keeps its frame and its tab, because an empty one is a box asking for a
+  // file, not a page.
+  const bare = Boolean(src);
+
   return (
     <>
-      <NodeHeader kind="page" family="artifact" />
+      {!bare && <NodeHeader kind="page" family="artifact" />}
       <Card
         width="100%"
         elevation="low"
         padding={0}
-        className="xnode-page"
+        className={`xnode-page${bare ? ' xnode-bare' : ''}`}
         onDrop={onDrop}
         onDragOver={(e) => {
           e.preventDefault();
@@ -98,7 +104,8 @@ export default function PageNode({ id, data, dragging, selected }) {
           {error && <StatusLine type="error">{error}</StatusLine>}
         </div>
       </Card>
-      <NodeLine>{title || null}</NodeLine>
+      {/* `--start`: the one fact takes the corner the tab used to own, as everywhere else. */}
+      <NodeLine className="xnode-line--start">{title || null}</NodeLine>
       {/* Both axes are the user's: a page has no ratio to keep. */}
       <MediaResize free />
     </>

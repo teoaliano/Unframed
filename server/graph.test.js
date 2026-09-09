@@ -214,6 +214,33 @@ function roundTrips(graph, op) {
   assert.deepEqual(one.graph.nodes.map((n) => n.id), ['a', 'G', 'z', 'm2', 'out']);
 }
 
+// ---- renameNode ----
+{
+  let g = emptyGraph();
+  g = applyOp(g, { type: 'addNode', node: node('G', { type: 'group' }) }).graph;
+  g = applyOp(g, { type: 'addNode', node: node('m', { parentId: 'G', position: { x: 1, y: 1 } }) }).graph;
+  g = applyOp(g, { type: 'addNode', node: node('out', { type: 'imageOutput' }) }).graph;
+  g = applyOp(g, { type: 'addEdge', edge: edge('eG', 'G', 'out') }).graph;
+
+  const r = roundTrips(g, { type: 'renameNode', id: 'G', to: 'fox' });
+  assert.deepEqual(r.graph.nodes.map((n) => n.id), ['fox', 'm', 'out'], 'the node took the new id');
+  assert.equal(r.graph.nodes.find((n) => n.id === 'm').parentId, 'fox', 'its members follow it');
+  assert.deepEqual(r.graph.edges[0], { id: 'eG', source: 'fox', target: 'out' }, 'both ends of an edge follow it; the edge id does not');
+  assert.deepEqual(r.inverse, { type: 'renameNode', id: 'fox', to: 'G' });
+  // Array order is z-order, so a rename must not reshuffle: a member still follows its
+  // group, which is what React Flow needs to resolve a relative position.
+  assert.deepEqual(r.graph.nodes.map((n) => n.id), ['fox', 'm', 'out']);
+
+  assert.match(applyOp(g, { type: 'renameNode', id: 'nope', to: 'fox' }).rejected, /no node nope/);
+  assert.match(applyOp(g, { type: 'renameNode', id: 'G', to: 'out' }).rejected, /taken/);
+  assert.match(applyOp(g, { type: 'renameNode', id: 'G', to: 'G' }).rejected, /unchanged/);
+  // Anything a prompt's @token could not address is refused, or the rename would make a
+  // node nothing is able to mention.
+  for (const bad of ['red fox', 'fox!', '', '@fox', null]) {
+    assert.match(applyOp(g, { type: 'renameNode', id: 'G', to: bad }).rejected, /letters, digits/, `expected ${bad} refused`);
+  }
+}
+
 // ---- unknown op ----
 assert.match(applyOp(emptyGraph(), { type: 'teleport' }).rejected, /unknown op/);
 
