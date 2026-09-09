@@ -589,8 +589,34 @@ Nor is loading. A pre-media-extraction project carries every image inline as a b
 (`server/media.js`) takes **0.64s once**, 4ms on every open after, and leaves a 34KB
 snapshot. Browser open to 55 nodes with 50 images decoded: **~295ms**.
 
-**What is left is the pixels, and it is the one thing this environment cannot measure.**
-Decoded bitmap versus the screen area it is drawn into, at fit view:
+**The dev server is not the app, and it is what "slow and heavy" turned out to mean.**
+A reading taken on the real machine at 120Hz, on `dither-landing-page`, dragging: the
+dev server dropped **one frame in three** with worst frames of 75–125ms, and the
+production build of the same commit dropped **none**. Reproduced headlessly, and
+decomposed — late frames per gesture, ~270 frames each:
+
+| build | zoom 0.12 (1548× minification) | zoom 0.50 (84×) |
+| --- | --- | --- |
+| dev server, StrictMode on | 34% | 29% |
+| dev server, StrictMode off | 21% | 20% |
+| production build | **1%** | **0%** |
+
+So roughly 20 points come from unminified dev code and another 13 from StrictMode
+rendering every component twice — both dev-only, and both **zoom-independent**. Anyone
+measuring frame rate on `npm run dev` is measuring the dev server. Use a
+`UNFRAMED_CLIENT_DIST` build for any number that gets quoted.
+
+It also says something about headroom, which "0% late" alone hides: one render pass per
+frame fits the 8.3ms budget and two does not, so there is about 2× of it. A board
+denser than these — which is what the synthetic tests were — spends that, and is why the
+subscription fixes above are worth having even though these boards did not need them.
+
+**The overdraw hypothesis below is NOT supported, and is kept only as a memory fact.**
+An earlier revision proposed image minification as the remaining cost. It fails two
+ways: the production build is clean at 1490× minification on the real machine, and the
+lateness that was there is flat across a 18× range of minification. Whatever else the
+decoded bitmap costs, it is not costing frames here. Decoded bitmap versus the screen
+area it is drawn into, at fit view:
 
 | project | images | zoom | decoded | on screen | overdraw |
 | --- | --- | --- | --- | --- | --- |
@@ -598,13 +624,11 @@ Decoded bitmap versus the screen area it is drawn into, at fit view:
 | portfolio | 34 | 0.14 | 39.9MP (~160MB RGBA) | 0.04MP | 1031× |
 | tattoo | 11 | 0.52 | 12.0MP (~50MB RGBA) | 0.19MP | 65× |
 
-Every full-resolution bitmap is held, uploaded as a texture and resampled on every
-frame of a pan, to end up as a thumbnail. That is a texture-memory and composite cost,
-which is exactly the category the instrument validation above proved blind — so it is a
-hypothesis with a measured input, not a finding. Confirming it needs `?fps=1` (or
-DevTools' Performance panel) on the real machine, and acting on it means displaying a
-downscaled decode at low zoom, which trades image fidelity for frame rate and is a
-product decision rather than a refactor.
+Every full-resolution bitmap is held to be drawn as a thumbnail, so ~260MB of RGBA is
+resident for a board whose images occupy 0.05 megapixels of screen. That is worth
+knowing for memory — it is most of what a tab on one of these projects holds — but it is
+not a frame-rate problem, per the measurements above. Thumbnailing would buy memory, not
+smoothness, and it would cost image fidelity, so nothing here argues for it.
 
 **`onlyRenderVisibleElements` must stay off here**, for an app-specific reason the docs
 do not have: culled nodes unmount, and `ImageOutputNode` holds a finished batch's bytes
