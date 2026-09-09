@@ -21,6 +21,58 @@ Keep that shape: the website's What's new page parses this file.
   loose video nodes before, so a box containing a clip was sent to an image model with no
   warning that the clip would be ignored.
 
+## 2026-09-06
+
+### Added
+
+- **Motion assets.** A new node type: a HyperFrames composition — an HTML video that
+  animates your project's images and clips with timed elements and a GSAP timeline. Ask
+  the agent for a video, an animation or motion graphics and it writes one beside the
+  selection; drop a composition `.html` onto a Motion node to bring your own. The node
+  plays it live, and **Render** turns it into an MP4 in your project folder that lands on
+  the canvas as an ordinary video node. Rendering runs locally in the Chrome (or Chromium,
+  Edge, Brave) you already have and uses no credits; without one, Render says so.
+
+### Changed
+
+- **Prompts are now plain text on the canvas**, the way text works in FigJam or Miro: no
+  card, no border, no type label — just the words, with the `@id` above them. One click
+  selects the text and shows a thin outline with a grip at each corner; a double-click or
+  Enter starts editing (the text comes up selected, so typing replaces it), and Escape
+  leaves editing with the element still selected. Drag it from anywhere.
+- **A group is named by its reference, and renaming it renames the reference.** The box
+  now shows one label — `@104` — instead of a "GROUP" tag and an id at opposite ends.
+  Double-click that label (or press F2) and type a name: the box becomes `@character`,
+  and every prompt that referenced the old name is rewritten to match, in one step that
+  one Undo takes back. The box keeps its dashed outline; selecting it looks like
+  selecting any other element. A group you named before this shows its id until you
+  rename it.
+- **Reference images and clips are bare on the canvas too**, framed by nothing: no card,
+  no border, no type label — just the picture, with its "image 1" role above it. Selecting
+  one draws the same thin outline and corner grips, and the remove X comes with the
+  selection instead of appearing under your pointer. An empty one still looks like a box
+  asking for a file, because that is what it is.
+- **Pages and motions follow the same rule**: once one holds a file it is just the page or
+  the composition on the canvas, with its title above it. Empty, it stays a box asking for
+  a file, and a motion keeps its Render button below the frame.
+- **A prompt is now exactly the size of its text**, growing as you type and never leaving
+  an empty box around the words. Drag a corner or an edge if you want a particular size
+  and it keeps it; double-click an edge to hand it back to the text.
+
+### Fixed
+
+- **No more squared-off corner with nothing above it.** Between roughly 50% and 75% zoom
+  a node's name tag is hidden until you point at it, but the card underneath kept the
+  square corner the tag docks into — so the corner looked chipped for no reason. It now
+  rounds and squares with the tag.
+- **One Undo takes back one edit again.** A pause in your work is a single step, so
+  typing a word (which also resizes the box around it) or dragging three nodes at once no
+  longer needs two or three presses of Cmd-Z to take back.
+- **Pasting or dropping an image onto the canvas works again.** Since 2026-09-04 both did
+  nothing at all: the code that saves the file into your project was calling something
+  the file never imported, so it failed on the first byte. Dropping onto an existing
+  image node was never affected, which is why it looked like only some drops worked.
+
 ## 2026-09-05
 
 ### Added
@@ -40,6 +92,22 @@ Keep that shape: the website's What's new page parses this file.
   clips. Drop an `.html` file onto the canvas, or ask the agent to make one. Pages are
   shown live from their own sandboxed origin, so a page can never reach your key or your
   files; every edit is a new version, and Cmd-Z steps back through them.
+- **One tab per thread in the Agent panel, filtered by what you select.** With nothing
+  selected the panel lists every conversation, newest first, the oldest tucked behind a
+  More menu that names whichever conversation is open. Double-click a tab to name that
+  conversation — useful when two of them are about the same page — and clear the name to
+  get the default back. Select a page and it shows
+  only the threads about that page; select several and it shows theirs. The page the open
+  thread is about lights up its name tag on the canvas, a chip over the composer names it
+  with a Locate button that pans to it, and with the panel open on a page's thread,
+  selecting other assets turns the toolbar's Agent button into **Add to <page>**.
+- **Pick the model and effort per thread.** The panel's composer has a model picker and
+  an effort control; they apply to the next message and stay with the thread. Threads can
+  be deleted from the panel header. Enter now sends, and Shift+Enter or Option+Enter
+  starts a new line, in the panel and the toolbar's composer alike.
+- **Copying a page copies its file**, so a pasted page is a separate version you can hand
+  to a separate thread. Deleting a page is undoable like any other node and its threads
+  come back with it; the only time it asks first is when the agent is mid-turn on it.
 - **Group nodes.** Select any inputs and press ⌘G (or right-click → Group) to wrap them in a named box. The box wires as one source, so connecting it sends everything inside, and `@`-referencing it in a prompt pulls in the text it holds. Double-click the box's label (or press F2) to rename it; renaming never breaks a reference, because the label shows the name while the reference stays tied to the id. Groups resize from any edge. ⌘⇧G ungroups, putting the contents back exactly where they look and leaving what you send unchanged. A saved group is how a reusable character, product or outfit lives in the Library.
 
 ## 2026-09-04

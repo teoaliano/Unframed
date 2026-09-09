@@ -29,8 +29,10 @@ import { OUTPUT_DEFAULTS } from '../nodes/output/defaults.js';
 // controls opt out individually with `nodrag`. See
 // docs/superpowers/specs/2026-08-18-canvas-interaction-design.md.
 const RESIZABLE_INPUT = new Set(['image', 'video', 'prompt']);
-// A page is free on both axes like a prompt, and starts large enough to read.
+// An artifact (a page, a motion) is free on both axes like a prompt, and starts large
+// enough to read.
 const PAGE_SIZE = { width: 480, height: 320 };
+const ARTIFACT = new Set(['page', 'motion']);
 
 // EVERY node that reaches the canvas goes through this, without exception — a node
 // handed straight to addNodes has no wrapper width, and an input node's Card is
@@ -54,13 +56,16 @@ export const withDrag = (n) => ({
   // keep the media's proportions exactly. A PROMPT has no ratio to keep, so both axes
   // are the user's and a height has to be seeded — before this it resized by a CSS
   // handle on the field itself (the old data.size + fieldResize.js), which is what the
-  // 2026-08-20 node-anatomy redesign replaced with a border drag on the card.
+  // 2026-08-20 node-anatomy redesign replaced with a border drag on the card. The
+  // prompt's two numbers are now only the frame before PromptNode measures itself: it
+  // hugs its text on mount and overwrites both, unless `data.sized` says the size is the
+  // user's. They still have to be here — the box needs A size to be measured inside.
   //
   // A GROUP is a box other nodes sit in, so it starts large enough to hold two of them
   // side by side and keeps both axes, like a prompt.
   width:
     n.type === 'group' ? n.width ?? 420
-    : n.type === 'page' ? n.width ?? PAGE_SIZE.width
+    : ARTIFACT.has(n.type) ? n.width ?? PAGE_SIZE.width
     : RESIZABLE_INPUT.has(n.type) ? n.width ?? 240
     : n.width,
   // Media is the DERIVED case, so its height is dropped rather than passed through: a
@@ -70,7 +75,7 @@ export const withDrag = (n) => ({
   height:
     n.type === 'prompt' ? n.height ?? 160
     : n.type === 'group' ? n.height ?? 280
-    : n.type === 'page' ? n.height ?? PAGE_SIZE.height
+    : ARTIFACT.has(n.type) ? n.height ?? PAGE_SIZE.height
     : undefined,
   // A member stays inside its box while dragged. Derived from parentId on every load
   // and add, like the two above, so nothing saved can disagree with the membership.
@@ -104,13 +109,14 @@ export const slug = (s) => s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/
 export const NEW_NODE = {
   prompt: { text: '' },
   // The name is what an @ tag shows for the group; the id stays the reference key.
-  group: { name: '' },
+  group: {},
   image: { fileName: '', dataUrl: '' },
   video: { fileName: '', dataUrl: '' },
   imageOutput: OUTPUT_DEFAULTS.imageOutput,
   videoOutput: OUTPUT_DEFAULTS.videoOutput,
   textOutput: OUTPUT_DEFAULTS.textOutput,
   page: { file: '', title: '', fileName: '' },
+  motion: { file: '', title: '', fileName: '' },
 };
 
 // A small starter graph that demonstrates the @id reference: the scene prompt

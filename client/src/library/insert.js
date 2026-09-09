@@ -1,5 +1,6 @@
 import { migrateNodes } from '../graph/migrate.js';
 import { stripRunMarkers } from '../graph/runMarkers.js';
+import { isGroup } from '../graph/resolve.js';
 
 // Turn a preset fragment into nodes and edges ready for the canvas. Pure: the
 // caller supplies the id minter and does the viewport placement, so this can be
@@ -11,14 +12,31 @@ import { stripRunMarkers } from '../graph/runMarkers.js';
 // at whatever an earlier insertion (or the user) happens to call by that name.
 const TOKEN_RE = /@([\w-]+)/g;
 
-export function instantiateFragment(fragment, nextId) {
+// The one id that is not a mint but a NAME: a group's id is what it is called, so a
+// saved character inserted back onto the canvas has to come back as @character rather
+// than as @712 — that name is the whole reason the preset was worth saving. A numeric
+// id is not a name, it is what the counter handed out, so it re-mints like everything
+// else. `taken` is the ids already on the canvas; a name in use is suffixed rather than
+// stolen, the same rule renaming follows (nodes/GroupNode.jsx).
+const isName = (n) => isGroup(n) && !/^\d+$/.test(n.id);
+
+export function instantiateFragment(fragment, nextId, taken = new Set()) {
   // Every preset reaches the canvas through here, bundled or saved by you, so this is
   // where a fragment written before the output split gets its node types brought up to
   // date. presets.json on disk is deliberately left alone: rewriting it means a
   // whole-array PUT, and that write path is the one place a stale read erases presets
   // that are still there. Migrating on the way out costs nothing and risks nothing.
   const source = migrateNodes(fragment.nodes);
-  const idMap = new Map(source.map((n) => [n.id, nextId()]));
+  const claimed = new Set(taken);
+  const idMap = new Map(
+    source.map((n) => {
+      if (!isName(n)) return [n.id, nextId()];
+      let id = n.id;
+      for (let i = 2; claimed.has(id); i += 1) id = `${n.id}-${i}`;
+      claimed.add(id);
+      return [n.id, id];
+    }),
+  );
 
   const nodes = source.map((n) => {
     // The inbound half of the strip in save.js's selectionFragment, and the

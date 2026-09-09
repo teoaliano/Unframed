@@ -22,6 +22,8 @@ import {
   threadPath,
   agentSidecar,
   bindArtifact,
+  applySettings,
+  renameThread,
   findArtifactThread,
 } from './threads.js';
 
@@ -53,6 +55,20 @@ assert.equal(t0.artifactId, null, 'a canvas thread is about the board, not a nod
   assert.equal(later.artifactId, 'a-1');
   assert.equal(later.updatedAt, 5);
   assert.equal(bindArtifact(later, 'a-2', 6).artifactId, 'a-1', 'bound once');
+
+  // Model and effort for the next turn: each optional, '' resets, refused mid-turn.
+  const set = applySettings(later, { model: 'claude-opus-5', effort: 'high' }, 7);
+  assert.equal(set.model, 'claude-opus-5');
+  assert.equal(set.effort, 'high');
+  assert.equal(set.updatedAt, 7);
+  assert.equal(applySettings(set, { effort: '' }, 8).effort, '', 'empty resets to the default');
+  assert.equal(applySettings(set, { effort: 'high' }, 9), set, 'no change returns the same record');
+  assert.equal(applySettings(set, { model: 'claude-sonnet-5' }, 9).effort, 'high', 'an absent key leaves the field alone');
+  assert.throws(() => applySettings(set, { effort: 'ultra' }), /Effort must be one of/);
+  assert.throws(() => applySettings(set, { model: 'x'.repeat(201) }), /model id/);
+  assert.throws(() => applySettings({ ...set, status: 'running' }, { effort: 'low' }), /turn is running/);
+  assert.equal(newThread({ id: 't-e', project: 'p', provider: 'claude', effort: 'medium', now: 1 }).effort, 'medium');
+  assert.throws(() => newThread({ id: 't-e', project: 'p', provider: 'claude', effort: 'silly', now: 1 }), /unknown effort/);
   assert.equal(bindArtifact(t0, 'a-1', 6).artifactId, null, 'a canvas thread never binds');
   assert.equal(newThread({ id: 'tc', project: 'p', provider: 'claude', model: '', artifactId: '107', now: 1 }).artifactId, null, 'a canvas thread ignores an artifactId');
   assert.throws(() => newThread({ id: 'td', project: 'p', provider: 'claude', model: '', kind: 'sticky' }), /kind/);
@@ -106,9 +122,21 @@ assert.deepEqual(eventsSince(t3, 2), []);
 
 // ---- the list shows a summary, not the transcript ----
 const s = threadSummary(t5);
-assert.deepEqual(Object.keys(s).sort(), ['artifactId', 'createdAt', 'id', 'kind', 'model', 'provider', 'status', 'title', 'turns', 'updatedAt']);
-assert.equal(s.title, 'What is on the canvas?', 'the first user message titles the thread until it is renamed');
-assert.equal(threadSummary(t0).title, '');
+assert.deepEqual(Object.keys(s).sort(), ['artifactId', 'createdAt', 'effort', 'id', 'kind', 'model', 'preview', 'provider', 'status', 'title', 'turns', 'updatedAt']);
+assert.equal(s.preview, 'What is on the canvas?', 'the first user message previews the thread');
+assert.equal(s.title, '', 'an unnamed thread has no title, however much was said in it');
+assert.equal(threadSummary(t0).preview, '');
+
+// ---- renaming ----
+const named = renameThread(t5, '  Hero copy  ', 3000);
+assert.equal(named.title, 'Hero copy', 'the name is trimmed');
+assert.equal(threadSummary(named).title, 'Hero copy');
+assert.equal(threadSummary(named).preview, 'What is on the canvas?', 'a name does not replace the preview');
+assert.equal(renameThread(named, 'Hero copy', 4000), named, 'renaming to the same name does not touch the record');
+assert.equal(renameThread(named, '', 4000).title, '', 'an empty name clears it');
+assert.equal(renameThread(t5, 'x'.repeat(200), 3000).title.length, 60, 'a name is capped');
+assert.equal(renameThread({ ...t5, status: 'running' }, 'Mid-turn', 3000).title, 'Mid-turn', 'renaming mid-turn is allowed; it is a label, not a setting');
+assert.throws(() => renameThread(t5, 42), /text/);
 
 // ---- I/O: temp-then-rename, per-thread serialisation, list, delete ----
 {

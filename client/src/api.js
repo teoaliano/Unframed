@@ -250,6 +250,10 @@ export const uploadFile = (name, file) =>
     return d;
   });
 
+// A copy of a project file, for pasting a page node so the paste owns its own file.
+// `from` is the project the original lives in, when pasting across projects.
+export const copyFile = (project, file, from = null) => postJson(`/api/projects/${enc(project)}/files/copy`, { file, ...(from ? { from } : {}) }).then((d) => d.file);
+
 // Where a project's files are served from, for <img>/<video> src and for references
 // the server inlines at the OpenRouter boundary.
 export const fileUrl = (project, file) => `/api/file/${enc(project)}/${enc(file)}`;
@@ -258,6 +262,31 @@ export const fileUrl = (project, file) => `/api/file/${enc(project)}/${enc(file)
 // port and therefore a different origin from the API. The IP literal rather than
 // `localhost`, so the origin is the same string in every browser.
 export const previewUrl = (previewPort, project, file) => `http://127.0.0.1:${previewPort}/p/${enc(project)}/${enc(file)}`;
+
+// A motion is shown through the viewer that sits beside it in the folder
+// (server/motion.js): the player, mounted on the composition named in the query.
+export const motionUrl = (previewPort, project, file) => `http://127.0.0.1:${previewPort}/p/${enc(project)}/hyperframes-viewer.html?c=${enc(file)}`;
+
+// Where an artifact node is shown from, by kind.
+export const artifactUrl = (previewPort, project, node) => (node.type === 'motion' ? motionUrl : previewUrl)(previewPort, project, node.data.file);
+
+// A composition the person brings, saved with the runtime tag and the library beside it
+// -- the two things the agent's motion_write does for its own (server/motion.js).
+export const uploadMotion = (project, file) =>
+  fetch(`/api/projects/${enc(project)}/motion/files?name=${enc(file.name || '')}`, { method: 'POST', headers: { 'Content-Type': 'text/html' }, body: file }).then(async (r) => {
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(d.error || `Could not upload the composition (${r.status})`);
+    return d;
+  });
+
+// Render a composition to an MP4: start, then poll until `status` is done or failed.
+export const startMotionRender = (project, file, title = '') => postJson(`/api/projects/${enc(project)}/motion/render`, { file, title });
+export const pollMotionRender = (project, id) =>
+  fetch(`/api/projects/${enc(project)}/motion/render/${enc(id)}`).then(async (r) => {
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(d.error || `Could not read the render (${r.status})`);
+    return d;
+  });
 
 // The event stream: every accepted entry from version `since` onward, then live.
 // EventSource reconnects on its own but cannot change its URL, so a drop is handled
@@ -361,6 +390,14 @@ export const sendThreadMessage = (project, id, { text, selection = [], target, w
     selection,
     ...(target ? { target } : {}),
     ...(withIds?.length ? { with: withIds } : {}),
+  });
+
+// Model and effort for the thread's next turn; either key may be omitted, '' resets.
+export const updateThread = (project, id, patch) =>
+  fetch(`/api/projects/${enc(project)}/threads/${enc(id)}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(patch) }).then(async (r) => {
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(d.error || `Could not update the thread (${r.status})`);
+    return d.thread;
   });
 
 export const interruptThread = (project, id) =>

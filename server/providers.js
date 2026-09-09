@@ -141,7 +141,7 @@ export function classify(kind, { version, probe }) {
     const auth = {};
     if (probe.email) auth.email = probe.email;
     if (probe.plan) auth.plan = probe.plan;
-    return { ...base, status: 'ready', installed: true, version: parsed, auth };
+    return { ...base, status: 'ready', installed: true, version: parsed, auth, ...(probe.models ? { models: probe.models } : {}) };
   }
   if (probe?.signedOut) {
     return { ...base, status: 'signed_out', installed: true, version: parsed, message: `${p.name} is installed but not signed in. Sign in with \`${p.binary} login\`, then check again.` };
@@ -229,6 +229,56 @@ const withTimeout = (promise, ms) =>
 // yields a message, read for its initialization result and then closed. No prompt ever
 // reaches Anthropic. `signedOut` is claimed only when the CLI answered with an account
 // that has nothing in it; any other failure is "could not tell".
+// Every Claude model a thread can name. The SDK's supportedModels() returns only the
+// current aliases (opus[1m], sonnet, …), so the rest of the catalogue is static, taken
+// from t3code's model manifest (apps/server/src/provider/model-manifest.json, MIT) --
+// the same ids Claude Code's --model accepts. Aliases let an SDK row take its catalogue
+// name ("opus[1m]" → "Opus 5 · 1M"). A `[1m]` suffix is the 1M-context variant.
+export const CLAUDE_CATALOGUE = [
+  { id: 'claude-fable-5-1', name: 'Fable 5.1', aliases: ['fable', 'fable-5.1', 'claude-fable-5.1'] },
+  { id: 'claude-fable-5', name: 'Fable 5', legacy: true, aliases: [] },
+  { id: 'claude-opus-5', name: 'Opus 5', aliases: ['opus', 'opus-5', 'claude-opus-5.0', 'claude-opus-5-0'] },
+  { id: 'claude-opus-4-8', name: 'Opus 4.8', legacy: true, aliases: ['opus-4.8', 'claude-opus-4.8'] },
+  { id: 'claude-opus-4-7', name: 'Opus 4.7', legacy: true, aliases: ['opus-4.7', 'claude-opus-4.7'] },
+  { id: 'claude-opus-4-6', name: 'Opus 4.6', legacy: true, aliases: ['opus-4.6', 'claude-opus-4.6', 'claude-opus-4-6-20251117'] },
+  { id: 'claude-opus-4-5', name: 'Opus 4.5', legacy: true, aliases: [] },
+  { id: 'claude-sonnet-5', name: 'Sonnet 5', aliases: ['sonnet', 'sonnet-5', 'claude-sonnet-5.0', 'claude-sonnet-5-0'] },
+  { id: 'claude-sonnet-4-6', name: 'Sonnet 4.6', legacy: true, aliases: ['sonnet-4.6', 'claude-sonnet-4.6', 'claude-sonnet-4-6-20251117'] },
+  { id: 'claude-haiku-4-5', name: 'Haiku 4.5', aliases: ['haiku', 'haiku-4.5', 'claude-haiku-4.5', 'claude-haiku-4-5-20251001'] },
+];
+const ALL_EFFORTS = ['low', 'medium', 'high', 'xhigh', 'max'];
+
+// SDK rows first (they carry the alias the CLI resolves and the effort levels it
+// reported), named from the catalogue; then the catalogue's remaining models, marked
+// legacy, with the full effort list since the SDK downgrades an unsupported level itself.
+// The SDK's own "default" row is dropped: it is an alias for one of the others.
+export function mergeClaudeModels(sdkModels) {
+  const entryFor = (id) => {
+    const base = String(id).replace(/\[1m\]$/, '');
+    return CLAUDE_CATALOGUE.find((c) => c.id === base || c.aliases.includes(base)) ?? null;
+  };
+  const rows = [];
+  const covered = new Set();
+  for (const m of sdkModels) {
+    if (m.value === 'default') continue;
+    const c = entryFor(m.value);
+    if (c) covered.add(c.id);
+    const oneM = /\[1m\]$/.test(m.value);
+    rows.push({
+      id: m.value,
+      name: c ? `${c.name}${oneM ? ' · 1M' : ''}` : m.displayName || m.value,
+      description: m.description || '',
+      efforts: m.supportedEffortLevels ?? [],
+      legacy: Boolean(c?.legacy),
+    });
+  }
+  for (const c of CLAUDE_CATALOGUE) {
+    if (covered.has(c.id)) continue;
+    rows.push({ id: c.id, name: c.name, description: '', efforts: ALL_EFFORTS, legacy: Boolean(c.legacy) });
+  }
+  return rows;
+}
+
 export async function probeClaude(executable, env, { cwd = os.homedir(), timeoutMs = 15000 } = {}) {
   const abort = new AbortController();
   const prompt = (async function* neverYields() {
@@ -254,7 +304,13 @@ export async function probeClaude(executable, env, { cwd = os.homedir(), timeout
     if (!a.email && !a.subscriptionType && !a.apiKeySource && !a.tokenSource && !init?.apiKeySource) {
       return { ok: false, signedOut: true };
     }
-    return { ok: true, email: a.email, plan: a.subscriptionType || (a.apiKeySource || init?.apiKeySource ? 'API key' : undefined), tokenSource: a.tokenSource };
+    // The models this account can run, with the effort levels each accepts -- the
+    // panel's model and effort controls are built from this. Still zero tokens: it is
+    // a control request on the same handshake, not a prompt.
+    const models = await withTimeout(q.supportedModels(), timeoutMs)
+      .then((list) => mergeClaudeModels(list ?? []))
+      .catch(() => []);
+    return { ok: true, email: a.email, plan: a.subscriptionType || (a.apiKeySource || init?.apiKeySource ? 'API key' : undefined), tokenSource: a.tokenSource, models };
   } catch {
     return { ok: false, signedOut: false };
   } finally {

@@ -86,7 +86,7 @@ one `To: … With: …` line so the intent is in the transcript, not only in a t
 
 ## The tools (`server/agentTools.js`)
 
-Four, all on the in-process `unframed` MCP server, all listed in `allowedTools`, and the
+Six, all on the in-process `unframed` MCP server, all listed in `allowedTools`, and the
 only things the agent can call:
 
 | Tool | Does |
@@ -95,6 +95,7 @@ only things the agent can call:
 | `canvas_write` | one `batch` of the document's own ops (`addNode`, `updateNode`, `moveNode`, `resizeNode`, `removeNode`, `addEdge`, `removeEdge`), committed under the thread's origin — journaled, streamed to every tab, **one undo step**. |
 | `page_write` | a new version of a page: writes `<timestamp>-<slug>.html` plus a sidecar, then one batch (`addNode` beside the selection for a new page, `updateNode { file }` for an existing one). |
 | `page_read` | the current HTML of a page node, so an edit starts from what is there. |
+| `motion_write` / `motion_read` | the same pair for a motion asset (a HyperFrames composition); see "The motion asset" below. |
 
 **What `canvas_write` refuses before the document sees it** (`prepareBatch`, tested):
 an unknown node type; any `data:` URL in node data or a patch — bytes never travel
@@ -115,6 +116,57 @@ by three names: still no built-in tools, no shell, no file system, no network. B
 reach disk through `page_write` alone, one extension into one folder; the preview origin
 below is what stops a page the agent wrote from reaching the API even by URL.
 
+## The motion asset (`server/motion.js`, `client/src/nodes/MotionNode.jsx`)
+
+A **motion** is a HyperFrames composition: one HTML file, timed by `data-start` /
+`data-duration` on `class="clip"` elements under a root `#root[data-composition-id]`,
+animated by one paused GSAP timeline registered as `window.__timelines.main`. It is a page
+at the file level — same folder, same preview origin, same frame, a new file on every
+write — with two things a page does not have: a player, and a render. Design and the
+rejected alternatives: `docs/superpowers/specs/2026-09-06-agent-canvas-slice-4-design.md`.
+
+**The library sits beside the compositions as plain files**, under fixed names:
+`hyperframes-viewer.html`, `hyperframes-player.js`, `hyperframes-runtime.js`, `gsap.js`
+(`ensureLibrary`, idempotent, refreshed when a source's size changes). The node frames
+the viewer with the composition's name in its query (`?c=<file>`, checked against the
+same alphabet the preview origin serves); the viewer mounts `<hyperframes-player
+runtime-src="hyperframes-runtime.js">` on it. Same-origin with the composition is what
+lets the player drive it, and not being the canvas's origin is what keeps the canvas
+safe — the preview origin's rules below hold unchanged, plus two additions made for
+this: `js` in the extension allow-list, and `frame-src 'self'` in the policy (a sibling
+may frame a sibling; with `default-src 'none'` alone Chrome refused the inner frame).
+
+**The runtime tag goes in at write time.** The player injects HyperFrames' runtime only
+into a composition with no timeline of its own, and a real composition has one — without
+the runtime inside the file the player drives GSAP and shows no timed clip. `withRuntime`
+adds `<script src="hyperframes-runtime.js" data-hyperframes-preview-runtime>` once, on
+`motion_write` and on `POST …/motion/files` (a composition the person drops on a motion
+node); the attribute is the marker `@hyperframes/core` strips by, so the renderer removes
+this copy and injects its own.
+
+**Render** (`POST /api/projects/:name/motion/render { file, title? }` → `{ id }`, then
+`GET …/motion/render/:id` → `{ status, progress, message, output, error }`) runs
+`@hyperframes/producer` — a headless Chrome captured frame by frame through the BeginFrame
+API, ffmpeg encoding — imported only when a render starts, since it is the heaviest
+module in the package. The MP4 is rendered into a temp folder and only then placed in the
+project as `<timestamp>-<slug>.mp4` with a sidecar (`source: 'render'`, `of` names the
+composition, **no `cost`**), so a failed render leaves nothing behind; the node then adds a
+`video` node beside itself naming the file, as a video output's Add to canvas does. Jobs
+are an in-memory Map, not `jobs.js`: a render is local compute on files still on disk, so
+one lost to a restart costs a click, not money. The Chrome is the person's own
+(`findChrome`: Google Chrome, Chromium, Edge or Brave where each platform installs them,
+then the puppeteer and HyperFrames caches; `UNFRAMED_CHROME_PATH` overrides), and
+`.puppeteerrc.cjs` at the root keeps puppeteer from downloading one on install; with no
+Chromium at all, Render fails with a message saying to install one.
+
+**The agent's two tools**, `motion_write` and `motion_read`, are `page_write` and
+`page_read` with the noun changed — one factory in `agentTools.js` builds both pairs, so
+the new-file rule, placement, the node it becomes and the `ops_applied` event cannot
+drift between them. `motion_write`'s description carries the composition contract
+(root attributes, clips, one paused timeline, `gsap.js` by sibling name, no external
+loads, no imperative media control); the runtime tag is added for it. The event's
+artifact field is still named `page` for both kinds, with `kind` inside it.
+
 ## The preview origin (`server/preview.js`)
 
 Pages are HTML and HTML runs code, so a page is never served from the API's origin —
@@ -126,7 +178,7 @@ serves `GET/HEAD /p/<project>/<file>` and nothing else. The rules, each pinned i
 
 - one path shape; the file name must match the alphabet this server writes
   (`[A-Za-z0-9._-]`), which disposes of `..`, separators and anything odd;
-- an **extension allow-list** (`html`, images, video, audio, fonts): `.json` sidecars,
+- an **extension allow-list** (`html`, `js` — for the motion library beside a composition — images, video, audio, fonts): `.json` sidecars,
   `graph.json`, `graph.log` and the thread records are never served;
 - the same loopback `Host` check as the API (`LOOPBACK_HOST` is defined here and imported
   by `index.js`, so the two cannot drift);
@@ -161,20 +213,89 @@ a rename:
 | `GET /api/projects/:name/threads/:id` | the record |
 | `POST …/:id/messages` | one turn: `{ text, selection, target?, with? }`; 409 while the previous one runs |
 | `GET …/:id/events?since=` | SSE: `state`, stored events past `since`, `live`, then everything as it happens |
+| `PATCH …/:id` | model and effort for the next turn: `{ model?, effort? }`, `''` resets to the default; 409 mid-turn; closes the live session so the next message resumes with the new values |
 | `POST …/:id/interrupt` | stop the running turn |
 | `DELETE …/:id` | remove the record |
+
+`effort` is one of the Agent SDK's levels (`low` … `max`, `EFFORTS` in `threads.js`) and is
+passed straight to the session's options; the models an account can run, each with the
+effort levels it accepts, come from the Claude probe (`supportedModels()` on the same
+zero-token handshake) as `models` on the provider's ready status.
 
 The browser's selection travels with each message. The server never holds it otherwise;
 `canvas_read` reports the latest one for that thread.
 
 ## The Agent panel (`client/src/agent/AgentPanel.jsx`)
 
-The Agent button in the chrome opens a right-hand panel with the project's Canvas
-thread. Everything durable is the server's; the panel mirrors the record and applies the
-stream. With no provider ready it shows what was checked, how to install, and Check
-again, with Send disabled — that is the design's state 10. Settings has a Local agents
-section with the same statuses and the path overrides. The anchored reply's "Open thread"
-opens the panel on that thread (`initialThreadId`); tabs per thread are slice 3.
+The Agent button in the chrome opens a right-hand panel over the project's threads, one
+tab each, newest first — a canvas thread's tab reads "Canvas", an artifact thread's the
+node's title. The strip is Astryx's `TabList`, shaped into folder tabs (a rounded top and
+a border that joins the open tab to the transcript under it) by the `tab` and `tab-list`
+overrides in `client/src/theme.js`, which is where that shape has to live: Astryx's own
+base styles come out of StyleX and only the theme's generated rules land in a layer above
+them. Past the third tab the rest go behind the strip's `TabMenu`, which names whichever
+one is active, so a narrow panel never scrolls its tabs out of reach. **Double-clicking a
+tab renames its thread** in the tab's own box -- Enter or clicking away commits, Escape
+abandons, and an empty name clears it so the tab goes back to saying what it is about.
+The name is `title` on the thread record (`renameThread` in `server/threads.js`, sent on
+the same PATCH as model and effort but taken mid-turn, since it changes no session). It
+is deliberately the only thing that outranks the artifact's title on a tab: two threads
+about one page are the intended way to explore two directions, and two tabs reading the
+same page title cannot be told apart. What a thread is bound to is answered by the focus
+mark and the scope row, which read `artifactLabel` and are unmoved by a rename.
+**The selection filters the strip** (`agent/tabs.js`, tested): no artifact
+selected shows every thread; one selected shows only its threads; several show the
+union, and the canvas threads drop out. A thread whose node is not on the canvas is
+hidden in every state and kept on disk; it reappears the moment undo or redo brings the
+node back, since the binding is by node id. The active tab is always visible: it survives
+a re-filter it is part of, else the newest visible one takes over, else none — and with
+none, Send creates a thread bound to the one selected artifact (or a canvas thread when
+none is; with several selected, Send is disabled and says why). The composer sends to the
+active tab: the thread's artifact is fixed for life, the selection at send time is the
+message's `with`. The active thread's artifact wears the **focus mark** on the canvas
+(`onFocus` → `className: 'agent-focus'` on that node — the node alone, not what the thread
+touched): its name tag fills bright with a live dot, design option E, chosen over a ring
+around the card because selection already owns the card border and the two read as one
+fact when they share it. The row above the composer names the same artifact with a
+**Locate** action that pans and zooms to it (`onLocate` → `fitView` on that node), beside
+a count of whatever else is selected. It shows only what the next message actually
+carries and is absent when that is nothing: an empty selection IS the whole canvas, so a
+chip announcing it was a label on the default, and the "Scope" heading over it was a
+label on a label. A thread with nothing in it yet says what to say in plain text at the
+FOOT of the transcript, next to the composer it is about -- in a box and at the top it
+read as the first message. The composer's bottom
+row sets the thread's **model and effort** for the next turn, after T3 Code's composer
+footer (`agent/ModelPicker.jsx`): two small ghost triggers with a popup each. The model
+popup has provider tabs across the top (Claude, Codex — the last says sessions on it do
+not exist yet) and one-line rows: the current models, then the older ones under a
+Legacy heading. The list is `mergeClaudeModels` in `providers.js`: the SDK's
+`supportedModels()` rows (the aliases the CLI resolves, with the effort levels it
+reported) named from a static catalogue, then the catalogue's remaining ids — the same
+ids `claude --model` accepts, taken from t3code's model manifest (MIT). The SDK's
+"default" alias is folded into the model it stands for, so the trigger always reads a
+real model name. The effort popup is a short list headed Reasoning, Auto marked Default,
+a hint under each level. Astryx has no component of that shape, so they are Astryx
+`Popover` and `Badge` around our own rows, styled from tokens (`.mp-*` in `styles.css`);
+the provider logos are the SVG paths t3code ships (MIT). Saved through
+`PATCH …/threads/:id`; with no thread yet they apply to the one the next message creates. **Enter sends, Shift+Enter or Option+Enter breaks the line**, in
+the panel and the toolbar's composer alike. The header's trash button deletes the active
+thread after a confirmation; the canvas changes it made stay. Everything durable
+is the server's; the panel mirrors the record and applies the stream, stored `ops_applied`
+events included, so a reopened thread shows what changed and not only what was said. With
+no provider ready it shows what was checked, how to install, and Check again, with Send
+disabled — that is the design's state 10. Settings has a Local agents section with the
+same statuses and the path overrides. The anchored reply's "Open thread" opens the panel
+on that thread (`initialThreadId`). Design: `2026-09-05-agent-canvas-slice-3-design.md`.
+
+**Deleting a page is the ordinary undoable op**: files and thread records stay on disk,
+and undo brings the node and its tabs back. The one confirmation is a page whose bound
+thread is `running` (React Flow's `onBeforeDelete` asks the thread list): Stop and delete
+interrupts the turn, then removes the node; cancel removes nothing, the rest of the
+selection included. Collecting the files and threads of a page that stays deleted is
+compaction's job, together with superseded page versions — not built. **Pasting a page
+copies its file** (`POST /api/projects/:name/files/copy { file }` → `copyMedia`, sidecar
+`source: 'copy'`, `of: <original>`), so two nodes never share one file and a copy is the
+unit of working on one asset from several threads at once.
 
 ## The selection toolbar and the composer (`client/src/toolbar/`)
 
@@ -186,7 +307,14 @@ Agent morphs the toolbar into a composer on the same centre and bottom edge
 room). The composer's target comes from the selection (`target.js`): exactly one
 artifact → it is "To" and the rest come "with"; none → "To" is a new asset the agent
 creates beside the selection; several → the agent must ask, and the composer says so.
-Two rules while it is open: clicking another node adds it to "with" (and keeps it
+One more when the panel is open on an artifact thread and the selection has no artifact:
+"To" is that thread's artifact, and the button reads **Add to <title>** — a selected
+artifact still wins over an open tab. Both the bar and the anchored reply float over React Flow as ordinary DOM, so a wheel
+over them would otherwise reach nothing and the canvas would sit frozen wherever they
+happen to be: `toolbar/canvasWheel.js` forwards the event to `.react-flow__pane`, on a
+timeout (d3-zoom ignores a wheel dispatched inside another wheel's dispatch) and with
+`view: window` (d3-zoom reads `event.view.document`), leaving the wheel alone only when
+something under the pointer can scroll itself. Two rules while it is open: clicking another node adds it to "with" (and keeps it
 selected), clicking empty canvas collapses it; Esc and Back do the same. The message goes
 to the target artifact's newest idle thread (or a new `artifact` thread), and the reply
 lands anchored below the node the agent worked on with **Undo** — offered only while the

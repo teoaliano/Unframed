@@ -5,11 +5,16 @@
 // Pure, pinned in target.test.js.
 import { isArtifact } from '../graph/resolve.js';
 
+// `focus` is the artifact the panel's active thread is about (slice 3): with no artifact
+// in the selection, the message goes to it ("Add to <title>") rather than to a new asset.
+// A selected artifact still wins -- selecting one is a more deliberate statement than
+// having a tab open.
 // -> { target: <id> | 'new' | 'ask', with: [ids], artifacts: [ids] }
-export function messageTarget(selected) {
+export function messageTarget(selected, focus = null) {
   const artifacts = selected.filter(isArtifact).map((n) => n.id);
   const rest = selected.filter((n) => !isArtifact(n)).map((n) => n.id);
   if (artifacts.length === 1) return { target: artifacts[0], with: rest, artifacts };
+  if (artifacts.length === 0 && focus) return { target: focus, with: rest, artifacts: [focus] };
   if (artifacts.length === 0) return { target: 'new', with: rest, artifacts };
   return { target: 'ask', with: selected.map((n) => n.id), artifacts };
 }
