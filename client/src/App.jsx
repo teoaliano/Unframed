@@ -174,8 +174,25 @@ function ChromeZoom() {
 }
 
 function Canvas() {
-  const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
-  const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
+  // EMPTY, not the starter graph, and that is what makes `fitView` frame the project you
+  // opened. React Flow consumes its queued initial fitView the first time every node has
+  // been measured (`fitViewQueued && nodesInitialized` in its store) — so seeding the
+  // starter graph here spent that fit on three starter nodes, and the real project, which
+  // arrives from `doc.open` a moment later, was never framed. Every board opened
+  // off-screen at the starter's zoom until you pressed Fit view. An empty array reports
+  // `nodesInitialized: false` (its own `nodes.length > 0`), so the fit stays queued until
+  // the project's own nodes land and are measured.
+  //
+  // Nothing else wanted the seed: a fresh install still gets the starter graph, because
+  // the two `doc.create` calls below pass `initialNodes`/`initialEdges` explicitly. A
+  // switch was never broken — `canvasGeneration` remounts the canvas, and the incoming
+  // project's nodes arrive before that mount measures anything, so its fit lands on the
+  // right graph. Fixing the load path by bumping `canvasGeneration` too would have been
+  // the smaller diff and the wrong one: it remounts every node component a second time,
+  // and a remounted video output gets a fresh `startedJobIds`, which is how a pending
+  // render acquires a SECOND poll loop (see canvasGeneration's own comment).
+  const [nodes, setNodes, onNodesChange] = useNodesState([]);
+  const [edges, setEdges, onEdgesChange] = useEdgesState([]);
   const { screenToFlowPosition, zoomIn, zoomOut, fitView, getNodes, deleteElements } = useReactFlow();
   const toast = useToast();
   // Shared by every saveProject call site (the debounced autosave below, and
