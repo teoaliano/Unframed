@@ -9,6 +9,17 @@ Keep that shape: the website's What's new page parses this file.
 
 ### Fixed
 
+- **Dragging a node on a big board is no longer slow.** Moving one node used to re-render
+  every image, video and output node on the canvas, on every frame, each one re-reading
+  the whole graph to work out its own "image 2" badge. On a 120-node board that was a
+  quarter-second of dropped frames per drag; it now holds a steady frame rate, and a
+  300-node board is roughly twice as fast as a 120-node one used to be. Panning and
+  zooming got quicker too, and neither costs anything at all with nothing selected.
+  Badges, the red ignored-input edges and the wiring warnings all still update live while
+  you drag.
+- **An image output now warns about a video wired in inside a group.** It only noticed
+  loose video nodes before, so a box containing a clip was sent to an image model with no
+  warning that the clip would be ignored.
 - **Opening a project no longer lands you on empty canvas.** The view was framed on the
   starter graph that shows for an instant while your project loads, and never re-framed
   once the project arrived — so any board whose nodes sit away from the origin opened

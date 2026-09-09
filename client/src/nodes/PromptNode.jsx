@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { memo, useEffect, useRef, useState } from 'react';
 import { Handle, Position, useReactFlow } from '@xyflow/react';
 import { Card } from '@astryxdesign/core/Card';
 import { TextArea } from '@astryxdesign/core/TextArea';
@@ -14,7 +14,7 @@ const TRIGGER_RE = /@([\w-]*)$/;
 // pixels, i.e. before the field's padding and the node's border.
 const AUTO_MAX_WIDTH = 320;
 
-export default function PromptNode({ id, data, parentId, selected }) {
+function PromptNode({ id, data, parentId, selected }) {
   const { updateNodeData, getNodes, setNodes } = useReactFlow();
   const ref = useRef(null);
   const [query, setQuery] = useState(null); // null = menu closed; string = open
@@ -351,3 +351,5 @@ export default function PromptNode({ id, data, parentId, selected }) {
     </>
   );
 }
+
+export default memo(PromptNode);

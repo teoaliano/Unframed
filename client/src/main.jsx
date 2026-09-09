@@ -13,6 +13,10 @@ import './styles.css';
 // ?trace=1 arms the pointer/selection tracer. A dynamic import, so it is its own
 // chunk and never lands in a normal bundle. See debug/trace.js for what it answers.
 if (new URLSearchParams(location.search).has('trace')) import('./debug/trace.js');
+// ?fps=1 draws the per-gesture frame-rate meter. Same deal: its own chunk, never in a
+// normal bundle. Chrome's Frame Rendering Stats gives an FPS number too; this one is
+// per gesture and against the display's real refresh rate — see debug/fps.js.
+if (new URLSearchParams(location.search).has('fps')) import('./debug/fps.js');
 // The whole node is draggable and controls opt out with `nodrag`; forgetting one is
 // silent. This warns about any that were missed. Dev only, and dynamic for the same
 // reason as above.

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { flushSync } from 'react-dom';
 import {
   ReactFlow,
@@ -121,6 +121,22 @@ const nodeTypes = {
 
 const edgeTypes = { ignored: IgnoredEdge };
 
+// Every non-scalar <ReactFlow> prop, hoisted out of the render. An object or array
+// literal in the JSX is a new identity on every render of this component, and this
+// component re-renders on every frame of every node drag (it holds the node array), so
+// each one was handing React Flow a "changed" prop sixty times a second. Cheap to get
+// wrong invisibly, which is why they sit together up here rather than inline.
+const MULTI_SELECT_KEYS = ['Meta', 'Control', 'Shift'];
+const PRO_OPTIONS = { hideAttribution: true };
+// The marching dashes are a signal, not decoration: an ignored edge is the one that has
+// STOPPED (styles.css, which also has why colour alone would not do). So this stays on
+// even though a dash animation is a continuous repaint of every edge on the board —
+// removing it would take the signal with it.
+const DEFAULT_EDGE_OPTIONS = { animated: true };
+// select tool: drag empty canvas draws a selection box, pan with the middle mouse.
+// pan tool: drag anywhere pans, like a hand tool.
+const PAN_WITH_MIDDLE_MOUSE = [1];
+
 // Icons come from lucide-react — the same pack @astryxdesign/theme-neutral
 // registers behind the design system's semantic names, so `icon="info"` and these
 // share one grid and one stroke weight. Hand-drawn paths did not: they ranged from
@@ -162,7 +178,7 @@ const HELP_TEXT =
 //
 // The numbers came from drawing rather than from use — see the redesign spec's "Left
 // open" — so they are expected to move once this has been lived with.
-function ChromeZoom() {
+function ChromeZoomChip() {
   const zoom = useStore((s) => s.transform[2]);
   const ref = useRef(null);
   const level = zoom < 0.5 ? 'off' : zoom < 0.75 ? 'hover' : 'on';
@@ -172,6 +188,9 @@ function ChromeZoom() {
   // Anchors to the flow element without a document-wide query, and takes no space.
   return <span ref={ref} hidden />;
 }
+// Same reason as CanvasBackground: no props, so memo leaves the zoom subscription as
+// its only reason to run, instead of every frame of every node drag.
+const ChromeZoom = memo(ChromeZoomChip);
 
 function Canvas() {
   // EMPTY, not the starter graph, and that is what makes `fitView` frame the project you
@@ -410,6 +429,16 @@ function Canvas() {
   const [reply, setReply] = useState(null);
   const replyClose = useRef(null); // the reply's event subscription
   const [panning, setPanning] = useState(false);
+  // Only a DRAG of the canvas hides the floating toolbar, which is what hiding it was
+  // ever for. These two also fire once per wheel burst, so hiding on any move made the
+  // bar blink off and on through every scroll and every zoom -- and a wheel move needs
+  // no hiding at all, since the bar is placed from the viewport transform and simply
+  // travels with the selection. `null` is a programmatic move (fitView), which likewise
+  // leaves it alone. Hoisted rather than written inline on <ReactFlow> for the reason
+  // every non-scalar prop up there is: this component re-renders on every frame of a
+  // node drag, and an inline arrow is a new prop identity each time.
+  const onMoveStart = useCallback((e) => setPanning(Boolean(e) && e.type !== 'wheel'), []);
+  const onMoveEnd = useCallback(() => setPanning(false), []);
   const [boxSelecting, setBoxSelecting] = useState(false);
   const readyProvider = ['claude', 'codex'].map((k) => providers?.[k]).find((p) => p?.status === 'ready') ?? null;
   const providerMessage = providers
@@ -1918,7 +1947,7 @@ function Canvas() {
           // from the rectangle's contents alone, and a press on empty canvas resets
           // regardless. `keepSelected` above is what makes both of those honour
           // whatever this names.
-          multiSelectionKeyCode={['Meta', 'Control', 'Shift']}
+          multiSelectionKeyCode={MULTI_SELECT_KEYS}
           // Shift is the multi-select key above, so it must NOT also be React Flow's
           // box-select key -- and 'Shift' is what that prop defaults to. When both
           // claimed it, the pane's capture-phase pointerdown listener treated every
@@ -1937,8 +1966,8 @@ function Canvas() {
           fitView
           minZoom={0.1}
           maxZoom={4}
-          defaultEdgeOptions={{ animated: true }}
-          proOptions={{ hideAttribution: true }}
+          defaultEdgeOptions={DEFAULT_EDGE_OPTIONS}
+          proOptions={PRO_OPTIONS}
           className={tool === 'pan' ? 'tool-pan' : undefined}
           // Figma-style navigation: two-finger scroll / wheel pans (shift+wheel goes
           // sideways), pinch zooms, Cmd/Ctrl+wheel zooms, space or middle-drag pans.
@@ -1947,20 +1976,12 @@ function Canvas() {
           panOnScroll
           zoomOnScroll={false}
           zoomOnDoubleClick={false}
-          // select tool: drag empty canvas draws a selection box, pan with the middle
-          // mouse. pan tool: drag anywhere pans, like a hand tool.
-          panOnDrag={tool === 'pan' ? true : [1]}
+          panOnDrag={tool === 'pan' ? true : PAN_WITH_MIDDLE_MOUSE}
           selectionOnDrag={tool === 'select'}
           // A node need only TOUCH the selection box, not sit entirely inside it.
           selectionMode="partial"
-          // Only a DRAG of the canvas hides the floating toolbar, which is what hiding
-          // it was ever for. These two also fire once per wheel burst, so hiding on any
-          // move made the bar blink off and on through every scroll and every zoom --
-          // and a wheel move needs no hiding at all, since the bar is placed from the
-          // viewport transform and simply travels with the selection. `null` is a
-          // programmatic move (fitView), which likewise leaves it alone.
-          onMoveStart={(e) => setPanning(Boolean(e) && e.type !== 'wheel')}
-          onMoveEnd={() => setPanning(false)}
+          onMoveStart={onMoveStart}
+          onMoveEnd={onMoveEnd}
           onNodeClick={onNodeClick}
           onPaneClick={onPaneClick}
           onSelectionStart={onSelectionStart}

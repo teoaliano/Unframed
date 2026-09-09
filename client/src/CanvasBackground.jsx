@@ -1,3 +1,4 @@
+import { memo } from 'react';
 import { Background, useStore } from '@xyflow/react';
 
 /*
@@ -21,9 +22,14 @@ const DOT = 1.1; // px on screen, constant at every zoom
 const DOT_COLOR =
   'color-mix(in srgb, var(--color-border-emphasized) 68%, var(--color-background-body))';
 
-export default function CanvasBackground() {
+function CanvasBackground() {
   const zoom = useStore((s) => s.transform[2]);
   let gap = BASE_GAP;
   while (gap * zoom < MIN_GAP) gap *= 2;
   return <Background gap={gap} size={DOT / zoom} color={DOT_COLOR} />;
 }
+
+// Takes no props, so memo makes its only reason to re-render the zoom subscription
+// above. Without it the dot grid re-rendered on every frame of every node drag, purely
+// because App re-renders (it holds the node array) and this is one of its children.
+export default memo(CanvasBackground);

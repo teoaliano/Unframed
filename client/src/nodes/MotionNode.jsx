@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { memo, useEffect, useRef, useState } from 'react';
 import { useReactFlow } from '@xyflow/react';
 import { Card } from '@astryxdesign/core/Card';
 import { Button } from '@astryxdesign/core/Button';
@@ -34,7 +34,7 @@ import { uploadMotion, motionUrl, startMotionRender, pollMotionRender } from '..
 const isHtml = (file) => file && (file.type === 'text/html' || /\.html?$/i.test(file.name || ''));
 const POLL_MS = 700;
 
-export default function MotionNode({ id, data, dragging, selected }) {
+function MotionNode({ id, data, dragging, selected }) {
   const { updateNodeData, addNodes, getNode, getNodes } = useReactFlow();
   const { name: project, ref: projectRef, previewPort } = useProject();
   const [error, setError] = useState('');
@@ -171,3 +171,5 @@ export default function MotionNode({ id, data, dragging, selected }) {
     </>
   );
 }
+
+export default memo(MotionNode);

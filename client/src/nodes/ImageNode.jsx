@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react';
-import { Handle, Position, useReactFlow, useNodes, useEdges } from '@xyflow/react';
+import { memo, useEffect, useState } from 'react';
+import { Handle, Position, useReactFlow } from '@xyflow/react';
 import { Card } from '@astryxdesign/core/Card';
 import { FileInput } from '@astryxdesign/core/FileInput';
 import { Thumbnail } from '@astryxdesign/core/Thumbnail';
@@ -9,7 +9,8 @@ import NodeHeader from './NodeHeader.jsx';
 import NodeLine from './NodeLine.jsx';
 import MediaResize from './MediaResize.jsx';
 import StatusLine from './StatusLine.jsx';
-import { sourceRoles, hasMedia } from '../graph/resolve.js';
+import { hasMedia } from '../graph/resolve.js';
+import { useSourceRoles } from '../graph/live.js';
 import { useProject } from '../graph/project.js';
 import { uploadFile, fileUrl } from '../api.js';
 
@@ -17,14 +18,14 @@ import { uploadFile, fileUrl } from '../api.js';
 // and is served by /api/file; the only non-file case is a hosted https link (video).
 export const mediaSrc = (data, project) => (data?.file ? fileUrl(project, data.file) : data?.dataUrl || '');
 
-export default function ImageNode({ id, data, parentId }) {
+function ImageNode({ id, data, parentId }) {
   const { updateNodeData } = useReactFlow();
   const { name: project } = useProject();
   const [error, setError] = useState('');
   // What each consuming node will do with this image, recomputed as connections,
   // positions and input modes change. "image 1 / —" = image 1 to one output, unused by
   // another. Empty = not wired anywhere.
-  const roles = sourceRoles(useNodes(), useEdges(), id);
+  const roles = useSourceRoles(id);
   const src = mediaSrc(data, project);
 
   // The bytes go to the project folder, not into node data: media left the document
@@ -144,3 +145,5 @@ export default function ImageNode({ id, data, parentId }) {
     </>
   );
 }
+
+export default memo(ImageNode);

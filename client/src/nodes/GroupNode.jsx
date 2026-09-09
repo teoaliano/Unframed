@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { memo, useEffect, useRef, useState } from 'react';
 import { Handle, Position, useReactFlow } from '@xyflow/react';
 import NodeLine from './NodeLine.jsx';
 import MediaResize from './MediaResize.jsx';
@@ -30,7 +30,7 @@ import { useDoc } from '../graph/useDocument.js';
 // Not ⌘R, which was the other candidate: it is the browser's reload, so taking it would
 // mean a user with a box selected cannot refresh the page. F2 is the platform-neutral
 // rename key and collides with nothing here.
-export default function GroupNode({ id, data, selected, width, height }) {
+function GroupNode({ id, data, selected, width, height }) {
   const { getNodes } = useReactFlow();
   const { send } = useDoc();
   const [editing, setEditing] = useState(false);
@@ -131,3 +131,5 @@ export default function GroupNode({ id, data, selected, width, height }) {
     </>
   );
 }
+
+export default memo(GroupNode);
