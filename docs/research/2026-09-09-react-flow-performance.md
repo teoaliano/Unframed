@@ -543,13 +543,68 @@ Caching that map on the array's identity took them to 2.4% and 1.3% — 126ms �
 going 8 → 1. After that `(program)` (browser layout, paint, composite) is 47% of the
 profile and is the floor.
 
-**§6's CSS costs did not reproduce here.** A/B'd on the same page by injecting
-`!important` overrides and panning 60 ticks each: baseline, no `backdrop-filter` on the
-chrome, no `box-shadow` anywhere, no edge dash animation, and all three off together all
-measured 8.3ms median with zero frames over 16.7ms. That is a main-thread frame-pacing
-result on a machine with headroom, so it does not contradict the GPU-utilisation report
-in §2 — it says the blur and the shadows are not what makes this app's canvas feel slow.
-The blur is also on three fixed chrome elements, never on a node.
+**§6's CSS costs are UNMEASURED, not disproved — and this file said otherwise for one
+revision.** They were A/B'd by injecting `!important` overrides and panning 60 ticks
+each: baseline, no `backdrop-filter`, no `box-shadow`, no dash animation, and all three
+off together all came out at 8.3ms median with zero late frames, which was written up as
+"the CSS costs did not reproduce". Then the instrument was validated and that conclusion
+had to be withdrawn.
+
+**Validate the instrument before believing a negative result.** Two deliberate
+slowdowns, injected into the running page, panning the same 60 ticks:
+
+| injected | rAF median | presented-frame median |
+| --- | --- | --- |
+| nothing (baseline) | 8.3ms | 24.9ms |
+| 25ms busy loop inside rAF (main thread) | **25.0ms** | — |
+| `blur(6px) drop-shadow()` on every node (paint only) | 8.3ms | 25.1ms |
+| full-screen `backdrop-filter: blur(30px)` (paint only) | 8.3ms | 24.9ms |
+
+rAF gaps track main-thread work exactly and are **completely blind to paint and
+composite**: headless Chrome has no display, so rAF runs on a synthetic clock that is
+not gated on rasterisation. `Page.screencastFrame` intervals were tried as a
+paint-sensitive substitute and are blind too — every run returned exactly 71 frames at
+~25ms, pinned to the harness's own input cadence rather than to presentation.
+
+So everything in the "Measured" table above stands, because it is main-thread work and
+is corroborated independently by the CPU profile — but **no claim about `backdrop-filter`,
+`box-shadow` or the dash animation can be supported from this environment at all**, in
+either direction. On real hardware rAF *is* vsync-aligned, so the in-app `?fps=1` meter
+does catch paint cost; a reading taken on the actual machine is the authority here and
+nothing headless can substitute for it.
+
+**On the real boards, the main-thread cost was never the problem.** The table above is
+synthetic boards. Re-run against copies of eight actual projects (the largest 55 nodes,
+45 of them images), the **pre-fix** build already dragged at 8.3ms median with 1 late
+frame — at fit view and at every zoom up to 1.17. The synthetic boards over-represented
+the one thing the `useNodes()` cost scales on: output nodes and edges. `rolesIndex` is
+O(consumers × (N+E)) per subscriber, and a real board is sparsely wired — 55 nodes but
+only **5 outputs and 21 edges**, against 120 nodes with 24 outputs and 96 edges
+synthetically. That is ~15× less work per frame, and it lands under the frame budget
+either way. The fix is still right, and it is what makes a dense board survive, but it
+is not what a real board was waiting on.
+
+Nor is loading. A pre-media-extraction project carries every image inline as a base64
+`dataUrl`, so `graph.json` is 51MB — and the one-time server-side rewrite to files
+(`server/media.js`) takes **0.64s once**, 4ms on every open after, and leaves a 34KB
+snapshot. Browser open to 55 nodes with 50 images decoded: **~295ms**.
+
+**What is left is the pixels, and it is the one thing this environment cannot measure.**
+Decoded bitmap versus the screen area it is drawn into, at fit view:
+
+| project | images | zoom | decoded | on screen | overdraw |
+| --- | --- | --- | --- | --- | --- |
+| dither-landing-page | 50 | 0.13 | 64.4MP (~260MB RGBA) | 0.05MP | **1210×** |
+| portfolio | 34 | 0.14 | 39.9MP (~160MB RGBA) | 0.04MP | 1031× |
+| tattoo | 11 | 0.52 | 12.0MP (~50MB RGBA) | 0.19MP | 65× |
+
+Every full-resolution bitmap is held, uploaded as a texture and resampled on every
+frame of a pan, to end up as a thumbnail. That is a texture-memory and composite cost,
+which is exactly the category the instrument validation above proved blind — so it is a
+hypothesis with a measured input, not a finding. Confirming it needs `?fps=1` (or
+DevTools' Performance panel) on the real machine, and acting on it means displaying a
+downscaled decode at low zoom, which trades image fidelity for frame rate and is a
+product decision rather than a refactor.
 
 **`onlyRenderVisibleElements` must stay off here**, for an app-specific reason the docs
 do not have: culled nodes unmount, and `ImageOutputNode` holds a finished batch's bytes
