@@ -48,7 +48,6 @@ export default function SelectionToolbar({
   onRun,
   onOpenPage,
 }) {
-  const transform = useStore((s) => s.transform);
   const el = useRef(null);
   const [size, setSize] = useState(null);
   const [text, setText] = useState('');
@@ -56,6 +55,16 @@ export default function SelectionToolbar({
 
   const selected = nodes.filter((n) => n.selected);
   const flowBox = selectionBox(nodes);
+  // Whether this renders at all -- decided before the viewport subscription, so the
+  // subscription can be dropped when it does not.
+  const showing = Boolean(flowBox) && !hidden && Boolean(canvasEl);
+  // The viewport, but only while there is a selection to follow. React Flow replaces
+  // `transform` on every frame of a pan, so subscribing to the array unconditionally
+  // re-rendered this component sixty times a second with nothing selected, purely to
+  // return null at the bottom. Joined to a string for the same reason the roles hook
+  // does it (graph/live.js): an array is a fresh identity every update, so the
+  // identity check could never spare a render.
+  const view = useStore((s) => (showing ? s.transform.join(',') : ''));
 
   // Measure after each render, so the flip and the clamp see the real box.
   useLayoutEffect(() => {
@@ -83,10 +92,10 @@ export default function SelectionToolbar({
   // The bar floats over the canvas, so it must not swallow the canvas's own gestures.
   useCanvasWheel(el, canvasEl);
 
-  if (!flowBox || hidden || !canvasEl) return null;
+  if (!showing) return null;
 
   const viewport = { width: canvasEl.clientWidth, height: canvasEl.clientHeight };
-  const box = toScreen(flowBox, transform);
+  const box = toScreen(flowBox, view.split(',').map(Number));
   const at = place({ box, size: size ?? DEFAULT_SIZE[mode], viewport });
   const actions = toolbarActions(selected);
 

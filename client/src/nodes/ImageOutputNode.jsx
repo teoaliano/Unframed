@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react';
-import { Handle, Position, useReactFlow, useNodes, useEdges } from '@xyflow/react';
+import { memo, useState, useEffect } from 'react';
+import { Handle, Position, useReactFlow } from '@xyflow/react';
 import { Card } from '@astryxdesign/core/Card';
 import { Text } from '@astryxdesign/core/Text';
 import { Button } from '@astryxdesign/core/Button';
@@ -17,7 +17,8 @@ import { useModels, useModelParams, freeSpot } from './output/core.js';
 import { estimateImageCost, formatEstimate } from './output/pricing.js';
 import { resetModelParams } from './output/defaults.js';
 import { ModelPicker, ParamControls, CostFoot } from './output/controls.jsx';
-import { buildRequest, splitSections, findFreeSource, freeSourceText, freeBatch, bucketSources, isTextOutput, hasMedia } from '../graph/resolve.js';
+import { buildRequest, splitSections, findFreeSource, freeSourceText, freeBatch, isTextOutput } from '../graph/resolve.js';
+import { useOutputWiring } from '../graph/live.js';
 import { withDrag } from '../graph/starter.js';
 import { generate, runText, getModelPricing, SESSION_ID } from '../api.js';
 import { useProject } from '../graph/project.js';
@@ -45,7 +46,7 @@ function emptyNote(empty) {
 // Makes an image. Its sibling makes a video, and the two used to be one node with a
 // tab: the medium picked the catalogue, the controls and the order of magnitude of
 // the bill, which is too much to hide behind a segmented control.
-export default function ImageOutputNode({ id, data }) {
+function ImageOutputNode({ id, data }) {
   const { ref: projectRef } = useProject();
   const { getNodes, getEdges, updateNodeData, getNode, addNodes } = useReactFlow();
   const toast = useToast();
@@ -73,8 +74,10 @@ export default function ImageOutputNode({ id, data }) {
   // exactly what the results pointer exists to avoid. Losing it on unmount costs nothing
   // but the text call already made.
   const [staged, setStaged] = useState(null);
-  const liveNodes = useNodes();
-  const liveEdges = useEdges();
+  // What is wired in, as counts. graph/live.js has why this is a narrow subscription
+  // and not useNodes()/useEdges(): those re-rendered this card on every frame of every
+  // drag anywhere on the board.
+  const wiring = useOutputWiring(id);
 
   // A marker left by a closed or reloaded tab can never be resumed — a batch is a
   // set of single requests, and the server has already written whatever it wrote
@@ -154,21 +157,14 @@ export default function ImageOutputNode({ id, data }) {
     updateNodeData(id, { results: undefined });
   }
 
-  // Render-time twin of findFreeSource(): getNodes()/getEdges() are stable function
-  // references, so React has no way to know an edge changed and won't re-render this
-  // warning on its own. useNodes()/useEdges() subscribe to canvas state, so the hint
-  // appears and disappears live as wiring changes.
-  const liveFreeSource = findFreeSource(liveNodes, liveEdges, id);
-
-  const wiredVideos = liveEdges
-    .filter((e) => e.target === id)
-    .filter((e) => liveNodes.some((n) => n.id === e.source && n.type === 'video' && hasMedia(n)))
-    .length;
-
-  // Read off bucketSources rather than the edges, so this counts exactly what
-  // buildRequest will put in input_references.
-  const wiredImages = bucketSources(liveNodes, liveEdges, id)
-    .references.filter((n) => n.type === 'image').length;
+  // Named here because the warnings below read better for it, and because these are the
+  // render-time twins of what the click handlers ask getNodes()/getEdges() for: those
+  // are stable function references, so React has no way to know an edge changed and
+  // would never re-render a warning on its own. The subscription is what makes these
+  // hints appear and disappear live as the wiring changes.
+  const hasFreeSource = wiring.hasFreeSource;
+  const wiredVideos = wiring.videos;
+  const wiredImages = wiring.images;
   // Not truncated here on purpose. The badge an input node shows ("image 2") comes
   // from sourceRoles, which knows the edges but not which model each consuming output
   // has selected -- and teaching it would mean every image node fetching the image
@@ -454,8 +450,10 @@ export default function ImageOutputNode({ id, data }) {
           // The count is known here and nowhere else: the model cannot see the canvas, so
           // "images 1 to 8" has to be stated or it invents numbers. Zero wired images
           // means the directive clauses are noise, so they are left out entirely.
-          const imageCount = bucketSources(getNodes(), getEdges(), id)
-            .references.filter((n) => n.type === 'image').length;
+          // `wiredImages` rather than a second reading of the graph: it comes off the
+          // same subscription the warnings do, so what this tells the model and what the
+          // card told the user cannot disagree.
+          const imageCount = wiredImages;
           const ask = [
             'You rewrite a rough description into image prompts, one per image, separated by lines containing only ---.',
             '',
@@ -633,7 +631,7 @@ export default function ImageOutputNode({ id, data }) {
           // nothing wired in has no list to work from either; the hint below
           // already says what to wire, so an error saying the same thing would
           // just be the hint again in red.
-          isDisabled={isRunning || (freeRuns && !liveFreeSource)}
+          isDisabled={isRunning || (freeRuns && !hasFreeSource)}
           onClick={onGenerate}
         />
 
@@ -657,7 +655,7 @@ export default function ImageOutputNode({ id, data }) {
           </StatusLine>
         )}
 
-        {freeRuns && !liveFreeSource && (
+        {freeRuns && !hasFreeSource && (
           <StatusLine type="info">
             Wire a prompt or text node in. Each item turns into one generation
             <br />
@@ -776,3 +774,5 @@ export default function ImageOutputNode({ id, data }) {
     </>
   );
 }
+
+export default memo(ImageOutputNode);

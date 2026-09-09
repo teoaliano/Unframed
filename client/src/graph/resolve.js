@@ -48,6 +48,22 @@ export const membersOf = (nodes, groupId) => nodes.filter((n) => n.parentId === 
 // remembering all three.
 const referenceMap = (nodes) => new Map(nodes.filter(isReferenceable).map((n) => [n.id, n]));
 
+// Nodes by id, cached on the array itself. Both bucketSources and findFreeSource want
+// one, and the canvas asks each of them once per output node on every frame of a drag,
+// so on a 300-node board this was rebuilding a 300-entry Map over a hundred times a
+// frame -- measurably the largest remaining cost of moving a node once the re-render
+// storm was dealt with (docs/research/2026-09-09-react-flow-performance.md).
+//
+// Keyed on identity, which is when the contents CAN have changed: React Flow hands out
+// a new array for a change and the same one for no change. That also states the one way
+// to break this -- mutating a nodes array in place and expecting these functions to
+// notice. Nothing does, and nothing should; the document is replace-only.
+let idCache = { nodes: null, byId: null };
+function nodesById(nodes) {
+  if (idCache.nodes !== nodes) idCache = { nodes, byId: new Map(nodes.map((n) => [n.id, n])) };
+  return idCache.byId;
+}
+
 // Its own predicate for the same reason isTextOutput has one: only a video output
 // carries an input mode, and asking the wrong node type for one silently changes
 // what gets sent.
@@ -105,7 +121,7 @@ function resolveRef(id, refs, stack) {
 // The single home for that split: buildRequest sends from it and the input node
 // badges read it, so what a node claims and what is sent cannot drift.
 export function bucketSources(nodes, edges, outputId) {
-  const byId = new Map(nodes.map((n) => [n.id, n]));
+  const byId = nodesById(nodes);
   const output = byId.get(outputId);
   // A wired group expands IN PLACE into its members: the box takes one slot in the
   // top-to-bottom order at its own position, and its contents fill that slot in their
@@ -190,33 +206,47 @@ export function buildRequest(nodes, edges, outputId) {
 // to one node and the first frame of another. Kept beside bucketSources so the
 // badge and the request cannot disagree. `nodes`/`edges` are the live arrays.
 export function sourceRoles(nodes, edges, nodeId) {
-  const self = nodes.find((n) => n.id === nodeId);
-  if (!self || (self.type !== 'image' && self.type !== 'video') || !hasMedia(self)) return [];
+  return rolesIndex(nodes, edges).get(nodeId) ?? [];
+}
 
-  const roles = [];
+// The same answer for EVERY media node, from one walk of the consumers. sourceRoles is
+// this looked up by id, and the canvas asks for the whole map (graph/live.js), because
+// asking per node meant every image and video node walking every consumer -- the same
+// work done once per media node, on every frame of every drag. One walk instead of M
+// turned a 120-node board's drag from 25ms a frame into 8ms (docs/research/
+// 2026-09-09-react-flow-performance.md has the measurements and why the badge cannot
+// simply be made drag-independent: it is ordered by Y, so a drag genuinely can change
+// it). The per-node signature stays because that is what reads well at a call site and
+// what resolve.test.js pins.
+export function rolesIndex(nodes, edges) {
+  const index = new Map();
+  // Deduplicated, first occurrence kept: an image can be image 2 to one output and the
+  // first frame of another, but it is not "image 2" twice.
+  const add = (id, role) => {
+    const roles = index.get(id);
+    if (!roles) index.set(id, [role]);
+    else if (!roles.includes(role)) roles.push(role);
+  };
   // Consumers in canvas order, top to bottom -- the same rule that orders prompts and
   // numbers references. Without it the badge would read "1 / 2" or "2 / 1" for the same
   // graph, depending only on which output happened to be created first.
-  const consumers = nodes
-    .filter(isOutput)
-    .sort((a, b) => (a.position?.y ?? 0) - (b.position?.y ?? 0));
+  const consumers = nodes.filter(isOutput).sort(byY);
   for (const consumer of consumers) {
+    // bucketSources' three buckets are mutually exclusive and hold only media nodes, so
+    // every id below is one this function should answer for, and each gets exactly one
+    // role per consumer.
     const { references, frames, excess } = bucketSources(nodes, edges, consumer.id);
-    const frame = frames.find((f) => f.node.id === nodeId);
-    if (frame) {
-      roles.push(frame.frame_type === 'first_frame' ? 'first' : 'last');
-      continue;
-    }
-    if (excess.includes(nodeId)) {
-      roles.push('—');
-      continue;
-    }
+    for (const { node, frame_type } of frames) add(node.id, frame_type === 'first_frame' ? 'first' : 'last');
+    for (const id of excess) add(id, '—');
     // Numbering is per kind: "image 1" and "video 1" coexist on one consumer.
-    const sameKind = references.filter((n) => n.type === self.type);
-    const idx = sameKind.findIndex((n) => n.id === nodeId);
-    if (idx !== -1) roles.push(String(idx + 1));
+    const rank = new Map();
+    for (const n of references) {
+      const next = (rank.get(n.type) ?? 0) + 1;
+      rank.set(n.type, next);
+      add(n.id, String(next));
+    }
   }
-  return [...new Set(roles)];
+  return index;
 }
 
 // The node supplying Free mode's list. A wired text output wins outright; only when
@@ -226,7 +256,7 @@ export function sourceRoles(nodes, edges, nodeId) {
 // built from the wrong text is only noticed after it has been paid for. Lowest Y
 // breaks ties within a kind, matching buildRequest's ordering.
 export function findFreeSource(nodes, edges, outputId) {
-  const byId = new Map(nodes.map((n) => [n.id, n]));
+  const byId = nodesById(nodes);
   const wired = edges
     .filter((e) => e.target === outputId)
     .map((e) => byId.get(e.source))

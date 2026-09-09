@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { memo, useState, useRef } from 'react';
 import { useReactFlow } from '@xyflow/react';
 import { Card } from '@astryxdesign/core/Card';
 import { FileInput } from '@astryxdesign/core/FileInput';
@@ -31,7 +31,7 @@ import { uploadFile, previewUrl } from '../api.js';
 // what lets Cmd-Z show the previous page (the spec, "files are immutable").
 const isHtml = (file) => file && (file.type === 'text/html' || /\.html?$/i.test(file.name || ''));
 
-export default function PageNode({ id, data, dragging, selected }) {
+function PageNode({ id, data, dragging, selected }) {
   const { updateNodeData } = useReactFlow();
   const { name: project, previewPort } = useProject();
   const [error, setError] = useState('');
@@ -117,3 +117,5 @@ export default function PageNode({ id, data, dragging, selected }) {
     </>
   );
 }
+
+export default memo(PageNode);
