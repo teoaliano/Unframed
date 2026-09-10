@@ -22,3 +22,18 @@ export function useNodeCommand(id, command, handler) {
     return () => window.removeEventListener(EVENT, on);
   }, [id, command, handler]);
 }
+
+// The same bus in the other direction, and the reason it is the same bus: an empty
+// artifact's own Agent button has to open the composer, and the composer's state is
+// App.jsx's (two canvas gestures change it), so the node announces and App acts --
+// exactly as the toolbar announces a run and the node acts. `handler` is given the id,
+// so App can select that node and aim the composer at it.
+export function useAnyNodeCommand(command, handler) {
+  useEffect(() => {
+    const on = (e) => {
+      if (e.detail?.command === command) handler(e.detail.id);
+    };
+    window.addEventListener(EVENT, on);
+    return () => window.removeEventListener(EVENT, on);
+  }, [command, handler]);
+}

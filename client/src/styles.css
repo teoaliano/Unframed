@@ -377,17 +377,23 @@ div:has(> .add-node-menu) {
 .xnode-tab--input svg {
   color: var(--color-text-secondary);
 }
-/* The third family, artifacts (a page; the motion in slice 4): a filled tab like an
-   output's, so it reads as a made thing rather than a supplied one, in the success hue
-   so it is not mistaken for an output either. */
+/* The third family, artifacts (a page, a motion): a filled tab like an output's, so it
+   reads as a made thing rather than a supplied one, but GREY rather than the accent --
+   and grey is the point, not a shade. An output's white tab marks the nodes that spend
+   money; an artifact is written by the agent on your own subscription and costs nothing
+   per run, so it must not wear the colour that says "this one bills". It was the success
+   hue, which said neither, and read as a status rather than a family.
+   `--color-border-emphasized` because it is the palette's one true mid-grey and the only
+   neutral that stays legible in both themes -- the surface tokens are white in light
+   mode and would vanish into the card. */
 .xnode-tab--artifact {
-  background: var(--color-success);
-  border-color: var(--color-success);
-  color: var(--color-on-success);
+  background: var(--color-border-emphasized);
+  border-color: var(--color-border-emphasized);
+  color: var(--color-text-primary);
 }
 .xnode-tab--artifact .astryx-text,
 .xnode-tab--artifact svg {
-  color: var(--color-on-success);
+  color: var(--color-text-primary);
 }
 .react-flow__node:hover .xnode-tab--input .astryx-text,
 .react-flow__node:hover .xnode-tab--input svg,
@@ -505,6 +511,26 @@ div:has(> .add-node-menu) {
   background: transparent;
   border-color: transparent;
   box-shadow: none;
+}
+/* The card's inset ring, and why a node card overrides it.
+
+   Astryx's elevation tokens each END with `inset 0 0 0 1px light-dark(transparent,
+   oklch(1 0 0 / 8%))` -- an inner highlight along the top edge that sells a raised
+   surface, and one that exists only in DARK mode. Our node cards also carry a real 1px
+   border (theme.js gives Astryx's Card `--color-border-emphasized`), so in dark mode every
+   card node painted two concentric hairlines: #525252 on the outside and white-at-8%
+   immediately inside it. That is the double border, and it reads worst on a page or a
+   motion, whose interior is one flat empty rectangle with nothing else competing for the
+   eye -- on an output node the controls hide it. It is invisible in light mode, which is
+   why it survived this long.
+
+   MASKED, not removed. `box-shadow: none` would take the drop shadow with it, and that
+   shadow is most of what separates a white node from a white canvas in light mode -- the
+   same reason the `.selected` rule further down repeats the elevation rather than setting
+   its ring alone. box-shadow layers paint first-on-top, so an inset ring in the card's own
+   fill placed BEFORE the token covers the token's ring exactly. */
+.react-flow__node > .astryx-card {
+  box-shadow: inset 0 0 0 1px var(--color-background-card), var(--shadow-low);
 }
 /* Selection is the thin accent rectangle, with none of the card's inset ring: at 1px
    that ring sits ON the photograph, taking a pixel off every edge of the thing being
@@ -1501,7 +1527,8 @@ div:has(> .add-node-menu) {
 .react-flow__node-image > .astryx-card,
 .react-flow__node-video > .astryx-card,
 .react-flow__node-prompt > .astryx-card,
-.react-flow__node-page > .astryx-card {
+.react-flow__node-page > .astryx-card,
+.react-flow__node-motion > .astryx-card {
   width: 100%;
   /* Both filled, and flex column, so a height-resize has a chain of "leftover
      space goes here" all the way down to the picture: the header stays its own
@@ -1543,25 +1570,103 @@ div:has(> .add-node-menu) {
 }
 
 /* ---- the agent panel (agent/AgentPanel.jsx) ----
-   Floats over the canvas on the right like the toolbar cards, and takes the same
-   material: the chrome recipe above (translucent surface, blur, border, shadow), so a
-   third floating thing does not read as a third kind of thing. It is a column: head,
-   the scrolling thread, the composer. Below the toolbar, above the tools rail's top. */
+   A rail down the right edge rather than a floating card: full viewport height, flush to
+   the edge, and its ONE piece of chrome is the left border that separates it from the
+   canvas. It keeps the translucent surface and the blur, so it is still the same material
+   as the toolbar cards -- it is simply attached to the window instead of hovering over
+   it, which is what lets it be the tallest thing on screen without looking like a card
+   that outgrew its box. No radius and no shadow: both say "floating", and this does not.
+   It is a column: head, the scrolling thread, the composer. */
 .agent-panel {
   position: absolute;
-  top: 60px;
-  right: 12px;
-  bottom: 12px;
+  top: 0;
+  right: 0;
+  bottom: 0;
   width: 380px;
   z-index: 8;
   display: flex;
   flex-direction: column;
   background: color-mix(in srgb, var(--color-background-surface) 92%, transparent);
   backdrop-filter: blur(var(--unframed-chrome-blur));
-  border: var(--border-width) solid var(--color-border);
-  border-radius: var(--radius-container);
-  box-shadow: var(--shadow-med);
+  border: 0;
+  border-left: var(--border-width) solid var(--color-border);
+  border-radius: 0;
   overflow: hidden;
+}
+
+/* Opening and closing it (App.jsx keeps it mounted through the exit, and `data-state`
+   drives both directions).
+
+   A TRANSITION, not a keyframe pair, because the panel is a toggle: reopened while it is
+   still leaving, a transition reverses from where it actually is, and a keyframe would
+   restart from the far edge and jump. `@starting-style` is what lets the enter run
+   without a mount-then-flip dance in JS -- the element is born at the closed values and
+   transitions off them on its first frame.
+
+   translateX in PERCENT so the distance is the panel's own width whatever that becomes,
+   and only transform and opacity so the whole thing stays on the compositor. The curve is
+   the iOS sheet's: almost all of the travel happens immediately, so 260ms reads as fast
+   rather than as 260ms. The exit is shorter and uses the same curve -- the decision is
+   already made, so it gets out of the way -- and the two share a direction, which is what
+   makes opening and closing read as one movement rather than two effects. */
+.agent-panel:not(.agent-panel--embedded) {
+  transform: translateX(0);
+  opacity: 1;
+  transition:
+    transform 260ms cubic-bezier(0.32, 0.72, 0, 1),
+    opacity 200ms ease-out;
+}
+@starting-style {
+  .agent-panel:not(.agent-panel--embedded) {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+}
+.agent-panel:not(.agent-panel--embedded)[data-state='closed'] {
+  transform: translateX(100%);
+  opacity: 0;
+  transition:
+    transform 200ms cubic-bezier(0.32, 0.72, 0, 1),
+    opacity 160ms ease-out;
+}
+
+/* The top-right toolbar steps aside while the rail is open: the rail covers where it sits
+   and carries its own close button, so leaving it there would be two sets of chrome in
+   one corner. It drifts the few pixels the panel is arriving from rather than only
+   fading, so it reads as being pushed rather than blinking out. App.jsx marks it `inert`
+   at the same time, so it is out of the tab order while invisible -- an opacity of 0 is
+   still focusable, and a focus ring on nothing is the classic version of this bug. */
+.toolbar-card-right {
+  transition:
+    opacity 160ms ease-out,
+    transform 200ms cubic-bezier(0.32, 0.72, 0, 1);
+}
+.toolbar-card-right[data-hidden='true'] {
+  opacity: 0;
+  transform: translateX(8px);
+}
+
+/* Reduced motion: gentler, not gone. The fade stays -- it is what explains that one thing
+   replaced another -- and every movement goes, which is the part that causes trouble. The
+   exit still has to END, or the transitionend that unmounts the panel never arrives. */
+@media (prefers-reduced-motion: reduce) {
+  .agent-panel:not(.agent-panel--embedded),
+  .agent-panel:not(.agent-panel--embedded)[data-state='closed'] {
+    transform: none;
+    transition: opacity 160ms ease-out;
+  }
+  @starting-style {
+    .agent-panel:not(.agent-panel--embedded) {
+      transform: none;
+      opacity: 0;
+    }
+  }
+  .toolbar-card-right {
+    transition: opacity 160ms ease-out;
+  }
+  .toolbar-card-right[data-hidden='true'] {
+    transform: none;
+  }
 }
 .agent-panel-head {
   padding: var(--spacing-2) var(--spacing-3) 0;
@@ -1826,6 +1931,19 @@ div:has(> .add-node-menu) {
 .react-flow__node-motion.dragging .xnode-frame {
   pointer-events: none;
 }
+/* An empty artifact offers the agent, centred in the box it is going to fill. A page or
+   a composition is written here rather than uploaded, so the one affordance is the one
+   everybody uses; dropping an .html still works and is simply not advertised. */
+.xnode-artifact-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
 /* The motion node's render row sits under the card, like the video transport: a control,
    so it cannot sit on the clip. */
 .xnode-motion-render {

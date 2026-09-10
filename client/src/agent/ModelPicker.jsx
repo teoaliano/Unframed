@@ -4,6 +4,7 @@ import { Badge } from '@astryxdesign/core/Badge';
 import { Icon } from '@astryxdesign/core/Icon';
 import { Text } from '@astryxdesign/core/Text';
 import { ChevronDown } from 'lucide-react';
+import { selectedModel } from './models.js';
 
 // The composer's two footer pickers, after T3 Code's (github.com/pingdotgg/t3code,
 // apps/web/src/components/chat/ProviderModelPicker.tsx and its Reasoning select): small
@@ -76,15 +77,17 @@ function Row({ row, selected, onPick, children }) {
   );
 }
 
-// `models` is the probe's merged list; `value` '' means the provider's default, which
-// reads as the model it resolves to (the SDK row whose description matches its
-// "default" alias, else the first).
+// `models` is the probe's merged list; `value` '' means the provider's default, which is
+// not a row of its own -- models.js owns what it resolves to, and owns it for the
+// Reasoning picker at the same time.
 export function ModelPicker({ provider, codex, models, value, onChange, disabled }) {
   const [open, setOpen] = useState(false);
   const [tab, setTab] = useState('claude');
   const current = useMemo(() => models.filter((m) => !m.legacy), [models]);
   const legacy = useMemo(() => models.filter((m) => m.legacy), [models]);
-  const selected = (value ? models.find((r) => r.id === value) : null) ?? current[0] ?? models[0] ?? null;
+  // The same resolution the Reasoning picker uses, from one place (models.js), or the
+  // trigger names a model whose effort levels the panel cannot find.
+  const selected = selectedModel(models, value);
   const pick = (id) => {
     onChange(id);
     setOpen(false);
