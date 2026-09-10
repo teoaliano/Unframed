@@ -2551,6 +2551,54 @@ app.post('/api/generate', async (req, res) => {
   }
 });
 
+// Every route above answers a failure with JSON, and the canvas reads `error` off it.
+// Body-parser is the one failure that never reaches a route: it throws from app-level
+// middleware, above the router, so Express's own default handler answers instead --
+// an HTML page, with the reason only in this process's stderr. The canvas is handed a
+// status code and nothing it can say, which is how a save failing on every attempt
+// looks exactly like a save that is quietly not happening.
+//
+// Found as a 413 on autosave in the packaged app: a project whose image nodes still
+// carried inline base64 crossed the limit, and every autosave after that failed in
+// silence while the canvas went on looking saved. Media leaves the document now
+// (server/media.js), so a body is a fraction of what it used to be -- but a ceiling is
+// still a ceiling, and the one thing it must never do is hit it without saying so.
+//
+// Registered last: an error handler only sees what the stack ABOVE it threw. Four
+// arguments, or Express reads it as an ordinary middleware and never calls it.
+const asMB = (bytes) => `${(bytes / 1024 / 1024).toFixed(1)}MB`;
+
+app.use((err, req, res, next) => {
+  // Something already started writing -- a streamed render, a route that failed after
+  // res.write. Only the default handler can destroy the connection at that point.
+  if (res.headersSent) return next(err);
+
+  if (err?.type === 'entity.too.large') {
+    // err.length is what Content-Length declared and can be absent on a chunked body;
+    // err.limit is the configured cap and is always there.
+    console.log(
+      `  ${req.method} ${req.originalUrl}: body too large` +
+        `${err.length ? ` (${asMB(err.length)})` : ''}, limit ${asMB(err.limit)}`,
+    );
+    return res.status(413).json({
+      error:
+        `This is too large to send in one request` +
+        `${err.length ? ` (${asMB(err.length)})` : ''} — the limit is ${asMB(err.limit)}. ` +
+        `Removing the largest images or videos from the board will bring it back under.`,
+    });
+  }
+
+  if (err?.type === 'entity.parse.failed') {
+    return res.status(400).json({ error: 'That request was not valid JSON.' });
+  }
+
+  // Anything else reaching here was thrown outside a route's own try/catch. It still
+  // answers as JSON, because a caller that can only parse JSON is the only caller
+  // there is.
+  console.log(`  ${req.method} ${req.originalUrl} failed: ${err?.stack || err}`);
+  res.status(500).json({ error: `Something went wrong: ${err?.message || 'unknown error'}` });
+});
+
 // A render outlives the browser: sweep once at boot (a job that finished while
 // the app was closed shouldn't wait for the first interval to land) and every
 // 30s after. unref() so this timer alone can never keep the process alive --

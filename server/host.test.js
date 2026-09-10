@@ -279,6 +279,43 @@ try {
   });
   assert.equal(preflight.headers.get('access-control-allow-origin'), null);
 
+  // A body over the cap must come back as JSON that NAMES the problem. This is the
+  // regression that shipped: body-parser throws above the router, so before the error
+  // handler existed Express answered with its default HTML page and the canvas had a
+  // bare 413 and nothing to display -- an autosave failing on every attempt looked
+  // like one that simply was not running.
+  //
+  // The body really is oversized, which is the slow way and the only way that works.
+  // Declaring an oversized Content-Length without sending the bytes looks like it
+  // should trip the same check more cheaply and does not: raw-body gets its length
+  // from the stream rather than the header here, so the server waits for a body that
+  // never comes and the request dies of timeout instead. ~63MB over loopback costs a
+  // second; the check being asserted is the one users hit.
+  const overCap = '{"ops":"' + 'x'.repeat(63 * 1024 * 1024) + '"}';
+  const oversize = await fetch(`${base}/api/projects/oversized/ops`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: overCap,
+  });
+  assert.equal(oversize.status, 413);
+  assert.match(
+    oversize.headers.get('content-type') || '',
+    /application\/json/,
+    'a 413 is JSON the canvas can read, not the default handler HTML page',
+  );
+  const tooBig = JSON.parse(await oversize.text());
+  assert.match(tooBig.error, /limit is 60\.0MB/, 'and it names the ceiling it hit');
+  assert.match(tooBig.error, /images or videos/, 'and what the person can do about it');
+
+  // The other body-parser failure, which used to answer HTML for the same reason.
+  const badJson = await fetch(`${base}/api/projects/malformed/ops`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: '{"ops": [',
+  });
+  assert.equal(badJson.status, 400);
+  assert.equal((await badJson.json()).error, 'That request was not valid JSON.');
+
   // /api/model-pricing interpolates its `id` into an upstream OpenRouter URL PATH,
   // so the slug check is a trust boundary rather than input tidiness: anything with a
   // traversal segment, a second slash or a query of its own would let a caller aim
