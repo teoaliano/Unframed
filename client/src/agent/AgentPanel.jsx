@@ -64,7 +64,7 @@ const ACTIVITY = {
 // `embedded` is the editor's column (editor/Editor.jsx): the panel is the page's left
 // third rather than a card floating over the canvas, so it has no Close of its own (the
 // editor's Back is the way out) and no Locate (there is no canvas to pan).
-export default function AgentPanel({ project, nodes, providers, onCheckProviders, checking, onClose, initialThreadId = null, refreshKey = 0, onFocus, onLocate, embedded = false }) {
+export default function AgentPanel({ project, nodes, providers, onCheckProviders, checking, onClose, initialThreadId = null, refreshKey = 0, onFocus, onLocate, embedded = false, state = 'open', onExited }) {
   const selection = nodes.filter((n) => n.selected).map((n) => n.id);
   const [threads, setThreads] = useState([]);
   const [chosenId, setChosenId] = useState(null);
@@ -83,6 +83,19 @@ export default function AgentPanel({ project, nodes, providers, onCheckProviders
     onFocus?.(thread?.kind === 'artifact' ? thread.artifactId ?? null : null);
   }, [thread?.id, thread?.kind, thread?.artifactId, onFocus]);
   useEffect(() => () => onFocus?.(null), [onFocus]);
+  // The closing panel has to come off the tree even when the transition never runs. A
+  // hidden tab does not composite, so it fires no `transitionend` at all -- values snap
+  // and the event never arrives (measured: a backgrounded page took 673ms to serve a 30ms
+  // timeout and reported no transition events). Close the panel, switch app, come back,
+  // and it would have sat there mounted forever, still holding its event stream. So the
+  // event is the fast, exact path and this is the guarantee. The number is deliberately
+  // not the CSS duration and never needs to match it -- it only has to be longer than any
+  // exit, so the two cannot drift apart.
+  useEffect(() => {
+    if (embedded || state !== 'closed' || !onExited) return undefined;
+    const t = setTimeout(onExited, 600);
+    return () => clearTimeout(t);
+  }, [embedded, state, onExited]);
   const [messages, setMessages] = useState([]);
   const [notes, setNotes] = useState([]); // the agent's changes, from stored and live ops_applied events
   const [status, setStatus] = useState('idle');
@@ -308,7 +321,21 @@ export default function AgentPanel({ project, nodes, providers, onCheckProviders
   const lines = [...messages, ...notes.map((n) => ({ role: 'note', text: n.text, at: n.at }))].sort((a, b) => (a.at ?? 0) - (b.at ?? 0));
 
   return (
-    <aside className={`agent-panel${embedded ? ' agent-panel--embedded' : ''}`} aria-label="Agent">
+    // `state` drives the enter and the exit in CSS; when the exit finishes, App.jsx is
+    // told and the element goes. Guarded on the panel's OWN transitions -- every hover
+    // and focus inside it bubbles one up here -- and on still being closed, so reopening
+    // mid-exit cannot unmount the panel the user just asked for.
+    <aside
+      className={`agent-panel${embedded ? ' agent-panel--embedded' : ''}`}
+      aria-label="Agent"
+      data-state={embedded ? undefined : state}
+      onTransitionEnd={(e) => {
+        if (embedded || state !== 'closed') return;
+        if (e.target !== e.currentTarget) return;
+        if (e.propertyName !== 'transform' && e.propertyName !== 'opacity') return;
+        onExited?.();
+      }}
+    >
       <div className="agent-panel-head">
         <HStack gap={2} align="center">
           <Icon icon={Sparkles} size="sm" />

@@ -373,6 +373,10 @@ function Canvas() {
     }
   }, []);
   const [agentOpen, setAgentOpen] = useState(false);
+  // The panel animates out, so it has to outlive `agentOpen`: `agentPresent` is "still on
+  // screen", cleared by the panel itself when its closing transition ends. Reopening
+  // mid-exit never unmounts anything -- the same element turns around where it is.
+  const [agentPresent, setAgentPresent] = useState(false);
   // Which thread the panel opens on: the anchored reply's "Open thread" sets it.
   const [agentThread, setAgentThread] = useState(null);
   const openAgent = (threadId = null) => {
@@ -387,6 +391,12 @@ function Canvas() {
   // Bumped when the toolbar's composer creates a thread, so the panel's strip re-reads.
   const [threadsBump, setThreadsBump] = useState(0);
   const focusNode = agentOpen && agentFocus ? nodes.find((n) => n.id === agentFocus) : null;
+  useEffect(() => {
+    if (agentOpen) setAgentPresent(true);
+  }, [agentOpen]);
+  // Stable: the panel holds it in an effect that starts the unmount backstop, and a fresh
+  // identity every render would keep restarting that timer and never let it land.
+  const onAgentExited = useCallback(() => setAgentPresent(false), []);
   const focusId = focusNode?.id ?? null;
   // The ring is a class on the React Flow wrapper, which `className` on the node reaches;
   // memoised so a render without a focus change hands React Flow the same array.
@@ -1870,7 +1880,9 @@ function Canvas() {
           onAdd={newProject}
         />
       </div>
-      <div className="toolbar-card toolbar-card-right">
+      {/* Hidden while the rail is open: it covers this corner and carries its own close
+          button. `inert` and not just an opacity of 0, or it stays in the tab order. */}
+      <div className="toolbar-card toolbar-card-right" data-hidden={agentOpen ? 'true' : 'false'} inert={agentOpen ? true : undefined}>
         {/* The agent: a right-hand panel with the project's Canvas thread (agent/AgentPanel.jsx). */}
         <IconButton
           variant={agentOpen ? 'secondary' : 'ghost'}
@@ -2041,8 +2053,10 @@ function Canvas() {
           onOpenThread={(id) => openAgent(id)}
           onOpenPage={openPage}
         />
-        {agentOpen && (
+        {agentPresent && (
           <AgentPanel
+            state={agentOpen ? 'open' : 'closed'}
+            onExited={onAgentExited}
             project={project}
             nodes={nodes}
             providers={providers}

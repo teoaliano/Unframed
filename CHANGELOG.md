@@ -25,8 +25,20 @@ Keep that shape: the website's What's new page parses this file.
   a box with an Agent button in the middle, which selects it and opens the composer aimed
   at it. Dropping an .html file onto the node still works exactly as before — it is just
   no longer presented as the way in.
-- **An empty motion node is no longer a thin strip.** Its box collapsed to the height of
-  whatever was inside it, so it read as a sliver next to a page node of the same kind.
+- **A motion node is now the size it says it is.** Its card never filled the node box, so
+  the box hugged its content while the selection handles and the resize edges stayed out
+  at the node's real size — a motion node read as a sliver beside a page node of the same
+  dimensions, and a composition inside one was squeezed into a strip instead of filling
+  the frame you sized for it.
+- **The agent panel is a rail down the right edge**, full height and flush to the window,
+  with a single left border instead of a card's outline, radius and shadow. It slides in
+  and out from that edge — quick, no bounce, shorter leaving than arriving — and the
+  top-right toolbar steps aside while it is open, since the rail covers that corner and
+  carries its own close button. Reduced-motion settings get the fade without the movement.
+- **Page and motion tabs are grey, not green.** Grey is the point rather than a shade: a
+  white tab marks the nodes that spend money per run, and an artifact the agent writes on
+  your own subscription costs nothing, so it should not wear that colour. The green read
+  as a status anyway.
 - **Less chatter in the agent panel.** The composer placeholders dropped their "(↵ to
   send, ⇧↵ for a new line)" tail, and selecting a single artifact with no thread yet no
   longer prints a line explaining that your first message starts one.
