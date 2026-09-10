@@ -512,6 +512,26 @@ div:has(> .add-node-menu) {
   border-color: transparent;
   box-shadow: none;
 }
+/* The card's inset ring, and why a node card overrides it.
+
+   Astryx's elevation tokens each END with `inset 0 0 0 1px light-dark(transparent,
+   oklch(1 0 0 / 8%))` -- an inner highlight along the top edge that sells a raised
+   surface, and one that exists only in DARK mode. Our node cards also carry a real 1px
+   border (theme.js gives Astryx's Card `--color-border-emphasized`), so in dark mode every
+   card node painted two concentric hairlines: #525252 on the outside and white-at-8%
+   immediately inside it. That is the double border, and it reads worst on a page or a
+   motion, whose interior is one flat empty rectangle with nothing else competing for the
+   eye -- on an output node the controls hide it. It is invisible in light mode, which is
+   why it survived this long.
+
+   MASKED, not removed. `box-shadow: none` would take the drop shadow with it, and that
+   shadow is most of what separates a white node from a white canvas in light mode -- the
+   same reason the `.selected` rule further down repeats the elevation rather than setting
+   its ring alone. box-shadow layers paint first-on-top, so an inset ring in the card's own
+   fill placed BEFORE the token covers the token's ring exactly. */
+.react-flow__node > .astryx-card {
+  box-shadow: inset 0 0 0 1px var(--color-background-card), var(--shadow-low);
+}
 /* Selection is the thin accent rectangle, with none of the card's inset ring: at 1px
    that ring sits ON the photograph, taking a pixel off every edge of the thing being
    judged, which is the whole reason media squares its corners in the first place. */

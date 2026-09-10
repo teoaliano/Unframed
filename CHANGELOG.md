@@ -35,6 +35,11 @@ Keep that shape: the website's What's new page parses this file.
   and out from that edge — quick, no bounce, shorter leaving than arriving — and the
   top-right toolbar steps aside while it is open, since the rail covers that corner and
   carries its own close button. Reduced-motion settings get the fade without the movement.
+- **Node cards no longer show a double border in dark mode.** Astryx's elevation carries a
+  1px inner highlight along its edge, and our nodes draw a real border of their own, so the
+  two sat one pixel apart and read as two lines. Worst on a page or a motion, whose empty
+  interior gives the eye nothing else to look at. The drop shadow is untouched — it is what
+  lifts a white node off a white canvas in light mode.
 - **Page and motion tabs are grey, not green.** Grey is the point rather than a shade: a
   white tab marks the nodes that spend money per run, and an artifact the agent writes on
   your own subscription costs nothing, so it should not wear that colour. The green read
