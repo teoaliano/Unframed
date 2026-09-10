@@ -4,11 +4,11 @@ import { Card } from '@astryxdesign/core/Card';
 import { Button } from '@astryxdesign/core/Button';
 import { Icon } from '@astryxdesign/core/Icon';
 import { Text } from '@astryxdesign/core/Text';
-import { FileInput } from '@astryxdesign/core/FileInput';
-import { Clapperboard } from 'lucide-react';
+import { Clapperboard, Sparkles } from 'lucide-react';
 import NodeHeader from './NodeHeader.jsx';
 import NodeLine from './NodeLine.jsx';
 import MediaResize from './MediaResize.jsx';
+import { sendNodeCommand } from './nodeCommands.js';
 import StatusLine from './StatusLine.jsx';
 import { freeSpot } from './output/core.js';
 import { withDrag } from '../graph/starter.js';
@@ -113,7 +113,8 @@ function MotionNode({ id, data, dragging, selected }) {
   // Bare once it holds a composition, for the reasons PageNode gives: the composition
   // fills the box, so a card around it frames the thing you are watching. The Render row
   // below stays where it is — it is a control, and cannot sit on the picture, the same
-  // rule the video transport follows.
+  // rule the video transport follows. Empty, it offers the agent rather than a file
+  // picker, for the reason PageNode gives at the same spot.
   const bare = Boolean(src);
 
   return (
@@ -145,7 +146,15 @@ function MotionNode({ id, data, dragging, selected }) {
               loading="lazy"
             />
           ) : (
-            <FileInput className="nodrag" label="HyperFrames composition" isLabelHidden accept=".html,.htm,text/html" value={null} onChange={onFile} />
+            <div className="xnode-artifact-empty nodrag">
+              <Button
+                size="sm"
+                variant="primary"
+                label="Agent"
+                icon={<Icon icon={Sparkles} />}
+                onClick={() => sendNodeCommand(id, 'agent')}
+              />
+            </div>
           )}
           {error && <StatusLine type="error">{error}</StatusLine>}
         </div>

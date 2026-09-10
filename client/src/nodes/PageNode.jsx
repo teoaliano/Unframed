@@ -1,10 +1,13 @@
 import { memo, useState } from 'react';
 import { useReactFlow } from '@xyflow/react';
 import { Card } from '@astryxdesign/core/Card';
-import { FileInput } from '@astryxdesign/core/FileInput';
+import { Button } from '@astryxdesign/core/Button';
+import { Icon } from '@astryxdesign/core/Icon';
+import { Sparkles } from 'lucide-react';
 import NodeHeader from './NodeHeader.jsx';
 import NodeLine from './NodeLine.jsx';
 import MediaResize from './MediaResize.jsx';
+import { sendNodeCommand } from './nodeCommands.js';
 import StatusLine from './StatusLine.jsx';
 import { useProject } from '../graph/project.js';
 import { uploadFile, previewUrl } from '../api.js';
@@ -58,8 +61,14 @@ function PageNode({ id, data, dragging, selected }) {
 
   // A page IS the page it shows, the same way a reference is its picture: once it holds
   // a file the card around it is chrome over the very thing being looked at, so it goes.
-  // An EMPTY one keeps its frame and its tab, because an empty one is a box asking for a
-  // file, not a page.
+  // An EMPTY one keeps its frame and its tab, because an empty one is a box asking to be
+  // filled, not a page.
+  //
+  // What it asks for is the AGENT, not a file. A page is written here; nobody arrives at
+  // an empty one holding an .html they want to upload, so a file picker as the whole
+  // empty state advertised the rare path and hid the only one anyone takes. Dropping a
+  // file still works -- the Card's onDrop is untouched -- it just no longer claims to be
+  // the way in.
   const bare = Boolean(src);
 
   return (
@@ -92,14 +101,15 @@ function PageNode({ id, data, dragging, selected }) {
               loading="lazy"
             />
           ) : (
-            <FileInput
-              className="nodrag"
-              label="HTML page"
-              isLabelHidden
-              accept=".html,.htm,text/html"
-              value={null}
-              onChange={onFile}
-            />
+            <div className="xnode-artifact-empty nodrag">
+              <Button
+                size="sm"
+                variant="primary"
+                label="Agent"
+                icon={<Icon icon={Sparkles} />}
+                onClick={() => sendNodeCommand(id, 'agent')}
+              />
+            </div>
           )}
           {error && <StatusLine type="error">{error}</StatusLine>}
         </div>

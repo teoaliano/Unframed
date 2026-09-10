@@ -5,6 +5,32 @@ is no release artifact to number. Headings are `## YYYY-MM-DD`, groups are
 `### Added` / `### Changed` / `### Fixed`, one bullet per user-visible change.
 Keep that shape: the website's What's new page parses this file.
 
+## 2026-09-10
+
+### Fixed
+
+- **The agent's Reasoning picker was missing on every new thread.** The composer's footer
+  offers a model and a reasoning effort, but the effort picker appeared only once you had
+  picked a model by hand. Left on the default — which is every new thread — the panel
+  looked up a model row called "default" that the provider probe never returns, decided
+  the model accepted no effort levels, and hid the picker, while the trigger beside it
+  happily named Opus 5. Both now resolve the default the same way, so the picker is there
+  from the start and is absent only for a model that genuinely has no levels.
+
+### Changed
+
+- **An empty page or motion node now offers the agent instead of a file picker.** Both
+  opened as a "Choose file" row, which advertised the one path almost nobody takes: a
+  page and a composition are written by the agent here, not uploaded. An empty one is now
+  a box with an Agent button in the middle, which selects it and opens the composer aimed
+  at it. Dropping an .html file onto the node still works exactly as before — it is just
+  no longer presented as the way in.
+- **An empty motion node is no longer a thin strip.** Its box collapsed to the height of
+  whatever was inside it, so it read as a sliver next to a page node of the same kind.
+- **Less chatter in the agent panel.** The composer placeholders dropped their "(↵ to
+  send, ⇧↵ for a new line)" tail, and selecting a single artifact with no thread yet no
+  longer prints a line explaining that your first message starts one.
+
 ## 2026-09-09
 
 ### Fixed

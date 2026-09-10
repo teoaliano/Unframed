@@ -205,8 +205,8 @@ export default function SelectionToolbar({
               placeholder={
                 provider
                   ? composer.target === 'new'
-                    ? 'What should the agent make from these? (↵ to send)'
-                    : 'What should change? (↵ to send)'
+                    ? 'What should the agent make from these?'
+                    : 'What should change?'
                   : 'Connect Claude or Codex to start'
               }
               isDisabled={!provider}

@@ -1826,6 +1826,25 @@ div:has(> .add-node-menu) {
 .react-flow__node-motion.dragging .xnode-frame {
   pointer-events: none;
 }
+/* An empty artifact offers the agent, centred in the box it is going to fill. A page or
+   a composition is written here rather than uploaded, so the one affordance is the one
+   everybody uses; dropping an .html still works and is simply not advertised. */
+.xnode-artifact-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  flex: 1 1 auto;
+  /* Its own floor rather than 0: a motion node's card is deliberately NOT stretched to
+     the node's height (its Render row sits outside the card, so 100% would push that row
+     out of the box), which leaves the card hugging its content. With a file row in it
+     that was a normal-looking strip; with one centred button it collapsed to less than
+     the button. An empty artifact is a target you are meant to aim at, so it gets a
+     size of its own. */
+  min-height: 96px;
+}
+
 /* The motion node's render row sits under the card, like the video transport: a control,
    so it cannot sit on the clip. */
 .xnode-motion-render {

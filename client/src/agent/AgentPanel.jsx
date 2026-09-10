@@ -8,6 +8,7 @@ import { Link } from '@astryxdesign/core/Link';
 import { HStack, VStack, StackItem } from '@astryxdesign/core/Stack';
 import { TabList, Tab, TabMenu } from '@astryxdesign/core/TabList';
 import { ModelPicker, EffortPicker } from './ModelPicker.jsx';
+import { effortsFor } from './models.js';
 import { AlertDialog } from '@astryxdesign/core/AlertDialog';
 import { X, Plus, RefreshCw, Sparkles, Square, Trash2, Crosshair } from 'lucide-react';
 import {
@@ -104,7 +105,7 @@ export default function AgentPanel({ project, nodes, providers, onCheckProviders
   const models = provider?.models ?? [];
   const settings = thread ? { model: thread.model || '', effort: thread.effort || '' } : pending;
   // The SDK lists the provider's default under the id 'default', so '' looks it up there.
-  const efforts = models.find((m) => m.id === (settings.model || 'default'))?.efforts ?? [];
+  const efforts = effortsFor(models, settings.model);
   const codex = providers?.codex ?? null;
 
   async function changeSettings(patch) {
@@ -383,9 +384,11 @@ export default function AgentPanel({ project, nodes, providers, onCheckProviders
               )}
             </TabList>
           )}
-          {visible.length === 0 && (
+          {/* One selected artifact says nothing: the composer below is already asking for
+              the first message, so a label repeating that is noise over an empty strip. */}
+          {visible.length === 0 && selectedArtifacts.length !== 1 && (
             <Text type="supporting" color="secondary" className="agent-tabs-empty">
-              {selectedArtifacts.length > 1 ? 'No thread yet about these' : selectedArtifacts.length === 1 ? 'No thread yet about this artifact — your first message starts one' : 'No threads yet'}
+              {selectedArtifacts.length > 1 ? 'No thread yet about these' : 'No threads yet'}
             </Text>
           )}
         </div>
@@ -513,8 +516,8 @@ export default function AgentPanel({ project, nodes, providers, onCheckProviders
                 : !thread && !newKind
                   ? 'Several artifacts are selected — select one to start a thread about it'
                   : thread?.kind === 'artifact' || newKind?.kind === 'artifact'
-                    ? 'What should change? (↵ to send, ⇧↵ for a new line)'
-                    : 'Ask about the board… (↵ to send, ⇧↵ for a new line)'
+                    ? 'What should change?'
+                    : 'Ask about the board…'
             }
             isDisabled={!provider || (!thread && !newKind)}
             onChange={setText}

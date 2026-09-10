@@ -77,7 +77,7 @@ import AgentPanel from './agent/AgentPanel.jsx';
 import SelectionToolbar from './toolbar/SelectionToolbar.jsx';
 import AnchoredReply from './toolbar/AnchoredReply.jsx';
 import { messageTarget, addToTarget } from './toolbar/target.js';
-import { sendNodeCommand } from './nodes/nodeCommands.js';
+import { sendNodeCommand, useAnyNodeCommand } from './nodes/nodeCommands.js';
 import {
   listProjects,
   createThread,
@@ -454,6 +454,20 @@ function Canvas() {
     if (!providers) checkProviders();
   }, [nodes, focusId, providers, checkProviders]);
   const closeComposer = useCallback(() => setComposer(null), []);
+
+  // An empty artifact's own Agent button (PageNode, MotionNode). It selects that node
+  // first and then opens the composer, which is exactly what clicking the node and then
+  // the toolbar's Agent does -- so the composer aims at the artifact through the same
+  // messageTarget rule, and there is no second way to decide what a message is about.
+  const openComposerFor = useCallback(
+    (nodeId) => {
+      setNodes((ns) => ns.map((n) => (n.selected === (n.id === nodeId) ? n : { ...n, selected: n.id === nodeId })));
+      setComposer(messageTarget(nodes.filter((n) => n.id === nodeId), focusId));
+      if (!providers) checkProviders();
+    },
+    [nodes, focusId, providers, checkProviders, setNodes],
+  );
+  useAnyNodeCommand('agent', openComposerFor);
 
   // Clicking another node while the composer is open adds it rather than replacing the
   // selection: React Flow has already selected the clicked node alone by the time this
