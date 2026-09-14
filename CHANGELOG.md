@@ -5,6 +5,16 @@ is no release artifact to number. Headings are `## YYYY-MM-DD`, groups are
 `### Added` / `### Changed` / `### Fixed`, one bullet per user-visible change.
 Keep that shape: the website's What's new page parses this file.
 
+## 2026-09-14
+
+### Fixed
+
+- A parameter that positions something no longer snaps back when the clip plays. The agent
+  was writing the parameter onto the very element its GSAP timeline animates, and GSAP
+  rewrites `transform` on every frame — so a tuned position held until you scrubbed and then
+  vanished, which looked like the tuning had never been saved. The agent is now told to put
+  the parameter on a wrapper the timeline does not touch.
+
 ## 2026-09-10
 
 ### Fixed

@@ -249,6 +249,18 @@ stitch of two tuned motions came out as the originals with nothing in the reply 
 it. The system prompt and both write tools say the same thing: build from the values, and
 carry them into anything made FROM an artifact.
 
+**A parameter and the timeline may not write the same property on the same element.** GSAP
+takes ownership of `transform` on everything it tweens and rewrites it every frame, so a
+position parameter applied to a tweened element reads correctly while the clip sits still
+and snaps back to the tween's value the moment it is played or scrubbed — the values are
+stored, delivered and applied perfectly, and then overwritten, which looks from the outside
+exactly like a tuning that was never saved (Matteo, 2026-09-14: a stitched motion whose
+intro kept jumping back to centre). The contract both write tools carry says to put the
+parameter on a wrapper the timeline never touches and animate the inner element, and
+`agentTools.test.js` pins that sentence — nothing in the engine can detect the collision,
+so the instruction is the only thing standing between a person and a motion that silently
+untunes itself.
+
 **A parameter is a value on the NODE** (`data.dials`), not an edit to the file. So tuning is
 an ordinary undoable canvas change, it streams to every tab, and it survives the agent
 rewriting the composition: the schema comes from the new file, the values from the node, and

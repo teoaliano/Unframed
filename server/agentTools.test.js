@@ -272,6 +272,10 @@ assert.deepEqual(placeBeside(graph, []), { x: 80, y: 80 });
     assert.match(byName[name].description, /\[value, min, max\]/, `${name} tells it the shapes`);
     assert.match(byName[name].description, /do not add a script tag/, `${name} says the bridge is already there`);
     assert.match(byName[name].description, /carry its current values/, `${name} says to carry the values when building from an artifact`);
+    // Without this the agent writes a position parameter onto the very element GSAP
+    // tweens, which looks right until the clip is scrubbed and then snaps back to the
+    // tween's value -- a tuned motion that silently untunes itself (Matteo, 2026-09-14).
+    assert.match(byName[name].description, /never write the same CSS property on the same element/, `${name} says a parameter and a tween cannot share a property`);
   }
 }
 
