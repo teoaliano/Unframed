@@ -19,7 +19,6 @@
     "@hyperframes/producer": "^0.8.29",
     "@modelcontextprotocol/sdk": "^1.30.0",
     "cors": "^2.8.5",
-    "dialkit": "^2.0.0",
     "dotenv": "^16.4.7",
     "express": "^4.21.2",
     "gsap": "^3.15.0",

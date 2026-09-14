@@ -49,7 +49,8 @@ Keep that shape: the website's What's new page parses this file.
   agent rewriting the composition.
 - **Ask for a parameter in the Parameters column.** Describe what you want tuneable — "the
   background colour, the title size" — press Add, and the agent writes it into the artifact
-  and the controls appear beside it.
+  and the controls appear beside it. The controls live in Unframed; a composition opened
+  outside it plays without them.
 
 - **The agent's replies are formatted.** Headings, lists, tables, quotes, task lists and
   code blocks (with a copy button) all render properly instead of arriving as one wall of

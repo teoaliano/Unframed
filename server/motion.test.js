@@ -9,7 +9,7 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { LIBRARY, LIBRARY_FILES, VIEWER, isLibraryFile, viewerHtml, viewerPath, ensureLibrary, motionFileName, renderFileName, renderSidecar, startRender, getRender, withRuntime, RUNTIME_TAG, chromeCandidates, findChrome, NO_CHROME } from './motion.js';
-import { BRIDGE, BRIDGE_TAG, DIALS_LIBRARY_FILES } from './dials.js';
+import { BRIDGE, BRIDGE_TAG } from './dials.js';
 
 const root = await fs.mkdtemp(path.join(os.tmpdir(), 'unframed-motion-test-'));
 
@@ -20,12 +20,10 @@ for (const [file, resolve] of Object.entries(LIBRARY)) {
   const src = resolve();
   assert.ok((await fs.stat(src)).size > 1000, `${file} <- ${src}`);
 }
-// The parameters bridge ships with every composition; DialKit is opt-in and installed by
-// an action in the editor (dials.js), but both are library files -- they are ours, not the
-// person's, and nothing should mistake one for a composition.
-assert.deepEqual(LIBRARY_FILES, [VIEWER, BRIDGE, 'hyperframes-player.js', 'hyperframes-runtime.js', 'gsap.js', ...DIALS_LIBRARY_FILES]);
+// The parameters bridge ships with every composition -- it is ours, not the person's, and
+// nothing should mistake it for a composition.
+assert.deepEqual(LIBRARY_FILES, [VIEWER, BRIDGE, 'hyperframes-player.js', 'hyperframes-runtime.js', 'gsap.js']);
 assert.equal(isLibraryFile(BRIDGE), true);
-assert.equal(isLibraryFile('dialkit.js'), true);
 assert.equal(isLibraryFile('gsap.js'), true);
 assert.equal(isLibraryFile('1-launch.html'), false);
 
@@ -42,12 +40,7 @@ assert.equal(viewerPath('1-intro.html'), 'hyperframes-viewer.html?c=1-intro.html
 {
   const dir = path.join(root, 'proj');
   const first = await ensureLibrary(dir);
-  // NOT the whole of LIBRARY_FILES: DialKit is 250KB that only a self-contained artifact
-  // needs, so it is installed on demand and never by writing a composition.
-  assert.deepEqual(first.sort(), [VIEWER, BRIDGE, 'gsap.js', 'hyperframes-player.js', 'hyperframes-runtime.js'].sort(), 'an empty folder gets the player, the runtime, GSAP, the viewer and the bridge');
-  for (const file of DIALS_LIBRARY_FILES) {
-    assert.equal(first.includes(file), false, `${file} is opt-in`);
-  }
+  assert.deepEqual(first.sort(), [...LIBRARY_FILES].sort(), 'an empty folder gets the whole library');
   assert.equal((await fs.readFile(path.join(dir, VIEWER), 'utf8')), viewer);
   assert.deepEqual(await ensureLibrary(dir), [], 'and nothing is rewritten when it is current');
   // A stale copy (a dependency bump, or a truncated file) is replaced.

@@ -19,30 +19,15 @@
 //     what keeps 250KB of DialKit out of every project folder and out of every render --
 //     a render needs the VALUES (`window.__hfVariables`, injected by the engine before
 //     any page script runs) and never a control to drag.
-//   - **DialKit beside the artifact is opt-in**, installed by an action in that column
-//     (`DIALS_LIBRARY`, `ensureDialsLibrary`). Installed, the viewer mounts the controls
-//     itself when it is the top-level page, so a composition opened outside the app
-//     carries its own. It cannot be fetched on demand from a CDN: the preview origin
-//     runs `script-src 'self'` with no network, so "on demand" means copying the files
-//     we already have.
-import fs from 'node:fs/promises';
-import path from 'node:path';
-import { createRequire } from 'node:module';
+//   - **An artifact carries no controls of its own.** Opened outside the app it plays and
+//     applies whatever values were baked into it, and that is all. DialKit was briefly
+//     installable beside a composition so it could show its own panel; it was removed on
+//     2026-09-14 because nothing asked for it -- the panel people want is the one in the
+//     editor, and the column's own box is how you ask for a parameter.
 
-const require = createRequire(import.meta.url);
-
-// The bridge, always beside a composition (it is small and does the work); DialKit only
-// when the person asks for it.
+// The bridge, beside every composition: it is small, it is what makes `unframed.dials`
+// exist, and injecting it unconditionally is why the agent's contract is one function call.
 export const BRIDGE = 'unframed-dials.js';
-// Resolved through what DialKit's `exports` map lets `require.resolve` reach: the global
-// browser build is not exported by name, so it is found beside the package entry -- the
-// same shape motion.js uses for the player, and for the same reason.
-const dialkitDist = () => path.dirname(require.resolve('dialkit'));
-export const DIALS_LIBRARY = {
-  'dialkit.js': () => path.join(dialkitDist(), 'vanilla', 'browser.global.js'),
-  'dialkit.css': () => require.resolve('dialkit/vanilla/styles.css'),
-};
-export const DIALS_LIBRARY_FILES = Object.keys(DIALS_LIBRARY);
 
 const HEX = /^#([0-9A-Fa-f]{3}|[0-9A-Fa-f]{6}|[0-9A-Fa-f]{8})$/;
 
@@ -137,31 +122,6 @@ export function mergeValues(schema, saved) {
     else out[key] = has && typeof saved[key] === typeof entry.value ? saved[key] : entry.value;
   }
   return out;
-}
-
-// Put DialKit beside the compositions, or bring it up to date -- the same size-compare
-// rule `ensureLibrary` uses, so a dependency bump refreshes it. Returns the names
-// written; idempotent and cheap when nothing changed.
-export async function ensureDialsLibrary(dir) {
-  await fs.mkdir(dir, { recursive: true });
-  const written = [];
-  for (const [file, resolve] of Object.entries(DIALS_LIBRARY)) {
-    const src = resolve();
-    const { size } = await fs.stat(src);
-    const have = (await fs.stat(path.join(dir, file)).catch(() => null))?.size;
-    if (have === size) continue;
-    await fs.copyFile(src, path.join(dir, file));
-    written.push(file);
-  }
-  return written;
-}
-
-// Whether an artifact in this folder would carry its own controls.
-export async function dialsLibraryInstalled(dir) {
-  for (const file of DIALS_LIBRARY_FILES) {
-    if (!(await fs.stat(path.join(dir, file)).catch(() => null))) return false;
-  }
-  return true;
 }
 
 // ---- the bridge that runs inside the artifact ----

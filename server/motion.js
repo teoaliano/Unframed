@@ -24,7 +24,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { createRequire } from 'node:module';
 import { mediaFileName } from './media.js';
-import { BRIDGE, BRIDGE_TAG, bridgeSource, DIALS_LIBRARY_FILES, dialsLibraryInstalled } from './dials.js';
+import { BRIDGE, BRIDGE_TAG, bridgeSource } from './dials.js';
 
 const require = createRequire(import.meta.url);
 
@@ -37,10 +37,9 @@ export const LIBRARY = {
   'gsap.js': () => require.resolve('gsap/dist/gsap.min.js'),
 };
 export const VIEWER = 'hyperframes-viewer.html';
-// The parameters bridge ships with every composition (it is small, and it is what makes
-// `unframed.dials` exist); DialKit itself is opt-in and installed separately
-// (server/dials.js says why).
-export const LIBRARY_FILES = [VIEWER, BRIDGE, ...Object.keys(LIBRARY), ...DIALS_LIBRARY_FILES];
+// The parameters bridge ships with every composition: it is small, and it is what makes
+// `unframed.dials` exist.
+export const LIBRARY_FILES = [VIEWER, BRIDGE, ...Object.keys(LIBRARY)];
 export const isLibraryFile = (name) => LIBRARY_FILES.includes(name);
 
 // The same alphabet the preview origin serves (preview.js NAME_RE), so the viewer's
@@ -62,15 +61,15 @@ const LOOPBACK_ORIGIN = /^http:\/\/(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$/i;
 // the CANVAS says hello first and the viewer replays the last announcement to it -- which
 // is what lets every message be addressed to a known origin instead of "*".
 //
-// With no canvas above it (the composition opened on its own) the viewer mounts DialKit's
-// own panel, if DialKit has been installed beside the artifact. That is the only reason
-// that library is ever in a project folder.
+// With no canvas above it there is simply nobody to relay to: a composition opened on its
+// own plays and applies its defaults, and shows no controls. It briefly mounted DialKit's
+// own panel in that case; removed on 2026-09-14, because the panel people actually want is
+// the editor's and nothing asked for the other one.
 export function viewerHtml() {
   return [
     '<!doctype html>',
     '<html><head><meta charset="utf-8"><title>motion</title>',
-    '<style>html,body{margin:0;height:100%;background:#000;overflow:hidden}hyperframes-player{display:block;width:100%;height:100%}',
-    '#dials{position:fixed;inset-block-start:0;inset-inline-end:0;z-index:2}</style>',
+    '<style>html,body{margin:0;height:100%;background:#000;overflow:hidden}hyperframes-player{display:block;width:100%;height:100%}</style>',
     '<script src="hyperframes-player.js"></script></head>',
     '<body><hyperframes-player id="player" runtime-src="hyperframes-runtime.js" controls muted></hyperframes-player>',
     '<script>',
@@ -82,26 +81,8 @@ export function viewerHtml() {
     '  var composition = null;',
     '  var canvas = null;',
     '  var last = null;',
-    '  var standalone = window.parent === window;',
     '  function toCanvas(msg) {',
     '    if (canvas && canvas.win && !canvas.win.closed) canvas.win.postMessage(msg, canvas.origin);',
-    '  }',
-    '  function mountStandalone(msg) {',
-    '    // DialKit is opt-in per project (server/dials.js). Without it there is simply no',
-    '    // panel here, and the composition still plays and still applies its defaults.',
-    '    if (!window.DialKit || !window.DialKit.createDialRoot) return;',
-    '    var host = document.getElementById("dials");',
-    '    if (!host) {',
-    '      host = document.createElement("div");',
-    '      host.id = "dials";',
-    '      document.body.appendChild(host);',
-    '    }',
-    '    if (!window.__dialRoot) window.__dialRoot = window.DialKit.createDialRoot({ target: host, mode: "inline", theme: "dark" });',
-    '    if (window.__dialKit) window.__dialKit.destroy();',
-    '    window.__dialKit = window.DialKit.createDialKit(msg.name || "Parameters", msg.config || {}, {});',
-    '    window.__dialKit.subscribe(function (values) {',
-    '      if (composition) composition.postMessage({ type: "unframed:dials:set", values: values }, window.location.origin);',
-    '    });',
     '  }',
     '  window.addEventListener("message", function (event) {',
     '    var data = event.data;',
@@ -110,8 +91,7 @@ export function viewerHtml() {
     '    if (data.type === "unframed:dials" && event.origin === window.location.origin) {',
     '      composition = event.source;',
     '      last = data;',
-    '      if (standalone) mountStandalone(data);',
-    '      else toCanvas(data);',
+    '      toCanvas(data);',
     '      return;',
     '    }',
     '    // From the canvas, which is a loopback page above this one.',
@@ -127,10 +107,6 @@ export function viewerHtml() {
     '  });',
     '})();',
     '</script>',
-    // Loaded LAST and only if present: an artifact carries its own controls only when
-    // DialKit has been installed beside it.
-    '<script src="dialkit.js" onerror="this.remove()"></script>',
-    '<link rel="stylesheet" href="dialkit.css" onerror="this.remove()">',
     '</body></html>',
     '',
   ].join('\n');

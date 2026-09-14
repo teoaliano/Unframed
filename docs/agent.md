@@ -288,15 +288,13 @@ before closing was dropped silently: the preview had shown it, the node never he
 canvas then correctly showed the untuned artifact — which reads as the canvas resetting your
 work.
 
-**DialKit beside the artifact is opt-in**, by `POST …/motion/controls`. Installed, the viewer
-mounts its own panel when it is the top-level page, so a composition opened outside the app
-carries its own controls, and it cannot be fetched from a CDN because the preview origin
-allows no network. **Nothing in the UI calls it since the box above replaced that button**;
-the routes and the viewer's standalone panel still work and are tested, and they are either
-waiting for a better home or waiting to be deleted. The bridge itself
-ships with every composition and is injected by `withRuntime`: the agent's contract is one
-function call, and a composition that called it without remembering a script tag would do
-nothing at all, silently.
+**An artifact carries no controls of its own.** Opened outside the app it plays and applies
+whatever it was written with, and shows no panel — the controls are the editor's. DialKit was
+briefly installable beside a composition so the viewer could mount its own; removed on
+2026-09-14 because nothing asked for it, and the column's own box is how you ask for a
+parameter. The **bridge** still ships with every composition and is injected by
+`withRuntime`: the agent's contract is one function call, and a composition that called it
+without remembering a script tag would do nothing at all, silently.
 
 The bridge is **generated** from the same functions the engine tests (`bridgeSource()` in
 `server/dials.js`), so the copy in a project folder cannot drift from the tested definition
@@ -351,7 +349,6 @@ a rename:
 | `PATCH …/:id` | model and effort for the next turn: `{ model?, effort? }`, `''` resets to the default; 409 mid-turn; closes the live session so the next message resumes with the new values |
 | `POST …/:id/interrupt` | stop the running turn |
 | `DELETE …/:id` | remove the record |
-| `GET/POST …/motion/controls` | whether DialKit sits beside this project's artifacts, and putting it there (see Parameters above) |
 
 `effort` is one of the Agent SDK's levels (`low` … `max`, `EFFORTS` in `threads.js`) and is
 passed straight to the session's options; the models an account can run, each with the

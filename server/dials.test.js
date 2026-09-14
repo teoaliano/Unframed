@@ -9,17 +9,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import {
-  normalizeConfig,
-  defaultValues,
-  mergeValues,
-  bridgeSource,
-  ensureDialsLibrary,
-  dialsLibraryInstalled,
-  DIALS_LIBRARY_FILES,
-  BRIDGE,
-  BRIDGE_TAG,
-} from './dials.js';
+import { normalizeConfig, defaultValues, mergeValues, bridgeSource, BRIDGE, BRIDGE_TAG } from './dials.js';
 
 // ---- the shorthand: a value is read by its shape ----
 {
@@ -202,23 +192,6 @@ assert.match(normalizeConfig({ a: { b: { c: [1, 2] } } }).error, /dials\.a\.b\.c
     assert.deepEqual(applied, { speed: 1 });
     assert.equal(posted.length, 0);
   }
-}
-
-// ---- DialKit beside an artifact is opt-in, and installing it is idempotent ----
-{
-  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'unframed-dials-'));
-  assert.equal(await dialsLibraryInstalled(dir), false, 'not there by default: it is 250KB nothing needs to render');
-  const first = await ensureDialsLibrary(dir);
-  assert.deepEqual(first.sort(), [...DIALS_LIBRARY_FILES].sort());
-  assert.equal(await dialsLibraryInstalled(dir), true);
-  assert.deepEqual(await ensureDialsLibrary(dir), [], 'nothing to do the second time');
-  for (const file of DIALS_LIBRARY_FILES) {
-    assert.ok((await fs.stat(path.join(dir, file))).size > 0, `${file} is real`);
-  }
-  // A truncated copy (an interrupted install, a dependency bump) is rewritten.
-  await fs.writeFile(path.join(dir, 'dialkit.js'), 'stale');
-  assert.deepEqual(await ensureDialsLibrary(dir), ['dialkit.js']);
-  await fs.rm(dir, { recursive: true, force: true });
 }
 
 console.log('dials.test.js: ok');
