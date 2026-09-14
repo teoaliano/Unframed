@@ -203,7 +203,7 @@ export default function SelectionToolbar({
               rows={2}
               autoFocus
               value={text}
-              placeholder={provider ? 'Ask, or say what should change… (↵ to send)' : 'Connect Claude or Codex to start'}
+              placeholder={provider ? 'Ask, or say what should change…' : 'Connect Claude or Codex to start'}
               isDisabled={!provider}
               onChange={setText}
             />

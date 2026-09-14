@@ -80,7 +80,7 @@ import { messageContext, addToContext } from './toolbar/target.js';
 // pulls the agent panel and the markdown renderer with it.
 const Editor = lazy(() => import('./editor/Editor.jsx'));
 import { continuableChat } from './agent/tabs.js';
-import { sendNodeCommand } from './nodes/nodeCommands.js';
+import { sendNodeCommand, useAnyNodeCommand } from './nodes/nodeCommands.js';
 import {
   listProjects,
   createThread,
@@ -375,6 +375,10 @@ function Canvas() {
     }
   }, []);
   const [agentOpen, setAgentOpen] = useState(false);
+  // The panel animates out, so it has to outlive `agentOpen`: `agentPresent` is "still on
+  // screen", cleared by the panel itself when its closing transition ends. Reopening
+  // mid-exit never unmounts anything -- the same element turns around where it is.
+  const [agentPresent, setAgentPresent] = useState(false);
   // Which thread the panel opens on: the anchored reply's "Open thread" sets it.
   const [agentThread, setAgentThread] = useState(null);
   const openAgent = (threadId = null) => {
@@ -396,6 +400,13 @@ function Canvas() {
   // document does not care -- the server owns it and this tab only holds a replica.
   const [editorId, setEditorId] = useState(null);
   const [restoreViewport, setRestoreViewport] = useState(null);
+  // The panel stays mounted through its closing transition, and comes off when the panel
+  // says it has exited. Stable, because the panel holds it in the effect that starts the
+  // unmount backstop and a fresh identity every render would restart that timer forever.
+  useEffect(() => {
+    if (agentOpen) setAgentPresent(true);
+  }, [agentOpen]);
+  const onAgentExited = useCallback(() => setAgentPresent(false), []);
   const focusKey = agentOpen ? agentFocus.join(',') : '';
   // The mark is a class on the React Flow wrapper, which `className` on the node reaches;
   // memoised so a render without a focus change hands React Flow the same array. A tag
@@ -475,6 +486,25 @@ function Canvas() {
     if (!providers) checkProviders();
   }, [nodes, project, providers, checkProviders]);
   const closeComposer = useCallback(() => setComposer(null), []);
+
+  // An empty artifact's own Agent button (PageNode, MotionNode). It selects that node
+  // first and then opens the composer, which is exactly what clicking the node and then
+  // the toolbar's Agent does -- the selection IS the context, so there is no second way to
+  // decide what a message is about.
+  const openComposerFor = useCallback(
+    (nodeId) => {
+      setNodes((ns) => ns.map((n) => (n.selected === (n.id === nodeId) ? n : { ...n, selected: n.id === nodeId })));
+      const ctx = messageContext(nodes.filter((n) => n.id === nodeId));
+      setComposer(ctx);
+      setForceNew(false);
+      listThreads(project)
+        .then((list) => setContinues(continuableChat(list, ctx.artifacts)))
+        .catch(() => setContinues(null));
+      if (!providers) checkProviders();
+    },
+    [nodes, project, providers, checkProviders, setNodes],
+  );
+  useAnyNodeCommand('agent', openComposerFor);
 
   // Clicking another node while the composer is open adds it rather than replacing the
   // selection: React Flow has already selected the clicked node alone by the time this
@@ -1889,7 +1919,9 @@ function Canvas() {
           onAdd={newProject}
         />
       </div>
-      <div className="toolbar-card toolbar-card-right">
+      {/* Hidden while the rail is open: it covers this corner and carries its own close
+          button. `inert` and not just an opacity of 0, or it stays in the tab order. */}
+      <div className="toolbar-card toolbar-card-right" data-hidden={agentOpen ? 'true' : 'false'} inert={agentOpen ? true : undefined}>
         {/* The agent: a right-hand panel with the project's Canvas thread (agent/AgentPanel.jsx). */}
         <IconButton
           variant={agentOpen ? 'secondary' : 'ghost'}
@@ -2065,8 +2097,10 @@ function Canvas() {
           // that leaves the app and it is not the first thing you land on.
           onOpenPage={openEditor}
         />
-        {agentOpen && (
+        {agentPresent && (
           <AgentPanel
+            state={agentOpen ? 'open' : 'closed'}
+            onExited={onAgentExited}
             project={project}
             nodes={nodes}
             providers={providers}
