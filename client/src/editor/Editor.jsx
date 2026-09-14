@@ -19,7 +19,7 @@ import { NODE_ICONS } from '../nodes/nodeIcons.jsx';
 // the viewport is put back on the way out. The frame here is the same one the node
 // shows, same origin, same sandbox (PageNode says why each attribute is there), just
 // given the room it deserves and live from the start.
-export default function Editor({ node, project, previewPort, onClose, onOpenExternal, onDials, agent }) {
+export default function Editor({ node, project, previewPort, onClose, onOpenExternal, onDials, onAsk, agent }) {
   // The artifact's frame. Dials talks to it directly (postMessage through the viewer),
   // which is why the ref lives here rather than inside that column.
   const frame = useRef(null);
@@ -73,7 +73,7 @@ export default function Editor({ node, project, previewPort, onClose, onOpenExte
       <aside className="editor-col">
         {/* Keyed by the FILE: a new version of the composition is a new set of parameters,
             so the panel is rebuilt rather than left showing the previous one's. */}
-        <Dials key={node.data?.file || node.id} project={project} dials={node.data?.dials ?? null} onChange={onDialsChange} frameRef={frame} />
+        <Dials key={node.data?.file || node.id} project={project} node={node} dials={node.data?.dials ?? null} onChange={onDialsChange} onAsk={onAsk} frameRef={frame} />
       </aside>
     </div>
   );

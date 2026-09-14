@@ -516,6 +516,26 @@ function Canvas() {
     return t;
   }
 
+  // Ask the agent for something about ONE artifact, from somewhere that is not the
+  // composer -- today the editor's Parameters column. It continues that artifact's newest
+  // idle chat or starts one tagged with it, exactly as the composer does, so a request
+  // made here lands in the same conversation rather than in a private one nobody sees.
+  async function askAgentAbout(nodeId, text) {
+    if (!readyProvider) throw new Error('Connect Claude or Codex first.');
+    // Its OWN chat, looked up here rather than through `composerThread` -- that one answers
+    // for the toolbar's current selection, and would have sent this into whichever
+    // conversation the composer last resolved.
+    const list = await listThreads(project);
+    let thread = continuableChat(list, [nodeId]);
+    if (!thread) {
+      thread = await createThread(project, { provider: readyProvider.kind, tags: [nodeId] });
+      setThreadsBump((b) => b + 1);
+    }
+    openAgent(thread.id);
+    await sendThreadMessage(project, thread.id, { text, selection: [nodeId] });
+    return thread.id;
+  }
+
   async function sendComposer(text) {
     const c = composer;
     if (!c || !readyProvider) return;
@@ -1834,6 +1854,7 @@ function Canvas() {
             previewPort={cfg.previewPort}
             onClose={closeEditor}
             onOpenExternal={openPage}
+            onAsk={askAgentAbout}
             // A parameter change is an ordinary node edit, so it rides the document's own
             // diff-and-commit (graph/useDocument.js): one undo step, streamed to every
             // tab, and picked up by the next render. Dials debounces, so this is already

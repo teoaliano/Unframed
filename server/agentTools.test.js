@@ -234,6 +234,27 @@ assert.deepEqual(placeBeside(graph, ['103', '104']), { x: 300 + 60, y: 0 });
 assert.deepEqual(placeBeside(graph, ['101']), { x: 40 + 240 + 60, y: 320 }, 'an unsized node is taken as the default width');
 assert.deepEqual(placeBeside(graph, []), { x: 80, y: 80 });
 
+// ---- the agent can SEE what an artifact is tuned to ----
+// A tuned value lives on the node, not in the file, so the file it reads back holds the
+// defaults. Without this it stitched two motions it had been told nothing about and
+// produced the originals, with nothing in the reply admitting it.
+{
+  const tuned = {
+    nodes: [
+      { id: 'm1', type: 'motion', position: { x: 0, y: 0 }, data: { file: '1-a.html', title: 'Intro', dials: { accent: '#ff0000', scale: 1.5 } } },
+      { id: 'm2', type: 'motion', position: { x: 0, y: 0 }, data: { file: '2-b.html', title: 'Outro' } },
+      { id: 'p1', type: 'page', position: { x: 0, y: 0 }, data: { file: '3-c.html', title: 'Deck', dials: {} } },
+    ],
+    edges: [],
+  };
+  const by = Object.fromEntries(describeCanvas(tuned, []).nodes.map((n) => [n.id, n]));
+  assert.deepEqual(by.m1.dials, { accent: '#ff0000', scale: 1.5 });
+  // Absent when there are none, rather than an empty object: "it has parameters, all at
+  // their defaults" and "it has none" are different facts.
+  assert.equal('dials' in by.m2, false);
+  assert.equal('dials' in by.p1, false, 'an empty set is no set');
+}
+
 // ---- the agent is TOLD about parameters, in both artifact kinds and once ----
 // A scripted fixture can hardcode `unframed.dials(...)` and pass while a real model would
 // never write one, because nothing told it the function exists. This is that check.
@@ -250,6 +271,7 @@ assert.deepEqual(placeBeside(graph, []), { x: 80, y: 80 });
     assert.match(byName[name].description, /unframed\.dials\(/, `${name} tells the agent the call`);
     assert.match(byName[name].description, /\[value, min, max\]/, `${name} tells it the shapes`);
     assert.match(byName[name].description, /do not add a script tag/, `${name} says the bridge is already there`);
+    assert.match(byName[name].description, /carry its current values/, `${name} says to carry the values when building from an artifact`);
   }
 }
 

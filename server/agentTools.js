@@ -67,6 +67,13 @@ function describeNode(n) {
     case 'motion':
       if (d.file) out.file = d.file;
       if (d.title) out.title = d.title;
+      // What its parameters are CURRENTLY set to. A tuned value lives on the node, not in
+      // the file (server/dials.js) -- which is what keeps tuning undoable and lets it
+      // survive a rewrite, but it also means the file alone no longer describes the
+      // artifact. Without this the agent read the file, saw the defaults, and stitched
+      // those: a motion the person had recoloured came back its original colour, and
+      // nothing in the reply admitted it (Matteo, 2026-09-14).
+      if (d.dials && typeof d.dials === 'object' && Object.keys(d.dials).length) out.dials = d.dials;
       break;
     case 'textOutput':
       out.text = d.text ?? '';
@@ -312,6 +319,7 @@ const failure = (message) => ({ content: [{ type: 'text', text: JSON.stringify({
 // are the shorthand `server/dials.js` normalises; the sentence is appended to BOTH artifact
 // kinds rather than written twice, since a second copy is how the two would drift.
 const DIALS_CONTRACT = [
+  'A `dials` object on a page or motion in canvas_read is what its parameters are set to RIGHT NOW -- the person turned them by hand, and those values are what they see and what a render uses. They live on the node, not in the file, so the file you read back still holds the defaults. When you build something FROM an artifact -- stitching, combining, copying -- carry its current values into what you make, or the new thing silently comes out as the original rather than as what they tuned.',
   'Parameters: you can expose values for the person to turn by hand, and they appear as controls beside the artifact. Call `unframed.dials("Scene", { accent: "#a78bfa", speed: [1, 0.5, 2], caption: "Launch day" }, (v) => { /* apply v */ })` -- once, at the end of your script, with a callback that applies the values (set a CSS custom property, a text content, a timeline timeScale).',
   'The shape of each value decides its control: a hex colour is a colour picker, `[value, min, max]` (optionally a fourth step) a slider, a string a text field, an array of strings a dropdown, a number or true/false itself, a nested object a folder of controls. The callback runs once at startup and again on every change, and the person\'s settings are what a render uses -- so apply them, never hard-code the value you also declared.',
   'Expose a parameter when the person asks for one, or when a choice is obviously worth tuning (a colour, a duration, a piece of copy). `unframed` is already there; do not add a script tag for it.',

@@ -242,6 +242,13 @@ lazily-loaded chunk; the artifact holds the values and applies them. That is wha
 ~250KB out of every project folder and out of every render, and a render needs the *values*,
 never a control to drag.
 
+**The agent is told what an artifact is SET TO**: `canvas_read` reports `dials` on a page or
+motion when it has any. It has to, and this was missed at first with a visible cost — the
+values live on the node, so the file the agent reads back still holds the defaults, and a
+stitch of two tuned motions came out as the originals with nothing in the reply admitting
+it. The system prompt and both write tools say the same thing: build from the values, and
+carry them into anything made FROM an artifact.
+
 **A parameter is a value on the NODE** (`data.dials`), not an edit to the file. So tuning is
 an ordinary undoable canvas change, it streams to every tab, and it survives the agent
 rewriting the composition: the schema comes from the new file, the values from the node, and
@@ -265,11 +272,28 @@ records `dials`, because a composition's file is no longer enough to reproduce a
 same file at two settings is two different videos, and this is the only place that
 difference is written down. Absent, not empty, when there were no parameters.
 
-**DialKit beside the artifact is opt-in**, by an action in that column. Installed, the viewer
+**Asking for a parameter is the column's own box.** Describe one — "the background colour,
+the title size" — and it goes to that artifact's own chat as an ordinary message, with a
+premade instruction (`ASK` in `Dials.jsx`) naming `unframed.dials`, insisting the callback
+APPLIES each value rather than declaring one it ignores, and telling the agent to keep the
+parameters already there. It replaced an "install the controls into the project" button,
+which was the wrong thing in the right place: it answered a question almost nobody has,
+while sitting where people look for a way to ADD a control, and twice read as "these
+controls are not installed" to someone looking straight at working controls. The box also
+gives the column a purpose when an artifact has no parameters at all.
+
+**A pending write is flushed when the editor closes, never cancelled.** The debounce that
+makes a drag one undo step used to be cleared on unmount, so a tweak made in the last 400ms
+before closing was dropped silently: the preview had shown it, the node never heard, and the
+canvas then correctly showed the untuned artifact — which reads as the canvas resetting your
+work.
+
+**DialKit beside the artifact is opt-in**, by `POST …/motion/controls`. Installed, the viewer
 mounts its own panel when it is the top-level page, so a composition opened outside the app
-carries its own controls. It cannot be fetched on demand from a CDN — the preview origin
-allows no network — so "on demand" means copying the two files the app already has
-(`POST …/motion/controls`, idempotent; `GET` says whether they are there). The bridge itself
+carries its own controls, and it cannot be fetched from a CDN because the preview origin
+allows no network. **Nothing in the UI calls it since the box above replaced that button**;
+the routes and the viewer's standalone panel still work and are tested, and they are either
+waiting for a better home or waiting to be deleted. The bridge itself
 ships with every composition and is injected by `withRuntime`: the agent's contract is one
 function call, and a composition that called it without remembering a script tag would do
 nothing at all, silently.

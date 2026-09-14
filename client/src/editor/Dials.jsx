@@ -2,11 +2,11 @@ import { useEffect, useRef, useState } from 'react';
 import { Button } from '@astryxdesign/core/Button';
 import { Icon } from '@astryxdesign/core/Icon';
 import { Text } from '@astryxdesign/core/Text';
-import { HStack, VStack } from '@astryxdesign/core/Stack';
-import { Check, Download, SlidersHorizontal } from 'lucide-react';
+import { HStack, VStack, StackItem } from '@astryxdesign/core/Stack';
+import { TextArea } from '@astryxdesign/core/TextArea';
+import { SlidersHorizontal, Sparkles } from 'lucide-react';
 import { createDialRoot, createDialKit } from 'dialkit/vanilla';
 import 'dialkit/vanilla/styles.css';
-import { dialsControls, installDialsControls } from '../api.js';
 
 // The editor's Parameters column: the controls an artifact exposed, hosted here rather
 // than inside the artifact. Design: docs/superpowers/specs/2026-09-06-chats-and-tags-design.md,
@@ -22,14 +22,29 @@ import { dialsControls, installDialsControls } from '../api.js';
 // control to drag. The one thing that costs is a composition opened outside the app: with
 // no canvas above it there is nobody to host this panel, so the action below installs
 // DialKit beside the artifacts and the viewer mounts its own.
-export default function Dials({ project, dials, onChange, frameRef }) {
+// What the agent is asked when someone describes a parameter here. It names the artifact,
+// says where the controls have to end up, and insists the callback APPLIES the value rather
+// than declaring one it then ignores -- the failure that looks like a working control doing
+// nothing. Kept whole and in one place: it is the instruction, and reading it is how anyone
+// knows what this box actually does.
+const ASK = (title, kind, wanted) =>
+  [
+    `Add ${wanted.trim()} as ${/\band\b|,/.test(wanted) ? 'parameters' : 'a parameter'} on the ${kind} "${title}".`,
+    'Expose them with a single `unframed.dials` call so they appear in the Parameters column,',
+    'and make the callback actually apply each value to the composition.',
+    'Keep every parameter it already has, and change nothing else about it.',
+  ].join(' ');
+
+export default function Dials({ project, node, dials, onChange, onAsk, frameRef }) {
   const host = useRef(null);
   const root = useRef(null);
   const kit = useRef(null);
   // What the artifact last announced: { name, config, values } | null.
   const [panel, setPanel] = useState(null);
-  const [installed, setInstalled] = useState(null); // null = not asked yet
-  const [installing, setInstalling] = useState(false);
+  // What the person is asking for, and the request in flight.
+  const [wanted, setWanted] = useState('');
+  const [asking, setAsking] = useState(false);
+  const [askError, setAskError] = useState(null);
   // The latest values, for the debounced write. A ref so the timer does not capture a
   // stale set and undo a change made while it was pending.
   const latest = useRef(null);
@@ -96,7 +111,17 @@ export default function Dials({ project, dials, onChange, frameRef }) {
       off();
       controller.destroy();
       kit.current = null;
-      if (timer.current) clearTimeout(timer.current);
+      // FLUSH the pending write, never cancel it. Closing the editor within the debounce
+      // window used to drop the last thing you changed, silently and permanently: the
+      // preview showed it, the node never heard about it, and the canvas correctly showed
+      // the untuned artifact afterwards -- which read as the canvas resetting your work
+      // (Matteo, 2026-09-14). Every way out unmounts this, so flushing here covers Escape,
+      // Back, deleting the artifact and switching to another one alike.
+      if (timer.current) {
+        clearTimeout(timer.current);
+        timer.current = null;
+        if (latest.current) notify.current(latest.current);
+      }
     };
     // `dials` is deliberately not a dependency either: it is the SAVED value, and
     // re-running this on every write would rebuild the panel under the pointer mid-drag.
@@ -105,11 +130,22 @@ export default function Dials({ project, dials, onChange, frameRef }) {
 
   useEffect(() => () => root.current?.destroy(), []);
 
-  // Only asked once there is something to be self-contained about.
-  useEffect(() => {
-    if (!panel || installed !== null) return;
-    dialsControls(project).then(setInstalled);
-  }, [panel, installed, project]);
+  // Send it to the artifact's own chat, and let the panel beside this column show the
+  // answer -- the request is an ordinary message, not a hidden side channel.
+  async function ask() {
+    const text = wanted.trim();
+    if (!text || asking) return;
+    setAsking(true);
+    setAskError(null);
+    try {
+      await onAsk(node.id, ASK(node.data?.title || node.id, node.type, text));
+      setWanted('');
+    } catch (err) {
+      setAskError(err.message);
+    } finally {
+      setAsking(false);
+    }
+  }
 
   return (
     <>
@@ -123,51 +159,53 @@ export default function Dials({ project, dials, onChange, frameRef }) {
         <div className="editor-dials" ref={host} />
       ) : (
         <Text type="supporting" color="secondary" className="editor-hint">
-          No parameters yet. Ask the agent to expose some — “expose the accent colour and the intro speed as parameters”.
+          No parameters yet.
         </Text>
       )}
-      {/* Making the FILE self-contained -- nothing about the controls above, which are
-          already here and working. The first wording led with the mechanism ("install
-          them in the project") while the person was looking at working controls, and read
-          as if they were not installed (Matteo, 2026-09-07). It now leads with the
-          situation it is about: the file, opened somewhere else. */}
-      {panel && installed !== null && (
-        <VStack gap={1} className="editor-dials-foot">
-          {installed ? (
-            <HStack gap={1} align="center">
-              <Icon icon={Check} size="sm" />
-              <Text type="supporting" color="secondary">
-                Opened outside Unframed, this file carries these controls with it.
-              </Text>
-            </HStack>
-          ) : (
-            <>
-              {/* Stacked, not a row: this column is ~300px and a row of sentence + button
-                  + note wrapped into three narrow ribbons. */}
-              <Text type="supporting" color="secondary">
-                Opened outside Unframed, this file plays without these controls. Adding them costs about 300KB, once per project.
-              </Text>
-              <Button
-                size="sm"
-                variant="secondary"
-                label={installing ? 'Adding…' : 'Add them to the file'}
-                icon={<Icon icon={Download} />}
-                isLoading={installing}
-                onClick={async () => {
-                  setInstalling(true);
-                  try {
-                    setInstalled(await installDialsControls(project));
-                  } catch {
-                    setInstalled(false);
-                  } finally {
-                    setInstalling(false);
-                  }
-                }}
-              />
-            </>
-          )}
-        </VStack>
-      )}
+      {/* Asking for a parameter. This replaced an "install the controls into the project"
+          button, which was the wrong thing in the right place: it answered a question
+          almost nobody has while sitting where people look for a way to ADD a control.
+          Describing what you want and having the agent write it is the straight line, and
+          it gives the column a purpose when an artifact has no parameters at all. */}
+      <VStack gap={1} className="editor-dials-foot">
+        <div
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' && !e.shiftKey && !e.altKey && !e.isComposing) {
+              e.preventDefault();
+              ask();
+            }
+          }}
+        >
+          <TextArea
+            label="Add a parameter"
+            rows={2}
+            value={wanted}
+            placeholder={panel ? 'Add a parameter… (e.g. the background colour, the title size)' : 'Describe a parameter… (e.g. the accent colour and the intro speed)'}
+            isDisabled={asking}
+            onChange={setWanted}
+          />
+        </div>
+        <HStack gap={2} align="center">
+          <Text type="supporting" color="secondary">
+            The agent writes it
+          </Text>
+          <StackItem size="fill" />
+          <Button
+            size="sm"
+            variant="secondary"
+            label={asking ? 'Asking…' : 'Add'}
+            icon={<Icon icon={Sparkles} />}
+            isLoading={asking}
+            isDisabled={!wanted.trim() || asking}
+            onClick={ask}
+          />
+        </HStack>
+        {askError && (
+          <Text type="supporting" color="secondary">
+            {askError}
+          </Text>
+        )}
+      </VStack>
     </>
   );
 }

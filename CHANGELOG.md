@@ -46,8 +46,11 @@ Keep that shape: the website's What's new page parses this file.
   accent colour and the intro speed as parameters" and controls appear in the editor's
   right-hand column: drag one and the preview follows, and Render uses whatever they are
   set to. A tweak is an ordinary canvas change, so ⌘Z takes it back, and it survives the
-  agent rewriting the composition. An action in that column installs the controls into the
-  project if you want the file to carry its own when opened outside the app.
+  agent rewriting the composition.
+- **Ask for a parameter in the Parameters column.** Describe what you want tuneable — "the
+  background colour, the title size" — press Add, and the agent writes it into the artifact
+  and the controls appear beside it.
+
 - **The agent's replies are formatted.** Headings, lists, tables, quotes, task lists and
   code blocks (with a copy button) all render properly instead of arriving as one wall of
   plain text. Links open in a new tab.
@@ -113,6 +116,12 @@ Keep that shape: the website's What's new page parses this file.
 - **A conversation outlives the things it was about.** Deleting a page or motion the agent
   worked on no longer asks you anything and no longer hides the chat: it stays, with the
   deleted thing greyed out in its list. Nothing is thrown away with the file.
+- **A parameter you changed just before leaving the editor is no longer lost.** Closing
+  within a moment of the last tweak used to throw it away silently, so the canvas showed
+  the artifact untuned and it looked like your work had been reset.
+- **The agent can see what an artifact is tuned to.** Asking it to stitch or combine
+  motions you had adjusted used to produce the originals, because it only ever read the
+  file and the values live on the node.
 
 ## 2026-09-05
 

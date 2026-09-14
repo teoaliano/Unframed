@@ -465,14 +465,3 @@ export const savePresets = (presets) =>
     if (!r.ok) throw new Error(`HTTP ${r.status}`);
   });
 
-// ---- an artifact's parameters (server/dials.js) ----
-// Whether DialKit sits beside this project's artifacts, and putting it there. Opt-in per
-// project: it is 250KB that nothing needs in order to render, and it is what makes a
-// composition opened outside the app carry its own controls.
-export const dialsControls = (project) =>
-  fetch(`/api/projects/${enc(project)}/motion/controls`)
-    .then((r) => (r.ok ? r.json() : { installed: false }))
-    .then((d) => Boolean(d.installed))
-    .catch(() => false);
-
-export const installDialsControls = (project) => postJson(`/api/projects/${enc(project)}/motion/controls`, {}).then((d) => Boolean(d.installed));
