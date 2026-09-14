@@ -29,7 +29,7 @@ import path from 'node:path';
 import { query, createSdkMcpServer } from '@anthropic-ai/claude-agent-sdk';
 import { canvasTools, messagePreamble, pageFileName, pageSidecar } from './agentTools.js';
 import { ensureLibrary, motionFileName, viewerPath } from './motion.js';
-import { detectProvider } from './providers.js';
+import { detectProvider, providerRunEnv } from './providers.js';
 import * as T from './threads.js';
 
 export const SYSTEM_PROMPT = [
@@ -193,7 +193,10 @@ class Session {
         },
       }),
     });
-    const penv = { ...this.env };
+    // The same environment the probe ran under, not this process's: a GUI-launched app
+    // has launchd's PATH, so a bare `claude` is invisible to the spawn even though
+    // detection just found it on the login shell's PATH.
+    const penv = await providerRunEnv(this.provider, this.settings, { env: this.env });
     this.q = query({
       prompt: this.queue.gen,
       options: {
