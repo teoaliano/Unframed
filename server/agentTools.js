@@ -322,8 +322,26 @@ const DIALS_CONTRACT = [
   'A `dials` object on a page or motion in canvas_read is what its parameters are set to RIGHT NOW -- the person turned them by hand, and those values are what they see and what a render uses. They live on the node, not in the file, so the file you read back still holds the defaults. When you build something FROM an artifact -- stitching, combining, copying -- carry its current values into what you make, or the new thing silently comes out as the original rather than as what they tuned.',
   'Parameters: you can expose values for the person to turn by hand, and they appear as controls beside the artifact. Call `unframed.dials("Scene", { accent: "#a78bfa", speed: [1, 0.5, 2], caption: "Launch day" }, (v) => { /* apply v */ })` -- once, at the end of your script, with a callback that applies the values (set a CSS custom property, a text content, a timeline timeScale).',
   'The shape of each value decides its control: a hex colour is a colour picker, `[value, min, max]` (optionally a fourth step) a slider, a string a text field, an array of strings a dropdown, a number or true/false itself, a nested object a folder of controls. The callback runs once at startup and again on every change, and the person\'s settings are what a render uses -- so apply them, never hard-code the value you also declared.',
-  'A parameter and the timeline must never write the same CSS property on the same element. GSAP takes ownership of `transform` on anything it tweens -- x, y, scale, rotation -- and rewrites it on every frame, so a position parameter applied to a tweened element looks correct while the clip sits still and snaps back to the tween\'s value the moment it is played or scrubbed. Put the parameter on a plain wrapper element the timeline never touches and animate the inner one, or feed the value into the tween itself. The same holds for opacity, colour or anything else both sides would set.',
+  'Decide first whether a value is part of the animation. One nothing animates -- a colour, a piece of copy, a size -- is applied straight to the DOM in the callback. One the animation is MADE of -- where a move starts or ends, how long it lasts, its ease -- belongs to the animation and must be given to it rather than written to the DOM: a parameter and whatever animates must never write the same CSS property on the same element, or the parameter reads correctly while the artifact sits still and is overwritten the moment it runs.',
   'Expose a parameter when the person asks for one, or when a choice is obviously worth tuning (a colour, a duration, a piece of copy). `unframed` is already there; do not add a script tag for it.',
+].join(' ');
+
+// The motion half of the parameter contract: how a value the TIMELINE owns is exposed.
+// Only motions have one, so this is appended to motion_write alone rather than to the
+// shared contract -- a page has no timeline and the GSAP detail would be noise in it.
+//
+// The rule exists because the obvious thing is wrong in a way that looks right. GSAP takes
+// ownership of `transform` on everything it tweens and rewrites it every frame, so a
+// position parameter written to the DOM beside a tween holds while the clip sits still and
+// snaps back the instant it is played or scrubbed -- the value is stored, delivered and
+// applied perfectly, then overwritten, which from the outside is indistinguishable from a
+// tuning that was never saved (Matteo, 2026-09-14). Building the timeline FROM the values
+// makes the collision impossible rather than merely discouraged: GSAP stays the only thing
+// writing the animated properties, and it writes them from the values.
+const DIALS_TIMELINE = [
+  'When a parameter is part of the animation, build the timeline FROM the values: register it synchronously as above, then inside the callback capture `var at = tl.time()`, call `tl.clear()`, add the tweens using the values, and `tl.seek(at)`. The callback runs once at startup, so the first build is synchronous and a render builds the timeline from the saved values before its first frame; every later change rebuilds it in place, and the runtime keeps the same timeline object throughout.',
+  'For example: `unframed.dials("Move", { fromX: [0, 0, 500], toX: [300, 0, 500], dur: [2, 0.5, 3] }, function (v) { var at = tl.time(); tl.clear(); tl.fromTo("#box", { x: v.fromX }, { x: v.toX, duration: v.dur }, 0); tl.seek(at); })`. Never set a tweened property directly in the callback; a purely static offset on a tweened element can instead go on a plain wrapper the timeline never touches, which is the same rule from the other side.',
+  'A value that CHANGES across the timeline is not one parameter: expose its start, its end and the duration as separate controls and let the tween carry it between them. Do not try to express a curve as a parameter -- when something needs a third waypoint the motion wants rewriting, not another dial.',
 ].join(' ');
 
 const ARTIFACTS = {
@@ -346,6 +364,7 @@ const ARTIFACTS = {
       'load GSAP with <script src="gsap.js"></script> -- it sits beside the composition -- and nothing else external: no CDNs, fonts or remote images. Never call play(), pause() or set currentTime on media; no wall-clock time, no unseeded randomness, no infinite repeats.',
       'The HyperFrames runtime is added to the file for you. Files are never overwritten -- every write is a new version the person can undo. Omit nodeId to create a motion beside the current selection; pass it to update that motion. The person renders it to an MP4 from the node.',
       DIALS_CONTRACT,
+      DIALS_TIMELINE,
     ].join(' '),
     describeRead: 'Read the current HTML of a motion asset (its HyperFrames composition), so an edit starts from what is there.',
     size: { width: 480, height: 300 },

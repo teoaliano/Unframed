@@ -275,8 +275,16 @@ assert.deepEqual(placeBeside(graph, []), { x: 80, y: 80 });
     // Without this the agent writes a position parameter onto the very element GSAP
     // tweens, which looks right until the clip is scrubbed and then snaps back to the
     // tween's value -- a tuned motion that silently untunes itself (Matteo, 2026-09-14).
-    assert.match(byName[name].description, /never write the same CSS property on the same element/, `${name} says a parameter and a tween cannot share a property`);
+    assert.match(byName[name].description, /never write the same CSS property on the same element/, `${name} says a parameter and whatever animates cannot share a property`);
   }
+  // The timeline half is motion-only: a page has no timeline, and the GSAP detail in its
+  // tool description would be noise. Rebuilding from the values is what makes an animated
+  // parameter possible at all -- the wrapper rule alone can only dodge the collision, not
+  // let someone tune where a move starts or how long it takes.
+  assert.match(byName.motion_write.description, /build the timeline FROM the values/, 'motion_write says to rebuild from the values');
+  assert.match(byName.motion_write.description, /tl\.clear\(\)/, 'motion_write shows how');
+  assert.match(byName.motion_write.description, /start, its end and the duration/, 'motion_write says a time-varying value is start/end/duration, not a curve');
+  assert.doesNotMatch(byName.page_write.description, /tl\.clear\(\)/, 'a page has no timeline to rebuild');
 }
 
 // ---- which artifacts a batch touched ----

@@ -12,8 +12,16 @@ Keep that shape: the website's What's new page parses this file.
 - A parameter that positions something no longer snaps back when the clip plays. The agent
   was writing the parameter onto the very element its GSAP timeline animates, and GSAP
   rewrites `transform` on every frame — so a tuned position held until you scrubbed and then
-  vanished, which looked like the tuning had never been saved. The agent is now told to put
-  the parameter on a wrapper the timeline does not touch.
+  vanished, which looked like the tuning had never been saved.
+
+### Added
+
+- Parameters can now be part of the animation itself, not just its dressing: how far
+  something slides in from, how long it takes, its easing. A motion builds its timeline
+  from its parameter values and rebuilds it as you turn them, so those controls work in the
+  preview and in a render. A value that changes over time is expressed as a start, an end
+  and a duration — there is no keyframe editor, and something needing more than that is
+  better asked of the agent.
 
 ## 2026-09-10
 

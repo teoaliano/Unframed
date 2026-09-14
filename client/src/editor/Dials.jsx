@@ -31,7 +31,13 @@ const ASK = (title, kind, wanted) =>
   [
     `Add ${wanted.trim()} as ${/\band\b|,/.test(wanted) ? 'parameters' : 'a parameter'} on the ${kind} "${title}".`,
     'Expose them with a single `unframed.dials` call so they appear in the Parameters column,',
-    'and make the callback actually apply each value to the composition.',
+    'and make the callback actually apply each value.',
+    // Without this clause the model reaches for a DOM write every time, which is correct
+    // only for a value nothing animates. Anything the timeline owns has to be wired INTO
+    // it, or the control works until the clip is played and then appears to forget itself.
+    'If any of them is part of the animation rather than just dressing, wire it into the timeline —',
+    'rebuild the timeline from the values instead of setting an animated property alongside it —',
+    'and express anything that changes over time as its start, its end and a duration.',
     'Keep every parameter it already has, and change nothing else about it.',
   ].join(' ');
 

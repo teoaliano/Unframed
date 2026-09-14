@@ -249,17 +249,29 @@ stitch of two tuned motions came out as the originals with nothing in the reply 
 it. The system prompt and both write tools say the same thing: build from the values, and
 carry them into anything made FROM an artifact.
 
-**A parameter and the timeline may not write the same property on the same element.** GSAP
-takes ownership of `transform` on everything it tweens and rewrites it every frame, so a
-position parameter applied to a tweened element reads correctly while the clip sits still
-and snaps back to the tween's value the moment it is played or scrubbed — the values are
-stored, delivered and applied perfectly, and then overwritten, which looks from the outside
-exactly like a tuning that was never saved (Matteo, 2026-09-14: a stitched motion whose
-intro kept jumping back to centre). The contract both write tools carry says to put the
-parameter on a wrapper the timeline never touches and animate the inner element, and
-`agentTools.test.js` pins that sentence — nothing in the engine can detect the collision,
-so the instruction is the only thing standing between a person and a motion that silently
-untunes itself.
+**There are three kinds of parameter, and conflating them is what breaks a motion.** One
+that nothing animates — a colour, a piece of copy, a size — is applied straight to the DOM
+in the callback. One the animation is MADE of — where a move starts or ends, how long it
+lasts, its ease — belongs to the animation and has to be given to it. And a value that
+varies across the timeline is not a parameter at all: it is a start, an end and a duration,
+exposed as separate controls. There is deliberately no keyframe or curve control, because
+the moment something needs a third waypoint the motion wants rewriting, which is a sentence
+to the agent rather than an editor to build.
+
+**The second kind is why a motion builds its timeline from the values.** Writing an
+animated property to the DOM beside a tween is wrong in a way that looks right: GSAP takes
+ownership of `transform` on everything it tweens and rewrites it every frame, so the value
+holds while the clip sits still and is overwritten the instant it is played or scrubbed —
+stored, delivered and applied perfectly, then lost, which from the outside is
+indistinguishable from a tuning that was never saved (Matteo, 2026-09-14). So the timeline
+is registered synchronously as always and then built INSIDE the callback: keep the
+playhead, `tl.clear()`, re-add the tweens from the values, seek back. The first call is
+synchronous, so a render builds the timeline from the saved values before its first frame;
+every later change rebuilds it in place and the runtime keeps the same timeline object.
+That makes the collision impossible rather than merely discouraged — GSAP stays the only
+thing writing the animated properties, and it writes them from the values. `motion_write`
+carries the rule and the worked example, `page_write` does not (a page has no timeline),
+and `agentTools.test.js` pins both facts.
 
 **A parameter is a value on the NODE** (`data.dials`), not an edit to the file. So tuning is
 an ordinary undoable canvas change, it streams to every tab, and it survives the agent
