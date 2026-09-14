@@ -14,6 +14,7 @@ import {
   parseVersion,
   classify,
   parseCodexLoginStatus,
+  providerRunEnv,
   PROVIDERS,
 } from './providers.js';
 
@@ -167,6 +168,22 @@ assert.deepEqual(parseCodexLoginStatus('something unexpected'), { ok: false, sig
   assert.ok(rest.some((r) => r.id === 'claude-opus-4-8' && r.legacy), 'and the older ones as legacy');
   assert.deepEqual(rest.find((r) => r.id === 'claude-opus-4-8').efforts, ['low', 'medium', 'high', 'xhigh', 'max']);
   assert.deepEqual(mergeClaudeModels([]).map((r) => r.id), CLAUDE_CATALOGUE.map((c) => c.id), 'no SDK list: the catalogue alone');
+}
+
+// ---- providerRunEnv ----
+// The environment the probe runs under is the one the real session must run under too:
+// building it inline in detectProvider and discarding it made a GUI-launched app probe
+// `claude` on a hydrated PATH, call it ready, then spawn it on launchd's PATH and fail
+// with ENOENT. Windows here because it is the one platform that skips the login shell,
+// so the assertion needs no subprocess.
+{
+  const base = { PATH: 'C:\\one', HOME: '' };
+  const claude = await providerRunEnv('claude', { configDir: '/cfg' }, { platform: 'win32', env: base });
+  assert.equal(claude.CLAUDE_CONFIG_DIR, '/cfg', 'the configured config dir reaches the run, not just the probe');
+  assert.ok(claude.HOME, 'a missing HOME is filled, or the macOS keychain lookup misses the stored credentials');
+  assert.equal(claude.PATH, 'C:\\one', 'no login shell on Windows: the PATH is unchanged');
+  const codex = await providerRunEnv('codex', { configDir: '/cfg' }, { platform: 'win32', env: base });
+  assert.equal(codex.CLAUDE_CONFIG_DIR, undefined, "codex does not get claude's config dir");
 }
 
 console.log('providers.test.js: ok');

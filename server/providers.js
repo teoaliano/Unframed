@@ -329,15 +329,25 @@ export async function probeCodex(executable, env) {
   return parseCodexLoginStatus(`${r.stdout}\n${r.stderr}`);
 }
 
-// The whole detection for one provider: PATH hydrated from the login shell, the
-// executable resolved, `--version` run, then the auth probe if it ran. Never rejects.
-export async function detectProvider(kind, { binaryPath, configDir } = {}, { platform = process.platform, env = process.env } = {}) {
-  const p = PROVIDERS[kind];
+// The environment a provider CLI runs under -- for the probes AND for the real session,
+// which is the point of it being its own function. Detection used to build this inline
+// and throw it away, so a GUI-launched app probed `claude` with a hydrated PATH, called
+// it ready, then spawned it with launchd's PATH and got ENOENT -- reported by the Agent
+// SDK as "native binary not found at claude", which reads like a broken install rather
+// than a missing directory. A configured CLAUDE_CONFIG_DIR was dropped the same way.
+export async function providerRunEnv(kind, { configDir } = {}, { platform = process.platform, env = process.env } = {}) {
   const shellPath = await loginShellPath({ platform, env });
-  const penv = providerEnv(
+  return providerEnv(
     { ...env, PATH: hydratedPath(shellPath, env.PATH, platform) },
     { configDir: kind === 'claude' ? configDir : undefined, homedir: os.homedir() },
   );
+}
+
+// The whole detection for one provider: the run environment, the executable resolved,
+// `--version` run, then the auth probe if it ran. Never rejects.
+export async function detectProvider(kind, { binaryPath, configDir } = {}, { platform = process.platform, env = process.env } = {}) {
+  const p = PROVIDERS[kind];
+  const penv = await providerRunEnv(kind, { configDir }, { platform, env });
   const cmd = typeof binaryPath === 'string' && binaryPath.trim() ? binaryPath.trim() : p.binary;
   const executable = resolveExecutable(cmd, { platform, env: penv, isFile });
   const version = await runCommand(executable, ['--version'], { env: penv, timeoutMs: 5000 });
