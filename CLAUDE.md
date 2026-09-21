@@ -82,6 +82,27 @@ Before calling a piece of work done:
 
 Two-package monorepo, no shared build: the root IS the engine package (`server/` has no `package.json` of its own — its dependencies are the root's, so the repo can be installed as a single unit by the desktop shell), and `client/` is a separate Vite build. The only non-trivial logic is in `client/src/graph/resolve.js` — read it first.
 
+**Take the solved problem; write the part nobody else has.** Before writing logic for something
+that is not specific to Unframed — uploading and classifying a file, a permission prompt, an
+attachment store, markdown, a diff — look for an open-source project that has already met the real
+world on it and take its answer. Code we did not write is code we do not maintain, and the version
+that has been in front of a hundred thousand users knows things ours will learn one bug at a time:
+`t3code`'s attachment classifier exists because a drag from another app hands over a `File` with an
+empty MIME type, which is not a thing anyone designs for in advance. The canvas, the graph, the
+node model and the generation pipeline are ours because nothing else is them; almost nothing else
+here is worth inventing.
+
+Three things make this a rule and not a licence to bolt on anything that compiles. **Take the
+slice, not the tree** — `t3code`'s composer is ~20,000 lines and its attachment handling is ~800 of
+them, so the useful move is lifting those and leaving the Tiptap document model we have no use
+for. **Read what you take, and bring its comments** — the comment explaining WHY a file with no
+MIME type is still an image is the part worth having; a copy without it is a snippet we will
+rediscover the hard way. And **check the licence and keep the notice**: MIT and Apache-2.0 are
+fine with attribution, and anything reciprocal (GPL, AGPL, SSPL) must not enter this repo at all,
+because the desktop shell ships it to users. `t3code` (MIT, `github.com/pingdotgg/t3code`) is the
+reference we lift agent-side behaviour from; note the provenance in a comment where a chunk came
+from someone else.
+
 Two rules keep this tree small. **Files split when a chunk earns its own tests, never on line count** — that trigger produced `env.js`, `share.js`, `presets.js`, `jobs.js` and `output/core.js`. The only other reason to split is a file that CANNOT be part of another: `client/src/theme.js` because Astryx declares its tokens on the `<Theme>` wrapper via `@scope`, so the palette cannot live in a stylesheet at all; `client/src/CanvasBackground.jsx` because it subscribes to the zoom and rerenders on every frame of a pan, which inside `App` would drag the whole canvas with it. Neither has tests, and neither is licence to split on size. **A comment earns its length only if deleting it would let someone make a wrong change** — everything else is history, and the git log holds history better than a comment does. Prose (comments, doc footnotes) gets reviewed for length the way code gets reviewed for logic.
 
 **Data flow:** `ImageOutputNode.onGenerate` → `buildRequest(nodes, edges, outputId)` (pure, in `resolve.js`) → `POST /api/generate` (via `client/src/api.js`) → server's `/api/generate` handler → OpenRouter `POST /api/v1/images` → image written to disk + returned as a data URL to the browser. The other two mirror it: `TextOutputNode.onRun` → `POST /api/text` → OpenRouter `chat/completions` → result stored in `node.data.result`; `VideoOutputNode.onGenerate` → `POST /api/video`, then polls `/api/video/:id` until the server has downloaded the finished file.
