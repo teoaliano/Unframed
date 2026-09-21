@@ -15,6 +15,8 @@ import {
   setStatus,
   threadSummary,
   eventsSince,
+  reconcile,
+  QUIT_MID_TURN,
   readThread,
   writeThread,
   persistThread,
@@ -273,6 +275,42 @@ assert.throws(() => renameThread(t5, 42), /text/);
   // Two turns in one millisecond do not overwrite each other.
   const second = await agentSidecar(dir, { threadId: 't1', turn: 2, provider: 'claude', model: 'm', usage: {}, now: 1700000000000 });
   assert.notEqual(second, file);
+}
+
+// ---- a turn the app was quit on ----
+// A session cannot outlive its process, so `running` with no live session has exactly
+// one explanation. Reconciling it to `failed` is what makes the chat continuable again:
+// the composer skips `running`, not `failed`.
+{
+  const base = newThread({ id: 'q1', project: 'p', provider: 'claude', now: 1 });
+  const running = setStatus(base, 'running', {}, 2);
+
+  const dead = reconcile(running, { live: false }, 3);
+  assert.equal(dead.status, 'failed');
+  assert.equal(dead.error, QUIT_MID_TURN);
+  assert.equal(dead.updatedAt, 3);
+  assert.deepEqual(dead.messages, running.messages, 'the transcript is untouched');
+
+  assert.equal(reconcile(running, { live: true }, 3), running, 'a turn actually in flight is left alone');
+  assert.equal(reconcile(running, {}, 3), running, 'and so is one whose caller did not say');
+  assert.equal(reconcile(base, { live: false }, 3), base, 'idle passes through');
+  const failed = setStatus(base, 'failed', { error: 'something else' }, 2);
+  assert.equal(reconcile(failed, { live: false }, 3), failed, 'and so does a failure that already has its own reason');
+}
+
+// The read path applies it, which is what makes the fix permanent rather than a boot-time
+// sweep that a later write could undo.
+{
+  const dir = path.join(root, 'quit');
+  await writeThread(dir, setStatus(newThread({ id: 'q2', project: 'p', provider: 'claude', now: 1 }), 'running', {}, 2));
+  assert.equal((await readThread(dir, 'q2')).status, 'running', 'no answer about liveness: left alone');
+  assert.equal((await readThread(dir, 'q2', { live: false })).status, 'failed');
+  assert.equal((await readThread(dir, 'q2', { live: true })).status, 'running');
+  assert.equal((await listThreads(dir, { live: () => false }))[0].status, 'failed');
+  assert.equal((await listThreads(dir, { live: (id) => id === 'q2' }))[0].status, 'running');
+  // And the record on disk is NOT rewritten: reconciliation is how a thread READS, so a
+  // server that starts, reports and stops has changed nothing to be undone.
+  assert.equal(JSON.parse(await fs.readFile(threadPath(dir, 'q2'), 'utf8')).status, 'running');
 }
 
 await fs.rm(root, { recursive: true, force: true });

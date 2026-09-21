@@ -60,6 +60,17 @@ written temp-then-rename before a turn starts, the `jobs.json` rule, so a turn i
 survives the tab that asked for it and a reopened panel reads the transcript back. Text
 deltas are streamed live and never stored; the assistant message holds the final text.
 
+**A status is reconciled on the way out, never swept at boot.** A session lives in one
+process and cannot outlive it, so a record saying `running` with no live session behind it
+has exactly one explanation: the app was quit mid-turn. `reconcile` (pure, in
+`threads.js`) makes that inference and `readThread`/`listThreads` apply it, with liveness
+passed in from the routes — `hasLiveSession` in `agent.js` is the only thing that knows.
+The record on disk is left alone; reconciliation is how a thread *reads*. It reads
+`failed`, and that is deliberate rather than cosmetic: the composer and `findChatFor` skip
+`running`, not `failed`, so an interrupted conversation is carried on instead of being
+silently replaced by a new chat. `live` defaults to true wherever a caller does not say,
+which is the safe way round — a wrong `false` would report a turn still in flight as dead.
+
 A live session is one long-lived Agent SDK `query()` per thread, fed user messages through
 a streaming prompt so the conversation keeps its context. It is closed after ten idle
 minutes and resumed through the SDK's own session store on the next message, so context

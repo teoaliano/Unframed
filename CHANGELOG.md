@@ -14,6 +14,11 @@ Keep that shape: the website's What's new page parses this file.
   Each kind of failure now gets a sentence you can act on, and anything the agent had
   already said is kept above it.
 
+- A chat the app was quit on no longer shows a turn that is not running. It used to sit
+  on a spinner for good, and the composer quietly started a new chat rather than
+  continuing it — so the history split in two. It now says the turn never finished, and
+  sending again carries the same conversation on.
+
 ### Added
 
 - The agent panel says when a request is being retried. A turn that sat silent for a

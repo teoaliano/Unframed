@@ -33,7 +33,7 @@ import { saveMedia, copyMedia, inlineFileRefs } from './media.js';
 import { ensureLibrary, startRender, getRender, withRuntime } from './motion.js';
 import { providerStatuses, forgetProviderStatus, PROVIDERS } from './providers.js';
 import { newThread, writeThread, readThread, listThreads, deleteThread, eventsSince, persistThread, applySettings, renameThread, tagThread, EFFORTS } from './threads.js';
-import { sendToThread, interruptThread, subscribeThread, closeThreadSession, closeSessionsFor } from './agent.js';
+import { sendToThread, interruptThread, subscribeThread, closeThreadSession, closeSessionsFor, hasLiveSession } from './agent.js';
 import crypto from 'node:crypto';
 import { startPreviewServer, LOOPBACK_HOST } from './preview.js';
 import {
@@ -1391,7 +1391,10 @@ app.patch('/api/projects/:name/threads/:id', async (req, res) => {
 // the strip's rule when several artifacts are selected (docs/agent.md).
 app.get('/api/projects/:name/threads', async (req, res) => {
   try {
-    const all = await listThreads(threadDir(req));
+    // Liveness is this process's to answer, so it is passed in: a record left `running`
+    // by an app that was quit reads as failed, and therefore continuable (threads.js).
+    const dir = threadDir(req);
+    const all = await listThreads(dir, { live: (id) => hasLiveSession(dir, id) });
     const q = req.query.tag;
     const tags = (Array.isArray(q) ? q : q === undefined ? [] : [q]).filter((t) => typeof t === 'string' && t);
     res.json({ threads: tags.length ? all.filter((t) => t.tags.some((id) => tags.includes(id))) : all });
@@ -1402,7 +1405,8 @@ app.get('/api/projects/:name/threads', async (req, res) => {
 
 app.get('/api/projects/:name/threads/:id', async (req, res) => {
   try {
-    res.json({ thread: await readThread(threadDir(req), req.params.id) });
+    const dir = threadDir(req);
+    res.json({ thread: await readThread(dir, req.params.id, { live: hasLiveSession(dir, req.params.id) }) });
   } catch (err) {
     res.status(404).json({ error: err.message });
   }
@@ -1447,7 +1451,8 @@ app.post('/api/projects/:name/threads/:id/messages', async (req, res) => {
 app.get('/api/projects/:name/threads/:id/events', async (req, res) => {
   let thread;
   try {
-    thread = await readThread(threadDir(req), req.params.id);
+    const dir = threadDir(req);
+    thread = await readThread(dir, req.params.id, { live: hasLiveSession(dir, req.params.id) });
   } catch (err) {
     return res.status(404).json({ error: err.message });
   }
