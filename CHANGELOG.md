@@ -5,6 +5,21 @@ is no release artifact to number. Headings are `## YYYY-MM-DD`, groups are
 `### Added` / `### Changed` / `### Fixed`, one bullet per user-visible change.
 Keep that shape: the website's What's new page parses this file.
 
+## 2026-09-22
+
+### Fixed
+
+- A turn that fails now says why. A failed agent turn used to render as a blank message
+  under a generic "the agent reported an error" — the reason was in a field nothing read.
+  Each kind of failure now gets a sentence you can act on, and anything the agent had
+  already said is kept above it.
+
+### Added
+
+- The agent panel says when a request is being retried. A turn that sat silent for a
+  minute and a half was indistinguishable from a stuck one; a retry now shows which
+  attempt it is on, how long it is waiting and what went wrong.
+
 ## 2026-09-14
 
 ### Fixed

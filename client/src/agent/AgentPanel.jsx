@@ -289,6 +289,13 @@ export default function AgentPanel({ project, nodes, providers, onCheckProviders
             // rather than on the next list read.
             setThreads((ts) => ts.map((t) => (t.id === threadId ? { ...t, title: e.title, titledBy: 'agent' } : t)));
             break;
+          case 'api_retry': {
+            // A retrying request looks exactly like a model thinking quietly, so the
+            // activity line says which attempt it is on rather than nothing at all.
+            const wait = e.delayMs ? ` — retrying in ${Math.round(e.delayMs / 1000)}s` : '';
+            setActivity(`The API is busy${e.status ? ` (${e.status})` : ''}${wait}. Attempt ${e.attempt ?? 1}${e.maxRetries ? ` of ${e.maxRetries}` : ''}…`);
+            break;
+          }
           case 'tool_result':
             setActivity(null);
             break;
@@ -589,7 +596,10 @@ export default function AgentPanel({ project, nodes, providers, onCheckProviders
             )}
           </div>
         )}
-        {error && <div className="agent-error">{error}</div>}
+        {/* The banner is for a failure the transcript cannot show -- a session that never
+            started, an interrupted stream. Once a turn's own reply says why it failed,
+            repeating it underneath is the same sentence twice. */}
+        {error && messages.at(-1)?.text !== error && <div className="agent-error">{error}</div>}
       </div>
 
       <div className="agent-panel-composer">

@@ -264,9 +264,45 @@ try {
   // one that rewrote it -- and the strip would show all three when it is selected.
   assert.deepEqual((await threads('?tag=m2')).map((t) => t.id).sort(), [chat, stitcher, reviser].sort());
 
+  // ---- 9. a turn that FAILS says why ----
+  // The SDK's error result carries no `result` field -- only `subtype` -- so a turn that
+  // failed used to render as an empty message and a generic apology. Observed in
+  // production on 2026-09-21.
+  const broken = (await call('POST', tBase, { provider: 'claude' })).body.thread.id;
+  const failed = await runTurn(broken, 'break it');
+  assert.equal(failed.status, 'failed');
+  assert.match(failed.error, /limit of steps/, `the record names the failure: ${failed.error}`);
+  assert.match(failed.messages.at(-1).text, /limit of steps/, 'and so does the transcript');
+  // A retry is no longer silent: the SDK says it is retrying, and that reaches the panel
+  // so a slow turn is distinguishable from a stuck one.
+  const retry = failed.events.find((e) => e.type === 'api_retry');
+  assert.ok(retry, 'the retry reached the event stream');
+  assert.equal(retry.attempt, 1);
+  assert.equal(retry.maxRetries, 3);
+  assert.equal(retry.delayMs, 2000);
+  assert.equal(retry.status, 529);
+
+  // The record settles BEFORE the result is broadcast and journaled (settleTurn says
+  // why), so a poll that stops at "not running" can beat the event onto disk. Wait for
+  // the event itself rather than assuming the two land together.
+  const withResult = await withDeadline(
+    (async () => {
+      for (;;) {
+        const rec = await thread(broken);
+        if (rec.events.some((e) => e.type === 'result')) return rec;
+        await new Promise((r) => setTimeout(r, 20));
+      }
+    })(),
+    5000,
+    'the failed turn never journaled a result event',
+  );
+  const failedResult = withResult.events.filter((e) => e.type === 'result').at(-1);
+  assert.equal(failedResult.ok, false);
+  assert.match(failedResult.text, /limit of steps/, 'and so does the event a listening panel sees');
+
   // Every turn left a subscription sidecar, and never a cost.
   const sidecars = (await fs.readdir(path.join(outDir, PROJECT))).filter((n) => n.endsWith('-agent.json'));
-  assert.equal(sidecars.length, 5, 'five turns, five sidecars');
+  assert.equal(sidecars.length, 6, 'six turns, six sidecars');
   for (const name of sidecars) {
     const body = JSON.parse(await fs.readFile(path.join(outDir, PROJECT, name), 'utf8'));
     assert.equal(body.billing, 'subscription');

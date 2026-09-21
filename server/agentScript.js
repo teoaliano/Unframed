@@ -12,7 +12,7 @@
 // deliberately no route, header or body field that can turn it on.
 //
 // A script is { when?, turns: [...] } (or a bare array of turns), and a turn is
-//   { text, tools?: [{ name, input }], title?, isError?, expectPreamble? }
+//   { text, tools?: [{ name, input }], retries?, title?, isError?, errorSubtype?, expectPreamble? }
 // Turn N answers the thread's Nth user message. `when` is a pattern matched against a
 // chat's FIRST message: it is how one folder of fixtures serves a flow that starts
 // several different conversations, since the env var is per server, not per thread.
@@ -87,6 +87,12 @@ export async function runScriptedTurn(session, { turn, preamble, text }) {
     await session.emit({ type: 'session', model: session.model || script.name, tools: session.tools.map((t) => `mcp__unframed__${t.name}`) });
   }
 
+  // Whatever the API retried before the turn got going, in the SDK's own order: the
+  // retries come first, then the tools.
+  for (const r of step.retries ?? []) {
+    await session.emit({ type: 'api_retry', attempt: r.attempt, maxRetries: r.maxRetries, delayMs: r.delayMs, status: r.status ?? null });
+  }
+
   const byName = new Map(session.tools.map((t) => [t.name, t]));
   for (const [i, call] of (step.tools ?? []).entries()) {
     const tool = byName.get(call.name);
@@ -104,6 +110,8 @@ export async function runScriptedTurn(session, { turn, preamble, text }) {
   await session.settleTurn({
     answer: step.text,
     isError: !!step.isError,
+    // Stands in for the SDK result's `subtype`, which is what names a failure.
+    subtype: step.errorSubtype,
     usage: { input_tokens: 0, output_tokens: 0 },
     numTurns: 1,
     durationMs: Date.now() - started,

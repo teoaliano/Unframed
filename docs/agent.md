@@ -389,14 +389,14 @@ or `with` to report any more.
 marker rule as `UNFRAMED_DATA_DIR` — makes a turn come from a JSON script instead of a
 model. It replaces **the model and nothing else**: the same `Session`, the same tool
 handlers, the same document, the same events (`session`, `tool_use`, `ops_applied`,
-`tool_result`, `text_delta`, `result`, `titled`), so a fixture commits real ops and writes
+`tool_result`, `text_delta`, `api_retry`, `result`, `titled`), so a fixture commits real ops and writes
 real files in milliseconds.
 
 It exists because every interesting claim about a turn spans several modules — that a bulk
 edit is one undo step, that a tag survives deleting the node it names, that the next turn
 is told about an undo of its own change — and a real turn can show that once, expensively,
 and never the same way twice. A script is `{ when?, turns: [...] }`; a turn is
-`{ text, tools?, title?, isError?, expectPreamble? }` and turn N answers the chat's Nth
+`{ text, tools?, retries?, title?, isError?, errorSubtype?, expectPreamble? }` and turn N answers the chat's Nth
 message. `when` is matched against a chat's first message, which is how one folder of
 fixtures (`server/fixtures/agent/`) serves a flow that starts several conversations from
 one env var; the choice is made once and kept, so turn 2 cannot wander into another

@@ -54,6 +54,22 @@ export const SYSTEM_PROMPT = [
   'Be brief and concrete. Refer to nodes by what they are and their id, for example "the prompt 101 (lone red fox)".',
 ].join('\n');
 
+// What a failed turn says. The SDK's error result is a DIFFERENT variant from the
+// success one: it has no `result` field at all, only `subtype`, so building the answer
+// from `msg.result` rendered every failure as an empty message under a generic apology
+// (observed in production on 2026-09-21). The subtype is the only thing that names the
+// cause, so it is what the person is told.
+const FAILURES = {
+  error_during_execution: 'The agent stopped part-way through this turn. Nothing further was run — ask again, and say what you want done first.',
+  error_max_turns: 'The agent reached its limit of steps for one turn and stopped. Ask again, more narrowly — one change at a time.',
+  error_max_budget_usd: 'The agent reached the spending limit set for one turn and stopped.',
+  error_max_structured_output_retries: 'The agent could not produce a usable answer after several attempts. Ask again, more plainly.',
+};
+
+export function failureMessage(subtype) {
+  return FAILURES[subtype] ?? (subtype ? `The agent failed: ${subtype}.` : 'The agent reported an error.');
+}
+
 const MAX_TURNS = 30;
 export const REQUIRED_TOOLS = ['mcp__unframed__canvas_read', 'mcp__unframed__canvas_write', 'mcp__unframed__page_write', 'mcp__unframed__page_read', 'mcp__unframed__motion_write', 'mcp__unframed__motion_read'];
 const IDLE_CLOSE_MS = 10 * 60 * 1000;
@@ -265,6 +281,13 @@ class Session {
     for await (const msg of this.q) {
       switch (msg.type) {
         case 'system':
+          // A retrying request is otherwise indistinguishable from a model thinking
+          // quietly: on 2026-09-21 a turn sat silent for 100 seconds and the panel had
+          // nothing to say about it, because this switch dropped everything but `init`.
+          if (msg.subtype === 'api_retry') {
+            await this.emit({ type: 'api_retry', attempt: msg.attempt, maxRetries: msg.max_retries, delayMs: msg.retry_delay_ms, status: msg.error_status ?? null });
+            break;
+          }
           if (msg.subtype === 'init') {
             this.sdkSessionId = msg.session_id;
             await this.persist((cur) => ({ ...cur, sdkSessionId: msg.session_id, updatedAt: now() }));
@@ -323,6 +346,7 @@ class Session {
           await this.settleTurn({
             answer: text || msg.result || '',
             isError: !!msg.is_error,
+            subtype: msg.subtype,
             usage: msg.usage ?? {},
             estimatedUsd: msg.total_cost_usd,
             numTurns: msg.num_turns,
@@ -345,7 +369,12 @@ class Session {
   // message and an idle status. `lastVersion` is stamped here and nowhere else: it is
   // what the NEXT turn's preamble measures "since your last turn" from, so it has to be
   // the document version at the moment this turn stopped touching it.
-  async settleTurn({ answer, isError, usage = {}, estimatedUsd, numTurns, durationMs, stopReason = null, model, title }) {
+  // On the error branch the reason is APPENDED to whatever the agent had already said
+  // rather than replacing it: a turn that explained itself and then died has two useful
+  // halves, and before this the failure half was invisible. Both runners come through
+  // here, so a scripted failure reads to a panel exactly as a real one does.
+  async settleTurn({ answer: said, isError, subtype, usage = {}, estimatedUsd, numTurns, durationMs, stopReason = null, model, title }) {
+    const answer = isError ? [said, failureMessage(subtype)].filter(Boolean).join('\n\n') : said;
     const { openDocument } = await import('./document.js');
     const version = await openDocument(this.dir).then((d) => d.version).catch(() => null);
     const settled = await this.persist((cur) => {
