@@ -1,0 +1,7 @@
+{
+  "when": "name this chat",
+  "turns": [
+    { "title": "  A named conversation  ", "text": "Named." },
+    { "title": "Ignored on a later turn", "text": "Still named." }
+  ]
+}

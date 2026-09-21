@@ -1,4 +1,4 @@
-import { memo, useState } from 'react';
+import { memo, useState, useRef } from 'react';
 import { useReactFlow } from '@xyflow/react';
 import { Card } from '@astryxdesign/core/Card';
 import { Button } from '@astryxdesign/core/Button';
@@ -10,6 +10,7 @@ import MediaResize from './MediaResize.jsx';
 import { sendNodeCommand } from './nodeCommands.js';
 import StatusLine from './StatusLine.jsx';
 import { useProject } from '../graph/project.js';
+import { useDialValues } from './useDialValues.js';
 import { uploadFile, previewUrl } from '../api.js';
 
 // The page asset: an HTML file in the project folder, shown live. The third node family
@@ -38,6 +39,10 @@ function PageNode({ id, data, dragging, selected }) {
   const { name: project, previewPort } = useProject();
   const [error, setError] = useState('');
   const src = data.file && previewPort ? previewUrl(previewPort, project, data.file) : '';
+  // The frame showing this artifact, and its saved parameter values handed to it, so
+  // the preview here is the artifact as it is TUNED rather than as it was written.
+  const frame = useRef(null);
+  useDialValues(frame, data.dials ?? null);
   const title = data.title || data.fileName?.replace(/\.html?$/i, '') || '';
 
   async function onFile(file) {
@@ -91,6 +96,7 @@ function PageNode({ id, data, dragging, selected }) {
             // it) rather than inside the page; the same rule keeps a drag from being
             // swallowed by the frame. Keyed by file so a new version is a fresh document.
             <iframe
+              ref={frame}
               key={data.file}
               className={`xnode-frame${selected && !dragging ? ' xnode-frame--live' : ''}`}
               src={src}

@@ -1,0 +1,21 @@
+{
+  "when": "stitch|combine|in order",
+  "turns": [
+    {
+      "title": "Stitched sequence",
+      "text": "Made one motion that plays m1 then m2, back to back. The originals are untouched -- it is built from copies.",
+      "tools": [
+        { "name": "canvas_read", "input": {} },
+        { "name": "motion_read", "input": { "nodeId": "m1" } },
+        { "name": "motion_read", "input": { "nodeId": "m2" } },
+        {
+          "name": "motion_write",
+          "input": {
+            "title": "Sequence",
+            "html": "<html><head><style>#root{position:relative;overflow:hidden}.clip{position:absolute;inset:0}</style></head><body><div id=\"root\" data-composition-id=\"main\" data-start=\"0\" data-duration=\"4\" data-width=\"640\" data-height=\"360\"><div id=\"a\" class=\"clip\" data-start=\"0\" data-duration=\"2\">Intro</div><div id=\"b\" class=\"clip\" data-start=\"2\" data-duration=\"2\">Outro</div></div><script src=\"gsap.js\"></script><script>window.__timelines=window.__timelines||{};window.__timelines.main=gsap.timeline({paused:true});</script></body></html>"
+          }
+        }
+      ]
+    }
+  ]
+}

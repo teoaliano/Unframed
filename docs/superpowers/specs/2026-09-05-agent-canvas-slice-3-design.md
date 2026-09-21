@@ -8,6 +8,22 @@ on `2026-09-04-agent-canvas-slice-1-design.md` (the document, the threads) and
 the Claude Design canvas linked from the slice-1 spec, page "E · States", the panel
 boards — one tab per thread plus the canvas ones.
 
+> **Superseded in part, 2026-09-06** (`2026-09-06-chats-and-tags-design.md`). Four decisions
+> in this file were reversed, all for one reason — a thread bound to ONE artifact could not
+> be about two:
+> - **the target rule** ("exactly one artifact → it is the target; several → the agent must
+>   ask") is gone; the selection is context and the agent decides what a message means;
+> - **the artifact binding**, including "fixed for life", is replaced by `tags`, which a
+>   chat picks up from its first selection and from every artifact it writes to;
+> - **the delete confirmation** for an artifact whose thread is mid-turn is gone: a chat is
+>   not a dependency of what it touched, so the write fails and the agent says so;
+> - **the anchored reply card** is removed, and "Add to \<page\>" with it — a card has one
+>   anchor, and an answer about two nodes cannot be pinned below one of them. The reply now
+>   lives in the panel.
+>
+> The tab strip's shape, the focus mark's design (option E) and the paste-copies-the-file
+> rule all stand; the strip now filters on tags, and every tag wears the mark.
+
 ## What this slice adds
 
 The panel becomes a view over the project's threads, and the canvas tells you which

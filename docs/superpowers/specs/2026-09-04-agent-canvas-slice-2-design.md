@@ -8,6 +8,13 @@ without changing any of it. Interaction design is the Claude Design canvas linke
 that spec, page "E · States", boards 2, 2a, 2b, 3, 3a and 4 — the approved reference,
 not a sketch to redo.
 
+> **Superseded in part, 2026-09-06** (`2026-09-06-chats-and-tags-design.md`). The composer's
+> `target`/`with` and the `kind: 'artifact'` / `artifactId` thread shape introduced here are
+> gone: a thread is a **chat tagged by the artifacts it touches**, and the selection travels
+> as context the agent interprets rather than as a target the composer computes. The
+> anchored reply card is removed — the reply lives in the panel. The preview origin, the page
+> asset, the tool set and `prepareBatch` all stand unchanged.
+
 ## What this slice adds
 
 Three things, and the agent can now change the canvas.

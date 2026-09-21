@@ -5,6 +5,24 @@ is no release artifact to number. Headings are `## YYYY-MM-DD`, groups are
 `### Added` / `### Changed` / `### Fixed`, one bullet per user-visible change.
 Keep that shape: the website's What's new page parses this file.
 
+## 2026-09-14
+
+### Fixed
+
+- A parameter that positions something no longer snaps back when the clip plays. The agent
+  was writing the parameter onto the very element its GSAP timeline animates, and GSAP
+  rewrites `transform` on every frame — so a tuned position held until you scrubbed and then
+  vanished, which looked like the tuning had never been saved.
+
+### Added
+
+- Parameters can now be part of the animation itself, not just its dressing: how far
+  something slides in from, how long it takes, its easing. A motion builds its timeline
+  from its parameter values and rebuilds it as you turn them, so those controls work in the
+  preview and in a render. A value that changes over time is expressed as a start, an end
+  and a duration — there is no keyframe editor, and something needing more than that is
+  better asked of the agent.
+
 ## 2026-09-10
 
 ### Fixed
@@ -76,6 +94,31 @@ Keep that shape: the website's What's new page parses this file.
 
 ### Added
 
+- **The agent's conversations are chats you can talk to about several things at once.**
+  Select two motions and say "make both titles red", or "stitch these in order", and it
+  works — no picking one of them first, no "which did you mean". Whatever you have
+  selected comes along as context and the agent works out what you meant from what you
+  said.
+- **The editor: one artifact, full window.** Double-click a page or a motion (or use Open
+  on the toolbar) and it fills the window in three columns — the chats about it, the thing
+  itself at a size you can actually judge, and its parameters. Escape puts the canvas back
+  exactly where it was.
+- **An artifact can expose parameters you turn by hand.** Ask the agent to "expose the
+  accent colour and the intro speed as parameters" and controls appear in the editor's
+  right-hand column: drag one and the preview follows, and Render uses whatever they are
+  set to. A tweak is an ordinary canvas change, so ⌘Z takes it back, and it survives the
+  agent rewriting the composition.
+- **Ask for a parameter in the Parameters column.** Describe what you want tuneable — "the
+  background colour, the title size" — press Add, and the agent writes it into the artifact
+  and the controls appear beside it. The controls live in Unframed; a composition opened
+  outside it plays without them.
+
+- **The agent's replies are formatted.** Headings, lists, tables, quotes, task lists and
+  code blocks (with a copy button) all render properly instead of arriving as one wall of
+  plain text. Links open in a new tab.
+- **Chats name themselves.** After the first exchange the agent writes a short name on the
+  tab, so the strip says what a conversation was about instead of quoting its first words.
+  Double-click a tab to rename it yourself, and yours always wins.
 - **Motion assets.** A new node type: a HyperFrames composition — an HTML video that
   animates your project's images and clips with timed elements and a GSAP timeline. Ask
   the agent for a video, an animation or motion graphics and it writes one beside the
@@ -123,6 +166,24 @@ Keep that shape: the website's What's new page parses this file.
   nothing at all: the code that saves the file into your project was calling something
   the file never imported, so it failed on the first byte. Dropping onto an existing
   image node was never affected, which is why it looked like only some drops worked.
+- **The agent's reply lives in the panel now**, not in a card floating over the node it
+  worked on. Send from the toolbar and the panel opens on that conversation with the
+  answer streaming into it. ⌘Z undoes what the agent changed, and a change to several
+  things undoes in one step.
+- **The composer says which conversation your message joins** before you send it —
+  "continues *Title fixes*" or "new chat" — with a button to switch.
+- **A chat ends with a recap of the files it involved** — a small card after the last
+  message listing every page and motion it read or changed, each with Open and Locate. The
+  row above the box you type in shows what you have selected right now, and nothing else.
+- **A conversation outlives the things it was about.** Deleting a page or motion the agent
+  worked on no longer asks you anything and no longer hides the chat: it stays, with the
+  deleted thing greyed out in its list. Nothing is thrown away with the file.
+- **A parameter you changed just before leaving the editor is no longer lost.** Closing
+  within a moment of the last tweak used to throw it away silently, so the canvas showed
+  the artifact untuned and it looked like your work had been reset.
+- **The agent can see what an artifact is tuned to.** Asking it to stitch or combine
+  motions you had adjusted used to produce the originals, because it only ever read the
+  file and the values live on the node.
 
 ## 2026-09-05
 

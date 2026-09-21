@@ -1,4 +1,4 @@
-// The tools the agent gets, as an in-process MCP server the Agent SDK connects to. Four:
+// The tools the agent gets, as an in-process MCP server the Agent SDK connects to. Six:
 // canvas_read (the graph as the agent should see it), canvas_write (one batch of the
 // document's own ops), page_write and motion_write (a new version of an artifact), page_read and motion_read (its
 // current HTML). The pure half -- what the model is told, what a batch is allowed to
@@ -34,6 +34,9 @@ export const MAX_BATCH_OPS = 200;
 export const MAX_PAGE_BYTES = 2 * 1024 * 1024;
 // A placeholder id the agent may use for a node it is adding in this same batch.
 const NEW_ID = /^new:/;
+// The two node types a chat can be tagged with, and the ones a change line can offer to
+// open in the editor.
+const ARTIFACT_TYPES = new Set(['page', 'motion']);
 
 const fileName = (url) => decodeURIComponent(String(url || '').split('/').pop() || '');
 
@@ -64,6 +67,13 @@ function describeNode(n) {
     case 'motion':
       if (d.file) out.file = d.file;
       if (d.title) out.title = d.title;
+      // What its parameters are CURRENTLY set to. A tuned value lives on the node, not in
+      // the file (server/dials.js) -- which is what keeps tuning undoable and lets it
+      // survive a rewrite, but it also means the file alone no longer describes the
+      // artifact. Without this the agent read the file, saw the defaults, and stitched
+      // those: a motion the person had recoloured came back its original colour, and
+      // nothing in the reply admitted it (Matteo, 2026-09-14).
+      if (d.dials && typeof d.dials === 'object' && Object.keys(d.dials).length) out.dials = d.dials;
       break;
     case 'textOutput':
       out.text = d.text ?? '';
@@ -87,35 +97,84 @@ function describeNode(n) {
   return out;
 }
 
-// `context` is what the composer sent with the latest message: `target` (a node id, or
-// "new") and `with` (the rest of the selection). Absent when the message came from the
-// panel, which sends the selection alone.
-export function describeCanvas(graph, selection, context = {}) {
+// The selection is the only thing the browser sends with a message. It is CONTEXT, not
+// an instruction: the agent decides what the sentence means about it (the same edit to
+// all of them, one of them, a new asset from them, a question). There is deliberately no
+// `target` -- a mode picker was rejected, so nothing here may re-invent one.
+export function describeCanvas(graph, selection) {
   const ids = new Set(graph.nodes.map((n) => n.id));
-  const out = {
+  return {
     nodes: graph.nodes.map(describeNode),
     edges: graph.edges.map((e) => ({ from: e.source, to: e.target })),
     selection: (Array.isArray(selection) ? selection : []).filter((id) => ids.has(id)),
   };
-  if (context.target) out.target = context.target === 'new' || ids.has(context.target) ? context.target : null;
-  if (Array.isArray(context.with) && context.with.length) out.with = context.with.filter((id) => ids.has(id));
-  return out;
 }
 
-// One line prefixed to the model's copy of a message, so the composer's intent is in the
-// transcript the agent reads and not only in a tool result it might not ask for.
-export function messagePreamble({ target, with: withIds } = {}, graph) {
-  if (!target) return '';
-  const name = (id) => {
-    const n = graph?.nodes.find((x) => x.id === id);
-    if (!n) return id;
-    const d = n.data ?? {};
-    const label = d.title || d.fileName || (typeof d.text === 'string' && d.text ? d.text.slice(0, 40) : '');
-    return `${KIND[n.type] || n.type} ${id}${label ? ` ("${label}")` : ''}`;
-  };
-  const to = target === 'new' ? 'a new asset' : name(target);
-  const rest = Array.isArray(withIds) && withIds.length ? ` With: ${withIds.map(name).join(', ')}.` : '';
-  return `To: ${to}.${rest}`;
+const nodeName = (graph, id) => {
+  const n = graph?.nodes.find((x) => x.id === id);
+  if (!n) return id;
+  const d = n.data ?? {};
+  const label = d.title || d.fileName || (typeof d.text === 'string' && d.text ? d.text.slice(0, 40) : '');
+  return `${KIND[n.type] || n.type} ${id}${label ? ` ("${label}")` : ''}`;
+};
+
+// What happened to the document since this chat's last turn ended, counted from the
+// journal. `since` is the thread's `lastVersion`; entries at or below it are what the
+// agent already knows about. `system` entries (media extraction, project creation) are
+// bookkeeping, not somebody's edit, so they are not counted -- telling the agent the
+// canvas "changed" because a data URL was rewritten would send it re-reading for nothing.
+export function summarizeChanges(entries, { since = 0, threadId = null } = {}) {
+  const byVersion = new Map((entries ?? []).map((e) => [e.version, e]));
+  let person = 0;
+  let otherChats = 0;
+  let undoneFromThisChat = 0;
+  for (const e of entries ?? []) {
+    if (e.version <= since) continue;
+    const kind = e.origin?.kind;
+    if (kind === 'system') continue;
+    // A thread entry is another chat's agent; an undo or redo is whoever pressed it,
+    // which is the person -- the agent has no undo tool.
+    if (kind === 'thread') {
+      if (e.origin.id === threadId) continue;
+      otherChats += 1;
+    } else {
+      person += 1;
+    }
+    if (e.undoes !== undefined) {
+      const target = byVersion.get(e.undoes);
+      if (target?.origin?.kind === 'thread' && target.origin.id === threadId) undoneFromThisChat += 1;
+    }
+  }
+  return { person, otherChats, undoneFromThisChat, total: person + otherChats };
+}
+
+const count = (n, noun) => `${n} ${noun}${n === 1 ? '' : 's'}`;
+
+// The sentence that tells the agent the board moved under it. Its job is to make the
+// agent re-read: an answer built on a canvas the person has since edited is wrong in a
+// way neither of them can see.
+export function changeSentence({ person = 0, otherChats = 0, undoneFromThisChat = 0, total = 0 } = {}) {
+  if (!total) return '';
+  const parts = [];
+  if (person) parts.push(`${count(person, 'change')} by the person`);
+  if (otherChats) parts.push(`${count(otherChats, 'change')} by another chat`);
+  const undone = undoneFromThisChat
+    ? `, including ${undoneFromThisChat === 1 ? 'an undo of a change' : `${undoneFromThisChat} undos of changes`} from this chat`
+    : '';
+  return `Since your last turn the canvas changed: ${parts.join(', ')}${undone}. Read it again before acting.`;
+}
+
+// The preamble on the model's copy of a message: what the person had selected when they
+// sent it, and whether the canvas moved since the last turn. It goes in the transcript
+// the agent reads rather than only in a tool result it might never ask for.
+export function contextPreamble({ selection = [], changes = null } = {}, graph) {
+  const ids = new Set(graph?.nodes.map((n) => n.id) ?? []);
+  const picked = (Array.isArray(selection) ? selection : []).filter((id) => ids.has(id));
+  const lines = [];
+  if (picked.length) lines.push(`Selected: ${picked.map((id) => nodeName(graph, id)).join(', ')}.`);
+  const sentence = changes ? changeSentence(changes) : '';
+  if (sentence) lines.push(sentence);
+  return lines.join(' ');
 }
 
 const hasDataUrl = (v) => typeof v === 'string' && /^data:/i.test(v);
@@ -213,6 +272,22 @@ export function prepareBatch(ops, { graph, files, now = Date.now, random = () =>
   return { batch: { type: 'batch', ops: out }, idMap };
 }
 
+// Which artifacts a prepared batch touched, so the panel's change line can expand to
+// them ("2 changes" -> the two motions, each with Open and Locate). Read from the ops
+// rather than from the graph after the fact, because a removeNode's node is gone by
+// then. `addNode` is included: a batch that adds a page node is a change to that page.
+export function batchArtifacts(ops, graph) {
+  const added = new Map(ops.filter((o) => o.type === 'addNode').map((o) => [o.node.id, o.node.type]));
+  const typeOf = (id) => added.get(id) ?? graph.nodes.find((n) => n.id === id)?.type;
+  const out = [];
+  for (const op of ops) {
+    const id = op.type === 'addNode' ? op.node.id : op.id;
+    if (typeof id !== 'string' || out.includes(id)) continue;
+    if (ARTIFACT_TYPES.has(typeOf(id))) out.push(id);
+  }
+  return out;
+}
+
 // A page's file name: the same `<timestamp>-<slug>.html` shape every other file in the
 // folder has (media.js), so the preview origin's name rule admits it.
 export const pageFileName = (now, title, n) => mediaFileName(now, `${title || 'page'}.html`, 'html', n);
@@ -223,7 +298,7 @@ export function pageSidecar({ threadId, turn, nodeId, title, bytes, now = Date.n
 export { motionFileName };
 
 // Where a new page goes: to the right of the selection's bounding box, or at a fixed
-// spot on an empty board. The composer's `with` ids are the selection that mattered.
+// spot on an empty board.
 export function placeBeside(graph, ids, size = { width: 480, height: 320 }) {
   const picked = graph.nodes.filter((n) => ids.includes(n.id));
   if (!picked.length) return { x: 80, y: 80 };
@@ -240,10 +315,39 @@ const failure = (message) => ({ content: [{ type: 'text', text: JSON.stringify({
 // new file on every write, placement beside the selection, the node it becomes, the
 // event the panel shows -- is shared by construction below, because the two used to be
 // one hand-written tool and a second copy is exactly how they would drift apart.
+// Parameters the person can turn by hand, in the editor's Parameters column. The shapes
+// are the shorthand `server/dials.js` normalises; the sentence is appended to BOTH artifact
+// kinds rather than written twice, since a second copy is how the two would drift.
+const DIALS_CONTRACT = [
+  'A `dials` object on a page or motion in canvas_read is what its parameters are set to RIGHT NOW -- the person turned them by hand, and those values are what they see and what a render uses. They live on the node, not in the file, so the file you read back still holds the defaults. When you build something FROM an artifact -- stitching, combining, copying -- carry its current values into what you make, or the new thing silently comes out as the original rather than as what they tuned.',
+  'Parameters: you can expose values for the person to turn by hand, and they appear as controls beside the artifact. Call `unframed.dials("Scene", { accent: "#a78bfa", speed: [1, 0.5, 2], caption: "Launch day" }, (v) => { /* apply v */ })` -- once, at the end of your script, with a callback that applies the values (set a CSS custom property, a text content, a timeline timeScale).',
+  'The shape of each value decides its control: a hex colour is a colour picker, `[value, min, max]` (optionally a fourth step) a slider, a string a text field, an array of strings a dropdown, a number or true/false itself, a nested object a folder of controls. The callback runs once at startup and again on every change, and the person\'s settings are what a render uses -- so apply them, never hard-code the value you also declared.',
+  'Decide first whether a value is part of the animation. One nothing animates -- a colour, a piece of copy, a size -- is applied straight to the DOM in the callback. One the animation is MADE of -- where a move starts or ends, how long it lasts, its ease -- belongs to the animation and must be given to it rather than written to the DOM: a parameter and whatever animates must never write the same CSS property on the same element, or the parameter reads correctly while the artifact sits still and is overwritten the moment it runs.',
+  'Expose a parameter when the person asks for one, or when a choice is obviously worth tuning (a colour, a duration, a piece of copy). `unframed` is already there; do not add a script tag for it.',
+].join(' ');
+
+// The motion half of the parameter contract: how a value the TIMELINE owns is exposed.
+// Only motions have one, so this is appended to motion_write alone rather than to the
+// shared contract -- a page has no timeline and the GSAP detail would be noise in it.
+//
+// The rule exists because the obvious thing is wrong in a way that looks right. GSAP takes
+// ownership of `transform` on everything it tweens and rewrites it every frame, so a
+// position parameter written to the DOM beside a tween holds while the clip sits still and
+// snaps back the instant it is played or scrubbed -- the value is stored, delivered and
+// applied perfectly, then overwritten, which from the outside is indistinguishable from a
+// tuning that was never saved (Matteo, 2026-09-14). Building the timeline FROM the values
+// makes the collision impossible rather than merely discouraged: GSAP stays the only thing
+// writing the animated properties, and it writes them from the values.
+const DIALS_TIMELINE = [
+  'When a parameter is part of the animation, build the timeline FROM the values: register it synchronously as above, then inside the callback capture `var at = tl.time()`, call `tl.clear()`, add the tweens using the values, and `tl.seek(at)`. The callback runs once at startup, so the first build is synchronous and a render builds the timeline from the saved values before its first frame; every later change rebuilds it in place, and the runtime keeps the same timeline object throughout.',
+  'For example: `unframed.dials("Move", { fromX: [0, 0, 500], toX: [300, 0, 500], dur: [2, 0.5, 3] }, function (v) { var at = tl.time(); tl.clear(); tl.fromTo("#box", { x: v.fromX }, { x: v.toX, duration: v.dur }, 0); tl.seek(at); })`. Never set a tweened property directly in the callback; a purely static offset on a tweened element can instead go on a plain wrapper the timeline never touches, which is the same rule from the other side.',
+  'A value that CHANGES across the timeline is not one parameter: expose its start, its end and the duration as separate controls and let the tween carry it between them. Do not try to express a curve as a parameter -- when something needs a third waypoint the motion wants rewriting, not another dial.',
+].join(' ');
+
 const ARTIFACTS = {
   page: {
     describeWrite:
-      "Create a page asset or write a new version of one. `html` is the complete, self-contained HTML document: inline its style and script; reference the project's images and clips by the exact file names canvas_read reports (they sit beside the page, so a plain relative name works); nothing external loads. Files are never overwritten -- every write is a new version the person can undo. Omit nodeId to create a page beside the current selection; pass it to update that page.",
+      `Create a page asset or write a new version of one. \`html\` is the complete, self-contained HTML document: inline its style and script; reference the project's images and clips by the exact file names canvas_read reports (they sit beside the page, so a plain relative name works); nothing external loads. Files are never overwritten -- every write is a new version the person can undo. Omit nodeId to create a page beside the current selection; pass it to update that page. ${DIALS_CONTRACT}`,
     describeRead: 'Read the current HTML of a page asset, so an edit starts from what is there.',
     size: { width: 480, height: 320 },
     prepare: (html) => html,
@@ -259,6 +363,8 @@ const ARTIFACTS = {
       'animation is ONE paused GSAP timeline, registered synchronously: window.__timelines = window.__timelines || {}; window.__timelines.main = gsap.timeline({ paused: true }); give tweens explicit positions and prefer fromTo();',
       'load GSAP with <script src="gsap.js"></script> -- it sits beside the composition -- and nothing else external: no CDNs, fonts or remote images. Never call play(), pause() or set currentTime on media; no wall-clock time, no unseeded randomness, no infinite repeats.',
       'The HyperFrames runtime is added to the file for you. Files are never overwritten -- every write is a new version the person can undo. Omit nodeId to create a motion beside the current selection; pass it to update that motion. The person renders it to an MP4 from the node.',
+      DIALS_CONTRACT,
+      DIALS_TIMELINE,
     ].join(' '),
     describeRead: 'Read the current HTML of a motion asset (its HyperFrames composition), so an edit starts from what is there.',
     size: { width: 480, height: 300 },
@@ -270,7 +376,7 @@ const ARTIFACTS = {
 
 // The write and read tools for one artifact kind. `kind` is both the node type and the
 // noun in every message.
-function artifactTools(kind, { getGraph, getSelection, getContext, commit, files, previewUrl, onWrite }) {
+function artifactTools(kind, { getGraph, getSelection, commit, files, previewUrl, onWrite }) {
   const A = ARTIFACTS[kind];
   const notA = (node) => `node ${node.id} is a ${KIND[node.type] || node.type}, not a ${kind}`;
   return [
@@ -300,10 +406,8 @@ function artifactTools(kind, { getGraph, getSelection, getContext, commit, files
           if (title !== undefined && name !== (existing.data?.title ?? '')) patch.title = name;
           batch = { type: 'batch', ops: [{ type: 'updateNode', id, patch }] };
         } else {
-          const ctx = getContext();
-          const beside = Array.isArray(ctx.with) && ctx.with.length ? ctx.with : getSelection();
           id = `a-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
-          const node = { id, type: kind, position: placeBeside(graph, beside), ...A.size, data: { file, title: name, fileName: '' } };
+          const node = { id, type: kind, position: placeBeside(graph, getSelection()), ...A.size, data: { file, title: name, fileName: '' } };
           batch = { type: 'batch', ops: [{ type: 'addNode', node }] };
         }
         const entry = await commit(batch);
@@ -338,19 +442,19 @@ function artifactTools(kind, { getGraph, getSelection, getContext, commit, files
   ];
 }
 
-// `getGraph` reads the server's document (never the browser); `getSelection` and
-// `getContext` are what the browser sent with the latest message of this thread;
+// `getGraph` reads the server's document (never the browser); `getSelection` is what the
+// browser sent with the latest message of this thread;
 // `commit(batch)` applies one batch under the thread's origin and resolves to the journal
 // entry or { rejected }; `files` are the folder helpers, scoped to the project;
 // `onWrite(entry, summary)` lets the session record an ops_applied event.
-export function canvasTools({ getGraph, getSelection, getContext = () => ({}), commit, files, previewUrl, onWrite = () => {} }) {
+export function canvasTools({ getGraph, getSelection, commit, files, previewUrl, onWrite = () => {} }) {
   const fileSet = async () => new Set(await files.list());
   return [
     tool(
       'canvas_read',
-      'Read the whole canvas: every node with its id, kind, position, text or file, the edges between them (what feeds what), which node ids the person currently has selected, and -- when the message came from the composer -- the target the message is about and the nodes it came with. A node with inGroup sits inside that group node, positioned relative to it; a wired group sends every node inside it. Call this before answering anything about what is on the canvas, and before any change.',
+      'Read the whole canvas: every node with its id, kind, position, text or file, the edges between them (what feeds what), and which node ids the person currently has selected. A node with inGroup sits inside that group node, positioned relative to it; a wired group sends every node inside it. Call this before answering anything about what is on the canvas, and before any change.',
       {},
-      async () => text(describeCanvas(await getGraph(), getSelection(), getContext())),
+      async () => text(describeCanvas(await getGraph(), getSelection())),
     ),
     tool(
       'canvas_write',
@@ -374,11 +478,12 @@ export function canvasTools({ getGraph, getSelection, getContext = () => ({}), c
         const entry = await commit(prepared.batch);
         if (!entry || entry.rejected) return failure(entry?.rejected || 'the change could not be applied');
         const summary = `${prepared.batch.ops.length} change${prepared.batch.ops.length === 1 ? '' : 's'}`;
-        await onWrite(entry, { summary, opCount: prepared.batch.ops.length });
+        const artifacts = batchArtifacts(prepared.batch.ops, graph);
+        await onWrite(entry, { summary, opCount: prepared.batch.ops.length, ...(artifacts.length ? { artifacts } : {}) });
         return text({ ok: true, version: entry.version, ids: prepared.idMap });
       },
     ),
-    ...artifactTools('page', { getGraph, getSelection, getContext, commit, files, previewUrl, onWrite }),
-    ...artifactTools('motion', { getGraph, getSelection, getContext, commit, files, previewUrl, onWrite }),
+    ...artifactTools('page', { getGraph, getSelection, commit, files, previewUrl, onWrite }),
+    ...artifactTools('motion', { getGraph, getSelection, commit, files, previewUrl, onWrite }),
   ];
 }
