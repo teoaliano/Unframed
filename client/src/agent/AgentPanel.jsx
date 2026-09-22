@@ -8,6 +8,7 @@ import { Link } from '@astryxdesign/core/Link';
 import { HStack, VStack, StackItem } from '@astryxdesign/core/Stack';
 import { TabList, Tab, TabMenu } from '@astryxdesign/core/TabList';
 import { ModelPicker, EffortPicker, ModePicker } from './ModelPicker.jsx';
+import { DEFAULT_MODE } from '../../../server/permissions.js';
 import { effortsFor } from './models.js';
 // The server's own classification, not a second copy of it: a composer that disagrees
 // with the server about what a file is would accept things the turn then refuses.
@@ -168,14 +169,14 @@ export default function AgentPanel({ project, nodes, providers, onCheckProviders
   // rename for a thread sitting in the overflow menu, which has nothing to double-click.
   const [renaming, setRenaming] = useState(null); // { id, draft } | null
   // Model and effort for a thread that does not exist yet; a thread carries its own.
-  const [pending, setPending] = useState({ model: '', effort: '', mode: 'auto' });
+  const [pending, setPending] = useState({ model: '', effort: '', mode: DEFAULT_MODE });
   const scroller = useRef(null);
 
   const ready = PROVIDER_ORDER.map((k) => providers?.[k]).filter((p) => p?.status === 'ready');
   const provider = ready[0] ?? null;
   // What the provider's account can run (providers.js probe); '' is the provider default.
   const models = provider?.models ?? [];
-  const settings = thread ? { model: thread.model || '', effort: thread.effort || '', mode: thread.mode || 'auto' } : pending;
+  const settings = thread ? { model: thread.model || '', effort: thread.effort || '', mode: thread.mode || DEFAULT_MODE } : pending;
   // The SDK lists the provider's default under the id 'default', so '' looks it up there.
   const efforts = effortsFor(models, settings.model);
   const codex = providers?.codex ?? null;
@@ -688,6 +689,12 @@ export default function AgentPanel({ project, nodes, providers, onCheckProviders
           <div className="agent-permission">
             <Text size="sm" weight="medium">{`Allow ${permission.tool}?`}</Text>
             {permission.target && <code className="agent-permission-target">{permission.target}</code>}
+            {/* What the prompt could not show. A command can hide its tail past the end of
+                what fits, and approving a string you were not shown is worse than no
+                prompt at all, so the count is stated rather than left to the clipping. */}
+            {permission.hidden > 0 && (
+              <Text size="xs" tone="subtle">{`and ${permission.hidden} more characters not shown. Deny unless you know what they are.`}</Text>
+            )}
             {permission.reason && <Text size="xs" tone="subtle">{permission.reason}</Text>}
             <HStack gap={1} wrap>
               <Button size="sm" onClick={() => answer(permission.id, 'once')}>Allow once</Button>

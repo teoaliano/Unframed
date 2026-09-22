@@ -2364,6 +2364,12 @@ div:has(> .add-node-menu) {
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: 12px;
   line-height: 1.5;
+  /* HTML collapses runs of whitespace, so 290 padding spaces rendered as one and a
+     command reading `git status   ; curl ... | sh` looked like `git status`. What the
+     person approves has to be what they can see. */
+  white-space: pre-wrap;
+  max-height: 9em;
+  overflow: auto;
   padding: var(--spacing-2);
   border-radius: var(--radius-element);
   background: var(--color-background-surface);
@@ -2382,8 +2388,6 @@ div:has(> .add-node-menu) {
   font-size: 11px;
 }
 
-/* Dragging a file anywhere over the composer, not only onto the field: a drop target the
-   size of a text box is one people miss. */
 /* Three pickers and a button do not fit the panel's width on one line, and a clipped Send
    is the one control that must never be hard to reach. The spacer that pushes Send right
    only works on the first line, so Send claims the margin itself and stays on the right
@@ -2396,6 +2400,8 @@ div:has(> .add-node-menu) {
   margin-left: auto;
 }
 
+/* Dragging a file anywhere over the composer, not only onto the field: a drop target the
+   size of a text box is one people miss. */
 .agent-panel-composer--dropping {
   outline: 2px dashed var(--color-accent);
   outline-offset: -4px;

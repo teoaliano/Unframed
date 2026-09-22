@@ -73,6 +73,12 @@ export function normalizeType({ name = '', type = '' } = {}) {
   return inferForUnknown({ name, type }) ?? String(type ?? '').toLowerCase();
 }
 
+// The extension a type implies, for a file whose NAME carries none. A pasted screenshot
+// arrives as `Image` with a real `image/png` type, and storing that as `.bin` threw away
+// the one thing that says the model can look at it.
+const EXTENSION_BY_IMAGE_TYPE = { 'image/gif': '.gif', 'image/jpeg': '.jpg', 'image/png': '.png', 'image/webp': '.webp' };
+export const extensionForType = (type) => EXTENSION_BY_IMAGE_TYPE[String(type ?? '').toLowerCase()] ?? '';
+
 export const limitFor = (kind) => (kind === 'image' ? MAX_IMAGE_BYTES : MAX_FILE_BYTES);
 
 // "3.2 MB" / "48 KB". Never "0 KB": a file the person can see has a size.

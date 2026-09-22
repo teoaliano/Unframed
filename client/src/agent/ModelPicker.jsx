@@ -5,6 +5,7 @@ import { Icon } from '@astryxdesign/core/Icon';
 import { Text } from '@astryxdesign/core/Text';
 import { ChevronDown, ShieldCheck } from 'lucide-react';
 import { selectedModel } from './models.js';
+import { MODES, MODE_LABELS, MODE_HINTS, DEFAULT_MODE } from '../../../server/permissions.js';
 
 // The composer's two footer pickers, after T3 Code's (github.com/pingdotgg/t3code,
 // apps/web/src/components/chat/ProviderModelPicker.tsx and its Reasoning select): small
@@ -196,18 +197,12 @@ export function EffortPicker({ efforts, value, onChange, disabled }) {
 
 // The chat's runtime mode: how much the agent may do without asking. Same shape as the
 // reasoning picker beside it, because it is the same kind of choice -- a short list of
-// named levels, each with a line saying what it costs you. `permissions.js` owns what each
-// one actually allows; these hints must not drift from it.
-const MODE_ROWS = [
-  { id: 'plan', label: 'Plan', hint: 'Reads and describes; changes nothing' },
-  { id: 'acceptEdits', label: 'Accept edits', hint: 'Writes files; asks before running anything' },
-  { id: 'auto', label: 'Auto', hint: 'Gets on with it; asks about what cannot be undone' },
-  { id: 'full', label: 'Full access', hint: 'Never asks. For when you are watching' },
-];
+// named levels, each with a line saying what it costs you. The rows come FROM the matrix
+// (permissions.js, which has no node imports for this reason), so a mode whose rules
+// change cannot keep a description that no longer matches them.
+const MODE_ROWS = MODES.map((id) => ({ id, label: MODE_LABELS[id], hint: MODE_HINTS[id] }));
 
-export const MODE_LABEL = Object.fromEntries(MODE_ROWS.map((r) => [r.id, r.label]));
-
-export function ModePicker({ value, onChange, disabled }) {
+export function ModePicker({ value, onChange }) {
   const [open, setOpen] = useState(false);
   const pick = (id) => {
     onChange(id);
@@ -224,7 +219,7 @@ export function ModePicker({ value, onChange, disabled }) {
             <Row key={r.id} row={{ id: r.id }} selected={r.id === value} onPick={pick}>
               <span className="mp-row-name">
                 {r.label}
-                {r.id === 'auto' && <Badge label="Default" />}
+                {r.id === DEFAULT_MODE && <Badge label="Default" />}
               </span>
               <span className="mp-row-sub">{r.hint}</span>
             </Row>
@@ -233,13 +228,13 @@ export function ModePicker({ value, onChange, disabled }) {
       </div>
     </div>
   );
-  const label = MODE_LABEL[value] ?? MODE_LABEL.auto;
+  const label = MODE_LABELS[value] ?? MODE_LABELS[DEFAULT_MODE];
   return (
-    <Popover content={content} isOpen={open} onOpenChange={setOpen} isEnabled={!disabled} placement="above" alignment="start" label="Runtime mode" width={300}>
+    <Popover content={content} isOpen={open} onOpenChange={setOpen} placement="above" alignment="start" label="Runtime mode" width={300}>
       {/* The reasoning picker beside this one also has a level called "Auto", and two
           chips reading "Auto" say nothing about which is which. The mark is what tells
           them apart at a glance, the way the provider mark does on the model picker. */}
-      <Trigger disabled={disabled} label={`What the agent may do: ${label}`}>
+      <Trigger label={`What the agent may do: ${label}`}>
         <Icon icon={ShieldCheck} size="sm" />
         <span className="mp-trigger-label">{label}</span>
       </Trigger>

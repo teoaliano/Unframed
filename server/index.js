@@ -34,7 +34,7 @@ import { ensureLibrary, startRender, getRender, withRuntime } from './motion.js'
 import { providerStatuses, forgetProviderStatus, PROVIDERS } from './providers.js';
 import { newThread, writeThread, readThread, listThreads, deleteThread, eventsSince, persistThread, applySettings, renameThread, setMode, answerPermission, tagThread, EFFORTS } from './threads.js';
 import { MODES, isMode } from './permissions.js';
-import { classify as classifyAttachment, normalizeType as normalizeAttachmentType, MAX_FILE_BYTES, MAX_PER_MESSAGE as MAX_ATTACHMENTS } from './attachments.js';
+import { classify as classifyAttachment, normalizeType as normalizeAttachmentType, tooLargeMessage, MAX_FILE_BYTES, MAX_PER_MESSAGE as MAX_ATTACHMENTS } from './attachments.js';
 import { attachmentsDir, storeAttachment, resolveAttachment } from './attachmentStore.js';
 import { sendToThread, interruptThread, subscribeThread, closeThreadSession, closeSessionsFor, hasLiveSession, answerPermissionRequest, setThreadMode } from './agent.js';
 import crypto from 'node:crypto';
@@ -1485,7 +1485,20 @@ app.post('/api/projects/:name/threads/:id/messages', async (req, res) => {
 // exactly that reason -- it does not belong to one.
 const ATTACHMENTS_DIR = attachmentsDir(process.env.UNFRAMED_DATA_DIR || ROOT);
 
-app.post('/api/attachments', express.raw({ type: () => true, limit: MAX_FILE_BYTES + 1024 }), async (req, res) => {
+// The raw parser rejects anything past the cap before the handler runs, and this setup has
+// no error middleware, so without the 4-argument handler below a large file got Express's
+// default HTML 413 instead of the sentence attachments.js writes. Route-level, not global:
+// the rest of the routes keep answering for themselves.
+const attachmentBody = express.raw({ type: () => true, limit: MAX_FILE_BYTES + 1024 });
+
+app.post('/api/attachments', attachmentBody, (err, req, res, next) => {
+  if (err?.type === 'entity.too.large' || err?.status === 413) {
+    return res.status(413).json({ error: tooLargeMessage(String(req.query.name || 'That file'), Number(req.headers['content-length']) || MAX_FILE_BYTES + 1, MAX_FILE_BYTES) });
+  }
+  return next(err);
+});
+
+app.post('/api/attachments', attachmentBody, async (req, res) => {
   if (!Buffer.isBuffer(req.body) || !req.body.length) return res.status(400).json({ error: 'No file bytes in the request body.' });
   const name = typeof req.query.name === 'string' ? path.basename(req.query.name) : '';
   if (!name) return res.status(400).json({ error: 'What is the file called?' });
@@ -1499,17 +1512,6 @@ app.post('/api/attachments', express.raw({ type: () => true, limit: MAX_FILE_BYT
   } catch (err) {
     res.status(500).json({ error: `Could not save the attachment: ${err.message}` });
   }
-});
-
-// Reading one back, for the composer's thumbnail. The id is resolved against the
-// attachments directory and nothing else (attachments.js, resolveAttachment): it arrives
-// in a URL, and the only safe answer to one that escapes is a 400.
-app.get('/api/attachments/:id', async (req, res) => {
-  const file = resolveAttachment(ATTACHMENTS_DIR, req.params.id);
-  if (!file) return res.status(400).json({ error: 'Not an attachment id.' });
-  res.sendFile(file, (err) => {
-    if (err && !res.headersSent) res.status(404).json({ error: 'No such attachment.' });
-  });
 });
 
 // The person's answer to a permission request. The RECORD is updated first and the

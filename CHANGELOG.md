@@ -33,6 +33,12 @@ Keep that shape: the website's What's new page parses this file.
   are kept outside your project folder, so giving the agent something to look at does not
   add a file to the work you are organising.
 
+- A permission request shows the whole command it is asking about. A command can pad
+  itself so the part that matters falls off the end of what the box shows, and spaces
+  collapse when drawn, so a request to pipe a web address into a shell could read as
+  `git status`. The request now shows the padding, says how many characters it could not
+  fit, and "allow for this chat" covers that exact command and nothing else.
+
 - The agent can be asked for permission rather than simply refused. When it wants to do
   something the chat's runtime mode does not already allow, the panel names the tool and
   what it will touch, and waits: allow it once, allow that kind of thing for the rest of

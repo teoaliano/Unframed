@@ -83,11 +83,24 @@ assert.equal(attachmentExtension('a.PNG'), '.png');
 assert.equal(attachmentExtension('archive.tar.gz'), '.gz');
 assert.equal(attachmentExtension('noextension'), '.bin');
 assert.equal(attachmentExtension('weird.thisistoolongforanextension'), '.bin');
+// The id's extension is the only record of what the file IS once the upload is over, so
+// when the name carries none the TYPE supplies one. A pasted screenshot arrives as
+// `Image` with a real image type, and storing that as `.bin` made the turn reclassify it
+// as a generic file and hand the model a path instead of a picture.
+assert.equal(attachmentExtension('Image', 'image/png'), '.png');
+assert.equal(attachmentExtension('screenshot', 'image/jpeg'), '.jpg');
+assert.equal(attachmentExtension('notes', 'text/csv'), '.bin', 'only an image type implies one');
+assert.equal(attachmentExtension('report.pdf', 'image/png'), '.pdf', 'a real extension wins');
 {
   const id = attachmentId(Buffer.from('hello'), 'a.png');
   assert.match(id, /^[0-9a-f]{32}\.png$/);
   assert.equal(id, attachmentId(Buffer.from('hello'), 'b.png'), 'content-addressed: the same bytes are one file');
   assert.notEqual(id, attachmentId(Buffer.from('other'), 'a.png'));
+  // What the upload decided survives into the id, so the message route reaches the same
+  // answer from the id alone.
+  const pasted = attachmentId(Buffer.from('hello'), 'Image', 'image/png');
+  assert.match(pasted, /\.png$/);
+  assert.equal(classify({ name: pasted, type: '' }), 'image', 'and it still reads as an image a turn later');
 }
 for (const bad of ['../../.env', '/etc/passwd', 'a/b.png', '..', '', 'a\0b']) {
   assert.equal(resolveAttachment(root, bad), null, `refused: ${JSON.stringify(bad)}`);
@@ -109,10 +122,16 @@ assert.equal(resolveAttachment(root, 'abc.png'), path.join(root, 'abc.png'));
   const twice = await storeAttachment(dir, { name: 'copy.png', type: 'image/png', bytes });
   assert.equal(twice.attachment.id, stored.attachment.id);
   assert.deepEqual((await fs.readdir(dir)).sort(), [stored.attachment.id]);
+  // A pasted screenshot, whose name carries nothing: it is stored as an image and still
+  // reads as one from its id alone.
+  const pasted = await storeAttachment(dir, { name: 'Image', type: 'image/png', bytes: Buffer.from('other') });
+  assert.equal(pasted.attachment.kind, 'image');
+  assert.match(pasted.attachment.id, /\.png$/);
+  assert.equal(classify({ name: pasted.attachment.id, type: '' }), 'image');
   // An oversized one never reaches the disk.
   const refused = await storeAttachment(dir, { name: 'huge.png', type: 'image/png', bytes: Buffer.alloc(MAX_IMAGE_BYTES + 1) });
   assert.equal(refused.ok, false);
-  assert.equal((await fs.readdir(dir)).length, 1);
+  assert.equal((await fs.readdir(dir)).length, 2);
 }
 
 // ---- what the agent is told, and what the provider is given ----

@@ -7,7 +7,7 @@
 import { createHash } from 'node:crypto';
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { checkAttachment } from './attachments.js';
+import { checkAttachment, extensionForType } from './attachments.js';
 
 export const attachmentsDir = (dataDir) => path.join(dataDir, 'attachments');
 
@@ -16,12 +16,18 @@ export const attachmentsDir = (dataDir) => path.join(dataDir, 'attachments');
 // kept in the id's tail only as an extension, because the id reaches a filesystem path.
 const EXTENSION = /^\.[a-z0-9]{1,10}$/;
 
-export function attachmentExtension(name) {
+// The id's extension is the only record of what this file IS once the upload request is
+// over, because the message that sends it later is re-checked against the id rather than
+// against what that request claims. So when the name carries no usable extension, the
+// TYPE supplies one. Without this a pasted screenshot named `Image` stored as `.bin`, the
+// turn reclassified it as a generic file, and the model got a path instead of a picture.
+export function attachmentExtension(name, type) {
   const ext = path.extname(String(name ?? '')).toLowerCase();
-  return EXTENSION.test(ext) ? ext : '.bin';
+  if (EXTENSION.test(ext)) return ext;
+  return extensionForType(type) || '.bin';
 }
 
-export const attachmentId = (bytes, name) => `${createHash('sha256').update(bytes).digest('hex').slice(0, 32)}${attachmentExtension(name)}`;
+export const attachmentId = (bytes, name, type) => `${createHash('sha256').update(bytes).digest('hex').slice(0, 32)}${attachmentExtension(name, type)}`;
 
 // Traversal-safe resolution, lifted from t3code's attachmentPaths.ts: an id arrives in a
 // URL, and the only safe answer to one that escapes the directory is null.
@@ -39,7 +45,7 @@ export async function storeAttachment(dir, { name, type, bytes }) {
   const checked = checkAttachment({ name, type, size: bytes.length });
   if (!checked.ok) return checked;
   await fs.mkdir(dir, { recursive: true });
-  const id = attachmentId(bytes, name);
+  const id = attachmentId(bytes, name, checked.type);
   const file = path.join(dir, id);
   try {
     await fs.writeFile(file, bytes, { flag: 'wx' });

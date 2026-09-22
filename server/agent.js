@@ -197,7 +197,10 @@ class Session {
     const record = await T.readThread(this.dir, this.threadId).catch(() => null);
     const verdict = decide({ mode: record?.mode ?? DEFAULT_MODE, tool, input, grants: record?.grants ?? [] });
     if (verdict.verdict !== 'ask') return verdict;
-    const answer = await this.requestPermission({ tool: verdict.tool, signature: verdict.signature, target: verdict.target, ...(verdict.reason ? { reason: verdict.reason } : {}) });
+    // `hidden` travels with it: the prompt clips a long command for display, and a person
+    // cannot consent to the part they were not shown, so the count has to reach the panel.
+    const { verdict: _, ...request } = verdict;
+    const answer = await this.requestPermission(request);
     return { ...verdict, verdict: answer === 'deny' ? 'deny' : 'allow', ...(answer === 'deny' ? { reason: DECLINED } : {}) };
   }
 

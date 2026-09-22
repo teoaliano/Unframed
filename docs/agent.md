@@ -406,7 +406,7 @@ a rename:
 | `POST …/:id/messages` | one turn: `{ text, selection, attachments? }`; 409 while the previous one runs. The first message tags the chat with the artifacts among `selection` |
 | `GET …/:id/events?since=` | SSE: `state`, stored events past `since`, `live`, then everything as it happens |
 | `PATCH …/:id` | model and effort for the next turn: `{ model?, effort? }`, `''` resets to the default; 409 mid-turn; closes the live session so the next message resumes with the new values. `title` and `mode` ride the same route and are refused by none of those conditions — neither changes a running session |
-| `POST /api/attachments?name=` | store a file for the agent: raw bytes, type from the header. Not nested under a project, deliberately — it is stored outside the project folder. `GET /api/attachments/:id` reads one back |
+| `POST /api/attachments?name=` | store a file for the agent: raw bytes, type from the header. Past the body cap it answers 413 with the size and the limit, through a route-level error handler, since the body parser rejects before the handler runs and this setup has no global error middleware. Not nested under a project, deliberately — it is stored outside the project folder. |
 | `POST …/:id/permission` | answer the request the turn is parked on: `{ id, decision: 'once' \| 'always' \| 'deny' }`. The record is updated first and the turn released second — `always` widens the chat's grants, and a turn released before that was saved could ask the same question again. A 409 is a stale panel answering a question that is no longer in flight |
 | `POST …/:id/interrupt` | stop the running turn |
 | `DELETE …/:id` | remove the record |
@@ -467,9 +467,20 @@ Deny offered to nobody are worse than no buttons at all.
 
 **A grant's breadth tracks how hard the thing is to undo.** "Allow for this chat" on a
 shell command grants the *program*, so agreeing to `git` does not agree to `curl`; a
-command on the dangerous list is its own kind, whole, because someone answering a prompt
-about `git status` agreed to `git` and a push is not what they were shown. Grants are
-thread-scoped by definition — a new chat starts with none.
+command on the dangerous list is its own kind, and its signature is the **whole command**.
+Never a prefix: a signature built from the first 300 characters let two different commands
+share one, so padding `git status` with 290 spaces put the real tail past the cut and
+"allow for this chat" on it covered every other command with that prefix. Found by review
+on 2026-09-22 and pinned in `permissions.test.js`. Grants are thread-scoped by definition,
+so a new chat starts with none.
+
+**A prompt never asks about a string it did not show.** `describe` answers in full and the
+outcome clips at `DISPLAY_MAX` for the panel, carrying `hidden`, the count of what it could
+not fit. The panel prints that count and tells the person to deny unless they know what is
+in it, and `.agent-permission-target` sets `white-space: pre-wrap` so padding is visible
+rather than collapsed by HTML into one space. A prompt reading `git status` for a command
+that goes on to pipe a URL into a shell is worse than no prompt, because the person
+believes they read it.
 
 ### Attachments
 
