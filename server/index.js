@@ -32,7 +32,8 @@ import {
 import { saveMedia, copyMedia, inlineFileRefs } from './media.js';
 import { ensureLibrary, startRender, getRender, withRuntime } from './motion.js';
 import { providerStatuses, forgetProviderStatus, PROVIDERS } from './providers.js';
-import { newThread, writeThread, readThread, listThreads, deleteThread, eventsSince, persistThread, applySettings, renameThread, tagThread, EFFORTS } from './threads.js';
+import { newThread, writeThread, readThread, listThreads, deleteThread, eventsSince, persistThread, applySettings, renameThread, setMode, tagThread, EFFORTS } from './threads.js';
+import { MODES, isMode } from './permissions.js';
 import { sendToThread, interruptThread, subscribeThread, closeThreadSession, closeSessionsFor, hasLiveSession } from './agent.js';
 import crypto from 'node:crypto';
 import { startPreviewServer, LOOPBACK_HOST } from './preview.js';
@@ -1345,18 +1346,19 @@ const NODE_ID_RE = /^[\w-]{1,80}$/;
 // refused rather than ignored: a client still sending them would silently get an
 // untagged chat, which looks like the feature working and is not.
 app.post('/api/projects/:name/threads', async (req, res) => {
-  const { provider = 'claude', model = '', effort = '', tags = [] } = req.body || {};
+  const { provider = 'claude', model = '', effort = '', mode, tags = [] } = req.body || {};
   if ('kind' in (req.body || {}) || 'artifactId' in (req.body || {})) {
     return res.status(400).json({ error: 'A thread is a chat now: send `tags` (artifact node ids), not `kind`/`artifactId`.' });
   }
   if (!PROVIDERS[provider]) return res.status(400).json({ error: `Unknown provider "${provider}".` });
   if (typeof model !== 'string' || model.length > 200) return res.status(400).json({ error: 'That does not look like a model id.' });
   if (effort !== '' && !EFFORTS.has(effort)) return res.status(400).json({ error: `Effort must be one of ${[...EFFORTS].join(', ')}.` });
+  if (mode !== undefined && !isMode(mode)) return res.status(400).json({ error: `Mode must be one of ${MODES.join(', ')}.` });
   if (!Array.isArray(tags) || tags.length > 500) return res.status(400).json({ error: 'tags must be an array of node ids.' });
   if (tags.some((t) => typeof t !== 'string' || !NODE_ID_RE.test(t))) return res.status(400).json({ error: 'Every tag must be a node id.' });
   try {
     const id = `t-${Date.now().toString(36)}-${crypto.randomBytes(4).toString('hex')}`;
-    const thread = newThread({ id, project: slugify(req.params.name), provider, model, effort, tags });
+    const thread = newThread({ id, project: slugify(req.params.name), provider, model, effort, tags, ...(mode === undefined ? {} : { mode }) });
     await writeThread(threadDir(req), thread);
     res.json({ thread });
   } catch (err) {
@@ -1367,17 +1369,21 @@ app.post('/api/projects/:name/threads', async (req, res) => {
 // Model and effort for the thread's next turn (threads.js applySettings validates and
 // refuses mid-turn). The live session was built with the old values, so it is closed;
 // the next message resumes the SDK session with the new ones and keeps the context.
-// `title` rides the same route but is not a setting: it changes no session, so a rename
-// neither closes one nor goes near applySettings -- which refuses mid-turn whether or
-// not a model was actually asked for, and would fail a rename for standing too close.
+// `title` and `mode` ride the same route but are not settings: neither changes a session,
+// so neither closes one nor goes near applySettings -- which refuses mid-turn whether or
+// not a model was actually asked for, and would fail both for standing too close.
 app.patch('/api/projects/:name/threads/:id', async (req, res) => {
-  const { model, effort, title } = req.body || {};
+  const { model, effort, title, mode } = req.body || {};
   const settings = model !== undefined || effort !== undefined;
   try {
     const thread = await persistThread(threadDir(req), req.params.id, (cur) => {
       if (!cur) throw Object.assign(new Error('Thread not found.'), { status: 404 });
       let next = settings ? applySettings(cur, { model, effort }) : cur;
       if (title !== undefined) next = renameThread(next, title);
+      // The runtime mode rides this route beside them and, like a rename, is refused by
+      // none of their conditions: it changes how the NEXT tool call is decided, not what
+      // the running session was built with, so it may change mid-turn (threads.js).
+      if (mode !== undefined) next = setMode(next, mode);
       return next;
     });
     if (settings) closeThreadSession(threadDir(req), req.params.id);

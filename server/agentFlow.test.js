@@ -267,7 +267,25 @@ try {
   // one that rewrote it -- and the strip would show all three when it is selected.
   assert.deepEqual((await threads('?tag=m2')).map((t) => t.id).sort(), [chat, stitcher, reviser].sort());
 
-  // ---- 9. a turn that FAILS says why ----
+  // ---- 9. a chat's runtime mode: set at creation, changed mid-conversation ----
+  // How much the agent may do without asking is a property of the CHAT, so two chats can
+  // run at different levels of trust at once (permissions.js owns what each mode means).
+  assert.equal((await thread(chat)).mode, 'auto', 'the default a chat starts in');
+  const planned = await call('POST', tBase, { provider: 'claude', mode: 'plan' });
+  assert.equal(planned.status, 200);
+  const planChat = planned.body.thread.id;
+  assert.equal(planChat && planned.body.thread.mode, 'plan');
+  assert.equal((await threads()).find((t) => t.id === planChat).mode, 'plan', 'the strip can see it');
+  assert.equal((await threads()).find((t) => t.id === chat).mode, 'auto', 'and the other chat is untouched');
+  assert.equal((await call('POST', tBase, { provider: 'claude', mode: 'yolo' })).status, 400);
+
+  const loosened = await call('PATCH', `${tBase}/${planChat}`, { mode: 'full' });
+  assert.equal(loosened.status, 200);
+  assert.equal(loosened.body.thread.mode, 'full', 'loosened mid-conversation');
+  assert.equal((await call('PATCH', `${tBase}/${planChat}`, { mode: 'nonsense' })).status, 400);
+  assert.equal((await thread(planChat)).mode, 'full', 'and a refused change leaves it alone');
+
+  // ---- 10. a turn that FAILS says why ----
   // The SDK's error result carries no `result` field -- only `subtype` -- so a turn that
   // failed used to render as an empty message and a generic apology. Observed in
   // production on 2026-09-21.
@@ -293,7 +311,7 @@ try {
   assert.equal(failedResult.ok, false);
   assert.match(failedResult.text, /limit of steps/, 'and so does the event a listening panel sees');
 
-  // ---- 10. a chat the app was quit on says so, and can be carried on ----
+  // ---- 11. a chat the app was quit on says so, and can be carried on ----
   // A session cannot outlive its process, so a record saying `running` with no session
   // behind it is exactly what quitting mid-turn leaves. Writing that record is how the
   // condition is reproduced; nothing else can produce it deterministically.
