@@ -21,6 +21,17 @@ Keep that shape: the website's What's new page parses this file.
 
 ### Added
 
+- The agent can be asked for permission rather than simply refused. When it wants to do
+  something the chat's runtime mode does not already allow, the panel names the tool and
+  what it will touch, and waits: allow it once, allow that kind of thing for the rest of
+  the chat, or say no and have the agent told so it tries another way. The question
+  survives a reload, and a chat you quit on does not leave buttons nobody can press.
+
+- A chat carries a runtime mode — plan, accept edits, auto or full access — so a throwaway
+  experiment and a careful edit do not need the same amount of supervision. It belongs to
+  the chat, so two can run at different levels of trust at once, and it can be changed
+  mid-conversation.
+
 - The agent panel says when a request is being retried. A turn that sat silent for a
   minute and a half was indistinguishable from a stuck one; a retry now shows which
   attempt it is on, how long it is waiting and what went wrong.

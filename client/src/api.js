@@ -403,6 +403,12 @@ export const updateThread = (project, id, patch) =>
     return d.thread;
   });
 
+// The person's answer to a permission request: `once`, `always` or `deny`. A 409 means
+// the question moved on -- another tab answered it, or the turn it belonged to is gone --
+// so the panel re-reads rather than insisting.
+export const answerPermission = (project, id, requestId, decision) =>
+  postJson(`/api/projects/${enc(project)}/threads/${enc(id)}/permission`, { id: requestId, decision });
+
 export const interruptThread = (project, id) =>
   postJson(`/api/projects/${enc(project)}/threads/${enc(id)}/interrupt`, {}).catch(() => ({ interrupted: false }));
 

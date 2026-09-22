@@ -18,6 +18,7 @@ import {
   sendThreadMessage,
   interruptThread,
   updateThread,
+  answerPermission,
   deleteThread,
   subscribeThreadEvents,
 } from '../api.js';
@@ -149,6 +150,9 @@ export default function AgentPanel({ project, nodes, providers, onCheckProviders
   const [error, setError] = useState(null);
   const [draft, setDraft] = useState(''); // the assistant's answer as it streams
   const [activity, setActivity] = useState(null); // "Reading the canvas…" while a tool runs
+  // The permission the turn is parked on, or null. It comes from the RECORD (the stream's
+  // `state`), not only from the event, so reopening the panel mid-question still shows it.
+  const [permission, setPermission] = useState(null);
   const [text, setText] = useState('');
   const [sending, setSending] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -254,6 +258,7 @@ export default function AgentPanel({ project, nodes, providers, onCheckProviders
         draftText = '';
         setDraft('');
         setActivity(null);
+        setPermission(s.pending ?? null);
       },
       onEvent: (e) => {
         // The recap is derived from the events themselves, so the replay of a reopened
@@ -289,6 +294,13 @@ export default function AgentPanel({ project, nodes, providers, onCheckProviders
             // rather than on the next list read.
             setThreads((ts) => ts.map((t) => (t.id === threadId ? { ...t, title: e.title, titledBy: 'agent' } : t)));
             break;
+          case 'permission_request':
+            setPermission(e);
+            setActivity(null);
+            break;
+          case 'permission_result':
+            setPermission(null);
+            break;
           case 'api_retry': {
             // A retrying request looks exactly like a model thinking quietly, so the
             // activity line says which attempt it is on rather than nothing at all.
@@ -300,6 +312,7 @@ export default function AgentPanel({ project, nodes, providers, onCheckProviders
             setActivity(null);
             break;
           case 'result':
+            setPermission(null);
             // The record already has the assistant message; re-read it so the panel shows
             // exactly what was stored rather than what it pieced together from deltas.
             getThread(project, threadId)
@@ -315,6 +328,7 @@ export default function AgentPanel({ project, nodes, providers, onCheckProviders
             refresh();
             break;
           case 'error':
+            setPermission(null);
             setStatus('failed');
             setError(e.message);
             draftText = '';
@@ -364,6 +378,24 @@ export default function AgentPanel({ project, nodes, providers, onCheckProviders
       setError(err.message);
     } finally {
       setSending(false);
+    }
+  }
+
+  // The answer clears the prompt here rather than waiting for the stream, because the
+  // person has already decided and a button that stays up reads as a click that missed.
+  // A 409 means the question moved on -- another tab answered it, or the turn it belonged
+  // to is gone -- so the record is what the panel believes, not this component.
+  async function answer(requestId, decision) {
+    setPermission(null);
+    try {
+      await answerPermission(project, threadId, requestId, decision);
+    } catch {
+      const t = await getThread(project, threadId).catch(() => null);
+      if (t) {
+        setPermission(t.pending ?? null);
+        setStatus(t.status);
+        setError(t.error ?? null);
+      }
     }
   }
 
@@ -594,6 +626,21 @@ export default function AgentPanel({ project, nodes, providers, onCheckProviders
                 ))}
               </VStack>
             )}
+          </div>
+        )}
+        {/* The turn is parked here: it has neither failed nor finished, and the person is
+            the only thing that can move it on. Named tool, named target, three answers --
+            once, for the rest of this chat, or no. */}
+        {permission && (
+          <div className="agent-permission">
+            <Text size="sm" weight="medium">{`Allow ${permission.tool}?`}</Text>
+            {permission.target && <code className="agent-permission-target">{permission.target}</code>}
+            {permission.reason && <Text size="xs" tone="subtle">{permission.reason}</Text>}
+            <HStack gap={8}>
+              <Button size="sm" onClick={() => answer(permission.id, 'once')}>Allow once</Button>
+              <Button size="sm" variant="secondary" onClick={() => answer(permission.id, 'always')}>Allow for this chat</Button>
+              <Button size="sm" variant="secondary" onClick={() => answer(permission.id, 'deny')}>Deny</Button>
+            </HStack>
           </div>
         )}
         {/* The banner is for a failure the transcript cannot show -- a session that never

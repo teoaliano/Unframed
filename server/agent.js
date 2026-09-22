@@ -29,6 +29,7 @@
 // from a JSON script instead of a model (agentScript.js). It is the SAME Session -- the
 // same tool wiring, the same events, the same record -- because a second Session would be
 // a second agent, and the thing worth testing is this one. Unset in a clone, so inert.
+import { randomBytes } from 'node:crypto';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { query, createSdkMcpServer } from '@anthropic-ai/claude-agent-sdk';
@@ -36,6 +37,7 @@ import { canvasTools, contextPreamble, summarizeChanges, pageFileName, pageSidec
 import { loadScript, runScriptedTurn } from './agentScript.js';
 import { ensureLibrary, motionFileName, viewerPath } from './motion.js';
 import { detectProvider, providerRunEnv } from './providers.js';
+import { decide, DEFAULT_MODE } from './permissions.js';
 import * as T from './threads.js';
 
 export const SYSTEM_PROMPT = [
@@ -76,6 +78,9 @@ const IDLE_CLOSE_MS = 10 * 60 * 1000;
 
 // dir\0threadId -> Session
 const sessions = new Map();
+// permission request id -> resolve('once' | 'always' | 'deny'). The turn is parked on the
+// promise; the route that answers it resolves this.
+const waiters = new Map();
 // threadId -> Set<listener(event)>
 const listeners = new Map();
 
@@ -153,6 +158,48 @@ class Session {
     // runs. `chosenScript` is which fixture this chat picked at its first message.
     this.script = null;
     this.chosenScript = null;
+    // Ids of permission requests this session is parked on, so close() can refuse them.
+    this.parked = new Set();
+  }
+
+  // Ask the person, and park the turn until they answer. The request is written into the
+  // THREAD (threads.js) rather than held here, which is what makes it survive a reload: a
+  // panel that reconnects reads it from the record instead of from a socket it missed.
+  // The waiter is keyed by request id in a module-level map, because the thing that
+  // resolves it is a route call on a different request altogether.
+  //
+  // A turn parked here is still `running`, deliberately: it has not failed and it has not
+  // finished, and the panel says what it is waiting for rather than spinning.
+  async requestPermission(request) {
+    const id = `perm-${Date.now().toString(36)}-${randomBytes(4).toString('hex')}`;
+    const entry = { ...request, id };
+    // The pending request and the event announcing it are ONE write, so nothing can read
+    // a record that is waiting on a question its own event log does not mention.
+    const event = { type: 'permission_request', ...entry, at: now(), threadId: this.threadId };
+    await this.persist((cur) => (cur ? T.appendEvent(T.askPermission(cur, entry, now()), event, now()) : null));
+    broadcast(this.threadId, event);
+    const decision = await new Promise((resolve) => {
+      waiters.set(id, resolve);
+      // A session that closes (idle, cancelled, the folder renamed) must not leave a turn
+      // parked for ever: closing answers every question it was holding with a refusal.
+      this.parked.add(id);
+    });
+    this.parked.delete(id);
+    waiters.delete(id);
+    await this.emit({ type: 'permission_result', id, decision });
+    return decision;
+  }
+
+  // The one decision, for both runners: ours are allowed, the mode decides the rest, and
+  // anything left over is put to the person. The mode and the chat's grants are read from
+  // the RECORD each time rather than captured when the session was built, so a mode
+  // changed mid-turn takes effect on the very next tool call.
+  async decidePermission(tool, input) {
+    const record = await T.readThread(this.dir, this.threadId).catch(() => null);
+    const verdict = decide({ mode: record?.mode ?? DEFAULT_MODE, tool, input, grants: record?.grants ?? [] });
+    if (verdict.verdict !== 'ask') return verdict;
+    const answer = await this.requestPermission({ tool: verdict.tool, signature: verdict.signature, target: verdict.target, ...(verdict.reason ? { reason: verdict.reason } : {}) });
+    return { ...verdict, verdict: answer === 'deny' ? 'deny' : 'allow', ...(answer === 'deny' ? { reason: DECLINED } : {}) };
   }
 
   async persist(update) {
@@ -254,10 +301,14 @@ class Session {
         tools: [],
         mcpServers: { unframed: server },
         allowedTools: REQUIRED_TOOLS,
-        canUseTool: async (toolName, input) =>
-          toolName.startsWith('mcp__unframed__')
+        // The thin adapter the spec describes: ask permissions.js, and on "needs asking"
+        // park the turn and wait for the person. The matrix itself lives there.
+        canUseTool: async (toolName, input) => {
+          const verdict = await this.decidePermission(toolName, input);
+          return verdict.verdict === 'allow'
             ? { behavior: 'allow', updatedInput: input }
-            : { behavior: 'deny', message: 'This tool is not available inside Unframed.' },
+            : { behavior: 'deny', message: verdict.reason ?? DECLINED };
+        },
         permissionMode: 'default',
         maxTurns: MAX_TURNS,
         includePartialMessages: true,
@@ -496,6 +547,10 @@ class Session {
   }
 
   close() {
+    // A turn parked on a question nobody will now answer would hang for ever, so closing
+    // answers every one of them with a refusal -- the agent is told, and the turn ends.
+    for (const id of this.parked) waiters.get(id)?.('deny');
+    this.parked.clear();
     if (this.idleTimer) clearTimeout(this.idleTimer);
     this.queue.close();
     try {
@@ -529,6 +584,20 @@ export async function sendToThread(dir, threadId, { text, selection }, { setting
     if (!err.status) await session.fail(err.message);
     throw err;
   }
+}
+
+// What the agent is told when the person says no. Written to the AGENT, so it tries
+// another way instead of stalling (user story 19).
+const DECLINED = 'The person declined this. Do not try it again; say what you would have done, or find another way.';
+
+// The person's answer, from the route. Resolving the waiter is what unparks the turn --
+// the record was already updated by the route, so the session's next decision reads the
+// widened grants without being told about them.
+export function answerPermissionRequest(id, decision) {
+  const resolve = waiters.get(id);
+  if (!resolve) return false;
+  resolve(decision);
+  return true;
 }
 
 export async function interruptThread(dir, threadId) {

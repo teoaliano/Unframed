@@ -382,6 +382,7 @@ a rename:
 | `POST …/:id/messages` | one turn: `{ text, selection }`; 409 while the previous one runs. The first message tags the chat with the artifacts among `selection` |
 | `GET …/:id/events?since=` | SSE: `state`, stored events past `since`, `live`, then everything as it happens |
 | `PATCH …/:id` | model and effort for the next turn: `{ model?, effort? }`, `''` resets to the default; 409 mid-turn; closes the live session so the next message resumes with the new values. `title` and `mode` ride the same route and are refused by none of those conditions — neither changes a running session |
+| `POST …/:id/permission` | answer the request the turn is parked on: `{ id, decision: 'once' \| 'always' \| 'deny' }`. The record is updated first and the turn released second — `always` widens the chat's grants, and a turn released before that was saved could ask the same question again. A 409 is a stale panel answering a question that is no longer in flight |
 | `POST …/:id/interrupt` | stop the running turn |
 | `DELETE …/:id` | remove the record |
 
@@ -392,6 +393,48 @@ chats can run at different levels of trust at once, and unlike the model it may 
 mid-turn: the SDK's own mode only sets the floor, and every decision `canUseTool` makes
 reads the record, so tightening a chat takes effect on the agent's very next call. A record
 written before runtime modes existed migrates to the default, which is `auto`.
+
+### Permissions
+
+`permissions.js` answers one question and nothing else: **given a chat's runtime mode, a
+tool name and its input, is this allowed, denied, or does it need asking?** The matrix, the
+list of commands destructive enough to stop for even in auto, and how a thread-scoped grant
+is matched all sit behind it, so they can be tested without running a model
+(`permissions.test.js`). `canUseTool` is a thin adapter over it, and the scripted agent
+goes through the same `decidePermission`, which is how the whole round trip is asserted in
+`agentFlow.test.js`.
+
+Reading is never asked about. Our own `mcp__unframed__` tools are never asked about either,
+in any mode: they are already scoped to this project's document and folder, and a prompt
+would make the thing the agent is good at slower without making it safer.
+
+| Mode | SDK `permissionMode` | Allows |
+| --- | --- | --- |
+| plan | `plan` | reads only; anything else is **denied**, not asked — a prompt mid-plan defeats the point, and the message is written to the agent so it describes what it would do instead of stalling |
+| accept edits | `acceptEdits` | files are written; anything that RUNS asks |
+| auto | `default` | ordinary work proceeds; only what cannot be undone asks |
+| full access | `bypassPermissions` | everything |
+
+**The ordering is deliberately not Claude Code's own ordering of the same words.** There
+`default` asks about edits and `acceptEdits` does not, so accept-edits is the looser of the
+two; here auto is looser, because accept-edits means "write files, but ask before running
+anything" and auto means "get on with it, and stop me only for the dangerous things". The
+SDK mapping is what keeps the two orderings from colliding.
+
+**A pending request is thread state, not session state.** It is written into the record and
+emitted on the thread's event stream in ONE write, so nothing can read a chat waiting on a
+question its own event log does not mention — and a panel that reconnects reads it from the
+record rather than from a socket it missed. Only one can be outstanding at a time, which is
+not a limitation but the shape of a turn: the agent is blocked on the answer. A turn parked
+on one is still `running` — it has neither failed nor finished. A request whose process
+died is cleared by the same `reconcile` that fails a stale `running`, because Allow and
+Deny offered to nobody are worse than no buttons at all.
+
+**A grant's breadth tracks how hard the thing is to undo.** "Allow for this chat" on a
+shell command grants the *program*, so agreeing to `git` does not agree to `curl`; a
+command on the dangerous list is its own kind, whole, because someone answering a prompt
+about `git status` agreed to `git` and a push is not what they were shown. Grants are
+thread-scoped by definition — a new chat starts with none.
 
 `effort` is one of the Agent SDK's levels (`low` … `max`, `EFFORTS` in `threads.js`) and is
 passed straight to the session's options; the models an account can run, each with the

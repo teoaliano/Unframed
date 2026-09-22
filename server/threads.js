@@ -10,6 +10,11 @@
 // mode:     the runtime mode -- how much the agent may do in this chat without asking
 //           (permissions.js). A property of the CHAT, so two chats can run at different
 //           levels of trust at once.
+// pending:  the permission request this chat is waiting on, or null. It is thread state
+//           rather than session state precisely so it survives a reload: a client that
+//           reconnects reads it from the record instead of from a socket it missed.
+// grants:   signatures the person has allowed for the rest of this chat (permissions.js,
+//           signatureOf). Thread-scoped by definition -- a new chat starts with none.
 // tags:     node ids of the artifacts (pages, motions) this chat has touched -- the ones
 //           selected at its first message, plus every artifact the agent writes to.
 //           Tags are POINTERS, never dependencies: deleting every file a chat touched
@@ -61,6 +66,8 @@ export function newThread({ id, project, tags = [], provider, model, effort = ''
     model: model || '',
     effort: effort || '',
     mode,
+    pending: null,
+    grants: [],
     status: 'idle',
     title: '',
     titledBy: null,
@@ -122,7 +129,10 @@ export const QUIT_MID_TURN = 'Unframed stopped while this turn was running, so i
 
 export function reconcile(thread, { live = true } = {}, now = Date.now()) {
   if (!thread || thread.status !== 'running' || live) return thread;
-  return setStatus(thread, 'failed', { error: QUIT_MID_TURN }, now);
+  // A pending request goes with it: the turn parked on that answer died with the process,
+  // so a panel offering Allow and Deny would be offering them to nobody.
+  const failed = setStatus(thread, 'failed', { error: QUIT_MID_TURN }, now);
+  return failed.pending ? { ...failed, pending: null } : failed;
 }
 
 // The chat picks up a tag for every artifact it touches -- the selection at its first
@@ -171,6 +181,31 @@ export function setMode(thread, mode, now = Date.now()) {
   return { ...thread, mode, updatedAt: now };
 }
 
+// ---- permissions ----
+//
+// A request is written into the record and emitted on the thread's event stream, the same
+// path every other agent event takes; the answer arrives as a route call and resolves the
+// promise the turn is parked on (agent.js). Only one can be outstanding at a time, which
+// is not a limitation but the shape of a turn: the agent is blocked on this answer and
+// cannot ask a second question until it has one.
+export function askPermission(thread, request, now = Date.now()) {
+  if (thread.pending) throw Object.assign(new Error('This chat is already waiting on a permission.'), { status: 409 });
+  return { ...thread, pending: { ...request, at: now, turn: thread.turns }, updatedAt: now };
+}
+
+// The person's answer. `always` also widens the chat, which is what stops the twentieth
+// identical request being the twentieth prompt (user story 18); `once` and `deny` leave
+// the chat exactly as trusting as it was. An answer to a request that is not the pending
+// one is refused rather than ignored -- a stale panel must not decide the live question.
+export function answerPermission(thread, id, decision, now = Date.now()) {
+  if (!thread.pending) throw Object.assign(new Error('This chat is not waiting on a permission.'), { status: 409 });
+  if (thread.pending.id !== id) throw Object.assign(new Error('That permission request is no longer the one in flight.'), { status: 409 });
+  if (!['once', 'always', 'deny'].includes(decision)) throw Object.assign(new Error('A permission is answered once, always or deny.'), { status: 400 });
+  const grants = thread.grants ?? [];
+  const widened = decision === 'always' && thread.pending.signature && !grants.includes(thread.pending.signature);
+  return { ...thread, pending: null, grants: widened ? [...grants, thread.pending.signature] : grants, updatedAt: now };
+}
+
 // The name a user typed on the tab. Separate from `applySettings` because it is a
 // label, not a setting: nothing in the running turn reads it, so renaming mid-turn is
 // fine where changing the model is not. `''` clears the name and the tab falls back to
@@ -206,6 +241,9 @@ export function threadSummary(thread) {
     model: thread.model,
     effort: thread.effort ?? '',
     mode: thread.mode ?? DEFAULT_MODE,
+    // The strip shows which chat is waiting on you, so the summary carries the fact but
+    // not the request: what it is asking for belongs to the panel that opens it.
+    waiting: !!thread.pending,
     status: thread.status,
     title: thread.title,
     titledBy: thread.titledBy ?? null,
@@ -232,6 +270,7 @@ export function migrateThread(record) {
   // A record written before runtime modes existed ran with no general tools at all, so
   // the mode it never had is the default one.
   if (!isMode(record.mode)) record = { ...record, mode: DEFAULT_MODE };
+  if (record.pending === undefined || !Array.isArray(record.grants)) record = { ...record, pending: record.pending ?? null, grants: Array.isArray(record.grants) ? record.grants : [] };
   if (Array.isArray(record.tags)) return record;
   const { kind, artifactId, ...rest } = record;
   return {
