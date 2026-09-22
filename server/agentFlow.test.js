@@ -439,6 +439,20 @@ try {
   const attached = answered.messages.find((m) => m.role === 'user').attachments;
   assert.deepEqual(attached, [{ id: attachment.id, name: 'hero.png', type: 'image/png', kind: 'image', size: png.length }]);
 
+  // What KIND of thing it is comes from the id the upload derived, not from what this
+  // second request claims -- two requests about one file cannot disagree about whether the
+  // model may look at it.
+  const lied = (await call('POST', tBase, { provider: 'claude' })).body.thread.id;
+  await call('POST', `${tBase}/${lied}/messages`, { text: 'what is in this picture', attachments: [{ id: attachment.id, name: 'hero.png', type: 'text/csv' }] });
+  const lieRec = await settleOn(lied, (r) => r.status !== 'running', 'the lying-type turn never finished');
+  assert.equal(lieRec.messages.find((m) => m.role === 'user').attachments[0].type, 'image/png', 'the server believes the file, not the claim');
+  assert.equal(lieRec.messages.find((m) => m.role === 'user').attachments[0].kind, 'image');
+
+  // A mode changed mid-conversation is accepted while a chat is live, and the session is
+  // told -- a tightening already bit through the record, a loosening needs the SDK told.
+  assert.equal((await call('PATCH', `${tBase}/${lied}`, { mode: 'plan' })).body.thread.mode, 'plan');
+  assert.equal((await call('PATCH', `${tBase}/${lied}`, { mode: 'full' })).body.thread.mode, 'full');
+
   // A message naming a file anywhere else on the machine is refused: an attachment is
   // named by the id the upload gave back, never by a path the browser chose.
   assert.equal((await call('POST', `${tBase}/${withFile}/messages`, { text: 'again', attachments: ['../../.env'] })).status, 400);
@@ -481,14 +495,14 @@ try {
     (async () => {
       for (;;) {
         const found = (await fs.readdir(path.join(outDir, PROJECT))).filter((n) => AGENT_SIDECAR.test(n));
-        if (found.length >= 13) return found;
+        if (found.length >= 14) return found;
         await new Promise((r) => setTimeout(r, 20));
       }
     })(),
     5000,
-    'thirteen turns ran, but thirteen sidecars were never written',
+    'fourteen turns ran, but fourteen sidecars were never written',
   );
-  assert.equal(sidecars.length, 13, 'thirteen turns, thirteen sidecars');
+  assert.equal(sidecars.length, 14, 'fourteen turns, fourteen sidecars');
   for (const name of sidecars) {
     const body = JSON.parse(await fs.readFile(path.join(outDir, PROJECT, name), 'utf8'));
     assert.equal(body.billing, 'subscription');

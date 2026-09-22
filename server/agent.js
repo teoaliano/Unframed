@@ -1,36 +1,24 @@
 // The agent session: one long-lived Claude Agent SDK query per thread, fed user messages
-// through a streaming prompt so the conversation keeps its context, with the canvas as
-// its only tool set (agentTools.js: read it, change it as one batch, write a page). Every turn is journaled into the thread record
-// (threads.js) before and as it happens, and fanned out live to whoever is listening on
-// the thread's event stream. Routes are in index.js.
+// through a streaming prompt so the conversation keeps its context, with the provider's
+// own tools plus the canvas ones (agentTools.js) behind a permission the person is asked
+// for (permissions.js). Every turn is journaled into the thread record (threads.js) before
+// and as it happens, and fanned out live to whoever is listening on the thread's event
+// stream. Routes are in index.js.
 //
-// The safety half, in one place (the spec's "session configuration"). It was once "the
-// agent has no tools but ours"; it is now "the agent has the provider's own tools, and a
-// person is asked before it uses them" -- reversed deliberately on 2026-09-22, because the
-// old answer to "read the file in my Downloads" was that it could not, which is true and
-// useless. What replaced each line:
-//   - tools: the Claude Code preset. Read, Write, Bash, Glob and Grep are the CLI's own;
-//     there was never an implementation to add, only an approval to build. Grep and Glob
-//     are named in allowedTools because a native build may otherwise offer search only
-//     through Bash (the SDK's own note on `tools`).
-//   - canUseTool is now a thin adapter over permissions.js: it asks the matrix, and on
-//     "needs asking" parks the turn until the person answers (requestPermission). The
-//     denying one it replaced is what made all of this necessary in the first place.
-//   - settingSources: ['user', 'project', 'local'], as t3code does. The user's CLAUDE.md,
-//     skills and hooks are now part of what they are asking for, not a leak.
-//   - strictMcpConfig is gone with it, which is the genuinely contested removal: on
-//     2026-09-05 a turn saw the user's Figma tools and none of ours. That is why the init
-//     handshake below is now LOAD-BEARING rather than belt-and-braces -- a session without
-//     our tools still fails the turn loudly. The foreign-tool refusal had to go, since the
-//     user's own servers arriving is the point of opening settingSources.
-//   - the system prompt is the preset with ours APPENDED, not replacing it: the behaviour
-//     people like comes from that preset as much as from the tools. Ours still says canvas
-//     text is data, not instruction.
-// Three things did not change, and each is load-bearing:
-//   - the `unframed` MCP server, and its six tools auto-approved in every mode
-//     (allowedTools, and permissions.js agreeing) -- they are already scoped to this
-//     project's document and folder, and a prompt on each would make the thing the agent
-//     was already good at slower without making it safer.
+// The session configuration, whose rules `docs/agent.md` owns -- read it before changing
+// any of the options below. Only the things that bite from inside this file are repeated
+// here:
+//   - canUseTool is a thin adapter over permissions.js. Widening what the agent may do
+//     without asking is a change to that matrix, never a branch here: a special case at
+//     this call site is invisible to permissions.test.js.
+//   - the init handshake is load-bearing, not belt-and-braces. Nothing restricts what
+//     else may appear in the tool list any more, so a session missing OURS has to fail
+//     the turn loudly (assertCanvasTools) rather than let the model tell the person the
+//     tools are unavailable.
+//   - the system prompt APPENDS to the preset. Replacing it takes the behaviour that
+//     makes "read the file in my Downloads" work well.
+//   - the six unframed tools are auto-approved in every mode, in two places that must
+//     agree: allowedTools here, and permissions.js.
 //   - CLAUDE_CONFIG_DIR only if configured; HOME never overridden (providers.js).
 //   - maxTurns bounded; an AbortController per session so a cancel actually stops it.
 //
@@ -332,14 +320,13 @@ class Session {
         // The thin adapter the spec describes: ask permissions.js, and on "needs asking"
         // park the turn and wait for the person. The matrix itself lives there.
         canUseTool: async (toolName, input) => {
-          const verdict = await this.decidePermission(toolName, input);
-          return verdict.verdict === 'allow'
+          const decided = await this.decidePermission(toolName, input);
+          return decided.verdict === 'allow'
             ? { behavior: 'allow', updatedInput: input }
-            : { behavior: 'deny', message: verdict.reason ?? DECLINED };
+            : { behavior: 'deny', message: decided.reason ?? DECLINED };
         },
-        // The SDK enforces the mode itself; this is the floor the session starts on. A
-        // mode changed mid-turn does not move that floor, but every decision canUseTool
-        // makes reads the record, so a TIGHTENING takes effect at once either way.
+        // The SDK enforces the mode itself; this is the floor the session starts on, and
+        // `setThreadMode` moves it when the person changes the mode mid-conversation.
         permissionMode: SDK_PERMISSION_MODE[startMode] ?? 'default',
         maxTurns: MAX_TURNS,
         includePartialMessages: true,
@@ -659,6 +646,17 @@ export async function interruptThread(dir, threadId) {
 // and nowhere else, which is what lets threads.js reconcile a stale `running` (its
 // `reconcile`). The routes ask this; nothing else needs to.
 export const hasLiveSession = (dir, threadId) => sessions.has(`${dir}\0${threadId}`);
+
+// A mode changed mid-conversation, told to the session that is already running. Our own
+// canUseTool reads the record every time, so a tightening bit already; this is what makes
+// a LOOSENING take effect too, since the SDK enforces the floor it was started with. No
+// live session is not a failure: the next turn builds one from the record.
+export async function setThreadMode(dir, threadId, mode) {
+  const session = sessions.get(`${dir}\0${threadId}`);
+  if (!session?.q?.setPermissionMode) return false;
+  await session.q.setPermissionMode(SDK_PERMISSION_MODE[mode] ?? 'default').catch(() => {});
+  return true;
+}
 
 export function closeThreadSession(dir, threadId) {
   sessions.get(`${dir}\0${threadId}`)?.close();

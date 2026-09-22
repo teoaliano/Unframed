@@ -34,9 +34,9 @@ import { ensureLibrary, startRender, getRender, withRuntime } from './motion.js'
 import { providerStatuses, forgetProviderStatus, PROVIDERS } from './providers.js';
 import { newThread, writeThread, readThread, listThreads, deleteThread, eventsSince, persistThread, applySettings, renameThread, setMode, answerPermission, tagThread, EFFORTS } from './threads.js';
 import { MODES, isMode } from './permissions.js';
-import { classify as classifyAttachment, MAX_FILE_BYTES, MAX_PER_MESSAGE as MAX_ATTACHMENTS } from './attachments.js';
+import { classify as classifyAttachment, normalizeType as normalizeAttachmentType, MAX_FILE_BYTES, MAX_PER_MESSAGE as MAX_ATTACHMENTS } from './attachments.js';
 import { attachmentsDir, storeAttachment, resolveAttachment } from './attachmentStore.js';
-import { sendToThread, interruptThread, subscribeThread, closeThreadSession, closeSessionsFor, hasLiveSession, answerPermissionRequest } from './agent.js';
+import { sendToThread, interruptThread, subscribeThread, closeThreadSession, closeSessionsFor, hasLiveSession, answerPermissionRequest, setThreadMode } from './agent.js';
 import crypto from 'node:crypto';
 import { startPreviewServer, LOOPBACK_HOST } from './preview.js';
 import {
@@ -1388,6 +1388,11 @@ app.patch('/api/projects/:name/threads/:id', async (req, res) => {
       if (mode !== undefined) next = setMode(next, mode);
       return next;
     });
+    // The SDK was given a mode when the session started, and it enforces that floor
+    // itself. Our own decisions read the record, so a TIGHTENING already bit on the next
+    // tool call -- but a LOOSENING would not have, which is half of what "changeable
+    // mid-conversation" means. So the live session is told too.
+    if (mode !== undefined) await setThreadMode(threadDir(req), req.params.id, mode);
     if (settings) closeThreadSession(threadDir(req), req.params.id);
     res.json({ thread });
   } catch (err) {
@@ -1455,8 +1460,13 @@ app.post('/api/projects/:name/threads/:id/messages', async (req, res) => {
     if (!file) return res.status(400).json({ error: 'That is not an attachment id.' });
     const stat = await fs.stat(file).catch(() => null);
     if (!stat) return res.status(404).json({ error: 'That attachment is no longer on disk.' });
+    // What KIND of thing it is comes from the id, which the upload derived from the real
+    // file, rather than from what this second request claims: two requests about one file
+    // must not be able to disagree about whether the model may look at it. The name is
+    // only a label, so it is taken as given.
     const name = typeof a?.name === 'string' ? path.basename(a.name) : id;
-    attachments.push({ id, name, type: typeof a?.type === 'string' ? a.type : '', kind: classifyAttachment({ name, type: a?.type ?? '' }), size: stat.size, path: file });
+    const type = normalizeAttachmentType({ name: id, type: '' }) || 'application/octet-stream';
+    attachments.push({ id, name, type, kind: classifyAttachment({ name: id, type: '' }), size: stat.size, path: file });
   }
   const dir = threadDir(req);
   try {

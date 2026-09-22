@@ -368,8 +368,8 @@ export const listProviders = (refresh = false) =>
 
 // `tags` are the artifact node ids the chat is about -- the artifacts in the selection
 // when it was started. The agent adds one for every artifact it writes to.
-export const createThread = (project, { provider = 'claude', model = '', effort = '', tags = [] } = {}) =>
-  postJson(`/api/projects/${enc(project)}/threads`, { provider, model, effort, tags }).then((d) => d.thread);
+export const createThread = (project, { provider = 'claude', model = '', effort = '', mode, tags = [] } = {}) =>
+  postJson(`/api/projects/${enc(project)}/threads`, { provider, model, effort, tags, ...(mode ? { mode } : {}) }).then((d) => d.thread);
 
 // `tags` narrows the list to the chats tagged with any of those artifacts (the strip's
 // rule). Omitted, it is every chat in the project.
@@ -407,7 +407,7 @@ export const updateThread = (project, id, patch) =>
 // file upload -- but NOT nested under a project: an attachment is stored outside the
 // project folder, because uploading something to talk about must not add a file to the
 // work you are organising.
-export const uploadAttachment = async (project, file) => {
+export const uploadAttachment = async (file) => {
   const res = await fetch(`/api/attachments?name=${encodeURIComponent(file.name)}`, {
     method: 'POST',
     headers: { 'Content-Type': file.type || 'application/octet-stream' },

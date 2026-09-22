@@ -2360,12 +2360,6 @@ div:has(> .add-node-menu) {
   background: var(--color-background-card);
 }
 
-/* Three answers do not fit the panel's width on one line, and a clipped Deny is the one
-   button that must never be hard to reach. */
-.agent-permission .astryx-stack {
-  flex-wrap: wrap;
-}
-
 .agent-permission-target {
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: 12px;
@@ -2390,6 +2384,18 @@ div:has(> .add-node-menu) {
 
 /* Dragging a file anywhere over the composer, not only onto the field: a drop target the
    size of a text box is one people miss. */
+/* Three pickers and a button do not fit the panel's width on one line, and a clipped Send
+   is the one control that must never be hard to reach. The spacer that pushes Send right
+   only works on the first line, so Send claims the margin itself and stays on the right
+   whichever line it lands on. */
+.agent-panel-composer > .astryx-stack:last-of-type {
+  flex-wrap: wrap;
+  row-gap: var(--spacing-2);
+}
+.agent-panel-composer > .astryx-stack:last-of-type > :last-child {
+  margin-left: auto;
+}
+
 .agent-panel-composer--dropping {
   outline: 2px dashed var(--color-accent);
   outline-offset: -4px;

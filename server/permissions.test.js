@@ -25,6 +25,15 @@ assert.equal(SDK_PERMISSION_MODE.full, 'bypassPermissions');
 for (const mode of MODES) assert.equal(verdict(mode, 'Read', { file_path: '/tmp/a' }), 'allow', mode);
 for (const mode of MODES) assert.equal(verdict(mode, 'Grep', { pattern: 'x' }), 'allow', mode);
 
+// ---- a subagent is not a read ----
+// `Task` starts one, and it runs tool calls of its own: as a read it would be a way out of
+// plan mode, and past the dangerous list in auto.
+assert.equal(verdict('plan', 'Task', { prompt: 'do the thing' }), 'deny');
+assert.equal(verdict('auto', 'Task', { prompt: 'do the thing' }), 'ask');
+assert.equal(verdict('full', 'Task', {}), 'allow', 'full access is still full access');
+// Its neighbour stays a read: TodoWrite touches nothing outside the session.
+for (const mode of MODES) assert.equal(verdict(mode, 'TodoWrite', {}), 'allow', mode);
+
 // ---- plan mode denies rather than asks: a prompt mid-plan would defeat the point ----
 assert.equal(verdict('plan', 'Write', { file_path: '/tmp/a' }), 'deny');
 assert.equal(verdict('plan', 'Bash', { command: 'ls' }), 'deny');

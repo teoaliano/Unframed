@@ -7,7 +7,7 @@ import { TextArea } from '@astryxdesign/core/TextArea';
 import { Link } from '@astryxdesign/core/Link';
 import { HStack, VStack, StackItem } from '@astryxdesign/core/Stack';
 import { TabList, Tab, TabMenu } from '@astryxdesign/core/TabList';
-import { ModelPicker, EffortPicker } from './ModelPicker.jsx';
+import { ModelPicker, EffortPicker, ModePicker } from './ModelPicker.jsx';
 import { effortsFor } from './models.js';
 // The server's own classification, not a second copy of it: a composer that disagrees
 // with the server about what a file is would accept things the turn then refuses.
@@ -168,14 +168,14 @@ export default function AgentPanel({ project, nodes, providers, onCheckProviders
   // rename for a thread sitting in the overflow menu, which has nothing to double-click.
   const [renaming, setRenaming] = useState(null); // { id, draft } | null
   // Model and effort for a thread that does not exist yet; a thread carries its own.
-  const [pending, setPending] = useState({ model: '', effort: '' });
+  const [pending, setPending] = useState({ model: '', effort: '', mode: 'auto' });
   const scroller = useRef(null);
 
   const ready = PROVIDER_ORDER.map((k) => providers?.[k]).filter((p) => p?.status === 'ready');
   const provider = ready[0] ?? null;
   // What the provider's account can run (providers.js probe); '' is the provider default.
   const models = provider?.models ?? [];
-  const settings = thread ? { model: thread.model || '', effort: thread.effort || '' } : pending;
+  const settings = thread ? { model: thread.model || '', effort: thread.effort || '', mode: thread.mode || 'auto' } : pending;
   // The SDK lists the provider's default under the id 'default', so '' looks it up there.
   const efforts = effortsFor(models, settings.model);
   const codex = providers?.codex ?? null;
@@ -187,7 +187,7 @@ export default function AgentPanel({ project, nodes, providers, onCheckProviders
     }
     try {
       const t = await updateThread(project, thread.id, patch);
-      setThreads((ts) => ts.map((x) => (x.id === t.id ? { ...x, model: t.model, effort: t.effort ?? '' } : x)));
+      setThreads((ts) => ts.map((x) => (x.id === t.id ? { ...x, model: t.model, effort: t.effort ?? '', mode: t.mode } : x)));
     } catch (err) {
       setError(err.message);
     }
@@ -310,6 +310,14 @@ export default function AgentPanel({ project, nodes, providers, onCheckProviders
           case 'permission_result':
             setPermission(null);
             break;
+          case 'rate_limit': {
+            // The agent has reported this since before it had general tools and nothing
+            // was showing it, so a turn stalled on a quota read as a turn thinking.
+            const resets = e.info?.resetsAt ?? e.info?.resets_at;
+            const when = resets ? new Date(typeof resets === 'number' ? resets * 1000 : resets) : null;
+            setActivity(`Waiting on a usage limit${when && !Number.isNaN(when.getTime()) ? ` until ${when.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}` : ''}…`);
+            break;
+          }
           case 'api_retry': {
             // A retrying request looks exactly like a model thinking quietly, so the
             // activity line says which attempt it is on rather than nothing at all.
@@ -366,7 +374,7 @@ export default function AgentPanel({ project, nodes, providers, onCheckProviders
   const selectedArtifactIds = selectedArtifacts.map((n) => n.id);
 
   async function startThread() {
-    const t = await createThread(project, { provider: provider.kind, model: pending.model, effort: pending.effort, tags: selectedArtifactIds });
+    const t = await createThread(project, { provider: provider.kind, model: pending.model, effort: pending.effort, mode: pending.mode, tags: selectedArtifactIds });
     setThreads((ts) => [t, ...ts]);
     setChosenId(t.id);
     return t;
@@ -406,7 +414,7 @@ export default function AgentPanel({ project, nodes, providers, onCheckProviders
         continue;
       }
       try {
-        const uploaded = await uploadAttachment(project, file);
+        const uploaded = await uploadAttachment(file);
         setAttachments((cur) => (cur.some((a) => a.id === uploaded.id) ? cur : [...cur, uploaded]));
       } catch (err) {
         setError(err.message);
@@ -681,7 +689,7 @@ export default function AgentPanel({ project, nodes, providers, onCheckProviders
             <Text size="sm" weight="medium">{`Allow ${permission.tool}?`}</Text>
             {permission.target && <code className="agent-permission-target">{permission.target}</code>}
             {permission.reason && <Text size="xs" tone="subtle">{permission.reason}</Text>}
-            <HStack gap={8}>
+            <HStack gap={1} wrap>
               <Button size="sm" onClick={() => answer(permission.id, 'once')}>Allow once</Button>
               <Button size="sm" variant="secondary" onClick={() => answer(permission.id, 'always')}>Allow for this chat</Button>
               <Button size="sm" variant="secondary" onClick={() => answer(permission.id, 'deny')}>Deny</Button>
@@ -694,9 +702,7 @@ export default function AgentPanel({ project, nodes, providers, onCheckProviders
         {error && messages.at(-1)?.text !== error && <div className="agent-error">{error}</div>}
       </div>
 
-      {/* Drag anywhere over the composer, not only onto the field: a drop target the size
-          of a text box is one people miss. dragover must be prevented or the browser
-          navigates to the file instead. */}
+      {/* dragover must be prevented, or the browser navigates to the dropped file. */}
       <div
         className={`agent-panel-composer${dragging ? ' agent-panel-composer--dropping' : ''}`}
         onDragOver={(e) => {
@@ -714,13 +720,7 @@ export default function AgentPanel({ project, nodes, providers, onCheckProviders
           addFiles(e.dataTransfer.files);
         }}
       >
-        {/* What the next message carries: the live selection, named. Absent when nothing
-            is selected -- an empty selection IS the whole canvas, so a chip saying so was
-            a label on the default. Each artifact wears its own node icon, so the chip and
-            the thing on the canvas look like the same thing; whatever else is selected is
-            counted rather than named, the same rule the toolbar's chip follows. There is
-            no Locate here: a selected node is one you have just pointed at. */}
-        {/* What the next message carries, beside the selection: each file named, sized and
+        {/* What the next message carries, beside the selection: each file named and
             removable. An image we cannot send inline says so rather than looking broken --
             the agent still gets its path and can open it with its own tools. */}
         {attachments.length > 0 && (
@@ -735,6 +735,12 @@ export default function AgentPanel({ project, nodes, providers, onCheckProviders
             ))}
           </HStack>
         )}
+        {/* The live selection, named. Absent when nothing is selected -- an empty selection
+            IS the whole canvas, so a chip saying so was a label on the default. Each
+            artifact wears its own node icon, so the chip and the thing on the canvas look
+            like the same thing; whatever else is selected is counted rather than named, the
+            same rule the toolbar's chip follows. There is no Locate here: a selected node
+            is one you have just pointed at. */}
         {selection.length > 0 && (
           <HStack gap={1} align="center" wrap>
             {selectionChips.map((chip) => (
@@ -794,6 +800,10 @@ export default function AgentPanel({ project, nodes, providers, onCheckProviders
           <IconButton label="Attach a file" size="sm" variant="ghost" icon={<Icon icon={Paperclip} />} isDisabled={!provider || attachments.length >= MAX_PER_MESSAGE} onClick={() => fileInput.current?.click()} />
           {provider && <ModelPicker provider={provider} codex={codex} models={models} value={settings.model} onChange={(id) => changeSettings({ model: id, effort: '' })} disabled={running} />}
           {provider && efforts.length > 0 && <EffortPicker efforts={efforts} value={settings.effort} onChange={(e) => changeSettings({ effort: e })} disabled={running} />}
+          {/* Deliberately NOT disabled while a turn runs, where the model picker is: the
+              whole point of the mode being a property of the chat is that you can tighten
+              it while the agent is working, and the server takes it mid-turn. */}
+          {provider && <ModePicker value={settings.mode} onChange={(m) => changeSettings({ mode: m })} />}
           <StackItem size="fill" />
           {running ? (
             <Button label="Stop" variant="secondary" size="sm" icon={<Icon icon={Square} />} onClick={() => interruptThread(project, threadId)} />

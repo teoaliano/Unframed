@@ -38,7 +38,12 @@ const OURS = /^mcp__unframed__/;
 // The provider's own tools, grouped by what a person would be agreeing to. A tool this
 // does not know is not assumed harmless -- it falls through to `ask`, which is what
 // keeps a future SDK's new tool from arriving pre-approved.
-const READS = new Set(['Read', 'Glob', 'Grep', 'LS', 'NotebookRead', 'TodoWrite', 'Task']);
+// `TodoWrite` writes only to the agent's own checklist and touches nothing outside the
+// session, so it is a read here despite its name. `Task` is deliberately NOT: it starts a
+// subagent that runs tool calls of its own, so treating it as a read would be a way out of
+// plan mode -- "describe what you would do without doing any of it" -- and, in auto, a way
+// past `isDangerous` for whatever the subagent runs. It falls through and is asked about.
+const READS = new Set(['Read', 'Glob', 'Grep', 'LS', 'NotebookRead', 'TodoWrite']);
 const EDITS = new Set(['Write', 'Edit', 'MultiEdit', 'NotebookEdit']);
 const RUNS = new Set(['Bash', 'BashOutput', 'KillShell', 'KillBash']);
 

@@ -429,7 +429,10 @@ is matched all sit behind it, so they can be tested without running a model
 goes through the same `decidePermission`, which is how the whole round trip is asserted in
 `agentFlow.test.js`.
 
-Reading is never asked about. Our own `mcp__unframed__` tools are never asked about either,
+Reading is never asked about — but `Task` is not a read, whatever it looks like: it starts
+a subagent that runs tool calls of its own, so treating it as one would be a way out of
+plan mode and past the dangerous list in auto. `TodoWrite` is, since it touches nothing
+outside the session. Our own `mcp__unframed__` tools are never asked about either,
 in any mode: they are already scoped to this project's document and folder, and a prompt
 would make the thing the agent is good at slower without making it safer.
 
@@ -439,6 +442,13 @@ would make the thing the agent is good at slower without making it safer.
 | accept edits | `acceptEdits` | files are written; anything that RUNS asks |
 | auto | `default` | ordinary work proceeds; only what cannot be undone asks |
 | full access | `bypassPermissions` | everything |
+
+The composer's third picker sets it, beside the model and the reasoning level — and
+unlike the model it is **not** disabled while a turn runs, because the point of the mode
+belonging to the chat is that you can tighten it while the agent is working. Both
+directions take effect at once: a tightening through the record, which every decision
+reads, and a loosening through `setThreadMode`, which tells the live session — the SDK
+enforces the floor it was started with, so the record alone could only ever tighten.
 
 **The ordering is deliberately not Claude Code's own ordering of the same words.** There
 `default` asks about edits and `acceptEdits` does not, so accept-edits is the looser of the
@@ -501,7 +511,9 @@ provider's sandbox and the permission matrix still decide what may be read, and 
 is never copied into the project to dodge them.
 
 A message names attachments by the id the upload gave back, never by a path the browser
-chose, so it cannot name a file elsewhere on the machine and have it read into the turn.
+chose, so it cannot name a file elsewhere on the machine and have it read into the turn —
+and what KIND of thing one is comes from that id rather than from what the message claims,
+so two requests about one file cannot disagree about whether the model may look at it.
 
 `effort` is one of the Agent SDK's levels (`low` … `max`, `EFFORTS` in `threads.js`) and is
 passed straight to the session's options; the models an account can run, each with the

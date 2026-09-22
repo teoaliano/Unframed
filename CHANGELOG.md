@@ -40,9 +40,13 @@ Keep that shape: the website's What's new page parses this file.
   survives a reload, and a chat you quit on does not leave buttons nobody can press.
 
 - A chat carries a runtime mode — plan, accept edits, auto or full access — so a throwaway
-  experiment and a careful edit do not need the same amount of supervision. It belongs to
-  the chat, so two can run at different levels of trust at once, and it can be changed
-  mid-conversation.
+  experiment and a careful edit do not need the same amount of supervision. It is the third
+  picker in the composer, it belongs to the chat so two can run at different levels of trust
+  at once, and it can be changed mid-conversation, including while the agent is working.
+
+- The agent panel says when you have hit a usage limit, and when it resets. It had been
+  reporting that to itself and showing you nothing, so a turn stalled on a quota looked
+  exactly like a turn thinking.
 
 - The agent panel says when a request is being retried. A turn that sat silent for a
   minute and a half was indistinguishable from a stuck one; a retry now shows which

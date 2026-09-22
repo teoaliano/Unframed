@@ -110,10 +110,10 @@ export async function runScriptedTurn(session, { turn, preamble, text }) {
   for (const [i, call] of (step.provider ?? []).entries()) {
     const id = `scripted-provider-${turn}-${i}`;
     await session.emit({ type: 'tool_use', name: call.name, input: call.input ?? {}, id });
-    const verdict = await session.decidePermission(call.name, call.input ?? {});
-    await session.emit({ type: 'tool_result', id, ok: verdict.verdict === 'allow', size: 0 });
-    if (verdict.verdict !== 'allow') {
-      refused = verdict.reason ?? 'refused';
+    const decided = await session.decidePermission(call.name, call.input ?? {});
+    await session.emit({ type: 'tool_result', id, ok: decided.verdict === 'allow', size: 0 });
+    if (decided.verdict !== 'allow') {
+      refused = decided.reason ?? 'refused';
       break;
     }
   }
