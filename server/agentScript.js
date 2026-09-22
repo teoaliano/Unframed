@@ -25,6 +25,7 @@
 // is checked from the agent's own side rather than from a log.
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import { assertCanvasTools } from './agentTools.js';
 
 const isTurn = (t) => t && typeof t === 'object' && typeof t.text === 'string';
 
@@ -87,9 +88,13 @@ export async function runScriptedTurn(session, { turn, preamble, text }) {
     throw new Error(`agent script ${script.name} turn ${turn}: preamble did not match /${step.expectPreamble}/ -- it was "${preamble}"`);
   }
 
-  // The init handshake the SDK path checks, so a listener sees the same first event.
+  // The init handshake the SDK path checks, in full: the same assertion against the same
+  // list, so a tool that stops being registered fails every scripted turn too rather than
+  // only a real one.
   if (turn === 1) {
-    await session.emit({ type: 'session', model: session.model || script.name, tools: session.tools.map((t) => `mcp__unframed__${t.name}`) });
+    const ours = session.tools.map((t) => `mcp__unframed__${t.name}`);
+    assertCanvasTools(ours);
+    await session.emit({ type: 'session', model: session.model || script.name, tools: ours });
   }
 
   // Whatever the API retried before the turn got going, in the SDK's own order: the
