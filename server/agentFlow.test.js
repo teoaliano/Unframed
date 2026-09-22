@@ -392,6 +392,66 @@ try {
   assert.equal(orphaned.pending, null, 'no Allow and Deny offered to nobody');
   assert.equal((await threads()).find((t) => t.id === orphanPerm).waiting, false);
 
+  // ---- 11c. attachments: stored outside the project, and carried into the turn ----
+  // Uploading something to talk about must not add a file to the work the person is
+  // organising, so an attachment lands beside `.env` under the data directory -- not in
+  // the project folder, and not nested under a project route at all.
+  const png = Buffer.from('89504e470d0a1a0a0000000d49484452', 'hex');
+  const projectFilesBefore = (await fs.readdir(path.join(outDir, PROJECT))).length;
+  const up = await fetch(`${base}/api/attachments?name=hero.png`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'image/png' },
+    body: png,
+    signal: AbortSignal.timeout(15000),
+  });
+  assert.equal(up.status, 200);
+  const attachment = (await up.json()).attachment;
+  assert.equal(attachment.kind, 'image');
+  assert.equal(attachment.size, png.length);
+  assert.match(attachment.id, /^[0-9a-f]{32}\.png$/, 'content-addressed');
+  assert.equal(path.dirname(attachment.path), path.join(dataDir, 'attachments'), 'beside .env, not in the project');
+  assert.equal((await fs.readdir(path.join(outDir, PROJECT))).length, projectFilesBefore, 'and the project folder is untouched');
+  // Addressable by path: the composer reads its own thumbnail back.
+  const fetched = await fetch(`${base}/api/attachments/${attachment.id}`, { signal: AbortSignal.timeout(15000) });
+  assert.equal(fetched.status, 200);
+  assert.deepEqual(Buffer.from(await fetched.arrayBuffer()), png);
+  // An id that escapes the directory is refused, and an oversized file never lands.
+  assert.equal((await fetch(`${base}/api/attachments/..%2F..%2F.env`, { signal: AbortSignal.timeout(15000) })).status, 400);
+  const tooBig = await fetch(`${base}/api/attachments?name=huge.png`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'image/png' },
+    body: Buffer.alloc(11 * 1024 * 1024),
+    signal: AbortSignal.timeout(20000),
+  });
+  assert.equal(tooBig.status, 400);
+  assert.match((await tooBig.json()).error, /over the 10\.0 MB limit/, 'its size and the limit, so you know what to do');
+
+  // The turn carries it: the fixture's `expectPreamble` asserts the agent was told the
+  // PATH, from its own side, so a missing line fails the turn rather than passing quietly.
+  const withFile = (await call('POST', tBase, { provider: 'claude' })).body.thread.id;
+  const sentFile = await call('POST', `${tBase}/${withFile}/messages`, { text: 'what is in this picture', attachments: [{ id: attachment.id, name: 'hero.png', type: 'image/png' }] });
+  assert.equal(sentFile.status, 200);
+  const answered = await settleOn(withFile, (r) => r.status !== 'running', 'the attachment turn never finished');
+  assert.equal(answered.status, 'idle', `the attachment turn failed: ${answered.error ?? ''}`);
+  assert.match(answered.messages.at(-1).text, /red square/);
+  // The record remembers what was attached, by id and name -- never the bytes, and never
+  // the on-disk path, which is not the browser's business.
+  const attached = answered.messages.find((m) => m.role === 'user').attachments;
+  assert.deepEqual(attached, [{ id: attachment.id, name: 'hero.png', type: 'image/png', kind: 'image', size: png.length }]);
+
+  // A message naming a file anywhere else on the machine is refused: an attachment is
+  // named by the id the upload gave back, never by a path the browser chose.
+  assert.equal((await call('POST', `${tBase}/${withFile}/messages`, { text: 'again', attachments: ['../../.env'] })).status, 400);
+  assert.equal((await call('POST', `${tBase}/${withFile}/messages`, { text: 'again', attachments: ['deadbeef.png'] })).status, 404);
+
+  // ---- 11d. the attachments directory is granted, and its siblings are not ----
+  // Asserted as the granted list rather than by reaching for the filesystem: it is a LEAF,
+  // so the key in `.env` and the job store beside it stay ungranted.
+  const grantedDirs = answered.events.find((e) => e.type === 'session').directories;
+  assert.deepEqual(grantedDirs, [path.join(dataDir, 'attachments')]);
+  assert.equal(grantedDirs.includes(dataDir), false, 'never the parent');
+  assert.equal(grantedDirs.includes(outDir), false);
+
   // ---- 12. a chat the app was quit on says so, and can be carried on ----
   // A session cannot outlive its process, so a record saying `running` with no session
   // behind it is exactly what quitting mid-turn leaves. Writing that record is how the
@@ -421,14 +481,14 @@ try {
     (async () => {
       for (;;) {
         const found = (await fs.readdir(path.join(outDir, PROJECT))).filter((n) => AGENT_SIDECAR.test(n));
-        if (found.length >= 12) return found;
+        if (found.length >= 13) return found;
         await new Promise((r) => setTimeout(r, 20));
       }
     })(),
     5000,
-    'twelve turns ran, but twelve sidecars were never written',
+    'thirteen turns ran, but thirteen sidecars were never written',
   );
-  assert.equal(sidecars.length, 12, 'twelve turns, twelve sidecars');
+  assert.equal(sidecars.length, 13, 'thirteen turns, thirteen sidecars');
   for (const name of sidecars) {
     const body = JSON.parse(await fs.readFile(path.join(outDir, PROJECT, name), 'utf8'));
     assert.equal(body.billing, 'subscription');

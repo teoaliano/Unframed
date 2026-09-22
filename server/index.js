@@ -34,6 +34,8 @@ import { ensureLibrary, startRender, getRender, withRuntime } from './motion.js'
 import { providerStatuses, forgetProviderStatus, PROVIDERS } from './providers.js';
 import { newThread, writeThread, readThread, listThreads, deleteThread, eventsSince, persistThread, applySettings, renameThread, setMode, answerPermission, tagThread, EFFORTS } from './threads.js';
 import { MODES, isMode } from './permissions.js';
+import { classify as classifyAttachment, MAX_FILE_BYTES, MAX_PER_MESSAGE as MAX_ATTACHMENTS } from './attachments.js';
+import { attachmentsDir, storeAttachment, resolveAttachment } from './attachmentStore.js';
 import { sendToThread, interruptThread, subscribeThread, closeThreadSession, closeSessionsFor, hasLiveSession, answerPermissionRequest } from './agent.js';
 import crypto from 'node:crypto';
 import { startPreviewServer, LOOPBACK_HOST } from './preview.js';
@@ -1442,14 +1444,62 @@ app.post('/api/projects/:name/threads/:id/messages', async (req, res) => {
   if (!text) return res.status(400).json({ error: 'Say something first.' });
   if (text.length > 20000) return res.status(400).json({ error: 'That message is too long.' });
   const selection = Array.isArray(req.body?.selection) ? req.body.selection.slice(0, 500).map(String) : [];
+  // Attachments are named by the id POST /api/attachments gave back, never by a path the
+  // browser chose: the id is resolved against the attachments directory here, so a message
+  // cannot name a file elsewhere on the machine and have it read into the turn.
+  const asked = Array.isArray(req.body?.attachments) ? req.body.attachments.slice(0, MAX_ATTACHMENTS) : [];
+  const attachments = [];
+  for (const a of asked) {
+    const id = typeof a === 'string' ? a : a?.id;
+    const file = typeof id === 'string' ? resolveAttachment(ATTACHMENTS_DIR, id) : null;
+    if (!file) return res.status(400).json({ error: 'That is not an attachment id.' });
+    const stat = await fs.stat(file).catch(() => null);
+    if (!stat) return res.status(404).json({ error: 'That attachment is no longer on disk.' });
+    const name = typeof a?.name === 'string' ? path.basename(a.name) : id;
+    attachments.push({ id, name, type: typeof a?.type === 'string' ? a.type : '', kind: classifyAttachment({ name, type: a?.type ?? '' }), size: stat.size, path: file });
+  }
   const dir = threadDir(req);
   try {
     await tagFirstMessage(dir, req.params.id, selection);
-    await sendToThread(dir, req.params.id, { text, selection }, { settings: providerSettings, previewPort: PREVIEW_PORT });
+    await sendToThread(dir, req.params.id, { text, selection, attachments }, { settings: providerSettings, previewPort: PREVIEW_PORT, attachmentsDir: ATTACHMENTS_DIR });
     res.json({ ok: true });
   } catch (err) {
     res.status(err.status || (/not found/i.test(err.message) ? 404 : 500)).json({ error: err.message });
   }
+});
+
+// ---- agent attachments (server/attachments.js) ----
+// A file the person hands the agent in the composer. It is stored OUTSIDE the project
+// folder, beside `.env` under the data directory: uploading something to talk about must
+// not add a file to the work the person is organising. Not nested under a project for
+// exactly that reason -- it does not belong to one.
+const ATTACHMENTS_DIR = attachmentsDir(process.env.UNFRAMED_DATA_DIR || ROOT);
+
+app.post('/api/attachments', express.raw({ type: () => true, limit: MAX_FILE_BYTES + 1024 }), async (req, res) => {
+  if (!Buffer.isBuffer(req.body) || !req.body.length) return res.status(400).json({ error: 'No file bytes in the request body.' });
+  const name = typeof req.query.name === 'string' ? path.basename(req.query.name) : '';
+  if (!name) return res.status(400).json({ error: 'What is the file called?' });
+  const type = String(req.headers['content-type'] || '').split(';')[0].trim();
+  try {
+    const stored = await storeAttachment(ATTACHMENTS_DIR, { name, type, bytes: req.body });
+    // A refusal is the person's to act on -- too large, or empty -- so it is a 400 with
+    // the sentence attachments.js wrote, not a 500.
+    if (!stored.ok) return res.status(400).json({ error: stored.error });
+    res.json({ attachment: stored.attachment });
+  } catch (err) {
+    res.status(500).json({ error: `Could not save the attachment: ${err.message}` });
+  }
+});
+
+// Reading one back, for the composer's thumbnail. The id is resolved against the
+// attachments directory and nothing else (attachments.js, resolveAttachment): it arrives
+// in a URL, and the only safe answer to one that escapes is a 400.
+app.get('/api/attachments/:id', async (req, res) => {
+  const file = resolveAttachment(ATTACHMENTS_DIR, req.params.id);
+  if (!file) return res.status(400).json({ error: 'Not an attachment id.' });
+  res.sendFile(file, (err) => {
+    if (err && !res.headersSent) res.status(404).json({ error: 'No such attachment.' });
+  });
 });
 
 // The person's answer to a permission request. The RECORD is updated first and the

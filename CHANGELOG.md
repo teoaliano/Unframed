@@ -26,6 +26,13 @@ Keep that shape: the website's What's new page parses this file.
   is not already on the board no longer gets "I have no filesystem access". What it may do
   without asking is the chat's runtime mode, and everything else it asks for.
 
+- Images and files can be attached to a message — by the paperclip, by dragging onto the
+  composer, or by pasting. The agent sees an image as an image rather than only knowing a
+  path, and a file whose type your browser did not report is still recognised by its name,
+  so a plain `photo.jpg` dragged from another app is not quietly downgraded. Attachments
+  are kept outside your project folder, so giving the agent something to look at does not
+  add a file to the work you are organising.
+
 - The agent can be asked for permission rather than simply refused. When it wants to do
   something the chat's runtime mode does not already allow, the panel names the tool and
   what it will touch, and waits: allow it once, allow that kind of thing for the rest of

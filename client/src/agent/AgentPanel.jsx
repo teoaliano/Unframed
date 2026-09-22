@@ -9,8 +9,11 @@ import { HStack, VStack, StackItem } from '@astryxdesign/core/Stack';
 import { TabList, Tab, TabMenu } from '@astryxdesign/core/TabList';
 import { ModelPicker, EffortPicker } from './ModelPicker.jsx';
 import { effortsFor } from './models.js';
+// The server's own classification, not a second copy of it: a composer that disagrees
+// with the server about what a file is would accept things the turn then refuses.
+import { classify, checkAttachment, shouldHandlePaste, MAX_PER_MESSAGE } from '../../../server/attachments.js';
 import { AlertDialog } from '@astryxdesign/core/AlertDialog';
-import { X, Plus, RefreshCw, Sparkles, Square, Trash2, Crosshair, ExternalLink, ChevronRight } from 'lucide-react';
+import { X, Plus, RefreshCw, Sparkles, Square, Trash2, Crosshair, ExternalLink, ChevronRight, Paperclip } from 'lucide-react';
 import {
   createThread,
   listThreads,
@@ -19,6 +22,7 @@ import {
   interruptThread,
   updateThread,
   answerPermission,
+  uploadAttachment,
   deleteThread,
   subscribeThreadEvents,
 } from '../api.js';
@@ -156,6 +160,10 @@ export default function AgentPanel({ project, nodes, providers, onCheckProviders
   const [text, setText] = useState('');
   const [sending, setSending] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  // Files staged for the next message: uploaded as they are added, so Send carries ids.
+  const [attachments, setAttachments] = useState([]);
+  const [dragging, setDragging] = useState(false);
+  const fileInput = useRef(null);
   // The tab being renamed, and the draft in its box. Double-click starts it; there is no
   // rename for a thread sitting in the overflow menu, which has nothing to double-click.
   const [renaming, setRenaming] = useState(null); // { id, draft } | null
@@ -258,6 +266,7 @@ export default function AgentPanel({ project, nodes, providers, onCheckProviders
         draftText = '';
         setDraft('');
         setActivity(null);
+        setAttachments([]);
         setPermission(s.pending ?? null);
       },
       onEvent: (e) => {
@@ -370,14 +379,38 @@ export default function AgentPanel({ project, nodes, providers, onCheckProviders
     setError(null);
     try {
       const t = thread ?? (await startThread());
+      const sent = attachments;
       // Optimistic: the user message shows at once; the stream's `turn` event confirms.
-      setMessages((ms) => [...ms, { role: 'user', text: body, at: Date.now(), selection }]);
+      setMessages((ms) => [...ms, { role: 'user', text: body, at: Date.now(), selection, attachments: sent }]);
       setText('');
-      await sendThreadMessage(project, t.id, { text: body, selection });
+      setAttachments([]);
+      await sendThreadMessage(project, t.id, { text: body, selection, attachments: sent });
     } catch (err) {
       setError(err.message);
     } finally {
       setSending(false);
+    }
+  }
+
+  // Files are uploaded as they are STAGED rather than on Send, so a large one is paid for
+  // while the person is still typing and Send stays instant. A refusal (too large, empty)
+  // is shown as the panel's error with the sentence the server wrote -- one wording for
+  // the same rule, wherever it is hit.
+  async function addFiles(list) {
+    const files = [...list].slice(0, Math.max(0, MAX_PER_MESSAGE - attachments.length));
+    if (!files.length) return;
+    for (const file of files) {
+      const refused = checkAttachment({ name: file.name, type: file.type, size: file.size });
+      if (!refused.ok) {
+        setError(refused.error);
+        continue;
+      }
+      try {
+        const uploaded = await uploadAttachment(project, file);
+        setAttachments((cur) => (cur.some((a) => a.id === uploaded.id) ? cur : [...cur, uploaded]));
+      } catch (err) {
+        setError(err.message);
+      }
     }
   }
 
@@ -579,6 +612,18 @@ export default function AgentPanel({ project, nodes, providers, onCheckProviders
                 would eat their asterisks and turn a line starting with "#" into a heading.
                 Their own words are shown exactly as they wrote them. */}
             {m.role === 'user' ? <div className="agent-msg-text">{m.text}</div> : <ChatMarkdown text={m.text} />}
+            {/* What was attached to this message, kept in the record by name rather than
+                by bytes -- so scrolling back says what you sent, not only what you said. */}
+            {m.attachments?.length > 0 && (
+              <HStack gap={1} align="center" wrap>
+                {m.attachments.map((a) => (
+                  <span key={a.id} className="agent-chip agent-attachment">
+                    <Icon icon={Paperclip} size="sm" />
+                    {a.name}
+                  </span>
+                ))}
+              </HStack>
+            )}
           </div>
         ))}
         {draft && (
@@ -649,13 +694,47 @@ export default function AgentPanel({ project, nodes, providers, onCheckProviders
         {error && messages.at(-1)?.text !== error && <div className="agent-error">{error}</div>}
       </div>
 
-      <div className="agent-panel-composer">
+      {/* Drag anywhere over the composer, not only onto the field: a drop target the size
+          of a text box is one people miss. dragover must be prevented or the browser
+          navigates to the file instead. */}
+      <div
+        className={`agent-panel-composer${dragging ? ' agent-panel-composer--dropping' : ''}`}
+        onDragOver={(e) => {
+          if (!provider || !e.dataTransfer?.types?.includes('Files')) return;
+          e.preventDefault();
+          setDragging(true);
+        }}
+        onDragLeave={(e) => {
+          if (!e.currentTarget.contains(e.relatedTarget)) setDragging(false);
+        }}
+        onDrop={(e) => {
+          if (!provider || !e.dataTransfer?.files?.length) return;
+          e.preventDefault();
+          setDragging(false);
+          addFiles(e.dataTransfer.files);
+        }}
+      >
         {/* What the next message carries: the live selection, named. Absent when nothing
             is selected -- an empty selection IS the whole canvas, so a chip saying so was
             a label on the default. Each artifact wears its own node icon, so the chip and
             the thing on the canvas look like the same thing; whatever else is selected is
             counted rather than named, the same rule the toolbar's chip follows. There is
             no Locate here: a selected node is one you have just pointed at. */}
+        {/* What the next message carries, beside the selection: each file named, sized and
+            removable. An image we cannot send inline says so rather than looking broken --
+            the agent still gets its path and can open it with its own tools. */}
+        {attachments.length > 0 && (
+          <HStack gap={1} align="center" wrap>
+            {attachments.map((a) => (
+              <span key={a.id} className="agent-chip agent-attachment" title={a.kind === 'unsupported-image' ? 'The agent gets this by path; it cannot look at it directly.' : undefined}>
+                <Icon icon={Paperclip} size="sm" />
+                {a.name}
+                {a.kind === 'unsupported-image' && <span className="agent-attachment-note">by path</span>}
+                <IconButton label={`Remove ${a.name}`} size="xs" variant="ghost" icon={<Icon icon={X} />} onClick={() => setAttachments((cur) => cur.filter((x) => x.id !== a.id))} />
+              </span>
+            ))}
+          </HStack>
+        )}
         {selection.length > 0 && (
           <HStack gap={1} align="center" wrap>
             {selectionChips.map((chip) => (
@@ -680,6 +759,15 @@ export default function AgentPanel({ project, nodes, providers, onCheckProviders
               send();
             }
           }}
+          onPaste={(e) => {
+            // shouldHandlePaste (attachments.js, from t3code) decides: a copied image
+            // always wins, and files alongside actual text do not, because someone
+            // pasting a screenshot and a caption meant the caption too.
+            const files = [...(e.clipboardData?.files ?? [])];
+            if (!provider || !shouldHandlePaste({ files, plainText: e.clipboardData?.getData('text/plain') ?? '' })) return;
+            e.preventDefault();
+            addFiles(files);
+          }}
         >
           <TextArea
             className="nowheel"
@@ -700,6 +788,10 @@ export default function AgentPanel({ project, nodes, providers, onCheckProviders
               effort a short list with what each level means. Astryx Selectors: their
               popovers anchor fine here, outside React Flow's transform -- the
               native-select exception is for the nodes only. */}
+          {/* The button, for people who do not know the field takes a drop. Hidden input
+              rather than a styled one: a file picker cannot be opened any other way. */}
+          <input ref={fileInput} type="file" multiple hidden onChange={(e) => { addFiles(e.target.files); e.target.value = ''; }} />
+          <IconButton label="Attach a file" size="sm" variant="ghost" icon={<Icon icon={Paperclip} />} isDisabled={!provider || attachments.length >= MAX_PER_MESSAGE} onClick={() => fileInput.current?.click()} />
           {provider && <ModelPicker provider={provider} codex={codex} models={models} value={settings.model} onChange={(id) => changeSettings({ model: id, effort: '' })} disabled={running} />}
           {provider && efforts.length > 0 && <EffortPicker efforts={efforts} value={settings.effort} onChange={(e) => changeSettings({ effort: e })} disabled={running} />}
           <StackItem size="fill" />

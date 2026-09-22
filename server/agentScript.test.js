@@ -29,7 +29,7 @@ await assert.rejects(() => loadScript(path.join(root, 'nope.json')), /no such pa
 
 {
   const dir = await loadScript(FIXTURES);
-  assert.deepEqual(dir.scripts.map((s) => s.name).sort(), ['bad-node', 'bulk-edit', 'dials', 'failure', 'markdown', 'permission', 'question', 'revise', 'stitch', 'title']);
+  assert.deepEqual(dir.scripts.map((s) => s.name).sort(), ['attachment', 'bad-node', 'bulk-edit', 'dials', 'failure', 'markdown', 'permission', 'question', 'revise', 'stitch', 'title']);
   // A chat picks its fixture from its first message, which is how ONE env var serves a
   // flow that starts several different conversations.
   assert.equal(pickScript(dir, 'make both titles red').name, 'bulk-edit');

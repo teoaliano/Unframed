@@ -392,8 +392,8 @@ export const getThread = (project, id) =>
 // the thread's event stream. A 409 means the previous turn is still running.
 // The selection is the only thing that travels with it, and it is context: the agent
 // decides what the sentence means about it, so there is no target to send.
-export const sendThreadMessage = (project, id, { text, selection = [] }) =>
-  postJson(`/api/projects/${enc(project)}/threads/${enc(id)}/messages`, { text, selection });
+export const sendThreadMessage = (project, id, { text, selection = [], attachments = [] }) =>
+  postJson(`/api/projects/${enc(project)}/threads/${enc(id)}/messages`, { text, selection, attachments: attachments.map(({ id: aid, name, type }) => ({ id: aid, name, type })) });
 
 // Model and effort for the thread's next turn; either key may be omitted, '' resets.
 export const updateThread = (project, id, patch) =>
@@ -402,6 +402,21 @@ export const updateThread = (project, id, patch) =>
     if (!r.ok) throw new Error(d.error || `Could not update the thread (${r.status})`);
     return d.thread;
   });
+
+// A file for the agent. Raw bytes with the name in the query, the same shape as a project
+// file upload -- but NOT nested under a project: an attachment is stored outside the
+// project folder, because uploading something to talk about must not add a file to the
+// work you are organising.
+export const uploadAttachment = async (project, file) => {
+  const res = await fetch(`/api/attachments?name=${encodeURIComponent(file.name)}`, {
+    method: 'POST',
+    headers: { 'Content-Type': file.type || 'application/octet-stream' },
+    body: file,
+  });
+  const d = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(d.error || `Could not attach that file (${res.status})`);
+  return d.attachment;
+};
 
 // The person's answer to a permission request: `once`, `always` or `deny`. A 409 means
 // the question moved on -- another tab answered it, or the turn it belonged to is gone --

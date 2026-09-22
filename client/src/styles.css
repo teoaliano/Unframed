@@ -2376,3 +2376,22 @@ div:has(> .add-node-menu) {
   color: var(--color-text-secondary);
   overflow-wrap: anywhere;
 }
+
+/* A file staged for the next message. Same chip as a selection, plus what the agent will
+   and will not be able to look at. */
+.agent-attachment {
+  gap: var(--spacing-1);
+}
+
+.agent-attachment-note {
+  color: var(--color-text-secondary);
+  font-size: 11px;
+}
+
+/* Dragging a file anywhere over the composer, not only onto the field: a drop target the
+   size of a text box is one people miss. */
+.agent-panel-composer--dropping {
+  outline: 2px dashed var(--color-accent);
+  outline-offset: -4px;
+  border-radius: var(--radius-element);
+}

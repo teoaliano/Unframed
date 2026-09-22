@@ -47,6 +47,8 @@ import { loadScript, runScriptedTurn } from './agentScript.js';
 import { ensureLibrary, motionFileName, viewerPath } from './motion.js';
 import { detectProvider, providerRunEnv } from './providers.js';
 import { decide, DEFAULT_MODE, SDK_PERMISSION_MODE } from './permissions.js';
+import { attachmentLines, providerContent } from './attachments.js';
+import { resolveAttachment } from './attachmentStore.js';
 import * as T from './threads.js';
 
 export const SYSTEM_PROMPT = [
@@ -141,7 +143,7 @@ function messageQueue() {
 }
 
 class Session {
-  constructor({ dir, thread, settings, env, previewPort = 0 }) {
+  constructor({ dir, thread, settings, env, previewPort = 0, attachmentsDir = '' }) {
     this.dir = dir;
     this.threadId = thread.id;
     this.provider = thread.provider;
@@ -150,6 +152,7 @@ class Session {
     this.settings = settings;
     this.env = env;
     this.previewPort = previewPort;
+    this.attachmentsDir = attachmentsDir;
     this.selection = [];
     this.lastVersion = thread.lastVersion ?? null;
     this.turn = thread.turns ?? 0;
@@ -208,6 +211,15 @@ class Session {
     if (verdict.verdict !== 'ask') return verdict;
     const answer = await this.requestPermission({ tool: verdict.tool, signature: verdict.signature, target: verdict.target, ...(verdict.reason ? { reason: verdict.reason } : {}) });
     return { ...verdict, verdict: answer === 'deny' ? 'deny' : 'allow', ...(answer === 'deny' ? { reason: DECLINED } : {}) };
+  }
+
+  // The ONE leaf directory the agent is granted beyond its project folder, so reading an
+  // attachment needs no approval. Its siblings under the data directory -- the key in
+  // `.env`, the job store -- are deliberately not granted: this is a leaf, not its parent.
+  // Reported on the `session` event as well as passed to the SDK, because "what can it
+  // reach" is the kind of fact a person should be able to read rather than infer.
+  grantedDirectories() {
+    return this.attachmentsDir ? [this.attachmentsDir] : [];
   }
 
   async persist(update) {
@@ -304,6 +316,7 @@ class Session {
         pathToClaudeCodeExecutable: detected.executable,
         env: penv,
         cwd: this.dir,
+        additionalDirectories: this.grantedDirectories(),
         ...(this.model ? { model: this.model } : {}),
         ...(this.effort ? { effort: this.effort } : {}),
         // Appended, not replacing: "read the latest file in my Downloads" behaves well
@@ -362,7 +375,7 @@ class Session {
             await this.persist((cur) => ({ ...cur, sdkSessionId: msg.session_id, updatedAt: now() }));
             const ours = msg.tools?.filter((t) => t.startsWith('mcp__unframed__')) ?? [];
             const foreign = msg.tools?.filter((t) => t.startsWith('mcp__') && !t.startsWith('mcp__unframed__')) ?? [];
-            await this.emit({ type: 'session', model: msg.model, tools: ours, ...(foreign.length ? { foreign } : {}) });
+            await this.emit({ type: 'session', model: msg.model, tools: ours, directories: this.grantedDirectories(), ...(foreign.length ? { foreign } : {}) });
             // Load-bearing rather than belt-and-braces now that strictMcpConfig is gone:
             // a session without our tools (the in-process server failed to register, as a
             // bad schema once made it) is stopped here, before the model speaks, instead
@@ -519,13 +532,13 @@ class Session {
     if (typeof this.idleTimer.unref === 'function') this.idleTimer.unref();
   }
 
-  async send({ text, selection }) {
+  async send({ text, selection, attachments = [] }) {
     if (this.running) throw Object.assign(new Error('The agent is still answering the previous message.'), { status: 409 });
     if (this.idleTimer) clearTimeout(this.idleTimer);
     this.selection = Array.isArray(selection) ? selection.map(String) : [];
     this.running = true;
     const settled = await this.persist((cur) =>
-      T.setStatus(T.appendMessage(cur, { role: 'user', text, selection: this.selection }, now()), 'running', {}, now()),
+      T.setStatus(T.appendMessage(cur, { role: 'user', text, selection: this.selection, attachments }, now()), 'running', {}, now()),
     );
     this.turn = settled?.turns ?? this.turn;
     await this.emit({ type: 'turn', text });
@@ -536,19 +549,40 @@ class Session {
     const { openDocument } = await import('./document.js');
     const doc = await openDocument(this.dir);
     const changes = summarizeChanges(doc.entries, { since: this.lastVersion ?? 0, threadId: this.threadId });
-    const preamble = contextPreamble({ selection: this.selection, changes }, doc.graph);
+    // The attachments ride in the preamble rather than being appended to the person's own
+    // sentence: it is context about the message, the same as the selection, and it must
+    // not read as something they typed.
+    const preamble = [contextPreamble({ selection: this.selection, changes }, doc.graph), attachmentLines(attachments)].filter(Boolean).join('\n\n');
     const body = preamble ? `${preamble}\n\n${text}` : text;
     if (this.script) {
       // Errors are the runner's to report as a failed turn, exactly as the SDK loop does.
       this.loop = runScriptedTurn(this, { turn: this.turn, preamble, text }).catch((err) => this.fail(err.message || String(err)));
       return;
     }
+    // The path is in the text AND the image goes to the provider natively, so the model
+    // can both look at it and dereference the path. Bytes are read here, at the boundary,
+    // the same rule media.js follows for a generation: nothing carries them before then.
     this.queue.push({
       type: 'user',
-      message: { role: 'user', content: body },
+      message: { role: 'user', content: providerContent(body, await this.readAttachments(attachments)) },
       parent_tool_use_id: null,
       session_id: this.sdkSessionId || '',
     });
+  }
+
+  // Only what the provider can actually look at is read; everything else the agent opens
+  // for itself, through the directory it was granted. An unreadable one is dropped rather
+  // than failing the turn -- the path is still in the text, and the agent can say so.
+  async readAttachments(attachments) {
+    const out = [];
+    for (const a of attachments) {
+      if (a.kind !== 'image') continue;
+      const file = resolveAttachment(this.attachmentsDir, a.id);
+      if (!file) continue;
+      const data = await fs.readFile(file).then((b) => b.toString('base64'), () => null);
+      if (data) out.push({ ...a, data });
+    }
+    return out;
   }
 
   async interrupt() {
@@ -581,12 +615,12 @@ class Session {
 // One live session per thread while the server runs. A thread that has gone quiet is
 // closed after IDLE_CLOSE_MS and resumed through the SDK's own session store on the next
 // message, so context survives both the idle close and a server restart.
-export async function sendToThread(dir, threadId, { text, selection }, { settings, env = process.env, previewPort = 0 }) {
+export async function sendToThread(dir, threadId, { text, selection, attachments }, { settings, env = process.env, previewPort = 0, attachmentsDir = '' }) {
   const key = `${dir}\0${threadId}`;
   let session = sessions.get(key);
   if (!session) {
     const thread = await T.readThread(dir, threadId);
-    session = new Session({ dir, thread, settings: settings(thread.provider), env, previewPort });
+    session = new Session({ dir, thread, settings: settings(thread.provider), env, previewPort, attachmentsDir });
     // Unset in a clone, so this is null and the SDK runs. Read per session rather than
     // once at import, so a test can point two servers at two different scripts.
     session.script = await loadScript(env.UNFRAMED_TEST_AGENT_SCRIPT);
@@ -594,7 +628,7 @@ export async function sendToThread(dir, threadId, { text, selection }, { setting
   }
   if (previewPort) session.previewPort = previewPort;
   try {
-    await session.send({ text, selection });
+    await session.send({ text, selection, attachments });
   } catch (err) {
     if (!err.status) await session.fail(err.message);
     throw err;

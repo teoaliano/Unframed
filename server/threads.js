@@ -82,10 +82,13 @@ export function newThread({ id, project, tags = [], provider, model, effort = ''
 }
 
 // A user message opens a turn; an assistant message closes the current one.
-export function appendMessage(thread, { role, text, selection }, now = Date.now()) {
+export function appendMessage(thread, { role, text, selection, attachments }, now = Date.now()) {
   const turns = role === 'user' ? thread.turns + 1 : thread.turns;
   const message = { role, text: String(text ?? ''), at: now, turn: turns };
   if (selection) message.selection = selection;
+  // What the person attached, by id and name -- never the bytes. A reopened panel shows
+  // the row again from this, and the file itself is read at the provider boundary.
+  if (attachments?.length) message.attachments = attachments.map(({ id, name, type, kind, size }) => ({ id, name, type, kind, size }));
   return { ...thread, messages: [...thread.messages, message], turns, updatedAt: now };
 }
 

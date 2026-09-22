@@ -94,7 +94,7 @@ export async function runScriptedTurn(session, { turn, preamble, text }) {
   if (turn === 1) {
     const ours = session.tools.map((t) => `mcp__unframed__${t.name}`);
     assertCanvasTools(ours);
-    await session.emit({ type: 'session', model: session.model || script.name, tools: ours });
+    await session.emit({ type: 'session', model: session.model || script.name, tools: ours, directories: session.grantedDirectories() });
   }
 
   // Whatever the API retried before the turn got going, in the SDK's own order: the
