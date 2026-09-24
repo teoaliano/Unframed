@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { memo, useState } from 'react';
 import Markdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import remarkBreaks from 'remark-breaks';
@@ -82,7 +82,10 @@ const COMPONENTS = {
 // `text` is the message. Rendered the same way whether it is a finished message or the
 // draft still streaming, so formatting appears as it arrives instead of snapping in at
 // the end.
-export default function ChatMarkdown({ text }) {
+// Memoized because it is a pure function of `text` and the panel re-renders around it:
+// every assistant message in a chat would otherwise re-run the markdown parse whenever
+// anything in the panel changed.
+function ChatMarkdown({ text }) {
   return (
     <div className="chat-md">
       <Markdown remarkPlugins={PLUGINS} components={COMPONENTS}>
@@ -91,3 +94,5 @@ export default function ChatMarkdown({ text }) {
     </div>
   );
 }
+
+export default memo(ChatMarkdown);

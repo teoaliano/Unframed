@@ -1,0 +1,10 @@
+{
+  "when": "what is in this picture",
+  "turns": [
+    {
+      "title": "The attached picture",
+      "expectPreamble": "Attached image \"hero\\.png\": .*attachments",
+      "text": "A small red square."
+    }
+  ]
+}

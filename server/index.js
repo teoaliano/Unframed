@@ -34,7 +34,9 @@ import { ensureLibrary, startRender, getRender, withRuntime } from './motion.js'
 import { providerStatuses, forgetProviderStatus, PROVIDERS } from './providers.js';
 import { newThread, writeThread, readThread, listThreads, deleteThread, eventsSince, persistThread, applySettings, renameThread, setMode, answerPermission, tagThread, EFFORTS } from './threads.js';
 import { MODES, isMode } from './permissions.js';
-import { sendToThread, interruptThread, subscribeThread, closeThreadSession, closeSessionsFor, hasLiveSession, answerPermissionRequest } from './agent.js';
+import { classify as classifyAttachment, normalizeType as normalizeAttachmentType, tooLargeMessage, MAX_FILE_BYTES, MAX_PER_MESSAGE as MAX_ATTACHMENTS } from './attachments.js';
+import { attachmentsDir, storeAttachment, resolveAttachment } from './attachmentStore.js';
+import { sendToThread, interruptThread, subscribeThread, closeThreadSession, closeSessionsFor, hasLiveSession, answerPermissionRequest, setThreadMode } from './agent.js';
 import crypto from 'node:crypto';
 import { startPreviewServer, LOOPBACK_HOST } from './preview.js';
 import {
@@ -1386,6 +1388,11 @@ app.patch('/api/projects/:name/threads/:id', async (req, res) => {
       if (mode !== undefined) next = setMode(next, mode);
       return next;
     });
+    // The SDK was given a mode when the session started, and it enforces that floor
+    // itself. Our own decisions read the record, so a TIGHTENING already bit on the next
+    // tool call -- but a LOOSENING would not have, which is half of what "changeable
+    // mid-conversation" means. So the live session is told too.
+    if (mode !== undefined) await setThreadMode(threadDir(req), req.params.id, mode);
     if (settings) closeThreadSession(threadDir(req), req.params.id);
     res.json({ thread });
   } catch (err) {
@@ -1442,15 +1449,71 @@ app.post('/api/projects/:name/threads/:id/messages', async (req, res) => {
   if (!text) return res.status(400).json({ error: 'Say something first.' });
   if (text.length > 20000) return res.status(400).json({ error: 'That message is too long.' });
   const selection = Array.isArray(req.body?.selection) ? req.body.selection.slice(0, 500).map(String) : [];
+  // Attachments are named by the id POST /api/attachments gave back, never by a path the
+  // browser chose: the id is resolved against the attachments directory here, so a message
+  // cannot name a file elsewhere on the machine and have it read into the turn.
+  const asked = Array.isArray(req.body?.attachments) ? req.body.attachments.slice(0, MAX_ATTACHMENTS) : [];
+  const attachments = [];
+  for (const a of asked) {
+    const id = typeof a === 'string' ? a : a?.id;
+    const file = typeof id === 'string' ? resolveAttachment(ATTACHMENTS_DIR, id) : null;
+    if (!file) return res.status(400).json({ error: 'That is not an attachment id.' });
+    const stat = await fs.stat(file).catch(() => null);
+    if (!stat) return res.status(404).json({ error: 'That attachment is no longer on disk.' });
+    // What KIND of thing it is comes from the id, which the upload derived from the real
+    // file, rather than from what this second request claims: two requests about one file
+    // must not be able to disagree about whether the model may look at it. The name is
+    // only a label, so it is taken as given.
+    const name = typeof a?.name === 'string' ? path.basename(a.name) : id;
+    const type = normalizeAttachmentType({ name: id, type: '' }) || 'application/octet-stream';
+    attachments.push({ id, name, type, kind: classifyAttachment({ name: id, type: '' }), size: stat.size, path: file });
+  }
   const dir = threadDir(req);
   try {
     await tagFirstMessage(dir, req.params.id, selection);
-    await sendToThread(dir, req.params.id, { text, selection }, { settings: providerSettings, previewPort: PREVIEW_PORT });
+    await sendToThread(dir, req.params.id, { text, selection, attachments }, { settings: providerSettings, previewPort: PREVIEW_PORT, attachmentsDir: ATTACHMENTS_DIR });
     res.json({ ok: true });
   } catch (err) {
     res.status(err.status || (/not found/i.test(err.message) ? 404 : 500)).json({ error: err.message });
   }
 });
+
+// ---- agent attachments (server/attachments.js) ----
+// A file the person hands the agent in the composer. It is stored OUTSIDE the project
+// folder, beside `.env` under the data directory: uploading something to talk about must
+// not add a file to the work the person is organising. Not nested under a project for
+// exactly that reason -- it does not belong to one.
+const ATTACHMENTS_DIR = attachmentsDir(process.env.UNFRAMED_DATA_DIR || ROOT);
+
+// The raw parser rejects anything past the cap before the handler runs, and this setup has
+// no error middleware, so the 4-argument handler in the middle of this chain is what turns
+// that into our sentence rather than Express's default HTML 413. Route-level, not global:
+// every other route goes on answering for itself.
+app.post(
+  '/api/attachments',
+  express.raw({ type: () => true, limit: MAX_FILE_BYTES + 1024 }),
+  (err, req, res, next) => {
+    if (err?.type === 'entity.too.large' || err?.status === 413) {
+      return res.status(413).json({ error: tooLargeMessage(String(req.query.name || 'That file'), Number(req.headers['content-length']) || MAX_FILE_BYTES + 1, MAX_FILE_BYTES) });
+    }
+    return next(err);
+  },
+  async (req, res) => {
+    if (!Buffer.isBuffer(req.body) || !req.body.length) return res.status(400).json({ error: 'No file bytes in the request body.' });
+    const name = typeof req.query.name === 'string' ? path.basename(req.query.name) : '';
+    if (!name) return res.status(400).json({ error: 'What is the file called?' });
+    const type = String(req.headers['content-type'] || '').split(';')[0].trim();
+    try {
+      const stored = await storeAttachment(ATTACHMENTS_DIR, { name, type, bytes: req.body });
+      // A refusal is the person's to act on -- too large, or empty -- so it is a 400 with
+      // the sentence attachments.js wrote, not a 500.
+      if (!stored.ok) return res.status(400).json({ error: stored.error });
+      res.json({ attachment: stored.attachment });
+    } catch (err) {
+      res.status(500).json({ error: `Could not save the attachment: ${err.message}` });
+    }
+  },
+);
 
 // The person's answer to a permission request. The RECORD is updated first and the
 // parked turn released second, in that order and never the other way: `always` widens the

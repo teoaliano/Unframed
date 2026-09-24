@@ -237,18 +237,19 @@ export const redoProject = (name) =>
     body: JSON.stringify({ origin: { id: SESSION_ID } }),
   }).then((r) => (r.ok ? null : Promise.reject(new Error(`Could not redo (${r.status})`))));
 
+// Raw bytes to a route that takes them in the body, with the name in the query. The three
+// uploads here share it rather than each unwrapping the error reply their own way.
+const postBytes = async (url, file, contentType, failed) => {
+  const r = await fetch(url, { method: 'POST', headers: { 'Content-Type': contentType }, body: file });
+  const d = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(d.error || `${failed} (${r.status})`);
+  return d;
+};
+
 // Raw bytes in, { file, fileName, bytes, mime } out; the node then references `file`.
 // Media never travels inside node data any more (server/media.js).
 export const uploadFile = (name, file) =>
-  fetch(`/api/projects/${enc(name)}/files?name=${enc(file.name || '')}`, {
-    method: 'POST',
-    headers: { 'Content-Type': file.type || 'application/octet-stream' },
-    body: file,
-  }).then(async (r) => {
-    const d = await r.json().catch(() => ({}));
-    if (!r.ok) throw new Error(d.error || `Could not upload the file (${r.status})`);
-    return d;
-  });
+  postBytes(`/api/projects/${enc(name)}/files?name=${enc(file.name || '')}`, file, file.type || 'application/octet-stream', 'Could not upload the file');
 
 // A copy of a project file, for pasting a page node so the paste owns its own file.
 // `from` is the project the original lives in, when pasting across projects.
@@ -273,11 +274,7 @@ export const artifactUrl = (previewPort, project, node) => (node.type === 'motio
 // A composition the person brings, saved with the runtime tag and the library beside it
 // -- the two things the agent's motion_write does for its own (server/motion.js).
 export const uploadMotion = (project, file) =>
-  fetch(`/api/projects/${enc(project)}/motion/files?name=${enc(file.name || '')}`, { method: 'POST', headers: { 'Content-Type': 'text/html' }, body: file }).then(async (r) => {
-    const d = await r.json().catch(() => ({}));
-    if (!r.ok) throw new Error(d.error || `Could not upload the composition (${r.status})`);
-    return d;
-  });
+  postBytes(`/api/projects/${enc(project)}/motion/files?name=${enc(file.name || '')}`, file, 'text/html', 'Could not upload the composition');
 
 // Render a composition to an MP4: start, then poll until `status` is done or failed.
 // `dials` are the node's parameter values, applied before the first frame is captured
@@ -368,8 +365,8 @@ export const listProviders = (refresh = false) =>
 
 // `tags` are the artifact node ids the chat is about -- the artifacts in the selection
 // when it was started. The agent adds one for every artifact it writes to.
-export const createThread = (project, { provider = 'claude', model = '', effort = '', tags = [] } = {}) =>
-  postJson(`/api/projects/${enc(project)}/threads`, { provider, model, effort, tags }).then((d) => d.thread);
+export const createThread = (project, { provider = 'claude', model = '', effort = '', mode, tags = [] } = {}) =>
+  postJson(`/api/projects/${enc(project)}/threads`, { provider, model, effort, tags, ...(mode ? { mode } : {}) }).then((d) => d.thread);
 
 // `tags` narrows the list to the chats tagged with any of those artifacts (the strip's
 // rule). Omitted, it is every chat in the project.
@@ -392,8 +389,8 @@ export const getThread = (project, id) =>
 // the thread's event stream. A 409 means the previous turn is still running.
 // The selection is the only thing that travels with it, and it is context: the agent
 // decides what the sentence means about it, so there is no target to send.
-export const sendThreadMessage = (project, id, { text, selection = [] }) =>
-  postJson(`/api/projects/${enc(project)}/threads/${enc(id)}/messages`, { text, selection });
+export const sendThreadMessage = (project, id, { text, selection = [], attachments = [] }) =>
+  postJson(`/api/projects/${enc(project)}/threads/${enc(id)}/messages`, { text, selection, attachments: attachments.map(({ id: aid, name }) => ({ id: aid, name })) });
 
 // Model and effort for the thread's next turn; either key may be omitted, '' resets.
 export const updateThread = (project, id, patch) =>
@@ -402,6 +399,13 @@ export const updateThread = (project, id, patch) =>
     if (!r.ok) throw new Error(d.error || `Could not update the thread (${r.status})`);
     return d.thread;
   });
+
+// A file for the agent. Raw bytes with the name in the query, the same shape as a project
+// file upload -- but NOT nested under a project: an attachment is stored outside the
+// project folder, because uploading something to talk about must not add a file to the
+// work you are organising.
+export const uploadAttachment = (file) =>
+  postBytes(`/api/attachments?name=${encodeURIComponent(file.name)}`, file, file.type || 'application/octet-stream', 'Could not attach that file').then((d) => d.attachment);
 
 // The person's answer to a permission request: `once`, `always` or `deny`. A 409 means
 // the question moved on -- another tab answered it, or the turn it belonged to is gone --

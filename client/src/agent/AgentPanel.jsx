@@ -7,10 +7,14 @@ import { TextArea } from '@astryxdesign/core/TextArea';
 import { Link } from '@astryxdesign/core/Link';
 import { HStack, VStack, StackItem } from '@astryxdesign/core/Stack';
 import { TabList, Tab, TabMenu } from '@astryxdesign/core/TabList';
-import { ModelPicker, EffortPicker } from './ModelPicker.jsx';
+import { ModelPicker, EffortPicker, ModePicker } from './ModelPicker.jsx';
+import { DEFAULT_MODE } from '../../../server/permissions.js';
 import { effortsFor } from './models.js';
+// The server's own classification, not a second copy of it: a composer that disagrees
+// with the server about what a file is would accept things the turn then refuses.
+import { classify, checkAttachment, shouldHandlePaste, MAX_PER_MESSAGE } from '../../../server/attachments.js';
 import { AlertDialog } from '@astryxdesign/core/AlertDialog';
-import { X, Plus, RefreshCw, Sparkles, Square, Trash2, Crosshair, ExternalLink, ChevronRight } from 'lucide-react';
+import { X, Plus, RefreshCw, Sparkles, Square, Trash2, Crosshair, ExternalLink, ChevronRight, Paperclip } from 'lucide-react';
 import {
   createThread,
   listThreads,
@@ -19,6 +23,7 @@ import {
   interruptThread,
   updateThread,
   answerPermission,
+  uploadAttachment,
   deleteThread,
   subscribeThreadEvents,
 } from '../api.js';
@@ -55,7 +60,37 @@ const PROVIDER_ORDER = ['claude', 'codex'];
 const INLINE_TABS = 3;
 
 // What the panel says while each tool runs.
+// What the agent is doing, per tool. The provider's own tools are named too: before
+// this, a turn that spent three minutes in Bash and Read said only 'Working…', which is
+// what a dead turn also says.
+// How long the running turn has been going, from ten seconds in so a quick turn stays
+// quiet. Its own component because it ticks every second: inside the panel that tick would
+// re-render every message in the chat, which is what CLAUDE.md's live.js rule forbids.
+function Elapsed({ startedAt }) {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (!startedAt) return undefined;
+    const id = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, [startedAt]);
+  if (!startedAt) return null;
+  const seconds = Math.floor((now - startedAt) / 1000);
+  if (seconds < 10) return null;
+  return ` ${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`;
+}
+
 const ACTIVITY = {
+  Read: 'Reading a file…',
+  Write: 'Writing a file…',
+  Edit: 'Editing a file…',
+  Bash: 'Running a command…',
+  Glob: 'Looking for files…',
+  Grep: 'Searching…',
+  WebFetch: 'Fetching a page…',
+  WebSearch: 'Searching the web…',
+  Task: 'Working on a sub-task…',
+  TodoWrite: 'Planning…',
+  ToolSearch: 'Looking for a tool…',
   mcp__unframed__canvas_read: 'Reading the canvas…',
   mcp__unframed__canvas_write: 'Changing the canvas…',
   mcp__unframed__page_write: 'Writing the page…',
@@ -153,21 +188,32 @@ export default function AgentPanel({ project, nodes, providers, onCheckProviders
   // The permission the turn is parked on, or null. It comes from the RECORD (the stream's
   // `state`), not only from the event, so reopening the panel mid-question still shows it.
   const [permission, setPermission] = useState(null);
+  // A usage limit you have actually hit, separate from the activity line so a long turn's
+  // progress does not overwrite it.
+  const [limit, setLimit] = useState(null);
+  // When the running turn started. The clock that reads it is its own component (Elapsed),
+  // because a tick in THIS one re-renders every message in the chat once a second, which is
+  // what the live.js rule in CLAUDE.md exists to stop.
+  const [startedAt, setStartedAt] = useState(null);
   const [text, setText] = useState('');
   const [sending, setSending] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  // Files staged for the next message: uploaded as they are added, so Send carries ids.
+  const [attachments, setAttachments] = useState([]);
+  const [dragging, setDragging] = useState(false);
+  const fileInput = useRef(null);
   // The tab being renamed, and the draft in its box. Double-click starts it; there is no
   // rename for a thread sitting in the overflow menu, which has nothing to double-click.
   const [renaming, setRenaming] = useState(null); // { id, draft } | null
   // Model and effort for a thread that does not exist yet; a thread carries its own.
-  const [pending, setPending] = useState({ model: '', effort: '' });
+  const [pending, setPending] = useState({ model: '', effort: '', mode: DEFAULT_MODE });
   const scroller = useRef(null);
 
   const ready = PROVIDER_ORDER.map((k) => providers?.[k]).filter((p) => p?.status === 'ready');
   const provider = ready[0] ?? null;
   // What the provider's account can run (providers.js probe); '' is the provider default.
   const models = provider?.models ?? [];
-  const settings = thread ? { model: thread.model || '', effort: thread.effort || '' } : pending;
+  const settings = thread ? { model: thread.model || '', effort: thread.effort || '', mode: thread.mode || DEFAULT_MODE } : pending;
   // The SDK lists the provider's default under the id 'default', so '' looks it up there.
   const efforts = effortsFor(models, settings.model);
   const codex = providers?.codex ?? null;
@@ -179,7 +225,7 @@ export default function AgentPanel({ project, nodes, providers, onCheckProviders
     }
     try {
       const t = await updateThread(project, thread.id, patch);
-      setThreads((ts) => ts.map((x) => (x.id === t.id ? { ...x, model: t.model, effort: t.effort ?? '' } : x)));
+      setThreads((ts) => ts.map((x) => (x.id === t.id ? { ...x, model: t.model, effort: t.effort ?? '', mode: t.mode } : x)));
     } catch (err) {
       setError(err.message);
     }
@@ -258,6 +304,7 @@ export default function AgentPanel({ project, nodes, providers, onCheckProviders
         draftText = '';
         setDraft('');
         setActivity(null);
+        setAttachments([]);
         setPermission(s.pending ?? null);
       },
       onEvent: (e) => {
@@ -270,6 +317,8 @@ export default function AgentPanel({ project, nodes, providers, onCheckProviders
         });
         switch (e.type) {
           case 'turn':
+            setStartedAt(Date.now());
+            setLimit(null);
             setStatus('running');
             setError(null);
             setThreads((ts) => ts.map((t) => (t.id === threadId ? { ...t, status: 'running' } : t)));
@@ -301,6 +350,18 @@ export default function AgentPanel({ project, nodes, providers, onCheckProviders
           case 'permission_result':
             setPermission(null);
             break;
+          case 'rate_limit': {
+            // The SDK sends this whenever your usage window CHANGES, and most of those say
+            // `allowed`. Treating every one as a block told people their turn was waiting
+            // on a limit at 13% of a five-hour window. Only a refusal stops a turn.
+            const info = e.info ?? {};
+            const at = info.resetsAt ? new Date(info.resetsAt * 1000) : null;
+            const clock = at && !Number.isNaN(at.getTime()) ? at.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) : '';
+            if (info.status === 'rejected') setLimit(clock ? `You have hit a usage limit. It resets at ${clock}.` : 'You have hit a usage limit.');
+            else if (info.status === 'allowed_warning') setLimit(`Close to your usage limit${clock ? `, which resets at ${clock}` : ''}.`);
+            else setLimit(null);
+            break;
+          }
           case 'api_retry': {
             // A retrying request looks exactly like a model thinking quietly, so the
             // activity line says which attempt it is on rather than nothing at all.
@@ -309,10 +370,14 @@ export default function AgentPanel({ project, nodes, providers, onCheckProviders
             break;
           }
           case 'tool_result':
-            setActivity(null);
+            // Deliberately NOT cleared. The gap after a tool returns is where the model
+            // does its thinking, and it is the longest part of a turn: blanking here is
+            // what made a working turn read as a stuck one.
             break;
           case 'result':
             setPermission(null);
+            setStartedAt(null);
+            setLimit(null);
             // The record already has the assistant message; re-read it so the panel shows
             // exactly what was stored rather than what it pieced together from deltas.
             getThread(project, threadId)
@@ -329,6 +394,7 @@ export default function AgentPanel({ project, nodes, providers, onCheckProviders
             break;
           case 'error':
             setPermission(null);
+            setStartedAt(null);
             setStatus('failed');
             setError(e.message);
             draftText = '';
@@ -357,7 +423,7 @@ export default function AgentPanel({ project, nodes, providers, onCheckProviders
   const selectedArtifactIds = selectedArtifacts.map((n) => n.id);
 
   async function startThread() {
-    const t = await createThread(project, { provider: provider.kind, model: pending.model, effort: pending.effort, tags: selectedArtifactIds });
+    const t = await createThread(project, { provider: provider.kind, model: pending.model, effort: pending.effort, mode: pending.mode, tags: selectedArtifactIds });
     setThreads((ts) => [t, ...ts]);
     setChosenId(t.id);
     return t;
@@ -370,15 +436,42 @@ export default function AgentPanel({ project, nodes, providers, onCheckProviders
     setError(null);
     try {
       const t = thread ?? (await startThread());
+      const sent = attachments;
       // Optimistic: the user message shows at once; the stream's `turn` event confirms.
-      setMessages((ms) => [...ms, { role: 'user', text: body, at: Date.now(), selection }]);
+      setMessages((ms) => [...ms, { role: 'user', text: body, at: Date.now(), selection, attachments: sent }]);
       setText('');
-      await sendThreadMessage(project, t.id, { text: body, selection });
+      setAttachments([]);
+      await sendThreadMessage(project, t.id, { text: body, selection, attachments: sent });
     } catch (err) {
       setError(err.message);
     } finally {
       setSending(false);
     }
+  }
+
+  // Files are uploaded as they are STAGED rather than on Send, so a large one is paid for
+  // while the person is still typing and Send stays instant. A refusal (too large, empty)
+  // is shown as the panel's error with the sentence the server wrote -- one wording for
+  // the same rule, wherever it is hit.
+  async function addFiles(list) {
+    const files = [...list].slice(0, Math.max(0, MAX_PER_MESSAGE - attachments.length));
+    if (!files.length) return;
+    const allowed = [];
+    for (const file of files) {
+      const refused = checkAttachment({ name: file.name, type: file.type, size: file.size });
+      if (refused.ok) allowed.push(file);
+      else setError(refused.error);
+    }
+    await Promise.all(
+      allowed.map(async (file) => {
+        try {
+          const uploaded = await uploadAttachment(file);
+          setAttachments((cur) => (cur.some((a) => a.id === uploaded.id) ? cur : [...cur, uploaded]));
+        } catch (err) {
+          setError(err.message);
+        }
+      }),
+    );
   }
 
   // The answer clears the prompt here rather than waiting for the stream, because the
@@ -579,6 +672,18 @@ export default function AgentPanel({ project, nodes, providers, onCheckProviders
                 would eat their asterisks and turn a line starting with "#" into a heading.
                 Their own words are shown exactly as they wrote them. */}
             {m.role === 'user' ? <div className="agent-msg-text">{m.text}</div> : <ChatMarkdown text={m.text} />}
+            {/* What was attached to this message, kept in the record by name rather than
+                by bytes -- so scrolling back says what you sent, not only what you said. */}
+            {m.attachments?.length > 0 && (
+              <HStack gap={1} align="center" wrap>
+                {m.attachments.map((a) => (
+                  <span key={a.id} className="agent-chip agent-attachment">
+                    <Icon icon={Paperclip} size="sm" />
+                    {a.name}
+                  </span>
+                ))}
+              </HStack>
+            )}
           </div>
         ))}
         {draft && (
@@ -591,14 +696,11 @@ export default function AgentPanel({ project, nodes, providers, onCheckProviders
             <ChatMarkdown text={draft} />
           </div>
         )}
-        {activity && (
+        {limit && <div className="agent-error">{limit}</div>}
+        {running && !draft && (
           <Text type="supporting" className="agent-activity">
-            {activity}
-          </Text>
-        )}
-        {running && !draft && !activity && (
-          <Text type="supporting" className="agent-activity">
-            Thinking…
+            {activity ?? 'Thinking…'}
+            <Elapsed startedAt={startedAt} />
           </Text>
         )}
         {/* What this conversation involved, after the last message: every artifact it
@@ -635,8 +737,14 @@ export default function AgentPanel({ project, nodes, providers, onCheckProviders
           <div className="agent-permission">
             <Text size="sm" weight="medium">{`Allow ${permission.tool}?`}</Text>
             {permission.target && <code className="agent-permission-target">{permission.target}</code>}
+            {/* What the prompt could not show. A command can hide its tail past the end of
+                what fits, and approving a string you were not shown is worse than no
+                prompt at all, so the count is stated rather than left to the clipping. */}
+            {permission.hidden > 0 && (
+              <Text size="xs" tone="subtle">{`and ${permission.hidden} more characters not shown. Deny unless you know what they are.`}</Text>
+            )}
             {permission.reason && <Text size="xs" tone="subtle">{permission.reason}</Text>}
-            <HStack gap={8}>
+            <HStack gap={1} wrap>
               <Button size="sm" onClick={() => answer(permission.id, 'once')}>Allow once</Button>
               <Button size="sm" variant="secondary" onClick={() => answer(permission.id, 'always')}>Allow for this chat</Button>
               <Button size="sm" variant="secondary" onClick={() => answer(permission.id, 'deny')}>Deny</Button>
@@ -649,13 +757,45 @@ export default function AgentPanel({ project, nodes, providers, onCheckProviders
         {error && messages.at(-1)?.text !== error && <div className="agent-error">{error}</div>}
       </div>
 
-      <div className="agent-panel-composer">
-        {/* What the next message carries: the live selection, named. Absent when nothing
-            is selected -- an empty selection IS the whole canvas, so a chip saying so was
-            a label on the default. Each artifact wears its own node icon, so the chip and
-            the thing on the canvas look like the same thing; whatever else is selected is
-            counted rather than named, the same rule the toolbar's chip follows. There is
-            no Locate here: a selected node is one you have just pointed at. */}
+      {/* dragover must be prevented, or the browser navigates to the dropped file. */}
+      <div
+        className={`agent-panel-composer${dragging ? ' agent-panel-composer--dropping' : ''}`}
+        onDragOver={(e) => {
+          if (!provider || !e.dataTransfer?.types?.includes('Files')) return;
+          e.preventDefault();
+          setDragging(true);
+        }}
+        onDragLeave={(e) => {
+          if (!e.currentTarget.contains(e.relatedTarget)) setDragging(false);
+        }}
+        onDrop={(e) => {
+          if (!provider || !e.dataTransfer?.files?.length) return;
+          e.preventDefault();
+          setDragging(false);
+          addFiles(e.dataTransfer.files);
+        }}
+      >
+        {/* What the next message carries, beside the selection: each file named and
+            removable. An image we cannot send inline says so rather than looking broken --
+            the agent still gets its path and can open it with its own tools. */}
+        {attachments.length > 0 && (
+          <HStack gap={1} align="center" wrap>
+            {attachments.map((a) => (
+              <span key={a.id} className="agent-chip agent-attachment" title={a.kind === 'unsupported-image' ? 'The agent gets this by path; it cannot look at it directly.' : undefined}>
+                <Icon icon={Paperclip} size="sm" />
+                {a.name}
+                {a.kind === 'unsupported-image' && <span className="agent-attachment-note">by path</span>}
+                <IconButton label={`Remove ${a.name}`} size="xs" variant="ghost" icon={<Icon icon={X} />} onClick={() => setAttachments((cur) => cur.filter((x) => x.id !== a.id))} />
+              </span>
+            ))}
+          </HStack>
+        )}
+        {/* The live selection, named. Absent when nothing is selected -- an empty selection
+            IS the whole canvas, so a chip saying so was a label on the default. Each
+            artifact wears its own node icon, so the chip and the thing on the canvas look
+            like the same thing; whatever else is selected is counted rather than named, the
+            same rule the toolbar's chip follows. There is no Locate here: a selected node
+            is one you have just pointed at. */}
         {selection.length > 0 && (
           <HStack gap={1} align="center" wrap>
             {selectionChips.map((chip) => (
@@ -680,6 +820,15 @@ export default function AgentPanel({ project, nodes, providers, onCheckProviders
               send();
             }
           }}
+          onPaste={(e) => {
+            // shouldHandlePaste (attachments.js, from t3code) decides: a copied image
+            // always wins, and files alongside actual text do not, because someone
+            // pasting a screenshot and a caption meant the caption too.
+            const files = [...(e.clipboardData?.files ?? [])];
+            if (!provider || !shouldHandlePaste({ files, plainText: e.clipboardData?.getData('text/plain') ?? '' })) return;
+            e.preventDefault();
+            addFiles(files);
+          }}
         >
           <TextArea
             className="nowheel"
@@ -700,8 +849,16 @@ export default function AgentPanel({ project, nodes, providers, onCheckProviders
               effort a short list with what each level means. Astryx Selectors: their
               popovers anchor fine here, outside React Flow's transform -- the
               native-select exception is for the nodes only. */}
+          {/* The button, for people who do not know the field takes a drop. Hidden input
+              rather than a styled one: a file picker cannot be opened any other way. */}
+          <input ref={fileInput} type="file" multiple hidden onChange={(e) => { addFiles(e.target.files); e.target.value = ''; }} />
+          <IconButton label="Attach a file" size="sm" variant="ghost" icon={<Icon icon={Paperclip} />} isDisabled={!provider || attachments.length >= MAX_PER_MESSAGE} onClick={() => fileInput.current?.click()} />
           {provider && <ModelPicker provider={provider} codex={codex} models={models} value={settings.model} onChange={(id) => changeSettings({ model: id, effort: '' })} disabled={running} />}
           {provider && efforts.length > 0 && <EffortPicker efforts={efforts} value={settings.effort} onChange={(e) => changeSettings({ effort: e })} disabled={running} />}
+          {/* Deliberately NOT disabled while a turn runs, where the model picker is: the
+              whole point of the mode being a property of the chat is that you can tighten
+              it while the agent is working, and the server takes it mid-turn. */}
+          {provider && <ModePicker value={settings.mode} onChange={(m) => changeSettings({ mode: m })} />}
           <StackItem size="fill" />
           {running ? (
             <Button label="Stop" variant="secondary" size="sm" icon={<Icon icon={Square} />} onClick={() => interruptThread(project, threadId)} />

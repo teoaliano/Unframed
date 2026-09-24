@@ -26,6 +26,19 @@ Keep that shape: the website's What's new page parses this file.
   is not already on the board no longer gets "I have no filesystem access". What it may do
   without asking is the chat's runtime mode, and everything else it asks for.
 
+- Images and files can be attached to a message — by the paperclip, by dragging onto the
+  composer, or by pasting. The agent sees an image as an image rather than only knowing a
+  path, and a file whose type your browser did not report is still recognised by its name,
+  so a plain `photo.jpg` dragged from another app is not quietly downgraded. Attachments
+  are kept outside your project folder, so giving the agent something to look at does not
+  add a file to the work you are organising.
+
+- A permission request shows the whole command it is asking about. A command can pad
+  itself so the part that matters falls off the end of what the box shows, and spaces
+  collapse when drawn, so a request to pipe a web address into a shell could read as
+  `git status`. The request now shows the padding, says how many characters it could not
+  fit, and "allow for this chat" covers that exact command and nothing else.
+
 - The agent can be asked for permission rather than simply refused. When it wants to do
   something the chat's runtime mode does not already allow, the panel names the tool and
   what it will touch, and waits: allow it once, allow that kind of thing for the rest of
@@ -33,9 +46,13 @@ Keep that shape: the website's What's new page parses this file.
   survives a reload, and a chat you quit on does not leave buttons nobody can press.
 
 - A chat carries a runtime mode — plan, accept edits, auto or full access — so a throwaway
-  experiment and a careful edit do not need the same amount of supervision. It belongs to
-  the chat, so two can run at different levels of trust at once, and it can be changed
-  mid-conversation.
+  experiment and a careful edit do not need the same amount of supervision. It is the third
+  picker in the composer, it belongs to the chat so two can run at different levels of trust
+  at once, and it can be changed mid-conversation, including while the agent is working.
+
+- The agent panel says when you have hit a usage limit, and when it resets. It had been
+  reporting that to itself and showing you nothing, so a turn stalled on a quota looked
+  exactly like a turn thinking.
 
 - The agent panel says when a request is being retried. A turn that sat silent for a
   minute and a half was indistinguishable from a stuck one; a retry now shows which
