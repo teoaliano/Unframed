@@ -91,24 +91,27 @@ try {
   // naming a chat is its own request on the person's plan (agent.js, askForTitle), and
   // the reply must not wait behind it. So a test that wants the name has to say so --
   // polling only for `idle` and then reading the title would pass or fail on timing.
+  // Poll a thread's record until it reads the way the test expects. Bounded, for the
+  // reason host.test.js states.
+  const settleOn = (id, test, message, ms = 5000) =>
+    withDeadline(
+      (async () => {
+        for (;;) {
+          const rec = await thread(id);
+          if (test(rec)) return rec;
+          await new Promise((r) => setTimeout(r, 20));
+        }
+      })(),
+      ms,
+      message,
+    );
+
   const runTurn = async (id, text, selection = [], { titled = false } = {}) => {
     const sent = await call('POST', `${tBase}/${id}/messages`, { text, selection });
     assert.equal(sent.status, 200, `POST messages: ${JSON.stringify(sent.body)}`);
-    const settle = async (test, ms, message) =>
-      withDeadline(
-        (async () => {
-          for (;;) {
-            const rec = await thread(id);
-            if (test(rec)) return rec;
-            await new Promise((r) => setTimeout(r, 20));
-          }
-        })(),
-        ms,
-        message,
-      );
-    const done = await settle((r) => r.status !== 'running', 15000, `the turn on ${id} never finished`);
+    const done = await settleOn(id, (r) => r.status !== 'running', `the turn on ${id} never finished`, 15000);
     if (!titled) return done;
-    return settle((r) => r.events.some((e) => e.type === 'titled'), 5000, `the chat ${id} was never named`);
+    return settleOn(id, (r) => r.events.some((e) => e.type === 'titled'), `the chat ${id} was never named`);
   };
 
   // ---- 1. a project with two motions and one image ----
@@ -285,24 +288,48 @@ try {
   // The record settles BEFORE the result is broadcast and journaled (settleTurn says
   // why), so a poll that stops at "not running" can beat the event onto disk. Wait for
   // the event itself rather than assuming the two land together.
-  const withResult = await withDeadline(
-    (async () => {
-      for (;;) {
-        const rec = await thread(broken);
-        if (rec.events.some((e) => e.type === 'result')) return rec;
-        await new Promise((r) => setTimeout(r, 20));
-      }
-    })(),
-    5000,
-    'the failed turn never journaled a result event',
-  );
+  const withResult = await settleOn(broken, (rec) => rec.events.some((e) => e.type === 'result'), 'the failed turn never journaled a result event');
   const failedResult = withResult.events.filter((e) => e.type === 'result').at(-1);
   assert.equal(failedResult.ok, false);
   assert.match(failedResult.text, /limit of steps/, 'and so does the event a listening panel sees');
 
-  // Every turn left a subscription sidecar, and never a cost.
-  const sidecars = (await fs.readdir(path.join(outDir, PROJECT))).filter((n) => n.endsWith('-agent.json'));
-  assert.equal(sidecars.length, 6, 'six turns, six sidecars');
+  // ---- 10. a chat the app was quit on says so, and can be carried on ----
+  // A session cannot outlive its process, so a record saying `running` with no session
+  // behind it is exactly what quitting mid-turn leaves. Writing that record is how the
+  // condition is reproduced; nothing else can produce it deterministically.
+  const quit = (await call('POST', tBase, { provider: 'claude' })).body.thread.id;
+  const quitFile = path.join(outDir, PROJECT, 'threads', `${quit}.json`);
+  await fs.writeFile(quitFile, JSON.stringify({ ...JSON.parse(await fs.readFile(quitFile, 'utf8')), status: 'running' }, null, 2));
+
+  const listed = (await threads()).find((t) => t.id === quit);
+  assert.equal(listed.status, 'failed', 'the strip stops showing a phantom turn in flight');
+  const opened = await thread(quit);
+  assert.equal(opened.status, 'failed');
+  assert.match(opened.error, /never finished/);
+  // Not rewritten on disk: reconciliation is how a thread reads.
+  assert.equal(JSON.parse(await fs.readFile(quitFile, 'utf8')).status, 'running');
+  // And it is continuable -- which is the whole point of `failed` rather than `running`.
+  const carried = await runTurn(quit, 'revise the outro');
+  assert.equal(carried.status, 'idle', `the interrupted chat could not be carried on: ${carried.error ?? ''}`);
+  assert.equal(carried.turns, 1);
+
+  // Every turn left a subscription sidecar, and never a cost. The sidecar is written
+  // AFTER the record goes idle (settleTurn: the reply must not wait behind bookkeeping),
+  // so this waits for them rather than assuming they landed with the last turn -- and the
+  // pattern allows the `-1` suffix two turns in the same millisecond produce.
+  const AGENT_SIDECAR = /-agent(-\d+)?\.json$/;
+  const sidecars = await withDeadline(
+    (async () => {
+      for (;;) {
+        const found = (await fs.readdir(path.join(outDir, PROJECT))).filter((n) => AGENT_SIDECAR.test(n));
+        if (found.length >= 7) return found;
+        await new Promise((r) => setTimeout(r, 20));
+      }
+    })(),
+    5000,
+    'seven turns ran, but seven sidecars were never written',
+  );
+  assert.equal(sidecars.length, 7, 'seven turns, seven sidecars');
   for (const name of sidecars) {
     const body = JSON.parse(await fs.readFile(path.join(outDir, PROJECT, name), 'utf8'));
     assert.equal(body.billing, 'subscription');

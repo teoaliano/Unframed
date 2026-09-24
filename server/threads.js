@@ -98,6 +98,27 @@ export function setStatus(thread, status, { error } = {}, now = Date.now()) {
 
 export const eventsSince = (thread, seq) => thread.events.filter((e) => e.seq > seq);
 
+// A session lives in one process and cannot outlive it (agent.js keeps them in a Map).
+// So a record that says `running` while no session is live for it is, with certainty, a
+// turn the app was quit on -- there is no third possibility. That inference is made here
+// and applied on the READ path rather than once at boot, so it holds wherever a thread is
+// listed or opened, and a record written by a server that has since been replaced cannot
+// slip past it.
+//
+// The reconciled thread reads `failed`, and that is the point: the composer and
+// `findChatFor` skip `running`, not `failed`, so an interrupted conversation can be
+// carried on instead of being silently replaced by a new one.
+//
+// `live` defaults to TRUE, which is the safe way round: a caller that forgets to say
+// leaves the bug in place, where a caller that forgets and gets `false` would report a
+// turn still in flight as dead.
+export const QUIT_MID_TURN = 'Unframed stopped while this turn was running, so it never finished. Send again to carry on where it left off.';
+
+export function reconcile(thread, { live = true } = {}, now = Date.now()) {
+  if (!thread || thread.status !== 'running' || live) return thread;
+  return setStatus(thread, 'failed', { error: QUIT_MID_TURN }, now);
+}
+
 // The chat picks up a tag for every artifact it touches -- the selection at its first
 // message, then every page or motion the agent writes to, created or updated. Adding a
 // tag it already has returns the SAME object, so a turn that rewrites one artifact five
@@ -198,14 +219,14 @@ export function migrateThread(record) {
   };
 }
 
-export async function readThread(dir, id) {
+export async function readThread(dir, id, { live } = {}) {
   let raw;
   try {
     raw = await fs.readFile(threadPath(dir, id), 'utf8');
   } catch {
     throw new Error(`Thread not found: ${id}`);
   }
-  return migrateThread(JSON.parse(raw));
+  return reconcile(migrateThread(JSON.parse(raw)), { live });
 }
 
 // Temp-then-rename, the jobs.json rule: a crash mid-save leaves the old record or the
@@ -243,7 +264,9 @@ export function persistThread(dir, id, update) {
 }
 
 // Newest first. No folder is no threads, not an error.
-export async function listThreads(dir) {
+// `live(id)` answers whether a session for that thread is running in this process; with
+// no answer every thread is assumed live, which is the safe default `reconcile` states.
+export async function listThreads(dir, { live } = {}) {
   let names;
   try {
     names = await fs.readdir(threadsDir(dir));
@@ -254,7 +277,8 @@ export async function listThreads(dir) {
   for (const name of names) {
     if (!name.endsWith('.json')) continue;
     try {
-      out.push(threadSummary(migrateThread(JSON.parse(await fs.readFile(path.join(threadsDir(dir), name), 'utf8')))));
+      const record = migrateThread(JSON.parse(await fs.readFile(path.join(threadsDir(dir), name), 'utf8')));
+      out.push(threadSummary(reconcile(record, { live: live ? live(record.id) : undefined })));
     } catch {
       // a half-written or hand-damaged record: skip it rather than hide every other one
     }
@@ -267,9 +291,9 @@ export async function listThreads(dir) {
 // not any-of: continuing a chat about A in a message about A and B would carry over an
 // answer that never saw B. With nothing selected it is the newest idle UNTAGGED chat --
 // a general conversation, not whichever artifact chat happens to be newest.
-export async function findChatFor(dir, artifactIds = []) {
+export async function findChatFor(dir, artifactIds = [], { live } = {}) {
   const want = cleanTags(artifactIds);
-  const all = await listThreads(dir);
+  const all = await listThreads(dir, { live });
   const idle = all.filter((t) => t.status !== 'running');
   if (!want.length) return idle.find((t) => !(t.tags ?? []).length) ?? null;
   return idle.find((t) => want.every((id) => (t.tags ?? []).includes(id))) ?? null;

@@ -537,6 +537,11 @@ export async function interruptThread(dir, threadId) {
   return session.interrupt();
 }
 
+// Whether a turn for this thread can actually be running: sessions live in this process
+// and nowhere else, which is what lets threads.js reconcile a stale `running` (its
+// `reconcile`). The routes ask this; nothing else needs to.
+export const hasLiveSession = (dir, threadId) => sessions.has(`${dir}\0${threadId}`);
+
 export function closeThreadSession(dir, threadId) {
   sessions.get(`${dir}\0${threadId}`)?.close();
 }
