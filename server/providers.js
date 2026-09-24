@@ -237,7 +237,8 @@ const withTimeout = (promise, ms) =>
 export const CLAUDE_CATALOGUE = [
   { id: 'claude-fable-5-1', name: 'Fable 5.1', aliases: ['fable', 'fable-5.1', 'claude-fable-5.1'] },
   { id: 'claude-fable-5', name: 'Fable 5', legacy: true, aliases: [] },
-  { id: 'claude-opus-5', name: 'Opus 5', aliases: ['opus', 'opus-5', 'claude-opus-5.0', 'claude-opus-5-0'] },
+  { id: 'claude-opus-5-5', name: 'Opus 5.5', aliases: ['opus', 'opus-5.5', 'claude-opus-5.5'] },
+  { id: 'claude-opus-5', name: 'Opus 5', legacy: true, aliases: ['opus-5', 'claude-opus-5.0', 'claude-opus-5-0'] },
   { id: 'claude-opus-4-8', name: 'Opus 4.8', legacy: true, aliases: ['opus-4.8', 'claude-opus-4.8'] },
   { id: 'claude-opus-4-7', name: 'Opus 4.7', legacy: true, aliases: ['opus-4.7', 'claude-opus-4.7'] },
   { id: 'claude-opus-4-6', name: 'Opus 4.6', legacy: true, aliases: ['opus-4.6', 'claude-opus-4.6', 'claude-opus-4-6-20251117'] },

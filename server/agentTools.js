@@ -9,7 +9,7 @@
 import { z } from 'zod';
 import { tool } from '@anthropic-ai/claude-agent-sdk';
 import { mediaFileName } from './media.js';
-import { withRuntime, motionFileName } from './motion.js';
+import { withRuntime, withBridge, motionFileName } from './motion.js';
 
 const KIND = {
   prompt: 'prompt',
@@ -363,7 +363,10 @@ const ARTIFACTS = {
       `Create a page asset or write a new version of one. \`html\` is the complete, self-contained HTML document: inline its style and script; reference the project's images and clips by the exact file names canvas_read reports (they sit beside the page, so a plain relative name works); nothing external loads. Files are never overwritten -- every write is a new version the person can undo. Omit nodeId to create a page beside the current selection; pass it to update that page. ${DIALS_CONTRACT}`,
     describeRead: 'Read the current HTML of a page asset, so an edit starts from what is there.',
     size: { width: 480, height: 320 },
-    prepare: (html) => html,
+    // The bridge that defines `unframed.dials`. Added unconditionally, for the reason
+    // withRuntime gives: the agent's contract is one function call, and a page that called
+    // it without remembering a script tag would do nothing at all, silently.
+    prepare: withBridge,
     write: (files, bytes, meta) => files.writePage(bytes, meta),
     read: (files, file) => files.readPage(file),
   },

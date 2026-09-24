@@ -252,6 +252,21 @@ drift between them. `motion_write`'s description carries the composition contrac
 loads, no imperative media control); the runtime tag is added for it. The event's
 artifact field is still named `page` for both kinds, with `kind` inside it.
 
+**A page gets the parameters bridge too, and it is framed differently from a motion.** A
+motion is shown through a viewer that sits between the canvas and the composition, on the
+same origin as the composition, and relays messages both ways. A page is shown as itself,
+so the canvas frames it directly across two origins. Two things follow, and both were
+broken until 2026-09-24. The bridge announces its parameters to the origin that asked
+(`announce(s, to)`) rather than always to its own, because a page's parent is the canvas
+and the browser drops a message aimed at the wrong origin. And the bridge answers
+`unframed:dials:hello`, which is the only thing a directly-framed page is ever asked; the
+motion's viewer used to answer that on the composition's behalf. Both replies sit behind
+the same `fromOurFramer` guard as everything else, so the guard has not widened.
+
+`page_write` injects the bridge tag (`withBridge`) and `ensureBridge` puts the file beside
+the page. A page takes the bridge and nothing else: no player, no GSAP, no runtime, since
+it has no composition to play.
+
 ## Parameters on an artifact (`server/dials.js`, `client/src/editor/Dials.jsx`)
 
 An artifact can expose controls, and the editor's third column is where you turn them. The

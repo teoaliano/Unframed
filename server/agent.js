@@ -32,7 +32,7 @@ import path from 'node:path';
 import { query, createSdkMcpServer } from '@anthropic-ai/claude-agent-sdk';
 import { canvasTools, contextPreamble, summarizeChanges, pageFileName, pageSidecar, REQUIRED_TOOLS, assertCanvasTools } from './agentTools.js';
 import { loadScript, runScriptedTurn } from './agentScript.js';
-import { ensureLibrary, motionFileName, viewerPath } from './motion.js';
+import { ensureBridge, ensureLibrary, motionFileName, viewerPath } from './motion.js';
 import { detectProvider, providerRunEnv } from './providers.js';
 import { decide, DEFAULT_MODE, SDK_PERMISSION_MODE } from './permissions.js';
 import { attachmentLines, providerContent } from './attachments.js';
@@ -258,7 +258,12 @@ class Session {
         // A new file every time, named like every other file in the folder, with a
         // sidecar; `wx` so it can never land on an existing one (the spec, "files are
         // immutable").
-        writePage: (bytes, meta) => writeArtifact('page', bytes, meta),
+        // The bridge sits beside the page, the way a motion's library sits beside it: the
+        // tag agentTools.js injects names a file, and the file has to be there.
+        writePage: async (bytes, meta) => {
+          await ensureBridge(this.dir);
+          return writeArtifact('page', bytes, meta);
+        },
         readPage: (file) => fs.readFile(path.join(this.dir, path.basename(file)), 'utf8'),
         // A motion needs the player, runtime and GSAP beside it (motion.js); the first
         // one in a project brings them, and a dependency bump refreshes them.
