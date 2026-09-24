@@ -1486,33 +1486,34 @@ app.post('/api/projects/:name/threads/:id/messages', async (req, res) => {
 const ATTACHMENTS_DIR = attachmentsDir(process.env.UNFRAMED_DATA_DIR || ROOT);
 
 // The raw parser rejects anything past the cap before the handler runs, and this setup has
-// no error middleware, so without the 4-argument handler below a large file got Express's
-// default HTML 413 instead of the sentence attachments.js writes. Route-level, not global:
-// the rest of the routes keep answering for themselves.
-const attachmentBody = express.raw({ type: () => true, limit: MAX_FILE_BYTES + 1024 });
-
-app.post('/api/attachments', attachmentBody, (err, req, res, next) => {
-  if (err?.type === 'entity.too.large' || err?.status === 413) {
-    return res.status(413).json({ error: tooLargeMessage(String(req.query.name || 'That file'), Number(req.headers['content-length']) || MAX_FILE_BYTES + 1, MAX_FILE_BYTES) });
-  }
-  return next(err);
-});
-
-app.post('/api/attachments', attachmentBody, async (req, res) => {
-  if (!Buffer.isBuffer(req.body) || !req.body.length) return res.status(400).json({ error: 'No file bytes in the request body.' });
-  const name = typeof req.query.name === 'string' ? path.basename(req.query.name) : '';
-  if (!name) return res.status(400).json({ error: 'What is the file called?' });
-  const type = String(req.headers['content-type'] || '').split(';')[0].trim();
-  try {
-    const stored = await storeAttachment(ATTACHMENTS_DIR, { name, type, bytes: req.body });
-    // A refusal is the person's to act on -- too large, or empty -- so it is a 400 with
-    // the sentence attachments.js wrote, not a 500.
-    if (!stored.ok) return res.status(400).json({ error: stored.error });
-    res.json({ attachment: stored.attachment });
-  } catch (err) {
-    res.status(500).json({ error: `Could not save the attachment: ${err.message}` });
-  }
-});
+// no error middleware, so the 4-argument handler in the middle of this chain is what turns
+// that into our sentence rather than Express's default HTML 413. Route-level, not global:
+// every other route goes on answering for itself.
+app.post(
+  '/api/attachments',
+  express.raw({ type: () => true, limit: MAX_FILE_BYTES + 1024 }),
+  (err, req, res, next) => {
+    if (err?.type === 'entity.too.large' || err?.status === 413) {
+      return res.status(413).json({ error: tooLargeMessage(String(req.query.name || 'That file'), Number(req.headers['content-length']) || MAX_FILE_BYTES + 1, MAX_FILE_BYTES) });
+    }
+    return next(err);
+  },
+  async (req, res) => {
+    if (!Buffer.isBuffer(req.body) || !req.body.length) return res.status(400).json({ error: 'No file bytes in the request body.' });
+    const name = typeof req.query.name === 'string' ? path.basename(req.query.name) : '';
+    if (!name) return res.status(400).json({ error: 'What is the file called?' });
+    const type = String(req.headers['content-type'] || '').split(';')[0].trim();
+    try {
+      const stored = await storeAttachment(ATTACHMENTS_DIR, { name, type, bytes: req.body });
+      // A refusal is the person's to act on -- too large, or empty -- so it is a 400 with
+      // the sentence attachments.js wrote, not a 500.
+      if (!stored.ok) return res.status(400).json({ error: stored.error });
+      res.json({ attachment: stored.attachment });
+    } catch (err) {
+      res.status(500).json({ error: `Could not save the attachment: ${err.message}` });
+    }
+  },
+);
 
 // The person's answer to a permission request. The RECORD is updated first and the
 // parked turn released second, in that order and never the other way: `always` widens the

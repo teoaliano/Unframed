@@ -63,6 +63,22 @@ const INLINE_TABS = 3;
 // What the agent is doing, per tool. The provider's own tools are named too: before
 // this, a turn that spent three minutes in Bash and Read said only 'Working…', which is
 // what a dead turn also says.
+// How long the running turn has been going, from ten seconds in so a quick turn stays
+// quiet. Its own component because it ticks every second: inside the panel that tick would
+// re-render every message in the chat, which is what CLAUDE.md's live.js rule forbids.
+function Elapsed({ startedAt }) {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (!startedAt) return undefined;
+    const id = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, [startedAt]);
+  if (!startedAt) return null;
+  const seconds = Math.floor((now - startedAt) / 1000);
+  if (seconds < 10) return null;
+  return ` ${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`;
+}
+
 const ACTIVITY = {
   Read: 'Reading a file…',
   Write: 'Writing a file…',
@@ -175,10 +191,10 @@ export default function AgentPanel({ project, nodes, providers, onCheckProviders
   // A usage limit you have actually hit, separate from the activity line so a long turn's
   // progress does not overwrite it.
   const [limit, setLimit] = useState(null);
-  // When the running turn started, so the panel can say how long it has been going. Three
-  // minutes of 'Reading a file, 2:58' is a different thing from three minutes of 'Thinking'.
+  // When the running turn started. The clock that reads it is its own component (Elapsed),
+  // because a tick in THIS one re-renders every message in the chat once a second, which is
+  // what the live.js rule in CLAUDE.md exists to stop.
   const [startedAt, setStartedAt] = useState(null);
-  const [, setTick] = useState(0);
   const [text, setText] = useState('');
   const [sending, setSending] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -200,9 +216,6 @@ export default function AgentPanel({ project, nodes, providers, onCheckProviders
   const settings = thread ? { model: thread.model || '', effort: thread.effort || '', mode: thread.mode || DEFAULT_MODE } : pending;
   // The SDK lists the provider's default under the id 'default', so '' looks it up there.
   const efforts = effortsFor(models, settings.model);
-  // Shown from ten seconds in, so an ordinary quick turn stays quiet.
-  const seconds = startedAt ? Math.floor((Date.now() - startedAt) / 1000) : 0;
-  const elapsed = seconds >= 10 ? ` ${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}` : '';
   const codex = providers?.codex ?? null;
 
   async function changeSettings(patch) {
@@ -397,13 +410,6 @@ export default function AgentPanel({ project, nodes, providers, onCheckProviders
     return close;
   }, [project, threadId]);
 
-  // One second is enough: the number is there to say the turn is alive, not to time it.
-  useEffect(() => {
-    if (!startedAt) return undefined;
-    const id = setInterval(() => setTick((n) => n + 1), 1000);
-    return () => clearInterval(id);
-  }, [startedAt]);
-
   useEffect(() => {
     const el = scroller.current;
     if (el) el.scrollTop = el.scrollHeight;
@@ -450,19 +456,22 @@ export default function AgentPanel({ project, nodes, providers, onCheckProviders
   async function addFiles(list) {
     const files = [...list].slice(0, Math.max(0, MAX_PER_MESSAGE - attachments.length));
     if (!files.length) return;
+    const allowed = [];
     for (const file of files) {
       const refused = checkAttachment({ name: file.name, type: file.type, size: file.size });
-      if (!refused.ok) {
-        setError(refused.error);
-        continue;
-      }
-      try {
-        const uploaded = await uploadAttachment(file);
-        setAttachments((cur) => (cur.some((a) => a.id === uploaded.id) ? cur : [...cur, uploaded]));
-      } catch (err) {
-        setError(err.message);
-      }
+      if (refused.ok) allowed.push(file);
+      else setError(refused.error);
     }
+    await Promise.all(
+      allowed.map(async (file) => {
+        try {
+          const uploaded = await uploadAttachment(file);
+          setAttachments((cur) => (cur.some((a) => a.id === uploaded.id) ? cur : [...cur, uploaded]));
+        } catch (err) {
+          setError(err.message);
+        }
+      }),
+    );
   }
 
   // The answer clears the prompt here rather than waiting for the stream, because the
@@ -690,7 +699,8 @@ export default function AgentPanel({ project, nodes, providers, onCheckProviders
         {limit && <div className="agent-error">{limit}</div>}
         {running && !draft && (
           <Text type="supporting" className="agent-activity">
-            {(activity ?? 'Thinking…') + elapsed}
+            {activity ?? 'Thinking…'}
+            <Elapsed startedAt={startedAt} />
           </Text>
         )}
         {/* What this conversation involved, after the last message: every artifact it

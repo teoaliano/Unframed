@@ -145,7 +145,9 @@ export function decide({ mode, tool, input = {}, grants = [] }) {
 
   if (grants.includes(signatureOf(tool, input))) return outcome('allow', tool, input);
 
-  if (EDITS.has(tool)) return mode === 'acceptEdits' || mode === 'auto' ? outcome('allow', tool, input) : outcome('ask', tool, input);
+  // Only acceptEdits and auto reach here, and both write files: plan and full and an
+  // unknown mode have all answered above.
+  if (EDITS.has(tool)) return outcome('allow', tool, input);
 
   if (RUNS.has(tool)) {
     if (mode === 'acceptEdits') return outcome('ask', tool, input);

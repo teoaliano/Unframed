@@ -157,8 +157,9 @@ class Session {
     // runs. `chosenScript` is which fixture this chat picked at its first message.
     this.script = null;
     this.chosenScript = null;
-    // Ids of permission requests this session is parked on, so close() can refuse them.
-    this.parked = new Set();
+    // The permission request this turn is parked on, if any, so close() can refuse it.
+    // At most one: threads.js refuses a second while one is pending.
+    this.parkedId = null;
   }
 
   // Ask the person, and park the turn until they answer. The request is written into the
@@ -180,10 +181,10 @@ class Session {
     const decision = await new Promise((resolve) => {
       waiters.set(id, resolve);
       // A session that closes (idle, cancelled, the folder renamed) must not leave a turn
-      // parked for ever: closing answers every question it was holding with a refusal.
-      this.parked.add(id);
+      // parked for ever: closing answers the question it was holding with a refusal.
+      this.parkedId = id;
     });
-    this.parked.delete(id);
+    this.parkedId = null;
     waiters.delete(id);
     await this.emit({ type: 'permission_result', id, decision });
     return decision;
@@ -587,9 +588,9 @@ class Session {
 
   close() {
     // A turn parked on a question nobody will now answer would hang for ever, so closing
-    // answers every one of them with a refusal -- the agent is told, and the turn ends.
-    for (const id of this.parked) waiters.get(id)?.('deny');
-    this.parked.clear();
+    // answers it with a refusal: the agent is told, and the turn ends.
+    if (this.parkedId) waiters.get(this.parkedId)?.('deny');
+    this.parkedId = null;
     if (this.idleTimer) clearTimeout(this.idleTimer);
     this.queue.close();
     try {

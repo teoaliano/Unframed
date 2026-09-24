@@ -273,6 +273,8 @@ export function migrateThread(record) {
   // A record written before runtime modes existed ran with no general tools at all, so
   // the mode it never had is the default one.
   if (!isMode(record.mode)) record = { ...record, mode: DEFAULT_MODE };
+  // The guard is not redundant with its own body: a record that already has both fields
+  // must come back as the SAME object, which is what lets a caller skip a write.
   if (record.pending === undefined || !Array.isArray(record.grants)) record = { ...record, pending: record.pending ?? null, grants: Array.isArray(record.grants) ? record.grants : [] };
   if (Array.isArray(record.tags)) return record;
   const { kind, artifactId, ...rest } = record;

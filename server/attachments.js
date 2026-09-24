@@ -79,8 +79,6 @@ export function normalizeType({ name = '', type = '' } = {}) {
 const EXTENSION_BY_IMAGE_TYPE = { 'image/gif': '.gif', 'image/jpeg': '.jpg', 'image/png': '.png', 'image/webp': '.webp' };
 export const extensionForType = (type) => EXTENSION_BY_IMAGE_TYPE[String(type ?? '').toLowerCase()] ?? '';
 
-export const limitFor = (kind) => (kind === 'image' ? MAX_IMAGE_BYTES : MAX_FILE_BYTES);
-
 // "3.2 MB" / "48 KB". Never "0 KB": a file the person can see has a size.
 export const formatSize = (bytes) => (bytes >= 1024 * 1024 ? `${(bytes / (1024 * 1024)).toFixed(1)} MB` : `${Math.max(1, Math.ceil(bytes / 1024))} KB`);
 
@@ -92,7 +90,9 @@ export const tooLargeMessage = (name, size, limit) => `'${name}' is ${formatSize
 // and the composer can turn the same sentence into a message beside the file.
 export function checkAttachment({ name, type, size }) {
   const kind = classify({ name, type });
-  const limit = limitFor(kind === 'file' ? 'file' : 'image');
+  // An image we cannot send inline still gets the image limit: it is a picture, and
+  // the larger allowance is for things that are never inlined into a request.
+  const limit = kind === 'file' ? MAX_FILE_BYTES : MAX_IMAGE_BYTES;
   if (!(size > 0)) return { ok: false, error: `'${name}' is empty.` };
   if (size > limit) return { ok: false, error: tooLargeMessage(name, size, limit) };
   return { ok: true, kind, type: normalizeType({ name, type }) || 'application/octet-stream' };
