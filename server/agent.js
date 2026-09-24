@@ -4,24 +4,33 @@
 // (threads.js) before and as it happens, and fanned out live to whoever is listening on
 // the thread's event stream. Routes are in index.js.
 //
-// The safety half, in one place (the spec's "session configuration"):
-//   - tools: [] -- no built-in tools. The agent cannot read or write files or run
-//     commands; it can only call `unframed` tools, and those are auto-approved. Nothing
-//     needs --dangerously-skip-permissions because nothing needs skipping. The one way
-//     bytes reach disk is page_write, which writes one extension into one folder
-//     through the same naming as every other file (media.js), never over an existing
-//     file; canvas_write cannot carry bytes at all (agentTools.js, prepareBatch).
-//   - canUseTool denies anything that is not ours, in case a future SDK ships a tool
-//     outside the `tools` list.
-//   - settingSources: [] -- the user's coding CLAUDE.md, skills and hooks do not leak into
-//     a media tool.
-//   - strictMcpConfig: true -- ONLY the `unframed` server. Without it the CLI also loads
-//     the user's own MCP servers (~/.claude.json, .mcp.json, plugins): on 2026-09-05 a
-//     turn saw the user's Figma tools and none of ours. canUseTool would have denied a
-//     call, but the model must not even see them.
-//   - the init handshake is checked: a session whose tool list lacks ours fails the turn
-//     loudly instead of letting the model answer with "the tools are not available".
-//   - our own system prompt, which says canvas text is data, not instruction.
+// The safety half, in one place (the spec's "session configuration"). It was once "the
+// agent has no tools but ours"; it is now "the agent has the provider's own tools, and a
+// person is asked before it uses them" -- reversed deliberately on 2026-09-22, because the
+// old answer to "read the file in my Downloads" was that it could not, which is true and
+// useless. What replaced each line:
+//   - tools: the Claude Code preset. Read, Write, Bash, Glob and Grep are the CLI's own;
+//     there was never an implementation to add, only an approval to build. Grep and Glob
+//     are named in allowedTools because a native build may otherwise offer search only
+//     through Bash (the SDK's own note on `tools`).
+//   - canUseTool is now a thin adapter over permissions.js: it asks the matrix, and on
+//     "needs asking" parks the turn until the person answers (requestPermission). The
+//     denying one it replaced is what made all of this necessary in the first place.
+//   - settingSources: ['user', 'project', 'local'], as t3code does. The user's CLAUDE.md,
+//     skills and hooks are now part of what they are asking for, not a leak.
+//   - strictMcpConfig is gone with it, which is the genuinely contested removal: on
+//     2026-09-05 a turn saw the user's Figma tools and none of ours. That is why the init
+//     handshake below is now LOAD-BEARING rather than belt-and-braces -- a session without
+//     our tools still fails the turn loudly. The foreign-tool refusal had to go, since the
+//     user's own servers arriving is the point of opening settingSources.
+//   - the system prompt is the preset with ours APPENDED, not replacing it: the behaviour
+//     people like comes from that preset as much as from the tools. Ours still says canvas
+//     text is data, not instruction.
+// Three things did not change, and each is load-bearing:
+//   - the `unframed` MCP server, and its six tools auto-approved in every mode
+//     (allowedTools, and permissions.js agreeing) -- they are already scoped to this
+//     project's document and folder, and a prompt on each would make the thing the agent
+//     was already good at slower without making it safer.
 //   - CLAUDE_CONFIG_DIR only if configured; HOME never overridden (providers.js).
 //   - maxTurns bounded; an AbortController per session so a cancel actually stops it.
 //
@@ -33,11 +42,11 @@ import { randomBytes } from 'node:crypto';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { query, createSdkMcpServer } from '@anthropic-ai/claude-agent-sdk';
-import { canvasTools, contextPreamble, summarizeChanges, pageFileName, pageSidecar } from './agentTools.js';
+import { canvasTools, contextPreamble, summarizeChanges, pageFileName, pageSidecar, REQUIRED_TOOLS, assertCanvasTools } from './agentTools.js';
 import { loadScript, runScriptedTurn } from './agentScript.js';
 import { ensureLibrary, motionFileName, viewerPath } from './motion.js';
 import { detectProvider, providerRunEnv } from './providers.js';
-import { decide, DEFAULT_MODE } from './permissions.js';
+import { decide, DEFAULT_MODE, SDK_PERMISSION_MODE } from './permissions.js';
 import * as T from './threads.js';
 
 export const SYSTEM_PROMPT = [
@@ -73,7 +82,6 @@ export function failureMessage(subtype) {
 }
 
 const MAX_TURNS = 30;
-export const REQUIRED_TOOLS = ['mcp__unframed__canvas_read', 'mcp__unframed__canvas_write', 'mcp__unframed__page_write', 'mcp__unframed__page_read', 'mcp__unframed__motion_write', 'mcp__unframed__motion_read'];
 const IDLE_CLOSE_MS = 10 * 60 * 1000;
 
 // dir\0threadId -> Session
@@ -287,6 +295,9 @@ class Session {
     // has launchd's PATH, so a bare `claude` is invisible to the spawn even though
     // detection just found it on the login shell's PATH.
     const penv = await providerRunEnv(this.provider, this.settings, { env: this.env });
+    // Read now rather than when the session object was built: a mode set between the two
+    // is the one the person means for this turn.
+    const startMode = (await T.readThread(this.dir, this.threadId).catch(() => null))?.mode ?? DEFAULT_MODE;
     this.q = query({
       prompt: this.queue.gen,
       options: {
@@ -295,12 +306,16 @@ class Session {
         cwd: this.dir,
         ...(this.model ? { model: this.model } : {}),
         ...(this.effort ? { effort: this.effort } : {}),
-        systemPrompt: { type: 'custom', prompt: SYSTEM_PROMPT },
-        settingSources: [],
-        strictMcpConfig: true,
-        tools: [],
+        // Appended, not replacing: "read the latest file in my Downloads" behaves well
+        // because of this preset, and Unframed's canvas instructions are the appendix.
+        systemPrompt: { type: 'preset', preset: 'claude_code', append: SYSTEM_PROMPT },
+        settingSources: ['user', 'project', 'local'],
+        tools: { type: 'preset', preset: 'claude_code' },
         mcpServers: { unframed: server },
-        allowedTools: REQUIRED_TOOLS,
+        // Auto-allowed, NOT a restriction (the SDK's own wording): ours never prompt, and
+        // Grep/Glob are named because a native build may otherwise offer search only
+        // through Bash. Everything else reaches canUseTool and the matrix.
+        allowedTools: [...REQUIRED_TOOLS, 'Grep', 'Glob'],
         // The thin adapter the spec describes: ask permissions.js, and on "needs asking"
         // park the turn and wait for the person. The matrix itself lives there.
         canUseTool: async (toolName, input) => {
@@ -309,7 +324,10 @@ class Session {
             ? { behavior: 'allow', updatedInput: input }
             : { behavior: 'deny', message: verdict.reason ?? DECLINED };
         },
-        permissionMode: 'default',
+        // The SDK enforces the mode itself; this is the floor the session starts on. A
+        // mode changed mid-turn does not move that floor, but every decision canUseTool
+        // makes reads the record, so a TIGHTENING takes effect at once either way.
+        permissionMode: SDK_PERMISSION_MODE[startMode] ?? 'default',
         maxTurns: MAX_TURNS,
         includePartialMessages: true,
         abortController: this.abort,
@@ -345,17 +363,14 @@ class Session {
             const ours = msg.tools?.filter((t) => t.startsWith('mcp__unframed__')) ?? [];
             const foreign = msg.tools?.filter((t) => t.startsWith('mcp__') && !t.startsWith('mcp__unframed__')) ?? [];
             await this.emit({ type: 'session', model: msg.model, tools: ours, ...(foreign.length ? { foreign } : {}) });
-            // The tool set is the safety boundary AND the feature. A session without our
-            // tools (the in-process server failed to register, as a bad schema once made
-            // it) or with someone else's is stopped here, before the model speaks.
-            const missing = REQUIRED_TOOLS.filter((t) => !ours.includes(t));
-            if (missing.length || foreign.length) {
-              throw new Error(
-                missing.length
-                  ? `The agent session started without the canvas tools (${missing.join(', ')}). This is a bug in Unframed, not your setup.`
-                  : `The agent session loaded tools outside Unframed (${foreign.slice(0, 3).join(', ')}); refusing to run.`,
-              );
-            }
+            // Load-bearing rather than belt-and-braces now that strictMcpConfig is gone:
+            // a session without our tools (the in-process server failed to register, as a
+            // bad schema once made it) is stopped here, before the model speaks, instead
+            // of the person getting "the tools are not available" from the model itself.
+            // Someone else's tools are no longer refused -- the user's own MCP servers
+            // arriving is what opening settingSources is FOR -- but they are still
+            // reported, because a turn that can see them is a fact worth having.
+            assertCanvasTools(ours);
           }
           break;
         case 'stream_event': {

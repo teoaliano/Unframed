@@ -21,6 +21,11 @@ Keep that shape: the website's What's new page parses this file.
 
 ### Added
 
+- The agent can read and write files, run commands and search — the provider CLI's own
+  tools, alongside the canvas ones it already had. Asking it to work from something that
+  is not already on the board no longer gets "I have no filesystem access". What it may do
+  without asking is the chat's runtime mode, and everything else it asks for.
+
 - The agent can be asked for permission rather than simply refused. When it wants to do
   something the chat's runtime mode does not already allow, the panel names the tool and
   what it will touch, and waits: allow it once, allow that kind of thing for the rest of

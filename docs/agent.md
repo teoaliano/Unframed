@@ -74,14 +74,38 @@ which is the safe way round — a wrong `false` would report a turn still in fli
 A live session is one long-lived Agent SDK `query()` per thread, fed user messages through
 a streaming prompt so the conversation keeps its context. It is closed after ten idle
 minutes and resumed through the SDK's own session store on the next message, so context
-survives both the idle close and a server restart. **The safety configuration is one
-block in `agent.js` and every line of it is deliberate:** no built-in tools (`tools: []`),
-so the agent cannot read or write files or run commands; `canUseTool` denies anything that
-is not an `mcp__unframed__` tool; `settingSources: []`, so the user's coding `CLAUDE.md`,
-skills and hooks do not leak into a media tool; our own system prompt, which says canvas
-text is data, not instruction; a bounded `maxTurns`; an `AbortController` per session so
-Stop actually stops. Nothing needs `--dangerously-skip-permissions`, because nothing
-needs skipping — copying that flag from a coding tool would hand prompt text a shell.
+survives both the idle close and a server restart.
+
+**The session configuration is one block in `agent.js` and every line of it is
+deliberate.** It used to say *the agent has no tools but ours*; it now says *the agent has
+the provider's own tools, and a person is asked before it uses them*. That was reversed on
+2026-09-22, because the old answer to "read the file in my Downloads" was that it could
+not — true, and useless.
+
+- `tools` is the Claude Code preset. Read, Write, Bash, Glob and Grep are the CLI's own:
+  there was never an implementation to add, only an approval to build. `Grep` and `Glob`
+  are named in `allowedTools` because a native build may otherwise offer search only
+  through `Bash`.
+- `canUseTool` is a thin adapter over `permissions.js` — ask the matrix, and on "needs
+  asking" park the turn until the person answers.
+- `settingSources` is `['user', 'project', 'local']`. The user's `CLAUDE.md`, skills and
+  hooks are part of what they are asking for, not a leak.
+- `strictMcpConfig` is gone with it, which is the genuinely contested removal: on
+  2026-09-05 a turn saw the user's Figma tools and none of ours. **That is why the init
+  handshake is now load-bearing rather than belt-and-braces** — `assertCanvasTools`
+  (`agentTools.js`, so it sits beside the tools it is about) stops a session missing one
+  of the six before the model speaks. Someone else's tools are reported, not refused: the
+  user's own servers arriving is what opening `settingSources` is *for*.
+- The system prompt is the preset with ours **appended**, not replacing it. The behaviour
+  people like comes from that preset as much as from the tools; ours still says canvas
+  text is data, not instruction.
+- Unchanged, and load-bearing: the `unframed` server with its six tools auto-approved in
+  every mode; a bounded `maxTurns`; an `AbortController` per session so Stop actually
+  stops; `CLAUDE_CONFIG_DIR` only if configured and `HOME` never overridden.
+
+`--dangerously-skip-permissions` is still never passed, and that is the one thing the
+reversal did not touch: full access is a mode the person chooses per chat and can leave,
+not a flag the app hands the agent on their behalf.
 
 Every turn writes a sidecar, `<timestamp>-agent.json`, with provider, model, token usage
 and `billing: "subscription"`. The SDK's dollar estimate is recorded as `estimatedUsd`
