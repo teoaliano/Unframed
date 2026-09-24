@@ -32,9 +32,9 @@ import {
 import { saveMedia, copyMedia, inlineFileRefs } from './media.js';
 import { ensureLibrary, startRender, getRender, withRuntime } from './motion.js';
 import { providerStatuses, forgetProviderStatus, PROVIDERS } from './providers.js';
-import { newThread, writeThread, readThread, listThreads, deleteThread, eventsSince, persistThread, applySettings, renameThread, setMode, tagThread, EFFORTS } from './threads.js';
+import { newThread, writeThread, readThread, listThreads, deleteThread, eventsSince, persistThread, applySettings, renameThread, setMode, answerPermission, tagThread, EFFORTS } from './threads.js';
 import { MODES, isMode } from './permissions.js';
-import { sendToThread, interruptThread, subscribeThread, closeThreadSession, closeSessionsFor, hasLiveSession } from './agent.js';
+import { sendToThread, interruptThread, subscribeThread, closeThreadSession, closeSessionsFor, hasLiveSession, answerPermissionRequest } from './agent.js';
 import crypto from 'node:crypto';
 import { startPreviewServer, LOOPBACK_HOST } from './preview.js';
 import {
@@ -1452,6 +1452,34 @@ app.post('/api/projects/:name/threads/:id/messages', async (req, res) => {
   }
 });
 
+// The person's answer to a permission request. The RECORD is updated first and the
+// parked turn released second, in that order and never the other way: `always` widens the
+// chat's grants, and the session re-reads the record on its next decision, so a turn
+// released before the widening was saved could ask the same question again.
+//
+// A 409 here is a stale panel answering a question that is no longer the one in flight --
+// refused rather than ignored, since silently accepting it would resume the turn on a
+// decision the person did not make about what it is actually doing.
+app.post('/api/projects/:name/threads/:id/permission', async (req, res) => {
+  const { id, decision } = req.body || {};
+  if (typeof id !== 'string' || !id) return res.status(400).json({ error: 'Which request are you answering?' });
+  try {
+    const thread = await persistThread(threadDir(req), req.params.id, (cur) => {
+      if (!cur) throw Object.assign(new Error('Thread not found.'), { status: 404 });
+      return answerPermission(cur, id, decision);
+    });
+    if (!answerPermissionRequest(id, decision)) {
+      // The record said this was the pending request, but no turn is parked on it: the
+      // session went with its process. The record is now correct either way, and the
+      // stale `running` is what `reconcile` answers for (threads.js).
+      return res.status(409).json({ error: 'That turn is no longer running.', thread });
+    }
+    res.json({ thread });
+  } catch (err) {
+    res.status(err.status || (/not found/i.test(err.message) ? 404 : 500)).json({ error: err.message });
+  }
+});
+
 // The thread's live stream: its state, every stored event past `since`, then whatever
 // happens next including text deltas. Same SSE shape as the document's.
 app.get('/api/projects/:name/threads/:id/events', async (req, res) => {
@@ -1470,7 +1498,7 @@ app.get('/api/projects/:name/threads/:id/events', async (req, res) => {
   });
   const send = (name, data) => res.write(`event: ${name}\ndata: ${JSON.stringify(data)}\n\n`);
   const since = Number.parseInt(req.query.since, 10);
-  send('state', { status: thread.status, error: thread.error, turns: thread.turns, seq: thread.seq, messages: thread.messages });
+  send('state', { status: thread.status, error: thread.error, turns: thread.turns, seq: thread.seq, messages: thread.messages, pending: thread.pending ?? null });
   for (const e of eventsSince(thread, Number.isInteger(since) ? since : 0)) send('event', e);
   send('live', { seq: thread.seq });
   const off = subscribeThread(req.params.id, (e) => send('event', e));

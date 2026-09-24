@@ -16,6 +16,8 @@ import {
   threadSummary,
   eventsSince,
   setMode,
+  askPermission,
+  answerPermission,
   reconcile,
   QUIT_MID_TURN,
   readThread,
@@ -181,7 +183,7 @@ assert.deepEqual(eventsSince(t3, 2), []);
 
 // ---- the list shows a summary, not the transcript ----
 const s = threadSummary(t5);
-assert.deepEqual(Object.keys(s).sort(), ['createdAt', 'effort', 'id', 'mode', 'model', 'preview', 'provider', 'status', 'tags', 'title', 'titledBy', 'turns', 'updatedAt']);
+assert.deepEqual(Object.keys(s).sort(), ['createdAt', 'effort', 'id', 'mode', 'model', 'preview', 'provider', 'status', 'tags', 'title', 'titledBy', 'turns', 'updatedAt', 'waiting']);
 assert.equal(s.preview, 'What is on the canvas?', 'the first user message previews the thread');
 assert.equal(s.title, '', 'an unnamed thread has no title, however much was said in it');
 assert.equal(threadSummary(t0).preview, '');
@@ -299,6 +301,42 @@ assert.throws(() => renameThread(t5, 42), /text/);
   assert.equal(migrateThread({ id: 'old', tags: [], status: 'idle' }).mode, 'auto');
 }
 
+// ---- a permission request lives on the thread, not in the session ----
+{
+  const base = setStatus(newThread({ id: 'p1', project: 'p', provider: 'claude', now: 1 }), 'running', {}, 2);
+  assert.equal(base.pending, null);
+  assert.deepEqual(base.grants, []);
+
+  const asking = askPermission(base, { id: 'r1', tool: 'Bash', signature: 'Bash!rm -rf build', target: 'rm -rf build' }, 5);
+  assert.equal(asking.pending.id, 'r1');
+  assert.equal(asking.pending.turn, base.turns, 'stamped with the turn that is waiting');
+  assert.equal(asking.status, 'running', 'a parked turn has not failed and has not finished');
+  assert.equal(threadSummary(asking).waiting, true, 'the strip says which chat wants you');
+  assert.equal(threadSummary(base).waiting, false);
+  // Only one at a time: the agent is blocked on this answer and cannot ask a second.
+  assert.throws(() => askPermission(asking, { id: 'r2', tool: 'Read' }), /already waiting/);
+
+  // Once leaves the chat exactly as trusting as it was; always widens it.
+  assert.deepEqual(answerPermission(asking, 'r1', 'once', 6).grants, []);
+  assert.equal(answerPermission(asking, 'r1', 'once', 6).pending, null);
+  assert.deepEqual(answerPermission(asking, 'r1', 'always', 6).grants, ['Bash!rm -rf build']);
+  // Granting the same kind twice is still one grant.
+  const widened = answerPermission(asking, 'r1', 'always', 6);
+  const again = askPermission(widened, { id: 'r2', tool: 'Bash', signature: 'Bash!rm -rf build' }, 7);
+  assert.deepEqual(answerPermission(again, 'r2', 'always', 8).grants, ['Bash!rm -rf build']);
+  assert.deepEqual(answerPermission(asking, 'r1', 'deny', 6).grants, []);
+
+  // A stale panel answering a question that is no longer the live one is refused.
+  assert.throws(() => answerPermission(asking, 'other', 'once'), /no longer the one in flight/);
+  assert.throws(() => answerPermission(base, 'r1', 'once'), /not waiting/);
+  assert.throws(() => answerPermission(asking, 'r1', 'maybe'), /once, always or deny/);
+
+  // A record written before permissions existed has neither field.
+  const old = migrateThread({ id: 'o', tags: [], mode: 'auto', status: 'idle' });
+  assert.equal(old.pending, null);
+  assert.deepEqual(old.grants, []);
+}
+
 // ---- a turn the app was quit on ----
 // A session cannot outlive its process, so `running` with no live session has exactly
 // one explanation. Reconciling it to `failed` is what makes the chat continuable again:
@@ -318,6 +356,14 @@ assert.throws(() => renameThread(t5, 42), /text/);
   assert.equal(reconcile(base, { live: false }, 3), base, 'idle passes through');
   const failed = setStatus(base, 'failed', { error: 'something else' }, 2);
   assert.equal(reconcile(failed, { live: false }, 3), failed, 'and so does a failure that already has its own reason');
+
+  // A pending request goes with it: the turn parked on that answer died with the process,
+  // so a panel offering Allow and Deny would be offering them to nobody.
+  const parked = askPermission(running, { id: 'r1', tool: 'Bash', signature: 'Bash:ls' }, 2);
+  const cleared = reconcile(parked, { live: false }, 3);
+  assert.equal(cleared.status, 'failed');
+  assert.equal(cleared.pending, null);
+  assert.equal(reconcile(parked, { live: true }, 3).pending.id, 'r1', 'a live one is still waiting for you');
 }
 
 // The read path applies it, which is what makes the fix permanent rather than a boot-time

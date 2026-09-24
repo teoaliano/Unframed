@@ -285,7 +285,74 @@ try {
   assert.equal((await call('PATCH', `${tBase}/${planChat}`, { mode: 'nonsense' })).status, 400);
   assert.equal((await thread(planChat)).mode, 'full', 'and a refused change leaves it alone');
 
-  // ---- 10. a turn that FAILS says why ----
+  // ---- 10. the permission round trip: asked, parked, answered, resumed ----
+  // `rm -rf` is on the dangerous list, so even in auto the person is asked. The turn
+  // parks -- still `running`, because it has neither failed nor finished -- and the panel
+  // reads what it is waiting for from the RECORD, which is what makes it survive a reload.
+  const perm = (await call('POST', tBase, { provider: 'claude' })).body.thread.id;
+  const permSend = await call('POST', `${tBase}/${perm}/messages`, { text: 'clean the build', selection: [] });
+  assert.equal(permSend.status, 200);
+
+  const asked = await settleOn(perm, (r) => r.pending, 'the turn never asked for permission');
+  assert.equal(asked.status, 'running', 'a parked turn has not failed and has not finished');
+  assert.equal(asked.pending.tool, 'Bash');
+  assert.equal(asked.pending.target, 'rm -rf build', 'the person is told what it will touch');
+  assert.match(asked.pending.reason, /cannot be undone/);
+  assert.equal(asked.pending.signature, 'Bash!rm -rf build');
+  assert.equal((await threads()).find((t) => t.id === perm).waiting, true, 'the strip says which chat wants you');
+  // It reached the event stream too, by the same path every other agent event takes.
+  const requestEvent = asked.events.find((e) => e.type === 'permission_request');
+  assert.ok(requestEvent, 'the request reached the event stream');
+  assert.equal(requestEvent.id, asked.pending.id);
+
+  // A stale panel answering a question that is no longer the live one is refused.
+  assert.equal((await call('POST', `${tBase}/${perm}/permission`, { id: 'perm-nope', decision: 'once' })).status, 409);
+  assert.equal((await call('POST', `${tBase}/${perm}/permission`, { id: asked.pending.id, decision: 'maybe' })).status, 400);
+
+  // Allow once: the turn resumes, and the chat is no more trusting than it was.
+  const allowed = await call('POST', `${tBase}/${perm}/permission`, { id: asked.pending.id, decision: 'once' });
+  assert.equal(allowed.status, 200);
+  const resumed = await settleOn(perm, (r) => r.status !== 'running', 'the turn never resumed after Allow');
+  assert.equal(resumed.status, 'idle');
+  assert.equal(resumed.pending, null);
+  assert.deepEqual(resumed.grants, [], 'once is once: the chat was not widened');
+  assert.match(resumed.messages.at(-1).text, /Removed the build folder/);
+  assert.equal(resumed.events.filter((e) => e.type === 'permission_result').at(-1).decision, 'once');
+
+  // ---- 10b. Deny: the turn resumes, and the AGENT is told ----
+  const perm2 = (await call('POST', `${tBase}/${perm}/messages`, { text: 'and dist', selection: [] }));
+  assert.equal(perm2.status, 200);
+  const asked2 = await settleOn(perm, (r) => r.pending, 'the second turn never asked');
+  const denied = await call('POST', `${tBase}/${perm}/permission`, { id: asked2.pending.id, decision: 'deny' });
+  assert.equal(denied.status, 200);
+  const afterDeny = await settleOn(perm, (r) => r.status !== 'running', 'the turn never resumed after Deny');
+  assert.equal(afterDeny.status, 'idle', 'a refusal is not a failure');
+  assert.match(afterDeny.messages.at(-1).text, /did not remove dist/);
+  assert.equal(afterDeny.events.filter((e) => e.type === 'tool_result').at(-1).ok, false);
+
+  // ---- 10c. Always: the same kind stops being asked about ----
+  const grantChat = (await call('POST', tBase, { provider: 'claude' })).body.thread.id;
+  await call('POST', `${tBase}/${grantChat}/messages`, { text: 'clean the build', selection: [] });
+  const asked3 = await settleOn(grantChat, (r) => r.pending, 'the grant chat never asked');
+  await call('POST', `${tBase}/${grantChat}/permission`, { id: asked3.pending.id, decision: 'always' });
+  const granted = await settleOn(grantChat, (r) => r.status !== 'running', 'the grant turn never resumed');
+  assert.deepEqual(granted.grants, ['Bash!rm -rf build'], 'the chat is now that much more trusting');
+  // A DIFFERENT dangerous command is still its own question -- the grant was for that one.
+  await call('POST', `${tBase}/${grantChat}/messages`, { text: 'and dist', selection: [] });
+  const asked4 = await settleOn(grantChat, (r) => r.pending, 'a different command should still ask');
+  assert.equal(asked4.pending.signature, 'Bash!rm -rf dist');
+  await call('POST', `${tBase}/${grantChat}/permission`, { id: asked4.pending.id, decision: 'once' });
+  await settleOn(grantChat, (r) => r.status !== 'running', 'the second grant turn never resumed');
+
+  // ---- 10d. full access asks about nothing ----
+  const trusted = (await call('POST', tBase, { provider: 'claude', mode: 'full' })).body.thread.id;
+  const trustedRec = await runTurn(trusted, 'clean the build');
+  assert.equal(trustedRec.status, 'idle');
+  assert.equal(trustedRec.pending, null);
+  assert.equal(trustedRec.events.some((e) => e.type === 'permission_request'), false, 'nothing was asked');
+  assert.match(trustedRec.messages.at(-1).text, /Removed the build folder/);
+
+  // ---- 11. a turn that FAILS says why ----
   // The SDK's error result carries no `result` field -- only `subtype` -- so a turn that
   // failed used to render as an empty message and a generic apology. Observed in
   // production on 2026-09-21.
@@ -311,7 +378,21 @@ try {
   assert.equal(failedResult.ok, false);
   assert.match(failedResult.text, /limit of steps/, 'and so does the event a listening panel sees');
 
-  // ---- 11. a chat the app was quit on says so, and can be carried on ----
+  // ---- 11b. a pending request whose process died is reconciled like a stale `running` ----
+  // The record is left mid-question, exactly as quitting the app while a permission was
+  // on screen would leave it. Nobody can answer it any more, so the panel must not offer.
+  const orphanPerm = (await call('POST', tBase, { provider: 'claude' })).body.thread.id;
+  const orphanFile = path.join(outDir, PROJECT, 'threads', `${orphanPerm}.json`);
+  await fs.writeFile(
+    orphanFile,
+    JSON.stringify({ ...JSON.parse(await fs.readFile(orphanFile, 'utf8')), status: 'running', pending: { id: 'perm-gone', tool: 'Bash', signature: 'Bash:ls', target: 'ls', at: 1, turn: 1 } }, null, 2),
+  );
+  const orphaned = await thread(orphanPerm);
+  assert.equal(orphaned.status, 'failed');
+  assert.equal(orphaned.pending, null, 'no Allow and Deny offered to nobody');
+  assert.equal((await threads()).find((t) => t.id === orphanPerm).waiting, false);
+
+  // ---- 12. a chat the app was quit on says so, and can be carried on ----
   // A session cannot outlive its process, so a record saying `running` with no session
   // behind it is exactly what quitting mid-turn leaves. Writing that record is how the
   // condition is reproduced; nothing else can produce it deterministically.
@@ -340,14 +421,14 @@ try {
     (async () => {
       for (;;) {
         const found = (await fs.readdir(path.join(outDir, PROJECT))).filter((n) => AGENT_SIDECAR.test(n));
-        if (found.length >= 7) return found;
+        if (found.length >= 12) return found;
         await new Promise((r) => setTimeout(r, 20));
       }
     })(),
     5000,
-    'seven turns ran, but seven sidecars were never written',
+    'twelve turns ran, but twelve sidecars were never written',
   );
-  assert.equal(sidecars.length, 7, 'seven turns, seven sidecars');
+  assert.equal(sidecars.length, 12, 'twelve turns, twelve sidecars');
   for (const name of sidecars) {
     const body = JSON.parse(await fs.readFile(path.join(outDir, PROJECT, name), 'utf8'));
     assert.equal(body.billing, 'subscription');

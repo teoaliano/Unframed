@@ -12,7 +12,12 @@
 // deliberately no route, header or body field that can turn it on.
 //
 // A script is { when?, turns: [...] } (or a bare array of turns), and a turn is
-//   { text, tools?: [{ name, input }], retries?, title?, isError?, errorSubtype?, expectPreamble? }
+//   { text, tools?: [{ name, input }], provider?: [{ name, input }], retries?, title?,
+//     isError?, errorSubtype?, expectPreamble? }
+// `provider` is the provider's OWN tools -- Read, Write, Bash -- which the script does not
+// run: it puts each through the real permission decision (agent.js, decidePermission), so
+// the round trip of asking a person and waiting for their answer is driveable end to end
+// without a model. Nothing is executed either way; what is being tested is the decision.
 // Turn N answers the thread's Nth user message. `when` is a pattern matched against a
 // chat's FIRST message: it is how one folder of fixtures serves a flow that starts
 // several different conversations, since the env var is per server, not per thread.
@@ -93,8 +98,23 @@ export async function runScriptedTurn(session, { turn, preamble, text }) {
     await session.emit({ type: 'api_retry', attempt: r.attempt, maxRetries: r.maxRetries, delayMs: r.delayMs, status: r.status ?? null });
   }
 
+  // The provider's own tools, through the real decision. A refusal stops the turn's work
+  // the way a refused model stops: the remaining calls are not made, and the answer says
+  // so rather than pretending the work happened.
+  let refused = null;
+  for (const [i, call] of (step.provider ?? []).entries()) {
+    const id = `scripted-provider-${turn}-${i}`;
+    await session.emit({ type: 'tool_use', name: call.name, input: call.input ?? {}, id });
+    const verdict = await session.decidePermission(call.name, call.input ?? {});
+    await session.emit({ type: 'tool_result', id, ok: verdict.verdict === 'allow', size: 0 });
+    if (verdict.verdict !== 'allow') {
+      refused = verdict.reason ?? 'refused';
+      break;
+    }
+  }
+
   const byName = new Map(session.tools.map((t) => [t.name, t]));
-  for (const [i, call] of (step.tools ?? []).entries()) {
+  for (const [i, call] of (refused ? [] : step.tools ?? []).entries()) {
     const tool = byName.get(call.name);
     if (!tool) throw new Error(`agent script ${script.name} turn ${turn}: no tool named ${call.name}`);
     const id = `scripted-${turn}-${i}`;
@@ -106,9 +126,10 @@ export async function runScriptedTurn(session, { turn, preamble, text }) {
     await session.emit({ type: 'tool_result', id, ok: !out?.isError, size: body.length });
   }
 
-  if (step.text) await session.emit({ type: 'text_delta', text: step.text });
+  const said = refused ? (step.refusedText ?? refused) : step.text;
+  if (said) await session.emit({ type: 'text_delta', text: said });
   await session.settleTurn({
-    answer: step.text,
+    answer: said,
     isError: !!step.isError,
     // Stands in for the SDK result's `subtype`, which is what names a failure.
     subtype: step.errorSubtype,

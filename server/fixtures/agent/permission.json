@@ -1,0 +1,16 @@
+{
+  "when": "clean the build",
+  "turns": [
+    {
+      "title": "Build cleanup",
+      "provider": [{ "name": "Bash", "input": { "command": "rm -rf build" } }],
+      "text": "Removed the build folder.",
+      "refusedText": "I did not remove the build folder."
+    },
+    {
+      "provider": [{ "name": "Bash", "input": { "command": "rm -rf dist" } }],
+      "text": "Removed dist too.",
+      "refusedText": "I did not remove dist."
+    }
+  ]
+}
