@@ -290,6 +290,19 @@ export function batchArtifacts(ops, graph) {
 
 // A page's file name: the same `<timestamp>-<slug>.html` shape every other file in the
 // folder has (media.js), so the preview origin's name rule admits it.
+// The six tools a session MUST have, and the check that it does. It lives here rather
+// than in agent.js because it is a fact about the tools themselves, and it is load-bearing
+// rather than belt-and-braces now that the session no longer restricts what else can
+// appear: a session missing one of these (the in-process MCP server failed to register, as
+// a bad schema once made it) is stopped before the model speaks, instead of the person
+// being told by the model that "the tools are not available".
+export const REQUIRED_TOOLS = ['canvas_read', 'canvas_write', 'page_write', 'page_read', 'motion_write', 'motion_read'].map((n) => `mcp__unframed__${n}`);
+
+export function assertCanvasTools(tools) {
+  const missing = REQUIRED_TOOLS.filter((t) => !(tools ?? []).includes(t));
+  if (missing.length) throw new Error(`The agent session started without the canvas tools (${missing.join(', ')}). This is a bug in Unframed, not your setup.`);
+}
+
 export const pageFileName = (now, title, n) => mediaFileName(now, `${title || 'page'}.html`, 'html', n);
 
 export function pageSidecar({ threadId, turn, nodeId, title, bytes, now = Date.now(), kind = 'page' }) {

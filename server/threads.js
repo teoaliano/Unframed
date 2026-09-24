@@ -5,8 +5,16 @@
 // that fills a thread is server/agent.js; the routes are in index.js.
 //
 // A thread is a CHAT, not a thing about an artifact:
-// { id, project, tags, provider, model, status, error?, title, titledBy, lastVersion,
-//   messages, events, seq, turns, createdAt, updatedAt }.
+// { id, project, tags, provider, model, mode, status, error?, title, titledBy,
+//   lastVersion, messages, events, seq, turns, createdAt, updatedAt }.
+// mode:     the runtime mode -- how much the agent may do in this chat without asking
+//           (permissions.js). A property of the CHAT, so two chats can run at different
+//           levels of trust at once.
+// pending:  the permission request this chat is waiting on, or null. It is thread state
+//           rather than session state precisely so it survives a reload: a client that
+//           reconnects reads it from the record instead of from a socket it missed.
+// grants:   signatures the person has allowed for the rest of this chat (permissions.js,
+//           signatureOf). Thread-scoped by definition -- a new chat starts with none.
 // tags:     node ids of the artifacts (pages, motions) this chat has touched -- the ones
 //           selected at its first message, plus every artifact the agent writes to.
 //           Tags are POINTERS, never dependencies: deleting every file a chat touched
@@ -27,6 +35,7 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { PROVIDERS } from './providers.js';
+import { MODES, DEFAULT_MODE, isMode } from './permissions.js';
 
 const ID_RE = /^[\w-]{1,80}$/;
 const STATUSES = new Set(['idle', 'running', 'failed']);
@@ -44,8 +53,9 @@ function cleanTags(tags) {
   return out;
 }
 
-export function newThread({ id, project, tags = [], provider, model, effort = '', now = Date.now() }) {
+export function newThread({ id, project, tags = [], provider, model, effort = '', mode = DEFAULT_MODE, now = Date.now() }) {
   if (effort && !EFFORTS.has(effort)) throw new Error(`unknown effort "${effort}"`);
+  if (!isMode(mode)) throw new Error(`unknown mode "${mode}"`);
   if (!ID_RE.test(String(id))) throw new Error('thread id must be a short token');
   if (!PROVIDERS[provider]) throw new Error(`unknown provider ${provider}`);
   return {
@@ -55,6 +65,9 @@ export function newThread({ id, project, tags = [], provider, model, effort = ''
     provider,
     model: model || '',
     effort: effort || '',
+    mode,
+    pending: null,
+    grants: [],
     status: 'idle',
     title: '',
     titledBy: null,
@@ -69,10 +82,13 @@ export function newThread({ id, project, tags = [], provider, model, effort = ''
 }
 
 // A user message opens a turn; an assistant message closes the current one.
-export function appendMessage(thread, { role, text, selection }, now = Date.now()) {
+export function appendMessage(thread, { role, text, selection, attachments }, now = Date.now()) {
   const turns = role === 'user' ? thread.turns + 1 : thread.turns;
   const message = { role, text: String(text ?? ''), at: now, turn: turns };
   if (selection) message.selection = selection;
+  // What the person attached, by id and name -- never the bytes. A reopened panel shows
+  // the row again from this, and the file itself is read at the provider boundary.
+  if (attachments?.length) message.attachments = attachments.map(({ id, name, type, kind, size }) => ({ id, name, type, kind, size }));
   return { ...thread, messages: [...thread.messages, message], turns, updatedAt: now };
 }
 
@@ -97,6 +113,30 @@ export function setStatus(thread, status, { error } = {}, now = Date.now()) {
 }
 
 export const eventsSince = (thread, seq) => thread.events.filter((e) => e.seq > seq);
+
+// A session lives in one process and cannot outlive it (agent.js keeps them in a Map).
+// So a record that says `running` while no session is live for it is, with certainty, a
+// turn the app was quit on -- there is no third possibility. That inference is made here
+// and applied on the READ path rather than once at boot, so it holds wherever a thread is
+// listed or opened, and a record written by a server that has since been replaced cannot
+// slip past it.
+//
+// The reconciled thread reads `failed`, and that is the point: the composer and
+// `findChatFor` skip `running`, not `failed`, so an interrupted conversation can be
+// carried on instead of being silently replaced by a new one.
+//
+// `live` defaults to TRUE, which is the safe way round: a caller that forgets to say
+// leaves the bug in place, where a caller that forgets and gets `false` would report a
+// turn still in flight as dead.
+export const QUIT_MID_TURN = 'Unframed stopped while this turn was running, so it never finished. Send again to carry on where it left off.';
+
+export function reconcile(thread, { live = true } = {}, now = Date.now()) {
+  if (!thread || thread.status !== 'running' || live) return thread;
+  // A pending request goes with it: the turn parked on that answer died with the process,
+  // so a panel offering Allow and Deny would be offering them to nobody.
+  const failed = setStatus(thread, 'failed', { error: QUIT_MID_TURN }, now);
+  return failed.pending ? { ...failed, pending: null } : failed;
+}
 
 // The chat picks up a tag for every artifact it touches -- the selection at its first
 // message, then every page or motion the agent writes to, created or updated. Adding a
@@ -129,6 +169,44 @@ export function applySettings(thread, { model, effort } = {}, now = Date.now()) 
   }
   if (next.model === thread.model && next.effort === (thread.effort ?? '')) return thread;
   return { ...next, updatedAt: now };
+}
+
+// How much the agent may do in this chat without asking (permissions.js). Its own
+// function rather than part of `applySettings` for the reason `renameThread` is: the two
+// are refused under different conditions, and sharing one would take the stricter. A
+// model cannot change mid-turn because the live session was built with it; a mode CAN,
+// because the SDK's own `permissionMode` only sets the floor and every decision our
+// `canUseTool` makes reads the record -- so tightening a chat takes effect on the agent's
+// very next call rather than on the next turn.
+export function setMode(thread, mode, now = Date.now()) {
+  if (!isMode(mode)) throw Object.assign(new Error(`Mode must be one of ${MODES.join(', ')}.`), { status: 400 });
+  if (mode === (thread.mode ?? DEFAULT_MODE)) return thread;
+  return { ...thread, mode, updatedAt: now };
+}
+
+// ---- permissions ----
+//
+// A request is written into the record and emitted on the thread's event stream, the same
+// path every other agent event takes; the answer arrives as a route call and resolves the
+// promise the turn is parked on (agent.js). Only one can be outstanding at a time, which
+// is not a limitation but the shape of a turn: the agent is blocked on this answer and
+// cannot ask a second question until it has one.
+export function askPermission(thread, request, now = Date.now()) {
+  if (thread.pending) throw Object.assign(new Error('This chat is already waiting on a permission.'), { status: 409 });
+  return { ...thread, pending: { ...request, at: now, turn: thread.turns }, updatedAt: now };
+}
+
+// The person's answer. `always` also widens the chat, which is what stops the twentieth
+// identical request being the twentieth prompt (user story 18); `once` and `deny` leave
+// the chat exactly as trusting as it was. An answer to a request that is not the pending
+// one is refused rather than ignored -- a stale panel must not decide the live question.
+export function answerPermission(thread, id, decision, now = Date.now()) {
+  if (!thread.pending) throw Object.assign(new Error('This chat is not waiting on a permission.'), { status: 409 });
+  if (thread.pending.id !== id) throw Object.assign(new Error('That permission request is no longer the one in flight.'), { status: 409 });
+  if (!['once', 'always', 'deny'].includes(decision)) throw Object.assign(new Error('A permission is answered once, always or deny.'), { status: 400 });
+  const grants = thread.grants ?? [];
+  const widened = decision === 'always' && thread.pending.signature && !grants.includes(thread.pending.signature);
+  return { ...thread, pending: null, grants: widened ? [...grants, thread.pending.signature] : grants, updatedAt: now };
 }
 
 // The name a user typed on the tab. Separate from `applySettings` because it is a
@@ -165,6 +243,10 @@ export function threadSummary(thread) {
     provider: thread.provider,
     model: thread.model,
     effort: thread.effort ?? '',
+    mode: thread.mode ?? DEFAULT_MODE,
+    // The strip shows which chat is waiting on you, so the summary carries the fact but
+    // not the request: what it is asking for belongs to the panel that opens it.
+    waiting: !!thread.pending,
     status: thread.status,
     title: thread.title,
     titledBy: thread.titledBy ?? null,
@@ -187,7 +269,14 @@ export const threadPath = (dir, id) => path.join(threadsDir(dir), `${path.basena
 // reason: the old fields are dropped the next time the record is written, and a chat
 // nobody has opened since must still open.
 export function migrateThread(record) {
-  if (!record || Array.isArray(record.tags)) return record;
+  if (!record) return record;
+  // A record written before runtime modes existed ran with no general tools at all, so
+  // the mode it never had is the default one.
+  if (!isMode(record.mode)) record = { ...record, mode: DEFAULT_MODE };
+  // The guard is not redundant with its own body: a record that already has both fields
+  // must come back as the SAME object, which is what lets a caller skip a write.
+  if (record.pending === undefined || !Array.isArray(record.grants)) record = { ...record, pending: record.pending ?? null, grants: Array.isArray(record.grants) ? record.grants : [] };
+  if (Array.isArray(record.tags)) return record;
   const { kind, artifactId, ...rest } = record;
   return {
     ...rest,
@@ -198,14 +287,14 @@ export function migrateThread(record) {
   };
 }
 
-export async function readThread(dir, id) {
+export async function readThread(dir, id, { live } = {}) {
   let raw;
   try {
     raw = await fs.readFile(threadPath(dir, id), 'utf8');
   } catch {
     throw new Error(`Thread not found: ${id}`);
   }
-  return migrateThread(JSON.parse(raw));
+  return reconcile(migrateThread(JSON.parse(raw)), { live });
 }
 
 // Temp-then-rename, the jobs.json rule: a crash mid-save leaves the old record or the
@@ -243,7 +332,9 @@ export function persistThread(dir, id, update) {
 }
 
 // Newest first. No folder is no threads, not an error.
-export async function listThreads(dir) {
+// `live(id)` answers whether a session for that thread is running in this process; with
+// no answer every thread is assumed live, which is the safe default `reconcile` states.
+export async function listThreads(dir, { live } = {}) {
   let names;
   try {
     names = await fs.readdir(threadsDir(dir));
@@ -254,7 +345,8 @@ export async function listThreads(dir) {
   for (const name of names) {
     if (!name.endsWith('.json')) continue;
     try {
-      out.push(threadSummary(migrateThread(JSON.parse(await fs.readFile(path.join(threadsDir(dir), name), 'utf8')))));
+      const record = migrateThread(JSON.parse(await fs.readFile(path.join(threadsDir(dir), name), 'utf8')));
+      out.push(threadSummary(reconcile(record, { live: live ? live(record.id) : undefined })));
     } catch {
       // a half-written or hand-damaged record: skip it rather than hide every other one
     }
@@ -267,9 +359,9 @@ export async function listThreads(dir) {
 // not any-of: continuing a chat about A in a message about A and B would carry over an
 // answer that never saw B. With nothing selected it is the newest idle UNTAGGED chat --
 // a general conversation, not whichever artifact chat happens to be newest.
-export async function findChatFor(dir, artifactIds = []) {
+export async function findChatFor(dir, artifactIds = [], { live } = {}) {
   const want = cleanTags(artifactIds);
-  const all = await listThreads(dir);
+  const all = await listThreads(dir, { live });
   const idle = all.filter((t) => t.status !== 'running');
   if (!want.length) return idle.find((t) => !(t.tags ?? []).length) ?? null;
   return idle.find((t) => want.every((id) => (t.tags ?? []).includes(id))) ?? null;

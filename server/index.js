@@ -32,8 +32,11 @@ import {
 import { saveMedia, copyMedia, inlineFileRefs } from './media.js';
 import { ensureLibrary, startRender, getRender, withRuntime } from './motion.js';
 import { providerStatuses, forgetProviderStatus, PROVIDERS } from './providers.js';
-import { newThread, writeThread, readThread, listThreads, deleteThread, eventsSince, persistThread, applySettings, renameThread, tagThread, EFFORTS } from './threads.js';
-import { sendToThread, interruptThread, subscribeThread, closeThreadSession, closeSessionsFor } from './agent.js';
+import { newThread, writeThread, readThread, listThreads, deleteThread, eventsSince, persistThread, applySettings, renameThread, setMode, answerPermission, tagThread, EFFORTS } from './threads.js';
+import { MODES, isMode } from './permissions.js';
+import { classify as classifyAttachment, normalizeType as normalizeAttachmentType, tooLargeMessage, MAX_FILE_BYTES, MAX_PER_MESSAGE as MAX_ATTACHMENTS } from './attachments.js';
+import { attachmentsDir, storeAttachment, resolveAttachment } from './attachmentStore.js';
+import { sendToThread, interruptThread, subscribeThread, closeThreadSession, closeSessionsFor, hasLiveSession, answerPermissionRequest, setThreadMode } from './agent.js';
 import crypto from 'node:crypto';
 import { startPreviewServer, LOOPBACK_HOST } from './preview.js';
 import {
@@ -1345,18 +1348,19 @@ const NODE_ID_RE = /^[\w-]{1,80}$/;
 // refused rather than ignored: a client still sending them would silently get an
 // untagged chat, which looks like the feature working and is not.
 app.post('/api/projects/:name/threads', async (req, res) => {
-  const { provider = 'claude', model = '', effort = '', tags = [] } = req.body || {};
+  const { provider = 'claude', model = '', effort = '', mode, tags = [] } = req.body || {};
   if ('kind' in (req.body || {}) || 'artifactId' in (req.body || {})) {
     return res.status(400).json({ error: 'A thread is a chat now: send `tags` (artifact node ids), not `kind`/`artifactId`.' });
   }
   if (!PROVIDERS[provider]) return res.status(400).json({ error: `Unknown provider "${provider}".` });
   if (typeof model !== 'string' || model.length > 200) return res.status(400).json({ error: 'That does not look like a model id.' });
   if (effort !== '' && !EFFORTS.has(effort)) return res.status(400).json({ error: `Effort must be one of ${[...EFFORTS].join(', ')}.` });
+  if (mode !== undefined && !isMode(mode)) return res.status(400).json({ error: `Mode must be one of ${MODES.join(', ')}.` });
   if (!Array.isArray(tags) || tags.length > 500) return res.status(400).json({ error: 'tags must be an array of node ids.' });
   if (tags.some((t) => typeof t !== 'string' || !NODE_ID_RE.test(t))) return res.status(400).json({ error: 'Every tag must be a node id.' });
   try {
     const id = `t-${Date.now().toString(36)}-${crypto.randomBytes(4).toString('hex')}`;
-    const thread = newThread({ id, project: slugify(req.params.name), provider, model, effort, tags });
+    const thread = newThread({ id, project: slugify(req.params.name), provider, model, effort, tags, ...(mode === undefined ? {} : { mode }) });
     await writeThread(threadDir(req), thread);
     res.json({ thread });
   } catch (err) {
@@ -1367,19 +1371,28 @@ app.post('/api/projects/:name/threads', async (req, res) => {
 // Model and effort for the thread's next turn (threads.js applySettings validates and
 // refuses mid-turn). The live session was built with the old values, so it is closed;
 // the next message resumes the SDK session with the new ones and keeps the context.
-// `title` rides the same route but is not a setting: it changes no session, so a rename
-// neither closes one nor goes near applySettings -- which refuses mid-turn whether or
-// not a model was actually asked for, and would fail a rename for standing too close.
+// `title` and `mode` ride the same route but are not settings: neither changes a session,
+// so neither closes one nor goes near applySettings -- which refuses mid-turn whether or
+// not a model was actually asked for, and would fail both for standing too close.
 app.patch('/api/projects/:name/threads/:id', async (req, res) => {
-  const { model, effort, title } = req.body || {};
+  const { model, effort, title, mode } = req.body || {};
   const settings = model !== undefined || effort !== undefined;
   try {
     const thread = await persistThread(threadDir(req), req.params.id, (cur) => {
       if (!cur) throw Object.assign(new Error('Thread not found.'), { status: 404 });
       let next = settings ? applySettings(cur, { model, effort }) : cur;
       if (title !== undefined) next = renameThread(next, title);
+      // The runtime mode rides this route beside them and, like a rename, is refused by
+      // none of their conditions: it changes how the NEXT tool call is decided, not what
+      // the running session was built with, so it may change mid-turn (threads.js).
+      if (mode !== undefined) next = setMode(next, mode);
       return next;
     });
+    // The SDK was given a mode when the session started, and it enforces that floor
+    // itself. Our own decisions read the record, so a TIGHTENING already bit on the next
+    // tool call -- but a LOOSENING would not have, which is half of what "changeable
+    // mid-conversation" means. So the live session is told too.
+    if (mode !== undefined) await setThreadMode(threadDir(req), req.params.id, mode);
     if (settings) closeThreadSession(threadDir(req), req.params.id);
     res.json({ thread });
   } catch (err) {
@@ -1391,7 +1404,10 @@ app.patch('/api/projects/:name/threads/:id', async (req, res) => {
 // the strip's rule when several artifacts are selected (docs/agent.md).
 app.get('/api/projects/:name/threads', async (req, res) => {
   try {
-    const all = await listThreads(threadDir(req));
+    // Liveness is this process's to answer, so it is passed in: a record left `running`
+    // by an app that was quit reads as failed, and therefore continuable (threads.js).
+    const dir = threadDir(req);
+    const all = await listThreads(dir, { live: (id) => hasLiveSession(dir, id) });
     const q = req.query.tag;
     const tags = (Array.isArray(q) ? q : q === undefined ? [] : [q]).filter((t) => typeof t === 'string' && t);
     res.json({ threads: tags.length ? all.filter((t) => t.tags.some((id) => tags.includes(id))) : all });
@@ -1402,7 +1418,8 @@ app.get('/api/projects/:name/threads', async (req, res) => {
 
 app.get('/api/projects/:name/threads/:id', async (req, res) => {
   try {
-    res.json({ thread: await readThread(threadDir(req), req.params.id) });
+    const dir = threadDir(req);
+    res.json({ thread: await readThread(dir, req.params.id, { live: hasLiveSession(dir, req.params.id) }) });
   } catch (err) {
     res.status(404).json({ error: err.message });
   }
@@ -1432,11 +1449,95 @@ app.post('/api/projects/:name/threads/:id/messages', async (req, res) => {
   if (!text) return res.status(400).json({ error: 'Say something first.' });
   if (text.length > 20000) return res.status(400).json({ error: 'That message is too long.' });
   const selection = Array.isArray(req.body?.selection) ? req.body.selection.slice(0, 500).map(String) : [];
+  // Attachments are named by the id POST /api/attachments gave back, never by a path the
+  // browser chose: the id is resolved against the attachments directory here, so a message
+  // cannot name a file elsewhere on the machine and have it read into the turn.
+  const asked = Array.isArray(req.body?.attachments) ? req.body.attachments.slice(0, MAX_ATTACHMENTS) : [];
+  const attachments = [];
+  for (const a of asked) {
+    const id = typeof a === 'string' ? a : a?.id;
+    const file = typeof id === 'string' ? resolveAttachment(ATTACHMENTS_DIR, id) : null;
+    if (!file) return res.status(400).json({ error: 'That is not an attachment id.' });
+    const stat = await fs.stat(file).catch(() => null);
+    if (!stat) return res.status(404).json({ error: 'That attachment is no longer on disk.' });
+    // What KIND of thing it is comes from the id, which the upload derived from the real
+    // file, rather than from what this second request claims: two requests about one file
+    // must not be able to disagree about whether the model may look at it. The name is
+    // only a label, so it is taken as given.
+    const name = typeof a?.name === 'string' ? path.basename(a.name) : id;
+    const type = normalizeAttachmentType({ name: id, type: '' }) || 'application/octet-stream';
+    attachments.push({ id, name, type, kind: classifyAttachment({ name: id, type: '' }), size: stat.size, path: file });
+  }
   const dir = threadDir(req);
   try {
     await tagFirstMessage(dir, req.params.id, selection);
-    await sendToThread(dir, req.params.id, { text, selection }, { settings: providerSettings, previewPort: PREVIEW_PORT });
+    await sendToThread(dir, req.params.id, { text, selection, attachments }, { settings: providerSettings, previewPort: PREVIEW_PORT, attachmentsDir: ATTACHMENTS_DIR });
     res.json({ ok: true });
+  } catch (err) {
+    res.status(err.status || (/not found/i.test(err.message) ? 404 : 500)).json({ error: err.message });
+  }
+});
+
+// ---- agent attachments (server/attachments.js) ----
+// A file the person hands the agent in the composer. It is stored OUTSIDE the project
+// folder, beside `.env` under the data directory: uploading something to talk about must
+// not add a file to the work the person is organising. Not nested under a project for
+// exactly that reason -- it does not belong to one.
+const ATTACHMENTS_DIR = attachmentsDir(process.env.UNFRAMED_DATA_DIR || ROOT);
+
+// The raw parser rejects anything past the cap before the handler runs, and this setup has
+// no error middleware, so the 4-argument handler in the middle of this chain is what turns
+// that into our sentence rather than Express's default HTML 413. Route-level, not global:
+// every other route goes on answering for itself.
+app.post(
+  '/api/attachments',
+  express.raw({ type: () => true, limit: MAX_FILE_BYTES + 1024 }),
+  (err, req, res, next) => {
+    if (err?.type === 'entity.too.large' || err?.status === 413) {
+      return res.status(413).json({ error: tooLargeMessage(String(req.query.name || 'That file'), Number(req.headers['content-length']) || MAX_FILE_BYTES + 1, MAX_FILE_BYTES) });
+    }
+    return next(err);
+  },
+  async (req, res) => {
+    if (!Buffer.isBuffer(req.body) || !req.body.length) return res.status(400).json({ error: 'No file bytes in the request body.' });
+    const name = typeof req.query.name === 'string' ? path.basename(req.query.name) : '';
+    if (!name) return res.status(400).json({ error: 'What is the file called?' });
+    const type = String(req.headers['content-type'] || '').split(';')[0].trim();
+    try {
+      const stored = await storeAttachment(ATTACHMENTS_DIR, { name, type, bytes: req.body });
+      // A refusal is the person's to act on -- too large, or empty -- so it is a 400 with
+      // the sentence attachments.js wrote, not a 500.
+      if (!stored.ok) return res.status(400).json({ error: stored.error });
+      res.json({ attachment: stored.attachment });
+    } catch (err) {
+      res.status(500).json({ error: `Could not save the attachment: ${err.message}` });
+    }
+  },
+);
+
+// The person's answer to a permission request. The RECORD is updated first and the
+// parked turn released second, in that order and never the other way: `always` widens the
+// chat's grants, and the session re-reads the record on its next decision, so a turn
+// released before the widening was saved could ask the same question again.
+//
+// A 409 here is a stale panel answering a question that is no longer the one in flight --
+// refused rather than ignored, since silently accepting it would resume the turn on a
+// decision the person did not make about what it is actually doing.
+app.post('/api/projects/:name/threads/:id/permission', async (req, res) => {
+  const { id, decision } = req.body || {};
+  if (typeof id !== 'string' || !id) return res.status(400).json({ error: 'Which request are you answering?' });
+  try {
+    const thread = await persistThread(threadDir(req), req.params.id, (cur) => {
+      if (!cur) throw Object.assign(new Error('Thread not found.'), { status: 404 });
+      return answerPermission(cur, id, decision);
+    });
+    if (!answerPermissionRequest(id, decision)) {
+      // The record said this was the pending request, but no turn is parked on it: the
+      // session went with its process. The record is now correct either way, and the
+      // stale `running` is what `reconcile` answers for (threads.js).
+      return res.status(409).json({ error: 'That turn is no longer running.', thread });
+    }
+    res.json({ thread });
   } catch (err) {
     res.status(err.status || (/not found/i.test(err.message) ? 404 : 500)).json({ error: err.message });
   }
@@ -1447,7 +1548,8 @@ app.post('/api/projects/:name/threads/:id/messages', async (req, res) => {
 app.get('/api/projects/:name/threads/:id/events', async (req, res) => {
   let thread;
   try {
-    thread = await readThread(threadDir(req), req.params.id);
+    const dir = threadDir(req);
+    thread = await readThread(dir, req.params.id, { live: hasLiveSession(dir, req.params.id) });
   } catch (err) {
     return res.status(404).json({ error: err.message });
   }
@@ -1459,7 +1561,7 @@ app.get('/api/projects/:name/threads/:id/events', async (req, res) => {
   });
   const send = (name, data) => res.write(`event: ${name}\ndata: ${JSON.stringify(data)}\n\n`);
   const since = Number.parseInt(req.query.since, 10);
-  send('state', { status: thread.status, error: thread.error, turns: thread.turns, seq: thread.seq, messages: thread.messages });
+  send('state', { status: thread.status, error: thread.error, turns: thread.turns, seq: thread.seq, messages: thread.messages, pending: thread.pending ?? null });
   for (const e of eventsSince(thread, Number.isInteger(since) ? since : 0)) send('event', e);
   send('live', { seq: thread.seq });
   const off = subscribeThread(req.params.id, (e) => send('event', e));

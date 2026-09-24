@@ -1,27 +1,24 @@
 // The agent session: one long-lived Claude Agent SDK query per thread, fed user messages
-// through a streaming prompt so the conversation keeps its context, with the canvas as
-// its only tool set (agentTools.js: read it, change it as one batch, write a page). Every turn is journaled into the thread record
-// (threads.js) before and as it happens, and fanned out live to whoever is listening on
-// the thread's event stream. Routes are in index.js.
+// through a streaming prompt so the conversation keeps its context, with the provider's
+// own tools plus the canvas ones (agentTools.js) behind a permission the person is asked
+// for (permissions.js). Every turn is journaled into the thread record (threads.js) before
+// and as it happens, and fanned out live to whoever is listening on the thread's event
+// stream. Routes are in index.js.
 //
-// The safety half, in one place (the spec's "session configuration"):
-//   - tools: [] -- no built-in tools. The agent cannot read or write files or run
-//     commands; it can only call `unframed` tools, and those are auto-approved. Nothing
-//     needs --dangerously-skip-permissions because nothing needs skipping. The one way
-//     bytes reach disk is page_write, which writes one extension into one folder
-//     through the same naming as every other file (media.js), never over an existing
-//     file; canvas_write cannot carry bytes at all (agentTools.js, prepareBatch).
-//   - canUseTool denies anything that is not ours, in case a future SDK ships a tool
-//     outside the `tools` list.
-//   - settingSources: [] -- the user's coding CLAUDE.md, skills and hooks do not leak into
-//     a media tool.
-//   - strictMcpConfig: true -- ONLY the `unframed` server. Without it the CLI also loads
-//     the user's own MCP servers (~/.claude.json, .mcp.json, plugins): on 2026-09-05 a
-//     turn saw the user's Figma tools and none of ours. canUseTool would have denied a
-//     call, but the model must not even see them.
-//   - the init handshake is checked: a session whose tool list lacks ours fails the turn
-//     loudly instead of letting the model answer with "the tools are not available".
-//   - our own system prompt, which says canvas text is data, not instruction.
+// The session configuration, whose rules `docs/agent.md` owns -- read it before changing
+// any of the options below. Only the things that bite from inside this file are repeated
+// here:
+//   - canUseTool is a thin adapter over permissions.js. Widening what the agent may do
+//     without asking is a change to that matrix, never a branch here: a special case at
+//     this call site is invisible to permissions.test.js.
+//   - the init handshake is load-bearing, not belt-and-braces. Nothing restricts what
+//     else may appear in the tool list any more, so a session missing OURS has to fail
+//     the turn loudly (assertCanvasTools) rather than let the model tell the person the
+//     tools are unavailable.
+//   - the system prompt APPENDS to the preset. Replacing it takes the behaviour that
+//     makes "read the file in my Downloads" work well.
+//   - the six unframed tools are auto-approved in every mode, in two places that must
+//     agree: allowedTools here, and permissions.js.
 //   - CLAUDE_CONFIG_DIR only if configured; HOME never overridden (providers.js).
 //   - maxTurns bounded; an AbortController per session so a cancel actually stops it.
 //
@@ -29,13 +26,17 @@
 // from a JSON script instead of a model (agentScript.js). It is the SAME Session -- the
 // same tool wiring, the same events, the same record -- because a second Session would be
 // a second agent, and the thing worth testing is this one. Unset in a clone, so inert.
+import { randomBytes } from 'node:crypto';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { query, createSdkMcpServer } from '@anthropic-ai/claude-agent-sdk';
-import { canvasTools, contextPreamble, summarizeChanges, pageFileName, pageSidecar } from './agentTools.js';
+import { canvasTools, contextPreamble, summarizeChanges, pageFileName, pageSidecar, REQUIRED_TOOLS, assertCanvasTools } from './agentTools.js';
 import { loadScript, runScriptedTurn } from './agentScript.js';
 import { ensureLibrary, motionFileName, viewerPath } from './motion.js';
 import { detectProvider, providerRunEnv } from './providers.js';
+import { decide, DEFAULT_MODE, SDK_PERMISSION_MODE } from './permissions.js';
+import { attachmentLines, providerContent } from './attachments.js';
+import { resolveAttachment } from './attachmentStore.js';
 import * as T from './threads.js';
 
 export const SYSTEM_PROMPT = [
@@ -71,11 +72,13 @@ export function failureMessage(subtype) {
 }
 
 const MAX_TURNS = 30;
-export const REQUIRED_TOOLS = ['mcp__unframed__canvas_read', 'mcp__unframed__canvas_write', 'mcp__unframed__page_write', 'mcp__unframed__page_read', 'mcp__unframed__motion_write', 'mcp__unframed__motion_read'];
 const IDLE_CLOSE_MS = 10 * 60 * 1000;
 
 // dir\0threadId -> Session
 const sessions = new Map();
+// permission request id -> resolve('once' | 'always' | 'deny'). The turn is parked on the
+// promise; the route that answers it resolves this.
+const waiters = new Map();
 // threadId -> Set<listener(event)>
 const listeners = new Map();
 
@@ -128,7 +131,7 @@ function messageQueue() {
 }
 
 class Session {
-  constructor({ dir, thread, settings, env, previewPort = 0 }) {
+  constructor({ dir, thread, settings, env, previewPort = 0, attachmentsDir = '' }) {
     this.dir = dir;
     this.threadId = thread.id;
     this.provider = thread.provider;
@@ -137,6 +140,7 @@ class Session {
     this.settings = settings;
     this.env = env;
     this.previewPort = previewPort;
+    this.attachmentsDir = attachmentsDir;
     this.selection = [];
     this.lastVersion = thread.lastVersion ?? null;
     this.turn = thread.turns ?? 0;
@@ -153,6 +157,61 @@ class Session {
     // runs. `chosenScript` is which fixture this chat picked at its first message.
     this.script = null;
     this.chosenScript = null;
+    // The permission request this turn is parked on, if any, so close() can refuse it.
+    // At most one: threads.js refuses a second while one is pending.
+    this.parkedId = null;
+  }
+
+  // Ask the person, and park the turn until they answer. The request is written into the
+  // THREAD (threads.js) rather than held here, which is what makes it survive a reload: a
+  // panel that reconnects reads it from the record instead of from a socket it missed.
+  // The waiter is keyed by request id in a module-level map, because the thing that
+  // resolves it is a route call on a different request altogether.
+  //
+  // A turn parked here is still `running`, deliberately: it has not failed and it has not
+  // finished, and the panel says what it is waiting for rather than spinning.
+  async requestPermission(request) {
+    const id = `perm-${Date.now().toString(36)}-${randomBytes(4).toString('hex')}`;
+    const entry = { ...request, id };
+    // The pending request and the event announcing it are ONE write, so nothing can read
+    // a record that is waiting on a question its own event log does not mention.
+    const event = { type: 'permission_request', ...entry, at: now(), threadId: this.threadId };
+    await this.persist((cur) => (cur ? T.appendEvent(T.askPermission(cur, entry, now()), event, now()) : null));
+    broadcast(this.threadId, event);
+    const decision = await new Promise((resolve) => {
+      waiters.set(id, resolve);
+      // A session that closes (idle, cancelled, the folder renamed) must not leave a turn
+      // parked for ever: closing answers the question it was holding with a refusal.
+      this.parkedId = id;
+    });
+    this.parkedId = null;
+    waiters.delete(id);
+    await this.emit({ type: 'permission_result', id, decision });
+    return decision;
+  }
+
+  // The one decision, for both runners: ours are allowed, the mode decides the rest, and
+  // anything left over is put to the person. The mode and the chat's grants are read from
+  // the RECORD each time rather than captured when the session was built, so a mode
+  // changed mid-turn takes effect on the very next tool call.
+  async decidePermission(tool, input) {
+    const record = await T.readThread(this.dir, this.threadId).catch(() => null);
+    const verdict = decide({ mode: record?.mode ?? DEFAULT_MODE, tool, input, grants: record?.grants ?? [] });
+    if (verdict.verdict !== 'ask') return verdict;
+    // `hidden` travels with it: the prompt clips a long command for display, and a person
+    // cannot consent to the part they were not shown, so the count has to reach the panel.
+    const { verdict: _, ...request } = verdict;
+    const answer = await this.requestPermission(request);
+    return { ...verdict, verdict: answer === 'deny' ? 'deny' : 'allow', ...(answer === 'deny' ? { reason: DECLINED } : {}) };
+  }
+
+  // The ONE leaf directory the agent is granted beyond its project folder, so reading an
+  // attachment needs no approval. Its siblings under the data directory -- the key in
+  // `.env`, the job store -- are deliberately not granted: this is a leaf, not its parent.
+  // Reported on the `session` event as well as passed to the SDK, because "what can it
+  // reach" is the kind of fact a person should be able to read rather than infer.
+  grantedDirectories() {
+    return this.attachmentsDir ? [this.attachmentsDir] : [];
   }
 
   async persist(update) {
@@ -240,25 +299,39 @@ class Session {
     // has launchd's PATH, so a bare `claude` is invisible to the spawn even though
     // detection just found it on the login shell's PATH.
     const penv = await providerRunEnv(this.provider, this.settings, { env: this.env });
+    // Read now rather than when the session object was built: a mode set between the two
+    // is the one the person means for this turn.
+    const startMode = (await T.readThread(this.dir, this.threadId).catch(() => null))?.mode ?? DEFAULT_MODE;
     this.q = query({
       prompt: this.queue.gen,
       options: {
         pathToClaudeCodeExecutable: detected.executable,
         env: penv,
         cwd: this.dir,
+        additionalDirectories: this.grantedDirectories(),
         ...(this.model ? { model: this.model } : {}),
         ...(this.effort ? { effort: this.effort } : {}),
-        systemPrompt: { type: 'custom', prompt: SYSTEM_PROMPT },
-        settingSources: [],
-        strictMcpConfig: true,
-        tools: [],
+        // Appended, not replacing: "read the latest file in my Downloads" behaves well
+        // because of this preset, and Unframed's canvas instructions are the appendix.
+        systemPrompt: { type: 'preset', preset: 'claude_code', append: SYSTEM_PROMPT },
+        settingSources: ['user', 'project', 'local'],
+        tools: { type: 'preset', preset: 'claude_code' },
         mcpServers: { unframed: server },
-        allowedTools: REQUIRED_TOOLS,
-        canUseTool: async (toolName, input) =>
-          toolName.startsWith('mcp__unframed__')
+        // Auto-allowed, NOT a restriction (the SDK's own wording): ours never prompt, and
+        // Grep/Glob are named because a native build may otherwise offer search only
+        // through Bash. Everything else reaches canUseTool and the matrix.
+        allowedTools: [...REQUIRED_TOOLS, 'Grep', 'Glob'],
+        // The thin adapter the spec describes: ask permissions.js, and on "needs asking"
+        // park the turn and wait for the person. The matrix itself lives there.
+        canUseTool: async (toolName, input) => {
+          const decided = await this.decidePermission(toolName, input);
+          return decided.verdict === 'allow'
             ? { behavior: 'allow', updatedInput: input }
-            : { behavior: 'deny', message: 'This tool is not available inside Unframed.' },
-        permissionMode: 'default',
+            : { behavior: 'deny', message: decided.reason ?? DECLINED };
+        },
+        // The SDK enforces the mode itself; this is the floor the session starts on, and
+        // `setThreadMode` moves it when the person changes the mode mid-conversation.
+        permissionMode: SDK_PERMISSION_MODE[startMode] ?? 'default',
         maxTurns: MAX_TURNS,
         includePartialMessages: true,
         abortController: this.abort,
@@ -293,18 +366,15 @@ class Session {
             await this.persist((cur) => ({ ...cur, sdkSessionId: msg.session_id, updatedAt: now() }));
             const ours = msg.tools?.filter((t) => t.startsWith('mcp__unframed__')) ?? [];
             const foreign = msg.tools?.filter((t) => t.startsWith('mcp__') && !t.startsWith('mcp__unframed__')) ?? [];
-            await this.emit({ type: 'session', model: msg.model, tools: ours, ...(foreign.length ? { foreign } : {}) });
-            // The tool set is the safety boundary AND the feature. A session without our
-            // tools (the in-process server failed to register, as a bad schema once made
-            // it) or with someone else's is stopped here, before the model speaks.
-            const missing = REQUIRED_TOOLS.filter((t) => !ours.includes(t));
-            if (missing.length || foreign.length) {
-              throw new Error(
-                missing.length
-                  ? `The agent session started without the canvas tools (${missing.join(', ')}). This is a bug in Unframed, not your setup.`
-                  : `The agent session loaded tools outside Unframed (${foreign.slice(0, 3).join(', ')}); refusing to run.`,
-              );
-            }
+            await this.emit({ type: 'session', model: msg.model, tools: ours, directories: this.grantedDirectories(), ...(foreign.length ? { foreign } : {}) });
+            // Load-bearing rather than belt-and-braces now that strictMcpConfig is gone:
+            // a session without our tools (the in-process server failed to register, as a
+            // bad schema once made it) is stopped here, before the model speaks, instead
+            // of the person getting "the tools are not available" from the model itself.
+            // Someone else's tools are no longer refused -- the user's own MCP servers
+            // arriving is what opening settingSources is FOR -- but they are still
+            // reported, because a turn that can see them is a fact worth having.
+            assertCanvasTools(ours);
           }
           break;
         case 'stream_event': {
@@ -453,13 +523,13 @@ class Session {
     if (typeof this.idleTimer.unref === 'function') this.idleTimer.unref();
   }
 
-  async send({ text, selection }) {
+  async send({ text, selection, attachments = [] }) {
     if (this.running) throw Object.assign(new Error('The agent is still answering the previous message.'), { status: 409 });
     if (this.idleTimer) clearTimeout(this.idleTimer);
     this.selection = Array.isArray(selection) ? selection.map(String) : [];
     this.running = true;
     const settled = await this.persist((cur) =>
-      T.setStatus(T.appendMessage(cur, { role: 'user', text, selection: this.selection }, now()), 'running', {}, now()),
+      T.setStatus(T.appendMessage(cur, { role: 'user', text, selection: this.selection, attachments }, now()), 'running', {}, now()),
     );
     this.turn = settled?.turns ?? this.turn;
     await this.emit({ type: 'turn', text });
@@ -470,19 +540,40 @@ class Session {
     const { openDocument } = await import('./document.js');
     const doc = await openDocument(this.dir);
     const changes = summarizeChanges(doc.entries, { since: this.lastVersion ?? 0, threadId: this.threadId });
-    const preamble = contextPreamble({ selection: this.selection, changes }, doc.graph);
+    // The attachments ride in the preamble rather than being appended to the person's own
+    // sentence: it is context about the message, the same as the selection, and it must
+    // not read as something they typed.
+    const preamble = [contextPreamble({ selection: this.selection, changes }, doc.graph), attachmentLines(attachments)].filter(Boolean).join('\n\n');
     const body = preamble ? `${preamble}\n\n${text}` : text;
     if (this.script) {
       // Errors are the runner's to report as a failed turn, exactly as the SDK loop does.
       this.loop = runScriptedTurn(this, { turn: this.turn, preamble, text }).catch((err) => this.fail(err.message || String(err)));
       return;
     }
+    // The path is in the text AND the image goes to the provider natively, so the model
+    // can both look at it and dereference the path. Bytes are read here, at the boundary,
+    // the same rule media.js follows for a generation: nothing carries them before then.
     this.queue.push({
       type: 'user',
-      message: { role: 'user', content: body },
+      message: { role: 'user', content: providerContent(body, await this.readAttachments(attachments)) },
       parent_tool_use_id: null,
       session_id: this.sdkSessionId || '',
     });
+  }
+
+  // Only what the provider can actually look at is read; everything else the agent opens
+  // for itself, through the directory it was granted. An unreadable one is dropped rather
+  // than failing the turn -- the path is still in the text, and the agent can say so.
+  async readAttachments(attachments) {
+    const out = [];
+    for (const a of attachments) {
+      if (a.kind !== 'image') continue;
+      const file = resolveAttachment(this.attachmentsDir, a.id);
+      if (!file) continue;
+      const data = await fs.readFile(file).then((b) => b.toString('base64'), () => null);
+      if (data) out.push({ ...a, data });
+    }
+    return out;
   }
 
   async interrupt() {
@@ -496,6 +587,10 @@ class Session {
   }
 
   close() {
+    // A turn parked on a question nobody will now answer would hang for ever, so closing
+    // answers it with a refusal: the agent is told, and the turn ends.
+    if (this.parkedId) waiters.get(this.parkedId)?.('deny');
+    this.parkedId = null;
     if (this.idleTimer) clearTimeout(this.idleTimer);
     this.queue.close();
     try {
@@ -511,12 +606,12 @@ class Session {
 // One live session per thread while the server runs. A thread that has gone quiet is
 // closed after IDLE_CLOSE_MS and resumed through the SDK's own session store on the next
 // message, so context survives both the idle close and a server restart.
-export async function sendToThread(dir, threadId, { text, selection }, { settings, env = process.env, previewPort = 0 }) {
+export async function sendToThread(dir, threadId, { text, selection, attachments }, { settings, env = process.env, previewPort = 0, attachmentsDir = '' }) {
   const key = `${dir}\0${threadId}`;
   let session = sessions.get(key);
   if (!session) {
     const thread = await T.readThread(dir, threadId);
-    session = new Session({ dir, thread, settings: settings(thread.provider), env, previewPort });
+    session = new Session({ dir, thread, settings: settings(thread.provider), env, previewPort, attachmentsDir });
     // Unset in a clone, so this is null and the SDK runs. Read per session rather than
     // once at import, so a test can point two servers at two different scripts.
     session.script = await loadScript(env.UNFRAMED_TEST_AGENT_SCRIPT);
@@ -524,17 +619,47 @@ export async function sendToThread(dir, threadId, { text, selection }, { setting
   }
   if (previewPort) session.previewPort = previewPort;
   try {
-    await session.send({ text, selection });
+    await session.send({ text, selection, attachments });
   } catch (err) {
     if (!err.status) await session.fail(err.message);
     throw err;
   }
 }
 
+// What the agent is told when the person says no. Written to the AGENT, so it tries
+// another way instead of stalling (user story 19).
+const DECLINED = 'The person declined this. Do not try it again; say what you would have done, or find another way.';
+
+// The person's answer, from the route. Resolving the waiter is what unparks the turn --
+// the record was already updated by the route, so the session's next decision reads the
+// widened grants without being told about them.
+export function answerPermissionRequest(id, decision) {
+  const resolve = waiters.get(id);
+  if (!resolve) return false;
+  resolve(decision);
+  return true;
+}
+
 export async function interruptThread(dir, threadId) {
   const session = sessions.get(`${dir}\0${threadId}`);
   if (!session) return false;
   return session.interrupt();
+}
+
+// Whether a turn for this thread can actually be running: sessions live in this process
+// and nowhere else, which is what lets threads.js reconcile a stale `running` (its
+// `reconcile`). The routes ask this; nothing else needs to.
+export const hasLiveSession = (dir, threadId) => sessions.has(`${dir}\0${threadId}`);
+
+// A mode changed mid-conversation, told to the session that is already running. Our own
+// canUseTool reads the record every time, so a tightening bit already; this is what makes
+// a LOOSENING take effect too, since the SDK enforces the floor it was started with. No
+// live session is not a failure: the next turn builds one from the record.
+export async function setThreadMode(dir, threadId, mode) {
+  const session = sessions.get(`${dir}\0${threadId}`);
+  if (!session?.q?.setPermissionMode) return false;
+  await session.q.setPermissionMode(SDK_PERMISSION_MODE[mode] ?? 'default').catch(() => {});
+  return true;
 }
 
 export function closeThreadSession(dir, threadId) {
