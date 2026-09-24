@@ -100,20 +100,28 @@ async function seed() {
 // Send one message and wait for the turn to end, collecting everything the panel would
 // have seen. `sendToThread` returns as soon as the turn is queued, so this is the same
 // wait a browser does on the event stream.
-async function turn(dir, threadId, text, selection = []) {
+async function turn(dir, threadId, text, selection = [], { titled = false } = {}) {
   const events = [];
   const done = new Promise((resolve, reject) => {
+    let timer = null;
+    const finish = (err) => {
+      clearTimeout(timer);
+      off();
+      if (err) reject(err);
+      else resolve();
+    };
     const off = subscribeThread(threadId, (e) => {
       events.push(e);
-      if (e.type === 'result' || e.type === 'error') {
-        // `titled` is emitted AFTER `result` (agent.js, nameChat), so the listener stays
-        // on through the settle -- which is also what the panel does.
-        setTimeout(() => {
-          off();
-          if (e.type === 'error') reject(new Error(e.message));
-          else resolve();
-        }, 50);
+      if (e.type === 'error') return finish(new Error(e.message));
+      // `titled` is emitted AFTER `result` (agent.js, nameChat), and only once a file has
+      // been written, so a fixed pause to catch it is a race: it lost on CI's Node 22 while
+      // passing on its Node 18 in the same run. A test that wants the name WAITS for the
+      // event; one asserting there is no name waits a grace and then says so.
+      if (e.type === 'titled') return finish();
+      if (e.type === 'result') {
+        timer = setTimeout(() => finish(titled ? new Error(`the chat ${threadId} was never named`) : undefined), titled ? 5000 : 250);
       }
+      return undefined;
     });
   });
   await sendToThread(dir, threadId, { text, selection }, { settings, env, previewPort: 0 });
@@ -132,7 +140,7 @@ async function newChat(dir, tags = []) {
   const dir = await seed();
   const id = await newChat(dir, ['m1', 'm2']);
   const before = (await openDocument(dir)).version;
-  const events = await turn(dir, id, 'make both titles red', ['m1', 'm2', 'i3']);
+  const events = await turn(dir, id, 'make both titles red', ['m1', 'm2', 'i3'], { titled: true });
 
   // The same events the SDK loop emits, in the same order.
   assert.deepEqual(
@@ -226,7 +234,7 @@ async function newChat(dir, tags = []) {
   const dir = await seed();
   const id = await newChat(dir);
   const before = (await openDocument(dir)).version;
-  const events = await turn(dir, id, 'what is on the canvas?', []);
+  const events = await turn(dir, id, 'what is on the canvas?', [], { titled: true });
   assert.deepEqual(
     events.map((e) => e.type),
     ['turn', 'session', 'tool_use', 'tool_result', 'text_delta', 'result', 'titled'],
