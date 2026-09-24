@@ -21,6 +21,8 @@ import {
   placeBeside,
   MAX_BATCH_OPS,
   MAX_PAGE_BYTES,
+  REQUIRED_TOOLS,
+  assertCanvasTools,
 } from './agentTools.js';
 
 const graph = {
@@ -463,7 +465,7 @@ assert.deepEqual(placeBeside(graph, []), { x: 80, y: 80 });
 // Every tool must survive the SDK's schema conversion and come back from listTools: a
 // schema it cannot convert made the whole server register nothing, and the model told
 // the user the tools were unavailable (2026-09-05). This is the check the session's init
-// guard (agent.js, REQUIRED_TOOLS) relies on never firing.
+// guard (`assertCanvasTools`) relies on never firing.
 {
   const tools = canvasTools({
     getGraph: async () => graph,
@@ -489,6 +491,18 @@ assert.deepEqual(placeBeside(graph, []), { x: 80, y: 80 });
   const res = await client.callTool({ name: 'canvas_read', arguments: {} });
   assert.equal(JSON.parse(res.content[0].text).nodes.length, graph.nodes.length);
   await client.close();
+
+  // The handshake both runners make: what the server actually registered satisfies it,
+  // and a session missing one of the six fails loudly rather than letting the model tell
+  // the person the tools are unavailable. Load-bearing rather than belt-and-braces now
+  // that the session no longer restricts what ELSE may appear in a tool list.
+  assertCanvasTools(listed.tools.map((t) => `mcp__unframed__${t.name}`));
+  assert.throws(() => assertCanvasTools([]), /without the canvas tools/);
+  assert.throws(() => assertCanvasTools(REQUIRED_TOOLS.slice(1)), /canvas_read/);
+  assert.throws(() => assertCanvasTools(undefined), /without the canvas tools/);
+  // Someone else's tools alongside ours are fine: the user's own MCP servers arriving is
+  // what opening settingSources is for.
+  assertCanvasTools([...REQUIRED_TOOLS, 'mcp__figma__get_design_context', 'Bash']);
 }
 
 console.log('agentTools.test.js: ok');

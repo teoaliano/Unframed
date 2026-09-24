@@ -15,6 +15,11 @@ import {
   setStatus,
   threadSummary,
   eventsSince,
+  setMode,
+  askPermission,
+  answerPermission,
+  reconcile,
+  QUIT_MID_TURN,
   readThread,
   writeThread,
   persistThread,
@@ -178,7 +183,7 @@ assert.deepEqual(eventsSince(t3, 2), []);
 
 // ---- the list shows a summary, not the transcript ----
 const s = threadSummary(t5);
-assert.deepEqual(Object.keys(s).sort(), ['createdAt', 'effort', 'id', 'model', 'preview', 'provider', 'status', 'tags', 'title', 'titledBy', 'turns', 'updatedAt']);
+assert.deepEqual(Object.keys(s).sort(), ['createdAt', 'effort', 'id', 'mode', 'model', 'preview', 'provider', 'status', 'tags', 'title', 'titledBy', 'turns', 'updatedAt', 'waiting']);
 assert.equal(s.preview, 'What is on the canvas?', 'the first user message previews the thread');
 assert.equal(s.title, '', 'an unnamed thread has no title, however much was said in it');
 assert.equal(threadSummary(t0).preview, '');
@@ -273,6 +278,107 @@ assert.throws(() => renameThread(t5, 42), /text/);
   // Two turns in one millisecond do not overwrite each other.
   const second = await agentSidecar(dir, { threadId: 't1', turn: 2, provider: 'claude', model: 'm', usage: {}, now: 1700000000000 });
   assert.notEqual(second, file);
+}
+
+// ---- the runtime mode ----
+{
+  const t = newThread({ id: 'm1', project: 'p', provider: 'claude', now: 1 });
+  assert.equal(t.mode, 'auto', 'a chat starts in the default mode');
+  assert.equal(newThread({ id: 'm2', project: 'p', provider: 'claude', mode: 'plan' }).mode, 'plan');
+  assert.throws(() => newThread({ id: 'm3', project: 'p', provider: 'claude', mode: 'yolo' }), /unknown mode/);
+
+  const planned = setMode(t, 'plan', 5);
+  assert.equal(planned.mode, 'plan');
+  assert.equal(planned.updatedAt, 5);
+  assert.equal(setMode(planned, 'plan', 9), planned, 'setting the mode it already has changes nothing');
+  assert.throws(() => setMode(t, 'nonsense'), /Mode must be one of/);
+  // Unlike the model, it may change mid-turn: the running session only sets the floor.
+  const running = setStatus(t, 'running', {}, 2);
+  assert.equal(setMode(running, 'plan', 5).mode, 'plan');
+  assert.throws(() => applySettings(running, { model: 'x' }), /A turn is running/);
+  assert.equal(threadSummary(planned).mode, 'plan', 'the strip can see it');
+  // A record written before runtime modes existed ran with no general tools at all.
+  assert.equal(migrateThread({ id: 'old', tags: [], status: 'idle' }).mode, 'auto');
+}
+
+// ---- a permission request lives on the thread, not in the session ----
+{
+  const base = setStatus(newThread({ id: 'p1', project: 'p', provider: 'claude', now: 1 }), 'running', {}, 2);
+  assert.equal(base.pending, null);
+  assert.deepEqual(base.grants, []);
+
+  const asking = askPermission(base, { id: 'r1', tool: 'Bash', signature: 'Bash!rm -rf build', target: 'rm -rf build' }, 5);
+  assert.equal(asking.pending.id, 'r1');
+  assert.equal(asking.pending.turn, base.turns, 'stamped with the turn that is waiting');
+  assert.equal(asking.status, 'running', 'a parked turn has not failed and has not finished');
+  assert.equal(threadSummary(asking).waiting, true, 'the strip says which chat wants you');
+  assert.equal(threadSummary(base).waiting, false);
+  // Only one at a time: the agent is blocked on this answer and cannot ask a second.
+  assert.throws(() => askPermission(asking, { id: 'r2', tool: 'Read' }), /already waiting/);
+
+  // Once leaves the chat exactly as trusting as it was; always widens it.
+  assert.deepEqual(answerPermission(asking, 'r1', 'once', 6).grants, []);
+  assert.equal(answerPermission(asking, 'r1', 'once', 6).pending, null);
+  assert.deepEqual(answerPermission(asking, 'r1', 'always', 6).grants, ['Bash!rm -rf build']);
+  // Granting the same kind twice is still one grant.
+  const widened = answerPermission(asking, 'r1', 'always', 6);
+  const again = askPermission(widened, { id: 'r2', tool: 'Bash', signature: 'Bash!rm -rf build' }, 7);
+  assert.deepEqual(answerPermission(again, 'r2', 'always', 8).grants, ['Bash!rm -rf build']);
+  assert.deepEqual(answerPermission(asking, 'r1', 'deny', 6).grants, []);
+
+  // A stale panel answering a question that is no longer the live one is refused.
+  assert.throws(() => answerPermission(asking, 'other', 'once'), /no longer the one in flight/);
+  assert.throws(() => answerPermission(base, 'r1', 'once'), /not waiting/);
+  assert.throws(() => answerPermission(asking, 'r1', 'maybe'), /once, always or deny/);
+
+  // A record written before permissions existed has neither field.
+  const old = migrateThread({ id: 'o', tags: [], mode: 'auto', status: 'idle' });
+  assert.equal(old.pending, null);
+  assert.deepEqual(old.grants, []);
+}
+
+// ---- a turn the app was quit on ----
+// A session cannot outlive its process, so `running` with no live session has exactly
+// one explanation. Reconciling it to `failed` is what makes the chat continuable again:
+// the composer skips `running`, not `failed`.
+{
+  const base = newThread({ id: 'q1', project: 'p', provider: 'claude', now: 1 });
+  const running = setStatus(base, 'running', {}, 2);
+
+  const dead = reconcile(running, { live: false }, 3);
+  assert.equal(dead.status, 'failed');
+  assert.equal(dead.error, QUIT_MID_TURN);
+  assert.equal(dead.updatedAt, 3);
+  assert.deepEqual(dead.messages, running.messages, 'the transcript is untouched');
+
+  assert.equal(reconcile(running, { live: true }, 3), running, 'a turn actually in flight is left alone');
+  assert.equal(reconcile(running, {}, 3), running, 'and so is one whose caller did not say');
+  assert.equal(reconcile(base, { live: false }, 3), base, 'idle passes through');
+  const failed = setStatus(base, 'failed', { error: 'something else' }, 2);
+  assert.equal(reconcile(failed, { live: false }, 3), failed, 'and so does a failure that already has its own reason');
+
+  // A pending request goes with it: the turn parked on that answer died with the process,
+  // so a panel offering Allow and Deny would be offering them to nobody.
+  const parked = askPermission(running, { id: 'r1', tool: 'Bash', signature: 'Bash:ls' }, 2);
+  const cleared = reconcile(parked, { live: false }, 3);
+  assert.equal(cleared.status, 'failed');
+  assert.equal(cleared.pending, null);
+  assert.equal(reconcile(parked, { live: true }, 3).pending.id, 'r1', 'a live one is still waiting for you');
+}
+
+// The read path applies it, which is what makes the fix permanent rather than a boot-time
+// sweep that a later write could undo.
+{
+  const dir = path.join(root, 'quit');
+  await writeThread(dir, setStatus(newThread({ id: 'q2', project: 'p', provider: 'claude', now: 1 }), 'running', {}, 2));
+  assert.equal((await readThread(dir, 'q2')).status, 'running', 'no answer about liveness: left alone');
+  assert.equal((await readThread(dir, 'q2', { live: false })).status, 'failed');
+  assert.equal((await readThread(dir, 'q2', { live: true })).status, 'running');
+  assert.equal((await listThreads(dir, { live: () => false }))[0].status, 'failed');
+  assert.equal((await listThreads(dir, { live: (id) => id === 'q2' }))[0].status, 'running');
+  // And the record on disk is NOT rewritten: reconciliation is how a thread READS, so a
+  // server that starts, reports and stops has changed nothing to be undone.
+  assert.equal(JSON.parse(await fs.readFile(threadPath(dir, 'q2'), 'utf8')).status, 'running');
 }
 
 await fs.rm(root, { recursive: true, force: true });
