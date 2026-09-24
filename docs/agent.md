@@ -376,14 +376,22 @@ a rename:
 
 | Route | Does |
 | --- | --- |
-| `POST /api/projects/:name/threads` | start a chat (`{ provider, model, effort?, tags? }`); `kind`/`artifactId` are **refused with a 400** naming the new field, not ignored — a client still sending them would silently get an untagged chat, which looks exactly like the feature working |
+| `POST /api/projects/:name/threads` | start a chat (`{ provider, model, effort?, mode?, tags? }`); `kind`/`artifactId` are **refused with a 400** naming the new field, not ignored — a client still sending them would silently get an untagged chat, which looks exactly like the feature working |
 | `GET /api/projects/:name/threads?tag=` | list, newest first; `tag` narrows to the chats tagged with that artifact, any-of when repeated |
 | `GET /api/projects/:name/threads/:id` | the record |
 | `POST …/:id/messages` | one turn: `{ text, selection }`; 409 while the previous one runs. The first message tags the chat with the artifacts among `selection` |
 | `GET …/:id/events?since=` | SSE: `state`, stored events past `since`, `live`, then everything as it happens |
-| `PATCH …/:id` | model and effort for the next turn: `{ model?, effort? }`, `''` resets to the default; 409 mid-turn; closes the live session so the next message resumes with the new values |
+| `PATCH …/:id` | model and effort for the next turn: `{ model?, effort? }`, `''` resets to the default; 409 mid-turn; closes the live session so the next message resumes with the new values. `title` and `mode` ride the same route and are refused by none of those conditions — neither changes a running session |
 | `POST …/:id/interrupt` | stop the running turn |
 | `DELETE …/:id` | remove the record |
+
+`mode` is the chat's **runtime mode** — how much the agent may do in it without asking
+(`permissions.js`, which owns what each of `plan`, `acceptEdits`, `auto` and `full` allows
+and how they map onto the SDK's `permissionMode`). It is a property of the chat, so two
+chats can run at different levels of trust at once, and unlike the model it may change
+mid-turn: the SDK's own mode only sets the floor, and every decision `canUseTool` makes
+reads the record, so tightening a chat takes effect on the agent's very next call. A record
+written before runtime modes existed migrates to the default, which is `auto`.
 
 `effort` is one of the Agent SDK's levels (`low` … `max`, `EFFORTS` in `threads.js`) and is
 passed straight to the session's options; the models an account can run, each with the

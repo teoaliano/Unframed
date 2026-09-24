@@ -15,6 +15,7 @@ import {
   setStatus,
   threadSummary,
   eventsSince,
+  setMode,
   reconcile,
   QUIT_MID_TURN,
   readThread,
@@ -180,7 +181,7 @@ assert.deepEqual(eventsSince(t3, 2), []);
 
 // ---- the list shows a summary, not the transcript ----
 const s = threadSummary(t5);
-assert.deepEqual(Object.keys(s).sort(), ['createdAt', 'effort', 'id', 'model', 'preview', 'provider', 'status', 'tags', 'title', 'titledBy', 'turns', 'updatedAt']);
+assert.deepEqual(Object.keys(s).sort(), ['createdAt', 'effort', 'id', 'mode', 'model', 'preview', 'provider', 'status', 'tags', 'title', 'titledBy', 'turns', 'updatedAt']);
 assert.equal(s.preview, 'What is on the canvas?', 'the first user message previews the thread');
 assert.equal(s.title, '', 'an unnamed thread has no title, however much was said in it');
 assert.equal(threadSummary(t0).preview, '');
@@ -275,6 +276,27 @@ assert.throws(() => renameThread(t5, 42), /text/);
   // Two turns in one millisecond do not overwrite each other.
   const second = await agentSidecar(dir, { threadId: 't1', turn: 2, provider: 'claude', model: 'm', usage: {}, now: 1700000000000 });
   assert.notEqual(second, file);
+}
+
+// ---- the runtime mode ----
+{
+  const t = newThread({ id: 'm1', project: 'p', provider: 'claude', now: 1 });
+  assert.equal(t.mode, 'auto', 'a chat starts in the default mode');
+  assert.equal(newThread({ id: 'm2', project: 'p', provider: 'claude', mode: 'plan' }).mode, 'plan');
+  assert.throws(() => newThread({ id: 'm3', project: 'p', provider: 'claude', mode: 'yolo' }), /unknown mode/);
+
+  const planned = setMode(t, 'plan', 5);
+  assert.equal(planned.mode, 'plan');
+  assert.equal(planned.updatedAt, 5);
+  assert.equal(setMode(planned, 'plan', 9), planned, 'setting the mode it already has changes nothing');
+  assert.throws(() => setMode(t, 'nonsense'), /Mode must be one of/);
+  // Unlike the model, it may change mid-turn: the running session only sets the floor.
+  const running = setStatus(t, 'running', {}, 2);
+  assert.equal(setMode(running, 'plan', 5).mode, 'plan');
+  assert.throws(() => applySettings(running, { model: 'x' }), /A turn is running/);
+  assert.equal(threadSummary(planned).mode, 'plan', 'the strip can see it');
+  // A record written before runtime modes existed ran with no general tools at all.
+  assert.equal(migrateThread({ id: 'old', tags: [], status: 'idle' }).mode, 'auto');
 }
 
 // ---- a turn the app was quit on ----

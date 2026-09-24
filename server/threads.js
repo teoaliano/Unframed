@@ -5,8 +5,11 @@
 // that fills a thread is server/agent.js; the routes are in index.js.
 //
 // A thread is a CHAT, not a thing about an artifact:
-// { id, project, tags, provider, model, status, error?, title, titledBy, lastVersion,
-//   messages, events, seq, turns, createdAt, updatedAt }.
+// { id, project, tags, provider, model, mode, status, error?, title, titledBy,
+//   lastVersion, messages, events, seq, turns, createdAt, updatedAt }.
+// mode:     the runtime mode -- how much the agent may do in this chat without asking
+//           (permissions.js). A property of the CHAT, so two chats can run at different
+//           levels of trust at once.
 // tags:     node ids of the artifacts (pages, motions) this chat has touched -- the ones
 //           selected at its first message, plus every artifact the agent writes to.
 //           Tags are POINTERS, never dependencies: deleting every file a chat touched
@@ -27,6 +30,7 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { PROVIDERS } from './providers.js';
+import { MODES, DEFAULT_MODE, isMode } from './permissions.js';
 
 const ID_RE = /^[\w-]{1,80}$/;
 const STATUSES = new Set(['idle', 'running', 'failed']);
@@ -44,8 +48,9 @@ function cleanTags(tags) {
   return out;
 }
 
-export function newThread({ id, project, tags = [], provider, model, effort = '', now = Date.now() }) {
+export function newThread({ id, project, tags = [], provider, model, effort = '', mode = DEFAULT_MODE, now = Date.now() }) {
   if (effort && !EFFORTS.has(effort)) throw new Error(`unknown effort "${effort}"`);
+  if (!isMode(mode)) throw new Error(`unknown mode "${mode}"`);
   if (!ID_RE.test(String(id))) throw new Error('thread id must be a short token');
   if (!PROVIDERS[provider]) throw new Error(`unknown provider ${provider}`);
   return {
@@ -55,6 +60,7 @@ export function newThread({ id, project, tags = [], provider, model, effort = ''
     provider,
     model: model || '',
     effort: effort || '',
+    mode,
     status: 'idle',
     title: '',
     titledBy: null,
@@ -152,6 +158,19 @@ export function applySettings(thread, { model, effort } = {}, now = Date.now()) 
   return { ...next, updatedAt: now };
 }
 
+// How much the agent may do in this chat without asking (permissions.js). Its own
+// function rather than part of `applySettings` for the reason `renameThread` is: the two
+// are refused under different conditions, and sharing one would take the stricter. A
+// model cannot change mid-turn because the live session was built with it; a mode CAN,
+// because the SDK's own `permissionMode` only sets the floor and every decision our
+// `canUseTool` makes reads the record -- so tightening a chat takes effect on the agent's
+// very next call rather than on the next turn.
+export function setMode(thread, mode, now = Date.now()) {
+  if (!isMode(mode)) throw Object.assign(new Error(`Mode must be one of ${MODES.join(', ')}.`), { status: 400 });
+  if (mode === (thread.mode ?? DEFAULT_MODE)) return thread;
+  return { ...thread, mode, updatedAt: now };
+}
+
 // The name a user typed on the tab. Separate from `applySettings` because it is a
 // label, not a setting: nothing in the running turn reads it, so renaming mid-turn is
 // fine where changing the model is not. `''` clears the name and the tab falls back to
@@ -186,6 +205,7 @@ export function threadSummary(thread) {
     provider: thread.provider,
     model: thread.model,
     effort: thread.effort ?? '',
+    mode: thread.mode ?? DEFAULT_MODE,
     status: thread.status,
     title: thread.title,
     titledBy: thread.titledBy ?? null,
@@ -208,7 +228,11 @@ export const threadPath = (dir, id) => path.join(threadsDir(dir), `${path.basena
 // reason: the old fields are dropped the next time the record is written, and a chat
 // nobody has opened since must still open.
 export function migrateThread(record) {
-  if (!record || Array.isArray(record.tags)) return record;
+  if (!record) return record;
+  // A record written before runtime modes existed ran with no general tools at all, so
+  // the mode it never had is the default one.
+  if (!isMode(record.mode)) record = { ...record, mode: DEFAULT_MODE };
+  if (Array.isArray(record.tags)) return record;
   const { kind, artifactId, ...rest } = record;
   return {
     ...rest,
