@@ -60,7 +60,21 @@ const PROVIDER_ORDER = ['claude', 'codex'];
 const INLINE_TABS = 3;
 
 // What the panel says while each tool runs.
+// What the agent is doing, per tool. The provider's own tools are named too: before
+// this, a turn that spent three minutes in Bash and Read said only 'Working…', which is
+// what a dead turn also says.
 const ACTIVITY = {
+  Read: 'Reading a file…',
+  Write: 'Writing a file…',
+  Edit: 'Editing a file…',
+  Bash: 'Running a command…',
+  Glob: 'Looking for files…',
+  Grep: 'Searching…',
+  WebFetch: 'Fetching a page…',
+  WebSearch: 'Searching the web…',
+  Task: 'Working on a sub-task…',
+  TodoWrite: 'Planning…',
+  ToolSearch: 'Looking for a tool…',
   mcp__unframed__canvas_read: 'Reading the canvas…',
   mcp__unframed__canvas_write: 'Changing the canvas…',
   mcp__unframed__page_write: 'Writing the page…',
@@ -158,6 +172,13 @@ export default function AgentPanel({ project, nodes, providers, onCheckProviders
   // The permission the turn is parked on, or null. It comes from the RECORD (the stream's
   // `state`), not only from the event, so reopening the panel mid-question still shows it.
   const [permission, setPermission] = useState(null);
+  // A usage limit you have actually hit, separate from the activity line so a long turn's
+  // progress does not overwrite it.
+  const [limit, setLimit] = useState(null);
+  // When the running turn started, so the panel can say how long it has been going. Three
+  // minutes of 'Reading a file, 2:58' is a different thing from three minutes of 'Thinking'.
+  const [startedAt, setStartedAt] = useState(null);
+  const [, setTick] = useState(0);
   const [text, setText] = useState('');
   const [sending, setSending] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -179,6 +200,9 @@ export default function AgentPanel({ project, nodes, providers, onCheckProviders
   const settings = thread ? { model: thread.model || '', effort: thread.effort || '', mode: thread.mode || DEFAULT_MODE } : pending;
   // The SDK lists the provider's default under the id 'default', so '' looks it up there.
   const efforts = effortsFor(models, settings.model);
+  // Shown from ten seconds in, so an ordinary quick turn stays quiet.
+  const seconds = startedAt ? Math.floor((Date.now() - startedAt) / 1000) : 0;
+  const elapsed = seconds >= 10 ? ` ${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}` : '';
   const codex = providers?.codex ?? null;
 
   async function changeSettings(patch) {
@@ -280,6 +304,8 @@ export default function AgentPanel({ project, nodes, providers, onCheckProviders
         });
         switch (e.type) {
           case 'turn':
+            setStartedAt(Date.now());
+            setLimit(null);
             setStatus('running');
             setError(null);
             setThreads((ts) => ts.map((t) => (t.id === threadId ? { ...t, status: 'running' } : t)));
@@ -312,11 +338,15 @@ export default function AgentPanel({ project, nodes, providers, onCheckProviders
             setPermission(null);
             break;
           case 'rate_limit': {
-            // The agent has reported this since before it had general tools and nothing
-            // was showing it, so a turn stalled on a quota read as a turn thinking.
-            const resets = e.info?.resetsAt ?? e.info?.resets_at;
-            const when = resets ? new Date(typeof resets === 'number' ? resets * 1000 : resets) : null;
-            setActivity(`Waiting on a usage limit${when && !Number.isNaN(when.getTime()) ? ` until ${when.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}` : ''}…`);
+            // The SDK sends this whenever your usage window CHANGES, and most of those say
+            // `allowed`. Treating every one as a block told people their turn was waiting
+            // on a limit at 13% of a five-hour window. Only a refusal stops a turn.
+            const info = e.info ?? {};
+            const at = info.resetsAt ? new Date(info.resetsAt * 1000) : null;
+            const clock = at && !Number.isNaN(at.getTime()) ? at.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) : '';
+            if (info.status === 'rejected') setLimit(clock ? `You have hit a usage limit. It resets at ${clock}.` : 'You have hit a usage limit.');
+            else if (info.status === 'allowed_warning') setLimit(`Close to your usage limit${clock ? `, which resets at ${clock}` : ''}.`);
+            else setLimit(null);
             break;
           }
           case 'api_retry': {
@@ -327,10 +357,14 @@ export default function AgentPanel({ project, nodes, providers, onCheckProviders
             break;
           }
           case 'tool_result':
-            setActivity(null);
+            // Deliberately NOT cleared. The gap after a tool returns is where the model
+            // does its thinking, and it is the longest part of a turn: blanking here is
+            // what made a working turn read as a stuck one.
             break;
           case 'result':
             setPermission(null);
+            setStartedAt(null);
+            setLimit(null);
             // The record already has the assistant message; re-read it so the panel shows
             // exactly what was stored rather than what it pieced together from deltas.
             getThread(project, threadId)
@@ -347,6 +381,7 @@ export default function AgentPanel({ project, nodes, providers, onCheckProviders
             break;
           case 'error':
             setPermission(null);
+            setStartedAt(null);
             setStatus('failed');
             setError(e.message);
             draftText = '';
@@ -361,6 +396,13 @@ export default function AgentPanel({ project, nodes, providers, onCheckProviders
     });
     return close;
   }, [project, threadId]);
+
+  // One second is enough: the number is there to say the turn is alive, not to time it.
+  useEffect(() => {
+    if (!startedAt) return undefined;
+    const id = setInterval(() => setTick((n) => n + 1), 1000);
+    return () => clearInterval(id);
+  }, [startedAt]);
 
   useEffect(() => {
     const el = scroller.current;
@@ -645,14 +687,10 @@ export default function AgentPanel({ project, nodes, providers, onCheckProviders
             <ChatMarkdown text={draft} />
           </div>
         )}
-        {activity && (
+        {limit && <div className="agent-error">{limit}</div>}
+        {running && !draft && (
           <Text type="supporting" className="agent-activity">
-            {activity}
-          </Text>
-        )}
-        {running && !draft && !activity && (
-          <Text type="supporting" className="agent-activity">
-            Thinking…
+            {(activity ?? 'Thinking…') + elapsed}
           </Text>
         )}
         {/* What this conversation involved, after the last message: every artifact it
