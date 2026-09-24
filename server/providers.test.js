@@ -155,7 +155,7 @@ assert.deepEqual(parseCodexLoginStatus('something unexpected'), { ok: false, sig
   const rows = mergeClaudeModels(sdk);
   assert.equal(rows.some((r) => r.id === 'default'), false, 'the default alias is folded away');
   assert.deepEqual(rows.slice(0, 4).map((r) => [r.id, r.name, r.legacy]), [
-    ['opus[1m]', 'Opus 5 · 1M', false],
+    ['opus[1m]', 'Opus 5.5 · 1M', false],
     ['sonnet', 'Sonnet 5', false],
     ['haiku', 'Haiku 4.5', false],
     ['mystery-9', 'Mystery', false],
@@ -163,7 +163,10 @@ assert.deepEqual(parseCodexLoginStatus('something unexpected'), { ok: false, sig
   assert.deepEqual(rows[0].efforts, ['low', 'high'], 'an SDK row keeps the levels the SDK reported');
   const rest = rows.slice(4);
   assert.ok(rest.every((r) => CLAUDE_CATALOGUE.some((c) => c.id === r.id)), 'the rest is the catalogue');
-  assert.equal(rest.some((r) => r.id === 'claude-opus-5' || r.id === 'claude-sonnet-5' || r.id === 'claude-haiku-4-5'), false, 'models the SDK covered are not repeated');
+  assert.equal(rest.some((r) => r.id === 'claude-opus-5-5' || r.id === 'claude-sonnet-5' || r.id === 'claude-haiku-4-5'), false, 'models the SDK covered are not repeated');
+  // The bare `opus` alias points at the current Opus, so the SDK row IS 5.5 and the
+  // version it superseded becomes a row of its own, still selectable by name.
+  assert.ok(rest.some((r) => r.id === 'claude-opus-5' && r.legacy), 'the superseded Opus is offered explicitly');
   assert.ok(rest.some((r) => r.id === 'claude-fable-5-1' && !r.legacy), 'a current model the SDK did not list is still offered, as current');
   assert.ok(rest.some((r) => r.id === 'claude-opus-4-8' && r.legacy), 'and the older ones as legacy');
   assert.deepEqual(rest.find((r) => r.id === 'claude-opus-4-8').efforts, ['low', 'medium', 'high', 'xhigh', 'max']);

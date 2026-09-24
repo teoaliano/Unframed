@@ -118,6 +118,18 @@ export const viewerPath = (file) => `${VIEWER}?c=${encodeURIComponent(file)}`;
 // Put the library beside the compositions, or bring it up to date: a file is rewritten
 // when its size differs from the source's, which is what a dependency bump looks like
 // from here. Returns the names written. Idempotent, and cheap when nothing changed.
+// The parameters bridge alone, beside a page. A page needs no player, no GSAP and no
+// runtime, so it does not call ensureLibrary: writing five files a page never loads into
+// every project that has one would be paying the motion's cost for the page's feature.
+export async function ensureBridge(dir) {
+  await fs.mkdir(dir, { recursive: true });
+  const bytes = Buffer.from(bridgeSource(), 'utf8');
+  const at = path.join(dir, BRIDGE);
+  if ((await fs.stat(at).catch(() => null))?.size === bytes.length) return [];
+  await fs.writeFile(at, bytes);
+  return [BRIDGE];
+}
+
 export async function ensureLibrary(dir) {
   await fs.mkdir(dir, { recursive: true });
   const written = [];
@@ -157,27 +169,31 @@ export const RUNTIME_TAG = '<script src="hyperframes-runtime.js" data-hyperframe
 // called it without remembering a script tag would do nothing at all, silently. It is
 // ~5KB of our own code and defines one function, so the cost of it being there unused is
 // smaller than the cost of the agent having to remember.
-export function withRuntime(html) {
-  let out = html;
-  for (const [tag, present] of [
-    [RUNTIME_TAG, /data-hyperframes-preview-runtime|hyperframes-runtime\.js|hyperframe\.runtime\.iife\.js/i],
-    [BRIDGE_TAG, /unframed-dials\.js/i],
-  ]) {
-    if (present.test(out)) continue;
-    const head = /<\/head\s*>/i.exec(out);
-    if (head) {
-      out = `${out.slice(0, head.index)}${tag}\n${out.slice(head.index)}`;
-      continue;
-    }
-    const body = /<body\b[^>]*>/i.exec(out);
-    if (body) {
-      const at = body.index + body[0].length;
-      out = `${out.slice(0, at)}\n${tag}${out.slice(at)}`;
-      continue;
-    }
-    out = `${tag}\n${out}`;
+// One tag, inserted where the document can take it: head first, then just inside body,
+// then at the top. Skipped when the document already has it, so a file read back and
+// rewritten does not grow a second copy.
+function inject(html, tag, present) {
+  if (present.test(html)) return html;
+  const head = /<\/head\s*>/i.exec(html);
+  if (head) return `${html.slice(0, head.index)}${tag}\n${html.slice(head.index)}`;
+  const body = /<body\b[^>]*>/i.exec(html);
+  if (body) {
+    const at = body.index + body[0].length;
+    return `${html.slice(0, at)}\n${tag}${html.slice(at)}`;
   }
-  return out;
+  return `${tag}\n${html}`;
+}
+
+const HAS_RUNTIME = /data-hyperframes-preview-runtime|hyperframes-runtime\.js|hyperframe\.runtime\.iife\.js/i;
+const HAS_BRIDGE = /unframed-dials\.js/i;
+
+// The parameters bridge, for an artifact that needs nothing else. A page is shown as
+// itself rather than through a viewer, so this is the whole of what it needs to call
+// `unframed.dials`; a motion gets it as part of withRuntime.
+export const withBridge = (html) => inject(html, BRIDGE_TAG, HAS_BRIDGE);
+
+export function withRuntime(html) {
+  return inject(inject(html, RUNTIME_TAG, HAS_RUNTIME), BRIDGE_TAG, HAS_BRIDGE);
 }
 
 // A composition's file name: the same shape as every file in the folder (media.js).

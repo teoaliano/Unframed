@@ -8,7 +8,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { LIBRARY, LIBRARY_FILES, VIEWER, isLibraryFile, viewerHtml, viewerPath, ensureLibrary, motionFileName, renderFileName, renderSidecar, startRender, getRender, withRuntime, RUNTIME_TAG, chromeCandidates, findChrome, NO_CHROME } from './motion.js';
+import { LIBRARY, LIBRARY_FILES, VIEWER, isLibraryFile, viewerHtml, viewerPath, ensureLibrary, motionFileName, renderFileName, renderSidecar, startRender, getRender, withRuntime, withBridge, ensureBridge, RUNTIME_TAG, chromeCandidates, findChrome, NO_CHROME } from './motion.js';
 import { BRIDGE, BRIDGE_TAG } from './dials.js';
 
 const root = await fs.mkdtemp(path.join(os.tmpdir(), 'unframed-motion-test-'));
@@ -195,4 +195,25 @@ const settle = (job) =>
 }
 
 await fs.rm(root, { recursive: true, force: true });
+// ---- a page takes the bridge and nothing else ----
+// It is shown as itself rather than through a viewer, so the player, GSAP and the runtime
+// are cost it never pays back. ensureBridge is what keeps the tag from naming a file that
+// is not there.
+{
+  assert.equal(withBridge('<html><head></head><body></body></html>'), `<html><head>${BRIDGE_TAG}\n</head><body></body></html>`);
+  assert.equal(withBridge('<h1>hi</h1>'), `${BRIDGE_TAG}\n<h1>hi</h1>`);
+  const once = withBridge('<body></body>');
+  assert.equal(withBridge(once), once, 'a page read back and rewritten does not grow a second copy');
+  assert.equal(withBridge(`<head>${BRIDGE_TAG}</head>`), `<head>${BRIDGE_TAG}</head>`, 'a page that brought its own is left alone');
+  // And no runtime: that is the motion's, and a page loading it would run a player it has
+  // no composition for.
+  assert.equal(/hyperframes-runtime/.test(withBridge('<body></body>')), false);
+
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'unframed-bridge-'));
+  assert.deepEqual(await ensureBridge(dir), [BRIDGE], 'written the first time');
+  assert.deepEqual(await fs.readdir(dir), [BRIDGE], 'and nothing else: no player, no GSAP, no runtime');
+  assert.deepEqual(await ensureBridge(dir), [], 'idempotent');
+  await fs.rm(dir, { recursive: true, force: true });
+}
+
 console.log('motion.test.js: ok');

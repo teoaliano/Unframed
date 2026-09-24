@@ -194,4 +194,22 @@ assert.match(normalizeConfig({ a: { b: { c: [1, 2] } } }).error, /dials\.a\.b\.c
   }
 }
 
+// ---- a page is framed from another origin, so the bridge has to answer ----
+// Two separate faults kept parameters from ever working on a page. The bridge announced
+// to its OWN origin, which the browser drops when the parent is the canvas rather than a
+// motion's viewer; and it never answered the canvas's hello, which is the only thing a
+// page is asked. Both are in the generated source, so both are checked there.
+{
+  const src = bridgeSource();
+  assert.match(src, /function announce\(s, to\)/, 'the announcement can be aimed at whoever asked');
+  assert.match(src, /to \|\| window\.location\.origin/, 'and falls back to our own origin, which is the motion path unchanged');
+  assert.match(src, /unframed:dials:hello/, 'the bridge answers a hello');
+  assert.match(src, /announce\(live, event\.origin\)/, 'and replies to the origin that asked, not to its own');
+  // The reply is still only ever to a framer we accept: the hello goes through the same
+  // guard as everything else, so a page on some other tab cannot ask for the schema.
+  const listener = src.slice(src.indexOf('addEventListener("message"'));
+  assert.match(listener, /if \(!fromOurFramer\(event\)/, 'the hello is behind the same guard as a set');
+  assert.ok(listener.indexOf('fromOurFramer') < listener.indexOf('unframed:dials:hello'), 'the guard runs first');
+}
+
 console.log('dials.test.js: ok');

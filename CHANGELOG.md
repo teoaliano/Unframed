@@ -5,6 +5,22 @@ is no release artifact to number. Headings are `## YYYY-MM-DD`, groups are
 `### Added` / `### Changed` / `### Fixed`, one bullet per user-visible change.
 Keep that shape: the website's What's new page parses this file.
 
+## 2026-09-24
+
+### Fixed
+
+- Parameters now work on a page, not only on a motion. A page never received the script
+  that defines them, so the call in it did nothing and the Parameters column stayed empty.
+  Even with the script, the page had no way to tell the canvas what it had, because the two
+  sit on different origins. Both are fixed, and a page you already wrote starts working the
+  next time the agent saves it.
+
+### Changed
+
+- The model picker names Opus 5.5. The current Opus was still labelled "Opus 5", so turns
+  ran on 5.5 while the app said otherwise. Opus 5 is still selectable by name, under the
+  older models.
+
 ## 2026-09-22
 
 ### Fixed

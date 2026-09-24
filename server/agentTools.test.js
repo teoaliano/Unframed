@@ -5,6 +5,7 @@
 // the document's own ops with no bytes, no run markers, known types, files that exist,
 // and placeholder ids rewritten; a page as a new file that is never overwritten.
 import assert from 'node:assert/strict';
+import { BRIDGE_TAG } from './dials.js';
 import { createSdkMcpServer } from '@anthropic-ai/claude-agent-sdk';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
@@ -392,7 +393,10 @@ assert.deepEqual(placeBeside(graph, []), { x: 80, y: 80 });
   assert.equal(created.ok, true);
   assert.equal(created.file, '9000-hello-page.html');
   assert.equal(created.previewUrl, 'http://127.0.0.1:5/p/coast/9000-hello-page.html');
-  assert.equal(written[0].html, '<h1>hello</h1>');
+  // The page carries the parameters bridge out, the way a composition carries the
+  // runtime: the agent's contract for parameters is one function call, and a page that
+  // called it with no script tag would do nothing at all, silently.
+  assert.equal(written[0].html, `${BRIDGE_TAG}\n<h1>hello</h1>`);
   assert.equal(written[0].meta.nodeId, null);
   const addOp = committed.at(-1).ops[0];
   assert.equal(addOp.type, 'addNode');
