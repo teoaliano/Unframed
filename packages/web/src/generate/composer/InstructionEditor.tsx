@@ -3,7 +3,7 @@ import { Placeholder } from "@tiptap/extensions";
 import { EditorContent, useEditor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import { mentionCandidates, mentionQuery, plainText, type MentionCandidate } from "@unframed/domain";
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useImperativeHandle, useLayoutEffect, useRef, useState, type Ref } from "react";
 import { createPortal } from "react-dom";
 import { useEditor as useCanvas } from "tldraw";
 
@@ -36,13 +36,15 @@ export interface InstructionEditorProps {
   readonly onSend: () => void;
   /** Whether a menu of the box is open, so the shell leaves Esc to it. */
   readonly onMenuOpen: (open: boolean) => void;
+  /** The box's editable element, for focus to come back to. */
+  readonly handle?: Ref<{ readonly element: () => HTMLElement | null }>;
 }
 
 /**
  * The composer's box: a Tiptap editor, one paragraph per line, with spec 02's `@` mention
  * menu. Attachments and chips are off in the Generate tray.
  */
-export const InstructionEditor = ({ initial, placeholder, onChange, onSend, onMenuOpen }: InstructionEditorProps) => {
+export const InstructionEditor = ({ initial, placeholder, onChange, onSend, onMenuOpen, handle }: InstructionEditorProps) => {
   const canvas = useCanvas();
   const [mention, setMention] = useState<Mention>();
   const [highlight, setHighlight] = useState(0);
@@ -81,6 +83,8 @@ export const InstructionEditor = ({ initial, placeholder, onChange, onSend, onMe
       Placeholder.configure({ placeholder }),
       Extension.create({
         name: "unframedSend",
+        // Ahead of the hard break, which also binds Mod-Enter.
+        priority: 1000,
         addKeyboardShortcuts: () => ({
           "Mod-Enter": () => {
             latest.current.onSend();
@@ -113,6 +117,7 @@ export const InstructionEditor = ({ initial, placeholder, onChange, onSend, onMe
   });
 
   editorRef.current = text;
+  useImperativeHandle(handle, () => ({ element: () => (editorRef.current?.view.dom as HTMLElement | undefined) ?? null }), []);
 
   const rows = mention ? mentionCandidates(canvas.getCurrentPageShapes(), undefined, mention.query) : [];
   const open = mention !== undefined && rows.length > 0 && dismissedAt !== mention.from;

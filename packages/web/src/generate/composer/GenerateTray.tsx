@@ -105,6 +105,7 @@ export const GenerateTray = ({ project, recipe, onSent, onMenuOpen, handle }: Ge
 
   const setValues = (next: TrayValues) => setValuesByMedium((current) => ({ ...current, [medium]: next }));
 
+  const box = useRef<{ readonly element: () => HTMLElement | null }>(null);
   const inFlight = useRef(false);
   const send = async () => {
     if (inFlight.current || blocked || !values) return;
@@ -152,6 +153,7 @@ export const GenerateTray = ({ project, recipe, onSent, onMenuOpen, handle }: Ge
           onChange={setInstruction}
           onSend={() => void send()}
           onMenuOpen={onMentionMenu}
+          handle={box}
         />
         <div className="unframed-composer-send">
           {estimate !== undefined && (
@@ -163,6 +165,7 @@ export const GenerateTray = ({ project, recipe, onSent, onMenuOpen, handle }: Ge
             type="button"
             className="unframed-composer-go"
             aria-busy={sending || undefined}
+            data-sending={sending ? "true" : undefined}
             disabled={blocked || sending}
             onClick={() => void send()}
           >
@@ -212,6 +215,7 @@ export const GenerateTray = ({ project, recipe, onSent, onMenuOpen, handle }: Ge
         browseUrl={definition.browseUrl}
         models={catalogue?.models ?? []}
         current={values?.model}
+        finalFocus={() => box.current?.element() ?? null}
         onPick={(model) => {
           if (!values) return;
           setValues({ model, picked: true, props: definition.reset(values.props, definition.params(entryOf(model))) });

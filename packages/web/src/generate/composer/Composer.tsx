@@ -51,17 +51,19 @@ export const Composer = ({ mode, project, recipe, onCollapse }: ComposerProps) =
       data-testid="composer"
       data-tray={mode}
       onKeyDownCapture={(event) => {
-        // A menu or the model dialog inside the composer takes Esc first.
-        if (event.key !== "Escape" || menus.current.size > 0) return;
-        event.preventDefault();
-        event.stopPropagation();
-        onCollapse();
-      }}
-      onKeyDown={(event) => {
-        if (isSendKey(event) && !event.defaultPrevented) {
+        // A menu or the model dialog inside the composer takes its keys first.
+        if (menus.current.size > 0) return;
+        if (event.key === "Escape") {
           event.preventDefault();
+          event.stopPropagation();
+          onCollapse();
+        } else if (isSendKey(event)) {
+          event.preventDefault();
+          event.stopPropagation();
           tray.current?.send();
         }
+      }}
+      onKeyDown={(event) => {
         // Keys typed in the composer are the composer's: tldraw's shortcuts never see them.
         event.stopPropagation();
       }}

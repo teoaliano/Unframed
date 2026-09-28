@@ -35,13 +35,15 @@ export interface ModelDialogProps {
   readonly models: ReadonlyArray<ModelEntry>;
   readonly current: string | undefined;
   readonly onPick: (id: string) => void;
+  /** Where focus goes when the dialog closes. */
+  readonly finalFocus?: () => HTMLElement | null;
 }
 
 /**
  * The model dialog: a searchable table of the catalogue, newest first, each provider in its
  * own colour. It takes Escape itself, in the capture phase, so Esc closes only the dialog.
  */
-export const ModelDialog = ({ open, onOpenChange, title, browseUrl, models, current, onPick }: ModelDialogProps) => {
+export const ModelDialog = ({ open, onOpenChange, title, browseUrl, models, current, onPick, finalFocus }: ModelDialogProps) => {
   const [query, setQuery] = useState("");
   const [sort, setSort] = useState<Sort>({ column: "released", direction: "desc" });
   const byProvider = useMemo(() => providers(models), [models]);
@@ -106,7 +108,9 @@ export const ModelDialog = ({ open, onOpenChange, title, browseUrl, models, curr
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
       <Dialog.Portal>
         <Dialog.Backdrop className="fixed inset-0 z-[1300] bg-[var(--unframed-scrim)] backdrop-blur-[10px] backdrop-saturate-[160%]" />
-        <Dialog.Popup className="unframed-models fixed left-1/2 top-1/2 z-[1301] flex max-h-[min(720px,calc(100vh-48px))] w-[680px] max-w-[calc(100vw-32px)] -translate-x-1/2 -translate-y-1/2 flex-col rounded-container border border-line bg-popover p-5 text-primary shadow-popover outline-none">
+        <Dialog.Popup
+          {...(finalFocus === undefined ? {} : { finalFocus: () => finalFocus() ?? true })}
+          className="unframed-models fixed left-1/2 top-1/2 z-[1301] flex max-h-[min(720px,calc(100vh-48px))] w-[680px] max-w-[calc(100vw-32px)] -translate-x-1/2 -translate-y-1/2 flex-col rounded-container border border-line bg-popover p-5 text-primary shadow-popover outline-none">
           <div className="flex items-center justify-between gap-4">
             <Dialog.Title className="m-0 text-[18px] font-semibold">{title}</Dialog.Title>
             <a href={browseUrl} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-[12px] text-secondary no-underline hover:text-primary">
