@@ -72,6 +72,7 @@ describe("asset markers", () => {
     expect(await push(videoAsset("b", "project-file:1789-clip.mp4"))).toBe("committed");
     expect(await push(videoAsset("c", "https://cdn.example.com/clip.mp4?sig=1"))).toBe("committed");
     expect(await push(imageAsset("d", null))).toBe("committed");
+    expect(await push(imageAsset("e", ""))).toBe("committed");
   });
 
   it("refuses preset pointers, other schemes, paths in a marker, and links for images", async () => {
@@ -83,7 +84,6 @@ describe("asset markers", () => {
       "asset:abc",
       "project-file:../other/fox.png",
       "project-file:sub/fox.png",
-      "",
     ]) {
       expect(await push(imageAsset(`bad-${Math.random()}`, src))).toEqual({ closed: "INVALID_RECORD" });
     }

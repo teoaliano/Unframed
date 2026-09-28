@@ -62,7 +62,8 @@ const isTransientSource = (src: string): boolean => src.startsWith("data:") || s
 
 const assetSource = (allowLinks: boolean) =>
   T.string.nullable().check((src) => {
-    if (src === null || isTransientSource(src)) return;
+    // tldraw makes an asset with an empty source before its upload answers.
+    if (src === null || src === "" || isTransientSource(src)) return;
     const marker = parseAssetMarker(src);
     if (marker?.kind === "project-file" || (allowLinks && marker?.kind === "link")) return;
     throw new T.ValidationError(`Expected a project file or ${allowLinks ? "an https link" : "no source"}, got ${JSON.stringify(src)}`);
