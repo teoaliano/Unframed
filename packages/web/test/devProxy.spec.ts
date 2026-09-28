@@ -52,7 +52,8 @@ test.describe("Vite dev server", () => {
 
     const watch = watchRpcSockets(page);
     await page.goto(`http://localhost:${vite.port}/`);
-    await expect(page.locator(".unframed-chrome-left")).toBeVisible();
+    // The first dev load bundles tldraw, which takes a while.
+    await expect(page.locator(".unframed-chrome-left")).toBeVisible({ timeout: 60_000 });
     await watch.frame(0, isSettingsChunk());
     expect(new URL(watch.sockets[0]!.socket.url()).host).toBe(`localhost:${vite.port}`);
 
@@ -63,5 +64,6 @@ test.describe("Vite dev server", () => {
     expect(file).toEqual({ status: 200, text: "through the proxy" });
     const missing = await page.evaluate(async () => (await fetch("/api/file/board/none.png")).json());
     expect(missing).toEqual({ error: "File not found." });
+    await expect(page.locator("[data-canvas-project] .tl-canvas")).toBeVisible({ timeout: 60_000 });
   });
 });

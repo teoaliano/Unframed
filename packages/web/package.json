@@ -10,7 +10,9 @@
   },
   "dependencies": {
     "@base-ui/react": "1.8.0",
+    "@tldraw/assets": "5.4.2",
     "@tldraw/sync": "5.4.2",
+    "@tldraw/sync-core": "5.4.2",
     "@unframed/contracts": "workspace:*",
     "@unframed/domain": "workspace:*",
     "effect": "4.0.0-rc.115",

@@ -77,9 +77,15 @@ importers:
       '@base-ui/react':
         specifier: 1.8.0
         version: 1.8.0(@types/react@19.3.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
+      '@tldraw/assets':
+        specifier: 5.4.2
+        version: 5.4.2
       '@tldraw/sync':
         specifier: 5.4.2
         version: 5.4.2(@floating-ui/dom@1.8.0)(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
+      '@tldraw/sync-core':
+        specifier: 5.4.2
+        version: 5.4.2(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
       '@unframed/contracts':
         specifier: workspace:*
         version: link:../contracts
@@ -1376,6 +1382,10 @@ packages:
 
   '@tiptap/starter-kit@3.31.3':
     resolution: {integrity: sha512-WKof9RewdmGHvWJ1wn0/HVNG2mV+HOgVRyJkKekuM9fgr6BZAAH/xZsWE1eon+94JnQ+KtK2ThydXQM/qc6b2A==}
+
+  '@tldraw/assets@5.4.2':
+    resolution: {integrity: sha512-+3mAc5ix1qO76LtEEGPgvxKEE1dMfiJrajnetzt0JjeX6WZeUwhscUqwcWz8A/IxA9qtctxDAhVXTdomGQ2oGQ==}
+    engines: {node: '>=22.12.0'}
 
   '@tldraw/driver@5.4.2':
     resolution: {integrity: sha512-XY0YOEyfkJ5emU+r75Hr1ZIC2A2aQcStM9itV99leGGaEXfr/4isFtC02qVpqAHBe3r0ePbQhqCKbsxFE/OpfQ==}
@@ -3373,6 +3383,10 @@ snapshots:
       '@tiptap/extension-underline': 3.31.3(@tiptap/core@3.31.3(@tiptap/pm@3.31.3))
       '@tiptap/extensions': 3.31.3(@tiptap/core@3.31.3(@tiptap/pm@3.31.3))(@tiptap/pm@3.31.3)
       '@tiptap/pm': 3.31.3
+
+  '@tldraw/assets@5.4.2':
+    dependencies:
+      '@tldraw/utils': 5.4.2
 
   '@tldraw/driver@5.4.2(@floating-ui/dom@1.8.0)(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)':
     dependencies:
