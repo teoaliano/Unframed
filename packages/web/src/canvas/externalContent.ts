@@ -300,9 +300,15 @@ export const clipboardOptions = (ctx: Pick<ContentContext, "project"> & { readon
     const current = ctx.context();
     if (!current) return undefined;
     switch (content.type) {
-      case "files":
+      case "files": {
+        // Copying one image also puts its picture on the clipboard; the shapes still win.
+        const shapes = content.sources?.find((source) => source.type === "tldraw");
+        if (shapes?.type === "tldraw") {
+          return { type: "tldraw", content: await fixUpPastedShapes(editor, current, shapes.data as UnframedContent) };
+        }
         await pasteFiles(editor, current, content.files);
         return false;
+      }
       case "text":
         await handleText(editor, content.text, editor.inputs.getCurrentPagePoint());
         return false;

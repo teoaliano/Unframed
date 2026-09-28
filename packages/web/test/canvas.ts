@@ -14,13 +14,23 @@ export const openCanvas = async (page: Page, engine: TestEngine, project?: strin
   const host = project === undefined ? page.locator("[data-canvas-project]") : page.locator(`[data-canvas-project="${project}"]`);
   await expect(host.locator(".tl-canvas")).toBeVisible({ timeout: 20_000 });
   const name = (await host.getAttribute("data-canvas-project"))!;
-  await expect.poll(() => page.locator(".tl-shape").count(), { timeout: 20_000 }).toBeGreaterThanOrEqual(0);
+  const shapes = (await roomRecords(engine, name)).filter((record) => record.typeName === "shape").length;
+  await expect.poll(() => host.locator(".tl-shape").count(), { timeout: 20_000 }).toBeGreaterThanOrEqual(shapes);
   return name;
 };
 
 /** Waits until a prompt's text editor has the keyboard. */
 export const editorFocused = async (page: Page): Promise<void> => {
   await expect(page.locator(".tl-rich-text [contenteditable='true']:focus, [contenteditable='true'].ProseMirror-focused")).toHaveCount(1);
+};
+
+/** Presses copy and waits until the system clipboard holds canvas content with `types`. */
+export const copySelection = async (page: Page, types: string[] = ["text/html"]): Promise<void> => {
+  await page.evaluate(() => navigator.clipboard.writeText(""));
+  await page.keyboard.press("ControlOrMeta+c");
+  await expect
+    .poll(() => page.evaluate(async () => (await navigator.clipboard.read()).flatMap((item) => item.types)))
+    .toEqual(expect.arrayContaining(types));
 };
 
 /** A toast on screen, by its text. */

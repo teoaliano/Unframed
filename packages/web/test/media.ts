@@ -65,9 +65,21 @@ export const uploadToEngine = async (engine: TestEngine, name: string, bytes: Bu
 /** A filled image or video: the file uploaded, its asset and a shape showing it. */
 export const filledMedia = async (
   engine: TestEngine,
-  options: { id: string; type: "image" | "video"; ref: string; at: { x: number; y: number }; bytes: Buffer; name: string; mime: string; natural: { w: number; h: number }; width?: number },
+  options: {
+    id: string;
+    type: "image" | "video";
+    ref: string;
+    at: { x: number; y: number };
+    bytes: Buffer;
+    name: string;
+    mime: string;
+    natural: { w: number; h: number };
+    width?: number;
+    project?: string;
+  },
 ) => {
-  const file = await uploadToEngine(engine, options.name, options.bytes, options.mime);
+  const project = options.project ?? "default";
+  const file = await uploadToEngine(engine, options.name, options.bytes, options.mime, project);
   const width = options.width ?? 240;
   const assetId = `asset:${options.id.slice("shape:".length)}`;
   const shape = emptyMedia(options.id, options.type, options.ref, options.at, { w: width, h: (width * options.natural.h) / options.natural.w });
@@ -78,7 +90,7 @@ export const filledMedia = async (
     props: { w: options.natural.w, h: options.natural.h, name: options.name, isAnimated: options.type === "video", mimeType: options.mime, src: `project-file:${file}` },
     meta: {},
   };
-  await putRecords(engine, [asset, { ...shape, props: { ...shape.props, assetId } }]);
+  await putRecords(engine, [asset, { ...shape, props: { ...shape.props, assetId } }], project);
   return { file, assetId };
 };
 
