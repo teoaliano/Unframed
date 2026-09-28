@@ -38,3 +38,50 @@
   white-space: pre-wrap;
   pointer-events: none;
 }
+
+.unframed-mention-menu {
+  position: absolute;
+  z-index: 600;
+  width: 260px;
+  max-height: 168px;
+  overflow-y: auto;
+  padding: 4px;
+  box-sizing: border-box;
+  border: 1px solid var(--unframed-border);
+  border-radius: var(--unframed-radius-container);
+  background-color: var(--unframed-popover-translucent);
+  backdrop-filter: blur(var(--unframed-chrome-blur));
+  box-shadow: var(--unframed-shadow-med);
+  font-family: var(--font-sans);
+  font-size: 12px;
+  pointer-events: all;
+}
+
+.unframed-mention-row {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  height: 26px;
+  padding: 0 8px;
+  line-height: 26px;
+  border-radius: var(--unframed-radius-inner);
+  cursor: default;
+  white-space: nowrap;
+}
+
+.unframed-mention-row[aria-selected="true"],
+.unframed-mention-row:hover {
+  background-color: var(--unframed-overlay-hover);
+}
+
+.unframed-mention-ref {
+  flex-shrink: 0;
+  color: var(--unframed-text-accent);
+}
+
+.unframed-mention-preview {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--unframed-text-secondary);
+}

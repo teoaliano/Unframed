@@ -3,7 +3,7 @@ import { useSync } from "@tldraw/sync";
 import { canvasSchema } from "@unframed/contracts";
 import { UPLOAD_BODY_LIMIT } from "@unframed/domain";
 import { useCallback, useContext, useEffect, useMemo, useRef } from "react";
-import { Tldraw, type Editor, type TldrawOptions } from "tldraw";
+import { Tldraw, type Editor, type TLComponents, type TldrawOptions } from "tldraw";
 import "tldraw/tldraw.css";
 import "./canvas.css";
 import { connectionMonitor } from "../connection/monitor.ts";
@@ -11,6 +11,7 @@ import { LicenseKeyContext } from "../license.ts";
 import type { ProjectActivation } from "../project/activation.ts";
 import { showError } from "../toasts.tsx";
 import { createAssetStore, Previews } from "./assetStore.ts";
+import { InFront } from "./InFront.tsx";
 import { overrides } from "./overrides.ts";
 import { installRefMinting, RefMinter } from "./refs.ts";
 import { PromptShapeUtil } from "./shapes/prompt.tsx";
@@ -36,6 +37,17 @@ const OPTIONS: Partial<TldrawOptions> = {
 };
 
 const SHAPE_UTILS = [PromptShapeUtil];
+
+/** tldraw's main, page, help and debug menus and its share panel are hidden. */
+const COMPONENTS: TLComponents = {
+  MainMenu: null,
+  PageMenu: null,
+  HelpMenu: null,
+  DebugMenu: null,
+  DebugPanel: null,
+  SharePanel: null,
+  InFrontOfTheCanvas: InFront,
+};
 
 const syncUrl = (project: string, sessionId: string): string => {
   const scheme = window.location.protocol === "https:" ? "wss" : "ws";
@@ -113,14 +125,7 @@ export const CanvasHost = ({ project, activation }: { readonly project: string; 
         onMount={onMount}
         shapeUtils={SHAPE_UTILS}
         overrides={overrides}
-        components={{
-          MainMenu: null,
-          PageMenu: null,
-          HelpMenu: null,
-          DebugMenu: null,
-          DebugPanel: null,
-          SharePanel: null,
-        }}
+        components={COMPONENTS}
         {...(licenseKey ? { licenseKey } : {})}
       />
     </div>
