@@ -277,3 +277,9 @@
 .tlui-layout__top {
   padding-top: 64px;
 }
+
+/* The dot grid: 1.1 px dots at every zoom, the emphasized border mixed 68 % into the canvas colour. */
+.unframed-dot-grid {
+  background-color: var(--unframed-canvas);
+  background-image: radial-gradient(circle, color-mix(in srgb, var(--unframed-border-emphasized) 68%, var(--unframed-canvas)) 0.55px, transparent 0.8px);
+}

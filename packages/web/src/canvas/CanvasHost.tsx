@@ -6,6 +6,9 @@ import { useCallback, useContext, useEffect, useMemo, useRef } from "react";
 import { Tldraw, type Editor, type TLComponents, type TldrawOptions } from "tldraw";
 import "tldraw/tldraw.css";
 import "./canvas.css";
+import { DotGrid } from "../chrome/DotGrid.tsx";
+import { installLabelLevel } from "../chrome/labelLevel.ts";
+import { OVERLAY_UTILS } from "../chrome/selectionLook.ts";
 import { connectionMonitor } from "../connection/monitor.ts";
 import { useEngine } from "../context.ts";
 import { LicenseKeyContext } from "../license.ts";
@@ -44,7 +47,7 @@ const OPTIONS: Partial<TldrawOptions> = {
 
 const SHAPE_UTILS = [PromptShapeUtil, ImageMediaUtil, VideoMediaUtil, GroupShapeUtil, PageShapeUtil, MotionShapeUtil];
 
-/** tldraw's main, page, help and debug menus and its share panel are hidden. */
+/** tldraw's main, page, help and debug menus and its share panel are hidden; the dot grid is the background. */
 const COMPONENTS: TLComponents = {
   MainMenu: null,
   PageMenu: null,
@@ -55,6 +58,7 @@ const COMPONENTS: TLComponents = {
   ImageToolbar: null,
   VideoToolbar: null,
   InFrontOfTheCanvas: InFront,
+  Background: DotGrid,
   ContextMenu,
 };
 
@@ -117,11 +121,13 @@ export const CanvasHost = ({ project, activation }: { readonly project: string; 
   const onMount = useCallback((editor: Editor) => {
     const minter = new RefMinter(editor);
     const stopMinting = installRefMinting(editor, minter);
+    const stopLabelLevel = installLabelLevel(editor);
     content.current = { project, engine, minter };
     installExternalContent(editor, content.current);
     fitToShapes(editor);
     return () => {
       stopMinting();
+      stopLabelLevel();
       content.current = undefined;
     };
   }, [project, engine]);
@@ -139,6 +145,7 @@ export const CanvasHost = ({ project, activation }: { readonly project: string; 
         maxImageDimension={Number.POSITIVE_INFINITY}
         onMount={onMount}
         shapeUtils={SHAPE_UTILS}
+        overlayUtils={OVERLAY_UTILS}
         overrides={overrides}
         components={COMPONENTS}
         {...(licenseKey ? { licenseKey } : {})}
