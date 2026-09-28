@@ -1,0 +1,160 @@
+import type http from "node:http";
+import { UnframedRpcs, type EngineIpcMessage } from "@unframed/contracts";
+import { effectiveSettings } from "@unframed/domain";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as ManagedRuntime from "effect/ManagedRuntime";
+import * as RpcServer from "effect/unstable/rpc/RpcServer";
+import { loadConfig } from "./config.ts";
+import { readEnvFileSync } from "./envFile.ts";
+import { createApiServer } from "./http/api.ts";
+import { projectFileRoute } from "./http/files.ts";
+import { createPreviewServer } from "./http/preview.ts";
+import { listenLoopback, LOOPBACK_HOST } from "./listen.ts";
+import { errorText, logError, logInfo } from "./log.ts";
+import { Ipc, nativeLayer } from "./native.ts";
+import { OpenProjects, openProjectsLayer } from "./openProjects.ts";
+import { installRoot } from "./paths.ts";
+import { preferencesStoreLayer } from "./preferencesStore.ts";
+import { projectDatabaseLayer } from "./projectDatabase.ts";
+import { Projects, projectsLayer } from "./projects.ts";
+import { rpcHandlersLayer } from "./rpc/handlers.ts";
+import { RpcSockets, rpcSocketsLayer } from "./rpc/sockets.ts";
+import { Config } from "./services.ts";
+import { SettingsStore, settingsStoreLayer } from "./settingsStore.ts";
+import { Shutdown, shutdownLayer } from "./shutdown.ts";
+
+export interface EngineHost {
+  readonly env: NodeJS.ProcessEnv;
+  readonly platform: NodeJS.Platform;
+  /** The parent's IPC channel, when there is one. */
+  readonly send: ((message: EngineIpcMessage) => void) | undefined;
+}
+
+export interface RunningEngine {
+  readonly port: number;
+  readonly previewPort: number;
+  /**
+   * Stops accepting connections, closes every WebSocket with 1001 and runs every
+   * shutdown hook, abandoning any still running 1.5 s after the stop began.
+   */
+  readonly stop: () => Promise<void>;
+}
+
+export class ListenError extends Error {}
+
+const banner = (lines: {
+  port: number;
+  imageModel: string;
+  textModel: string;
+  videoModel: string;
+  hasKey: boolean;
+  previewPort: number;
+  outputDir: string;
+}): string =>
+  [
+    "",
+    `  Unframed server  →  http://localhost:${lines.port}`,
+    `  image:    ${lines.imageModel}`,
+    `  text:     ${lines.textModel}`,
+    `  video:    ${lines.videoModel}`,
+    `  api key:  ${lines.hasKey ? "loaded" : "MISSING: add one in the app (settings icon, top right)"}`,
+    `  preview:  http://127.0.0.1:${lines.previewPort}`,
+    `  output:   ${lines.outputDir}`,
+    "",
+    "",
+  ].join("\n");
+
+const stopListening = (server: http.Server) => {
+  server.close();
+  server.closeIdleConnections();
+};
+
+/**
+ * Boots the engine: read settings, bind the preview origin, bind the API, print the
+ * banner, then report ready to a parent that forked it.
+ */
+export const startEngine = async (host: EngineHost): Promise<RunningEngine> => {
+  const { config, warnings } = loadConfig(host.env, installRoot(), host.platform);
+  for (const warning of warnings) logInfo(warning);
+
+  let fileVars: Record<string, string> = {};
+  try {
+    fileVars = readEnvFileSync(config.envPath);
+  } catch (error) {
+    logError(`could not read .env: ${errorText(error)}`);
+  }
+  const bootSettings = effectiveSettings(fileVars, host.env);
+
+  const preview = createPreviewServer();
+  const previewPort = await listenLoopback(preview, 0).catch((error: unknown) => {
+    throw new ListenError(`could not start the preview origin on ${LOOPBACK_HOST}: ${errorText(error)}`);
+  });
+
+  const services = Layer.mergeAll(RpcServer.layer(UnframedRpcs, { disableTracing: true })).pipe(
+    Layer.provideMerge(rpcHandlersLayer),
+    Layer.provideMerge(rpcSocketsLayer),
+    Layer.provideMerge(nativeLayer),
+    Layer.provideMerge(preferencesStoreLayer),
+    Layer.provideMerge(projectsLayer),
+    Layer.provideMerge(projectDatabaseLayer),
+    Layer.provideMerge(openProjectsLayer),
+    Layer.provideMerge(settingsStoreLayer({ fileVars, processEnv: host.env, previewPort })),
+    Layer.provideMerge(shutdownLayer),
+    Layer.provideMerge(Layer.succeed(Config, config)),
+    Layer.provideMerge(Layer.succeed(Ipc, { send: host.send })),
+  );
+  const runtime = ManagedRuntime.make(services);
+  const { view, sockets, projects, shutdown } = await runtime.runPromise(
+    Effect.gen(function* () {
+      const store = yield* SettingsStore;
+      const shutdown = yield* Shutdown;
+      const openProjects = yield* OpenProjects;
+      yield* shutdown.register(
+        "open projects",
+        Effect.flatMap(openProjects.closeAll, (failures) =>
+          Effect.sync(() => {
+            for (const failure of failures) {
+              logError(`could not close ${failure.name} of ${failure.project}: ${failure.reason}`);
+            }
+          }),
+        ),
+      );
+      const hookMs = config.testShutdownHookMs;
+      if (hookMs !== undefined) yield* shutdown.register("test hook", Effect.sleep(hookMs));
+      return { view: yield* store.view, sockets: yield* RpcSockets, projects: yield* Projects, shutdown };
+    }),
+  );
+
+  const api = createApiServer({
+    http: [projectFileRoute((project) => runtime.runPromise(projects.folder(project)))],
+    upgrade: [sockets.upgrade],
+  });
+  const port = await listenLoopback(api, bootSettings.port).catch((error: unknown) => {
+    throw new ListenError(`could not listen on ${LOOPBACK_HOST}:${bootSettings.port}: ${errorText(error)}`);
+  });
+
+  process.stdout.write(
+    banner({
+      port,
+      imageModel: view.imageModel,
+      textModel: view.textModel,
+      videoModel: view.videoModel,
+      hasKey: view.hasKey,
+      previewPort,
+      outputDir: view.outputDir,
+    }),
+  );
+  host.send?.({ type: "ready", port, previewPort });
+
+  const stop = async () => {
+    const startedAt = Date.now();
+    stopListening(api);
+    stopListening(preview);
+    await sockets.closeAll(1001);
+    await runtime.runPromise(shutdown.runHooks(startedAt));
+    api.closeAllConnections();
+    preview.closeAllConnections();
+  };
+  return { port, previewPort, stop };
+};

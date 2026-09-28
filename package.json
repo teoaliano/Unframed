@@ -1,0 +1,25 @@
+{
+  "name": "unframed-monorepo",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@9.15.4",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "dev": "node scripts/dev.ts",
+    "engine": "node packages/engine/src/main.ts",
+    "web": "pnpm --filter @unframed/web dev",
+    "typecheck": "pnpm -r --no-bail typecheck",
+    "test": "vitest run",
+    "test:browser": "playwright test",
+    "build": "node scripts/build.ts"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.63.0",
+    "@types/node": "24.19.0",
+    "esbuild": "0.28.2",
+    "typescript": "7.0.2",
+    "vitest": "5.0.2"
+  }
+}
