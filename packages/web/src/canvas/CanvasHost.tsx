@@ -7,13 +7,16 @@ import { Tldraw, type Editor, type TLComponents, type TldrawOptions } from "tldr
 import "tldraw/tldraw.css";
 import "./canvas.css";
 import { connectionMonitor } from "../connection/monitor.ts";
+import { useEngine } from "../context.ts";
 import { LicenseKeyContext } from "../license.ts";
 import type { ProjectActivation } from "../project/activation.ts";
 import { showError } from "../toasts.tsx";
 import { createAssetStore, Previews } from "./assetStore.ts";
+import { clipboardOptions, installExternalContent, type ContentContext } from "./externalContent.ts";
 import { InFront } from "./InFront.tsx";
 import { overrides } from "./overrides.ts";
 import { installRefMinting, RefMinter } from "./refs.ts";
+import { MotionShapeUtil, PageShapeUtil } from "./shapes/artifact.tsx";
 import { ImageMediaUtil, VideoMediaUtil } from "./shapes/media.tsx";
 import { PromptShapeUtil } from "./shapes/prompt.tsx";
 import { SyncSocket } from "./syncSocket.ts";
@@ -37,7 +40,7 @@ const OPTIONS: Partial<TldrawOptions> = {
   },
 };
 
-const SHAPE_UTILS = [PromptShapeUtil, ImageMediaUtil, VideoMediaUtil];
+const SHAPE_UTILS = [PromptShapeUtil, ImageMediaUtil, VideoMediaUtil, PageShapeUtil, MotionShapeUtil];
 
 /** tldraw's main, page, help and debug menus and its share panel are hidden. */
 const COMPONENTS: TLComponents = {
@@ -47,6 +50,8 @@ const COMPONENTS: TLComponents = {
   DebugMenu: null,
   DebugPanel: null,
   SharePanel: null,
+  ImageToolbar: null,
+  VideoToolbar: null,
   InFrontOfTheCanvas: InFront,
 };
 
@@ -76,6 +81,9 @@ const REFUSALS: Record<string, string> = {
  */
 export const CanvasHost = ({ project, activation }: { readonly project: string; readonly activation: ProjectActivation }) => {
   const licenseKey = useContext(LicenseKeyContext);
+  const engine = useEngine();
+  const content = useRef<ContentContext | undefined>(undefined);
+  const options = useMemo(() => ({ ...OPTIONS, ...clipboardOptions({ project, context: () => content.current }) }), [project]);
   const socket = useRef<SyncSocket | undefined>(undefined);
   const previews = useMemo(() => new Previews(project), [project]);
   const assets = useMemo(() => createAssetStore(project, previews), [project, previews]);
@@ -106,11 +114,14 @@ export const CanvasHost = ({ project, activation }: { readonly project: string; 
   const onMount = useCallback((editor: Editor) => {
     const minter = new RefMinter(editor);
     const stopMinting = installRefMinting(editor, minter);
+    content.current = { project, engine, minter };
+    installExternalContent(editor, content.current);
     fitToShapes(editor);
     return () => {
       stopMinting();
+      content.current = undefined;
     };
-  }, []);
+  }, [project, engine]);
 
   if (store.status === "error") return <div className="absolute inset-0" data-canvas-refused={project} />;
 
@@ -118,7 +129,7 @@ export const CanvasHost = ({ project, activation }: { readonly project: string; 
     <div className="absolute inset-0" data-canvas-project={project}>
       <Tldraw
         store={store}
-        options={OPTIONS}
+        options={options}
         colorScheme="system"
         assetUrls={assetUrls}
         maxAssetSize={UPLOAD_BODY_LIMIT}

@@ -182,6 +182,24 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* Pages and motions: a card with the kind icon centred while empty. */
+.unframed-artifact {
+  box-sizing: border-box;
+  border: 1px solid var(--unframed-border-emphasized);
+  border-radius: var(--unframed-radius-container);
+  background-color: var(--unframed-card);
+}
+
+.unframed-artifact__empty {
+  display: flex;
+  height: 100%;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  color: var(--unframed-icon-secondary);
+}
+
 .unframed-mention-menu {
   position: absolute;
   z-index: 600;

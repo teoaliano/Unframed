@@ -19,6 +19,39 @@ export const emptyMedia = (id: string, type: "image" | "video", ref: string, at:
   meta: { ref },
 });
 
+/** A file to drop: its bytes, or just a size for a large blank one made in the page. */
+export interface DroppedFile {
+  readonly name: string;
+  readonly mime: string;
+  readonly bytes?: Buffer;
+  readonly size?: number;
+}
+
+/**
+ * Drops files on the page at a screen point. A browser gives a test no way to drag real
+ * files from the OS, so this builds the drop's DataTransfer the way the OS would.
+ */
+export const dropFiles = async (page: import("@playwright/test").Page, point: { x: number; y: number }, files: ReadonlyArray<DroppedFile>) => {
+  await page.evaluate(
+    ({ point, files }) => {
+      const transfer = new DataTransfer();
+      for (const file of files) {
+        const bytes = file.size !== undefined ? new Uint8Array(file.size) : Uint8Array.from(atob(file.base64), (char) => char.charCodeAt(0));
+        transfer.items.add(new File([bytes], file.name, { type: file.mime }));
+      }
+      const target = document.elementFromPoint(point.x, point.y)!;
+      const init = { bubbles: true, cancelable: true, clientX: point.x, clientY: point.y, dataTransfer: transfer };
+      target.dispatchEvent(new DragEvent("dragenter", init));
+      target.dispatchEvent(new DragEvent("dragover", init));
+      target.dispatchEvent(new DragEvent("drop", init));
+    },
+    {
+      point,
+      files: files.map((file) => ({ name: file.name, mime: file.mime, base64: file.bytes?.toString("base64") ?? "", size: file.size })),
+    },
+  );
+};
+
 /** Uploads bytes through the engine's route and answers the saved file's name. */
 export const uploadToEngine = async (engine: TestEngine, name: string, bytes: Buffer, mime: string, project = "default"): Promise<string> =>
   (
