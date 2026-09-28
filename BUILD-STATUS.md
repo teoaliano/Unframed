@@ -14,7 +14,7 @@ Checked 2026-09-28: Node v24.21.0, pnpm 9.15.4 through Corepack, Google Chrome, 
 | --- | --- | --- | --- | --- | --- |
 | 01 | engine foundation | 1 | merged | f480398 | 54/54 tasks; 311 tests, 7 browser tests green on build |
 | 02 | canvas | 2 | merged | 901847a | 60/60 tasks; 421 tests, 83 browser tests green on build; all budgets met (see below) |
-| 03 | image generation | 3 | building | | |
+| 03 | image generation | 3 | building | f9649ab (merged, suite not green) | 54/54 tasks; 626 tests green; browser suite: 112 pass but hangs in teardown, and Cmd+Enter tests flake. Sent back to the spec 03 agent |
 | 04 | video generation | 4 | pending | | merge after 05 |
 | 05 | text, multi-run and Free | 4 | pending | | merge before 04 |
 | 06 | groups, recipes and the library | 5 | pending | | |
