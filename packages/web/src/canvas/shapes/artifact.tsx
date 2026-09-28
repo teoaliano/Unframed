@@ -1,6 +1,6 @@
 import type { ArtifactShapeProps } from "@unframed/contracts";
 import { AppWindow, Clapperboard } from "lucide-react";
-import { BaseBoxShapeUtil, HTMLContainer, T, type RecordProps, type TLResizeInfo, type TLShape } from "tldraw";
+import { BaseBoxShapeUtil, HTMLContainer, resizeBox, T, type RecordProps, type TLResizeInfo, type TLShape } from "tldraw";
 import { useSlots } from "../../chrome/slots.ts";
 import { ShapeLabel } from "./ShapeLabel.tsx";
 
@@ -18,8 +18,6 @@ const artifactProps: RecordProps<ArtifactShape> = {
   fileName: T.string,
   dials: T.dict(T.string, T.jsonValue).optional(),
 };
-
-const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
 
 const ArtifactCard = ({ shape, kind }: { readonly shape: ArtifactShape; readonly kind: "page" | "motion" }) => {
   const { artifactEmptyState: EmptyState } = useSlots();
@@ -66,17 +64,7 @@ const makeArtifactUtil = (kind: "page" | "motion") =>
     }
 
     override onResize(shape: ArtifactShape, info: TLResizeInfo<ArtifactShape>) {
-      const resized = super.onResize(shape, info);
-      const w = clamp(resized.props?.w ?? shape.props.w, ARTIFACT_MIN.w, ARTIFACT_MAX.w);
-      const h = clamp(resized.props?.h ?? shape.props.h, ARTIFACT_MIN.h, ARTIFACT_MAX.h);
-      const left = info.handle.includes("left");
-      const top = info.handle.includes("top");
-      return {
-        ...resized,
-        x: left ? info.initialShape.x + info.initialShape.props.w - w : info.initialShape.x,
-        y: top ? info.initialShape.y + info.initialShape.props.h - h : info.initialShape.y,
-        props: { ...resized.props, w, h },
-      };
+      return resizeBox(shape, info, { minWidth: ARTIFACT_MIN.w, minHeight: ARTIFACT_MIN.h, maxWidth: ARTIFACT_MAX.w, maxHeight: ARTIFACT_MAX.h });
     }
   };
 
