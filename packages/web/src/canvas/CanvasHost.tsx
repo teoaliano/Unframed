@@ -17,6 +17,7 @@ import { InFront } from "./InFront.tsx";
 import { overrides } from "./overrides.ts";
 import { installRefMinting, RefMinter } from "./refs.ts";
 import { MotionShapeUtil, PageShapeUtil } from "./shapes/artifact.tsx";
+import { GroupShapeUtil } from "./shapes/group.tsx";
 import { ImageMediaUtil, VideoMediaUtil } from "./shapes/media.tsx";
 import { PromptShapeUtil } from "./shapes/prompt.tsx";
 import { SyncSocket } from "./syncSocket.ts";
@@ -40,7 +41,7 @@ const OPTIONS: Partial<TldrawOptions> = {
   },
 };
 
-const SHAPE_UTILS = [PromptShapeUtil, ImageMediaUtil, VideoMediaUtil, PageShapeUtil, MotionShapeUtil];
+const SHAPE_UTILS = [PromptShapeUtil, ImageMediaUtil, VideoMediaUtil, GroupShapeUtil, PageShapeUtil, MotionShapeUtil];
 
 /** tldraw's main, page, help and debug menus and its share panel are hidden. */
 const COMPONENTS: TLComponents = {

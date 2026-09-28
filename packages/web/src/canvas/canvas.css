@@ -246,3 +246,17 @@
   text-overflow: ellipsis;
   color: var(--unframed-text-secondary);
 }
+
+/* A group: a dashed box in the border colour; selected, a solid accent box with square corners. */
+.unframed-group {
+  box-sizing: border-box;
+  border: 1.5px dashed var(--unframed-border);
+  border-radius: 12px;
+  background-color: color-mix(in srgb, var(--unframed-border) 8%, transparent);
+}
+
+.unframed-group[data-selected] {
+  border-style: solid;
+  border-color: var(--unframed-accent);
+  border-radius: 0;
+}

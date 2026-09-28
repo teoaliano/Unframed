@@ -97,3 +97,38 @@ export const filledMedia = async (
 /** Puts records on the board as an engine-side write, as a run would. */
 export const putRecords = async (engine: TestEngine, records: unknown[], project = "default") =>
   (await engine.rpc()).call("testCanvas.apply", { project, change: { put: records, remove: [] }, origin: { kind: "server", id: "test" } });
+
+const baseShape = (id: string, type: string, at: { x: number; y: number }) => ({
+  id,
+  typeName: "shape",
+  type,
+  x: at.x,
+  y: at.y,
+  rotation: 0,
+  index: `a${Math.floor(Math.random() * 8) + 2}`,
+  parentId: "page:page",
+  isLocked: false,
+  opacity: 1,
+});
+
+/** A group (tldraw's frame) named `name`. */
+export const groupRecord = (id: string, name: string, at: { x: number; y: number }, size = { w: 420, h: 280 }) => ({
+  ...baseShape(id, "frame", at),
+  props: { ...size, name, color: "black" },
+  meta: {},
+});
+
+/** A page or motion, empty unless it names a file. */
+export const artifactRecord = (id: string, kind: "page" | "motion", ref: string, at: { x: number; y: number }, file = "", fileName = "") => ({
+  ...baseShape(id, kind, at),
+  props: { w: 480, h: 320, file, fileName, title: fileName.replace(/\.[^.]+$/, "") },
+  meta: { ref },
+});
+
+/** The same record placed inside a group, at a point relative to the group. */
+export const inGroup = <T extends { parentId: string; x: number; y: number }>(record: T, group: string, at: { x: number; y: number }): T => ({
+  ...record,
+  parentId: group,
+  x: at.x,
+  y: at.y,
+});
