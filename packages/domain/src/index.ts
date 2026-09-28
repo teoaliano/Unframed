@@ -26,3 +26,5 @@ export * from "./runMessages.ts";
 export * from "./videoProps.ts";
 export * from "./videoRequest.ts";
 export * from "./videoTray.ts";
+export * from "./shareRegistry.ts";
+export * from "./renderJobs.ts";

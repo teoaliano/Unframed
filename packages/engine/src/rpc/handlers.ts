@@ -1,4 +1,4 @@
-import { UnframedRpcs, unframedError } from "@unframed/contracts";
+import { UnframedRpcs, unframedError, type ResultRecipe, type UnframedError } from "@unframed/contracts";
 import type { TLRecord } from "@tldraw/tlschema";
 import * as Effect from "effect/Effect";
 import { CanvasRooms } from "../canvas/rooms.ts";
@@ -8,6 +8,7 @@ import { Native } from "../native.ts";
 import { Catalogue } from "../openRouter/catalogue.ts";
 import { VideoCatalogue } from "../openRouter/videoCatalogue.ts";
 import { Runs } from "../runs/runs.ts";
+import { RenderJobs } from "../video/renderJobs.ts";
 import { PreferencesStore } from "../preferencesStore.ts";
 import { Projects } from "../projects.ts";
 import { revealFiles } from "../reveal.ts";
@@ -27,6 +28,7 @@ export const rpcHandlersLayer = UnframedRpcs.toLayer(
     const catalogue = yield* Catalogue;
     const videoCatalogue = yield* VideoCatalogue;
     const runs = yield* Runs;
+    const renderJobs = yield* RenderJobs;
     const context = yield* Effect.context<SettingsStore | Projects | Native>();
 
     const testOnly = <A, E>(run: () => Effect.Effect<A, E>) =>
@@ -50,11 +52,21 @@ export const rpcHandlersLayer = UnframedRpcs.toLayer(
       "models.imagePricing": ({ id }) => catalogue.imagePricing(id),
       "run.image": (request) => runs.image(request),
       "run.subscribe": ({ project }) => runs.subscribe(project),
-      "recipe.read": ({ project, shapeId }) => runs.recipe(project, shapeId),
+      // A render placeholder has no sidecar until its clip lands: its recipe is in the job record (spec 04).
+      "recipe.read": ({ project, shapeId }) =>
+        runs.recipe(project, shapeId).pipe(
+          Effect.catchIf(
+            (error: UnframedError) => error.code === "not_found",
+            (error) =>
+              Effect.flatMap(renderJobs.placeholderRecipe(project, shapeId), (recipe): Effect.Effect<ResultRecipe, UnframedError> =>
+                recipe ? Effect.succeed(recipe) : Effect.fail(error),
+              ),
+          ),
+        ),
       "recipe.copy": ({ project, from, sidecar, file }) => runs.copyRecipe(project, from, sidecar, file),
-      "video.start": () => Effect.fail(unframedError("unavailable", "Not yet.")),
-      "video.poll": () => Effect.fail(unframedError("unavailable", "Not yet.")),
-      "video.forget": () => Effect.fail(unframedError("unavailable", "Not yet.")),
+      "video.start": (request) => renderJobs.start(request),
+      "video.poll": (request) => renderJobs.poll(request),
+      "video.forget": ({ project, jobId }) => renderJobs.forget(project, jobId),
       "testCanvas.read": ({ project }) =>
         testOnly(() =>
           Effect.all({ clock: rooms.clock(project), records: Effect.map(rooms.read(project), (records) => [...records]) }),

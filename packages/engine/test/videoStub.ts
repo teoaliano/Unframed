@@ -42,11 +42,14 @@ export type CreateAnswer =
   | { readonly kind: "status"; readonly status: number; readonly body: unknown }
   | { readonly kind: "not-json"; readonly text: string }
   | { readonly kind: "drop" }
+  /** The connection closes before any answer: a network failure. */
+  | { readonly kind: "hangup" }
   | { readonly kind: "no-id" };
 
 /** How the stub answers one `GET /api/v1/videos/<id>`. */
 export type StatusAnswer =
   | { readonly kind: "data"; readonly data: Record<string, unknown> }
+  | { readonly kind: "hangup" }
   | { readonly kind: "status"; readonly status: number; readonly body: unknown }
   | { readonly kind: "not-json"; readonly text: string }
   | { readonly kind: "drop" };
@@ -114,6 +117,9 @@ export const videoJobs = (): VideoJobs => {
           case "no-id":
             json(res, 200, { status: "pending" });
             return;
+          case "hangup":
+            req.socket.destroy();
+            return;
         }
       });
       return true;
@@ -139,6 +145,9 @@ export const videoJobs = (): VideoJobs => {
             res.writeHead(200, { "content-type": "application/json", "content-length": "100000" });
             res.write('{"status":"compl');
             setTimeout(() => res.destroy(), 20);
+            return;
+          case "hangup":
+            req.socket.destroy();
             return;
         }
       });
