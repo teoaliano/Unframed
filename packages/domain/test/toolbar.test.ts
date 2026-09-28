@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { resultLine, selectionHint, toolbarState, type ToolbarShape } from "../src/index.ts";
+import { batchHint, resultLine, selectionHint, toolbarState, type ToolbarShape } from "../src/index.ts";
 
 const promptShape: ToolbarShape = { id: "p", kind: "prompt" };
 const emptyImage: ToolbarShape = { id: "e", kind: "image" };
@@ -55,6 +55,34 @@ describe("the selection hint", () => {
     expect(selectionHint(batch.slice(0, 3), batch)).toBe("3 selected");
     expect(selectionHint([batch[0]!], [batch[0]!])).toBe("1 selected");
     expect(selectionHint([result("a", "b-1"), result("b", "b-2")], [result("a", "b-1"), result("b", "b-2")])).toBe("2 selected");
+  });
+});
+
+describe("the batch hint", () => {
+  const extra = (id: string, cost: number | null) => result(id, "b-9", cost, { result: { batchId: "b-9", cost, batchExtraCost: 0.0015 } });
+
+  it("sums the members' costs and the batch's extra cost once", () => {
+    const members = [extra("a", 0.042), extra("b", 0.042), extra("c", 0.042)];
+    expect(batchHint(members, [...members, result("other", "b-1")])).toBe("3 images · $0.1275");
+  });
+
+  it("sums the known costs when some are missing", () => {
+    const members = [result("a", "b-1", 0.05), result("b", "b-1", null)];
+    expect(batchHint(members, members)).toBe("2 images · $0.0500");
+  });
+
+  it("reads the count alone with no cost known", () => {
+    const members = [result("a", "b-1", null), result("b", "b-1", null), result("c", "b-1", null)];
+    expect(batchHint(members, members)).toBe("3 images");
+  });
+
+  it.each<[string, ToolbarShape[], ToolbarShape[]]>([
+    ["part of a batch", [result("a", "b-1"), result("b", "b-1")], [result("a", "b-1"), result("b", "b-1"), result("c", "b-1")]],
+    ["a batch of one", [result("a", "b-1")], [result("a", "b-1")]],
+    ["two batches", [result("a", "b-1"), result("b", "b-2")], [result("a", "b-1"), result("b", "b-2")]],
+    ["a batch and a prompt", [result("a", "b-1"), result("b", "b-1"), promptShape], [result("a", "b-1"), result("b", "b-1")]],
+  ])("is not shown for %s", (_case, selected, results) => {
+    expect(batchHint(selected, results)).toBeUndefined();
   });
 });
 
