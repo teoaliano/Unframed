@@ -1,0 +1,18 @@
+{
+  "when": "break it",
+  "turns": [
+    {
+      "text": "",
+      "retries": [
+        {
+          "attempt": 1,
+          "maxRetries": 3,
+          "delayMs": 2000,
+          "status": 529
+        }
+      ],
+      "isError": true,
+      "errorSubtype": "error_max_turns"
+    }
+  ]
+}

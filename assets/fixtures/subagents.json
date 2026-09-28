@@ -1,0 +1,23 @@
+{
+  "when": "in parallel",
+  "turns": [
+    {
+      "title": "Research in parallel",
+      "tasks": [
+        {
+          "title": "Read the brief",
+          "status": "completed"
+        },
+        {
+          "title": "Collect the stills",
+          "status": "completed"
+        },
+        {
+          "title": "Check the fonts",
+          "status": "failed"
+        }
+      ],
+      "text": "Two of the three helpers finished. The one checking the fonts failed, so I left the fonts as they are."
+    }
+  ]
+}

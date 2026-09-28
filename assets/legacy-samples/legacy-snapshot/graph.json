@@ -1,0 +1,76 @@
+{
+  "nodes": [
+    {
+      "id": "100",
+      "type": "prompt",
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "width": 300,
+      "height": 30,
+      "selected": false,
+      "data": {
+        "text": "A fox running along the beach at low tide"
+      }
+    },
+    {
+      "id": "101",
+      "type": "image",
+      "position": {
+        "x": 0,
+        "y": 80
+      },
+      "width": 240,
+      "data": {
+        "fileName": "beach.png",
+        "dataUrl": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAAAoCAIAAADBrGu+AAAACXBIWXMAAAABAAAAAQBPJcTWAAAATElEQVR4nO3PQQ3AIADAQEhwj07+SJgIHpclPQXtvGePP1s64FUDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oD2gcL5AL+GhwaQgAAAABJRU5ErkJggg==",
+        "aspect": 1.6
+      }
+    },
+    {
+      "id": "102",
+      "type": "output",
+      "position": {
+        "x": 440,
+        "y": 0
+      },
+      "data": {
+        "model": "openai/gpt-image-2",
+        "resolution": "1K",
+        "runs": 1,
+        "results": [
+          {
+            "url": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAAAoCAIAAADBrGu+AAAACXBIWXMAAAABAAAAAQBPJcTWAAAATElEQVR4nO3PQQ3AIADAQEjwrwFh4GUieFyW9BS08+w7/mzpgFcNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaB84ZQL33F68pAAAAABJRU5ErkJggg==",
+            "cost": 0.0061,
+            "runIndex": 0
+          }
+        ]
+      }
+    },
+    {
+      "id": "103",
+      "type": "videoOutput",
+      "position": {
+        "x": 440,
+        "y": 300
+      },
+      "data": {
+        "videoModel": "bytedance/seedance-2.0",
+        "duration": 5,
+        "resolution": "480p",
+        "job": {
+          "id": "vid_4b9e2d6f03",
+          "startedAt": 1789042680000,
+          "params": {
+            "prompt": "A fox running along the beach at low tide",
+            "model": "bytedance/seedance-2.0",
+            "duration": 5,
+            "resolution": "480p",
+            "size": null
+          }
+        }
+      }
+    }
+  ]
+}

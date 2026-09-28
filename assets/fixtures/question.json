@@ -1,0 +1,50 @@
+{
+  "when": "ask me first",
+  "turns": [
+    {
+      "title": "Asking before the page",
+      "question": {
+        "questions": [
+          {
+            "id": "Which look should the page have?",
+            "header": "Look",
+            "question": "Which look should the page have?",
+            "options": [
+              {
+                "label": "Warm",
+                "description": "Cream background, dark brown type"
+              },
+              {
+                "label": "Cool",
+                "description": "Pale grey background, navy type"
+              }
+            ],
+            "allowCustomAnswer": true,
+            "multiSelect": false
+          },
+          {
+            "id": "Which sections should it have?",
+            "header": "Sections",
+            "question": "Which sections should it have?",
+            "options": [
+              {
+                "label": "Hero",
+                "description": "One large picture with the headline"
+              },
+              {
+                "label": "Gallery",
+                "description": "The stills in a grid"
+              },
+              {
+                "label": "Footer",
+                "description": "A short line of contact details"
+              }
+            ],
+            "multiSelect": true
+          }
+        ]
+      },
+      "text": "Thanks. I will build the page with the look and sections you picked."
+    }
+  ]
+}

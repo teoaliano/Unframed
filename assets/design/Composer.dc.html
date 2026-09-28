@@ -1,0 +1,124 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    *{box-sizing:border-box}
+    body{margin:0;font-family:ui-sans-serif,-apple-system,"Segoe UI",Helvetica,Arial,sans-serif;color:#262626;background:#f7f7f7;-webkit-font-smoothing:antialiased}
+    a{color:#262626}a:hover{color:#000000}
+    .canvas{position:relative;width:100%;height:100%;overflow:hidden;background-color:#f7f7f7;background-image:radial-gradient(#dedede 1px,transparent 1px);background-size:24px 24px}
+    .sec{font-size:10.5px;letter-spacing:.11em;text-transform:uppercase;color:#9a9a9a}
+    .row{display:flex;align-items:center;gap:8px}
+    .above{display:flex;align-items:baseline;justify-content:space-between;padding:0 2px 6px}
+    .kind{font-size:12.5px;color:#a2a2a2}
+    .kind b{font-weight:500;color:#262626}
+    .count{font-size:12.5px;color:#8d8d8d}
+    .box{position:relative;background:#ffffff;border:1px solid #e3e3e3;border-radius:12px;padding:13px 14px;min-height:118px}
+    .ph{font-size:14px;line-height:1.5;color:#a6a6a6;max-width:300px}
+    .say{font-size:14px;line-height:1.5;color:#262626;max-width:300px}
+    .send{position:absolute;right:12px;bottom:12px;width:34px;height:34px;border-radius:999px;border:0;background:#262626;display:flex;align-items:center;justify-content:center}
+    .send-off{position:absolute;right:12px;bottom:12px;width:34px;height:34px;border-radius:999px;border:1px solid #e3e3e3;background:#f2f2f2;display:flex;align-items:center;justify-content:center}
+    .tray{display:flex;align-items:center;justify-content:space-between;margin:-1px 0 0;padding:8px 14px;background:#fafafa;border:1px solid #e3e3e3;border-top:0;border-radius:0 0 12px 12px}
+    .props{display:flex;align-items:center;gap:8px;font-size:12.5px;color:#6a6a6a}
+    .prop{color:#3d3d3d}
+    .dot{color:#c4c4c4}
+    .add{font-size:12.5px;color:#8d8d8d}
+    .cost{font-size:12.5px;color:#8d8d8d}
+    .menu{background:#ffffff;border:1px solid #e3e3e3;border-radius:10px;box-shadow:0 14px 34px rgba(0,0,0,.12);padding:7px 0;width:186px}
+    .mi{display:flex;justify-content:space-between;padding:7px 12px;font-size:12.5px;color:#3d3d3d}
+    .mi span{color:#9a9a9a}
+    .cite{border-left:1px solid #e3e3e3;padding-left:14px;width:300px}
+    .cite h4{margin:0 0 7px;font-size:12.5px;font-weight:600}
+    .cite p{margin:0;font-size:12.5px;line-height:1.6;color:#7a7a7a}
+  </style>
+</helmet>
+<div class="canvas">
+  <div style="position:absolute;left:48px;top:36px;width:420px">
+    <div style="font-size:14.5px;font-weight:600">The composer</div>
+    <div style="margin-top:9px;font-size:13px;line-height:1.55;color:#7a7a7a">Three bands. What it makes and what it is made from sit above the box; the box is nothing but what you type and the one way to send it; the settings hang underneath as a tray you add to.</div>
+  </div>
+
+  <div class="sec" style="position:absolute;left:48px;top:140px">At rest</div>
+  <div style="position:absolute;left:48px;top:158px;width:392px">
+    <div class="above">
+      <div class="kind"><b>image</b> / video / text</div>
+      <div class="count">3 selected</div>
+    </div>
+    <div class="box">
+      <div class="ph">What should this make?</div>
+      <div class="send-off">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M8 13V3.5M8 3.5L3.8 7.7M8 3.5L12.2 7.7" stroke="#b6b6b6" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </div>
+    </div>
+    <div class="tray">
+      <div class="props"><span class="prop">gpt-image-2</span></div>
+      <div class="add">+ add prop</div>
+    </div>
+  </div>
+
+  <div class="sec" style="position:absolute;left:48px;top:392px">Configured</div>
+  <div style="position:absolute;left:48px;top:410px;width:392px">
+    <div class="above">
+      <div class="kind"><b>image</b> / video / text</div>
+      <div class="count">3 selected</div>
+    </div>
+    <div class="box">
+      <div class="say">Crop tighter than the reference. Leave the top third empty for the headline.</div>
+      <div class="cost" style="position:absolute;right:58px;bottom:21px">$0.168</div>
+      <div class="send">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M8 13V3.5M8 3.5L3.8 7.7M8 3.5L12.2 7.7" stroke="#ffffff" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </div>
+    </div>
+    <div class="tray">
+      <div class="props">
+        <span class="prop">gpt-image-2</span><span class="dot">·</span>
+        <span class="prop">2:3</span><span class="dot">·</span>
+        <span class="prop">high</span><span class="dot">·</span>
+        <span class="prop">4×</span>
+      </div>
+      <div class="add">+ add prop</div>
+    </div>
+  </div>
+
+  <div class="sec" style="position:absolute;left:48px;top:644px">Adding a prop</div>
+  <div style="position:absolute;left:48px;top:662px;width:392px">
+    <div class="above">
+      <div class="kind"><b>image</b> / video / text</div>
+      <div class="count">3 selected</div>
+    </div>
+    <div class="box">
+      <div class="say">Crop tighter than the reference.</div>
+      <div class="send">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M8 13V3.5M8 3.5L3.8 7.7M8 3.5L12.2 7.7" stroke="#ffffff" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </div>
+    </div>
+    <div class="tray">
+      <div class="props"><span class="prop">gpt-image-2</span><span class="dot">·</span><span class="prop">2:3</span></div>
+      <div class="add" style="color:#262626">+ add prop</div>
+    </div>
+  </div>
+  <div class="menu" style="position:absolute;left:254px;top:872px">
+    <div class="mi">Quality <span>high</span></div>
+    <div class="mi">Background <span>auto</span></div>
+    <div class="mi">Runs <span>1</span></div>
+  </div>
+
+  <div style="position:absolute;left:48px;top:1030px;display:flex;gap:44px">
+    <div class="cite">
+      <h4>Why the tray is outside</h4>
+      <p>A prop is a decision about the run, not part of the message. Keeping it below the border means the box never has to hold two kinds of thing, and the tray can grow a line without the field moving.</p>
+    </div>
+    <div class="cite">
+      <h4>What to settle</h4>
+      <p>Where the price goes — it sits beside the arrow here, but the tray’s right end is the other honest home. And whether a prop comes off the same way it went on: a click to open it, a second to drop it.</p>
+    </div>
+  </div>
+</div>
+</x-dc>
+</body>
+</html>

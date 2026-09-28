@@ -1,0 +1,27 @@
+{
+  "when": "usage limit",
+  "turns": [
+    {
+      "title": "Near the usage limit",
+      "rateLimit": {
+        "status": "allowed_warning",
+        "resetsAt": "2026-10-01T15:00:00.000Z"
+      },
+      "text": "Done, but you are close to your usage limit."
+    },
+    {
+      "rateLimit": {
+        "status": "rejected",
+        "resetsAt": "2026-10-01T15:00:00.000Z"
+      },
+      "text": "",
+      "isError": true
+    },
+    {
+      "rateLimit": {
+        "status": "allowed"
+      },
+      "text": "Back under the limit."
+    }
+  ]
+}

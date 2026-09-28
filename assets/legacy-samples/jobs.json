@@ -1,0 +1,80 @@
+[
+  {
+    "startedAt": 1789036200000,
+    "project": "everything",
+    "params": {
+      "prompt": "Slow push-in toward the cliff at dusk",
+      "model": "bytedance/seedance-2.0",
+      "duration": 5,
+      "resolution": "720p",
+      "size": null
+    },
+    "status": "pending",
+    "refs": {
+      "images": 0,
+      "videos": 0,
+      "frames": 0
+    },
+    "id": "vid_2f8c1e7a9b"
+  },
+  {
+    "startedAt": 1789036500000,
+    "project": "everything",
+    "params": {
+      "prompt": "The fox walks along the ridge",
+      "model": "bytedance/seedance-2.0",
+      "duration": 7,
+      "resolution": "720p",
+      "size": null
+    },
+    "status": "failed",
+    "refs": {
+      "images": 0,
+      "videos": 0,
+      "frames": 0
+    },
+    "id": "vid_7d3a0c5e11",
+    "error": "The provider rejected the request: duration must be 4, 5, 6 or 8 seconds.",
+    "resolvedAt": 1789036560000
+  },
+  {
+    "startedAt": 1789042680000,
+    "project": "legacy-snapshot",
+    "params": {
+      "prompt": "A fox running along the beach at low tide",
+      "model": "bytedance/seedance-2.0",
+      "duration": 5,
+      "resolution": "480p",
+      "size": null
+    },
+    "status": "done",
+    "refs": {
+      "images": 1,
+      "videos": 0,
+      "frames": 0
+    },
+    "id": "vid_4b9e2d6f03",
+    "savedPath": "/Users/sample/Unframed/output/legacy-snapshot/2026-09-10T12-20-00-000Z-a-fox-running-along-the-beach-at-low-tid.mp4",
+    "cost": 0.1,
+    "resolvedAt": 1789042800000
+  },
+  {
+    "startedAt": 1789049400000,
+    "project": "other-project",
+    "params": {
+      "prompt": "A fox curled up asleep in the snow",
+      "model": "bytedance/seedance-2.0",
+      "duration": 5,
+      "resolution": "480p",
+      "size": null
+    },
+    "status": "pending",
+    "refs": {
+      "images": 1,
+      "videos": 0,
+      "frames": 0
+    },
+    "id": "vid_9a1c7e3b58",
+    "unreachableSince": 1789050000000
+  }
+]

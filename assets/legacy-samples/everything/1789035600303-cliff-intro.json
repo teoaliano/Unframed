@@ -1,0 +1,13 @@
+{
+  "source": "render",
+  "of": "1789035300202-cliff-intro.html",
+  "title": "Cliff intro",
+  "mime": "video/mp4",
+  "fps": 30,
+  "quality": "standard",
+  "bytes": 1881,
+  "dials": {
+    "speed": 1
+  },
+  "at": "2026-09-10T10:20:00.303Z"
+}

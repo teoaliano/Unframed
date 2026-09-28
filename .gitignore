@@ -1,0 +1,11 @@
+node_modules/
+dist/
+.env
+.env.local
+/output/
+.reference/
+*.log
+.DS_Store
+.claude/worktrees/
+test-results/
+playwright-report/

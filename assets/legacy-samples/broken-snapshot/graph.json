@@ -1,0 +1,8 @@
+{
+  "version": 3,
+  "nodes": [
+    {
+      "id": "100",
+      "type": "prompt",
+      "position": {
+        "x": 0,
