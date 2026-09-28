@@ -10,6 +10,8 @@ export class Catalogue extends Context.Service<
   Catalogue,
   {
     readonly listImageModels: Effect.Effect<ModelsListAnswer>;
+    /** Spec 05: the text models that read images, so a text run's pictures are seen. */
+    readonly listTextModels: Effect.Effect<ModelsListAnswer>;
     readonly imagePricing: (id: string) => Effect.Effect<ImagePricingAnswer, UnframedError>;
   }
 >()("unframed/engine/Catalogue") {}
@@ -45,6 +47,20 @@ const toEntry = (raw: unknown): ModelEntry | undefined => {
     created: typeof created === "number" && Number.isFinite(created) ? created : null,
     params: typeof params === "object" && params !== null && !Array.isArray(params) ? (params as Record<string, unknown>) : null,
   };
+};
+
+const modalities = (raw: unknown, key: string): unknown[] => {
+  const list = field(field(raw, "architecture"), key);
+  return Array.isArray(list) ? list : [];
+};
+
+/** A general listing entry that writes text and reads images, as `{ id, name, created }`. */
+const textEntry = (raw: unknown): ModelEntry | undefined => {
+  if (!modalities(raw, "output_modalities").includes("text") || !modalities(raw, "input_modalities").includes("image")) return undefined;
+  const entry = toEntry(raw);
+  if (!entry) return undefined;
+  const { params: _params, ...rest } = entry;
+  return rest;
 };
 
 const toSku = (raw: unknown): Sku => {
@@ -87,6 +103,19 @@ export const catalogueLayer = Layer.effect(
       return { models: all.sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0)), default: fallback };
     });
 
+    const listTextModels = Effect.gen(function* () {
+      const fallback = (yield* settings.read).textModel;
+      const models = yield* Effect.promise(async () => {
+        try {
+          return listOf(await getJson(`${origin}/api/v1/models`)).flatMap((raw) => textEntry(raw) ?? []);
+        } catch {
+          return [];
+        }
+      });
+      const all: ModelEntry[] = models.some((model) => model.id === fallback) ? models : [...models, { id: fallback, name: fallback }];
+      return { models: all.sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0)), default: fallback };
+    });
+
     const imagePricing = (id: string) =>
       Effect.gen(function* () {
         if (!MODEL_SLUG.test(id) || id.includes("..")) return yield* unframedError("bad_request", "Not a model slug.");
@@ -105,6 +134,6 @@ export const catalogueLayer = Layer.effect(
         });
       });
 
-    return Catalogue.of({ listImageModels, imagePricing });
+    return Catalogue.of({ listImageModels, listTextModels, imagePricing });
   }),
 );

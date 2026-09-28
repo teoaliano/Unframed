@@ -51,6 +51,25 @@ export const writeResultFile = async (folder: string, base: string, ext: string,
   throw failure;
 };
 
+/**
+ * Writes a sidecar that stands alone (a text call's), never over another file: the name
+ * retries as `<base>-2` up to `<base>-5`. Answers the final file name.
+ */
+export const writeLoneSidecar = async (folder: string, base: string, value: unknown): Promise<string> => {
+  let failure: unknown;
+  for (let attempt = 1; attempt <= MAX_NAMES; attempt++) {
+    const name = `${attempt === 1 ? base : `${base}-${attempt}`}.json`;
+    try {
+      await writeFile(join(folder, name), `${JSON.stringify(value, null, 2)}\n`, { flag: "wx" });
+      return name;
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
+      failure = error;
+    }
+  }
+  throw failure;
+};
+
 /** A sidecar is written beside its file, never over another one. */
 export const writeSidecar = (folder: string, base: string, value: unknown): Promise<void> =>
   writeFile(join(folder, `${base}.json`), `${JSON.stringify(value, null, 2)}\n`, { flag: "wx" });
