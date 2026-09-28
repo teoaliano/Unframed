@@ -4,6 +4,7 @@ import { UnframedError, unframedError } from "@unframed/contracts";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import { createCanvasChangesTable, createSyncStorageTables } from "./canvas/tables.ts";
 import { errorText } from "./log.ts";
 import { OpenProjects } from "./openProjects.ts";
 import { Config } from "./services.ts";
@@ -22,7 +23,10 @@ export interface Migration {
 }
 
 /** The one ordered list. Every table a later spec adds to the project database is a migration here. */
-export const MIGRATIONS: ReadonlyArray<Migration> = [];
+export const MIGRATIONS: ReadonlyArray<Migration> = [
+  { id: 1, name: "tldraw sync storage", up: createSyncStorageTables },
+  { id: 2, name: "canvas_changes", up: createCanvasChangesTable },
+];
 
 /** `UNFRAMED_TEST_MIGRATION`'s extra migration, numbered far past any real one. */
 const TEST_MIGRATION_ID = 1_000_000;

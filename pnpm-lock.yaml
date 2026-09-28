@@ -65,6 +65,9 @@ importers:
         specifier: 8.22.0
         version: 8.22.0
     devDependencies:
+      '@tldraw/state':
+        specifier: 5.4.2
+        version: 5.4.2
       '@types/ws':
         specifier: 8.18.1
         version: 8.18.1
