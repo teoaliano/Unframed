@@ -1,5 +1,5 @@
 import { parseAssetMarker, projectFileMarker } from "@unframed/contracts";
-import { pastedFileName } from "@unframed/domain";
+import { pastedFileName, PREVIEW_SIZES } from "@unframed/domain";
 import type { TLAsset, TLAssetContext, TLAssetStore } from "tldraw";
 import type { PreviewRequest, PreviewResult } from "./previews.worker.ts";
 
@@ -14,7 +14,6 @@ export const previewUrl = (project: string, file: string, size: number): string 
  */
 export const isAssetMarker = (url: string): boolean => parseAssetMarker(url) !== undefined;
 
-const PREVIEW_SIZES = [512, 2048] as const;
 /** Raster types a worker can decode and scale. Animated and vector images keep their original. */
 const PREVIEWABLE = new Set(["image/png", "image/jpeg", "image/webp", "image/avif"]);
 
@@ -58,12 +57,12 @@ export class Previews {
     this.project = project;
   }
 
-  private post(file: string): Promise<PreviewResult> {
+  private post(file: string, sizes: ReadonlyArray<number> = PREVIEW_SIZES, check = false): Promise<PreviewResult> {
     this.worker ??= this.startWorker();
     const id = this.nextId++;
     return new Promise((resolve) => {
       this.waiting.set(id, resolve);
-      this.worker!.postMessage({ id, project: this.project, file, sizes: [...PREVIEW_SIZES] } satisfies PreviewRequest);
+      this.worker!.postMessage({ id, project: this.project, file, sizes: [...sizes], check } satisfies PreviewRequest);
     });
   }
 
@@ -76,32 +75,29 @@ export class Previews {
     return worker;
   }
 
-  /** Makes the previews of an image. Until they exist, the image shows its original. */
-  make(file: string): Promise<ReadonlySet<number>> {
-    this.known.set(file, Promise.resolve(new Set<number>()));
+  /** Makes the previews of an image. Until they exist, the image shows its original or `meanwhile`. */
+  make(file: string, meanwhile: ReadonlySet<number> = new Set()): Promise<ReadonlySet<number>> {
+    this.known.set(file, Promise.resolve(meanwhile));
     const made = this.post(file).then((result) => new Set(result.made) as ReadonlySet<number>);
     void made.then((sizes) => this.known.set(file, Promise.resolve(sizes)));
     return made;
   }
 
   /**
-   * The preview sizes that exist for `file`. When none do, they are made in the background
-   * and this answers none, so the image shows its original until they exist.
+   * The preview sizes of `file` that exist and decode, checked in the worker. When one is
+   * missing or broken, all are made again in the background, and until then the image
+   * shows its original or a good preview.
    */
-  available(file: string): Promise<ReadonlySet<number>> {
+  available(file: string, longest: number): Promise<ReadonlySet<number>> {
     const cached = this.known.get(file);
     if (cached) return cached;
-    const found = (async () => {
-      const present = new Set<number>();
-      await Promise.all(
-        PREVIEW_SIZES.map(async (size) => {
-          const response = await fetch(previewUrl(this.project, file, size), { method: "HEAD" }).catch(() => undefined);
-          if (response?.ok) present.add(size);
-        }),
-      );
-      if (present.size === 0) void this.make(file);
-      return present;
-    })();
+    // A preview is never larger than its original, so a small image has fewer or none.
+    const expected = PREVIEW_SIZES.filter((size) => longest > size);
+    const found = this.post(file, expected, true).then((result) => {
+      const good = new Set(result.made);
+      if (good.size < expected.length) void this.make(file, good);
+      return good as ReadonlySet<number>;
+    });
     this.known.set(file, found);
     return found;
   }
@@ -145,8 +141,9 @@ export const createAssetStore = (project: string, previews: Previews): TLAssetSt
     if (asset.type !== "image" || ctx.shouldResolveToOriginal || !PREVIEWABLE.has(mime)) return original;
     const needed = longestSide(asset) * ctx.screenScale * ctx.dpr;
     if (needed > 2048) return original;
-    const available = await previews.available(marker.file);
-    const target = PREVIEW_SIZES.find((size) => size >= needed && available.has(size));
-    return target === undefined ? original : previewUrl(project, marker.file, target);
+    const available = await previews.available(marker.file, longestSide(asset));
+    // The smallest variant that covers the image; when that one is missing or broken, the original.
+    const target = PREVIEW_SIZES.find((size) => size >= needed);
+    return target !== undefined && available.has(target) ? previewUrl(project, marker.file, target) : original;
   },
 });

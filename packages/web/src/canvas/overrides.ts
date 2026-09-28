@@ -17,9 +17,15 @@ const bindings = (kbd: string | undefined): string[] =>
     .map((binding) => binding.trim().toLowerCase().replace(/^!/, "shift+"))
     .filter((binding) => binding !== "");
 
-/** A key tldraw already uses stays tldraw's; Unframed's binding moves to Shift plus the same letter. */
-export const unframedBinding = (wanted: string, taken: ReadonlySet<string>): string =>
-  taken.has(wanted) ? `shift+${wanted.replace(/^shift\+/, "")}` : wanted;
+/**
+ * A key tldraw already uses stays tldraw's; Unframed's binding moves to Shift plus the same
+ * letter, or goes unbound when tldraw holds that too.
+ */
+const unframedBinding = (wanted: string, taken: ReadonlySet<string>): string | undefined => {
+  if (!taken.has(wanted)) return wanted;
+  const shifted = `shift+${wanted.replace(/^shift\+/, "")}`;
+  return taken.has(shifted) ? undefined : shifted;
+};
 
 let actionKeys = new Set<string>();
 
@@ -59,11 +65,13 @@ export const overrides: TLUiOverrides = {
     const taken = new Set([...actionKeys, ...Object.values(tools).flatMap((tool) => bindings(tool.kbd))]);
     for (const [kind, key] of ADD_KEYS) {
       const id = `unframed-add-${kind}`;
+      const kbd = unframedBinding(key, taken);
+      if (kbd === undefined) continue;
       const item: TLUiToolItem = {
         id,
         label: id,
         icon: "plus",
-        kbd: unframedBinding(key, taken),
+        kbd,
         onSelect: () => {
           if (editor.getEditingShapeId()) return;
           addShape(editor, kind, { at: editor.inputs.getCurrentPagePoint() });

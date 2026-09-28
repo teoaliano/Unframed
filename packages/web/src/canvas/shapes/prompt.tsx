@@ -119,6 +119,7 @@ export class PromptShapeUtil extends TextShapeUtil {
 }
 
 const PromptShape = ({ shape, util }: { readonly shape: TLTextShape; readonly util: PromptShapeUtil }) => {
+  noteRender(shape.id);
   const editor = useEditor();
   const colorMode = useColorMode();
   const dv = getDisplayValues(util, shape, colorMode);

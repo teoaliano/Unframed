@@ -15,6 +15,8 @@ test("I, U, Shift+P and Shift+M add an empty image, video, page and motion at th
     const before = new Set((await roomRecords(engine, "default")).map((record) => record.id));
     const at = await emptyCanvasPoint(page);
     await page.mouse.move(at.x, at.y);
+    // tldraw takes the pointer position on its next tick.
+    await page.waitForTimeout(100);
     await page.keyboard.press(key);
     const made = await newShape(engine, before, type);
     expect(made.parentId).toBe("page:page");

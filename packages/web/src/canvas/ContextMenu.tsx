@@ -60,14 +60,13 @@ const shapeUnder = (editor: Editor, point: VecLike): TLShape | undefined =>
   editor.getShapeAtPoint(point, { margin: 4 / editor.getZoomLevel(), hitInside: true, hitLabels: true, renderingOnly: true });
 
 /**
- * Whether Paste would do something. A clipboard the page may not read yet is given the
- * benefit of the doubt, since pasting asks for access; a refused one hides Paste.
+ * Whether Paste would do something. A clipboard the page may not read without asking
+ * counts as empty: reading it here would put a permission prompt on every right-click.
  */
 const clipboardHasContent = async (): Promise<boolean> => {
   try {
     const status = await navigator.permissions.query({ name: "clipboard-read" as PermissionName });
-    if (status.state === "denied") return false;
-    if (status.state === "prompt") return true;
+    if (status.state !== "granted") return false;
     const items = await navigator.clipboard.read();
     return items.some((item) => item.types.some((type) => type === "text/plain" || type === "text/html" || type.startsWith("image/") || type.startsWith("video/")));
   } catch {

@@ -15,9 +15,6 @@ export const MEDIA_MIN_HEIGHT = 100;
 /** A file or link Unframed refuses, with the sentence the person sees. */
 export class MediaRefused extends Error {}
 
-export const kindOfFile = (file: File): MediaKind | undefined =>
-  file.type.startsWith("image/") ? "image" : file.type.startsWith("video/") ? "video" : undefined;
-
 /** Refuses a clip over 25 MB before anything is uploaded. */
 export const checkMediaFile = (kind: MediaKind, file: File): void => {
   if (kind === "video" && file.size > VIDEO_FILE_LIMIT) throw new MediaRefused(VIDEO_TOO_LARGE_MESSAGE);

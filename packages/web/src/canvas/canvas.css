@@ -22,7 +22,7 @@
   display: none;
 }
 
-.tl-container[data-label-level="hover"] .unframed-shape-label:not([data-active]) {
+.tl-container[data-label-level="hover"] .tl-shape:not([data-label-active]) .unframed-shape-label {
   visibility: hidden;
 }
 

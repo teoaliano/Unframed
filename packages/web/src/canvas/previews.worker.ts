@@ -7,6 +7,8 @@ export interface PreviewRequest {
   readonly project: string;
   readonly file: string;
   readonly sizes: ReadonlyArray<number>;
+  /** Only check that these existing previews decode, and answer the ones that do. */
+  readonly check?: boolean;
 }
 
 export interface PreviewResult {
@@ -47,14 +49,32 @@ const make = async ({ id, project, file, sizes }: PreviewRequest): Promise<Previ
   return { id, made, longest };
 };
 
-// One image at a time: a board of large originals would otherwise decode them all at once.
+const decodes = async (url: string): Promise<boolean> => {
+  try {
+    const response = await fetch(url);
+    if (!response.ok) return false;
+    (await createImageBitmap(await response.blob())).close();
+    return true;
+  } catch {
+    return false;
+  }
+};
+
+const check = async ({ id, project, file, sizes }: PreviewRequest): Promise<PreviewResult> => {
+  const good = await Promise.all(sizes.map((size) => decodes(`${fileUrl(project, file)}?preview=${size}`)));
+  return { id, made: sizes.filter((_, index) => good[index]) };
+};
+
+// One image made at a time: a board of large originals would otherwise decode them all at
+// once. Checks are small and skip the queue.
 let queue: Promise<unknown> = Promise.resolve();
 
 self.onmessage = (event: MessageEvent<PreviewRequest>) => {
-  queue = queue.then(() =>
-    make(event.data).then(
+  const run = () =>
+    (event.data.check ? check : make)(event.data).then(
       (result) => self.postMessage(result),
       (error: unknown) => self.postMessage({ id: event.data.id, made: [], error: String(error) } satisfies PreviewResult),
-    ),
-  );
+    );
+  if (event.data.check) void run();
+  else queue = queue.then(run);
 };

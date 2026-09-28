@@ -70,5 +70,5 @@ test("dragging a prompt or image into a group makes it a member; a page, a motio
     .toEqual({ "shape:image": "shape:group", "shape:page": "page:page", "shape:other": "page:page", "shape:starter-subject": "shape:group" });
   // The refused shapes did move over the group; they just stayed on the page.
   const records = await roomRecords(engine, "default");
-  expect(["shape:page", "shape:other"].map((id) => [id, records.find((record) => record.id === id)!.x < 1040])).toEqual([["shape:page", true], ["shape:other", true]]);
+  expect(["shape:page", "shape:other"].map((id) => [id, (records.find((record) => record.id === id)?.x ?? Infinity) < 1040])).toEqual([["shape:page", true], ["shape:other", true]]);
 });

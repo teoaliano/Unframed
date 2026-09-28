@@ -7,7 +7,7 @@ import { Tldraw, type Editor, type TLComponents, type TldrawOptions } from "tldr
 import "tldraw/tldraw.css";
 import "./canvas.css";
 import { DotGrid } from "../chrome/DotGrid.tsx";
-import { installLabelLevel } from "../chrome/labelLevel.ts";
+import { installLabelActivity, installLabelLevel } from "../chrome/labelLevel.ts";
 import { OVERLAY_UTILS } from "../chrome/selectionLook.ts";
 import { connectionMonitor } from "../connection/monitor.ts";
 import { useEngine } from "../context.ts";
@@ -55,8 +55,6 @@ const COMPONENTS: TLComponents = {
   DebugMenu: null,
   DebugPanel: null,
   SharePanel: null,
-  ImageToolbar: null,
-  VideoToolbar: null,
   InFrontOfTheCanvas: InFront,
   Background: DotGrid,
   ContextMenu,
@@ -122,12 +120,14 @@ export const CanvasHost = ({ project, activation }: { readonly project: string; 
     const minter = new RefMinter(editor);
     const stopMinting = installRefMinting(editor, minter);
     const stopLabelLevel = installLabelLevel(editor);
+    const stopLabelActivity = installLabelActivity(editor);
     content.current = { project, engine, minter };
     installExternalContent(editor, content.current);
     fitToShapes(editor);
     return () => {
       stopMinting();
       stopLabelLevel();
+      stopLabelActivity();
       content.current = undefined;
     };
   }, [project, engine]);

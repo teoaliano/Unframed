@@ -11,6 +11,8 @@ const drag = async (page: Page, from: { x: number; y: number }, to: { x: number;
     await page.mouse.move(from.x + ((to.x - from.x) * step) / 10, from.y + ((to.y - from.y) * step) / 10);
     await page.waitForTimeout(16);
   }
+  // tldraw applies pointer moves on its next tick; let the last one land before releasing.
+  await page.waitForTimeout(100);
   await page.mouse.up();
 };
 
@@ -53,7 +55,7 @@ test("an image resizes with its aspect locked, from 140 to 900 wide and at least
   // Double-clicking an image enters tldraw's crop; dragging a crop corner crops it.
   const current = await box();
   await page.mouse.dblclick(current.x + current.width / 2, current.y + current.height / 2);
-  await page.waitForTimeout(300);
+  await page.waitForTimeout(600);
   await drag(page, { x: current.x + 2, y: current.y + 2 }, { x: current.x + current.width / 3, y: current.y + current.height / 3 });
   await page.keyboard.press("Enter");
   record = (await settledRecord(engine, "default", "shape:photo"))!;

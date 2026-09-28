@@ -1,5 +1,5 @@
 import { parseAssetMarker, projectFileMarker, UnframedError } from "@unframed/contracts";
-import { isVideoLink, pastedFileName, rewriteRichTextTokens, VIDEO_FILE_LIMIT, VIDEO_TOO_LARGE_MESSAGE } from "@unframed/domain";
+import { isVideoLink, META_REF_TYPES, pastedFileName, rewriteRichTextTokens, VIDEO_FILE_LIMIT, VIDEO_TOO_LARGE_MESSAGE } from "@unframed/domain";
 import {
   AssetRecordType,
   createShapeId,
@@ -17,7 +17,7 @@ import type { EngineConnection } from "../rpc/engine.ts";
 import { showError } from "../toasts.tsx";
 import { fileUrl, uploadFile } from "./assetStore.ts";
 import { fillShape, linkAsset, MEDIA_DEFAULT_SIZE, MediaRefused, sizeForAsset, type MediaKind, type MediaShape } from "./media.ts";
-import { META_REF_TYPES, type RefMinter } from "./refs.ts";
+import type { RefMinter } from "./refs.ts";
 import { ARTIFACT_DEFAULT_SIZE } from "./shapes/artifact.tsx";
 
 /** What paste and drop need to know about the open canvas. */

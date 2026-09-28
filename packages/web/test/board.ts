@@ -136,15 +136,8 @@ export const openMetered = async (page: Page, engine: TestEngine, shapes: number
   await expect.poll(() => page.evaluate(() => (window as any).__fps?.frameTime() ?? 0)).toBeGreaterThan(0);
 };
 
-export interface Measured {
-  kind: string;
-  frameTime: number;
-  gaps: number[];
-  median: number;
-  overOne: number;
-  overTwo: number;
-  renders: Record<string, number>;
-}
+export type { Gesture as Measured } from "../src/fps/meter.ts";
+import type { Gesture as Measured } from "../src/fps/meter.ts";
 
 /** The first gesture of `kind` the meter settled after the first `before` gestures, once it has settled. */
 export const lastGesture = async (page: Page, before: number, kind?: string): Promise<Measured> => {
@@ -161,8 +154,7 @@ export const gestureCount = (page: Page): Promise<number> => page.evaluate(() =>
 
 /** The budget's numbers for a gesture: median frame gap and the share of frames over 33 ms. */
 export const frameStats = (gesture: Measured) => {
-  const sorted = [...gesture.gaps].sort((a, b) => a - b);
-  const median = sorted.length === 0 ? 0 : sorted[Math.floor((sorted.length - 1) / 2)]!;
+  const median = gesture.median;
   const over33 = gesture.gaps.filter((gap) => gap > 33).length / Math.max(1, gesture.gaps.length);
   return { median, over33, frames: gesture.gaps.length };
 };

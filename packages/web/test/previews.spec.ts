@@ -1,5 +1,5 @@
 import type { Locator } from "@playwright/test";
-import { access, readdir, rm } from "node:fs/promises";
+import { access, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { emptyCanvasPoint, openCanvas, shapeOnScreen, waitForRoom } from "./canvas.ts";
 import { expect, test } from "./fixtures.ts";
@@ -57,7 +57,7 @@ test("an upload makes 512 and 2048 WebP previews off the main thread, and the vi
   await expect.poll(() => shownSrc(image)).toBe(`/api/file/default/${file}?preview=512`);
 });
 
-test("an image with no previews shows its original while they are made, and uses them next time", async ({ page, engine }) => {
+test("an image with missing or broken previews shows its original while they are made, and uses them next time", async ({ page, engine }) => {
   await openCanvas(page, engine);
   const { file } = await filledMedia(engine, { id: "shape:photo", type: "image", ref: "150", at: { x: 440, y: 60 }, bytes: pngBytes(3000, 2000), name: "photo.png", mime: "image/png", natural: { w: 3000, h: 2000 } });
   const image = shapeOnScreen(page, "shape:photo").locator("img").first();
@@ -74,4 +74,13 @@ test("an image with no previews shows its original while they are made, and uses
   await openCanvas(page, engine);
   await expect.poll(() => shownSrc(image)).toBe(`/api/file/default/${file}`);
   await expect.poll(() => exists(join(cache, `${file}-512.webp`)), { timeout: 20_000 }).toBe(true);
+
+  // A preview that does not decode: the original again, and a good preview is made in its place.
+  await expect.poll(() => exists(join(cache, `${file}-2048.webp`)), { timeout: 20_000 }).toBe(true);
+  await writeFile(join(cache, `${file}-512.webp`), "not a picture");
+  await openCanvas(page, engine);
+  await expect.poll(() => shownSrc(image)).toBe(`/api/file/default/${file}`);
+  await expect.poll(async () => (await readFile(join(cache, `${file}-512.webp`))).subarray(8, 12).toString("latin1"), { timeout: 20_000 }).toBe("WEBP");
+  await openCanvas(page, engine);
+  await expect.poll(() => shownSrc(image)).toBe(`/api/file/default/${file}?preview=512`);
 });

@@ -1,8 +1,6 @@
-import { nextRef, readRef, type CanvasRecordLike } from "@unframed/domain";
+import { META_REF_TYPES, nextRef, readRef, type CanvasRecordLike } from "@unframed/domain";
 import { DefaultFontStyle, DefaultSizeStyle, DefaultTextAlignStyle, type Editor, type TLShape } from "tldraw";
 
-/** The shape kinds that carry a ref in `meta.ref`. A group's ref is its name. */
-export const META_REF_TYPES = new Set(["text", "image", "video", "page", "motion"]);
 
 /**
  * Mints refs from the live store, which holds every other tab's synced shapes. Refs minted

@@ -20,6 +20,7 @@ const LABEL_BAND = 22;
 const LABEL_CHAR_WIDTH = 8;
 
 const GroupBox = ({ shape }: { readonly shape: TLFrameShape }) => {
+  noteRender(shape.id);
   const editor = useEditor();
   const id: TLShapeId = shape.id;
   const selected = useValue("group selected", () => editor.getSelectedShapeIds().includes(id), [editor, id]);

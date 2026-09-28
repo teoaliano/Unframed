@@ -3,6 +3,7 @@
  * by their DOM, and read what the engine's room holds.
  */
 import type { Locator, Page } from "@playwright/test";
+import { plainText as promptText } from "@unframed/domain";
 import type { TestEngine } from "../../engine/test/engineProcess.ts";
 import { expect } from "./fixtures.ts";
 
@@ -45,10 +46,8 @@ export const roomShapes = async (engine: TestEngine, project: string, type?: str
 
 export const shapeOnScreen = (page: Page, id: string): Locator => page.locator(`[data-shape-id="${id}"]`);
 
-export const plainText = (record: AnyRecord | undefined): string =>
-  (record?.props?.richText?.content ?? [])
-    .map((paragraph: any) => (paragraph.content ?? []).map((node: any) => node.text ?? "").join(""))
-    .join("\n");
+/** A prompt record's text, read the way the app reads it. */
+export const plainText = (record: AnyRecord | undefined): string => promptText(record?.props?.richText);
 
 /** The centre of an element on screen. */
 export const centre = async (locator: Locator): Promise<{ x: number; y: number }> => {

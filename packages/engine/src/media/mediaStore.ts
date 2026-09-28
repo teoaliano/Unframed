@@ -11,6 +11,7 @@ import {
   sidecarText,
   UPLOAD_BODY_LIMIT,
   type MediaSidecar,
+  type PreviewSize,
 } from "@unframed/domain";
 import type { TLAsset, TLRecord } from "@tldraw/tlschema";
 import * as Context from "effect/Context";
@@ -29,8 +30,6 @@ export interface SavedFile {
 }
 
 /** The only preview sizes: WebP at longest side 512 and 2048. */
-export const PREVIEW_SIZES = [512, 2048] as const;
-export type PreviewSize = (typeof PREVIEW_SIZES)[number];
 
 export const PREVIEW_FOLDER = join(".cache", "previews");
 

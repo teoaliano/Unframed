@@ -21,6 +21,7 @@ const artifactProps: RecordProps<ArtifactShape> = {
 };
 
 const ArtifactCard = ({ shape, kind }: { readonly shape: ArtifactShape; readonly kind: "page" | "motion" }) => {
+  noteRender(shape.id);
   const { artifactEmptyState: EmptyState } = useSlots();
   const Icon = kind === "page" ? AppWindow : Clapperboard;
   const props = shape.props as ArtifactShapeProps;

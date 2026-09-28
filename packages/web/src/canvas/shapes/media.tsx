@@ -1,4 +1,4 @@
-import { isHttpsLink, VIDEO_LINK_MESSAGE } from "@unframed/domain";
+import { isHttpsLink, linkedVideoName, VIDEO_LINK_MESSAGE } from "@unframed/domain";
 import { Pause, Play, X } from "lucide-react";
 import { useEffect, useRef, useState, type SyntheticEvent } from "react";
 import {
@@ -66,6 +66,7 @@ const useIsSelected = (shape: MediaShape) => {
 
 /** The empty state: a card with its kind label that asks for a file (and, for a video, a link). */
 const EmptyMedia = ({ shape, kind }: { readonly shape: MediaShape; readonly kind: MediaKind }) => {
+  noteRender(shape.id);
   const editor = useEditor();
   const input = useRef<HTMLInputElement>(null);
   const [link, setLink] = useState("");
@@ -73,14 +74,14 @@ const EmptyMedia = ({ shape, kind }: { readonly shape: MediaShape; readonly kind
   const [busy, setBusy] = useState(false);
   const events = controlEvents(editor);
 
-  const run = async (task: () => Promise<void>) => {
+  const run = async (name: string, task: () => Promise<void>) => {
     setProblem(undefined);
     setBusy(true);
     try {
       await task();
     } catch (error) {
       if (error instanceof MediaRefused) setProblem(error.message);
-      else showError(`Could not add ${kind === "image" ? "that image" : "that video"}: ${messageOf(error)}`);
+      else showError(`Could not add ${name}: ${messageOf(error)}`);
     } finally {
       setBusy(false);
     }
@@ -88,13 +89,13 @@ const EmptyMedia = ({ shape, kind }: { readonly shape: MediaShape; readonly kind
 
   const onFile = (file: File | undefined) => {
     if (!file) return;
-    void run(async () => fillShape(editor, shape.id, await uploadMedia(editor, kind, file)));
+    void run(file.name, async () => fillShape(editor, shape.id, await uploadMedia(editor, kind, file)));
   };
 
   const onLink = () => {
     const value = link.trim();
     if (!isHttpsLink(value)) return setProblem(VIDEO_LINK_MESSAGE);
-    void run(async () => fillShape(editor, shape.id, await linkAsset(editor, value)));
+    void run(linkedVideoName(value), async () => fillShape(editor, shape.id, await linkAsset(editor, value)));
   };
 
   return (
@@ -152,6 +153,7 @@ const EmptyMedia = ({ shape, kind }: { readonly shape: MediaShape; readonly kind
 
 /** The remove control of a selected filled shape: it empties the shape and leaves the file on disk. */
 const RemoveButton = ({ shape, name }: { readonly shape: MediaShape; readonly name: string }) => {
+  noteRender(shape.id);
   const editor = useEditor();
   const selected = useIsSelected(shape);
   return (
@@ -208,6 +210,7 @@ const clock = (seconds: number) => {
 
 /** A filled clip: no native controls, muted, metadata preloaded; the transport sits below it, outside its bounds. */
 const VideoClip = ({ shape }: { readonly shape: TLVideoShape }) => {
+  noteRender(shape.id);
   const editor = useEditor();
   const video = useRef<HTMLVideoElement>(null);
   const { url } = useImageOrVideoAsset({ shapeId: shape.id, assetId: shape.props.assetId, width: shape.props.w });

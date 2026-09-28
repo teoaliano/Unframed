@@ -99,7 +99,7 @@ export const ProjectMenu = () => {
   const refresh = () =>
     engine.call("projects.list").then(
       (answer) => setProjects(answer.projects),
-      (error: unknown) => showError(`Could not list your projects: ${messageOf(error)}`),
+      (error: unknown) => showError(`Could not list your projects: ${messageOf(error)}. Reload to try again.`),
     );
 
   useEffect(() => {

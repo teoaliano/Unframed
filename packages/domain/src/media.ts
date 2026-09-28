@@ -6,6 +6,10 @@ export const VIDEO_FILE_LIMIT = 26_214_400;
 /** The upload route's body limit: 500 MB. Images are accepted up to this size. */
 export const UPLOAD_BODY_LIMIT = 500 * 1_048_576;
 
+/** Display preview sizes: the longest side of each WebP made for the screen. */
+export const PREVIEW_SIZES = [512, 2048] as const;
+export type PreviewSize = (typeof PREVIEW_SIZES)[number];
+
 export const VIDEO_TOO_LARGE_MESSAGE = "Video is too large. Keep it under 25MB.";
 export const VIDEO_LINK_MESSAGE = "Paste a full https:// link to a video file.";
 
