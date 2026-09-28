@@ -1,17 +1,10 @@
 import { gate } from "../../engine/test/openRouterStub.ts";
 import { emptyCanvasPoint, openCanvas, roomShapes, shapeOnScreen } from "./canvas.ts";
-import { clickShape, composer, expect, instructionBox, selectGroup, sendButton, startGeneration, test, toolbar } from "./generation.ts";
+import { clickShape, composer, expect, instructionBox, openComposer, pressSend, selectGroup, sendButton, sendRun, startGeneration, test, toolbar } from "./generation.ts";
 import { pngBytes } from "./images.ts";
 import { emptyMedia, filledMedia, groupRecord, inGroup, promptRecord, putRecords } from "./media.ts";
 
 const GEO = { geo: "rectangle", dash: "draw", url: "", w: 60, h: 40, growY: 0, scale: 1, flipX: false, flipY: false, labelColor: "black", color: "red", fill: "none", size: "m", font: "draw", align: "middle", verticalAlign: "middle", richText: { type: "doc", content: [{ type: "paragraph" }] } };
-
-const openComposer = async (page: import("@playwright/test").Page) => {
-  await toolbar(page).getByRole("button", { name: "Generate" }).click();
-  await expect(composer(page)).toBeVisible();
-  // The tray is ready once the catalogue and the last-used values are in.
-  await expect(composer(page).getByTestId("model-chip")).toBeEnabled();
-};
 
 test("Generate grows the bar into the composer on the same centre and bottom edge; Esc closes it back to the bar", async ({ page, generation }) => {
   await openCanvas(page, generation.engine);
@@ -20,7 +13,7 @@ test("Generate grows the bar into the composer on the same centre and bottom edg
   await expect(bar.getByRole("button", { name: "Generate" })).toBeVisible();
   const before = (await bar.boundingBox())!;
 
-  await openComposer(page);
+  await bar.getByRole("button", { name: "Generate" }).click();
   // The morph animates size and place together, then settles on the composer.
   await expect(bar).toHaveAttribute("data-morphing", "true");
   await expect(bar).not.toHaveAttribute("data-morphing");
@@ -96,7 +89,7 @@ test("the box: a placeholder, the @ menu, Enter adds a line, Cmd+Enter sends", a
   await page.keyboard.press("Backspace");
   await page.keyboard.press("Backspace");
 
-  await page.keyboard.press("ControlOrMeta+Enter");
+  await pressSend(page);
   await expect.poll(() => generation.requests.length).toBe(1);
   // Acknowledged: the composer is back to the bar.
   await expect(composer(page)).toHaveCount(0);

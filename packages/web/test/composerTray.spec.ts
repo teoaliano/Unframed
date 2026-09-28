@@ -1,13 +1,10 @@
 import type { Page } from "@playwright/test";
 import { openCanvas } from "./canvas.ts";
-import { clickShape, composer, expect, startGeneration, test, toolbar } from "./generation.ts";
+import { clickShape, composer, expect, openComposer, sendRun, startGeneration, test, toolbar } from "./generation.ts";
 
-const openComposer = async (page: Page) => {
+const openOnSubject = async (page: Page) => {
   await clickShape(page, "shape:starter-subject");
-  await toolbar(page).getByRole("button", { name: "Generate" }).click();
-  await expect(composer(page)).toBeVisible();
-  // The tray is ready once the catalogue and the last-used values are in.
-  await expect(composer(page).getByTestId("model-chip")).toBeEnabled();
+  await openComposer(page);
 };
 
 const tray = (page: Page) => composer(page).getByTestId("composer-tray");
@@ -22,7 +19,7 @@ const pickModel = async (page: Page, part: string) => {
 
 test("the tray: the model chip, the default props the model declares, value menus with Remove, and + add prop", async ({ page, generation }) => {
   await openCanvas(page, generation.engine);
-  await openComposer(page);
+  await openOnSubject(page);
   await expect(tray(page).getByTestId("model-chip")).toHaveText("gpt-image-2");
   await tray(page).getByTestId("model-chip").hover();
   await expect(page.getByText("openai/gpt-image-2", { exact: true })).toBeVisible();
@@ -59,17 +56,24 @@ test("the tray: the model chip, the default props the model declares, value menu
   await expect(composer(page)).toBeVisible();
 
   // With every declared prop in the tray, + add prop is gone.
-  for (const label of ["Ratio 1:1", "Format png"]) {
+  for (const [label, menu] of [
+    ["Ratio 1:1", "Ratio"],
+    ["Format png", "Format"],
+  ] as const) {
     await tray(page).getByRole("button", { name: "+ add prop" }).click();
     await page.getByRole("menu", { name: "Add prop" }).getByRole("menuitem", { name: label }).click();
+    // Picking a prop opens its value menu; Esc closes that menu, not the composer.
+    const values = page.getByRole("menu", { name: menu });
+    await expect(values).toBeVisible();
     await page.keyboard.press("Escape");
+    await expect(values).toHaveCount(0);
   }
   await expect(tray(page).getByRole("button", { name: "+ add prop" })).toHaveCount(0);
 });
 
 test("a model that declares a single format still offers Format, and props reset on a model change", async ({ page, generation }) => {
   await openCanvas(page, generation.engine);
-  await openComposer(page);
+  await openOnSubject(page);
   await chips(page).filter({ hasText: "low" }).click();
   await page.getByRole("menu", { name: "Quality" }).getByRole("menuitemradio", { name: "high" }).click();
   await expect(chips(page)).toHaveText(["1K", "1:1", "high"]);
@@ -90,7 +94,7 @@ test("a model that declares a single format still offers Format, and props reset
 
 test("the model dialog: title, link, newest first, sorts, search, provider tokens, the current model, pick and close", async ({ page, generation }) => {
   await openCanvas(page, generation.engine);
-  await openComposer(page);
+  await openOnSubject(page);
   await tray(page).getByTestId("model-chip").click();
   const box = dialog(page);
   await expect(box.getByRole("heading", { name: "Image models" })).toBeVisible();
@@ -135,7 +139,7 @@ test("the model dialog: title, link, newest first, sorts, search, provider token
 
 test("Escape in the model dialog closes only the dialog", async ({ page, generation }) => {
   await openCanvas(page, generation.engine);
-  await openComposer(page);
+  await openOnSubject(page);
   await tray(page).getByTestId("model-chip").click();
   await expect(dialog(page)).toBeVisible();
   await page.keyboard.press("Escape");
@@ -147,7 +151,7 @@ test("Escape in the model dialog closes only the dialog", async ({ page, generat
 
 test("the estimate shows beside send only when exact, and a reply for a model no longer selected is dropped", async ({ page, generation }) => {
   await openCanvas(page, generation.engine);
-  await openComposer(page);
+  await openOnSubject(page);
   const estimate = composer(page).getByTestId("estimate");
   await expect(estimate).toHaveText("est. ~$0.011");
   await chips(page).filter({ hasText: "low" }).click();
@@ -170,21 +174,20 @@ test("the estimate shows beside send only when exact, and a reply for a model no
 
 test("the composer reopens on the last sent model and props; a model gone from the catalogue falls back to the default", async ({ page, generation }) => {
   await openCanvas(page, generation.engine);
-  await openComposer(page);
+  await openOnSubject(page);
   await pickModel(page, "flux-2");
   await chips(page).filter({ hasText: "1:1" }).click();
   await page.getByRole("menu", { name: "Ratio" }).getByRole("menuitemradio", { name: "4:3" }).click();
   await composer(page).getByRole("textbox", { name: "What should this make?" }).click();
   await page.keyboard.type("a sketchy fox");
-  await page.keyboard.press("ControlOrMeta+Enter");
-  await expect(composer(page)).toHaveCount(0);
+  await sendRun(page);
   await expect.poll(async () => (await (await generation.engine.rpc()).call("preferences.get", { keys: ["lastUsed.image"] })).values).toEqual({
     "lastUsed.image": { model: "~black-forest-labs/flux-2", props: { aspect_ratio: "4:3" } },
   });
 
   await page.reload();
   await expect(page.locator("[data-canvas-project] .tl-canvas")).toBeVisible();
-  await openComposer(page);
+  await openOnSubject(page);
   await expect(tray(page).getByTestId("model-chip")).toHaveText("flux-2");
   await expect(chips(page)).toHaveText(["4:3"]);
 
@@ -200,7 +203,7 @@ test("a first composer with nothing stored opens on the defaults", async ({ page
   const generation = await startGeneration();
   try {
     await openCanvas(page, generation.engine);
-    await openComposer(page);
+    await openOnSubject(page);
     await expect(chips(page)).toHaveText(["1K", "1:1", "low"]);
   } finally {
     await generation.engine.dispose();

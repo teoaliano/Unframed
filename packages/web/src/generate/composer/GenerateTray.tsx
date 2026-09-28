@@ -155,7 +155,6 @@ export const GenerateTray = ({ project, recipe, onSent, onMenuOpen, handle }: Ge
           initial={instruction}
           placeholder={INSTRUCTION_PLACEHOLDER}
           onChange={setInstruction}
-          onSend={() => void send()}
           onMenuOpen={onMentionMenu}
           handle={box}
         />

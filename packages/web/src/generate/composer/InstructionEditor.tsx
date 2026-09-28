@@ -1,4 +1,4 @@
-import { Extension, type Editor as TiptapEditor } from "@tiptap/core";
+import type { Editor as TiptapEditor } from "@tiptap/core";
 import { Placeholder } from "@tiptap/extensions";
 import { EditorContent, useEditor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
@@ -33,8 +33,6 @@ export interface InstructionEditorProps {
   readonly initial: string;
   readonly placeholder: string;
   readonly onChange: (text: string) => void;
-  /** Cmd+Enter (Ctrl+Enter off macOS). Plain Enter and Shift+Enter insert a line. */
-  readonly onSend: () => void;
   /** Whether a menu of the box is open, so the shell leaves Esc to it. */
   readonly onMenuOpen: (open: boolean) => void;
   /** The box's editable element, for focus to come back to. */
@@ -43,14 +41,15 @@ export interface InstructionEditorProps {
 
 /**
  * The composer's box: a Tiptap editor, one paragraph per line, with spec 02's `@` mention
- * menu. Attachments and chips are off in the Generate tray.
+ * menu. Attachments and chips are off in the Generate tray. Plain Enter and Shift+Enter insert
+ * a line; the composer shell takes Cmd+Enter.
  */
-export const InstructionEditor = ({ initial, placeholder, onChange, onSend, onMenuOpen, handle }: InstructionEditorProps) => {
+export const InstructionEditor = ({ initial, placeholder, onChange, onMenuOpen, handle }: InstructionEditorProps) => {
   const canvas = useCanvas();
   const [mention, setMention] = useState<Mention>();
   const [highlight, setHighlight] = useState(0);
   const [dismissedAt, setDismissedAt] = useState<number>();
-  const latest = useRef({ onSend, onChange, rows: [] as MentionCandidate[], open: false, highlight: 0, mention: undefined as Mention | undefined });
+  const latest = useRef({ onChange, rows: [] as MentionCandidate[], open: false, highlight: 0, mention: undefined as Mention | undefined });
   const editorRef = useRef<TiptapEditor | null>(null);
 
   const insert = (ref: string) => {
@@ -82,17 +81,6 @@ export const InstructionEditor = ({ initial, placeholder, onChange, onSend, onMe
         listKeymap: false,
       }),
       Placeholder.configure({ placeholder }),
-      Extension.create({
-        name: "unframedSend",
-        // Ahead of the hard break, which also binds Mod-Enter.
-        priority: 1000,
-        addKeyboardShortcuts: () => ({
-          "Mod-Enter": () => {
-            latest.current.onSend();
-            return true;
-          },
-        }),
-      }),
     ],
     content: toDoc(initial),
     autofocus: "end",
@@ -122,7 +110,7 @@ export const InstructionEditor = ({ initial, placeholder, onChange, onSend, onMe
 
   const rows = mention ? mentionCandidates(canvas.getCurrentPageShapes(), undefined, mention.query) : [];
   const open = mention !== undefined && rows.length > 0 && dismissedAt !== mention.from;
-  latest.current = { onSend, onChange, rows, open, highlight, mention };
+  latest.current = { onChange, rows, open, highlight, mention };
 
   useEffect(() => setHighlight(0), [mention?.query, mention?.from]);
   useEffect(() => {

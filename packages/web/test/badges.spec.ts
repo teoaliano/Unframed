@@ -2,15 +2,10 @@ import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { Page } from "@playwright/test";
 import { openCanvas, roomRecords, shapeOnScreen } from "./canvas.ts";
-import { clickShape, composer, expect, test, toolbar } from "./generation.ts";
+import { clickShape, composer, expect, openComposer, sendRun, test, toolbar } from "./generation.ts";
 import { pngBytes } from "./images.ts";
 import { artifactRecord, emptyMedia, filledMedia, putRecords } from "./media.ts";
 
-const openComposer = async (page: Page) => {
-  await toolbar(page).getByRole("button", { name: "Generate" }).click();
-  await expect(composer(page)).toBeVisible();
-  await expect(composer(page).getByTestId("model-chip")).toBeEnabled();
-};
 
 const badge = (page: Page, id: string) => page.locator(`[data-role-for="${id}"]`);
 
@@ -88,8 +83,7 @@ test("badges show each selected medium's role only while the Generate tray is op
   await putRecords(engine, [{ ...current, y: -200 }]);
   await expect(badge(page, "shape:b")).toHaveText("image 1");
   await expect(badge(page, "shape:a")).toHaveText("image 2");
-  await page.keyboard.press("ControlOrMeta+Enter");
-  await expect(composer(page)).toHaveCount(0);
+  await sendRun(page);
   await expect.poll(() => generation.requests.length).toBe(1);
   expect(generation.requests[0]!.body.input_references.map((ref: any) => ref.image_url.url)).toEqual([
     `data:image/png;base64,${b.toString("base64")}`,
@@ -127,8 +121,7 @@ test("marks on a selected image go as one composite in its slot, loose marks as 
   expect(sketchBadge.x).toBeCloseTo(looseBox.x, 0);
 
   await page.keyboard.type("make it neon");
-  await page.keyboard.press("ControlOrMeta+Enter");
-  await expect(composer(page)).toHaveCount(0);
+  await sendRun(page);
   await expect.poll(() => generation.requests.length).toBe(1);
   const refs = generation.requests[0]!.body.input_references.map((ref: any) => ref.image_url.url);
   expect(refs).toHaveLength(2);

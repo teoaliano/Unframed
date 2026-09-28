@@ -1,4 +1,15 @@
+import { fileURLToPath } from "node:url";
 import { defineConfig } from "@playwright/test";
+
+/**
+ * Specs that copy, paste or read what the clipboard holds. Every browser this machine runs
+ * shares one system clipboard, so these run one at a time in their own project, and no
+ * other spec may touch the clipboard: a spec that starts to must be added here.
+ */
+const CLIPBOARD = /\/(contextMenu|copyImage|copyPaste|menuActions|pasteAcross|resultCopies|systemPaste)\.spec\.ts$/;
+
+/** A local run on a Mac starts the installed Chrome through this script: it says why. */
+const macChrome = process.env.CI || process.platform !== "darwin" ? undefined : fileURLToPath(new URL("packages/web/test/chrome.sh", import.meta.url));
 
 /**
  * The browser seam: Playwright driving the built web client served by an engine at the
@@ -14,6 +25,11 @@ export default defineConfig({
   globalSetup: "./packages/web/test/globalSetup.ts",
   use: {
     channel: process.env.CI ? undefined : "chrome",
+    ...(macChrome === undefined ? {} : { launchOptions: { executablePath: macChrome } }),
     headless: true,
   },
+  projects: [
+    { name: "canvas", testIgnore: CLIPBOARD },
+    { name: "clipboard", testMatch: CLIPBOARD, workers: 1 },
+  ],
 });
