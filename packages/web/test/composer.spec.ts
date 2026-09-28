@@ -9,6 +9,8 @@ const GEO = { geo: "rectangle", dash: "draw", url: "", w: 60, h: 40, growY: 0, s
 const openComposer = async (page: import("@playwright/test").Page) => {
   await toolbar(page).getByRole("button", { name: "Generate" }).click();
   await expect(composer(page)).toBeVisible();
+  // The tray is ready once the catalogue and the last-used values are in.
+  await expect(composer(page).getByTestId("model-chip")).toBeEnabled();
 };
 
 test("Generate grows the bar into the composer on the same centre and bottom edge; Esc closes it back to the bar", async ({ page, generation }) => {

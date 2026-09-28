@@ -33,7 +33,11 @@ const localBox = (shape: ShapeLike): Box => {
   const scale = num(props.scale, 1);
   switch (shape.type) {
     case "text": {
-      const w = num(props.w, 320) * scale;
+      // A prompt that was never sized by hand hugs its text, so it is as wide as its longest line.
+      const sized = (shape as { meta?: { sized?: unknown } }).meta?.sized === true;
+      const size = FONT_SIZES[String(props.size)] ?? 18;
+      const longest = Math.max(1, ...plainText(props.richText).split("\n").map((line) => line.length));
+      const w = (sized ? num(props.w, 320) : Math.min(num(props.w, 320), longest * size * 0.55 + 4)) * scale;
       return { x: shape.x, y: shape.y, w, h: textHeight(props, w) * scale };
     }
     case "note":
@@ -62,8 +66,12 @@ const localBox = (shape: ShapeLike): Box => {
   }
 };
 
-/** The page bounds of every shape in `records` (a group's members moved by their group's origin). */
-export const shapePageBounds = (records: ReadonlyArray<TLRecord>): Box[] => {
+/**
+ * The page bounds of every shape in `records` (a group's members moved by their group's
+ * origin), leaving out `except`: the sources sit inside the anchor, so only an estimate
+ * could make them look in the way.
+ */
+export const shapePageBounds = (records: ReadonlyArray<TLRecord>, except: ReadonlySet<string> = new Set()): Box[] => {
   const shapes = records.filter((record) => record.typeName === "shape") as unknown as ShapeLike[];
   const byId = new Map(shapes.map((shape) => [shape.id, shape]));
   const originOf = (shape: ShapeLike, depth = 0): { x: number; y: number } => {
@@ -72,7 +80,7 @@ export const shapePageBounds = (records: ReadonlyArray<TLRecord>): Box[] => {
     const above = originOf(parent, depth + 1);
     return { x: above.x + parent.x, y: above.y + parent.y };
   };
-  return shapes.map((shape) => {
+  return shapes.filter((shape) => !except.has(shape.id)).map((shape) => {
     const box = localBox(shape);
     const origin = originOf(shape);
     return { x: origin.x + box.x, y: origin.y + box.y, w: box.w, h: box.h };

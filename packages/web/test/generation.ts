@@ -6,7 +6,7 @@ import type { Locator, Page } from "@playwright/test";
 import type { TestEngine } from "../../engine/test/engineProcess.ts";
 import { imageCatalogue, imageGeneration, imagePricing, routes, type ImageAnswer, type ImageRequest } from "../../engine/test/openRouterStub.ts";
 import { centre, shapeOnScreen } from "./canvas.ts";
-import { test as base, startHostedEngine } from "./fixtures.ts";
+import { expect, test as base, startHostedEngine } from "./fixtures.ts";
 import { pngBytes } from "./images.ts";
 
 export const KEY = "sk-or-v1-browser-test-0000";
@@ -99,7 +99,7 @@ export const test = base.extend<{ generation: GenerationEngine }>({
   },
 });
 
-export { expect } from "./fixtures.ts";
+export { expect };
 
 /** The selection toolbar, as bar or composer. */
 export const toolbar = (page: Page): Locator => page.getByTestId("selection-toolbar");
@@ -124,4 +124,18 @@ export const clickShape = async (page: Page, id: string, modifiers?: Array<"Shif
 export const selectGroup = async (page: Page, id: string): Promise<void> => {
   const box = (await shapeOnScreen(page, id).boundingBox())!;
   await page.mouse.click(box.x + 10, box.y - 8);
+};
+
+/** Waits until an element stops moving (a camera animation has finished). */
+export const settled = async (locator: Locator): Promise<void> => {
+  let last = "";
+  await expect
+    .poll(async () => {
+      const box = await locator.boundingBox();
+      const now = JSON.stringify(box);
+      const still = now === last;
+      last = now;
+      return still;
+    })
+    .toBe(true);
 };

@@ -6,6 +6,8 @@ const openComposer = async (page: Page) => {
   await clickShape(page, "shape:starter-subject");
   await toolbar(page).getByRole("button", { name: "Generate" }).click();
   await expect(composer(page)).toBeVisible();
+  // The tray is ready once the catalogue and the last-used values are in.
+  await expect(composer(page).getByTestId("model-chip")).toBeEnabled();
 };
 
 const tray = (page: Page) => composer(page).getByTestId("composer-tray");

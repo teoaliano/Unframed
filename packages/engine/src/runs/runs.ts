@@ -260,7 +260,7 @@ export const runsLayer = Layer.effect(
         const pageId = page?.id ?? "page:page";
         const height = placeholderHeight(request.params);
         const sizes = request.outputs.map(() => ({ w: PLACEHOLDER_WIDTH, h: height }));
-        const positions = placeResults(request.anchor, sizes, shapePageBounds(records));
+        const positions = placeResults(request.anchor, sizes, shapePageBounds(records, new Set(request.sources)));
         const topIndex = records
           .filter((record) => isShape(record) && (record as unknown as { parentId: string }).parentId === pageId)
           .map((record) => (record as unknown as { index: IndexKey }).index)
