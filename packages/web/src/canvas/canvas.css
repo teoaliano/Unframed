@@ -260,3 +260,15 @@
   border-color: var(--unframed-accent);
   border-radius: 0;
 }
+
+/* The right-click menu: 188 px wide, Unframed's sections headed in small secondary text. */
+.tlui-menu[data-testid="context-menu"] {
+  width: 188px;
+  min-width: 188px;
+}
+
+.unframed-menu-heading {
+  padding: 6px 8px 2px;
+  font-size: 11px;
+  color: var(--unframed-text-secondary);
+}

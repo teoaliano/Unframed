@@ -147,8 +147,7 @@ const selectedOfKind = (editor: Editor, kind: MediaKind) =>
  * A picture or clip pasted from the system clipboard: every selected shape of its kind
  * takes the new media, or else a new shape appears at the pointer.
  */
-const pasteFiles = async (editor: Editor, ctx: ContentContext, files: ReadonlyArray<File>) => {
-  const point = editor.inputs.getCurrentPagePoint();
+const pasteFiles = async (editor: Editor, ctx: ContentContext, files: ReadonlyArray<File>, point: VecLike = editor.inputs.getCurrentPagePoint()) => {
   let placed = 0;
   for (const pastedFile of files) {
     const kind = kindOf(pastedFile);
@@ -306,14 +305,14 @@ export const clipboardOptions = (ctx: Pick<ContentContext, "project"> & { readon
         if (shapes?.type === "tldraw") {
           return { type: "tldraw", content: await fixUpPastedShapes(editor, current, shapes.data as UnframedContent) };
         }
-        await pasteFiles(editor, current, content.files);
+        await pasteFiles(editor, current, content.files, content.point);
         return false;
       }
       case "text":
-        await handleText(editor, content.text, editor.inputs.getCurrentPagePoint());
+        await handleText(editor, content.text, content.point ?? editor.inputs.getCurrentPagePoint());
         return false;
       case "url":
-        await handleText(editor, content.url, editor.inputs.getCurrentPagePoint());
+        await handleText(editor, content.url, content.point ?? editor.inputs.getCurrentPagePoint());
         return false;
       case "embed":
         return false;

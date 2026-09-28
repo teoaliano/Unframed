@@ -13,6 +13,7 @@ import type { ProjectActivation } from "../project/activation.ts";
 import { showError } from "../toasts.tsx";
 import { createAssetStore, Previews } from "./assetStore.ts";
 import { clipboardOptions, installExternalContent, type ContentContext } from "./externalContent.ts";
+import { ContextMenu } from "./ContextMenu.tsx";
 import { InFront } from "./InFront.tsx";
 import { overrides } from "./overrides.ts";
 import { installRefMinting, RefMinter } from "./refs.ts";
@@ -54,6 +55,7 @@ const COMPONENTS: TLComponents = {
   ImageToolbar: null,
   VideoToolbar: null,
   InFrontOfTheCanvas: InFront,
+  ContextMenu,
 };
 
 const syncUrl = (project: string, sessionId: string): string => {
