@@ -28,6 +28,8 @@ export interface EngineConfig {
   readonly testShutdownHookMs: number | undefined;
   /** `UNFRAMED_TEST_MIGRATION`: SQL run as one extra migration at the end of the list. */
   readonly testMigrationSql: string | undefined;
+  /** `UNFRAMED_TEST_CANVAS=1`: the testCanvas.* RPC methods answer instead of refusing. */
+  readonly testCanvasRpc: boolean;
   readonly platform: NodeJS.Platform;
 }
 
@@ -68,6 +70,7 @@ export const loadConfig = (
       pickFolderAnswer: nativeLogPath === undefined ? undefined : env.UNFRAMED_TEST_PICK_FOLDER,
       testShutdownHookMs: shutdownHook !== undefined && /^\d+$/.test(shutdownHook) ? Number(shutdownHook) : undefined,
       testMigrationSql: nonEmpty(env.UNFRAMED_TEST_MIGRATION),
+      testCanvasRpc: nonEmpty(env.UNFRAMED_TEST_CANVAS) === "1",
       platform,
     },
     warnings,

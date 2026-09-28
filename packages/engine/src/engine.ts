@@ -5,11 +5,14 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as ManagedRuntime from "effect/ManagedRuntime";
 import * as RpcServer from "effect/unstable/rpc/RpcServer";
+import { CanvasRooms, canvasRoomsLayer } from "./canvas/rooms.ts";
 import { loadConfig } from "./config.ts";
+import { MediaStore, mediaStoreLayer } from "./media/mediaStore.ts";
 import { readEnvFileSync } from "./envFile.ts";
 import { createApiServer } from "./http/api.ts";
 import { clientRoute } from "./http/client.ts";
 import { projectFileRoute } from "./http/files.ts";
+import { uploadRoute } from "./http/upload.ts";
 import { createPreviewServer } from "./http/preview.ts";
 import { listenLoopback, LOOPBACK_HOST } from "./listen.ts";
 import { errorText, logError, logInfo } from "./log.ts";
@@ -87,6 +90,8 @@ export const startEngine = async (host: EngineHost): Promise<RunningEngine> => {
   const services = Layer.mergeAll(RpcServer.layer(UnframedRpcs, { disableTracing: true })).pipe(
     Layer.provideMerge(rpcHandlersLayer),
     Layer.provideMerge(rpcSocketsLayer),
+    Layer.provideMerge(mediaStoreLayer),
+    Layer.provideMerge(canvasRoomsLayer),
     Layer.provideMerge(nativeLayer),
     Layer.provideMerge(preferencesStoreLayer),
     Layer.provideMerge(projectsLayer),
@@ -98,7 +103,7 @@ export const startEngine = async (host: EngineHost): Promise<RunningEngine> => {
     Layer.provideMerge(Layer.succeed(Ipc, { send: host.send })),
   );
   const runtime = ManagedRuntime.make(services);
-  const { settings, sockets, projects, shutdown } = await runtime.runPromise(
+  const { settings, sockets, rooms, media, projects, shutdown } = await runtime.runPromise(
     Effect.gen(function* () {
       const store = yield* SettingsStore;
       const shutdown = yield* Shutdown;
@@ -115,16 +120,24 @@ export const startEngine = async (host: EngineHost): Promise<RunningEngine> => {
       );
       const hookMs = config.testShutdownHookMs;
       if (hookMs !== undefined) yield* shutdown.register("test hook", Effect.sleep(hookMs));
-      return { settings: yield* store.view, sockets: yield* RpcSockets, projects: yield* Projects, shutdown };
+      return {
+        settings: yield* store.view,
+        sockets: yield* RpcSockets,
+        rooms: yield* CanvasRooms,
+        media: yield* MediaStore,
+        projects: yield* Projects,
+        shutdown,
+      };
     }),
   );
 
   const api = createApiServer({
     http: [
       projectFileRoute((project) => runtime.runPromise(projects.folder(project))),
+      uploadRoute(media),
       ...(config.clientDist === undefined ? [] : [clientRoute(config.clientDist)]),
     ],
-    upgrade: [sockets.upgrade],
+    upgrade: [sockets.upgrade, rooms.upgrade],
   });
   const apiPort = await listenLoopback(api, port.port).catch((error: unknown) => {
     throw new Error(`could not listen on ${LOOPBACK_HOST}:${port.port}: ${errorText(error)}`);
@@ -137,7 +150,7 @@ export const startEngine = async (host: EngineHost): Promise<RunningEngine> => {
     const startedAt = Date.now();
     stopListening(api);
     stopListening(preview);
-    await sockets.closeAll(1001);
+    await Promise.all([sockets.closeAll(1001), rooms.closeSockets(1001)]);
     await runtime.runPromise(shutdown.runHooks(startedAt));
     api.closeAllConnections();
     preview.closeAllConnections();

@@ -1,4 +1,5 @@
 import { extname, join } from "node:path";
+import { PREVIEW_FOLDER, previewFileName } from "../media/mediaStore.ts";
 import { fileNameOf } from "../paths.ts";
 import type { Route } from "./api.ts";
 import { sendError } from "./respond.ts";
@@ -43,6 +44,8 @@ export const contentTypeFor = (name: string): string =>
 /**
  * `GET /api/file/<project>/<name>` (and `HEAD`). `projectFolder` slugs the project and
  * `fileNameOf` keeps only the name's basename, so neither can escape the project folder.
+ * With `preview=512` or `preview=2048` it serves that file's display preview from the
+ * cache folder instead, or 404 when there is none (the web then falls back to the original).
  */
 export const projectFileRoute =
   (projectFolder: (project: string) => Promise<string | undefined>): Route =>
@@ -60,15 +63,18 @@ export const projectFileRoute =
         // A malformed escape names no file.
       }
     }
+    const preview = url.searchParams.get("preview");
+    const size = preview === "512" ? 512 : preview === "2048" ? 2048 : undefined;
     const sent =
       folder !== undefined &&
       name !== undefined &&
+      (preview === null || size !== undefined) &&
       (await sendFile(
         req,
         res,
-        join(folder, name),
+        size === undefined ? join(folder, name) : join(folder, PREVIEW_FOLDER, previewFileName(name, size)),
         {
-          "content-type": contentTypeFor(name),
+          "content-type": size === undefined ? contentTypeFor(name) : "image/webp",
           "cache-control": "no-cache",
           // Opened as a document, the file gets no script and no origin.
           "content-security-policy": "sandbox",

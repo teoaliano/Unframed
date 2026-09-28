@@ -66,14 +66,26 @@ describe("project database migrations", () => {
     await first.stop();
     const path = join(dataDir, "output", "one", "unframed.sqlite");
     const ledger = readLedger(path).rows;
-    expect(ledger.map((row) => ({ id: row.id, name: row.name }))).toEqual([{ id: 1_000_000, name: "test migration" }]);
-    expect(tables(path)).toEqual(["probe", "unframed_migrations"]);
+    expect(ledger.map((row) => ({ id: row.id, name: row.name }))).toEqual([
+      { id: 1, name: "tldraw sync storage" },
+      { id: 2, name: "canvas_changes" },
+      { id: 1_000_000, name: "test migration" },
+    ]);
+    expect(tables(path)).toEqual([
+      "canvas_changes",
+      "probe",
+      "tldraw_documents",
+      "tldraw_metadata",
+      "tldraw_objects",
+      "tldraw_tombstones",
+      "unframed_migrations",
+    ]);
 
     const second = await startEngine({ dataDir, env });
     await (await second.rpc()).call("projects.create", { name: "Two" });
     await second.stop();
     expect(readLedger(path).rows).toEqual(ledger);
-    expect(readLedger(join(dataDir, "output", "two", "unframed.sqlite")).rows.map((row) => row.id)).toEqual([1_000_000]);
+    expect(readLedger(join(dataDir, "output", "two", "unframed.sqlite")).rows.map((row) => row.id)).toEqual([1, 2, 1_000_000]);
   });
 
   it("rolls a failing migration back whole and answers the failure", async () => {
@@ -85,8 +97,8 @@ describe("project database migrations", () => {
     expect((failure as Error).message).toMatch(/^Could not create the project: .*no such table: no_such_table/);
     await engine.stop();
     const path = join(engine.dataDir, "output", "broken", "unframed.sqlite");
-    expect(tables(path)).toEqual(["unframed_migrations"]);
-    expect(readLedger(path).rows).toEqual([]);
+    expect(tables(path)).not.toContain("probe");
+    expect(readLedger(path).rows.map((row) => row.id)).toEqual([1, 2]);
   });
 });
 

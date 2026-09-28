@@ -7,9 +7,12 @@ export const webDist = (): string => {
   return dist;
 };
 
-/** Starts an engine serving the built web, the way the desktop shell hosts it. */
+/**
+ * Starts an engine serving the built web, the way the desktop shell hosts it, with the
+ * test-only canvas methods on so a test can read what the room holds.
+ */
 export const startHostedEngine = (options: EngineOptions = {}): Promise<TestEngine> =>
-  startEngine({ clientDist: webDist(), ...options });
+  startEngine({ clientDist: webDist(), ...options, env: { UNFRAMED_TEST_CANVAS: "1", ...options.env } });
 
 type Fixtures = { engine: TestEngine };
 

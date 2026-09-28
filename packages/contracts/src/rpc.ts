@@ -89,6 +89,47 @@ export const PreferencesSubscribe = Rpc.make("preferences.subscribe", {
   stream: true,
 });
 
+/** Copies a bare file name from `from` (default `project`) into `project` with a copy sidecar. */
+export const FilesCopy = Rpc.make("files.copy", {
+  payload: Schema.Struct({
+    project: Schema.String,
+    file: Schema.String,
+    from: Schema.optionalKey(Schema.String),
+  }),
+  success: Schema.Struct({ file: Schema.String }),
+  error: UnframedError,
+});
+
+/** A canvas change for the engine-side write: whole records to put and ids to remove. */
+export const CanvasChangePayload = Schema.Struct({
+  put: Schema.Array(Schema.Unknown),
+  remove: Schema.Array(Schema.String),
+});
+
+const CanvasOrigin = Schema.Struct({ kind: Schema.Literals(["server", "system"]), id: Schema.String });
+
+// Test-only: answered only when the engine runs with UNFRAMED_TEST_CANVAS=1 (spec 01's
+// table of test-only variables), so the engine seam can reach the room's engine-side
+// interface. Otherwise every one answers `unavailable`.
+
+export const TestCanvasRead = Rpc.make("testCanvas.read", {
+  payload: Schema.Struct({ project: Schema.String }),
+  success: Schema.Struct({ clock: Schema.Number, records: Schema.Array(Schema.Unknown) }),
+  error: UnframedError,
+});
+
+export const TestCanvasApply = Rpc.make("testCanvas.apply", {
+  payload: Schema.Struct({ project: Schema.String, change: CanvasChangePayload, origin: CanvasOrigin }),
+  success: Schema.Struct({ clock: Schema.Number, inverse: CanvasChangePayload }),
+  error: UnframedError,
+});
+
+export const TestCanvasChangedSince = Rpc.make("testCanvas.changedSince", {
+  payload: Schema.Struct({ project: Schema.String, recordIds: Schema.Array(Schema.String), clock: Schema.Number }),
+  success: Schema.Struct({ ids: Schema.Array(Schema.String) }),
+  error: UnframedError,
+});
+
 export const UnframedRpcs = RpcGroup.make(
   ServerHealth,
   SettingsGet,
@@ -101,5 +142,9 @@ export const UnframedRpcs = RpcGroup.make(
   PreferencesGet,
   PreferencesSet,
   PreferencesSubscribe,
+  FilesCopy,
+  TestCanvasRead,
+  TestCanvasApply,
+  TestCanvasChangedSince,
 );
 export type UnframedRpcs = typeof UnframedRpcs;

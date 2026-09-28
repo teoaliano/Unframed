@@ -13,6 +13,8 @@ export default defineConfig({
   define: {
     __TLDRAW_LICENSE_KEY__: JSON.stringify(process.env.TLDRAW_LICENSE_KEY ?? ""),
   },
+  // tldraw's asset imports use ?url, which the dev dependency bundler cannot follow.
+  optimizeDeps: { exclude: ["@tldraw/assets"] },
   build: {
     outDir: process.env.UNFRAMED_WEB_OUT_DIR ?? "dist",
     emptyOutDir: true,
@@ -29,6 +31,7 @@ export default defineConfig({
     proxy: {
       "/api": { target: `http://localhost:${serverPort}`, changeOrigin: false },
       "/ws": { target: `ws://localhost:${serverPort}`, ws: true, changeOrigin: false },
+      "/sync": { target: `ws://localhost:${serverPort}`, ws: true, changeOrigin: false },
     },
   },
 });

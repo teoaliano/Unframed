@@ -1,0 +1,122 @@
+import { mayBeGroupMember } from "./grouping.ts";
+
+/** What the menu rules need to know about a shape. `file` is its project file, when it has one. */
+export interface MenuShape {
+  readonly id: string;
+  readonly type: string;
+  readonly ref?: string;
+  readonly file?: string;
+  /** A video filled with an `https://` link: filled, but with no file to reveal. */
+  readonly link?: boolean;
+}
+
+export type MenuTarget = { readonly kind: "canvas" } | { readonly kind: "shape"; readonly shape: MenuShape };
+
+export interface MenuInput {
+  readonly target: MenuTarget;
+  /** The selection after the right-click rule: an unselected shape is selected alone first. */
+  readonly selection: ReadonlyArray<MenuShape>;
+  /** The clipboard holds tldraw content, a picture, a clip or text. */
+  readonly clipboard: boolean;
+  /** Spec 06 has registered the Add to library handler. */
+  readonly libraryRegistered: boolean;
+  readonly platform: string;
+}
+
+export type EditAction = "cut" | "copy" | "paste" | "group" | "ungroup";
+export type AddAction = "add-prompt" | "add-image" | "add-video" | "add-group" | "add-page" | "add-motion";
+
+export type MenuItem =
+  | { readonly action: "reveal"; readonly label: string; readonly files: ReadonlyArray<string> }
+  | { readonly action: "copy-as-image"; readonly label: string }
+  | { readonly action: "copy-ref"; readonly label: string; readonly ref: string }
+  | { readonly action: EditAction; readonly label: string; readonly shortcut: string }
+  | { readonly action: "add-to-library"; readonly label: string }
+  | { readonly action: AddAction; readonly label: string };
+
+export type MenuSectionId = "image" | "reference" | "edit" | "library" | "inputs" | "artifacts";
+
+export interface MenuSection {
+  readonly section: MenuSectionId;
+  readonly heading: string;
+  readonly items: ReadonlyArray<MenuItem>;
+}
+
+/** The OS file manager's reveal item, with ` (<n>)` when it reveals more than one file. */
+export const revealLabel = (platform: string, count: number): string => {
+  const label = platform === "darwin" ? "Reveal in Finder" : platform === "win32" ? "Show in Explorer" : "Show in file manager";
+  return count > 1 ? `${label} (${count})` : label;
+};
+
+const KEYS: Record<EditAction, string> = { cut: "X", copy: "C", paste: "V", group: "G", ungroup: "G" };
+
+export const shortcutHint = (action: EditAction, platform: string): string => {
+  const mac = platform === "darwin";
+  const shift = action === "ungroup";
+  if (mac) return `${shift ? "⇧" : ""}⌘${KEYS[action]}`;
+  return `Ctrl+${shift ? "⇧" : ""}${KEYS[action]}`;
+};
+
+const EDIT_LABELS: Record<EditAction, string> = { cut: "Cut", copy: "Copy", paste: "Paste", group: "Group", ungroup: "Ungroup" };
+
+export const INPUT_ITEMS: ReadonlyArray<{ action: AddAction; label: string }> = [
+  { action: "add-prompt", label: "Prompt" },
+  { action: "add-image", label: "Image" },
+  { action: "add-video", label: "Video" },
+  { action: "add-group", label: "Group" },
+];
+
+export const ARTIFACT_ITEMS: ReadonlyArray<{ action: AddAction; label: string }> = [
+  { action: "add-page", label: "Page" },
+  { action: "add-motion", label: "Motion" },
+];
+
+const isFilledMedia = (shape: MenuShape): boolean =>
+  (shape.type === "image" || shape.type === "video") && shape.file !== undefined;
+
+/**
+ * The Unframed sections of the right-click menu, in order, each only when it has an
+ * item. An item that would do nothing is left out, never greyed.
+ */
+export const contextMenu = (input: MenuInput): MenuSection[] => {
+  const { target, selection, platform } = input;
+  const clicked = target.kind === "shape" ? target.shape : undefined;
+  const sections: MenuSection[] = [];
+  const add = (section: MenuSectionId, heading: string, items: MenuItem[]) => {
+    if (items.length > 0) sections.push({ section, heading, items });
+  };
+
+  const imageItems: MenuItem[] = [];
+  if (clicked && isFilledMedia(clicked)) {
+    const selectedFiles = selection.filter(isFilledMedia).map((shape) => shape.file!);
+    const files = selectedFiles.length > 0 ? selectedFiles : [clicked.file!];
+    imageItems.push({ action: "reveal", label: revealLabel(platform, files.length), files });
+  }
+  if (clicked && clicked.type === "image" && clicked.file !== undefined) {
+    imageItems.push({ action: "copy-as-image", label: "Copy as image" });
+  }
+  add("image", "Image", imageItems);
+
+  const referenceItems: MenuItem[] = [];
+  if (clicked && (clicked.type === "text" || clicked.type === "frame") && clicked.ref !== undefined) {
+    referenceItems.push({ action: "copy-ref", label: `Copy @${clicked.ref}`, ref: clicked.ref });
+  }
+  add("reference", "Reference", referenceItems);
+
+  const edit = (action: EditAction): MenuItem => ({ action, label: EDIT_LABELS[action], shortcut: shortcutHint(action, platform) });
+  const editItems: MenuItem[] = [];
+  const something = selection.length > 0 || clicked !== undefined;
+  if (something) editItems.push(edit("cut"), edit("copy"));
+  if (input.clipboard) editItems.push(edit("paste"));
+  if (selection.some((shape) => mayBeGroupMember(shape.type))) editItems.push(edit("group"));
+  if (clicked?.type === "frame" || selection.some((shape) => shape.type === "frame")) editItems.push(edit("ungroup"));
+  add("edit", "Edit", editItems);
+
+  add("library", "Library", input.libraryRegistered && selection.length > 0 ? [{ action: "add-to-library", label: "Add to library" }] : []);
+
+  if (target.kind === "canvas") {
+    add("inputs", "Inputs", [...INPUT_ITEMS]);
+    add("artifacts", "Artifacts", [...ARTIFACT_ITEMS]);
+  }
+  return sections;
+};
