@@ -26,6 +26,8 @@ import {
   type VecLike,
 } from "tldraw";
 import { currentSlots } from "../chrome/slots.ts";
+import { copyAsPrompt } from "../generate/copyAsPrompt.ts";
+import { isTextResult } from "../generate/facts.ts";
 import { useActivation, useEngine } from "../context.ts";
 import { useActiveProject } from "../project/activation.ts";
 import { showError } from "../toasts.tsx";
@@ -52,6 +54,7 @@ const menuShape = (editor: Editor, shape: TLShape): MenuShape => {
     ...(ref !== undefined ? { ref } : {}),
     ...(marker?.kind === "project-file" ? { file: marker.file } : {}),
     ...(marker?.kind === "link" ? { link: true } : {}),
+    ...(isTextResult(shape) ? { textResult: true } : {}),
   };
 };
 
@@ -129,6 +132,9 @@ const UnframedSections = () => {
       }
       case "copy-ref":
         navigator.clipboard.writeText(`@${item.ref}`).catch(() => showError(`Could not copy @${item.ref} to the clipboard.`));
+        return;
+      case "copy-as-prompt":
+        if (opened.clicked) copyAsPrompt(editor, opened.clicked);
         return;
       case "cut":
       case "copy":

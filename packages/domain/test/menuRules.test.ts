@@ -50,6 +50,12 @@ describe("shortcutHint", () => {
 });
 
 describe("contextMenu", () => {
+  it("offers Copy as prompt after Copy @id on a text result, and only there", () => {
+    const answer: MenuShape = { id: "t", type: "text", ref: "107", textResult: true };
+    expect(outline(shape(answer))[0]).toEqual(["reference", ["Copy @107", "Copy as prompt"]]);
+    expect(outline(shape(prompt))[0]).toEqual(["reference", ["Copy @100"]]);
+  });
+
   it("offers reveal and copy as image on a filled image, then the edit items", () => {
     expect(outline(shape(image))).toEqual([
       ["image", ["Reveal in Finder", "Copy as image"]],

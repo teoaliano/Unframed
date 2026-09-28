@@ -1,6 +1,6 @@
 import { gate } from "../../engine/test/openRouterStub.ts";
 import { editorFocused, openCanvas, plainText, roomRecords, shapeOnScreen, toast, waitForRoom } from "./canvas.ts";
-import { clickShape, openComposer, sendRun } from "./generation.ts";
+import { clickShape, composer, instructionBox, openComposer, sendRun, toolbar } from "./generation.ts";
 import { promptRecord, putRecords } from "./media.ts";
 import { chooseText, expect, makeTextResult, mediumOption, sendText, test, textResults } from "./texting.ts";
 
@@ -81,6 +81,42 @@ test("editing a text result changes what it contributes, runs nothing, and stays
   await sendRun(page);
   await expect.poll(() => generation.requests.length).toBe(1);
   expect(generation.requests[0]!.body.prompt).toBe("See tidied, about @100");
+});
+
+test("a text result's bar offers Regenerate and Recipe but no Vary, and Regenerate lands a second answer from its recipe", async ({ page, generation }) => {
+  generation.answerText(() => ({ kind: "text", text: "first answer", cost: 0.001 }));
+  await openCanvas(page, generation.engine);
+  const first = await makeTextResult(page, generation);
+
+  await page.mouse.click(10, 400);
+  await clickShape(page, first.id);
+  await expect(toolbar(page).getByRole("button", { name: "Regenerate" })).toBeVisible();
+  await expect(toolbar(page).getByRole("button", { name: "Recipe" })).toBeVisible();
+  await expect(toolbar(page).getByRole("button", { name: "Vary" })).toHaveCount(0);
+
+  generation.answerText(() => ({ kind: "text", text: "second answer", cost: 0.002 }));
+  await toolbar(page).getByRole("button", { name: "Regenerate" }).click();
+  await expect.poll(async () => (await textResults(generation)).filter((shape) => plainText(shape) === "second answer").length).toBe(1);
+  expect(generation.chat).toHaveLength(2);
+  expect(generation.chat[1]!.body).toEqual(generation.chat[0]!.body);
+  const second = (await textResults(generation)).find((shape) => plainText(shape) === "second answer")!;
+  expect(second.x).toBeGreaterThan(first.x!);
+  const sidecar = JSON.parse((await generation.engine.request(`/api/file/default/${second.meta.unframed.result.sidecar}`)).text);
+  expect(sidecar.recipe).toMatchObject({ medium: "text", selectionPrompt: "lone red fox", of: { sidecar: first.meta.unframed.result.sidecar, action: "regenerate" } });
+
+  // Recipe reopens the composer on the text medium over the recorded run.
+  await page.mouse.click(10, 400);
+  await clickShape(page, first.id);
+  await toolbar(page).getByRole("button", { name: "Recipe" }).click();
+  await expect(composer(page)).toBeVisible();
+  await expect(mediumOption(page, "text")).toHaveAttribute("aria-checked", "true");
+  await expect(composer(page).getByTestId("source-count")).toHaveText("recipe · 1 sources");
+  await instructionBox(page).click();
+  await page.keyboard.type("shorter");
+  generation.answerText(() => ({ kind: "text", text: "third answer" }));
+  await sendText(page);
+  await expect.poll(() => generation.chat.length).toBe(3);
+  expect(generation.chat[2]!.body.messages[0].content).toEqual([{ type: "text", text: "lone red fox\n\nshorter" }]);
 });
 
 test("a text result with no known cost shows its @id alone, and a failed run says why", async ({ page, generation }) => {
