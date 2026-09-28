@@ -1,0 +1,40 @@
+/* The Unframed parts of shapes on the canvas. Every colour is a theme token. */
+
+.unframed-shape-label {
+  position: absolute;
+  left: 0;
+  bottom: 100%;
+  height: 22px;
+  display: flex;
+  align-items: center;
+  font-family: var(--font-sans);
+  font-size: 11px;
+  line-height: 1;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--unframed-text-secondary);
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+/* Labels by zoom: the level is one attribute on the canvas container, so no shape re-renders. */
+.tl-container[data-label-level="off"] .unframed-shape-label {
+  display: none;
+}
+
+.tl-container[data-label-level="hover"] .unframed-shape-label:not([data-active]) {
+  visibility: hidden;
+}
+
+.unframed-prompt {
+  position: relative;
+}
+
+.unframed-prompt-hint {
+  position: absolute;
+  top: 0;
+  left: 0;
+  color: var(--unframed-text-secondary);
+  white-space: pre-wrap;
+  pointer-events: none;
+}

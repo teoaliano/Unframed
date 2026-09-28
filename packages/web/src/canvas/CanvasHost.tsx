@@ -5,12 +5,15 @@ import { UPLOAD_BODY_LIMIT } from "@unframed/domain";
 import { useCallback, useContext, useEffect, useMemo, useRef } from "react";
 import { Tldraw, type Editor, type TldrawOptions } from "tldraw";
 import "tldraw/tldraw.css";
+import "./canvas.css";
 import { connectionMonitor } from "../connection/monitor.ts";
 import { LicenseKeyContext } from "../license.ts";
 import type { ProjectActivation } from "../project/activation.ts";
 import { showError } from "../toasts.tsx";
 import { createAssetStore, Previews } from "./assetStore.ts";
 import { overrides } from "./overrides.ts";
+import { installRefMinting, RefMinter } from "./refs.ts";
+import { PromptShapeUtil } from "./shapes/prompt.tsx";
 import { SyncSocket } from "./syncSocket.ts";
 
 const assetUrls = getAssetUrlsByImport();
@@ -21,6 +24,8 @@ const SETTLE_BEFORE_SWITCH_MS = 2000;
 const OPTIONS: Partial<TldrawOptions> = {
   maxPages: 1,
   actionShortcutsLocation: "toolbar",
+  // A resize pins a prompt from its first move of 2 px.
+  dragDistanceSquared: 4,
   camera: {
     isLocked: false,
     panSpeed: 1,
@@ -30,9 +35,21 @@ const OPTIONS: Partial<TldrawOptions> = {
   },
 };
 
+const SHAPE_UTILS = [PromptShapeUtil];
+
 const syncUrl = (project: string, sessionId: string): string => {
   const scheme = window.location.protocol === "https:" ? "wss" : "ws";
   return `${scheme}://${window.location.host}/sync/${encodeURIComponent(project)}?sessionId=${encodeURIComponent(sessionId)}`;
+};
+
+/** Opening a project fits the view to its shapes, never closer than 100 %. */
+const fitToShapes = (editor: Editor) => {
+  editor.zoomToFit({ animation: { duration: 0 } });
+  if (editor.getZoomLevel() > 1) {
+    const bounds = editor.getCurrentPageBounds();
+    if (bounds) editor.centerOnPoint(bounds.center, { animation: { duration: 0 } });
+    editor.resetZoom(editor.getViewportScreenCenter(), { animation: { duration: 0 } });
+  }
 };
 
 const REFUSALS: Record<string, string> = {
@@ -74,7 +91,12 @@ export const CanvasHost = ({ project, activation }: { readonly project: string; 
   }, [activation, previews]);
 
   const onMount = useCallback((editor: Editor) => {
-    editor.zoomToFit({ animation: { duration: 0 } });
+    const minter = new RefMinter(editor);
+    const stopMinting = installRefMinting(editor, minter);
+    fitToShapes(editor);
+    return () => {
+      stopMinting();
+    };
   }, []);
 
   if (store.status === "error") return <div className="absolute inset-0" data-canvas-refused={project} />;
@@ -89,6 +111,7 @@ export const CanvasHost = ({ project, activation }: { readonly project: string; 
         maxAssetSize={UPLOAD_BODY_LIMIT}
         maxImageDimension={Number.POSITIVE_INFINITY}
         onMount={onMount}
+        shapeUtils={SHAPE_UTILS}
         overrides={overrides}
         components={{
           MainMenu: null,

@@ -18,6 +18,11 @@ export const openCanvas = async (page: Page, engine: TestEngine, project?: strin
   return name;
 };
 
+/** Waits until a prompt's text editor has the keyboard. */
+export const editorFocused = async (page: Page): Promise<void> => {
+  await expect(page.locator(".tl-rich-text [contenteditable='true']:focus, [contenteditable='true'].ProseMirror-focused")).toHaveCount(1);
+};
+
 /** A toast on screen, by its text. */
 export const toast = (page: Page, text: string | RegExp): Locator => page.locator(".unframed-toast").filter({ hasText: text });
 
@@ -42,10 +47,23 @@ export const centre = async (locator: Locator): Promise<{ x: number; y: number }
   return { x: box.x + box.width / 2, y: box.y + box.height / 2 };
 };
 
-/** A point on empty canvas: the lower right area, clear of the chrome and the starter prompts. */
+/** A point on empty canvas, clear of every shape (and its label) and of the chrome. */
 export const emptyCanvasPoint = async (page: Page): Promise<{ x: number; y: number }> => {
   const size = page.viewportSize() ?? { width: 1280, height: 720 };
-  return { x: Math.round(size.width * 0.62), y: Math.round(size.height * 0.62) };
+  const boxes = await page.locator(".tl-shape").evaluateAll((shapes) =>
+    shapes.map((shape) => {
+      const rect = shape.getBoundingClientRect();
+      return { x: rect.x, y: rect.y - 30, w: rect.width, h: rect.height + 30 };
+    }),
+  );
+  const clear = (x: number, y: number) => boxes.every((box) => x < box.x - 40 || x > box.x + box.w + 40 || y < box.y - 40 || y > box.y + box.h + 40);
+  for (const fy of [0.55, 0.45, 0.65, 0.35]) {
+    for (const fx of [0.8, 0.2, 0.7, 0.3, 0.6, 0.4]) {
+      const point = { x: Math.round(size.width * fx), y: Math.round(size.height * fy) };
+      if (clear(point.x, point.y)) return point;
+    }
+  }
+  throw new Error("no empty canvas left on screen");
 };
 
 /** A record once the room has stopped changing it (a drag sends many moves). */
