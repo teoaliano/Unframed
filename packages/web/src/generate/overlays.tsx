@@ -7,7 +7,9 @@ import { composeSelection, SKETCH_ROLE } from "@unframed/domain";
 import { useValue, useEditor, type Editor, type TLShapeId } from "tldraw";
 import { resultMetaOf } from "@unframed/contracts";
 import { canvasShapes, pageBox } from "./facts.ts";
+import { mediumDefinition } from "./mediumRegistry.ts";
 import { composerState } from "./state.ts";
+import { trayView } from "./trayView.ts";
 
 interface Badge {
   readonly key: string;
@@ -21,7 +23,10 @@ const badgesOf = (editor: Editor): ReadonlyArray<Badge> => {
   if (mode !== "generate" || recipe) return [];
   const composition = composeSelection({ shapes: canvasShapes(editor), selected: editor.getSelectedShapeIds(), instruction: "", medium });
   const sketch = composition.references.find((slot) => slot.source.type === "sketch");
-  return Object.entries(composition.roles).flatMap(([id, text]) => {
+  const view = trayView(editor).get();
+  const own = mediumDefinition(medium)?.roles;
+  const roles = own && view?.medium === medium ? { ...composition.roles, ...own({ composition, props: view.props, entry: view.entry }) } : composition.roles;
+  return Object.entries(roles).flatMap(([id, text]) => {
     if (id === SKETCH_ROLE) {
       const bounds = sketch?.source.type === "sketch" ? sketch.source.bounds : undefined;
       return bounds ? [{ key: id, x: bounds.x, y: bounds.y, text }] : [];

@@ -6,6 +6,7 @@ import { MediaStore } from "../media/mediaStore.ts";
 import { clearStoredModels } from "../lastUsed.ts";
 import { Native } from "../native.ts";
 import { Catalogue } from "../openRouter/catalogue.ts";
+import { VideoCatalogue } from "../openRouter/videoCatalogue.ts";
 import { Runs } from "../runs/runs.ts";
 import { PreferencesStore } from "../preferencesStore.ts";
 import { Projects } from "../projects.ts";
@@ -24,6 +25,7 @@ export const rpcHandlersLayer = UnframedRpcs.toLayer(
     const media = yield* MediaStore;
     const config = yield* Config;
     const catalogue = yield* Catalogue;
+    const videoCatalogue = yield* VideoCatalogue;
     const runs = yield* Runs;
     const context = yield* Effect.context<SettingsStore | Projects | Native>();
 
@@ -44,12 +46,15 @@ export const rpcHandlersLayer = UnframedRpcs.toLayer(
       "preferences.get": ({ keys }) => Effect.map(preferences.get(keys), (values) => ({ values })),
       "preferences.set": ({ key, value }) => Effect.as(preferences.set(key, value), {}),
       "preferences.subscribe": ({ keys }) => preferences.subscribe(keys),
-      "models.list": () => catalogue.listImageModels,
+      "models.list": ({ medium }) => (medium === "video" ? videoCatalogue.list : catalogue.listImageModels),
       "models.imagePricing": ({ id }) => catalogue.imagePricing(id),
       "run.image": (request) => runs.image(request),
       "run.subscribe": ({ project }) => runs.subscribe(project),
       "recipe.read": ({ project, shapeId }) => runs.recipe(project, shapeId),
       "recipe.copy": ({ project, from, sidecar, file }) => runs.copyRecipe(project, from, sidecar, file),
+      "video.start": () => Effect.fail(unframedError("unavailable", "Not yet.")),
+      "video.poll": () => Effect.fail(unframedError("unavailable", "Not yet.")),
+      "video.forget": () => Effect.fail(unframedError("unavailable", "Not yet.")),
       "testCanvas.read": ({ project }) =>
         testOnly(() =>
           Effect.all({ clock: rooms.clock(project), records: Effect.map(rooms.read(project), (records) => [...records]) }),

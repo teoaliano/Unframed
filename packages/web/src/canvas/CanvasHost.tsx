@@ -8,6 +8,7 @@ import "tldraw/tldraw.css";
 import "./canvas.css";
 import "../generate/generate.css";
 import "../generate/imageMedium.ts";
+import "../generate/videoMedium.ts";
 import { DotGrid } from "../chrome/DotGrid.tsx";
 import { installLabelActivity, installLabelLevel } from "../chrome/labelLevel.ts";
 import { OVERLAY_UTILS } from "../chrome/selectionLook.ts";

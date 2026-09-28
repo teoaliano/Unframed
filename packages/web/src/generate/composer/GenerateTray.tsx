@@ -9,6 +9,7 @@ import { canvasShapes, resultShapes, toolbarShape } from "../facts.ts";
 import { loadLastUsed, type LastUsed } from "../lastUsed.ts";
 import { mediumDefinition, registeredMedia, type PropValue, type RunSource, type TrayValues } from "../mediumRegistry.ts";
 import { composerState, setMedium, type RecipeMode } from "../state.ts";
+import { trayView } from "../trayView.ts";
 import { InstructionEditor } from "./InstructionEditor.tsx";
 import { ModelDialog } from "./ModelDialog.tsx";
 import { PropTray } from "./PropTray.tsx";
@@ -71,18 +72,20 @@ export const GenerateTray = ({ project, recipe, onSent, onMenuOpen, handle }: Ge
     let values: TrayValues;
     if (recipe && recipe.recipe.medium === medium) {
       // The recorded model is not a pick: only the model dialog makes one.
-      values = { model: recipe.recipe.model, picked: false, props: definition.keep(definition.fromRecipe(recipe.recipe), definition.params(entryOf(recipe.recipe.model))) };
+      const recorded = definition.fromRecipe(recipe.recipe);
+      values = { model: recipe.recipe.model, picked: false, props: definition.keep(recorded, definition.params(entryOf(recipe.recipe.model), recorded)) };
     } else {
       const stored = lastUsed?.model !== undefined && catalogue.models.some((entry) => entry.id === lastUsed.model) ? lastUsed.model : undefined;
       const model = stored ?? catalogue.default;
-      const params = definition.params(entryOf(model));
+      const params = definition.params(entryOf(model), lastUsed?.props);
       values = { model, picked: stored !== undefined, props: lastUsed ? definition.keep(lastUsed.props, params) : definition.defaults(params) };
     }
     setValuesByMedium((current) => ({ ...current, [medium]: values }));
   }, [valuesByMedium, medium, catalogue, lastUsed, recipe, definition, entryOf]);
 
   const values = valuesByMedium[medium];
-  const params = useMemo(() => definition.params(entryOf(values?.model)), [definition, entryOf, values?.model]);
+  const entry = entryOf(values?.model);
+  const params = useMemo(() => definition.params(entry, values?.props), [definition, entry, values?.props]);
   const pricing = usePricing(engine, definition, values?.model);
 
   const composition = useValue(
@@ -100,14 +103,32 @@ export const GenerateTray = ({ project, recipe, onSent, onMenuOpen, handle }: Ge
   const source: RunSource = recipe
     ? { kind: "recipe", recipe, instruction: resolved?.ok ? resolved.text.trim() : "", error: resolved?.ok === false ? resolved.error : undefined }
     : { kind: "selection", composition, selected: editor.getSelectedShapeIds() };
-  const status = definition.status({ source, hasKey: settings?.hasKey ?? true });
-  const estimate = values ? definition.estimate({ pricing, props: values.props, source }) : undefined;
+  const status = definition.status({ source, hasKey: settings?.hasKey ?? true, values, entry });
+  const estimate = values ? definition.estimate({ pricing, props: values.props, source, entry }) : undefined;
   const blocked = status.blockers.length > 0 || values === undefined;
 
   const onMentionMenu = useCallback((open: boolean) => onMenuOpen("mention", open), [onMenuOpen]);
   const onTrayMenu = useCallback((open: boolean) => onMenuOpen("tray", open), [onMenuOpen]);
 
   const setValues = (next: TrayValues) => setValuesByMedium((current) => ({ ...current, [medium]: next }));
+
+  // A stored value the model cannot honour clears itself once the catalogue is known.
+  useEffect(() => {
+    if (!values || !definition.heal) return;
+    const healed = definition.heal({ props: values.props, entry, loaded: catalogue !== undefined });
+    if (healed) setValuesByMedium((current) => ({ ...current, [medium]: { ...values, props: healed } }));
+  }, [definition, values, entry, catalogue, medium]);
+
+  // What the canvas draws from the tray (the role badges) reads its values here.
+  useEffect(() => {
+    trayView(editor).set({ medium, props: values?.props ?? {}, entry });
+  }, [editor, medium, values?.props, entry]);
+  useEffect(
+    () => () => {
+      trayView(editor).set(undefined);
+    },
+    [editor],
+  );
 
   const box = useRef<{ readonly element: () => HTMLElement | null }>(null);
   const inFlight = useRef(false);
@@ -173,11 +194,13 @@ export const GenerateTray = ({ project, recipe, onSent, onMenuOpen, handle }: Ge
             onClick={() => void send()}
           >
             {sending ? <LoaderCircle size={14} className="animate-spin" aria-hidden /> : <ArrowUp size={14} aria-hidden />}
-            {definition.sendLabel(values ?? { model: undefined, picked: false, props: {} })}
+            {sending && definition.sendingLabel !== undefined ? definition.sendingLabel : definition.sendLabel(values ?? { model: undefined, picked: false, props: {} })}
           </button>
         </div>
       </div>
-      {(status.warnings.length > 0 || status.blockers.length > 0 || failure !== undefined) && (
+      {definition.Status && values ? (
+        <definition.Status status={status} failure={failure} values={values} source={source} entry={entry} setProps={(props) => setValues({ ...values, props })} />
+      ) : (status.warnings.length > 0 || status.blockers.length > 0 || failure !== undefined) && (
         <div className="unframed-composer-status" data-testid="composer-status">
           {status.warnings.map((line) => (
             <p key={line} role="status" data-kind="warning">
@@ -201,6 +224,7 @@ export const GenerateTray = ({ project, recipe, onSent, onMenuOpen, handle }: Ge
         catalogueReady={catalogue !== undefined && catalogue.models.length > 0 && values !== undefined}
         params={params}
         props={values?.props ?? {}}
+        addable={definition.addable}
         onModelClick={() => {
           setDialogOpen(true);
           onMenuOpen("dialog", true);

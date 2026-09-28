@@ -6,6 +6,8 @@ import type { PropValue } from "./mediumRegistry.ts";
 export interface LastUsed {
   readonly model?: string;
   readonly props: Readonly<Record<string, PropValue>>;
+  /** Spec 04: the share consent, stored beside the props; the tray holds it as one of them. */
+  readonly shareLocalVideos?: boolean;
 }
 
 const keyOf = (medium: Medium) => `lastUsed.${medium}`;
@@ -13,11 +15,12 @@ const keyOf = (medium: Medium) => `lastUsed.${medium}`;
 /** A stored value, or `undefined` for a missing or unreadable one. */
 const readLastUsed = (value: unknown): LastUsed | undefined => {
   if (typeof value !== "object" || value === null) return undefined;
-  const { model, props } = value as { model?: unknown; props?: unknown };
+  const { model, props, shareLocalVideos } = value as { model?: unknown; props?: unknown; shareLocalVideos?: unknown };
   const kept: Record<string, PropValue> = {};
   if (typeof props === "object" && props !== null) {
     for (const [key, each] of Object.entries(props)) if (typeof each === "string" || typeof each === "number" || typeof each === "boolean") kept[key] = each;
   }
+  if (typeof shareLocalVideos === "boolean") kept.shareLocalVideos = shareLocalVideos;
   return { ...(typeof model === "string" && model !== "" ? { model } : {}), props: kept };
 };
 

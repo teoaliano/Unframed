@@ -2,12 +2,19 @@
 export type ImagePropKey = "resolution" | "size" | "aspect_ratio" | "quality" | "background" | "output_format";
 
 export interface PropSpec {
-  readonly key: ImagePropKey;
+  /** An image prop here; spec 04 adds the video props. */
+  readonly key: string;
   readonly label: string;
   /** Exactly the values the model declares. */
   readonly values: ReadonlyArray<string>;
   /** Menu labels for values that read differently from the chip (exact sizes). */
   readonly optionLabels?: Readonly<Record<string, string>>;
+  /** Chip text for values that read differently from the value (spec 04: Input, Seconds, Audio). */
+  readonly chipLabels?: Readonly<Record<string, string>>;
+  /** A yes-or-no prop shown as one checkbox (spec 04: Audio). Its value is a boolean. */
+  readonly checkbox?: true;
+  /** Always in the tray: its menu has no Remove (spec 04: Input and Seconds). */
+  readonly required?: true;
 }
 
 export interface ModelParams {
@@ -123,7 +130,7 @@ const isModelDriven = (key: string): key is ImagePropKey => (MODEL_DRIVEN_PROPS 
 export const defaultProps = (params: ModelParams): Record<string, string> => {
   const values: Record<string, string> = {};
   for (const prop of params.props) {
-    const value = IMAGE_DEFAULTS[prop.key];
+    const value = IMAGE_DEFAULTS[prop.key as ImagePropKey];
     if (value !== undefined && params.supported(prop.key, value)) values[prop.key] = value;
   }
   return values;
@@ -140,11 +147,11 @@ export const keepSupported = (values: Readonly<Record<string, unknown>>, params:
   Object.fromEntries(Object.entries(values).filter(([key, value]) => !isModelDriven(key) || params.supported(key, value)));
 
 /** The value a prop is offered with in "+ add prop": its current value, else its allowed default, else its first. */
-export const addablePropValue = (params: ModelParams, key: ImagePropKey, current: Readonly<Record<string, unknown>>): string | undefined => {
+export const addablePropValue = (params: ModelParams, key: string, current: Readonly<Record<string, unknown>>): string | undefined => {
   const prop = params.props.find((each) => each.key === key);
   if (!prop) return undefined;
   const now = current[key];
   if (now !== undefined && params.supported(key, now)) return String(now);
-  const fallback = IMAGE_DEFAULTS[key];
+  const fallback = IMAGE_DEFAULTS[key as ImagePropKey];
   return fallback !== undefined && params.supported(key, fallback) ? fallback : prop.values[0];
 };

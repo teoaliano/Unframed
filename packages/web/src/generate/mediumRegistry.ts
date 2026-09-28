@@ -5,6 +5,7 @@
  */
 import type { Medium, ModelEntry, ResultRecipe } from "@unframed/contracts";
 import type { Composition, ModelParams } from "@unframed/domain";
+import type { ComponentType } from "react";
 import type { Editor } from "tldraw";
 import type { EngineConnection, Payload } from "../rpc/engine.ts";
 import type { RecipeMode } from "./state.ts";
@@ -41,6 +42,16 @@ export interface SendInput {
   readonly source: RunSource;
 }
 
+/** What a medium's own status band shows: its status, the last send failure, and a way to change the tray. */
+export interface MediumStatusProps {
+  readonly status: TrayStatus;
+  readonly failure: string | undefined;
+  readonly values: TrayValues;
+  readonly source: RunSource;
+  readonly entry: ModelEntry | undefined;
+  readonly setProps: (props: Record<string, PropValue>) => void;
+}
+
 export interface MediumDefinition {
   readonly medium: Medium;
   /** The medium switch's lowercase label. */
@@ -49,8 +60,8 @@ export interface MediumDefinition {
   readonly catalogue: Payload<"models.list">["medium"];
   readonly dialogTitle: string;
   readonly browseUrl: string;
-  /** The props this model declares, with exactly its values. */
-  readonly params: (entry: ModelEntry | undefined) => ModelParams;
+  /** The props this model declares, with exactly its values. `props` is the tray's current values (spec 04: a stored input mode). */
+  readonly params: (entry: ModelEntry | undefined, props?: TrayProps) => ModelParams;
   readonly defaults: (params: ModelParams) => Record<string, PropValue>;
   /** The tray after a model change. */
   readonly reset: (props: TrayProps, params: ModelParams) => Record<string, PropValue>;
@@ -59,9 +70,19 @@ export interface MediumDefinition {
   /** The model's pricing, which the tray caches per model for the session. */
   readonly pricing: (engine: EngineConnection, model: string) => Promise<unknown>;
   /** The price beside the send button, when it is exact. `pricing` is what `pricing` answered, once it has. */
-  readonly estimate: (input: { readonly pricing: unknown; readonly props: TrayProps; readonly source: RunSource }) => string | undefined;
-  readonly status: (input: { readonly source: RunSource; readonly hasKey: boolean }) => TrayStatus;
+  readonly estimate: (input: { readonly pricing: unknown; readonly props: TrayProps; readonly source: RunSource; readonly entry?: ModelEntry | undefined }) => string | undefined;
+  readonly status: (input: { readonly source: RunSource; readonly hasKey: boolean; readonly values?: TrayValues | undefined; readonly entry?: ModelEntry | undefined }) => TrayStatus;
   readonly sendLabel: (values: TrayValues) => string;
+  /** The send button's label while the engine acknowledges a send (spec 04: `Starting…`). */
+  readonly sendingLabel?: string;
+  /** The value "+ add prop" offers a prop with. The image rule when absent. */
+  readonly addable?: (params: ModelParams, key: string, props: TrayProps) => PropValue | undefined;
+  /** Renders the status band itself, in place of the plain lines (spec 04: the share block sits among them). */
+  readonly Status?: ComponentType<MediumStatusProps>;
+  /** Badge text by shape id, over the composition's own roles (spec 04: first, last, unused). */
+  readonly roles?: (input: { readonly composition: Composition; readonly props: TrayProps; readonly entry: ModelEntry | undefined }) => Readonly<Record<string, string>>;
+  /** The tray's props corrected once the catalogue is known (spec 04: a stored input mode the model cannot honour), or undefined when nothing changes. */
+  readonly heal?: (input: { readonly props: TrayProps; readonly entry: ModelEntry | undefined; readonly loaded: boolean }) => Record<string, PropValue> | undefined;
   /** Renders, uploads and starts the run. Resolves once the engine acknowledged it. */
   readonly send: (input: SendInput) => Promise<void>;
   /** The tray's values from a recipe, for recipe mode. */

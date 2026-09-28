@@ -23,3 +23,6 @@ export * from "./estimate.ts";
 export * from "./placement.ts";
 export * from "./imageDimensions.ts";
 export * from "./runMessages.ts";
+export * from "./videoProps.ts";
+export * from "./videoRequest.ts";
+export * from "./videoTray.ts";

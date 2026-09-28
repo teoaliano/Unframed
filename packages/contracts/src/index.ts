@@ -4,3 +4,4 @@ export * from "./rpc.ts";
 export * from "./settings.ts";
 export * from "./canvas.ts";
 export * from "./generation.ts";
+export * from "./video.ts";

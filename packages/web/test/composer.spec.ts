@@ -56,7 +56,7 @@ test("the top band offers only the registered media and names the source by coun
   await selectGroup(page, "shape:character");
   await openComposer(page);
   const media = composer(page).getByRole("radiogroup", { name: "Medium" });
-  await expect(media.getByRole("radio")).toHaveText(["image"]);
+  await expect(media.getByRole("radio")).toHaveText(["image", "video"]);
   await expect(media.getByRole("radio", { name: "image" })).toHaveAttribute("aria-checked", "true");
   await expect(composer(page).getByTestId("source-count")).toHaveText("@character");
 });

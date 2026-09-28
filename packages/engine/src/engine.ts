@@ -9,6 +9,7 @@ import { CanvasRooms, canvasRoomsLayer } from "./canvas/rooms.ts";
 import { loadConfig } from "./config.ts";
 import { MediaStore, mediaStoreLayer } from "./media/mediaStore.ts";
 import { catalogueLayer } from "./openRouter/catalogue.ts";
+import { videoCatalogueLayer } from "./openRouter/videoCatalogue.ts";
 import { runsLayer } from "./runs/runs.ts";
 import { readEnvFileSync } from "./envFile.ts";
 import { createApiServer } from "./http/api.ts";
@@ -94,6 +95,7 @@ export const startEngine = async (host: EngineHost): Promise<RunningEngine> => {
     Layer.provideMerge(rpcSocketsLayer),
     Layer.provideMerge(runsLayer),
     Layer.provideMerge(catalogueLayer),
+    Layer.provideMerge(videoCatalogueLayer),
     Layer.provideMerge(mediaStoreLayer),
     Layer.provideMerge(canvasRoomsLayer),
     Layer.provideMerge(nativeLayer),
