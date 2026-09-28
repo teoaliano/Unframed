@@ -13,6 +13,7 @@
     "@tldraw/store": "5.4.2",
     "@tldraw/sync-core": "5.4.2",
     "@tldraw/tlschema": "5.4.2",
+    "@tldraw/utils": "5.4.2",
     "@unframed/contracts": "workspace:*",
     "@unframed/domain": "workspace:*",
     "effect": "4.0.0-rc.115",

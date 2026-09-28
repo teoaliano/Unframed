@@ -6,11 +6,16 @@ import { useCallback, useContext, useEffect, useMemo, useRef } from "react";
 import { Tldraw, type Editor, type TLComponents, type TldrawOptions } from "tldraw";
 import "tldraw/tldraw.css";
 import "./canvas.css";
+import "../generate/generate.css";
+import "../generate/imageMedium.ts";
 import { DotGrid } from "../chrome/DotGrid.tsx";
 import { installLabelActivity, installLabelLevel } from "../chrome/labelLevel.ts";
 import { OVERLAY_UTILS } from "../chrome/selectionLook.ts";
 import { connectionMonitor } from "../connection/monitor.ts";
-import { useEngine } from "../context.ts";
+import { CanvasProjectContext, useEngine } from "../context.ts";
+import { installCopyStripping } from "../generate/copies.ts";
+import { RoleBadges } from "../generate/overlays.tsx";
+import { watchRunReports } from "../generate/runReports.ts";
 import { LicenseKeyContext } from "../license.ts";
 import type { ProjectActivation } from "../project/activation.ts";
 import { showError } from "../toasts.tsx";
@@ -56,6 +61,7 @@ const COMPONENTS: TLComponents = {
   DebugPanel: null,
   SharePanel: null,
   InFrontOfTheCanvas: InFront,
+  OnTheCanvas: RoleBadges,
   Background: DotGrid,
   ContextMenu,
 };
@@ -107,6 +113,8 @@ export const CanvasHost = ({ project, activation }: { readonly project: string; 
 
   const store = useSync({ connect, assets, schema: canvasSchema() });
 
+  useEffect(() => watchRunReports(engine, project), [engine, project]);
+
   useEffect(() => {
     activation.setBeforeSwitch(() => socket.current?.settled(SETTLE_BEFORE_SWITCH_MS) ?? Promise.resolve());
     return () => {
@@ -121,6 +129,7 @@ export const CanvasHost = ({ project, activation }: { readonly project: string; 
     const stopMinting = installRefMinting(editor, minter);
     const stopLabelLevel = installLabelLevel(editor);
     const stopLabelActivity = installLabelActivity(editor);
+    const stopCopyStripping = installCopyStripping(editor);
     content.current = { project, engine, minter };
     installExternalContent(editor, content.current);
     fitToShapes(editor);
@@ -128,6 +137,7 @@ export const CanvasHost = ({ project, activation }: { readonly project: string; 
       stopMinting();
       stopLabelLevel();
       stopLabelActivity();
+      stopCopyStripping();
       content.current = undefined;
     };
   }, [project, engine]);
@@ -136,6 +146,7 @@ export const CanvasHost = ({ project, activation }: { readonly project: string; 
 
   return (
     <div className="absolute inset-0" data-canvas-project={project}>
+      <CanvasProjectContext.Provider value={project}>
       <Tldraw
         store={store}
         options={options}
@@ -150,6 +161,7 @@ export const CanvasHost = ({ project, activation }: { readonly project: string; 
         components={COMPONENTS}
         {...(licenseKey ? { licenseKey } : {})}
       />
+      </CanvasProjectContext.Provider>
     </div>
   );
 };

@@ -3,7 +3,10 @@ import type { TLRecord } from "@tldraw/tlschema";
 import * as Effect from "effect/Effect";
 import { CanvasRooms } from "../canvas/rooms.ts";
 import { MediaStore } from "../media/mediaStore.ts";
+import { clearStoredModels } from "../lastUsed.ts";
 import { Native } from "../native.ts";
+import { Catalogue } from "../openRouter/catalogue.ts";
+import { Runs } from "../runs/runs.ts";
 import { PreferencesStore } from "../preferencesStore.ts";
 import { Projects } from "../projects.ts";
 import { revealFiles } from "../reveal.ts";
@@ -20,6 +23,8 @@ export const rpcHandlersLayer = UnframedRpcs.toLayer(
     const rooms = yield* CanvasRooms;
     const media = yield* MediaStore;
     const config = yield* Config;
+    const catalogue = yield* Catalogue;
+    const runs = yield* Runs;
     const context = yield* Effect.context<SettingsStore | Projects | Native>();
 
     const testOnly = <A, E>(run: () => Effect.Effect<A, E>) =>
@@ -28,7 +33,7 @@ export const rpcHandlersLayer = UnframedRpcs.toLayer(
     return guardHandlers({
       "server.health": () => Effect.map(settings.view, (view) => ({ ...view, ok: true as const })),
       "settings.get": () => settings.view,
-      "settings.update": (patch) => settings.update(patch),
+      "settings.update": (patch) => Effect.tap(settings.update(patch), () => clearStoredModels(preferences, patch)),
       "settings.subscribe": () => settings.subscribe,
       "settings.pickFolder": () =>
         Effect.map(Effect.flatMap(settings.outputDir, native.pickFolder), (path) => ({ path })),
@@ -39,6 +44,12 @@ export const rpcHandlersLayer = UnframedRpcs.toLayer(
       "preferences.get": ({ keys }) => Effect.map(preferences.get(keys), (values) => ({ values })),
       "preferences.set": ({ key, value }) => Effect.as(preferences.set(key, value), {}),
       "preferences.subscribe": ({ keys }) => preferences.subscribe(keys),
+      "models.list": () => catalogue.listImageModels,
+      "models.imagePricing": ({ id }) => catalogue.imagePricing(id),
+      "run.image": (request) => runs.image(request),
+      "run.subscribe": ({ project }) => runs.subscribe(project),
+      "recipe.read": ({ project, shapeId }) => runs.recipe(project, shapeId),
+      "recipe.copy": ({ project, from, sidecar, file }) => runs.copyRecipe(project, from, sidecar, file),
       "testCanvas.read": ({ project }) =>
         testOnly(() =>
           Effect.all({ clock: rooms.clock(project), records: Effect.map(rooms.read(project), (records) => [...records]) }),

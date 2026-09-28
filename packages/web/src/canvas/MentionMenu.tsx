@@ -1,6 +1,7 @@
 import { mentionCandidates, mentionQuery, type MentionCandidate } from "@unframed/domain";
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useEditor, useValue, type TiptapEditor, type TLShapeId } from "tldraw";
+import { MentionList } from "./MentionList.tsx";
 
 interface MentionState {
   /** Where the typed `@query` starts in the document. */
@@ -116,39 +117,6 @@ export const MentionMenu = () => {
     [editor, editingId, open],
   );
 
-  const list = useRef<HTMLDivElement>(null);
-  useLayoutEffect(() => {
-    list.current?.querySelector(`[data-index="${highlight}"]`)?.scrollIntoView({ block: "nearest" });
-  }, [highlight]);
-
   if (!open || !position) return null;
-  return (
-    <div
-      ref={list}
-      role="listbox"
-      aria-label="Mentions"
-      className="unframed-mention-menu"
-      style={{ left: position.x, top: position.y + 6 }}
-      onPointerDown={(event) => event.stopPropagation()}
-    >
-      {rows.map((row, index) => (
-        <div
-          key={row.ref}
-          role="option"
-          aria-selected={index === highlight}
-          data-index={index}
-          className="unframed-mention-row"
-          onPointerDown={(event) => {
-            event.preventDefault();
-            event.stopPropagation();
-            insert(row.ref);
-          }}
-          onPointerEnter={() => setHighlight(index)}
-        >
-          <span className="unframed-mention-ref">@{row.ref}</span>
-          {row.preview !== undefined && <span className="unframed-mention-preview">{row.preview}</span>}
-        </div>
-      ))}
-    </div>
-  );
+  return <MentionList rows={rows} highlight={highlight} style={{ left: position.x, top: position.y + 6 }} onPick={insert} onHighlight={setHighlight} />;
 };

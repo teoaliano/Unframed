@@ -157,7 +157,7 @@ Sketches:
 - Rendering (web): a composite is the image's visible crop plus its owned marks, clipped to the image's frame, at the image's native resolution (the crop region's size in the file's own pixels; marks are scaled by file pixels per canvas unit). A sketch is the loose marks on a white background with 16 canvas units of padding, scaled so its longer side is 1024 pixels, capped at 2048. Both are PNG, rendered with tldraw's own export so they match the canvas. The canvas image stays clean and the marks stay editable shapes.
 - Each Generate writes each composite and sketch it sent into the project folder through spec 02's upload path, named `composite-<original file base>.png` and `sketch.png` (spec 02's upload naming then prefixes the timestamp). Their sidecars use spec 02's upload sidecar with `source: "composite"` or `source: "sketch"`, plus `of` (the original file, composites only), `marks` (the mark ids) and `crop` (tldraw's crop record, or `null`). One Generate writes each composite once, shared by every output of its batch.
 
-Usable: a selection is usable when its composition has at least one non-empty prompt part or at least one reference slot.
+Usable: a selection is usable when its composition has at least one non-empty prompt part or at least one reference slot. A selection whose only text fails on a circular reference is usable too, so the composer opens and shows the error.
 
 Roles (badges), shown only while the composer's Generate tray is open, on every selected shape that is media or an artifact, and on the sketch:
 
@@ -292,6 +292,7 @@ type ImageRunRequest = {
 type Ref = RecipeRef                    // defined with the recipe schema below
 ```
 
+- `recipe.copy({ project, from, sidecar, file })` returns `{ sidecar }`. A result pasted from project `from` brings its recipe: every file the recipe names (its references and their `original`) is copied into `project` through spec 02's copy, and the result's sidecar, its references renamed to the copies and its `file` set to `file` (the image's copy), is written beside `file` in place of that copy's own sidecar. A sidecar that is gone answers `not_found` with the `recipe.read` message below.
 - `recipe.read({ project, shapeId })` returns the result's recipe from its sidecar, or, for a durable placeholder whose sidecar is not written yet (spec 04), from its render job record; otherwise the error (`not_found`) `This result's recipe is no longer in the project folder.`
 - `run.subscribe({ project })` streams run events for that project:
   - `{ type: 'started', runId, batchId, count }`
@@ -415,7 +416,7 @@ A group's standing recipe holds no text and no sources: no instruction, no selec
 
 An **approximate** recipe (spec 11) has an empty `selectionPrompt` and `references`. Its Regenerate and Vary recompose the request from its `sources` as they are on the canvas now, by the selection to request rule, skipping any that are gone, with the recipe's model and params. Its Recipe mode shows `Imported from the old app. It sent:` and the `sentPrompt` above the box, and sends from the live sources.
 
-Copies keep the result meta (the sidecar is in the same project). Cross-project paste copies the sidecar and every reference file its recipe names along with the image (spec 02 copies the image file; this spec adds the rest).
+Copies keep the result meta (the sidecar is in the same project). Cross-project paste copies the sidecar and every reference file its recipe names along with the image (spec 02 copies the image file; this spec adds the rest, through `recipe.copy`). A result whose recipe cannot come along pastes as an ordinary image, with the toast `Could not copy the result's recipe: <message>`.
 
 The result's line, shown under a selected result: `<model part> · <W>×<H> · $<cost>` with any missing part omitted. `W×H` are the file's pixel dimensions.
 

@@ -1,5 +1,5 @@
 import { isHttpsLink, linkedVideoName, VIDEO_LINK_MESSAGE } from "@unframed/domain";
-import { Pause, Play, X } from "lucide-react";
+import { LoaderCircle, Pause, Play, X } from "lucide-react";
 import { useEffect, useRef, useState, type SyntheticEvent } from "react";
 import {
   HTMLContainer,
@@ -31,6 +31,7 @@ import {
 } from "../media.ts";
 import { ShapeLabel } from "./ShapeLabel.tsx";
 import { noteRender } from "../../fps/renders.ts";
+import { runMarkerOf } from "@unframed/contracts";
 
 const messageOf = (error: unknown) => (error instanceof Error ? error.message : String(error));
 
@@ -151,6 +152,22 @@ const EmptyMedia = ({ shape, kind }: { readonly shape: MediaShape; readonly kind
   );
 };
 
+/** A placeholder: where a result lands, while the run that makes it is in flight. */
+const Generating = ({ shape, kind }: { readonly shape: MediaShape; readonly kind: MediaKind }) => {
+  noteRender(shape.id);
+  return (
+    <HTMLContainer id={shape.id} className="unframed-media-empty unframed-placeholder" style={{ width: shape.props.w, height: shape.props.h }}>
+      <ShapeLabel shapeId={shape.id} kind={kind}>
+        {kind === "image" ? "Image" : "Video"}
+      </ShapeLabel>
+      <div className="unframed-media-empty__body" role="status">
+        <LoaderCircle size={18} className="unframed-placeholder__spinner" aria-hidden />
+        <span>Generating…</span>
+      </div>
+    </HTMLContainer>
+  );
+};
+
 /** The remove control of a selected filled shape: it empties the shape and leaves the file on disk. */
 const RemoveButton = ({ shape, name }: { readonly shape: MediaShape; readonly name: string }) => {
   noteRender(shape.id);
@@ -189,7 +206,7 @@ export class ImageMediaUtil extends ImageShapeUtil {
 
   override component(shape: TLImageShape) {
     noteRender(shape.id);
-    if (!shape.props.assetId) return <EmptyMedia shape={shape} kind="image" />;
+    if (!shape.props.assetId) return runMarkerOf(shape) ? <Generating shape={shape} kind="image" /> : <EmptyMedia shape={shape} kind="image" />;
     return (
       <>
         {super.component(shape)}

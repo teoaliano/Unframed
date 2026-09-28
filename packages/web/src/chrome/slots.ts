@@ -1,10 +1,18 @@
 import { useSyncExternalStore, type ComponentType } from "react";
-import type { Editor } from "tldraw";
+import type { Editor, TLShapeId } from "tldraw";
+
+/** What the composer shell hands the Agent tray (spec 08) when the composer opens from Agent. */
+export interface AgentTrayProps {
+  readonly project: string;
+  /** Collapses the composer back to the selection toolbar. */
+  readonly close: () => void;
+}
 
 /**
  * Named places in the chrome that later specs fill: the Agent button (spec 08), the
  * Settings button (spec 10), the Library button and the Add to library handler (spec 06),
- * and the artifact empty state (spec 09). Empty until a spec registers into them.
+ * the artifact empty state (spec 09), the composer's Agent tray (spec 08) and the
+ * toolbar's Open action (spec 09). Empty until a spec registers into them.
  */
 export interface ChromeSlots {
   agentButton?: ComponentType;
@@ -12,6 +20,10 @@ export interface ChromeSlots {
   libraryButton?: ComponentType;
   addToLibrary?: (editor: Editor) => void;
   artifactEmptyState?: ComponentType<{ shapeId: string }>;
+  /** The composer's Agent tray. The toolbar shows Agent only once one is registered. */
+  agentTray?: ComponentType<AgentTrayProps>;
+  /** What Open on a filled page or motion does. */
+  openArtifact?: (editor: Editor, shapeId: TLShapeId) => void;
 }
 
 let slots: ChromeSlots = {};

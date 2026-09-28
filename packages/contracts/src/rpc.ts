@@ -2,6 +2,7 @@ import * as Schema from "effect/Schema";
 import * as Rpc from "effect/unstable/rpc/Rpc";
 import * as RpcGroup from "effect/unstable/rpc/RpcGroup";
 import { UnframedError } from "./errors.ts";
+import { ImagePricingAnswer, ImageRunRequest, ModelsListAnswer, ModelsListRequest, ResultRecipe, RunEvent, RunStarted } from "./generation.ts";
 import { Health, Settings, SettingsPatch } from "./settings.ts";
 
 const Empty = Schema.Struct({});
@@ -130,6 +131,52 @@ export const TestCanvasChangedSince = Rpc.make("testCanvas.changedSince", {
   error: UnframedError,
 });
 
+/** The catalogue for a medium, newest data from OpenRouter; on any upstream failure only the default model. */
+export const ModelsList = Rpc.make("models.list", {
+  payload: ModelsListRequest,
+  success: ModelsListAnswer,
+  error: UnframedError,
+});
+
+/** One SKU list per endpoint of an image model; empty on any upstream failure. */
+export const ModelsImagePricing = Rpc.make("models.imagePricing", {
+  payload: Schema.Struct({ id: Schema.String }),
+  success: ImagePricingAnswer,
+  error: UnframedError,
+});
+
+/** Starts an image run. Answers once its placeholders are in the room; outputs arrive on `run.subscribe`. */
+export const RunImage = Rpc.make("run.image", {
+  payload: ImageRunRequest,
+  success: RunStarted,
+  error: UnframedError,
+});
+
+/** A result's recipe, from its sidecar. */
+export const RecipeRead = Rpc.make("recipe.read", {
+  payload: Schema.Struct({ project: Schema.String, shapeId: Schema.String }),
+  success: ResultRecipe,
+  error: UnframedError,
+});
+
+/**
+ * A result pasted into another project brings its recipe: the sidecar and every file the
+ * recipe names are copied from `from` into `project`, beside `file` (the image's copy).
+ */
+export const RecipeCopy = Rpc.make("recipe.copy", {
+  payload: Schema.Struct({ project: Schema.String, from: Schema.String, sidecar: Schema.String, file: Schema.String }),
+  success: Schema.Struct({ sidecar: Schema.String }),
+  error: UnframedError,
+});
+
+/** Run events of one project, as they happen. */
+export const RunSubscribe = Rpc.make("run.subscribe", {
+  payload: Schema.Struct({ project: Schema.String }),
+  success: RunEvent,
+  error: UnframedError,
+  stream: true,
+});
+
 export const UnframedRpcs = RpcGroup.make(
   ServerHealth,
   SettingsGet,
@@ -146,5 +193,11 @@ export const UnframedRpcs = RpcGroup.make(
   TestCanvasRead,
   TestCanvasApply,
   TestCanvasChangedSince,
+  ModelsList,
+  ModelsImagePricing,
+  RunImage,
+  RecipeRead,
+  RecipeCopy,
+  RunSubscribe,
 );
 export type UnframedRpcs = typeof UnframedRpcs;

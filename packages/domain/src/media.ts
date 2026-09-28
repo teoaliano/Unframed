@@ -63,15 +63,24 @@ export const mediaFileName = (input: {
 /** The sidecar next to a file: the same base name with `.json`. */
 export const sidecarFileName = (file: string): string => `${withoutExtension(file)}.json`;
 
-/** The sidecar of an uploaded or copied file. `of` is the source file, present only for a copy. */
+/**
+ * The sidecar of an uploaded or copied file. `of` is the source file of a copy, or the
+ * canvas image a composite was rendered from. A composite and a sketch (spec 03) also
+ * record the marks they hold and the crop they were cut to.
+ */
 export interface MediaSidecar {
-  readonly source: "upload" | "copy";
+  readonly source: "upload" | "copy" | "composite" | "sketch";
   readonly fileName: string;
   readonly mime: string;
   readonly bytes: number;
   readonly at: string;
   readonly of?: string;
+  readonly marks?: ReadonlyArray<string>;
+  readonly crop?: unknown;
 }
+
+/** What a composite or sketch upload adds to its sidecar. */
+export type RenderedSidecar = Pick<MediaSidecar, "of" | "marks" | "crop"> & { readonly source: "composite" | "sketch" };
 
 export const sidecarText = (sidecar: MediaSidecar): string => {
   const ordered: Record<string, unknown> = {
@@ -82,6 +91,8 @@ export const sidecarText = (sidecar: MediaSidecar): string => {
     at: sidecar.at,
   };
   if (sidecar.of !== undefined) ordered.of = sidecar.of;
+  if (sidecar.marks !== undefined) ordered.marks = sidecar.marks;
+  if (sidecar.source === "composite" || sidecar.source === "sketch") ordered.crop = sidecar.crop ?? null;
   return `${JSON.stringify(ordered, null, 2)}\n`;
 };
 

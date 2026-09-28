@@ -60,6 +60,37 @@ describe("the upload route", () => {
     for (const file of files) expect(file).toMatch(/^\d+-twin(-\d)?\.png$/);
   });
 
+  it("writes a composite's or a sketch's sidecar with its source, original, marks and crop", async () => {
+    const crop = { topLeft: { x: 0.1, y: 0 }, bottomRight: { x: 1, y: 0.5 } };
+    const composite = await engine.request(
+      `/api/projects/board/files?name=composite-1-fox.png&source=composite&of=1-fox.png&marks=${encodeURIComponent(JSON.stringify(["shape:m1", "shape:m2"]))}&crop=${encodeURIComponent(JSON.stringify(crop))}`,
+      { method: "POST", body: png, headers: { "content-type": "image/png" } },
+    );
+    expect(composite.status).toBe(200);
+    const compositeFile = composite.json().file as string;
+    expect(compositeFile).toMatch(/^\d+-composite-1-fox\.png$/);
+    const compositeSidecar = JSON.parse(await readFile(join(folder, compositeFile.replace(/\.png$/, ".json")), "utf8"));
+    expect(Object.keys(compositeSidecar)).toEqual(["source", "fileName", "mime", "bytes", "at", "of", "marks", "crop"]);
+    expect(compositeSidecar).toMatchObject({ source: "composite", fileName: "composite-1-fox.png", of: "1-fox.png", marks: ["shape:m1", "shape:m2"], crop });
+
+    const sketch = await engine.request(`/api/projects/board/files?name=sketch.png&source=sketch&marks=${encodeURIComponent(JSON.stringify(["shape:m3"]))}`, {
+      method: "POST",
+      body: png,
+      headers: { "content-type": "image/png" },
+    });
+    const sketchSidecar = JSON.parse(await readFile(join(folder, (sketch.json().file as string).replace(/\.png$/, ".json")), "utf8"));
+    expect(Object.keys(sketchSidecar)).toEqual(["source", "fileName", "mime", "bytes", "at", "marks", "crop"]);
+    expect(sketchSidecar).toMatchObject({ source: "sketch", fileName: "sketch.png", marks: ["shape:m3"], crop: null });
+  });
+
+  it("refuses a composite sidecar it cannot read", async () => {
+    for (const query of ["source=paste", "source=composite&marks=not-json", "source=composite&of=../x.png&marks=[]", "source=sketch&marks=[1]"]) {
+      const response = await engine.request(`/api/projects/board/files?name=refused.png&${query}`, { method: "POST", body: png, headers: { "content-type": "image/png" } });
+      expect(response.status).toBe(400);
+      expect(response.json()).toEqual({ error: "That is not a composite or sketch upload." });
+    }
+  });
+
   it("answers 400 for an empty body", async () => {
     const response = await upload("empty.png", Buffer.alloc(0), "image/png");
     expect(response.status).toBe(400);
