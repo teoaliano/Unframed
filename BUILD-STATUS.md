@@ -52,6 +52,7 @@ Measured by the spec agent in the hosted shape (production web served by the eng
 ## Orchestration notes
 
 - Local Playwright runs use the installed Chrome. Chrome sometimes starts only its crash handlers and never opens, and Playwright then waits with no output. Run browser tests with `--global-timeout` and kill and rerun on a hang.
+- A spec agent stalls (10 minutes with no stream progress) when one command runs long with no output, such as a browser suite hung in teardown. Briefs cap each command at 5 minutes with `--global-timeout 280000 --reporter=list`, and tell agents not to use background commands, whose notifications reach the orchestrator. A stalled agent resumes with SendMessage and keeps its context.
 - `menuActions.spec.ts` "Reveal shows the right-clicked file" failed once in a full run on `build` after the spec 02 merge and passed on every rerun (3 alone, then the full suite). Watch it.
 
 - Background sub-agents that a spec agent starts (the code-review reviewers) report to the orchestrator, not to the spec agent. The brief tells spec agents to start their sub-agents in the foreground. If one still waits, the orchestrator forwards the results with SendMessage.
