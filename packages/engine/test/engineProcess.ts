@@ -38,6 +38,8 @@ export interface EngineOptions {
   waitForReady?: boolean;
   /** Point `UNFRAMED_TEST_OPENROUTER_ORIGIN` at a stub (default true). */
   openRouterStub?: boolean;
+  /** How the stub answers, from the start. */
+  stub?: StubHandler;
 }
 
 export interface Exited {
@@ -121,16 +123,20 @@ export const rawRequest = (port: number, path: string, options: RequestOptions =
     req.end();
   });
 
+/** Answers a stub request itself by returning true; anything else falls through to a 404. */
+export type StubHandler = (req: http.IncomingMessage, body: string, res: http.ServerResponse) => boolean | void;
+
 export interface OpenRouterStub {
   readonly origin: string;
   readonly requests: Array<{ method: string; url: string; headers: http.IncomingHttpHeaders; body: string }>;
+  /** Replaces how the stub answers, for the requests that follow. */
+  setHandler(handler: StubHandler | undefined): void;
   close(): Promise<void>;
 }
 
-/** A loopback server standing in for openrouter.ai. Answers 404 to everything until a spec adds routes. */
-export const startOpenRouterStub = async (
-  handler?: (req: http.IncomingMessage, body: string, res: http.ServerResponse) => boolean | void,
-): Promise<OpenRouterStub> => {
+/** A loopback server standing in for openrouter.ai. Answers 404 to everything a handler does not answer. */
+export const startOpenRouterStub = async (initial?: StubHandler): Promise<OpenRouterStub> => {
+  let handler = initial;
   const requests: OpenRouterStub["requests"] = [];
   const server = http.createServer((req, res) => {
     const chunks: Buffer[] = [];
@@ -149,6 +155,9 @@ export const startOpenRouterStub = async (
   return {
     origin: `http://127.0.0.1:${address.port}`,
     requests,
+    setHandler: (next) => {
+      handler = next;
+    },
     close: () =>
       new Promise((done) => {
         server.closeAllConnections();
@@ -205,7 +214,7 @@ export const startEngine = async (options: EngineOptions = {}): Promise<TestEngi
   const dataDir = options.dataDir ?? (await makeTempDir());
   const nativeLogPath = join(dataDir, ".native-log.jsonl");
   if (options.dotenv !== undefined) await writeFile(join(dataDir, ".env"), options.dotenv);
-  const stub = options.openRouterStub === false ? undefined : await startOpenRouterStub();
+  const stub = options.openRouterStub === false ? undefined : await startOpenRouterStub(options.stub);
 
   const env: Record<string, string> = {};
   for (const [name, value] of Object.entries(process.env)) {

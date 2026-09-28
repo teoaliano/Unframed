@@ -24,12 +24,20 @@ export const ROOM_IDLE_MS = 60_000;
 
 const SYNC_PATH = /^\/sync\/([^/]+)$/;
 
-/** Work the room hands off after a commit: media rewriting lives in the media store. */
-export type AfterCommit = (
-  project: string,
-  change: CommittedChange,
-  room: { readonly get: (id: string) => TLRecord | undefined; readonly apply: (put: TLRecord[]) => void },
-) => void;
+/** What work handed off by a room may do with it, while it is open. */
+export interface RoomAccess {
+  readonly get: (id: string) => TLRecord | undefined;
+  readonly read: () => ReadonlyArray<TLRecord>;
+  /** Puts records with origin `system` (media rewriting). */
+  readonly apply: (put: TLRecord[]) => void;
+  readonly change: (change: CanvasChange, origin: ChangeOrigin) => void;
+}
+
+/** Work the room hands off after a commit: media rewriting (media store), run marker resolution (runs). */
+export type AfterCommit = (project: string, change: CommittedChange, room: RoomAccess) => void;
+
+/** Work that runs once when a room opens, before any tab or call uses it: run marker resolution. */
+export type AfterOpen = (project: string, room: RoomAccess) => void;
 
 /**
  * The canvas rooms: one tldraw sync room per project, opened on the first tab or the
@@ -52,6 +60,8 @@ export class CanvasRooms extends Context.Service<
     readonly closeSockets: (code: number) => Promise<void>;
     /** Registers the work that runs after each committed change (media rewriting). */
     readonly afterCommit: (hook: AfterCommit) => Effect.Effect<void>;
+    /** Registers the work that runs when a room opens. */
+    readonly afterOpen: (hook: AfterOpen) => Effect.Effect<void>;
   }
 >()("unframed/engine/CanvasRooms") {}
 
@@ -73,6 +83,18 @@ export const canvasRoomsLayer = Layer.effect(
     const rooms = new Map<string, CanvasRoom>();
     const forget = new Map<CanvasRoom, () => void>();
     const hooks: AfterCommit[] = [];
+    const openHooks: AfterOpen[] = [];
+
+    const access = (room: CanvasRoom): RoomAccess => ({
+      get: (id) => (room.isClosed ? undefined : room.get(id)),
+      read: () => (room.isClosed ? [] : room.read()),
+      apply: (put) => {
+        if (!room.isClosed) room.apply({ put, remove: [] }, { kind: "system", id: "media" });
+      },
+      change: (change, origin) => {
+        if (!room.isClosed) room.apply(change, origin);
+      },
+    });
 
     const closeRoom = (room: CanvasRoom, code?: number, reason?: string) => {
       room.close(code, reason);
@@ -108,12 +130,11 @@ export const canvasRoomsLayer = Layer.effect(
           logError(`canvas ${room.project}: could not repair refs: ${errorText(error)}`);
         }
         for (const hook of hooks) {
-          hook(room.project, change, {
-            get: (id) => (room.isClosed ? undefined : room.get(id)),
-            apply: (put) => {
-              if (!room.isClosed) room.apply({ put, remove: [] }, { kind: "system", id: "media" });
-            },
-          });
+          try {
+            hook(room.project, change, access(room));
+          } catch (error) {
+            logError(`canvas ${room.project}: ${errorText(error)}`);
+          }
         }
       });
     };
@@ -151,6 +172,13 @@ export const canvasRoomsLayer = Layer.effect(
             room,
             yield* openProjects.register(slug, "canvas room", Effect.sync(() => closeRoom(room, 1012, "project closed"))),
           );
+          for (const hook of openHooks) {
+            try {
+              room.engineCall(() => hook(slug, access(room)));
+            } catch (error) {
+              logError(`canvas ${slug}: ${errorText(error)}`);
+            }
+          }
         }
         return room;
       });
@@ -257,6 +285,7 @@ export const canvasRoomsLayer = Layer.effect(
         }),
       closeSockets,
       afterCommit: (hook) => Effect.sync(() => void hooks.push(hook)),
+      afterOpen: (hook) => Effect.sync(() => void openHooks.push(hook)),
     });
   }),
 );

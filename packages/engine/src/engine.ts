@@ -8,6 +8,8 @@ import * as RpcServer from "effect/unstable/rpc/RpcServer";
 import { CanvasRooms, canvasRoomsLayer } from "./canvas/rooms.ts";
 import { loadConfig } from "./config.ts";
 import { MediaStore, mediaStoreLayer } from "./media/mediaStore.ts";
+import { catalogueLayer } from "./openRouter/catalogue.ts";
+import { runsLayer } from "./runs/runs.ts";
 import { readEnvFileSync } from "./envFile.ts";
 import { createApiServer } from "./http/api.ts";
 import { clientRoute } from "./http/client.ts";
@@ -90,6 +92,8 @@ export const startEngine = async (host: EngineHost): Promise<RunningEngine> => {
   const services = Layer.mergeAll(RpcServer.layer(UnframedRpcs, { disableTracing: true })).pipe(
     Layer.provideMerge(rpcHandlersLayer),
     Layer.provideMerge(rpcSocketsLayer),
+    Layer.provideMerge(runsLayer),
+    Layer.provideMerge(catalogueLayer),
     Layer.provideMerge(mediaStoreLayer),
     Layer.provideMerge(canvasRoomsLayer),
     Layer.provideMerge(nativeLayer),
