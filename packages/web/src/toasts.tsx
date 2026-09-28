@@ -18,6 +18,10 @@ export const showError = (message: string, options: { id?: string; sticky?: bool
     timeout: options.sticky ? 0 : ERROR_TIMEOUT_MS,
   });
 
+/** A notice that is not a failure: a warning when something went partly wrong, or information. */
+export const showNotice = (message: string, type: "warning" | "info"): string =>
+  toastManager.add({ title: message, type, priority: type === "warning" ? "high" : "low", timeout: ERROR_TIMEOUT_MS });
+
 export const closeToast = (id: string): void => toastManager.close(id);
 
 const ToastList = () => {

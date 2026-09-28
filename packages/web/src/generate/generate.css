@@ -1,0 +1,413 @@
+/* The selection toolbar, the composer it grows into, the role badges and the tether. Every colour is a theme token. */
+
+.unframed-floating {
+  position: absolute;
+  z-index: 500;
+  box-sizing: border-box;
+  overflow: hidden;
+  pointer-events: all;
+  border: 1px solid var(--unframed-border);
+  border-radius: var(--unframed-radius-container);
+  background-color: var(--unframed-card-translucent);
+  box-shadow: var(--unframed-shadow-med);
+  backdrop-filter: blur(var(--unframed-chrome-blur));
+  font-family: var(--font-sans);
+  color: var(--unframed-text-primary);
+}
+
+/* The bar grows into the composer on the same centre and bottom edge: size and place animate together. */
+.unframed-floating[data-animated="true"] {
+  transition:
+    left 200ms ease-out,
+    top 200ms ease-out,
+    width 200ms ease-out,
+    height 200ms ease-out;
+}
+
+.unframed-floating__content {
+  position: absolute;
+  left: 0;
+  top: 0;
+}
+
+.unframed-floating__content[data-side="above"] {
+  top: auto;
+  bottom: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .unframed-floating[data-animated="true"] {
+    transition: none;
+  }
+
+  .unframed-floating__content {
+    animation: unframed-crossfade 120ms linear;
+  }
+}
+
+@keyframes unframed-crossfade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.unframed-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px;
+  white-space: nowrap;
+}
+
+.unframed-bar--result {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 2px;
+}
+
+.unframed-bar__row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.unframed-bar__line {
+  padding: 2px 6px 3px;
+  font-size: 12px;
+  color: var(--unframed-text-secondary);
+  font-variant-numeric: tabular-nums;
+}
+
+.unframed-bar__hint {
+  padding: 0 4px;
+  font-size: 12px;
+  color: var(--unframed-text-secondary);
+}
+
+.unframed-bar-separator {
+  width: 1px;
+  align-self: stretch;
+  margin: 4px 2px;
+  background-color: var(--unframed-border);
+}
+
+.unframed-bar-button {
+  display: inline-flex;
+  height: 30px;
+  align-items: center;
+  gap: 7px;
+  padding: 0 11px;
+  border: 1px solid var(--unframed-border-emphasized);
+  border-radius: var(--unframed-radius-inner);
+  background-color: var(--unframed-surface);
+  color: var(--unframed-text-primary);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.unframed-bar-button:hover:not(:disabled) {
+  background-color: color-mix(in srgb, var(--unframed-surface) 100%, var(--unframed-overlay-hover));
+}
+
+.unframed-bar-button:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
+.unframed-bar-button--primary {
+  border-color: var(--unframed-accent);
+  background-color: var(--unframed-accent);
+  color: var(--unframed-on-accent);
+}
+
+.unframed-bar-button--primary:hover:not(:disabled) {
+  background-color: color-mix(in srgb, var(--unframed-accent) 88%, var(--unframed-on-accent));
+}
+
+.unframed-bar-button--quiet {
+  border-color: transparent;
+  background-color: transparent;
+}
+
+/* The composer: three bands, 420 px wide. */
+.unframed-composer {
+  width: 420px;
+  box-sizing: border-box;
+  padding: 12px;
+}
+
+.unframed-composer-generate {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.unframed-composer-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 0 2px;
+}
+
+.unframed-composer-count {
+  font-size: 12.5px;
+  color: var(--unframed-text-secondary);
+  white-space: nowrap;
+}
+
+.unframed-segmented {
+  display: flex;
+  gap: 3px;
+  padding: 3px;
+  border-radius: var(--unframed-radius-inner);
+  background-color: var(--unframed-overlay-hover);
+}
+
+.unframed-segmented > button {
+  height: 24px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: calc(var(--unframed-radius-inner) - 2px);
+  background: transparent;
+  color: var(--unframed-text-secondary);
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.unframed-segmented > button[data-on] {
+  background-color: var(--unframed-surface);
+  color: var(--unframed-text-primary);
+  box-shadow: var(--unframed-shadow-low);
+}
+
+.unframed-composer-box {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-height: 108px;
+  box-sizing: border-box;
+  padding: 11px 12px 48px;
+  border: 1px solid var(--unframed-border);
+  border-radius: var(--unframed-radius-container);
+  background-color: var(--unframed-surface);
+}
+
+.unframed-composer-editor {
+  max-height: 180px;
+  overflow-y: auto;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.unframed-composer-input {
+  outline: none;
+  min-height: 21px;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.unframed-composer-input p {
+  margin: 0;
+}
+
+.unframed-composer-input p.is-editor-empty:first-child::before {
+  content: attr(data-placeholder);
+  float: left;
+  height: 0;
+  color: var(--unframed-text-secondary);
+  pointer-events: none;
+}
+
+.unframed-composer-send {
+  position: absolute;
+  right: 10px;
+  bottom: 10px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.unframed-composer-estimate {
+  font-size: 12.5px;
+  color: var(--unframed-text-secondary);
+  font-variant-numeric: tabular-nums;
+}
+
+.unframed-composer-go {
+  display: inline-flex;
+  height: 30px;
+  align-items: center;
+  gap: 6px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 999px;
+  background-color: var(--unframed-accent);
+  color: var(--unframed-on-accent);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.unframed-composer-go:disabled {
+  cursor: default;
+  background-color: var(--unframed-overlay-hover);
+  color: var(--unframed-text-secondary);
+}
+
+.unframed-composer-status {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 0 2px;
+}
+
+.unframed-composer-status p {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--unframed-text-secondary);
+}
+
+.unframed-composer-status p[data-kind="blocked"],
+.unframed-composer-status p[data-kind="error"] {
+  color: var(--unframed-error);
+}
+
+.unframed-composer-tray {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 2px 2px 0;
+}
+
+/* Role badges: where a bare media shape's one fact sits, above its top-left corner. */
+.unframed-role-badge {
+  position: absolute;
+  left: 0;
+  top: 0;
+  height: 22px;
+  display: flex;
+  align-items: center;
+  font-family: var(--font-sans);
+  font-size: 11px;
+  line-height: 1;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--unframed-text-accent);
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.tl-container[data-label-level="off"] .unframed-role-badge {
+  display: none;
+}
+
+.unframed-tether {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  pointer-events: none;
+}
+
+.unframed-placeholder .unframed-media-empty__body {
+  flex-direction: row;
+  font-size: 13px;
+  color: var(--unframed-text-secondary);
+}
+
+.unframed-placeholder__spinner {
+  animation: unframed-spin 1s linear infinite;
+}
+
+@keyframes unframed-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* The model dialog's table. */
+.unframed-models__table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.unframed-models__table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background-color: var(--unframed-popover);
+  text-align: left;
+  font-weight: 600;
+  border-bottom: 1px solid var(--unframed-border);
+}
+
+.unframed-models__table td {
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--unframed-border);
+}
+
+.unframed-models__sort {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 8px;
+  border: 0;
+  background: transparent;
+  color: var(--unframed-text-primary);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.unframed-models__released {
+  width: 130px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+th.unframed-models__released {
+  text-align: right;
+}
+
+.unframed-models__pick {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--unframed-text-primary);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.unframed-models__current .unframed-models__pick {
+  font-weight: 700;
+}
+
+.unframed-models__table tbody tr:hover {
+  background-color: var(--unframed-overlay-hover);
+}
+
+.unframed-provider {
+  display: inline-block;
+  padding: 2px 7px;
+  border-radius: var(--unframed-radius-inner);
+  font-size: 12px;
+  white-space: nowrap;
+}

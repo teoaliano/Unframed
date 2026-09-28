@@ -5,7 +5,7 @@ import { artifact, group, image, mark, prompt, textResult, video } from "./shape
 const compose = (shapes: CanvasShape[], selected: string[], extra: Partial<CompositionInput> = {}) =>
   composeSelection({ shapes, selected, instruction: "", medium: "image", ...extra });
 
-const DASH = "—";
+const DASH = "\u2014";
 
 describe("prompt order and joining", () => {
   it.each([
@@ -50,6 +50,7 @@ describe("prompt order and joining", () => {
     const composition = compose(shapes, ["a"], { instruction: "  in @style, please  " });
     expect(composition.promptParts).toEqual(["a fox"]);
     expect(composition.prompt).toBe("a fox\n\nin watercolour, please");
+    expect(composition.instruction).toBe("in watercolour, please");
   });
 
   it("uses the instruction alone when no prompt is selected", () => {

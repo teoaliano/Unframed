@@ -12,6 +12,7 @@ import {
   UPLOAD_BODY_LIMIT,
   type MediaSidecar,
   type PreviewSize,
+  type RenderedSidecar,
 } from "@unframed/domain";
 import type { TLAsset, TLRecord } from "@tldraw/tlschema";
 import * as Context from "effect/Context";
@@ -56,7 +57,10 @@ export class MediaStore extends Context.Service<
   MediaStore,
   {
     /** Streams `body` into a new project file and writes its sidecar. Rejects with `SaveRefused`. */
-    readonly save: (project: string, input: { originalName: string; mime: string; body: AsyncIterable<Buffer> }) => Promise<SavedFile>;
+    readonly save: (
+      project: string,
+      input: { originalName: string; mime: string; body: AsyncIterable<Buffer>; rendered?: RenderedSidecar | undefined },
+    ) => Promise<SavedFile>;
     /** Writes a regenerable display preview of `file` into the cache folder. No sidecar. */
     readonly savePreview: (project: string, file: string, size: PreviewSize, body: AsyncIterable<Buffer>) => Promise<{ bytes: number }>;
     readonly copy: (project: string, file: string, from?: string) => Effect.Effect<string, UnframedError>;
@@ -150,7 +154,10 @@ export const mediaStoreLayer = Layer.effect(
       }
     };
 
-    const save = async (project: string, input: { originalName: string; mime: string; body: AsyncIterable<Buffer> }) => {
+    const save = async (
+      project: string,
+      input: { originalName: string; mime: string; body: AsyncIterable<Buffer>; rendered?: RenderedSidecar | undefined },
+    ) => {
       const dir = await folder(project);
       if (dir === undefined) throw new SaveRefused(404, `There is no project named "${projectSlug(project)}".`);
       const mime = input.mime || "application/octet-stream";
@@ -161,6 +168,7 @@ export const mediaStoreLayer = Layer.effect(
           mime,
           bytes,
           at: new Date().toISOString(),
+          ...input.rendered,
         }));
         return { file, fileName: input.originalName, bytes, mime };
       } catch (error) {

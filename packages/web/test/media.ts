@@ -132,3 +132,19 @@ export const inGroup = <T extends { parentId: string; x: number; y: number }>(re
   x: at.x,
   y: at.y,
 });
+
+/** A prompt holding `text`. */
+export const promptRecord = (id: string, ref: string, text: string, at: { x: number; y: number } = { x: 0, y: 0 }, meta: Record<string, unknown> = {}) => ({
+  ...baseShape(id, "text", at),
+  props: {
+    color: "black",
+    size: "s",
+    w: 320,
+    font: "sans",
+    textAlign: "start",
+    autoSize: false,
+    scale: 1,
+    richText: { type: "doc", content: text.split("\n").map((line) => (line === "" ? { type: "paragraph" } : { type: "paragraph", content: [{ type: "text", text: line }] })) },
+  },
+  meta: { ref, ...meta },
+});

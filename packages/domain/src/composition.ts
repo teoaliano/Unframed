@@ -26,7 +26,7 @@ export interface Slot {
 export const SKETCH_ROLE = "sketch";
 
 /** The badge of a selected shape that sends nothing: U+2014. */
-export const UNUSED_ROLE = "—";
+export const UNUSED_ROLE = "\u2014";
 
 export interface CompositionInput {
   /** Every shape on the canvas: references and mark ownership read all of them. */
@@ -43,6 +43,8 @@ export interface Composition {
   readonly promptParts: ReadonlyArray<string>;
   /** The parts, then the instruction, joined with a blank line. */
   readonly prompt: string;
+  /** The instruction, resolved and trimmed. */
+  readonly instruction: string;
   readonly references: ReadonlyArray<Slot>;
   /** Badge text by shape id (and `SKETCH_ROLE`). */
   readonly roles: Readonly<Record<string, string>>;
@@ -226,6 +228,7 @@ export const composeSelection = (input: CompositionInput): Composition => {
   return {
     promptParts,
     prompt,
+    instruction,
     references,
     roles,
     usable: promptParts.length > 0 || references.length > 0 || (error !== undefined && hadText),

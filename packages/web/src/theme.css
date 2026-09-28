@@ -29,6 +29,29 @@
   --unframed-error: #a50c25;
   --unframed-shadow-low: 0 2px 4px oklch(0 0 0 / 5%), 0 4px 8px oklch(0 0 0 / 10%);
   --unframed-shadow-med: 0 2px 4px oklch(0 0 0 / 5%), 0 4px 12px oklch(0 0 0 / 10%);
+  /* The hues of provider tokens in the model dialog. */
+  --unframed-hue-blue-bg: #c4ddfb;
+  --unframed-hue-blue-text: #00458c;
+  --unframed-hue-orange-bg: #fad0b5;
+  --unframed-hue-orange-text: #6e3500;
+  --unframed-hue-purple-bg: #eccef3;
+  --unframed-hue-purple-text: #700084;
+  --unframed-hue-green-bg: #c5e5c0;
+  --unframed-hue-green-text: #0c5700;
+  --unframed-hue-pink-bg: #fccadc;
+  --unframed-hue-pink-text: #83004b;
+  --unframed-hue-teal-bg: #a5e3d6;
+  --unframed-hue-teal-text: #005348;
+  --unframed-hue-red-bg: #facecb;
+  --unframed-hue-red-text: #89001a;
+  --unframed-hue-cyan-bg: #a3e0ef;
+  --unframed-hue-cyan-text: #00505f;
+  --unframed-hue-yellow-bg: #f8da9d;
+  --unframed-hue-yellow-text: #584400;
+  --unframed-hue-gray-bg: #e5e5e5;
+  --unframed-hue-gray-text: #262626;
+  --unframed-hue-neutral-bg: #0000000f;
+  --unframed-hue-neutral-text: #262626;
 }
 
 :root[data-unframed-theme="dark"] {
@@ -53,6 +76,28 @@
   --unframed-error: #ffc6c1;
   --unframed-shadow-low: 0 2px 4px oklch(0 0 0 / 25%), 0 4px 8px oklch(0 0 0 / 40%), inset 0 0 0 1px oklch(1 0 0 / 8%);
   --unframed-shadow-med: 0 2px 4px oklch(0 0 0 / 35%), 0 4px 12px oklch(0 0 0 / 50%), inset 0 0 0 1px oklch(1 0 0 / 12%);
+  --unframed-hue-blue-bg: #9eb7ff3d;
+  --unframed-hue-blue-text: #c7d3ff;
+  --unframed-hue-orange-bg: #ffa2583d;
+  --unframed-hue-orange-text: #ffc9a2;
+  --unframed-hue-purple-bg: #f297ff3d;
+  --unframed-hue-purple-text: #fac1ff;
+  --unframed-hue-green-bg: #84c9803d;
+  --unframed-hue-green-text: #9fe59b;
+  --unframed-hue-pink-bg: #ff99c33d;
+  --unframed-hue-pink-text: #ffc3da;
+  --unframed-hue-teal-bg: #7ec6b83d;
+  --unframed-hue-teal-text: #99e2d3;
+  --unframed-hue-red-bg: #ff9e973d;
+  --unframed-hue-red-text: #ffc6c1;
+  --unframed-hue-cyan-bg: #83c2d43d;
+  --unframed-hue-cyan-text: #9edef0;
+  --unframed-hue-yellow-bg: #deb4333d;
+  --unframed-hue-yellow-text: #fdcf4f;
+  --unframed-hue-gray-bg: #ffffff1a;
+  --unframed-hue-gray-text: #e5e5e5;
+  --unframed-hue-neutral-bg: #ffffff1a;
+  --unframed-hue-neutral-text: #e5e5e5;
 }
 
 :root {
