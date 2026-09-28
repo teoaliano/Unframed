@@ -8,6 +8,7 @@ import * as RpcServer from "effect/unstable/rpc/RpcServer";
 import { loadConfig } from "./config.ts";
 import { readEnvFileSync } from "./envFile.ts";
 import { createApiServer } from "./http/api.ts";
+import { clientRoute } from "./http/client.ts";
 import { projectFileRoute } from "./http/files.ts";
 import { createPreviewServer } from "./http/preview.ts";
 import { listenLoopback, LOOPBACK_HOST } from "./listen.ts";
@@ -127,7 +128,10 @@ export const startEngine = async (host: EngineHost): Promise<RunningEngine> => {
   );
 
   const api = createApiServer({
-    http: [projectFileRoute((project) => runtime.runPromise(projects.folder(project)))],
+    http: [
+      projectFileRoute((project) => runtime.runPromise(projects.folder(project))),
+      ...(config.clientDist === undefined ? [] : [clientRoute(config.clientDist)]),
+    ],
     upgrade: [sockets.upgrade],
   });
   const port = await listenLoopback(api, bootSettings.port).catch((error: unknown) => {

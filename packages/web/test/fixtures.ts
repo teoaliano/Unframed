@@ -1,0 +1,74 @@
+import { test as base, type Page, type WebSocket } from "@playwright/test";
+import { startEngine, type EngineOptions, type TestEngine } from "../../engine/test/engineProcess.ts";
+
+export const webDist = (): string => {
+  const dist = process.env.UNFRAMED_TEST_WEB_DIST;
+  if (!dist) throw new Error("The browser seam's global setup did not build the web.");
+  return dist;
+};
+
+/** Starts an engine serving the built web, the way the desktop shell hosts it. */
+export const startHostedEngine = (options: EngineOptions = {}): Promise<TestEngine> =>
+  startEngine({ clientDist: webDist(), ...options });
+
+type Fixtures = { engine: TestEngine };
+
+export const test = base.extend<Fixtures>({
+  engine: async ({}, use) => {
+    const engine = await startHostedEngine();
+    await use(engine);
+    await engine.dispose();
+  },
+});
+
+export { expect } from "@playwright/test";
+
+export interface RpcSocketWatch {
+  /** Every socket the page opened to `/ws`, in order. */
+  readonly sockets: Array<{ socket: WebSocket; openedAt: number; closedAt?: number; frames: any[] }>;
+  /** Resolves once socket `index` has received a frame that matches. */
+  frame(index: number, predicate: (message: any) => boolean, timeout?: number): Promise<any>;
+}
+
+/** Records every `/ws` socket the page opens and every frame it receives. Attach before navigating. */
+export const watchRpcSockets = (page: Page): RpcSocketWatch => {
+  const sockets: RpcSocketWatch["sockets"] = [];
+  page.on("websocket", (socket) => {
+    if (new URL(socket.url()).pathname !== "/ws") return;
+    const entry: RpcSocketWatch["sockets"][number] = { socket, openedAt: Date.now(), frames: [] };
+    sockets.push(entry);
+    socket.on("framereceived", ({ payload }) => {
+      try {
+        entry.frames.push(JSON.parse(String(payload)));
+      } catch {
+        // not an RPC frame
+      }
+    });
+    socket.on("close", () => (entry.closedAt = Date.now()));
+  });
+  return {
+    sockets,
+    frame: (index, predicate, timeout = 15_000) =>
+      new Promise((resolve, reject) => {
+        const started = Date.now();
+        const timer = setInterval(() => {
+          const found = sockets[index]?.frames.find(predicate);
+          if (found !== undefined) {
+            clearInterval(timer);
+            resolve(found);
+          } else if (Date.now() - started > timeout) {
+            clearInterval(timer);
+            reject(new Error(`socket ${index} received no matching frame (${sockets.length} sockets)`));
+          }
+        }, 20);
+      }),
+  };
+};
+
+/** A settings chunk from `settings.subscribe`, optionally with a given text model. */
+export const isSettingsChunk =
+  (textModel?: string) =>
+  (message: any): boolean =>
+    message?._tag === "Chunk" &&
+    Array.isArray(message.values) &&
+    message.values.some((value: any) => typeof value?.hasKey === "boolean" && (textModel === undefined || value.textModel === textModel));

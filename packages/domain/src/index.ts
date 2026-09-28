@@ -3,6 +3,7 @@ export * from "./httpMessages.ts";
 export * from "./loopbackGuard.ts";
 export * from "./nativePlans.ts";
 export * from "./preferences.ts";
+export { reconnectDelay } from "./reconnect.ts";
 export * from "./settings.ts";
 export * from "./settingsPatch.ts";
 export { projectSlug } from "./slug.ts";

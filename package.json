@@ -10,9 +10,10 @@
     "dev": "node scripts/dev.ts",
     "engine": "node packages/engine/src/main.ts",
     "web": "pnpm --filter @unframed/web dev",
-    "typecheck": "pnpm -r --no-bail typecheck",
+    "typecheck": "tsc --noEmit -p tsconfig.json && pnpm -r --no-bail typecheck",
     "test": "vitest run",
     "test:browser": "playwright test",
+    "test:bundle": "vitest run --project engine packages/engine/test/bundle.test.ts",
     "build": "node scripts/build.ts"
   },
   "devDependencies": {
