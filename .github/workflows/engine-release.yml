@@ -1,0 +1,83 @@
+name: Engine release
+
+# Pushing engine-v<semver> builds the bundle and commits it to the dist branch, tagged
+# engine-v<semver>-dist, which the desktop shell pins. It never creates a GitHub
+# Release and never calls the Release API: the shell's updater reads the latest Release.
+on:
+  push:
+    tags:
+      - "engine-v*"
+      - "!engine-v*-dist"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: engine-dist
+  cancel-in-progress: false
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: The tag matches the engine version
+        run: node scripts/checkEngineTag.ts "$GITHUB_REF_NAME"
+
+      - name: The tldraw license key secret is set
+        env:
+          TLDRAW_LICENSE_KEY: ${{ secrets.TLDRAW_LICENSE_KEY }}
+        run: |
+          if [ -z "$TLDRAW_LICENSE_KEY" ]; then
+            echo "::error::The TLDRAW_LICENSE_KEY repository secret is empty."
+            exit 1
+          fi
+
+      - name: The bundle has a LICENSE to carry
+        run: |
+          if [ ! -f LICENSE ]; then
+            echo "::error::There is no LICENSE at the repository root."
+            exit 1
+          fi
+
+  ci:
+    needs: check
+    uses: ./.github/workflows/ci.yml
+    secrets: inherit
+
+  publish:
+    needs: ci
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: engine-bundle
+          path: bundle
+
+      - name: Boot the bundle under Electron 44 in Node mode
+        run: |
+          npx --yes playwright@1.63.0 install-deps chromium
+          npm install --no-save --no-audit --no-fund --prefix "$RUNNER_TEMP/electron" electron@44
+          electron="$(node -p "require('$RUNNER_TEMP/electron/node_modules/electron')")"
+          node scripts/electronSmoke.ts bundle "$electron"
+
+      - name: Commit the bundle to dist and tag it
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          bash scripts/publishDist.sh bundle "${GITHUB_REF_NAME#engine-v}"

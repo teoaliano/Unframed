@@ -142,6 +142,8 @@ This is the one table of every test-only variable in the build. A spec that uses
 | `UNFRAMED_TEST_OPENROUTER_ORIGIN` | 01, 03, 04, 05, 10 | replaces `https://openrouter.ai` in every OpenRouter URL the engine builds: image generation and the image catalogue and pricing endpoints (spec 03), video create, status and catalogue and the unofficial `/api/frontend/v1/models/find` endpoint (spec 04), chat completions and the models listing (spec 05), the OAuth authorize page, the key exchange and the key status endpoint (spec 10). There is no per-URL override: every OpenRouter call goes through this one origin. Accepted only when it is an `http://127.0.0.1:<port>` or `http://localhost:<port>` origin; any other value is ignored and the engine logs `  test origin ignored: <value> is not a loopback origin` at boot, so the variable can never send the key anywhere but this machine |
 | `UNFRAMED_TEST_NATIVE_LOG` | 01 | a file path. When set, reveal and the folder picker never spawn OS commands. Each command the engine would have run is appended as one JSON line `{"cmd": string, "args": string[]}` |
 | `UNFRAMED_TEST_PICK_FOLDER` | 01, 10 | with `UNFRAMED_TEST_NATIVE_LOG` set, the folder picker's answer: `none` behaves as "no picker on this machine", `cancel` as a cancelled dialog, any other value as the chosen path |
+| `UNFRAMED_TEST_SHUTDOWN_HOOK_MS` | 01 | registers one extra shutdown hook that takes this many milliseconds, so a test can watch a hook finish inside the budget or be abandoned at 1.5 seconds |
+| `UNFRAMED_TEST_MIGRATION` | 01 | an SQL script the project database runs as one extra migration at the end of its list, so a test can watch a migration apply once and roll back whole when it fails |
 | `UNFRAMED_TEST_TUNNEL` | 04 | `loopback` makes the share service's tunnel return the share server's own `http://127.0.0.1:<port>` and its reachability probe a plain `HEAD` against it; `never` makes every probe fail at once |
 | `UNFRAMED_TEST_SWEEP_MS` | 04 | the render sweep's interval in milliseconds, in place of 30 s |
 | `UNFRAMED_TEST_SHARE_TTL_MS` | 04 | the share link TTL in milliseconds, in place of 30 min; the expiry check then runs at the smaller of 60 s and this value |
@@ -176,7 +178,7 @@ The shell's CI greps for `Unframed server`. That phrase must never change. Every
 
 Ready: when the process has an IPC channel, it sends `{ "type": "ready", "port": <API port>, "previewPort": <preview port> }` once, after both listeners are bound. Without a channel it sends nothing and runs identically.
 
-Listen failure (port in use, permission): print the error and exit with code 1, so the shell's "engine exited" path fires.
+Listen failure (port in use, permission): print the error and exit with code 1, so the shell's "engine exited" path fires. A `PORT` that is not a whole number from 0 to 65535 stops the boot the same way, before anything binds, with `  PORT has to be a whole number from 0 to 65535, not "<value>".`
 
 Shutdown: on SIGTERM or SIGINT the engine stops accepting connections, closes every WebSocket with close code 1001, runs every registered shutdown hook (later specs register: flush sync rooms and databases, close the share tunnel, stop the render sweep, end agent sessions), and exits with code 0. The whole sequence must finish within 2 seconds, because the shell waits 2 seconds before giving up. A hook that has not finished by 1.5 seconds is abandoned and the engine exits anyway. Timers the engine starts (sweeps, TTL checks) never keep the process alive on their own.
 
@@ -202,7 +204,9 @@ A top-level browser navigation GET (the OAuth callback in spec 10) carries no `O
 
 As t3code does: Effect RPC over one WebSocket at the path `/ws`, JSON serialisation, an `RpcGroup` defined in contracts, served by the engine and consumed by the web through Effect's RPC client. Method names are `<area>.<verb>`. Streaming methods (subscriptions) are Effect RPC streams.
 
-Inbound frame limit: 60 MB (62,914,560 bytes). A larger frame closes that socket with code 1009. The web, on a 1009 close, fails every call that was in flight on it with: `This is too large to send in one request. The limit is 60.0MB. Removing the largest images or videos from the board will bring it back under.` A frame that is not valid JSON closes that socket with code 1007 and logs `  ws: closed a socket that sent a frame that was not JSON`. Neither affects other sockets.
+Inbound frame limit: 60 MB (62,914,560 bytes). A larger frame closes that socket with code 1009. The web, on a 1009 close, fails every call that was in flight on it with: `This is too large to send in one request. The limit is 60.0MB. Removing the largest images or videos from the board will bring it back under.` A frame that is not valid JSON closes that socket with code 1007 and logs `  ws: closed a socket that sent a frame that was not JSON`. A frame that is JSON but not an RPC message closes it with 1007 too and logs `  ws: closed a socket that sent a frame that was not an RPC message`. None of these affects other sockets.
+
+The engine's side of the socket is its own protocol over the `ws` package, because Effect's socket protocol answers a non-JSON frame or an undecodable payload with a defect instead of a 1007 close or `bad_request`. The web uses Effect's own socket protocol.
 
 Error model. Every method's failure schema is one tagged error:
 
@@ -212,7 +216,7 @@ UnframedError { _tag: "UnframedError", code: "bad_request" | "not_found" | "conf
 
 This is the only failure shape any RPC method in any spec answers. A later spec lists its failures as `code: message` pairs; when the web needs to tell two failures with the same code apart, the spec names a `details.reason` string (spec 04 does this for video starts), never a second error shape. `message` is a full sentence meant for the person, and is what the web shows. `code` maps to the HTTP status the same failure would have on an HTTP route (400, 404, 409, 501, 502, 500). `upstream` means OpenRouter, or another service the engine called, failed or answered with an error. A payload that fails schema decoding is answered `bad_request` with a message naming the field. A defect (an unexpected throw inside a handler) is caught at the RPC server boundary, logged as `  <method> failed: <stack>`, and answered `internal` with `Something went wrong: <message>`.
 
-Web client: connects to `ws(s)://<location.host>/ws`. On a drop it reconnects with backoff starting at 1 s, doubling, capped at 10 s. Subscriptions re-subscribe after reconnect. What a person sees while the socket is down is spec 02's connection-lost notice; this spec shows no notice of its own.
+Web client: connects to `ws(s)://<location.host>/ws`. On a drop it reconnects with backoff starting at 1 s, doubling, capped at 10 s. Subscriptions re-subscribe after reconnect. On a close other than 1009, calls in flight fail with `unavailable`: `The connection to the local engine was lost.` Both failures carry `details.reason` (`too_large` for the 1009 one, `connection_lost` otherwise), which is how the web tells them from failures the engine answered. A call made while the socket is down waits for the next one. What a person sees while the socket is down is spec 02's connection-lost notice; this spec shows no notice of its own.
 
 Methods this spec delivers:
 
@@ -289,7 +293,7 @@ Registered by: this spec's project database (its handle); spec 02 (the sync room
 
 Each project has exactly one SQLite file, `<project folder>/unframed.sqlite`, used through `node:sqlite` in WAL mode. The **project database** module (engine) is the only code that opens it. `open(project)` returns the handle, creating the file when it does not exist, applies pending migrations, and registers the handle's closer with the open-project registry. Every other module that needs the file asks this one; none opens the file itself or keeps a second SQLite file in the project folder.
 
-Later specs add their tables to this file by name, as numbered migrations in the module's one ordered list, each applied once inside a transaction at open:
+Later specs add their tables to this file by name, as numbered migrations in the module's one ordered list, each applied once inside a transaction at open and recorded in the file's `unframed_migrations` table:
 
 | Tables | Added by |
 | --- | --- |
@@ -328,7 +332,7 @@ A later spec that remembers something adds its key to this table.
 
 ### Project file serving (HTTP)
 
-`GET /api/file/<project>/<name>` (and `HEAD`). The project is slugged; `name` is reduced to its basename, so a path in it cannot escape. Serves the file with a content type from its extension, supports byte-range requests (videos must seek), `Cache-Control: no-cache`, `X-Content-Type-Options: nosniff`. A missing file answers 404 `{ "error": "File not found." }`. This route never serves `.html` as `text/html`: HTML files are served as `text/plain`, because a page is never rendered from the app's origin (00-index contract 3). The loopback guard applies.
+`GET /api/file/<project>/<name>` (and `HEAD`). The project is slugged; `name` is reduced to its basename, so a path in it cannot escape. Serves the file with a content type from its extension, supports byte-range requests (videos must seek), `Cache-Control: no-cache`, `X-Content-Type-Options: nosniff`. A missing file answers 404 `{ "error": "File not found." }`. This route never serves `.html` as `text/html`: HTML files are served as `text/plain`, because a page is never rendered from the app's origin (00-index contract 3). Scripts (`.js`, `.mjs`) are served as `text/plain` for the same reason, and every file carries `Content-Security-Policy: sandbox`, so a file opened as a document runs no script and gets no origin. The loopback guard applies.
 
 ### Serving the web
 
@@ -405,7 +409,7 @@ The bundle's Node floor is the Node inside the Electron release the shell ships.
 ### CI
 
 - On every pull request (forks included) and every push to `main`, on Node 24: `pnpm install --frozen-lockfile`, `pnpm typecheck`, `pnpm test`, install Playwright's Chromium, `pnpm test:browser`, then `pnpm build` and the bundle smoke test (fork the built `server/index.js` with the hosted variables, a temp data folder and `PORT=0`, assert the ready message and the banner, fetch `/` and get the web).
-- On push of a tag matching `engine-v<semver>`: everything above, with `TLDRAW_LICENSE_KEY` from the repository secret; fail unless `<semver>` equals the engine package version; boot the bundle under Electron 44 in `ELECTRON_RUN_AS_NODE=1` mode through `fork` with an IPC channel and assert the ready message; then commit the bundle as one new commit on the `dist` branch (its tree is the bundle root only, a fast-forward on top of the previous dist commit, never a force-push) and tag that commit `engine-v<semver>-dist`. The shell pins `github:<owner>/<repo>#engine-v<semver>-dist`.
+- On push of a tag matching `engine-v<semver>`: everything above, with `TLDRAW_LICENSE_KEY` from the repository secret; fail unless `<semver>` equals the engine package version and the repository has a `LICENSE` for the bundle to carry; boot the bundle under Electron 44 in `ELECTRON_RUN_AS_NODE=1` mode through `fork` with an IPC channel and assert the ready message; then commit the bundle as one new commit on the `dist` branch (its tree is the bundle root only, a fast-forward on top of the previous dist commit, never a force-push) and tag that commit `engine-v<semver>-dist`. The shell pins `github:<owner>/<repo>#engine-v<semver>-dist`.
 - CI never runs `gh release create` or any Release API call. An engine tag must never become a GitHub Release.
 
 ## Testing Decisions

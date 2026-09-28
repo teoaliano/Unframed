@@ -1,0 +1,7 @@
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "lib": ["es2024", "dom", "dom.iterable"]
+  },
+  "include": ["scripts", "packages/web/test", "playwright.config.ts", "vitest.config.ts"]
+}
