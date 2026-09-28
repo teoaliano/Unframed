@@ -9,11 +9,15 @@
     "typecheck": "tsc --noEmit -p ."
   },
   "dependencies": {
+    "@base-ui/react": "1.8.0",
+    "@tldraw/sync": "5.4.2",
     "@unframed/contracts": "workspace:*",
     "@unframed/domain": "workspace:*",
     "effect": "4.0.0-rc.115",
+    "lucide-react": "1.48.0",
     "react": "19.3.0",
-    "react-dom": "19.3.0"
+    "react-dom": "19.3.0",
+    "tldraw": "5.4.2"
   },
   "devDependencies": {
     "@tailwindcss/vite": "4.3.3",

@@ -10,6 +10,9 @@
     "typecheck": "tsc --noEmit -p ."
   },
   "dependencies": {
+    "@tldraw/store": "5.4.2",
+    "@tldraw/tlschema": "5.4.2",
+    "@tldraw/validate": "5.4.2",
     "effect": "4.0.0-rc.115"
   }
 }
