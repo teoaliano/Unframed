@@ -402,7 +402,7 @@ Built by `pnpm build`, published by CI. Layout at the bundle root:
 - `server/index.js`: plain ESM JavaScript, the fork entry. All workspace code and every inlinable dependency are bundled into it (plus sibling chunk files under `server/` if the bundler splits). No TypeScript, no workspace references, no source maps, no test files.
 - `client/dist/`: the built web.
 - `client/package.json` and `client/package-lock.json`: a compatibility shim for a shell that still runs `npm --prefix <engine>/client ci && npm --prefix <engine>/client run build`. The manifest has no dependencies and a `build` script that does nothing and exits 0, and the lockfile matches it, so that command succeeds and leaves `client/dist` untouched. It can be removed once the shell stops building the client.
-- `LICENSE` and `THIRD_PARTY_NOTICES` (crediting t3code, MIT, among the rest).
+- `LICENSE` (the repository root `LICENSE`: MIT) and `THIRD_PARTY_NOTICES` (crediting t3code, MIT, among the rest).
 
 The bundle's Node floor is the Node inside the Electron release the shell ships. The shell moves to Electron 44 as part of adopting this rewrite; the bundle targets that release's Node. An older shell cannot run it.
 
