@@ -2,8 +2,8 @@ const MAX_SLUG_LENGTH = 40;
 
 /**
  * A project name as a folder name. The slug is also what keeps a name inside the
- * output folder, so every path that takes a project name slugs it first. An empty
- * result means the name is refused.
+ * output folder, so every path that takes a project name slugs it first. The caller
+ * refuses a name whose slug is empty.
  */
 export const projectSlug = (name: string): string =>
   name

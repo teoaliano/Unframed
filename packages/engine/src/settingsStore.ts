@@ -21,14 +21,14 @@ export class SettingsStore extends Context.Service<
   SettingsStore,
   {
     /** The live values, key included. Never send these to the web. */
-    readonly current: Effect.Effect<EffectiveSettings>;
+    readonly read: Effect.Effect<EffectiveSettings>;
     /** The resolved absolute output folder. */
     readonly outputDir: Effect.Effect<string>;
     /** What the web may see. */
     readonly view: Effect.Effect<Settings>;
     readonly update: (patch: SettingsPatch) => Effect.Effect<Settings, UnframedError>;
     /** The current settings first, then one value per change. */
-    readonly changes: Stream.Stream<Settings>;
+    readonly subscribe: Stream.Stream<Settings>;
   }
 >()("unframed/engine/SettingsStore") {}
 
@@ -84,13 +84,13 @@ export const settingsStoreLayer = (options: {
         }).pipe(updates.withPermits(1));
 
       return SettingsStore.of({
-        current: SubscriptionRef.get(state),
+        read: SubscriptionRef.get(state),
         outputDir: Effect.map(SubscriptionRef.get(state), (settings) =>
           resolveOutputDir(settings.outputDir, config.dataDir),
         ),
         view: Effect.map(SubscriptionRef.get(state), view),
         update,
-        changes: Stream.map(SubscriptionRef.changes(state), view),
+        subscribe: Stream.map(SubscriptionRef.changes(state), view),
       });
     }),
   );

@@ -6,7 +6,7 @@ import type { EngineIpcMessage } from "@unframed/contracts";
 import { startEngine } from "./engine.ts";
 import { errorText, logError, stackText } from "./log.ts";
 
-/** The shell waits this long after SIGTERM before giving up on the engine. */
+/** The shell gives up 2 s after SIGTERM, so the engine exits by this point whatever is still running. */
 const EXIT_DEADLINE_MS = 1900;
 
 process.on("unhandledRejection", (reason) => {

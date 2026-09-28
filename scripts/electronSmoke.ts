@@ -7,6 +7,7 @@ import { fork } from "node:child_process";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import type { ReadyMessage } from "../packages/contracts/src/ipc.ts";
 
 const [bundleArg, electronArg] = process.argv.slice(2);
 if (!bundleArg || !electronArg) {
@@ -38,12 +39,12 @@ const fail = async (message: string): Promise<never> => {
   process.exit(1);
 };
 
-const ready = await new Promise<{ type: string; port: number; previewPort: number } | undefined>((done) => {
+const ready = await new Promise<ReadyMessage | undefined>((done) => {
   const timer = setTimeout(() => done(undefined), 30_000);
   child.on("message", (message: { type?: string }) => {
     if (message.type !== "ready") return;
     clearTimeout(timer);
-    done(message as { type: string; port: number; previewPort: number });
+    done(message as ReadyMessage);
   });
   child.on("exit", () => done(undefined));
 });

@@ -17,7 +17,7 @@ const appleScriptString = (text: string): string => `"${text.replace(/\\/g, "\\\
  */
 export const revealPlan = (platform: string, files: ReadonlyArray<string>, folder: string): RevealPlan => {
   if (platform === "darwin") {
-    // A quote would break out of the script string, so such a file is dropped, not escaped.
+    // The reveal rule drops a file whose path holds a quote, which would end the script string.
     const safe = files.filter((file) => !file.includes('"'));
     if (safe.length === 0) return { command: { cmd: "open", args: [folder] }, revealed: "folder" };
     const list = safe.map((file) => `POSIX file ${appleScriptString(file)}`).join(", ");

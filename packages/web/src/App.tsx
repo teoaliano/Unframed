@@ -24,6 +24,7 @@ export const useSettings = (): Settings | undefined => {
  * canvas background. Spec 02 fills the cards and puts the canvas under them.
  */
 const Frame = () => {
+  // Holds the app's settings.subscribe open from the start, through every reconnect.
   useSettings();
   return (
     <main className="relative h-full w-full overflow-hidden bg-canvas text-primary">

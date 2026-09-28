@@ -6,6 +6,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { errorText } from "./log.ts";
 import { OpenProjects } from "./openProjects.ts";
+import { Config } from "./services.ts";
 import { SettingsStore } from "./settingsStore.ts";
 
 export const DATABASE_FILE = "unframed.sqlite";
@@ -20,12 +21,11 @@ export interface Migration {
   readonly up: (db: DatabaseSync) => void;
 }
 
-/**
- * The one ordered list. Later specs add their tables here by name: tldraw sync storage
- * and `canvas_changes` (02), the orchestration and projection tables and `turn_changes`
- * (07), `legacy_import_report` (11).
- */
+/** The one ordered list. Every table a later spec adds to the project database is a migration here. */
 export const MIGRATIONS: ReadonlyArray<Migration> = [];
+
+/** `UNFRAMED_TEST_MIGRATION`'s extra migration, numbered far past any real one. */
+const TEST_MIGRATION_ID = 1_000_000;
 
 /** Applies every migration not yet recorded, each once inside its own transaction. */
 export const applyMigrations = (db: DatabaseSync, migrations: ReadonlyArray<Migration> = MIGRATIONS): number => {
@@ -81,15 +81,21 @@ export class ProjectDatabase extends Context.Service<
 export const projectDatabaseLayer = Layer.effect(
   ProjectDatabase,
   Effect.gen(function* () {
+    const config = yield* Config;
     const settings = yield* SettingsStore;
     const openProjects = yield* OpenProjects;
+    const migrations: ReadonlyArray<Migration> =
+      config.testMigrationSql === undefined
+        ? MIGRATIONS
+        : [...MIGRATIONS, { id: TEST_MIGRATION_ID, name: "test migration", up: (db) => db.exec(config.testMigrationSql!) }];
+    // By file, not by name: after an output folder change the same name is another project.
     const handles = new Map<string, ProjectDb>();
 
     const open = (project: string) =>
       Effect.gen(function* () {
-        const cached = handles.get(project);
-        if (cached) return cached;
         const path = join(yield* settings.outputDir, project, DATABASE_FILE);
+        const cached = handles.get(path);
+        if (cached) return cached;
         const handle = yield* Effect.try({
           try: () => {
             const db = new DatabaseSync(path);
@@ -97,7 +103,7 @@ export const projectDatabaseLayer = Layer.effect(
               db.exec("PRAGMA journal_mode = WAL");
               db.exec("PRAGMA busy_timeout = 5000");
               db.exec("PRAGMA foreign_keys = ON");
-              applyMigrations(db);
+              applyMigrations(db, migrations);
             } catch (error) {
               db.close();
               throw error;
@@ -106,12 +112,12 @@ export const projectDatabaseLayer = Layer.effect(
           },
           catch: (error) => unframedError("internal", `Could not open the project database: ${errorText(error)}`),
         });
-        handles.set(project, handle);
+        handles.set(path, handle);
         yield* openProjects.register(
           project,
           "project database",
           Effect.sync(() => {
-            if (handles.get(project) === handle) handles.delete(project);
+            if (handles.get(path) === handle) handles.delete(path);
             if (handle.db.isOpen) handle.db.close();
           }),
         );

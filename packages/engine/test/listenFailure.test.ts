@@ -18,4 +18,14 @@ describe("listen failure", () => {
     expect(engine.stdout()).not.toContain("Unframed server");
     expect(engine.messages).toEqual([]);
   });
+
+  it.each([
+    ["the process environment", { env: { PORT: "80a" } }, "80a"],
+    [".env", { dotenv: "PORT=70000\n" }, "70000"],
+  ])("refuses a PORT from %s that is not a port, and exits with code 1", async (_source, options, value) => {
+    const engine = await startEngine({ ...options, waitForReady: false });
+    expect((await engine.exited).code).toBe(1);
+    expect(engine.stderr()).toContain(`  PORT has to be a whole number from 0 to 65535, not "${value}".\n`);
+    expect(engine.stdout()).not.toContain("Unframed server");
+  });
 });

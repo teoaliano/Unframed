@@ -24,7 +24,7 @@ export class Projects extends Context.Service<
   }
 >()("unframed/engine/Projects") {}
 
-const code = (error: unknown) => (error as NodeJS.ErrnoException).code;
+const errnoCode = (error: unknown) => (error as NodeJS.ErrnoException).code;
 
 export const projectsLayer = Layer.effect(
   Projects,
@@ -59,7 +59,7 @@ export const projectsLayer = Layer.effect(
               await mkdir(join(outputDir, slug));
               return true;
             } catch (error) {
-              if (code(error) !== "EEXIST") throw error;
+              if (errnoCode(error) !== "EEXIST") throw error;
               const entries = await readdir(outputDir, { withFileTypes: true });
               if (entries.some((entry) => entry.name === slug && entry.isDirectory())) return false;
               throw error;

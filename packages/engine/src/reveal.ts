@@ -1,8 +1,9 @@
 import { stat } from "node:fs/promises";
-import { basename, join } from "node:path";
+import { join } from "node:path";
 import { unframedError } from "@unframed/contracts";
 import * as Effect from "effect/Effect";
 import { Native } from "./native.ts";
+import { fileNameOf } from "./paths.ts";
 import { Projects } from "./projects.ts";
 import { SettingsStore } from "./settingsStore.ts";
 
@@ -14,7 +15,7 @@ const exists = (path: string) =>
 
 /**
  * `files.reveal`: the project folder (or the output folder when no project is named).
- * Each name is reduced to its basename and names not on disk are dropped.
+ * It keeps each name's basename and drops the names not on disk.
  */
 export const revealFiles = (input: { readonly project?: string; readonly fileNames: ReadonlyArray<string> }) =>
   Effect.gen(function* () {
@@ -26,9 +27,9 @@ export const revealFiles = (input: { readonly project?: string; readonly fileNam
       folder !== undefined && (yield* Effect.promise(() => stat(folder).then((info) => info.isDirectory(), () => false)));
     if (folder === undefined || !isFolder) return yield* unframedError("not_found", "No files for this project yet.");
 
-    const names = [...new Set(input.fileNames.map((name) => basename(name)))].filter(
-      (name) => name !== "" && name !== "." && name !== "..",
-    );
+    const names = [
+      ...new Set(input.fileNames.map(fileNameOf).filter((name): name is string => name !== undefined)),
+    ];
     const files: string[] = [];
     for (const name of names) {
       const path = join(folder, name);

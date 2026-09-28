@@ -35,9 +35,9 @@ const upsertOne = (lines: Line[], name: string, value: string | null): Line[] =>
 
 /**
  * Applies `changes` to `.env` text: a value replaces the first line for its name in
- * place (keeping that line's ending) or is appended; `null` deletes every line for the
- * name. Comments, blank lines and unknown variables stay byte for byte. Values are
- * written unquoted: the validators forbid quotes, `#` and line breaks.
+ * place (keeping that line's ending), or goes at the end; `null` deletes every line for
+ * the name. Comments, blank lines and unknown variables stay byte for byte. It writes
+ * values unquoted: the validators forbid quotes, `#` and line breaks.
  */
 export const envUpsert = (text: string, changes: Readonly<Record<string, string | null>>): string => {
   let lines = splitLines(text);

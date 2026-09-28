@@ -11,8 +11,8 @@ export class HttpBodyError extends Error {
 }
 
 /**
- * The one JSON body parser every HTTP route uses. Caps the body at 60 MB: a declared
- * length over the cap is refused before reading, and an undeclared one as soon as it
+ * The one JSON body parser every HTTP route uses. Caps the body at 60 MB: it refuses a
+ * declared length over the cap before reading, and an undeclared one as soon as it
  * passes it.
  */
 export const readJsonBody = async (req: http.IncomingMessage, limit = MAX_REQUEST_BYTES): Promise<unknown> => {

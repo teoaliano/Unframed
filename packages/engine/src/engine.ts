@@ -1,6 +1,6 @@
 import type http from "node:http";
-import { UnframedRpcs, type EngineIpcMessage } from "@unframed/contracts";
-import { effectiveSettings } from "@unframed/domain";
+import { UnframedRpcs, type EngineIpcMessage, type Settings } from "@unframed/contracts";
+import { readPort } from "@unframed/domain";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as ManagedRuntime from "effect/ManagedRuntime";
@@ -42,26 +42,17 @@ export interface RunningEngine {
   readonly stop: () => Promise<void>;
 }
 
-export class ListenError extends Error {}
-
-const banner = (lines: {
-  port: number;
-  imageModel: string;
-  textModel: string;
-  videoModel: string;
-  hasKey: boolean;
-  previewPort: number;
-  outputDir: string;
-}): string =>
+/** The desktop shell's CI greps for "Unframed server": that phrase must never change. */
+const banner = (port: number, settings: Settings): string =>
   [
     "",
-    `  Unframed server  →  http://localhost:${lines.port}`,
-    `  image:    ${lines.imageModel}`,
-    `  text:     ${lines.textModel}`,
-    `  video:    ${lines.videoModel}`,
-    `  api key:  ${lines.hasKey ? "loaded" : "MISSING: add one in the app (settings icon, top right)"}`,
-    `  preview:  http://127.0.0.1:${lines.previewPort}`,
-    `  output:   ${lines.outputDir}`,
+    `  Unframed server  →  http://localhost:${port}`,
+    `  image:    ${settings.imageModel}`,
+    `  text:     ${settings.textModel}`,
+    `  video:    ${settings.videoModel}`,
+    `  api key:  ${settings.hasKey ? "loaded" : "MISSING: add one in the app (settings icon, top right)"}`,
+    `  preview:  http://127.0.0.1:${settings.previewPort}`,
+    `  output:   ${settings.outputDir}`,
     "",
     "",
   ].join("\n");
@@ -73,7 +64,7 @@ const stopListening = (server: http.Server) => {
 
 /**
  * Boots the engine: read settings, bind the preview origin, bind the API, print the
- * banner, then report ready to a parent that forked it.
+ * banner, then report ready to a parent that forked it. Rejects when it cannot listen.
  */
 export const startEngine = async (host: EngineHost): Promise<RunningEngine> => {
   const { config, warnings } = loadConfig(host.env, installRoot(), host.platform);
@@ -85,11 +76,12 @@ export const startEngine = async (host: EngineHost): Promise<RunningEngine> => {
   } catch (error) {
     logError(`could not read .env: ${errorText(error)}`);
   }
-  const bootSettings = effectiveSettings(fileVars, host.env);
+  const port = readPort(fileVars, host.env);
+  if (!port.ok) throw new Error(`PORT has to be a whole number from 0 to 65535, not "${port.value}".`);
 
   const preview = createPreviewServer();
   const previewPort = await listenLoopback(preview, 0).catch((error: unknown) => {
-    throw new ListenError(`could not start the preview origin on ${LOOPBACK_HOST}: ${errorText(error)}`);
+    throw new Error(`could not start the preview origin on ${LOOPBACK_HOST}: ${errorText(error)}`);
   });
 
   const services = Layer.mergeAll(RpcServer.layer(UnframedRpcs, { disableTracing: true })).pipe(
@@ -106,7 +98,7 @@ export const startEngine = async (host: EngineHost): Promise<RunningEngine> => {
     Layer.provideMerge(Layer.succeed(Ipc, { send: host.send })),
   );
   const runtime = ManagedRuntime.make(services);
-  const { view, sockets, projects, shutdown } = await runtime.runPromise(
+  const { settings, sockets, projects, shutdown } = await runtime.runPromise(
     Effect.gen(function* () {
       const store = yield* SettingsStore;
       const shutdown = yield* Shutdown;
@@ -123,7 +115,7 @@ export const startEngine = async (host: EngineHost): Promise<RunningEngine> => {
       );
       const hookMs = config.testShutdownHookMs;
       if (hookMs !== undefined) yield* shutdown.register("test hook", Effect.sleep(hookMs));
-      return { view: yield* store.view, sockets: yield* RpcSockets, projects: yield* Projects, shutdown };
+      return { settings: yield* store.view, sockets: yield* RpcSockets, projects: yield* Projects, shutdown };
     }),
   );
 
@@ -134,22 +126,12 @@ export const startEngine = async (host: EngineHost): Promise<RunningEngine> => {
     ],
     upgrade: [sockets.upgrade],
   });
-  const port = await listenLoopback(api, bootSettings.port).catch((error: unknown) => {
-    throw new ListenError(`could not listen on ${LOOPBACK_HOST}:${bootSettings.port}: ${errorText(error)}`);
+  const apiPort = await listenLoopback(api, port.port).catch((error: unknown) => {
+    throw new Error(`could not listen on ${LOOPBACK_HOST}:${port.port}: ${errorText(error)}`);
   });
 
-  process.stdout.write(
-    banner({
-      port,
-      imageModel: view.imageModel,
-      textModel: view.textModel,
-      videoModel: view.videoModel,
-      hasKey: view.hasKey,
-      previewPort,
-      outputDir: view.outputDir,
-    }),
-  );
-  host.send?.({ type: "ready", port, previewPort });
+  process.stdout.write(banner(apiPort, settings));
+  host.send?.({ type: "ready", port: apiPort, previewPort });
 
   const stop = async () => {
     const startedAt = Date.now();
@@ -160,5 +142,5 @@ export const startEngine = async (host: EngineHost): Promise<RunningEngine> => {
     api.closeAllConnections();
     preview.closeAllConnections();
   };
-  return { port, previewPort, stop };
+  return { port: apiPort, previewPort, stop };
 };

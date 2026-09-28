@@ -1,6 +1,5 @@
 import type http from "node:http";
 
-/** Every HTTP error answer is JSON with an `error` string. */
 export const sendJson = (
   res: http.ServerResponse,
   status: number,
@@ -18,6 +17,7 @@ export const sendJson = (
   res.end(text);
 };
 
+/** Every HTTP error answer is JSON with an `error` string, except a page a person's browser lands on. */
 export const sendError = (res: http.ServerResponse, status: number, message: string): void =>
   sendJson(res, status, { error: message });
 

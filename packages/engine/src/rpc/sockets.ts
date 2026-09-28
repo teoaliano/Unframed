@@ -23,7 +23,9 @@ export const RPC_PATH = "/ws";
 
 /**
  * The RPC socket at `/ws`: every connected client, and the RPC server protocol that
- * carries their messages. One bad frame closes only its own socket.
+ * carries their messages. One bad frame closes only its own socket. Hand-written because
+ * Effect's socket protocol answers a non-JSON frame and an undecodable payload with a
+ * defect, where the spec needs a 1007 close and `bad_request` naming the field.
  */
 export class RpcSockets extends Context.Service<
   RpcSockets,
@@ -34,7 +36,7 @@ export class RpcSockets extends Context.Service<
   }
 >()("unframed/engine/RpcSockets") {}
 
-type Decoders = {
+type RpcCodecs = {
   readonly decodePayload: (input: unknown) => Exit.Exit<unknown, Schema.SchemaError>;
   readonly encodeExit: (exit: Exit.Exit<unknown, unknown>) => unknown;
 };
@@ -62,20 +64,19 @@ export const rpcSocketsLayer = Layer.effectContext(
     const runPromise = Effect.runPromiseWith(context);
     const disconnects = yield* Queue.unbounded<number>();
     const clients = new Map<number, WebSocket>();
-    const clientIds = new Set<number>();
     let nextClientId = 0;
 
-    const decoders = new Map<string, Decoders>();
-    const decodersFor = (tag: string): Decoders | undefined => {
-      const cached = decoders.get(tag);
+    const codecs = new Map<string, RpcCodecs>();
+    const codecsFor = (tag: string): RpcCodecs | undefined => {
+      const cached = codecs.get(tag);
       if (cached) return cached;
       const rpc = UnframedRpcs.requests.get(tag);
       if (!rpc) return undefined;
-      const made: Decoders = {
-        decodePayload: Schema.decodeUnknownExit(Schema.toCodecJson(rpc.payloadSchema)) as Decoders["decodePayload"],
-        encodeExit: Schema.encodeSync(Schema.toCodecJson(Rpc.exitSchema(rpc))) as Decoders["encodeExit"],
+      const made: RpcCodecs = {
+        decodePayload: Schema.decodeUnknownExit(Schema.toCodecJson(rpc.payloadSchema)) as RpcCodecs["decodePayload"],
+        encodeExit: Schema.encodeSync(Schema.toCodecJson(Rpc.exitSchema(rpc))) as RpcCodecs["encodeExit"],
       };
-      decoders.set(tag, made);
+      codecs.set(tag, made);
       return made;
     };
 
@@ -92,7 +93,7 @@ export const rpcSocketsLayer = Layer.effectContext(
         disconnects,
         send,
         end: () => Effect.void,
-        clientIds: Effect.sync(() => clientIds),
+        clientIds: Effect.sync(() => new Set(clients.keys())),
         initialMessage: Effect.succeed(Option.none()),
         supportsAck: true,
         supportsTransferables: false,
@@ -102,12 +103,12 @@ export const rpcSocketsLayer = Layer.effectContext(
       });
     });
 
-    /** A payload that fails decoding is answered `bad_request` naming the field, never a defect. */
+    /** Answers a payload that fails decoding with `bad_request` naming the field, never a defect. */
     const refuseUndecodable = (clientId: number, message: FromClientEncoded): boolean => {
       if (message._tag !== "Request") return false;
-      const codec = decodersFor(message.tag);
-      if (!codec) return false;
-      const decoded = codec.decodePayload(message.payload);
+      const rpcCodecs = codecsFor(message.tag);
+      if (!rpcCodecs) return false;
+      const decoded = rpcCodecs.decodePayload(message.payload);
       if (Exit.isSuccess(decoded)) return false;
       const failure = Exit.findErrorOption(decoded);
       const described = Option.isSome(failure)
@@ -115,7 +116,7 @@ export const rpcSocketsLayer = Layer.effectContext(
         : { field: "", message: "That request is not valid." };
       const error = unframedError("bad_request", described.message, described.field ? { field: described.field } : undefined);
       void runPromise(
-        send(clientId, { _tag: "Exit", requestId: message.id, exit: codec.encodeExit(Exit.fail(error)) } as FromServerEncoded),
+        send(clientId, { _tag: "Exit", requestId: message.id, exit: rpcCodecs.encodeExit(Exit.fail(error)) } as FromServerEncoded),
       );
       return true;
     };
@@ -125,7 +126,6 @@ export const rpcSocketsLayer = Layer.effectContext(
     const onConnection = (socket: WebSocket) => {
       const clientId = nextClientId++;
       clients.set(clientId, socket);
-      clientIds.add(clientId);
       let queue: Promise<void> = Promise.resolve();
       socket.on("message", (data) => {
         let parsed: unknown;
@@ -150,7 +150,6 @@ export const rpcSocketsLayer = Layer.effectContext(
       socket.on("error", () => {});
       socket.on("close", () => {
         clients.delete(clientId);
-        clientIds.delete(clientId);
         Queue.offerUnsafe(disconnects, clientId);
       });
     };

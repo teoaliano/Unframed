@@ -15,6 +15,7 @@ describe("project file serving", () => {
     await writeFile(join(project, "cat.png"), PNG);
     await writeFile(join(project, "clip.mp4"), CLIP);
     await writeFile(join(project, "page.html"), "<script>alert(1)</script>");
+    await writeFile(join(project, "tool.js"), "alert(1)");
     await writeFile(join(project, "notes.json"), '{"a":1}');
     await writeFile(join(engine.dataDir, "output", "jobs.json"), "[]");
     await writeFile(join(engine.dataDir, "secret.txt"), "outside the output folder");
@@ -96,6 +97,20 @@ describe("project file serving", () => {
     expect(response.status).toBe(200);
     expect(response.headers["content-type"]).toBe("text/plain; charset=utf-8");
     expect(response.text).toBe("<script>alert(1)</script>");
+  });
+
+  it("serves scripts as text/plain and sandboxes every file opened as a document", async () => {
+    const script = await engine.request("/api/file/board/tool.js");
+    expect(script.status).toBe(200);
+    expect(script.headers["content-type"]).toBe("text/plain; charset=utf-8");
+    for (const name of ["cat.png", "page.html", "tool.js"]) {
+      expect((await engine.request(`/api/file/board/${name}`)).headers["content-security-policy"]).toBe("sandbox");
+    }
+  });
+
+  it("answers only GET and HEAD", async () => {
+    const response = await engine.request("/api/file/board/cat.png", { method: "POST", body: "x" });
+    expect(response.status).toBe(404);
   });
 
   it("applies the loopback guard", async () => {

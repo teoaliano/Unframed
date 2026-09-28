@@ -8,13 +8,13 @@ import { fork, spawn, type ChildProcess } from "node:child_process";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import http from "node:http";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
+import { join } from "node:path";
 import type { EngineIpcMessage, ReadyMessage } from "@unframed/contracts";
 import WebSocket from "ws";
+import { repoRoot } from "../../../scripts/buildWeb.ts";
 import { connectRpc, type TestRpcClient } from "./rpcClient.ts";
 
-export const repoRoot = resolve(fileURLToPath(new URL("../../..", import.meta.url)));
+export { repoRoot };
 export const sourceEntry = join(repoRoot, "packages/engine/src/main.ts");
 
 export interface EngineOptions {

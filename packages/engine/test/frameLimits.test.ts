@@ -35,4 +35,16 @@ describe("frame limits", () => {
     await engine.waitForOutput("  ws: closed a socket that sent a frame that was not JSON\n");
     expect((await other.call("server.health")).ok).toBe(true);
   });
+
+  it("closes a socket that sends JSON that is not an RPC message with 1007, and logs it", async () => {
+    const engine = await startEngine();
+    const other = await engine.rpc();
+    for (const frame of ["null", "42", '{"no":"tag"}', '[{"_tag":"Ping"},7]']) {
+      const raw = await openRawSocket(engine.socket());
+      raw.sendText(frame);
+      expect(await raw.closed, frame).toBe(1007);
+    }
+    await engine.waitForOutput("  ws: closed a socket that sent a frame that was not an RPC message\n");
+    expect((await other.call("server.health")).ok).toBe(true);
+  });
 });

@@ -15,9 +15,9 @@ import { build } from "esbuild";
 import { buildWeb, repoRoot } from "./buildWeb.ts";
 
 /**
- * Runtime packages that cannot be inlined: they locate their own files on disk or spawn
- * binaries. Later specs add theirs here and to the engine's dependencies (the Claude
- * Agent SDK, the HyperFrames packages, GSAP).
+ * Runtime packages that cannot be inlined because they locate their own files on disk or
+ * spawn binaries. Each one here must also be in the engine's dependencies: the bundle's
+ * package.json takes its version from there.
  */
 export const RUNTIME_DEPENDENCIES: ReadonlyArray<string> = [];
 

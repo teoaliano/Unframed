@@ -20,7 +20,7 @@ export const parseEnvText = (text: string): Record<string, string> =>
   parseEnv(text) as Record<string, string>;
 
 /**
- * The only code that writes `.env`. Writes are queued on one chain; each reads the
+ * The only code that writes `.env`. It queues writes on one chain; each reads the
  * current file, applies the upsert and writes. A failed write rejects its own caller and
  * never blocks or fails the next one. Answers the text now on disk.
  */

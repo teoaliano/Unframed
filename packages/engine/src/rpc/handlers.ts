@@ -18,7 +18,7 @@ export const rpcHandlersLayer = UnframedRpcs.toLayer(
       "server.health": () => Effect.map(settings.view, (view) => ({ ...view, ok: true as const })),
       "settings.get": () => settings.view,
       "settings.update": (patch) => settings.update(patch),
-      "settings.subscribe": () => settings.changes,
+      "settings.subscribe": () => settings.subscribe,
       "settings.pickFolder": () =>
         Effect.map(Effect.flatMap(settings.outputDir, native.pickFolder), (path) => ({ path })),
       "projects.list": () => Effect.map(projects.list, (list) => ({ projects: [...list] })),

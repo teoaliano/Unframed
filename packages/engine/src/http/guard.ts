@@ -3,12 +3,12 @@ import type { Duplex } from "node:stream";
 import { loopbackGuard, type GuardDecision } from "@unframed/domain";
 import { sendError } from "./respond.ts";
 
-export const decide = (req: http.IncomingMessage): GuardDecision =>
+export const guardDecision = (req: http.IncomingMessage): GuardDecision =>
   loopbackGuard({ origin: req.headers.origin, host: req.headers.host });
 
 /** Runs the loopback guard before any handler. Answers the refusal and returns false. */
 export const guardRequest = (req: http.IncomingMessage, res: http.ServerResponse): boolean => {
-  const decision = decide(req);
+  const decision = guardDecision(req);
   if (decision.allowed) return true;
   sendError(res, decision.status, decision.error);
   return false;
@@ -16,7 +16,7 @@ export const guardRequest = (req: http.IncomingMessage, res: http.ServerResponse
 
 /** A refused upgrade gets a plain HTTP 403 with the same body, and no handshake. */
 export const guardUpgrade = (req: http.IncomingMessage, socket: Duplex): boolean => {
-  const decision = decide(req);
+  const decision = guardDecision(req);
   if (decision.allowed) return true;
   refuseUpgrade(socket, decision.status, decision.error);
   return false;

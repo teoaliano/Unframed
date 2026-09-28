@@ -1,17 +1,19 @@
 import { UnframedError, UnframedRpcs, unframedError } from "@unframed/contracts";
-import { MAX_REQUEST_BYTES, reconnectDelay, tooLargeMessage } from "@unframed/domain";
+import { connectionFailure, reconnectDelay } from "@unframed/domain";
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Fiber from "effect/Fiber";
 import * as Layer from "effect/Layer";
-import * as Schema from "effect/Schema";
+import * as Schedule from "effect/Schedule";
 import * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
-import * as Rpc from "effect/unstable/rpc/Rpc";
+import type * as Rpc from "effect/unstable/rpc/Rpc";
 import * as RpcClient from "effect/unstable/rpc/RpcClient";
+import { RpcClientError } from "effect/unstable/rpc/RpcClientError";
 import type * as RpcGroup from "effect/unstable/rpc/RpcGroup";
-import type { FromClientEncoded, FromServerEncoded } from "effect/unstable/rpc/RpcMessage";
+import * as RpcSerialization from "effect/unstable/rpc/RpcSerialization";
+import * as Socket from "effect/unstable/socket/Socket";
 
 type Rpcs = RpcGroup.Rpcs<typeof UnframedRpcs>;
 export type Method = Rpcs["_tag"];
@@ -24,13 +26,17 @@ type PayloadArgs<M extends Method> = Payload<M> extends void ? [] : [Payload<M>]
 
 export type ConnectionState = "connecting" | "open" | "closed";
 
-/** A failure made on this side because the socket went away, not answered by the engine. */
+/** A failure made on this side because the socket went away, not one the engine answered. */
 export const isConnectionFailure = (error: unknown): boolean =>
   error instanceof UnframedError &&
   (error.details?.reason === "connection_lost" || error.details?.reason === "too_large");
 
 export interface EngineConnection {
-  /** Answers the success value, or rejects with the method's `UnframedError`. */
+  /**
+   * Answers the success value, or rejects with an `UnframedError`: the method's own, or a
+   * connection failure when the socket closed with the call in flight. A call made while
+   * the socket is down waits for the next one.
+   */
   call<M extends Method>(method: M, ...payload: PayloadArgs<M>): Promise<Success<M>>;
   /**
    * Calls `onValue` for every value of a `*.subscribe` stream, and subscribes again each
@@ -43,148 +49,46 @@ export interface EngineConnection {
   close(): void;
 }
 
-const TOO_LARGE = 1009;
-
 export const engineSocketUrl = (location: Location): string =>
   `${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/ws`;
 
-type Transport = {
-  send(clientId: number, message: FromClientEncoded): void;
-  onResponse: (clientId: number, message: FromServerEncoded) => void;
+/** Every failure the web handles is an `UnframedError`; a closed socket becomes one here. */
+const asUnframedError = (error: unknown): unknown => {
+  if (!(error instanceof RpcClientError)) return error;
+  const failure = connectionFailure(error.reason._tag === "SocketCloseError" ? error.reason.code : undefined);
+  return unframedError(failure.code, failure.message, { reason: failure.reason });
 };
 
-/**
- * One WebSocket at a time to `/ws`. Requests made while it is down wait for the next
- * socket; requests in flight when it closes fail at once, with the size message when the
- * engine closed it for a frame over the limit.
- */
-const makeTransport = (url: string, setState: (state: ConnectionState) => void) => {
-  let socket: WebSocket | undefined;
-  let open = false;
-  let closedForGood = false;
-  let attempt = 0;
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  const waiting: Array<{ clientId: number; message: FromClientEncoded }> = [];
-  const inFlight = new Map<string, { clientId: number; tag: string; id: string | number }>();
-  const clientIds = new Set<number>();
-
-  const transport: Transport & { close(): void } = {
-    onResponse: () => {},
-    send(clientId, message) {
-      clientIds.add(clientId);
-      if (message._tag === "Request") {
-        if (!open) {
-          waiting.push({ clientId, message });
-          return;
-        }
-        inFlight.set(String(message.id), { clientId, tag: message.tag, id: message.id });
-      } else if (message._tag === "Interrupt") {
-        const requestId = String(message.requestId);
-        inFlight.delete(requestId);
-        const queued = waiting.findIndex((entry) => entry.message._tag === "Request" && String(entry.message.id) === requestId);
-        if (queued >= 0) {
-          waiting.splice(queued, 1);
-          return;
-        }
-      }
-      if (open) socket?.send(JSON.stringify(message));
-    },
-    close() {
-      closedForGood = true;
-      clearTimeout(timer);
-      socket?.close(1000);
-    },
-  };
-
-  const failInFlight = (code: number) => {
-    const error =
-      code === TOO_LARGE
-        ? unframedError("bad_request", tooLargeMessage(undefined, MAX_REQUEST_BYTES), { reason: "too_large" })
-        : unframedError("unavailable", "The connection to the local engine was lost.", { reason: "connection_lost" });
-    const failed = [...inFlight.entries()];
-    inFlight.clear();
-    for (const { clientId, tag, id } of failed.map(([, entry]) => entry)) {
-      const rpc = UnframedRpcs.requests.get(tag);
-      if (!rpc) continue;
-      const exit = Schema.encodeSync(Schema.toCodecJson(Rpc.exitSchema(rpc)))(Exit.fail(error) as never);
-      // The client keys its requests by the id as it sent it, number or string.
-      transport.onResponse(clientId, { _tag: "Exit", requestId: id, exit } as FromServerEncoded);
-    }
-  };
-
-  const connect = () => {
-    setState("connecting");
-    const next = new WebSocket(url);
-    socket = next;
-    next.onopen = () => {
-      open = true;
-      attempt = 0;
-      setState("open");
-      for (const { clientId, message } of waiting.splice(0)) transport.send(clientId, message);
-    };
-    next.onmessage = (event: MessageEvent) => {
-      let message: FromServerEncoded;
-      try {
-        message = JSON.parse(String(event.data)) as FromServerEncoded;
-      } catch {
-        return;
-      }
-      if (message._tag === "Pong") return;
-      if ("requestId" in message) {
-        const target = inFlight.get(String(message.requestId));
-        if (!target) return;
-        if (message._tag === "Exit") inFlight.delete(String(message.requestId));
-        transport.onResponse(target.clientId, message);
-        return;
-      }
-      for (const clientId of clientIds) transport.onResponse(clientId, message);
-    };
-    next.onclose = (event: CloseEvent) => {
-      if (socket !== next) return;
-      open = false;
-      socket = undefined;
-      failInFlight(event.code);
-      if (closedForGood) {
-        setState("closed");
-        return;
-      }
-      setState("connecting");
-      timer = setTimeout(connect, reconnectDelay(attempt++));
-    };
-  };
-  connect();
-  return transport;
-};
-
-/** The web's one connection to the engine, through Effect's RPC client. */
+/** The web's one connection to the engine: Effect's RPC client over its WebSocket transport. */
 export const connectEngine = (url: string = engineSocketUrl(window.location)): EngineConnection => {
   let state: ConnectionState = "connecting";
+  let closed = false;
+  let failedAttempts = 0;
   const listeners = new Set<(state: ConnectionState) => void>();
   const setState = (next: ConnectionState) => {
     if (next === state) return;
     state = next;
     for (const listener of listeners) listener(next);
   };
-  const transport = makeTransport(url, setState);
 
+  const hooks = RpcClient.ConnectionHooks.of({
+    onConnect: Effect.sync(() => {
+      failedAttempts = 0;
+      setState("open");
+    }),
+    onDisconnect: Effect.sync(() => setState(closed ? "closed" : "connecting")),
+  });
+  // The delay comes from a counter the open socket resets, so every drop starts again at
+  // 1 s; a schedule's own state would keep growing across drops.
+  const retryPolicy = Schedule.modifyDelay(Schedule.forever, () => Effect.sync(() => reconnectDelay(failedAttempts++)));
   const protocol = Layer.effect(
     RpcClient.Protocol,
-    RpcClient.Protocol.make((writeResponse) =>
-      Effect.gen(function* () {
-        const context = yield* Effect.context<never>();
-        const runPromise = Effect.runPromiseWith(context);
-        let order: Promise<void> = Promise.resolve();
-        transport.onResponse = (clientId, message) => {
-          order = order.then(() => runPromise(writeResponse(clientId, message))).catch(() => {});
-        };
-        return {
-          send: (clientId: number, request: FromClientEncoded) => Effect.sync(() => transport.send(clientId, request)),
-          supportsAck: true,
-          supportsTransferables: false,
-          codecFor: Schema.toCodecJson,
-        };
-      }),
+    RpcClient.makeProtocolSocket({ retryTransientErrors: true, retryPolicy }),
+  ).pipe(
+    Layer.provide(
+      Layer.mergeAll(Socket.layerWebSocket(url), RpcSerialization.layerJson, Layer.succeed(RpcClient.ConnectionHooks, hooks)),
     ),
+    Layer.provide(Socket.layerWebSocketConstructorGlobal),
   );
   const scope = Effect.runSync(Scope.make());
   const client = Effect.runPromise(
@@ -193,9 +97,6 @@ export const connectEngine = (url: string = engineSocketUrl(window.location)): E
       return yield* RpcClient.make(UnframedRpcs).pipe(Effect.provideContext(context), Scope.provide(scope));
     }),
   );
-
-  const invoke = async (method: Method, payload: unknown[]) =>
-    ((await client)[method] as (...args: unknown[]) => unknown)(...payload);
 
   const waitForOpen = () =>
     new Promise<void>((resolve) => {
@@ -207,12 +108,17 @@ export const connectEngine = (url: string = engineSocketUrl(window.location)): E
       });
     });
 
+  const invoke = async (method: Method, payload: unknown[]) => {
+    await waitForOpen();
+    return ((await client)[method] as (...args: unknown[]) => unknown)(...payload);
+  };
+
   const connection: EngineConnection = {
     async call(method, ...payload) {
       const exit = await Effect.runPromiseExit((await invoke(method, payload)) as Effect.Effect<never, unknown>);
       if (Exit.isSuccess(exit)) return exit.value;
       const error = Cause.findErrorOption(exit.cause);
-      throw error._tag === "Some" ? error.value : Cause.squash(exit.cause);
+      throw error._tag === "Some" ? asUnframedError(error.value) : Cause.squash(exit.cause);
     },
     subscribe(method, payload, onValue) {
       let ended = false;
@@ -220,16 +126,16 @@ export const connectEngine = (url: string = engineSocketUrl(window.location)): E
       void (async () => {
         while (!ended) {
           const stream = (await invoke(method, [payload])) as Stream.Stream<StreamItem<typeof method>, unknown>;
+          if (ended) return;
           const fiber = Effect.runFork(Stream.runForEach(stream, (value) => Effect.sync(() => onValue(value))));
           stopCurrent = () => void Effect.runFork(Fiber.interrupt(fiber));
           const exit = await Effect.runPromise(Fiber.await(fiber));
           if (ended || Exit.isSuccess(exit)) return;
           const error = Cause.findErrorOption(exit.cause);
-          if (error._tag === "None" || !isConnectionFailure(error.value)) {
+          if (error._tag === "None" || !isConnectionFailure(asUnframedError(error.value))) {
             console.error(`${method} ended:`, Cause.pretty(exit.cause));
             return;
           }
-          await waitForOpen();
         }
       })();
       return () => {
@@ -245,7 +151,7 @@ export const connectEngine = (url: string = engineSocketUrl(window.location)): E
       return state;
     },
     close() {
-      transport.close();
+      closed = true;
       void Effect.runPromise(Scope.close(scope, Exit.void));
     },
   };
