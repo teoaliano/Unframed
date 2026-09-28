@@ -86,8 +86,17 @@ const Floating = ({ target, hidden, expanded, children }: { target: ScreenBox | 
   const root = useRef<HTMLDivElement>(null);
   const content = useRef<HTMLDivElement>(null);
   const [size, setSize] = useState<{ w: number; h: number }>();
-  const [settled, setSettled] = useState(false);
+  // Only the morph between bar and composer animates; following the selection never lags.
+  const [morphing, setMorphing] = useState(false);
+  const wasExpanded = useRef(expanded);
   useWheelToCanvas(editor, root);
+  useLayoutEffect(() => {
+    if (wasExpanded.current === expanded) return;
+    wasExpanded.current = expanded;
+    setMorphing(true);
+    const timer = setTimeout(() => setMorphing(false), 260);
+    return () => clearTimeout(timer);
+  }, [expanded]);
 
   useLayoutEffect(() => {
     const element = content.current;
@@ -108,11 +117,6 @@ const Floating = ({ target, hidden, expanded, children }: { target: ScreenBox | 
     [editor],
   );
   const place = size && target ? placeFloating(target, size, canvas) : undefined;
-  useEffect(() => {
-    if (!place || settled) return;
-    const frame = requestAnimationFrame(() => setSettled(true));
-    return () => cancelAnimationFrame(frame);
-  }, [place, settled]);
 
   return (
     <div
@@ -121,7 +125,7 @@ const Floating = ({ target, hidden, expanded, children }: { target: ScreenBox | 
       data-testid="selection-toolbar"
       data-side={place?.side}
       data-expanded={expanded ? "true" : undefined}
-      data-animated={settled ? "true" : undefined}
+      data-morphing={morphing ? "true" : undefined}
       style={{
         left: place?.left ?? 0,
         top: place?.top ?? 0,

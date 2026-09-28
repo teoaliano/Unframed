@@ -16,7 +16,7 @@
 }
 
 /* The bar grows into the composer on the same centre and bottom edge: size and place animate together. */
-.unframed-floating[data-animated="true"] {
+.unframed-floating[data-morphing="true"] {
   transition:
     left 200ms ease-out,
     top 200ms ease-out,
@@ -36,11 +36,12 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .unframed-floating[data-animated="true"] {
+  .unframed-floating[data-morphing="true"] {
     transition: none;
   }
 
-  .unframed-floating__content {
+  /* Bar and composer are different children, so each one fades in as it replaces the other. */
+  .unframed-floating__content > * {
     animation: unframed-crossfade 120ms linear;
   }
 }

@@ -1,6 +1,14 @@
 /** Browser-seam helpers for media shapes: put empty ones on the board through the engine. */
 import type { TestEngine } from "../../engine/test/engineProcess.ts";
 
+/**
+ * Distinct fractional indices, in the order shapes are made, above the starter prompts'
+ * a1 and a2, so no two shapes tie in z (tldraw cannot place a shape between two equal ones).
+ */
+let nextIndex = 0;
+const DIGITS = "3456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
+export const testIndex = (): string => `a${DIGITS[nextIndex++ % DIGITS.length]}`;
+
 export const emptyMedia = (id: string, type: "image" | "video", ref: string, at: { x: number; y: number }, size?: { w: number; h: number }) => ({
   id,
   typeName: "shape",
@@ -8,7 +16,7 @@ export const emptyMedia = (id: string, type: "image" | "video", ref: string, at:
   x: at.x,
   y: at.y,
   rotation: 0,
-  index: `a${Math.floor(Math.random() * 8) + 2}`,
+  index: testIndex(),
   parentId: "page:page",
   isLocked: false,
   opacity: 1,
@@ -105,7 +113,7 @@ const baseShape = (id: string, type: string, at: { x: number; y: number }) => ({
   x: at.x,
   y: at.y,
   rotation: 0,
-  index: `a${Math.floor(Math.random() * 8) + 2}`,
+  index: testIndex(),
   parentId: "page:page",
   isLocked: false,
   opacity: 1,

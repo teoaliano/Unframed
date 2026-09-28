@@ -18,10 +18,12 @@ test("Generate grows the bar into the composer on the same centre and bottom edg
   await clickShape(page, "shape:starter-subject");
   const bar = toolbar(page);
   await expect(bar.getByRole("button", { name: "Generate" })).toBeVisible();
-  await expect(bar).toHaveAttribute("data-animated", "true");
   const before = (await bar.boundingBox())!;
 
   await openComposer(page);
+  // The morph animates size and place together, then settles on the composer.
+  await expect(bar).toHaveAttribute("data-morphing", "true");
+  await expect(bar).not.toHaveAttribute("data-morphing");
   await expect.poll(async () => Math.round((await bar.boundingBox())!.width)).toBe(420);
   const after = (await bar.boundingBox())!;
   expect(after.x + after.width / 2).toBeCloseTo(before.x + before.width / 2, 0);
