@@ -111,6 +111,29 @@ export const instructionBox = (page: Page): Locator => composer(page).getByRole(
 
 export const sendButton = (page: Page): Locator => composer(page).getByRole("button", { name: /^Generate/ });
 
+/**
+ * Opens the composer from the bar, and waits until a person could type and send: the model
+ * chip names the model instead of "Loading models…", and the box has the caret.
+ */
+export const openComposer = async (page: Page): Promise<void> => {
+  await toolbar(page).getByRole("button", { name: "Generate" }).click();
+  await expect(composer(page)).toBeVisible();
+  await expect(composer(page).getByTestId("model-chip")).toBeEnabled();
+  await expect(instructionBox(page)).toBeFocused();
+};
+
+/** Presses Cmd+Enter once the send button shows a run can go. */
+export const pressSend = async (page: Page): Promise<void> => {
+  await expect(sendButton(page)).toBeEnabled();
+  await page.keyboard.press("ControlOrMeta+Enter");
+};
+
+/** Sends, and waits for the acknowledgement that collapses the composer back to the bar. */
+export const sendRun = async (page: Page): Promise<void> => {
+  await pressSend(page);
+  await expect(composer(page)).toHaveCount(0);
+};
+
 /** Clicks the middle of a shape, as a person selects it. */
 export const clickShape = async (page: Page, id: string, modifiers?: Array<"Shift">): Promise<void> => {
   const at = await centre(shapeOnScreen(page, id));

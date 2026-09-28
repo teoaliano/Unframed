@@ -31,11 +31,20 @@ const closeMenu = async (page: Page) => {
   await expect(menu(page)).toBeHidden();
 };
 
+/**
+ * A page whose clipboard reads as empty, whatever this machine's clipboard holds, for the
+ * menus that must show no Paste. Another worker, or another program, may copy at any time.
+ */
+const withEmptyClipboard = (page: Page) =>
+  page.addInitScript(() => {
+    Object.defineProperty(navigator.clipboard, "read", { configurable: true, value: async () => [] });
+  });
+
 const photo = { type: "image" as const, bytes: pngBytes(300, 150), name: "photo.png", mime: "image/png", natural: { w: 300, h: 150 } };
 
 test("on empty canvas the menu offers the add items, then tldraw's own groups; nothing that would do nothing", async ({ page, engine }) => {
+  await withEmptyClipboard(page);
   await openCanvas(page, engine);
-  await page.evaluate(() => navigator.clipboard.writeText(""));
   const { headings, items } = await rightClick(page, await emptyCanvasPoint(page));
   expect(headings).toEqual(["Inputs", "Artifacts"]);
   expect(items.slice(0, 6)).toEqual(["Prompt", "Image", "Video", "Group", "Page", "Motion"]);
@@ -45,14 +54,18 @@ test("on empty canvas the menu offers the add items, then tldraw's own groups; n
   expect((await menu(page).boundingBox())!.width).toBe(188);
   await closeMenu(page);
 
-  // Text on the clipboard brings Paste.
-  await page.evaluate(() => navigator.clipboard.writeText("a misty harbour"));
+  // Text on the clipboard brings Paste: the real clipboard, from here on.
+  await page.evaluate(async () => {
+    delete (navigator.clipboard as { read?: unknown }).read;
+    await navigator.clipboard.writeText("a misty harbour");
+  });
   const withText = await rightClick(page, await emptyCanvasPoint(page));
   expect(withText.headings).toEqual(["Edit", "Inputs", "Artifacts"]);
   expect(withText.items[0]).toBe("Paste ⌘V");
 });
 
 test("a right-clicked prompt is selected alone and offers its reference and the edit items", async ({ page, engine }) => {
+  await withEmptyClipboard(page);
   await openCanvas(page, engine);
   const scene = shapeOnScreen(page, "shape:starter-scene");
   await page.mouse.click(...Object.values(await centre(scene)) as [number, number]);
@@ -71,6 +84,7 @@ test("a right-clicked prompt is selected alone and offers its reference and the 
 });
 
 test("a filled image offers reveal and copy as image; inside a selection of two it reveals both", async ({ page, engine }) => {
+  await withEmptyClipboard(page);
   await openCanvas(page, engine);
   await filledMedia(engine, { ...photo, id: "shape:one", ref: "150", at: { x: 440, y: 60 } });
   await filledMedia(engine, { ...photo, id: "shape:two", ref: "151", at: { x: 440, y: 260 } });
@@ -93,6 +107,7 @@ test("a filled image offers reveal and copy as image; inside a selection of two 
 });
 
 test("a right-clicked group offers its reference and Ungroup, not Group", async ({ page, engine }) => {
+  await withEmptyClipboard(page);
   await openCanvas(page, engine);
   await putRecords(engine, [groupRecord("shape:group", "160", { x: 440, y: 60 })]);
   const box = (await shapeOnScreen(page, "shape:group").boundingBox())!;

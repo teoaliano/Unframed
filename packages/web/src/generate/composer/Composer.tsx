@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, type KeyboardEvent } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import { useEditor, type TLShapeId } from "tldraw";
 import { platform } from "../../canvas/platform.ts";
 import { useSlots } from "../../chrome/slots.ts";
@@ -13,7 +13,10 @@ export interface ComposerProps {
   readonly onCollapse: () => void;
 }
 
-const isSendKey = (event: KeyboardEvent) => event.key === "Enter" && (platform() === "darwin" ? event.metaKey : event.ctrlKey);
+const isSendKey = (event: { readonly key: string; readonly metaKey: boolean; readonly ctrlKey: boolean }) =>
+  event.key === "Enter" && (platform() === "darwin" ? event.metaKey : event.ctrlKey);
+
+const isEditable = (target: EventTarget | null) => target instanceof HTMLElement && target.closest("input, textarea, [contenteditable='true']") !== null;
 
 /**
  * The composer shell, shared by the Generate tray and the Agent tray (spec 08). It owns
@@ -24,10 +27,24 @@ export const Composer = ({ mode, project, recipe, onCollapse }: ComposerProps) =
   const { agentTray: AgentTray } = useSlots();
   const menus = useRef(new Set<string>());
   const tray = useRef<TrayHandle>(null);
+  const root = useRef<HTMLDivElement>(null);
 
   const onMenuOpen = useCallback((key: string, open: boolean) => {
     if (open) menus.current.add(key);
     else menus.current.delete(key);
+  }, []);
+
+  // The send key works while the composer is open wherever focus is, unless another text field has it.
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (!isSendKey(event) || menus.current.size > 0) return;
+      if (!root.current?.contains(event.target as Node) && isEditable(event.target)) return;
+      event.preventDefault();
+      event.stopPropagation();
+      tray.current?.send();
+    };
+    window.addEventListener("keydown", onKeyDown, { capture: true });
+    return () => window.removeEventListener("keydown", onKeyDown, { capture: true });
   }, []);
 
   // While the composer is open, clicking a shape adds it to the selection instead of replacing it.
@@ -45,6 +62,7 @@ export const Composer = ({ mode, project, recipe, onCollapse }: ComposerProps) =
 
   return (
     <div
+      ref={root}
       className="unframed-composer"
       role="group"
       aria-label="Composer"
@@ -57,10 +75,6 @@ export const Composer = ({ mode, project, recipe, onCollapse }: ComposerProps) =
           event.preventDefault();
           event.stopPropagation();
           onCollapse();
-        } else if (isSendKey(event)) {
-          event.preventDefault();
-          event.stopPropagation();
-          tray.current?.send();
         }
       }}
       onKeyDown={(event) => {

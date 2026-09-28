@@ -1,7 +1,7 @@
 import { Menu } from "@base-ui/react/menu";
 import { addablePropValue, modelPart, type ImagePropKey, type ModelParams } from "@unframed/domain";
 import { Check } from "lucide-react";
-import { Fragment, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 import { itemClass, popupClass, Tip } from "../../chrome/ui.tsx";
 import type { PropValue, TrayProps } from "../mediumRegistry.ts";
 
@@ -29,10 +29,10 @@ export const PropTray = ({ model, catalogueReady, params, props, onModelClick, o
   const inTray = params.props.filter((prop) => props[prop.key] !== undefined);
   const addable = params.props.filter((prop) => props[prop.key] === undefined);
 
-  const setOpen = (key: ImagePropKey | undefined) => {
-    setOpenProp(key);
-    onMenuOpen(key !== undefined);
-  };
+  // One flag for all of the tray's menus: a value menu can open as the add menu closes.
+  const anyOpen = openProp !== undefined || addOpen;
+  useEffect(() => onMenuOpen(anyOpen), [anyOpen, onMenuOpen]);
+  const setOpen = (key: ImagePropKey | undefined) => setOpenProp(key);
 
   return (
     <div className="unframed-composer-tray" data-testid="composer-tray">
@@ -87,10 +87,7 @@ export const PropTray = ({ model, catalogueReady, params, props, onModelClick, o
       {addable.length > 0 && (
         <Menu.Root
           open={addOpen}
-          onOpenChange={(open) => {
-            setAddOpen(open);
-            onMenuOpen(open);
-          }}
+          onOpenChange={setAddOpen}
         >
           <Menu.Trigger className={`${chipClass} shrink-0 text-secondary`}>+ add prop</Menu.Trigger>
           <Menu.Portal>
