@@ -30,11 +30,19 @@ const inBatches = async <T, R>(items: ReadonlyArray<T>, size: number, run: (item
 export const imageRecords = async (
   engine: TestEngine,
   count: number,
-  options: { natural: { w: number; h: number }; width: number; columns: number; pitch: { x: number; y: number }; origin?: { x: number; y: number }; firstRef?: number },
+  options: {
+    natural: { w: number; h: number };
+    width: number;
+    columns: number;
+    pitch: { x: number; y: number };
+    origin?: { x: number; y: number };
+    firstRef?: number;
+    bytes?: (index: number) => Buffer;
+  },
 ) => {
   const origin = options.origin ?? { x: 40, y: 40 };
   const files = await inBatches(Array.from({ length: count }, (_, index) => index), 8, (index) =>
-    uploadToEngine(engine, `photo-${index}.png`, pngBytes(options.natural.w, options.natural.h, index % 64), "image/png"),
+    uploadToEngine(engine, `photo-${index}.png`, options.bytes?.(index) ?? pngBytes(options.natural.w, options.natural.h, index % 64), "image/png"),
   );
   return files.flatMap((file, index) => {
     const x = origin.x + (index % options.columns) * options.pitch.x;
@@ -138,10 +146,15 @@ export interface Measured {
   renders: Record<string, number>;
 }
 
-/** The gesture the meter settled most recently, once it has settled. */
-export const lastGesture = async (page: Page, before: number): Promise<Measured> => {
-  await expect.poll(() => page.evaluate(() => (window as any).__fps.dump().length), { timeout: 10_000 }).toBeGreaterThan(before);
-  return page.evaluate(() => (window as any).__fps.dump().at(-1));
+/** The first gesture of `kind` the meter settled after the first `before` gestures, once it has settled. */
+export const lastGesture = async (page: Page, before: number, kind?: string): Promise<Measured> => {
+  const find = () =>
+    page.evaluate(
+      ({ before, kind }) => (window as any).__fps.dump().slice(before).find((gesture: Measured) => kind === undefined || gesture.kind === kind) ?? null,
+      { before, kind },
+    );
+  await expect.poll(find, { timeout: 10_000 }).not.toBeNull();
+  return (await find())!;
 };
 
 export const gestureCount = (page: Page): Promise<number> => page.evaluate(() => (window as any).__fps.dump().length);
