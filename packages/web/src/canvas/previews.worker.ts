@@ -47,9 +47,14 @@ const make = async ({ id, project, file, sizes }: PreviewRequest): Promise<Previ
   return { id, made, longest };
 };
 
+// One image at a time: a board of large originals would otherwise decode them all at once.
+let queue: Promise<unknown> = Promise.resolve();
+
 self.onmessage = (event: MessageEvent<PreviewRequest>) => {
-  make(event.data).then(
-    (result) => self.postMessage(result),
-    (error: unknown) => self.postMessage({ id: event.data.id, made: [], error: String(error) } satisfies PreviewResult),
+  queue = queue.then(() =>
+    make(event.data).then(
+      (result) => self.postMessage(result),
+      (error: unknown) => self.postMessage({ id: event.data.id, made: [], error: String(error) } satisfies PreviewResult),
+    ),
   );
 };

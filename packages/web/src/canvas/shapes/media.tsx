@@ -30,6 +30,7 @@ import {
   type MediaShape,
 } from "../media.ts";
 import { ShapeLabel } from "./ShapeLabel.tsx";
+import { noteRender } from "../../fps/renders.ts";
 
 const messageOf = (error: unknown) => (error instanceof Error ? error.message : String(error));
 
@@ -185,6 +186,7 @@ export class ImageMediaUtil extends ImageShapeUtil {
   }
 
   override component(shape: TLImageShape) {
+    noteRender(shape.id);
     if (!shape.props.assetId) return <EmptyMedia shape={shape} kind="image" />;
     return (
       <>
@@ -290,6 +292,7 @@ export class VideoMediaUtil extends VideoShapeUtil {
   }
 
   override component(shape: TLVideoShape) {
+    noteRender(shape.id);
     if (!shape.props.assetId) return <EmptyMedia shape={shape} kind="video" />;
     return (
       <>

@@ -3,6 +3,7 @@ import { AppWindow, Clapperboard } from "lucide-react";
 import { BaseBoxShapeUtil, HTMLContainer, resizeBox, T, type RecordProps, type TLResizeInfo, type TLShape } from "tldraw";
 import { useSlots } from "../../chrome/slots.ts";
 import { ShapeLabel } from "./ShapeLabel.tsx";
+import { noteRender } from "../../fps/renders.ts";
 
 export const ARTIFACT_DEFAULT_SIZE = { w: 480, h: 320 };
 export const ARTIFACT_MIN = { w: 180, h: 96 };
@@ -54,6 +55,7 @@ const makeArtifactUtil = (kind: "page" | "motion") =>
     }
 
     override component(shape: ArtifactShape) {
+      noteRender(shape.id);
       return <ArtifactCard shape={shape} kind={kind} />;
     }
 

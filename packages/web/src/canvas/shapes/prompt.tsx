@@ -17,6 +17,7 @@ import {
   type TLTextShape,
 } from "tldraw";
 import { ShapeLabel } from "./ShapeLabel.tsx";
+import { noteRender } from "../../fps/renders.ts";
 
 export const PROMPT_HUG_WIDTH = 320;
 export const PROMPT_MIN_WIDTH = 40;
@@ -87,6 +88,7 @@ export class PromptShapeUtil extends TextShapeUtil {
   }
 
   override component(shape: TLTextShape) {
+    noteRender(shape.id);
     return <PromptShape shape={shape} util={this} />;
   }
 

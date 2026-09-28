@@ -76,14 +76,18 @@ export class Previews {
     return worker;
   }
 
-  /** Makes the previews of a freshly uploaded image. */
+  /** Makes the previews of an image. Until they exist, the image shows its original. */
   make(file: string): Promise<ReadonlySet<number>> {
+    this.known.set(file, Promise.resolve(new Set<number>()));
     const made = this.post(file).then((result) => new Set(result.made) as ReadonlySet<number>);
-    this.known.set(file, made);
+    void made.then((sizes) => this.known.set(file, Promise.resolve(sizes)));
     return made;
   }
 
-  /** The preview sizes that exist for `file`, making them when none do. */
+  /**
+   * The preview sizes that exist for `file`. When none do, they are made in the background
+   * and this answers none, so the image shows its original until they exist.
+   */
   available(file: string): Promise<ReadonlySet<number>> {
     const cached = this.known.get(file);
     if (cached) return cached;
@@ -95,8 +99,8 @@ export class Previews {
           if (response?.ok) present.add(size);
         }),
       );
-      if (present.size > 0) return present;
-      return new Set((await this.post(file)).made);
+      if (present.size === 0) void this.make(file);
+      return present;
     })();
     this.known.set(file, found);
     return found;

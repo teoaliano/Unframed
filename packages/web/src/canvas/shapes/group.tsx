@@ -14,6 +14,7 @@ import {
   type TLShapeId,
 } from "tldraw";
 import { ShapeLabel } from "./ShapeLabel.tsx";
+import { noteRender } from "../../fps/renders.ts";
 
 const LABEL_BAND = 22;
 const LABEL_CHAR_WIDTH = 8;
@@ -59,6 +60,7 @@ export class GroupShapeUtil extends FrameShapeUtil {
   }
 
   override component(shape: TLFrameShape) {
+    noteRender(shape.id);
     return <GroupBox shape={shape} />;
   }
 
