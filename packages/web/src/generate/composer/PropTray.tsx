@@ -18,7 +18,7 @@ export interface PropTrayProps {
   readonly onMenuOpen: (open: boolean) => void;
 }
 
-const chipClass =
+export const chipClass =
   "cursor-pointer rounded-inner border-0 bg-transparent px-1 py-0.5 text-[12.5px] text-primary hover:bg-hover data-[popup-open]:bg-hover disabled:cursor-default disabled:text-secondary";
 
 /**

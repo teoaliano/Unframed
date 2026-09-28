@@ -13,9 +13,12 @@ import {
 import type { TLShapeId } from "tldraw";
 import type { Payload } from "../rpc/engine.ts";
 import { pageBox, selectionBox } from "./facts.ts";
+import { FinalPromptOverlay } from "./composer/FinalPromptDialog.tsx";
+import { freeBlockers, mintBatchId, sendFree } from "./free.ts";
 import { saveLastUsed } from "./lastUsed.ts";
 import { registerMedium, type MediumDefinition, type PropValue, type RunSource, type SendInput, type TrayProps } from "./mediumRegistry.ts";
 import { referencesFor } from "./render.ts";
+import { runsOf, runsProp } from "./runsProp.tsx";
 
 export const NOTHING_TO_MAKE = "Nothing says what to make. Select a prompt, or type an instruction.";
 
@@ -45,21 +48,32 @@ const planOf = (source: RunSource) => {
   return { prompt: joinPromptParts(recipe.selectionPrompt, source.instruction), error: source.error, selectionPrompt: recipe.selectionPrompt, instruction: source.instruction };
 };
 
-const send = async ({ editor, engine, project, values, source }: SendInput) => {
+const send = async (input: SendInput): Promise<void | "stay"> => {
+  const { editor, engine, project, values, source } = input;
+  const runs = runsOf(values.props);
+  const remember = () => void saveLastUsed(engine, "image", { ...(values.picked && values.model !== undefined ? { model: values.model } : {}), props: { ...values.props } });
+  if (runs === "free") {
+    const outcome = await sendFree(input);
+    remember();
+    return outcome;
+  }
   const plan = planOf(source);
   let request: Payload<"run.image">;
   const common = {
     project,
+    batchId: mintBatchId(),
     ...(values.model === undefined ? {} : { model: values.model }),
     params: imageParams(values.props),
     selectionPrompt: plan.selectionPrompt,
     instruction: plan.instruction,
   };
+  // A fixed count sends that many identical outputs as one batch.
+  const outputs = (references: RecipeRef[]) => Array.from({ length: runs }, () => ({ prompt: plan.prompt, references }));
   if (source.kind === "selection") {
     const references: RecipeRef[] = await referencesFor(editor, project, source.composition.references);
     request = {
       ...common,
-      outputs: [{ prompt: plan.prompt, references }],
+      outputs: outputs(references),
       sources: [...source.composition.sources],
       anchor: selectionBox(editor, source.selected as TLShapeId[]) ?? { x: 0, y: 0, w: 0, h: 0 },
     };
@@ -67,14 +81,14 @@ const send = async ({ editor, engine, project, values, source }: SendInput) => {
     const { recipe, shapeId } = source.recipe;
     request = {
       ...common,
-      outputs: [{ prompt: plan.prompt, references: [...recipe.references] }],
+      outputs: outputs([...recipe.references]),
       sources: [...recipe.sources],
       anchor: pageBox(editor, shapeId as TLShapeId) ?? { x: 0, y: 0, w: 0, h: 0 },
       of: { shapeId, action: "recipe" },
     };
   }
   await engine.call("run.image", request);
-  void saveLastUsed(engine, "image", { ...(values.picked && values.model !== undefined ? { model: values.model } : {}), props: { ...values.props } });
+  remember();
 };
 
 export const imageMedium: MediumDefinition = {
@@ -95,20 +109,31 @@ export const imageMedium: MediumDefinition = {
       ...(typeof props.quality === "string" ? { quality: props.quality } : {}),
       ...(typeof props.resolution === "string" ? { resolution: props.resolution } : {}),
     };
-    const value = estimateImageRun({ endpoints: answer.endpoints, chosen, referenceImages: imageSlots(source), outputs: 1 });
-    return value === null ? undefined : formatEstimate(value);
+    // Free prices one image, since nobody knows the count yet; a fixed count prices the batch.
+    const runs = runsOf(props);
+    const value = estimateImageRun({ endpoints: answer.endpoints, chosen, referenceImages: imageSlots(source), outputs: runs === "free" ? 1 : runs });
+    if (value === null) return undefined;
+    return runs === "free" ? `${formatEstimate(value)} / image` : formatEstimate(value);
   },
-  status: ({ source, hasKey }) => {
-    const plan = planOf(source);
+  status: ({ source, hasKey, props }) => {
     const blockers: string[] = [];
-    if (plan.error !== undefined) blockers.push(plan.error);
-    else if (plan.prompt.trim() === "") blockers.push(NOTHING_TO_MAKE);
+    if (props !== undefined && runsOf(props) === "free") blockers.push(...freeBlockers(source));
+    else {
+      const plan = planOf(source);
+      if (plan.error !== undefined) blockers.push(plan.error);
+      else if (plan.prompt.trim() === "") blockers.push(NOTHING_TO_MAKE);
+    }
     if (!hasKey) blockers.push(NO_KEY_MESSAGE);
     return { warnings: source.kind === "selection" ? [...source.composition.warnings] : [], blockers };
   },
-  sendLabel: () => "Generate",
+  sendLabel: (values) => {
+    const runs = runsOf(values.props);
+    return typeof runs === "number" && runs > 1 ? `Generate ${runs}×` : "Generate";
+  },
   send,
   fromRecipe: (recipe) => ({ ...recipe.params }),
+  trayProps: [runsProp],
+  Overlay: FinalPromptOverlay,
 };
 
 registerMedium(imageMedium);

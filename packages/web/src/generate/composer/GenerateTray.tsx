@@ -103,7 +103,7 @@ export const GenerateTray = ({ project, recipe, onSent, onMenuOpen, handle }: Ge
   const source: RunSource = recipe
     ? { kind: "recipe", recipe, instruction: resolved?.ok ? resolved.text.trim() : "", error: resolved?.ok === false ? resolved.error : undefined }
     : { kind: "selection", composition, selected: editor.getSelectedShapeIds(), shapes, instruction };
-  const status = definition.status({ source, hasKey: settings?.hasKey ?? true });
+  const status = definition.status({ source, hasKey: settings?.hasKey ?? true, props: values?.props });
   const estimate = values ? definition.estimate({ pricing, props: values.props, source }) : undefined;
   const blocked = status.blockers.length > 0 || values === undefined;
 

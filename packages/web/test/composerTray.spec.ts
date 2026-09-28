@@ -41,7 +41,7 @@ test("the tray: the model chip, the default props the model declares, value menu
   // + add prop lists the declared props not in the tray, with their values; picking one adds it and opens its menu.
   await tray(page).getByRole("button", { name: "+ add prop" }).click();
   const add = page.getByRole("menu", { name: "Add prop" });
-  await expect(add.getByRole("menuitem")).toHaveText([/Ratio\s*1:1/, /Background\s*auto/, /Format\s*png/]);
+  await expect(add.getByRole("menuitem")).toHaveText([/Ratio\s*1:1/, /Background\s*auto/, /Format\s*png/, /Runs\s*1/]);
   await add.getByRole("menuitem", { name: "Background auto" }).click();
   await expect(chips(page)).toHaveText(["1K", "high", "auto"]);
   await expect(page.getByRole("menu", { name: "Background" })).toBeVisible();
@@ -55,7 +55,7 @@ test("the tray: the model chip, the default props the model declares, value menu
   await expect(page.getByRole("menu", { name: "Size" })).toHaveCount(0);
   await expect(composer(page)).toBeVisible();
 
-  // With every declared prop in the tray, + add prop is gone.
+  // With every declared prop in the tray, + add prop lists only Runs (spec 05), which is not a model trait.
   for (const [label, menu] of [
     ["Ratio 1:1", "Ratio"],
     ["Format png", "Format"],
@@ -68,7 +68,9 @@ test("the tray: the model chip, the default props the model declares, value menu
     await page.keyboard.press("Escape");
     await expect(values).toHaveCount(0);
   }
-  await expect(tray(page).getByRole("button", { name: "+ add prop" })).toHaveCount(0);
+  await tray(page).getByRole("button", { name: "+ add prop" }).click();
+  await expect(page.getByRole("menu", { name: "Add prop" }).getByRole("menuitem")).toHaveText([/Runs\s*1/]);
+  await page.keyboard.press("Escape");
 });
 
 test("a model that declares a single format still offers Format, and props reset on a model change", async ({ page, generation }) => {
@@ -85,7 +87,7 @@ test("a model that declares a single format still offers Format, and props reset
   await pickModel(page, "recraft-v4");
   await expect(chips(page)).toHaveText([]);
   await tray(page).getByRole("button", { name: "+ add prop" }).click();
-  await expect(page.getByRole("menu", { name: "Add prop" }).getByRole("menuitem")).toHaveText([/Format\s*svg/]);
+  await expect(page.getByRole("menu", { name: "Add prop" }).getByRole("menuitem")).toHaveText([/Format\s*svg/, /Runs\s*1/]);
   await page.keyboard.press("Escape");
 
   await pickModel(page, "gpt-image-2");

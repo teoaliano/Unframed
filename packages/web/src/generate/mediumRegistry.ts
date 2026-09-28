@@ -69,7 +69,8 @@ export interface MediumDefinition {
   readonly pricing: (engine: EngineConnection, model: string) => Promise<unknown>;
   /** The price beside the send button, when it is exact. `pricing` is what `pricing` answered, once it has. */
   readonly estimate: (input: { readonly pricing: unknown; readonly props: TrayProps; readonly source: RunSource }) => string | undefined;
-  readonly status: (input: { readonly source: RunSource; readonly hasKey: boolean }) => TrayStatus;
+  /** `props` are the tray's, once it has values. */
+  readonly status: (input: { readonly source: RunSource; readonly hasKey: boolean; readonly props?: TrayProps | undefined }) => TrayStatus;
   readonly sendLabel: (values: TrayValues) => string;
   /**
    * Renders, uploads and starts the run. Resolves once the engine acknowledged it, or with
