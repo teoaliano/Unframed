@@ -135,7 +135,7 @@ test("warnings and the states that disable send", async ({ page, generation }) =
   const { engine } = generation;
   await openCanvas(page, engine);
   await filledMedia(engine, { id: "shape:photo", type: "image", ref: "300", at: { x: 420, y: -60 }, bytes: pngBytes(40, 40), name: "photo.png", mime: "image/png", natural: { w: 40, h: 40 }, width: 140 });
-  await filledMedia(engine, { id: "shape:clip", type: "video", ref: "301", at: { x: 420, y: 150 }, bytes: Buffer.from("x"), name: "clip.mp4", mime: "video/mp4", natural: { w: 64, h: 36 }, width: 160 });
+  await filledMedia(engine, { id: "shape:clip", type: "video", ref: "301", at: { x: -380, y: 150 }, bytes: Buffer.from("x"), name: "clip.mp4", mime: "video/mp4", natural: { w: 64, h: 36 }, width: 160 });
   await putRecords(engine, [promptRecord("shape:loop-a", "302", "see @303", { x: 640, y: -60 }), promptRecord("shape:loop-b", "303", "see @302", { x: 640, y: 150 })]);
   await expect(shapeOnScreen(page, "shape:loop-b")).toBeVisible();
 
