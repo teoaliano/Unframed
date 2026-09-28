@@ -3,36 +3,36 @@ import { readFile, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import {
   isBareFileName,
-  projectFileMarker,
-  ResultRecipe,
+  resultMetaOf,
+  runMarkerOf,
+  runOriginId,
   unframedError,
   UnframedError,
   type ImageRunRequest,
   type ImageSidecar,
   type RecipeRef,
-  type ResultMeta,
+  type ResultRecipe,
   type RunEvent,
-  type RunMarker,
 } from "@unframed/contracts";
-import { imageDimensions, nextRef, placeResults, projectSlug } from "@unframed/domain";
+import { imageDimensions, NO_KEY_MESSAGE, nextRef, placeResults, projectSlug, sidecarFileName, type Box } from "@unframed/domain";
 import type { TLRecord } from "@tldraw/tlschema";
 import { getIndicesAbove, type IndexKey } from "@tldraw/utils";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as PubSub from "effect/PubSub";
-import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
-import { CanvasRooms, type CanvasChange, type ChangeOrigin, type RoomAccess } from "../canvas/rooms.ts";
+import { CanvasRooms, type ChangeOrigin, type RoomAccess } from "../canvas/rooms.ts";
 import { errorText, logError, logInfo } from "../log.ts";
 import { MediaStore } from "../media/mediaStore.ts";
-import { generateImage } from "../openRouter/images.ts";
+import { generateImage, imageRequestBody } from "../openRouter/images.ts";
 import { Config } from "../services.ts";
 import { SettingsStore } from "../settingsStore.ts";
+import { clearChange, fillChange, imagePlaceholder, isShape, PLACEHOLDER_WIDTH, placeholderHeight, type Landed, type Shape } from "./placeholders.ts";
 import { extensionFor, mimeForFile, referenceName, resultBase, writeResultFile, writeSidecar } from "./resultFiles.ts";
-import { shapePageBounds } from "./shapeBounds.ts";
+import { shapePageBoxes } from "./shapeBounds.ts";
+import { readResultSidecar } from "./sidecars.ts";
 
-export const NO_KEY_MESSAGE = "No OpenRouter key yet. Add one with the key icon in the top right (it becomes a settings gear once saved).";
 export const EMPTY_PROMPT_MESSAGE = "Prompt is empty. Select a prompt, or type an instruction.";
 export const OUTPUT_COUNT_MESSAGE = "A run makes between 1 and 10 images.";
 export const LINK_MESSAGE = "A video link must start with https://.";
@@ -40,7 +40,6 @@ export const RECIPE_GONE_MESSAGE = "This result's recipe is no longer in the pro
 export const referenceMissingMessage = (file: string) => `Reference file not found in this project: ${file}`;
 
 const MAX_OUTPUTS = 10;
-const PLACEHOLDER_WIDTH = 320;
 /** The run registry keeps this many runs, for resolving markers. */
 const REGISTRY_SIZE = 200;
 
@@ -56,17 +55,6 @@ export class Runs extends Context.Service<
   }
 >()("unframed/engine/Runs") {}
 
-/** What landed for one output: enough to fill its placeholder, now or after an undo. */
-interface Landed {
-  readonly file: string;
-  readonly sidecar: string;
-  readonly cost: number | null;
-  readonly width: number | undefined;
-  readonly height: number | undefined;
-  readonly mime: string;
-  readonly bytes: number;
-}
-
 type Outcome = { readonly ok: true; readonly landed: Landed } | { readonly ok: false; readonly error: string };
 
 interface RunRecord {
@@ -74,87 +62,22 @@ interface RunRecord {
   readonly outputs: Map<number, Outcome>;
 }
 
-type Shape = TLRecord & { type: string; props: Record<string, unknown>; meta: Record<string, unknown> };
+const runOrigin = (runId: string): ChangeOrigin => ({ kind: "server", id: runOriginId(runId) });
 
-const isShape = (record: TLRecord | undefined): record is Shape => record?.typeName === "shape";
+const contains = (box: Box, point: { readonly x: number; readonly y: number }) =>
+  point.x >= box.x && point.x <= box.x + box.w && point.y >= box.y && point.y <= box.y + box.h;
 
-const field = (value: unknown, key: string): unknown =>
-  typeof value === "object" && value !== null ? (value as Record<string, unknown>)[key] : undefined;
-
-const unframedOf = (shape: Shape): Record<string, unknown> => {
-  const value = shape.meta.unframed;
-  return typeof value === "object" && value !== null ? (value as Record<string, unknown>) : {};
+/**
+ * What the row of results must stay clear of. The engine has no text layout, so a prompt's
+ * size is an estimate; a prompt among the run's sources that starts inside the anchor is
+ * inside the selection, and only the estimate could put it in the row's way.
+ */
+const obstacles = (records: ReadonlyArray<TLRecord>, request: ImageRunRequest): Box[] => {
+  const sources = new Set(request.sources);
+  return shapePageBoxes(records)
+    .filter((shape) => !(shape.type === "text" && sources.has(shape.id) && contains(request.anchor, shape.box)))
+    .map((shape) => shape.box);
 };
-
-export const markerOf = (shape: Shape): RunMarker | undefined => {
-  const run = unframedOf(shape).run;
-  return typeof field(run, "runId") === "string" ? (run as RunMarker) : undefined;
-};
-
-const resultOf = (shape: Shape): ResultMeta | undefined => {
-  const result = unframedOf(shape).result;
-  return typeof field(result, "model") === "string" ? (result as ResultMeta) : undefined;
-};
-
-const runOrigin = (runId: string): ChangeOrigin => ({ kind: "server", id: `run:${runId}` });
-
-/** The height of an image placeholder: from the requested `W:H` ratio or exact size, else square. */
-const placeholderHeight = (params: ImageRunRequest["params"]): number => {
-  const ratio = params.size !== undefined ? /^(\d+)x(\d+)$/.exec(params.size) : params.aspect_ratio !== undefined ? /^(\d+(?:\.\d+)?):(\d+(?:\.\d+)?)$/.exec(params.aspect_ratio) : null;
-  const w = ratio ? Number(ratio[1]) : 0;
-  const h = ratio ? Number(ratio[2]) : 0;
-  return w > 0 && h > 0 ? (PLACEHOLDER_WIDTH * h) / w : PLACEHOLDER_WIDTH;
-};
-
-/** Only set params are sent; `quality: 'auto'` and `background: 'auto'` are not. */
-const sentParams = (params: ImageRunRequest["params"]): Record<string, string> => {
-  const sent: Record<string, string> = {};
-  for (const [key, value] of Object.entries(params)) {
-    if (typeof value !== "string" || value === "") continue;
-    if ((key === "quality" || key === "background") && value === "auto") continue;
-    sent[key] = value;
-  }
-  return sent;
-};
-
-/** The change that fills a placeholder: the file as its asset, the file's aspect at its width, the sidecar, no marker. */
-const fillChange = (shape: Shape, landed: Landed): CanvasChange => {
-  const assetId = `asset:${randomUUID()}`;
-  const width = typeof shape.props.w === "number" ? shape.props.w : PLACEHOLDER_WIDTH;
-  const height = landed.width && landed.height ? (width * landed.height) / landed.width : typeof shape.props.h === "number" ? shape.props.h : width;
-  const { run: _run, ...unframed } = unframedOf(shape);
-  const result = resultOf(shape);
-  const asset = {
-    id: assetId,
-    typeName: "asset",
-    type: "image",
-    props: {
-      w: landed.width ?? Math.round(width),
-      h: landed.height ?? Math.round(height),
-      name: landed.file,
-      isAnimated: landed.mime === "image/gif",
-      mimeType: landed.mime,
-      src: projectFileMarker(landed.file),
-      ...(landed.bytes > 0 ? { fileSize: landed.bytes } : {}),
-    },
-    meta: {},
-  } as unknown as TLRecord;
-  const filled = {
-    ...shape,
-    props: { ...shape.props, assetId, h: height, crop: null },
-    meta: { ...shape.meta, unframed: { ...unframed, ...(result ? { result: { ...result, sidecar: landed.sidecar, cost: landed.cost } } : {}) } },
-  } as unknown as TLRecord;
-  return { put: [asset, filled], remove: [] };
-};
-
-/** The change that settles a marker whose work did not land: the marker goes, and an empty shape goes too. */
-const clearChange = (shape: Shape): CanvasChange => {
-  if (shape.props.assetId === null || shape.props.assetId === undefined) return { put: [], remove: [shape.id] };
-  const { run: _run, ...unframed } = unframedOf(shape);
-  return { put: [{ ...shape, meta: { ...shape.meta, unframed } } as unknown as TLRecord], remove: [] };
-};
-
-const plainRecipe = Schema.decodeUnknownOption(ResultRecipe);
 
 export const runsLayer = Layer.effect(
   Runs,
@@ -183,26 +106,25 @@ export const runsLayer = Layer.effect(
 
     /** Resolves one marker: leave a live run's, fill a landed output's, clear the rest. */
     const resolve = (shape: Shape, room: RoomAccess) => {
-      const marker = markerOf(shape);
+      const marker = runMarkerOf(shape);
       // Spec 04 resolves durable markers against its render job store.
       if (!marker || marker.durable) return;
       const run = registry.get(marker.runId);
       const outcome = run?.outputs.get(marker.runIndex);
       if (run && !outcome) return;
-      const change = outcome?.ok ? fillChange(shape, outcome.landed) : clearChange(shape);
-      room.change(change, runOrigin(marker.runId));
+      room.change(outcome?.ok ? fillChange(shape, outcome.landed) : clearChange(shape), runOrigin(marker.runId));
     };
 
     yield* rooms.afterOpen((_project, room) => {
-      for (const record of room.read()) if (isShape(record) && markerOf(record)) resolve(record, room);
+      for (const record of room.read()) if (isShape(record) && runMarkerOf(record)) resolve(record, room);
     });
 
+    // A shape that arrives carrying a marker (an undo restoring a deleted placeholder) is resolved at once.
     yield* rooms.afterCommit((_project, change, room) => {
       for (const id of change.created) {
         const record = change.records.get(id);
-        if (!isShape(record)) continue;
-        const marker = markerOf(record);
-        if (!marker || change.origin.id === `run:${marker.runId}`) continue;
+        const marker = isShape(record) ? runMarkerOf(record) : undefined;
+        if (!marker || change.origin.id === runOriginId(marker.runId)) continue;
         const current = room.get(id);
         if (isShape(current)) resolve(current, room);
       }
@@ -253,16 +175,17 @@ export const runsLayer = Layer.effect(
         const records = yield* rooms.read(request.project);
         let of: ResultRecipe["of"];
         if (request.of) {
-          const source = records.find((record) => record.id === request.of!.shapeId);
-          const sidecar = isShape(source) ? resultOf(source)?.sidecar : undefined;
+          const sidecar = resultMetaOf(records.find((record) => record.id === request.of!.shapeId) ?? {})?.sidecar;
           if (typeof sidecar === "string") of = { sidecar, action: request.of.action };
         }
 
-        const page = records.find((record) => record.typeName === "page");
-        const pageId = page?.id ?? "page:page";
+        const pageId = records.find((record) => record.typeName === "page")?.id ?? "page:page";
         const height = placeholderHeight(request.params);
-        const sizes = request.outputs.map(() => ({ w: PLACEHOLDER_WIDTH, h: height }));
-        const positions = placeResults(request.anchor, sizes, shapePageBounds(records, new Set(request.sources)));
+        const positions = placeResults(
+          request.anchor,
+          request.outputs.map(() => ({ w: PLACEHOLDER_WIDTH, h: height })),
+          obstacles(records, request),
+        );
         const topIndex = records
           .filter((record) => isShape(record) && (record as unknown as { parentId: string }).parentId === pageId)
           .map((record) => (record as unknown as { index: IndexKey }).index)
@@ -273,31 +196,15 @@ export const runsLayer = Layer.effect(
         const placeholders = request.outputs.map((_output, index) => {
           const ref = nextRef([...records, ...minted]);
           minted.push({ typeName: "shape", type: "image", meta: { ref } });
-          const marker: RunMarker = { runId, runIndex: index + 1, startedAt };
-          const result: ResultMeta = {
-            sidecar: null,
-            medium: "image",
-            model,
-            batchId,
-            runIndex: index + 1,
-            runCount,
-            cost: null,
-            sources: [...request.sources],
-          };
-          return {
-            id: `shape:${randomUUID()}`,
-            typeName: "shape",
-            type: "image",
-            x: positions[index]!.x,
-            y: positions[index]!.y,
-            rotation: 0,
+          return imagePlaceholder({
+            at: positions[index]!,
+            height,
             index: indices[index]!,
             parentId: pageId,
-            isLocked: false,
-            opacity: 1,
-            props: { w: PLACEHOLDER_WIDTH, h: height, playing: true, url: "", assetId: null, crop: null, flipX: false, flipY: false, altText: "" },
-            meta: { ref, unframed: { run: marker, result } },
-          } as unknown as TLRecord;
+            ref,
+            marker: { runId, runIndex: index + 1, startedAt },
+            result: { sidecar: null, medium: "image", model, batchId, runIndex: index + 1, runCount, cost: null, sources: [...request.sources] },
+          });
         });
 
         const run: RunRecord = { live: true, outputs: new Map() };
@@ -306,17 +213,6 @@ export const runsLayer = Layer.effect(
           Effect.tapError(() => Effect.sync(() => registry.delete(runId))),
         );
         yield* PubSub.publish(events, { project, event: { type: "started", runId, batchId, count: runCount } });
-
-        const recipeFor = (references: ReadonlyArray<RecipeRef>): ResultRecipe => ({
-          medium: "image",
-          model,
-          params: { ...request.params } as Record<string, string>,
-          selectionPrompt: request.selectionPrompt,
-          instruction: request.instruction,
-          references: [...references],
-          sources: [...request.sources],
-          ...(of === undefined ? {} : { of }),
-        });
 
         const land = async (index: number, bytes: Buffer, mediaType: string | undefined, cost: number | null): Promise<Landed> => {
           const output = request.outputs[index]!;
@@ -329,17 +225,17 @@ export const runsLayer = Layer.effect(
             throw new Error(`Generated the image but failed to write it: ${errorText(error)}`);
           }
           const file = `${base}.${ext}`;
-          const dimensions = imageDimensions(bytes);
-          const references = output.references;
+          const { references } = output;
+          const { resolution, quality, aspect_ratio, output_format, background, size } = request.params;
           const sidecar: ImageSidecar = {
             prompt: output.prompt,
             model,
-            ...(request.params.resolution === undefined ? {} : { resolution: request.params.resolution }),
-            ...(request.params.quality === undefined ? {} : { quality: request.params.quality }),
-            ...(request.params.aspect_ratio === undefined ? {} : { aspect_ratio: request.params.aspect_ratio }),
-            ...(request.params.output_format === undefined ? {} : { output_format: request.params.output_format }),
-            background: request.params.background ?? null,
-            ...(request.params.size === undefined ? {} : { size: request.params.size }),
+            ...(resolution === undefined ? {} : { resolution }),
+            ...(quality === undefined ? {} : { quality }),
+            ...(aspect_ratio === undefined ? {} : { aspect_ratio }),
+            ...(output_format === undefined ? {} : { output_format }),
+            background: background ?? null,
+            ...(size === undefined ? {} : { size }),
             referenceCount: references.length,
             references: { images: references.filter((ref) => ref.kind === "image").length, videos: references.filter((ref) => ref.kind === "video").length },
             batchId,
@@ -348,11 +244,20 @@ export const runsLayer = Layer.effect(
             cost,
             createdAt: new Date().toISOString(),
             file,
-            recipe: recipeFor(references),
+            recipe: {
+              medium: "image",
+              model,
+              params: { ...request.params } as Record<string, string>,
+              selectionPrompt: request.selectionPrompt,
+              instruction: request.instruction,
+              references: [...references],
+              sources: [...request.sources],
+              ...(of === undefined ? {} : { of }),
+            },
           };
           await writeSidecar(folder, base, sidecar).catch((error: unknown) => logError(`could not write the sidecar of ${file}: ${errorText(error)}`));
-          const path = join(folder, file);
-          logInfo(`generated → ${path}${cost === null ? "" : `  ($${cost.toFixed(4)})`}`);
+          logInfo(`generated → ${join(folder, file)}${cost === null ? "" : `  ($${cost.toFixed(4)})`}`);
+          const dimensions = imageDimensions(bytes);
           return {
             file,
             sidecar: `${base}.json`,
@@ -368,7 +273,7 @@ export const runsLayer = Layer.effect(
           const output = request.outputs[index]!;
           const runIndex = index + 1;
           const shapeId = placeholders[index]!.id;
-          const body: Record<string, unknown> = { model, prompt: output.prompt, ...sentParams(request.params) };
+          const body = imageRequestBody(model, output.prompt, request.params);
           let outcome: Outcome;
           try {
             if (output.references.length > 0) body.input_references = await inline(folder, output.references);
@@ -382,7 +287,7 @@ export const runsLayer = Layer.effect(
             Effect.map(rooms.read(request.project), (now) => {
               const shape = now.find((record) => record.id === shapeId);
               if (!isShape(shape)) return undefined;
-              return outcome.ok ? fillChange(shape, outcome.landed) : markerOf(shape)?.runId === runId ? clearChange(shape) : undefined;
+              return outcome.ok ? fillChange(shape, outcome.landed) : runMarkerOf(shape)?.runId === runId ? clearChange(shape) : undefined;
             }),
           ).catch(() => undefined);
           if (change) {
@@ -401,16 +306,16 @@ export const runsLayer = Layer.effect(
           return { ok: false, error: outcome.error };
         };
 
+        // The run lives in the engine: nothing here waits on the socket that started it.
         void Promise.all(request.outputs.map((_output, index) => settle(index)))
           .then(async (settled) => {
             run.live = false;
-            const errors = [...new Set(settled.flatMap((each) => (each.error === undefined ? [] : [each.error])))];
             await publish(project, {
               type: "finished",
               runId,
               succeeded: settled.filter((each) => each.ok).length,
               failed: settled.filter((each) => !each.ok).length,
-              errors,
+              errors: [...new Set(settled.flatMap((each) => (each.error === undefined ? [] : [each.error])))],
               orphaned: settled.filter((each) => each.orphaned).length,
             });
           })
@@ -429,41 +334,27 @@ export const runsLayer = Layer.effect(
         ),
       );
 
+    const readSidecar = (folder: string, name: string) =>
+      Effect.flatMap(
+        Effect.promise(() => readResultSidecar(folder, name)),
+        (read) => (read === undefined ? Effect.fail(unframedError("not_found", RECIPE_GONE_MESSAGE)) : Effect.succeed(read)),
+      );
+
     const recipe = (project: string, shapeId: string) =>
       Effect.gen(function* () {
         const folder = yield* projectFolder(project);
         const records = yield* rooms.read(project);
-        const shape = records.find((record) => record.id === shapeId);
-        const result = isShape(shape) ? resultOf(shape) : undefined;
+        const result = resultMetaOf(records.find((record) => record.id === shapeId) ?? {});
         if (result?.recipe) return result.recipe;
-        const sidecar = result?.sidecar;
-        if (typeof sidecar !== "string" || !isBareFileName(sidecar)) return yield* unframedError("not_found", RECIPE_GONE_MESSAGE);
-        const text = yield* Effect.promise(() => readFile(join(folder, sidecar), "utf8").catch(() => undefined));
-        let parsed: unknown;
-        try {
-          parsed = text === undefined ? undefined : JSON.parse(text);
-        } catch {
-          parsed = undefined;
-        }
-        const decoded = plainRecipe(field(parsed, "recipe"));
-        if (decoded._tag === "None") return yield* unframedError("not_found", RECIPE_GONE_MESSAGE);
-        return decoded.value;
+        if (typeof result?.sidecar !== "string") return yield* unframedError("not_found", RECIPE_GONE_MESSAGE);
+        return (yield* readSidecar(folder, result.sidecar)).recipe;
       });
 
     const copyRecipe = (project: string, from: string, sidecar: string, file: string) =>
       Effect.gen(function* () {
         if (!isBareFileName(sidecar) || !isBareFileName(file)) return yield* unframedError("bad_request", "That is not a file in this project.");
-        const sourceDir = yield* projectFolder(from);
+        const source = yield* readSidecar(yield* projectFolder(from), sidecar);
         const targetDir = yield* projectFolder(project);
-        const text = yield* Effect.promise(() => readFile(join(sourceDir, sidecar), "utf8").catch(() => undefined));
-        let parsed: unknown;
-        try {
-          parsed = text === undefined ? undefined : JSON.parse(text);
-        } catch {
-          parsed = undefined;
-        }
-        const decoded = plainRecipe(field(parsed, "recipe"));
-        if (decoded._tag === "None") return yield* unframedError("not_found", RECIPE_GONE_MESSAGE);
         const copies = new Map<string, string>();
         const copyOf = (name: string) =>
           Effect.gen(function* () {
@@ -474,17 +365,14 @@ export const runsLayer = Layer.effect(
             return copied;
           });
         const references: RecipeRef[] = [];
-        for (const ref of decoded.value.references) {
-          if ("url" in ref) {
-            references.push(ref);
-            continue;
-          }
-          const copied = yield* copyOf(ref.file);
-          references.push(ref.original === undefined ? { kind: ref.kind, file: copied } : { kind: ref.kind, file: copied, original: yield* copyOf(ref.original) });
+        for (const ref of source.recipe.references) {
+          if ("url" in ref) references.push(ref);
+          else if (ref.original === undefined) references.push({ kind: ref.kind, file: yield* copyOf(ref.file) });
+          else references.push({ kind: ref.kind, file: yield* copyOf(ref.file), original: yield* copyOf(ref.original) });
         }
-        // The result's sidecar sits beside its image, as a run leaves it.
-        const target = `${file.replace(/\.[^.]*$/, "")}.json`;
-        const next = { ...(parsed as Record<string, unknown>), file, recipe: { ...decoded.value, references } };
+        // The result's sidecar sits beside its image, as a run leaves it, in place of the copy's own.
+        const target = sidecarFileName(file);
+        const next = { ...source.sidecar, file, recipe: { ...source.recipe, references } };
         yield* Effect.tryPromise({
           try: () => writeFile(join(targetDir, target), `${JSON.stringify(next, null, 2)}\n`),
           catch: (error) => unframedError("internal", `Could not copy the recipe: ${errorText(error)}`),

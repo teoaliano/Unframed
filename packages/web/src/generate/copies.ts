@@ -1,5 +1,5 @@
 import type { Editor, TLShape, TLShapeId } from "tldraw";
-import { resultOf, runMarkerOf, unframedOf } from "./facts.ts";
+import { resultMetaOf, runMarkerOf, unframedMetaOf } from "@unframed/contracts";
 
 /**
  * A copy never claims someone else's run: every shape this tab creates that carries a run
@@ -15,8 +15,8 @@ export const installCopyStripping = (editor: Editor): (() => void) => {
   });
   const stopCreate = editor.sideEffects.registerBeforeCreateHandler("shape", (shape: TLShape, source) => {
     if (source !== "user" || deleted.has(shape.id)) return shape;
-    const unframed = unframedOf(shape);
-    const result = resultOf(shape);
+    const unframed = unframedMetaOf(shape);
+    const result = resultMetaOf(shape);
     const unfilled = result !== undefined && result.sidecar === null;
     if (!runMarkerOf(shape) && unframed.runError === undefined && !unfilled) return shape;
     const { run: _run, runError: _runError, result: _result, ...rest } = unframed;

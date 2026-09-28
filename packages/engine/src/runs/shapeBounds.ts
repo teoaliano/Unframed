@@ -66,12 +66,8 @@ const localBox = (shape: ShapeLike): Box => {
   }
 };
 
-/**
- * The page bounds of every shape in `records` (a group's members moved by their group's
- * origin), leaving out `except`: the sources sit inside the anchor, so only an estimate
- * could make them look in the way.
- */
-export const shapePageBounds = (records: ReadonlyArray<TLRecord>, except: ReadonlySet<string> = new Set()): Box[] => {
+/** The page bounds of every shape in `records`, a group's members moved by their group's origin. */
+export const shapePageBoxes = (records: ReadonlyArray<TLRecord>): Array<{ readonly id: string; readonly type: string; readonly box: Box }> => {
   const shapes = records.filter((record) => record.typeName === "shape") as unknown as ShapeLike[];
   const byId = new Map(shapes.map((shape) => [shape.id, shape]));
   const originOf = (shape: ShapeLike, depth = 0): { x: number; y: number } => {
@@ -80,9 +76,9 @@ export const shapePageBounds = (records: ReadonlyArray<TLRecord>, except: Readon
     const above = originOf(parent, depth + 1);
     return { x: above.x + parent.x, y: above.y + parent.y };
   };
-  return shapes.filter((shape) => !except.has(shape.id)).map((shape) => {
+  return shapes.map((shape) => {
     const box = localBox(shape);
     const origin = originOf(shape);
-    return { x: origin.x + box.x, y: origin.y + box.y, w: box.w, h: box.h };
+    return { id: shape.id, type: shape.type, box: { x: origin.x + box.x, y: origin.y + box.y, w: box.w, h: box.h } };
   });
 };

@@ -5,7 +5,8 @@
  */
 import { composeSelection, SKETCH_ROLE } from "@unframed/domain";
 import { useValue, useEditor, type Editor, type TLShapeId } from "tldraw";
-import { canvasShapes, pageBox, resultOf } from "./facts.ts";
+import { resultMetaOf } from "@unframed/contracts";
+import { canvasShapes, pageBox } from "./facts.ts";
 import { composerState } from "./state.ts";
 
 interface Badge {
@@ -66,7 +67,7 @@ const edgePoint = (from: { x: number; y: number }, box: { x: number; y: number; 
 
 const tetherOf = (editor: Editor): ReadonlyArray<Line> => {
   const only = editor.getOnlySelectedShape();
-  const result = only ? resultOf(only) : undefined;
+  const result = only ? resultMetaOf(only) : undefined;
   if (!only || !result) return [];
   const target = pageBox(editor, only.id);
   if (!target) return [];

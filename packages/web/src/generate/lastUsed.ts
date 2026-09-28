@@ -1,6 +1,6 @@
 import type { Medium } from "@unframed/contracts";
 import type { EngineConnection } from "../rpc/engine.ts";
-import type { PropValue } from "./media.ts";
+import type { PropValue } from "./mediumRegistry.ts";
 
 /** A medium's last-used values: the model (only when the person picked one) and the tray's props. */
 export interface LastUsed {
@@ -11,7 +11,7 @@ export interface LastUsed {
 const keyOf = (medium: Medium) => `lastUsed.${medium}`;
 
 /** A stored value, or `undefined` for a missing or unreadable one. */
-export const readLastUsed = (value: unknown): LastUsed | undefined => {
+const readLastUsed = (value: unknown): LastUsed | undefined => {
   if (typeof value !== "object" || value === null) return undefined;
   const { model, props } = value as { model?: unknown; props?: unknown };
   const kept: Record<string, PropValue> = {};
@@ -21,7 +21,6 @@ export const readLastUsed = (value: unknown): LastUsed | undefined => {
   return { ...(typeof model === "string" && model !== "" ? { model } : {}), props: kept };
 };
 
-/** Reads a medium's last-used values from the preferences store. */
 export const loadLastUsed = async (engine: EngineConnection, medium: Medium): Promise<LastUsed | undefined> => {
   try {
     const { values } = await engine.call("preferences.get", { keys: [keyOf(medium)] });

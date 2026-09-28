@@ -27,9 +27,13 @@ export interface Uploaded {
   readonly mime: string;
 }
 
-/** Sends bytes to the engine's upload route. Rejects with the route's own message. */
-export const uploadFile = async (project: string, file: Blob, name: string, signal?: AbortSignal): Promise<Uploaded> => {
-  const response = await fetch(`/api/projects/${encodeURIComponent(project)}/files?name=${encodeURIComponent(name)}`, {
+/**
+ * Sends bytes to the engine's upload route. `sidecar` carries what a composite or sketch
+ * adds to its sidecar (spec 03). Rejects with the route's own message.
+ */
+export const uploadFile = async (project: string, file: Blob, name: string, signal?: AbortSignal, sidecar?: Readonly<Record<string, string>>): Promise<Uploaded> => {
+  const query = new URLSearchParams({ name, ...sidecar });
+  const response = await fetch(`/api/projects/${encodeURIComponent(project)}/files?${query.toString()}`, {
     method: "POST",
     body: file,
     headers: { "content-type": file.type || "application/octet-stream" },

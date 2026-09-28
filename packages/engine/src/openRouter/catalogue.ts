@@ -15,7 +15,7 @@ export class Catalogue extends Context.Service<
 >()("unframed/engine/Catalogue") {}
 
 /** A model id is interpolated into an upstream path, so it must be a plain slug. */
-export const MODEL_SLUG = /^~?[\w.-]+\/[\w.-]+$/;
+const MODEL_SLUG = /^~?[\w.-]+\/[\w.-]+$/;
 
 const field = (value: unknown, key: string): unknown =>
   typeof value === "object" && value !== null ? (value as Record<string, unknown>)[key] : undefined;

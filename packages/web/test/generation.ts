@@ -109,7 +109,6 @@ export const composer = (page: Page): Locator => page.getByTestId("composer");
 /** The composer's instruction box. */
 export const instructionBox = (page: Page): Locator => composer(page).getByRole("textbox", { name: "What should this make?" });
 
-/** The send button of the Generate tray. */
 export const sendButton = (page: Page): Locator => composer(page).getByRole("button", { name: /^Generate/ });
 
 /** Clicks the middle of a shape, as a person selects it. */

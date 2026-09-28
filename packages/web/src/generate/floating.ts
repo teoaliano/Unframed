@@ -5,7 +5,7 @@ export interface ScreenBox {
   readonly h: number;
 }
 
-export interface Floating {
+export interface FloatingPlace {
   readonly left: number;
   readonly top: number;
   /** `above` grows upward from its bottom edge; `below` grows downward from its top edge. */
@@ -20,7 +20,7 @@ const MARGIN = 8;
  * selection, 12 px away, kept 8 px inside the canvas's sides; below it when there is no
  * room above; pinned at the top margin when there is room neither above nor below.
  */
-export const placeFloating = (target: ScreenBox, size: { readonly w: number; readonly h: number }, canvas: { readonly w: number; readonly h: number }): Floating => {
+export const placeFloating = (target: ScreenBox, size: { readonly w: number; readonly h: number }, canvas: { readonly w: number; readonly h: number }): FloatingPlace => {
   const centre = target.x + target.w / 2;
   const left = Math.min(Math.max(MARGIN, centre - size.w / 2), Math.max(MARGIN, canvas.w - MARGIN - size.w));
   const above = target.y - GAP - size.h;

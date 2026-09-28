@@ -60,7 +60,6 @@ export class CanvasRooms extends Context.Service<
     readonly closeSockets: (code: number) => Promise<void>;
     /** Registers the work that runs after each committed change (media rewriting). */
     readonly afterCommit: (hook: AfterCommit) => Effect.Effect<void>;
-    /** Registers the work that runs when a room opens. */
     readonly afterOpen: (hook: AfterOpen) => Effect.Effect<void>;
   }
 >()("unframed/engine/CanvasRooms") {}

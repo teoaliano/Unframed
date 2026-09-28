@@ -5,13 +5,13 @@ import { ArrowDown, ArrowUp, ArrowUpDown, Check, ExternalLink, Search } from "lu
 import { useEffect, useMemo, useState } from "react";
 
 /** The provider token hues, in the order provider keys take them. */
-export const PROVIDER_HUES = ["blue", "orange", "purple", "green", "pink", "teal", "red", "cyan", "yellow", "gray", "neutral"] as const;
+const PROVIDER_HUES = ["blue", "orange", "purple", "green", "pink", "teal", "red", "cyan", "yellow", "gray", "neutral"] as const;
 
 /** A slug's provider key: the part before `/`, without a leading `~`. */
-export const providerKey = (id: string): string => id.split("/")[0]!.replace(/^~/, "");
+const providerKey = (id: string): string => id.split("/")[0]!.replace(/^~/, "");
 
 /** Each provider's label and hue, from the catalogue as a whole. */
-export const providers = (models: ReadonlyArray<ModelEntry>): Map<string, { readonly label: string; readonly hue: (typeof PROVIDER_HUES)[number] }> => {
+const providers = (models: ReadonlyArray<ModelEntry>): Map<string, { readonly label: string; readonly hue: (typeof PROVIDER_HUES)[number] }> => {
   const keys = [...new Set(models.map((model) => providerKey(model.id)))].sort();
   return new Map(
     keys.map((key, index) => {

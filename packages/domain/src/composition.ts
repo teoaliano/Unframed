@@ -1,5 +1,5 @@
 import { membersOf, readingOrder, type CanvasShape, type Crop } from "./canvasShapes.ts";
-import type { Box } from "./grouping.ts";
+import { boxesOverlap, type Box } from "./grouping.ts";
 import { createResolver } from "./references.ts";
 
 export type Medium = "image" | "video" | "text";
@@ -55,8 +55,6 @@ export interface Composition {
   readonly error?: string;
 }
 
-const overlaps = (a: Box, b: Box): boolean => a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
-
 /** A crop that leaves the whole picture visible is no crop. */
 const isCropped = (crop: Crop | null | undefined): crop is Crop =>
   crop !== null &&
@@ -82,7 +80,7 @@ const markOwners = (shapes: ReadonlyArray<CanvasShape>): Map<string, string> => 
     if (mark.kind !== "mark") continue;
     let owner: CanvasShape | undefined;
     for (const image of images) {
-      if (image.z >= mark.z || !overlaps(image.bounds, mark.bounds)) continue;
+      if (image.z >= mark.z || !boxesOverlap(image.bounds, mark.bounds)) continue;
       if (owner === undefined || image.z > owner.z) owner = image;
     }
     if (owner) owners.set(mark.id, owner.id);
@@ -104,6 +102,13 @@ const flatten = (shapes: ReadonlyArray<CanvasShape>, selected: ReadonlyArray<str
     .sort(readingOrder);
   return top.flatMap((shape) => (shape.kind === "group" ? membersOf(shapes, shape.id) : [shape]));
 };
+
+/** Prompt parts as a run sends them: each trimmed, empties dropped, joined with one blank line. */
+export const joinPromptParts = (...parts: ReadonlyArray<string>): string =>
+  parts
+    .map((part) => part.trim())
+    .filter((part) => part !== "")
+    .join("\n\n");
 
 const plural = (count: number, one: string, many: string) => (count === 1 ? one : many);
 
@@ -224,7 +229,7 @@ export const composeSelection = (input: CompositionInput): Composition => {
   }
 
   const instruction = resolve(input.instruction).trim();
-  const prompt = [...promptParts, ...(instruction === "" ? [] : [instruction])].join("\n\n");
+  const prompt = joinPromptParts(...promptParts, instruction);
   return {
     promptParts,
     prompt,

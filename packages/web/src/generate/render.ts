@@ -4,9 +4,9 @@
  * clean and the marks stay editable shapes.
  */
 import type { RecipeRef } from "@unframed/contracts";
-import type { Slot, SlotSource } from "@unframed/domain";
+import type { RenderedSidecar, Slot, SlotSource } from "@unframed/domain";
 import { Box, type Editor, type TLShapeId } from "tldraw";
-import { UploadFailed, type Uploaded } from "../canvas/assetStore.ts";
+import { uploadFile, type Uploaded } from "../canvas/assetStore.ts";
 import { assetOf } from "./facts.ts";
 
 const SKETCH_PADDING = 16;
@@ -14,23 +14,13 @@ const SKETCH_LONGEST = 1024;
 const SKETCH_CAP = 2048;
 
 /** Uploads a rendered picture through spec 02's upload path, with its composite or sketch sidecar. */
-const uploadRendered = async (
-  project: string,
-  blob: Blob,
-  name: string,
-  sidecar: { readonly source: "composite" | "sketch"; readonly of?: string; readonly marks: ReadonlyArray<string>; readonly crop: unknown },
-): Promise<Uploaded> => {
-  const query = new URLSearchParams({ name, source: sidecar.source, marks: JSON.stringify(sidecar.marks), crop: JSON.stringify(sidecar.crop ?? null) });
-  if (sidecar.of !== undefined) query.set("of", sidecar.of);
-  const response = await fetch(`/api/projects/${encodeURIComponent(project)}/files?${query.toString()}`, {
-    method: "POST",
-    body: blob,
-    headers: { "content-type": "image/png" },
+const uploadRendered = (project: string, blob: Blob, name: string, sidecar: RenderedSidecar): Promise<Uploaded> =>
+  uploadFile(project, new Blob([blob], { type: "image/png" }), name, undefined, {
+    source: sidecar.source,
+    marks: JSON.stringify(sidecar.marks ?? []),
+    crop: JSON.stringify(sidecar.crop ?? null),
+    ...(sidecar.of === undefined ? {} : { of: sidecar.of }),
   });
-  const answer = (await response.json().catch(() => ({}))) as Partial<Uploaded> & { error?: string };
-  if (!response.ok || typeof answer.file !== "string") throw new UploadFailed(answer.error ?? `The engine answered ${response.status}.`);
-  return answer as Uploaded;
-};
 
 const withoutExtension = (file: string) => file.replace(/\.[^.]*$/, "");
 

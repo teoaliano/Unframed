@@ -1,32 +1,33 @@
-import type { ImageParams, RecipeRef } from "@unframed/contracts";
-import { defaultProps, estimateImageRun, formatEstimate, keepSupported, modelParams, resetProps } from "@unframed/domain";
-import { pageBox, selectionBox } from "./facts.ts";
-import { registerMedium, type MediumDefinition, type PropValue, type RunSource, type SendInput, type TrayProps } from "./media.ts";
-import { referencesFor } from "./render.ts";
-import { saveLastUsed } from "./lastUsed.ts";
+import type { ImageParams, ImagePricingAnswer, RecipeRef } from "@unframed/contracts";
+import {
+  defaultProps,
+  estimateImageRun,
+  formatEstimate,
+  joinPromptParts,
+  keepSupported,
+  MODEL_DRIVEN_PROPS,
+  modelParams,
+  NO_KEY_MESSAGE,
+  resetProps,
+} from "@unframed/domain";
 import type { TLShapeId } from "tldraw";
 import type { Payload } from "../rpc/engine.ts";
+import { pageBox, selectionBox } from "./facts.ts";
+import { saveLastUsed } from "./lastUsed.ts";
+import { registerMedium, type MediumDefinition, type PropValue, type RunSource, type SendInput, type TrayProps } from "./mediumRegistry.ts";
+import { referencesFor } from "./render.ts";
 
-export const NO_KEY_LINE = "No OpenRouter key yet. Add one with the key icon in the top right (it becomes a settings gear once saved).";
 export const NOTHING_TO_MAKE = "Nothing says what to make. Select a prompt, or type an instruction.";
-
-const IMAGE_PARAM_KEYS = ["resolution", "quality", "aspect_ratio", "background", "output_format", "size"] as const;
 
 /** The tray's props as the request's image params: model-driven keys only, as strings. */
 export const imageParams = (props: TrayProps): ImageParams => {
   const params: Record<string, string> = {};
-  for (const key of IMAGE_PARAM_KEYS) {
+  for (const key of MODEL_DRIVEN_PROPS) {
     const value = props[key];
     if (value !== undefined) params[key] = String(value);
   }
   return params;
 };
-
-const join = (...parts: ReadonlyArray<string>) =>
-  parts
-    .map((part) => part.trim())
-    .filter((part) => part !== "")
-    .join("\n\n");
 
 /** How many image slots a run sends: every one, over the cap included. */
 const imageSlots = (source: RunSource): number =>
@@ -34,40 +35,41 @@ const imageSlots = (source: RunSource): number =>
     ? source.composition.references.filter((slot) => slot.kind === "image").length
     : source.recipe.recipe.references.filter((ref) => ref.kind === "image").length;
 
-const promptOf = (source: RunSource): string =>
-  source.kind === "selection" ? source.composition.prompt : join(source.recipe.recipe.selectionPrompt, source.instruction);
-
-const send = async ({ editor, engine, project, values, source }: SendInput) => {
-  let references: RecipeRef[];
-  let request: Payload<"run.image">;
-  const params = imageParams(values.props);
-  const model = values.model === undefined ? {} : { model: values.model };
+/** A run's prompt, its error and the rest of its request, from the live selection or a recipe. */
+const planOf = (source: RunSource) => {
   if (source.kind === "selection") {
     const { composition } = source;
-    references = await referencesFor(editor, project, composition.references);
-    const anchor = selectionBox(editor, source.selected as TLShapeId[]) ?? { x: 0, y: 0, w: 0, h: 0 };
+    return { prompt: composition.prompt, error: composition.error, selectionPrompt: composition.promptParts.join("\n\n"), instruction: composition.instruction };
+  }
+  const { recipe } = source.recipe;
+  return { prompt: joinPromptParts(recipe.selectionPrompt, source.instruction), error: source.error, selectionPrompt: recipe.selectionPrompt, instruction: source.instruction };
+};
+
+const send = async ({ editor, engine, project, values, source }: SendInput) => {
+  const plan = planOf(source);
+  let request: Payload<"run.image">;
+  const common = {
+    project,
+    ...(values.model === undefined ? {} : { model: values.model }),
+    params: imageParams(values.props),
+    selectionPrompt: plan.selectionPrompt,
+    instruction: plan.instruction,
+  };
+  if (source.kind === "selection") {
+    const references: RecipeRef[] = await referencesFor(editor, project, source.composition.references);
     request = {
-      project,
-      ...model,
-      params,
-      selectionPrompt: composition.promptParts.join("\n\n"),
-      instruction: composition.instruction,
-      outputs: [{ prompt: composition.prompt, references }],
-      sources: [...composition.sources],
-      anchor,
+      ...common,
+      outputs: [{ prompt: plan.prompt, references }],
+      sources: [...source.composition.sources],
+      anchor: selectionBox(editor, source.selected as TLShapeId[]) ?? { x: 0, y: 0, w: 0, h: 0 },
     };
   } else {
     const { recipe, shapeId } = source.recipe;
-    const anchor = pageBox(editor, shapeId as TLShapeId) ?? { x: 0, y: 0, w: 0, h: 0 };
     request = {
-      project,
-      ...model,
-      params,
-      selectionPrompt: recipe.selectionPrompt,
-      instruction: source.instruction.trim(),
-      outputs: [{ prompt: join(recipe.selectionPrompt, source.instruction), references: [...recipe.references] }],
+      ...common,
+      outputs: [{ prompt: plan.prompt, references: [...recipe.references] }],
       sources: [...recipe.sources],
-      anchor,
+      anchor: pageBox(editor, shapeId as TLShapeId) ?? { x: 0, y: 0, w: 0, h: 0 },
       of: { shapeId, action: "recipe" },
     };
   }
@@ -85,20 +87,24 @@ export const imageMedium: MediumDefinition = {
   defaults: (params) => defaultProps(params),
   reset: (props, params) => resetProps(props, params) as Record<string, PropValue>,
   keep: (props, params) => keepSupported(props, params) as Record<string, PropValue>,
+  pricing: (engine, id) => engine.call("models.imagePricing", { id }),
   estimate: ({ pricing, props, source }) => {
-    if (!pricing) return undefined;
-    const chosen = { ...(typeof props.quality === "string" ? { quality: props.quality } : {}), ...(typeof props.resolution === "string" ? { resolution: props.resolution } : {}) };
-    const value = estimateImageRun({ endpoints: pricing.endpoints, chosen, referenceImages: imageSlots(source), outputs: 1 });
+    const answer = pricing as ImagePricingAnswer | undefined;
+    if (!answer) return undefined;
+    const chosen = {
+      ...(typeof props.quality === "string" ? { quality: props.quality } : {}),
+      ...(typeof props.resolution === "string" ? { resolution: props.resolution } : {}),
+    };
+    const value = estimateImageRun({ endpoints: answer.endpoints, chosen, referenceImages: imageSlots(source), outputs: 1 });
     return value === null ? undefined : formatEstimate(value);
   },
   status: ({ source, hasKey }) => {
-    const warnings = source.kind === "selection" ? [...source.composition.warnings] : [];
+    const plan = planOf(source);
     const blockers: string[] = [];
-    const error = source.kind === "selection" ? source.composition.error : undefined;
-    if (error !== undefined) blockers.push(error);
-    else if (promptOf(source).trim() === "") blockers.push(NOTHING_TO_MAKE);
-    if (!hasKey) blockers.push(NO_KEY_LINE);
-    return { warnings, blockers };
+    if (plan.error !== undefined) blockers.push(plan.error);
+    else if (plan.prompt.trim() === "") blockers.push(NOTHING_TO_MAKE);
+    if (!hasKey) blockers.push(NO_KEY_MESSAGE);
+    return { warnings: source.kind === "selection" ? [...source.composition.warnings] : [], blockers };
   },
   sendLabel: () => "Generate",
   send,

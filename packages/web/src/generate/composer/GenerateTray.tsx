@@ -1,5 +1,5 @@
 import { UnframedError, type Medium } from "@unframed/contracts";
-import { composeSelection, selectionHint } from "@unframed/domain";
+import { composeSelection, resolveReferences, selectionHint } from "@unframed/domain";
 import { ArrowUp, LoaderCircle } from "lucide-react";
 import { useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState, type Ref } from "react";
 import { useEditor, useValue } from "tldraw";
@@ -7,7 +7,7 @@ import { useEngine, useSettings } from "../../context.ts";
 import { useCatalogue, usePricing } from "../catalogue.ts";
 import { canvasShapes, resultShapes, toolbarShape } from "../facts.ts";
 import { loadLastUsed, type LastUsed } from "../lastUsed.ts";
-import { mediumDefinition, registeredMedia, type PropValue, type RunSource, type TrayValues } from "../media.ts";
+import { mediumDefinition, registeredMedia, type PropValue, type RunSource, type TrayValues } from "../mediumRegistry.ts";
 import { composerState, setMedium, type RecipeMode } from "../state.ts";
 import { InstructionEditor } from "./InstructionEditor.tsx";
 import { ModelDialog } from "./ModelDialog.tsx";
@@ -70,7 +70,8 @@ export const GenerateTray = ({ project, recipe, onSent, onMenuOpen, handle }: Ge
     if (valuesByMedium[medium] || !catalogue || lastUsed === undefined) return;
     let values: TrayValues;
     if (recipe && recipe.recipe.medium === medium) {
-      values = { model: recipe.recipe.model, picked: true, props: definition.keep(definition.fromRecipe(recipe.recipe), definition.params(entryOf(recipe.recipe.model))) };
+      // The recorded model is not a pick: only the model dialog makes one.
+      values = { model: recipe.recipe.model, picked: false, props: definition.keep(definition.fromRecipe(recipe.recipe), definition.params(entryOf(recipe.recipe.model))) };
     } else {
       const stored = lastUsed?.model !== undefined && catalogue.models.some((entry) => entry.id === lastUsed.model) ? lastUsed.model : undefined;
       const model = stored ?? catalogue.default;
@@ -82,7 +83,7 @@ export const GenerateTray = ({ project, recipe, onSent, onMenuOpen, handle }: Ge
 
   const values = valuesByMedium[medium];
   const params = useMemo(() => definition.params(entryOf(values?.model)), [definition, entryOf, values?.model]);
-  const pricing = usePricing(engine, values?.model);
+  const pricing = usePricing(engine, definition, values?.model);
 
   const composition = useValue(
     "composition",
@@ -95,8 +96,11 @@ export const GenerateTray = ({ project, recipe, onSent, onMenuOpen, handle }: Ge
     [editor],
   );
 
-  const source: RunSource = recipe ? { kind: "recipe", recipe, instruction } : { kind: "selection", composition, selected: editor.getSelectedShapeIds() };
-  const status = definition.status({ source, hasKey: settings?.hasKey ?? true, params, instruction });
+  const resolved = useValue("recipe instruction", () => (recipe ? resolveReferences(instruction, canvasShapes(editor)) : undefined), [editor, recipe, instruction]);
+  const source: RunSource = recipe
+    ? { kind: "recipe", recipe, instruction: resolved?.ok ? resolved.text.trim() : "", error: resolved?.ok === false ? resolved.error : undefined }
+    : { kind: "selection", composition, selected: editor.getSelectedShapeIds() };
+  const status = definition.status({ source, hasKey: settings?.hasKey ?? true });
   const estimate = values ? definition.estimate({ pricing, props: values.props, source }) : undefined;
   const blocked = status.blockers.length > 0 || values === undefined;
 
@@ -218,7 +222,8 @@ export const GenerateTray = ({ project, recipe, onSent, onMenuOpen, handle }: Ge
         finalFocus={() => box.current?.element() ?? null}
         onPick={(model) => {
           if (!values) return;
-          setValues({ model, picked: true, props: definition.reset(values.props, definition.params(entryOf(model))) });
+          const props = model === values.model ? values.props : definition.reset(values.props, definition.params(entryOf(model)));
+          setValues({ model, picked: true, props });
         }}
       />
     </div>

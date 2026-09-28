@@ -99,8 +99,29 @@ export interface UnframedShapeMeta {
   readonly recipe?: GroupRecipe;
 }
 
-// ---------------------------------------------------------------------------------------
-// The catalogue.
+const field = (value: unknown, key: string): unknown =>
+  typeof value === "object" && value !== null ? (value as Record<string, unknown>)[key] : undefined;
+
+/** A shape's `meta.unframed`, or an empty object. */
+export const unframedMetaOf = (shape: { readonly meta?: unknown }): Record<string, unknown> => {
+  const value = field(shape.meta, "unframed");
+  return typeof value === "object" && value !== null ? (value as Record<string, unknown>) : {};
+};
+
+/** A shape's result meta, when it is a result or an unfilled placeholder. */
+export const resultMetaOf = (shape: { readonly meta?: unknown }): ResultMeta | undefined => {
+  const result = unframedMetaOf(shape).result;
+  return typeof field(result, "model") === "string" ? (result as ResultMeta) : undefined;
+};
+
+/** A shape's run marker, while its work is still being made. */
+export const runMarkerOf = (shape: { readonly meta?: unknown }): RunMarker | undefined => {
+  const run = unframedMetaOf(shape).run;
+  return typeof field(run, "runId") === "string" ? (run as RunMarker) : undefined;
+};
+
+/** The change origin of a run's placeholders and fills. */
+export const runOriginId = (runId: string): string => `run:${runId}`;
 
 /** One model. `params` is OpenRouter's typed `supported_parameters` map. */
 export const ModelEntry = Schema.Struct({
@@ -127,9 +148,6 @@ export type Sku = typeof Sku.Type;
 
 export const ImagePricingAnswer = Schema.Struct({ endpoints: Schema.Array(Schema.Array(Sku)) });
 export type ImagePricingAnswer = typeof ImagePricingAnswer.Type;
-
-// ---------------------------------------------------------------------------------------
-// Runs.
 
 export const ImageParams = Schema.Struct({
   resolution: Schema.optionalKey(Schema.String),

@@ -1,11 +1,9 @@
-import type { Box, Size } from "./grouping.ts";
+import { boxesOverlap, type Box, type Size } from "./grouping.ts";
 
 const GAP_FROM_ANCHOR = 40;
 const GAP_BETWEEN = 24;
 const STEP_DOWN = 48;
 const MAX_STEPS = 200;
-
-const intersects = (a: Box, b: Box): boolean => a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
 
 /**
  * Where a run's outputs land: one row in run order, left to right, 24 apart, starting 40
@@ -26,7 +24,7 @@ export const placeResults = (anchor: Box, sizes: ReadonlyArray<Size>, existing: 
   let y = anchor.y;
   for (let step = 0; step < MAX_STEPS; step++) {
     const row = { x: left, y, w: width, h: height };
-    if (!existing.some((box) => intersects(row, box))) break;
+    if (!existing.some((box) => boxesOverlap(row, box))) break;
     y += STEP_DOWN;
   }
   return xs.map((at) => ({ x: at, y }));

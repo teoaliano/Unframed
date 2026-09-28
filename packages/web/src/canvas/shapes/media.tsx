@@ -31,7 +31,7 @@ import {
 } from "../media.ts";
 import { ShapeLabel } from "./ShapeLabel.tsx";
 import { noteRender } from "../../fps/renders.ts";
-import { runMarkerOf } from "../../generate/facts.ts";
+import { runMarkerOf } from "@unframed/contracts";
 
 const messageOf = (error: unknown) => (error instanceof Error ? error.message : String(error));
 

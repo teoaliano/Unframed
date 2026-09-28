@@ -1,4 +1,4 @@
-import { UnframedError, type ResultRecipe } from "@unframed/contracts";
+import { resultMetaOf, UnframedError, type ResultRecipe } from "@unframed/contracts";
 import { composeSelection, resultLine, toolbarState, type ToolbarState } from "@unframed/domain";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { useEditor, useValue, type Editor, type TLShapeId } from "tldraw";
@@ -8,7 +8,7 @@ import { useCanvasProject, useEngine } from "../context.ts";
 import { showError } from "../toasts.tsx";
 import { loadCatalogue } from "./catalogue.ts";
 import { Composer } from "./composer/Composer.tsx";
-import { assetOf, canvasShapes, resultOf, resultShapes, toolbarShape } from "./facts.ts";
+import { assetOf, canvasShapes, resultShapes, toolbarShape } from "./facts.ts";
 import { placeFloating, type ScreenBox } from "./floating.ts";
 import { repeatResult, varyBlocked, varyCapMessage } from "./results.ts";
 import { closeComposer, composerState, leaveRecipeMode, openComposer } from "./state.ts";
@@ -184,7 +184,7 @@ const ResultBar = ({ shapeId, agent }: { shapeId: TLShapeId; agent: ReactNode })
     "result facts",
     () => {
       const shape = editor.getShape(shapeId);
-      const result = shape ? resultOf(shape) : undefined;
+      const result = shape ? resultMetaOf(shape) : undefined;
       if (!shape || !result) return undefined;
       const asset = assetOf(editor, shape)?.props as { w?: number; h?: number } | undefined;
       return {

@@ -56,6 +56,17 @@ export const readOpenRouterAnswer = async (
   return { ok: true, body: parsed };
 };
 
+/** The image endpoint's body: only set params are sent, and `quality: "auto"` and `background: "auto"` are not. */
+export const imageRequestBody = (model: string, prompt: string, params: Readonly<Record<string, string | undefined>>): Record<string, unknown> => {
+  const body: Record<string, unknown> = { model, prompt };
+  for (const [key, value] of Object.entries(params)) {
+    if (value === undefined || value === "") continue;
+    if ((key === "quality" || key === "background") && value === "auto") continue;
+    body[key] = value;
+  }
+  return body;
+};
+
 /** One call to OpenRouter's image endpoint. Never rejects: every failure is an outcome. */
 export const generateImage = async (origin: string, key: string, body: Record<string, unknown>): Promise<ImageCallOutcome> => {
   let response: Response;

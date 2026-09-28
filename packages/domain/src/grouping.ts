@@ -10,6 +10,9 @@ export interface Size {
   readonly h: number;
 }
 
+/** Whether two boxes share any area; touching edges do not count. */
+export const boxesOverlap = (a: Box, b: Box): boolean => a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
+
 export const GROUP_MIN: Size = { w: 180, h: 96 };
 export const GROUP_MAX: Size = { w: 4000, h: 4000 };
 export const GROUP_DEFAULT: Size = { w: 420, h: 280 };

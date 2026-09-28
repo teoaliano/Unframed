@@ -3,7 +3,7 @@ import { addablePropValue, modelPart, type ImagePropKey, type ModelParams } from
 import { Check } from "lucide-react";
 import { Fragment, useState } from "react";
 import { itemClass, popupClass, Tip } from "../../chrome/ui.tsx";
-import type { PropValue, TrayProps } from "../media.ts";
+import type { PropValue, TrayProps } from "../mediumRegistry.ts";
 
 export interface PropTrayProps {
   readonly model: string | undefined;

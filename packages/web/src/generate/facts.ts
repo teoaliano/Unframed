@@ -2,30 +2,14 @@
  * What the generation rules read from the canvas: the canvas description the domain's
  * selection to request rule takes, and the facts of results and run markers on shapes.
  */
-import { kindOfShapeType, parseAssetMarker, type ResultMeta, type RunMarker } from "@unframed/contracts";
+import { kindOfShapeType, parseAssetMarker, resultMetaOf, runMarkerOf } from "@unframed/contracts";
 import { plainText, readRef, type CanvasShape, type Crop, type ToolbarShape } from "@unframed/domain";
 import { computed, type Computed, type Editor, type TLAsset, type TLShape } from "tldraw";
 
 const field = (value: unknown, key: string): unknown =>
   typeof value === "object" && value !== null ? (value as Record<string, unknown>)[key] : undefined;
 
-/** `meta.unframed`: where every spec keeps its fields on a shape. */
-export const unframedOf = (shape: TLShape): Record<string, unknown> => {
-  const value = field(shape.meta, "unframed");
-  return typeof value === "object" && value !== null ? (value as Record<string, unknown>) : {};
-};
-
-export const resultOf = (shape: TLShape): ResultMeta | undefined => {
-  const result = unframedOf(shape).result;
-  return typeof field(result, "model") === "string" ? (result as ResultMeta) : undefined;
-};
-
-export const runMarkerOf = (shape: TLShape): RunMarker | undefined => {
-  const run = unframedOf(shape).run;
-  return typeof field(run, "runId") === "string" ? (run as RunMarker) : undefined;
-};
-
-export const isTextResult = (shape: TLShape): boolean => shape.type === "text" && resultOf(shape)?.medium === "text";
+export const isTextResult = (shape: TLShape): boolean => shape.type === "text" && resultMetaOf(shape)?.medium === "text";
 
 /** The asset a media shape shows, when it has one. */
 export const assetOf = (editor: Editor, shape: TLShape): TLAsset | undefined => {
@@ -42,7 +26,6 @@ export const mediaSource = (editor: Editor, shape: TLShape): { readonly file?: s
   return {};
 };
 
-/** A shape's page bounds as a plain box. */
 export const pageBox = (editor: Editor, id: TLShape["id"]) => {
   const bounds = editor.getShapePageBounds(id);
   return bounds ? { x: bounds.x, y: bounds.y, w: bounds.w, h: bounds.h } : undefined;
@@ -89,7 +72,7 @@ export const canvasShapes = (editor: Editor): CanvasShape[] => {
 /** A shape as the toolbar reads it. */
 export const toolbarShape = (editor: Editor, shape: TLShape): ToolbarShape => {
   const kind = kindOfShapeType(shape.type);
-  const result = resultOf(shape);
+  const result = resultMetaOf(shape);
   const file = kind === "page" || kind === "motion" ? field(shape.props, "file") : undefined;
   return {
     id: shape.id,
@@ -106,7 +89,7 @@ export const toolbarShape = (editor: Editor, shape: TLShape): ToolbarShape => {
 export const resultShapes = (editor: Editor): ToolbarShape[] =>
   editor
     .getCurrentPageShapes()
-    .filter((shape) => resultOf(shape) !== undefined)
+    .filter((shape) => resultMetaOf(shape) !== undefined)
     .map((shape) => toolbarShape(editor, shape));
 
 /** The union of the page bounds of `ids`. */

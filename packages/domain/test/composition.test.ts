@@ -244,6 +244,8 @@ describe("usable, sources and warnings", () => {
     ["a filled image", [image("i", "a.png")], ["i"], true],
     ["a linked video", [video("v", { link: "https://example.com/c.mp4" })], ["v"], true],
     ["nothing", [prompt("p", "fox")], [], false],
+    // Its text does not resolve, but the composer has to open to say why.
+    ["a prompt caught in a loop", [prompt("a", "@b"), prompt("b", "@a")], ["a"], true],
   ])("%s: usable is %s", (_case, shapes, selected, usable) => {
     expect(compose(shapes, selected).usable).toBe(usable);
   });

@@ -154,9 +154,13 @@ test("Vary adds the result itself as the last reference, and is disabled with a 
   await openCanvas(page, engine);
   const first = await makeResult(page, generation);
   const before = generation.requests.length;
+  const lastUsed = async () => (await (await engine.rpc()).call("preferences.get", { keys: ["lastUsed.image"] })).values;
+  const stored = await lastUsed();
   await clickShape(page, first.id);
   await toolbar(page).getByRole("button", { name: "Vary" }).click();
   await expect.poll(() => generation.requests.length).toBe(before + 1);
+  // Vary never writes last-used values.
+  expect(await lastUsed()).toEqual(stored);
   const file = (await roomRecords(engine, "default")).find((record) => record.id === first.props.assetId)!.props.src.replace("project-file:", "");
   const refs = generation.requests[before]!.body.input_references;
   expect(refs).toHaveLength(1);
@@ -213,14 +217,25 @@ test("Recipe reopens the composer on the recorded run; a selection change leaves
   await expect(composer(page).locator("[data-prop]")).toHaveText(["1K", "1:1", "high"]);
   await expect(page.locator(".unframed-role-badge")).toHaveCount(0);
 
-  // "Same thing, bigger": change a prop and send.
+  // "Same thing, bigger": change a prop, add to the instruction (resolved like a prompt's) and send.
   await composer(page).locator("[data-prop]").filter({ hasText: "1K" }).click();
   await page.getByRole("menu", { name: "Size" }).getByRole("menuitemradio", { name: "2K" }).click();
   const before = generation.requests.length;
   await instructionBox(page).click();
+  await page.keyboard.press("End");
+  await page.keyboard.type(" like @101 ");
   await page.keyboard.press("ControlOrMeta+Enter");
   await expect.poll(() => generation.requests.length).toBe(before + 1);
-  expect(generation.requests[before]!.body).toEqual({ model: "openai/gpt-image-2", prompt: "lone red fox\n\nmoody", resolution: "2K", aspect_ratio: "1:1", quality: "high" });
+  expect(generation.requests[before]!.body).toEqual({
+    model: "openai/gpt-image-2",
+    prompt: "lone red fox\n\nmoody like A lone red fox on a windswept cliff at golden hour, cinematic, 35mm",
+    resolution: "2K",
+    aspect_ratio: "1:1",
+    quality: "high",
+  });
+  // The recorded model was not picked in the model dialog, so it is not stored as last-used.
+  await expect.poll(async () => ((await (await generation.engine.rpc()).call("preferences.get", { keys: ["lastUsed.image"] })).values["lastUsed.image"] as { props?: unknown })?.props).toEqual({ resolution: "2K", aspect_ratio: "1:1", quality: "high" });
+  expect(((await (await generation.engine.rpc()).call("preferences.get", { keys: ["lastUsed.image"] })).values["lastUsed.image"] as { model?: string }).model).toBeUndefined();
   await expect.poll(async () => (await results(generation)).filter((shape) => shape.props.assetId).length).toBe(2);
   const remade = (await results(generation)).find((shape) => shape.id !== result!.id)!;
   expect((await sidecarOf(generation, remade)).recipe.of).toEqual({ sidecar: result!.meta.unframed.result.sidecar, action: "recipe" });

@@ -6,6 +6,7 @@ import { mentionCandidates, mentionQuery, plainText, type MentionCandidate } fro
 import { useEffect, useImperativeHandle, useLayoutEffect, useRef, useState, type Ref } from "react";
 import { createPortal } from "react-dom";
 import { useEditor as useCanvas } from "tldraw";
+import { MentionList } from "../../canvas/MentionList.tsx";
 
 interface Mention {
   readonly from: number;
@@ -21,7 +22,7 @@ const readMention = (text: TiptapEditor): Mention | undefined => {
 };
 
 /** One paragraph per line: the plain text of the box. */
-export const instructionText = (text: TiptapEditor): string => plainText(text.getJSON());
+const instructionText = (text: TiptapEditor): string => plainText(text.getJSON());
 
 const toDoc = (value: string) => ({
   type: "doc",
@@ -143,31 +144,13 @@ export const InstructionEditor = ({ initial, placeholder, onChange, onSend, onMe
       {open &&
         anchor &&
         createPortal(
-          <div
-            role="listbox"
-            aria-label="Mentions"
-            className="unframed-mention-menu"
+          <MentionList
+            rows={rows}
+            highlight={highlight}
             style={{ position: "fixed", left: anchor.left, top: anchor.top, zIndex: 1200 }}
-            onPointerDown={(event) => event.stopPropagation()}
-          >
-            {rows.map((row, index) => (
-              <div
-                key={row.ref}
-                role="option"
-                aria-selected={index === highlight}
-                className="unframed-mention-row"
-                onPointerDown={(event) => {
-                  event.preventDefault();
-                  event.stopPropagation();
-                  insert(row.ref);
-                }}
-                onPointerEnter={() => setHighlight(index)}
-              >
-                <span className="unframed-mention-ref">@{row.ref}</span>
-                {row.preview !== undefined && <span className="unframed-mention-preview">{row.preview}</span>}
-              </div>
-            ))}
-          </div>,
+            onPick={insert}
+            onHighlight={setHighlight}
+          />,
           document.body,
         )}
     </div>
