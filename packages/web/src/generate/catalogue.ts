@@ -12,13 +12,13 @@ const lists = new Map<Catalogue, ModelsListAnswer>();
  * `undefined` until the first answer of the session arrives.
  */
 export const useCatalogue = (engine: EngineConnection, medium: Catalogue): ModelsListAnswer | undefined => {
-  const [answer, setAnswer] = useState(() => lists.get(medium));
+  const [answer, setAnswer] = useState(() => ({ medium, list: lists.get(medium) }));
   useEffect(() => {
     let live = true;
     engine.call("models.list", { medium }).then(
       (next) => {
         lists.set(medium, next);
-        if (live) setAnswer(next);
+        if (live) setAnswer({ medium, list: next });
       },
       () => undefined,
     );
@@ -26,7 +26,8 @@ export const useCatalogue = (engine: EngineConnection, medium: Catalogue): Model
       live = false;
     };
   }, [engine, medium]);
-  return answer;
+  // Another medium's answer is never this one's, even for the render before the switch lands.
+  return answer.medium === medium ? answer.list : lists.get(medium);
 };
 
 /** The last catalogue answer of the session, for actions that need a model's traits without a tray. */

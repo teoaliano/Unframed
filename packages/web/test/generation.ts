@@ -3,7 +3,7 @@
  * the image catalogue, pricing and generation, and ways to find the toolbar and composer.
  */
 import type { Locator, Page } from "@playwright/test";
-import type { TestEngine } from "../../engine/test/engineProcess.ts";
+import type { StubHandler, TestEngine } from "../../engine/test/engineProcess.ts";
 import { imageCatalogue, imageGeneration, imagePricing, routes, type ImageAnswer, type ImageRequest } from "../../engine/test/openRouterStub.ts";
 import { centre, shapeOnScreen } from "./canvas.ts";
 import { expect, test as base, startHostedEngine } from "./fixtures.ts";
@@ -59,7 +59,7 @@ export interface GenerationEngine {
   holdPricing(model: string): () => void;
 }
 
-export const startGeneration = async (options: { key?: boolean; dotenv?: string } = {}): Promise<GenerationEngine> => {
+export const startGeneration = async (options: { key?: boolean; dotenv?: string; extra?: StubHandler[] } = {}): Promise<GenerationEngine> => {
   let script: (request: ImageRequest) => ImageAnswer | Promise<ImageAnswer> = () => ({ kind: "image", bytes: pngBytes(96, 64), cost: 0.19 });
   const images = imageGeneration((request) => script(request));
   const held = new Map<string, Promise<void>>();
@@ -72,7 +72,7 @@ export const startGeneration = async (options: { key?: boolean; dotenv?: string 
       if (!hold) return pricing(req, body, res);
       void hold.then(() => pricing(req, body, res));
       return true;
-    }, images.handler),
+    }, images.handler, ...(options.extra ?? [])),
   });
   return {
     engine,

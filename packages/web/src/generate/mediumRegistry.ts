@@ -4,7 +4,8 @@
  * specs 04 and 05 register `video` and `text` the same way.
  */
 import type { Medium, ModelEntry, ResultRecipe } from "@unframed/contracts";
-import type { Composition, ModelParams } from "@unframed/domain";
+import type { CanvasShape, Composition, ModelParams } from "@unframed/domain";
+import type { ComponentType } from "react";
 import type { Editor } from "tldraw";
 import type { EngineConnection, Payload } from "../rpc/engine.ts";
 import type { RecipeMode } from "./state.ts";
@@ -29,7 +30,15 @@ export interface TrayStatus {
 
 /** What the run is made from: the live selection, or a result's recorded recipe. */
 export type RunSource =
-  | { readonly kind: "selection"; readonly composition: Composition; readonly selected: ReadonlyArray<string> }
+  | {
+      readonly kind: "selection";
+      readonly composition: Composition;
+      readonly selected: ReadonlyArray<string>;
+      /** The canvas the composition read, for rules that recompose it (spec 05's Free). */
+      readonly shapes: ReadonlyArray<CanvasShape>;
+      /** The box's text as typed, before resolution. */
+      readonly instruction: string;
+    }
   /** `instruction` is the box's text resolved like a prompt's; `error` is its circular reference. */
   | { readonly kind: "recipe"; readonly recipe: RecipeMode; readonly instruction: string; readonly error?: string | undefined };
 
@@ -62,10 +71,45 @@ export interface MediumDefinition {
   readonly estimate: (input: { readonly pricing: unknown; readonly props: TrayProps; readonly source: RunSource }) => string | undefined;
   readonly status: (input: { readonly source: RunSource; readonly hasKey: boolean }) => TrayStatus;
   readonly sendLabel: (values: TrayValues) => string;
-  /** Renders, uploads and starts the run. Resolves once the engine acknowledged it. */
-  readonly send: (input: SendInput) => Promise<void>;
+  /**
+   * Renders, uploads and starts the run. Resolves once the engine acknowledged it, or with
+   * `"stay"` when nothing was sent yet and the composer stays open (spec 05's final prompt).
+   */
+  readonly send: (input: SendInput) => Promise<void | "stay">;
   /** The tray's values from a recipe, for recipe mode. */
   readonly fromRecipe: (recipe: ResultRecipe) => TrayProps;
+  /** Tray props the model does not drive (spec 05's Runs), after the model's own. */
+  readonly trayProps?: ReadonlyArray<TrayPropDefinition>;
+  /** Rendered inside the tray, for a medium's own dialogs (spec 05's final prompt). */
+  readonly Overlay?: ComponentType<TrayOverlayProps>;
+}
+
+/** A tray prop that is not a model trait, so a model change leaves it. It draws its own chip and popup. */
+export interface TrayPropDefinition {
+  readonly key: string;
+  readonly label: string;
+  /** Whether its chip shows. While its popup is open it shows regardless. */
+  readonly inTray: (props: TrayProps) => boolean;
+  /** The value `+ add prop` lists it with. */
+  readonly addValue: (props: TrayProps) => string;
+  /** The props once `+ add prop` adds it. */
+  readonly add: (props: TrayProps) => Record<string, PropValue>;
+  readonly Chip: ComponentType<TrayPropChipProps>;
+}
+
+export interface TrayPropChipProps {
+  readonly props: TrayProps;
+  readonly onChange: (props: Record<string, PropValue>) => void;
+  readonly open: boolean;
+  readonly onOpenChange: (open: boolean) => void;
+}
+
+export interface TrayOverlayProps {
+  readonly project: string;
+  /** The run was acknowledged: the composer collapses back to the bar. */
+  readonly onSent: () => void;
+  /** Whether a dialog of the overlay is open, so the shell leaves Esc and the send key to it. */
+  readonly onMenuOpen: (key: string, open: boolean) => void;
 }
 
 const registry: MediumDefinition[] = [];

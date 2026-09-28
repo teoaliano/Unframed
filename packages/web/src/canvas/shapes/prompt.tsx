@@ -1,4 +1,6 @@
-import { plainText } from "@unframed/domain";
+import { resultMetaOf, runMarkerOf } from "@unframed/contracts";
+import { formatCost, plainText } from "@unframed/domain";
+import { LoaderCircle } from "lucide-react";
 import {
   createComputedCache,
   getDisplayValues,
@@ -23,6 +25,8 @@ export const PROMPT_HUG_WIDTH = 320;
 export const PROMPT_MIN_WIDTH = 40;
 export const PROMPT_MIN_HEIGHT = 28;
 export const PROMPT_HINT = "Add text…";
+/** What a text result's placeholder says while its run is in flight (spec 05). */
+export const PROMPT_RUNNING = "Running…";
 
 const HINT_TEXT = toRichText(PROMPT_HINT);
 
@@ -127,18 +131,33 @@ const PromptShape = ({ shape, util }: { readonly shape: TLTextShape; readonly ut
   const isSelected = useValue("prompt selected", () => editor.getOnlySelectedShapeId() === shape.id, [editor, shape.id]);
   const empty = isEmptyPrompt(shape);
   const { ref } = metaOf(shape);
+  // A text result (spec 05) carries its cost on its line; its placeholder says the run is in flight.
+  const result = resultMetaOf(shape);
+  const running = empty && runMarkerOf(shape) !== undefined;
+  const cost = result?.medium === "text" && result.cost !== null ? `${formatCost(result.cost)} · ` : "";
   return (
     <div className="unframed-prompt" style={{ width, height, transform: `scale(${shape.props.scale})`, transformOrigin: "top left" }}>
       <ShapeLabel shapeId={shape.id} kind="prompt">
-        @{ref}
+        {cost}@{ref}
       </ShapeLabel>
-      {empty && (
+      {running ? (
         <div
-          className="unframed-prompt-hint"
+          className="unframed-prompt-hint unframed-prompt-running"
+          role="status"
           style={{ fontFamily: dv.fontFamily, fontSize: dv.fontSize, lineHeight: dv.lineHeight, width, height }}
         >
-          {PROMPT_HINT}
+          <LoaderCircle size={14} className="unframed-placeholder__spinner" aria-hidden />
+          <span>{PROMPT_RUNNING}</span>
         </div>
+      ) : (
+        empty && (
+          <div
+            className="unframed-prompt-hint"
+            style={{ fontFamily: dv.fontFamily, fontSize: dv.fontSize, lineHeight: dv.lineHeight, width, height }}
+          >
+            {PROMPT_HINT}
+          </div>
+        )
       )}
       <RichTextLabel
         shapeId={shape.id}
