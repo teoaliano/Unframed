@@ -282,3 +282,37 @@ test("a copied generating placeholder pastes as an empty image with no marker; a
   expect(copy.meta.unframed.result).toEqual(filled.meta.unframed.result);
   expect(copy.meta.unframed.run).toBeUndefined();
 });
+
+test("a result pasted into another project brings its sidecar and its reference files, so its recipe still reads", async ({ page, generation }) => {
+  const { engine } = generation;
+  await openCanvas(page, engine);
+  await (await engine.rpc()).call("projects.create", { name: "beta" });
+  await filledMedia(engine, { id: "shape:ref", type: "image", ref: "400", at: { x: -300, y: 0 }, bytes: pngBytes(30, 30), name: "ref.png", mime: "image/png", natural: { w: 30, h: 30 }, width: 140 });
+  await expect(shapeOnScreen(page, "shape:ref").locator("img")).toBeVisible();
+  await clickShape(page, "shape:ref");
+  await clickShape(page, "shape:starter-subject", ["Shift"]);
+  await openComposer(page);
+  await page.keyboard.press("ControlOrMeta+Enter");
+  await expect(composer(page)).toHaveCount(0);
+  await expect.poll(async () => (await results(generation)).filter((shape) => shape.props.assetId).length).toBe(1);
+  const [result] = await results(generation);
+  await expect(shapeOnScreen(page, result!.id).locator("img")).toBeVisible();
+  await page.mouse.click(10, 400);
+  await clickShape(page, result!.id);
+  await copySelection(page, ["text/html", "image/png"]);
+
+  await page.getByRole("button", { name: "Project" }).click();
+  await page.getByRole("menuitem", { name: "beta" }).click();
+  await expect(page.locator("[data-canvas-project='beta'] .tl-canvas")).toBeVisible();
+  await page.keyboard.press("ControlOrMeta+v");
+  await expect
+    .poll(async () => (await roomShapes(engine, "beta", "image")).find((shape) => shape.meta?.unframed?.result)?.meta.unframed.result.sidecar ?? null)
+    .not.toBeNull();
+  const pasted = (await roomShapes(engine, "beta", "image")).find((shape) => shape.meta.unframed.result)!;
+  expect(pasted.meta.unframed.result.sidecar).not.toBe(result!.meta.unframed.result.sidecar);
+  const recipe = await (await engine.rpc()).call("recipe.read", { project: "beta", shapeId: pasted.id });
+  expect(recipe.selectionPrompt).toBe("lone red fox");
+  expect(recipe.references).toHaveLength(1);
+  const referenced = recipe.references[0] as { file: string };
+  expect((await engine.request(`/api/file/beta/${referenced.file}`)).body).toEqual(pngBytes(30, 30));
+});

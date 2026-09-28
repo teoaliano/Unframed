@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { readFile, stat } from "node:fs/promises";
+import { readFile, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import {
   isBareFileName,
@@ -51,6 +51,8 @@ export class Runs extends Context.Service<
     readonly image: (request: ImageRunRequest) => Effect.Effect<{ runId: string; batchId: string; placeholders: string[] }, UnframedError>;
     readonly subscribe: (project: string) => Stream.Stream<RunEvent>;
     readonly recipe: (project: string, shapeId: string) => Effect.Effect<ResultRecipe, UnframedError>;
+    /** Copies a result's sidecar and the files its recipe names from `from` into `project`, beside `file`. */
+    readonly copyRecipe: (project: string, from: string, sidecar: string, file: string) => Effect.Effect<{ sidecar: string }, UnframedError>;
   }
 >()("unframed/engine/Runs") {}
 
@@ -448,6 +450,48 @@ export const runsLayer = Layer.effect(
         return decoded.value;
       });
 
-    return Runs.of({ image, subscribe, recipe });
+    const copyRecipe = (project: string, from: string, sidecar: string, file: string) =>
+      Effect.gen(function* () {
+        if (!isBareFileName(sidecar) || !isBareFileName(file)) return yield* unframedError("bad_request", "That is not a file in this project.");
+        const sourceDir = yield* projectFolder(from);
+        const targetDir = yield* projectFolder(project);
+        const text = yield* Effect.promise(() => readFile(join(sourceDir, sidecar), "utf8").catch(() => undefined));
+        let parsed: unknown;
+        try {
+          parsed = text === undefined ? undefined : JSON.parse(text);
+        } catch {
+          parsed = undefined;
+        }
+        const decoded = plainRecipe(field(parsed, "recipe"));
+        if (decoded._tag === "None") return yield* unframedError("not_found", RECIPE_GONE_MESSAGE);
+        const copies = new Map<string, string>();
+        const copyOf = (name: string) =>
+          Effect.gen(function* () {
+            const known = copies.get(name);
+            if (known !== undefined) return known;
+            const copied = yield* media.copy(project, name, from);
+            copies.set(name, copied);
+            return copied;
+          });
+        const references: RecipeRef[] = [];
+        for (const ref of decoded.value.references) {
+          if ("url" in ref) {
+            references.push(ref);
+            continue;
+          }
+          const copied = yield* copyOf(ref.file);
+          references.push(ref.original === undefined ? { kind: ref.kind, file: copied } : { kind: ref.kind, file: copied, original: yield* copyOf(ref.original) });
+        }
+        // The result's sidecar sits beside its image, as a run leaves it.
+        const target = `${file.replace(/\.[^.]*$/, "")}.json`;
+        const next = { ...(parsed as Record<string, unknown>), file, recipe: { ...decoded.value, references } };
+        yield* Effect.tryPromise({
+          try: () => writeFile(join(targetDir, target), `${JSON.stringify(next, null, 2)}\n`),
+          catch: (error) => unframedError("internal", `Could not copy the recipe: ${errorText(error)}`),
+        });
+        return { sidecar: target };
+      });
+
+    return Runs.of({ image, subscribe, recipe, copyRecipe });
   }),
 );

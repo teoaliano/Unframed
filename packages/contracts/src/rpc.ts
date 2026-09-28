@@ -159,6 +159,16 @@ export const RecipeRead = Rpc.make("recipe.read", {
   error: UnframedError,
 });
 
+/**
+ * A result pasted into another project brings its recipe: the sidecar and every file the
+ * recipe names are copied from `from` into `project`, beside `file` (the image's copy).
+ */
+export const RecipeCopy = Rpc.make("recipe.copy", {
+  payload: Schema.Struct({ project: Schema.String, from: Schema.String, sidecar: Schema.String, file: Schema.String }),
+  success: Schema.Struct({ sidecar: Schema.String }),
+  error: UnframedError,
+});
+
 /** Run events of one project, as they happen. */
 export const RunSubscribe = Rpc.make("run.subscribe", {
   payload: Schema.Struct({ project: Schema.String }),
@@ -187,6 +197,7 @@ export const UnframedRpcs = RpcGroup.make(
   ModelsImagePricing,
   RunImage,
   RecipeRead,
+  RecipeCopy,
   RunSubscribe,
 );
 export type UnframedRpcs = typeof UnframedRpcs;

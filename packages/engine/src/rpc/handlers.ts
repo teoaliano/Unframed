@@ -49,6 +49,7 @@ export const rpcHandlersLayer = UnframedRpcs.toLayer(
       "run.image": (request) => runs.image(request),
       "run.subscribe": ({ project }) => runs.subscribe(project),
       "recipe.read": ({ project, shapeId }) => runs.recipe(project, shapeId),
+      "recipe.copy": ({ project, from, sidecar, file }) => runs.copyRecipe(project, from, sidecar, file),
       "testCanvas.read": ({ project }) =>
         testOnly(() =>
           Effect.all({ clock: rooms.clock(project), records: Effect.map(rooms.read(project), (records) => [...records]) }),

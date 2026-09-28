@@ -247,6 +247,7 @@ const fixUpPastedShapes = async (editor: Editor, ctx: ContentContext, pasted: Un
       props.assetId = (next.props as { src?: string | null }).src ? next.id : null;
     }
     content.assets = kept.filter((asset) => (asset.props as { src?: string | null }).src);
+    await copyRecipes(ctx, source, content);
   }
 
   const ids = new Map<string, string>();
@@ -271,6 +272,31 @@ const fixUpPastedShapes = async (editor: Editor, ctx: ContentContext, pasted: Un
     props.richText = rewriteRichTextTokens(props.richText, ids);
   }
   return content;
+};
+
+/**
+ * A result pasted from another project brings its recipe along (spec 03): its sidecar and
+ * every file the recipe names are copied in beside the image's copy. A result whose recipe
+ * cannot come along pastes as an ordinary image.
+ */
+const copyRecipes = async (ctx: ContentContext, source: string, content: TLContent) => {
+  const byId = new Map(content.assets.map((asset) => [asset.id as string, asset]));
+  for (const shape of content.shapes) {
+    const meta = shape.meta as { unframed?: { result?: { sidecar?: unknown } } };
+    const result = meta.unframed?.result;
+    if (!result || typeof result.sidecar !== "string") continue;
+    const assetId = (shape.props as { assetId?: string | null }).assetId;
+    const marker = parseAssetMarker(String((assetId ? byId.get(assetId)?.props as { src?: string | null } | undefined : undefined)?.src ?? ""));
+    try {
+      if (marker?.kind !== "project-file") throw new Error("the result has no picture here");
+      const copied = await ctx.engine.call("recipe.copy", { project: ctx.project, from: source, sidecar: result.sidecar, file: marker.file });
+      shape.meta = { ...shape.meta, unframed: { ...meta.unframed, result: { ...result, sidecar: copied.sidecar } } };
+    } catch (error) {
+      const { result: _result, ...rest } = meta.unframed ?? {};
+      shape.meta = { ...shape.meta, unframed: rest };
+      showError(`Could not copy the result's recipe: ${messageOf(error)}`);
+    }
+  }
 };
 
 /** The one place paste and drop are decided: tldraw's handlers for files, text and links are replaced. */
