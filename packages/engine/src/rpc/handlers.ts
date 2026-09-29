@@ -1,7 +1,6 @@
 import { UnframedRpcs, unframedError, type ResultRecipe, type UnframedError } from "@unframed/contracts";
 import type { TLRecord } from "@tldraw/tlschema";
 import * as Effect from "effect/Effect";
-import * as Stream from "effect/Stream";
 import { CanvasRooms } from "../canvas/rooms.ts";
 import { MediaStore } from "../media/mediaStore.ts";
 import { clearStoredModels } from "../lastUsed.ts";
@@ -19,6 +18,7 @@ import { guardHandlers } from "./guardHandlers.ts";
 import { copyPresetFiles } from "../library/presetCopier.ts";
 import { PresetStore } from "../library/presetStore.ts";
 import { ProviderDetection } from "../agent/detection.ts";
+import { Agents } from "../agent/layer.ts";
 
 export const rpcHandlersLayer = UnframedRpcs.toLayer(
   Effect.gen(function* () {
@@ -35,6 +35,7 @@ export const rpcHandlersLayer = UnframedRpcs.toLayer(
     const renderJobs = yield* RenderJobs;
     const presets = yield* PresetStore;
     const detection = yield* ProviderDetection;
+    const agents = yield* Agents;
     const context = yield* Effect.context<SettingsStore | Projects | Native>();
 
     const testOnly = <A, E>(run: () => Effect.Effect<A, E>) =>
@@ -92,10 +93,10 @@ export const rpcHandlersLayer = UnframedRpcs.toLayer(
         Effect.flatMap(projectId === undefined ? Effect.succeed(undefined) : projects.folder(projectId), (projectFolder) =>
           detection.statuses({ ...(refresh === undefined ? {} : { refresh }), ...(projectFolder === undefined ? {} : { projectFolder }) }),
         ),
-      "orchestration.dispatchCommand": () => Effect.fail(unframedError("unavailable", "Not yet.")),
-      "orchestration.subscribeShell": () => Stream.fail(unframedError("unavailable", "Not yet.")),
-      "orchestration.subscribeThread": () => Stream.fail(unframedError("unavailable", "Not yet.")),
-      "attachments.createUploadUrl": () => Effect.fail(unframedError("unavailable", "Not yet.")),
+      "orchestration.dispatchCommand": (command) => agents.dispatch(command),
+      "orchestration.subscribeShell": ({ projectId, afterSequence }) => agents.subscribeShell(projectId, afterSequence),
+      "orchestration.subscribeThread": ({ projectId, threadId, afterSequence }) => agents.subscribeThread(projectId, threadId, afterSequence),
+      "attachments.createUploadUrl": (input) => agents.createUploadUrl(input),
       "testCanvas.read": ({ project }) =>
         testOnly(() =>
           Effect.all({ clock: rooms.clock(project), records: Effect.map(rooms.read(project), (records) => [...records]) }),

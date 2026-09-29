@@ -51,3 +51,4 @@ export * from "./agent/runtimeEvents.ts";
 export * from "./agent/permissionPolicy.ts";
 export * from "./agent/turnText.ts";
 export * from "./agent/canvasTools.ts";
+export * from "./agent/scriptedAgent.ts";
