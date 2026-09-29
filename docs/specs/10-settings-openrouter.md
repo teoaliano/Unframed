@@ -122,7 +122,7 @@ Callback URL, built by the engine because only it knows its own port:
 
 `oauth.pending`: `peek`, or `{ state: "none", reason: "" }` when null.
 
-`oauth.cancel`: if `cancel()` returns true, delete the key line through the settings write funnel and clear the key in the running process. That write queues behind the callback's own key write, so the key ends up removed either way. On write failure: `internal`, `Could not remove the key the cancelled connection had written: <reason>`. A `waiting` attempt wrote nothing, so cancelling it leaves any existing key alone.
+`oauth.cancel`: if `cancel()` returns true, delete the key line through the settings write funnel and clear the key in the running process. That write queues behind the callback's own key write, so the key ends up removed either way. On write failure: `internal`, `Could not remove the key the cancelled connection had written: <reason>`. A key deleted this way is a key removal (index contract 5): it then runs steps 4 and 5 of Removing the key below, failing every pending render job with the same error, and answers `{ endedRenders }` plus `renderCleanupError` when the store could not be read. A `waiting` attempt wrote nothing, so cancelling it leaves any existing key alone and ends no renders.
 
 Callback route, in order. Every failure below except the first calls `resolve(nonce, "failed", <detail>)` so the app learns the outcome; each answers HTML.
 
