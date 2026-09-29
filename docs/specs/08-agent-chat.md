@@ -126,7 +126,6 @@ The selection toolbar
 - **Filter**: with no artifact selected, every chat shows. With one or more artifacts selected, only chats whose tags include any of them. A chat whose tagged artifacts are all deleted still shows.
 - **Active tab**: the one last chosen if it is still visible; else the newest visible one; else none. With none, the next message starts a chat.
 - **Empty strip**: "No chats yet" with nothing selected; "Nothing said about these yet. Your first message starts a chat." with two or more artifacts selected; nothing with exactly one (the composer already asks for the first message).
-- **Focus mark**: every artifact in the active chat's tags wears the focus mark on the canvas (spec 02's artifact label filled with the highlight colour, in the highlight foreground, with a live dot, in the kit's small badge shape). A tag whose shape is gone marks nothing.
 
 ### Thread search
 
@@ -324,7 +323,7 @@ The embedded rail is exercised by spec 09's editor tests, since the editor is wh
 40. **Recap card.** After a scripted write the card lists the artifact with Open and Locate; deleting the artifact strikes it through as "deleted"; Hide and Show. Seam: browser.
 41. **Revert this turn.** Revert restores the canvas and the card reads "Reverted"; after the person edits one of the shapes first, the card names it as left alone. Seam: browser.
 42. **Failure, retry and limit lines.** The failure fixture shows the retry line during the turn and the failure sentence in the reply; a scripted limit shows its line; the error line does not repeat the reply. Seam: browser.
-43. **Focus mark.** Every artifact tagged by the active chat wears the focus mark; switching tabs moves it. Seam: browser.
+43. (Removed: the focus mark. Shape labels keep their one look, at the person's request.) Seam: none.
 44. **Toolbar Agent button.** It opens the Agent tray on the selection with "continues <chat>" or "new chat" and the switch; clicking another shape adds a chip; clicking empty canvas closes it; Escape closes it. Seam: browser.
 45. **Toolbar Send.** Send opens the rail on the right chat before the reply streams; a new chat is tagged with the selected artifacts. Seam: browser.
 46. **Artifact diffs, engine.** For a turn whose scripted `canvas_write` `update` points a seeded page at a new file and a seeded motion at a new file (spec 09 builds the artifact write tools later; this task needs only files the test writes into the project folder), `getTurnDiff` returns both with correct counts and patches; `getFullThreadDiff` spans the chat; an oversized file answers the too-large sentence. Seam: engine.

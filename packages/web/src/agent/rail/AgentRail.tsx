@@ -9,7 +9,6 @@ import { useEngine } from "../../context.ts";
 import { AgentTray } from "../composer/AgentTray.tsx";
 import { noProviderReady } from "../providers.ts";
 import { ConfirmDialog } from "../ConfirmDialog.tsx";
-import { useFocusMark } from "./focusMark.ts";
 // Loaded when first opened: the diff renderer and its highlighter are heavy, and a page that never diffs should not pay for them.
 const DiffPanel = lazy(() => import("../diff/DiffPanel.tsx").then((module) => ({ default: module.DiffPanel })));
 import { NEW_CHAT, useChatClient, useChats, useProviders, useRailUi, useWatchedThread } from "../store.ts";
@@ -122,7 +121,6 @@ export const AgentRail = ({ project, embedded, inSheet, filterTo, onLocate, onOp
   const activeSummary = visible.find((chat) => chat.id === active);
   // The session's failure shows here only when the transcript cannot say it: a failed turn's reply already ends with it.
   const activeChat = useWatchedThread(client, active);
-  useFocusMark(editor, activeSummary?.tags);
   const lastError = activeChat?.session?.lastError ?? null;
   const lastText = activeChat?.messages.at(-1)?.text ?? "";
   const errorLine = ui.error ?? (lastError !== null && lastError.trim() !== "" && !lastText.includes(lastError.trim()) ? lastError : undefined);
