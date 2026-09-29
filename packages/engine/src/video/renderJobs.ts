@@ -24,7 +24,7 @@ import {
   type VideoSidecar,
   type VideoStartRequest,
 } from "@unframed/contracts";
-import { classifyVideoStatus, givenUp, nextRef, NO_KEY_MESSAGE, pendingFor, projectSlug, type RenderJob } from "@unframed/domain";
+import { classifyVideoStatus, GENERATION_FAILED, givenUp, inputModeOf, nextRef, NO_KEY_MESSAGE, pendingFor, projectSlug, type RenderJob } from "@unframed/domain";
 import type { TLRecord } from "@tldraw/tlschema";
 import { getIndicesAbove, type IndexKey } from "@tldraw/utils";
 import * as Context from "effect/Context";
@@ -37,7 +37,7 @@ import { MediaStore } from "../media/mediaStore.ts";
 import { clipUrlOf, createVideoJob, downloadClip, readVideoStatus, type CreateFailureReason } from "../openRouter/videos.ts";
 import { isShape, type Shape } from "../runs/placeholders.ts";
 import { fileStamp, mimeForFile, referenceName, writeResultFile, writeSidecar } from "../runs/resultFiles.ts";
-import { LINK_MESSAGE, referenceMissingMessage } from "../runs/runs.ts";
+import { referenceMissingMessage } from "../runs/runs.ts";
 import { shapePageBoxes } from "../runs/shapeBounds.ts";
 import { Config } from "../services.ts";
 import { SettingsStore } from "../settingsStore.ts";
@@ -258,7 +258,6 @@ export const renderJobsLayer = Layer.effect(
       const recipe = recipeOf(current.recipe) ?? recipeOf(record.recipe) ?? recipeFromParams(params);
       const usage = field(data, "usage");
       const cost = numberOrUndefined(field(usage, "cost")) ?? numberOrUndefined(field(data, "cost")) ?? null;
-      const inputMode = recipe.params.inputMode;
       const aspect = recipe.params.aspect_ratio;
       const audio = recipe.params.generate_audio;
       const sidecar: VideoSidecar = {
@@ -270,7 +269,7 @@ export const renderJobsLayer = Layer.effect(
         size: params.size,
         aspect_ratio: typeof aspect === "string" ? aspect : null,
         generate_audio: typeof audio === "boolean" ? audio : null,
-        inputMode: inputMode === "first_frame" || inputMode === "first_last" ? inputMode : "reference",
+        inputMode: inputModeOf(recipe.params),
         references: current.refs ?? record.refs ?? null,
         usage: typeof usage === "object" && usage !== null ? usage : null,
         cost,
@@ -306,7 +305,7 @@ export const renderJobsLayer = Layer.effect(
           };
           const shape = videoShape(records, `shape:${randomUUID()}`, at, { result: resultMeta(params.model, done.startedAt, recipe.sources) });
           const filled = fillChange(shape as unknown as Shape, landed);
-          await applyRoom(project, { put: [filled.put[0]!, filled.put[1]!], remove: [] }, record.id);
+          await applyRoom(project, filled, record.id);
         } else logInfo(`${record.id}: output 1 landed after its placeholder was deleted → ${join(folder, file)}`);
       }
       return done;
@@ -319,10 +318,10 @@ export const renderJobsLayer = Layer.effect(
 
     const findJob = async (id: string) => (await readJobsLenient(await outputDir())).find((job) => job.id === id);
 
-    // ---------------------------------------------------------------------------------
     // video.start
 
-    type Inlined = { readonly entries: Record<string, unknown>[]; readonly local: Array<{ readonly index: number; readonly file: string }> };
+    /** A local clip is a video reference that is not an `https://` link; only one naming a project file can be shared. */
+    type Inlined = { readonly entries: Record<string, unknown>[]; readonly local: Array<{ readonly index: number; readonly url: string; readonly file: string | undefined }> };
 
     const start = async (request: VideoStartRequest) => {
       const key = await currentKey();
@@ -350,8 +349,7 @@ export const renderJobsLayer = Layer.effect(
           const name = await projectFile(url);
           const frameType = field(entry, "frame_type");
           if (video && !frames) {
-            if (name !== undefined) local.push({ index: entries.length, file: name });
-            else if (!url.startsWith("https://")) throw refusal("invalid", "bad_request", LINK_MESSAGE);
+            if (!url.startsWith("https://")) local.push({ index: entries.length, url, file: name });
             entries.push({ type: "video_url", video_url: { url } });
             continue;
           }
@@ -372,7 +370,10 @@ export const renderJobsLayer = Layer.effect(
       };
       if (references.local.length > 0) {
         try {
-          for (const clip of references.local) tokens.push(await shares.mint(join(folder, clip.file)));
+          for (const clip of references.local) {
+            if (clip.file === undefined) throw new Error(`${clip.url} is not a file in this project.`);
+            tokens.push(await shares.mint(join(folder, clip.file)));
+          }
           let base: string | undefined;
           for (let attempt = 1; attempt <= TUNNEL_ATTEMPTS && base === undefined; attempt++) {
             if (attempt > 1) await shares.closeTunnel();
@@ -452,14 +453,13 @@ export const renderJobsLayer = Layer.effect(
       return { jobId, status: created.status ?? "pending", shapeId };
     };
 
-    // ---------------------------------------------------------------------------------
     // video.poll
 
     const poll = async ({ jobId, project, params }: { jobId: string; project: string; params: RenderParams }): Promise<VideoPollAnswer> => {
       // Answering from the store needs no key: that is how a tab learns its render ended after the key was removed.
       const stored = await findJob(jobId);
       if (stored?.status === "done") return completedAnswer(stored);
-      if (stored?.status === "failed") return { status: "failed", error: stored.error ?? "Generation failed." };
+      if (stored?.status === "failed") return { status: "failed", error: stored.error ?? GENERATION_FAILED };
       const key = await currentKey();
       if (key === "") throw refusal("no_key", "unavailable", "No OpenRouter key yet.");
       const read = await readVideoStatus(config.openRouterOrigin, key, jobId);
@@ -478,10 +478,10 @@ export const renderJobsLayer = Layer.effect(
       if (collecting.has(jobId)) return { status: "pending", progress: null };
       collecting.add(jobId);
       try {
-        // The first read is a network round trip old.
+        // Read the store again: the first read was before a network round trip.
         const fresh = await findJob(jobId);
         if (fresh?.status === "done") return completedAnswer(fresh);
-        if (fresh?.status === "failed") return { status: "failed", error: fresh.error ?? "Generation failed." };
+        if (fresh?.status === "failed") return { status: "failed", error: fresh.error ?? GENERATION_FAILED };
         return completedAnswer(await collect(fresh ?? built, read.data, key));
       } catch (error) {
         throw refusal("upstream", "upstream", errorText(error));
@@ -490,7 +490,6 @@ export const renderJobsLayer = Layer.effect(
       }
     };
 
-    // ---------------------------------------------------------------------------------
     // video.forget
 
     const forget = async (projectName: string, jobId: string) => {
@@ -503,8 +502,7 @@ export const renderJobsLayer = Layer.effect(
       return {};
     };
 
-    // ---------------------------------------------------------------------------------
-    // The sweep
+    // The sweep: lands renders with no tab open.
 
     const visit = async (job: RenderJob, key: string, dir: string) => {
       const read = await readVideoStatus(config.openRouterOrigin, key, job.id);
@@ -565,8 +563,7 @@ export const renderJobsLayer = Layer.effect(
     void sweep();
     yield* shutdown.register("render sweep", Effect.sync(() => clearInterval(timer)));
 
-    // ---------------------------------------------------------------------------------
-    // Durable markers: resolved against the store when a room opens and when an undo restores one.
+    // Durable markers are resolved against the store when a room opens and when an undo restores one.
 
     const resolveDurable = async (project: string, ids: ReadonlyArray<string>) => {
       const jobs = await readJobsLenient(await outputDir());
@@ -578,7 +575,7 @@ export const renderJobsLayer = Layer.effect(
         if (!shape || !marker?.durable) continue;
         const job = jobs.find((each) => each.id === marker.runId);
         // Pending: the sweep and the tab's poll land it. No record: the poll can still collect it from the marker.
-        if (job?.status === "failed") await applyRoom(project, failChange(shape, job.error ?? "Generation failed."), job.id);
+        if (job?.status === "failed") await applyRoom(project, failChange(shape, job.error ?? GENERATION_FAILED), job.id);
         else if (job?.status === "done" && job.savedPath !== undefined) {
           const file = basename(job.savedPath);
           const size = await stat(job.savedPath).then(

@@ -91,8 +91,7 @@ export const videoParams = (entry: VideoEntry | undefined, stored: Readonly<Reco
 
   const durations = listOf(declared.duration);
   if (durations.length > 0) {
-    const labels = Object.fromEntries(durations.map((value) => [value, `${value}s`]));
-    props.push({ key: "duration", label: "Seconds", values: durations, optionLabels: labels, chipLabels: labels, required: true });
+    props.push({ key: "duration", label: "Seconds", values: durations, required: true });
   }
 
   const sizes = listOf(declared.size).filter((value) => EXACT_SIZE.test(value));

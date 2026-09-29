@@ -61,7 +61,7 @@ test("choosing video shows the default video model and only the props it declare
   await openComposer(page);
   await expect(composer(page).getByRole("radio")).toHaveText(["image", "video"]);
   await chooseVideo(page);
-  await expect(chips(page)).toHaveText(["References", "5s"]);
+  await expect(chips(page)).toHaveText(["References", "5"]);
   await tray(page).getByRole("button", { name: "+ add prop" }).click();
   const add = page.getByRole("menu", { name: "Add prop" });
   await expect(add.getByRole("menuitem")).toHaveText([/Size\s*480p/, /Ratio\s*16:9/, /Audio\s*off/]);
@@ -71,7 +71,7 @@ test("choosing video shows the default video model and only the props it declare
   // Seconds lists exactly the model's durations and has no Remove.
   await tray(page).locator('[aria-label="Seconds 5"]').click();
   const seconds = page.getByRole("menu", { name: "Seconds" });
-  await expect(seconds.getByRole("menuitemradio")).toHaveText(["5s", "10s"]);
+  await expect(seconds.getByRole("menuitemradio")).toHaveText(["5", "10"]);
   await expect(seconds.getByRole("menuitem", { name: "Remove" })).toHaveCount(0);
   await page.keyboard.press("Escape");
 
@@ -82,10 +82,10 @@ test("choosing video shows the default video model and only the props it declare
 
   // Audio is a checkbox, off until ticked.
   await addProp(page, "Audio off", "Audio");
-  await expect(chips(page)).toHaveText(["References", "5s", "no audio"]);
+  await expect(chips(page)).toHaveText(["References", "5", "no audio"]);
   await tray(page).locator('[aria-label="Audio false"]').click();
   await page.getByRole("menu", { name: "Audio" }).getByRole("menuitemcheckbox", { name: "Audio" }).click();
-  await expect(chips(page)).toHaveText(["References", "5s", "audio"]);
+  await expect(chips(page)).toHaveText(["References", "5", "audio"]);
 
   // A model with exact sizes offers them, labelled with their ratio, and no tier or ratio.
   await pickModel(page, "veo-3.1");
@@ -95,7 +95,7 @@ test("choosing video shows the default video model and only the props it declare
 
   // A model without frame support has no Input prop.
   await pickModel(page, "kling-3");
-  await expect(chips(page)).toHaveText(["5s"]);
+  await expect(chips(page)).toHaveText(["5"]);
   await expect(page.getByRole("dialog", { name: "Video models" })).toHaveCount(0);
 });
 
@@ -105,14 +105,14 @@ test("changing the model resets the props in the tray", async ({ page, videoEngi
   await openComposer(page);
   await chooseVideo(page);
   await setProp(page, "Input", "First and last frame");
-  await setProp(page, "Seconds", "10s");
+  await setProp(page, "Seconds", "10");
   await addProp(page, "Ratio 16:9", "Ratio");
   await addProp(page, "Size 480p", "Size");
-  await expect(chips(page)).toHaveText(["First and last frame", "10s", "480p", "16:9"]);
+  await expect(chips(page)).toHaveText(["First and last frame", "10", "480p", "16:9"]);
   await pickModel(page, "veo-3.1");
-  await expect(chips(page)).toHaveText(["References", "8s"]);
+  await expect(chips(page)).toHaveText(["References", "8"]);
   await pickModel(page, "seedance-2.0");
-  await expect(chips(page)).toHaveText(["References", "5s"]);
+  await expect(chips(page)).toHaveText(["References", "5"]);
 });
 
 test("role badges show on selected media while the composer is open on video, and go when it closes", async ({ page, videoEngine: video }) => {
@@ -217,7 +217,7 @@ test("the estimate reads est. ~$x.xx and follows Seconds and Size", async ({ pag
   await chooseVideo(page);
   const estimate = composer(page).getByTestId("estimate");
   await expect(estimate).toHaveText("est. ~$0.50");
-  await setProp(page, "Seconds", "10s");
+  await setProp(page, "Seconds", "10");
   await expect(estimate).toHaveText("est. ~$1.00");
   await addProp(page, "Size 480p", "Size");
   await expect(estimate).toHaveText("est. ~$1.00");

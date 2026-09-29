@@ -66,6 +66,21 @@ describe("video.start refusals", () => {
   });
 });
 
+describe("a clip that is not an https link", () => {
+  it("is a local clip: refused without consent, and not shareable unless it names a project file", async () => {
+    const rendering = await withClip();
+    const request = startRequest({ input_references: [videoRef("http://cdn.example/plain.mp4")] });
+    await expect(rendering.rpc.call("video.start", request)).rejects.toMatchObject({ code: "bad_request", message: LOCAL_CLIP, details: { reason: "local_clip" } });
+    await expect(rendering.rpc.call("video.start", { ...request, shareLocalVideos: true })).rejects.toMatchObject({
+      code: "upstream",
+      message: "Could not share the clip: http://cdn.example/plain.mp4 is not a file in this project.",
+      details: { reason: "share_failed" },
+    });
+    expect(rendering.jobs.creates).toEqual([]);
+    expect(await shareCopies(rendering)).toEqual([]);
+  });
+});
+
 describe("video.start's payload", () => {
   it("sends exactly the set params, with image markers inlined and links as given", async () => {
     const rendering = await withClip();

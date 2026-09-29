@@ -73,8 +73,6 @@ export interface VideoJobs {
   status(script: (id: string, request: VideoRequest) => StatusAnswer | Promise<StatusAnswer>): void;
   /** The clip each job's download answers; a promise holds the download open until it settles. */
   clip(script: (id: string) => Buffer | Promise<Buffer> | { status: number }): void;
-  /** The download URL a completed status names for `id`, on this stub. */
-  clipUrl(origin: string, id: string): string;
 }
 
 /** A completed status answer naming this stub's download URL. */
@@ -184,6 +182,5 @@ export const videoJobs = (): VideoJobs => {
     clip: (script) => {
       clipScript = script;
     },
-    clipUrl: (origin, id) => `${origin}/files/${id}.mp4`,
   };
 };

@@ -82,6 +82,9 @@ test("a failed render keeps its recipe: Regenerate starts the same render again 
   await sendRun(page);
   const failed = await waitForRoom(video.engine, "default", (records) => records.find((each) => each.meta?.unframed?.runError === "Output flagged"));
   await expect(shapeOnScreen(page, failed.id).getByRole("alert")).toHaveText("Output flagged");
+  // After a reload no tray has fetched the video catalogue: Regenerate sends the recipe exactly all the same.
+  await page.reload();
+  await expect(shapeOnScreen(page, failed.id).getByRole("alert")).toHaveText("Output flagged");
   await clickShape(page, failed.id);
   await toolbar(page).getByRole("button", { name: "Regenerate" }).click();
   await expect.poll(() => video.jobs.creates.length).toBe(2);

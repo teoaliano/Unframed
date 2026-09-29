@@ -106,6 +106,9 @@ export type UpstreamVideoStatus =
   /** Still in flight: the raw status, so an unusual one reads as unusual. */
   | { readonly kind: "rendering"; readonly status: string; readonly progress: number | null };
 
+/** What a failed render says when the provider gives no reason. */
+export const GENERATION_FAILED = "Generation failed.";
+
 const TERMINAL = new Set(["failed", "expired", "cancelled", "canceled"]);
 
 const field = (value: unknown, key: string): unknown =>
@@ -121,7 +124,7 @@ export const classifyVideoStatus = (data: unknown): UpstreamVideoStatus => {
   if (typeof status === "string" && TERMINAL.has(status)) {
     const error = field(data, "error");
     const message = field(error, "message");
-    return { kind: "failed", message: typeof message === "string" ? message : typeof error === "string" ? error : "Generation failed." };
+    return { kind: "failed", message: typeof message === "string" ? message : typeof error === "string" ? error : GENERATION_FAILED };
   }
   const progress = field(data, "progress");
   return { kind: "rendering", status: typeof status === "string" ? status : "", progress: typeof progress === "number" && Number.isFinite(progress) ? progress : null };

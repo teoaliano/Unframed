@@ -44,9 +44,9 @@ describe("the video props a model declares", () => {
     });
   });
 
-  it("labels Seconds on the chip and in the menu, and Audio as on or off", () => {
+  it("shows Seconds as its values, and Audio as on or off", () => {
     const params = videoParams(SEEDANCE);
-    expect(params.props.find((prop) => prop.key === "duration")?.chipLabels).toEqual({ "5": "5s", "10": "10s" });
+    expect(params.props.find((prop) => prop.key === "duration")).toEqual({ key: "duration", label: "Seconds", values: ["5", "10"], required: true });
     expect(params.props.find((prop) => prop.key === "generate_audio")?.chipLabels).toEqual({ true: "audio", false: "no audio" });
   });
 

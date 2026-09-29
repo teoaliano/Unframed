@@ -2,7 +2,7 @@
 export type ImagePropKey = "resolution" | "size" | "aspect_ratio" | "quality" | "background" | "output_format";
 
 export interface PropSpec {
-  /** An image prop here; spec 04 adds the video props. */
+  /** An image prop, or a video prop (spec 04). */
   readonly key: string;
   readonly label: string;
   /** Exactly the values the model declares. */
