@@ -211,11 +211,13 @@ export const onlyChat = async (engine: TestEngine, check: (chat: Chat) => boolea
   return found!;
 };
 
-/** The open approval request of a chat, as the engine holds it. */
+/** The open approval request of a chat's running turn, as the engine holds it. */
 export const pendingRequest = async (engine: TestEngine, threadId: string): Promise<string | undefined> => {
   const chat = await engineChat(engine, threadId);
+  const running = chat.latestTurn?.state === "running" ? chat.latestTurn.turnId : undefined;
   const open = new Map<string, true>();
   for (const activity of chat.activities) {
+    if (activity.turnId !== running) continue;
     const id = (activity.payload as { requestId?: string } | null)?.requestId;
     if (!id) continue;
     if (activity.kind === "approval.requested") open.set(id, true);

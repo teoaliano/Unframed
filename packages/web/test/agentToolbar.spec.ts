@@ -98,8 +98,10 @@ test("Send opens the rail on the chat it continues, then the message goes there;
   await expect(rail(page).locator("[data-role='assistant']").last()).not.toBeEmpty();
   expect(await userTexts(agent, both)).toEqual(["what is on this page?"]);
 
+  await expect(toolbar(page).getByRole("button", { name: "Agent" })).toBeVisible();
   await clickShape(page, "shape:p2");
   await toolbar(page).getByRole("button", { name: "Agent" }).click();
+  await expect(chips(page)).toHaveText(["Beta"]);
   await target(page).getByRole("button", { name: "New chat instead" }).click();
   await promptBox(composer(page)).pressSequentially("start over on beta");
   await promptBox(composer(page)).press("Enter");
@@ -114,12 +116,9 @@ test("with no provider ready, the toolbar's Agent tooltip is the provider's mess
   try {
     await openCanvas(page, engine);
     await clickShape(page, "shape:starter-subject");
-    // The first hover asks for the statuses; the tooltip shows once they are in.
-    await expect(async () => {
-      await page.mouse.move(5, 5);
-      await toolbar(page).getByRole("button", { name: "Agent" }).hover();
-      await expect(page.getByText("Claude is not installed or not on PATH.", { exact: true })).toBeVisible({ timeout: 1500 });
-    }).toPass({ timeout: 15_000 });
+    // The first hover asks for the statuses; the tooltip reads the message once they are in.
+    await toolbar(page).getByRole("button", { name: "Agent" }).hover();
+    await expect(toolbar(page).getByRole("button", { name: "Agent" })).toHaveAttribute("title", "Claude is not installed or not on PATH.", { timeout: 15_000 });
   } finally {
     await engine.dispose();
   }

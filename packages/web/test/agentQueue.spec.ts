@@ -58,6 +58,7 @@ test("a message sent while a turn runs waits as Queued and goes after the next t
   if ((await pendingRequest(agent, chatId)) === undefined) await sendThrough(agent, chatId, "park again");
   await expect.poll(async () => (await pendingRequest(agent, chatId)) !== undefined).toBe(true);
   const before = await userTexts(agent, chatId);
+  await expect(panel.getByRole("button", { name: "Queue message" })).toBeVisible();
 
   // Cancel gives a queued message back to the composer.
   await type(panel, "take me back");

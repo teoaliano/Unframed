@@ -1,5 +1,6 @@
 import { mergeAttributes, Node, type Editor as TiptapEditor, type JSONContent } from "@tiptap/core";
 import { Placeholder } from "@tiptap/extensions";
+import { Selection } from "@tiptap/pm/state";
 import { EditorContent, useEditor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import { useEffect, useImperativeHandle, useRef, type Ref } from "react";
@@ -199,8 +200,12 @@ export const PromptEditor = ({ placeholder, label, onChange, onTrigger, onKey, o
       focus: () => editor?.commands.focus("end"),
       text: () => (editor ? draftText(editor.getJSON()) : ""),
       setText: (text) => {
-        editor?.commands.setContent(draftDoc(text), { emitUpdate: true });
-        editor?.commands.focus("end");
+        if (!editor) return;
+        editor.commands.setContent(draftDoc(text), { emitUpdate: true });
+        // Focused already, the caret goes to the end at once: Tiptap's focus lands a frame
+        // later and would put it back after an arrow key the person pressed meanwhile.
+        if (editor.view.hasFocus()) editor.view.dispatch(editor.state.tr.setSelection(Selection.atEnd(editor.state.doc)));
+        else editor.commands.focus("end");
       },
       clear: () => {
         editor?.commands.setContent({ type: "doc", content: [{ type: "paragraph" }] }, { emitUpdate: true });

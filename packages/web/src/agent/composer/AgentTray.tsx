@@ -5,7 +5,6 @@ import {
   DEFAULT_RUNTIME_MODE,
   implementPlanText,
   implementPlanTitle,
-  openRequests,
   pasteBecomesFile,
   pastedTextFileName,
   tabLabel,
@@ -25,7 +24,7 @@ import { latestCompletedTool, returnQueued, sendQueued } from "../queue.tsx";
 import { Tip } from "../../chrome/ui.tsx";
 import { formatSize, useAttachments } from "./attachments.ts";
 import { StashMenu, useStash } from "./stash.tsx";
-import { ApprovalPanel, choiceOnly, openQuestion, PlanActions, PlanReady, QuestionPanel } from "./panels.tsx";
+import { ApprovalPanel, choiceOnly, openQuestion, PlanActions, PlanReady, QuestionPanel, waitingRequests } from "./panels.tsx";
 import { platform } from "../../canvas/platform.ts";
 import { showNotice } from "../../toasts.tsx";
 import { AttachmentShelf } from "./AttachmentShelf.tsx";
@@ -324,6 +323,12 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
       stashKey();
       return true;
     }
+    // The stash menu opened from the keyboard may not have the focus yet: Esc in the box still closes it.
+    if (event.key === "Escape" && stashOpen) {
+      event.stopPropagation();
+      setStashOpen(false);
+      return true;
+    }
     if (command && event.shiftKey && event.key === "Enter" && chat) {
       const oldest = client.queue(chat.id)[0];
       if (oldest) void sendQueued(client, chat.id, oldest.id);
@@ -357,7 +362,7 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
   };
 
   // What waits on the person in this chat: an approval, a question, a plan to implement.
-  const approvalPending = variant === "rail" && chat !== undefined && openRequests(chat, "approval").length > 0;
+  const approvalPending = variant === "rail" && chat !== undefined && waitingRequests(chat, "approval").length > 0;
   const asked = variant === "rail" ? openQuestion(chat) : undefined;
   const [questionIndex, setQuestionIndex] = useState(0);
   const [chosen, setChosen] = useState<Record<string, ReadonlyArray<string>>>({});

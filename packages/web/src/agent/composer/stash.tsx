@@ -27,12 +27,14 @@ export const useStash = (engine: EngineConnection, project: string) => {
   const key = `agent.stash.${project}`;
   const [entries, setEntries] = useState<ReadonlyArray<StashEntry>>([]);
   const latest = useRef<ReadonlyArray<StashEntry>>([]);
-  // While a write of ours is in flight, the echoes of earlier ones are older than what we hold.
+  // Our own writes come back as changes, and not always in order: an echo of one, or any
+  // change while one is in flight, is older than what we hold. Only another tab's counts.
   const writing = useRef(0);
+  const written = useRef<string[]>([]);
   useEffect(
     () =>
       engine.subscribe("preferences.subscribe", { keys: [key] }, (change) => {
-        if (change.key !== key || writing.current > 0) return;
+        if (change.key !== key || writing.current > 0 || written.current.includes(JSON.stringify(change.value ?? null))) return;
         latest.current = Array.isArray(change.value) ? change.value.filter(isEntry) : [];
         setEntries(latest.current);
       }),
@@ -42,6 +44,7 @@ export const useStash = (engine: EngineConnection, project: string) => {
     (next: ReadonlyArray<StashEntry>) => {
       latest.current = next;
       setEntries(next);
+      written.current = [...written.current.slice(-49), JSON.stringify(next.length === 0 ? null : next)];
       writing.current++;
       void engine
         .call("preferences.set", { key, value: next.length === 0 ? null : next })

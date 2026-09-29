@@ -14,19 +14,8 @@ export const iconButtonClass =
   "flex size-9 cursor-pointer items-center justify-center rounded-element border-0 bg-transparent p-0 text-icon hover:bg-hover active:bg-pressed focus-visible:outline-2 focus-visible:outline-accent";
 
 /** A tooltip on `children`, which must be the trigger element. */
-export const Tip = ({
-  label,
-  children,
-  side = "bottom",
-  disabled,
-}: {
-  readonly label: ReactNode;
-  readonly children: ReactElement;
-  readonly side?: "top" | "bottom" | "left" | "right";
-  /** No tooltip for now, with the trigger kept mounted, so one that turns on later opens under a pointer already there. */
-  readonly disabled?: boolean;
-}) => (
-  <Tooltip.Root disabled={disabled === true}>
+export const Tip = ({ label, children, side = "bottom" }: { readonly label: ReactNode; readonly children: ReactElement; readonly side?: "top" | "bottom" | "left" | "right" }) => (
+  <Tooltip.Root>
     <Tooltip.Trigger render={children} />
     <Tooltip.Portal>
       <Tooltip.Positioner side={side} sideOffset={8} className="z-[1100]">

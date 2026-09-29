@@ -54,14 +54,18 @@ const RailMotion = ({ open, children }: { readonly open: boolean; readonly child
   return <>{children((node) => (element.current = node), open ? "open" : "closed")}</>;
 };
 
-/** The selection toolbar's filled Agent button; with no provider ready its tooltip is the provider's message. */
+/**
+ * The selection toolbar's filled Agent button; with no provider ready its tooltip is the
+ * provider's message. A native tooltip: a tooltip component in the bar, which morphs into
+ * the composer under the pointer, took the composer's focus now and then.
+ */
 const ToolbarAgentButton = ({ client, onOpen }: { readonly client: ChatClient; readonly onOpen: () => void }) => {
   const { statuses } = useProviders(client);
-  const message = providerMessage(statuses);
-  const button = (
+  return (
     <button
       type="button"
       className="unframed-bar-button unframed-bar-button--primary"
+      title={providerMessage(statuses)}
       onPointerEnter={() => void client.loadProviders()}
       onFocus={() => void client.loadProviders()}
       onClick={() => {
@@ -72,11 +76,6 @@ const ToolbarAgentButton = ({ client, onOpen }: { readonly client: ChatClient; r
       <Sparkles size={14} aria-hidden />
       Agent
     </button>
-  );
-  return (
-    <Tip label={message} side="top" disabled={message === undefined}>
-      {button}
-    </Tip>
   );
 };
 

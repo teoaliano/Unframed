@@ -9,6 +9,12 @@ import type { ChatClient } from "../store.ts";
 
 const record = (value: unknown): Record<string, unknown> => (typeof value === "object" && value !== null ? (value as Record<string, unknown>) : {});
 
+/** The chat's open requests of a kind that its running turn waits on: a turn that ended waits on nothing. */
+export const waitingRequests = (chat: Chat, kind: "approval" | "user-input"): ChatActivity[] => {
+  const running = chat.latestTurn?.state === "running" ? chat.latestTurn.turnId : undefined;
+  return openRequests(chat, kind).filter((activity) => activity.turnId === null || activity.turnId === running);
+};
+
 const APPROVAL_HEADERS: Record<string, string> = {
   command_execution_approval: "Command approval",
   file_read_approval: "File read approval",
@@ -28,7 +34,7 @@ export const TARGET_SHOWN = 300;
  */
 export const ApprovalPanel = ({ client, chat }: { readonly client: ChatClient; readonly chat: Chat }) => {
   const [answered, setAnswered] = useState<ReadonlySet<string>>(new Set());
-  const pending = openRequests(chat, "approval").filter((activity) => !answered.has(String(record(activity.payload).requestId)));
+  const pending = waitingRequests(chat, "approval").filter((activity) => !answered.has(String(record(activity.payload).requestId)));
   const request = pending[0];
   if (!request) return null;
   const payload = record(request.payload);
@@ -101,7 +107,7 @@ export interface QuestionState {
 
 /** The chat's open question, if any, as the panel shows it. */
 export const openQuestion = (chat: Chat | undefined): { request: ChatActivity; requestId: string; questions: ReadonlyArray<UserQuestion>; dismissable: boolean } | undefined => {
-  const request = chat ? openRequests(chat, "user-input")[0] : undefined;
+  const request = chat ? waitingRequests(chat, "user-input")[0] : undefined;
   if (!request) return undefined;
   const payload = record(request.payload);
   const questions = Array.isArray(payload.questions) ? (payload.questions as UserQuestion[]) : [];
