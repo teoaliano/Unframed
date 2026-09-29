@@ -309,23 +309,6 @@
   outline: none;
 }
 
-/* The right-click menu: 188 px wide, Unframed's sections headed in small secondary text. */
-.tlui-menu[data-testid="context-menu"] {
-  width: 188px;
-  min-width: 188px;
-}
-
-.unframed-menu-heading {
-  padding: 6px 8px 2px;
-  font-size: 11px;
-  color: var(--unframed-text-secondary);
-}
-
-/* tldraw's top zone (its style panel) starts below the corner cards, so nothing hides under them. */
-.tlui-layout__top {
-  padding-top: 64px;
-}
-
 /* The dot grid: 1.1 px dots at every zoom, the emphasized border mixed 68 % into the canvas colour. */
 .unframed-dot-grid {
   background-color: var(--unframed-canvas);

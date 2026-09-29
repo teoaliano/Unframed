@@ -180,7 +180,8 @@ const UnframedSections = () => {
     <>
       {sections.map((section) => (
         <TldrawUiMenuGroup key={section.section} id={`unframed-${section.section}`}>
-          <div className="unframed-menu-heading" role="presentation">
+          {/* tldraw's menu is not a kit Menu, so the heading carries the kit's menu label recipe itself. */}
+          <div data-testid="context-menu-heading" role="presentation" className="px-2 py-1.5 text-xs font-medium text-muted-foreground">
             {section.heading}
           </div>
           {section.items.map((item) =>
@@ -192,7 +193,7 @@ const UnframedSections = () => {
                 aria-disabled="true"
                 data-disabled=""
                 title={item.tooltip}
-                className="tlui-button tlui-button__menu unframed-menu-disabled"
+                className="tlui-button tlui-button__menu"
                 data-testid={`context-menu.unframed-${item.action}`}
               >
                 <span className="tlui-button__label">{item.label}</span>

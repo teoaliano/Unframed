@@ -295,7 +295,7 @@ Sections appear in this order, each only when it has at least one item. An item 
 | Library | "Add to library" | something is selected, and spec 06 has registered the handler |
 | Inputs, Artifacts | the add menu's items, placed at the click point | the right-click landed on empty canvas |
 
-On Windows and Linux the shortcut hints read `Ctrl+X`, `Ctrl+C`, `Ctrl+V`, `Ctrl+G`, `Ctrl+⇧G`. Right-clicking an unselected shape selects it alone first; right-clicking inside the selection keeps it. Section headings are small secondary text. Menu width 188 px.
+On Windows and Linux the shortcut hints read `Ctrl+X`, `Ctrl+C`, `Ctrl+V`, `Ctrl+G`, `Ctrl+⇧G`. Right-clicking an unselected shape selects it alone first; right-clicking inside the selection keeps it. Section headings use the kit's menu label look (spec 12: extra-small medium muted text), rows highlight with the kit's accent, and a disabled row (spec 06's Add to library) has the kit's disabled look, its own text at 64 %. Menu width 188 px.
 
 Failures: "Could not show that file: <message>" or "Could not show those <n> files: <message>"; "Could not copy @<ref> to the clipboard."; "Could not copy that image to the clipboard.".
 

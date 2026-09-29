@@ -62,6 +62,8 @@ test("Add to library: enabled for one group or loose shapes, disabled with the r
   await page.mouse.click(set.x + 10, set.y - 8, { button: "right" });
   await expect(addToLibrary(page)).toHaveAttribute("aria-disabled", "true");
   await expect(addToLibrary(page)).toHaveAttribute("title", "A preset is one group. Select one group, or shapes outside any group.");
+  // The kit's disabled look: the row's own text colour at 64 %.
+  expect(await addToLibrary(page).evaluate((element) => getComputedStyle(element).opacity)).toBe("0.64");
   await page.keyboard.press("Escape");
 
   // A page alone holds nothing a group may.

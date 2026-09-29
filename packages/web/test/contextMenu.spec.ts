@@ -2,6 +2,7 @@ import type { Page } from "@playwright/test";
 import { centre, emptyCanvasPoint, openCanvas, shapeOnScreen } from "./canvas.ts";
 import { expect, test } from "./fixtures.ts";
 import { pngBytes } from "./images.ts";
+import { inBothSchemes, styleOf, tokenColor } from "./kit.ts";
 import { filledMedia, groupRecord, putRecords } from "./media.ts";
 
 test.use({ permissions: ["clipboard-read", "clipboard-write"] });
@@ -13,7 +14,7 @@ const rightClick = async (page: Page, at: { x: number; y: number }) => {
   await page.mouse.click(at.x, at.y, { button: "right" });
   await expect(menu(page)).toBeVisible();
   await page.waitForTimeout(200);
-  const headings = await menu(page).locator(".unframed-menu-heading").allTextContents();
+  const headings = await menu(page).getByTestId("context-menu-heading").allTextContents();
   const items = await menu(page)
     .locator(":scope > * [role='menuitem'], :scope > [role='menuitem']")
     .evaluateAll((elements) =>
@@ -116,4 +117,21 @@ test("a right-clicked group offers its reference and Ungroup, not Group", async 
   expect(headings).toEqual(["Reference", "Edit", "Library"]);
   expect(items.slice(0, 4)).toEqual(["Copy @160", "Cut ⌘X", "Copy ⌘C", "Ungroup ⇧⌘G"]);
   expect(items).not.toContain("Group ⌘G");
+});
+
+test("the menu has the kit's label and disabled looks, at 188 px, and its rows highlight like the kit's", async ({ page, engine }) => {
+  await withEmptyClipboard(page);
+  await openCanvas(page, engine);
+  await inBothSchemes(page, async () => {
+    await rightClick(page, await emptyCanvasPoint(page));
+    expect((await menu(page).boundingBox())!.width).toBe(188);
+    const heading = menu(page).getByTestId("context-menu-heading").first();
+    expect(await styleOf(heading, "font-size")).toBe("12px");
+    expect(await styleOf(heading, "font-weight")).toBe("500");
+    expect(await styleOf(heading, "color")).toBe(await tokenColor(page, "--color-muted-foreground"));
+    const row = menu(page).getByRole("menuitem", { name: "Prompt" });
+    await row.hover();
+    expect(await row.evaluate((element) => getComputedStyle(element, "::after").backgroundColor)).toBe(await tokenColor(page, "--accent"));
+    await closeMenu(page);
+  });
 });

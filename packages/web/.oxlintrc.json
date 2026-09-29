@@ -25,7 +25,10 @@
         "allow": [
           "unframed-chrome-left",
           "unframed-chrome-right",
-          "unframed-chrome-bottom-right"
+          "unframed-chrome-bottom-right",
+          // tldraw's own class names, where Unframed renders into tldraw's menus.
+          "tl-*",
+          "tlui-*"
         ]
       }
     ],
@@ -115,7 +118,6 @@
         "src/artifacts/RenderRow.tsx",
         "src/artifacts/editor/ArtifactEditor.tsx",
         "src/artifacts/editor/Parameters.tsx",
-        "src/canvas/ContextMenu.tsx",
         "src/canvas/MentionList.tsx",
         "src/canvas/shapes/ShapeLabel.tsx",
         "src/canvas/shapes/artifact.tsx",

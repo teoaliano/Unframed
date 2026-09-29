@@ -28,7 +28,7 @@
   --tl-color-text-0: var(--foreground);
   --tl-color-text-1: var(--foreground);
   --tl-color-text-3: var(--muted-foreground);
-  --tl-color-text-disabled: color-mix(in srgb, var(--muted-foreground) 64%, transparent);
+  --tl-color-text-disabled: var(--foreground);
   --tl-color-text-shadow: var(--background);
   --tl-color-primary: var(--primary);
   --tl-color-danger: var(--destructive);
@@ -101,4 +101,22 @@
 /* The style panel is a panel like the toolbar and the corner cards, not a menu. */
 .tlui-style-panel__wrapper {
   border-radius: var(--tl-radius-4);
+}
+
+/* Disabled buttons and rows: the kit's disabled look, the control's own colour at 64 %. */
+.tlui-button:disabled,
+.tlui-button[data-disabled] {
+  opacity: 0.64;
+  cursor: not-allowed;
+}
+
+/* The right-click menu keeps spec 02's 188 px. */
+.tlui-menu[data-testid="context-menu"] {
+  width: 188px;
+  min-width: 188px;
+}
+
+/* tldraw's top zone (its style panel) starts below the corner cards, so nothing hides under them. */
+.tlui-layout__top {
+  padding-top: 64px;
 }
