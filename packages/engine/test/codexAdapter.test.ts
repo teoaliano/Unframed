@@ -1,4 +1,4 @@
-import { realpathSync } from "node:fs";
+import { readFileSync, realpathSync } from "node:fs";
 import { join } from "node:path";
 import { openRequests } from "@unframed/domain";
 import { describe, expect, it } from "vitest";
@@ -42,6 +42,8 @@ describe("Codex runs a chat", () => {
     const sent = log.flatMap((entry) => (entry.message ? [entry.message] : []));
     expect(sent[0]).toMatchObject({ method: "initialize", params: { clientInfo: { name: "unframed", title: "Unframed" }, capabilities: { experimentalApi: true } } });
     expect(sent[0]).not.toHaveProperty("jsonrpc");
+    const { version } = JSON.parse(readFileSync(join(import.meta.dirname, "../package.json"), "utf8"));
+    expect(sent[0].params.clientInfo.version).toBe(version);
     expect(sent[1]).toEqual({ method: "initialized" });
     const threadStart = sent.find((message) => message.method === "thread/start" && message.params.ephemeral !== true);
     expect(threadStart.params).toMatchObject({ cwd: agent.folder, approvalPolicy: "untrusted", sandbox: "read-only", approvalsReviewer: "user", model: "gpt-6" });

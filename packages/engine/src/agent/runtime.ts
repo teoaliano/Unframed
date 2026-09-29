@@ -645,7 +645,7 @@ export class AgentRuntime {
     let sentence: string | undefined;
     if (failed) {
       sentence = failureSentence({ subtype: outcome.errorSubtype, message: outcome.errorMessage });
-      const current = turn.assistantMessageId === null ? undefined : chat.messages.find((message) => message.id === turn.assistantMessageId);
+      const current = [...chat.messages].reverse().find((message) => message.role === "assistant" && message.turnId === turn.turnId);
       const messageId = current?.id ?? `assistant:${turn.turnId}:failure`;
       const lead = current !== undefined && current.text.trim() !== "" ? "\n\n" : "";
       await this.internal(agent, chatId, { type: "thread.message.assistant.delta", messageId, turnId: turn.turnId, delta: `${lead}${sentence}` });

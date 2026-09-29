@@ -19,7 +19,7 @@ import { buildWeb, repoRoot } from "./buildWeb.ts";
  * spawn binaries. Each one here must also be in the engine's dependencies: the bundle's
  * package.json takes its version from there.
  */
-export const RUNTIME_DEPENDENCIES: ReadonlyArray<string> = [];
+export const RUNTIME_DEPENDENCIES: ReadonlyArray<string> = ["@anthropic-ai/claude-agent-sdk"];
 
 /** Build-time packages whose output ships in the bundle anyway (Tailwind's base styles). */
 const SHIPPED_BUILD_PACKAGES = ["tailwindcss"];
