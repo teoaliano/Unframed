@@ -4,7 +4,7 @@ import { join } from "node:path";
 import type { Locator, Page } from "@playwright/test";
 import type { TestEngine } from "../../engine/test/engineProcess.ts";
 import { openCanvas } from "./canvas.ts";
-import { createChat, engineChat, expect, onlyChat, openRail, promptBox, say, sendThrough, startAgentEngine, startProvidersEngine, tabs } from "./agent.ts";
+import { createChat, enablePlanMode, engineChat, expect, onlyChat, openRail, promptBox, say, sendThrough, startAgentEngine, startProvidersEngine, tabs } from "./agent.ts";
 import { test as base } from "./fixtures.ts";
 import { expectToken } from "./kit.ts";
 
@@ -39,6 +39,17 @@ test("/ offers the built-ins, the provider's commands and its skills; each does 
   const box = promptBox(panel);
   await box.click();
 
+  // Plan mode is off unless set, as in t3code: no /plan or /default.
+  await box.pressSequentially("/");
+  await expect(commands(page).getByRole("option")).toHaveText([
+    "/modelSwitch response model for this chat",
+    "/compactSummarise the conversation so far to free up context.",
+    "/reviewReview the code",
+    "/skill:brandApply the house brandClaude",
+  ]);
+  await page.keyboard.press("Escape");
+  await box.clear();
+  await enablePlanMode(providers);
   await box.pressSequentially("/");
   await expect(commands(page).getByRole("option")).toHaveText([
     "/modelSwitch response model for this chat",
@@ -243,9 +254,10 @@ test("the runtime mode picker: four modes with what each does, Full access by de
   }
 });
 
-test("the plan toggle reads Plan or Build with its tooltip, Shift+Tab flips it, and the chat follows", async ({ page }) => {
+test("with plan mode on, the plan toggle reads Plan or Build with its tooltip, Shift+Tab flips it, and the chat follows", async ({ page }) => {
   const agent = await startAgentEngine();
   try {
+    await enablePlanMode(agent);
     await openCanvas(page, agent);
     const chatId = await createChat(agent, { title: "Planning" });
     const panel = await openRail(page);

@@ -244,6 +244,22 @@ test("Follow-up behavior shows Queue by default, saves Steer at once without Sav
   }
 });
 
+test("Plan mode (legacy) is off by default and saves at once without Save, as t3code's setting does", async ({ page }) => {
+  const { engine } = await startSettingsEngine();
+  try {
+    await openApp(page, engine);
+    const dialog = await openSettings(page);
+    const toggle = dialog.getByRole("switch", { name: "Plan mode (legacy)" });
+    await expect(toggle).toHaveAttribute("aria-checked", "false");
+    await expect(dialog.getByText("Restore Build/Plan, /plan, /default, and Shift+Tab. Off uses build mode.")).toBeVisible();
+    await toggle.click();
+    await expect(toggle).toHaveAttribute("aria-checked", "true");
+    await expect.poll(async () => (await (await engine.rpc()).call("preferences.get", { keys: ["agent.planMode"] })).values["agent.planMode"]).toBe(true);
+  } finally {
+    await engine.dispose();
+  }
+});
+
 const MENU_GLASS = "color-mix(in srgb, var(--popover) 18%, color-mix(in srgb, var(--popover) var(--glass-opacity), transparent))";
 
 test("the settings dialog is the kit's dialog at 480 px, with kit fields, comboboxes, select, buttons and banners, in both schemes", async ({ page }) => {

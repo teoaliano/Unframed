@@ -3,7 +3,7 @@ import { join } from "node:path";
 import type { Locator, Page } from "@playwright/test";
 import { openCanvas } from "./canvas.ts";
 import type { TestEngine } from "../../engine/test/engineProcess.ts";
-import { createChat, engineChat, engineChats, expect, FIXTURES, openRail, promptBox, rail, say, test, userTexts } from "./agent.ts";
+import { createChat, enablePlanMode, engineChat, engineChats, expect, FIXTURES, openRail, promptBox, rail, say, test, userTexts } from "./agent.ts";
 
 const PLAN: string = JSON.parse(await readFile(join(FIXTURES, "plan.json"), "utf8")).turns[0].plan;
 const TITLE = "Landing page from the three stills";
@@ -11,6 +11,7 @@ const IMPLEMENT = `PLEASE IMPLEMENT THIS PLAN:\n${PLAN.trim()}`;
 
 /** A chat in plan mode whose first turn proposed the fixture's plan, open in the rail. */
 const planned = async (page: Page, agent: TestEngine): Promise<{ panel: Locator; chatId: string }> => {
+  await enablePlanMode(agent);
   await openCanvas(page, agent);
   const chatId = await createChat(agent, { title: "Landing", interactionMode: "plan" });
   const panel = await openRail(page);
@@ -82,4 +83,26 @@ test("Refine sends the draft as feedback and the chat stays in plan mode", async
   await panel.getByRole("button", { name: "Refine" }).click();
   await expect.poll(() => userTexts(agent, chatId)).toEqual(["plan the landing page", "shorter please"]);
   expect((await engineChat(agent, chatId)).interactionMode).toBe("plan");
+});
+
+test("plan mode is off unless set: no Build/Plan toggle, Shift+Tab does nothing, and a chat left in plan mode sends in build mode", async ({ page, agent }) => {
+  await openCanvas(page, agent);
+  const chatId = await createChat(agent, { title: "Old plan", interactionMode: "plan" });
+  const panel = await openRail(page);
+  await expect(promptBox(panel)).toBeVisible();
+  await expect(panel.getByTestId("plan-toggle")).toHaveCount(0);
+  await promptBox(panel).click();
+  await page.keyboard.press("Shift+Tab");
+  await expect(panel.getByTestId("plan-toggle")).toHaveCount(0);
+  await say(panel, "hello there");
+  await expect.poll(async () => (await engineChat(agent, chatId)).interactionMode).toBe("default");
+});
+
+test("turning plan mode on shows the toggle at once, in the chat's own mode", async ({ page, agent }) => {
+  await openCanvas(page, agent);
+  await createChat(agent, { title: "Old plan", interactionMode: "plan" });
+  const panel = await openRail(page);
+  await expect(panel.getByTestId("plan-toggle")).toHaveCount(0);
+  await enablePlanMode(agent);
+  await expect(panel.getByTestId("plan-toggle")).toHaveText("Plan");
 });

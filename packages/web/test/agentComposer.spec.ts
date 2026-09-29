@@ -3,7 +3,7 @@ import { openCanvas, shapeOnScreen, toast } from "./canvas.ts";
 import { clickShape, composer, toolbar } from "./generation.ts";
 import { pngBytes } from "./images.ts";
 import { filledMedia, putRecords } from "./media.ts";
-import { artifactColumn, expect, onlyChat, openRail, promptBox, rail, rpcOf, scriptFolder, startAgentEngine, test } from "./agent.ts";
+import { artifactColumn, enablePlanMode, expect, onlyChat, openRail, promptBox, rail, rpcOf, scriptFolder, startAgentEngine, test } from "./agent.ts";
 import type { TestEngine } from "../../engine/test/engineProcess.ts";
 import { expectSlot, expectToken, inBothSchemes, resolvedColor, styleOf } from "./kit.ts";
 
@@ -305,6 +305,7 @@ test("ArrowUp in an empty box recalls this chat's earlier messages, newest first
 const MENU_GLASS = "color-mix(in srgb, var(--popover) 18%, color-mix(in srgb, var(--popover) var(--glass-opacity), transparent))";
 
 test("the Agent tray is t3code's composer on the kit: the rounded shell, kit chips and controls, the round Send, the kit menu look", async ({ page, agent }) => {
+  await enablePlanMode(agent);
   await pageAndImages(page, agent);
   await openAgentTray(page);
   const tray = composer(page);

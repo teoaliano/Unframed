@@ -1,10 +1,8 @@
-import { getAssetUrlsByImport } from "@tldraw/assets/imports.vite";
 import { useSync } from "@tldraw/sync";
 import { canvasSchema } from "@unframed/contracts";
 import { UPLOAD_BODY_LIMIT } from "@unframed/domain";
 import { useCallback, useContext, useEffect, useMemo, useRef } from "react";
-import { DefaultStylePanel, Tldraw, useEditor, useValue, type Editor, type TLComponents, type TldrawOptions, type TLUiStylePanelProps } from "tldraw";
-import "tldraw/tldraw.css";
+import { Tldraw, type Editor, type TLComponents } from "tldraw";
 import "./canvas.css";
 import "../generate/imageMedium.ts";
 import "../generate/videoMedium.ts";
@@ -33,53 +31,17 @@ import { MotionShapeUtil, PageShapeUtil } from "./shapes/artifact.tsx";
 import { GroupShapeUtil } from "./shapes/group.tsx";
 import { ImageMediaUtil, VideoMediaUtil } from "./shapes/media.tsx";
 import { PromptShapeUtil } from "./shapes/prompt.tsx";
-import { lucideIconUrls } from "./icons.tsx";
 import { SyncSocket } from "./syncSocket.ts";
-
-const tldrawAssets = getAssetUrlsByImport();
-const assetUrls = { ...tldrawAssets, icons: { ...tldrawAssets.icons, ...lucideIconUrls() } };
+import { TLDRAW_ASSET_URLS, TLDRAW_CHROME, TLDRAW_OPTIONS } from "./tldrawChrome.tsx";
 
 /** How long a project switch waits for the room to acknowledge this tab's pending edits. */
 const SETTLE_BEFORE_SWITCH_MS = 2000;
 
-const OPTIONS: Partial<TldrawOptions> = {
-  maxPages: 1,
-  actionShortcutsLocation: "toolbar",
-  // A resize pins a prompt from its first move of 2 px.
-  dragDistanceSquared: 4,
-  camera: {
-    isLocked: false,
-    panSpeed: 1,
-    zoomSpeed: 1,
-    zoomSteps: [0.1, 0.25, 0.5, 1, 2, 4],
-    wheelBehavior: "pan",
-  },
-};
-
 const SHAPE_UTILS = [PromptShapeUtil, ImageMediaUtil, VideoMediaUtil, GroupShapeUtil, PageShapeUtil, MotionShapeUtil];
 
-/** tldraw's main, page, help and debug menus and its share panel are hidden; the dot grid is the background. */
-/**
- * tldraw's style panel, shown only when it has something to set: a drawing tool is on, or
- * the selection holds shapes with styles (prompts, drawings). Media, artifacts and groups have none.
- */
-const StylePanel = (props: TLUiStylePanelProps) => {
-  const editor = useEditor();
-  const styled = useValue("styled selection or tool", () => editor.getSharedStyles().size > 0, [editor]);
-  return styled ? <DefaultStylePanel {...props} /> : null;
-};
-
+/** Unframed's tldraw chrome, and the canvas's own parts: the dot grid behind, badges and overlays on top, the context menu. */
 const COMPONENTS: TLComponents = {
-  MainMenu: null,
-  PageMenu: null,
-  HelpMenu: null,
-  DebugMenu: null,
-  DebugPanel: null,
-  SharePanel: null,
-  // One toolbar per selection: Unframed's selection toolbar, never tldraw's media bars beside it.
-  ImageToolbar: null,
-  VideoToolbar: null,
-  StylePanel,
+  ...TLDRAW_CHROME,
   InFrontOfTheCanvas: InFront,
   OnTheCanvas: RoleBadges,
   Background: DotGrid,
@@ -114,7 +76,7 @@ export const CanvasHost = ({ project, activation }: { readonly project: string; 
   const licenseKey = useContext(LicenseKeyContext);
   const engine = useEngine();
   const content = useRef<ContentContext | undefined>(undefined);
-  const options = useMemo(() => ({ ...OPTIONS, ...clipboardOptions({ project, context: () => content.current }) }), [project]);
+  const options = useMemo(() => ({ ...TLDRAW_OPTIONS, ...clipboardOptions({ project, context: () => content.current }) }), [project]);
   const socket = useRef<SyncSocket | undefined>(undefined);
   const previews = useMemo(() => new Previews(project), [project]);
   const assets = useMemo(() => createAssetStore(project, previews), [project, previews]);
@@ -179,7 +141,7 @@ export const CanvasHost = ({ project, activation }: { readonly project: string; 
         store={store}
         options={options}
         colorScheme="system"
-        assetUrls={assetUrls}
+        assetUrls={TLDRAW_ASSET_URLS}
         maxAssetSize={UPLOAD_BODY_LIMIT}
         maxImageDimension={Number.POSITIVE_INFINITY}
         onMount={onMount}

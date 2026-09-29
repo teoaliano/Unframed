@@ -327,6 +327,7 @@ Keys in use, each owned by the spec named:
 | `lastUsed.image`, `lastUsed.video`, `lastUsed.text` | 03 (04 and 05 add fields) | the composer's last-used values for that medium |
 | `library.view` | 06 | `"card"` or `"list"` |
 | `agent.followUp` | 08 (control in spec 10's dialog) | `"queue"` or `"steer"` |
+| `agent.planMode` | 08 (control in spec 10's dialog) | `true` turns plan mode on; off when unset |
 | `agent.stash.<project>` | 08 | that project's stashed prompts |
 | `agent.diffLayout` | 08 | `"stacked"` or `"split"` |
 

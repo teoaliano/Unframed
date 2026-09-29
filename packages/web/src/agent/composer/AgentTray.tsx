@@ -18,7 +18,7 @@ import type { AgentTrayProps as SlotProps } from "../../chrome/slots.ts";
 import { useEngine } from "../../context.ts";
 import { effectiveModel, noProviderReady, providerName, readyProviders } from "../providers.ts";
 import { createChat, sendMessage } from "../send.ts";
-import { useChatClient, useChats, useFollowUp, useHandoffVersion, useProviders, useRailUi, useWatchedThread, type ChatClient } from "../store.ts";
+import { useChatClient, useChats, useFollowUp, useHandoffVersion, usePlanMode, useProviders, useRailUi, useWatchedThread, type ChatClient } from "../store.ts";
 import { latestCompletedTool, returnQueued, sendQueued } from "../queue.tsx";
 import { Alert, AlertDescription } from "~/components/ui/alert";
 import { Button } from "~/components/ui/button";
@@ -118,7 +118,9 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
     [chat?.modelSelection, draftModel, ready],
   );
   const runtimeMode = chat?.runtimeMode ?? draftRuntime;
-  const interactionMode = chat?.interactionMode ?? draftInteraction;
+  const planMode = usePlanMode(client);
+  // With plan mode off, as t3code ships it, every chat runs in build mode.
+  const interactionMode = planMode ? (chat?.interactionMode ?? draftInteraction) : "default";
   const model = effectiveModel(statuses, selection.provider, selection.model);
   const status = statuses?.[selection.provider];
   const setModelSelection = (next: ModelSelection) => {
@@ -243,7 +245,7 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
     }
     if (trigger.char === "/") {
       const wholeDraft = text.trim() === `/${trigger.query}` && attachments.staged.length === 0;
-      const items = slashItems({ query: trigger.query, status, provider: selection.provider, wholeDraft });
+      const items = slashItems({ query: trigger.query, status, provider: selection.provider, wholeDraft, planMode });
       return {
         label: "Commands",
         trigger,
@@ -351,7 +353,7 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
     if (!menu && !event.shiftKey && !event.altKey && !event.metaKey && !event.ctrlKey && (event.key === "ArrowUp" || event.key === "ArrowDown")) {
       return history(event.key === "ArrowUp" ? "up" : "down");
     }
-    if (event.key === "Tab" && event.shiftKey && !menu) {
+    if (planMode && event.key === "Tab" && event.shiftKey && !menu) {
       setInteraction(interactionMode === "plan" ? "default" : "plan");
       return true;
     }
@@ -450,7 +452,7 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
     try {
       let target = chatId;
       if (target === null) {
-        target = await createChat(client, { modelSelection: selection, runtimeMode: draftRuntime, interactionMode: draftInteraction, tags: newChatTags }, message);
+        target = await createChat(client, { modelSelection: selection, runtimeMode: draftRuntime, interactionMode, tags: newChatTags }, message);
       }
       beforeSend?.(target);
       const context = contextSelection(canvas, chips.shapes);
@@ -460,6 +462,7 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
       chips.set(canvas?.getSelectedShapeIds() ?? []);
       const outgoing = { text: message, selection: context, attachments: uploaded };
       const current = client.thread(target);
+      if (!planMode && current?.interactionMode === "plan") await client.dispatch({ type: "thread.interaction-mode.set", threadId: target, interactionMode: "default" });
       if (current?.latestTurn?.state === "running") {
         // Queue waits for the turn's next tool call or its end; Steer joins the turn now. Cmd+Enter flips it once.
         const steer = (followUp === "steer") !== invert;
@@ -580,7 +583,7 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
               onChange={(traits) => setModelSelection({ ...selection, traits: declaredTraits(model, traits) })}
             />
             <RuntimeModePicker mode={runtimeMode} open={modeOpen} onOpenChange={setModeOpen} onChange={setRuntime} />
-            <PlanToggle mode={interactionMode} onToggle={() => setInteraction(interactionMode === "plan" ? "default" : "plan")} />
+            {planMode && <PlanToggle mode={interactionMode} onToggle={() => setInteraction(interactionMode === "plan" ? "default" : "plan")} />}
             {usage && chat && (
               <ContextMeter
                 usage={usage}

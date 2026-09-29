@@ -181,7 +181,7 @@ The composer is one component (spec 03) with two trays. This spec builds its Age
 
 **Slash commands.** `/` at the start of the draft opens the command menu:
 
-- Built-ins: `/model` "Switch response model for this chat" (opens the model picker), `/plan` "Switch this chat into plan mode", `/default` "Switch this chat back to normal build mode".
+- Built-ins: `/model` "Switch response model for this chat" (opens the model picker), and, only while plan mode is on, `/plan` "Switch this chat into plan mode" and `/default` "Switch this chat back to normal build mode".
 - Provider commands from the provider status (spec 07), shown as `/<name>` with their description, else their input hint, else "Run provider command". `/compact` only when it is the whole draft with no attachments.
 - Skills, shown as `/skill:<name>` with their description, else "<scope> skill", and a source badge. Choosing one inserts `$<name> `. Typing `$` opens skills alone ("Run provider skill").
 - Search strips the leading `/` and ranks exact, then prefix, then word-boundary (`-`, `_`, `/`), then substring, then fuzzy matches on the name, with description matches after; ties go built-ins, provider commands, skills. Arrow keys move, Enter or Tab choose (the first item when none is highlighted), Escape closes. Empty: "No matching command."; skills loading: "Searching skills..."; no skills: "No skills found. Try / to browse provider commands."
@@ -203,7 +203,9 @@ The composer is one component (spec 03) with two trays. This spec builds its Age
 
 Full access carries a "Default" badge in the list.
 
-**Plan toggle.** The kit's Toggle reading "Plan" (ruler-pencil icon) in plan mode and "Build" (bot icon) otherwise, `aria-pressed` set in plan mode. Tooltip: "Plan mode. Click to return to normal build mode." or "Default mode. Click to enter plan mode." Shift+Tab in the composer toggles it.
+**Plan mode is off unless set**, as t3code ships it. The `agent.planMode` preference (spec 10's Plan mode (legacy) switch) turns it on. While it is off the tray shows no plan toggle, `/` offers no `/plan` or `/default`, Shift+Tab does nothing, a new chat starts in default mode, and a message into a chat left in plan mode first switches that chat to default mode. Turning it on shows the toggle at once, in the chat's own mode.
+
+**Plan toggle** (plan mode on). The kit's Toggle reading "Plan" (ruler-pencil icon) in plan mode and "Build" (bot icon) otherwise, `aria-pressed` set in plan mode. Tooltip: "Plan mode. Click to return to normal build mode." or "Default mode. Click to enter plan mode." Shift+Tab in the composer toggles it.
 
 **Context window meter.** A 20 px ring in a 28 px ghost button, filled to the share of the context used (from spec 07's token usage), in the primary colour, turning to the error colour above 90%. Its label reads "Context window NN% used" (one decimal under 10%), or "Context window <N> tokens used" with no known maximum. Hovering for 150 ms opens a popover: "Context Window", "NN% · <used>/<max>" (tokens as `N`, `N.Nk`, `Nk`, `N.Nm`), a progress bar, "Total processed <N>", "Context compacts automatically when needed.", and a **Compact context** button that sends the provider's compaction (disabled with "Compaction is unavailable for this provider" when it has none).
 
@@ -299,7 +301,7 @@ The embedded rail is exercised by spec 09's editor tests, since the editor is wh
 19. **Model picker.** Provider tabs with logos, search, the Legacy section, selecting a model updates the chat; after the first turn the other provider's tab is disabled with its tooltip; the picker is disabled mid-turn. Seam: browser.
 20. **Traits picker.** Only the traits the model declares, the Default badge, the trigger label; changing the model drops traits it does not declare. Seam: browser.
 21. **Runtime mode picker.** The four modes with labels, descriptions and icons, Full access marked Default on a new chat, and a change mid-turn is dispatched and shown. Seam: browser.
-22. **Plan toggle.** Plan and Build labels, tooltips, Shift+Tab, and the chat's interaction mode follows. Seam: browser.
+22. **Plan toggle.** Off unless `agent.planMode` is set: no toggle, no `/plan` or `/default`, no Shift+Tab, and a chat left in plan mode sends in default mode. On: Plan and Build labels, tooltips, Shift+Tab, and the chat's interaction mode follows. Seam: browser.
 23. **Context meter.** The percentage formatting, the token formatting and the red threshold. Seam: domain.
 24. **Context meter in the composer.** The ring reflects the scripted usage and the popover shows its lines and Compact context. Seam: browser.
 25. **Queue.** A message sent while a scripted turn runs shows as Queued, is dispatched after the next tool call completes, and Cancel returns it to the composer; Stop returns all queued messages. Seam: browser.

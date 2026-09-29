@@ -15,7 +15,7 @@ import { useActivation, useEngine } from "../context.ts";
 import { loadCatalogue } from "../generate/catalogue.ts";
 import { showNotice } from "../toasts.tsx";
 import { Copy, linkClass, ModelSelect, SectionHeading } from "./fields.tsx";
-import { FOLLOW_UP_KEY, LocalAgents, type FollowUp } from "./LocalAgents.tsx";
+import { FOLLOW_UP_KEY, LocalAgents, PLAN_MODE_KEY, type FollowUp } from "./LocalAgents.tsx";
 import { useSettingsUi, type SettingsUi } from "./settingsUi.ts";
 
 export const KEY_SAVED_MESSAGE = "Key saved. Unframed is ready to generate.";
@@ -86,6 +86,7 @@ export const SettingsDialog = ({ ui }: { readonly ui: SettingsUi }) => {
   const [statuses, setStatuses] = useState<ProviderStatuses>();
   const [checking, setChecking] = useState(false);
   const [followUp, setFollowUp] = useState<FollowUp>("queue");
+  const [planMode, setPlanMode] = useState(false);
   const keyField = useRef<HTMLInputElement>(null);
   const checks = useRef(0);
 
@@ -132,8 +133,9 @@ export const SettingsDialog = ({ ui }: { readonly ui: SettingsUi }) => {
       );
     }
     checkProviders(false);
-    const stop = engine.subscribe("preferences.subscribe", { keys: [FOLLOW_UP_KEY] }, ({ key, value }) => {
+    const stop = engine.subscribe("preferences.subscribe", { keys: [FOLLOW_UP_KEY, PLAN_MODE_KEY] }, ({ key, value }) => {
       if (key === FOLLOW_UP_KEY) setFollowUp(value === "steer" ? "steer" : "queue");
+      if (key === PLAN_MODE_KEY) setPlanMode(value === true);
     });
     return () => {
       live = false;
@@ -217,6 +219,10 @@ export const SettingsDialog = ({ ui }: { readonly ui: SettingsUi }) => {
     }
   };
 
+  const setPlanModePreference = (value: boolean) => {
+    setPlanMode(value);
+    engine.call("preferences.set", { key: PLAN_MODE_KEY, value }).catch((error: unknown) => setBanner({ kind: "error", message: messageOf(error) }));
+  };
   const setFollowUpPreference = (value: FollowUp) => {
     setFollowUp(value);
     engine.call("preferences.set", { key: FOLLOW_UP_KEY, value }).catch((error: unknown) => setBanner({ kind: "error", message: messageOf(error) }));
@@ -361,6 +367,8 @@ export const SettingsDialog = ({ ui }: { readonly ui: SettingsUi }) => {
                 onChange={(field, value) => edit({ [field]: value })}
                 followUp={followUp}
                 onFollowUp={setFollowUpPreference}
+                planMode={planMode}
+                onPlanMode={setPlanModePreference}
               />
             </>
           )}

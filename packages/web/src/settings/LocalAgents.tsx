@@ -6,9 +6,12 @@ import { Input } from "~/components/ui/input";
 import { Label } from "~/components/ui/label";
 import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "~/components/ui/select";
 import { Spinner } from "~/components/ui/spinner";
+import { Switch } from "~/components/ui/switch";
 import { linkClass, SectionHeading } from "./fields.tsx";
 
 export const FOLLOW_UP_KEY = "agent.followUp";
+/** Off unless set, as t3code ships it: plan mode, its toggle, `/plan`, `/default` and Shift+Tab (spec 08). */
+export const PLAN_MODE_KEY = "agent.planMode";
 export type FollowUp = "queue" | "steer";
 
 const FOLLOW_UPS: ReadonlyArray<{ readonly value: FollowUp; readonly label: string; readonly hint: string }> = [
@@ -69,11 +72,14 @@ export interface LocalAgentsProps {
   readonly onChange: (field: "claudePath" | "codexPath" | "claudeConfigDir", value: string) => void;
   readonly followUp: FollowUp;
   readonly onFollowUp: (value: FollowUp) => void;
+  readonly planMode: boolean;
+  readonly onPlanMode: (value: boolean) => void;
 }
 
 export const LocalAgents = (props: LocalAgentsProps) => {
   const configId = useId();
   const followUpId = useId();
+  const planModeId = useId();
   return (
     <section className="flex flex-col gap-3 border-t pt-4" aria-label="Local agents">
       <SectionHeading
@@ -136,6 +142,13 @@ export const LocalAgents = (props: LocalAgentsProps) => {
             ))}
           </SelectPopup>
         </Select>
+      </div>
+      <div className="flex items-center justify-between gap-4">
+        <div className="flex flex-col gap-0.5">
+          <Label htmlFor={planModeId}>Plan mode (legacy)</Label>
+          <span className="text-xs text-muted-foreground">Restore Build/Plan, /plan, /default, and Shift+Tab. Off uses build mode.</span>
+        </div>
+        <Switch id={planModeId} checked={props.planMode} onCheckedChange={props.onPlanMode} />
       </div>
     </section>
   );

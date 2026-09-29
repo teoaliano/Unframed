@@ -86,6 +86,8 @@ export class ChatClient {
   private readonly handoffs = new Map<string, Handoff[]>();
   private followUpValue: "queue" | "steer" = "queue";
   private followUpWatch: (() => void) | undefined;
+  private planModeValue = false;
+  private planModeWatch: (() => void) | undefined;
   private readonly stopShell: () => void;
 
   constructor(engine: EngineConnection, project: string) {
@@ -97,6 +99,7 @@ export class ChatClient {
   dispose(): void {
     this.stopShell();
     this.followUpWatch?.();
+    this.planModeWatch?.();
     for (const entry of this.threads.values()) entry.stop();
     this.threads.clear();
   }
@@ -362,6 +365,18 @@ export class ChatClient {
     return this.followUpValue;
   }
 
+  /** The Plan mode preference (spec 10 shows its control): off unless set, as in t3code. */
+  get planMode(): boolean {
+    if (!this.planModeWatch) {
+      this.planModeWatch = this.engine.subscribe("preferences.subscribe", { keys: ["agent.planMode"] }, (change) => {
+        if (change.key !== "agent.planMode") return;
+        this.planModeValue = change.value === true;
+        this.changed("ui");
+      });
+    }
+    return this.planModeValue;
+  }
+
   // -------------------------------------------------------------------------------------
   // The rail's own state.
 
@@ -467,6 +482,12 @@ export const useQueuedThreads = (client: ChatClient): string[] => {
 
 /** Changes whenever a draft is handed to a composer. */
 export const useHandoffVersion = (client: ChatClient): number => useKey(client, "handoff");
+
+/** The Plan mode preference, live. */
+export const usePlanMode = (client: ChatClient): boolean => {
+  useKey(client, "ui");
+  return client.planMode;
+};
 
 /** The Follow-up behavior preference, live. */
 export const useFollowUp = (client: ChatClient): "queue" | "steer" => {

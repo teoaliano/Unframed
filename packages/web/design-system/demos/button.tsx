@@ -1,4 +1,4 @@
-import { Plus, Sparkles, Trash2 } from "lucide-react";
+import { ChevronLeft, ChevronRight, Plus, Sparkles, X } from "lucide-react";
 import { Button, InlineButton } from "~/components/ui/button";
 import { Spinner } from "~/components/ui/spinner";
 import { Demos, Row, Section } from "../frame.tsx";
@@ -23,15 +23,27 @@ export default function ButtonDemo() {
             </Button>
           </Row>
         ))}
-        <Row label="overlay, media-*">
+        <Row label="overlay, media-close">
           <div className="flex gap-2 rounded-md bg-muted p-2">
             <Button variant="overlay">Overlay</Button>
             <Button variant="media-close" size="icon-sm" aria-label="Close">
-              <Trash2 />
+              <X />
             </Button>
-            <Button variant="media-navigation" size="icon-sm" aria-label="Next">
-              <Plus />
-            </Button>
+          </div>
+        </Row>
+        <Row label="media-navigation">
+          {/* The variant places itself at the vertical middle of its positioned parent: an image viewer's frame. */}
+          <div className="flex h-28 w-64 justify-between rounded-md bg-muted-foreground px-1">
+            <div className="relative h-full w-8">
+              <Button variant="media-navigation" size="icon-sm" aria-label="Previous">
+                <ChevronLeft />
+              </Button>
+            </div>
+            <div className="relative h-full w-8">
+              <Button variant="media-navigation" size="icon-sm" aria-label="Next">
+                <ChevronRight />
+              </Button>
+            </div>
           </div>
         </Row>
       </Section>

@@ -34,8 +34,10 @@ export const slashItems = (input: {
   readonly provider: AgentProvider;
   /** The draft holds nothing but this command, and no attachments. */
   readonly wholeDraft: boolean;
+  /** Plan mode is on: `/plan` and `/default` are offered. */
+  readonly planMode: boolean;
 }): CommandItem[] => {
-  const builtIns: CommandItem[] = BUILT_INS.map((item) => ({ ...item, key: `builtin:${item.name}`, label: `/${item.name}` }));
+  const builtIns: CommandItem[] = BUILT_INS.filter((item) => input.planMode || item.name === "model").map((item) => ({ ...item, key: `builtin:${item.name}`, label: `/${item.name}` }));
   const commands: CommandItem[] = (input.status?.commands ?? [])
     .filter((command) => command.name !== "compact" || input.wholeDraft)
     .map((command) => ({

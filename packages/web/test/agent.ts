@@ -125,6 +125,11 @@ export const artifactColumn = (items: ReadonlyArray<{ id: string; kind?: "page" 
     meta: { ref: String(700 + index) },
   }));
 
+/** Turns on plan mode, which is off unless set, as in t3code (spec 08). Call before opening the canvas. */
+export const enablePlanMode = async (engine: TestEngine): Promise<void> => {
+  await (await rpcOf(engine)).call("preferences.set", { key: "agent.planMode", value: true });
+};
+
 /** Dispatches one chat command as the web would. */
 export const dispatch = async (engine: TestEngine, command: Record<string, unknown>, project = "default"): Promise<{ sequence: number }> =>
   (await rpcOf(engine)).call("orchestration.dispatchCommand", { commandId: crypto.randomUUID(), projectId: project, ...command } as never);
