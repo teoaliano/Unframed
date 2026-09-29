@@ -2,7 +2,7 @@ import { readFileSync, realpathSync } from "node:fs";
 import { join } from "node:path";
 import { openRequests } from "@unframed/domain";
 import { describe, expect, it } from "vitest";
-import { startAgentEngine } from "./agent.ts";
+import { startAgentEngine, UNFRAMED_TOOLS } from "./agent.ts";
 import { fakeCodexAppServer, fakeCodexMessages, fakeShell } from "./agentFakes.ts";
 import { makeTempDir } from "./harness.ts";
 
@@ -31,8 +31,8 @@ describe("Codex runs a chat", () => {
     await agent.dispatch({ type: "thread.approval.respond", threadId: chatId, requestId: request.requestId, decision: "accept" });
     const chat = await agent.settled(chatId, 1);
     expect(chat.latestTurn?.state).toBe("completed");
-    expect(chat.messages.at(-1)).toMatchObject({ role: "assistant", text: "Tools: canvas_read, canvas_write. Decision: accept.", streaming: false });
-    expect(chat.activities.find((activity) => activity.kind === "session.configured")?.payload).toMatchObject({ tools: ["mcp__unframed__canvas_read", "mcp__unframed__canvas_write"] });
+    expect(chat.messages.at(-1)).toMatchObject({ role: "assistant", text: `Tools: ${UNFRAMED_TOOLS.join(", ")}. Decision: accept.`, streaming: false });
+    expect(chat.activities.find((activity) => activity.kind === "session.configured")?.payload).toMatchObject({ tools: UNFRAMED_TOOLS.map((name) => `mcp__unframed__${name}`) });
 
     const log = await fakeCodexMessages(messages);
     const start = log.find((entry) => entry.start === true);
@@ -59,7 +59,7 @@ describe("Codex runs a chat", () => {
     const second = openRequests(next, "approval")[0]!.payload as { requestId: string };
     await agent.dispatch({ type: "thread.approval.respond", threadId: chatId, requestId: second.requestId, decision: "decline" });
     const resumed = await agent.settled(chatId, 2);
-    expect(resumed.messages.at(-1)?.text).toBe("Tools: canvas_read, canvas_write. Decision: decline.");
+    expect(resumed.messages.at(-1)?.text).toBe(`Tools: ${UNFRAMED_TOOLS.join(", ")}. Decision: decline.`);
     const after = (await fakeCodexMessages(messages)).flatMap((entry) => (entry.message ? [entry.message] : []));
     const resume = after.find((message) => message.method === "thread/resume");
     expect(resume.params).toMatchObject({ threadId: turnStart.params.threadId, excludeTurns: true, approvalPolicy: "never", sandbox: "danger-full-access" });
@@ -94,5 +94,27 @@ describe("Codex runs a chat", () => {
       body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/list", params: {} }),
     });
     expect(listed.status).toBe(401);
+  });
+
+  it("fails the turn before the model speaks when the session came up without one of the artifact tools, naming it", async () => {
+    const dir = await makeTempDir("unframed-codex-");
+    const codex = await fakeCodexAppServer(join(dir, "bin"));
+    const shell = await fakeShell(join(dir, "shell"));
+    const agent = await startAgentEngine({
+      dotenv: `CODEX_PATH=${codex}\nCLAUDE_PATH=${join(dir, "none")}\n`,
+      env: {
+        UNFRAMED_TEST_AGENT_SCRIPT: undefined,
+        SHELL: shell,
+        FAKE_SHELL_PATH: "",
+        FAKE_CODEX_MESSAGES: join(dir, "messages.log"),
+        FAKE_CODEX_THREADS: join(dir, "threads.log"),
+        FAKE_CODEX_DROP_TOOL: "motion_read",
+      },
+    });
+    const chatId = await agent.createChat({ modelSelection: { provider: "codex", model: "gpt-6", traits: {} } });
+    await agent.send(chatId, "clean the build folder");
+    const chat = await agent.settled(chatId, 1);
+    expect(chat.latestTurn?.state).toBe("error");
+    expect(chat.session?.lastError).toBe("The agent session started without the canvas tools (mcp__unframed__motion_read). This is a bug in Unframed, not your setup.");
   });
 });

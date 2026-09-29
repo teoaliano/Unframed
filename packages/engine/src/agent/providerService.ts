@@ -24,6 +24,8 @@ export interface ProviderServiceOptions {
   readonly runEnvironment: (provider: AgentProvider) => Promise<RunEnvironment>;
   /** Called when a quiet session closed itself. */
   readonly onIdleClose: (project: string, chatId: string) => void;
+  /** Called whenever a session closes, for whatever it held open. */
+  readonly onClosed?: (project: string, chatId: string) => void;
 }
 
 /**
@@ -186,6 +188,7 @@ export class ProviderService {
       // The project database may already be closed.
     }
     await session.adapter.stopSession(chatId).catch(() => undefined);
+    this.options.onClosed?.(session.project, chatId);
   }
 
   /** Closes every session of a project, for the open-project registry's closer. */

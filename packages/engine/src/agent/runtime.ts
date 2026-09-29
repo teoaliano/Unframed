@@ -45,7 +45,8 @@ import { AttachmentStore } from "./attachmentStore.ts";
 import { CanvasTools } from "./canvasTools.ts";
 import { ChatEngine, CommandRejected } from "./chatEngine.ts";
 import type { RunEnvironment } from "./detection.ts";
-import { McpTokens, McpToolRegistry, MCP_PATH } from "./mcp.ts";
+import { McpTokens, McpToolRegistry, MCP_PATH, type McpTool } from "./mcp.ts";
+import type { AgentToolContext } from "../artifacts/artifactTools.ts";
 import { ProviderService, SESSION_IDLE_MS } from "./providerService.ts";
 import { writeTurnSidecar } from "./sidecar.ts";
 import { planRevert, TurnChanges } from "./turnChanges.ts";
@@ -72,6 +73,10 @@ export interface AgentRuntimeDeps {
   readonly defaultModel: (provider: AgentProvider) => Promise<string | undefined>;
   /** Builds the real provider adapters; the scripted one replaces both under the test variable. */
   readonly realAdapter: (provider: AgentProvider, context: AdapterContext) => ProviderAdapter;
+  /** The tools other specs add to the Unframed MCP server (spec 09: the artifact and preview tools). */
+  readonly extraTools?: (context: AgentToolContext) => ReadonlyArray<McpTool>;
+  /** Told when a chat's provider session closes, for whatever it held open (spec 09's preview tabs). */
+  readonly onSessionClosed?: (project: string, chatId: string) => void;
 }
 
 /** A dispatch refusal the RPC layer answers as spec 01's error. */
@@ -139,15 +144,21 @@ export class AgentRuntime {
   constructor(deps: AgentRuntimeDeps) {
     this.deps = deps;
     this.attachments = new AttachmentStore(deps.dataDir, deps.uploadUrlTtlMs);
-    const tools = new CanvasTools({
+    const context: AgentToolContext = {
       read: (project) => deps.rooms.read(project),
       apply: (project, change, origin) => deps.rooms.apply(project, change, origin),
       folder: async (project) => (await this.project(project)).folder,
       turnChanges: async (project) => (await this.project(project)).turnChanges,
       chatTurn: (project, chatId) => this.chatTurn(project, chatId),
       tag: (project, chatId, ids) => void this.tag(project, chatId, ids),
-    });
-    for (const tool of tools.tools()) this.registry.register(tool);
+      activity: (project, chatId, activity) =>
+        void this.project(project).then(
+          (agent) => this.activity(agent, chatId, activity),
+          () => undefined,
+        ),
+    };
+    for (const tool of new CanvasTools(context).tools()) this.registry.register(tool);
+    for (const tool of deps.extraTools?.(context) ?? []) this.registry.register(tool);
     this.providers = new ProviderService({
       adapterFor: (provider) => this.adapterFor(provider),
       tokens: this.tokens,
@@ -156,6 +167,7 @@ export class AgentRuntime {
       attachmentsDir: this.attachments.folder,
       runEnvironment: deps.runEnvironment,
       onIdleClose: (project, chatId) => void this.idleClosed(project, chatId),
+      ...(deps.onSessionClosed === undefined ? {} : { onClosed: deps.onSessionClosed }),
     });
   }
 
@@ -334,6 +346,7 @@ export class AgentRuntime {
     const latestUser = [...(chat?.messages ?? [])].reverse().find((message) => message.role === "user");
     return {
       turnCount: chat?.latestTurn?.state === "running" ? chat.latestTurn.turnCount : active?.turnCount,
+      turnId: chat?.latestTurn?.state === "running" ? chat.latestTurn.turnId : active?.turnId,
       interactionMode: active?.interactionMode ?? chat?.interactionMode ?? "default",
       selection: latestUser?.context?.selection ?? [],
     };

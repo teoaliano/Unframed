@@ -14,6 +14,9 @@ import type { Subscription, TestRpcClient } from "./rpcClient.ts";
 export const FIXTURES = join(repoRoot, "assets", "fixtures");
 export const PROJECT = "board";
 
+/** Every tool the Unframed MCP server registers, in order: spec 07's two canvas tools, then spec 09's. */
+export const UNFRAMED_TOOLS = ["canvas_read", "canvas_write", "page_write", "page_read", "motion_write", "motion_read"];
+
 type Distributive<T> = T extends unknown ? Omit<T, "commandId" | "projectId"> : never;
 export type CommandInput = Distributive<ClientChatCommand>;
 

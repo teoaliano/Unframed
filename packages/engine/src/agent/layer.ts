@@ -19,6 +19,7 @@ import { realAdapter } from "./adapters/real.ts";
 import { ProviderDetection } from "./detection.ts";
 import { mcpRoute } from "./mcp.ts";
 import { AgentRuntime, DispatchError } from "./runtime.ts";
+import { ArtifactTools } from "../artifacts/artifactTools.ts";
 import { openShell, openThread } from "./subscriptions.ts";
 
 /**
@@ -54,6 +55,7 @@ export const agentsLayer = Layer.effect(
     const openProjects = yield* OpenProjects;
     const rooms = yield* CanvasRooms;
     const detection = yield* ProviderDetection;
+    const { previewPort } = yield* settings.view;
     const context = yield* Effect.context<never>();
     const run = <A, E>(effect: Effect.Effect<A, E>): Promise<A> =>
       Effect.runPromiseWith(context)(effect).catch((error: unknown) => {
@@ -81,6 +83,7 @@ export const agentsLayer = Layer.effect(
       runEnvironment: (provider) => run(detection.runEnvironment(provider)),
       defaultModel: async (provider) => defaultModel((await run(detection.statuses({})))[provider].models ?? []),
       realAdapter,
+      extraTools: (tools) => new ArtifactTools(tools, () => previewPort).tools(),
     });
 
     const opened = (projectId: string) =>
