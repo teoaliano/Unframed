@@ -7,13 +7,13 @@ import { artifactTitle, isArtifactKind, type ArtifactKind, type DialsAnnouncemen
 import { AppWindow, ArrowLeft, Clapperboard, ExternalLink } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useEditor, useValue, type TLShapeId } from "tldraw";
+import { Button } from "~/components/ui/button";
 import { AgentRail } from "../../agent/rail/AgentRail.tsx";
 import { Tip } from "../../chrome/ui.tsx";
 import { useCanvasProject } from "../../context.ts";
 import { ArtifactFrame, urlOf } from "../ArtifactFrame.tsx";
 import { previewPort } from "../state.ts";
-import { Parameters } from "./Parameters.tsx";
-import "./editor.css";
+import { COLUMN, ColumnHeader, Parameters } from "./Parameters.tsx";
 
 export interface ArtifactEditorProps {
   readonly shapeId: TLShapeId;
@@ -91,37 +91,46 @@ export const ArtifactEditor = ({ shapeId, onClose, onOpen }: ArtifactEditorProps
   const Icon = facts.kind === "page" ? AppWindow : Clapperboard;
 
   return (
-    <div className="unframed-artifact-editor" {...KEEP_FROM_CANVAS}>
-      <section className="unframed-artifact-editor__column unframed-artifact-editor__rail">
+    // It stops above tldraw's watermark band (8 px from the corner, 36 px tall), which stays uncovered.
+    <div
+      data-testid="artifact-editor"
+      className="pointer-events-auto absolute inset-x-0 top-0 bottom-13 z-[700] box-border grid grid-cols-[360px_minmax(0,1fr)_320px] gap-3 bg-background p-3 font-sans text-foreground"
+      {...KEEP_FROM_CANVAS}
+    >
+      <section data-editor-column="rail" className={COLUMN}>
         <AgentRail project={project} embedded filterTo={[shapeId]} onOpenEditor={onOpen} />
       </section>
-      <section className="unframed-artifact-editor__column unframed-artifact-editor__centre" aria-label={`Editing ${title}`}>
-        <header className="unframed-artifact-editor__header">
+      <section data-editor-column="centre" className={COLUMN} aria-label={`Editing ${title}`}>
+        <ColumnHeader>
           <Tip label="Back to canvas (Esc)">
-            <button type="button" className="unframed-artifact-editor__icon" aria-label="Back to canvas" onClick={onClose}>
-              <ArrowLeft size={16} aria-hidden />
-            </button>
+            <Button variant="ghost" size="icon" aria-label="Back to canvas" onClick={onClose}>
+              <ArrowLeft aria-hidden />
+            </Button>
           </Tip>
-          <Icon size={16} aria-hidden className="unframed-artifact-editor__kind-icon" />
-          <span className="unframed-artifact-editor__title">{title}</span>
-          <span className="unframed-artifact-editor__kind">{facts.kind}</span>
+          <Icon aria-hidden className="size-4 shrink-0 text-muted-foreground" />
+          <span data-testid="artifact-editor-title" className="truncate text-sm font-semibold">
+            {title}
+          </span>
+          <span data-testid="artifact-editor-kind" className="text-sm text-muted-foreground">
+            {facts.kind}
+          </span>
           <span className="flex-1" />
           {facts.file !== "" && port !== undefined && (
             <Tip label="Open in a new tab">
-              <button
-                type="button"
-                className="unframed-artifact-editor__icon"
+              <Button
+                variant="ghost"
+                size="icon"
                 aria-label="Open in a new tab"
                 onClick={() => window.open(urlOf(project, facts.kind, facts.file, port), "_blank", "noopener,noreferrer")}
               >
-                <ExternalLink size={16} aria-hidden />
-              </button>
+                <ExternalLink aria-hidden />
+              </Button>
             </Tip>
           )}
-        </header>
-        <div className="unframed-artifact-editor__body">
+        </ColumnHeader>
+        <div className="relative flex min-h-0 flex-1">
           {facts.file === "" ? (
-            <p className="unframed-artifact-editor__empty">{`This ${facts.kind} has no file yet. Ask the agent to write one.`}</p>
+            <p className="m-auto p-6 text-center text-sm text-muted-foreground">{`This ${facts.kind} has no file yet. Ask the agent to write one.`}</p>
           ) : port === undefined ? null : (
             <ArtifactFrame
               key={facts.file}
@@ -138,7 +147,7 @@ export const ArtifactEditor = ({ shapeId, onClose, onOpen }: ArtifactEditorProps
           )}
         </div>
       </section>
-      <section className="unframed-artifact-editor__column unframed-artifact-editor__parameters">
+      <section data-editor-column="parameters" className={COLUMN}>
         <Parameters
           key={facts.file}
           shapeId={shapeId}

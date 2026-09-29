@@ -6,9 +6,10 @@ import { expect, test } from "./agent.ts";
 import { clickShape } from "./generation.ts";
 import { putRecords } from "./media.ts";
 import { dialsPage, filledArtifact, insideComposition, insideFrame, writeBridge, writeProjectFile } from "./artifacts.ts";
+import { inBothSchemes, styleOf, tokenColor } from "./kit.ts";
 
-const editor = (page: Page) => page.locator(".unframed-artifact-editor");
-const editorFrame = (page: Page): FrameLocator => editor(page).frameLocator("iframe.unframed-artifact__frame");
+const editor = (page: Page) => page.getByTestId("artifact-editor");
+const editorFrame = (page: Page): FrameLocator => editor(page).frameLocator("iframe[data-artifact-frame]");
 const shown = async (frame: FrameLocator) => JSON.parse((await frame.locator("#values").textContent()) ?? "null");
 
 const openEditor = async (page: Page, id: string, name: string) => {
@@ -151,4 +152,34 @@ test("a new version that drops or retypes a parameter keeps the rest and rebuild
   await expect(dials.getByText("Caption")).toHaveCount(0);
   await expect(dials.getByLabel("Accent color value")).toHaveValue("#ff0000");
   await expect.poll(() => shown(editorFrame(page))).toEqual({ accent: "#ff0000", size: "big", glow: true });
+});
+
+test("the dials panel stays dark in both schemes, in the kit's dark tokens", async ({ page, agent }) => {
+  await openCanvas(page, agent);
+  await writeBridge(agent);
+  await filledArtifact(agent, { id: "shape:tuned", kind: "page", ref: "150", at: { x: -520, y: -40 }, size: { w: 300, h: 200 }, title: "Tuned", html: dialsPage({ size: [12, 8, 40] }) });
+  await expect(shapeOnScreen(page, "shape:tuned")).toBeVisible();
+  await openEditor(page, "shape:tuned", "Tuned");
+  const dials = editor(page).getByTestId("artifact-dials");
+  // DialKit's own class names, as tldraw's are in the tldraw tests: they are the library's, not ours.
+  const panel = dials.locator(".dialkit-panel-inner");
+  const title = dials.locator(".dialkit-folder-title-root");
+  const label = dials.locator(".dialkit-slider-label");
+  const track = dials.locator(".dialkit-slider");
+  await expect(title).toHaveText("Look");
+
+  await page.emulateMedia({ colorScheme: "dark" });
+  await expect(page.locator("html")).toHaveAttribute("data-unframed-theme", "dark");
+  const dark = { card: await tokenColor(page, "--card"), foreground: await tokenColor(page, "--foreground"), muted: await tokenColor(page, "--muted-foreground"), accent: await tokenColor(page, "--accent") };
+  await page.emulateMedia({ colorScheme: "light" });
+  await expect(page.locator("html")).toHaveAttribute("data-unframed-theme", "light");
+  expect(await tokenColor(page, "--card")).not.toBe(dark.card);
+
+  await inBothSchemes(page, async () => {
+    await expect.poll(() => styleOf(panel, "background-color")).toBe(dark.card);
+    expect(await styleOf(track, "background-color")).toBe(dark.accent);
+    await expect.poll(() => styleOf(title, "color")).toBe(dark.foreground);
+    await expect.poll(() => styleOf(label, "color")).toBe(dark.muted);
+    expect(await styleOf(panel, "font-family")).toBe(await styleOf(page.locator("body"), "font-family"));
+  });
 });

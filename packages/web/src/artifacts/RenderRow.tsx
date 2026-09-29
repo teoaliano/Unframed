@@ -3,6 +3,8 @@ import { artifactTitle } from "@unframed/domain";
 import { Clapperboard } from "lucide-react";
 import { useEffect, useRef, useState, type SyntheticEvent } from "react";
 import { useEditor, useValue, type TLShape, type TLShapeId } from "tldraw";
+import { Button } from "~/components/ui/button";
+import { Spinner } from "~/components/ui/spinner";
 import { useCanvasProject, useEngine } from "../context.ts";
 import { artifactsOf, setProblem } from "./state.ts";
 
@@ -76,17 +78,18 @@ export const RenderRow = ({ shape }: { readonly shape: TLShape }) => {
 
   const progress = status?.progress ?? 0;
   return (
-    <div className="unframed-artifact-render" style={{ top: props.h, width: props.w }} {...events}>
-      <button type="button" className="unframed-artifact-render__button" disabled={rendering} onClick={() => void start()} {...events}>
-        <Clapperboard size={14} aria-hidden />
+    <div className="pointer-events-auto absolute left-0 mt-1 flex h-7.5 items-center gap-2 font-sans text-xs text-muted-foreground" style={{ top: props.h, width: props.w }} {...events}>
+      <Button variant="outline" size="xs" disabled={rendering} onClick={() => void start()} {...events}>
+        <Clapperboard aria-hidden />
         Render
-      </button>
+      </Button>
       {rendering && (
-        <div className="unframed-artifact-render__progress" role="status">
-          <div className="unframed-artifact-render__bar" aria-hidden>
-            <div className="unframed-artifact-render__fill" style={{ width: `${progress}%` }} />
+        <div role="status" data-testid="render-progress" className="flex min-w-0 flex-1 items-center gap-2">
+          <Spinner size="xs" aria-hidden />
+          <div aria-hidden className="h-1 w-18 shrink-0 overflow-hidden rounded-full bg-input">
+            <div data-testid="render-fill" className="h-full rounded-full bg-primary transition-[width] duration-200 ease-out" style={{ width: `${progress}%` }} />
           </div>
-          <span className="unframed-artifact-render__text">{status?.message ? `${progress}% · ${status.message}` : `${progress}%`}</span>
+          <span className="truncate tabular-nums">{status?.message ? `${progress}% · ${status.message}` : `${progress}%`}</span>
         </div>
       )}
     </div>
@@ -99,7 +102,7 @@ export const ProblemLine = ({ shapeId, offset, width }: { readonly shapeId: TLSh
   const problem = useValue("artifact problem", () => artifactsOf(editor).problems.get().get(shapeId), [editor, shapeId]);
   if (problem === undefined) return null;
   return (
-    <p role="alert" className="unframed-artifact-problem" style={{ top: offset, width }}>
+    <p role="alert" className="absolute left-0 mt-1.5 mb-0 font-sans text-xs leading-snug text-destructive-foreground" style={{ top: offset, width }}>
       {problem}
     </p>
   );

@@ -6,6 +6,7 @@ import type { TestEngine } from "../../engine/test/engineProcess.ts";
 import { openCanvas, roomRecords, shapeOnScreen, waitForRoom } from "./canvas.ts";
 import { expect, startHostedEngine, test } from "./fixtures.ts";
 import { filledArtifact } from "./artifacts.ts";
+import { expectSlot, expectToken } from "./kit.ts";
 
 const COMPOSITION = '<div id="root" data-composition-id="main" data-start="0" data-duration="2" data-width="640" data-height="360"><div id="a" class="clip" data-start="0" data-duration="2">Intro</div></div>';
 
@@ -40,7 +41,13 @@ withRenderer("Render puts a placeholder beside the motion at once, shows the pro
   await expect(shapeOnScreen(page, placeholder.id).getByText("Generating…")).toBeVisible();
 
   await expect(shape.getByRole("button", { name: "Render" })).toBeDisabled();
-  await expect(shape.locator(".unframed-artifact-render__text")).toHaveText(/^\d+% · (Capturing frames|Encoding|Finishing)$/, { timeout: 5000 });
+  await expectSlot(shape.getByRole("button", { name: "Render" }), "button");
+  // The kit's progress look: a spinner, a thin bar filling in the primary colour, the muted percentage.
+  const progress = shape.getByTestId("render-progress");
+  await expect(progress).toHaveText(/^\d+% · (Capturing frames|Encoding|Finishing)$/, { timeout: 5000 });
+  await expect(progress.locator("svg[aria-label='Loading']")).toHaveCount(1);
+  await expectToken(progress.getByTestId("render-fill"), "background-color", "--primary");
+  await expectToken(progress, "color", "--color-muted-foreground");
   const filled = await waitForRoom(engine, "default", (records) => {
     const video = records.find((record) => record.id === placeholder.id);
     return video?.props.assetId ? video : undefined;
@@ -49,7 +56,7 @@ withRenderer("Render puts a placeholder beside the motion at once, shows the pro
   const asset = (await roomRecords(engine, "default")).find((record) => record.id === filled.props.assetId)!;
   expect(asset.props.name).toMatch(/^\d+-intro\.mp4$/);
   await expect(shape.getByRole("button", { name: "Render" })).toBeEnabled();
-  await expect(shape.locator(".unframed-artifact-render__progress")).toHaveCount(0);
+  await expect(shape.getByTestId("render-progress")).toHaveCount(0);
   await expect(shapeOnScreen(page, filled.id).locator("video")).toHaveCount(1);
 });
 
@@ -61,6 +68,7 @@ withRenderer.describe("a render that fails", () => {
     await shape.getByRole("button", { name: "Render" }).click();
     await waitForRoom(engine, "default", (records) => placeholderOf(records));
     await expect(shape.getByRole("alert")).toHaveText("Stub render failed.", { timeout: 10_000 });
+    await expectToken(shape.getByRole("alert"), "color", "--color-destructive-foreground");
     await expect.poll(async () => placeholderOf(await roomRecords(engine, "default"))).toBeUndefined();
     await expect(shape.getByRole("button", { name: "Render" })).toBeEnabled();
     await shape.getByRole("button", { name: "Render" }).click();
