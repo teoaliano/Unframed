@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@import "./tldraw.css";
 @import "./vendors.css";
 @import "./legacy.css";
 

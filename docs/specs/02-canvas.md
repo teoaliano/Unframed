@@ -353,7 +353,7 @@ A newly created canvas (a new project, or the `default` project on a fresh insta
 
 ### Theme
 
-Tailwind with t3code's default light and dark tokens (spec 12), following the OS setting (`prefers-color-scheme`). tldraw's colour scheme follows the same setting. Every theme change sets `data-unframed-theme` on `<html>` and `--unframed-text-secondary` to the resolved muted foreground in the same frame (spec 01's hooks). The canvas background is `--background`, the same as the body. Every colour comes from a token; a variant is a `color-mix` of tokens, never a new hex value in a component. Base UI supplies the dialog, menu, tooltip and toast primitives through spec 12's UI kit.
+Tailwind with t3code's default light and dark tokens (spec 12), following the OS setting (`prefers-color-scheme`). tldraw's colour scheme follows the same setting, and spec 12's tldraw theme adapter maps tldraw's UI variables (panels, text, selection, radii, shadows, the UI font) onto the kit's tokens. Every theme change sets `data-unframed-theme` on `<html>` and `--unframed-text-secondary` to the resolved muted foreground in the same frame (spec 01's hooks). The canvas background is `--background`, the same as the body. Every colour comes from a token; a variant is a `color-mix` of tokens, never a new hex value in a component. Base UI supplies the dialog, menu, tooltip and toast primitives through spec 12's UI kit.
 
 ### Toasts
 
