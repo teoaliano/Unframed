@@ -3,7 +3,7 @@ import { openCanvas, shapeOnScreen, toast } from "./canvas.ts";
 import { clickShape, composer, toolbar } from "./generation.ts";
 import { pngBytes } from "./images.ts";
 import { filledMedia, putRecords } from "./media.ts";
-import { artifactColumn, expect, onlyChat, openRail, promptBox, rail, rpcOf, test } from "./agent.ts";
+import { artifactColumn, expect, onlyChat, openRail, promptBox, rail, rpcOf, scriptFolder, startAgentEngine, test } from "./agent.ts";
 import type { TestEngine } from "../../engine/test/engineProcess.ts";
 
 /** A page and two filled images, left of the starter prompts. */
@@ -249,4 +249,50 @@ test("Cmd+S stashes the draft and clears it; the badge's menu restores and delet
       return (values["agent.stash.default"] as Array<{ text: string }> | undefined)?.map((entry) => entry.text);
     })
     .toEqual(Array.from({ length: 20 }, (_, index) => `idea ${21 - index}`));
+});
+
+test("ArrowUp in an empty box recalls this chat's earlier messages, newest first; ArrowDown past the newest clears", async ({ page }) => {
+  const agent = await startAgentEngine({ script: await scriptFolder({ history: { when: "^history", turns: [{ text: "One." }, { text: "Two." }, { text: "Three." }] } }) });
+  try {
+    await openCanvas(page, agent);
+    const panel = await openRail(page);
+    const box = promptBox(panel);
+    const lines = panel.locator(".ProseMirror p");
+    await box.click();
+    for (const [index, message] of ["history one", "history two\nsecond line", "history three"].entries()) {
+      for (const [at, line] of message.split("\n").entries()) {
+        if (at > 0) await page.keyboard.press("Shift+Enter");
+        await page.keyboard.type(line);
+      }
+      await page.keyboard.press("Enter");
+      await expect(panel.locator("[data-role='assistant']")).toHaveCount(index + 1);
+    }
+
+    await page.keyboard.press("ArrowUp");
+    await expect(lines).toHaveText(["history three"]);
+    await page.keyboard.press("ArrowUp");
+    await expect(lines).toHaveText(["history two", "second line"]);
+    // The caret is on the last line: ArrowUp moves it to the first before it recalls again.
+    await page.keyboard.press("ArrowUp");
+    await expect(lines).toHaveText(["history two", "second line"]);
+    await page.keyboard.press("ArrowUp");
+    await expect(lines).toHaveText(["history one"]);
+    await page.keyboard.press("ArrowUp");
+    await expect(lines).toHaveText(["history one"]);
+
+    await page.keyboard.press("ArrowDown");
+    await expect(lines).toHaveText(["history two", "second line"]);
+    await page.keyboard.press("ArrowDown");
+    await expect(lines).toHaveText(["history three"]);
+    await page.keyboard.press("ArrowDown");
+    await expect(box).toHaveText("");
+
+    // Editing a recalled message ends the recall: the arrows move the caret again.
+    await page.keyboard.press("ArrowUp");
+    await page.keyboard.type(" edited");
+    await page.keyboard.press("ArrowUp");
+    await expect(lines).toHaveText(["history three edited"]);
+  } finally {
+    await agent.dispose();
+  }
 });

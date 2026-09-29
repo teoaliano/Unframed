@@ -217,13 +217,12 @@ export const PromptEditor = ({ placeholder, label, onChange, onTrigger, onKey, o
       },
       caretLine: () => {
         if (!editor) return { first: true, last: true };
-        const { $from } = editor.state.selection;
-        const index = $from.index(0);
-        const count = editor.state.doc.childCount;
-        const parentText = $from.parent.textContent;
-        const before = parentText.slice(0, $from.parentOffset);
-        const after = parentText.slice($from.parentOffset);
-        return { first: index === 0 && !before.includes("\n"), last: index === count - 1 && !after.includes("\n") };
+        // Read from the DOM: the editor state catches up with a caret move only after the key that made it.
+        const root = editor.view.dom;
+        let node = window.getSelection()?.anchorNode ?? null;
+        while (node && node.parentNode !== root) node = node.parentNode;
+        if (!node) return { first: true, last: true };
+        return { first: node === root.firstChild, last: node === root.lastChild };
       },
     }),
     [editor],

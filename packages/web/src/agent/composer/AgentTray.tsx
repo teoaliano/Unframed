@@ -262,6 +262,43 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
   }, [onMenuOpen, menu]);
   useEffect(() => () => onMenuOpen?.("agent-menu", false), [onMenuOpen]);
 
+  // ArrowUp in an empty box recalls this chat's earlier messages, newest first; editing one ends the recall.
+  const recall = useRef<{ index: number; text: string } | undefined>(undefined);
+  useEffect(() => {
+    recall.current = undefined;
+  }, [chatId]);
+  const history = (direction: "up" | "down"): boolean => {
+    const earlier = (chat?.messages ?? []).filter((message) => message.role === "user").map((message) => message.text).reverse();
+    const current = box.current?.text() ?? "";
+    const recalled = recall.current;
+    if (recalled && recalled.text !== current) recall.current = undefined;
+    const line = box.current?.caretLine() ?? { first: true, last: true };
+    if (!recall.current) {
+      if (direction === "down" || current !== "" || earlier.length === 0) return false;
+      recall.current = { index: 0, text: earlier[0]! };
+      box.current?.setText(earlier[0]!);
+      return true;
+    }
+    if (direction === "up") {
+      if (!line.first) return false;
+      const index = recall.current.index + 1;
+      if (index >= earlier.length) return true;
+      recall.current = { index, text: earlier[index]! };
+      box.current?.setText(earlier[index]!);
+      return true;
+    }
+    if (!line.last) return false;
+    const index = recall.current.index - 1;
+    if (index < 0) {
+      recall.current = undefined;
+      box.current?.clear();
+      return true;
+    }
+    recall.current = { index, text: earlier[index]! };
+    box.current?.setText(earlier[index]!);
+    return true;
+  };
+
   /** Keys the box gives the tray first: an open menu takes its arrows, Enter, Tab and Esc. */
   const onKey = (event: KeyboardEvent): boolean => {
     const command = platform() === "darwin" ? event.metaKey : event.ctrlKey;
@@ -281,6 +318,9 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
     if (command && event.shiftKey && event.key.toLowerCase() === "a") {
       setModeOpen(true);
       return true;
+    }
+    if (!menu && !event.shiftKey && !event.altKey && !event.metaKey && !event.ctrlKey && (event.key === "ArrowUp" || event.key === "ArrowDown")) {
+      return history(event.key === "ArrowUp" ? "up" : "down");
     }
     if (event.key === "Tab" && event.shiftKey && !menu) {
       setInteraction(interactionMode === "plan" ? "default" : "plan");
