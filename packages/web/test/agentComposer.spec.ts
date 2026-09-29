@@ -3,7 +3,7 @@ import { openCanvas, shapeOnScreen, toast } from "./canvas.ts";
 import { clickShape, composer, toolbar } from "./generation.ts";
 import { pngBytes } from "./images.ts";
 import { filledMedia, putRecords } from "./media.ts";
-import { artifactColumn, expect, onlyChat, openRail, promptBox, rail, test } from "./agent.ts";
+import { artifactColumn, expect, onlyChat, openRail, promptBox, rail, rpcOf, test } from "./agent.ts";
 import type { TestEngine } from "../../engine/test/engineProcess.ts";
 
 /** A page and two filled images, left of the starter prompts. */
@@ -193,4 +193,60 @@ test("a large paste becomes pasted-text.txt with a toast; Cmd+Shift+V keeps it i
   await pasteText(page, "x".repeat(33 * 1024));
   await expect(files).toHaveCount(2);
   await expect.poll(async () => (await box.textContent())?.length).toBe(33 * 1024);
+});
+
+test("Cmd+S stashes the draft and clears it; the badge's menu restores and deletes; the 21st drops the oldest", async ({ page, agent }) => {
+  await openCanvas(page, agent);
+  const panel = await openRail(page);
+  const box = promptBox(panel);
+  const badge = panel.getByTestId("stash-badge");
+  const menu = page.getByRole("menu", { name: "Stashed prompts" });
+  const mac = process.platform === "darwin";
+
+  // An empty stash: Cmd+S in an empty box opens the menu with its hint.
+  await box.click();
+  await page.keyboard.press("ControlOrMeta+s");
+  await expect(menu.getByText(`Nothing stashed yet. Press ${mac ? "⌘S" : "Ctrl+S"} with a prompt in the composer to stash it.`, { exact: true })).toBeVisible();
+  await page.keyboard.press("Escape");
+
+  await box.click();
+  await box.pressSequentially("first idea");
+  await page.keyboard.press("ControlOrMeta+s");
+  await expect(box).toHaveText("");
+  await expect(badge).toHaveAttribute("aria-label", "Stashed prompts: 1. Open stash.");
+  // One entry: Cmd+S in the empty box brings it back.
+  await page.keyboard.press("ControlOrMeta+s");
+  await expect(box).toHaveText("first idea");
+  await expect(badge).toHaveAttribute("aria-label", "Stashed prompts: 0. Open stash.");
+  await page.keyboard.press("ControlOrMeta+s");
+  await box.pressSequentially("second idea");
+  await page.keyboard.press("ControlOrMeta+s");
+  await expect(badge).toHaveAttribute("aria-label", "Stashed prompts: 2. Open stash.");
+
+  await badge.click();
+  await expect(menu.getByRole("menuitem")).toHaveText([/^second ideajust now/, /^first ideajust now/]);
+  await menu.getByRole("menuitem").first().hover();
+  await page.keyboard.press(mac ? "Meta+Backspace" : "Control+Backspace");
+  await expect(menu.getByRole("menuitem")).toHaveText([/^first idea/]);
+  await menu.getByRole("menuitem").first().click();
+  await expect(box).toHaveText("first idea");
+  await expect(badge).toHaveAttribute("aria-label", "Stashed prompts: 0. Open stash.");
+
+  // Twenty-one stashes: the oldest goes, with a toast.
+  await page.keyboard.press("ControlOrMeta+a");
+  await page.keyboard.press("Backspace");
+  for (let n = 1; n <= 21; n++) {
+    await box.pressSequentially(`idea ${n}`);
+    await page.keyboard.press("ControlOrMeta+s");
+    await expect(box).toHaveText("");
+  }
+  const notice = toast(page, "Oldest stashed prompt discarded");
+  await expect(notice).toContainText("The stash holds 20 prompts; the oldest was removed to make room.");
+  await expect(badge).toHaveAttribute("aria-label", "Stashed prompts: 20. Open stash.");
+  await expect
+    .poll(async () => {
+      const { values } = await (await rpcOf(agent)).call("preferences.get", { keys: ["agent.stash.default"] });
+      return (values["agent.stash.default"] as Array<{ text: string }> | undefined)?.map((entry) => entry.text);
+    })
+    .toEqual(Array.from({ length: 20 }, (_, index) => `idea ${21 - index}`));
 });

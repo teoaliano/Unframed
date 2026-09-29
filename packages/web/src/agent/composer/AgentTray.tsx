@@ -1,4 +1,4 @@
-import type { ModelSelection } from "@unframed/contracts";
+import type { ChatAttachment, ModelSelection } from "@unframed/contracts";
 import { continuableChat, DEFAULT_RUNTIME_MODE, pasteBecomesFile, pastedTextFileName, tabLabel, type InteractionMode, type RuntimeMode } from "@unframed/domain";
 import { ArrowLeft, ArrowUp, Paperclip, Square } from "lucide-react";
 import { createPortal } from "react-dom";
@@ -11,6 +11,7 @@ import { useChatClient, useChats, useFollowUp, useHandoffVersion, useProviders, 
 import { latestCompletedTool, returnQueued, sendQueued } from "../queue.tsx";
 import { Tip } from "../../chrome/ui.tsx";
 import { formatSize, useAttachments } from "./attachments.ts";
+import { StashMenu, useStash } from "./stash.tsx";
 import { platform } from "../../canvas/platform.ts";
 import { showNotice } from "../../toasts.tsx";
 import { AttachmentShelf } from "./AttachmentShelf.tsx";
@@ -268,6 +269,10 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
       inlineNext.current = Date.now();
       return false;
     }
+    if (command && !event.shiftKey && event.key.toLowerCase() === "s") {
+      stashKey();
+      return true;
+    }
     if (command && event.shiftKey && event.key === "Enter" && chat) {
       const oldest = client.queue(chat.id)[0];
       if (oldest) void sendQueued(client, chat.id, oldest.id);
@@ -301,6 +306,28 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
   const canSend = !none && !sending && (text.trim() !== "" || attachments.staged.length > 0);
 
   const followUp = useFollowUp(client);
+  const stash = useStash(client.engine, client.project);
+  const [stashOpen, setStashOpen] = useState(false);
+  const restoreDraft = (draft: { readonly text: string; readonly selection: ReadonlyArray<string>; readonly attachments: ReadonlyArray<ChatAttachment> }) => {
+    box.current?.setText(draft.text);
+    chips.set(draft.selection);
+    attachments.restore(draft.attachments);
+  };
+  /** Cmd+S: a draft goes to the stash; with an empty box the only entry comes back, or the menu opens. */
+  const stashKey = () => {
+    const draft = box.current?.text() ?? "";
+    if (draft.trim() !== "" || attachments.staged.length > 0) {
+      stash.push({ text: draft, selection: chips.shapes.map((shape) => shape.id), attachments: attachments.staged.flatMap((item) => (item.attachment ? [item.attachment] : [])) });
+      box.current?.clear();
+      attachments.clear();
+      chips.set(canvas?.getSelectedShapeIds() ?? []);
+    } else if (stash.entries.length === 1) {
+      restoreDraft(stash.entries[0]!);
+      stash.remove(stash.entries[0]!.id);
+    } else {
+      setStashOpen(true);
+    }
+  };
   const send = useCallback(async (invert = false) => {
     const message = box.current?.text() ?? "";
     if (none || (message.trim() === "" && attachments.staged.length === 0) || sending) return;
@@ -439,6 +466,19 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
           </div>
           <div className="unframed-agent-footer__send">
             {note?.(providerName(selection.provider))}
+            <StashMenu
+              entries={stash.entries}
+              open={stashOpen}
+              onOpenChange={(open) => {
+                setStashOpen(open);
+                if (!open) box.current?.focus();
+              }}
+              onRestore={(entry) => {
+                restoreDraft(entry);
+                stash.remove(entry.id);
+              }}
+              onDelete={(entry) => stash.remove(entry.id)}
+            />
             {running && (
               <button type="button" className="unframed-agent-stop" aria-label="Stop generation" onClick={interrupt}>
                 <Square size={12} aria-hidden fill="currentColor" />
