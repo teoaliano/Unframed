@@ -1,6 +1,7 @@
 /** Browser-seam helpers for the settings dialog: an engine with a scripted OpenRouter key flow and catalogues. */
+import { join } from "node:path";
 import type { Locator, Page } from "@playwright/test";
-import type { EngineOptions, StubHandler, TestEngine } from "../../engine/test/engineProcess.ts";
+import { repoRoot, type EngineOptions, type StubHandler, type TestEngine } from "../../engine/test/engineProcess.ts";
 import { oauthStub, type OAuthStub } from "../../engine/test/oauthStub.ts";
 import { imageCatalogue, routes } from "../../engine/test/openRouterStub.ts";
 import { textCatalogue, listedModel } from "../../engine/test/textStub.ts";
@@ -19,13 +20,20 @@ export interface SettingsEngine {
   readonly oauth: OAuthStub;
 }
 
-/** An engine with the key given (none for `key: false`), the OAuth stub and the three catalogues. */
+export const FIXTURES = join(repoRoot, "assets", "fixtures");
+
+/**
+ * An engine with the key given (none for `key: false`), the OAuth stub and the three
+ * catalogues. Provider statuses come from the scripted agent unless a test sets
+ * `UNFRAMED_TEST_AGENT_SCRIPT` to undefined, so no real CLI on this machine is ever run.
+ */
 export const startSettingsEngine = async (options: EngineOptions & { readonly key?: boolean; readonly extra?: StubHandler[] } = {}): Promise<SettingsEngine> => {
   const oauth = oauthStub();
   const { key, extra, ...rest } = options;
   const engine = await startHostedEngine({
     dotenv: key === false ? "" : `OPENROUTER_API_KEY=${KEY}\n`,
     ...rest,
+    env: { UNFRAMED_TEST_AGENT_SCRIPT: FIXTURES, ...rest.env },
     stub: routes(
       oauth.handler,
       imageCatalogue({ data: IMAGE_MODELS.map((id, index) => ({ id, name: id, created: 1_700_000_000 + index })) }),

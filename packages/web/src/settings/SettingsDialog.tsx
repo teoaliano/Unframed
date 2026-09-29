@@ -324,14 +324,14 @@ export const SettingsDialog = ({ ui }: { readonly ui: SettingsUi }) => {
 
               {hasKey && settings !== undefined && (
                 <>
-                  <section className="flex flex-col gap-3 border-t border-line pt-4" aria-label="Default models">
+                  <section className="flex flex-col gap-3 border-t border-line pt-4">
                     <SectionHeading>Default models</SectionHeading>
                     {MEDIA.map(({ medium, label, field }) => (
                       <ModelSelect key={medium} label={label} value={draft[field]} models={catalogues[medium]} onChange={(value) => edit({ [field]: value })} />
                     ))}
                   </section>
 
-                  <section className="flex flex-col gap-2 border-t border-line pt-4" aria-label="Output folder">
+                  <section className="flex flex-col gap-2 border-t border-line pt-4">
                     <SectionHeading>Output folder</SectionHeading>
                     <div className="flex items-center gap-2">
                       <TextField aria-label="Output folder" placeholder="./output" value={draft.outputDir} onChange={(event) => edit({ outputDir: event.target.value })} />
