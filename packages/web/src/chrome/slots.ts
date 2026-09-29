@@ -6,6 +6,8 @@ export interface AgentTrayProps {
   readonly project: string;
   /** Collapses the composer back to the selection toolbar. */
   readonly close: () => void;
+  /** Whether a menu of the tray is open, so the shell leaves Esc and the send key to it. */
+  readonly onMenuOpen?: (key: string, open: boolean) => void;
 }
 
 /**
@@ -22,8 +24,12 @@ export interface ChromeSlots {
   artifactEmptyState?: ComponentType<{ shapeId: string }>;
   /** The composer's Agent tray. The toolbar shows Agent only once one is registered. */
   agentTray?: ComponentType<AgentTrayProps>;
+  /** The toolbar's Agent button itself, when the Agent tray's spec draws it (spec 08). */
+  agentToolbarButton?: ComponentType<{ readonly onOpen: () => void }>;
   /** What Open on a filled page or motion does. */
   openArtifact?: (editor: Editor, shapeId: TLShapeId) => void;
+  /** Set while the chat rail (spec 08) holds the right edge: the top-right card steps aside. */
+  rightCardAside?: boolean;
 }
 
 let slots: ChromeSlots = {};

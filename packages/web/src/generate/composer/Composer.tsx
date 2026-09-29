@@ -35,7 +35,9 @@ export const Composer = ({ mode, project, recipe, onCollapse }: ComposerProps) =
   }, []);
 
   // The send key works while the composer is open wherever focus is, unless another text field has it.
+  // The Agent tray reads its own keys (Enter sends there, Cmd+Enter flips queue and steer).
   useEffect(() => {
+    if (mode === "agent") return;
     const onKeyDown = (event: KeyboardEvent) => {
       if (!isSendKey(event) || menus.current.size > 0) return;
       if (!root.current?.contains(event.target as Node) && isEditable(event.target)) return;
@@ -45,7 +47,7 @@ export const Composer = ({ mode, project, recipe, onCollapse }: ComposerProps) =
     };
     window.addEventListener("keydown", onKeyDown, { capture: true });
     return () => window.removeEventListener("keydown", onKeyDown, { capture: true });
-  }, []);
+  }, [mode]);
 
   // While the composer is open, clicking a shape adds it to the selection instead of replacing it.
   useEffect(
@@ -85,7 +87,7 @@ export const Composer = ({ mode, project, recipe, onCollapse }: ComposerProps) =
       {mode === "generate" ? (
         <GenerateTray project={project} recipe={recipe} onSent={onCollapse} onMenuOpen={onMenuOpen} handle={tray} />
       ) : AgentTray ? (
-        <AgentTray project={project} close={onCollapse} />
+        <AgentTray project={project} close={onCollapse} onMenuOpen={onMenuOpen} />
       ) : null}
     </div>
   );

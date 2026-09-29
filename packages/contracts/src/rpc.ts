@@ -11,9 +11,14 @@ import {
   ClientChatCommand,
   CreateUploadUrlAnswer,
   CreateUploadUrlInput,
+  FullThreadDiffInput,
   ProviderStatuses,
+  SearchThreadsAnswer,
+  SearchThreadsInput,
   ShellStreamItem,
   ThreadStreamItem,
+  TurnDiff,
+  TurnDiffInput,
 } from "./agent.ts";
 
 const Empty = Schema.Struct({});
@@ -228,6 +233,27 @@ export const AttachmentsCreateUploadUrl = Rpc.make("attachments.createUploadUrl"
   error: UnframedError,
 });
 
+/** Chats whose messages or final replies match the query, one row per chat (spec 08). */
+export const OrchestrationSearchThreads = Rpc.make("orchestration.searchThreads", {
+  payload: SearchThreadsInput,
+  success: SearchThreadsAnswer,
+  error: UnframedError,
+});
+
+/** The pages and motions written in turns `fromTurnCount + 1` to `toTurnCount`, as unified diffs (spec 08). */
+export const OrchestrationGetTurnDiff = Rpc.make("orchestration.getTurnDiff", {
+  payload: TurnDiffInput,
+  success: TurnDiff,
+  error: UnframedError,
+});
+
+/** The same from the chat's start. */
+export const OrchestrationGetFullThreadDiff = Rpc.make("orchestration.getFullThreadDiff", {
+  payload: FullThreadDiffInput,
+  success: TurnDiff,
+  error: UnframedError,
+});
+
 export const UnframedRpcs = RpcGroup.make(
   ServerHealth,
   SettingsGet,
@@ -264,5 +290,8 @@ export const UnframedRpcs = RpcGroup.make(
   OrchestrationSubscribeThread,
   ProvidersGetStatuses,
   AttachmentsCreateUploadUrl,
+  OrchestrationSearchThreads,
+  OrchestrationGetTurnDiff,
+  OrchestrationGetFullThreadDiff,
 );
 export type UnframedRpcs = typeof UnframedRpcs;

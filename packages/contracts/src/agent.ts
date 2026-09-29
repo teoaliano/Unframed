@@ -44,6 +44,7 @@ export const ProviderModel = Schema.Struct({
   thinking: Schema.optionalKey(Schema.Boolean),
   fastMode: Schema.optionalKey(Schema.Boolean),
 });
+export type ProviderModel = typeof ProviderModel.Type;
 
 /** A slash command or a skill the composer offers (spec 08). */
 export const ProviderCommand = Schema.Struct({
@@ -324,3 +325,57 @@ export const ThreadStreamItem = Schema.Union([
   Schema.Struct({ kind: Schema.Literal("event"), event: ChatEvent }),
 ]);
 export type ThreadStreamItem = typeof ThreadStreamItem.Type;
+
+// ---------------------------------------------------------------------------------------
+// Thread search and artifact diffs (spec 08).
+
+export const SearchThreadsInput = Schema.Struct({
+  projectId: Schema.String,
+  query: Schema.String.check(Schema.isMinLength(2), Schema.isMaxLength(200)),
+  limit: Schema.optionalKey(Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 50 }))),
+});
+
+export const ThreadSearchMatch = Schema.Struct({
+  threadId: Schema.String,
+  source: Schema.Literals(["user", "assistant"]),
+  snippet: Schema.String,
+  messageCreatedAt: Schema.String,
+});
+export type ThreadSearchMatch = typeof ThreadSearchMatch.Type;
+
+export const SearchThreadsAnswer = Schema.Struct({ matches: Schema.Array(ThreadSearchMatch) });
+
+const TurnCount = Schema.Int.check(Schema.isGreaterThanOrEqualTo(0));
+
+export const TurnDiffInput = Schema.Struct({
+  projectId: Schema.String,
+  threadId: Schema.String,
+  fromTurnCount: TurnCount,
+  toTurnCount: TurnCount,
+  ignoreWhitespace: Schema.optionalKey(Schema.Boolean),
+});
+
+export const FullThreadDiffInput = Schema.Struct({
+  projectId: Schema.String,
+  threadId: Schema.String,
+  toTurnCount: TurnCount,
+  ignoreWhitespace: Schema.optionalKey(Schema.Boolean),
+});
+
+/** One page or motion a range of turns wrote: its file before the first and after the last, as a unified diff. */
+export const ArtifactDiffFile = Schema.Struct({
+  shapeId: Schema.String,
+  label: Schema.String,
+  kind: Schema.String,
+  before: Schema.NullOr(Schema.String),
+  after: Schema.NullOr(Schema.String),
+  additions: Schema.Number,
+  deletions: Schema.Number,
+  patch: Schema.String,
+  /** The patch is the too-large sentence, not a diff. */
+  tooLarge: Schema.optionalKey(Schema.Boolean),
+});
+export type ArtifactDiffFile = typeof ArtifactDiffFile.Type;
+
+export const TurnDiff = Schema.Struct({ files: Schema.Array(ArtifactDiffFile) });
+export type TurnDiff = typeof TurnDiff.Type;

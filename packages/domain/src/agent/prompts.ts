@@ -56,3 +56,6 @@ export const CHAT_TITLE_SYSTEM_PROMPT = "You name conversations. Answer with the
 export const CHAT_TITLE_PROMPT = "Title this conversation in three to five words, no quotes: <first message>\n<answer>";
 
 export const CANCELLED_MESSAGE = "User cancelled tool execution.";
+
+/** `implement-plan.md` (from t3code, MIT): what Implement sends, `<plan>` being the trimmed plan. */
+export const IMPLEMENT_PLAN_PROMPT = "PLEASE IMPLEMENT THIS PLAN:\n<plan>";

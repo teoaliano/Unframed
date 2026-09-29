@@ -12,7 +12,7 @@ export const HELP_TEXT = "Reference a prompt or group with @id. Select images to
  * them with its own CSS.
  */
 export const TopCorners = () => {
-  const { agentButton: Agent, settingsButton: SettingsButton } = useSlots();
+  const { agentButton: Agent, settingsButton: SettingsButton, rightCardAside } = useSlots();
   return (
     <Tooltip.Provider delay={400}>
       <div className="unframed-chrome-left">
@@ -24,7 +24,7 @@ export const TopCorners = () => {
         />
         <ProjectMenu />
       </div>
-      <div className="unframed-chrome-right">
+      <div className="unframed-chrome-right" data-aside={rightCardAside ? "" : undefined} inert={rightCardAside === true}>
         {Agent && <Agent />}
         {SettingsButton && <SettingsButton />}
         <Tip label={HELP_TEXT}>

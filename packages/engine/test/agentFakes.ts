@@ -147,6 +147,39 @@ export const fakeCodexMessages = async (log: string): Promise<any[]> =>
     .filter((line) => line !== "")
     .map((line) => JSON.parse(line));
 
+export interface SignedInClaude {
+  /** The SDK's `ModelInfo` rows the initialization reports. */
+  readonly models?: ReadonlyArray<Record<string, unknown>>;
+  readonly commands?: ReadonlyArray<{ name: string; description: string }>;
+  readonly account?: Record<string, unknown>;
+}
+
+/**
+ * A `claude` that answers the Agent SDK's initialization handshake as a signed-in CLI
+ * would: the account, the supported models and the slash commands. It never runs a turn.
+ */
+export const fakeSignedInClaude = (dir: string, options: SignedInClaude = {}) =>
+  write(
+    join(dir, "claude"),
+    script(`
+if (args[0] === "--version") { console.log("2.1.280 (Claude Code)"); process.exit(0); }
+const init = ${JSON.stringify({
+      commands: options.commands ?? [],
+      models: options.models ?? [],
+      account: options.account ?? { email: "person@example.com", subscriptionType: "Max" },
+    })};
+const send = (message) => process.stdout.write(JSON.stringify(message) + "\\n");
+const rl = require("node:readline").createInterface({ input: process.stdin });
+rl.on("line", (line) => {
+  const message = JSON.parse(line);
+  if (message.type !== "control_request") return;
+  const response = message.request.subtype === "initialize" ? init : {};
+  send({ type: "control_response", response: { subtype: "success", request_id: message.request_id, response } });
+});
+rl.on("close", () => process.exit(0));
+`),
+  );
+
 /** A login shell that answers `$SHELL -lc 'echo "$PATH"'` with `FAKE_SHELL_PATH`. */
 export const fakeShell = (dir: string) => write(join(dir, "fake-shell"), `#!/bin/sh\necho "some profile banner"\necho "$FAKE_SHELL_PATH"\n`);
 

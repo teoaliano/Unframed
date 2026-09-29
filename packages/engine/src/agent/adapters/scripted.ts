@@ -205,6 +205,7 @@ export const scriptedAdapter = (scriptPath: string, context: AdapterContext): Pr
     refused: boolean,
   ) => {
     const turn = { turnId: input.turnId };
+    if (step.usage) emit(input.chatId, { type: "thread.token-usage.updated", ...turn, payload: { usage: { ...step.usage } } });
     if (text !== "") {
       const itemId = `message-${++items}`;
       emit(input.chatId, { type: "content.delta", ...turn, itemId, payload: { streamKind: "assistant_text", delta: text } });

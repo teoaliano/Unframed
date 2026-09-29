@@ -1,5 +1,5 @@
 import { join } from "node:path";
-import type { ClientChatCommand, ShellStreamItem, ThreadStreamItem } from "@unframed/contracts";
+import type { ClientChatCommand, ShellStreamItem, ThreadSearchMatch, ThreadStreamItem, TurnDiff } from "@unframed/contracts";
 import { UnframedError, unframedError } from "@unframed/contracts";
 import { defaultModel, projectSlug, type ClientCommand } from "@unframed/domain";
 import * as Context from "effect/Context";
@@ -32,6 +32,8 @@ export class Agents extends Context.Service<
     readonly dispatch: (command: ClientChatCommand) => Effect.Effect<{ sequence: number }, UnframedError>;
     readonly subscribeShell: (projectId: string, afterSequence: number | undefined) => Stream.Stream<ShellStreamItem, UnframedError>;
     readonly subscribeThread: (projectId: string, threadId: string, afterSequence: number | undefined) => Stream.Stream<ThreadStreamItem, UnframedError>;
+    readonly searchThreads: (projectId: string, query: string, limit: number | undefined) => Effect.Effect<{ matches: ReadonlyArray<ThreadSearchMatch> }, UnframedError>;
+    readonly turnDiff: (input: { projectId: string; threadId: string; fromTurnCount: number; toTurnCount: number; ignoreWhitespace?: boolean }) => Effect.Effect<TurnDiff, UnframedError>;
     readonly createUploadUrl: (input: { name: string; mimeType: string; sizeBytes: number }) => Effect.Effect<{ relativeUrl: string; expiresAt: string }, UnframedError>;
     readonly routes: ReadonlyArray<Route>;
   }
@@ -133,6 +135,13 @@ export const agentsLayer = Layer.effect(
           (agent) => agent.engine.chat(threadId)?.deletedAt === null,
           (agent, emit) => openThread(agent.engine, threadId, afterSequence, emit),
         ),
+      searchThreads: (projectId, query, limit) =>
+        Effect.tryPromise({ try: async () => ({ matches: await runtime.searchThreads(projectId, query, limit) }), catch: toUnframed }),
+      turnDiff: (input) =>
+        Effect.tryPromise({
+          try: () => runtime.turnDiff(input.projectId, input.threadId, input.fromTurnCount, input.toTurnCount, input.ignoreWhitespace === true),
+          catch: toUnframed,
+        }),
       createUploadUrl: (input) =>
         Effect.try({
           try: () => runtime.attachments.createUploadUrl(input),

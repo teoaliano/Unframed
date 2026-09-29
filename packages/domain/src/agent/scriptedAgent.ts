@@ -21,6 +21,8 @@ export interface ScriptTurn {
   readonly tasks?: ReadonlyArray<{ readonly title: string; readonly status: string }>;
   readonly rateLimit?: { readonly status: "allowed" | "allowed_warning" | "rejected"; readonly resetsAt?: string };
   readonly plan?: string;
+  /** Token usage reported as the turn ends, as a provider reports its context window (spec 08's meter). */
+  readonly usage?: { readonly usedTokens: number; readonly maxTokens?: number; readonly totalProcessedTokens?: number };
   readonly title?: string;
   readonly isError?: boolean;
   readonly errorSubtype?: string;

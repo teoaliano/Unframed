@@ -15,17 +15,17 @@ const IMAGE_RECIPE = { medium: "image", model: "openai/gpt-image-2", params: { q
 
 const barButtons = (page: Page) => toolbar(page).getByRole("button");
 
-test("a recipe group's bar: Generate N×, its @name with the estimate, Recipe", async ({ page, generation }) => {
+test("a recipe group's bar: Generate N×, its @name with the estimate, Recipe, Agent", async ({ page, generation }) => {
   await openCanvas(page, generation.engine);
   await putRecords(generation.engine, group({ ...IMAGE_RECIPE, params: { quality: "low", resolution: "1K" } }));
   await expect(shapeOnScreen(page, "shape:line")).toBeVisible();
   await selectGroup(page, "shape:character");
-  await expect(barButtons(page)).toHaveText(["Generate 3×", "Recipe"]);
+  await expect(barButtons(page)).toHaveText(["Generate 3×", "Recipe", "Agent"]);
   // Three low 1K images at $0.011.
   await expect(toolbar(page).getByTestId("selection-hint")).toHaveText("@character · ~$0.033");
 
   await putRecords(generation.engine, group({ ...IMAGE_RECIPE, runs: 1 }));
-  await expect(barButtons(page)).toHaveText(["Generate", "Recipe"]);
+  await expect(barButtons(page)).toHaveText(["Generate", "Recipe", "Agent"]);
 });
 
 test("Generate on a recipe group runs the recipe at once: its model and params, no instruction, one batch, results beside the box", async ({ page, generation }) => {
@@ -81,7 +81,7 @@ test("a Free recipe's Generate stops at the final prompt and spends nothing unti
   await putRecords(generation.engine, group({ medium: "image", model: "openai/gpt-image-2", params: {}, runs: "free" }, "a fox\n---\na hare"));
   await expect(shapeOnScreen(page, "shape:line")).toBeVisible();
   await selectGroup(page, "shape:character");
-  await expect(barButtons(page)).toHaveText(["Generate", "Recipe"]);
+  await expect(barButtons(page)).toHaveText(["Generate", "Recipe", "Agent"]);
   await toolbar(page).getByRole("button", { name: "Generate", exact: true }).click();
 
   const dialog = page.getByTestId("final-prompt");
@@ -103,7 +103,7 @@ test("the recipe applies with loose shapes selected too; they join the sources i
   await expect(shapeOnScreen(page, "shape:loose")).toBeVisible();
   await selectGroup(page, "shape:character");
   await clickShape(page, "shape:loose", ["Shift"]);
-  await expect(barButtons(page)).toHaveText(["Generate", "Recipe"]);
+  await expect(barButtons(page)).toHaveText(["Generate", "Recipe", "Agent"]);
   await expect(toolbar(page).getByTestId("selection-hint")).toHaveText(/^@character/);
   await toolbar(page).getByRole("button", { name: "Generate", exact: true }).click();
   await expect.poll(() => generation.requests.length).toBe(1);

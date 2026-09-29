@@ -30,6 +30,18 @@ test("Generate grows the bar into the composer on the same centre and bottom edg
   await expect(bar.getByRole("button", { name: "Generate" })).toBeVisible();
 });
 
+test("Agent opens the composer on its Agent tray, the slot spec 08 fills; Esc closes it back to the bar", async ({ page, generation }) => {
+  await openCanvas(page, generation.engine);
+  await clickShape(page, "shape:starter-subject");
+  await toolbar(page).getByRole("button", { name: "Agent" }).click();
+  await expect(composer(page)).toHaveAttribute("data-tray", "agent");
+  await expect(composer(page).getByTestId("agent-tray")).toBeVisible();
+  await expect(instructionBox(page)).toHaveCount(0);
+  await page.keyboard.press("Escape");
+  await expect(composer(page)).toHaveCount(0);
+  await expect(toolbar(page).getByRole("button", { name: "Agent" })).toBeVisible();
+});
+
 test("clicking a shape while the composer is open adds it; clicking empty canvas closes it", async ({ page, generation }) => {
   await openCanvas(page, generation.engine);
   await clickShape(page, "shape:starter-subject");
