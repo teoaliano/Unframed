@@ -95,7 +95,8 @@ export interface GenerateTrayProps {
   readonly recipe: RecipeMode | undefined;
   /** Called once the engine has acknowledged the run: the composer collapses back to the bar. */
   readonly onSent: () => void;
-  readonly onMenuOpen: (key: string, open: boolean) => void;
+  /** A menu or dialog opened or closed; `close` lets the shell close it on Esc. */
+  readonly onMenuOpen: (key: string, open: boolean, close?: () => void) => void;
   readonly handle: Ref<TrayHandle>;
 }
 
@@ -192,7 +193,7 @@ export const GenerateTray = ({ project, recipe, onSent, onMenuOpen, handle }: Ge
   const blocked = status.blockers.length > 0 || values === undefined;
 
   const onMentionMenu = useCallback((open: boolean) => onMenuOpen("mention", open), [onMenuOpen]);
-  const onTrayMenu = useCallback((open: boolean) => onMenuOpen("tray", open), [onMenuOpen]);
+  const onTrayMenu = useCallback((open: boolean, close: () => void) => onMenuOpen("tray", open, close), [onMenuOpen]);
 
   const setValues = (next: TrayValues) => setValuesByMedium((current) => ({ ...current, [medium]: next }));
 

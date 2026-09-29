@@ -2,7 +2,7 @@ import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import type { Page } from "@playwright/test";
 import { openCanvas, roomRecords, shapeOnScreen } from "./canvas.ts";
-import { clickShape, composer, openComposer } from "./generation.ts";
+import { clickShape, composer, openAndEscape, openComposer } from "./generation.ts";
 import { pngBytes } from "./images.ts";
 import { filledMedia, promptRecord, putRecords, testIndex } from "./media.ts";
 import { addProp, badge, chips, chooseVideo, expect, pickModel, setProp, statusLines, test, tray } from "./videoGeneration.ts";
@@ -97,6 +97,19 @@ test("choosing video shows the default video model and only the props it declare
   await pickModel(page, "kling-3");
   await expect(chips(page)).toHaveText(["5"]);
   await expect(page.getByRole("dialog", { name: "Video models" })).toHaveCount(0);
+});
+
+test("an Escape the moment Audio's menu opens from + add prop closes only that menu", async ({ page, videoEngine: video }) => {
+  await openCanvas(page, video.engine);
+  await clickShape(page, "shape:starter-subject");
+  await openComposer(page);
+  await chooseVideo(page);
+  await tray(page).getByRole("button", { name: "+ add prop" }).click();
+  const audio = page.getByRole("menu", { name: "Add prop" }).getByRole("menuitem", { name: "Audio off" });
+  expect(await openAndEscape(audio, "Audio")).not.toBe("opened");
+  await expect(page.getByRole("menu", { name: "Audio" })).toHaveCount(0);
+  await expect(chips(page)).toHaveText(["References", "5", "no audio"]);
+  await expect(composer(page)).toBeVisible();
 });
 
 test("changing the model resets the props in the tray", async ({ page, videoEngine: video }) => {

@@ -134,22 +134,35 @@ export const sendRun = async (page: Page): Promise<void> => {
   await expect(composer(page)).toHaveCount(0);
 };
 
+/** Where focus was when `openAndEscape` pressed Escape. */
+export type EscapeFocus = "control" | "opened" | "elsewhere";
+
 /**
- * Clicks a composer control and presses Escape the moment the page shows what it opened,
- * while the control may still have focus: a quick Esc that lands before the menu, popover or
- * dialog takes focus. Answers whether focus was still on the control as Escape went down.
+ * Clicks a composer control and presses Escape on whatever has focus the moment the page shows
+ * what the click opened: a quick Esc that lands before the menu, popup or dialog takes focus.
+ * `shows` names the menu or dialog to wait for; without it, the one the control opens.
  */
-export const openAndEscape = (control: Locator): Promise<{ focusOnControl: boolean }> =>
+export const openAndEscape = (control: Locator, shows?: string): Promise<EscapeFocus> =>
   control.evaluate(
-    (element: HTMLElement) =>
-      new Promise<{ focusOnControl: boolean }>((resolve, reject) => {
-        const shown = () => element.getAttribute("aria-expanded") === "true" || document.querySelector("[role=dialog]") !== null;
+    (element: HTMLElement, name: string | null) =>
+      new Promise<EscapeFocus>((resolve, reject) => {
+        const newest = (selector: string) => [...document.querySelectorAll(selector)].at(-1);
+        const opened = (): Element | undefined =>
+          name !== null
+            ? newest(`[role=menu][aria-label="${name}"], [role=dialog][aria-label="${name}"]`)
+            : element.getAttribute("aria-expanded") === "true"
+              ? (newest("[role=menu], [role=dialog]") ?? element)
+              : newest("[role=dialog]");
         const watch = new MutationObserver(() => {
-          if (!shown()) return;
+          const popup = opened();
+          if (!popup) return;
           watch.disconnect();
-          const focusOnControl = document.activeElement === element;
-          element.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", code: "Escape", bubbles: true, cancelable: true }));
-          resolve({ focusOnControl });
+          // Right after the render that shows it, before its effects run: under load, a real
+          // key press can land here, ahead of Base UI moving focus in and listening for Esc.
+          const focus = document.activeElement ?? document.body;
+          const where: EscapeFocus = focus === element ? "control" : popup !== element && popup.contains(focus) ? "opened" : "elsewhere";
+          focus.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", code: "Escape", bubbles: true, cancelable: true }));
+          resolve(where);
         });
         watch.observe(document.body, { subtree: true, childList: true, attributes: true });
         setTimeout(() => reject(new Error("nothing opened")), 2000);
@@ -161,6 +174,7 @@ export const openAndEscape = (control: Locator): Promise<{ focusOnControl: boole
         element.dispatchEvent(new MouseEvent("mouseup", at));
         element.dispatchEvent(new MouseEvent("click", at));
       }),
+    shows ?? null,
   );
 
 /** Clicks the middle of a shape, as a person selects it. */

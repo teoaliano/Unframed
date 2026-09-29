@@ -25,13 +25,30 @@ const isEditable = (target: EventTarget | null) => target instanceof HTMLElement
 export const Composer = ({ mode, project, recipe, onCollapse }: ComposerProps) => {
   const editor = useEditor();
   const { agentTray: AgentTray } = useSlots();
-  const menus = useRef(new Set<string>());
+  // Each open menu, with how to close it when its owner lets the shell do that.
+  const menus = useRef(new Map<string, (() => void) | undefined>());
   const tray = useRef<TrayHandle>(null);
   const root = useRef<HTMLDivElement>(null);
 
-  const onMenuOpen = useCallback((key: string, open: boolean) => {
-    if (open) menus.current.add(key);
+  const onMenuOpen = useCallback((key: string, open: boolean, close?: () => void) => {
+    if (open) menus.current.set(key, close);
     else menus.current.delete(key);
+  }, []);
+
+  // Esc closes a menu that gave the shell its close, whatever has focus. Focus can be outside
+  // the menu: on its chip before the menu takes focus, or on "+ add prop" when a value menu
+  // opens from it. Base UI's own Esc listeners need focus inside, or arrive a render later.
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      const closers = [...menus.current.values()].filter((close) => close !== undefined);
+      if (closers.length === 0) return;
+      event.preventDefault();
+      event.stopPropagation();
+      for (const close of closers) close();
+    };
+    window.addEventListener("keydown", onKeyDown, { capture: true });
+    return () => window.removeEventListener("keydown", onKeyDown, { capture: true });
   }, []);
 
   // The send key works while the composer is open wherever focus is, unless another text field has it.

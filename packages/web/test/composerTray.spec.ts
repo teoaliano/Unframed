@@ -151,19 +151,27 @@ test("Escape in the model dialog closes only the dialog", async ({ page, generat
   await expect(composer(page)).toHaveCount(0);
 });
 
-test("an Escape the moment a tray menu or the model dialog opens closes only that, and keeps the selection", async ({ page, generation }) => {
+test("an Escape the moment a tray menu, a value menu from + add prop, or the model dialog shows closes only that", async ({ page, generation }) => {
   await openCanvas(page, generation.engine);
   await openOnSubject(page);
 
-  expect(await openAndEscape(tray(page).getByRole("button", { name: "+ add prop" }))).toEqual({ focusOnControl: true });
+  expect(await openAndEscape(tray(page).getByRole("button", { name: "+ add prop" }))).toBe("control");
   await expect(page.getByRole("menu", { name: "Add prop" })).toHaveCount(0);
   await expect(composer(page)).toBeVisible();
 
-  expect(await openAndEscape(chips(page).filter({ hasText: "low" }))).toEqual({ focusOnControl: true });
+  expect(await openAndEscape(chips(page).filter({ hasText: "low" }))).toBe("control");
   await expect(page.getByRole("menu", { name: "Quality" })).toHaveCount(0);
   await expect(composer(page)).toBeVisible();
 
-  // The dialog takes focus as it mounts, so this Esc goes down on the chip after focus left it.
+  // A prop picked from + add prop opens its value menu a frame later, while focus is still outside it.
+  await tray(page).getByRole("button", { name: "+ add prop" }).click();
+  const background = page.getByRole("menu", { name: "Add prop" }).getByRole("menuitem", { name: "Background auto" });
+  expect(await openAndEscape(background, "Background")).not.toBe("opened");
+  await expect(page.getByRole("menu", { name: "Background" })).toHaveCount(0);
+  await expect(chips(page)).toHaveText(["1K", "1:1", "low", "auto"]);
+  await expect(composer(page)).toBeVisible();
+
+  // The dialog takes focus as it mounts, so this Esc lands inside it.
   await openAndEscape(tray(page).getByTestId("model-chip"));
   await expect(dialog(page)).toHaveCount(0);
   // The composer closes with the selection, so still showing means tldraw kept it.
