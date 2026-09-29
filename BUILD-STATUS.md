@@ -61,9 +61,8 @@ Measured by the spec agent in the hosted shape (production web served by the eng
 - Browser specs that touch the system clipboard run one at a time in their own Playwright project (spec 03 fixes). New clipboard tests go there.
 - A spec agent stalls (10 minutes with no stream progress) when one command runs long with no output, such as a browser suite hung in teardown. Briefs cap each command at 5 minutes with `--global-timeout 280000 --reporter=list`, and tell agents not to use background commands, whose notifications reach the orchestrator. A stalled agent resumes with SendMessage and keeps its context.
 - Never run a bare `pkill -f workerProcessEntry`: it kills every worktree's Playwright workers. Kill by path (`<checkout>/node_modules/.pnpm/playwright.*/workerProcessEntry`) or orphans only.
-- Right-click after a Shift-click sometimes opens no context menu under load. It failed `menuActions.spec.ts` "Reveal shows the right-clicked file" after spec 02 and `contextMenu.spec.ts:86` after spec 05. Sent back to the spec 02 agent.
-- `promptPin.spec.ts` failed 3 of 3 on base sources at e3be34f in the spec 04 worktree, then passed. Sent to the spec 02 agent with the right-click flake.
+- Fixed in 19a4177: the right-click flake (`menuActions` "Reveal", `contextMenu.spec.ts:86`), `promptPin.spec.ts` and the `mediaResize.spec.ts` crop flake. The context-menu fix in `packages/web/src/canvas/ContextMenu.tsx` cancels the menu library's delayed refocus through an internal event name that tldraw bundles. A tldraw upgrade that renames it brings the flake back silently.
 - `packages/engine/test/bundle.test.ts` timed out once at 30 s in a loaded full run in the spec 04 worktree and passed alone. Watch it.
-- `mediaResize.spec.ts` failed once under parallel load in the spec 05 worktree (a drag landed at the wrong width). Watch it.
+- `composerTray.spec.ts:20` and `:76` failed together once in a full run on build at load average 11 (composer not visible in 5 s; model chip click timed out), then passed 21 of 21 alone and in the next full run. Watch them.
 
 - Background sub-agents that a spec agent starts (the code-review reviewers) report to the orchestrator, not to the spec agent. The brief tells spec agents to start their sub-agents in the foreground. If one still waits, the orchestrator forwards the results with SendMessage.
