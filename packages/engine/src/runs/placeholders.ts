@@ -94,6 +94,9 @@ export const fillChange = (shape: Shape, landed: Landed): CanvasChange => {
   return { put: [asset, filled], remove: [] };
 };
 
+/** How one output of a run ended: what landed, or the sentence the person sees. */
+export type RunOutcome<L> = { readonly ok: true; readonly landed: L } | { readonly ok: false; readonly error: string };
+
 /** What landed for a text run (spec 05): the answer and its sidecar, `null` when none could be written. */
 export interface LandedText {
   readonly kind: "text";

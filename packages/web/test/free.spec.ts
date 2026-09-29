@@ -114,7 +114,8 @@ test("Free with prose makes one repair call, system rules apart from the text, i
   await upload(generation, "shape:photo", "300", { x: 540, y: 40 }, 1);
   await putRecords(engine, [promptRecord("shape:list", "301", "three versions of a fox", { x: 40, y: -80 })]);
   await expect(shapeOnScreen(page, "shape:list")).toBeVisible();
-  generation.answerText(() => ({ kind: "text", text: "a red fox\n---\na grey fox\n---\na white fox", cost: 0.002 }));
+  // The answer is model output: its @100 is sent as written, never resolved.
+  generation.answerText(() => ({ kind: "text", text: "a red fox like @100\n---\na grey fox\n---\na white fox", cost: 0.002 }));
 
   await freeOn(page, ["shape:list", "shape:photo"]);
   await sendRun(page);
@@ -126,7 +127,7 @@ test("Free with prose makes one repair call, system rules apart from the text, i
     { role: "system", content: `${base}\n${images.replace("<N> reference images are attached, numbered 1 to <N>.", "1 reference image is attached, numbered 1 to 1.")}` },
     { role: "user", content: [{ type: "text", text: "Text to rewrite:\n\nthree versions of a fox" }, { type: "image_url", image_url: { url: dataUrl(1) } }] },
   ]);
-  expect(generation.requests.map((request) => request.body.prompt).sort()).toEqual(["a grey fox", "a red fox", "a white fox"]);
+  expect(generation.requests.map((request) => request.body.prompt).sort()).toEqual(["a grey fox", "a red fox like @100", "a white fox"]);
   await expect(toast(page, "re-split into 3 sections")).toBeVisible();
 
   // The repair's cost counts once in the batch, and its sidecar carries the batch id.
@@ -180,7 +181,7 @@ test("Free picks: each run receives only its images, with dropped numbers and sk
   const sidecars = await Promise.all(results.map((shape) => sidecarOf(generation, shape)));
   expect(sidecars.map((sidecar) => sidecar.free)).toEqual([
     { picks: [2], dropped: [] },
-    { picks: [1], dropped: [5] },
+    { picks: [1, 5], dropped: [5] },
     { picks: null, dropped: [] },
   ]);
   expect(sidecars[0].recipe.references).toEqual([{ kind: "image", file: expect.stringMatching(/301\.png$/) }]);

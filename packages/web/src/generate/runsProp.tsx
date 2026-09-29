@@ -1,5 +1,5 @@
 /**
- * The Runs prop (spec 05), image medium only: a count from 1 to 10 fires that many
+ * The Runs prop (spec 05), image medium only: a count up to the domain's `RUNS_CAP` fires that many
  * generations as one batch; Free takes the count from a list in the selection. It is not a
  * model trait, so a model change leaves it. Its values live in the tray's props as `runs`
  * and `viewFinalPrompt`, which is also how last-used values store them.

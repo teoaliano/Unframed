@@ -5,7 +5,7 @@
  * stages it for the final prompt dialog. Everything after the list text is in hand is the
  * one pure Free batch call, so what the dialog shows is what gets sent.
  */
-import { resultMetaOf, type RecipeRef } from "@unframed/contracts";
+import { resultMetaOf, type ImageParams, type RecipeRef } from "@unframed/contracts";
 import {
   composeSelection,
   freeBatch,
@@ -21,8 +21,7 @@ import {
 import { atom, type Atom, type Editor, type TLShapeId } from "tldraw";
 import type { EngineConnection } from "../rpc/engine.ts";
 import { canvasShapes, selectionBox } from "./facts.ts";
-import { imageParams } from "./imageMedium.ts";
-import type { RunSource, SendInput, TrayValues } from "./mediumRegistry.ts";
+import type { RunSource, SendInput } from "./mediumRegistry.ts";
 import { referencesFor } from "./render.ts";
 import { noteBatch } from "./runReports.ts";
 import { viewsFinalPrompt } from "./runsProp.tsx";
@@ -53,12 +52,15 @@ export interface StagedFree {
   readonly sourceId: string;
   /** The list as the pipeline has it: the repaired text when the repair was used, the source's otherwise. */
   readonly listText: string;
+  /** The list is the repair's answer, so Free batch reads it literally. */
+  readonly repaired: boolean;
   /** The box's text as typed. */
   readonly instruction: string;
   readonly repairNotes: ReadonlyArray<string>;
   /** The repair call's cost, counted once in the batch. */
   readonly extraCost: number | undefined;
-  readonly values: TrayValues;
+  readonly model: string | undefined;
+  readonly params: ImageParams;
   /** Composites and sketches already rendered and uploaded, by slot: one Generate writes each once. */
   readonly rendered: Map<string, RecipeRef>;
 }
@@ -86,8 +88,15 @@ const renderSlots = async (editor: Editor, project: string, slots: ReadonlyArray
 };
 
 /** The batch a list text makes against the canvas as it is now. */
-export const batchNow = (editor: Editor, stage: Pick<StagedFree, "sourceId" | "instruction">, listText: string): FreeBatch =>
-  freeBatch({ shapes: canvasShapes(editor), selected: editor.getSelectedShapeIds(), instruction: stage.instruction, sourceId: stage.sourceId, listText });
+export const batchNow = (editor: Editor, stage: Pick<StagedFree, "sourceId" | "instruction" | "repaired">, listText: string): FreeBatch =>
+  freeBatch({
+    shapes: canvasShapes(editor),
+    selected: editor.getSelectedShapeIds(),
+    instruction: stage.instruction,
+    sourceId: stage.sourceId,
+    listText,
+    repaired: stage.repaired,
+  });
 
 /** Sends a built batch as one image run with the staged batch id, its notes kept for the run report. */
 export const sendBatch = async (editor: Editor, engine: EngineConnection, stage: StagedFree, batch: FreeBatch): Promise<void> => {
@@ -101,16 +110,15 @@ export const sendBatch = async (editor: Editor, engine: EngineConnection, stage:
       prompt: run.prompt,
       references: await renderSlots(editor, stage.project, run.references, stage.rendered),
       selectionPrompt: run.selectionPrompt,
-      free: { picks: run.used === null ? null : [...run.used], dropped: [...run.dropped] },
+      free: { picks: run.picks === null ? null : [...run.picks], dropped: [...run.dropped] },
     });
   }
   noteBatch(stage.batchId, freeNotes(batch, stage.repairNotes));
-  const { values } = stage;
   await engine.call("run.image", {
     project: stage.project,
     batchId: stage.batchId,
-    ...(values.model === undefined ? {} : { model: values.model }),
-    params: imageParams(values.props),
+    ...(stage.model === undefined ? {} : { model: stage.model }),
+    params: stage.params,
     selectionPrompt: batch.shared,
     instruction: batch.instruction,
     outputs,
@@ -122,9 +130,10 @@ export const sendBatch = async (editor: Editor, engine: EngineConnection, stage:
 
 /**
  * The Free send: the list from the selection, one repair call when it holds fewer than two
- * sections, then the batch, sent or staged for the final prompt dialog (`"stay"`).
+ * sections, then the batch, sent or staged for the final prompt dialog (`"stay"`). `params`
+ * are the image params the tray's props make.
  */
-export const sendFree = async ({ editor, engine, project, values, source }: SendInput): Promise<void | "stay"> => {
+export const sendFree = async ({ editor, engine, project, values, source }: SendInput, params: ImageParams): Promise<void | "stay"> => {
   if (source.kind !== "selection") throw new Error(NO_FREE_SOURCE);
   const found = freeSource(source);
   if (found.source === undefined) throw new Error(NO_FREE_SOURCE);
@@ -135,6 +144,7 @@ export const sendFree = async ({ editor, engine, project, values, source }: Send
   const slots = await renderSlots(editor, project, composition.references, rendered);
 
   let listText = found.text;
+  let repaired = false;
   const repairNotes: string[] = [];
   let extraCost: number | undefined;
   if (splitList(found.listText).sections.length < 2) {
@@ -150,14 +160,29 @@ export const sendFree = async ({ editor, engine, project, values, source }: Send
       ...(model === undefined ? {} : { model }),
     });
     if (answer.cost !== null) extraCost = answer.cost;
-    const repaired = splitList(answer.text);
-    const sections = repaired.sections.length + repaired.truncated;
-    if (sections > 1) listText = answer.text;
+    const split = splitList(answer.text);
+    const sections = split.sections.length + split.truncated;
+    if (sections > 1) {
+      listText = answer.text;
+      repaired = true;
+    }
     repairNotes.push(repairNote(sections));
   }
 
-  const stage: StagedFree = { project, batchId, sourceId: found.source.id, listText, instruction: source.instruction, repairNotes, extraCost, values, rendered };
-  const batch = freeBatch({ shapes: source.shapes, selected: source.selected, instruction: source.instruction, sourceId: found.source.id, listText });
+  const stage: StagedFree = {
+    project,
+    batchId,
+    sourceId: found.source.id,
+    listText,
+    repaired,
+    instruction: source.instruction,
+    repairNotes,
+    extraCost,
+    model: values.model,
+    params,
+    rendered,
+  };
+  const batch = freeBatch({ shapes: source.shapes, selected: source.selected, instruction: source.instruction, sourceId: found.source.id, listText, repaired });
   if (batch.error !== undefined) throw new Error(batch.error);
   if (batch.runs.length === 0) throw new Error(NO_SECTIONS);
   if (viewsFinalPrompt(values.props)) {

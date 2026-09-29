@@ -8,6 +8,7 @@ import { join } from "node:path";
 import {
   resultMetaOf,
   runMarkerOf,
+  runOriginId,
   unframedError,
   type RecipeRef,
   type ResultRecipe,
@@ -25,7 +26,7 @@ import type { CanvasRooms, ChangeOrigin } from "../canvas/rooms.ts";
 import { errorText, logError, logInfo } from "../log.ts";
 import { chatRequestBody, completeText, type ReferencePart, type TextCallOutcome } from "../openRouter/text.ts";
 import type { SettingsStore } from "../settingsStore.ts";
-import { clearChange, fillFor, isShape, PLACEHOLDER_WIDTH, textPlaceholder, type LandedText } from "./placeholders.ts";
+import { clearChange, fillFor, isShape, PLACEHOLDER_WIDTH, textPlaceholder, type LandedText, type RunOutcome } from "./placeholders.ts";
 import { fileStamp, writeLoneSidecar } from "./resultFiles.ts";
 
 /** What a text run needs from the run service that owns the registry. */
@@ -39,7 +40,7 @@ export interface TextRunDeps {
   readonly inline: (folder: string, refs: ReadonlyArray<RecipeRef>) => Promise<ReferencePart[]>;
   /** Registers a live run; `settle` records its one output's outcome and ends it, `forget` drops a run that never started. */
   readonly register: (runId: string) => {
-    readonly settle: (outcome: { ok: true; landed: LandedText } | { ok: false; error: string }) => void;
+    readonly settle: (outcome: RunOutcome<LandedText>) => void;
     readonly forget: () => void;
   };
   readonly publish: (project: string, event: RunEvent) => Promise<unknown>;
@@ -52,7 +53,7 @@ export interface TextRunDeps {
 /** A text placeholder's box for placement: an empty prompt hugs its hint, so its height is the prompt's minimum. */
 const PLACEHOLDER_BOX = { w: PLACEHOLDER_WIDTH, h: 28 };
 
-const origin = (runId: string): ChangeOrigin => ({ kind: "server", id: `run:${runId}` });
+const origin = (runId: string): ChangeOrigin => ({ kind: "server", id: runOriginId(runId) });
 
 const counts = (refs: ReadonlyArray<RecipeRef>) => ({
   images: refs.filter((ref) => ref.kind === "image").length,
@@ -73,7 +74,7 @@ export const makeTextRuns = (deps: TextRunDeps) => {
     });
 
   /** One chat call with its references inlined, logged. Never rejects. */
-  const call = async (folder: string, key: string, model: string, prompt: string, references: ReadonlyArray<RecipeRef>, system?: string): Promise<TextCallOutcome> => {
+  const chatOnce = async (folder: string, key: string, model: string, prompt: string, references: ReadonlyArray<RecipeRef>, system?: string): Promise<TextCallOutcome> => {
     let outcome: TextCallOutcome;
     try {
       outcome = await completeText(deps.openRouterOrigin, key, chatRequestBody(model, prompt, await deps.inline(folder, references), system));
@@ -122,7 +123,7 @@ export const makeTextRuns = (deps: TextRunDeps) => {
       const model = request.model ?? current.textModel;
       const references = request.references ?? [];
       const startedAt = Date.now();
-      const outcome = yield* Effect.promise(() => call(folder, current.key, model, request.prompt, references, request.system));
+      const outcome = yield* Effect.promise(() => chatOnce(folder, current.key, model, request.prompt, references, request.system));
       if (!outcome.ok) return yield* unframedError("upstream", outcome.error);
       yield* Effect.promise(() => writeSidecar(folder, startedAt, sidecarOf(request.prompt, model, outcome.text, references, request.batchId ?? null, outcome.cost)));
       return { text: outcome.text, cost: outcome.cost };
@@ -166,8 +167,8 @@ export const makeTextRuns = (deps: TextRunDeps) => {
       yield* rooms.apply(request.project, { put: [placeholder], remove: [] }, origin(runId)).pipe(Effect.tapError(() => Effect.sync(run.forget)));
       yield* Effect.promise(() => deps.publish(project, { type: "started", runId, batchId, count: 1 }));
 
-      const settle = async () => {
-        const outcome = await call(folder, current.key, model, request.prompt, request.references);
+      const finish = async () => {
+        const outcome = await chatOnce(folder, current.key, model, request.prompt, request.references);
         let landed: LandedText | undefined;
         if (outcome.ok) {
           const recipe: ResultRecipe = {
@@ -213,7 +214,7 @@ export const makeTextRuns = (deps: TextRunDeps) => {
         await deps.publish(project, { type: "finished", runId, succeeded: 0, failed: 1, errors: [error], orphaned: 0 });
       };
       // The run lives in the engine: nothing here waits on the socket that started it.
-      void settle().catch((error: unknown) => logError(`${runId}: ${errorText(error)}`));
+      void finish().catch((error: unknown) => logError(`${runId}: ${errorText(error)}`));
 
       return { runId, batchId, placeholders: [shapeId] };
     });

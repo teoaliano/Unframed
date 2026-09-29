@@ -169,6 +169,23 @@ describe("Free batch: assembling each run", () => {
     expect(looped.runs).toEqual([]);
   });
 
+  it("reads a repaired list literally, as model output, even from a prompt source", () => {
+    const shapes = [shape.prompt("list", "three of @subject"), shape.prompt("subject", "a wolf", { y: 900 })];
+    const batch = freeBatch({ shapes, selected: ["list"], instruction: "", sourceId: "list", listText: "@subject once\n---\n@list twice", repaired: true });
+    expect(batch.error).toBeUndefined();
+    expect(batch.runs.map((run) => run.prompt)).toEqual(["@subject once", "@list twice"]);
+  });
+
+  it("reports the numbers each section listed beside the ones it could use", () => {
+    const shapes = [shape.prompt("list", ""), shape.image("a", "a.png", { y: 100 }), shape.image("b", "b.png", { y: 200 })];
+    const batch = batchOf(shapes, "list", "images: 1, 5\none\n---\nimages: 7\ntwo\n---\nthree");
+    expect(batch.runs.map((run) => [run.picks, run.used, run.dropped])).toEqual([
+      [[1, 5], [1], [5]],
+      [[7], null, [7]],
+      [null, null, []],
+    ]);
+  });
+
   it("reads a text result source's list literally", () => {
     const shapes = [shape.textResult("answer", "x"), shape.prompt("subject", "a wolf", { y: 900 })];
     expect(batchOf(shapes, "answer", "@subject\n---\n@answer", "", ["answer"]).runs.map((run) => run.prompt)).toEqual(["@subject", "@answer"]);

@@ -96,10 +96,14 @@ export interface FreeBatchInput {
   readonly shapes: ReadonlyArray<CanvasShape>;
   readonly selected: ReadonlyArray<string>;
   readonly instruction: string;
-  /** The Free source's shape id. */
   readonly sourceId: string;
   /** The list, as the source has it or as the repair rewrote it. */
   readonly listText: string;
+  /**
+   * The list is the repair's answer. It is model output, so it is read literally even from
+   * a prompt source: its `@` tokens never pull in other prompts.
+   */
+  readonly repaired?: boolean | undefined;
 }
 
 /** One output of a Free batch: exactly what it sends and how its directive was read. */
@@ -108,14 +112,15 @@ export interface FreeRun {
   /** The shared context and the section, joined: what the output's recipe records. */
   readonly selectionPrompt: string;
   readonly references: ReadonlyArray<Slot>;
-  /** The picked image numbers that named an image, or `null` for every image. */
+  /** The numbers the section's `images:` line listed, or `null` without one. */
+  readonly picks: ReadonlyArray<number> | null;
+  /** The picks that named an image, or `null` when the run gets every image. */
   readonly used: ReadonlyArray<number> | null;
   readonly dropped: ReadonlyArray<number>;
 }
 
 export interface FreeBatch {
   readonly runs: ReadonlyArray<FreeRun>;
-  /** Sections past the cap. */
   readonly truncated: number;
   /** Sections within the cap left with no text once their directive was read. */
   readonly empty: number;
@@ -140,7 +145,7 @@ export const freeBatch = (input: FreeBatchInput): FreeBatch => {
   const base = { shared, instruction: composition.instruction, truncated: 0, empty: 0, runs: [] };
   const source = selectionOrder(input.shapes, input.selected).find((shape) => shape.id === input.sourceId);
   if (source === undefined) return { ...base, error: SOURCE_GONE_MESSAGE };
-  const list = resolveListText(input.shapes, source, input.listText);
+  const list = input.repaired ? { ok: true as const, text: input.listText } : resolveListText(input.shapes, source, input.listText);
   if (!list.ok) return { ...base, error: list.error };
   if (composition.error !== undefined) return { ...base, error: composition.error };
 
@@ -158,6 +163,7 @@ export const freeBatch = (input: FreeBatchInput): FreeBatch => {
       prompt: joinPromptParts(shared, parsed.text, composition.instruction),
       selectionPrompt: joinPromptParts(shared, parsed.text),
       references,
+      picks: parsed.picks,
       used,
       dropped,
     });

@@ -39,7 +39,7 @@ const imageSlots = (source: RunSource): number =>
     : source.recipe.recipe.references.filter((ref) => ref.kind === "image").length;
 
 /** A run's prompt, its error and the rest of its request, from the live selection or a recipe. */
-const planOf = (source: RunSource) => {
+export const planOf = (source: RunSource) => {
   if (source.kind === "selection") {
     const { composition } = source;
     return { prompt: composition.prompt, error: composition.error, selectionPrompt: composition.promptParts.join("\n\n"), instruction: composition.instruction };
@@ -53,7 +53,7 @@ const send = async (input: SendInput): Promise<void | "stay"> => {
   const runs = runsOf(values.props);
   const remember = () => void saveLastUsed(engine, "image", { ...(values.picked && values.model !== undefined ? { model: values.model } : {}), props: { ...values.props } });
   if (runs === "free") {
-    const outcome = await sendFree(input);
+    const outcome = await sendFree(input, imageParams(values.props));
     remember();
     return outcome;
   }

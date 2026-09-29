@@ -32,9 +32,20 @@ import { generateImage, imageRequestBody } from "../openRouter/images.ts";
 import type { ReferencePart } from "../openRouter/text.ts";
 import { Config } from "../services.ts";
 import { SettingsStore } from "../settingsStore.ts";
-import { clearChange, fillFor, imagePlaceholder, isShape, PLACEHOLDER_WIDTH, placeholderHeight, type Landed, type LandedText, type Shape } from "./placeholders.ts";
+import {
+  clearChange,
+  fillFor,
+  imagePlaceholder,
+  isShape,
+  PLACEHOLDER_WIDTH,
+  placeholderHeight,
+  type Landed,
+  type LandedText,
+  type RunOutcome,
+  type Shape,
+} from "./placeholders.ts";
 import { makeTextRuns } from "./textRuns.ts";
-import { extensionFor, mimeForFile, referenceName, resultBase, writeResultFile, writeSidecar } from "./resultFiles.ts";
+import { extensionFor, mimeForFile, referenceName, resultBase, writeLoneSidecar, writeResultFile, writeSidecar } from "./resultFiles.ts";
 import { shapePageBoxes } from "./shapeBounds.ts";
 import { readResultSidecar } from "./sidecars.ts";
 
@@ -53,7 +64,7 @@ export class Runs extends Context.Service<
   Runs,
   {
     readonly image: (request: ImageRunRequest) => Effect.Effect<{ runId: string; batchId: string; placeholders: string[] }, UnframedError>;
-    /** Spec 05: a text run, landing a text result. */
+    /** Spec 05: answers once the run's empty text result is in the room; the answer fills it later. */
     readonly text: (request: TextRunRequest) => Effect.Effect<{ runId: string; batchId: string; placeholders: string[] }, UnframedError>;
     /** Spec 05: one text call that lands nothing. */
     readonly complete: (request: TextCompleteRequest) => Effect.Effect<TextCompleteAnswer, UnframedError>;
@@ -64,7 +75,7 @@ export class Runs extends Context.Service<
   }
 >()("unframed/engine/Runs") {}
 
-type Outcome = { readonly ok: true; readonly landed: Landed | LandedText } | { readonly ok: false; readonly error: string };
+type Outcome = RunOutcome<Landed | LandedText>;
 
 interface RunRecord {
   live: boolean;
@@ -323,7 +334,7 @@ export const runsLayer = Layer.effect(
           const runIndex = index + 1;
           const shapeId = placeholders[index]!.id;
           const body = imageRequestBody(model, output.prompt, request.params);
-          let outcome: { readonly ok: true; readonly landed: Landed } | { readonly ok: false; readonly error: string };
+          let outcome: RunOutcome<Landed>;
           try {
             if (output.references.length > 0) body.input_references = await inline(folder, output.references);
             const answer = await generateImage(config.openRouterOrigin, current.key, body);
@@ -418,6 +429,14 @@ export const runsLayer = Layer.effect(
           if ("url" in ref) references.push(ref);
           else if (ref.original === undefined) references.push({ kind: ref.kind, file: yield* copyOf(ref.file) });
           else references.push({ kind: ref.kind, file: yield* copyOf(ref.file), original: yield* copyOf(ref.original) });
+        }
+        // Spec 05: a text result's only file is its sidecar, so its copy is a new sidecar that never overwrites.
+        if (source.recipe.medium === "text") {
+          const next = { ...source.sidecar, recipe: { ...source.recipe, references } };
+          return yield* Effect.tryPromise({
+            try: async () => ({ sidecar: await writeLoneSidecar(targetDir, file.replace(/\.json$/, ""), next) }),
+            catch: (error) => unframedError("internal", `Could not copy the recipe: ${errorText(error)}`),
+          });
         }
         // The result's sidecar sits beside its image, as a run leaves it, in place of the copy's own.
         const target = sidecarFileName(file);

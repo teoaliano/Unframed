@@ -3,26 +3,18 @@
  * image and video slot attached, the answer landing as a text result. No props, no Runs,
  * no estimate: the tray shows the model and nothing else.
  */
-import { joinPromptParts, NO_KEY_MESSAGE, type ModelParams } from "@unframed/domain";
+import { NO_KEY_MESSAGE, type ModelParams } from "@unframed/domain";
 import type { TLShapeId } from "tldraw";
 import type { Payload } from "../rpc/engine.ts";
 import { pageBox, selectionBox } from "./facts.ts";
+import { planOf } from "./imageMedium.ts";
 import { saveLastUsed } from "./lastUsed.ts";
-import { registerMedium, type MediumDefinition, type RunSource, type SendInput } from "./mediumRegistry.ts";
+import { registerMedium, type MediumDefinition, type SendInput } from "./mediumRegistry.ts";
 import { referencesFor } from "./render.ts";
 
 export const NOTHING_TO_RUN = "Nothing to run. Select a prompt, or type an instruction.";
 
 const NO_PARAMS: ModelParams = { props: [], referenceCap: undefined, supported: () => false };
-
-const planOf = (source: RunSource) => {
-  if (source.kind === "selection") {
-    const { composition } = source;
-    return { prompt: composition.prompt, error: composition.error, selectionPrompt: composition.promptParts.join("\n\n"), instruction: composition.instruction };
-  }
-  const { recipe } = source.recipe;
-  return { prompt: joinPromptParts(recipe.selectionPrompt, source.instruction), error: source.error, selectionPrompt: recipe.selectionPrompt, instruction: source.instruction };
-};
 
 /** The request of a text run, from the live selection or a result's recorded recipe. */
 export const textRunRequest = async ({ editor, project, values, source }: Omit<SendInput, "engine">): Promise<Payload<"run.text">> => {

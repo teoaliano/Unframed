@@ -288,8 +288,10 @@ const copyRecipes = async (ctx: ContentContext, source: string, content: TLConte
     const assetId = (shape.props as { assetId?: string | null }).assetId;
     const marker = parseAssetMarker(String((assetId ? byId.get(assetId)?.props as { src?: string | null } | undefined : undefined)?.src ?? ""));
     try {
-      if (marker?.kind !== "project-file") throw new Error("the result has no picture here");
-      const copied = await ctx.engine.call("recipe.copy", { project: ctx.project, from: source, sidecar: result.sidecar, file: marker.file });
+      // A text result (spec 05) has no picture: its sidecar is its one file.
+      const file = shape.type === "text" ? result.sidecar : marker?.kind === "project-file" ? marker.file : undefined;
+      if (file === undefined) throw new Error("the result has no picture here");
+      const copied = await ctx.engine.call("recipe.copy", { project: ctx.project, from: source, sidecar: result.sidecar, file });
       shape.meta = { ...shape.meta, unframed: { ...meta.unframed, result: { ...result, sidecar: copied.sidecar } } };
     } catch (error) {
       const { result: _result, ...rest } = meta.unframed ?? {};

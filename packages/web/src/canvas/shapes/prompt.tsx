@@ -135,26 +135,20 @@ const PromptShape = ({ shape, util }: { readonly shape: TLTextShape; readonly ut
   const result = resultMetaOf(shape);
   const running = empty && runMarkerOf(shape) !== undefined;
   const cost = result?.medium === "text" && result.cost !== null ? `${formatCost(result.cost)} · ` : "";
+  const hintStyle = { fontFamily: dv.fontFamily, fontSize: dv.fontSize, lineHeight: dv.lineHeight, width, height };
   return (
     <div className="unframed-prompt" style={{ width, height, transform: `scale(${shape.props.scale})`, transformOrigin: "top left" }}>
       <ShapeLabel shapeId={shape.id} kind="prompt">
         {cost}@{ref}
       </ShapeLabel>
       {running ? (
-        <div
-          className="unframed-prompt-hint unframed-prompt-running"
-          role="status"
-          style={{ fontFamily: dv.fontFamily, fontSize: dv.fontSize, lineHeight: dv.lineHeight, width, height }}
-        >
+        <div className="unframed-prompt-hint unframed-prompt-running" role="status" style={hintStyle}>
           <LoaderCircle size={14} className="unframed-placeholder__spinner" aria-hidden />
           <span>{PROMPT_RUNNING}</span>
         </div>
       ) : (
         empty && (
-          <div
-            className="unframed-prompt-hint"
-            style={{ fontFamily: dv.fontFamily, fontSize: dv.fontSize, lineHeight: dv.lineHeight, width, height }}
-          >
+          <div className="unframed-prompt-hint" style={hintStyle}>
             {PROMPT_HINT}
           </div>
         )

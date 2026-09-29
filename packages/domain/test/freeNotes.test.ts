@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { finalPromptWarnings, freeNotes, repairNote, type FreeBatch, type FreeRun } from "../src/index.ts";
 
-const run = (dropped: number[] = []): FreeRun => ({ prompt: "p", selectionPrompt: "p", references: [], used: null, dropped });
+const run = (dropped: number[] = []): FreeRun => ({ prompt: "p", selectionPrompt: "p", references: [], picks: dropped.length > 0 ? dropped : null, used: null, dropped });
 const batch = (runs: FreeRun[], truncated = 0, empty = 0): FreeBatch => ({ runs, truncated, empty, shared: "", instruction: "" });
 
 describe("the Free notes", () => {
