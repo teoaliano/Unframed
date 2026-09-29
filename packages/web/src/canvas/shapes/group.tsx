@@ -92,7 +92,7 @@ const RenameField = ({ shape }: { readonly shape: TLFrameShape }) => {
     // The name is typed as it is, not in the label's capitals; the kit Input sits unstyled inside this frame.
     <span className="pointer-events-auto flex items-center gap-px tracking-normal normal-case">
       <span data-testid="group-rename-prefix">@</span>
-      <span className="inline-flex h-5 items-center overflow-hidden rounded-md border border-primary bg-background text-foreground">
+      <span className="inline-flex h-5 items-center overflow-hidden rounded-md border border-highlight bg-background text-foreground">
         <Input
           ref={input}
           unstyled
@@ -142,7 +142,7 @@ const GroupBox = ({ shape }: { readonly shape: TLFrameShape }) => {
   return (
     <HTMLContainer
       id={shape.id}
-      className="box-border rounded-xl border-[1.5px] border-dashed border-border bg-group-fill data-[selected]:rounded-none data-[selected]:border-solid data-[selected]:border-primary"
+      className="box-border rounded-xl border-[1.5px] border-dashed border-border bg-group-fill data-[selected]:rounded-none data-[selected]:border-solid data-[selected]:border-highlight"
       data-testid="group-frame"
       data-selected={selected ? "true" : undefined}
       style={{ width: shape.props.w, height: shape.props.h }}

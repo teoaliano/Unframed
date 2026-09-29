@@ -35,8 +35,8 @@
   --tl-color-warning: var(--warning);
   --tl-color-success: var(--success);
   --tl-color-info: var(--info);
-  --tl-color-selection-stroke: var(--primary);
-  --tl-color-selection-fill: color-mix(in srgb, var(--primary) 16%, transparent);
+  --tl-color-selection-stroke: var(--highlight);
+  --tl-color-selection-fill: color-mix(in srgb, var(--highlight) 16%, transparent);
   --tl-radius-0: calc(var(--radius) - 8px);
   --tl-radius-1: calc(var(--radius) - 6px);
   --tl-radius-2: var(--radius-sm);

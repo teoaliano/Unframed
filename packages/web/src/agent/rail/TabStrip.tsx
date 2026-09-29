@@ -10,7 +10,7 @@ import type { ChatClient } from "../store.ts";
 
 const INLINE_TABS = 3;
 
-const LiveDot = () => <span className="size-1.5 shrink-0 rounded-full bg-primary" data-testid="live-dot" aria-label="Running" />;
+const LiveDot = () => <span className="size-1.5 shrink-0 rounded-full bg-highlight" data-testid="live-dot" aria-label="Running" />;
 
 /** A chat is live while its turn runs or it waits on the person. */
 const isLive = (chat: ChatSummary) => chat.status === "running" || chat.hasPendingApproval || chat.hasPendingUserInput;

@@ -88,6 +88,8 @@
   --color-secondary: var(--secondary);
   --color-primary-foreground: var(--primary-foreground);
   --color-primary: var(--primary);
+  --color-highlight: var(--highlight);
+  --color-highlight-foreground: var(--highlight-foreground);
   --color-popover-foreground: var(--contrast-popover-foreground);
   --color-popover: var(--popover);
   --color-card-foreground: var(--contrast-card-foreground);
@@ -329,8 +331,12 @@
   --card-foreground: var(--color-zinc-800);
   --popover: var(--color-white);
   --popover-foreground: var(--color-zinc-800);
-  --primary: oklch(0.488 0.217 264);
+  /* Unframed: a neutral primary, near black on light and near white on dark, in place of t3code's blue. */
+  --primary: var(--color-neutral-900);
   --primary-foreground: var(--color-white);
+  /* Unframed: the highlight for focus, links, the canvas selection and live marks (sky-300 on dark; sky-600 reads on light). */
+  --highlight: var(--color-sky-600);
+  --highlight-foreground: var(--color-white);
   --secondary: var(--color-zinc-50);
   --secondary-foreground: var(--color-zinc-800);
   --muted: var(--color-zinc-50);
@@ -352,7 +358,7 @@
   --destructive: var(--error);
   --border: var(--color-zinc-200);
   --input: var(--color-zinc-300);
-  --ring: var(--primary);
+  --ring: var(--highlight);
   --destructive-foreground: var(--error-foreground);
   --info: var(--color-blue-500);
   --info-foreground: var(--color-blue-700);
@@ -373,7 +379,10 @@
     --card-foreground: var(--color-neutral-100);
     --popover: color-mix(in srgb, var(--background) 97%, var(--color-white));
     --popover-foreground: var(--color-neutral-100);
-    --primary: oklch(0.571 0.21 264);
+    --primary: var(--color-neutral-50);
+    --primary-foreground: var(--color-neutral-950);
+    --highlight: var(--color-sky-300);
+    --highlight-foreground: var(--color-neutral-950);
     --secondary: --alpha(var(--color-white) / 3%);
     --secondary-foreground: var(--color-neutral-100);
     --muted: --alpha(var(--color-white) / 3%);
@@ -467,9 +476,9 @@
 /* Unframed-only tokens (spec 12): canvas values t3code has no token for, built from its tokens. */
 :root {
   --canvas-dot: color-mix(in srgb, var(--foreground) 16%, var(--background));
-  --selection-stroke: var(--primary);
+  --selection-stroke: var(--highlight);
   --selection-grip: var(--card);
-  --group-fill: color-mix(in srgb, var(--primary) 4%, var(--background));
+  --group-fill: color-mix(in srgb, var(--highlight) 4%, var(--background));
   /* A filled page's frame is white in both schemes (spec 09). */
   --artifact-page: var(--color-white);
   /* Unframed: bottom-left toasts sit above tldraw's zoom controls (spec 02). */
@@ -628,7 +637,7 @@ code {
 }
 
 .chat-markdown a:not(.chat-markdown-file-link) {
-  color: var(--info-foreground);
+  color: var(--highlight);
 }
 
 .chat-markdown a:not(.chat-markdown-file-link):hover,

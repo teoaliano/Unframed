@@ -41,7 +41,7 @@ const Provider = ({
   readonly placeholder: string;
   readonly onPath: (path: string) => void;
 }) => {
-  const dot = status === undefined ? "bg-input" : status.status === "ready" ? "bg-primary" : "bg-destructive";
+  const dot = status === undefined ? "bg-input" : status.status === "ready" ? "bg-highlight" : "bg-destructive";
   const text = status === undefined ? (checking ? "checking…" : "not checked yet") : statusText(status);
   return (
     <div className="flex flex-col gap-1.5" data-provider={name}>

@@ -45,7 +45,7 @@ test("the selection is a thin accent line with square grips, drawn from the sele
   await openCanvas(page, engine);
   await putRecords(engine, [emptyMedia("shape:a", "image", "150", { x: 440, y: 60 }), emptyMedia("shape:b", "image", "151", { x: 440, y: 300 })]);
   await expect(shapeOnScreen(page, "shape:b")).toBeVisible();
-  const accent = await token(page, "--primary");
+  const accent = await token(page, "--highlight");
   const canvas = await token(page, "--background");
 
   const a = (await shapeOnScreen(page, "shape:a").boundingBox())!;

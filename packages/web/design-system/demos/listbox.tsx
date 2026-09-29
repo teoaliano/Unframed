@@ -30,7 +30,7 @@ export default function ListboxDemo() {
           <div role="listbox" aria-label="Mentions" className={`${listboxPopupClass} max-h-[168px] w-[260px]`}>
             {MENTIONS.map((row, index) => (
               <div key={row.ref} role="option" aria-selected={index === 1} data-highlighted={index === 1 ? "" : undefined} className={`${listboxRowClass} whitespace-nowrap`}>
-                <span className="shrink-0 text-primary">@{row.ref}</span>
+                <span className="shrink-0 text-highlight">@{row.ref}</span>
                 <span className="min-w-0 truncate text-muted-foreground">{row.preview}</span>
               </div>
             ))}

@@ -47,7 +47,7 @@ export const MentionList = ({
           }}
           onPointerEnter={() => onHighlight(index)}
         >
-          <span className="shrink-0 text-primary">@{row.ref}</span>
+          <span className="shrink-0 text-highlight">@{row.ref}</span>
           {row.preview !== undefined && <span className="min-w-0 truncate text-muted-foreground">{row.preview}</span>}
         </div>
       ))}

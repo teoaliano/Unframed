@@ -27,7 +27,7 @@
 }
 
 /*
- * The focus mark: the active chat's artifacts, their label filled with the primary colour
+ * The focus mark: the active chat's artifacts, their label filled with the highlight colour
  * and a live dot, in the shape of the kit's small badge.
  */
 .tl-container .tl-shape[data-agent-focus] [data-shape-label] {
@@ -37,8 +37,8 @@
   height: 1.125rem;
   bottom: calc(100% + 2px);
   border-radius: var(--radius-sm);
-  background-color: var(--primary);
-  color: var(--primary-foreground);
+  background-color: var(--highlight);
+  color: var(--highlight-foreground);
   visibility: visible;
 }
 

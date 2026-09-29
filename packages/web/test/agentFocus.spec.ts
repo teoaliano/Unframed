@@ -28,8 +28,8 @@ test("the active chat's artifacts wear the focus mark, and switching tabs moves 
   // The label fills with the primary colour in both schemes.
   const label = outro.locator("[data-shape-label]");
   await inBothSchemes(page, async () => {
-    await expectToken(label, "background-color", "--primary");
-    await expectToken(label, "color", "--primary-foreground");
+    await expectToken(label, "background-color", "--highlight");
+    await expectToken(label, "color", "--highlight-foreground");
   });
 
   await rail(page).getByRole("tab", { name: "About the intro" }).click();

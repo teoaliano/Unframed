@@ -217,7 +217,7 @@ export const QuestionPanel = ({
                     <span className="text-sm font-medium">{option.label}</span>
                     {option.description !== "" && <span className="text-2xs font-normal text-secondary-label">{option.description}</span>}
                   </span>
-                  {selected && <Check aria-hidden className="size-3.5 shrink-0 text-primary" />}
+                  {selected && <Check aria-hidden className="size-3.5 shrink-0 text-highlight" />}
                 </Button>
               );
             })}

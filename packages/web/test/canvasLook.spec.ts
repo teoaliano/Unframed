@@ -79,7 +79,7 @@ test("the mention menu is the kit's popup with its row look", async ({ page, eng
   });
 });
 
-test("a group is a dashed frame in the border colour on the group fill, solid primary when selected; its name field and recipe chip are the kit's", async ({ page, engine }) => {
+test("a group is a dashed frame in the border colour on the group fill, solid highlight when selected; its name field and recipe chip are the kit's", async ({ page, engine }) => {
   await openCanvas(page, engine);
   const recipe = { medium: "image", model: "openai/gpt-image-2", params: {}, runs: 2 };
   await putRecords(engine, [{ ...groupRecord("shape:character", "character", { x: -400, y: -100 }), meta: { unframed: { recipe } } }]);
@@ -100,7 +100,7 @@ test("a group is a dashed frame in the border colour on the group fill, solid pr
     await page.mouse.click(box.x + 2, box.y + box.height / 2);
     await expect(frame).toHaveAttribute("data-selected", "true");
     expect(await styleOf(frame, "border-top-style")).toBe("solid");
-    expect(await styleOf(frame, "border-top-color")).toBe(await tokenColor(page, "--primary"));
+    expect(await styleOf(frame, "border-top-color")).toBe(await tokenColor(page, "--highlight"));
     expect(await styleOf(frame, "border-top-left-radius")).toBe("0px");
 
     await page.keyboard.press("F2");

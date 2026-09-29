@@ -88,7 +88,7 @@
   --dial-text-secondary: color-mix(in srgb, var(--color-neutral-500) 90%, var(--color-white));
   --dial-text-tertiary: color-mix(in srgb, var(--color-neutral-500) 90%, var(--color-white));
   /* --ring */
-  --dial-focus-ring: oklch(0.571 0.21 264);
+  --dial-focus-ring: var(--color-sky-300);
   --dial-radius: var(--control-radius);
   font-family: var(--font-sans);
 }

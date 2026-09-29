@@ -46,7 +46,7 @@ withRenderer("Render puts a placeholder beside the motion at once, shows the pro
   const progress = shape.getByTestId("render-progress");
   await expect(progress).toHaveText(/^\d+% · (Capturing frames|Encoding|Finishing)$/, { timeout: 5000 });
   await expect(progress.locator("svg[aria-label='Loading']")).toHaveCount(1);
-  await expectToken(progress.getByTestId("render-fill"), "background-color", "--primary");
+  await expectToken(progress.getByTestId("render-fill"), "background-color", "--highlight");
   await expectToken(progress, "color", "--color-muted-foreground");
   const filled = await waitForRoom(engine, "default", (records) => {
     const video = records.find((record) => record.id === placeholder.id);

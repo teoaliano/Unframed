@@ -124,7 +124,7 @@ The selection toolbar
 - **Filter**: with no artifact selected, every chat shows. With one or more artifacts selected, only chats whose tags include any of them. A chat whose tagged artifacts are all deleted still shows.
 - **Active tab**: the one last chosen if it is still visible; else the newest visible one; else none. With none, the next message starts a chat.
 - **Empty strip**: "No chats yet" with nothing selected; "Nothing said about these yet. Your first message starts a chat." with two or more artifacts selected; nothing with exactly one (the composer already asks for the first message).
-- **Focus mark**: every artifact in the active chat's tags wears the focus mark on the canvas (spec 02's artifact label filled with the primary colour, in the primary foreground, with a live dot, in the kit's small badge shape). A tag whose shape is gone marks nothing.
+- **Focus mark**: every artifact in the active chat's tags wears the focus mark on the canvas (spec 02's artifact label filled with the highlight colour, in the highlight foreground, with a live dot, in the kit's small badge shape). A tag whose shape is gone marks nothing.
 
 ### Thread search
 
@@ -207,7 +207,7 @@ Full access carries a "Default" badge in the list.
 
 **Plan toggle** (plan mode on). The kit's Toggle reading "Plan" (ruler-pencil icon) in plan mode and "Build" (bot icon) otherwise, `aria-pressed` set in plan mode. Tooltip: "Plan mode. Click to return to normal build mode." or "Default mode. Click to enter plan mode." Shift+Tab in the composer toggles it.
 
-**Context window meter.** A 20 px ring in a 28 px ghost button, filled to the share of the context used (from spec 07's token usage), in the primary colour, turning to the error colour above 90%. Its label reads "Context window NN% used" (one decimal under 10%), or "Context window <N> tokens used" with no known maximum. Hovering for 150 ms opens a popover: "Context Window", "NN% · <used>/<max>" (tokens as `N`, `N.Nk`, `Nk`, `N.Nm`), a progress bar, "Total processed <N>", "Context compacts automatically when needed.", and a **Compact context** button that sends the provider's compaction (disabled with "Compaction is unavailable for this provider" when it has none).
+**Context window meter.** A 20 px ring in a 28 px ghost button, filled to the share of the context used (from spec 07's token usage), in the highlight colour, turning to the error colour above 90%. Its label reads "Context window NN% used" (one decimal under 10%), or "Context window <N> tokens used" with no known maximum. Hovering for 150 ms opens a popover: "Context Window", "NN% · <used>/<max>" (tokens as `N`, `N.Nk`, `Nk`, `N.Nm`), a progress bar, "Total processed <N>", "Context compacts automatically when needed.", and a **Compact context** button that sends the provider's compaction (disabled with "Compaction is unavailable for this provider" when it has none).
 
 **Send and Stop.** Send is disabled with no provider, or with an empty draft and no attachments. While a turn runs, Stop ("Stop generation") interrupts it, and Send becomes "Queue message".
 

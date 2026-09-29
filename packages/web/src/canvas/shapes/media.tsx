@@ -323,7 +323,7 @@ const VideoClip = ({ shape }: { readonly shape: TLVideoShape }) => {
         <input
           type="range"
           aria-label="Position"
-          className="min-w-0 flex-1 accent-primary"
+          className="min-w-0 flex-1 accent-highlight"
           min={0}
           max={Number.isFinite(duration) && duration > 0 ? duration : 0}
           step={0.01}

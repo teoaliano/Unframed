@@ -87,7 +87,7 @@ export const RenderRow = ({ shape }: { readonly shape: TLShape }) => {
         <div role="status" data-testid="render-progress" className="flex min-w-0 flex-1 items-center gap-2">
           <Spinner size="xs" aria-hidden />
           <div aria-hidden className="h-1 w-18 shrink-0 overflow-hidden rounded-full bg-input">
-            <div data-testid="render-fill" className="h-full rounded-full bg-primary transition-[width] duration-200 ease-out" style={{ width: `${progress}%` }} />
+            <div data-testid="render-fill" className="h-full rounded-full bg-highlight transition-[width] duration-200 ease-out" style={{ width: `${progress}%` }} />
           </div>
           <span className="truncate tabular-nums">{status?.message ? `${progress}% · ${status.message}` : `${progress}%`}</span>
         </div>

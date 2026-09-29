@@ -382,7 +382,7 @@ export const ContextMeter = ({ usage, onCompact, compactUnavailable }: { readonl
               cy="12"
               r={RADIUS}
               fill="none"
-              className={view.overloaded ? "stroke-error transition-[stroke-dashoffset,stroke] duration-500 ease-out motion-reduce:transition-none" : "stroke-primary transition-[stroke-dashoffset,stroke] duration-500 ease-out motion-reduce:transition-none"}
+              className={view.overloaded ? "stroke-error transition-[stroke-dashoffset,stroke] duration-500 ease-out motion-reduce:transition-none" : "stroke-highlight transition-[stroke-dashoffset,stroke] duration-500 ease-out motion-reduce:transition-none"}
               data-testid="context-ring"
               strokeWidth="3"
               strokeLinecap="round"
@@ -402,7 +402,7 @@ export const ContextMeter = ({ usage, onCompact, compactUnavailable }: { readonl
           </div>
           {view.percent !== null && (
             <div role="progressbar" aria-label="Context window usage" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(filled)} className="h-1.5 w-full overflow-hidden rounded-full bg-muted/60">
-              <div className={view.overloaded ? "h-full rounded-full bg-error" : "h-full rounded-full bg-primary"} style={{ width: `${filled}%` }} />
+              <div className={view.overloaded ? "h-full rounded-full bg-error" : "h-full rounded-full bg-highlight"} style={{ width: `${filled}%` }} />
             </div>
           )}
           {view.totalProcessedText !== null && (
