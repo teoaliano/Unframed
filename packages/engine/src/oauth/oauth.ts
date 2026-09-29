@@ -1,6 +1,6 @@
 /**
  * The OpenRouter connect flow (spec 10): the one pending attempt, the authorize URL, the
- * callback page a person's browser lands on, cancelling, and the key status. The verifier
+ * callback page a person's browser lands on, ending an attempt, and the key status. The verifier
  * never leaves this process; the key OpenRouter returns goes through the same validator
  * and the same `.env` funnel as a pasted one.
  */
@@ -22,8 +22,6 @@ export class OAuth extends Context.Service<
   {
     readonly start: Effect.Effect<{ authorizeUrl: string }>;
     readonly pending: Effect.Effect<OAuthPendingAnswer>;
-    /** `oauth.cancel`: ends the attempt, and removes the key it wrote if it got that far. */
-    readonly cancel: Effect.Effect<Record<string, never>, UnframedError>;
     /** Ends a pending attempt without touching `.env`. True when a key write for it is in flight or landed. */
     readonly cancelAttempt: Effect.Effect<boolean>;
     readonly status: Effect.Effect<KeyStatus, UnframedError>;
@@ -90,16 +88,6 @@ export const oauthLayer = Layer.effect(
 
     const pending = Effect.sync((): OAuthPendingAnswer => attempts.peek(Date.now()) ?? { state: "none", reason: "" });
 
-    const cancel = Effect.gen(function* () {
-      if (!attempts.cancel()) return {};
-      // Queued behind the callback's own key write, so the key ends up removed either way.
-      yield* Effect.mapError(settings.write({ OPENROUTER_API_KEY: null }), (error) =>
-        unframedError("internal", `Could not remove the key the cancelled connection had written: ${error.reason}`),
-      );
-      yield* settings.emit;
-      return {};
-    });
-
     const status = Effect.gen(function* () {
       const { key } = yield* settings.read;
       if (key === "") return { hasKey: false } as const;
@@ -165,7 +153,6 @@ export const oauthLayer = Layer.effect(
     return OAuth.of({
       start,
       pending,
-      cancel,
       cancelAttempt: Effect.sync(() => attempts.cancel()),
       status,
       callbackRoute,

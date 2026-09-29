@@ -61,7 +61,7 @@ export const rpcHandlersLayer = UnframedRpcs.toLayer(
       "settings.removeKey": () => lifecycle.removeKey,
       "oauth.start": () => oauth.start,
       "oauth.pending": () => oauth.pending,
-      "oauth.cancel": () => oauth.cancel,
+      "oauth.cancel": () => lifecycle.cancelConnection,
       "oauth.status": () => oauth.status,
       "projects.rename": ({ name, to }) => lifecycle.renameProject(name, to),
       "projects.delete": ({ name, confirmRenders }) => lifecycle.deleteProject(name, confirmRenders === true),

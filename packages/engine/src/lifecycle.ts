@@ -62,6 +62,8 @@ export class Lifecycle extends Context.Service<
     readonly updateSettings: (patch: SettingsPatch) => Effect.Effect<Settings, UnframedError>;
     /** Removing a key is a security action: it stands even when the job store cannot be read. */
     readonly removeKey: Effect.Effect<RemovedKey, UnframedError>;
+    /** `oauth.cancel`: ends the attempt; when its key write was in flight or landed, removes the key as `removeKey` does. */
+    readonly cancelConnection: Effect.Effect<Omit<RemovedKey, "settings">, UnframedError>;
     readonly renameProject: (name: string, to: string) => Effect.Effect<{ name: string; movedRenders: number }, UnframedError>;
     /** Refuses with `conflict` and `details.pendingRenders` while renders are in progress, unless `confirmRenders`. */
     readonly deleteProject: (name: string, confirmRenders: boolean) => Effect.Effect<{ endedRenders: number }, UnframedError>;
@@ -173,25 +175,38 @@ export const lifecycleLayer = Layer.effect(
         return yield* applyChanges(changes).pipe(lock.withPermits(1));
       });
 
-    const removeKeyLocked = Effect.gen(function* () {
-      // A delete, not an empty line, so a key the shell environment provides is not shadowed.
-      yield* writeEnv({ OPENROUTER_API_KEY: null });
-      const view = yield* published;
-      // The sweep cannot poll without a key, so pending renders would sit stranded for 24 hours.
-      return yield* renderJobs.failPending({ error: KEY_REMOVED_ERROR }).pipe(
-        Effect.map((endedRenders): RemovedKey => ({ settings: view, endedRenders })),
-        Effect.catch((error) =>
-          Effect.succeed<RemovedKey>({
-            settings: view,
-            endedRenders: 0,
-            renderCleanupError: `The key was removed, but renders already in progress could not be stopped: ${error.reason}`,
-          }),
-        ),
-      );
-    });
+    /** Deletes the key line and fails every pending render; `writeFailure` names a `.env` write that did not land. */
+    const removeKeyLine = (writeFailure: (reason: string) => string) =>
+      Effect.gen(function* () {
+        // A delete, not an empty line, so a key the shell environment provides is not shadowed.
+        yield* Effect.mapError(settings.write({ OPENROUTER_API_KEY: null }), (error) => unframedError("internal", writeFailure(error.reason)));
+        const view = yield* published;
+        // The sweep cannot poll without a key, so pending renders would sit stranded for 24 hours.
+        return yield* renderJobs.failPending({ error: KEY_REMOVED_ERROR }).pipe(
+          Effect.map((endedRenders): RemovedKey => ({ settings: view, endedRenders })),
+          Effect.catch((error) =>
+            Effect.succeed<RemovedKey>({
+              settings: view,
+              endedRenders: 0,
+              renderCleanupError: `The key was removed, but renders already in progress could not be stopped: ${error.reason}`,
+            }),
+          ),
+        );
+      });
 
     // The attempt is cancelled first, outside the lock: the key is being removed anyway.
-    const removeKey = Effect.andThen(oauth.cancelAttempt, removeKeyLocked.pipe(lock.withPermits(1)));
+    const removeKey = Effect.andThen(oauth.cancelAttempt, removeKeyLine((reason) => `Could not write .env: ${reason}`).pipe(lock.withPermits(1)));
+
+    // A waiting attempt wrote nothing. A committed one's key write is queued before this
+    // delete, so the key ends up removed either way.
+    const cancelConnection = Effect.flatMap(oauth.cancelAttempt, (wrote) =>
+      wrote
+        ? removeKeyLine((reason) => `Could not remove the key the cancelled connection had written: ${reason}`).pipe(
+            lock.withPermits(1),
+            Effect.map(({ settings: _settings, ...ended }) => ended),
+          )
+        : Effect.succeed({ endedRenders: 0 }),
+    );
 
     const closeProject = (project: string) =>
       Effect.flatMap(openProjects.close(project), (failures) =>
@@ -277,6 +292,6 @@ export const lifecycleLayer = Layer.effect(
         return { endedRenders: ended };
       }).pipe(lock.withPermits(1));
 
-    return Lifecycle.of({ updateSettings, removeKey, renameProject, deleteProject });
+    return Lifecycle.of({ updateSettings, removeKey, cancelConnection, renameProject, deleteProject });
   }),
 );

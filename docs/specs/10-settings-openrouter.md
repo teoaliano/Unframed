@@ -81,7 +81,7 @@ Added to the group from spec 01:
 | `settings.removeKey` | none | `{ settings: Settings, endedRenders: number, renderCleanupError?: string }` | |
 | `oauth.start` | none | `{ authorizeUrl: string }` | never fails |
 | `oauth.pending` | none | `{ state: "none" \| "waiting" \| "done" \| "failed", reason: string }` | `reason` is `''` unless failed |
-| `oauth.cancel` | none | `{}` | |
+| `oauth.cancel` | none | `{ endedRenders: number, renderCleanupError?: string }` | `endedRenders` is 0 when the attempt wrote no key |
 | `oauth.status` | none | `KeyStatus` | |
 | `projects.rename` | `{ name: string, to: string }` | `{ name: string, movedRenders: number }` | |
 | `projects.delete` | `{ name: string, confirmRenders?: boolean }` | `{ endedRenders: number }` | |

@@ -140,7 +140,9 @@ export class SettingsUi {
   cancel() {
     this.stopPolling();
     this.cancelling = (async () => {
-      await this.engine.call("oauth.cancel").catch(() => undefined);
+      const answer = await this.engine.call("oauth.cancel").catch(() => undefined);
+      // The cancel removed a key the connection had written, as Remove key does, and says so the same way.
+      if (answer?.renderCleanupError !== undefined) this.report(answer.renderCleanupError);
       // The cancel may have removed a key a committed callback had written.
       const settings = await this.engine.call("settings.get").catch(() => undefined);
       if (settings) this.set({ settings });

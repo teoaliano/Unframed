@@ -1,10 +1,13 @@
-import { chmod, readFile, stat } from "node:fs/promises";
+import { chmod, mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { startEngine, type EngineOptions, type RawResponse, type TestEngine } from "./harness.ts";
+import { makeTempDir, startEngine, type EngineOptions, type RawResponse, type TestEngine } from "./harness.ts";
 import { CONNECTED_KEY, oauthStub, type OAuthStub } from "./oauthStub.ts";
 import { gate } from "./openRouterStub.ts";
 import type { TestRpcClient } from "./rpcClient.ts";
+
+const KEY_REMOVED =
+  "Stopped tracking this render: the OpenRouter key was removed, so its progress can no longer be checked. It may still finish upstream, but nothing here will save the result.";
 
 interface Connecting {
   readonly engine: TestEngine;
@@ -235,7 +238,7 @@ describe("oauth.cancel", () => {
   it("while waiting leaves an existing key untouched, and a later callback is refused", async () => {
     const { engine, rpc, approve, land } = await connecting({ dotenv: "OPENROUTER_API_KEY=sk-or-v1-kept-key-33334444\n" });
     const callback = await approve((await rpc.call("oauth.start")).authorizeUrl);
-    expect(await rpc.call("oauth.cancel")).toEqual({});
+    expect(await rpc.call("oauth.cancel")).toEqual({ endedRenders: 0 });
     expect(await rpc.call("oauth.pending")).toEqual({ state: "none", reason: "" });
     const page = await land(callback);
     expect(page.status).toBe(400);
@@ -249,10 +252,58 @@ describe("oauth.cancel", () => {
     const updates = rpc.subscribe("settings.subscribe");
     expect((await connect()).status).toBe(200);
     expect((await rpc.call("settings.get")).hasKey).toBe(true);
-    expect(await rpc.call("oauth.cancel")).toEqual({});
+    expect(await rpc.call("oauth.cancel")).toEqual({ endedRenders: 0 });
     expect((await rpc.call("settings.get")).hasKey).toBe(false);
     expect(await readFile(join(engine.dataDir, ".env"), "utf8")).toBe("");
     await expect.poll(() => updates.values.at(-1)?.hasKey).toBe(false);
+  });
+
+  /** An engine whose output folder already holds `jobs.json` with this text. */
+  const withJobs = async (text: string) => {
+    const dataDir = await makeTempDir();
+    await mkdir(join(dataDir, "output"), { recursive: true });
+    await writeFile(join(dataDir, "output", "jobs.json"), text);
+    const connection = await connecting({ dataDir });
+    return { ...connection, jobs: async () => JSON.parse(await readFile(join(dataDir, "output", "jobs.json"), "utf8")) as any[] };
+  };
+
+  const pendingJob = (id: string) => ({
+    id,
+    project: "board",
+    params: { prompt: "a render", model: "bytedance/seedance-2.0", duration: 5, resolution: null, size: null },
+    startedAt: Date.now() - 60_000,
+    status: "pending",
+  });
+
+  it("after done is a key removal: every pending render fails with the key-removed error and the answer counts them", async () => {
+    const { rpc, connect, jobs } = await withJobs(JSON.stringify([pendingJob("job-a"), pendingJob("job-b"), { ...pendingJob("job-c"), status: "done", resolvedAt: Date.now() }]));
+    expect((await connect()).status).toBe(200);
+    const before = Date.now();
+    expect(await rpc.call("oauth.cancel")).toEqual({ endedRenders: 2 });
+    const stored = await jobs();
+    for (const id of ["job-a", "job-b"]) {
+      const job = stored.find((each) => each.id === id);
+      expect(job).toMatchObject({ status: "failed", error: KEY_REMOVED });
+      expect(job.resolvedAt).toBeGreaterThanOrEqual(before);
+    }
+    expect(stored.find((each) => each.id === "job-c").status).toBe("done");
+    expect((await rpc.call("settings.get")).hasKey).toBe(false);
+  });
+
+  it("after done says the renders could not be stopped when the job store is unreadable, and still removes the key", async () => {
+    const { rpc, connect, engine } = await withJobs("{ broken");
+    expect((await connect()).status).toBe(200);
+    const answer = await rpc.call("oauth.cancel");
+    expect(answer.endedRenders).toBe(0);
+    expect(answer.renderCleanupError).toMatch(/^The key was removed, but renders already in progress could not be stopped: The job store at .+ is not valid JSON: .+/);
+    expect(await readFile(join(engine.dataDir, ".env"), "utf8")).toBe("");
+  });
+
+  it("while waiting ends no renders", async () => {
+    const { rpc, jobs } = await withJobs(JSON.stringify([pendingJob("job-a")]));
+    await rpc.call("oauth.start");
+    expect(await rpc.call("oauth.cancel")).toEqual({ endedRenders: 0 });
+    expect((await jobs())[0].status).toBe("pending");
   });
 });
 

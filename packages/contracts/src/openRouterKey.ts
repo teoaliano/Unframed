@@ -43,8 +43,9 @@ export const OAuthPending = Rpc.make("oauth.pending", {
   error: UnframedError,
 });
 
+/** A cancel that deletes the key the connection wrote is a key removal: it fails pending renders as `settings.removeKey` does. */
 export const OAuthCancel = Rpc.make("oauth.cancel", {
-  success: Schema.Struct({}),
+  success: Schema.Struct({ endedRenders: Schema.Number, renderCleanupError: Schema.optionalKey(Schema.String) }),
   error: UnframedError,
 });
 
