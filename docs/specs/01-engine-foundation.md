@@ -150,6 +150,7 @@ This is the one table of every test-only variable in the build. A spec that uses
 | `UNFRAMED_TEST_SHARE_TTL_MS` | 04 | the share link TTL in milliseconds, in place of 30 min; the expiry check then runs at the smaller of 60 s and this value |
 | `UNFRAMED_TEST_AGENT_SCRIPT` | 07, 08, 09 | a JSON script file or a folder of them. Every chat's provider adapter becomes the scripted adapter spec 07 defines |
 | `UNFRAMED_TEST_AGENT_IDLE_MS` | 07 | the agent session idle close in milliseconds, in place of 10 min |
+| `UNFRAMED_TEST_UPLOAD_URL_TTL_MS` | 07 | an attachment upload URL's lifetime in milliseconds, in place of 10 min |
 | `UNFRAMED_TEST_RENDERER` | 09 | replaces the motion renderer and the Chrome search: `ok`, `fail` or `no-chrome`, each behaving as spec 09 states |
 
 Anything that redirects network traffic follows the loopback-only rule of the origin override.

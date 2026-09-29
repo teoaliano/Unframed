@@ -62,6 +62,7 @@ export const agentsLayer = Layer.effect(
       dataDir: config.dataDir,
       testAgentScript: config.testAgentScript,
       idleMs: config.testAgentIdleMs,
+      uploadUrlTtlMs: config.testUploadUrlTtlMs,
       agentDebug: config.agentDebug,
       projectFolder: async (project) => {
         const slug = projectSlug(project);

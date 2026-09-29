@@ -604,7 +604,7 @@ A good test here drives a chat the way the web does (dispatching commands and re
 
 Prior art: t3code's own orchestration tests (decider and projector cases as plain inputs and outputs, engine tests through dispatch and subscribe) and the old app's scripted-agent flow test, which forked the real server and drove chats through its routes. The fixtures in `assets/fixtures/` are the scenarios that flow test covered.
 
-The test-only variables this spec uses, `UNFRAMED_TEST_AGENT_SCRIPT` and `UNFRAMED_TEST_AGENT_IDLE_MS`, are defined in spec 01's test-only table.
+The test-only variables this spec uses, `UNFRAMED_TEST_AGENT_SCRIPT`, `UNFRAMED_TEST_AGENT_IDLE_MS` and `UNFRAMED_TEST_UPLOAD_URL_TTL_MS`, are defined in spec 01's test-only table.
 
 ## Tasks
 

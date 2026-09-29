@@ -32,9 +32,11 @@ export class AttachmentRefused extends Error {}
 export class AttachmentStore {
   readonly folder: string;
   private readonly pending = new Map<string, PendingUpload>();
+  private readonly ttlMs: number;
 
-  constructor(dataDir: string) {
+  constructor(dataDir: string, ttlMs = UPLOAD_URL_TTL_MS) {
     this.folder = join(dataDir, "attachments");
+    this.ttlMs = ttlMs;
   }
 
   /** A signed, one-use upload path, valid ten minutes, for a file within the limits. */
@@ -45,9 +47,10 @@ export class AttachmentStore {
     const refusal = attachmentLimitError([{ name, kind, size: input.sizeBytes }]);
     if (refusal) throw new AttachmentRefused(refusal);
     const now = Date.now();
-    for (const [token, upload] of this.pending) if (upload.expiresAt <= now) this.pending.delete(token);
+    // An expired path is kept a while longer so using it says it expired rather than that it never existed.
+    for (const [token, upload] of this.pending) if (upload.expiresAt + this.ttlMs <= now) this.pending.delete(token);
     const token = randomBytes(32).toString("hex");
-    const expiresAt = now + UPLOAD_URL_TTL_MS;
+    const expiresAt = now + this.ttlMs;
     this.pending.set(token, { name, mimeType: input.mimeType, sizeBytes: input.sizeBytes, expiresAt });
     return { relativeUrl: `/api/attachments/upload/${token}`, expiresAt: new Date(expiresAt).toISOString() };
   }

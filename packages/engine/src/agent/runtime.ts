@@ -46,6 +46,7 @@ export interface AgentRuntimeDeps {
   readonly dataDir: string;
   readonly testAgentScript: string | undefined;
   readonly idleMs: number | undefined;
+  readonly uploadUrlTtlMs: number | undefined;
   readonly agentDebug: boolean;
   /** The project's folder, or `undefined` when there is no such project. */
   readonly projectFolder: (project: string) => Promise<string | undefined>;
@@ -124,7 +125,7 @@ export class AgentRuntime {
 
   constructor(deps: AgentRuntimeDeps) {
     this.deps = deps;
-    this.attachments = new AttachmentStore(deps.dataDir);
+    this.attachments = new AttachmentStore(deps.dataDir, deps.uploadUrlTtlMs);
     const tools = new CanvasTools({
       read: (project) => deps.rooms.read(project),
       apply: (project, change, origin) => deps.rooms.apply(project, change, origin),

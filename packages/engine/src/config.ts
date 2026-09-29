@@ -40,6 +40,8 @@ export interface EngineConfig {
   readonly testAgentScript: string | undefined;
   /** `UNFRAMED_TEST_AGENT_IDLE_MS`: the agent session idle close, in place of 10 min. */
   readonly testAgentIdleMs: number | undefined;
+  /** `UNFRAMED_TEST_UPLOAD_URL_TTL_MS`: an attachment upload URL's lifetime, in place of 10 min. */
+  readonly testUploadUrlTtlMs: number | undefined;
   readonly platform: NodeJS.Platform;
 }
 
@@ -88,6 +90,7 @@ export const loadConfig = (
       testShareTtlMs: wholeMs(nonEmpty(env.UNFRAMED_TEST_SHARE_TTL_MS)),
       testAgentScript: nonEmpty(env.UNFRAMED_TEST_AGENT_SCRIPT) === undefined ? undefined : resolve(nonEmpty(env.UNFRAMED_TEST_AGENT_SCRIPT)!),
       testAgentIdleMs: wholeMs(nonEmpty(env.UNFRAMED_TEST_AGENT_IDLE_MS)),
+      testUploadUrlTtlMs: wholeMs(nonEmpty(env.UNFRAMED_TEST_UPLOAD_URL_TTL_MS)),
       platform,
     },
     warnings,
