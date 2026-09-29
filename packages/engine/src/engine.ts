@@ -19,7 +19,7 @@ import { createApiServer } from "./http/api.ts";
 import { clientRoute } from "./http/client.ts";
 import { projectFileRoute } from "./http/files.ts";
 import { uploadRoute } from "./http/upload.ts";
-import { createPreviewServer } from "./http/preview.ts";
+import { startPreviewOrigin } from "./http/preview.ts";
 import { listenLoopback, LOOPBACK_HOST } from "./listen.ts";
 import { errorText, logError, logInfo } from "./log.ts";
 import { Ipc, nativeLayer } from "./native.ts";
@@ -92,10 +92,12 @@ export const startEngine = async (host: EngineHost): Promise<RunningEngine> => {
   const port = readPort(fileVars, host.env);
   if (!port.ok) throw new Error(`PORT has to be a whole number from 0 to 65535, not "${port.value}".`);
 
-  const preview = createPreviewServer();
-  const previewPort = await listenLoopback(preview, 0).catch((error: unknown) => {
+  // Bound before the services exist, so it reads the output folder once they do.
+  let outputDir: (() => Promise<string>) | undefined;
+  const preview = await startPreviewOrigin(() => (outputDir === undefined ? Promise.reject(new Error("starting")) : outputDir())).catch((error: unknown) => {
     throw new Error(`could not start the preview origin on ${LOOPBACK_HOST}: ${errorText(error)}`);
   });
+  const previewPort = preview.port;
 
   const services = Layer.mergeAll(RpcServer.layer(UnframedRpcs, { disableTracing: true })).pipe(
     Layer.provideMerge(rpcHandlersLayer),
@@ -120,7 +122,7 @@ export const startEngine = async (host: EngineHost): Promise<RunningEngine> => {
     Layer.provideMerge(Layer.succeed(Ipc, { send: host.send })),
   );
   const runtime = ManagedRuntime.make(services);
-  const { settings, sockets, rooms, media, projects, shutdown, agents, oauth } = await runtime.runPromise(
+  const booted = await runtime.runPromise(
     Effect.gen(function* () {
       const store = yield* SettingsStore;
       const shutdown = yield* Shutdown;
@@ -146,9 +148,12 @@ export const startEngine = async (host: EngineHost): Promise<RunningEngine> => {
         agents: yield* Agents,
         oauth: yield* OAuth,
         shutdown,
+        outputDir: store.outputDir,
       };
     }),
   );
+  outputDir = () => runtime.runPromise(booted.outputDir);
+  const { settings, sockets, rooms, media, projects, shutdown, agents, oauth } = booted;
 
   const api = createApiServer({
     http: [
@@ -172,7 +177,7 @@ export const startEngine = async (host: EngineHost): Promise<RunningEngine> => {
   const stop = async () => {
     const startedAt = Date.now();
     stopListening(api);
-    stopListening(preview);
+    preview.stopListening();
     await Promise.all([sockets.closeAll(1001), rooms.closeSockets(1001)]);
     await runtime.runPromise(shutdown.runHooks(startedAt));
     api.closeAllConnections();

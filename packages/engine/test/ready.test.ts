@@ -12,6 +12,14 @@ const connects = (host: string, port: number): Promise<boolean> =>
     socket.once("error", () => resolve(false));
   });
 
+/** Whether this machine has an IPv6 loopback address to bind. */
+const hasIpv6Loopback = (): Promise<boolean> =>
+  new Promise((resolve) => {
+    const server = net.createServer();
+    server.once("error", () => resolve(false));
+    server.listen({ host: "::1", port: 0 }, () => server.close(() => resolve(true)));
+  });
+
 describe("ready message", () => {
   it("with PORT=0 and an IPC channel sends exactly one ready message after both listeners are bound", async () => {
     const engine = await startEngine();
@@ -22,9 +30,10 @@ describe("ready message", () => {
     expect(engine.port).not.toBe(engine.previewPort);
     expect(await connects("127.0.0.1", engine.port)).toBe(true);
     expect(await connects("127.0.0.1", engine.previewPort)).toBe(true);
-    // Loopback IPv4 only: never ::1, never every interface.
+    // The API is loopback IPv4 only: never ::1, never every interface.
     expect(await connects("::1", engine.port)).toBe(false);
-    expect(await connects("::1", engine.previewPort)).toBe(false);
+    // The preview origin also answers on ::1 where the machine has it (spec 09), so localhost reaches it.
+    expect(await connects("::1", engine.previewPort)).toBe(await hasIpv6Loopback());
 
     await engine.request("/");
     expect(engine.messages.filter((message) => message.type === "ready")).toHaveLength(1);

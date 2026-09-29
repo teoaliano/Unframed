@@ -63,3 +63,8 @@ export * from "./agent/workLog.ts";
 export * from "./oauthAttempt.ts";
 export * from "./keyStatusCopy.ts";
 export * from "./jobLifecycle.ts";
+export * from "./artifacts/prompts.ts";
+export * from "./artifacts/dials.ts";
+export * from "./artifacts/artifactRules.ts";
+export * from "./artifacts/chromeCandidates.ts";
+export * from "./artifacts/viewer.ts";
