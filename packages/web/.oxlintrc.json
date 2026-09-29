@@ -93,7 +93,6 @@
     // Surfaces spec 12 has not moved onto the kit yet. Each task removes its files; the sweep (task 24) leaves this empty.
     {
       "files": [
-        "src/agent/ConfirmDialog.tsx",
         "src/artifacts/ArtifactFrame.tsx",
         "src/artifacts/ArtifactsHost.tsx",
         "src/artifacts/RenderRow.tsx",
