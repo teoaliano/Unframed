@@ -1,4 +1,4 @@
-import { UnframedError, type ChatAttachment, type ModelSelection } from "@unframed/contracts";
+import type { ChatAttachment, ModelSelection } from "@unframed/contracts";
 import type { InteractionMode, RuntimeMode } from "@unframed/domain";
 import { newId, type ChatClient } from "./store.ts";
 
@@ -18,7 +18,7 @@ export interface NewChat {
   readonly title?: string;
 }
 
-export const messageOf = (error: unknown): string => (error instanceof UnframedError || error instanceof Error ? error.message : String(error));
+export { messageOf } from "./store.ts";
 
 /** Creates a chat and makes it the rail's active one before the engine answers, so its tab shows at once. */
 export const createChat = async (client: ChatClient, chat: NewChat, preview = ""): Promise<string> => {

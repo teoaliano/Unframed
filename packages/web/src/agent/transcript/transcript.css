@@ -435,7 +435,6 @@
   }
 }
 
-/* A proposed plan. */
 .unframed-agent-plan {
   display: flex;
   flex-direction: column;
@@ -495,7 +494,6 @@
   align-self: center;
 }
 
-/* What a turn read or changed. */
 .unframed-agent-recap {
   display: flex;
   flex-direction: column;

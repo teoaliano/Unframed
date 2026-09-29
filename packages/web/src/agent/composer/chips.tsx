@@ -1,4 +1,4 @@
-import { shapeKind, type ShapeKind } from "@unframed/domain";
+import { shapeKind, shapeLabel, type ShapeKind } from "@unframed/domain";
 import { AlignLeft, AppWindow, Clapperboard, Group, Image, PenLine, SquarePlay, X, type LucideIcon } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useValue, type Editor, type TLShapeId } from "tldraw";
@@ -29,7 +29,6 @@ export interface ChipShape {
   readonly label: string;
 }
 
-const text = (value: unknown): string => (typeof value === "string" ? value : "");
 
 /** A shape as a chip names it: an artifact by its title, else its file name without `.html`, else its kind. */
 export const describeShape = (editor: Editor, id: string): ChipShape | undefined => {
@@ -37,7 +36,7 @@ export const describeShape = (editor: Editor, id: string): ChipShape | undefined
   if (!shape) return undefined;
   const kind = shapeKind(shape.type);
   const props = shape.props as Record<string, unknown>;
-  const label = text(props.title).trim() || text(props.fileName).replace(/\.html$/i, "") || KIND_NOUNS[kind][0]!.toUpperCase() + KIND_NOUNS[kind].slice(1);
+  const label = shapeLabel(props) ?? KIND_NOUNS[kind][0]!.toUpperCase() + KIND_NOUNS[kind].slice(1);
   return { id: shape.id, kind, label };
 };
 

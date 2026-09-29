@@ -27,10 +27,11 @@ const projectFileOf = (editor: Editor, shape: TLShape): string => {
 const labelOf = (editor: Editor, shape: TLShape, kind: string): string => {
   const props = shape.props as Record<string, unknown>;
   if (kind === "prompt" || kind === "group") return `@${readRef(shape) ?? agentShapeId(shape.id)}`;
-  if (text(props.title).trim() !== "") return text(props.title);
+  const named = shapeLabel(props);
+  if (named !== undefined) return named;
   const assetId = props.assetId;
   const assetName = typeof assetId === "string" ? text((editor.getAsset(assetId as TLAssetId)?.props as Record<string, unknown> | undefined)?.name) : "";
-  return text(props.fileName).replace(/\.html$/i, "") || assetName || `${KIND_WORDS[kind]} ${readRef(shape) ?? agentShapeId(shape.id)}`;
+  return assetName || `${KIND_WORDS[kind]} ${readRef(shape) ?? agentShapeId(shape.id)}`;
 };
 
 /**

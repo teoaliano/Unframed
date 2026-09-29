@@ -450,7 +450,7 @@ Projector rules worth stating:
 - A streaming assistant message appends its delta; a completed one with non-empty text replaces the text.
 - `thread.session-set` leaving `running` settles the running turn: `idle` or `ready` becomes `completed`, `error` becomes `error`, `interrupted` or `stopped` becomes `interrupted`.
 - `thread.turn-settled` stamps `lastClock` (the room clock when the turn stopped touching it).
-- `thread.reverted {turnCount}` keeps the turns up to `turnCount` and their messages, activities and plans, and drops the rest. `thread.checkpoint.revert` emits it together with `thread.checkpoint-revert-requested` (which names the dropped turns), so a message sent right after the rewind is numbered after the kept turns; the reactor then reverts the canvas and rolls the provider back before any later turn of the chat is sent.
+- `thread.reverted {turnCount}` keeps the turns up to `turnCount` and their messages, activities and plans, and drops the rest. `thread.checkpoint.revert` emits it together with `thread.checkpoint-revert-requested` (which names the dropped turns), so a message sent right after the rewind is numbered after the kept turns; the reactor then reverts the canvas and rolls the provider back before any later turn of the chat is sent. With `restoreCanvas: true` it then appends a `checkpoint.reverted` activity with no turn (so it outlives the dropped turns), `{turnCount, restored: [shape ids], skipped: [{id, by: person | another chat | a later turn}]}`, which spec 08's rail reads to say which shapes were left alone.
 - `thread.turn-revert-requested` marks the turn, so a second `thread.turn.revert` is refused before the first lands.
 - `thread.tagged {ids}` appends ids the chat does not have yet, in order.
 

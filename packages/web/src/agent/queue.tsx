@@ -1,6 +1,6 @@
 import { openRequests, type Chat } from "@unframed/domain";
 import { useEffect } from "react";
-import { messageOf, sendMessage } from "./send.ts";
+import { sendMessage } from "./send.ts";
 import { useQueue, useQueuedThreads, useWatchedThread, type ChatClient, type QueuedMessage } from "./store.ts";
 
 /** The chat's latest completed tool call: a queued message waits for the next one. */
@@ -36,7 +36,7 @@ export const sendQueued = async (client: ChatClient, threadId: string, id: strin
     client.takeQueued(threadId, id);
   } catch (error) {
     client.updateQueue(threadId, (queue) => queue.map((known) => (known.id === id ? { ...known, state: "waiting" } : known)));
-    client.setUi({ error: messageOf(error) });
+    client.reportError(error);
   }
 };
 

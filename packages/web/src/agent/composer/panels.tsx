@@ -4,10 +4,8 @@ import { openRequests, planTitle, type Chat, type ChatActivity, type ProposedPla
 import { ChevronDown, ChevronRight, Ellipsis, ListChecks, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { itemClass, popupClass } from "../../chrome/ui.tsx";
-import { messageOf } from "../send.ts";
 import type { ChatClient } from "../store.ts";
-
-const record = (value: unknown): Record<string, unknown> => (typeof value === "object" && value !== null ? (value as Record<string, unknown>) : {});
+import { record } from "../record.ts";
 
 /** The chat's open requests of a kind that its running turn waits on: a turn that ended waits on nothing. */
 export const waitingRequests = (chat: Chat, kind: "approval" | "user-input"): ChatActivity[] => {
@@ -47,7 +45,7 @@ export const ApprovalPanel = ({ client, chat }: { readonly client: ChatClient; r
   const respond = (decision: ApprovalDecision) => {
     setAnswered((known) => new Set([...known, requestId]));
     client.dispatch({ type: "thread.approval.respond", threadId: chat.id, requestId, decision }).catch((error: unknown) => {
-      client.setUi({ error: messageOf(error) });
+      client.reportError(error);
       setAnswered((known) => new Set([...known].filter((id) => id !== requestId)));
     });
   };

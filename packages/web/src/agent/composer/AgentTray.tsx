@@ -18,8 +18,8 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode, type
 import type { AgentTrayProps as SlotProps } from "../../chrome/slots.ts";
 import { useEngine } from "../../context.ts";
 import { effectiveModel, noProviderReady, providerName, readyProviders } from "../providers.ts";
-import { createChat, messageOf, sendMessage } from "../send.ts";
-import { useChatClient, useChats, useFollowUp, useHandoffVersion, useProviders, useWatchedThread, type ChatClient } from "../store.ts";
+import { createChat, sendMessage } from "../send.ts";
+import { useChatClient, useChats, useFollowUp, useHandoffVersion, useProviders, useRailUi, useWatchedThread, type ChatClient } from "../store.ts";
 import { latestCompletedTool, returnQueued, sendQueued } from "../queue.tsx";
 import { Tip } from "../../chrome/ui.tsx";
 import { formatSize, useAttachments } from "./attachments.ts";
@@ -58,8 +58,8 @@ export interface AgentTrayProps {
   readonly beforeSend?: (chatId: string) => void;
   /** Called once the message was accepted. */
   readonly onSent?: () => void;
-  /** A band above the box (the toolbar's "continues" line). */
-  readonly top?: ReactNode;
+  /** A line under the chips (the toolbar's "continues" line). */
+  readonly underChips?: ReactNode;
   /** A line beside Send (the toolbar's provider note). */
   readonly note?: (provider: string) => ReactNode;
   /** Tells the composer shell a menu of the tray is open, so Esc closes the menu first. */
@@ -81,11 +81,12 @@ interface OpenMenu {
  * footer's pickers, Stop and Send. The rail's composer and the toolbar's are this one
  * component; only where a message goes differs.
  */
-export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, onSent, top, note, onMenuOpen, dropTarget }: AgentTrayProps) => {
+export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, onSent, underChips, note, onMenuOpen, dropTarget }: AgentTrayProps) => {
+  const ui = useRailUi(client);
   const { statuses } = useProviders(client);
   const chat = useWatchedThread(client, chatId);
   const running = chat?.latestTurn?.state === "running";
-  const none = noProviderReady(statuses);
+  const noProvider = noProviderReady(statuses);
   const ready = readyProviders(statuses);
   const canvas = useMaybeEditor();
   const box = useRef<PromptEditorHandle>(null);
@@ -109,18 +110,17 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
   const interactionMode = chat?.interactionMode ?? draftInteraction;
   const model = effectiveModel(statuses, selection.provider, selection.model);
   const status = statuses?.[selection.provider];
-  const fail = useCallback((error: unknown) => client.setUi({ error: messageOf(error) }), [client]);
   const setModelSelection = (next: ModelSelection) => {
     if (!chat) return setDraftModel(next);
-    void client.dispatch({ type: "thread.meta.update", threadId: chat.id, modelSelection: next }).catch(fail);
+    void client.dispatch({ type: "thread.meta.update", threadId: chat.id, modelSelection: next }).catch((error: unknown) => client.reportError(error));
   };
   const setRuntime = (mode: RuntimeMode) => {
     if (!chat) return setDraftRuntime(mode);
-    void client.dispatch({ type: "thread.runtime-mode.set", threadId: chat.id, runtimeMode: mode }).catch(fail);
+    void client.dispatch({ type: "thread.runtime-mode.set", threadId: chat.id, runtimeMode: mode }).catch((error: unknown) => client.reportError(error));
   };
   const setInteraction = (mode: InteractionMode) => {
     if (!chat) return setDraftInteraction(mode);
-    void client.dispatch({ type: "thread.interaction-mode.set", threadId: chat.id, interactionMode: mode }).catch(fail);
+    void client.dispatch({ type: "thread.interaction-mode.set", threadId: chat.id, interactionMode: mode }).catch((error: unknown) => client.reportError(error));
   };
   const usage = latestUsage(chat);
   const compactable = (status?.commands ?? []).some((command) => command.name === "compact");
@@ -131,7 +131,6 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
   const [dropElement, setDropElement] = useState<HTMLElement | null>(null);
   useEffect(() => setDropElement(dropTarget?.current ?? root.current), [dropTarget]);
 
-  // Files dragged onto the drop target show the overlay and are staged when dropped.
   useEffect(() => {
     const element = dropElement;
     if (!element) return;
@@ -385,7 +384,7 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
         : PLACEHOLDERS.customAnswer
       : planFollowUp
         ? PLACEHOLDERS.planFollowUp
-        : none
+        : noProvider
           ? PLACEHOLDERS.noProvider
           : PLACEHOLDERS.default;
 
@@ -399,7 +398,7 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
   const questionAnswered = answering && answerOf(question, text) !== undefined;
   const allAnswered = answering && asked.questions.every((each) => answerOf(each, each.id === question.id ? text : (ownAnswers.current[each.id] ?? "")) !== undefined);
   const lastQuestion = answering && questionIndex === asked.questions.length - 1;
-  const canSend = answering ? !submitting && (lastQuestion ? allAnswered : questionAnswered) : planFollowUp ? !sending : !none && !sending && (text.trim() !== "" || attachments.staged.length > 0);
+  const canSend = answering ? !submitting && (lastQuestion ? allAnswered : questionAnswered) : planFollowUp ? !sending : !noProvider && !sending && (text.trim() !== "" || attachments.staged.length > 0);
 
   const moveQuestion = (index: number) => {
     if (!asked || !question) return;
@@ -433,14 +432,14 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
       await client.dispatch({ type: "thread.user-input.respond", threadId: chat.id, requestId: asked.requestId, answers });
       box.current?.clear();
     } catch (error) {
-      client.setUi({ error: messageOf(error) });
+      client.reportError(error);
     } finally {
       setSubmitting(false);
     }
   };
   const dismissQuestion = () => {
     if (!asked || !chat) return;
-    void client.dispatch({ type: "thread.user-input.dismiss", threadId: chat.id, requestId: asked.requestId }).catch(fail);
+    void client.dispatch({ type: "thread.user-input.dismiss", threadId: chat.id, requestId: asked.requestId }).catch((error: unknown) => client.reportError(error));
   };
 
   /** Implement: the chat back to building, then the plan after t3code's prefix; or the same in a new chat named after it. */
@@ -463,7 +462,7 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
         await sendMessage(client, chat.id, message, source);
       }
     } catch (error) {
-      client.setUi({ error: messageOf(error) });
+      client.reportError(error);
     } finally {
       setSending(false);
     }
@@ -496,7 +495,7 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
     if (answering) return answer();
     const message = box.current?.text() ?? "";
     if (planFollowUp && message.trim() === "") return implementPlan(false);
-    if (none || (message.trim() === "" && attachments.staged.length === 0) || sending) return;
+    if (noProvider || (message.trim() === "" && attachments.staged.length === 0) || sending) return;
     setSending(true);
     client.setUi({ error: undefined });
     try {
@@ -522,7 +521,7 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
       }
       onSent?.();
     } catch (error) {
-      client.setUi({ error: messageOf(error) });
+      client.reportError(error);
       if ((box.current?.text() ?? "") === "") box.current?.setText(message);
     } finally {
       setSending(false);
@@ -547,13 +546,12 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
     if (!chat?.latestTurn) return;
     // Stop gives every queued message back to the composer.
     returnQueued(client, chat.id);
-    void client.dispatch({ type: "thread.turn.interrupt", threadId: chat.id, turnId: chat.latestTurn.turnId }).catch((error: unknown) => client.setUi({ error: messageOf(error) }));
+    void client.dispatch({ type: "thread.turn.interrupt", threadId: chat.id, turnId: chat.latestTurn.turnId }).catch((error: unknown) => client.reportError(error));
   };
 
 
   return (
     <div className="unframed-agent-tray" data-variant={variant} data-testid="agent-tray" ref={root}>
-      {top}
       {approvalPending && chat && <ApprovalPanel client={client} chat={chat} />}
       {asked && question && <QuestionPanel state={{ ...asked, index: questionIndex, chosen }} onChoose={chooseOption} onDismiss={dismissQuestion} />}
       {planFollowUp && <PlanReady plan={planFollowUp} />}
@@ -574,6 +572,7 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
             box.current?.focus();
           }}
         />
+        {underChips}
         <PromptEditor
           placeholder={placeholder}
           label={PROMPT_LABEL}
@@ -630,7 +629,7 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
               <ContextMeter
                 usage={usage}
                 compactUnavailable={!compactable}
-                onCompact={() => void sendMessage(client, chat.id, { text: "/compact", selection: [], attachments: [] }, { steer: running }).catch(fail)}
+                onCompact={() => void sendMessage(client, chat.id, { text: "/compact", selection: [], attachments: [] }, { steer: running }).catch((error: unknown) => client.reportError(error))}
               />
             )}
           </div>
@@ -675,6 +674,12 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
           </div>
         </div>
       </div>
+      {/* The rail is closed while the toolbar's tray is open: its errors show here. */}
+      {variant === "toolbar" && ui.error !== undefined && (
+        <p role="alert" className="unframed-agent-tray__error">
+          {ui.error}
+        </p>
+      )}
     </div>
   );
 };
@@ -697,6 +702,8 @@ export const ToolbarAgentTray = ({ project, close, onMenuOpen }: SlotProps) => {
   );
   const artifacts = useMemo(() => (artifactKey === "" ? [] : artifactKey.split(" ")), [artifactKey]);
   const continuable = continuableChat(chats, artifacts);
+  // An error the rail showed earlier is not about this message.
+  useEffect(() => client.setUi({ error: undefined }), [client]);
   const [fresh, setFresh] = useState(false);
   const target = fresh || !continuable ? null : continuable.id;
   return (
@@ -708,7 +715,7 @@ export const ToolbarAgentTray = ({ project, close, onMenuOpen }: SlotProps) => {
       beforeSend={(chatId) => client.setUi({ open: true, chosen: chatId, pinned: null })}
       onSent={close}
       {...(onMenuOpen ? { onMenuOpen } : {})}
-      top={
+      underChips={
         <div className="unframed-agent-target" data-testid="agent-target">
           <span className="unframed-agent-target__line">
             {target !== null && continuable ? (

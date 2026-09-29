@@ -7,7 +7,6 @@ import { useEngine } from "../../context.ts";
 import { AgentTray } from "../composer/AgentTray.tsx";
 import { noProviderReady } from "../providers.ts";
 import { ConfirmDialog } from "../ConfirmDialog.tsx";
-import { messageOf } from "../send.ts";
 import { useFocusMark } from "./focusMark.ts";
 // Loaded when first opened: the diff renderer and its highlighter are heavy, and a page that never diffs should not pay for them.
 const DiffPanel = lazy(() => import("../diff/DiffPanel.tsx").then((module) => ({ default: module.DiffPanel })));
@@ -189,7 +188,7 @@ export const AgentRail = ({ project, embedded, filterTo, onLocate, onOpenEditor,
             onClick: () => {
               if (!active) return;
               client.setUi({ chosen: null, pinned: null });
-              client.dispatch({ type: "thread.delete", threadId: active }).catch((error: unknown) => client.setUi({ error: messageOf(error) }));
+              client.dispatch({ type: "thread.delete", threadId: active }).catch((error: unknown) => client.reportError(error));
             },
           },
         ]}

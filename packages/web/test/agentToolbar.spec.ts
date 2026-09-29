@@ -10,16 +10,17 @@ import type { TestEngine } from "../../engine/test/engineProcess.ts";
 
 const at = (day: number) => `2026-09-${String(day).padStart(2, "0")}T10:00:00.000Z`;
 
-/** Alpha and Beta pages; "About alpha" knows Alpha, the newer "About both" knows both. */
+/**
+ * Alpha and Beta pages, Beta far enough below Alpha that the tray opened on Alpha leaves it
+ * clear; "About alpha" knows Alpha, the newer "About both" knows both.
+ */
 const twoPages = async (page: Page, engine: TestEngine): Promise<{ alpha: string; both: string }> => {
   await openCanvas(page, engine);
-  await putRecords(
-    engine,
-    artifactColumn([
-      { id: "shape:p1", title: "Alpha" },
-      { id: "shape:p2", title: "Beta" },
-    ]),
-  );
+  const [alpha1, beta] = artifactColumn([
+    { id: "shape:p1", title: "Alpha" },
+    { id: "shape:p2", title: "Beta" },
+  ]);
+  await putRecords(engine, [alpha1, { ...beta!, y: 520 }]);
   const alpha = await createChat(engine, { title: "About alpha", tags: ["shape:p1"], createdAt: at(1) });
   const both = await createChat(engine, { title: "About both", tags: ["shape:p1", "shape:p2"], createdAt: at(2) });
   await openCanvas(page, engine);
@@ -109,6 +110,27 @@ test("Send opens the rail on the chat it continues, then the message goes there;
   const fresh = (await engineChats(agent)).find((chat) => chat.preview.startsWith("start over on beta"))!;
   expect((await engineChat(agent, fresh.id)).tags).toEqual(["shape:p2"]);
   await expect(rail(page).getByRole("tab", { selected: true })).toHaveAttribute("data-chat-id", fresh.id);
+});
+
+test("the toolbar's tray says what went wrong itself, since the rail is closed", async ({ page, agent }) => {
+  await twoPages(page, agent);
+  await clickShape(page, "shape:p1");
+  await toolbar(page).getByRole("button", { name: "Agent" }).click();
+  await expect(target(page)).toBeVisible();
+  // Under the chips: the line saying which chat this joins.
+  expect(await composer(page).evaluate((element) => {
+    const chipRow = element.querySelector("[aria-label='Context']")!;
+    const line = element.querySelector("[data-testid='agent-target']")!;
+    return chipRow.compareDocumentPosition(line) & Node.DOCUMENT_POSITION_FOLLOWING;
+  })).toBeTruthy();
+  await page.evaluate(() => {
+    const transfer = new DataTransfer();
+    transfer.items.add(new File([new Uint8Array(51 * 1024 * 1024)], "huge.bin", { type: "application/octet-stream" }));
+    const tray = document.querySelector("[data-testid='composer'] [data-testid='agent-tray']")!;
+    for (const type of ["dragenter", "drop"]) tray.dispatchEvent(new DragEvent(type, { bubbles: true, cancelable: true, dataTransfer: transfer }));
+  });
+  await expect(composer(page).getByRole("alert")).toHaveText("'huge.bin' exceeds the 50 MB attachment limit.");
+  await expect(rail(page)).toHaveCount(0);
 });
 
 test("with no provider ready, the toolbar's Agent tooltip is the provider's message", async ({ page }) => {

@@ -3,7 +3,6 @@ import type { ChatSummary } from "@unframed/contracts";
 import { tabLabel, tabTooltip } from "@unframed/domain";
 import { ChevronDown } from "lucide-react";
 import { useRef, useState } from "react";
-import { messageOf } from "../send.ts";
 import { itemClass, popupClass, Tip } from "../../chrome/ui.tsx";
 import type { ChatClient } from "../store.ts";
 
@@ -37,7 +36,7 @@ export const TabStrip = ({ client, chats, active, selectedCount }: TabStripProps
     if (abandoned.current) return;
     const chat = chats.find((known) => known.id === id);
     if (chat && value.trim() === chat.title.trim()) return;
-    client.dispatch({ type: "thread.meta.update", threadId: id, title: value }).catch((error: unknown) => client.setUi({ error: messageOf(error) }));
+    client.dispatch({ type: "thread.meta.update", threadId: id, title: value }).catch((error: unknown) => client.reportError(error));
   };
   if (chats.length === 0) {
     const empty = selectedCount === 0 ? "No chats yet" : selectedCount >= 2 ? "Nothing said about these yet. Your first message starts a chat." : undefined;

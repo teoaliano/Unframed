@@ -5,7 +5,6 @@ import { WorkEntries } from "./WorkLog.tsx";
 import { useMaybeEditor } from "tldraw";
 import { describeShape } from "../composer/chips.tsx";
 import { ConfirmDialog } from "../ConfirmDialog.tsx";
-import { messageOf } from "../send.ts";
 import { providerName } from "../providers.ts";
 import { ChevronRight, Clock, Undo2, X } from "lucide-react";
 import { Tip } from "../../chrome/ui.tsx";
@@ -14,6 +13,7 @@ import { useQueue, useWatchedThread, type ChatClient } from "../store.ts";
 import { ChatMarkdown } from "./ChatMarkdown.tsx";
 import { PlanCard } from "./PlanCard.tsx";
 import { RecapCard } from "./RecapCard.tsx";
+import { record } from "../record.ts";
 
 export const EMPTY_CHAT = "Ask about what is on the canvas, or say what should change or be made. Whatever is selected comes with the message as context.";
 
@@ -136,7 +136,7 @@ export const Transcript = ({ client, chatId, embedded, onLocate, onOpenEditor }:
     client
       .dispatch({ type: "thread.checkpoint.revert", threadId: chat.id, turnCount: turn.turnCount - 1, restoreCanvas })
       .then(() => client.handOff(chat.id, { text: message.text, selection: message.context?.selection ?? [], attachments: message.attachments ?? [] }))
-      .catch((error: unknown) => client.setUi({ error: messageOf(error) }));
+      .catch((error: unknown) => client.reportError(error));
   };
   const scroller = useRef<HTMLDivElement>(null);
   const following = useRef(true);
@@ -187,7 +187,7 @@ export const Transcript = ({ client, chatId, embedded, onLocate, onOpenEditor }:
       labelOf={labelOf}
       onRevert={() => {
         client.setUi({ error: undefined });
-        void client.dispatch({ type: "thread.turn.revert", threadId: chat.id, turnCount: turn.turnCount }).catch((error: unknown) => client.setUi({ error: messageOf(error) }));
+        void client.dispatch({ type: "thread.turn.revert", threadId: chat.id, turnCount: turn.turnCount }).catch((error: unknown) => client.reportError(error));
       }}
       onDiff={(shapeId) => client.setUi({ diff: { threadId: chat.id, turnCount: turn.turnCount, ...(shapeId ? { shapeId } : {}) } })}
       onDiffAll={() => client.setUi({ diff: { threadId: chat.id, turnCount: "all" } })}
@@ -282,14 +282,13 @@ const WorkedFor = ({ turn, children }: { readonly turn: ChatTurn; readonly child
   );
 };
 
-const record = (value: unknown): Record<string, unknown> => (typeof value === "object" && value !== null ? (value as Record<string, unknown>) : {});
-
 /** A provider retry, said in words. */
 export const retrySentence = (payload: unknown): string => {
   const p = record(payload);
   const status = typeof p.status === "number" || (typeof p.status === "string" && p.status !== "") ? ` (${String(p.status)})` : "";
   const wait = typeof p.delayMs === "number" && p.delayMs > 0 ? ` in ${Math.round(p.delayMs / 1000)}s` : "";
-  return `The API is busy${status}, retrying${wait}. Attempt ${String(p.attempt ?? 1)} of ${String(p.maxRetries ?? 1)}…`;
+  const of = typeof p.maxRetries === "number" ? ` of ${p.maxRetries}` : "";
+  return `The API is busy${status}, retrying${wait}. Attempt ${String(p.attempt ?? 1)}${of}…`;
 };
 
 const RetryLine = ({ payload }: { readonly payload: unknown }) => (

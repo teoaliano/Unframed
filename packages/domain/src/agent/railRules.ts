@@ -5,6 +5,7 @@
  * different questions and must not be merged.
  */
 import type { ChatActivity, TurnFile } from "./chatModel.ts";
+import { shapeLabel } from "./shapeLabel.ts";
 import { agentShapeId, roomShapeId as shapeId } from "./turnText.ts";
 
 /** What the rules read of a chat: its summary. */
@@ -56,7 +57,6 @@ export const tabLabel = (chat: Pick<RailChat, "title" | "preview">): string => {
 export const tabTooltip = (chat: Pick<RailChat, "title" | "preview">): string => {
   const label = tabLabel(chat);
   const words = openingWords(chat);
-  if (chat.title.trim() === "") return words === "" ? label : words;
   return words === "" || words === label ? label : `${label} · ${words}`;
 };
 
@@ -94,7 +94,6 @@ export interface RecapRow {
 const ARTIFACT_TOOLS = new Set(["page_write", "page_read", "motion_write", "motion_read"]);
 
 const record = (value: unknown): Record<string, unknown> => (typeof value === "object" && value !== null ? (value as Record<string, unknown>) : {});
-
 
 const toolName = (activity: ChatActivity): string => {
   const data = record(record(activity.payload).data);
@@ -158,11 +157,7 @@ export const recapRows = (
   const byId = new Map(shapes.map((shape) => [shapeId(shape.id), shape]));
   return order.map((id) => {
     const shape = byId.get(id);
-    const label =
-      (shape?.title !== undefined && shape.title.trim() !== "" ? shape.title : undefined) ??
-      (shape?.fileName !== undefined && shape.fileName !== "" ? shape.fileName.replace(/\.html$/i, "") : undefined) ??
-      titles.get(id) ??
-      agentShapeId(id);
+    const label = (shape && shapeLabel(shape)) ?? titles.get(id) ?? agentShapeId(id);
     return { shapeId: id, kind: shape?.kind ?? kinds.get(id) ?? "", label, deleted: shape === undefined, rewritten: rewritten.has(id) };
   });
 };

@@ -8,6 +8,7 @@ import claudeLogo from "../../../../../assets/brand/provider-logos/claude.svg?ur
 import codexLogo from "../../../../../assets/brand/provider-logos/codex.svg?url";
 import { Tip } from "../../chrome/ui.tsx";
 import { effectiveModel, modelsOf, PROVIDERS, providerName } from "../providers.ts";
+import { record } from "../record.ts";
 
 const LOGOS: Record<AgentProvider, string> = { claude: claudeLogo, codex: codexLogo };
 
@@ -333,8 +334,6 @@ export const PlanToggle = ({ mode, onToggle }: { readonly mode: InteractionMode;
 
 // ---------------------------------------------------------------------------------------
 // The context window meter.
-
-const record = (value: unknown): Record<string, unknown> => (typeof value === "object" && value !== null ? (value as Record<string, unknown>) : {});
 
 /** The chat's latest token usage, from spec 07's context window activities. */
 export const latestUsage = (chat: Chat | undefined): ContextUsage | undefined => {

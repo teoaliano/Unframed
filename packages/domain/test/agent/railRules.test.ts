@@ -64,7 +64,8 @@ describe("tab labels", () => {
   it("gives a tooltip of the label and the opening words when they differ", () => {
     expect(tabTooltip({ title: "Landing page", preview: "make a landing page" })).toBe("Landing page · make a landing page");
     expect(tabTooltip({ title: "Same", preview: "Same" })).toBe("Same");
-    expect(tabTooltip({ title: "", preview: "make these three stills into a landing page" })).toBe("make these three stills into a landing page");
+    expect(tabTooltip({ title: "", preview: "make these three stills into a landing page" })).toBe("make these three stills into a l… · make these three stills into a landing page");
+    expect(tabTooltip({ title: "", preview: "a short one" })).toBe("a short one");
     expect(tabTooltip({ title: "", preview: "" })).toBe("Chat");
   });
 });

@@ -1,7 +1,7 @@
 import { readFile, stat } from "node:fs/promises";
 import { join } from "node:path";
 import type { ArtifactDiffFile } from "@unframed/contracts";
-import { agentShapeId, shapeKind } from "@unframed/domain";
+import { agentShapeId, shapeKind, shapeLabel } from "@unframed/domain";
 import type { TLRecord } from "@tldraw/tlschema";
 import { structuredPatch, formatPatch } from "diff";
 import type { TurnChanges } from "./turnChanges.ts";
@@ -9,12 +9,8 @@ import type { TurnChanges } from "./turnChanges.ts";
 const TOO_LARGE_BYTES = 2 * 1024 * 1024;
 export const TOO_LARGE = "This file is too large to diff.";
 
-const labelOf = (record: TLRecord | null, shapeId: string): string => {
-  const props = (record?.typeName === "shape" ? record.props : {}) as { title?: unknown; fileName?: unknown };
-  if (typeof props.title === "string" && props.title.trim() !== "") return props.title;
-  if (typeof props.fileName === "string" && props.fileName !== "") return props.fileName.replace(/\.html$/i, "");
-  return agentShapeId(shapeId);
-};
+const labelOf = (record: TLRecord | null, shapeId: string): string =>
+  shapeLabel((record?.typeName === "shape" ? record.props : {}) as { title?: unknown; fileName?: unknown }) ?? agentShapeId(shapeId);
 
 const isArtifact = (record: TLRecord | null): boolean => record?.typeName === "shape" && (record.type === "page" || record.type === "motion");
 

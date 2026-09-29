@@ -192,6 +192,34 @@ describe("Edit from here", () => {
     expect((await roomShape(agent, "m1")).props.title).toBe("A");
   });
 
+  it("says in a chat-wide activity which shapes a rewind restored and which it left alone", async () => {
+    const agent = await startAgentEngine({ script: await script() });
+    await seed(agent, [motionShape("m1", "100", "Original"), motionShape("m2", "101", "Other")]);
+    const chatId = await agent.createChat();
+    await agent.send(chatId, "retitle it");
+    await agent.settled(chatId, 1);
+    await agent.send(chatId, "retitle it again");
+    await agent.settled(chatId, 2);
+    await agent.dispatch({ type: "thread.checkpoint.revert", threadId: chatId, turnCount: 1, restoreCanvas: true });
+    const reverted = (chat: Chat) => chat.activities.filter((activity) => activity.kind === "checkpoint.reverted");
+    const first = await (await agent.watch(chatId)).until((chat) => reverted(chat).length === 1, "the rewind's activity");
+    expect(reverted(first)[0]).toMatchObject({ turnId: null, payload: { turnCount: 1, restored: ["shape:m1"], skipped: [] } });
+
+    // Changed by the person since, a shape is left alone and named.
+    await agent.send(chatId, "retitle it once more");
+    await agent.settled(chatId, 2);
+    await seed(agent, [motionShape("m1", "100", "Hand-made")]);
+    await agent.dispatch({ type: "thread.checkpoint.revert", threadId: chatId, turnCount: 1, restoreCanvas: true });
+    const second = await (await agent.watch(chatId)).until((chat) => reverted(chat).length === 2, "the second rewind's activity");
+    expect(reverted(second)[1]?.payload).toEqual({ turnCount: 1, restored: [], skipped: [{ id: "shape:m1", by: "person" }] });
+    expect((await roomShape(agent, "m1")).props.title).toBe("Hand-made");
+
+    // Without the canvas, a rewind says nothing.
+    await agent.dispatch({ type: "thread.checkpoint.revert", threadId: chatId, turnCount: 0, restoreCanvas: false });
+    const third = await (await agent.watch(chatId)).until((chat) => chat.turns.length === 0, "the rewind to the start");
+    expect(reverted(third)).toHaveLength(2);
+  });
+
   it("numbers a message sent right after the rewind after the kept turns", async () => {
     const agent = await startAgentEngine({ script: await script() });
     await seed(agent, [motionShape("m1", "100", "Original")]);

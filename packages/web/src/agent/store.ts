@@ -1,7 +1,9 @@
-import type { ChatAttachment, ChatSummary, ClientChatCommand, ProviderStatuses, ShellStreamItem, ThreadStreamItem } from "@unframed/contracts";
+import { UnframedError, type ChatAttachment, type ChatSummary, type ClientChatCommand, type ProviderStatuses, type ShellStreamItem, type ThreadStreamItem } from "@unframed/contracts";
 import { projectChat, type Chat, type ChatEvent, type ChatMessage } from "@unframed/domain";
 import { useEffect, useMemo, useSyncExternalStore } from "react";
 import type { EngineConnection } from "../rpc/engine.ts";
+
+export const messageOf = (error: unknown): string => (error instanceof UnframedError || error instanceof Error ? error.message : String(error));
 
 type Distributive<T> = T extends unknown ? Omit<T, "commandId" | "projectId"> : never;
 /** A command as the rail builds it: the client adds the command id and the project. */
@@ -365,6 +367,11 @@ export class ChatClient {
 
   get ui(): RailUi {
     return this.uiState;
+  }
+
+  /** A refused command or a failed call, in the rail's error line (and the toolbar tray's). */
+  reportError(error: unknown): void {
+    this.setUi({ error: messageOf(error) });
   }
 
   setUi(update: Partial<RailUi> | ((ui: RailUi) => Partial<RailUi>)): void {
