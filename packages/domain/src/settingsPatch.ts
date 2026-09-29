@@ -13,6 +13,10 @@ export interface SettingsPatchInput {
 type Field = keyof SettingsPatchInput;
 
 const MODEL = /^[\w.-]+\/[\w.:-]+$/;
+const OPENROUTER_KEY = /^sk-or-[\w.-]{8,200}$/;
+
+/** The one key validator: a pasted key and a key OpenRouter returns (spec 10) pass the same check. */
+export const isOpenRouterKey = (value: string): boolean => OPENROUTER_KEY.test(value);
 const COMMAND = /^[^\n\r"'#;&|$`<>(){}\s][^\n\r"'#;&|$`<>(){}]{0,399}$/;
 const MODEL_MESSAGE = 'That does not look like a model slug. Expected something like "openai/gpt-image-2".';
 const COMMAND_MESSAGE = "That does not look like a command name or a path to one.";
@@ -28,7 +32,7 @@ const FIELDS: ReadonlyArray<{
   {
     field: "key",
     variable: "OPENROUTER_API_KEY",
-    pattern: /^sk-or-[\w.-]{8,200}$/,
+    pattern: OPENROUTER_KEY,
     message: 'That does not look like an OpenRouter key. Keys start with "sk-or-".',
     clearable: false,
   },

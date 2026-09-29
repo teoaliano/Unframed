@@ -20,6 +20,7 @@ import { PresetStore } from "../library/presetStore.ts";
 import { ProviderDetection } from "../agent/detection.ts";
 import { Agents } from "../agent/layer.ts";
 import { Lifecycle } from "../lifecycle.ts";
+import { OAuth } from "../oauth/oauth.ts";
 
 export const rpcHandlersLayer = UnframedRpcs.toLayer(
   Effect.gen(function* () {
@@ -38,6 +39,7 @@ export const rpcHandlersLayer = UnframedRpcs.toLayer(
     const detection = yield* ProviderDetection;
     const agents = yield* Agents;
     const lifecycle = yield* Lifecycle;
+    const oauth = yield* OAuth;
     const context = yield* Effect.context<SettingsStore | Projects | Native>();
 
     const testOnly = <A, E>(run: () => Effect.Effect<A, E>) =>
@@ -56,11 +58,11 @@ export const rpcHandlersLayer = UnframedRpcs.toLayer(
           ),
         ),
       "settings.subscribe": () => settings.subscribe,
-      "settings.removeKey": () => Effect.fail(unframedError("unavailable", "Not yet.")),
-      "oauth.start": () => Effect.fail(unframedError("unavailable", "Not yet.")),
-      "oauth.pending": () => Effect.fail(unframedError("unavailable", "Not yet.")),
-      "oauth.cancel": () => Effect.fail(unframedError("unavailable", "Not yet.")),
-      "oauth.status": () => Effect.fail(unframedError("unavailable", "Not yet.")),
+      "settings.removeKey": () => lifecycle.removeKey,
+      "oauth.start": () => oauth.start,
+      "oauth.pending": () => oauth.pending,
+      "oauth.cancel": () => oauth.cancel,
+      "oauth.status": () => oauth.status,
       "projects.rename": () => Effect.fail(unframedError("unavailable", "Not yet.")),
       "projects.delete": () => Effect.fail(unframedError("unavailable", "Not yet.")),
       "settings.pickFolder": () =>
