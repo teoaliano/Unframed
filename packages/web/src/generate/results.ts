@@ -9,6 +9,7 @@ import type { EngineConnection } from "../rpc/engine.ts";
 import { knownCatalogue } from "./catalogue.ts";
 import { mediaSource, pageBox } from "./facts.ts";
 import { imageParams } from "./imageMedium.ts";
+import { repeatVideo } from "./videoMedium.ts";
 
 /** The Vary tooltip when the recipe already uses every reference the model takes. */
 export const varyCapMessage = (cap: number) => `This model takes at most ${cap} references, and this recipe already uses them.`;
@@ -33,6 +34,7 @@ export const repeatResult = async (
   recipe?: ResultRecipe,
 ): Promise<void> => {
   const recorded = recipe ?? (await engine.call("recipe.read", { project, shapeId }));
+  if (recorded.medium === "video") return repeatVideo(editor, engine, project, shapeId, action, recorded);
   if (recorded.medium === "text") {
     // A text result (spec 05) has no Vary: Regenerate repeats its run through the text medium.
     await engine.call("run.text", {

@@ -129,10 +129,14 @@ export const ModelEntry = Schema.Struct({
   name: Schema.String,
   created: Schema.optionalKey(Schema.NullOr(Schema.Number)),
   params: Schema.optionalKey(Schema.NullOr(Schema.Record(Schema.String, Schema.Unknown))),
+  /** Spec 04: a video model's `pricing_skus`. */
+  pricing: Schema.optionalKey(Schema.NullOr(Schema.Record(Schema.String, Schema.Unknown))),
+  /** Spec 04: whether a video model takes video input; `null` when that is unknown. */
+  acceptsVideo: Schema.optionalKey(Schema.NullOr(Schema.Boolean)),
 });
 export type ModelEntry = typeof ModelEntry.Type;
 
-export const ModelsListRequest = Schema.Struct({ medium: Schema.Literals(["image", "text"]) });
+export const ModelsListRequest = Schema.Struct({ medium: Schema.Literals(["image", "video", "text"]) });
 
 export const ModelsListAnswer = Schema.Struct({ models: Schema.Array(ModelEntry), default: Schema.String });
 export type ModelsListAnswer = typeof ModelsListAnswer.Type;

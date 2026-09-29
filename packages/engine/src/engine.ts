@@ -9,7 +9,10 @@ import { CanvasRooms, canvasRoomsLayer } from "./canvas/rooms.ts";
 import { loadConfig } from "./config.ts";
 import { MediaStore, mediaStoreLayer } from "./media/mediaStore.ts";
 import { catalogueLayer } from "./openRouter/catalogue.ts";
+import { videoCatalogueLayer } from "./openRouter/videoCatalogue.ts";
 import { runsLayer } from "./runs/runs.ts";
+import { shareLinksLayer } from "./share/shareLinks.ts";
+import { renderJobsLayer } from "./video/renderJobs.ts";
 import { readEnvFileSync } from "./envFile.ts";
 import { createApiServer } from "./http/api.ts";
 import { clientRoute } from "./http/client.ts";
@@ -92,8 +95,11 @@ export const startEngine = async (host: EngineHost): Promise<RunningEngine> => {
   const services = Layer.mergeAll(RpcServer.layer(UnframedRpcs, { disableTracing: true })).pipe(
     Layer.provideMerge(rpcHandlersLayer),
     Layer.provideMerge(rpcSocketsLayer),
+    Layer.provideMerge(renderJobsLayer),
+    Layer.provideMerge(shareLinksLayer),
     Layer.provideMerge(runsLayer),
     Layer.provideMerge(catalogueLayer),
+    Layer.provideMerge(videoCatalogueLayer),
     Layer.provideMerge(mediaStoreLayer),
     Layer.provideMerge(canvasRoomsLayer),
     Layer.provideMerge(nativeLayer),

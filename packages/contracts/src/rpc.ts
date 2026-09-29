@@ -4,6 +4,7 @@ import * as RpcGroup from "effect/unstable/rpc/RpcGroup";
 import { UnframedError } from "./errors.ts";
 import { ImagePricingAnswer, ImageRunRequest, ModelsListAnswer, ModelsListRequest, ResultRecipe, RunEvent, RunStarted } from "./generation.ts";
 import { Health, Settings, SettingsPatch } from "./settings.ts";
+import { VideoForget, VideoPoll, VideoStart } from "./video.ts";
 import { RunText, TextComplete } from "./text.ts";
 
 const Empty = Schema.Struct({});
@@ -200,6 +201,9 @@ export const UnframedRpcs = RpcGroup.make(
   RecipeRead,
   RecipeCopy,
   RunSubscribe,
+  VideoStart,
+  VideoPoll,
+  VideoForget,
   RunText,
   TextComplete,
 );

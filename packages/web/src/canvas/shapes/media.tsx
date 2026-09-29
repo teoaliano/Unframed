@@ -30,6 +30,7 @@ import {
   type MediaShape,
 } from "../media.ts";
 import { ShapeLabel } from "./ShapeLabel.tsx";
+import { isRenderPlaceholder, RenderPlaceholder } from "./renderPlaceholder.tsx";
 import { noteRender } from "../../fps/renders.ts";
 import { runMarkerOf } from "@unframed/contracts";
 
@@ -225,6 +226,24 @@ const clock = (seconds: number) => {
   return `${Math.floor(whole / 60)}:${String(whole % 60).padStart(2, "0")}`;
 };
 
+/**
+ * A clip whose asset has no size yet (the engine lands a collected render without one)
+ * takes its size from the clip the first time it loads: the width stays, the height follows.
+ */
+const takeClipAspect = (editor: Editor, shape: TLVideoShape, clip: HTMLVideoElement) => {
+  const asset = shape.props.assetId ? editor.getAsset(shape.props.assetId) : undefined;
+  const known = asset?.props as { w?: number; h?: number } | undefined;
+  if (!asset || (known?.w && known.h) || !clip.videoWidth || !clip.videoHeight) return;
+  const { videoWidth: w, videoHeight: h } = clip;
+  editor.run(
+    () => {
+      editor.updateAssets([{ ...asset, props: { ...asset.props, w, h } } as typeof asset]);
+      editor.updateShape({ id: shape.id, type: shape.type, props: { h: (shape.props.w * h) / w } });
+    },
+    { history: "ignore" },
+  );
+};
+
 /** A filled clip: no native controls, muted, metadata preloaded; the transport sits below it, outside its bounds. */
 const VideoClip = ({ shape }: { readonly shape: TLVideoShape }) => {
   noteRender(shape.id);
@@ -257,7 +276,10 @@ const VideoClip = ({ shape }: { readonly shape: TLVideoShape }) => {
             disablePictureInPicture
             disableRemotePlayback
             draggable={false}
-            onLoadedMetadata={(event) => setDuration(event.currentTarget.duration)}
+            onLoadedMetadata={(event) => {
+              setDuration(event.currentTarget.duration);
+              takeClipAspect(editor, shape, event.currentTarget);
+            }}
             onDurationChange={(event) => setDuration(event.currentTarget.duration)}
             onTimeUpdate={(event) => setTime(event.currentTarget.currentTime)}
             onPlay={() => setPlaying(true)}
@@ -313,7 +335,7 @@ export class VideoMediaUtil extends VideoShapeUtil {
 
   override component(shape: TLVideoShape) {
     noteRender(shape.id);
-    if (!shape.props.assetId) return <EmptyMedia shape={shape} kind="video" />;
+    if (!shape.props.assetId) return isRenderPlaceholder(shape) ? <RenderPlaceholder shape={shape} /> : <EmptyMedia shape={shape} kind="video" />;
     return (
       <>
         <VideoClip shape={shape} />

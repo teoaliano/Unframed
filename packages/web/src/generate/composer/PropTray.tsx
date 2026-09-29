@@ -14,6 +14,8 @@ export interface PropTrayProps {
   readonly props: TrayProps;
   readonly onModelClick: () => void;
   readonly onChange: (props: Record<string, PropValue>) => void;
+  /** The value "+ add prop" offers a prop with; the image rule when absent. */
+  readonly addable?: ((params: ModelParams, key: string, props: TrayProps) => PropValue | undefined) | undefined;
   /** Whether one of the tray's menus is open, so the shell leaves Esc to it. */
   readonly onMenuOpen: (open: boolean) => void;
 }
@@ -25,7 +27,7 @@ export const chipClass =
  * The tray below the box: the model chip, one chip per prop that will be sent, and
  * "+ add prop". A prop comes off the way it went on: from its own menu.
  */
-export const PropTray = ({ model, catalogueReady, params, extra = [], props, onModelClick, onChange, onMenuOpen }: PropTrayProps) => {
+export const PropTray = ({ model, catalogueReady, params, extra = [], props, onModelClick, onChange, onMenuOpen, addable: addableValue }: PropTrayProps) => {
   const [openProp, setOpenProp] = useState<string>();
   const [addOpen, setAddOpen] = useState(false);
   const inTray = params.props.filter((prop) => props[prop.key] !== undefined);
@@ -53,25 +55,41 @@ export const PropTray = ({ model, catalogueReady, params, extra = [], props, onM
             </span>
             <Menu.Root open={openProp === prop.key} onOpenChange={(open) => setOpen(open ? prop.key : undefined)}>
               <Menu.Trigger className={chipClass} data-prop={prop.key} aria-label={`${prop.label} ${String(props[prop.key])}`}>
-                {String(props[prop.key])}
+                {prop.chipLabels?.[String(props[prop.key])] ?? String(props[prop.key])}
               </Menu.Trigger>
               <Menu.Portal>
                 <Menu.Positioner side="top" align="start" sideOffset={6} className="z-[1250]">
                   <Menu.Popup className={`${popupClass} min-w-[160px]`} aria-label={prop.label}>
-                    <Menu.RadioGroup value={String(props[prop.key])} onValueChange={(value: string) => onChange({ ...props, [prop.key]: value })}>
-                      {prop.values.map((value) => (
-                        <Menu.RadioItem key={value} value={value} className={itemClass} closeOnClick>
-                          <span className="flex size-4 items-center justify-center">
-                            <Menu.RadioItemIndicator>
-                              <Check size={14} aria-hidden />
-                            </Menu.RadioItemIndicator>
-                          </span>
-                          {prop.optionLabels?.[value] ?? value}
-                        </Menu.RadioItem>
-                      ))}
-                    </Menu.RadioGroup>
-                    <Menu.Separator className="my-1 h-px bg-[var(--unframed-border)]" />
-                    <Menu.Item
+                    {prop.checkbox ? (
+                      <Menu.CheckboxItem
+                        className={itemClass}
+                        checked={props[prop.key] === true}
+                        onCheckedChange={(checked: boolean) => onChange({ ...props, [prop.key]: checked })}
+                        closeOnClick
+                      >
+                        <span className="flex size-4 items-center justify-center">
+                          <Menu.CheckboxItemIndicator>
+                            <Check size={14} aria-hidden />
+                          </Menu.CheckboxItemIndicator>
+                        </span>
+                        {prop.label}
+                      </Menu.CheckboxItem>
+                    ) : (
+                      <Menu.RadioGroup value={String(props[prop.key])} onValueChange={(value: string) => onChange({ ...props, [prop.key]: value })}>
+                        {prop.values.map((value) => (
+                          <Menu.RadioItem key={value} value={value} className={itemClass} closeOnClick>
+                            <span className="flex size-4 items-center justify-center">
+                              <Menu.RadioItemIndicator>
+                                <Check size={14} aria-hidden />
+                              </Menu.RadioItemIndicator>
+                            </span>
+                            {prop.optionLabels?.[value] ?? value}
+                          </Menu.RadioItem>
+                        ))}
+                      </Menu.RadioGroup>
+                    )}
+                    {!prop.required && <Menu.Separator className="my-1 h-px bg-[var(--unframed-border)]" />}
+                    {!prop.required && <Menu.Item
                       className={itemClass}
                       onClick={() => {
                         const { [prop.key]: _removed, ...rest } = props;
@@ -80,7 +98,7 @@ export const PropTray = ({ model, catalogueReady, params, extra = [], props, onM
                     >
                       <span className="size-4" />
                       Remove
-                    </Menu.Item>
+                    </Menu.Item>}
                   </Menu.Popup>
                 </Menu.Positioner>
               </Menu.Portal>
@@ -106,11 +124,12 @@ export const PropTray = ({ model, catalogueReady, params, extra = [], props, onM
             <Menu.Positioner side="top" align="end" sideOffset={6} className="z-[1250]">
               <Menu.Popup className={`${popupClass} min-w-[186px]`} aria-label="Add prop">
                 {addable.map((prop) => {
-                  const value = addablePropValue(params, prop.key, props) ?? "";
+                  const value = (addableValue ? addableValue(params, prop.key, props) : addablePropValue(params, prop.key, props)) ?? "";
+                  const shown = prop.optionLabels?.[String(value)] ?? String(value);
                   return (
                     <Menu.Item
                       key={prop.key}
-                      aria-label={`${prop.label} ${value}`}
+                      aria-label={`${prop.label} ${shown}`}
                       className={`${itemClass} justify-between`}
                       onClick={() => {
                         onChange({ ...props, [prop.key]: value });
@@ -119,7 +138,7 @@ export const PropTray = ({ model, catalogueReady, params, extra = [], props, onM
                       }}
                     >
                       <span>{prop.label}</span>
-                      <span className="text-secondary">{value}</span>
+                      <span className="text-secondary">{shown}</span>
                     </Menu.Item>
                   );
                 })}

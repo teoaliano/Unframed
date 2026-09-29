@@ -30,6 +30,12 @@ export interface EngineConfig {
   readonly testMigrationSql: string | undefined;
   /** `UNFRAMED_TEST_CANVAS=1`: the testCanvas.* RPC methods answer instead of refusing. */
   readonly testCanvasRpc: boolean;
+  /** `UNFRAMED_TEST_TUNNEL`: `loopback` serves shares on the share server itself, `never` fails every probe at once. */
+  readonly testTunnel: "loopback" | "never" | undefined;
+  /** `UNFRAMED_TEST_SWEEP_MS`: the render sweep's interval, in place of 30 s. */
+  readonly testSweepMs: number | undefined;
+  /** `UNFRAMED_TEST_SHARE_TTL_MS`: the share link TTL, in place of 30 min. */
+  readonly testShareTtlMs: number | undefined;
   readonly platform: NodeJS.Platform;
 }
 
@@ -55,6 +61,8 @@ export const loadConfig = (
   }
   const nativeLogPath = nonEmpty(env.UNFRAMED_TEST_NATIVE_LOG);
   const shutdownHook = nonEmpty(env.UNFRAMED_TEST_SHUTDOWN_HOOK_MS);
+  const tunnel = nonEmpty(env.UNFRAMED_TEST_TUNNEL);
+  const wholeMs = (value: string | undefined) => (value !== undefined && /^\d+$/.test(value) && Number(value) > 0 ? Number(value) : undefined);
   return {
     config: {
       installRoot,
@@ -71,6 +79,9 @@ export const loadConfig = (
       testShutdownHookMs: shutdownHook !== undefined && /^\d+$/.test(shutdownHook) ? Number(shutdownHook) : undefined,
       testMigrationSql: nonEmpty(env.UNFRAMED_TEST_MIGRATION),
       testCanvasRpc: nonEmpty(env.UNFRAMED_TEST_CANVAS) === "1",
+      testTunnel: tunnel === "loopback" || tunnel === "never" ? tunnel : undefined,
+      testSweepMs: wholeMs(nonEmpty(env.UNFRAMED_TEST_SWEEP_MS)),
+      testShareTtlMs: wholeMs(nonEmpty(env.UNFRAMED_TEST_SHARE_TTL_MS)),
       platform,
     },
     warnings,
