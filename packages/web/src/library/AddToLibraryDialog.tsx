@@ -1,13 +1,16 @@
-import { Dialog } from "@base-ui/react/dialog";
 import { PRESET_EMPTY_NAME_MESSAGE, presetFromSelection } from "@unframed/domain";
-import { useState } from "react";
+import { useRef, useState } from "react";
+import { Button } from "~/components/ui/button";
+import { Dialog, DialogClose, DialogDescription, DialogFooter, DialogHeader, DialogPanel, DialogPopup, DialogTitle } from "~/components/ui/dialog";
+import { Input } from "~/components/ui/input";
 import { useEngine } from "../context.ts";
 import { showNotice } from "../toasts.tsx";
 import type { Captured } from "./state.ts";
 
 export const SAVE_FAILED_MESSAGE = "Could not save. Is the local server running?";
 
-const fieldClass = "h-9 rounded-lg border border-input bg-card px-2.5 text-[14px] text-foreground outline-none focus:border-primary";
+const fieldLabelClass = "grid gap-1.5";
+const fieldNameClass = "text-xs font-medium text-foreground";
 
 /** `N shape(s), saved as you have them now.`, naming the recipe when the group has one. */
 export const saveSubtitle = (captured: Pick<Captured, "members" | "recipe">): string =>
@@ -23,6 +26,7 @@ export const AddToLibraryDialog = ({ captured, onClose }: { readonly captured: C
   const [summary, setSummary] = useState("");
   const [problem, setProblem] = useState<string>();
   const [busy, setBusy] = useState(false);
+  const nameField = useRef<HTMLInputElement>(null);
 
   const save = async () => {
     if (busy) return;
@@ -43,29 +47,26 @@ export const AddToLibraryDialog = ({ captured, onClose }: { readonly captured: C
   };
 
   return (
-    <Dialog.Root open onOpenChange={(open) => !open && onClose()}>
-      <Dialog.Portal>
-        <Dialog.Backdrop className="fixed inset-0 z-[1300] bg-[var(--unframed-scrim)] backdrop-blur-[10px] backdrop-saturate-[160%]" />
-        <Dialog.Popup
-          data-testid="add-to-library"
-          className="fixed left-1/2 top-1/2 z-[1301] w-[420px] max-w-[calc(100vw-32px)] -translate-x-1/2 -translate-y-1/2 rounded-xl border border-border bg-popover p-5 text-foreground shadow-lg outline-none"
+    <Dialog open onOpenChange={(open) => !open && onClose()}>
+      <DialogPopup data-testid="add-to-library" className="max-w-[420px]" initialFocus={nameField}>
+        <form
+          onSubmit={(event) => {
+            event.preventDefault();
+            void save();
+          }}
         >
-          <Dialog.Title className="m-0 text-[18px] font-semibold">Add to library</Dialog.Title>
-          <Dialog.Description className="m-0 mt-1 text-[13px] text-muted-foreground">{saveSubtitle(captured)}</Dialog.Description>
-          <form
-            className="mt-4 flex flex-col gap-3"
-            onSubmit={(event) => {
-              event.preventDefault();
-              void save();
-            }}
-          >
-            <label className="flex flex-col gap-1 text-[13px]">
-              Name
-              <input
-                autoFocus
-                className={fieldClass}
+          <DialogHeader>
+            <DialogTitle>Add to library</DialogTitle>
+            <DialogDescription>{saveSubtitle(captured)}</DialogDescription>
+          </DialogHeader>
+          <DialogPanel>
+            <label className={fieldLabelClass}>
+              <span className={fieldNameClass}>Name</span>
+              <Input
+                ref={nameField}
                 placeholder="e.g. Portrait retouch"
                 value={name}
+                aria-invalid={problem !== undefined || undefined}
                 onChange={(event) => {
                   setName(event.target.value);
                   setProblem(undefined);
@@ -73,23 +74,23 @@ export const AddToLibraryDialog = ({ captured, onClose }: { readonly captured: C
               />
             </label>
             {problem !== undefined && (
-              <p role="alert" className="-mt-1 m-0 text-[12px] text-destructive-foreground">
+              <p role="alert" className="m-0 text-sm text-destructive-foreground">
                 {problem}
               </p>
             )}
-            <label className="flex flex-col gap-1 text-[13px]">
-              Description
-              <input className={fieldClass} placeholder="What it does, in a line" value={summary} onChange={(event) => setSummary(event.target.value)} />
+            <label className={fieldLabelClass}>
+              <span className={fieldNameClass}>Description</span>
+              <Input placeholder="What it does, in a line" value={summary} onChange={(event) => setSummary(event.target.value)} />
             </label>
-            <div className="mt-2 flex justify-end gap-2">
-              <Dialog.Close className="h-8 cursor-pointer rounded-lg border border-border bg-transparent px-3 text-[13px] text-foreground hover:bg-accent">Cancel</Dialog.Close>
-              <button type="submit" className="h-8 cursor-pointer rounded-lg border-0 bg-primary px-3 text-[13px] text-primary-foreground disabled:opacity-50" disabled={busy}>
-                Save
-              </button>
-            </div>
-          </form>
-        </Dialog.Popup>
-      </Dialog.Portal>
-    </Dialog.Root>
+          </DialogPanel>
+          <DialogFooter>
+            <DialogClose render={<Button variant="outline" />}>Cancel</DialogClose>
+            <Button type="submit" disabled={busy}>
+              Save
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogPopup>
+    </Dialog>
   );
 };

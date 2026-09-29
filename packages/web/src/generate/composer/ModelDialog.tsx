@@ -1,11 +1,39 @@
-import { Dialog } from "@base-ui/react/dialog";
 import type { ModelEntry } from "@unframed/contracts";
 import { modelPart } from "@unframed/domain";
 import { ArrowDown, ArrowUp, ArrowUpDown, Check, ExternalLink, Search } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { Badge } from "~/components/ui/badge";
+import { Button, InlineButton } from "~/components/ui/button";
+import { Dialog, DialogHeader, DialogPopup, DialogTitle } from "~/components/ui/dialog";
+import { InputGroup, InputGroupAddon, InputGroupInput } from "~/components/ui/input-group";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "~/components/ui/table";
 
 /** The provider token hues, in the order provider keys take them. */
 const PROVIDER_HUES = ["blue", "orange", "purple", "green", "pink", "teal", "red", "cyan", "yellow", "gray", "neutral"] as const;
+
+/** Each hue's Tailwind palette colour, the `--label` a provider token tints from. */
+const HUE_COLOR: Record<(typeof PROVIDER_HUES)[number], string> = {
+  blue: "var(--color-blue-500)",
+  orange: "var(--color-orange-500)",
+  purple: "var(--color-purple-500)",
+  green: "var(--color-green-500)",
+  pink: "var(--color-pink-500)",
+  teal: "var(--color-teal-500)",
+  red: "var(--color-red-500)",
+  cyan: "var(--color-cyan-500)",
+  yellow: "var(--color-yellow-500)",
+  gray: "var(--color-gray-500)",
+  neutral: "var(--color-neutral-500)",
+};
+
+/** One column layout for the header table and the rows table, so their columns line up. */
+const Columns = () => (
+  <colgroup>
+    <col />
+    <col className="w-44" />
+    <col className="w-[130px]" />
+  </colgroup>
+);
 
 /** A slug's provider key: the part before `/`, without a leading `~`. */
 const providerKey = (id: string): string => id.split("/")[0]!.replace(/^~/, "");
@@ -46,6 +74,7 @@ export interface ModelDialogProps {
 export const ModelDialog = ({ open, onOpenChange, title, browseUrl, models, current, onPick, finalFocus }: ModelDialogProps) => {
   const [query, setQuery] = useState("");
   const [sort, setSort] = useState<Sort>({ column: "released", direction: "desc" });
+  const search = useRef<HTMLInputElement>(null);
   const byProvider = useMemo(() => providers(models), [models]);
 
   useEffect(() => {
@@ -83,99 +112,115 @@ export const ModelDialog = ({ open, onOpenChange, title, browseUrl, models, curr
     });
   }, [models, query, sort, byProvider]);
 
-  const header = (column: Column, label: string, className = "") => {
+  const header = (column: Column, label: string) => {
     const active = sort.column === column;
     const Icon = !active ? ArrowUpDown : sort.direction === "asc" ? ArrowUp : ArrowDown;
+    const end = column === "released";
     return (
-      <th aria-sort={active ? (sort.direction === "asc" ? "ascending" : "descending") : "none"} className={`unframed-models__th ${className}`}>
-        <button
-          type="button"
-          className="unframed-models__sort"
-          onClick={() =>
-            setSort((previous) =>
-              previous.column === column ? { column, direction: previous.direction === "asc" ? "desc" : "asc" } : { column, direction: column === "released" ? "desc" : "asc" },
-            )
-          }
-        >
-          {label}
-          <Icon size={12} aria-hidden className={active ? "" : "opacity-40"} />
-        </button>
-      </th>
+      <TableHead aria-sort={active ? (sort.direction === "asc" ? "ascending" : "descending") : "none"}>
+        <div className={end ? "flex justify-end" : "flex"}>
+          <Button
+            variant="ghost"
+            size="xs"
+            className={end ? "-me-2" : "-ms-2"}
+            onClick={() =>
+              setSort((previous) =>
+                previous.column === column ? { column, direction: previous.direction === "asc" ? "desc" : "asc" } : { column, direction: column === "released" ? "desc" : "asc" },
+              )
+            }
+          >
+            {label}
+            <Icon aria-hidden className={active ? undefined : "opacity-40"} />
+          </Button>
+        </div>
+      </TableHead>
     );
   };
 
   return (
-    <Dialog.Root open={open} onOpenChange={onOpenChange}>
-      <Dialog.Portal>
-        <Dialog.Backdrop className="fixed inset-0 z-[1300] bg-[var(--unframed-scrim)] backdrop-blur-[10px] backdrop-saturate-[160%]" />
-        <Dialog.Popup
-          {...(finalFocus === undefined ? {} : { finalFocus: () => finalFocus() ?? true })}
-          className="unframed-models fixed left-1/2 top-1/2 z-[1301] flex max-h-[min(720px,calc(100vh-48px))] w-[680px] max-w-[calc(100vw-32px)] -translate-x-1/2 -translate-y-1/2 flex-col rounded-xl border border-border bg-popover p-5 text-foreground shadow-lg outline-none">
-          <div className="flex items-center justify-between gap-4">
-            <Dialog.Title className="m-0 text-[18px] font-semibold">{title}</Dialog.Title>
-            <a href={browseUrl} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-[12px] text-muted-foreground no-underline hover:text-foreground">
-              Browse on OpenRouter
-              <ExternalLink size={12} aria-hidden />
-            </a>
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogPopup
+        className="max-h-[min(720px,calc(100vh-48px))] max-w-[680px]"
+        initialFocus={search}
+        {...(finalFocus === undefined ? {} : { finalFocus: () => finalFocus() ?? true })}
+      >
+        <DialogHeader>
+          {/* The end padding keeps the link clear of the dialog's close button. */}
+          <div className="flex items-center justify-between gap-4 pe-8">
+            <DialogTitle>{title}</DialogTitle>
+            <span className="text-xs">
+              <InlineButton tone="muted" render={<a href={browseUrl} target="_blank" rel="noreferrer" />}>
+                Browse on OpenRouter
+                <ExternalLink aria-hidden className="size-3" />
+              </InlineButton>
+            </span>
           </div>
-          <label className="mt-4 flex h-9 items-center gap-2 rounded-lg border border-input bg-card px-2.5">
-            <Search size={14} aria-hidden className="text-muted-foreground" />
-            <span className="sr-only">Search models</span>
-            <input
-              autoFocus
-              className="h-full min-w-0 flex-1 border-0 bg-transparent text-[14px] text-foreground outline-none"
-              placeholder="Search models…"
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-            />
-          </label>
-          <div className="unframed-models__scroll mt-3 min-h-0 flex-1 overflow-y-auto">
-            {rows.length === 0 ? (
-              <p className="m-0 py-6 text-center text-[13px] text-muted-foreground">No model matches. Clear the search.</p>
-            ) : (
-              <table className="unframed-models__table">
-                <thead>
-                  <tr>
-                    {header("model", "Model")}
-                    {header("provider", "Provider")}
-                    {header("released", "Released", "unframed-models__released")}
-                  </tr>
-                </thead>
-                <tbody>
-                  {rows.map((model) => {
-                    const provider = byProvider.get(providerKey(model.id));
-                    const isCurrent = model.id === current;
-                    return (
-                      <tr key={model.id} data-model={model.id} className={isCurrent ? "unframed-models__current" : undefined}>
-                        <td>
-                          <button
-                            type="button"
-                            className="unframed-models__pick"
-                            title={model.id}
-                            onClick={() => {
-                              onPick(model.id);
-                              onOpenChange(false);
-                            }}
-                          >
-                            {modelPart(model.id)}
-                            {isCurrent && <Check size={13} aria-label="Current model" />}
-                          </button>
-                        </td>
-                        <td>
-                          <span className="unframed-provider" data-hue={provider?.hue} style={{ backgroundColor: `var(--unframed-hue-${provider?.hue}-bg)`, color: `var(--unframed-hue-${provider?.hue}-text)` }}>
-                            {provider?.label}
-                          </span>
-                        </td>
-                        <td className="unframed-models__released">{released(model.created)}</td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            )}
-          </div>
-        </Dialog.Popup>
-      </Dialog.Portal>
-    </Dialog.Root>
+        </DialogHeader>
+        <div className="flex min-h-0 flex-1 flex-col gap-3 px-6 pb-6">
+          <InputGroup>
+            <InputGroupAddon>
+              <Search aria-hidden />
+            </InputGroupAddon>
+            <InputGroupInput ref={search} aria-label="Search models" placeholder="Search models…" value={query} onChange={(event) => setQuery(event.target.value)} />
+          </InputGroup>
+          {rows.length === 0 ? (
+            <p className="m-0 py-6 text-center text-sm text-muted-foreground">No model matches. Clear the search.</p>
+          ) : (
+            // The header is its own table above the scrolling rows, so it stays put while they scroll.
+            <div className="flex min-h-0 flex-1 flex-col">
+              <div className="shrink-0 overflow-y-hidden [scrollbar-gutter:stable]">
+                <Table className="table-fixed">
+                  <Columns />
+                  <TableHeader>
+                    <TableRow>
+                      {header("model", "Model")}
+                      {header("provider", "Provider")}
+                      {header("released", "Released")}
+                    </TableRow>
+                  </TableHeader>
+                </Table>
+              </div>
+              <div className="min-h-0 flex-1 overflow-y-auto [scrollbar-gutter:stable]">
+                <Table className="table-fixed">
+                  <Columns />
+                  <TableBody>
+                    {rows.map((model) => {
+                      const provider = byProvider.get(providerKey(model.id));
+                      const isCurrent = model.id === current;
+                      return (
+                        <TableRow key={model.id} data-model={model.id}>
+                          <TableCell>
+                            <InlineButton
+                              title={model.id}
+                              onClick={() => {
+                                onPick(model.id);
+                                onOpenChange(false);
+                              }}
+                            >
+                              <span className={isCurrent ? "font-bold" : undefined}>{modelPart(model.id)}</span>
+                              {isCurrent && <Check aria-label="Current model" className="size-3.5" />}
+                            </InlineButton>
+                          </TableCell>
+                          <TableCell>
+                            {provider && (
+                              <Badge variant="label" data-hue={provider.hue} style={{ "--label": HUE_COLOR[provider.hue] } as CSSProperties}>
+                                {provider.label}
+                              </Badge>
+                            )}
+                          </TableCell>
+                          <TableCell>
+                            <span className="block text-right tabular-nums">{released(model.created)}</span>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              </div>
+            </div>
+          )}
+        </div>
+      </DialogPopup>
+    </Dialog>
   );
 };

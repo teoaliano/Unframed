@@ -92,19 +92,7 @@
     },
     // Surfaces spec 12 has not moved onto the kit yet. Each task removes its files; the sweep (task 24) leaves this empty.
     {
-      "files": [
-        "src/generate/SelectionToolbar.tsx",
-        "src/generate/composer/Composer.tsx",
-        "src/generate/composer/FinalPromptDialog.tsx",
-        "src/generate/composer/GenerateTray.tsx",
-        "src/generate/composer/InstructionEditor.tsx",
-        "src/generate/composer/ModelDialog.tsx",
-        "src/generate/composer/PropTray.tsx",
-        "src/generate/composer/VideoStatus.tsx",
-        "src/generate/runsProp.tsx",
-        "src/library/AddToLibraryDialog.tsx",
-        "src/library/LibraryDialog.tsx"
-      ],
+      "files": [],
       "rules": {
         "shadcn/no-unknown-classes": "off",
         "shadcn/no-raw-colors": "off",

@@ -170,7 +170,7 @@ Badges sit where spec 02 puts a bare media shape's one fact (top-left, outside t
 
 ### Warnings and errors in the Generate tray (image medium)
 
-Shown under the box, above the tray, as status lines. Exact strings:
+Shown under the box, above the tray, as status lines. A line that disables send is the kit's Alert (`warning` for a blocker, `error` for a failed start); a warning that lets the run go is `text-xs` muted text. Exact strings:
 
 - Videos in an image run: `A video is selected, but image models do not take video input. It will be sent and probably ignored.` With several: `3 videos are selected, but image models do not take video input. They will be sent and probably ignored.` Videos are still sent.
 - Over the cap (image slots, including composites and the sketch, above the model's `input_references` maximum): `5 images are selected, but this model takes at most 4. Deselect the rest, or pick a model that takes more.` When the cap is 1: `... but this model takes only one. ...`.
@@ -185,7 +185,7 @@ Decided from the selection by a pure function in the web (tested at the domain s
 | Selection | Bar |
 | --- | --- |
 | nothing | no bar |
-| exactly one result (spec terms: a shape with a recipe) | Regenerate (primary), Vary, Recipe (quiet), separator, Agent; the result's line shows under it |
+| exactly one result (spec terms: a shape with a recipe) | Regenerate (primary), Vary, Recipe (ghost), separator, Agent; the result's line shows under it |
 | exactly one result still generating | the hint `Generating…`, separator, Agent |
 | exactly one page or motion with a file | Open, separator, Agent (spec 09 connects Open to its editor) |
 | usable | Generate (primary), hint, separator, Agent |
@@ -193,17 +193,19 @@ Decided from the selection by a pure function in the web (tested at the domain s
 
 The hint is `@<name>` when the selection is exactly one group, otherwise `N selected` where N counts the selected shapes as tldraw counts them (a group is one). When the selection is exactly the members of one batch (spec 05), the hint is `4 images · $0.6720`. Vary is hidden for a text result (spec 05). Regenerate and Vary are disabled while that result's own run marker is set.
 
+Look (spec 12): the bar is a `surface-glass` card with the kit's border, `rounded-xl` radius and small shadow. Its buttons are the kit's Button at `sm` size: the primary one (Generate, Regenerate, Open, Agent) is `default`, Vary is `outline`, Recipe is `ghost`. The separator is the kit's vertical Separator. The hint and the result's line are `text-xs` in the muted foreground.
+
 Placement: centred above the selection's screen bounds, 12 px gap, clamped 8 px from the canvas's sides; flipped below the selection when there is no room above; when there is room neither above nor below, pinned inside the canvas at the top margin. The composer uses the same rule with its own size, so it grows upward on the same centre and bottom edge (downward when flipped). The morph animates size and position over 200 ms ease-out; under reduced motion it crossfades over 120 ms. The bar hides while a shape is dragged, while the canvas is dragged (not on wheel moves) and during a box selection. Pointer and click events on the bar and composer never reach the canvas. A wheel over them is forwarded to the canvas at the same pointer position, unless the element under the pointer scrolls itself (the instruction box once it overflows).
 
 ### The composer and its Generate tray
 
-Width 420 px. Three bands.
+Width 420 px. Three bands. The bar grows into t3code's composer shell (spec 12): `rounded-3xl`, a glass fill of `--card` (dark: `--surface-raised`) at the glass opacity with the glass blur, the kit border, and `shadow-composer` in light (none in dark, as in t3code). The radius, fill and shadow change within the same 200 ms morph.
 
-Top band: the medium switch (a segmented control of the registered media, lowercase labels `image`, `video`, `text`) on the left; the source count on the right, the same text as the toolbar hint (`3 selected`, `@character`), or `recipe · N sources` in recipe mode.
+Top band: the medium switch (the kit's `segmented` ToggleGroup of the registered media, with radio semantics, lowercase labels `image`, `video`, `text`) on the left; the source count on the right in `text-xs` muted foreground, the same text as the toolbar hint (`3 selected`, `@character`), or `recipe · N sources` in recipe mode.
 
-Box: the instruction editor (Tiptap, one paragraph per line, the `@` mention menu of spec 02's prompt editing), placeholder `What should this make?`, autofocused on open. Attachments and chips are off in the Generate tray. The send button sits at the box's bottom right with the price estimate immediately to its left. Send label: `Generate` (spec 05 adds `Generate 4×`). Cmd+Enter (Ctrl+Enter off macOS) sends wherever focus is while the composer is open, except in a text field outside it or while one of its menus is open; Enter and Shift+Enter insert a line. While the send is being acknowledged, the button shows a spinner and is disabled; a second press does nothing.
+Box: the instruction editor (Tiptap, one paragraph per line, the `@` mention menu of spec 02's prompt editing), placeholder `What should this make?`, autofocused on open, inside the kit's field frame (input border, background, `rounded-lg`, the focus ring while the editor has focus). Attachments and chips are off in the Generate tray. The send button sits at the box's bottom right with the price estimate immediately to its left; it is the kit's Button `default` at `sm` size with an up arrow, in `--message-action` (the primary colour), since the kit has no round labelled button. Send label: `Generate` (spec 05 adds `Generate 4×`). Cmd+Enter (Ctrl+Enter off macOS) sends wherever focus is while the composer is open, except in a text field outside it or while one of its menus is open; Enter and Shift+Enter insert a line. While the send is being acknowledged, the button shows a spinner and is disabled; a second press does nothing.
 
-Tray band, below the box's border: the model chip first, then one chip per prop that will be sent, joined visually with ` · `, then `+ add prop`. Chip text is the value (`2:3`, `high`, `1K`, `transparent`, `svg`); the model chip shows the part of the slug after the first `/`, with the full slug as its tooltip, and `Loading models…` until the catalogue arrives (disabled while the catalogue is empty).
+Tray band, below the box's border: the model chip first, then one chip per prop that will be sent, side by side, then `+ add prop` at the end of the row. Every chip is one chip recipe (spec 12): the kit's Button `outline` at `compact` size (28 px); `+ add prop` is Button `ghost-muted` at the same size. The menus are the kit's Menu, a prop's values as radio items (the current one tinted and checked), the add menu as items with the value in the muted foreground. Chip text is the value (`2:3`, `high`, `1K`, `transparent`, `svg`); the model chip shows the part of the slug after the first `/`, with the full slug as its tooltip, and `Loading models…` until the catalogue arrives (disabled while the catalogue is empty).
 
 - The model chip opens the model dialog.
 - A prop chip opens a menu of that prop's allowed values with the current one checked, then a separator and `Remove`. Remove takes the prop out of the tray; a prop not in the tray is not sent.
@@ -236,17 +238,17 @@ The composer opens on the app's last-used values per medium: the model (only whe
 
 ### The model dialog
 
-A centred modal dialog, 680 px wide, one per open picker.
+A centred modal dialog, 680 px wide, one per open picker: the kit's Dialog (spec 12), its title in the kit's dialog title, the header link an InlineButton in the muted tone, the search field the kit's InputGroup with a search icon, the table the kit's Table, and each sortable column header a Button `ghost` at `xs` size with its sort arrow.
 
 - Title: `Image models` (spec 04 and 05: `Video models`, `Text models`).
 - Header link `Browse on OpenRouter`, opening in a new tab: image `https://openrouter.ai/models?output_modalities=image`, video `https://openrouter.ai/models?output_modalities=video`, text `https://openrouter.ai/models?output_modalities=text&input_modalities=image`.
 - Search field, label `Search models` (visually hidden), placeholder `Search models…`. Matches, case-insensitively, the full slug or the display name.
 - A table with three sortable columns, sorted by Released, newest first, by default:
-  - **Model**: the slug after the first `/`. The cell is a button that picks the model and closes the dialog. The current model is bold with a check icon labelled `Current model`.
-  - **Provider**: a coloured token. The provider key is the slug's prefix before `/` with a leading `~` removed. Its label is the part before `:` of the first model in the catalogue under that key whose display name contains a colon, trimmed; if none has one, the key itself. The colour is assigned by the key's position in the catalogue's sorted list of provider keys, cycling through 11 hues in this order: blue, orange, purple, green, pink, teal, red, cyan, yellow, gray, neutral (values from `assets/theme/`).
+  - **Model**: the slug after the first `/`. The cell is a button (InlineButton) that picks the model and closes the dialog. The current model is bold with a check icon labelled `Current model`.
+  - **Provider**: a coloured token. The provider key is the slug's prefix before `/` with a leading `~` removed. Its label is the part before `:` of the first model in the catalogue under that key whose display name contains a colon, trimmed; if none has one, the key itself. The colour is assigned by the key's position in the catalogue's sorted list of provider keys, cycling through 11 hues in this order: blue, orange, purple, green, pink, teal, red, cyan, yellow, gray, neutral. The token is the kit's Badge `label`, tinted from `--label` set to the Tailwind palette colour of that hue at 500 (`--color-blue-500` and so on).
   - **Released**: OpenRouter's `created` (Unix seconds) formatted as a short local date (numeric year, short month, numeric day), right-aligned, 130 px; empty when absent. Sorting uses the number.
 - No match: `No model matches. Clear the search.`
-- The table scrolls inside the dialog with a sticky header.
+- The table scrolls inside the dialog with a sticky header: the header row is its own table with the same columns, above the scrolling rows.
 - The dialog handles Escape itself, in the capture phase, and stops it there, so Esc closes only the dialog.
 
 ### Pricing

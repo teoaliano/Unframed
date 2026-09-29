@@ -1,6 +1,7 @@
 import type { Page } from "@playwright/test";
 import { openCanvas } from "./canvas.ts";
 import { clickShape, composer, expect, openAndEscape, openComposer, sendRun, startGeneration, test, toolbar } from "./generation.ts";
+import { expectSlot, expectToken, inBothSchemes, resolvedColor, styleOf } from "./kit.ts";
 
 const openOnSubject = async (page: Page) => {
   await clickShape(page, "shape:starter-subject");
@@ -73,6 +74,35 @@ test("the tray: the model chip, the default props the model declares, value menu
   await page.keyboard.press("Escape");
 });
 
+const MENU_GLASS = "color-mix(in srgb, var(--popover) 18%, color-mix(in srgb, var(--popover) var(--glass-opacity), transparent))";
+
+test("the tray's chips are one chip recipe on the kit's outline Button, and its menus are kit menus with radio items", async ({ page, generation }) => {
+  await openCanvas(page, generation.engine);
+  await openOnSubject(page);
+  const model = tray(page).getByTestId("model-chip");
+  const low = chips(page).filter({ hasText: "low" });
+  const add = tray(page).getByRole("button", { name: "+ add prop" });
+  await expectSlot(model, "tooltip-trigger");
+  await expectSlot(low, "menu-trigger");
+  await expectSlot(add, "menu-trigger");
+  await inBothSchemes(page, async () => {
+    await page.mouse.move(5, 500);
+    for (const chip of [model, low]) {
+      expect((await chip.boundingBox())!.height).toBe(28);
+      await expectToken(chip, "border-top-color", "--color-input");
+    }
+    await low.click();
+    const menu = page.getByRole("menu", { name: "Quality" });
+    await expectSlot(menu, "menu-popup");
+    expect(await styleOf(menu, "background-color")).toBe(await resolvedColor(page, MENU_GLASS));
+    for (const item of await menu.getByRole("menuitemradio").all()) await expectSlot(item, "menu-radio-item");
+    await expectSlot(menu.getByRole("menuitem", { name: "Remove" }), "menu-item");
+    await expect(menu.locator("[data-slot='menu-separator']")).toHaveCount(1);
+    await page.keyboard.press("Escape");
+    await expect(menu).toHaveCount(0);
+  });
+});
+
 test("a model that declares a single format still offers Format, and props reset on a model change", async ({ page, generation }) => {
   await openCanvas(page, generation.engine);
   await openOnSubject(page);
@@ -137,6 +167,30 @@ test("the model dialog: title, link, newest first, sorts, search, provider token
   await box.getByRole("button", { name: "flux-2", exact: true }).click();
   await expect(box).toHaveCount(0);
   await expect(tray(page).getByTestId("model-chip")).toHaveText("flux-2");
+});
+
+test("the model dialog is the kit's Dialog at 680 px with the kit's search field, Table and sort Buttons, and provider tokens as label Badges", async ({ page, generation }) => {
+  await openCanvas(page, generation.engine);
+  await openOnSubject(page);
+  await tray(page).getByTestId("model-chip").click();
+  const box = dialog(page);
+  await expectSlot(box, "dialog-popup");
+  await expect.poll(async () => Math.round((await box.boundingBox())!.width)).toBe(680);
+  const title = box.locator("[data-slot='dialog-title']");
+  expect(await styleOf(title, "font-size")).toBe("20px");
+  expect(await styleOf(title, "font-weight")).toBe("600");
+  await expectSlot(box.getByPlaceholder("Search models…"), "input");
+  await expect(box.getByPlaceholder("Search models…")).toBeFocused();
+  await expect(box.locator("[data-slot='table']")).not.toHaveCount(0);
+  await expectSlot(box.getByRole("button", { name: "Released", exact: true }), "button");
+  await expectSlot(box.getByRole("button", { name: "flux-2", exact: true }), "inline-button");
+  const openai = box.locator('tr[data-model="openai/gpt-image-2"] [data-hue]');
+  await expectSlot(openai, "badge");
+  await inBothSchemes(page, async (scheme) => {
+    expect(await resolvedColor(page, "var(--color-purple-500)")).not.toBe("rgba(0, 0, 0, 0)");
+    const tint = `color-mix(in srgb, var(--color-purple-500) ${scheme === "light" ? 30 : 45}%, var(--color-foreground))`;
+    await expect.poll(async () => (await styleOf(openai, "color")) === (await resolvedColor(page, tint))).toBe(true);
+  });
 });
 
 test("Escape in the model dialog closes only the dialog", async ({ page, generation }) => {

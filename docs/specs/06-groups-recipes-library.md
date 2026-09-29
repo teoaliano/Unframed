@@ -119,7 +119,7 @@ F2 is used rather than Cmd-R because Cmd-R reloads the page.
 
 Spec 03's selection to request already expands a selected group in place (one slot at the box's top edge, members in their own order inside it, a member selected with its group counted once) and resolves `@group` to its prompt members' text without media. Every rule specs 03 to 05 apply to selected shapes applies to members the same way. Selecting only a member (clicking inside a box selects the child) treats it as a loose shape.
 
-**Hint.** When the selection is exactly one group, the toolbar hint reads `@<name>` instead of "N selected" (spec 03's toolbar states). In the composer's sources band the group shows as one chip reading `@<name>`, and its members keep their role badges on the canvas while the composer is open.
+**Hint.** When the selection is exactly one group, the toolbar hint reads `@<name>` instead of "N selected" (spec 03's toolbar states). In the composer's sources band the group shows as one chip (the kit's Badge `outline`) reading `@<name>`, and its members keep their role badges on the canvas while the composer is open.
 
 **Agent.** Agent on a selection containing a group sends every member as context, as spec 08 sends any selected shape.
 
@@ -137,16 +137,16 @@ Example: `gpt-image-2 · 1024² · ×3`. Clicking the chip opens the composer on
 
 **When a recipe applies.** When the selection contains exactly one recipe group, whatever else is selected. Other selected shapes join the run as sources in the usual order. With two or more recipe groups selected, no recipe applies and the composer opens on last-used values.
 
-**Toolbar.** When a recipe applies, the selection toolbar shows, in order: the primary button, the hint, a "Recipe" button, and "Agent".
+**Toolbar.** When a recipe applies, the selection toolbar shows, in order: the primary button (Button `default`), the hint, a "Recipe" button (Button `ghost`), and "Agent".
 - The primary button reads "Generate" for one output and "Generate N×" for N, and while the run it started is going "Generating d / t…", where t is the run's output count and d how many have settled, counted from spec 03's `run.subscribe` events. Clicking it starts the run at once with the recipe's medium, model, params and runs, with the expanded selection as sources and no instruction. It does not open the composer.
 - For a Free recipe, the primary button reads "Generate" and opens the final prompt dialog from spec 05 first; nothing is spent until that dialog's "Generate N×".
 - The hint reads `@<name>` and, when spec 03 can estimate the run, ` · ` and the estimate (`~$0.57`).
 - "Recipe" opens the composer on the recipe.
 The run is an ordinary run: the same request, sidecars, batch and results as specs 03 to 05. Results land beside the box, outside it, by spec 03's placement rule. A recipe run does not change the composer's last-used values.
 
-**Composer on a group.** When the selection is exactly one group, the composer shows a recipe line under the tray. Its content depends on the state:
+**Composer on a group.** When the selection is exactly one group, the composer shows a recipe line under the tray, in `text-xs`. Its buttons are the kit's InlineButton: a quiet button is the `muted` tone, a plain one the `default` tone. Its content depends on the state:
 - group without a recipe: a quiet button "Save as recipe" (tooltip "Keep these settings on @<name>. Its Generate uses them.");
-- recipe applies and the tray matches it (`recipeEquals`): the text "Recipe of @<name>" and a quiet button "Clear recipe";
+- recipe applies and the tray matches it (`recipeEquals`): the text "Recipe of @<name>" (muted) and a quiet button "Clear recipe";
 - recipe applies and the tray differs: a button "Update recipe" and a quiet button "Clear recipe".
 When a recipe applies, the composer opens with the tray set from the recipe instead of last-used values. Editing the tray never writes to the group; only "Save as recipe" and "Update recipe" do. Generate from the composer uses the tray as it stands.
 
@@ -184,9 +184,9 @@ type Preset = {
 - nothing groupable: disabled.
 Pages and motions in the selection are never saved. The content is captured when the menu item is clicked, so edits made while the dialog is open are not saved.
 
-The "Add to library" dialog: title "Add to library", subtitle "N shape(s), saved as you have them now." ("1 shape" singular), or "N shape(s) and its recipe, saved as you have them now." when the group has a recipe, where N counts members. Fields: "Name" (autofocused, placeholder "e.g. Portrait retouch"), "Description" (placeholder "What it does, in a line"). Buttons "Cancel" and "Save". An empty name shows "Give it a name." under the field and saves nothing. A failed save shows "Could not save. Is the local server running?" under the name. Success closes the dialog and toasts "Saved “<name>” to your library." (typographic double quotes U+201C and U+201D around the name).
+The "Add to library" dialog: title "Add to library", subtitle "N shape(s), saved as you have them now." ("1 shape" singular), or "N shape(s) and its recipe, saved as you have them now." when the group has a recipe, where N counts members. The kit's Dialog (spec 12), 420 wide. Fields, each a kit Input under its label: "Name" (autofocused, placeholder "e.g. Portrait retouch"), "Description" (placeholder "What it does, in a line"). Buttons in the kit's dialog footer: "Cancel" (Button `outline`) and "Save" (Button `default`). An empty name shows "Give it a name." under the field and saves nothing. A failed save shows "Could not save. Is the local server running?" under the name. Success closes the dialog and toasts "Saved “<name>” to your library." (typographic double quotes U+201C and U+201D around the name).
 
-**The Library dialog.** Opened by the "Library" button in the canvas chrome (icon Library). 680 wide, title "Library". It re-reads the user presets every time it opens.
+**The Library dialog.** Opened by the "Library" button in the canvas chrome (icon Library). The kit's Dialog (spec 12), 680 wide, title "Library". The search field is the kit's InputGroup, the sort the kit's Select, and each toggle the kit's `segmented` ToggleGroup. It re-reads the user presets every time it opens.
 
 Row 1, left to right:
 - search field, hidden label "Search presets", placeholder "Search presets…", search icon. Matches the trimmed, lowercased query as a substring of "<name> <summary>", lowercased;
@@ -196,19 +196,19 @@ Row 2:
 - type toggle, label "Type": "All", "Recipes", "Groups";
 - source toggle, label "Source": "Any", "Custom", "System" ("Any", not a second "All").
 
-The list is the user presets followed by the system presets, filtered by type, source and query, then sorted, then cut into pages of 10. Sorting is stable. "Newest" orders by a rank: `savedAt` when present, a rank above every system preset for a user preset without one, and the lowest rank for system presets. "Oldest" is its exact reverse. "A–Z" compares names with locale comparison; "Z–A" is its reverse. The page resets to 1 when the query, a filter or the sort changes, and is clamped to the last page (deleting the last preset on the last page never shows an empty page). Pagination appears only when there are more than 10 results, right-aligned, showing a count ("11–20 of 23").
+The list is the user presets followed by the system presets, filtered by type, source and query, then sorted, then cut into pages of 10. Sorting is stable. "Newest" orders by a rank: `savedAt` when present, a rank above every system preset for a user preset without one, and the lowest rank for system presets. "Oldest" is its exact reverse. "A–Z" compares names with locale comparison; "Z–A" is its reverse. The page resets to 1 when the query, a filter or the sort changes, and is clamped to the last page (deleting the last preset on the last page never shows an empty page). Pagination appears only when there are more than 10 results, right-aligned, showing a count ("11–20 of 23") and the previous and next page buttons (Button `ghost` at an icon size).
 
 Empty result: "Nothing here yet. Try another category or clear the search."
 
 The view choice is stored in spec 01's preferences store under `library.view` as `card` or `list` (default `card`), so it survives the packaged app's new origin on every launch; when the preference cannot be read the dialog opens in card view. The sort is not remembered.
 
-Card view: a grid of cards. Each card: the name (medium weight), the summary, the needs line when present (supporting ink), then a row of chips, then a footer strip under a divider holding "Add". A user preset has a delete icon button in the top-right corner. List view: dense divided rows; the name and its chips on one line, the summary below clamped to three lines with the full text in a native tooltip, then "Add" and the delete button at the row's end.
+Card view: a grid of cards, each on `--card` with the kit's border and `rounded-xl` radius. Each card: the name (medium weight), the summary, the needs line when present (supporting ink), then a row of chips, then a footer strip under a divider holding "Add" (Button `outline` at `xs` size, as in list view). A user preset has a delete icon button in the top-right corner. List view: dense divided rows; the name and its chips on one line, the summary below clamped to three lines with the full text in a native tooltip, then "Add" and the delete button at the row's end.
 
-Chips (label = the value capitalised, each with an icon and a hue): type `Recipe` (Workflow icon, purple) or `Group` (Group icon, blue); medium `Image` (Image icon, teal), `Video` (SquarePlay icon, orange), `Text` (Type icon, cyan), shown only for recipes; source `Custom` (UserRound icon, green) for user presets or `System` (Package icon, pink).
+Chips (label = the value capitalised, each with an icon and a hue; each is the kit's Badge `label`, tinted from `--label` set to the Tailwind palette colour of its hue at 500): type `Recipe` (Workflow icon, purple) or `Group` (Group icon, blue); medium `Image` (Image icon, teal), `Video` (SquarePlay icon, orange), `Text` (Type icon, cyan), shown only for recipes; source `Custom` (UserRound icon, green) for user presets or `System` (Package icon, pink).
 
-Delete: an icon button with accessible label "Delete <name>" and tooltip "Delete from your library", only on user presets. It opens an alert: title "Delete preset?", body "This removes “<name>” from your library. Shapes already on the canvas are untouched. This can't be undone.", action "Delete preset". A failed delete toasts "Could not delete that preset. Is the local server running?".
+Delete: an icon button (Button `ghost-destructive`) with accessible label "Delete <name>" and tooltip "Delete from your library", only on user presets. It opens an alert, the kit's AlertDialog: title "Delete preset?", body "This removes “<name>” from your library. Shapes already on the canvas are untouched. This can't be undone.", action "Delete preset" (Button `destructive`) beside "Cancel". A failed delete toasts "Could not delete that preset. Is the local server running?".
 
-A failed read (for example a damaged file) keeps the system presets on screen and shows one line above the list: "Your presets could not be read: <engine message>". Saving and deleting stay refused until the file reads again, because the engine refuses them (below).
+A failed read (for example a damaged file) keeps the system presets on screen and shows one line above the list, the kit's Alert `error`: "Your presets could not be read: <engine message>". Saving and deleting stay refused until the file reads again, because the engine refuses them (below).
 
 **Inserting ("Add").** Closes the dialog and inserts the preset into the current page as one undo step:
 1. tldraw inserts the content with fresh shape ids and applies its schema migrations.

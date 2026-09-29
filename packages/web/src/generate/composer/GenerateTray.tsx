@@ -1,8 +1,12 @@
 import { UnframedError, type Medium } from "@unframed/contracts";
 import { composeSelection, readRef, recipeEquals, recipeFromTray, resolveReferences, selectionHint } from "@unframed/domain";
-import { ArrowUp, LoaderCircle } from "lucide-react";
+import { ArrowUp } from "lucide-react";
 import { useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState, type Ref } from "react";
 import { useEditor, useValue, type TLShapeId } from "tldraw";
+import { Badge } from "~/components/ui/badge";
+import { Button, InlineButton } from "~/components/ui/button";
+import { Spinner } from "~/components/ui/spinner";
+import { Toggle, ToggleGroup } from "~/components/ui/toggle-group";
 import { appliedRecipe, groupRecipeOf, setGroupRecipe } from "../../canvas/groupRecipes.ts";
 import { Tip } from "../../chrome/ui.tsx";
 import { useEngine, useSettings } from "../../context.ts";
@@ -17,6 +21,7 @@ import { trayView } from "../trayView.ts";
 import { InstructionEditor } from "./InstructionEditor.tsx";
 import { ModelDialog } from "./ModelDialog.tsx";
 import { PropTray } from "./PropTray.tsx";
+import { StatusBand, StatusLine } from "./StatusLine.tsx";
 
 const messageOf = (error: unknown) => (error instanceof UnframedError || error instanceof Error ? error.message : String(error));
 
@@ -26,9 +31,7 @@ export const INSTRUCTION_PLACEHOLDER = "What should this make?";
 const recipeSources = (recipe: RecipeMode): number =>
   recipe.recipe.references.length + recipe.recipe.selectionPrompt.split(/\n\n+/).filter((part) => part.trim() !== "").length;
 
-const quietButton =
-  "h-6 cursor-pointer rounded-md border-0 bg-transparent px-1.5 text-[12.5px] text-muted-foreground hover:bg-accent hover:text-foreground disabled:cursor-default disabled:opacity-50";
-const plainButton = "h-6 cursor-pointer rounded-md border border-border bg-transparent px-2 text-[12.5px] text-foreground hover:bg-accent";
+const recipeLineClass = "flex items-center gap-3 px-2.5 pb-1 text-xs";
 
 /**
  * The line under the tray while the selection is exactly one group: Save as recipe for a
@@ -61,27 +64,27 @@ const RecipeLine = ({
   };
   if (!standing) {
     return (
-      <div className="unframed-composer-recipe" data-testid="recipe-line">
+      <div className={recipeLineClass} data-testid="recipe-line">
         <Tip label={`Keep these settings on @${name}. Its Generate uses them.`} side="top">
-          <button type="button" className={quietButton} disabled={!current} onClick={save}>
+          <InlineButton tone="muted" disabled={!current} onClick={save}>
             Save as recipe
-          </button>
+          </InlineButton>
         </Tip>
       </div>
     );
   }
   return (
-    <div className="unframed-composer-recipe" data-testid="recipe-line">
+    <div className={recipeLineClass} data-testid="recipe-line">
       {current && recipeEquals(current, standing) ? (
-        <span className="text-[12.5px] text-muted-foreground">Recipe of @{name}</span>
+        <span className="text-muted-foreground">Recipe of @{name}</span>
       ) : (
-        <button type="button" className={plainButton} disabled={!current} onClick={save}>
+        <InlineButton disabled={!current} onClick={save}>
           Update recipe
-        </button>
+        </InlineButton>
       )}
-      <button type="button" className={quietButton} onClick={clear}>
+      <InlineButton tone="muted" onClick={clear}>
         Clear recipe
-      </button>
+      </InlineButton>
     </div>
   );
 };
@@ -239,34 +242,44 @@ export const GenerateTray = ({ project, recipe, onSent, onMenuOpen, handle }: Ge
   useImperativeHandle(handle, () => ({ send: () => void send() }));
 
   const media = registeredMedia();
+  const sources = recipe ? `recipe · ${live ? live.selected.length : recipeSources(recipe)} sources` : hint;
   return (
-    <div className="unframed-composer-generate">
-      <div className="unframed-composer-top">
-        <div role="radiogroup" aria-label="Medium" className="unframed-segmented">
+    <div className="flex flex-col gap-2">
+      <div className="flex items-center justify-between gap-2 px-0.5">
+        {/* One choice of several: radio semantics on the kit's segmented toggle group. */}
+        <ToggleGroup
+          role="radiogroup"
+          aria-label="Medium"
+          value={[medium]}
+          onValueChange={(next) => {
+            const [picked] = next as Medium[];
+            if (picked !== undefined) setMedium(editor, picked);
+          }}
+        >
           {media.map((each) => (
-            <button
-              key={each.medium}
-              type="button"
-              role="radio"
-              aria-checked={each.medium === medium}
-              data-on={each.medium === medium ? "" : undefined}
-              onClick={() => setMedium(editor, each.medium)}
-            >
+            <Toggle key={each.medium} value={each.medium} role="radio" aria-checked={each.medium === medium}>
               {each.label}
-            </button>
+            </Toggle>
           ))}
-        </div>
-        <span className="unframed-composer-count" data-testid="source-count" data-chip={!recipe && hint.startsWith("@") ? "group" : undefined}>
-          {recipe ? `recipe · ${live ? live.selected.length : recipeSources(recipe)} sources` : hint}
-        </span>
+        </ToggleGroup>
+        {!recipe && hint.startsWith("@") ? (
+          <Badge variant="outline" data-testid="source-count" data-chip="group">
+            {sources}
+          </Badge>
+        ) : (
+          <span className="whitespace-nowrap text-xs text-muted-foreground" data-testid="source-count">
+            {sources}
+          </span>
+        )}
       </div>
       {live && recipe?.recipe.sentPrompt !== undefined && (
-        <div className="unframed-composer-sent" data-testid="recipe-sent">
-          <p>{IMPORTED_RECIPE_NOTE}</p>
-          <p>{recipe.recipe.sentPrompt}</p>
+        <div className="flex flex-col gap-0.5 px-0.5 text-xs text-muted-foreground" data-testid="recipe-sent">
+          <p className="m-0">{IMPORTED_RECIPE_NOTE}</p>
+          <p className="m-0 max-h-24 overflow-y-auto whitespace-pre-wrap text-foreground">{recipe.recipe.sentPrompt}</p>
         </div>
       )}
-      <div className="unframed-composer-box">
+      {/* The box: the kit's field frame and focus ring around the editor, with send at its bottom right. */}
+      <div className="relative flex min-h-27 flex-col rounded-lg border border-input bg-background px-3 pt-2.5 pb-12 not-dark:bg-clip-padding shadow-xs/5 ring-ring/24 transition-shadow has-focus-visible:border-ring has-focus-visible:ring-[3px] dark:bg-input/32">
         <InstructionEditor
           initial={instruction}
           placeholder={INSTRUCTION_PLACEHOLDER}
@@ -274,45 +287,34 @@ export const GenerateTray = ({ project, recipe, onSent, onMenuOpen, handle }: Ge
           onMenuOpen={onMentionMenu}
           handle={box}
         />
-        <div className="unframed-composer-send">
+        <div className="absolute right-2.5 bottom-2.5 flex items-center gap-2.5">
           {estimate !== undefined && (
-            <span className="unframed-composer-estimate" data-testid="estimate">
+            <span className="text-xs text-muted-foreground tabular-nums" data-testid="estimate">
               {estimate}
             </span>
           )}
-          <button
-            type="button"
-            className="unframed-composer-go"
-            aria-busy={sending || undefined}
-            data-sending={sending ? "true" : undefined}
-            disabled={blocked || sending}
-            onClick={() => void send()}
-          >
-            {sending ? <LoaderCircle size={14} className="animate-spin" aria-hidden /> : <ArrowUp size={14} aria-hidden />}
+          <Button size="sm" aria-busy={sending || undefined} data-sending={sending ? "true" : undefined} disabled={blocked || sending} onClick={() => void send()}>
+            {sending ? <Spinner aria-hidden /> : <ArrowUp aria-hidden />}
             {sending && definition.sendingLabel !== undefined ? definition.sendingLabel : definition.sendLabel(values ?? { model: undefined, picked: false, props: {} })}
-          </button>
+          </Button>
         </div>
       </div>
       {definition.Status && values ? (
         <definition.Status status={status} failure={failure} values={values} source={source} entry={entry} setProps={(props) => setValues({ ...values, props })} />
       ) : (status.warnings.length > 0 || status.blockers.length > 0 || failure !== undefined) && (
-        <div className="unframed-composer-status" data-testid="composer-status">
+        <StatusBand>
           {status.warnings.map((line) => (
-            <p key={line} role="status" data-kind="warning">
+            <StatusLine key={line} kind="warning">
               {line}
-            </p>
+            </StatusLine>
           ))}
           {status.blockers.map((line) => (
-            <p key={line} role="status" data-kind="blocked">
+            <StatusLine key={line} kind="blocked">
               {line}
-            </p>
+            </StatusLine>
           ))}
-          {failure !== undefined && (
-            <p role="alert" data-kind="error">
-              {failure}
-            </p>
-          )}
-        </div>
+          {failure !== undefined && <StatusLine kind="error">{failure}</StatusLine>}
+        </StatusBand>
       )}
       <PropTray
         model={values?.model}

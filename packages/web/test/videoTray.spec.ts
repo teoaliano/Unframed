@@ -4,6 +4,7 @@ import type { Page } from "@playwright/test";
 import { openCanvas, roomRecords, shapeOnScreen } from "./canvas.ts";
 import { clickShape, composer, openAndEscape, openComposer } from "./generation.ts";
 import { pngBytes } from "./images.ts";
+import { expectSlot } from "./kit.ts";
 import { filledMedia, promptRecord, putRecords, testIndex } from "./media.ts";
 import { addProp, badge, chips, chooseVideo, expect, pickModel, setProp, statusLines, test, tray } from "./videoGeneration.ts";
 
@@ -210,6 +211,8 @@ test("the share block shows only for a local clip that will be sent, on by defau
   await expect(block).toBeVisible();
   const consent = block.getByRole("checkbox", { name: "Share via temporary link while generating" });
   await expect(consent).toBeChecked();
+  await expectSlot(consent, "checkbox");
+  await expectSlot(block.getByRole("button", { name: "What sharing does" }), "inline-button");
   await expect(block.getByText(SHARE_ON)).toHaveCount(0);
   await block.getByRole("button", { name: "What sharing does" }).click();
   await expect(block.getByText(SHARE_ON)).toBeVisible();

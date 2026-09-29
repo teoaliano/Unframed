@@ -1,8 +1,18 @@
-import { Menu } from "@base-ui/react/menu";
 import { addablePropValue, modelPart, type ModelParams } from "@unframed/domain";
-import { Check } from "lucide-react";
-import { Fragment, useLayoutEffect, useState } from "react";
-import { itemClass, popupClass, Tip } from "../../chrome/ui.tsx";
+import { useLayoutEffect, useState, type ComponentProps } from "react";
+import { Button } from "~/components/ui/button";
+import {
+  Menu,
+  MenuCheckboxItem,
+  MenuItem,
+  MenuPopup,
+  MenuRadioGroup,
+  MenuRadioItem,
+  MenuRadioItemIndicator,
+  MenuSeparator,
+  MenuTrigger,
+} from "~/components/ui/menu";
+import { Tip } from "../../chrome/ui.tsx";
 import type { PropValue, TrayPropDefinition, TrayProps } from "../mediumRegistry.ts";
 
 export interface PropTrayProps {
@@ -20,8 +30,8 @@ export interface PropTrayProps {
   readonly onMenuOpen: (open: boolean, close: () => void) => void;
 }
 
-export const chipClass =
-  "cursor-pointer rounded-md border-0 bg-transparent px-1 py-0.5 text-[12.5px] text-foreground hover:bg-accent data-[popup-open]:bg-accent disabled:cursor-default disabled:text-muted-foreground";
+/** The tray's one chip recipe (spec 12): the model chip, each prop chip and the Runs chip. */
+export const TrayChip = (props: ComponentProps<typeof Button>) => <Button variant="outline" size="compact" {...props} />;
 
 /**
  * The tray below the box: the model chip, one chip per prop that will be sent, and
@@ -49,128 +59,95 @@ export const PropTray = ({ model, catalogueReady, params, extra = [], props, onM
   const setOpen = (key: string | undefined) => setOpenProp(key);
 
   return (
-    <div className="unframed-composer-tray" data-testid="composer-tray">
-      <div className="flex min-w-0 flex-wrap items-center gap-x-1 gap-y-0.5">
+    <div className="flex items-center justify-between gap-2 px-0.5 pt-0.5" data-testid="composer-tray">
+      <div className="flex min-w-0 flex-wrap items-center gap-1">
         <Tip label={model ?? "Loading models…"} side="top">
-          <button type="button" className={chipClass} data-testid="model-chip" disabled={!catalogueReady} onClick={onModelClick}>
+          <TrayChip data-testid="model-chip" disabled={!catalogueReady} onClick={onModelClick}>
             {catalogueReady && model !== undefined ? modelPart(model) : "Loading models…"}
-          </button>
+          </TrayChip>
         </Tip>
         {inTray.map((prop) => (
-          <Fragment key={prop.key}>
-            <span aria-hidden className="text-[12.5px] text-[var(--unframed-border-emphasized)]">
-              ·
-            </span>
-            <Menu.Root open={openProp === prop.key} onOpenChange={(open) => setOpen(open ? prop.key : undefined)}>
-              <Menu.Trigger className={chipClass} data-prop={prop.key} aria-label={`${prop.label} ${String(props[prop.key])}`}>
-                {prop.chipLabels?.[String(props[prop.key])] ?? String(props[prop.key])}
-              </Menu.Trigger>
-              <Menu.Portal>
-                <Menu.Positioner side="top" align="start" sideOffset={6} className="z-[1250]">
-                  <Menu.Popup className={`${popupClass} min-w-[160px]`} aria-label={prop.label}>
-                    {prop.checkbox ? (
-                      <Menu.CheckboxItem
-                        className={itemClass}
-                        checked={props[prop.key] === true}
-                        onCheckedChange={(checked: boolean) => onChange({ ...props, [prop.key]: checked })}
-                        closeOnClick
-                      >
-                        <span className="flex size-4 items-center justify-center">
-                          <Menu.CheckboxItemIndicator>
-                            <Check size={14} aria-hidden />
-                          </Menu.CheckboxItemIndicator>
-                        </span>
-                        {prop.label}
-                      </Menu.CheckboxItem>
-                    ) : (
-                      <Menu.RadioGroup value={String(props[prop.key])} onValueChange={(value: string) => onChange({ ...props, [prop.key]: value })}>
-                        {prop.values.map((value) => (
-                          <Menu.RadioItem key={value} value={value} className={itemClass} closeOnClick>
-                            <span className="flex size-4 items-center justify-center">
-                              <Menu.RadioItemIndicator>
-                                <Check size={14} aria-hidden />
-                              </Menu.RadioItemIndicator>
-                            </span>
-                            {prop.optionLabels?.[value] ?? value}
-                          </Menu.RadioItem>
-                        ))}
-                      </Menu.RadioGroup>
-                    )}
-                    {!prop.required && <Menu.Separator className="my-1 h-px bg-[var(--unframed-border)]" />}
-                    {!prop.required && <Menu.Item
-                      className={itemClass}
-                      onClick={() => {
-                        const { [prop.key]: _removed, ...rest } = props;
-                        onChange(rest);
-                      }}
-                    >
-                      <span className="size-4" />
-                      Remove
-                    </Menu.Item>}
-                  </Menu.Popup>
-                </Menu.Positioner>
-              </Menu.Portal>
-            </Menu.Root>
-          </Fragment>
+          <Menu key={prop.key} open={openProp === prop.key} onOpenChange={(open) => setOpen(open ? prop.key : undefined)}>
+            <MenuTrigger data-prop={prop.key} aria-label={`${prop.label} ${String(props[prop.key])}`} render={<TrayChip />}>
+              {prop.chipLabels?.[String(props[prop.key])] ?? String(props[prop.key])}
+            </MenuTrigger>
+            <MenuPopup side="top" align="start" sideOffset={6} aria-label={prop.label}>
+              {prop.checkbox ? (
+                <MenuCheckboxItem checked={props[prop.key] === true} onCheckedChange={(checked: boolean) => onChange({ ...props, [prop.key]: checked })} closeOnClick>
+                  {prop.label}
+                </MenuCheckboxItem>
+              ) : (
+                <MenuRadioGroup value={String(props[prop.key])} onValueChange={(value: string) => onChange({ ...props, [prop.key]: value })}>
+                  {prop.values.map((value) => (
+                    <MenuRadioItem key={value} value={value} closeOnClick>
+                      <span className="flex items-center justify-between gap-3">
+                        {prop.optionLabels?.[value] ?? value}
+                        <MenuRadioItemIndicator />
+                      </span>
+                    </MenuRadioItem>
+                  ))}
+                </MenuRadioGroup>
+              )}
+              {!prop.required && <MenuSeparator />}
+              {!prop.required && (
+                <MenuItem
+                  onClick={() => {
+                    const { [prop.key]: _removed, ...rest } = props;
+                    onChange(rest);
+                  }}
+                >
+                  Remove
+                </MenuItem>
+              )}
+            </MenuPopup>
+          </Menu>
         ))}
         {extraInTray.map((prop) => (
-          <Fragment key={prop.key}>
-            <span aria-hidden className="text-[12.5px] text-[var(--unframed-border-emphasized)]">
-              ·
-            </span>
-            <prop.Chip props={props} onChange={onChange} open={openProp === prop.key} onOpenChange={(open) => setOpen(open ? prop.key : undefined)} />
-          </Fragment>
+          <prop.Chip key={prop.key} props={props} onChange={onChange} open={openProp === prop.key} onOpenChange={(open) => setOpen(open ? prop.key : undefined)} />
         ))}
       </div>
       {addable.length + extraAddable.length > 0 && (
-        <Menu.Root
-          open={addOpen}
-          onOpenChange={setAddOpen}
-        >
-          <Menu.Trigger className={`${chipClass} shrink-0 text-muted-foreground`}>+ add prop</Menu.Trigger>
-          <Menu.Portal>
-            <Menu.Positioner side="top" align="end" sideOffset={6} className="z-[1250]">
-              <Menu.Popup className={`${popupClass} min-w-[186px]`} aria-label="Add prop">
-                {addable.map((prop) => {
-                  const value = (addableValue ? addableValue(params, prop.key, props) : addablePropValue(params, prop.key, props)) ?? "";
-                  const shown = prop.optionLabels?.[String(value)] ?? String(value);
-                  return (
-                    <Menu.Item
-                      key={prop.key}
-                      aria-label={`${prop.label} ${shown}`}
-                      className={`${itemClass} justify-between`}
-                      onClick={() => {
-                        onChange({ ...props, [prop.key]: value });
-                        // The new chip opens its value menu once it is on screen.
-                        requestAnimationFrame(() => setOpen(prop.key));
-                      }}
-                    >
-                      <span>{prop.label}</span>
-                      <span className="text-muted-foreground">{shown}</span>
-                    </Menu.Item>
-                  );
-                })}
-                {extraAddable.map((prop) => {
-                  const value = prop.addValue(props);
-                  return (
-                    <Menu.Item
-                      key={prop.key}
-                      aria-label={`${prop.label} ${value}`}
-                      className={`${itemClass} justify-between`}
-                      onClick={() => {
-                        onChange(prop.add(props));
-                        requestAnimationFrame(() => setOpen(prop.key));
-                      }}
-                    >
-                      <span>{prop.label}</span>
-                      <span className="text-muted-foreground">{value}</span>
-                    </Menu.Item>
-                  );
-                })}
-              </Menu.Popup>
-            </Menu.Positioner>
-          </Menu.Portal>
-        </Menu.Root>
+        <Menu open={addOpen} onOpenChange={setAddOpen}>
+          <MenuTrigger render={<Button variant="ghost-muted" size="compact" />}>+ add prop</MenuTrigger>
+          <MenuPopup side="top" align="end" sideOffset={6} aria-label="Add prop" className="min-w-[186px]">
+            {addable.map((prop) => {
+              const value = (addableValue ? addableValue(params, prop.key, props) : addablePropValue(params, prop.key, props)) ?? "";
+              const shown = prop.optionLabels?.[String(value)] ?? String(value);
+              return (
+                <MenuItem
+                  key={prop.key}
+                  aria-label={`${prop.label} ${shown}`}
+                  className="justify-between"
+                  onClick={() => {
+                    onChange({ ...props, [prop.key]: value });
+                    // The new chip opens its value menu once it is on screen.
+                    requestAnimationFrame(() => setOpen(prop.key));
+                  }}
+                >
+                  <span>{prop.label}</span>
+                  <span className="text-muted-foreground">{shown}</span>
+                </MenuItem>
+              );
+            })}
+            {extraAddable.map((prop) => {
+              const value = prop.addValue(props);
+              return (
+                <MenuItem
+                  key={prop.key}
+                  aria-label={`${prop.label} ${value}`}
+                  className="justify-between"
+                  onClick={() => {
+                    onChange(prop.add(props));
+                    requestAnimationFrame(() => setOpen(prop.key));
+                  }}
+                >
+                  <span>{prop.label}</span>
+                  <span className="text-muted-foreground">{value}</span>
+                </MenuItem>
+              );
+            })}
+          </MenuPopup>
+        </Menu>
       )}
     </div>
   );

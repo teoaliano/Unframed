@@ -4,6 +4,7 @@ import type { Page } from "@playwright/test";
 import { openCanvas, plainText, roomRecords, shapeOnScreen } from "./canvas.ts";
 import { clickShape, composer, instructionBox, openComposer, pressSend, sendButton } from "./generation.ts";
 import { pngBytes } from "./images.ts";
+import { expectSlot, expectToken } from "./kit.ts";
 import { filledMedia, promptRecord, putRecords } from "./media.ts";
 import { expect, imageResults, setFree, test, type TextGeneration } from "./texting.ts";
 
@@ -56,6 +57,15 @@ test("the final prompt dialog opens after the repair with nothing else paid for,
   await expect(dialog(page).locator('[data-kind="warning"]')).toHaveText(["no image 4 selected"]);
   await expect(dialog(page).locator('[data-kind="info"]')).toHaveText("re-split into 3 sections");
   await expect(dialog(page).getByRole("button", { name: "Generate 3×" })).toBeEnabled();
+
+  // The kit's Dialog at 640 px, with its Textarea, an Alert per warning and the kit's Buttons.
+  await expectSlot(dialog(page), "dialog-popup");
+  await expect.poll(async () => Math.round((await dialog(page).boundingBox())!.width)).toBe(640);
+  await expectSlot(sections(page), "textarea");
+  await expectSlot(dialog(page).locator('[data-kind="warning"]'), "alert");
+  await expectSlot(dialog(page).getByRole("button", { name: "Cancel" }), "dialog-close");
+  expect((await sections(page).boundingBox())!.height).toBe(250);
+  await expectToken(dialog(page).getByRole("button", { name: "Generate 3×" }), "background-color", "--primary");
 });
 
 test("editing the list updates the rows live, and confirm sends the edited batch with the staged batch id, no second text call and nothing written back", async ({ page, generation }) => {

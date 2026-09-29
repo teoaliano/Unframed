@@ -3,6 +3,7 @@ import { gate } from "../../engine/test/openRouterStub.ts";
 import { openCanvas, roomRecords, shapeOnScreen, type AnyRecord } from "./canvas.ts";
 import { clickShape, composer, openComposer, selectGroup, toolbar } from "./generation.ts";
 import { pngBytes } from "./images.ts";
+import { expectSlot, expectToken, styleOf } from "./kit.ts";
 import { groupRecord, inGroup, promptRecord, putRecords } from "./media.ts";
 import { expect, imageResults, test, textResults, tray } from "./texting.ts";
 
@@ -23,6 +24,11 @@ test("a recipe group's bar: Generate N×, its @name with the estimate, Recipe, A
   await expect(barButtons(page)).toHaveText(["Generate 3×", "Recipe", "Agent"]);
   // Three low 1K images at $0.011.
   await expect(toolbar(page).getByTestId("selection-hint")).toHaveText("@character · ~$0.033");
+  // Generate is the kit's primary Button, Recipe its ghost Button.
+  await page.mouse.move(5, 500);
+  await expectSlot(toolbar(page).getByRole("button", { name: "Recipe" }), "button");
+  await expectToken(toolbar(page).getByRole("button", { name: "Generate 3×" }), "background-color", "--primary");
+  expect(await styleOf(toolbar(page).getByRole("button", { name: "Recipe" }), "background-color")).toBe("rgba(0, 0, 0, 0)");
 
   await putRecords(generation.engine, group({ ...IMAGE_RECIPE, runs: 1 }));
   await expect(barButtons(page)).toHaveText(["Generate", "Recipe", "Agent"]);

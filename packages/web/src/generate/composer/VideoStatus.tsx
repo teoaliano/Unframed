@@ -1,8 +1,12 @@
 import { videoStatusLines } from "@unframed/domain";
 import { ChevronDown } from "lucide-react";
 import { useState } from "react";
+import { InlineButton } from "~/components/ui/button";
+import { Checkbox } from "~/components/ui/checkbox";
+import { Label } from "~/components/ui/label";
 import type { MediumStatusProps } from "../mediumRegistry.ts";
 import { videoCounts } from "../videoPlan.ts";
+import { StatusBand, StatusLine } from "./StatusLine.tsx";
 
 export const SHARE_LABEL = "Share via temporary link while generating";
 export const SHARE_NOTE = "What sharing does";
@@ -15,36 +19,26 @@ export const SHARE_OFF =
 const ShareBlock = ({ on, onChange }: { readonly on: boolean; readonly onChange: (on: boolean) => void }) => {
   const [open, setOpen] = useState(false);
   return (
-    <div className="unframed-share" data-testid="share-block">
-      <div className="unframed-share__row">
-        <label className="unframed-share__consent">
-          <input
-            type="checkbox"
+    <div className="flex flex-col gap-1" data-testid="share-block">
+      <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1 text-xs">
+        <Label>
+          <Checkbox
             checked={on}
-            onChange={(event) => {
-              const next = event.currentTarget.checked;
+            onCheckedChange={(next) => {
               onChange(next);
               // Turning sharing off opens the note, so the warning that generating will fail is read.
               if (!next) setOpen(true);
             }}
           />
           {SHARE_LABEL}
-        </label>
-        <button type="button" className="unframed-share__toggle" aria-expanded={open} onClick={() => setOpen(!open)}>
+        </Label>
+        <InlineButton tone="muted" aria-expanded={open} onClick={() => setOpen(!open)}>
           {SHARE_NOTE}
-          <ChevronDown size={12} aria-hidden data-open={open ? "true" : undefined} />
-        </button>
+          <ChevronDown aria-hidden className="size-3 transition-transform data-[open=true]:rotate-180" data-open={open ? "true" : undefined} />
+        </InlineButton>
       </div>
       {open &&
-        (on ? (
-          <p role="status" data-kind="info">
-            {SHARE_ON}
-          </p>
-        ) : (
-          <p role="status" data-kind="warning">
-            {SHARE_OFF}
-          </p>
-        ))}
+        (on ? <StatusLine kind="info">{SHARE_ON}</StatusLine> : <StatusLine kind="warning">{SHARE_OFF}</StatusLine>)}
     </div>
   );
 };
@@ -54,27 +48,23 @@ export const VideoStatus = ({ status, failure, values, source, entry, setProps }
   const lines = videoStatusLines({ counts: videoCounts(source, values.props, entry), entry, shareLocalVideos: values.props.shareLocalVideos });
   if (lines.length === 0 && status.blockers.length === 0 && failure === undefined) return null;
   return (
-    <div className="unframed-composer-status" data-testid="composer-status">
+    <StatusBand>
       {lines.map((line) =>
         line.kind === "share" ? (
           <ShareBlock key="share" on={line.on} onChange={(on) => setProps({ ...values.props, shareLocalVideos: on })} />
         ) : (
-          <p key={line.text} role="status" data-kind="warning">
+          <StatusLine key={line.text} kind="warning">
             {line.text}
-          </p>
+          </StatusLine>
         ),
       )}
       {status.blockers.map((line) => (
-        <p key={line} role="status" data-kind="blocked">
+        <StatusLine key={line} kind="blocked">
           {line}
-        </p>
+        </StatusLine>
       ))}
-      {failure !== undefined && (
-        <p role="alert" data-kind="error">
-          {failure}
-        </p>
-      )}
-    </div>
+      {failure !== undefined && <StatusLine kind="error">{failure}</StatusLine>}
+    </StatusBand>
   );
 };
 

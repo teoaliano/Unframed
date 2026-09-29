@@ -102,7 +102,7 @@ The landed shape, a **text result**:
 - It is editable like any prompt. Editing never re-runs. Its text is always substituted literally, never re-scanned (spec 03's resolver), before and after an edit.
 - Copies keep the result meta, so a copy is still a text result.
 - The context menu gains `Copy as prompt` on a text result: it places a plain prompt with the same text beside it (spec 03's result placement, anchored on the text result), with no result meta, so its `@` tokens resolve normally.
-- The result bar (spec 03's toolbar states) shows Regenerate (primary), Recipe (quiet), separator, Agent. There is no Vary.
+- The result bar (spec 03's toolbar states) shows Regenerate (primary, Button `default`), Recipe (Button `ghost`), separator, Agent. There is no Vary.
 
 In flight: a placeholder text result is written into the room at once, holding no text, with spec 03's run marker, showing a spinner and `Running…`. On success its text is set to the answer and its marker cleared. On failure it is deleted and the run report toast shows `0 of 1 succeeded. <message>`. Every run marker rule of spec 03 applies unchanged.
 
@@ -127,7 +127,7 @@ The Runs prop is registered for the image medium only.
 
 - Label `Runs`. It is not a model trait, so a model change does not reset it.
 - Its tray chip shows `4×`, or `Free`. At 1 it is not in the tray, and `+ add prop` lists it as `Runs 1`. Remove sets it back to 1.
-- Its menu holds a number field (accessible name `Number of runs`, 1 to 10) and a `Free` option. When Free is chosen, the menu also shows a checkbox `View final prompt`.
+- Its chip is the tray's chip (spec 03). It opens a popup, the kit's Popover at 200 px, holding a number field (the kit's NumberField, accessible name `Number of runs`, 1 to 10), a `Free` option (the kit's Toggle, pressed while Free is chosen), a separator and `Remove` (Button `ghost`). When Free is chosen, the popup also shows a checkbox `View final prompt` (the kit's Checkbox with its Label).
 - Typing: only digits are kept, at most two; the value is rounded, a non-number becomes 1, and the result is clamped to 1 to 10. The field keeps what was typed while focused and shows the clamped value on blur. Focusing or pressing the number field selects a fixed count (leaves Free).
 - `Free` has the tooltip `Free takes the number of runs from the selection. Select a prompt or text result listing what to generate, as sections split by lines containing only ---, or prose a text model can split, and each item becomes one image.`
 - The cap of 10 lives in the runs value module and every limit message quotes it from there.
@@ -192,17 +192,18 @@ Recipes for Free outputs: each output's recipe records its own run exactly, so R
 
 ### The final prompt dialog
 
-A modal dialog, 640 px wide, opened by step 5 above. Nothing but the repair call has been paid for when it opens.
+A modal dialog, 640 px wide (the kit's Dialog, spec 12), opened by step 5 above. Nothing but the repair call has been paid for when it opens.
 
 - Title `Final prompt`. Subtitle `4 generations. Nothing has been sent yet.` (`1 generation.` in the singular), or `This list cannot be assembled yet.` when the current text has an error.
 - `Shared by every run` (label) and the shared text, read-only, when not empty. When an instruction was typed, `Added after every section` (label) and the instruction, read-only.
-- `Sections` (label) and an editable text area of 12 rows, spellcheck off, seeded with the list text as the pipeline has it (the repaired text when the repair was used, the source text otherwise), with its separators and directives intact.
+- `Sections` (label) and an editable text area of 12 rows (the kit's Textarea in the mono stack, 12 rows tall), spellcheck off, seeded with the list text as the pipeline has it (the repaired text when the repair was used, the source text otherwise), with its separators and directives intact.
 - Rows derived live from the text area through Free batch, one per run: `Run 1` on the left, `images 1, 5` or `all images` on the right.
 - Live warnings: `3 more sections beyond the 10-run cap will not run.` (singular `1 more section`), `2 sections with no prompt text will not run.` (singular `1 section`), and the dropped-images note.
-- The repair notes, as an info line.
+- The repair notes, as an info line in `text-xs` muted text.
 - Errors: a cycle's message, or `The list source is no longer selected.` when the source shape is gone.
+- Each warning is the kit's Alert `warning`, each error the kit's Alert `error`.
 - The rows and warnings scroll; the buttons do not.
-- Buttons: `Cancel`, and `Generate N×` (primary), disabled on an error or zero runs.
+- Buttons, in the kit's dialog footer: `Cancel` (Button `outline`), and `Generate N×` (primary, Button `default`), disabled on an error or zero runs.
 
 Confirm re-runs Free batch on the text as confirmed, against the canvas as it is at that moment, and sends `run.image` with the same batch id. There is no second text call. Its notes are recomputed from the confirmed text, plus the repair notes. Edits are never written back to the source shape. Cancel and Esc close the dialog and send nothing. The staged batch lives only in the web and is lost on reload, which costs nothing but the text call already made.
 

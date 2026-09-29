@@ -3,6 +3,7 @@ import { gate } from "../../engine/test/openRouterStub.ts";
 import { openCanvas, roomRecords, roomShapes, shapeOnScreen, toast, type AnyRecord } from "./canvas.ts";
 import { clickShape, composer, expect, instructionBox, openComposer, pressSend, sendRun, settled, test, toolbar, type GenerationEngine } from "./generation.ts";
 import { pngBytes } from "./images.ts";
+import { expectSlot, expectToken, styleOf } from "./kit.ts";
 import { filledMedia, putRecords } from "./media.ts";
 
 const results = async (generation: GenerationEngine) => (await roomShapes(generation.engine, "default", "image")).filter((shape) => shape.meta?.unframed?.result);
@@ -53,6 +54,13 @@ test("results land to the right of the selection, placeholder first, and a selec
   await expect(toolbar(page).getByRole("button", { name: "Vary" })).toBeVisible();
   await expect(toolbar(page).getByRole("button", { name: "Recipe" })).toBeVisible();
   await expect(toolbar(page).getByTestId("result-line")).toHaveText("gpt-image-2 · 96×64 · $0.1900");
+  // Regenerate is the kit's primary Button, Vary its outline Button, Recipe its ghost Button.
+  await page.mouse.move(5, 500);
+  for (const name of ["Regenerate", "Vary", "Recipe"]) await expectSlot(toolbar(page).getByRole("button", { name }), "button");
+  await expectToken(toolbar(page).getByRole("button", { name: "Regenerate" }), "background-color", "--primary");
+  await expectToken(toolbar(page).getByRole("button", { name: "Vary" }), "border-top-color", "--color-input");
+  expect(await styleOf(toolbar(page).getByRole("button", { name: "Recipe" }), "background-color")).toBe("rgba(0, 0, 0, 0)");
+  await expectToken(toolbar(page).getByTestId("result-line"), "color", "--color-muted-foreground");
 });
 
 test("a failed run says why in a toast, a partial run counts its successes, and a full success says nothing", async ({ page, generation }) => {

@@ -2,6 +2,9 @@ import { resultMetaOf, UnframedError, type ResultRecipe } from "@unframed/contra
 import { composeSelection, resultLine, toolbarState, type ToolbarState } from "@unframed/domain";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useEditor, useValue, type Editor, type TLShapeId } from "tldraw";
+import { Button } from "~/components/ui/button";
+import { Separator } from "~/components/ui/separator";
+import { cn } from "~/lib/utils";
 import { groupRecipeOf } from "../canvas/groupRecipes.ts";
 import { Tip } from "../chrome/ui.tsx";
 import { useSlots } from "../chrome/slots.ts";
@@ -42,8 +45,6 @@ const selectionOnScreen = (editor: Editor): ScreenBox | undefined => {
   const bottomRight = editor.pageToViewport({ x: bounds.maxX, y: bounds.maxY });
   return { x: topLeft.x, y: topLeft.y, w: bottomRight.x - topLeft.x, h: bottomRight.y - topLeft.y };
 };
-
-const buttonClass = (kind: "primary" | "plain" | "quiet") => `unframed-bar-button unframed-bar-button--${kind}`;
 
 /** A wheel over the bar or the composer moves the canvas, unless it is over something that scrolls itself. */
 const useWheelToCanvas = (editor: Editor, root: React.RefObject<HTMLDivElement | null>) => {
@@ -124,7 +125,13 @@ const Floating = ({ target, hidden, expanded, children }: { target: ScreenBox | 
   return (
     <div
       ref={root}
-      className="unframed-floating"
+      className={cn(
+        "pointer-events-auto absolute z-[500] box-border overflow-hidden border font-sans text-foreground data-[morphing=true]:transition-[left,top,width,height,border-radius,background-color,box-shadow] data-[morphing=true]:duration-200 data-[morphing=true]:ease-out motion-reduce:data-[morphing=true]:transition-none",
+        // The bar is a glass card; the composer is t3code's composer shell.
+        expanded
+          ? "rounded-3xl bg-card/(--glass-opacity) shadow-composer backdrop-blur-(--glass-blur) backdrop-saturate-(--glass-saturation) dark:bg-surface-raised/(--glass-opacity) dark:shadow-none"
+          : "rounded-xl shadow-lg/5 surface-glass",
+      )}
       data-testid="selection-toolbar"
       data-side={place?.side}
       data-expanded={expanded ? "true" : undefined}
@@ -140,12 +147,22 @@ const Floating = ({ target, hidden, expanded, children }: { target: ScreenBox | 
       onClick={(event) => event.stopPropagation()}
       onDoubleClick={(event) => event.stopPropagation()}
     >
-      <div ref={content} className="unframed-floating__content" data-side={place?.side}>
+      {/* Bar and composer are different children, so under reduced motion each fades in as it replaces the other. */}
+      <div
+        ref={content}
+        className="absolute left-0 top-0 data-[side=above]:top-auto data-[side=above]:bottom-0 motion-reduce:*:transition-opacity motion-reduce:*:duration-[120ms] motion-reduce:*:ease-linear motion-reduce:*:starting:opacity-0"
+        data-side={place?.side}
+      >
         {children}
       </div>
     </div>
   );
 };
+
+/** The bar's row of buttons and hint; `barClass` pads it inside the floating element. */
+const rowClass = "flex items-center gap-1.5";
+const barClass = `${rowClass} whitespace-nowrap p-1`;
+const hintClass = "px-1 text-xs text-muted-foreground";
 
 /** The recipe of the one selected result, read when it is selected, for Vary's cap. */
 const useSelectedRecipe = (shapeId: string | undefined, sidecar: string | null | undefined) => {
@@ -173,13 +190,13 @@ const AgentButton = ({ onOpen }: { onOpen: () => void }) => {
   const { agentToolbarButton: Registered } = useSlots();
   return (
     <>
-      <span className="unframed-bar-separator" aria-hidden />
+      <Separator orientation="vertical" className="mx-0.5 my-1" />
       {Registered ? (
         <Registered onOpen={onOpen} />
       ) : (
-        <button type="button" className={buttonClass("plain")} onClick={onOpen}>
+        <Button size="sm" onClick={onOpen}>
           Agent
-        </button>
+        </Button>
       )}
     </>
   );
@@ -230,32 +247,32 @@ const ResultBar = ({ shapeId, agent }: { shapeId: TLShapeId; agent: ReactNode })
   };
 
   return (
-    <div className="unframed-bar unframed-bar--result">
-      <div className="unframed-bar__row">
-        <button type="button" className={buttonClass("primary")} disabled={busy} onClick={() => void act("regenerate")}>
+    <div className="flex flex-col gap-0.5 whitespace-nowrap p-1">
+      <div className={rowClass}>
+        <Button size="sm" disabled={busy} onClick={() => void act("regenerate")}>
           Regenerate
-        </button>
+        </Button>
         {!facts?.text &&
           (cap !== undefined ? (
             <Tip label={varyCapMessage(cap)} side="top">
               <span className="inline-flex" tabIndex={0}>
-                <button type="button" className={buttonClass("plain")} disabled>
+                <Button variant="outline" size="sm" disabled>
                   Vary
-                </button>
+                </Button>
               </span>
             </Tip>
           ) : (
-            <button type="button" className={buttonClass("plain")} disabled={busy} onClick={() => void act("vary")}>
+            <Button variant="outline" size="sm" disabled={busy} onClick={() => void act("vary")}>
               Vary
-            </button>
+            </Button>
           ))}
-        <button type="button" className={buttonClass("quiet")} onClick={() => void openRecipe()}>
+        <Button variant="ghost" size="sm" onClick={() => void openRecipe()}>
           Recipe
-        </button>
+        </Button>
         {agent}
       </div>
       {facts && (
-        <div className="unframed-bar__line" data-testid="result-line">
+        <div className="px-1.5 py-0.5 text-xs text-muted-foreground tabular-nums" data-testid="result-line">
           {facts.line}
         </div>
       )}
@@ -309,16 +326,16 @@ const RecipeBar = ({ state, agent }: { state: Extract<ToolbarState, { kind: "rec
   const label = progress ? `Generating ${progress.settled} / ${progress.total}…` : typeof state.runs === "number" && state.runs > 1 ? `Generate ${state.runs}×` : "Generate";
   const Overlay = definition?.Overlay;
   return (
-    <div className="unframed-bar">
-      <button type="button" className={buttonClass("primary")} disabled={busy || progress !== undefined} onClick={() => void generate()}>
+    <div className={barClass}>
+      <Button size="sm" disabled={busy || progress !== undefined} onClick={() => void generate()}>
         {label}
-      </button>
-      <span className="unframed-bar__hint" data-testid="selection-hint">
+      </Button>
+      <span className={hintClass} data-testid="selection-hint">
         {`@${state.name}${estimate === undefined ? "" : ` · ${estimate.replace(/^est\. /, "")}`}`}
       </span>
-      <button type="button" className={buttonClass("quiet")} onClick={() => recipe && openOnRecipe(editor, groupId, recipe)}>
+      <Button variant="ghost" size="sm" onClick={() => recipe && openOnRecipe(editor, groupId, recipe)}>
         Recipe
-      </button>
+      </Button>
       {agent}
       {Overlay && <Overlay project={project} onSent={() => undefined} onMenuOpen={() => undefined} />}
     </div>
@@ -335,34 +352,34 @@ const Bar = ({ state, onGenerate, agent }: { state: Exclude<ToolbarState, { kind
       return <ResultBar shapeId={state.shapeId as TLShapeId} agent={agent} />;
     case "generating":
       return (
-        <div className="unframed-bar">
-          <span className="unframed-bar__hint">Generating…</span>
+        <div className={barClass}>
+          <span className={hintClass}>Generating…</span>
           {agent}
         </div>
       );
     case "open":
       return (
-        <div className="unframed-bar">
-          <button type="button" className={buttonClass("primary")} onClick={() => openArtifact?.(editor, state.shapeId as TLShapeId)}>
+        <div className={barClass}>
+          <Button size="sm" onClick={() => openArtifact?.(editor, state.shapeId as TLShapeId)}>
             Open
-          </button>
+          </Button>
           {agent}
         </div>
       );
     case "generate":
       return (
-        <div className="unframed-bar">
-          <button type="button" className={buttonClass("primary")} onClick={onGenerate}>
+        <div className={barClass}>
+          <Button size="sm" onClick={onGenerate}>
             Generate
-          </button>
-          <span className="unframed-bar__hint" data-testid="selection-hint">
+          </Button>
+          <span className={hintClass} data-testid="selection-hint">
             {state.hint}
           </span>
           {agent}
         </div>
       );
     case "agent":
-      return agent === null ? null : <div className="unframed-bar">{agent}</div>;
+      return agent === null ? null : <div className={barClass}>{agent}</div>;
   }
 };
 
