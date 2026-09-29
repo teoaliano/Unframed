@@ -463,3 +463,26 @@
   font-weight: 500;
   color: var(--unframed-text-primary);
 }
+
+/* Moved from agent.css: the agent's focus mark on shape labels (spec 08). */
+
+/* The focus mark: the active chat's artifacts, their label filled with the accent and a live dot. */
+.tl-container .tl-shape[data-agent-focus] .unframed-shape-label {
+  display: flex;
+  gap: 5px;
+  padding: 0 7px;
+  height: 18px;
+  bottom: calc(100% + 2px);
+  border-radius: var(--unframed-radius-inner);
+  background-color: var(--unframed-accent);
+  color: var(--unframed-on-accent);
+  visibility: visible;
+}
+
+.tl-container .tl-shape[data-agent-focus] .unframed-shape-label::before {
+  width: 5px;
+  height: 5px;
+  border-radius: 999px;
+  background-color: currentColor;
+  content: "";
+}

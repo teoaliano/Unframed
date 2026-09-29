@@ -1,4 +1,13 @@
 /*
  * Third-party adapters (spec 12): each library's look set from the kit's tokens. The
- * tldraw adapter lives beside this file.
+ * tldraw adapter lives beside this file; t3code's .chat-markdown rules for react-markdown
+ * are in theme.css.
  */
+
+/* Tiptap: the Generate composer's instruction box (spec 12 task 11). */
+
+/* Tiptap: the Agent tray's prompt editor (spec 12 task 17). */
+
+/* @pierre/diffs: t3code's diff colours and injected diff CSS (spec 12 task 19). */
+
+/* DialKit: its variables from the kit's dark tokens (spec 12 task 20). */
