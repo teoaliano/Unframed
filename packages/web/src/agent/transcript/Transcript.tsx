@@ -1,12 +1,14 @@
 import { activityLabel, agentShapeId, buildTimeline, type TimelineBlock, formatWorkDuration, revertSkipLine, type Chat, type ChatMessage, type ChatTurn } from "@unframed/domain";
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
-import { WorkEntries } from "./WorkLog.tsx";
+import { Brain, ChevronDown, ChevronRight, Clock, Undo2, X } from "lucide-react";
 import { useMaybeEditor } from "tldraw";
+import { Badge } from "~/components/ui/badge";
+import { Button, InlineButton } from "~/components/ui/button";
+import { Tip } from "../../chrome/ui.tsx";
 import { describeShape } from "../composer/chips.tsx";
 import { ConfirmDialog } from "../ConfirmDialog.tsx";
 import { providerName } from "../providers.ts";
-import { ChevronRight, Clock, Undo2, X } from "lucide-react";
-import { Tip } from "../../chrome/ui.tsx";
+import { BODY_CLASS, Chevron, Disclosure, IconSlot, ROW_CLASS, TOGGLE_CLASS, WorkEntries } from "./WorkLog.tsx";
 import { returnQueued, sendQueued } from "../queue.tsx";
 import { useQueue, useWatchedThread, type ChatClient } from "../store.ts";
 import { ChatMarkdown } from "./ChatMarkdown.tsx";
@@ -16,42 +18,55 @@ import { record } from "../record.ts";
 
 export const EMPTY_CHAT = "Ask about what is on the canvas, or say what should change or be made. Whatever is selected comes with the message as context.";
 
+/** The transcript's scroll area: the timeline's column, in t3code's type. */
+const SCROLLER_CLASS = "flex min-h-0 flex-1 flex-col gap-3.5 overflow-y-auto px-3.5 pt-3.5 pb-2.5 text-sm leading-relaxed";
+
+const TOGGLE_ROW_CLASS = `${ROW_CLASS} ${TOGGLE_CLASS}`;
+const REASONING_BODY_CLASS = `${BODY_CLASS} max-h-96 overflow-auto text-sm whitespace-pre-wrap text-muted-foreground select-text`;
+
 const COLLAPSE_CHARACTERS = 600;
 const COLLAPSE_LINES = 8;
 
-/** The person's message exactly as typed: never parsed as markdown. Long ones collapse. */
+/** A message's author, as t3code names it for the outline: quiet, above the text. */
+const AUTHOR_CLASS = "mb-1 text-xs font-medium text-muted-foreground";
+
+/** The person's message exactly as typed, in t3code's message bubble: never parsed as markdown. Long ones collapse. */
 const UserMessage = ({ message, running, onEdit }: { readonly message: ChatMessage; readonly running: boolean; readonly onEdit: (restoreCanvas: boolean) => void }) => {
   const [confirming, setConfirming] = useState(false);
   const long = message.text.length > COLLAPSE_CHARACTERS || message.text.split("\n").length > COLLAPSE_LINES;
   const [open, setOpen] = useState(false);
   const selected = message.context?.selection.length ?? 0;
   return (
-    <article className="unframed-agent-message" data-role="user" data-message-id={message.id}>
-      <header className="unframed-agent-message__author">
-        You{selected > 0 && <span className="unframed-agent-message__context">{` · ${selected} selected`}</span>}
-      </header>
-      <div className="unframed-agent-message__text" data-collapsed={long && !open ? "" : undefined}>
-        {message.text}
-      </div>
-      {(message.attachments?.length ?? 0) > 0 && (
-        <div className="unframed-agent-message__attachments" role="list" aria-label="Attachments">
-          {message.attachments!.map((attachment) => (
-            <span key={attachment.id} role="listitem" className="unframed-agent-chip" data-chip={attachment.kind}>
-              <span className="unframed-agent-chip__label">{attachment.name}</span>
-            </span>
-          ))}
+    <article className="group flex flex-col items-end gap-1" data-role="user" data-message-id={message.id}>
+      <div className="relative max-w-[80%] min-w-0 rounded-2xl bg-message p-3 text-message-foreground" data-testid="message-bubble">
+        <header className={AUTHOR_CLASS}>
+          You{selected > 0 && <span>{` · ${selected} selected`}</span>}
+        </header>
+        {(message.attachments?.length ?? 0) > 0 && (
+          <div className="mb-2 flex flex-wrap gap-1" role="list" aria-label="Attachments">
+            {message.attachments!.map((attachment) => (
+              <Badge key={attachment.id} variant="outline" size="lg" className="max-w-full" role="listitem" data-chip={attachment.kind}>
+                <span className="truncate">{attachment.name}</span>
+              </Badge>
+            ))}
+          </div>
+        )}
+        <div className="text-sm leading-relaxed whitespace-pre-wrap break-words data-collapsed:line-clamp-8" data-testid="message-text" data-collapsed={long && !open ? "" : undefined}>
+          {message.text}
         </div>
-      )}
-      {long && (
-        <button type="button" className="unframed-agent-link" onClick={() => setOpen(!open)}>
-          {open ? "Show less" : "Show full message"}
-        </button>
-      )}
-      <div className="unframed-agent-message__actions">
-        <button type="button" className="unframed-agent-button unframed-agent-button--ghost" disabled={running || message.turnId === null} onClick={() => setConfirming(true)}>
-          <Undo2 size={13} aria-hidden />
+        {long && (
+          <p className="m-0 mt-1.5 text-xs">
+            <InlineButton tone="muted" onClick={() => setOpen(!open)}>
+              {open ? "Show less" : "Show full message"}
+            </InlineButton>
+          </p>
+        )}
+      </div>
+      <div className="flex max-w-[80%] items-center justify-end opacity-0 transition-opacity duration-200 group-hover:opacity-100 focus-within:opacity-100 pointer-coarse:opacity-100">
+        <Button variant="ghost" size="xs" disabled={running || message.turnId === null} onClick={() => setConfirming(true)}>
+          <Undo2 aria-hidden />
           Edit from here
-        </button>
+        </Button>
       </div>
       <ConfirmDialog
         open={confirming}
@@ -67,27 +82,38 @@ const UserMessage = ({ message, running, onEdit }: { readonly message: ChatMessa
   );
 };
 
-/** Messages waiting for the running turn: right-aligned, dashed, with Send now and a way back to the composer. */
+/**
+ * Messages waiting for the running turn (t3code's queued row): a dashed, dimmed bubble with
+ * Send now and a way back to the composer. A press on either keeps the focus in the composer.
+ */
 const QueuedMessages = ({ client, chatId }: { readonly client: ChatClient; readonly chatId: string }) => {
   const queue = useQueue(client, chatId);
   return queue.map((item, index) => (
-    <div key={item.id} className="unframed-agent-queued" data-testid="queued-message" data-state={item.state}>
-      <Tip label={index === 0 ? "Sends after the next tool call or when the turn ends" : "Sends after the messages above it"} side="left">
-        <span className="unframed-agent-queued__status">
-          <Clock size={12} aria-hidden />
-          Queued
-        </span>
-      </Tip>
-      <div className="unframed-agent-queued__text">{item.message.text}</div>
-      <div className="unframed-agent-queued__actions">
-        <button type="button" className="unframed-agent-button unframed-agent-button--ghost" disabled={item.state === "sending"} onClick={() => void sendQueued(client, chatId, item.id)}>
-          Send now
-        </button>
-        <Tip label="Cancel and return to the composer" side="top">
-          <button type="button" className="unframed-agent-control unframed-agent-control--icon" aria-label="Cancel and return to the composer" onClick={() => returnQueued(client, chatId, item.id)}>
-            <X size={13} aria-hidden />
-          </button>
+    <div key={item.id} className="max-w-[80%] self-end rounded-2xl border border-dashed p-3 text-message-foreground/80" data-testid="queued-message" data-state={item.state}>
+      <div className="text-sm leading-relaxed whitespace-pre-wrap break-words">{item.message.text}</div>
+      <div className="mt-2 flex items-center gap-4 text-xs text-secondary-label">
+        <Tip label={index === 0 ? "Sends after the next tool call or when the turn ends" : "Sends after the messages above it"} side="bottom">
+          <span className="inline-flex h-6 items-center gap-1">
+            <Clock aria-hidden className="size-3.5" />
+            Queued
+          </span>
         </Tip>
+        <div className="ml-auto flex items-center gap-0.5">
+          <Button variant="ghost-muted" size="xs" disabled={item.state === "sending"} onPointerDown={(event) => event.preventDefault()} onClick={() => void sendQueued(client, chatId, item.id)}>
+            Send now
+          </Button>
+          <Tip label="Cancel and return to the composer" side="bottom">
+            <Button
+              variant="ghost-muted"
+              size="icon-xs"
+              aria-label="Cancel and return to the composer"
+              onPointerDown={(event) => event.preventDefault()}
+              onClick={() => returnQueued(client, chatId, item.id)}
+            >
+              <X aria-hidden />
+            </Button>
+          </Tip>
+        </div>
       </div>
     </div>
   ));
@@ -162,15 +188,15 @@ export const Transcript = ({ client, chatId, embedded, onLocate, onOpenEditor }:
     setPill(!following.current);
   };
 
-  if (!chat) return <div className="unframed-agent-transcript" />;
+  if (!chat) return <div className={SCROLLER_CLASS} data-testid="transcript" />;
   const author = providerName(chat.modelSelection.provider);
   const timeline = buildTimeline(chat);
   const latest = chat.latestTurn;
   const streaming = chat.messages.some((message) => message.streaming && message.role === "assistant" && message.turnId === latest?.turnId);
   const assistant = (message: ChatMessage) => (
-    <article key={message.id} className="unframed-agent-message" data-role="assistant" data-message-id={message.id} data-streaming={message.streaming ? "" : undefined}>
-      <header className="unframed-agent-message__author">{author}</header>
-      {message.text === "" && !message.streaming ? <p className="unframed-agent-muted">(empty response)</p> : <ChatMarkdown text={message.text} />}
+    <article key={message.id} className="relative min-w-0 px-1 py-0.5" data-role="assistant" data-message-id={message.id} data-streaming={message.streaming ? "" : undefined}>
+      <header className={AUTHOR_CLASS}>{author}</header>
+      {message.text === "" && !message.streaming ? <p className="m-0 text-sm text-muted-foreground">(empty response)</p> : <ChatMarkdown text={message.text} />}
     </article>
   );
   const labelOf = (id: string) => (editor && describeShape(editor, id)?.label) ?? agentShapeId(id);
@@ -204,12 +230,12 @@ export const Transcript = ({ client, chatId, embedded, onLocate, onOpenEditor }:
     return assistant(message);
   };
   return (
-    <div className="unframed-agent-transcript-frame">
-      <div ref={scroller} className="unframed-agent-transcript" data-scrolls="true" data-testid="transcript" onScroll={onScroll}>
+    <div className="relative flex min-h-0 flex-1 flex-col">
+      <div ref={scroller} className={SCROLLER_CLASS} data-scrolls="true" data-testid="transcript" onScroll={onScroll}>
         {timeline.map((turn) => {
           if (!turn.settled)
             return (
-              <div key={turn.key} className="unframed-agent-turn">
+              <div key={turn.key} className="flex flex-col gap-2.5">
                 {turn.blocks.map(block)}
                 {turn.turn && recap(turn.turn)}
               </div>
@@ -219,7 +245,7 @@ export const Transcript = ({ client, chatId, embedded, onLocate, onOpenEditor }:
           const folded = turn.blocks.filter((item) => item.kind === "work" || (item.kind === "message" && item.message.role === "reasoning"));
           const said = turn.blocks.filter((item) => (item.kind === "message" && item.message.role === "assistant") || item.kind === "retry" || item.kind === "plan");
           return (
-            <div key={turn.key} className="unframed-agent-turn">
+            <div key={turn.key} className="flex flex-col gap-2.5">
               {users.map(block)}
               {folded.length > 0 && turn.turn && <WorkedFor turn={turn.turn}>{folded.map(block)}</WorkedFor>}
               {said.map(block)}
@@ -230,12 +256,13 @@ export const Transcript = ({ client, chatId, embedded, onLocate, onOpenEditor }:
         <LimitLine chat={chat} />
         <QueuedMessages client={client} chatId={chatId} />
         {running && !streaming && latest && <ActivityLine label={activityLabel(chat.activities, latest.turnId)} since={latest.startedAt ?? latest.requestedAt} />}
-        {chat.messages.length === 0 && <p className="unframed-agent-empty">{EMPTY_CHAT}</p>}
+        {chat.messages.length === 0 && <p className="m-0 mt-auto text-xs text-muted-foreground">{EMPTY_CHAT}</p>}
       </div>
       {pill && (
-        <button
-          type="button"
-          className="unframed-agent-scroll-pill"
+        <Button
+          variant="glass"
+          size="xs"
+          className="absolute bottom-2 left-1/2 z-10 -translate-x-1/2"
           onClick={() => {
             const element = scroller.current;
             if (element) element.scrollTop = element.scrollHeight;
@@ -243,43 +270,56 @@ export const Transcript = ({ client, chatId, embedded, onLocate, onOpenEditor }:
             setPill(false);
           }}
         >
+          <ChevronDown aria-hidden />
           Scroll to end
-        </button>
+        </Button>
       )}
     </div>
   );
 };
 
-/** Reasoning: "Thinking" while it streams, then "Thought", folded. */
+/** Reasoning (t3code's row): "Thinking" while it streams, then "Thought", folded. */
 const Reasoning = ({ message }: { readonly message: ChatMessage }) => {
   const [open, setOpen] = useState(false);
   return (
-    <div className="unframed-agent-reasoning" data-testid="reasoning">
-      <button type="button" className="unframed-agent-work-group__head" aria-expanded={open} onClick={() => setOpen(!open)}>
-        <ChevronRight size={12} aria-hidden className="unframed-agent-chevron" />
-        {message.streaming ? "Thinking" : "Thought"}
-      </button>
-      {open && <p className="unframed-agent-reasoning__text">{message.text}</p>}
+    <div className="flex flex-col" data-testid="reasoning">
+      <Disclosure open={open} onToggle={() => setOpen(!open)} className={TOGGLE_ROW_CLASS}>
+        <IconSlot>
+          <Brain aria-hidden className="size-4 shrink-0 opacity-70" />
+        </IconSlot>
+        <span className="min-w-0 flex-1 truncate text-secondary-label">{message.streaming ? "Thinking" : "Thought"}</span>
+        <Chevron open={open} />
+      </Disclosure>
+      {open && <p className={REASONING_BODY_CLASS}>{message.text}</p>}
     </div>
   );
 };
 
-/** A settled turn's work, behind how long it took ("You stopped after" when interrupted). */
+/** A settled turn's work, behind how long it took ("You stopped after" when interrupted): t3code's turn fold. */
 const WorkedFor = ({ turn, children }: { readonly turn: ChatTurn; readonly children: ReactNode }) => {
   const [open, setOpen] = useState(false);
   const started = Date.parse(turn.startedAt ?? turn.requestedAt);
   const ended = Date.parse(turn.completedAt ?? turn.startedAt ?? turn.requestedAt);
   const took = formatWorkDuration(Math.max(0, ended - started));
   return (
-    <div className="unframed-agent-worked" data-testid="worked-for">
-      <button type="button" className="unframed-agent-work-group__head" aria-expanded={open} onClick={() => setOpen(!open)}>
-        <ChevronRight size={12} aria-hidden className="unframed-agent-chevron" />
-        {turn.state === "interrupted" ? `You stopped after ${took}` : `Worked for ${took}`}
-      </button>
-      {open && <div className="unframed-agent-worked__body">{children}</div>}
+    <div className="flex flex-col" data-testid="worked-for">
+      <div className="flex items-center gap-1 border-b border-border/60 pt-1 pb-2">
+        <Disclosure
+          open={open}
+          onToggle={() => setOpen(!open)}
+          className="flex cursor-pointer select-none items-center gap-1 rounded-md px-1 text-sm leading-relaxed text-muted-foreground tabular-nums transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring/70"
+        >
+          <span>{turn.state === "interrupted" ? `You stopped after ${took}` : `Worked for ${took}`}</span>
+          {open ? <ChevronDown aria-hidden className="size-3.5" /> : <ChevronRight aria-hidden className="size-3.5" />}
+        </Disclosure>
+      </div>
+      {open && <div className="flex flex-col gap-px pt-1">{children}</div>}
     </div>
   );
 };
+
+/** The quiet lines of the transcript: retries, limits, what the agent is doing. */
+const NOTICE_CLASS = "m-0 px-1 text-sm leading-relaxed text-muted-foreground";
 
 /** A provider retry, said in words. */
 export const retrySentence = (payload: unknown): string => {
@@ -291,7 +331,7 @@ export const retrySentence = (payload: unknown): string => {
 };
 
 const RetryLine = ({ payload }: { readonly payload: unknown }) => (
-  <p className="unframed-agent-notice" data-testid="retry-line">
+  <p className={NOTICE_CLASS} data-testid="retry-line">
     {retrySentence(payload)}
   </p>
 );
@@ -313,14 +353,14 @@ const LimitLine = ({ chat }: { readonly chat: Chat }) => {
   const time = resetTime(p.resetsAt);
   if (p.status === "rejected") {
     return (
-      <p className="unframed-agent-notice" data-kind="limit" data-testid="limit-line">
+      <p className="m-0 px-1 text-sm leading-relaxed text-destructive-foreground" data-kind="limit" data-testid="limit-line">
         {time === undefined ? "You have hit a usage limit." : `You have hit a usage limit. It resets at ${time}.`}
       </p>
     );
   }
   if (p.status === "allowed_warning") {
     return (
-      <p className="unframed-agent-notice" data-testid="limit-line">
+      <p className={NOTICE_CLASS} data-testid="limit-line">
         {time === undefined ? "Close to your usage limit." : `Close to your usage limit, which resets at ${time}.`}
       </p>
     );
@@ -330,7 +370,7 @@ const LimitLine = ({ chat }: { readonly chat: Chat }) => {
 
 /** What the agent is doing, with the time since the turn began once it passes ten seconds. */
 const ActivityLine = ({ label, since }: { readonly label: string; readonly since: string }) => (
-  <p className="unframed-agent-activity" data-testid="activity-line">
+  <p className="m-0 px-1 text-sm leading-relaxed text-muted-foreground tabular-nums" data-testid="activity-line">
     {label}
     <Elapsed since={since} />
   </p>
@@ -345,5 +385,5 @@ const Elapsed = ({ since }: { readonly since: string }) => {
   }, []);
   const seconds = Math.floor((now - Date.parse(since)) / 1000);
   if (!(seconds >= 10)) return null;
-  return <span className="unframed-agent-activity__clock">{` ${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`}</span>;
+  return <span className="tabular-nums">{` ${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`}</span>;
 };

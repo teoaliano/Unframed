@@ -44,7 +44,7 @@ test("selecting artifacts filters the tabs to the chats tagged with any of them,
   // Exactly one: the strip says nothing, since the composer already asks for the first message.
   await clickShape(page, "shape:p3");
   await expect(tabs(page)).toHaveCount(0);
-  await expect(panel.locator(".unframed-agent-tabs__empty")).toHaveCount(0);
+  await expect(panel.getByTestId("chat-tabs")).toHaveText("");
 
   // Nothing selected shows every chat again.
   const empty = await emptyCanvasPoint(page);

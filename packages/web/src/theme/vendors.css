@@ -8,7 +8,33 @@
 
 /* Tiptap: the Agent tray's prompt editor (spec 12 task 17). */
 
+/* t3code's composer editor rules (its .composer-tiptap), keyed on the agent prompt's own attribute. */
+[data-agent-prompt] p {
+  margin: 0;
+}
+
+[data-agent-prompt] p.is-editor-empty:first-child::before {
+  content: attr(data-placeholder);
+  float: left;
+  height: 0;
+  color: color-mix(in srgb, var(--contrast-placeholder) 75%, transparent);
+  pointer-events: none;
+}
+
+[data-agent-prompt] .ProseMirror-selectednode {
+  outline: 2px solid var(--ring);
+  outline-offset: 1px;
+  border-radius: 6px;
+}
+
 /* @pierre/diffs: t3code's diff colours and injected diff CSS (spec 12 task 19). */
+
+/*
+ * The renderer paints in a shadow root that no stylesheet reaches, so t3code's injected
+ * diff CSS goes in through its unsafeCSS option (agent/diff/diffTheme.ts). The tokens it
+ * reads inherit into the shadow root: the --diff-* colours and --diffs-font-family in
+ * theme.css, and the code surface tokens.
+ */
 
 /* DialKit: its variables from the kit's dark tokens (spec 12 task 20). */
 

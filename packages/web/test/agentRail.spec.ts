@@ -1,6 +1,10 @@
 import type { Locator } from "@playwright/test";
 import { openCanvas } from "./canvas.ts";
-import { agentChromeButton, expect, openRail, rail, test } from "./agent.ts";
+import { agentChromeButton, createChat, expect, openRail, rail, tabs, test } from "./agent.ts";
+import { expectSlot, expectToken, inBothSchemes, resolvedColor, styleOf, tokenColor } from "./kit.ts";
+
+const GLASS = "color-mix(in srgb, var(--background) var(--glass-opacity), transparent)";
+const MENU_GLASS = "color-mix(in srgb, var(--popover) 18%, color-mix(in srgb, var(--popover) var(--glass-opacity), transparent))";
 
 const computed = (locator: Locator, ...names: string[]) =>
   locator.evaluate((element, names) => {
@@ -80,4 +84,41 @@ test("with reduced motion the rail only fades, and still leaves the page on Clos
   await expect(panel).toHaveAttribute("data-state", "closed");
   expect((await computed(panel, "transform")).transform).toBe("none");
   await expect(panel).toHaveCount(0);
+});
+
+test("the rail is t3code's chat panel on the kit: a glass shell with a left border, kit header buttons, panel tabs, a kit More menu and search field", async ({ page, agent }) => {
+  await openCanvas(page, agent);
+  for (const [index, title] of ["First", "Second", "Third", "Fourth"].entries()) await createChat(agent, { title, createdAt: `2026-09-0${index + 1}T10:00:00.000Z` });
+  const panel = await openRail(page);
+  await expect(tabs(page)).toHaveText(["Fourth", "Third", "Second"]);
+  await inBothSchemes(page, async () => {
+    await page.mouse.move(10, 400);
+    expect(await styleOf(panel, "background-color")).toBe(await resolvedColor(page, GLASS));
+    await expectToken(panel, "border-left-color", "--color-border");
+    await expect(panel.getByRole("heading", { name: "Agent" })).toBeVisible();
+    for (const name of ["Search chats", "New chat", "Delete chat", "Close"]) await expectSlot(panel.getByRole("button", { name, exact: true }), "tooltip-trigger");
+
+    // Panel tabs: 24 px rows, the active one on the accent in the foreground, the rest muted.
+    const [active, other] = [tabs(page).first(), tabs(page).nth(1)];
+    expect((await active.boundingBox())!.height).toBe(24);
+    await expectToken(active, "background-color", "--accent");
+    await expectToken(active, "color", "--color-foreground");
+    await expectToken(other, "color", "--color-muted-foreground");
+
+    const more = panel.getByRole("button", { name: "More chats" });
+    await expectSlot(more, "menu-trigger");
+    await more.click();
+    const popup = page.locator("[data-slot='menu-popup']");
+    await expect(popup).toBeVisible();
+    expect(await styleOf(popup, "background-color")).toBe(await resolvedColor(page, MENU_GLASS));
+    await expectSlot(popup.getByRole("menuitem", { name: "First" }), "menu-item");
+    await page.keyboard.press("Escape");
+    await expect(popup).toHaveCount(0);
+
+    await panel.getByRole("button", { name: "Search chats" }).click();
+    const field = panel.getByRole("textbox", { name: "Search chats" });
+    await expectSlot(field, "input");
+    await field.press("Escape");
+    await expect(field).toHaveCount(0);
+  });
 });

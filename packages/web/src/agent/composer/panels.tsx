@@ -1,9 +1,10 @@
-import { Menu } from "@base-ui/react/menu";
 import type { ApprovalDecision } from "@unframed/contracts";
 import { openRequests, planTitle, type Chat, type ChatActivity, type ProposedPlan, type UserQuestion } from "@unframed/domain";
-import { ChevronDown, ChevronRight, Ellipsis, ListChecks, X } from "lucide-react";
-import { useEffect, useRef, useState, type RefObject } from "react";
-import { itemClass, popupClass } from "../../chrome/ui.tsx";
+import { Check, ChevronDown, ChevronRight, Ellipsis, ListChecks, ListTodo, MessageCircleQuestion, ShieldAlert, X } from "lucide-react";
+import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type RefObject } from "react";
+import { Button } from "~/components/ui/button";
+import { Menu, MenuItem, MenuPopup, MenuTrigger } from "~/components/ui/menu";
+import { MessageAction } from "./MessageAction.tsx";
 import type { ChatClient } from "../store.ts";
 import type { PromptEditorHandle } from "./PromptEditor.tsx";
 import { record } from "../record.ts";
@@ -21,6 +22,17 @@ const APPROVAL_HEADERS: Record<string, string> = {
   mcp_elicitation_approval: "App access approval",
   permission_approval: "App permission approval",
 };
+
+/**
+ * t3code's composer banner (ComposerBanner): the glass strip above the composer that holds
+ * what waits on the person. An approval takes its warning tint.
+ */
+const BANNER =
+  "relative flex flex-col gap-1.5 rounded-2xl border bg-card/(--glass-opacity) px-3 py-2 text-xs/4 shadow-composer backdrop-blur-(--glass-blur) backdrop-saturate-(--glass-saturation) dark:bg-surface-raised/(--glass-opacity) dark:shadow-composer-dark";
+const WARNING_BANNER = `${BANNER} border-warning/28 bg-linear-to-b from-warning/8 to-warning/8`;
+
+/** The banner's first line: its icon, what it is, and anything beside it. */
+const BANNER_ROW = "flex min-h-6 min-w-0 items-center gap-1.5";
 
 /** How much of a request's target the panel shows before it says how much it held back. */
 export const TARGET_SHOWN = 300;
@@ -51,40 +63,46 @@ export const ApprovalPanel = ({ client, chat }: { readonly client: ChatClient; r
     });
   };
   return (
-    <section className="unframed-agent-panel" role="group" aria-label={header} data-testid="approval-panel">
-      <header className="unframed-agent-panel__header">
-        <span className="unframed-agent-panel__title">{header}</span>
-        {typeof args.toolName === "string" && <span className="unframed-agent-panel__tool">{args.toolName}</span>}
-        {pending.length > 1 && <span className="unframed-agent-panel__count">{`1/${pending.length}`}</span>}
+    <section className={WARNING_BANNER} role="group" aria-label={header} data-testid="approval-panel">
+      <header className={BANNER_ROW}>
+        <ShieldAlert aria-hidden className="size-4 shrink-0 text-warning" />
+        <span className="shrink-0 text-2xs font-medium text-warning" data-testid="panel-title">
+          {header}
+        </span>
+        {typeof args.toolName === "string" && (
+          <span className="min-w-0 truncate text-2xs text-muted-foreground" data-testid="panel-tool">
+            {args.toolName}
+          </span>
+        )}
+        {pending.length > 1 && <span className="ml-auto shrink-0 text-2xs text-muted-foreground tabular-nums" data-testid="panel-count">{`1/${pending.length}`}</span>}
       </header>
-      <code className="unframed-agent-panel__target" tabIndex={0} data-testid="approval-target">
+      {/* Whitespace kept, so padding that pushes a second command out of sight shows. */}
+      <code
+        className="block max-h-20 w-full min-w-0 overflow-auto font-mono text-xs whitespace-pre-wrap wrap-anywhere text-foreground [scrollbar-width:thin] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring/70"
+        tabIndex={0}
+        data-testid="approval-target"
+      >
         {shown}
       </code>
-      {hidden > 0 && <p className="unframed-agent-panel__warning">{`and ${hidden} more characters not shown. Decline unless you know what they are.`}</p>}
-      <div className="unframed-agent-panel__actions">
-        <button type="button" className="unframed-agent-button" onClick={() => respond("decline")}>
+      {hidden > 0 && (
+        <p className="m-0 text-xs text-warning-foreground" data-testid="approval-warning">{`and ${hidden} more characters not shown. Decline unless you know what they are.`}</p>
+      )}
+      <div className="flex items-center justify-end gap-1.5">
+        <Button variant="outline" size="xs" onClick={() => respond("decline")}>
           Decline
-        </button>
-        <button type="button" className="unframed-agent-button unframed-agent-button--primary" onClick={() => respond("accept")}>
+        </Button>
+        <Button size="xs" onClick={() => respond("accept")}>
           Approve
-        </button>
-        <Menu.Root>
-          <Menu.Trigger className="unframed-agent-control unframed-agent-control--icon" aria-label="More approval options">
-            <Ellipsis size={14} aria-hidden />
-          </Menu.Trigger>
-          <Menu.Portal>
-            <Menu.Positioner side="top" align="end" sideOffset={4} className="z-[1100]">
-              <Menu.Popup className={popupClass}>
-                <Menu.Item className={itemClass} onClick={() => respond("acceptForSession")}>
-                  Always allow this session
-                </Menu.Item>
-                <Menu.Item className={itemClass} onClick={() => respond("cancel")}>
-                  Cancel
-                </Menu.Item>
-              </Menu.Popup>
-            </Menu.Positioner>
-          </Menu.Portal>
-        </Menu.Root>
+        </Button>
+        <Menu>
+          <MenuTrigger render={<Button variant="outline" size="icon-xs" aria-label="More approval options" />}>
+            <Ellipsis aria-hidden />
+          </MenuTrigger>
+          <MenuPopup side="top" align="end">
+            <MenuItem onClick={() => respond("acceptForSession")}>Always allow this session</MenuItem>
+            <MenuItem onClick={() => respond("cancel")}>Cancel</MenuItem>
+          </MenuPopup>
+        </Menu>
       </div>
     </section>
   );
@@ -152,44 +170,62 @@ export const QuestionPanel = ({
   if (!question) return null;
   const chosen = state.chosen[question.id] ?? [];
   return (
-    <section className="unframed-agent-panel" role="group" aria-label={question.header} data-testid="question-panel">
-      <header className="unframed-agent-panel__header">
-        <button type="button" className="unframed-agent-control unframed-agent-control--icon" aria-label={collapsed ? "Show question" : "Hide question"} aria-expanded={!collapsed} onClick={() => setCollapsed(!collapsed)}>
-          {collapsed ? <ChevronRight size={13} aria-hidden /> : <ChevronDown size={13} aria-hidden />}
-        </button>
-        <span className="unframed-agent-panel__title">{question.header}</span>
-        <span className="unframed-agent-panel__count">{`${state.index + 1}/${state.questions.length}`}</span>
+    <section className={BANNER} role="group" aria-label={question.header} data-testid="question-panel">
+      <header className={BANNER_ROW}>
+        <MessageCircleQuestion aria-hidden className="size-3.5 shrink-0 text-muted-foreground" />
+        <span className="shrink-0 font-medium text-muted-foreground" data-testid="panel-title">
+          {question.header}
+        </span>
+        {collapsed && <span className="min-w-0 flex-1 truncate text-secondary-label">{question.question}</span>}
+        <span className="ml-auto shrink-0 text-3xs font-medium text-muted-foreground tabular-nums" data-testid="panel-count">{`${state.index + 1}/${state.questions.length}`}</span>
+        <Button variant="ghost-muted" size="icon-xs" aria-label={collapsed ? "Show question" : "Hide question"} aria-expanded={!collapsed} onClick={() => setCollapsed(!collapsed)}>
+          {collapsed ? <ChevronRight aria-hidden /> : <ChevronDown aria-hidden />}
+        </Button>
         {state.dismissable && (
-          <button type="button" className="unframed-agent-control unframed-agent-control--icon" aria-label="Dismiss question without answering" onClick={onDismiss}>
-            <X size={13} aria-hidden />
-          </button>
+          <Button variant="ghost-muted" size="icon-xs" aria-label="Dismiss question without answering" onClick={onDismiss}>
+            <X aria-hidden />
+          </Button>
         )}
       </header>
       {!collapsed && (
-        <>
-          <p className="unframed-agent-panel__question">{question.question}</p>
+        <div className="pe-1 pb-1 wrap-anywhere">
+          <p className="m-0 text-sm text-foreground/85" data-testid="panel-question">
+            {question.question}
+          </p>
           {question.multiSelect && (
-            <p className="unframed-agent-panel__hint">
-              <ListChecks size={12} aria-hidden /> Select one or more options.
+            <p className="m-0 mt-1 flex items-center gap-1 text-xs text-secondary-label">
+              <ListChecks aria-hidden className="size-3" /> Select one or more options.
             </p>
           )}
-          <div className="unframed-agent-options" role={question.multiSelect ? "group" : "radiogroup"} aria-label={question.question}>
-            {question.options.map((option, index) => (
-              <button
-                key={option.label}
-                type="button"
-                role={question.multiSelect ? "checkbox" : "radio"}
-                aria-checked={chosen.includes(option.label)}
-                className="unframed-agent-option"
-                onClick={() => onChoose(question, option.label)}
-              >
-                <span className="unframed-agent-option__key">{index + 1}</span>
-                <span className="unframed-agent-option__label">{option.label}</span>
-                {option.description !== "" && <span className="unframed-agent-option__description">{option.description}</span>}
-              </button>
-            ))}
+          <div className="mt-2 flex flex-col gap-0.5" role={question.multiSelect ? "group" : "radiogroup"} aria-label={question.question}>
+            {question.options.map((option, index) => {
+              const selected = chosen.includes(option.label);
+              return (
+                <div
+                  key={option.label}
+                  role={question.multiSelect ? "checkbox" : "radio"}
+                  tabIndex={0}
+                  aria-checked={selected}
+                  data-selected={selected ? "" : undefined}
+                  className="group flex w-full cursor-pointer items-center gap-2 rounded-md bg-transparent px-2.5 py-2 text-left text-foreground/85 outline-none transition-colors duration-150 hover:bg-muted/30 focus-visible:ring-1 focus-visible:ring-primary/25 data-selected:bg-muted/55 data-selected:text-foreground"
+                  onClick={() => onChoose(question, option.label)}
+                  onKeyDown={(event: ReactKeyboardEvent) => {
+                    if (event.key !== "Enter" && event.key !== " ") return;
+                    event.preventDefault();
+                    onChoose(question, option.label);
+                  }}
+                >
+                  <kbd className="flex size-5 shrink-0 items-center justify-center font-sans text-3xs font-medium text-muted-foreground tabular-nums">{index + 1}</kbd>
+                  <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+                    <span className="text-sm font-medium">{option.label}</span>
+                    {option.description !== "" && <span className="text-2xs text-secondary-label">{option.description}</span>}
+                  </span>
+                  {selected && <Check aria-hidden className="size-3.5 shrink-0 text-primary" />}
+                </div>
+              );
+            })}
           </div>
-        </>
+        </div>
       )}
     </section>
   );
@@ -202,9 +238,12 @@ export const QuestionPanel = ({
 export const PlanReady = ({ plan }: { readonly plan: ProposedPlan }) => {
   const title = planTitle(plan.planMarkdown);
   return (
-    <section className="unframed-agent-banner" data-testid="plan-ready">
-      <span className="unframed-agent-banner__label">Plan ready</span>
-      {title !== undefined && <span className="unframed-agent-banner__title">{title}</span>}
+    <section className={BANNER} data-testid="plan-ready">
+      <div className={BANNER_ROW}>
+        <ListTodo aria-hidden className="size-3.5 shrink-0 text-muted-foreground" />
+        <span className="shrink-0 font-medium text-muted-foreground">Plan ready</span>
+        {title !== undefined && <span className="min-w-0 flex-1 truncate text-foreground/85">{title}</span>}
+      </div>
     </section>
   );
 };
@@ -213,30 +252,24 @@ export const PlanReady = ({ plan }: { readonly plan: ProposedPlan }) => {
 export const PlanActions = ({ refine, busy, onSend, onNewChat }: { readonly refine: boolean; readonly busy: boolean; readonly onSend: () => void; readonly onNewChat: () => void }) => {
   if (refine) {
     return (
-      <button type="button" className="unframed-agent-button unframed-agent-button--primary" disabled={busy} onClick={onSend}>
+      <MessageAction tone="pill" disabled={busy} onClick={onSend}>
         {busy ? "Sending..." : "Refine"}
-      </button>
+      </MessageAction>
     );
   }
   return (
-    <div className="unframed-agent-split" data-testid="implement-actions">
-      <button type="button" className="unframed-agent-button unframed-agent-button--primary" disabled={busy} onClick={onSend}>
+    <div className="flex items-center" data-testid="implement-actions">
+      <MessageAction tone="pillStart" disabled={busy} onClick={onSend}>
         {busy ? "Sending..." : "Implement"}
-      </button>
-      <Menu.Root>
-        <Menu.Trigger className="unframed-agent-button unframed-agent-button--primary" aria-label="Implementation actions" disabled={busy}>
-          <ChevronDown size={13} aria-hidden />
-        </Menu.Trigger>
-        <Menu.Portal>
-          <Menu.Positioner side="top" align="end" sideOffset={4} className="z-[1100]">
-            <Menu.Popup className={popupClass}>
-              <Menu.Item className={itemClass} onClick={onNewChat}>
-                Implement in a new chat
-              </Menu.Item>
-            </Menu.Popup>
-          </Menu.Positioner>
-        </Menu.Portal>
-      </Menu.Root>
+      </MessageAction>
+      <Menu>
+        <MenuTrigger render={<MessageAction tone="pillEnd" aria-label="Implementation actions" disabled={busy} />}>
+          <ChevronDown aria-hidden />
+        </MenuTrigger>
+        <MenuPopup side="top" align="end">
+          <MenuItem onClick={onNewChat}>Implement in a new chat</MenuItem>
+        </MenuPopup>
+      </Menu>
     </div>
   );
 };

@@ -53,14 +53,14 @@ export const mentionItems = (editor: Editor, query: string): Mentionable[] => {
         key: shape.id,
         label,
         ...(preview ? { description: preview } : {}),
-        icon: <Icon size={13} aria-hidden />,
+        icon: <Icon aria-hidden className="size-3.5" />,
         chip: { kind: "mention", label: KIND_WORDS[kind]!, title: label, ref: agentShapeId(shape.id) },
         shapeId: shape.id,
       });
     }
     const file = projectFileOf(editor, shape);
     if (file !== "" && file.toLowerCase().includes(wanted) && !files.has(file)) {
-      files.set(file, { key: `file:${file}`, label: file, badge: "File", icon: <File size={13} aria-hidden />, chip: { kind: "mention", label: "File", title: file, ref: file } });
+      files.set(file, { key: `file:${file}`, label: file, badge: "File", icon: <File aria-hidden className="size-3.5" />, chip: { kind: "mention", label: "File", title: file, ref: file } });
     }
   }
   return [...shapes, ...[...files.values()].sort((a, b) => a.label.localeCompare(b.label))];

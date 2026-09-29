@@ -1,10 +1,11 @@
-import { Menu } from "@base-ui/react/menu";
-import { Check, Copy, Ellipsis, WrapText } from "lucide-react";
+import { Check, Copy, WrapText } from "lucide-react";
 import { memo, useRef, useState, type ComponentPropsWithoutRef, type ReactNode } from "react";
 import ReactMarkdown, { defaultUrlTransform, type Components } from "react-markdown";
 import remarkBreaks from "remark-breaks";
 import remarkGfm from "remark-gfm";
-import { itemClass, popupClass } from "../../chrome/ui.tsx";
+import { Button } from "~/components/ui/button";
+import { Menu, MenuItem, MenuPopup, MenuTrigger } from "~/components/ui/menu";
+import { Tip } from "../../chrome/ui.tsx";
 
 const COPIED_MS = 1200;
 
@@ -29,17 +30,29 @@ const CodeBlock = ({ children, ...rest }: ComponentPropsWithoutRef<"pre">) => {
       setTimeout(() => setCopied(false), COPIED_MS);
     });
   };
+  const wrapLabel = wrap ? "Disable line wrap" : "Wrap lines";
+  const copyLabel = copied ? "Copied" : "Copy code";
   return (
-    <div className="chat-markdown-codeblock" data-wrap={wrap ? "" : undefined}>
-      <div className="chat-markdown-codeblock__toolbar">
-        {language !== undefined && <span className="chat-markdown-codeblock__language">{language}</span>}
-        <span className="flex-1" />
-        <button type="button" aria-label={wrap ? "Disable line wrap" : "Wrap lines"} title={wrap ? "Disable line wrap" : "Wrap lines"} onClick={() => setWrap(!wrap)}>
-          <WrapText size={13} aria-hidden />
-        </button>
-        <button type="button" aria-label={copied ? "Copied" : "Copy code"} title={copied ? "Copied" : "Copy code"} onClick={copy}>
-          {copied ? <Check size={13} aria-hidden /> : <Copy size={13} aria-hidden />}
-        </button>
+    <div
+      className="chat-markdown-codeblock my-[0.65rem] overflow-hidden rounded-lg border border-border/70 bg-secondary leading-snug dark:border-transparent dark:bg-input/32"
+      data-language={language}
+      data-wrap={wrap ? "true" : "false"}
+      data-testid="code-block"
+    >
+      <div className="chat-markdown-codeblock-header flex items-center justify-between gap-2 pt-1.5 pr-1.5 pb-0 pl-3 select-none">
+        <span className="inline-flex min-w-0 items-center gap-1.5 font-mono text-2xs">{language !== undefined && <span className="truncate">{language}</span>}</span>
+        <span className="flex items-center gap-0.5" role="toolbar" aria-label="Code block actions">
+          <Tip label={wrapLabel} side="top">
+            <Button variant={wrap ? "secondary" : "ghost-muted"} size="icon-xs" aria-pressed={wrap} aria-label={wrapLabel} onClick={() => setWrap(!wrap)}>
+              <WrapText aria-hidden className="size-3" />
+            </Button>
+          </Tip>
+          <Tip label={copyLabel} side="top">
+            <Button variant="ghost-muted" size="icon-xs" aria-label={copyLabel} onClick={copy}>
+              {copied ? <Check aria-hidden className="size-3" /> : <Copy aria-hidden className="size-3" />}
+            </Button>
+          </Tip>
+        </span>
       </div>
       <pre {...rest}>{children}</pre>
     </div>
@@ -68,28 +81,22 @@ const Table = ({ children, ...rest }: ComponentPropsWithoutRef<"table">) => {
     void navigator.clipboard.writeText(format === "markdown" ? asMarkdown(rows) : asCsv(rows));
   };
   return (
-    <div className="chat-markdown-table">
-      <Menu.Root>
-        <Menu.Trigger className="chat-markdown-table__actions" aria-label="Table actions">
-          <Ellipsis size={14} aria-hidden />
-        </Menu.Trigger>
-        <Menu.Portal>
-          <Menu.Positioner side="bottom" align="end" sideOffset={4} className="z-[1200]">
-            <Menu.Popup className={popupClass}>
-              <Menu.Item className={itemClass} onClick={() => copy("markdown")}>
-                Copy as Markdown
-              </Menu.Item>
-              <Menu.Item className={itemClass} onClick={() => copy("csv")}>
-                Copy as CSV
-              </Menu.Item>
-            </Menu.Popup>
-          </Menu.Positioner>
-        </Menu.Portal>
-      </Menu.Root>
-      <div className="chat-markdown-table__scroll" data-scrolls="true">
+    <div className="chat-markdown-table-container">
+      <div className="w-full max-w-full overflow-x-auto" data-scrolls="true">
         <table ref={table} {...rest}>
           {children}
         </table>
+      </div>
+      <div className="mt-0.5 flex items-center justify-end select-none">
+        <Menu>
+          <MenuTrigger render={<Button variant="ghost-muted" size="icon-xs" aria-label="Table actions" />}>
+            <Copy aria-hidden className="size-3" />
+          </MenuTrigger>
+          <MenuPopup align="end">
+            <MenuItem onClick={() => copy("markdown")}>Copy as Markdown</MenuItem>
+            <MenuItem onClick={() => copy("csv")}>Copy as CSV</MenuItem>
+          </MenuPopup>
+        </Menu>
       </div>
     </div>
   );
@@ -142,7 +149,7 @@ const urlTransform = (url: string): string => defaultUrlTransform(url);
  * reply shows as the text it is. That is the one deliberate difference from t3code.
  */
 export const ChatMarkdown = memo(({ text }: { readonly text: string }) => (
-  <div className="chat-markdown">
+  <div className="chat-markdown w-full min-w-0 text-sm leading-relaxed text-foreground/[calc(80%+var(--appearance-contrast-boost)/5)] [overflow-wrap:anywhere] [word-break:break-word]">
     <ReactMarkdown remarkPlugins={[remarkGfm, remarkBreaks, htmlAsText]} components={COMPONENTS} urlTransform={urlTransform}>
       {text}
     </ReactMarkdown>

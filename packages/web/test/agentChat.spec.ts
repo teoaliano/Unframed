@@ -1,6 +1,7 @@
 import { openCanvas, roomShapes } from "./canvas.ts";
 import { putRecords } from "./media.ts";
 import { artifactColumn, engineChats, expect, onlyChat, openRail, promptBox, say, tabs, test } from "./agent.ts";
+import { expectToken, inBothSchemes, styleOf } from "./kit.ts";
 
 test("typing and Enter starts a chat: the message shows at once, the reply streams in and the tab gets its name; Shift+Enter breaks the line", async ({ page, agent }) => {
   await openCanvas(page, agent);
@@ -14,7 +15,7 @@ test("typing and Enter starts a chat: the message shows at once, the reply strea
   await expect(panel.locator("[data-role='user']")).toHaveCount(0);
 
   await box.press("Enter");
-  await expect(panel.locator("[data-role='user'] .unframed-agent-message__text")).toHaveText("what is on the board?\nin short");
+  await expect(panel.locator("[data-role='user'] [data-testid='message-text']")).toHaveText("what is on the board?\nin short");
   await expect(box).toHaveText("");
   await expect(panel.locator("[data-role='assistant']")).toContainText("Three shapes: motion m1");
   await expect(panel.locator("[data-role='assistant'] header")).toHaveText("Claude");
@@ -39,7 +40,15 @@ test("Delete asks first, then the chat is gone and what it changed on the canvas
   const dialog = page.getByRole("alertdialog");
   await expect(dialog.getByText("Delete this chat?", { exact: true })).toBeVisible();
   await expect(dialog.getByText("The conversation is removed for good. What the agent changed on the canvas stays.", { exact: true })).toBeVisible();
+  // The kit's alert dialog, its action the destructive Button.
+  await expect(dialog).toHaveAttribute("data-slot", "alert-dialog-popup");
+  await inBothSchemes(page, async () => {
+    expect(await styleOf(dialog.locator("[data-slot='alert-dialog-title']"), "font-size")).toBe("20px");
+    await expectToken(dialog.getByRole("button", { name: "Delete chat" }), "background-color", "--destructive");
+    await expect(dialog.getByRole("button", { name: "Cancel" })).toHaveAttribute("data-slot", "alert-dialog-close");
+  });
   await dialog.getByRole("button", { name: "Cancel" }).click();
+  await expect(dialog).toHaveCount(0);
   await expect(tabs(page)).toHaveCount(1);
 
   await panel.getByRole("button", { name: "Delete chat" }).click();

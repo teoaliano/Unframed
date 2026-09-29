@@ -1,29 +1,42 @@
-import { Popover } from "@base-ui/react/popover";
-import { Select } from "@base-ui/react/select";
 import type { AgentProvider, ModelSelection, ProviderModel, ProviderStatuses } from "@unframed/contracts";
 import { contextMeter, type Chat, type ContextUsage, type InteractionMode, type RuntimeMode, type Traits } from "@unframed/domain";
-import { Bot, Check, ChevronDown, ChevronRight, Lock, LockOpen, Minimize2, PencilLine, PencilRuler, Sparkles, Zap, type LucideIcon } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { Bot, Check, ChevronDown, Lock, LockOpen, Minimize2, PencilLine, PencilRuler, Sparkles, Zap, type LucideIcon } from "lucide-react";
+import { useEffect, useMemo, useState, type KeyboardEvent } from "react";
+import { Badge } from "~/components/ui/badge";
+import { Button } from "~/components/ui/button";
+import { Input } from "~/components/ui/input";
+import { Popover, PopoverPopup, PopoverTrigger } from "~/components/ui/popover";
+import { Select, SelectItem, SelectPopup, SelectTrigger } from "~/components/ui/select";
+import { Toggle } from "~/components/ui/toggle";
 import claudeLogo from "../../../../../assets/brand/provider-logos/claude.svg?url";
 import codexLogo from "../../../../../assets/brand/provider-logos/codex.svg?url";
 import { Tip } from "../../chrome/ui.tsx";
+import { Chevron } from "../transcript/WorkLog.tsx";
 import { effectiveModel, modelsOf, PROVIDERS, providerName } from "../providers.ts";
 import { record } from "../record.ts";
 
 const LOGOS: Record<AgentProvider, string> = { claude: claudeLogo, codex: codexLogo };
 
-export const ProviderLogo = ({ provider, size = 14 }: { readonly provider: AgentProvider; readonly size?: number }) => (
+export const ProviderLogo = ({ provider }: { readonly provider: AgentProvider }) => (
   <span
     role="img"
     aria-label={providerName(provider)}
     data-logo={provider}
-    className="unframed-agent-logo"
-    style={{ width: size, height: size, mask: `url("${LOGOS[provider]}") center / contain no-repeat`, WebkitMask: `url("${LOGOS[provider]}") center / contain no-repeat` }}
+    className="inline-block size-3.5 shrink-0 bg-current"
+    style={{ mask: `url("${LOGOS[provider]}") center / contain no-repeat`, WebkitMask: `url("${LOGOS[provider]}") center / contain no-repeat` }}
   />
 );
 
-const popupClass =
-  "z-[1100] rounded-xl border border-border bg-[var(--unframed-popover-translucent)] p-1 text-[13px] text-foreground shadow-lg outline-none backdrop-blur-[var(--unframed-chrome-blur)]";
+/** t3code's picker row: a list row that highlights under the pointer and the keys, the chosen one tinted. */
+const PICKER_ROW =
+  "flex min-h-7 w-full cursor-pointer select-none items-center gap-2 rounded-sm px-2 py-1 text-left text-sm text-foreground outline-none data-chosen:bg-foreground/[0.08] data-highlighted:bg-accent data-highlighted:text-accent-foreground";
+
+/** A popover row that acts on Enter and Space as well as a click. */
+const activate = (run: () => void) => (event: KeyboardEvent) => {
+  if (event.key !== "Enter" && event.key !== " ") return;
+  event.preventDefault();
+  run();
+};
 
 // ---------------------------------------------------------------------------------------
 // The model picker.
@@ -74,112 +87,111 @@ export const ModelPicker = ({ statuses, selection, providerLocked, disabled, ope
     const index = visible.indexOf(model);
     const chosen = tab === selection.provider && current?.id === model.id;
     return (
-      <button
+      <div
         key={model.id}
-        type="button"
         role="option"
         aria-selected={index === highlight}
+        data-highlighted={index === highlight ? "" : undefined}
         data-chosen={chosen ? "" : undefined}
-        className="unframed-agent-model-row"
+        className={PICKER_ROW}
         onMouseEnter={() => setHighlight(index)}
+        onMouseDown={(event) => event.preventDefault()}
         onClick={() => pick(model)}
       >
-        <span className="unframed-agent-model-row__name">{model.name}</span>
-        {model.description !== "" && <span className="unframed-agent-model-row__description">{model.description}</span>}
-        {chosen && <Check size={13} aria-label="Current model" className="ml-auto" />}
-      </button>
+        <span className="min-w-0 flex-1">
+          <span className="block truncate text-xs font-medium leading-snug" data-testid="model-name">
+            {model.name}
+          </span>
+          {model.description !== "" && <span className="mt-0.5 block truncate text-xs leading-snug text-muted-foreground">{model.description}</span>}
+        </span>
+        {chosen && <Check aria-label="Current model" className="size-3.5 shrink-0" />}
+      </div>
     );
   };
 
-  const trigger = (
-    <Popover.Trigger className="unframed-agent-control" aria-label="Model" data-testid="model-picker" disabled={disabled}>
-      <ProviderLogo provider={selection.provider} />
-      <span className="unframed-agent-control__label">{current?.name ?? (selection.model === "" ? providerName(selection.provider) : selection.model)}</span>
-      <ChevronDown size={12} aria-hidden />
-    </Popover.Trigger>
-  );
-
   return (
-    <Popover.Root open={open} onOpenChange={(next) => onOpenChange(next)}>
-      {trigger}
-      <Popover.Portal>
-        <Popover.Positioner side="top" align="start" sideOffset={6} className="z-[1100]">
-          <Popover.Popup className={`${popupClass} w-[300px]`} aria-label="Models">
-            <div role="tablist" aria-label="Providers" className="unframed-agent-provider-tabs">
-              {PROVIDERS.map((provider) => {
-                const locked = providerLocked && provider !== selection.provider;
-                const button = (
-                  <button
-                    key={provider}
-                    type="button"
-                    role="tab"
-                    aria-selected={tab === provider}
-                    aria-disabled={locked || undefined}
-                    className="unframed-agent-provider-tab"
-                    onClick={() => {
-                      if (locked) return;
-                      setTab(provider);
-                      setHighlight(0);
-                    }}
-                  >
-                    <ProviderLogo provider={provider} />
-                    {providerName(provider)}
-                  </button>
-                );
-                return locked ? (
-                  <Tip key={provider} label={`A chat stays on the provider it started on. Start a new chat to use ${providerName(provider)}.`} side="top">
-                    {button}
-                  </Tip>
-                ) : (
-                  button
-                );
-              })}
-            </div>
-            {status?.status !== "ready" ? (
-              <p className="unframed-agent-picker__note">{status?.message ?? "checking…"}</p>
+    <Popover open={open} onOpenChange={(next) => onOpenChange(next)}>
+      <PopoverTrigger render={<Button variant="ghost-muted" size="xs" className="min-w-0" />} aria-label="Model" data-testid="model-picker" disabled={disabled}>
+        <ProviderLogo provider={selection.provider} />
+        <span className="min-w-0 truncate">{current?.name ?? (selection.model === "" ? providerName(selection.provider) : selection.model)}</span>
+        <ChevronDown aria-hidden className="size-3 opacity-60" />
+      </PopoverTrigger>
+      <PopoverPopup side="top" align="start" sideOffset={6} padding="compact" className="w-[300px]" aria-label="Models">
+        <div role="tablist" aria-label="Providers" className="mb-2 flex gap-1">
+          {PROVIDERS.map((provider) => {
+            const locked = providerLocked && provider !== selection.provider;
+            const button = (
+              <Button
+                key={provider}
+                variant="ghost-muted"
+                size="xs"
+                role="tab"
+                aria-selected={tab === provider}
+                aria-disabled={locked || undefined}
+                data-pressed={tab === provider ? "" : undefined}
+                onClick={() => {
+                  if (locked) return;
+                  setTab(provider);
+                  setHighlight(0);
+                }}
+              >
+                <ProviderLogo provider={provider} />
+                {providerName(provider)}
+              </Button>
+            );
+            return locked ? (
+              <Tip key={provider} label={`A chat stays on the provider it started on. Start a new chat to use ${providerName(provider)}.`} side="top">
+                {button}
+              </Tip>
             ) : (
-              <>
-                <input
-                  className="unframed-agent-picker__search"
-                  placeholder="Search models..."
-                  aria-label="Search models"
-                  value={query}
-                  autoFocus
-                  onChange={(event) => {
-                    setQuery(event.currentTarget.value);
-                    setHighlight(0);
-                  }}
-                  onKeyDown={(event) => {
-                    if (event.key === "ArrowDown" && visible.length > 0) {
-                      event.preventDefault();
-                      setHighlight((highlight + 1) % visible.length);
-                    } else if (event.key === "ArrowUp" && visible.length > 0) {
-                      event.preventDefault();
-                      setHighlight((highlight - 1 + visible.length) % visible.length);
-                    } else if (event.key === "Enter" && visible[highlight]) {
-                      event.preventDefault();
-                      pick(visible[highlight]!);
-                    }
-                  }}
-                />
-                <div role="listbox" aria-label={`${providerName(tab)} models`} className="unframed-agent-picker__list">
-                  {currentRows.map(row)}
-                  {legacyRows.length > 0 && needle === "" && (
-                    <button type="button" className="unframed-agent-legacy" aria-expanded={legacyOpen} onClick={() => setLegacyOpen(!legacyOpen)}>
-                      <ChevronRight size={13} aria-hidden className="unframed-agent-legacy__chevron" />
-                      Legacy models
-                      <span className="ml-auto text-muted-foreground">{`${legacyRows.length} models`}</span>
-                    </button>
-                  )}
-                  {(legacyOpen || needle !== "") && legacyRows.map(row)}
-                  {all.length === 0 && <p className="unframed-agent-picker__note">No models found</p>}
+              button
+            );
+          })}
+        </div>
+        {status?.status !== "ready" ? (
+          <p className="m-0 px-2 py-1.5 text-xs text-muted-foreground">{status?.message ?? "checking…"}</p>
+        ) : (
+          <>
+            <Input
+              size="compact"
+              className="mb-1"
+              placeholder="Search models..."
+              aria-label="Search models"
+              value={query}
+              autoFocus
+              onChange={(event) => {
+                setQuery(event.currentTarget.value);
+                setHighlight(0);
+              }}
+              onKeyDown={(event) => {
+                if (event.key === "ArrowDown" && visible.length > 0) {
+                  event.preventDefault();
+                  setHighlight((highlight + 1) % visible.length);
+                } else if (event.key === "ArrowUp" && visible.length > 0) {
+                  event.preventDefault();
+                  setHighlight((highlight - 1 + visible.length) % visible.length);
+                } else if (event.key === "Enter" && visible[highlight]) {
+                  event.preventDefault();
+                  pick(visible[highlight]!);
+                }
+              }}
+            />
+            <div role="listbox" aria-label={`${providerName(tab)} models`} className="flex max-h-72 flex-col gap-px overflow-y-auto">
+              {currentRows.map(row)}
+              {legacyRows.length > 0 && needle === "" && (
+                <div role="button" tabIndex={0} aria-expanded={legacyOpen} className={PICKER_ROW} onClick={() => setLegacyOpen(!legacyOpen)} onKeyDown={activate(() => setLegacyOpen(!legacyOpen))}>
+                  <Chevron open={legacyOpen} />
+                  <span className="text-xs font-medium">Legacy models</span>
+                  <span className="ml-auto text-xs text-muted-foreground">{`${legacyRows.length} models`}</span>
                 </div>
-              </>
-            )}
-          </Popover.Popup>
-        </Popover.Positioner>
-      </Popover.Portal>
-    </Popover.Root>
+              )}
+              {(legacyOpen || needle !== "") && legacyRows.map(row)}
+              {all.length === 0 && <p className="m-0 px-2 py-1.5 text-xs text-muted-foreground">No models found</p>}
+            </div>
+          </>
+        )}
+      </PopoverPopup>
+    </Popover>
   );
 };
 
@@ -203,14 +215,21 @@ export const declaredTraits = (model: ProviderModel | undefined, traits: Traits)
   ...(traits.fastMode !== undefined && model?.fastMode === true ? { fastMode: traits.fastMode } : {}),
 });
 
+/** A choice in the traits popover, in t3code's radio row look: its label, its hint, the default marked. */
 const RadioRow = ({ checked, label, hint, badge, onSelect }: { readonly checked: boolean; readonly label: string; readonly hint?: string; readonly badge?: string; readonly onSelect: () => void }) => (
-  <button type="button" role="radio" aria-checked={checked} className="unframed-agent-radio" onClick={onSelect}>
-    <span className="unframed-agent-radio__dot" data-on={checked ? "" : undefined} />
-    <span className="unframed-agent-radio__label">{label}</span>
-    {hint !== undefined && <span className="unframed-agent-radio__hint">{hint}</span>}
-    {badge !== undefined && <span className="unframed-agent-menu__badge">{badge}</span>}
-  </button>
+  <div role="radio" tabIndex={0} aria-checked={checked} data-chosen={checked ? "" : undefined} className={`${PICKER_ROW} hover:bg-accent`} onClick={onSelect} onKeyDown={activate(onSelect)}>
+    <span className="flex size-3.5 shrink-0 items-center justify-center">{checked && <Check aria-hidden className="size-3.5" />}</span>
+    <span className="shrink-0">{label}</span>
+    {hint !== undefined && <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground">{hint}</span>}
+    {badge !== undefined && (
+      <Badge variant="outline" size="sm" className="ms-auto">
+        {badge}
+      </Badge>
+    )}
+  </div>
 );
+
+const GROUP_LABEL = "px-2 pt-1.5 pb-1 text-xs font-medium text-muted-foreground";
 
 /**
  * The traits picker: radio groups for the traits the chosen model declares (its effort
@@ -221,18 +240,16 @@ export const TraitsPicker = ({ provider, model, traits, disabled, onChange }: { 
   const effort = traits.effort ?? model.defaultEffort;
   const labels = [effort !== undefined ? effortLabel(effort) : undefined, traits.thinking === true ? "Thinking" : undefined].filter((label): label is string => label !== undefined);
   return (
-    <Popover.Root>
-      <Popover.Trigger className="unframed-agent-control" aria-label="Traits" data-testid="traits-picker" disabled={disabled}>
-        <span className="unframed-agent-control__label">{labels.length > 0 ? labels.join(" · ") : "Default"}</span>
-        {traits.fastMode === true && <Zap size={12} aria-label="Fast mode" />}
-        <ChevronDown size={12} aria-hidden />
-      </Popover.Trigger>
-      <Popover.Portal>
-        <Popover.Positioner side="top" align="start" sideOffset={6} className="z-[1100]">
-          <Popover.Popup className={`${popupClass} w-[280px]`} aria-label="Traits">
+    <Popover>
+      <PopoverTrigger render={<Button variant="ghost-muted" size="xs" className="min-w-0" />} aria-label="Traits" data-testid="traits-picker" disabled={disabled}>
+        <span className="min-w-0 truncate">{labels.length > 0 ? labels.join(" · ") : "Default"}</span>
+        {traits.fastMode === true && <Zap aria-label="Fast mode" />}
+        <ChevronDown aria-hidden className="size-3 opacity-60" />
+      </PopoverTrigger>
+      <PopoverPopup side="top" align="start" sideOffset={6} padding="compact" className="w-[280px]" aria-label="Traits">
             {model.efforts.length > 0 && (
-              <div role="radiogroup" aria-label="Reasoning" className="unframed-agent-radios">
-                <p className="unframed-agent-radios__heading">Reasoning</p>
+              <div role="radiogroup" aria-label="Reasoning" className="flex flex-col gap-px">
+                <p className={`m-0 ${GROUP_LABEL}`}>Reasoning</p>
                 {model.efforts.map((level) => (
                   <RadioRow
                     key={level}
@@ -246,23 +263,21 @@ export const TraitsPicker = ({ provider, model, traits, disabled, onChange }: { 
               </div>
             )}
             {model.thinking === true && (
-              <div role="radiogroup" aria-label="Thinking" className="unframed-agent-radios">
-                <p className="unframed-agent-radios__heading">Thinking</p>
+              <div role="radiogroup" aria-label="Thinking" className="flex flex-col gap-px">
+                <p className={`m-0 ${GROUP_LABEL}`}>Thinking</p>
                 <RadioRow checked={traits.thinking === true} label="On" onSelect={() => onChange({ ...traits, thinking: true })} />
                 <RadioRow checked={traits.thinking !== true} label="Off" onSelect={() => onChange({ ...traits, thinking: false })} />
               </div>
             )}
             {model.fastMode === true && (
-              <div role="radiogroup" aria-label="Fast mode" className="unframed-agent-radios">
-                <p className="unframed-agent-radios__heading">Fast mode</p>
+              <div role="radiogroup" aria-label="Fast mode" className="flex flex-col gap-px">
+                <p className={`m-0 ${GROUP_LABEL}`}>Fast mode</p>
                 <RadioRow checked={traits.fastMode === true} label="On" onSelect={() => onChange({ ...traits, fastMode: true })} />
                 <RadioRow checked={traits.fastMode !== true} label="Off" onSelect={() => onChange({ ...traits, fastMode: false })} />
               </div>
             )}
-          </Popover.Popup>
-        </Popover.Positioner>
-      </Popover.Portal>
-    </Popover.Root>
+      </PopoverPopup>
+    </Popover>
   );
 };
 
@@ -281,39 +296,35 @@ export const RuntimeModePicker = ({ mode, open, onOpenChange, onChange }: { read
   const chosen = RUNTIME_MODES.find((known) => known.mode === mode) ?? RUNTIME_MODES[3]!;
   const Icon = chosen.icon;
   return (
-    <Select.Root value={mode} open={open} onOpenChange={(next) => onOpenChange(next)} onValueChange={(next) => onChange(next as RuntimeMode)}>
+    <Select value={mode} open={open} onOpenChange={(next) => onOpenChange(next)} onValueChange={(next) => onChange(next as RuntimeMode)}>
       <Tip label={chosen.description} side="top">
-        <Select.Trigger className="unframed-agent-control" aria-label="Runtime mode" data-testid="runtime-mode">
-          <Icon size={13} aria-hidden />
-          <span className="unframed-agent-control__label">{chosen.label}</span>
-          <ChevronDown size={12} aria-hidden />
-        </Select.Trigger>
+        <SelectTrigger variant="ghost" size="xs" className="min-w-0" aria-label="Runtime mode" data-testid="runtime-mode">
+          <Icon aria-hidden />
+          <span className="min-w-0 truncate">{chosen.label}</span>
+        </SelectTrigger>
       </Tip>
-      <Select.Portal>
-        <Select.Positioner side="top" align="start" sideOffset={6} alignItemWithTrigger={false} className="z-[1100]">
-          <Select.Popup className={`${popupClass} w-[300px]`}>
-            <Select.List>
-              {RUNTIME_MODES.map((entry) => {
-                const EntryIcon = entry.icon;
-                return (
-                  <Select.Item key={entry.mode} value={entry.mode} className="unframed-agent-mode">
-                    <EntryIcon size={14} aria-hidden className="unframed-agent-mode__icon" />
-                    <span className="unframed-agent-mode__text">
-                      <Select.ItemText className="unframed-agent-mode__label">{entry.label}</Select.ItemText>
-                      <span className="unframed-agent-mode__description">{entry.description}</span>
-                    </span>
-                    {entry.mode === "full-access" && <span className="unframed-agent-menu__badge">Default</span>}
-                    <Select.ItemIndicator className="unframed-agent-mode__check">
-                      <Check size={13} aria-hidden />
-                    </Select.ItemIndicator>
-                  </Select.Item>
-                );
-              })}
-            </Select.List>
-          </Select.Popup>
-        </Select.Positioner>
-      </Select.Portal>
-    </Select.Root>
+      <SelectPopup side="top" align="start" sideOffset={6} alignItemWithTrigger={false} className="w-[300px]">
+        {RUNTIME_MODES.map((entry) => {
+          const EntryIcon = entry.icon;
+          return (
+            <SelectItem key={entry.mode} value={entry.mode}>
+              <span className="flex min-w-0 items-start gap-2">
+                <EntryIcon aria-hidden className="mt-0.5 size-3.5 shrink-0" />
+                <span className="flex min-w-0 flex-1 flex-col">
+                  <span className="font-medium">{entry.label}</span>
+                  <span className="text-xs text-muted-foreground">{entry.description}</span>
+                </span>
+                {entry.mode === "full-access" && (
+                  <Badge variant="outline" size="sm" className="ms-auto">
+                    Default
+                  </Badge>
+                )}
+              </span>
+            </SelectItem>
+          );
+        })}
+      </SelectPopup>
+    </Select>
   );
 };
 
@@ -324,10 +335,10 @@ export const PlanToggle = ({ mode, onToggle }: { readonly mode: InteractionMode;
   const plan = mode === "plan";
   return (
     <Tip label={plan ? "Plan mode. Click to return to normal build mode." : "Default mode. Click to enter plan mode."} side="top">
-      <button type="button" className="unframed-agent-control" aria-pressed={plan} data-testid="plan-toggle" onClick={onToggle}>
-        {plan ? <PencilRuler size={13} aria-hidden /> : <Bot size={13} aria-hidden />}
-        <span className="unframed-agent-control__label">{plan ? "Plan" : "Build"}</span>
-      </button>
+      <Toggle variant="ghost" size="compact" pressed={plan} onPressedChange={onToggle} data-testid="plan-toggle">
+        {plan ? <PencilRuler aria-hidden /> : <Bot aria-hidden />}
+        {plan ? "Plan" : "Build"}
+      </Toggle>
     </Tip>
   );
 };
@@ -359,52 +370,61 @@ export const ContextMeter = ({ usage, onCompact, compactUnavailable }: { readonl
   const view = useMemo(() => contextMeter(usage), [usage]);
   const filled = view.percent ?? 0;
   return (
-    <Popover.Root>
-      <Popover.Trigger openOnHover delay={150} closeDelay={150} className="unframed-agent-control unframed-agent-control--icon" aria-label={view.label} data-testid="context-meter" data-overloaded={view.overloaded ? "" : undefined}>
-        <svg viewBox="0 0 24 24" width={20} height={20} aria-hidden className="unframed-agent-ring">
-          <circle cx="12" cy="12" r={RADIUS} fill="none" className="unframed-agent-ring__track" strokeWidth="3" />
-          <circle
-            cx="12"
-            cy="12"
-            r={RADIUS}
-            fill="none"
-            className="unframed-agent-ring__fill"
-            strokeWidth="3"
-            strokeLinecap="round"
-            strokeDasharray={CIRCUMFERENCE}
-            strokeDashoffset={CIRCUMFERENCE * (1 - filled / 100)}
-          />
-        </svg>
-      </Popover.Trigger>
-      <Popover.Portal>
-        <Popover.Positioner side="top" align="end" sideOffset={6} className="z-[1100]">
-          <Popover.Popup className={`${popupClass} w-[240px] p-3`} aria-label="Context Window">
-            <div className="flex items-center justify-between gap-3">
-              <span className="text-[12px] font-medium text-muted-foreground">Context Window</span>
-              <span className="text-[11px] tabular-nums text-muted-foreground" data-testid="context-numbers">
-                {view.percentText !== null ? `${view.percentText} · ${view.usedText}/${view.maxText}` : view.usedText}
-              </span>
+    <Popover>
+      <PopoverTrigger
+        openOnHover
+        delay={150}
+        closeDelay={150}
+        render={<Button variant="ghost-muted" size="icon-sm" />}
+        aria-label={view.label}
+        data-testid="context-meter"
+        data-overloaded={view.overloaded ? "" : undefined}
+      >
+        <span className="relative flex size-5 items-center justify-center">
+          <svg viewBox="0 0 24 24" className="absolute inset-0 mx-0! size-full -rotate-90" aria-hidden>
+            <circle cx="12" cy="12" r={RADIUS} fill="none" className="stroke-muted-foreground/24" strokeWidth="3" />
+            <circle
+              cx="12"
+              cy="12"
+              r={RADIUS}
+              fill="none"
+              className={view.overloaded ? "stroke-error transition-[stroke-dashoffset,stroke] duration-500 ease-out motion-reduce:transition-none" : "stroke-primary transition-[stroke-dashoffset,stroke] duration-500 ease-out motion-reduce:transition-none"}
+              data-testid="context-ring"
+              strokeWidth="3"
+              strokeLinecap="round"
+              strokeDasharray={CIRCUMFERENCE}
+              strokeDashoffset={CIRCUMFERENCE * (1 - filled / 100)}
+            />
+          </svg>
+        </span>
+      </PopoverTrigger>
+      <PopoverPopup tooltipStyle side="top" align="end" sideOffset={6} padding="none" width="sm" aria-label="Context Window">
+        <div className="flex flex-col gap-2 p-(--floating-content-inset) text-left whitespace-normal">
+          <div className="flex items-center justify-between gap-3">
+            <span className="text-xs font-medium text-muted-foreground">Context Window</span>
+            <span className="text-2xs text-secondary-label tabular-nums" data-testid="context-numbers">
+              {view.percentText !== null ? `${view.percentText} · ${view.usedText}/${view.maxText}` : view.usedText}
+            </span>
+          </div>
+          {view.percent !== null && (
+            <div role="progressbar" aria-label="Context window usage" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(filled)} className="h-1.5 w-full overflow-hidden rounded-full bg-muted/60">
+              <div className={view.overloaded ? "h-full rounded-full bg-error" : "h-full rounded-full bg-primary"} style={{ width: `${filled}%` }} />
             </div>
-            {view.percent !== null && (
-              <div role="progressbar" aria-label="Context window usage" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(filled)} className="unframed-agent-progress">
-                <div style={{ width: `${filled}%` }} data-overloaded={view.overloaded ? "" : undefined} />
-              </div>
-            )}
-            {view.totalProcessedText !== null && (
-              <div className="mt-2 flex justify-between text-[11px] text-muted-foreground">
-                <span>Total processed</span>
-                <span className="tabular-nums">{view.totalProcessedText}</span>
-              </div>
-            )}
-            <p className="m-0 mt-2 text-[11px] text-muted-foreground">Context compacts automatically when needed.</p>
-            <button type="button" className="unframed-agent-button mt-2 w-full justify-center" disabled={compactUnavailable} onClick={onCompact}>
-              <Minimize2 size={13} aria-hidden />
-              Compact context
-            </button>
-            {compactUnavailable && <p className="m-0 mt-1 text-[11px] text-muted-foreground">Compaction is unavailable for this provider</p>}
-          </Popover.Popup>
-        </Popover.Positioner>
-      </Popover.Portal>
-    </Popover.Root>
+          )}
+          {view.totalProcessedText !== null && (
+            <div className="flex items-center justify-between gap-3 text-2xs leading-4">
+              <span className="text-secondary-label">Total processed</span>
+              <span className="font-medium text-secondary-label tabular-nums">{view.totalProcessedText}</span>
+            </div>
+          )}
+          <p className="m-0 mt-1 text-2xs font-medium text-pretty text-secondary-label">Context compacts automatically when needed.</p>
+          <Button variant="outline" size="xs" className="mt-1 w-full" disabled={compactUnavailable} onClick={onCompact}>
+            <Minimize2 aria-hidden />
+            Compact context
+          </Button>
+          {compactUnavailable && <p className="m-0 text-2xs text-pretty text-secondary-label">Compaction is unavailable for this provider</p>}
+        </div>
+      </PopoverPopup>
+    </Popover>
   );
 };

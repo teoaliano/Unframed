@@ -5,6 +5,10 @@ import { pngBytes } from "./images.ts";
 import { filledMedia, putRecords } from "./media.ts";
 import { artifactColumn, expect, onlyChat, openRail, promptBox, rail, rpcOf, scriptFolder, startAgentEngine, test } from "./agent.ts";
 import type { TestEngine } from "../../engine/test/engineProcess.ts";
+import { expectSlot, expectToken, inBothSchemes, resolvedColor, styleOf } from "./kit.ts";
+
+/** A toast's second line, by its text. */
+const toastDescription = (page: Page, text: string) => page.locator("[data-slot='toast-description']").filter({ hasText: text });
 
 /** A page and two filled images, left of the starter prompts. */
 const pageAndImages = async (page: Page, engine: TestEngine) => {
@@ -130,9 +134,9 @@ test("attach by button, by drag and by paste: thumbnails and file chips, a remov
   await expect(shelf.locator("[data-chip='file']")).toHaveCount(0);
 
   // Dragging files over the rail shows the overlay; dropping them attaches them.
-  await fileEvents(page, "aside[aria-label='Agent'] .unframed-agent-transcript, aside[aria-label='Agent'] .unframed-agent-tabs", ["dragenter", "dragover"], [{ name: "brief.pdf", mime: "application/pdf", bytes: Buffer.from("%PDF-1.4 brief") }]);
+  await fileEvents(page, "aside[aria-label='Agent'] [data-testid='chat-tabs']", ["dragenter", "dragover"], [{ name: "brief.pdf", mime: "application/pdf", bytes: Buffer.from("%PDF-1.4 brief") }]);
   await expect(panel.getByTestId("drop-overlay")).toHaveText("Drop files to attach");
-  await fileEvents(page, "aside[aria-label='Agent'] .unframed-agent-tabs", ["drop"], [{ name: "brief.pdf", mime: "application/pdf", bytes: Buffer.from("%PDF-1.4 brief") }]);
+  await fileEvents(page, "aside[aria-label='Agent'] [data-testid='chat-tabs']", ["drop"], [{ name: "brief.pdf", mime: "application/pdf", bytes: Buffer.from("%PDF-1.4 brief") }]);
   await expect(panel.getByTestId("drop-overlay")).toHaveCount(0);
   await expect(shelf.locator("[data-chip='file']")).toHaveText(["brief.pdf14 B"]);
 
@@ -141,7 +145,7 @@ test("attach by button, by drag and by paste: thumbnails and file chips, a remov
   await expect(shelf.getByRole("link", { name: "Preview pasted.png" })).toBeVisible();
 
   // Over the limit: the exact sentence, and nothing staged.
-  await fileEvents(page, "aside[aria-label='Agent'] .unframed-agent-tabs", ["dragenter", "drop"], [{ name: "huge.bin", mime: "application/octet-stream", size: 51 * 1024 * 1024 }]);
+  await fileEvents(page, "aside[aria-label='Agent'] [data-testid='chat-tabs']", ["dragenter", "drop"], [{ name: "huge.bin", mime: "application/octet-stream", size: 51 * 1024 * 1024 }]);
   await expect(panel.getByRole("alert")).toHaveText("'huge.bin' exceeds the 50 MB attachment limit.");
   await expect(shelf.locator("[data-chip='file']")).toHaveText(["brief.pdf14 B"]);
 
@@ -175,12 +179,12 @@ test("a large paste becomes pasted-text.txt with a toast; Cmd+Shift+V keeps it i
   await box.click();
   const big = "log line\n".repeat(4000);
   await pasteText(page, big);
-  const files = panel.getByTestId("attachments").locator("[data-chip='file'] .unframed-agent-chip__label");
+  const files = panel.getByTestId("attachments").locator("[data-chip='file'] [data-testid='chip-label']");
   await expect(files).toHaveText(["pasted-text.txt"]);
   const notice = toast(page, "Large paste attached as pasted-text.txt");
   await expect(notice).toBeVisible();
   const hint = process.platform === "darwin" ? "⌘⇧V" : "Ctrl+Shift+V";
-  await expect(notice).toContainText(`35.2 KB · Use ${hint} to keep a large paste inline.`);
+  await expect(toastDescription(page, `35.2 KB · Use ${hint} to keep a large paste inline.`)).toBeVisible();
   await expect(box).toHaveText("");
 
   await pasteText(page, big);
@@ -241,7 +245,8 @@ test("Cmd+S stashes the draft and clears it; the badge's menu restores and delet
     await expect(box).toHaveText("");
   }
   const notice = toast(page, "Oldest stashed prompt discarded");
-  await expect(notice).toContainText("The stash holds 20 prompts; the oldest was removed to make room.");
+  await expect(notice).toBeVisible();
+  await expect(toastDescription(page, "The stash holds 20 prompts; the oldest was removed to make room.")).toBeVisible();
   await expect(badge).toHaveAttribute("aria-label", "Stashed prompts: 20. Open stash.");
   await expect
     .poll(async () => {
@@ -295,4 +300,47 @@ test("ArrowUp in an empty box recalls this chat's earlier messages, newest first
   } finally {
     await agent.dispose();
   }
+});
+
+const MENU_GLASS = "color-mix(in srgb, var(--popover) 18%, color-mix(in srgb, var(--popover) var(--glass-opacity), transparent))";
+
+test("the Agent tray is t3code's composer on the kit: the rounded shell, kit chips and controls, the round Send, the kit menu look", async ({ page, agent }) => {
+  await pageAndImages(page, agent);
+  await openAgentTray(page);
+  const tray = composer(page);
+  const shell = tray.getByTestId("agent-composer");
+  await inBothSchemes(page, async (scheme) => {
+    await page.mouse.move(10, 10);
+    expect(await styleOf(shell, "border-top-left-radius")).toBe("22px");
+    // t3code's composer shadow in light; none in dark.
+    expect((await styleOf(shell, "box-shadow")).includes("0px 12px 28px -18px")).toBe(scheme === "light");
+    for (const chip of await chips(page).all()) await expectSlot(chip, "badge");
+    await expectSlot(tray.getByRole("button", { name: "Remove Alpha" }), "button");
+    await expectSlot(tray.getByRole("button", { name: "Attach files" }), "tooltip-trigger");
+    await expectSlot(tray.getByTestId("model-picker"), "popover-trigger");
+    await expectSlot(tray.getByRole("combobox", { name: "Runtime mode" }), "tooltip-trigger");
+    await expectSlot(tray.getByTestId("stash-badge"), "menu-trigger");
+    // The plan toggle is the kit Toggle, on the accent while pressed (Shift+Tab flips it from the box).
+    const toggle = tray.getByTestId("plan-toggle");
+    await promptBox(tray).click();
+    await page.keyboard.press("Shift+Tab");
+    await expect(toggle).toHaveAttribute("aria-pressed", "true");
+    await page.mouse.move(10, 10);
+    await expectToken(toggle, "background-color", "--accent");
+    await page.keyboard.press("Shift+Tab");
+    await expect(toggle).toHaveAttribute("aria-pressed", "false");
+    // Send is t3code's round message action.
+    const send = tray.getByRole("button", { name: "Send", exact: true });
+    await expectSlot(send, "message-action");
+    await expectToken(send, "background-color", "--message-action");
+
+    // The @ menu has the kit's menu popup look.
+    await promptBox(tray).click();
+    await promptBox(tray).pressSequentially("@");
+    const mentions = page.getByRole("listbox", { name: "Mentions" });
+    await expect(mentions).toBeVisible();
+    expect(await styleOf(mentions, "background-color")).toBe(await resolvedColor(page, MENU_GLASS));
+    await page.keyboard.press("Backspace");
+    await expect(mentions).toHaveCount(0);
+  });
 });

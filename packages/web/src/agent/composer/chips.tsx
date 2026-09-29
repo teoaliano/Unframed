@@ -2,6 +2,8 @@ import { shapeKind, shapeLabel, type ShapeKind } from "@unframed/domain";
 import { AlignLeft, AppWindow, Clapperboard, Group, Image, PenLine, SquarePlay, X, type LucideIcon } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useValue, type Editor, type TLShapeId } from "tldraw";
+import { Badge } from "~/components/ui/badge";
+import { Button } from "~/components/ui/button";
 
 export const KIND_ICONS: Record<ShapeKind, LucideIcon> = {
   prompt: AlignLeft,
@@ -102,18 +104,20 @@ export const ChipRow = ({ shapes, onRemove }: { readonly shapes: ReadonlyArray<C
   const chips = chipsOf(shapes);
   if (chips.length === 0) return null;
   return (
-    <div className="unframed-agent-chips" role="list" aria-label="Context">
+    <div className="flex flex-wrap gap-1" role="list" aria-label="Context">
       {chips.map((chip) => {
         const label = chip.kind === "artifact" ? chip.shape.label : chip.label;
         const Icon = chip.kind === "artifact" ? KIND_ICONS[chip.shape.kind] : undefined;
         return (
-          <span key={chip.kind === "artifact" ? chip.shape.id : "count"} role="listitem" className="unframed-agent-chip" data-chip={chip.kind}>
-            {Icon && <Icon size={12} aria-hidden />}
-            <span className="unframed-agent-chip__label">{label}</span>
-            <button type="button" aria-label={`Remove ${label}`} onClick={() => onRemove(chip.kind === "artifact" ? [chip.shape.id] : chip.ids)}>
-              <X size={11} aria-hidden />
-            </button>
-          </span>
+          <Badge key={chip.kind === "artifact" ? chip.shape.id : "count"} variant="outline" size="lg" className="max-w-full" role="listitem" data-chip={chip.kind}>
+            {Icon && <Icon aria-hidden />}
+            <span className="min-w-0 truncate" data-testid="chip-label">
+              {label}
+            </span>
+            <Button variant="ghost-muted" size="icon-tiny" aria-label={`Remove ${label}`} onClick={() => onRemove(chip.kind === "artifact" ? [chip.shape.id] : chip.ids)}>
+              <X aria-hidden />
+            </Button>
+          </Badge>
         );
       })}
     </div>

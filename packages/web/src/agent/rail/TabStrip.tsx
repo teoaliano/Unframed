@@ -1,14 +1,16 @@
-import { Menu } from "@base-ui/react/menu";
 import type { ChatSummary } from "@unframed/contracts";
 import { tabLabel, tabTooltip } from "@unframed/domain";
 import { ChevronDown } from "lucide-react";
 import { useRef, useState } from "react";
-import { itemClass, popupClass, Tip } from "../../chrome/ui.tsx";
+import { Button } from "~/components/ui/button";
+import { Input } from "~/components/ui/input";
+import { Menu, MenuItem, MenuPopup, MenuTrigger } from "~/components/ui/menu";
+import { Tip } from "../../chrome/ui.tsx";
 import type { ChatClient } from "../store.ts";
 
 const INLINE_TABS = 3;
 
-const LiveDot = () => <span className="unframed-agent-live-dot" data-testid="live-dot" aria-label="Running" />;
+const LiveDot = () => <span className="size-1.5 shrink-0 rounded-full bg-primary" data-testid="live-dot" aria-label="Running" />;
 
 /** A chat is live while its turn runs or it waits on the person. */
 const isLive = (chat: ChatSummary) => chat.status === "running" || chat.hasPendingApproval || chat.hasPendingUserInput;
@@ -21,9 +23,12 @@ export interface TabStripProps {
   readonly selectedCount: number;
 }
 
+const STRIP_CLASS = "flex h-9 shrink-0 items-center gap-1 border-b px-2";
+
 /**
- * One folder tab per visible chat, newest first: three inline, the rest under More, whose
- * trigger names the active chat when it is one of them. A running chat shows a live dot.
+ * One panel tab per visible chat (t3code's right panel tabs), newest first: three inline,
+ * the rest under More, whose trigger names the active chat when it is one of them. A
+ * running chat shows a live dot. The selected look is the kit Button's pressed state.
  */
 export const TabStrip = ({ client, chats, active, selectedCount }: TabStripProps) => {
   const choose = (id: string) => client.setUi({ chosen: id, pinned: client.ui.pinned === id ? id : null });
@@ -41,8 +46,8 @@ export const TabStrip = ({ client, chats, active, selectedCount }: TabStripProps
   if (chats.length === 0) {
     const empty = selectedCount === 0 ? "No chats yet" : selectedCount >= 2 ? "Nothing said about these yet. Your first message starts a chat." : undefined;
     return (
-      <div className="unframed-agent-tabs" data-empty="">
-        {empty !== undefined && <p className="unframed-agent-tabs__empty">{empty}</p>}
+      <div className={STRIP_CLASS} data-testid="chat-tabs">
+        {empty !== undefined && <p className="m-0 truncate px-1 text-xs text-muted-foreground">{empty}</p>}
       </div>
     );
   }
@@ -50,13 +55,16 @@ export const TabStrip = ({ client, chats, active, selectedCount }: TabStripProps
   const more = chats.slice(INLINE_TABS);
   const activeInMore = more.find((chat) => chat.id === active);
   return (
-    <div className="unframed-agent-tabs" role="tablist" aria-label="Chats">
+    <div className={STRIP_CLASS} role="tablist" aria-label="Chats" data-testid="chat-tabs">
       {inline.map((chat) =>
         renaming?.id === chat.id ? (
-          <input
+          // The rename box grows with the text: its field is as wide as the name in characters.
+          <Input
             key={chat.id}
+            size="compact"
+            className="w-auto max-w-56"
+            style={{ width: `${Math.max(6, renaming.value.length + 2)}ch` }}
             aria-label="Rename chat"
-            className="unframed-agent-tab-rename"
             value={renaming.value}
             placeholder={tabLabel({ ...chat, title: "" })}
             autoFocus
@@ -76,47 +84,46 @@ export const TabStrip = ({ client, chats, active, selectedCount }: TabStripProps
             onBlur={commit}
           />
         ) : (
-        <Tip key={chat.id} label={tabTooltip(chat)}>
-          <button
-            type="button"
-            role="tab"
-            aria-selected={chat.id === active}
-            className="unframed-agent-tab"
-            data-chat-id={chat.id}
-            onClick={() => choose(chat.id)}
-            onDoubleClick={() => {
-              abandoned.current = false;
-              choose(chat.id);
-              setRenaming({ id: chat.id, value: chat.title });
-            }}
-          >
-            <span className="unframed-agent-tab__label">{tabLabel(chat)}</span>
-            {isLive(chat) && <LiveDot />}
-          </button>
-        </Tip>
+          <Tip key={chat.id} label={tabTooltip(chat)}>
+            <Button
+              variant="ghost-muted"
+              size="xs"
+              className="min-w-0 max-w-36"
+              role="tab"
+              aria-selected={chat.id === active}
+              data-pressed={chat.id === active ? "" : undefined}
+              data-chat-id={chat.id}
+              onClick={() => choose(chat.id)}
+              onDoubleClick={() => {
+                abandoned.current = false;
+                choose(chat.id);
+                setRenaming({ id: chat.id, value: chat.title });
+              }}
+            >
+              <span className="min-w-0 truncate">{tabLabel(chat)}</span>
+              {isLive(chat) && <LiveDot />}
+            </Button>
+          </Tip>
         ),
       )}
       {more.length > 0 && (
-        <Menu.Root>
-          <Menu.Trigger className="unframed-agent-tab unframed-agent-tab--more" data-active={activeInMore ? "" : undefined} aria-label={activeInMore ? `More chats: ${tabLabel(activeInMore)}` : "More chats"}>
-            <span className="unframed-agent-tab__label">{activeInMore ? tabLabel(activeInMore) : "More"}</span>
-            <ChevronDown size={13} aria-hidden />
-          </Menu.Trigger>
-          <Menu.Portal>
-            <Menu.Positioner side="bottom" align="end" sideOffset={4} className="z-[800]">
-              <Menu.Popup className={`${popupClass} max-w-[300px]`}>
-                {more.map((chat) => (
-                  <Menu.Item key={chat.id} className={itemClass} data-chat-id={chat.id} onClick={() => choose(chat.id)}>
-                    {isLive(chat) && <LiveDot />}
-                    <span className="truncate" data-active={chat.id === active ? "" : undefined}>
-                      {tabLabel(chat)}
-                    </span>
-                  </Menu.Item>
-                ))}
-              </Menu.Popup>
-            </Menu.Positioner>
-          </Menu.Portal>
-        </Menu.Root>
+        <Menu>
+          <MenuTrigger
+            render={<Button variant="ghost-muted" size="xs" className="ml-auto min-w-0 max-w-36" data-pressed={activeInMore ? "" : undefined} />}
+            aria-label={activeInMore ? `More chats: ${tabLabel(activeInMore)}` : "More chats"}
+          >
+            <span className="min-w-0 truncate">{activeInMore ? tabLabel(activeInMore) : "More"}</span>
+            <ChevronDown aria-hidden />
+          </MenuTrigger>
+          <MenuPopup side="bottom" align="end" sideOffset={4} className="max-w-[300px]">
+            {more.map((chat) => (
+              <MenuItem key={chat.id} data-chat-id={chat.id} data-active={chat.id === active ? "" : undefined} onClick={() => choose(chat.id)}>
+                {isLive(chat) && <LiveDot />}
+                <span className="min-w-0 truncate">{tabLabel(chat)}</span>
+              </MenuItem>
+            ))}
+          </MenuPopup>
+        </Menu>
       )}
     </div>
   );

@@ -7,6 +7,7 @@ import { clickShape, composer, toolbar } from "./generation.ts";
 import { putRecords } from "./media.ts";
 import { artifactColumn, createChat, engineChat, engineChats, expect, promptBox, rail, startDetectingEngine, test, userTexts } from "./agent.ts";
 import type { TestEngine } from "../../engine/test/engineProcess.ts";
+import { expectSlot, expectToken, inBothSchemes } from "./kit.ts";
 
 const at = (day: number) => `2026-09-${String(day).padStart(2, "0")}T10:00:00.000Z`;
 
@@ -34,18 +35,22 @@ test("Agent on the toolbar is filled, and opens the Agent tray saying which chat
   await twoPages(page, agent);
   await clickShape(page, "shape:p1");
   const button = toolbar(page).getByRole("button", { name: "Agent" });
-  await expect(button).toHaveClass(/unframed-bar-button--primary/);
+  await expectSlot(button, "button");
+  await inBothSchemes(page, async () => {
+    await page.mouse.move(10, 10);
+    await expectToken(button, "background-color", "--primary");
+  });
   await expect(button.locator("svg")).toHaveCount(1);
   await button.click();
 
   await expect(composer(page)).toHaveAttribute("data-tray", "agent");
-  await expect(target(page).locator(".unframed-agent-target__line")).toHaveText("continues About both");
+  await expect(target(page).getByTestId("agent-target-line")).toHaveText("continues About both");
   await expect(target(page).locator("em")).toHaveText("About both");
   await expect(composer(page).getByText("Claude · not metered", { exact: true })).toBeVisible();
   await target(page).getByRole("button", { name: "New chat instead" }).click();
-  await expect(target(page).locator(".unframed-agent-target__line")).toHaveText("new chat");
+  await expect(target(page).getByTestId("agent-target-line")).toHaveText("new chat");
   await target(page).getByRole("button", { name: "Continue the earlier chat" }).click();
-  await expect(target(page).locator(".unframed-agent-target__line")).toHaveText("continues About both");
+  await expect(target(page).getByTestId("agent-target-line")).toHaveText("continues About both");
 
   // Back to tools (Esc) closes it; so does Escape.
   await target(page).getByRole("button", { name: "Back to tools (Esc)" }).click();
@@ -60,7 +65,7 @@ test("Agent on the toolbar is filled, and opens the Agent tray saying which chat
   // Nothing the chats know selected: a new chat, and nothing to switch to.
   await clickShape(page, "shape:starter-subject");
   await toolbar(page).getByRole("button", { name: "Agent" }).click();
-  await expect(target(page).locator(".unframed-agent-target__line")).toHaveText("new chat");
+  await expect(target(page).getByTestId("agent-target-line")).toHaveText("new chat");
   await expect(target(page).getByRole("button", { name: "Continue the earlier chat" })).toHaveCount(0);
 });
 
@@ -69,7 +74,7 @@ test("while the tray is open a clicked shape joins the context and stays selecte
   await clickShape(page, "shape:p1");
   await toolbar(page).getByRole("button", { name: "Agent" }).click();
   await expect(chips(page)).toHaveText(["Alpha"]);
-  await expect(target(page).locator(".unframed-agent-target__line")).toHaveText("continues About both");
+  await expect(target(page).getByTestId("agent-target-line")).toHaveText("continues About both");
 
   await clickShape(page, "shape:p2");
   await expect(chips(page)).toHaveText(["Alpha", "Beta"]);

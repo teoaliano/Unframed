@@ -11,7 +11,7 @@ import {
   type InteractionMode,
   type RuntimeMode,
 } from "@unframed/domain";
-import { ArrowLeft, ArrowUp, Paperclip, Square } from "lucide-react";
+import { ArrowLeft, Paperclip } from "lucide-react";
 import { createPortal } from "react-dom";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from "react";
 import type { AgentTrayProps as SlotProps } from "../../chrome/slots.ts";
@@ -20,7 +20,10 @@ import { effectiveModel, noProviderReady, providerName, readyProviders } from ".
 import { createChat, sendMessage } from "../send.ts";
 import { useChatClient, useChats, useFollowUp, useHandoffVersion, useProviders, useRailUi, useWatchedThread, type ChatClient } from "../store.ts";
 import { latestCompletedTool, returnQueued, sendQueued } from "../queue.tsx";
+import { Alert, AlertDescription } from "~/components/ui/alert";
+import { Button } from "~/components/ui/button";
 import { Tip } from "../../chrome/ui.tsx";
+import { MessageAction, SendArrow, StopSquare } from "./MessageAction.tsx";
 import { formatSize, useAttachments } from "./attachments.ts";
 import { StashMenu, useStash } from "./stash.tsx";
 import { ApprovalPanel, choiceOnly, PlanActions, PlanReady, useQuestionAnswers, waitingRequests } from "./panels.tsx";
@@ -34,8 +37,16 @@ import { slashItems, skillMenuItems } from "./commands.tsx";
 import { ContextMeter, declaredTraits, latestUsage, ModelPicker, PlanToggle, RuntimeModePicker, TraitsPicker } from "./pickers.tsx";
 import { PromptEditor, type PromptEditorHandle, type Trigger } from "./PromptEditor.tsx";
 import { useMaybeEditor, useValue } from "tldraw";
+import { Input } from "~/components/ui/input";
 
 export const PROMPT_LABEL = "Message the agent";
+
+/**
+ * t3code's composer shell (ComposerSurface): a rounded glass box with the composer shadow
+ * and a hairline outline, the outline turning to the ring while files are dragged over.
+ */
+const COMPOSER_SHELL =
+  "relative isolate flex flex-col gap-1.5 rounded-3xl px-3 pt-2.5 pb-2 shadow-composer dark:shadow-none bg-card/(--glass-opacity) backdrop-blur-(--glass-blur) backdrop-saturate-(--glass-saturation) dark:bg-surface-raised/(--glass-opacity) after:pointer-events-none after:absolute after:inset-0 after:rounded-[inherit] after:border after:border-border data-dragging:after:border-ring";
 
 export const PLACEHOLDERS = {
   approval: "Resolve this approval request to continue",
@@ -488,19 +499,22 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
 
 
   return (
-    <div className="unframed-agent-tray" data-variant={variant} data-testid="agent-tray" ref={root}>
+    <div className="flex flex-col gap-1.5" data-variant={variant} data-testid="agent-tray" ref={root}>
       {approvalPending && chat && <ApprovalPanel client={client} chat={chat} />}
       {questions.panel}
       {planFollowUp && <PlanReady plan={planFollowUp} />}
       {dragging &&
         dropElement &&
         createPortal(
-          <div className="unframed-agent-drop" data-testid="drop-overlay">
+          <div
+            className="pointer-events-none absolute inset-0 z-20 flex items-center justify-center rounded-[inherit] border-2 border-dashed border-primary bg-background/80 text-sm font-medium text-foreground"
+            data-testid="drop-overlay"
+          >
             Drop files to attach
           </div>,
           dropElement,
         )}
-      <div className="unframed-agent-box" ref={boxElement} data-dragging={dragging ? "" : undefined}>
+      <div className={COMPOSER_SHELL} ref={boxElement} data-testid="agent-composer" data-dragging={dragging ? "" : undefined}>
         <AttachmentShelf staged={attachments.staged} onRemove={attachments.remove} onRetry={attachments.retry} />
         <ChipRow
           shapes={chips.shapes}
@@ -523,18 +537,22 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
           autofocus={variant === "toolbar"}
         />
         {menu && <ComposerMenu label={menu.label} items={menu.items} highlight={highlight} empty={menu.empty} anchor={boxElement} onPick={menu.pick} onHighlight={setHighlight} />}
-        <div className="unframed-agent-footer">
-          <div className="unframed-agent-footer__tools">
+        {/* The tools keep their width; when they and Send do not fit on one line, Send wraps to the next, on the right. */}
+        <div className="flex flex-wrap items-center gap-1">
+          <div className="flex min-w-0 flex-wrap items-center gap-0.5">
             <Tip label="Attach files" side="top">
-              <button type="button" className="unframed-agent-control unframed-agent-control--icon" aria-label="Attach files" onClick={() => files.current?.click()}>
-                <Paperclip size={15} aria-hidden />
-              </button>
+              <Button variant="ghost-muted" size="icon-sm" aria-label="Attach files" onClick={() => files.current?.click()}>
+                <Paperclip aria-hidden />
+              </Button>
             </Tip>
-            <input
+            <Input
               ref={files}
               type="file"
               multiple
               hidden
+              unstyled
+              nativeInput
+              className="hidden"
               data-testid="attach-input"
               onChange={(event) => {
                 const chosen = [...(event.currentTarget.files ?? [])];
@@ -570,7 +588,7 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
               />
             )}
           </div>
-          <div className="unframed-agent-footer__send">
+          <div className="ml-auto flex shrink-0 items-center gap-1.5">
             {note?.(providerName(selection.provider))}
             <StashMenu
               entries={stash.entries}
@@ -586,36 +604,36 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
               onDelete={(entry) => stash.remove(entry.id)}
             />
             {running && (
-              <button type="button" className="unframed-agent-stop" aria-label="Stop generation" onClick={interrupt}>
-                <Square size={12} aria-hidden fill="currentColor" />
-              </button>
+              <MessageAction tone="stop" aria-label="Stop generation" onClick={interrupt}>
+                <StopSquare />
+              </MessageAction>
             )}
             {answering ? (
               <>
                 {questions.index > 0 && (
-                  <button type="button" className="unframed-agent-button" disabled={questions.submitting} onClick={() => questions.move(questions.index - 1)}>
+                  <Button variant="outline" size="sm" disabled={questions.submitting} onClick={() => questions.move(questions.index - 1)}>
                     Previous
-                  </button>
+                  </Button>
                 )}
-                <button type="button" className="unframed-agent-button unframed-agent-button--primary" disabled={!canSend} onClick={() => void questions.answer()}>
+                <MessageAction tone="pill" disabled={!canSend} onClick={() => void questions.answer()}>
                   {questions.submitting ? "Submitting..." : !questions.lastQuestion ? "Next question" : questions.index > 0 ? "Submit answers" : "Submit answer"}
-                </button>
+                </MessageAction>
               </>
             ) : planFollowUp ? (
               <PlanActions refine={text.trim() !== ""} busy={sending} onSend={() => void send()} onNewChat={() => void implementPlan(true)} />
             ) : (
-              <button type="button" className="unframed-agent-send" aria-label={running ? "Queue message" : "Send"} disabled={!canSend} onClick={() => void send()}>
-                <ArrowUp size={15} aria-hidden />
-              </button>
+              <MessageAction tone="send" aria-label={running ? "Queue message" : "Send"} disabled={!canSend} onClick={() => void send()}>
+                <SendArrow />
+              </MessageAction>
             )}
           </div>
         </div>
       </div>
       {/* The rail is closed while the toolbar's tray is open: its errors show here. */}
       {variant === "toolbar" && ui.error !== undefined && (
-        <p role="alert" className="unframed-agent-tray__error">
-          {ui.error}
-        </p>
+        <Alert variant="error">
+          <AlertDescription>{ui.error}</AlertDescription>
+        </Alert>
       )}
     </div>
   );
@@ -653,34 +671,34 @@ export const ToolbarAgentTray = ({ project, close, onMenuOpen }: SlotProps) => {
       onSent={close}
       {...(onMenuOpen ? { onMenuOpen } : {})}
       underChips={
-        <div className="unframed-agent-target" data-testid="agent-target">
-          <span className="unframed-agent-target__line">
+        <div className="flex min-h-7 items-center gap-1.5 px-0.5 text-xs text-muted-foreground" data-testid="agent-target">
+          <span className="min-w-0 truncate" data-testid="agent-target-line">
             {target !== null && continuable ? (
               <>
-                continues <em>{tabLabel(continuable)}</em>
+                continues <em className="text-foreground">{tabLabel(continuable)}</em>
               </>
             ) : (
               "new chat"
             )}
           </span>
           {target !== null ? (
-            <button type="button" className="unframed-agent-button unframed-agent-button--ghost" onClick={() => setFresh(true)}>
+            <Button variant="ghost" size="xs" onClick={() => setFresh(true)}>
               New chat instead
-            </button>
+            </Button>
           ) : continuable ? (
-            <button type="button" className="unframed-agent-button unframed-agent-button--ghost" onClick={() => setFresh(false)}>
+            <Button variant="ghost" size="xs" onClick={() => setFresh(false)}>
               Continue the earlier chat
-            </button>
+            </Button>
           ) : null}
           <span className="flex-1" />
           <Tip label="Back to tools (Esc)" side="top">
-            <button type="button" className="unframed-agent-control unframed-agent-control--icon" aria-label="Back to tools (Esc)" onClick={close}>
-              <ArrowLeft size={14} aria-hidden />
-            </button>
+            <Button variant="ghost-muted" size="icon-xs" aria-label="Back to tools (Esc)" onClick={close}>
+              <ArrowLeft aria-hidden />
+            </Button>
           </Tip>
         </div>
       }
-      note={(provider) => <span className="unframed-agent-note">{`${provider} · not metered`}</span>}
+      note={(provider) => <span className="text-xs whitespace-nowrap text-muted-foreground">{`${provider} · not metered`}</span>}
     />
   );
 };

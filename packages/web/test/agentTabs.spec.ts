@@ -47,6 +47,7 @@ test("double-click renames a tab in place: Enter and blur commit, Escape abandon
 
   await tabs(page).first().dblclick();
   await expect(rename).toBeFocused();
+  await expect(rename).toHaveAttribute("data-slot", "input");
   await expect(rename).toHaveValue("A named conversation");
   await rename.fill("Brief");
   await rename.press("Enter");
@@ -63,7 +64,7 @@ test("double-click renames a tab in place: Enter and blur commit, Escape abandon
 
   await tabs(page).first().dblclick();
   await rename.fill("Blurred");
-  await panel.locator(".unframed-agent-rail__title").click();
+  await panel.getByRole("heading", { name: "Agent" }).click();
   await expect(tabs(page)).toHaveText(["Blurred"]);
   await expect.poll(async () => (await engineChat(agent, chatId)).title).toBe("Blurred");
 

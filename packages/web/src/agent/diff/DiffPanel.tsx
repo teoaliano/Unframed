@@ -1,12 +1,16 @@
-import { Menu } from "@base-ui/react/menu";
 import type { ArtifactDiffFile } from "@unframed/contracts";
 import type { Chat } from "@unframed/domain";
 import { PatchDiff } from "@pierre/diffs/react";
 import { WorkerPoolContextProvider } from "@pierre/diffs/react";
 import DiffsWorker from "@pierre/diffs/worker/worker.js?worker";
-import { Check, ChevronDown, Columns2, Pilcrow, Rows3, TextWrap, X } from "lucide-react";
+import { ChevronDown, Columns2, Pilcrow, Rows3, TextWrap, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import { itemClass, popupClass, Tip } from "../../chrome/ui.tsx";
+import { Button } from "~/components/ui/button";
+import { Menu, MenuPopup, MenuRadioGroup, MenuRadioItem, MenuTrigger } from "~/components/ui/menu";
+import { Toggle } from "~/components/ui/toggle";
+import { Toggle as GroupToggle, ToggleGroup } from "~/components/ui/toggle-group";
+import { Tip } from "../../chrome/ui.tsx";
+import { DIFF_SURFACE_CSS } from "./diffTheme.ts";
 import { messageOf } from "../send.ts";
 import type { ChatClient, RailUi } from "../store.ts";
 
@@ -93,10 +97,13 @@ export const DiffPanel = ({ client, chat, diff }: { readonly client: ChatClient;
   }, [files, diff.shapeId]);
 
   const scopeLabel = scope === "all" ? "All turns" : latest && scope === latest.turnCount ? "Latest turn" : `Turn ${scope}`;
+  const wrapLabel = wrap ? "Disable line wrapping" : "Enable line wrapping";
+  const whitespaceLabel = ignoreWhitespace ? "Show whitespace changes" : "Hide whitespace changes";
   return (
+    // t3code's diff panel shell, beside the rail on its left and as tall as it.
     <section
       ref={root}
-      className="unframed-agent-diff"
+      className="absolute top-0 right-[calc(100%+8px)] bottom-0 flex w-[min(760px,calc(100vw-540px))] min-w-0 flex-col overflow-hidden rounded-xl border bg-background text-sm shadow-lg/5 outline-none"
       role="dialog"
       aria-label="Changes"
       tabIndex={-1}
@@ -107,124 +114,120 @@ export const DiffPanel = ({ client, chat, diff }: { readonly client: ChatClient;
         close();
       }}
     >
-      <header className="unframed-agent-diff__header">
-        <Menu.Root>
-          <Menu.Trigger className="unframed-agent-control" aria-label={`Diff scope: ${scopeLabel}`} disabled={!latest}>
-            <span className="unframed-agent-control__label">{scopeLabel}</span>
-            <ChevronDown size={13} aria-hidden />
-          </Menu.Trigger>
-          <Menu.Portal>
-            <Menu.Positioner side="bottom" align="start" sideOffset={4} className="z-[1100]">
-              <Menu.Popup className={popupClass}>
-                <Menu.RadioGroup value={scope === "all" ? "all" : latest && scope === latest.turnCount ? "latest" : `turn:${scope}`}>
-                  {latest && (
-                    <Menu.RadioItem className={itemClass} value="latest" closeOnClick onClick={() => choose(latest.turnCount)}>
-                      Latest turn
-                      <Menu.RadioItemIndicator className="ml-auto">
-                        <Check size={13} aria-hidden />
-                      </Menu.RadioItemIndicator>
-                    </Menu.RadioItem>
-                  )}
-                  {turns.map((turn) => (
-                    <Menu.RadioItem key={turn.turnId} className={itemClass} value={`turn:${turn.turnCount}`} closeOnClick onClick={() => choose(turn.turnCount)}>
-                      {`Turn ${turn.turnCount}`}
-                      <Menu.RadioItemIndicator className="ml-auto">
-                        <Check size={13} aria-hidden />
-                      </Menu.RadioItemIndicator>
-                    </Menu.RadioItem>
-                  ))}
-                  <Menu.RadioItem className={itemClass} value="all" closeOnClick onClick={() => choose("all")}>
-                    All turns
-                    <Menu.RadioItemIndicator className="ml-auto">
-                      <Check size={13} aria-hidden />
-                    </Menu.RadioItemIndicator>
-                  </Menu.RadioItem>
-                </Menu.RadioGroup>
-              </Menu.Popup>
-            </Menu.Positioner>
-          </Menu.Portal>
-        </Menu.Root>
-        <span className="flex-1" />
-        <div className="unframed-agent-diff__segmented" role="group" aria-label="Diff layout">
-          <Tip label="Stacked" side="bottom">
-            <button type="button" className="unframed-agent-control unframed-agent-control--icon" aria-label="Stacked diff view" aria-pressed={layout === "stacked"} onClick={() => setLayout("stacked")}>
-              <Rows3 size={14} aria-hidden />
-            </button>
+      <header className="flex h-10 min-h-10 shrink-0 items-center justify-between gap-2 border-b border-border/60 bg-background px-2">
+        <Menu>
+          <MenuTrigger render={<Button variant="secondary" size="xs" className="max-w-full" />} aria-label={`Diff scope: ${scopeLabel}`} disabled={!latest}>
+            <span className="truncate">{scopeLabel}</span>
+            <ChevronDown aria-hidden className="size-3.5 shrink-0 opacity-70" />
+          </MenuTrigger>
+          <MenuPopup side="bottom" align="start">
+            <MenuRadioGroup value={scope === "all" ? "all" : latest && scope === latest.turnCount ? "latest" : `turn:${scope}`}>
+              {latest && (
+                <MenuRadioItem value="latest" closeOnClick onClick={() => choose(latest.turnCount)}>
+                  Latest turn
+                </MenuRadioItem>
+              )}
+              {turns.map((turn) => (
+                <MenuRadioItem key={turn.turnId} value={`turn:${turn.turnCount}`} closeOnClick onClick={() => choose(turn.turnCount)}>
+                  {`Turn ${turn.turnCount}`}
+                </MenuRadioItem>
+              ))}
+              <MenuRadioItem value="all" closeOnClick onClick={() => choose("all")}>
+                All turns
+              </MenuRadioItem>
+            </MenuRadioGroup>
+          </MenuPopup>
+        </Menu>
+        <div className="flex shrink-0 items-center gap-1">
+          <ToggleGroup
+            aria-label="Diff layout"
+            className="shrink-0"
+            variant="segmented"
+            value={[layout]}
+            onValueChange={(value) => {
+              const next = value[0];
+              if (next === "stacked" || next === "split") setLayout(next);
+            }}
+          >
+            <GroupToggle aria-label="Stacked diff view" value="stacked">
+              <Rows3 aria-hidden className="size-3.5" />
+            </GroupToggle>
+            <GroupToggle aria-label="Split diff view" value="split">
+              <Columns2 aria-hidden className="size-3.5" />
+            </GroupToggle>
+          </ToggleGroup>
+          <Tip label={wrapLabel} side="bottom">
+            <Toggle variant="ghost" size="sm" aria-label={wrapLabel} pressed={wrap} onPressedChange={(pressed) => setWrap(pressed)}>
+              <TextWrap aria-hidden className="size-3.5" />
+            </Toggle>
           </Tip>
-          <Tip label="Split" side="bottom">
-            <button type="button" className="unframed-agent-control unframed-agent-control--icon" aria-label="Split diff view" aria-pressed={layout === "split"} onClick={() => setLayout("split")}>
-              <Columns2 size={14} aria-hidden />
-            </button>
+          <Tip label={whitespaceLabel} side="bottom">
+            <Toggle variant="ghost" size="sm" aria-label={whitespaceLabel} pressed={ignoreWhitespace} onPressedChange={(pressed) => setIgnoreWhitespace(pressed)}>
+              <Pilcrow aria-hidden className="size-3.5" />
+            </Toggle>
+          </Tip>
+          <Tip label="Close" side="bottom">
+            <Button variant="ghost" size="icon-sm" aria-label="Close diff" onClick={close}>
+              <X aria-hidden />
+            </Button>
           </Tip>
         </div>
-        <Tip label={wrap ? "Disable line wrapping" : "Enable line wrapping"} side="bottom">
-          <button type="button" className="unframed-agent-control unframed-agent-control--icon" aria-label={wrap ? "Disable line wrapping" : "Enable line wrapping"} aria-pressed={wrap} onClick={() => setWrap(!wrap)}>
-            <TextWrap size={14} aria-hidden />
-          </button>
-        </Tip>
-        <Tip label={ignoreWhitespace ? "Show whitespace changes" : "Hide whitespace changes"} side="bottom">
-          <button
-            type="button"
-            className="unframed-agent-control unframed-agent-control--icon"
-            aria-label={ignoreWhitespace ? "Show whitespace changes" : "Hide whitespace changes"}
-            aria-pressed={ignoreWhitespace}
-            onClick={() => setIgnoreWhitespace(!ignoreWhitespace)}
-          >
-            <Pilcrow size={14} aria-hidden />
-          </button>
-        </Tip>
-        <Tip label="Close" side="bottom">
-          <button type="button" className="unframed-agent-control unframed-agent-control--icon" aria-label="Close diff" onClick={close}>
-            <X size={14} aria-hidden />
-          </button>
-        </Tip>
       </header>
       {!latest ? (
-        <p className="unframed-agent-diff__empty">No completed turns yet.</p>
+        <p className={EMPTY_CLASS}>No completed turns yet.</p>
       ) : current && "error" in current ? (
-        <p className="unframed-agent-diff__empty" role="alert">
+        <p className={EMPTY_CLASS} role="alert">
           {current.error}
         </p>
       ) : !files ? (
-        <p className="unframed-agent-diff__empty" role="status">
+        <p className={EMPTY_CLASS} role="status">
           Loading changes…
         </p>
       ) : files.length === 0 ? (
-        <p className="unframed-agent-diff__empty">No page or motion changed in this selection.</p>
+        <p className={EMPTY_CLASS}>No page or motion changed in this selection.</p>
       ) : (
-        <div className="unframed-agent-diff__body">
-          <nav className="unframed-agent-diff__files" aria-label="Changed files">
+        <div className="flex min-h-0 flex-1">
+          <nav className="flex w-45 shrink-0 flex-col gap-px overflow-auto border-r border-border/60 p-1.5" aria-label="Changed files">
             {files.map((file) => (
-              <button
+              <Button
                 key={file.shapeId}
-                type="button"
-                className="unframed-agent-diff__file"
+                variant="ghost"
+                size="sm"
+                className="w-full"
                 aria-current={diff.shapeId === file.shapeId ? "true" : undefined}
+                data-pressed={diff.shapeId === file.shapeId ? "" : undefined}
                 onClick={() => {
                   client.setUi({ diff: { ...diff, shapeId: file.shapeId } });
                   root.current?.querySelector(`[data-diff-file="${CSS.escape(file.shapeId)}"]`)?.scrollIntoView({ block: "start" });
                 }}
               >
-                <span className="unframed-agent-diff__file-label">{file.label}</span>
-                <span className="unframed-agent-diff__added">{`+${file.additions}`}</span>
-                <span className="unframed-agent-diff__removed">{`−${file.deletions}`}</span>
-              </button>
+                <span className="min-w-0 flex-1 truncate text-left">{file.label}</span>
+                <DiffStat additions={file.additions} deletions={file.deletions} />
+              </Button>
             ))}
           </nav>
           <WorkerPoolContextProvider poolOptions={POOL} highlighterOptions={HIGHLIGHTER}>
-            <div className="unframed-agent-diff__patches">
+            <div className="min-w-0 flex-1 overflow-auto">
               {files.map((file) => (
-                <article key={file.shapeId} className="unframed-agent-diff__patch" data-diff-file={file.shapeId} aria-label={file.label}>
-                  <header className="unframed-agent-diff__patch-header">
-                    <span className="unframed-agent-diff__file-label">{file.label}</span>
-                    <span className="unframed-agent-diff__names">{`${file.before ?? "new"} → ${file.after ?? "removed"}`}</span>
+                <article key={file.shapeId} className="border-border/60 not-first:border-t" data-diff-file={file.shapeId} aria-label={file.label}>
+                  <header className="sticky top-0 z-1 flex h-8 items-center gap-2 border-b border-border/60 bg-background px-3">
+                    <span className="min-w-0 truncate text-sm font-medium">{file.label}</span>
+                    <span className="min-w-0 truncate font-mono text-2xs text-muted-foreground" data-testid="diff-names">{`${file.before ?? "new"} → ${file.after ?? "removed"}`}</span>
                   </header>
                   {file.tooLarge ? (
-                    <p className="unframed-agent-diff__empty">{file.patch}</p>
+                    <p className={EMPTY_CLASS}>{file.patch}</p>
                   ) : (
                     <PatchDiff
                       patch={file.patch}
-                      options={{ diffStyle: layout === "split" ? "split" : "unified", overflow: wrap ? "wrap" : "scroll", disableFileHeader: true, themeType: "system", theme: HIGHLIGHTER.theme, lineDiffType: "none" }}
+                      options={{
+                        diffStyle: layout === "split" ? "split" : "unified",
+                        overflow: wrap ? "wrap" : "scroll",
+                        disableFileHeader: true,
+                        themeType: "system",
+                        theme: HIGHLIGHTER.theme,
+                        lineDiffType: "none",
+                        unsafeCSS: DIFF_SURFACE_CSS,
+                      }}
                     />
                   )}
                 </article>
@@ -236,3 +239,14 @@ export const DiffPanel = ({ client, chat, diff }: { readonly client: ChatClient;
     </section>
   );
 };
+
+/** t3code's empty and loading lines in the diff panel. */
+const EMPTY_CLASS = "m-0 flex flex-1 items-center justify-center px-5 py-6 text-center text-xs text-muted-foreground/70";
+
+/** Added and removed line counts, in t3code's diff colours. */
+const DiffStat = ({ additions, deletions }: { readonly additions: number; readonly deletions: number }) => (
+  <span className="flex shrink-0 items-center gap-1 font-mono text-xs tabular-nums">
+    <span className="text-diff-addition" data-testid="diff-additions">{`+${additions}`}</span>
+    <span className="text-diff-deletion" data-testid="diff-deletions">{`−${deletions}`}</span>
+  </span>
+);

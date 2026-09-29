@@ -6,13 +6,6 @@ import { Sparkles } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { useEditor, type TLShapeId } from "tldraw";
-import "./agent.css";
-import "./rail/rail.css";
-import "./composer/tray.css";
-import "./composer/pickers.css";
-import "./composer/panels.css";
-import "./transcript/transcript.css";
-import "./diff/diff.css";
 import { registerSlot, type AgentTrayProps } from "../chrome/slots.ts";
 import { useSlots } from "../chrome/slots.ts";
 import { Button } from "~/components/ui/button";
@@ -63,9 +56,8 @@ const RailMotion = ({ open, children }: { readonly open: boolean; readonly child
 const ToolbarAgentButton = ({ client, onOpen }: { readonly client: ChatClient; readonly onOpen: () => void }) => {
   const { statuses } = useProviders(client);
   return (
-    <button
-      type="button"
-      className="unframed-bar-button unframed-bar-button--primary"
+    <Button
+      size="sm"
       title={providerMessage(statuses)}
       onPointerEnter={() => void client.loadProviders()}
       onFocus={() => void client.loadProviders()}
@@ -74,9 +66,9 @@ const ToolbarAgentButton = ({ client, onOpen }: { readonly client: ChatClient; r
         onOpen();
       }}
     >
-      <Sparkles size={14} aria-hidden />
+      <Sparkles aria-hidden />
       Agent
-    </button>
+    </Button>
   );
 };
 

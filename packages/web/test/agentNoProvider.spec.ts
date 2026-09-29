@@ -15,6 +15,8 @@ test("with no provider ready the rail shows each status and how to install, Send
     await openCanvas(page, engine);
     const panel = await openRail(page);
     const none = panel.getByTestId("no-provider");
+    await expect(none).toHaveAttribute("data-slot", "empty");
+    await expect(none.getByRole("button", { name: "Check again" })).toHaveAttribute("data-slot", "button");
     await expect(none.getByText(`No Claude or Codex found on this ${where}.`, { exact: true })).toBeVisible();
     await expect(none.getByText("Install one and sign in, and the agent runs on your plan. Nothing is sent anywhere until then.", { exact: true })).toBeVisible();
     const claude = none.locator("li[data-provider='claude']");
