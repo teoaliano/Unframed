@@ -8,6 +8,7 @@ import { AgentTray } from "../composer/AgentTray.tsx";
 import { noProviderReady } from "../providers.ts";
 import { ConfirmDialog } from "../ConfirmDialog.tsx";
 import { messageOf } from "../send.ts";
+import { useFocusMark } from "./focusMark.ts";
 import { NEW_CHAT, useChatClient, useChats, useProviders, useRailUi, useWatchedThread } from "../store.ts";
 import { EMPTY_CHAT, Transcript } from "../transcript/Transcript.tsx";
 import { NoProvider } from "./NoProvider.tsx";
@@ -77,6 +78,7 @@ export const AgentRail = ({ project, embedded, filterTo, onLocate, onOpenEditor,
   const activeSummary = visible.find((chat) => chat.id === active);
   // The session's failure shows here only when the transcript cannot say it: a failed turn's reply already ends with it.
   const activeChat = useWatchedThread(client, active);
+  useFocusMark(editor, activeSummary?.tags);
   const lastError = activeChat?.session?.lastError ?? null;
   const lastText = activeChat?.messages.at(-1)?.text ?? "";
   const errorLine = ui.error ?? (lastError !== null && lastError.trim() !== "" && !lastText.includes(lastError.trim()) ? lastError : undefined);
