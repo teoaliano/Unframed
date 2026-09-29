@@ -10,7 +10,6 @@ import {
   tabLabel,
   type InteractionMode,
   type RuntimeMode,
-  type UserQuestion,
 } from "@unframed/domain";
 import { ArrowLeft, ArrowUp, Paperclip, Square } from "lucide-react";
 import { createPortal } from "react-dom";
@@ -24,7 +23,7 @@ import { latestCompletedTool, returnQueued, sendQueued } from "../queue.tsx";
 import { Tip } from "../../chrome/ui.tsx";
 import { formatSize, useAttachments } from "./attachments.ts";
 import { StashMenu, useStash } from "./stash.tsx";
-import { ApprovalPanel, choiceOnly, openQuestion, PlanActions, PlanReady, QuestionPanel, waitingRequests } from "./panels.tsx";
+import { ApprovalPanel, choiceOnly, PlanActions, PlanReady, useQuestionAnswers, waitingRequests } from "./panels.tsx";
 import { platform } from "../../canvas/platform.ts";
 import { showNotice } from "../../toasts.tsx";
 import { AttachmentShelf } from "./AttachmentShelf.tsx";
@@ -362,18 +361,8 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
 
   // What waits on the person in this chat: an approval, a question, a plan to implement.
   const approvalPending = variant === "rail" && chat !== undefined && waitingRequests(chat, "approval").length > 0;
-  const asked = variant === "rail" ? openQuestion(chat) : undefined;
-  const [questionIndex, setQuestionIndex] = useState(0);
-  const [chosen, setChosen] = useState<Record<string, ReadonlyArray<string>>>({});
-  const ownAnswers = useRef<Record<string, string>>({});
-  const [submitting, setSubmitting] = useState(false);
-  useEffect(() => {
-    setQuestionIndex(0);
-    setChosen({});
-    ownAnswers.current = {};
-  }, [asked?.requestId]);
-  const question = asked?.questions[questionIndex];
-  const answering = asked !== undefined && question !== undefined;
+  const questions = useQuestionAnswers(client, variant === "rail" ? chat : undefined, box, text);
+  const { question, answering } = questions;
   const planFollowUp = variant === "rail" && chat !== undefined && !running && !answering && interactionMode === "plan" && attachments.staged.length === 0 ? actionablePlan(chat) : undefined;
 
   const placeholder = approvalPending
@@ -388,59 +377,7 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
           ? PLACEHOLDERS.noProvider
           : PLACEHOLDERS.default;
 
-  /** One question's answer: what was typed for it, else the options chosen. */
-  const answerOf = (current: UserQuestion, typed: string): string | string[] | undefined => {
-    if (typed.trim() !== "") return typed.trim();
-    const picked = chosen[current.id] ?? [];
-    if (picked.length === 0) return undefined;
-    return current.multiSelect ? [...picked] : picked[0];
-  };
-  const questionAnswered = answering && answerOf(question, text) !== undefined;
-  const allAnswered = answering && asked.questions.every((each) => answerOf(each, each.id === question.id ? text : (ownAnswers.current[each.id] ?? "")) !== undefined);
-  const lastQuestion = answering && questionIndex === asked.questions.length - 1;
-  const canSend = answering ? !submitting && (lastQuestion ? allAnswered : questionAnswered) : planFollowUp ? !sending : !noProvider && !sending && (text.trim() !== "" || attachments.staged.length > 0);
-
-  const moveQuestion = (index: number) => {
-    if (!asked || !question) return;
-    ownAnswers.current = { ...ownAnswers.current, [question.id]: box.current?.text() ?? "" };
-    setQuestionIndex(index);
-    const next = asked.questions[index];
-    box.current?.setText(next ? (ownAnswers.current[next.id] ?? "") : "");
-  };
-  const chooseOption = (current: UserQuestion, label: string) => {
-    setChosen((known) => {
-      const was = known[current.id] ?? [];
-      const next = current.multiSelect ? (was.includes(label) ? was.filter((item) => item !== label) : [...was, label]) : [label];
-      return { ...known, [current.id]: next };
-    });
-    if (!current.multiSelect && asked && questionIndex < asked.questions.length - 1) {
-      setTimeout(() => moveQuestion(questionIndex + 1), 200);
-    }
-  };
-  /** Send while a question waits: the next question, or every answer at once from the last. */
-  const answer = async () => {
-    if (!asked || !question || !chat || !canSend) return;
-    if (!lastQuestion) return moveQuestion(questionIndex + 1);
-    const typed = { ...ownAnswers.current, [question.id]: box.current?.text() ?? "" };
-    const answers: Record<string, string | string[]> = {};
-    for (const each of asked.questions) {
-      const value = answerOf(each, typed[each.id] ?? "");
-      if (value !== undefined) answers[each.id] = value;
-    }
-    setSubmitting(true);
-    try {
-      await client.dispatch({ type: "thread.user-input.respond", threadId: chat.id, requestId: asked.requestId, answers });
-      box.current?.clear();
-    } catch (error) {
-      client.reportError(error);
-    } finally {
-      setSubmitting(false);
-    }
-  };
-  const dismissQuestion = () => {
-    if (!asked || !chat) return;
-    void client.dispatch({ type: "thread.user-input.dismiss", threadId: chat.id, requestId: asked.requestId }).catch((error: unknown) => client.reportError(error));
-  };
+  const canSend = answering ? questions.ready : planFollowUp ? !sending : !noProvider && !sending && (text.trim() !== "" || attachments.staged.length > 0);
 
   /** Implement: the chat back to building, then the plan after t3code's prefix; or the same in a new chat named after it. */
   const implementPlan = async (inNewChat: boolean) => {
@@ -492,7 +429,7 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
     }
   };
   const send = async (invert = false) => {
-    if (answering) return answer();
+    if (answering) return questions.answer();
     const message = box.current?.text() ?? "";
     if (planFollowUp && message.trim() === "") return implementPlan(false);
     if (noProvider || (message.trim() === "" && attachments.staged.length === 0) || sending) return;
@@ -553,7 +490,7 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
   return (
     <div className="unframed-agent-tray" data-variant={variant} data-testid="agent-tray" ref={root}>
       {approvalPending && chat && <ApprovalPanel client={client} chat={chat} />}
-      {asked && question && <QuestionPanel state={{ ...asked, index: questionIndex, chosen }} onChoose={chooseOption} onDismiss={dismissQuestion} />}
+      {questions.panel}
       {planFollowUp && <PlanReady plan={planFollowUp} />}
       {dragging &&
         dropElement &&
@@ -655,13 +592,13 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
             )}
             {answering ? (
               <>
-                {questionIndex > 0 && (
-                  <button type="button" className="unframed-agent-button" disabled={submitting} onClick={() => moveQuestion(questionIndex - 1)}>
+                {questions.index > 0 && (
+                  <button type="button" className="unframed-agent-button" disabled={questions.submitting} onClick={() => questions.move(questions.index - 1)}>
                     Previous
                   </button>
                 )}
-                <button type="button" className="unframed-agent-button unframed-agent-button--primary" disabled={!canSend} onClick={() => void answer()}>
-                  {submitting ? "Submitting..." : !lastQuestion ? "Next question" : questionIndex > 0 ? "Submit answers" : "Submit answer"}
+                <button type="button" className="unframed-agent-button unframed-agent-button--primary" disabled={!canSend} onClick={() => void questions.answer()}>
+                  {questions.submitting ? "Submitting..." : !questions.lastQuestion ? "Next question" : questions.index > 0 ? "Submit answers" : "Submit answer"}
                 </button>
               </>
             ) : planFollowUp ? (

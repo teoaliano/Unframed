@@ -1,4 +1,4 @@
-import { agentShapeId, plainText, readRef, shapeKind } from "@unframed/domain";
+import { agentShapeId, plainText, readRef, shapeKind, shapeLabel } from "@unframed/domain";
 import { File } from "lucide-react";
 import type { Editor, TLAssetId, TLShape } from "tldraw";
 import { KIND_ICONS } from "./chips.tsx";

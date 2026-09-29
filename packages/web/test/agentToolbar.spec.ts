@@ -72,7 +72,9 @@ test("while the tray is open a clicked shape joins the context and stays selecte
 
   await clickShape(page, "shape:p2");
   await expect(chips(page)).toHaveText(["Alpha", "Beta"]);
-  await clickShape(page, "shape:p1");
+  // Again, past tldraw's double-click window: a double click would start a new prompt.
+  await page.waitForTimeout(600);
+  await clickShape(page, "shape:p2");
   await expect(chips(page)).toHaveText(["Alpha", "Beta"]);
   await promptBox(composer(page)).click();
   await page.keyboard.press("Escape");

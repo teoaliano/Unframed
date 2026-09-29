@@ -2,9 +2,10 @@ import { Menu } from "@base-ui/react/menu";
 import type { ApprovalDecision } from "@unframed/contracts";
 import { openRequests, planTitle, type Chat, type ChatActivity, type ProposedPlan, type UserQuestion } from "@unframed/domain";
 import { ChevronDown, ChevronRight, Ellipsis, ListChecks, X } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState, type RefObject } from "react";
 import { itemClass, popupClass } from "../../chrome/ui.tsx";
 import type { ChatClient } from "../store.ts";
+import type { PromptEditorHandle } from "./PromptEditor.tsx";
 import { record } from "../record.ts";
 
 /** The chat's open requests of a kind that its running turn waits on: a turn that ended waits on nothing. */
@@ -238,4 +239,81 @@ export const PlanActions = ({ refine, busy, onSend, onNewChat }: { readonly refi
       </Menu.Root>
     </div>
   );
+};
+
+/**
+ * Answering the chat's open question from the composer (t3code's flow): an option chosen
+ * in the panel or an answer typed in the box, per question; Send moves to the next and
+ * sends every answer from the last. `text` is the box's current draft.
+ */
+export const useQuestionAnswers = (client: ChatClient, chat: Chat | undefined, box: RefObject<PromptEditorHandle | null>, text: string) => {
+  const asked = openQuestion(chat);
+  const [index, setIndex] = useState(0);
+  const [chosen, setChosen] = useState<Record<string, ReadonlyArray<string>>>({});
+  const typedAnswers = useRef<Record<string, string>>({});
+  const [submitting, setSubmitting] = useState(false);
+  useEffect(() => {
+    setIndex(0);
+    setChosen({});
+    typedAnswers.current = {};
+  }, [asked?.requestId]);
+  const question = asked?.questions[index];
+
+  /** One question's answer: what was typed for it, else the options chosen. */
+  const answerOf = (current: UserQuestion, typed: string): string | string[] | undefined => {
+    if (typed.trim() !== "") return typed.trim();
+    const picked = chosen[current.id] ?? [];
+    if (picked.length === 0) return undefined;
+    return current.multiSelect ? [...picked] : picked[0];
+  };
+  const lastQuestion = asked !== undefined && index === asked.questions.length - 1;
+  const ready =
+    asked !== undefined &&
+    question !== undefined &&
+    !submitting &&
+    (lastQuestion
+      ? asked.questions.every((each) => answerOf(each, each.id === question.id ? text : (typedAnswers.current[each.id] ?? "")) !== undefined)
+      : answerOf(question, text) !== undefined);
+
+  const move = (to: number) => {
+    if (!asked || !question) return;
+    typedAnswers.current = { ...typedAnswers.current, [question.id]: box.current?.text() ?? "" };
+    setIndex(to);
+    const next = asked.questions[to];
+    box.current?.setText(next ? (typedAnswers.current[next.id] ?? "") : "");
+  };
+  const choose = (current: UserQuestion, label: string) => {
+    setChosen((known) => {
+      const was = known[current.id] ?? [];
+      const next = current.multiSelect ? (was.includes(label) ? was.filter((item) => item !== label) : [...was, label]) : [label];
+      return { ...known, [current.id]: next };
+    });
+    if (!current.multiSelect && asked && index < asked.questions.length - 1) setTimeout(() => move(index + 1), 200);
+  };
+  const answer = async () => {
+    if (!asked || !question || !chat || !ready) return;
+    if (!lastQuestion) return move(index + 1);
+    const typed = { ...typedAnswers.current, [question.id]: box.current?.text() ?? "" };
+    const answers: Record<string, string | string[]> = {};
+    for (const each of asked.questions) {
+      const value = answerOf(each, typed[each.id] ?? "");
+      if (value !== undefined) answers[each.id] = value;
+    }
+    setSubmitting(true);
+    try {
+      await client.dispatch({ type: "thread.user-input.respond", threadId: chat.id, requestId: asked.requestId, answers });
+      box.current?.clear();
+    } catch (error) {
+      client.reportError(error);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+  const dismiss = () => {
+    if (!asked || !chat) return;
+    void client.dispatch({ type: "thread.user-input.dismiss", threadId: chat.id, requestId: asked.requestId }).catch((error: unknown) => client.reportError(error));
+  };
+  const panel =
+    asked && question ? <QuestionPanel state={{ ...asked, index, chosen }} onChoose={choose} onDismiss={dismiss} /> : null;
+  return { question, answering: question !== undefined, index, lastQuestion, ready, submitting, move, answer, panel };
 };
