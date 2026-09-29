@@ -5,7 +5,7 @@ import { edge, group, image, imageOutput, journal, prompt, snapshot, type Json }
 /** The graph after replaying `ops` over a version-1 snapshot, and how many of them applied. */
 const replay = (nodes: Json[], edges: Json[], ops: Json[]) => {
   const { graph, stats } = rebuild(snapshot(nodes, edges), journal(ops));
-  return { nodes: graph.nodes as Json[], edges: graph.edges as Json[], applied: stats.journalEntriesApplied };
+  return { nodes: graph.nodes as unknown as Json[], edges: graph.edges as unknown as Json[], applied: stats.journalEntriesApplied };
 };
 
 const ids = (list: Json[]) => list.map((each) => each.id);
