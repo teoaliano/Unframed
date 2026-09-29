@@ -21,7 +21,7 @@ Checked 2026-09-28: Node v24.21.0, pnpm 9.15.4 through Corepack, Google Chrome, 
 | 07 | agent runtime | 6 | merged | ba20d56 | 55/55 tasks; 1356 tests, 185 browser tests green on build |
 | 08 | agent chat | 7 | building | | merge before 10 |
 | 09 | artifacts | 8 | pending | | |
-| 10 | settings and OpenRouter | 7 | building | | merge after 08 |
+| 10 | settings and OpenRouter | 7 | building | | 58/58 tasks done on its branch; adding the oauth.cancel render rule below; merges after 08 |
 | 11 | legacy import | 9 | pending | | |
 
 ## Decisions
@@ -29,6 +29,10 @@ Checked 2026-09-28: Node v24.21.0, pnpm 9.15.4 through Corepack, Google Chrome, 
 Each entry names the decision, the answer, and the spec it changed.
 
 1. Repository license (spec 01, the published bundle): MIT. The root `LICENSE` names Matteo Aliano as copyright holder. Spec 01 now says the bundle carries the MIT root `LICENSE`.
+
+Settled by the orchestrator from the specs (no decision needed from the person):
+
+- Spec 10, `oauth.cancel` after `done` (commit 9949bd9): the cancel deletes the key, so it is a key removal under index contract 5 and spec 10's own removal step 4. It now fails pending render jobs with the key-removed error, the same as Remove key. The spec 10 agent had read it as "delete the key only".
 
 ## Deferred items
 
@@ -39,7 +43,7 @@ Each entry names the decision, the answer, and the spec it changed.
 - Spec 07: review items left alone, the 800-line `runtime.ts` and duplicated contract and domain type definitions (a compile-time check in `layer.ts` catches drift).
 - Spec 06, task 15: the recipe bar's Agent button shows only once spec 08 registers the Agent tray. The spec 08 agent must cover it.
 - Spec 06: review smells left alone, the 10 copies of `messageOf` across files and the paste fix-up that overlaps domain `instantiate`.
-- Spec 04: if a pending render job's project folder is gone, the collector fails and the sweep retries every tick, downloading the clip each time. Spec 10 fails such records before it deletes or moves a project; the spec 10 agent must check the sweep stops.
+- Spec 09: motion-render runs are not in spec 10's live-run check for an output folder change yet. The spec 09 agent must add them.
 - Spec 04, task 21: the test moves the image through the room, not with a mouse drag, because dragging a selected shape moves the whole selection.
 - Spec 05: some logic is duplicated between `textRuns.ts` and spec 03's `runs.ts` (run-id minting, the `of` lookup, top-index lookup), and between the image and text catalogue functions. The agent left spec 03's files alone because spec 04 edits them in parallel. Fold them together after wave 4.
 - Spec 05: a text result whose sidecar could not be written gets `sidecar: null`, and duplicating it drops its result meta, because the copy rules read null as an unfilled placeholder.
