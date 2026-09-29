@@ -51,7 +51,8 @@ test("Agent on the toolbar is filled, and opens the Agent tray saying which chat
   await target(page).getByRole("button", { name: "Back to tools (Esc)" }).click();
   await expect(composer(page)).toHaveCount(0);
   await toolbar(page).getByRole("button", { name: "Agent" }).click();
-  await expect(composer(page)).toBeVisible();
+  // The box takes the keyboard as the tray opens; Escape from there closes it.
+  await expect(promptBox(composer(page))).toBeFocused();
   await page.keyboard.press("Escape");
   await expect(composer(page)).toHaveCount(0);
   await expect(toolbar(page).getByRole("button", { name: "Agent" })).toBeVisible();

@@ -1,6 +1,5 @@
-import { activityLabel, agentShapeId, formatWorkDuration, revertSkipLine, type Chat, type ChatMessage, type ChatTurn } from "@unframed/domain";
+import { activityLabel, agentShapeId, buildTimeline, type TimelineBlock, formatWorkDuration, revertSkipLine, type Chat, type ChatMessage, type ChatTurn } from "@unframed/domain";
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
-import { buildTimeline, type Block } from "./timeline.ts";
 import { WorkEntries } from "./WorkLog.tsx";
 import { useMaybeEditor } from "tldraw";
 import { describeShape } from "../composer/chips.tsx";
@@ -195,7 +194,7 @@ export const Transcript = ({ client, chatId, embedded, onLocate, onOpenEditor }:
       onOpenEditor={onOpenEditor}
     />
   );
-  const block = (item: Block) => {
+  const block = (item: TimelineBlock) => {
     if (item.kind === "work") return <WorkEntries key={item.id} entries={item.entries} />;
     if (item.kind === "retry") return <RetryLine key={item.activity.id} payload={item.activity.payload} />;
     if (item.kind === "plan") return <PlanCard key={item.plan.id} plan={item.plan.planMarkdown} />;
