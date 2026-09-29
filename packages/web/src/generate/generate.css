@@ -163,6 +163,23 @@
   white-space: nowrap;
 }
 
+/* Under the tray while one group is selected: its recipe, and the buttons that write it. */
+.unframed-composer-recipe {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 10px 8px;
+}
+
+/* One selected group is one source: a chip reading its @name. */
+.unframed-composer-count[data-chip="group"] {
+  padding: 1px 7px;
+  border: 1px solid var(--unframed-border);
+  border-radius: 999px;
+  background-color: var(--unframed-overlay-hover);
+  color: var(--unframed-text-accent);
+}
+
 .unframed-segmented {
   display: flex;
   gap: 3px;

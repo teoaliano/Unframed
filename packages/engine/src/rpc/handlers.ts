@@ -15,6 +15,8 @@ import { revealFiles } from "../reveal.ts";
 import { Config } from "../services.ts";
 import { SettingsStore } from "../settingsStore.ts";
 import { guardHandlers } from "./guardHandlers.ts";
+import { copyPresetFiles } from "../library/presetCopier.ts";
+import { PresetStore } from "../library/presetStore.ts";
 
 export const rpcHandlersLayer = UnframedRpcs.toLayer(
   Effect.gen(function* () {
@@ -29,6 +31,7 @@ export const rpcHandlersLayer = UnframedRpcs.toLayer(
     const videoCatalogue = yield* VideoCatalogue;
     const runs = yield* Runs;
     const renderJobs = yield* RenderJobs;
+    const presets = yield* PresetStore;
     const context = yield* Effect.context<SettingsStore | Projects | Native>();
 
     const testOnly = <A, E>(run: () => Effect.Effect<A, E>) =>
@@ -70,6 +73,10 @@ export const rpcHandlersLayer = UnframedRpcs.toLayer(
       "video.start": (request) => renderJobs.start(request),
       "video.poll": (request) => renderJobs.poll(request),
       "video.forget": ({ project, jobId }) => renderJobs.forget(project, jobId),
+      "library.list": () => presets.list,
+      "library.save": (input) => presets.save(input),
+      "library.delete": ({ id }) => presets.remove(id),
+      "library.copyFiles": ({ project, files }) => presets.serialised(copyPresetFiles(media, project, files)),
       "testCanvas.read": ({ project }) =>
         testOnly(() =>
           Effect.all({ clock: rooms.clock(project), records: Effect.map(rooms.read(project), (records) => [...records]) }),

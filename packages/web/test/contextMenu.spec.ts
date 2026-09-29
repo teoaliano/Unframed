@@ -71,7 +71,8 @@ test("a right-clicked prompt is selected alone and offers its reference and the 
   await page.mouse.click(...Object.values(await centre(scene)) as [number, number]);
 
   const { headings, items } = await rightClick(page, await centre(shapeOnScreen(page, "shape:starter-subject")));
-  expect(headings).toEqual(["Reference", "Edit"]);
+  // A selection always gets the Library section, whose Add to library the canvas registers.
+  expect(headings).toEqual(["Reference", "Edit", "Library"]);
   expect(items.slice(0, 5)).toEqual(["Copy @100", "Cut ⌘X", "Copy ⌘C", "Group ⌘G", expect.not.stringMatching(/^(Paste|Ungroup)/)]);
   // Each edit item once: tldraw's own cut, copy and group are gone.
   expect(items.filter((item) => /^(Cut|Copy|Paste|Group|Ungroup)( ⌘| ⇧|$)/.test(item))).toEqual(["Cut ⌘X", "Copy ⌘C", "Group ⌘G"]);
@@ -92,7 +93,7 @@ test("a filled image offers reveal and copy as image; inside a selection of two 
 
   const one = await centre(shapeOnScreen(page, "shape:one"));
   const single = await rightClick(page, one);
-  expect(single.headings).toEqual(["Image", "Edit"]);
+  expect(single.headings).toEqual(["Image", "Edit", "Library"]);
   expect(single.items.slice(0, 5)).toEqual(["Reveal in Finder", "Copy as image", "Cut ⌘X", "Copy ⌘C", "Group ⌘G"]);
   await closeMenu(page);
 
@@ -112,7 +113,7 @@ test("a right-clicked group offers its reference and Ungroup, not Group", async 
   await putRecords(engine, [groupRecord("shape:group", "160", { x: 440, y: 60 })]);
   const box = (await shapeOnScreen(page, "shape:group").boundingBox())!;
   const { headings, items } = await rightClick(page, { x: box.x + 10, y: box.y - 8 });
-  expect(headings).toEqual(["Reference", "Edit"]);
+  expect(headings).toEqual(["Reference", "Edit", "Library"]);
   expect(items.slice(0, 4)).toEqual(["Copy @160", "Cut ⌘X", "Copy ⌘C", "Ungroup ⇧⌘G"]);
   expect(items).not.toContain("Group ⌘G");
 });

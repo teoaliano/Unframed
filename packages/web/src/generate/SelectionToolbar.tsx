@@ -1,15 +1,18 @@
 import { resultMetaOf, UnframedError, type ResultRecipe } from "@unframed/contracts";
 import { composeSelection, resultLine, toolbarState, type ToolbarState } from "@unframed/domain";
-import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useEditor, useValue, type Editor, type TLShapeId } from "tldraw";
+import { groupRecipeOf } from "../canvas/groupRecipes.ts";
 import { Tip } from "../chrome/ui.tsx";
 import { useSlots } from "../chrome/slots.ts";
-import { useCanvasProject, useEngine } from "../context.ts";
+import { useCanvasProject, useEngine, useSettings } from "../context.ts";
 import { showError } from "../toasts.tsx";
-import { loadCatalogue } from "./catalogue.ts";
+import { loadCatalogue, useKnownCatalogue, usePricing } from "./catalogue.ts";
 import { Composer } from "./composer/Composer.tsx";
 import { assetOf, canvasShapes, resultShapes, toolbarShape } from "./facts.ts";
 import { placeFloating, type ScreenBox } from "./floating.ts";
+import { mediumDefinition, type RunSource } from "./mediumRegistry.ts";
+import { openOnRecipe, recipeProps, recipeRunProgress, runGroupRecipe } from "./recipeRuns.ts";
 import { repeatResult, varyBlocked, varyCapMessage } from "./results.ts";
 import { closeComposer, composerState, leaveRecipeMode, openComposer } from "./state.ts";
 
@@ -253,10 +256,74 @@ const ResultBar = ({ shapeId, agent }: { shapeId: TLShapeId; agent: ReactNode })
   );
 };
 
+/**
+ * The bar of a selection holding one recipe group: Generate runs the recipe at once (a
+ * Free recipe stops at the final prompt), the hint names the group and the estimate, and
+ * Recipe opens the composer on it.
+ */
+const RecipeBar = ({ state, agent }: { state: Extract<ToolbarState, { kind: "recipe" }>; agent: ReactNode }) => {
+  const editor = useEditor();
+  const engine = useEngine();
+  const project = useCanvasProject();
+  const settings = useSettings();
+  const groupId = state.groupId as TLShapeId;
+  const recipe = useValue("group recipe", () => groupRecipeOf(editor.getShape(groupId)), [editor, groupId]);
+  const medium = recipe?.medium ?? "image";
+  const definition = mediumDefinition(medium);
+  const catalogue = useKnownCatalogue(engine, medium);
+  const entry = catalogue?.models.find((model) => model.id === recipe?.model);
+  const props = useMemo(() => (recipe && definition ? recipeProps(definition, recipe, entry) : {}), [recipe, definition, entry]);
+  const pricing = usePricing(engine, definition ?? mediumDefinition("image")!, recipe?.model);
+  const source = useValue(
+    "recipe source",
+    (): RunSource => {
+      const shapes = canvasShapes(editor);
+      const selected = editor.getSelectedShapeIds();
+      return { kind: "selection", composition: composeSelection({ shapes, selected, instruction: "", medium }), selected, shapes, instruction: "" };
+    },
+    [editor, medium],
+  );
+  const estimate = definition && recipe && catalogue ? definition.estimate({ pricing, props, source, entry }) : undefined;
+  const progress = useValue("recipe progress", () => recipeRunProgress(editor, groupId), [editor, groupId]);
+  const [busy, setBusy] = useState(false);
+
+  const generate = async () => {
+    if (busy || !recipe) return;
+    setBusy(true);
+    try {
+      await runGroupRecipe({ editor, engine, project, groupId, recipe, hasKey: settings?.hasKey ?? true });
+    } catch (error) {
+      showError(messageOf(error));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const label = progress ? `Generating ${progress.settled} / ${progress.total}…` : typeof state.runs === "number" && state.runs > 1 ? `Generate ${state.runs}×` : "Generate";
+  const Overlay = definition?.Overlay;
+  return (
+    <div className="unframed-bar">
+      <button type="button" className={buttonClass("primary")} disabled={busy || progress !== undefined} onClick={() => void generate()}>
+        {label}
+      </button>
+      <span className="unframed-bar__hint" data-testid="selection-hint">
+        {`@${state.name}${estimate === undefined ? "" : ` · ${estimate.replace(/^est\. /, "")}`}`}
+      </span>
+      <button type="button" className={buttonClass("quiet")} onClick={() => recipe && openOnRecipe(editor, groupId, recipe)}>
+        Recipe
+      </button>
+      {agent}
+      {Overlay && <Overlay project={project} onSent={() => undefined} onMenuOpen={() => undefined} />}
+    </div>
+  );
+};
+
 const Bar = ({ state, onGenerate, agent }: { state: Exclude<ToolbarState, { kind: "none" }>; onGenerate: () => void; agent: ReactNode }) => {
   const editor = useEditor();
   const { openArtifact } = useSlots();
   switch (state.kind) {
+    case "recipe":
+      return <RecipeBar state={state} agent={agent} />;
     case "result":
       return <ResultBar shapeId={state.shapeId as TLShapeId} agent={agent} />;
     case "generating":

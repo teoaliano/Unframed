@@ -120,7 +120,7 @@ export const videoStartRequest = async (input: {
 
 const entryFor = (model: string | undefined) => knownCatalogue("video")?.models.find((entry) => entry.id === model);
 
-const send = async ({ editor, engine, project, values, source }: SendInput) => {
+const send = async ({ editor, engine, project, values, source, remember }: SendInput) => {
   const anchor =
     source.kind === "selection"
       ? (selectionBox(editor, source.selected as TLShapeId[]) ?? { x: 0, y: 0, w: 0, h: 0 })
@@ -137,13 +137,16 @@ const send = async ({ editor, engine, project, values, source }: SendInput) => {
     anchor,
     ...(typeof sidecar === "string" ? { of: { sidecar, action: "recipe" as const } } : {}),
   });
-  await engine.call("video.start", request);
+  const started = await engine.call("video.start", request);
   const { shareLocalVideos, ...props } = values.props;
-  void saveLastUsed(engine, "video", {
-    ...(values.picked && values.model !== undefined ? { model: values.model } : {}),
-    props,
-    ...(typeof shareLocalVideos === "boolean" ? { shareLocalVideos } : {}),
-  });
+  if (remember !== false) {
+    void saveLastUsed(engine, "video", {
+      ...(values.picked && values.model !== undefined ? { model: values.model } : {}),
+      props,
+      ...(typeof shareLocalVideos === "boolean" ? { shareLocalVideos } : {}),
+    });
+  }
+  return { shapeIds: [started.shapeId] };
 };
 
 /** The tray's props from a recipe: its recorded params, the duration as the tray names it. */

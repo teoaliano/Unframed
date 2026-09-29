@@ -22,6 +22,7 @@ import {
   type Editor,
   type TLAssetId,
   type TLShape,
+  type TLShapeId,
   type TLUiContextMenuProps,
   type VecLike,
 } from "tldraw";
@@ -33,6 +34,7 @@ import { useActiveProject } from "../project/activation.ts";
 import { showError } from "../toasts.tsx";
 import { addShape, kindOfAddAction } from "./addShapes.ts";
 import { imagePng } from "./externalContent.ts";
+import { groupRecipeOf, setGroupRecipe } from "./groupRecipes.ts";
 import { ungroup, wrapSelection } from "./groups.ts";
 import { platform } from "./platform.ts";
 
@@ -48,6 +50,7 @@ const assetSrc = (editor: Editor, shape: TLShape): string | undefined => {
 const menuShape = (editor: Editor, shape: TLShape): MenuShape => {
   const marker = shape.type === "image" || shape.type === "video" ? parseAssetMarker(assetSrc(editor, shape) ?? "") : undefined;
   const ref = readRef(shape);
+  const parent = editor.getShape(shape.parentId as TLShapeId);
   return {
     id: shape.id,
     type: shape.type,
@@ -55,6 +58,8 @@ const menuShape = (editor: Editor, shape: TLShape): MenuShape => {
     ...(marker?.kind === "project-file" ? { file: marker.file } : {}),
     ...(marker?.kind === "link" ? { link: true } : {}),
     ...(isTextResult(shape) ? { textResult: true } : {}),
+    ...(parent?.type === "frame" ? { parent: parent.id } : {}),
+    ...(groupRecipeOf(shape) ? { recipe: true } : {}),
   };
 };
 
@@ -152,7 +157,11 @@ const UnframedSections = () => {
         ungroup(editor, selectedGroups.length > 0 ? selectedGroups.map((shape) => shape.id) : opened.clicked ? [opened.clicked.id] : []);
         return;
       }
+      case "clear-recipe":
+        if (opened.clicked) setGroupRecipe(editor, opened.clicked.id, undefined);
+        return;
       case "add-to-library":
+        selectClickedWhenEmpty();
         currentSlots().addToLibrary?.(editor);
         return;
       default:
@@ -167,7 +176,21 @@ const UnframedSections = () => {
           <div className="unframed-menu-heading" role="presentation">
             {section.heading}
           </div>
-          {section.items.map((item) => (
+          {section.items.map((item) =>
+            "disabled" in item && item.disabled ? (
+              // tldraw leaves a disabled item out of its context menu; this one stays, greyed, and says why.
+              <div
+                key={item.action}
+                role="menuitem"
+                aria-disabled="true"
+                data-disabled=""
+                title={item.tooltip}
+                className="tlui-button tlui-button__menu unframed-menu-disabled"
+                data-testid={`context-menu.unframed-${item.action}`}
+              >
+                <span className="tlui-button__label">{item.label}</span>
+              </div>
+            ) : (
             <TldrawUiMenuItem
               key={item.action}
               id={`unframed-${item.action}`}
@@ -178,7 +201,8 @@ const UnframedSections = () => {
                 run(item);
               }}
             />
-          ))}
+            ),
+          )}
         </TldrawUiMenuGroup>
       ))}
     </>

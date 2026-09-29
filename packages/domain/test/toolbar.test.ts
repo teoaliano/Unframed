@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { batchHint, resultLine, selectionHint, toolbarState, type ToolbarShape } from "../src/index.ts";
 
 const promptShape: ToolbarShape = { id: "p", kind: "prompt" };
+const recipeGroup = (id: string, ref: string, runs: number | "free"): ToolbarShape => ({ id, kind: "group", ref, recipe: { runs } });
 const emptyImage: ToolbarShape = { id: "e", kind: "image" };
 const result = (id: string, batchId = `b-${id}`, cost: number | null = 0.1, extra: Partial<ToolbarShape> = {}): ToolbarShape => ({
   id,
@@ -29,6 +30,11 @@ describe("the toolbar's state", () => {
     ["exactly one group: its name", [{ id: "g", kind: "group", ref: "character" }], true, { kind: "generate", hint: "@character" }],
     ["an unusable selection: Agent only", [emptyImage], false, { kind: "agent" }],
     ["a result among other shapes is a plain selection", [result("r"), promptShape], true, { kind: "generate", hint: "2 selected" }],
+    ["one recipe group: its recipe runs from the bar", [recipeGroup("g", "character", 3)], true, { kind: "recipe", groupId: "g", name: "character", runs: 3 }],
+    ["one recipe group with loose shapes: the recipe still applies", [promptShape, recipeGroup("g", "character", "free"), emptyImage], true, { kind: "recipe", groupId: "g", name: "character", runs: "free" }],
+    ["one recipe group and a plain group", [recipeGroup("g", "character", 1), { id: "h", kind: "group", ref: "set" }], true, { kind: "recipe", groupId: "g", name: "character", runs: 1 }],
+    ["a recipe group with nothing to run from still shows its recipe", [recipeGroup("g", "empty", 1)], false, { kind: "recipe", groupId: "g", name: "empty", runs: 1 }],
+    ["two recipe groups: no recipe applies", [recipeGroup("g", "a", 2), recipeGroup("h", "b", 2)], true, { kind: "generate", hint: "2 selected" }],
   ])("%s", (_case, selected, usable, expected) => {
     expect(toolbarState({ selected, usable, results: selected.filter((shape) => shape.result) })).toEqual(expected);
   });

@@ -1,5 +1,5 @@
 import { parseAssetMarker, projectFileMarker, UnframedError } from "@unframed/contracts";
-import { isVideoLink, META_REF_TYPES, pastedFileName, rewriteRichTextTokens, VIDEO_FILE_LIMIT, VIDEO_TOO_LARGE_MESSAGE } from "@unframed/domain";
+import { isVideoLink, META_REF_TYPES, pastedFileName, readRef, rewriteRichTextTokens, uniqueName, VIDEO_FILE_LIMIT, VIDEO_TOO_LARGE_MESSAGE } from "@unframed/domain";
 import {
   AssetRecordType,
   createShapeId,
@@ -251,6 +251,8 @@ const fixUpPastedShapes = async (editor: Editor, ctx: ContentContext, pasted: Un
   }
 
   const ids = new Map<string, string>();
+  // Refs are unique across the canvas, so a pasted group's name is taken by any of them.
+  const taken = new Set(editor.getCurrentPageShapes().flatMap((shape) => readRef(shape) ?? []));
   for (const shape of content.shapes) {
     if (META_REF_TYPES.has(shape.type)) {
       const meta = shape.meta as { ref?: string };
@@ -259,11 +261,11 @@ const fixUpPastedShapes = async (editor: Editor, ctx: ContentContext, pasted: Un
       shape.meta = { ...shape.meta, ref: fresh };
     } else if (shape.type === "frame") {
       const props = shape.props as { name: string };
-      if (NUMERIC.test(props.name)) {
-        const fresh = ctx.minter.mint();
-        ids.set(props.name, fresh);
-        props.name = fresh;
-      }
+      // A named group keeps its name, suffixed when taken (spec 06); a minted one is minted again.
+      const fresh = NUMERIC.test(props.name) || props.name === "" ? ctx.minter.mint() : uniqueName(props.name, taken);
+      taken.add(fresh);
+      if (props.name !== "") ids.set(props.name, fresh);
+      props.name = fresh;
     }
   }
   for (const shape of content.shapes) {

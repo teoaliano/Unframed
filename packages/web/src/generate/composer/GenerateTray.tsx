@@ -1,13 +1,16 @@
 import { UnframedError, type Medium } from "@unframed/contracts";
-import { composeSelection, resolveReferences, selectionHint } from "@unframed/domain";
+import { composeSelection, readRef, recipeEquals, recipeFromTray, resolveReferences, selectionHint } from "@unframed/domain";
 import { ArrowUp, LoaderCircle } from "lucide-react";
 import { useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState, type Ref } from "react";
-import { useEditor, useValue } from "tldraw";
+import { useEditor, useValue, type TLShapeId } from "tldraw";
+import { appliedRecipe, groupRecipeOf, setGroupRecipe } from "../../canvas/groupRecipes.ts";
+import { Tip } from "../../chrome/ui.tsx";
 import { useEngine, useSettings } from "../../context.ts";
 import { useCatalogue, usePricing } from "../catalogue.ts";
 import { canvasShapes, resultShapes, toolbarShape } from "../facts.ts";
 import { loadLastUsed, type LastUsed } from "../lastUsed.ts";
 import { mediumDefinition, registeredMedia, type PropValue, type RunSource, type TrayValues } from "../mediumRegistry.ts";
+import { recipeProps } from "../recipeRuns.ts";
 import { composerState, setMedium, type RecipeMode } from "../state.ts";
 import { trayView } from "../trayView.ts";
 import { InstructionEditor } from "./InstructionEditor.tsx";
@@ -21,6 +24,66 @@ export const INSTRUCTION_PLACEHOLDER = "What should this make?";
 /** How many sources a recipe records: its reference slots plus its prompt parts. */
 const recipeSources = (recipe: RecipeMode): number =>
   recipe.recipe.references.length + recipe.recipe.selectionPrompt.split(/\n\n+/).filter((part) => part.trim() !== "").length;
+
+const quietButton =
+  "h-6 cursor-pointer rounded-inner border-0 bg-transparent px-1.5 text-[12.5px] text-secondary hover:bg-hover hover:text-primary disabled:cursor-default disabled:opacity-50";
+const plainButton = "h-6 cursor-pointer rounded-inner border border-line bg-transparent px-2 text-[12.5px] text-primary hover:bg-hover";
+
+/**
+ * The line under the tray while the selection is exactly one group: Save as recipe for a
+ * plain group; for a recipe group, whether the tray matches its recipe, Update recipe when
+ * it does not, and Clear recipe. Only these buttons write to the group.
+ */
+const RecipeLine = ({
+  groupId,
+  medium,
+  values,
+  onDone,
+}: {
+  readonly groupId: TLShapeId;
+  readonly medium: Medium;
+  readonly values: TrayValues | undefined;
+  /** The button pressed goes away with the change, so the keyboard goes back to the box. */
+  readonly onDone: () => void;
+}) => {
+  const editor = useEditor();
+  const name = useValue("group name", () => readRef(editor.getShape(groupId) ?? {}) ?? "", [editor, groupId]);
+  const standing = useValue("group recipe", () => groupRecipeOf(editor.getShape(groupId)), [editor, groupId]);
+  const current = values?.model === undefined ? undefined : recipeFromTray({ medium, model: values.model, props: values.props });
+  const save = () => {
+    if (current) setGroupRecipe(editor, groupId, current);
+    onDone();
+  };
+  const clear = () => {
+    setGroupRecipe(editor, groupId, undefined);
+    onDone();
+  };
+  if (!standing) {
+    return (
+      <div className="unframed-composer-recipe" data-testid="recipe-line">
+        <Tip label={`Keep these settings on @${name}. Its Generate uses them.`} side="top">
+          <button type="button" className={quietButton} disabled={!current} onClick={save}>
+            Save as recipe
+          </button>
+        </Tip>
+      </div>
+    );
+  }
+  return (
+    <div className="unframed-composer-recipe" data-testid="recipe-line">
+      {current && recipeEquals(current, standing) ? (
+        <span className="text-[12.5px] text-secondary">Recipe of @{name}</span>
+      ) : (
+        <button type="button" className={plainButton} disabled={!current} onClick={save}>
+          Update recipe
+        </button>
+      )}
+      <button type="button" className={quietButton} onClick={clear}>
+        Clear recipe
+      </button>
+    </div>
+  );
+};
 
 export interface TrayHandle {
   /** Sends, unless a send is already being acknowledged or something stops it. */
@@ -68,7 +131,13 @@ export const GenerateTray = ({ project, recipe, onSent, onMenuOpen, handle }: Ge
 
   const entryOf = useCallback((model: string | undefined) => catalogue?.models.find((entry) => entry.id === model), [catalogue]);
 
-  // The tray opens on the recipe's values in recipe mode, else the last-used values, else the defaults.
+  // The one recipe group the selection held when the composer opened (spec 06): its recipe is the tray's start.
+  const [standing] = useState(() => (recipe ? undefined : appliedRecipe(editor)?.recipe));
+  useEffect(() => {
+    if (standing && composerState(editor).get().medium !== standing.medium) setMedium(editor, standing.medium);
+  }, [editor, standing]);
+
+  // The tray opens on the recipe's values in recipe mode or on a recipe group, else the last-used values, else the defaults.
   useEffect(() => {
     if (valuesByMedium[medium] || !catalogue || lastUsed === undefined) return;
     let values: TrayValues;
@@ -76,6 +145,9 @@ export const GenerateTray = ({ project, recipe, onSent, onMenuOpen, handle }: Ge
       // The recorded model is not a pick: only the model dialog makes one.
       const recorded = definition.fromRecipe(recipe.recipe);
       values = { model: recipe.recipe.model, picked: false, props: definition.keep(recorded, definition.params(entryOf(recipe.recipe.model), recorded)) };
+    } else if (standing && standing.medium === medium) {
+      const model = standing.model === "" ? catalogue.default : standing.model;
+      values = { model, picked: false, props: recipeProps(definition, standing, entryOf(model)) };
     } else {
       const stored = lastUsed?.model !== undefined && catalogue.models.some((entry) => entry.id === lastUsed.model) ? lastUsed.model : undefined;
       const model = stored ?? catalogue.default;
@@ -83,7 +155,7 @@ export const GenerateTray = ({ project, recipe, onSent, onMenuOpen, handle }: Ge
       values = { model, picked: stored !== undefined, props: lastUsed ? definition.keep(lastUsed.props, params) : definition.defaults(params) };
     }
     setValuesByMedium((current) => ({ ...current, [medium]: values }));
-  }, [valuesByMedium, medium, catalogue, lastUsed, recipe, definition, entryOf]);
+  }, [valuesByMedium, medium, catalogue, lastUsed, recipe, standing, definition, entryOf]);
 
   const values = valuesByMedium[medium];
   const entry = entryOf(values?.model);
@@ -98,6 +170,15 @@ export const GenerateTray = ({ project, recipe, onSent, onMenuOpen, handle }: Ge
   const hint = useValue(
     "source count",
     () => selectionHint(editor.getSelectedShapes().map((shape) => toolbarShape(editor, shape)), resultShapes(editor)),
+    [editor],
+  );
+
+  const onlyGroup = useValue(
+    "only group",
+    () => {
+      const only = editor.getOnlySelectedShape();
+      return only?.type === "frame" ? only.id : undefined;
+    },
     [editor],
   );
 
@@ -169,7 +250,7 @@ export const GenerateTray = ({ project, recipe, onSent, onMenuOpen, handle }: Ge
             </button>
           ))}
         </div>
-        <span className="unframed-composer-count" data-testid="source-count">
+        <span className="unframed-composer-count" data-testid="source-count" data-chip={!recipe && hint.startsWith("@") ? "group" : undefined}>
           {recipe ? `recipe · ${recipeSources(recipe)} sources` : hint}
         </span>
       </div>
@@ -235,6 +316,7 @@ export const GenerateTray = ({ project, recipe, onSent, onMenuOpen, handle }: Ge
         onChange={(props: Record<string, PropValue>) => values && setValues({ ...values, props })}
         onMenuOpen={onTrayMenu}
       />
+      {onlyGroup !== undefined && !recipe && <RecipeLine groupId={onlyGroup} medium={medium} values={values} onDone={() => box.current?.element()?.focus()} />}
       <ModelDialog
         open={dialogOpen}
         onOpenChange={(open) => {

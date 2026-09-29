@@ -63,7 +63,8 @@ export class MediaStore extends Context.Service<
     ) => Promise<SavedFile>;
     /** Writes a regenerable display preview of `file` into the cache folder. No sidecar. */
     readonly savePreview: (project: string, file: string, size: PreviewSize, body: AsyncIterable<Buffer>) => Promise<{ bytes: number }>;
-    readonly copy: (project: string, file: string, from?: string) => Effect.Effect<string, UnframedError>;
+    /** `ofProject` names the source project in the copy's sidecar (spec 06's preset copies). */
+    readonly copy: (project: string, file: string, from?: string, ofProject?: string) => Effect.Effect<string, UnframedError>;
     /** The absolute project folder, when the project exists. */
     readonly folder: (project: string) => Promise<string | undefined>;
   }
@@ -208,7 +209,7 @@ export const mediaStoreLayer = Layer.effect(
       }
     };
 
-    const copy = (project: string, file: string, from?: string) =>
+    const copy = (project: string, file: string, from?: string, ofProject?: string) =>
       Effect.tryPromise({
         try: async () => {
           const sourceDir = await folder(from ?? project);
@@ -238,7 +239,7 @@ export const mediaStoreLayer = Layer.effect(
             renameSync(temp, join(targetDir, target));
             writeFileSync(
               join(targetDir, sidecarFileName(target)),
-              sidecarText({ source: "copy", fileName, mime, bytes: info.size, at: new Date().toISOString(), of: file }),
+              sidecarText({ source: "copy", fileName, mime, bytes: info.size, at: new Date().toISOString(), of: file, ...(ofProject === undefined ? {} : { ofProject }) }),
             );
             return target;
           } catch (error) {

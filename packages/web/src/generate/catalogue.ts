@@ -41,6 +41,22 @@ export const loadCatalogue = async (engine: EngineConnection, medium: Catalogue)
   return answer;
 };
 
+/** The session's catalogue for a medium, fetched only when there is none yet: for surfaces that are not a tray (spec 06's recipe bar). */
+export const useKnownCatalogue = (engine: EngineConnection, medium: Catalogue): ModelsListAnswer | undefined => {
+  const [answer, setAnswer] = useState(() => lists.get(medium));
+  useEffect(() => {
+    let live = true;
+    loadCatalogue(engine, medium).then(
+      (next) => live && setAnswer(next),
+      () => undefined,
+    );
+    return () => {
+      live = false;
+    };
+  }, [engine, medium]);
+  return answer ?? lists.get(medium);
+};
+
 const pricing = new Map<string, Promise<unknown>>();
 
 /**

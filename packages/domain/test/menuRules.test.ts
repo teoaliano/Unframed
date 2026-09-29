@@ -105,6 +105,28 @@ describe("contextMenu", () => {
     expect(canvas.some((section) => section.section === "library")).toBe(false);
   });
 
+  it.each<[string, MenuShape, MenuShape[], { disabled?: boolean; tooltip?: string }]>([
+    ["one group: enabled", group, [group], {}],
+    ["one group with a loose page: enabled", group, [group, page], {}],
+    ["loose groupable shapes: enabled", prompt, [prompt, image, mark], {}],
+    ["a member of the selected group is not loose", group, [group, { ...prompt, parent: "g" }], {}],
+    ["two groups: disabled with the reason", group, [group, { ...group, id: "g2", ref: "106" }], { disabled: true, tooltip: "A preset is one group. Select one group, or shapes outside any group." }],
+    ["a group and a loose prompt: disabled with the reason", group, [group, prompt], { disabled: true, tooltip: "A preset is one group. Select one group, or shapes outside any group." }],
+    ["nothing groupable: disabled", page, [page], { disabled: true }],
+  ])("Add to library with %s", (_case, target, selection, state) => {
+    const item = shape(target, selection, { libraryRegistered: true }).find((section) => section.section === "library")?.items[0];
+    expect(item).toEqual({ action: "add-to-library", label: "Add to library", ...state });
+  });
+
+  it("offers Clear recipe in the Edit section of a right-clicked recipe group", () => {
+    const recipeGroup: MenuShape = { ...group, recipe: true };
+    expect(outline(shape(recipeGroup))).toEqual([
+      ["reference", ["Copy @105"]],
+      ["edit", ["Cut ⌘X", "Copy ⌘C", "Ungroup ⇧⌘G", "Clear recipe"]],
+    ]);
+    expect(outline(shape(group)).flatMap(([, items]) => items)).not.toContain("Clear recipe");
+  });
+
   it("offers the add menu's items on empty canvas, and paste when there is something to paste", () => {
     expect(outline(contextMenu({ ...base, target: { kind: "canvas" }, selection: [] }))).toEqual([
       ["inputs", ["Prompt", "Image", "Video", "Group"]],

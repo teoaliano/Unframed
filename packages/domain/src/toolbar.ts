@@ -1,4 +1,5 @@
 import type { ShapeKind } from "./canvasShapes.ts";
+import type { RunsValue } from "./runsValue.ts";
 
 /** The facts of a result's meta the toolbar reads. */
 export interface ResultFacts {
@@ -20,6 +21,8 @@ export interface ToolbarShape {
   /** The shape carries a run marker. */
   readonly generating?: boolean | undefined;
   readonly textResult?: boolean | undefined;
+  /** Present on a group with a standing recipe (spec 06): how many outputs it makes. */
+  readonly recipe?: { readonly runs: RunsValue } | undefined;
 }
 
 export interface ToolbarInput {
@@ -38,7 +41,15 @@ export type ToolbarState =
   | { readonly kind: "generating"; readonly shapeId: string }
   | { readonly kind: "open"; readonly shapeId: string }
   | { readonly kind: "generate"; readonly hint: string }
+  /** Spec 06: exactly one recipe group among the selection. Its Generate runs the recipe at once. */
+  | { readonly kind: "recipe"; readonly groupId: string; readonly name: string; readonly runs: RunsValue }
   | { readonly kind: "agent" };
+
+/** The one recipe group among `selected`, when there is exactly one: its recipe applies to the run. */
+export const recipeGroupOf = (selected: ReadonlyArray<ToolbarShape>): ToolbarShape | undefined => {
+  const groups = selected.filter((shape) => shape.kind === "group" && shape.recipe !== undefined);
+  return groups.length === 1 ? groups[0] : undefined;
+};
 
 export const formatCost = (cost: number): string => `$${cost.toFixed(4)}`;
 
@@ -82,6 +93,8 @@ export const toolbarState = (input: ToolbarInput): ToolbarState => {
     }
     if ((only.kind === "page" || only.kind === "motion") && only.file) return { kind: "open", shapeId: only.id };
   }
+  const recipeGroup = recipeGroupOf(selected);
+  if (recipeGroup?.recipe) return { kind: "recipe", groupId: recipeGroup.id, name: recipeGroup.ref ?? "", runs: recipeGroup.recipe.runs };
   if (input.usable) return { kind: "generate", hint: selectionHint(selected, input.results) };
   return { kind: "agent" };
 };
