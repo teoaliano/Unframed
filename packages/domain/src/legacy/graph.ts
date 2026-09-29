@@ -111,7 +111,7 @@ const insertAt = <T>(list: T[], item: T, index: unknown): T[] => {
 const touching = (edge: LegacyEdge, ids: ReadonlySet<string>) => ids.has(edge.source) || ids.has(edge.target);
 
 /** One op applied as the old app applied it: the graph after it, or `undefined` when it is rejected. */
-const applyOp = (graph: Working, value: unknown): Working | undefined => {
+export const applyLegacyOp = (graph: Working, value: unknown): Working | undefined => {
   const op = record(value);
   if (!op) return undefined;
   const find = (id: unknown) => graph.nodes.find((node) => node.id === id);
@@ -192,7 +192,7 @@ const applyOp = (graph: Working, value: unknown): Working | undefined => {
       if (!Array.isArray(op.ops)) return undefined;
       let next: Working | undefined = graph;
       for (const inner of op.ops) {
-        next = applyOp(next, inner);
+        next = applyLegacyOp(next, inner);
         if (!next) return undefined;
       }
       return next;
@@ -202,4 +202,3 @@ const applyOp = (graph: Working, value: unknown): Working | undefined => {
   }
 };
 
-export { applyOp as applyLegacyOp };

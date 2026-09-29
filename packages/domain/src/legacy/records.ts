@@ -2,6 +2,7 @@
  * An imported canvas as tldraw records (spec 11): the shapes and assets the room stores,
  * in the canvas schema, with Unframed's fields where spec 02, 03, 04 and 06 put them.
  */
+import { richTextOf } from "../agent/canvasTools.ts";
 import type { ContentAsset, ContentShape } from "../presetRules.ts";
 import type { LegacyMedia, LegacyShape } from "./canvas.ts";
 
@@ -19,12 +20,6 @@ export const legacyIndexKey = (n: number): string => {
   if (n < 61 + 62 ** 2) return `b${digits(n - 61, 2)}`;
   return `c${digits(n - 61 - 62 ** 2, 3)}`;
 };
-
-/** Plain text as tldraw rich text: one paragraph per line. */
-export const richTextOf = (text: string) => ({
-  type: "doc",
-  content: text.split("\n").map((line) => (line === "" ? { type: "paragraph" } : { type: "paragraph", content: [{ type: "text", text: line }] })),
-});
 
 export interface RecordIds {
   /** The canvas page the top-level shapes sit on. */

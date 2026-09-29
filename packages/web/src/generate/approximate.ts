@@ -18,13 +18,13 @@ import { entryFor, fromRecipe, recordedSettings, videoStartRequest } from "./vid
 /** What the Recipe mode of an imported result says above the box. */
 export const IMPORTED_RECIPE_NOTE = "Imported from the old app. It sent:";
 
-/** The recipe's sources still on the canvas, composed as a selection with `instruction`. */
-export const liveSource = (editor: Editor, recipe: ResultRecipe, instruction: string): Extract<RunSource, { kind: "selection" }> => {
+/** The recipe's sources still on the canvas, composed as a selection with `instruction`, answering for result `shapeId`. */
+export const liveSource = (editor: Editor, shapeId: string, recipe: ResultRecipe, instruction: string): Extract<RunSource, { kind: "selection" }> => {
   const shapes = canvasShapes(editor);
   const present = new Set(shapes.map((shape) => shape.id));
   const selected = recipe.sources.filter((id) => present.has(id));
   const composition = composeSelection({ shapes, selected, instruction, medium: recipe.medium });
-  return { kind: "selection", composition, selected, shapes, instruction };
+  return { kind: "selection", composition, selected, shapes, instruction, answersFor: shapeId };
 };
 
 /** Vary: the result's own file, after everything the sources send. */
@@ -41,7 +41,7 @@ export const repeatApproximate = async (
   action: "regenerate" | "vary",
   recipe: ResultRecipe,
 ): Promise<void> => {
-  const live = liveSource(editor, recipe, "");
+  const live = liveSource(editor, shapeId, recipe, "");
   if (live.composition.error !== undefined) throw new Error(live.composition.error);
   const shape = editor.getShape(shapeId);
   const own = shape ? mediaSource(editor, shape).file : undefined;

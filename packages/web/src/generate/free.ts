@@ -36,7 +36,7 @@ export const mintBatchId = (): string => `b-${Date.now()}`;
 
 /** What stops a Free send before anything is paid for. */
 export const freeBlockers = (source: RunSource): string[] => {
-  if (source.kind !== "selection") return [NO_FREE_SOURCE];
+  if (source.kind !== "selection" || source.answersFor !== undefined) return [NO_FREE_SOURCE];
   const found = freeSource(source);
   if (found.source === undefined) return [NO_FREE_SOURCE];
   if (found.error !== undefined) return [found.error];

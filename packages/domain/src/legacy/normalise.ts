@@ -3,7 +3,7 @@
  * keys dropped, membership repaired and ids made usable as `@id`s, and a note for each
  * repair the person should hear about.
  */
-import { keptEdge, keptNode, LEGACY_ID, LEGACY_OUTPUT_TYPES, type LegacyEdge, type LegacyGraph, type LegacyNode } from "./graph.ts";
+import { keptEdge, keptNode, LEGACY_ID, type LegacyEdge, type LegacyGraph, type LegacyNode } from "./graph.ts";
 import { RefMinter } from "./minter.ts";
 import { reportText, type ReportItem } from "./report.ts";
 
@@ -95,4 +95,3 @@ export const normalise = (input: LegacyGraph): Normalised => {
   return { graph: { nodes: repaired, edges }, notes };
 };
 
-export { LEGACY_OUTPUT_TYPES };

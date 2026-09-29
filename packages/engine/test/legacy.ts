@@ -3,11 +3,12 @@
  * samples in `assets/legacy-samples/`. Tests change the copy, never the samples.
  */
 import { createHash } from "node:crypto";
-import { cp, readdir, readFile } from "node:fs/promises";
+import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
-import { makeTempDir, repoRoot, startEngine, type EngineOptions, type TestEngine } from "./harness.ts";
+import { makeTempDir, startEngine, type EngineOptions, type TestEngine } from "./harness.ts";
+import { copySamples } from "./legacySamples.ts";
 
-export const SAMPLES = join(repoRoot, "assets", "legacy-samples");
+export { SAMPLES } from "./legacySamples.ts";
 export const SAMPLE_PROJECTS = ["everything", "legacy-snapshot", "broken-snapshot"] as const;
 
 export interface LegacyEngine {
@@ -19,7 +20,7 @@ export interface LegacyEngine {
 /** A data folder whose output folder holds the samples, before any engine has seen it. */
 export const legacyDataDir = async (): Promise<string> => {
   const dataDir = await makeTempDir("unframed-legacy-");
-  await cp(SAMPLES, join(dataDir, "output"), { recursive: true, filter: (source) => !source.endsWith("README.md") });
+  await copySamples(join(dataDir, "output"));
   return dataDir;
 };
 

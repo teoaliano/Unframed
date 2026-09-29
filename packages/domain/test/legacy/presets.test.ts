@@ -13,7 +13,7 @@ const output = (id: string, type: string, x: number, y: number, data: Json = {})
 
 /** The converted content's root group and its members by `@id`. */
 const contentOf = (converted: ReturnType<typeof convert>) => {
-  const content = converted!.preset.content;
+  const content = converted!.content;
   const root = content.shapes.find((shape) => shape.id === content.rootShapeIds[0])!;
   const member = (ref: string): ContentShape | undefined =>
     content.shapes.find((shape) => shape.parentId === root.id && (shape.type === "frame" ? shape.props.name === ref : shape.meta.ref === ref));
@@ -29,7 +29,7 @@ describe("convertPreset: what is an old preset", () => {
   });
 
   it("keeps id, name, summary, needs and savedAt, is a user preset marked legacy, and leaves the schema to be stamped", () => {
-    const { preset } = convert(sample("user-mf2k8a1c"))!;
+    const preset = convert(sample("user-mf2k8a1c"))!;
     expect(preset).toMatchObject({
       format: 2,
       id: "user-mf2k8a1c",
@@ -41,24 +41,24 @@ describe("convertPreset: what is an old preset", () => {
       legacy: true,
     });
     expect(preset.content.schema).toBeNull();
-    expect(convert(sample("user-mf0a3z7d"))!.preset).not.toHaveProperty("savedAt");
+    expect(convert(sample("user-mf0a3z7d"))!).not.toHaveProperty("savedAt");
   });
 });
 
 describe("convertPreset: the recipe output", () => {
   it("is the output that feeds no other output, and makes a recipe preset of its medium", () => {
     const converted = convert(sample("user-mf2k8a1c"))!;
-    expect(converted.preset).toMatchObject({ kind: "recipe", medium: "image" });
+    expect(converted).toMatchObject({ kind: "recipe", medium: "image" });
     expect(contentOf(converted).root.meta.unframed).toEqual({ recipe: { medium: "image", model: "openai/gpt-image-2", params: {}, runs: "free" } });
-    expect(describePresetContent(converted.preset.content)).toEqual({ ok: true, kind: "recipe", medium: "image" });
+    expect(describePresetContent(converted.content)).toEqual({ ok: true, kind: "recipe", medium: "image" });
   });
 
   it("is the topmost of several, ties left to right", () => {
     const tie = convert(oldPreset([output("right", "imageOutput", 500, 0), output("left", "videoOutput", 100, 0), output("low", "textOutput", 0, 400, { text: "", result: "" })]))!;
-    expect(tie.preset).toMatchObject({ kind: "recipe", medium: "video" });
+    expect(tie).toMatchObject({ kind: "recipe", medium: "video" });
     expect(tie.notes).toEqual(["@right, a second image output, was not kept.", "@low, a second text output, was not kept."]);
     const clip = convert(sample("user-mf1x9k4b"))!;
-    expect(clip.preset).toMatchObject({ kind: "recipe", medium: "video" });
+    expect(clip).toMatchObject({ kind: "recipe", medium: "video" });
     expect(contentOf(clip).root.meta.unframed).toEqual({
       recipe: { medium: "video", model: "bytedance/seedance-2.0", params: { duration: 5, resolution: "480p", inputMode: "reference", shareLocalVideos: true }, runs: 1 },
     });
@@ -66,14 +66,14 @@ describe("convertPreset: the recipe output", () => {
 
   it("makes a lone text output a text recipe group", () => {
     const converted = convert(sample("user-mf1b5y2e"))!;
-    expect(converted.preset).toMatchObject({ kind: "recipe", medium: "text" });
+    expect(converted).toMatchObject({ kind: "recipe", medium: "text" });
     expect(contentOf(converted).root.meta.unframed).toEqual({ recipe: { medium: "text", model: "google/gemini-3.5-flash-lite", params: {}, runs: 1 } });
   });
 
   it("is missing from a block with no output, which is a plain group", () => {
     const converted = convert(sample("user-mf0a3z7d"))!;
-    expect(converted.preset.kind).toBe("group");
-    expect(converted.preset).not.toHaveProperty("medium");
+    expect(converted.kind).toBe("group");
+    expect(converted).not.toHaveProperty("medium");
     expect(contentOf(converted).root.meta).toEqual({});
   });
 });
@@ -82,7 +82,7 @@ describe("convertPreset: what is not kept, and its notes", () => {
   it("drops old results and run markers, noting only the results", () => {
     expect(convert(sample("user-mf2k8a1c"))!.notes).toContain("Its old results were not kept.");
     expect(convert(sample("user-mf1x9k4b"))!.notes).not.toContain("Its old results were not kept.");
-    const content = JSON.stringify(convert(sample("user-mf1x9k4b"))!.preset.content);
+    const content = JSON.stringify(convert(sample("user-mf1x9k4b"))!.content);
     expect(content).not.toContain("vid_0c3e5a7b91");
     expect(content).not.toContain("running");
   });
@@ -100,8 +100,8 @@ describe("convertPreset: what is not kept, and its notes", () => {
     expect(answer).toMatchObject({ type: "text", meta: { ref: "planner", unframed: { result: { medium: "text", sidecar: null } } } });
     const instructions = members.find((shape) => shape.type === "text" && JSON.stringify(shape.props.richText).includes("Split it."))!;
     expect(instructions.meta.unframed).toBeUndefined();
-    expect(converted.preset.kind).toBe("recipe");
-    expect(JSON.stringify(converted.preset.content)).not.toContain("some/model");
+    expect(converted.kind).toBe("recipe");
+    expect(JSON.stringify(converted.content)).not.toContain("some/model");
     const sampled = convert(sample("user-mf2k8a1c"))!;
     expect(sampled.notes).toEqual(["Its old results were not kept.", "The text step @planner lost its model. Run it with the composer."]);
   });
@@ -117,7 +117,7 @@ describe("convertPreset: what is not kept, and its notes", () => {
       "Group @pose was flattened into the preset's group.",
       "Pages and motions are not kept in a preset.",
     ]);
-    expect(converted.preset.content.shapes.some((shape) => shape.type === "page" || shape.type === "motion")).toBe(false);
+    expect(converted.content.shapes.some((shape) => shape.type === "page" || shape.type === "motion")).toBe(false);
   });
 
   it("puts a text recipe output's instructions at the bottom of the group, below its answer", () => {
@@ -204,13 +204,13 @@ describe("convertPreset: media", () => {
 
 describe("inserting a converted preset", () => {
   it("copies its inline bytes and its target-project files in, and no data URL reaches the canvas", () => {
-    const content = convert(sample("user-mf1x9k4b"))!.preset.content;
+    const content = convert(sample("user-mf1x9k4b"))!.content;
     const files = presetFiles(content);
     expect(files).toEqual([{ dataUrl: expect.stringMatching(/^data:image\/png;base64,/) }]);
     const resolved = resolvePresetFiles(content, [{ file: "9-upload.png" }], () => "asset:new");
     expect(resolved.missing).toBe(0);
     expect(resolved.content.assets.map((asset) => asset.props.src)).toEqual(["project-file:9-upload.png", "https://media.example.com/clips/fox-trot.mp4"]);
-    const hiker = convert(sample("user-mf0a3z7d"))!.preset.content;
+    const hiker = convert(sample("user-mf0a3z7d"))!.content;
     expect(presetFiles(hiker)).toEqual([{ project: "", file: "1789030920022-hiker.png" }]);
     const gone = resolvePresetFiles(hiker, [{ missing: true }], () => "asset:new");
     expect(gone.missing).toBe(1);

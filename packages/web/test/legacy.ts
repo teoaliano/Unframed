@@ -2,16 +2,15 @@
  * Browser-seam helpers for spec 11: the app over an output folder copied from the old-format
  * samples, opening `everything` unless told otherwise. Tests change the copy, never the samples.
  */
-import { cp, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Locator, Page } from "@playwright/test";
-import { repoRoot, type TestEngine } from "../../engine/test/engineProcess.ts";
+import type { TestEngine } from "../../engine/test/engineProcess.ts";
+import { copySamples } from "../../engine/test/legacySamples.ts";
 import { videoJobs, type VideoJobs } from "../../engine/test/videoStub.ts";
 import { expect } from "./fixtures.ts";
 import { startTextGeneration, type TextGeneration } from "./texting.ts";
-
-export const SAMPLES = join(repoRoot, "assets", "legacy-samples");
 
 export interface LegacyApp extends TextGeneration {
   /** The video endpoints: every job the samples hold stays in flight unless a test scripts it. */
@@ -28,7 +27,7 @@ export interface LegacyApp extends TextGeneration {
 export const startLegacyApp = async (options: { readonly project?: string; readonly prepare?: (outputDir: string) => Promise<void> } = {}): Promise<LegacyApp> => {
   const dataDir = await mkdtemp(join(tmpdir(), "unframed-legacy-web-"));
   const outputDir = join(dataDir, "output");
-  await cp(SAMPLES, outputDir, { recursive: true, filter: (source) => !source.endsWith("README.md") });
+  await copySamples(outputDir);
   // The boot sweep must write nothing, or every write prunes the old done and failed records
   // before an import reads them: the other project's job, long unreachable, would be given
   // up on, and every other pending render stays in flight (below).

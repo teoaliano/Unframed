@@ -29,12 +29,12 @@ import {
 } from "@unframed/domain";
 import { writeFirstCanvas } from "../canvas/room.ts";
 import { errorText } from "../log.ts";
+import { DATABASE_FILE } from "../paths.ts";
 import { readJobsLenient } from "../video/jobStore.ts";
 import { writeImportReport } from "./reportTable.ts";
 
 export const SNAPSHOT_FILE = "graph.json";
 export const JOURNAL_FILE = "graph.log";
-const DATABASE_FILE = "unframed.sqlite";
 const TEMP_PREFIX = `${DATABASE_FILE}.import-`;
 
 /** How the import of one folder stands, for the web's loading and failure states. */

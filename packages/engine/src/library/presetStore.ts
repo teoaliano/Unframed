@@ -13,6 +13,7 @@ import {
   convertPreset,
   describePresetContent,
   joinJsonArray,
+  legacyDefaults,
   PRESET_EMPTY_NAME_MESSAGE,
   PRESET_NOT_ONE_GROUP_MESSAGE,
   splitJsonArray,
@@ -96,9 +97,9 @@ const onQueue = <T>(outputDir: string, task: () => Promise<T>): Promise<T> => {
 
 /** An old entry (spec 11) as the preset it lists as, stamped with the canvas schema its records are written in. */
 const converted = (value: unknown, defaults: LegacyDefaults): Preset | undefined => {
-  const result = convertPreset(value, { defaults });
-  if (!result) return undefined;
-  const preset = { ...result.preset, content: { ...result.preset.content, schema: canvasSchema().serialize() } };
+  const old = convertPreset(value, { defaults });
+  if (!old) return undefined;
+  const preset = { ...old, content: { ...old.content, schema: canvasSchema().serialize() } };
   return listed(preset) ? preset : undefined;
 };
 
@@ -122,7 +123,7 @@ export const presetStoreLayer = Layer.effect(
         Effect.tryPromise({ try: () => onQueue(outputDir, () => task(presetsPath(outputDir))), catch: failure }),
       );
 
-    const defaults = Effect.map(settings.read, (live): LegacyDefaults => ({ image: live.imageModel, video: live.videoModel, text: live.textModel }));
+    const defaults = Effect.map(settings.read, legacyDefaults);
 
     const list = Effect.flatMap(defaults, (models) =>
       queued(async (path) => {

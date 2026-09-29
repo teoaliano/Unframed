@@ -38,6 +38,11 @@ export type RunSource =
       readonly shapes: ReadonlyArray<CanvasShape>;
       /** The box's text as typed, before resolution. */
       readonly instruction: string;
+      /**
+       * Recipe mode over an imported result (spec 11), which runs from its live sources: the
+       * result the run answers for. Its outputs land beside it, and Free is not offered.
+       */
+      readonly answersFor?: string | undefined;
     }
   /** `instruction` is the box's text resolved like a prompt's; `error` is its circular reference. */
   | { readonly kind: "recipe"; readonly recipe: RecipeMode; readonly instruction: string; readonly error?: string | undefined };

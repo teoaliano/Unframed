@@ -111,6 +111,26 @@ describe("rule 2: a box around the sources", () => {
   });
 });
 
+describe("a text output feeding another output", () => {
+  it("is mapped first even when it sits below, so its answer is boxed and recorded as a source", () => {
+    const mapped = mapNodes(
+      [
+        prompt("100", "a fox", { ...at(0, 0), width: 100, height: 30 }),
+        output("110", "textOutput", 0, 200, { text: "", result: "A red fox." }),
+        image("120", { ...at(300, 200), width: 100, data: { file: "a.png", fileName: "a.png", aspect: 1 } }),
+        output("140", "imageOutput", 1200, 0, { results: [{ savedPath: "/x/r.png", runIndex: 0 }] }),
+      ],
+      [edge("100", "110"), edge("110", "140"), edge("120", "140")],
+      { files: ["a.png", "r.png"] },
+    );
+    const { key } = shapesOf(mapped);
+    expect(key("answer:110")).toMatchObject({ parent: "group:140" });
+    expect(key("node:120")).toMatchObject({ parent: "group:140" });
+    expect(section(mapped, "changed")).toContain("@140 was an image output. It is now a recipe group around its 2 sources.");
+    expect(key("result:140:0").result!.sources).toEqual(["answer:110", "node:120"]);
+  });
+});
+
 describe("rule 2 refused", () => {
   it("when a source also feeds another output", () => {
     const mapped = mapSample("everything");

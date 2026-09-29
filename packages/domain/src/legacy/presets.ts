@@ -6,13 +6,27 @@
  */
 import { wrapBox, type Box } from "../grouping.ts";
 import { imageDimensions } from "../imageDimensions.ts";
-import { linkedVideoName } from "../media.ts";
+import { isHttpsLink, linkedVideoName } from "../media.ts";
 import type { Preset } from "../presetRules.ts";
 import type { GroupRecipe } from "../recipeRules.ts";
 import { projectSlug } from "../slug.ts";
-import type { LegacyMedia, LegacyShape } from "./canvas.ts";
-import { finite, LEGACY_OUTPUT_TYPES, record, type LegacyGraph, type LegacyNode } from "./graph.ts";
-import { legacyTextBox, resultRecipe } from "./mapper.ts";
+import type { LegacyMedia, LegacyResult } from "./canvas.ts";
+import { LEGACY_OUTPUT_TYPES, record, type LegacyGraph, type LegacyNode } from "./graph.ts";
+import {
+  answerOf,
+  answerShape,
+  belowLowest,
+  DEFAULT_SIZE,
+  grownToHold,
+  instructionsOf,
+  instructionsShape,
+  MEDIA_WIDTH,
+  nonEmpty,
+  positiveAspect,
+  resultRecipe,
+  VIDEO_ASPECT,
+  type Shape,
+} from "./layout.ts";
 import { mimeByExtension, parseDataUrl } from "./media.ts";
 import { RefMinter } from "./minter.ts";
 import { legacyPromptTexts, normalise } from "./normalise.ts";
@@ -34,16 +48,8 @@ export const presetNotes = {
 /** The line the Library shows under a converted preset's summary. */
 export const legacyPresetLine = (notes: ReadonlyArray<string>): string => (notes.length === 0 ? "From the old app." : `From the old app. Not kept: ${notes.join(" ")}`);
 
-const MEDIA_WIDTH = 240;
-const SIDE_MARGIN = 28;
-const TOP_MARGIN = 56;
-const GAP = 28;
-const DEFAULT_SIZE = { prompt: { w: 240, h: 160 }, group: { w: 420, h: 280 }, output: { w: 320, h: 200 } } as const;
 const PAGE = "page:page";
-
-type Shape = { -readonly [K in keyof LegacyShape]: LegacyShape[K] };
-
-const text = (value: unknown): string | undefined => (typeof value === "string" && value !== "" ? value : undefined);
+const STEP_GAP = 28;
 
 const isOldPreset = (entry: Record<string, unknown>): boolean =>
   entry.format === undefined && typeof entry.id === "string" && Array.isArray(record(entry.fragment)?.nodes);
@@ -51,12 +57,12 @@ const isOldPreset = (entry: Record<string, unknown>): boolean =>
 /** An old fragment's media as a preset carries it: a pointer to a file of the target project, bytes inline, or a link. */
 const mediaOf = (node: LegacyNode, w: number, h: number): LegacyMedia | undefined => {
   const fileName = typeof node.data.fileName === "string" ? node.data.fileName : "";
-  const file = text(node.data.file);
+  const file = nonEmpty(node.data.file);
   if (file !== undefined && !file.includes("/") && !file.includes("\\") && !file.includes("..")) {
     return { kind: "preset-file", file, name: fileName || file, mime: mimeByExtension(file) ?? "application/octet-stream", w: Math.round(w), h: Math.round(h) };
   }
   const url = node.data.dataUrl;
-  if (node.type === "video" && typeof url === "string" && /^https:\/\/.+/.test(url)) {
+  if (node.type === "video" && typeof url === "string" && isHttpsLink(url)) {
     return { kind: "link", url, name: fileName || linkedVideoName(url), w: Math.round(720 * (w / h)), h: 720 };
   }
   const parsed = parseDataUrl(url);
@@ -65,96 +71,93 @@ const mediaOf = (node: LegacyNode, w: number, h: number): LegacyMedia | undefine
   return { kind: "data", url, name: fileName || "upload", mime: parsed.mime, w: size?.w ?? Math.round(w), h: size?.h ?? Math.round(h) };
 };
 
+/** A prompt, image or video node as a preset shape at `at`. */
+const inputShape = (node: LegacyNode, at: { x: number; y: number }, parent?: string): Shape | undefined => {
+  const base = { key: `node:${node.id}`, ref: node.id, ...at, ...(parent === undefined ? {} : { parent }) };
+  if (node.type === "prompt") {
+    return { ...base, kind: "prompt", w: node.width ?? DEFAULT_SIZE.prompt.w, h: node.height ?? DEFAULT_SIZE.prompt.h, text: typeof node.data.text === "string" ? node.data.text : "", sized: node.data.sized === true };
+  }
+  if (node.type !== "image" && node.type !== "video") return undefined;
+  const w = node.width ?? MEDIA_WIDTH;
+  const stated = positiveAspect(node.data.aspect);
+  const media = mediaOf(node, w, w / (stated ?? (node.type === "video" ? VIDEO_ASPECT : 1)));
+  const aspect = stated ?? (media?.kind === "data" ? media.w / media.h : node.type === "video" ? VIDEO_ASPECT : 1);
+  return { ...base, kind: node.type, w, h: w / aspect, ...(media ? { media } : {}) };
+};
+
+/** A text answer's result meta. A text step lost its model, so its `model` is empty. */
+const answerResult = (output: LegacyNode, model: string): LegacyResult => ({
+  sidecar: null,
+  medium: "text",
+  model,
+  batchId: `legacy-${output.id}`,
+  runIndex: 1,
+  runCount: 1,
+  cost: null,
+  sources: [],
+  recipe: resultRecipe("text", model, {}, [], undefined),
+});
+
+/** Puts `shape` in `group` below its lowest member, growing the box to hold it. */
+const placeBelow = (group: Shape, shapes: Shape[], shape: Shape) => {
+  const placed: Shape = { ...shape, ...belowLowest(shapes.filter((each) => each.parent === group.key)), parent: group.key };
+  Object.assign(group, grownToHold(group, placed));
+  shapes.push(placed);
+};
+
 /**
- * An old preset as a spec 06 preset, or `undefined` for an entry that is not one (no
- * `format` and a fragment of nodes). `defaults` are the app's models, for an output that
- * names none.
+ * An old preset as a spec 06 preset with its notes, or `undefined` for an entry that is not
+ * one (it has a `format`, or no fragment of nodes). `defaults` are the app's models, for an
+ * output that names none. The numbered steps are spec 11's.
  */
-export const convertPreset = (entry: unknown, options: { readonly defaults: LegacyDefaults }): { readonly preset: ConvertedPreset; readonly notes: ReadonlyArray<string> } | undefined => {
+export const convertPreset = (entry: unknown, options: { readonly defaults: LegacyDefaults }): ConvertedPreset | undefined => {
   const value = record(entry);
   if (!value || !isOldPreset(value)) return undefined;
   const fragment = record(value.fragment)!;
   const notes: string[] = [];
+  // Step 1: legacy types migrate as a project's do; run markers and produced output are never read, and old results are noted.
   const { graph } = normalise({ nodes: fragment.nodes, edges: Array.isArray(fragment.edges) ? fragment.edges : [] } as unknown as LegacyGraph);
   const byId = new Map(graph.nodes.map((node) => [node.id, node]));
   const minter = new RefMinter(
     graph.nodes.map((node) => node.id),
     legacyPromptTexts(graph.nodes),
   );
-
-  // 1. Run markers and produced output are dropped.
-  const produced = graph.nodes.some((node) => (node.type === "imageOutput" && Array.isArray(node.data.results) && node.data.results.length > 0) || (node.type === "videoOutput" && record(node.data.result) !== undefined));
+  const produced = graph.nodes.some(
+    (node) => (node.type === "imageOutput" && Array.isArray(node.data.results) && node.data.results.length > 0) || (node.type === "videoOutput" && record(node.data.result) !== undefined),
+  );
   if (produced) notes.push(presetNotes.results);
 
-  // 2. The recipe output: not a source of another output, topmost, ties left to right.
+  // Step 2: the recipe output feeds no other output; the topmost, ties left to right.
   const outputs = graph.nodes.filter((node) => LEGACY_OUTPUT_TYPES.has(node.type));
-  const feedsAnOutput = (node: LegacyNode) => graph.edges.some((edge) => edge.source === node.id && byId.get(edge.target) !== undefined && LEGACY_OUTPUT_TYPES.has(byId.get(edge.target)!.type));
-  const recipeOutput = outputs
-    .filter((node) => !feedsAnOutput(node))
-    .sort((a, b) => a.position.y - b.position.y || a.position.x - b.position.x)[0];
+  const feedsAnOutput = (node: LegacyNode) => graph.edges.some((edge) => edge.source === node.id && LEGACY_OUTPUT_TYPES.has(byId.get(edge.target)?.type ?? ""));
+  const recipeOutput = outputs.filter((node) => !feedsAnOutput(node)).sort((a, b) => a.position.y - b.position.y || a.position.x - b.position.x)[0];
   const recipe: GroupRecipe | undefined = recipeOutput ? outputRecipe(recipeOutput, options.defaults) : undefined;
 
-  const shapes: Shape[] = [];
-  /** A text output's answer as a text result. `model` is empty for a text step, which lost its model. */
-  const answerOf = (output: LegacyNode, at: { x: number; y: number }, model: string): Shape | undefined => {
-    const answer = text(output.data.result);
-    if (answer === undefined) return undefined;
-    return {
-      key: `answer:${output.id}`,
-      kind: "prompt",
-      ref: output.id,
-      ...at,
-      w: MEDIA_WIDTH,
-      h: legacyTextBox(answer, MEDIA_WIDTH).h,
-      text: answer,
-      sized: true,
-      result: { sidecar: null, medium: "text", model, batchId: `legacy-${output.id}`, runIndex: 1, runCount: 1, cost: null, sources: [], recipe: resultRecipe("text", model, {}, [], undefined) },
-    };
-  };
-  const instructionsOf = (output: LegacyNode, at: { x: number; y: number }): Shape | undefined => {
-    const instructions = typeof output.data.text === "string" && output.data.text.trim() !== "" ? output.data.text : undefined;
-    if (instructions === undefined) return undefined;
-    return { key: `instructions:${output.id}`, kind: "prompt", ref: minter.mint(), ...at, ...legacyTextBox(instructions), text: instructions, sized: false };
-  };
-
-  // 3. A text step that feeds another output keeps its instructions and answer; any other output goes.
+  // Step 3: a text step that feeds another output keeps its instructions and answer; any other output goes.
   const kept: Shape[] = [];
   for (const output of outputs) {
     if (output === recipeOutput) continue;
     const medium = OUTPUT_MEDIUM[output.type]!;
-    if (medium === "text" && feedsAnOutput(output)) {
-      const instructions = instructionsOf(output, output.position);
-      const answer = answerOf(output, instructions ? { x: output.position.x, y: output.position.y + instructions.h + GAP } : output.position, "");
-      kept.push(...[instructions, answer].filter((shape): shape is Shape => shape !== undefined));
-      notes.push(presetNotes.textStep(output.id));
-    } else notes.push(presetNotes.extraOutput(output.id, medium));
+    if (medium !== "text" || !feedsAnOutput(output)) {
+      notes.push(presetNotes.extraOutput(output.id, medium));
+      continue;
+    }
+    const instructions = instructionsOf(output);
+    const prompt = instructions === undefined ? undefined : { ...instructionsShape(output, instructions, minter.mint()), ...output.position };
+    const answer = answerOf(output);
+    if (prompt) kept.push(prompt);
+    if (answer !== undefined) kept.push({ ...answerShape(output, answer, answerResult(output, "")), x: output.position.x, y: prompt ? prompt.y + prompt.h + STEP_GAP : output.position.y });
+    notes.push(presetNotes.textStep(output.id));
   }
 
-  const inputShape = (node: LegacyNode, at: { x: number; y: number }, parent?: string): Shape | undefined => {
-    const base = { key: `node:${node.id}`, ref: node.id, ...at, ...(parent === undefined ? {} : { parent }) };
-    if (node.type === "prompt") {
-      return { ...base, kind: "prompt", w: node.width ?? DEFAULT_SIZE.prompt.w, h: node.height ?? DEFAULT_SIZE.prompt.h, text: typeof node.data.text === "string" ? node.data.text : "", sized: node.data.sized === true };
-    }
-    if (node.type === "image" || node.type === "video") {
-      const w = node.width ?? MEDIA_WIDTH;
-      const stated = finite(node.data.aspect);
-      let aspect = stated !== undefined && stated > 0 ? stated : node.type === "video" ? 16 / 9 : 1;
-      const media = mediaOf(node, w, w / aspect);
-      if (media?.kind === "data" && (stated === undefined || stated <= 0) && media.w > 0 && media.h > 0) aspect = media.w / media.h;
-      return { ...base, kind: node.type, w, h: w / aspect, ...(media ? { media } : {}) };
-    }
-    return undefined;
-  };
-
-  // 5. The group: the one top-level group, or a new one around every kept top-level input.
+  // Step 5 comes before step 4, which puts things in the group: the one top-level group, or a new one around every kept top-level input.
+  const shapes: Shape[] = [];
   const topInputs = graph.nodes.filter((node) => node.parentId === undefined && (node.type === "prompt" || node.type === "image" || node.type === "video" || node.type === "group"));
   const onlyGroup = topInputs.length === 1 && topInputs[0]!.type === "group" ? topInputs[0]! : undefined;
   let group: Shape;
   if (onlyGroup) {
     group = { key: `node:${onlyGroup.id}`, kind: "group", ref: onlyGroup.id, ...onlyGroup.position, w: onlyGroup.width ?? DEFAULT_SIZE.group.w, h: onlyGroup.height ?? DEFAULT_SIZE.group.h };
-    const members = graph.nodes.filter((node) => node.parentId === onlyGroup.id).flatMap((node) => inputShape(node, node.position, group.key) ?? []);
-    shapes.push(group, ...members);
-    // Kept text steps go inside it, below its lowest member.
+    shapes.push(group, ...graph.nodes.filter((node) => node.parentId === onlyGroup.id).flatMap((node) => inputShape(node, node.position, group.key) ?? []));
     for (const shape of kept) placeBelow(group, shapes, shape);
   } else {
     const loose: Shape[] = [];
@@ -171,26 +174,31 @@ export const convertPreset = (entry: unknown, options: { readonly defaults: Lega
       }
     }
     loose.push(...kept);
-    const box = wrapBox(loose.map((shape) => ({ x: shape.x, y: shape.y, w: shape.w, h: shape.h })));
-    const at: Box = box ?? { x: recipeOutput?.position.x ?? 0, y: recipeOutput?.position.y ?? 0, w: recipeOutput?.width ?? DEFAULT_SIZE.output.w, h: recipeOutput?.height ?? DEFAULT_SIZE.output.h };
-    group = { key: "group:preset", kind: "group", ref: projectSlug(typeof value.name === "string" ? value.name : "") || minter.mint(), ...at };
-    shapes.push(group, ...loose.map((shape) => ({ ...shape, x: shape.x - at.x, y: shape.y - at.y, parent: group.key })));
+    const box: Box = wrapBox(loose) ?? {
+      x: recipeOutput?.position.x ?? 0,
+      y: recipeOutput?.position.y ?? 0,
+      w: recipeOutput?.width ?? DEFAULT_SIZE.output.w,
+      h: recipeOutput?.height ?? DEFAULT_SIZE.output.h,
+    };
+    group = { key: "group:preset", kind: "group", ref: projectSlug(typeof value.name === "string" ? value.name : "") || minter.mint(), ...box };
+    shapes.push(group, ...loose.map((shape) => ({ ...shape, x: shape.x - box.x, y: shape.y - box.y, parent: group.key })));
   }
 
-  // 4. A text recipe output's answer, then its instructions at the bottom of the group.
-  if (recipeOutput && OUTPUT_MEDIUM[recipeOutput.type] === "text") {
-    const answer = answerOf(recipeOutput, { x: 0, y: 0 }, recipe?.model ?? options.defaults.text);
-    if (answer) placeBelow(group, shapes, answer);
-    const instructions = instructionsOf(recipeOutput, { x: 0, y: 0 });
-    if (instructions) placeBelow(group, shapes, instructions);
+  // Step 4: a text recipe output's answer, then its instructions at the bottom of the group.
+  if (recipeOutput && recipe?.medium === "text") {
+    const answer = answerOf(recipeOutput);
+    if (answer !== undefined) placeBelow(group, shapes, answerShape(recipeOutput, answer, answerResult(recipeOutput, recipe.model)));
+    const instructions = instructionsOf(recipeOutput);
+    if (instructions !== undefined) placeBelow(group, shapes, instructionsShape(recipeOutput, instructions, minter.mint()));
   }
   if (recipe) group.recipe = recipe;
 
-  // 6. Pages and motions are not kept.
+  // Step 6: pages and motions are not kept. Step 7: edges are never read.
   if (graph.nodes.some((node) => node.type === "page" || node.type === "motion")) notes.push(presetNotes.artifacts);
 
+  // Steps 8 and 9: media as the records carry it, and the entry's own fields.
   const records = legacyRecords(shapes, { page: PAGE, shape: (key) => `shape:${key}`, asset: (key) => `asset:${key}` });
-  const preset: ConvertedPreset = {
+  return {
     format: 2,
     id: value.id as string,
     source: "user",
@@ -204,16 +212,4 @@ export const convertPreset = (entry: unknown, options: { readonly defaults: Lega
     legacy: true,
     notes,
   };
-  return { preset, notes };
 };
-
-/** Puts `shape` in `group` below its lowest member with a gap of 28, or inside the label margin of an empty one, growing the box. */
-const placeBelow = (group: Shape, shapes: Shape[], shape: Shape) => {
-  const members = shapes.filter((each) => each.parent === group.key);
-  const lowest = members.reduce<Shape | undefined>((low, each) => (low === undefined || each.y + each.h > low.y + low.h ? each : low), undefined);
-  const placed: Shape = { ...shape, x: lowest ? lowest.x : SIDE_MARGIN, y: lowest ? lowest.y + lowest.h + GAP : TOP_MARGIN, parent: group.key };
-  group.w = Math.max(group.w, placed.x + placed.w + SIDE_MARGIN);
-  group.h = Math.max(group.h, placed.y + placed.h + SIDE_MARGIN);
-  shapes.push(placed);
-};
-

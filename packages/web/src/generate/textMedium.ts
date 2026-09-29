@@ -6,7 +6,7 @@
 import { NO_KEY_MESSAGE, type ModelParams } from "@unframed/domain";
 import type { TLShapeId } from "tldraw";
 import type { Payload } from "../rpc/engine.ts";
-import { pageBox, selectionBox } from "./facts.ts";
+import { anchorOf, pageBox } from "./facts.ts";
 import { planOf } from "./imageMedium.ts";
 import { saveLastUsed } from "./lastUsed.ts";
 import { registerMedium, type MediumDefinition, type SendInput } from "./mediumRegistry.ts";
@@ -31,7 +31,8 @@ export const textRunRequest = async ({ editor, project, values, source }: Omit<S
       ...common,
       references: await referencesFor(editor, project, source.composition.references),
       sources: [...source.composition.sources],
-      anchor: selectionBox(editor, source.selected as TLShapeId[]) ?? { x: 0, y: 0, w: 0, h: 0 },
+      anchor: anchorOf(editor, source),
+      ...(source.answersFor === undefined ? {} : { of: { shapeId: source.answersFor, action: "recipe" as const } }),
     };
   }
   const { recipe, shapeId } = source.recipe;

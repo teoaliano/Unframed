@@ -8,7 +8,6 @@ import { Dialog } from "@base-ui/react/dialog";
 import { UnframedError, type ImportReport } from "@unframed/contracts";
 import { useEffect, useState, type ReactNode } from "react";
 import { useEngine } from "../context.ts";
-import { isConnectionFailure } from "../rpc/engine.ts";
 import { reportState, useReportState } from "./reportState.ts";
 
 export const IMPORTING_MESSAGE = "Importing from the old Unframed…";
@@ -32,7 +31,7 @@ const settled = async <T,>(call: () => Promise<T>): Promise<T> => {
     try {
       return await call();
     } catch (error) {
-      if (!isConnectionFailure(error)) throw error;
+      if (!(error instanceof UnframedError && error.details?.reason === "connection_lost")) throw error;
     }
   }
 };

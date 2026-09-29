@@ -22,7 +22,7 @@ import type { Editor, TLShapeId } from "tldraw";
 import type { EngineConnection, Payload } from "../rpc/engine.ts";
 import { knownCatalogue } from "./catalogue.ts";
 import { VideoStatus } from "./composer/VideoStatus.tsx";
-import { mediaSource, pageBox, selectionBox } from "./facts.ts";
+import { anchorOf, answeredShape, mediaSource, pageBox } from "./facts.ts";
 import { NOTHING_TO_MAKE } from "./imageMedium.ts";
 import { saveLastUsed } from "./lastUsed.ts";
 import { registerMedium, type MediumDefinition, type PropValue, type RunSource, type SendInput, type TrayProps } from "./mediumRegistry.ts";
@@ -121,11 +121,9 @@ export const videoStartRequest = async (input: {
 export const entryFor = (model: string | undefined) => knownCatalogue("video")?.models.find((entry) => entry.id === model);
 
 const send = async ({ editor, engine, project, values, source, remember }: SendInput) => {
-  const anchor =
-    source.kind === "selection"
-      ? (selectionBox(editor, source.selected as TLShapeId[]) ?? { x: 0, y: 0, w: 0, h: 0 })
-      : (pageBox(editor, source.recipe.shapeId as TLShapeId) ?? { x: 0, y: 0, w: 0, h: 0 });
-  const recorded = source.kind === "recipe" ? editor.getShape(source.recipe.shapeId as TLShapeId) : undefined;
+  const anchor = anchorOf(editor, source);
+  const answered = answeredShape(source);
+  const recorded = answered === undefined ? undefined : editor.getShape(answered as TLShapeId);
   const sidecar = recorded ? resultMetaOf(recorded)?.sidecar : undefined;
   const request = await videoStartRequest({
     editor,

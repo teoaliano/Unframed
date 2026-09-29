@@ -1,6 +1,7 @@
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { UnframedError, unframedError } from "@unframed/contracts";
+import { legacyDefaults } from "@unframed/domain";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -11,9 +12,10 @@ import { createLegacyImportReportTable } from "./legacy/reportTable.ts";
 import { errorText } from "./log.ts";
 import { OpenProjects } from "./openProjects.ts";
 import { Config } from "./services.ts";
+import { DATABASE_FILE } from "./paths.ts";
 import { SettingsStore } from "./settingsStore.ts";
 
-export const DATABASE_FILE = "unframed.sqlite";
+export { DATABASE_FILE };
 
 /**
  * One numbered migration. A persisted row must stay readable by every later version, so
@@ -106,7 +108,7 @@ export const projectDatabaseLayer = Layer.effect(
     const importer = makeLegacyImporter({
       migrate: (db) => void applyMigrations(db, migrations),
       outputDir: () => Effect.runPromise(settings.outputDir),
-      defaults: () => Effect.runPromise(Effect.map(settings.read, (live) => ({ image: live.imageModel, video: live.videoModel, text: live.textModel }))),
+      defaults: () => Effect.runPromise(Effect.map(settings.read, legacyDefaults)),
     });
     const folderOf = (project: string) => Effect.map(settings.outputDir, (outputDir) => join(outputDir, project));
 
@@ -124,6 +126,7 @@ export const projectDatabaseLayer = Layer.effect(
               ? unframedError("internal", error.message, { reason: "legacy_import" })
               : unframedError("internal", `Could not open the project database: ${errorText(error)}`),
         });
+        // Another open of this project may have finished while this one waited for the import.
         const handle = yield* Effect.try({
           try: () => {
             const opened = handles.get(path);

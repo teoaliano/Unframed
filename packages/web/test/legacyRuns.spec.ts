@@ -4,7 +4,7 @@ import type { Page } from "@playwright/test";
 import { splitJsonArray } from "@unframed/domain";
 import { plainText, roomRecords, shapeOnScreen, waitForRoom, type AnyRecord } from "./canvas.ts";
 import { expect, test } from "./fixtures.ts";
-import { clickShape, composer, selectGroup, toolbar } from "./generation.ts";
+import { clickShape, composer, selectGroup, sendRun, toolbar } from "./generation.ts";
 import { canvasOf, openImported, reportDialog, startLegacyApp, type LegacyApp } from "./legacy.ts";
 import { libraryDialog, openLibrary, presetItem } from "./library.ts";
 
@@ -41,13 +41,18 @@ test("Recipe on an imported result shows what the old app sent, and Regenerate r
     await expect(sent).toContainText("Imported from the old app. It sent:");
     await expect(sent).toContainText("A red fox standing on a windswept cliff at golden hour, 35mm");
     await expect(composer(page).getByTestId("source-count")).toHaveText("recipe · 2 sources");
-    await page.keyboard.press("Escape");
-    await expect(composer(page)).toHaveCount(0);
+    // Sending from Recipe mode runs from the live sources too, and lands beside the result.
+    await sendRun(page);
+    await expect.poll(() => app.requests.length).toBe(1);
+    expect(app.requests[0]!.body).toMatchObject({ model: "openai/gpt-image-2", prompt: "A lone red fox standing on a windswept cliff at golden hour, 35mm", quality: "low" });
+    const fromRecipe = await waitForRoom(app.engine, "everything", (all) => all.find((record) => record.typeName === "shape" && record.meta?.unframed?.result?.sidecar && !records.some((old) => old.id === record.id)));
+    expect(fromRecipe.x).toBeGreaterThan(result.x! + result.props.w);
+    const known = [...records, fromRecipe];
 
     await clickShape(page, result.id);
     await toolbar(page).getByRole("button", { name: "Regenerate" }).click();
-    await expect.poll(() => app.requests.length).toBe(1);
-    const [request] = app.requests;
+    await expect.poll(() => app.requests.length).toBe(2);
+    const request = app.requests[1];
     // Prompt @100 now reads through @101, which the journal changed to "lone red fox".
     expect(request!.body).toMatchObject({
       model: "openai/gpt-image-2",
@@ -58,7 +63,7 @@ test("Recipe on an imported result shows what the old app sent, and Regenerate r
       output_format: "png",
     });
     expect(request!.body.input_references).toHaveLength(1);
-    const landed = await waitForRoom(app.engine, "everything", (all) => all.find((record) => record.typeName === "shape" && record.meta?.unframed?.result?.sidecar && !records.some((old) => old.id === record.id)));
+    const landed = await waitForRoom(app.engine, "everything", (all) => all.find((record) => record.typeName === "shape" && record.meta?.unframed?.result?.sidecar && !known.some((old) => old.id === record.id)));
     expect(landed.meta.unframed.result).toMatchObject({ medium: "image", model: "openai/gpt-image-2" });
     expect(landed.meta.unframed.result.recipe).toBeUndefined();
   } finally {

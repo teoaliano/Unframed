@@ -76,7 +76,7 @@ export { rebuild, type Rebuilt } from "./legacy/reader.ts";
 export { normalise, type Normalised } from "./legacy/normalise.ts";
 export type { LegacyCanvas, LegacyMedia, LegacyRender, LegacyResult, LegacyResultRecipe, LegacyShape, LegacyShapeKind } from "./legacy/canvas.ts";
 export { legacyReferencedFiles, mapProject, type Extraction, type LegacyJob, type MapOptions, type Mapped, type ProjectFacts } from "./legacy/mapper.ts";
-export type { LegacyDefaults } from "./legacy/recipes.ts";
+export { legacyDefaults, type LegacyDefaults } from "./legacy/recipes.ts";
 export { legacyIndexKey, legacyRecords, type RecordIds } from "./legacy/records.ts";
 export { parseDataUrl, type DataUrl } from "./legacy/media.ts";
 export { convertPreset, legacyPresetLine, presetNotes, type ConvertedPreset } from "./legacy/presets.ts";

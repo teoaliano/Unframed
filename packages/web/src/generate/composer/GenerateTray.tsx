@@ -187,7 +187,7 @@ export const GenerateTray = ({ project, recipe, onSent, onMenuOpen, handle }: Ge
   const resolved = useValue("recipe instruction", () => (recipe ? resolveReferences(instruction, canvasShapes(editor)) : undefined), [editor, recipe, instruction]);
   const shapes = useValue("canvas shapes", () => canvasShapes(editor), [editor]);
   // An imported result (spec 11) sends from its sources as they are now.
-  const live = useValue("imported recipe sources", () => (recipe?.recipe.approximate ? liveSource(editor, recipe.recipe, instruction) : undefined), [editor, recipe, instruction]);
+  const live = useValue("imported recipe sources", () => (recipe?.recipe.approximate ? liveSource(editor, recipe.shapeId, recipe.recipe, instruction) : undefined), [editor, recipe, instruction]);
   const source: RunSource =
     live ??
     (recipe
