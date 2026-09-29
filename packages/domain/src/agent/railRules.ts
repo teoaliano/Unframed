@@ -123,11 +123,18 @@ export const recapRows = (
     if (kind !== undefined && !kinds.has(key)) kinds.set(key, kind);
     if (typeof title === "string" && title !== "") titles.set(key, title);
   };
+  // A provider may send a call's input only when it starts: take it from any of the call's activities.
+  const inputs = new Map<unknown, unknown>();
+  for (const activity of activities) {
+    const payload = record(activity.payload);
+    const given = record(payload.data).input;
+    if (activity.kind.startsWith("tool.") && given !== undefined && !inputs.has(payload.itemId)) inputs.set(payload.itemId, given);
+  }
   const completed = [...activities].filter((activity) => activity.kind === "tool.completed").sort((a, b) => a.sequence - b.sequence);
   for (const activity of completed) {
     const tool = toolName(activity);
     const data = record(record(activity.payload).data);
-    const input = record(data.input);
+    const input = record(data.input ?? inputs.get(record(activity.payload).itemId));
     const result = record(data.result);
     if (ARTIFACT_TOOLS.has(tool)) {
       const kind = tool.startsWith("page") ? "page" : "motion";

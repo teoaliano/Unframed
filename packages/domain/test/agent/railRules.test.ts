@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { continuableChat, nextActive, tabLabel, tabTooltip, visibleChats, type RailChat } from "../../src/index.ts";
+import { continuableChat, nextActive, recapRows, revertSkipLine, tabLabel, tabTooltip, visibleChats, type ChatActivity, type RailChat } from "../../src/index.ts";
 
 const chat = (id: string, createdAt: string, fields: Partial<RailChat> = {}): RailChat => ({
   id,
@@ -100,5 +100,90 @@ describe("the continuable chat", () => {
 
   it("may continue a chat whose last turn failed", () => {
     expect(continuableChat([chat("failed", "01", { status: "failed" })], [])?.id).toBe("failed");
+  });
+});
+
+describe("the recap rows", () => {
+  let sequence = 0;
+  const activity = (kind: string, payload: Record<string, unknown>): ChatActivity => ({
+    id: `a${++sequence}`,
+    tone: "tool",
+    kind,
+    summary: kind,
+    payload,
+    turnId: "t1",
+    sequence,
+    createdAt: new Date(Date.UTC(2026, 8, 29, 10, 0, sequence)).toISOString(),
+  });
+  /** A call as the runtime ingests it: the input on its start, the result on its end. */
+  const call = (toolName: string, input: Record<string, unknown>, result: unknown = {}) => {
+    const itemId = `i${++sequence}`;
+    return [
+      activity("tool.started", { itemId, itemType: "mcp_tool_call", status: "inProgress", data: { toolName, input } }),
+      activity("tool.completed", { itemId, itemType: "mcp_tool_call", status: "completed", data: { toolName, result } }),
+    ];
+  };
+
+  it("lists what the artifact tools named and what canvas_write ops touched, in first-touch order, canvas_read adding nothing", () => {
+    const activities = [
+      ...call("mcp__unframed__canvas_read", {}, { shapes: [{ id: "p9" }] }),
+      ...call("mcp__unframed__motion_read", { shapeId: "m1" }),
+      ...call("mcp__unframed__canvas_write", { ops: [{ type: "create", id: "new:note", kind: "prompt", x: 0, y: 0 }, { type: "move", id: "m1", x: 1, y: 2 }, { type: "update", id: "shape:p2" }] }, { ok: true, ids: { "new:note": "p7" } }),
+      ...call("mcp__unframed__page_write", { shapeId: "g1", title: "Landing" }),
+    ];
+    const rows = recapRows(activities, [], [
+      { id: "shape:m1", kind: "motion", title: "Intro" },
+      { id: "shape:p7", kind: "prompt" },
+      { id: "shape:p2", kind: "prompt", title: "  " },
+      { id: "shape:g1", kind: "page", fileName: "landing.html" },
+    ]);
+    expect(rows.map((row) => [row.shapeId, row.kind, row.label])).toEqual([
+      ["shape:m1", "motion", "Intro"],
+      ["shape:p7", "prompt", "p7"],
+      ["shape:p2", "prompt", "p2"],
+      ["shape:g1", "page", "landing"],
+    ]);
+    expect(rows.some((row) => row.shapeId === "shape:p9")).toBe(false);
+  });
+
+  it("adds the turn changes after the tool calls, and offers a diff for a page or motion whose file the turn wrote", () => {
+    const activities = call("mcp__unframed__motion_write", { shapeId: "m1", title: "Intro" });
+    const rows = recapRows(
+      activities,
+      [
+        { shapeId: "shape:m1", kind: "motion", change: "updated", file: "intro.html", previousFile: "intro.html" },
+        { shapeId: "shape:p4", kind: "prompt", change: "updated" },
+        { shapeId: "shape:g2", kind: "page", change: "created", file: "new.html" },
+      ],
+      [
+        { id: "shape:m1", kind: "motion", title: "Intro" },
+        { id: "shape:p4", kind: "prompt", title: "Fox" },
+        { id: "shape:g2", kind: "page", title: "New" },
+      ],
+    );
+    expect(rows.map((row) => [row.label, row.rewritten])).toEqual([
+      ["Intro", true],
+      ["Fox", false],
+      ["New", true],
+    ]);
+  });
+
+  it("marks a shape no longer on the canvas deleted, keeping the title the tool gave it", () => {
+    const rows = recapRows(call("mcp__unframed__page_write", { shapeId: "g1", title: "Landing" }), [], []);
+    expect(rows).toEqual([{ shapeId: "shape:g1", kind: "page", label: "Landing", deleted: true, rewritten: false }]);
+  });
+});
+
+describe("a revert that left shapes alone", () => {
+  it("names each one and who changed it since", () => {
+    expect(revertSkipLine([{ label: "Intro", by: "person" }], 2)).toBe("Left 1 shape alone because they changed since: Intro (by the person).");
+    expect(revertSkipLine([{ label: "Intro", by: "person" }, { label: "Fox", by: "another chat" }], 1)).toBe(
+      "Left 2 shapes alone because they changed since: Intro (by the person), Fox (by another chat).",
+    );
+  });
+
+  it("says there was nothing to revert when every shape was skipped, and nothing when none was", () => {
+    expect(revertSkipLine([{ label: "Intro", by: "a later turn" }], 0)).toBe("Nothing to revert: everything this turn changed has changed since.");
+    expect(revertSkipLine([], 3)).toBeUndefined();
   });
 });
