@@ -12,7 +12,7 @@ import { projectChat, type Chat, type ChatEvent } from "@unframed/domain";
 import { FIXTURES } from "../../engine/test/agent.ts";
 import { fakeCodex, fakeShell, fakeSignedInClaude } from "../../engine/test/agentFakes.ts";
 import type { EngineOptions, TestEngine } from "../../engine/test/engineProcess.ts";
-import { expect, startHostedEngine, test as base } from "./fixtures.ts";
+import { expect, FIXTURE_KEY, startHostedEngine, test as base } from "./fixtures.ts";
 
 export { FIXTURES };
 
@@ -25,13 +25,14 @@ export const startAgentEngine = (options: EngineOptions & { script?: string } = 
 /**
  * An engine that detects providers for real, against fakes: its login shell adds nothing
  * to PATH and `CLAUDE_PATH` and `CODEX_PATH` name files in `dir`, which the test may or may
- * not have written. No real CLI ever runs.
+ * not have written. No real CLI ever runs. Its `.env` carries the fixture key, because a
+ * keyless app opens the settings dialog over the canvas (spec 10).
  */
 export const startDetectingEngine = async (dir: string, options: EngineOptions = {}): Promise<TestEngine> => {
   const shell = await fakeShell(join(dir, "shell"));
   return startHostedEngine({
     ...options,
-    dotenv: `CLAUDE_PATH=${join(dir, "bin", "claude")}\nCODEX_PATH=${join(dir, "bin", "codex")}\n${options.dotenv ?? ""}`,
+    dotenv: `OPENROUTER_API_KEY=${FIXTURE_KEY}\nCLAUDE_PATH=${join(dir, "bin", "claude")}\nCODEX_PATH=${join(dir, "bin", "codex")}\n${options.dotenv ?? ""}`,
     env: { SHELL: shell, FAKE_SHELL_PATH: "", ...options.env },
   });
 };
