@@ -15,7 +15,7 @@ Checked 2026-09-28: Node v24.21.0, pnpm 9.15.4 through Corepack, Google Chrome, 
 | 01 | engine foundation | 1 | merged | f480398 | 54/54 tasks; 311 tests, 7 browser tests green on build |
 | 02 | canvas | 2 | merged | 901847a | 60/60 tasks; 421 tests, 83 browser tests green on build; all budgets met (see below) |
 | 03 | image generation | 3 | merged | f9649ab, fixes 5621a6a | 54/54 tasks; 626 tests, 112 browser tests green on build in 3.0 min. Task 36's Agent tray part waits for spec 08 |
-| 04 | video generation | 4 | building | | merge after 05 |
+| 04 | video generation | 4 | building | | 66/66 tasks done on its branch; merging build (spec 05) into it to resolve 13 conflicts |
 | 05 | text, multi-run and Free | 4 | merged | c1bb5a2 | 40/40 tasks; 790 tests green, 134 of 135 browser tests (the one failure is the spec 02 right-click flake, sent back to the spec 02 agent) |
 | 06 | groups, recipes and the library | 5 | pending | | |
 | 07 | agent runtime | 6 | pending | | |
@@ -34,6 +34,8 @@ Each entry names the decision, the answer, and the spec it changed.
 
 - Spec 03, task 36: the Agent tray part is untestable until spec 08 fills the `agentTray` slot. The spec 08 agent must cover it.
 - Spec 03: Regenerate and Recipe for imported (approximate) recipes belong to spec 11.
+- Spec 04: if a pending render job's project folder is gone, the collector fails and the sweep retries every tick, downloading the clip each time. Spec 10 fails such records before it deletes or moves a project; the spec 10 agent must check the sweep stops.
+- Spec 04, task 21: the test moves the image through the room, not with a mouse drag, because dragging a selected shape moves the whole selection.
 - Spec 05: some logic is duplicated between `textRuns.ts` and spec 03's `runs.ts` (run-id minting, the `of` lookup, top-index lookup), and between the image and text catalogue functions. The agent left spec 03's files alone because spec 04 edits them in parallel. Fold them together after wave 4.
 - Spec 05: a text result whose sidecar could not be written gets `sidecar: null`, and duplicating it drops its result meta, because the copy rules read null as an unfilled placeholder.
 - Spec 01: the Electron 44 boot and the `dist` branch publish run only in the tag workflow. The agent checked `scripts/electronSmoke.ts` with plain Node as the binary and did not run `scripts/publishDist.sh` locally.
@@ -60,6 +62,7 @@ Measured by the spec agent in the hosted shape (production web served by the eng
 - A spec agent stalls (10 minutes with no stream progress) when one command runs long with no output, such as a browser suite hung in teardown. Briefs cap each command at 5 minutes with `--global-timeout 280000 --reporter=list`, and tell agents not to use background commands, whose notifications reach the orchestrator. A stalled agent resumes with SendMessage and keeps its context.
 - Never run a bare `pkill -f workerProcessEntry`: it kills every worktree's Playwright workers. Kill by path (`<checkout>/node_modules/.pnpm/playwright.*/workerProcessEntry`) or orphans only.
 - Right-click after a Shift-click sometimes opens no context menu under load. It failed `menuActions.spec.ts` "Reveal shows the right-clicked file" after spec 02 and `contextMenu.spec.ts:86` after spec 05. Sent back to the spec 02 agent.
+- `promptPin.spec.ts` failed 3 of 3 on base sources at e3be34f in the spec 04 worktree, then passed. Sent to the spec 02 agent with the right-click flake.
 - `mediaResize.spec.ts` failed once under parallel load in the spec 05 worktree (a drag landed at the wrong width). Watch it.
 
 - Background sub-agents that a spec agent starts (the code-review reviewers) report to the orchestrator, not to the spec agent. The brief tells spec agents to start their sub-agents in the foreground. If one still waits, the orchestrator forwards the results with SendMessage.
