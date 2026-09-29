@@ -167,6 +167,8 @@ export const LibraryDialog = ({ onClose, onAdd }: { readonly onClose: () => void
   const [controls, setControls] = useState<LibraryControls>({ query: "", type: "all", source: "any", sort: "newest", page: 1 });
   const [view, setView] = useState<View>("card");
   const [deleting, setDeleting] = useState<Preset>();
+  // The list shows once the file has been read, so it never reorders under the pointer.
+  const [loaded, setLoaded] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -176,6 +178,8 @@ export const LibraryDialog = ({ onClose, onAdd }: { readonly onClose: () => void
     } catch (error) {
       setPresets([]);
       setReadFailure(messageOf(error));
+    } finally {
+      setLoaded(true);
     }
   }, [engine]);
 
@@ -288,7 +292,7 @@ export const LibraryDialog = ({ onClose, onAdd }: { readonly onClose: () => void
               </p>
             )}
             <div className="min-h-0 flex-1 overflow-y-auto" data-scrolls="true">
-              {shown.items.length === 0 ? (
+              {!loaded ? null : shown.items.length === 0 ? (
                 <p className="m-0 py-8 text-center text-[13px] text-secondary">{EMPTY_LIBRARY_MESSAGE}</p>
               ) : (
                 <ul className={view === "card" ? "m-0 grid list-none grid-cols-2 gap-2.5 p-0" : "m-0 list-none p-0"} aria-label="Presets">
@@ -298,7 +302,7 @@ export const LibraryDialog = ({ onClose, onAdd }: { readonly onClose: () => void
                 </ul>
               )}
             </div>
-            {shown.total > 10 && (
+            {loaded && shown.total > 10 && (
               <nav className="flex items-center justify-end gap-1 text-[12.5px] text-secondary" aria-label="Pages">
                 <span data-testid="library-range">{libraryRange(shown)}</span>
                 <button type="button" aria-label="Previous page" className={iconButton} disabled={shown.page <= 1} onClick={() => change({ page: shown.page - 1 })}>
