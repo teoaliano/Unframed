@@ -187,7 +187,7 @@ Decided from the selection by a pure function in the web (tested at the domain s
 | nothing | no bar |
 | exactly one result (spec terms: a shape with a recipe) | Regenerate (primary), Vary, Recipe (ghost), Agent; the result's line shows under it |
 | exactly one result still generating | the hint `Generating…`, Agent |
-| exactly one page or motion with a file | a six-dot drag handle, Open, Agent (spec 09 connects Open to its editor) |
+| exactly one page or motion with a file | a six-dot drag handle, Open, Render for a motion (spec 09), Agent (spec 09 connects Open to its editor) |
 | usable | hint, Agent, Generate (primary, last) |
 | not usable | Agent only |
 

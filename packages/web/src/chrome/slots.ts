@@ -29,6 +29,8 @@ export interface ChromeSlots {
   agentToolbarButton?: ComponentType<{ readonly onOpen: () => void }>;
   /** What Open on a filled page or motion does. */
   openArtifact?: (editor: Editor, shapeId: TLShapeId) => void;
+  /** Render for a selected motion, beside Open (spec 09 registers it). */
+  renderButton?: ComponentType<{ shapeId: TLShapeId }>;
   /** Set while the chat rail (spec 08) holds the right edge: the top-right card steps aside. */
   leftCardDocked?: boolean;
 }

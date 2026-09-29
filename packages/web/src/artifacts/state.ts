@@ -6,6 +6,7 @@
  * shape.
  */
 import { farOffscreen, isArtifactKind, liveArtifacts, LIVE_SELECTED_LIMIT, PIN_LIMIT } from "@unframed/domain";
+import type { RenderStatus } from "@unframed/contracts";
 import { atom, computed, type Atom, type Computed, type Editor, type TLShapeId } from "tldraw";
 
 /** The preview origin's port, from the engine's settings. Unknown until they arrive. */
@@ -49,6 +50,8 @@ interface CanvasArtifacts {
   readonly live: Computed<ReadonlySet<string>>;
   /** Upload and render errors, under their shape, until the next upload or render starts. */
   readonly problems: Atom<ReadonlyMap<string, string>>;
+  /** Each motion's render in flight, by shape: starting until the engine answers, then its status. */
+  readonly renders: Atom<ReadonlyMap<string, { readonly starting: boolean; readonly status?: RenderStatus }>>;
 }
 
 const canvases = new WeakMap<Editor, CanvasArtifacts>();
@@ -74,7 +77,7 @@ export const artifactsOf = (editor: Editor): CanvasArtifacts => {
         viewportCentre: selected.length > LIVE_SELECTED_LIMIT ? editor.getViewportPageBounds().center : { x: 0, y: 0 },
       });
     });
-    found = { project, editing, hold: atom("frame hold", false), live, problems: atom("artifact problems", new Map()) };
+    found = { project, editing, hold: atom("frame hold", false), live, problems: atom("artifact problems", new Map()), renders: atom("motion renders", new Map()) };
     canvases.set(editor, found);
   }
   return found;

@@ -9,6 +9,7 @@ import { useEditor, useValue, type Editor, type TLCamera, type TLShapeId } from 
 import { registerSlot } from "../chrome/slots.ts";
 import { useCanvasProject, useEngine, useSettings } from "../context.ts";
 import { closeComposer } from "../generate/state.ts";
+import { RenderButton } from "./render.tsx";
 import { artifactsOf, installFrameHold, previewPort } from "./state.ts";
 import { watchSnapshots } from "./snapshots.ts";
 
@@ -59,6 +60,7 @@ export const ArtifactsHost = () => {
       installFrameHold(editor),
       watchSnapshots(engine, project),
       registerSlot("openArtifact", openArtifactEditor),
+      registerSlot("renderButton", RenderButton),
     ];
     return () => {
       for (const stop of stops) stop();

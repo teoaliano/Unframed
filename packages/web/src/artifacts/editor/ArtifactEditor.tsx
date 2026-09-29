@@ -13,6 +13,7 @@ import { Tip } from "../../chrome/ui.tsx";
 import { useCanvasProject } from "../../context.ts";
 import { ArtifactFrame, urlOf } from "../ArtifactFrame.tsx";
 import { previewPort } from "../state.ts";
+import { RenderButton } from "../render.tsx";
 import { COLUMN, ColumnHeader, Parameters } from "./Parameters.tsx";
 
 export interface ArtifactEditorProps {
@@ -115,6 +116,7 @@ export const ArtifactEditor = ({ shapeId, onClose, onOpen }: ArtifactEditorProps
             {facts.kind}
           </span>
           <span className="flex-1" />
+          {facts.kind === "motion" && facts.file !== "" && <RenderButton shapeId={shapeId} />}
           {facts.file !== "" && port !== undefined && (
             <Tip label="Open in a new tab">
               <Button

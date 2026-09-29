@@ -58,7 +58,7 @@ This spec also owns the agent's artifact tools (`page_write`, `page_read`, `moti
 32. As a person, I want only the canvas (a loopback page) to be able to frame an artifact, so that no website can.
 33. As a person, I want a new version of a page to show up without a stale cache, so that I always see the current file.
 34. As a person, I want a motion shape to play the composition with player controls, muted by default, so that it can autoplay and I can unmute.
-35. As a person, I want a Render button under a filled motion, so that I can turn it into an MP4.
+35. As a person, I want Render in a selected motion's toolbar and in its editor's header, so that I can turn it into an MP4.
 36. As a person, I want to see render progress as a percentage and a status message, so that I know it is working.
 37. As a person, I want the finished MP4 to appear as a video shape beside the motion, so that I can select it into a video run.
 38. As a person, I want the render to go to the project I started it in even if I switch projects, and add no shape to the wrong one, so that files do not land in the wrong place.
@@ -112,7 +112,7 @@ Two custom tldraw shapes, `page` and `motion`, both artifacts. They are the one 
 - The frame: an iframe with `src` set to the artifact URL on the preview origin, `sandbox="allow-scripts allow-same-origin"`, `referrerpolicy="no-referrer"`, `allow=""`, `loading="lazy"`, white background (the `--artifact-page` token, white in both schemes), no border. It is keyed by `file`, so a new version is a fresh document. It exists only while the shape is live (see "Keeping artifacts off the canvas thread" below); otherwise the shape shows its snapshot.
 - The frame takes pointer events only when the shape is selected and not being dragged or resized. Otherwise every pointer event goes to tldraw.
 - Double-click on an artifact opens the editor. It never enters tldraw's text-edit state.
-- A motion with a file shows a render row under the shape (outside it, like the video transport): button "Render" (Clapperboard icon, the kit's small outline Button), and while rendering the kit's progress look (spec 12): a Spinner, a thin bar filling in `--highlight` over `--input`, and the text `{progress}%` or `{progress}% · {message}` in extra-small muted text.
+- **Render** is the kit's small outline Button with the Clapperboard icon, in the selection toolbar after Open when one filled motion is selected (spec 03), and in the editor's header when a filled motion is open. It is disabled while that motion renders. While a render runs, a row under the shape (outside it, like the video transport) shows the kit's progress look (spec 12): a Spinner, a thin bar filling in `--highlight` over `--input`, and the text `{progress}%` or `{progress}% · {message}` in extra-small muted text. Every Render and the row read one render state per motion, so they agree.
 - Errors from an upload or render show in a status line under the shape (outside it, below the render row on a motion), in the error text colour, until the next upload or render starts.
 - Delete is tldraw's ordinary delete, with no confirmation. Files, sidecars and chats stay on disk. Undo brings the shape back and its chat tags match again. Nothing deletes superseded or orphaned artifact files.
 

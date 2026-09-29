@@ -18,8 +18,13 @@ test("panning with the rail open under the glass selection toolbar keeps spec 02
     await busyBoard(engine);
     await openMetered(page, engine, 302);
     await openRail(page);
-    const image = await centre(shapeOnScreen(page, "shape:img-10"));
-    await page.mouse.click(image.x, image.y);
+    // An image clear of the rail on the left and the bottom bar.
+    let image: { x: number; y: number } | undefined;
+    for (let index = 0; index < 100 && !image; index++) {
+      const box = await shapeOnScreen(page, `shape:img-${index}`).boundingBox();
+      if (box && box.x > 420 && box.x + box.width < 1200 && box.y > 80 && box.y + box.height < 600) image = { x: box.x + box.width / 2, y: box.y + box.height / 2 };
+    }
+    await page.mouse.click(image!.x, image!.y);
     await expect(page.getByTestId("selection-toolbar")).toBeVisible();
 
     const before = await gestureCount(page);
