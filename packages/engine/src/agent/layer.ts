@@ -83,23 +83,35 @@ export const agentsLayer = Layer.effect(
     const opened = (projectId: string) =>
       Effect.tryPromise({ try: () => runtime.project(projectId), catch: toUnframed });
 
-    const subscribe = <A>(projectId: string, open: (agent: Awaited<ReturnType<AgentRuntime["project"]>>, emit: (item: A) => void) => (() => void) | undefined) =>
-      Stream.callback<A, UnframedError>((queue) =>
+    const subscribe = <A>(
+      projectId: string,
+      exists: (agent: Awaited<ReturnType<AgentRuntime["project"]>>) => boolean,
+      open: (agent: Awaited<ReturnType<AgentRuntime["project"]>>, emit: (item: A) => void) => (() => void) | undefined,
+    ) =>
+      Stream.unwrap(
         Effect.gen(function* () {
           const agent = yield* opened(projectId);
-          let stop: (() => void) | undefined;
-          const end = () => {
-            stop?.();
-            agent.subscriptions.delete(end);
-            Queue.endUnsafe(queue);
-          };
-          stop = open(agent, (item) => Queue.offerUnsafe(queue, item));
-          if (stop === undefined) return yield* unframedError("not_found", "That chat does not exist.");
-          agent.subscriptions.add(end);
-          yield* Effect.addFinalizer(() =>
-            Effect.sync(() => {
-              stop?.();
-              agent.subscriptions.delete(end);
+          if (!exists(agent)) return yield* unframedError("not_found", "That chat does not exist.");
+          return Stream.callback<A, UnframedError>((queue) =>
+            Effect.gen(function* () {
+              let stop: (() => void) | undefined;
+              const end = () => {
+                stop?.();
+                agent.subscriptions.delete(end);
+                Queue.endUnsafe(queue);
+              };
+              stop = open(agent, (item) => Queue.offerUnsafe(queue, item));
+              if (stop === undefined) {
+                Queue.endUnsafe(queue);
+                return;
+              }
+              agent.subscriptions.add(end);
+              yield* Effect.addFinalizer(() =>
+                Effect.sync(() => {
+                  stop?.();
+                  agent.subscriptions.delete(end);
+                }),
+              );
             }),
           );
         }),
@@ -108,9 +120,14 @@ export const agentsLayer = Layer.effect(
     return Agents.of({
       runtime,
       dispatch: (command) => Effect.tryPromise({ try: () => runtime.dispatch(command as ClientCommand), catch: toUnframed }),
-      subscribeShell: (projectId, afterSequence) => subscribe<ShellStreamItem>(projectId, (agent, emit) => openShell(agent.engine, afterSequence, emit)),
+      subscribeShell: (projectId, afterSequence) =>
+        subscribe<ShellStreamItem>(projectId, () => true, (agent, emit) => openShell(agent.engine, afterSequence, emit)),
       subscribeThread: (projectId, threadId, afterSequence) =>
-        subscribe<ThreadStreamItem>(projectId, (agent, emit) => openThread(agent.engine, threadId, afterSequence, emit)),
+        subscribe<ThreadStreamItem>(
+          projectId,
+          (agent) => agent.engine.chat(threadId)?.deletedAt === null,
+          (agent, emit) => openThread(agent.engine, threadId, afterSequence, emit),
+        ),
       createUploadUrl: (input) =>
         Effect.try({
           try: () => runtime.attachments.createUploadUrl(input),
