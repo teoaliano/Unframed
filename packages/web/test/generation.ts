@@ -134,6 +134,35 @@ export const sendRun = async (page: Page): Promise<void> => {
   await expect(composer(page)).toHaveCount(0);
 };
 
+/**
+ * Clicks a composer control and presses Escape the moment the page shows what it opened,
+ * while the control may still have focus: a quick Esc that lands before the menu, popover or
+ * dialog takes focus. Answers whether focus was still on the control as Escape went down.
+ */
+export const openAndEscape = (control: Locator): Promise<{ focusOnControl: boolean }> =>
+  control.evaluate(
+    (element: HTMLElement) =>
+      new Promise<{ focusOnControl: boolean }>((resolve, reject) => {
+        const shown = () => element.getAttribute("aria-expanded") === "true" || document.querySelector("[role=dialog]") !== null;
+        const watch = new MutationObserver(() => {
+          if (!shown()) return;
+          watch.disconnect();
+          const focusOnControl = document.activeElement === element;
+          element.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", code: "Escape", bubbles: true, cancelable: true }));
+          resolve({ focusOnControl });
+        });
+        watch.observe(document.body, { subtree: true, childList: true, attributes: true });
+        setTimeout(() => reject(new Error("nothing opened")), 2000);
+        const at = { bubbles: true, cancelable: true, composed: true, button: 0, pointerType: "mouse", isPrimary: true };
+        element.focus();
+        element.dispatchEvent(new PointerEvent("pointerdown", at));
+        element.dispatchEvent(new MouseEvent("mousedown", at));
+        element.dispatchEvent(new PointerEvent("pointerup", at));
+        element.dispatchEvent(new MouseEvent("mouseup", at));
+        element.dispatchEvent(new MouseEvent("click", at));
+      }),
+  );
+
 /** Clicks the middle of a shape, as a person selects it. */
 export const clickShape = async (page: Page, id: string, modifiers?: Array<"Shift">): Promise<void> => {
   const at = await centre(shapeOnScreen(page, id));
