@@ -12,6 +12,7 @@ import {
   ReorderMenuSubmenu,
   SelectAllMenuItem,
   TldrawUiMenuActionItem,
+  TldrawUiMenuCheckboxItem,
   TldrawUiMenuGroup,
   TldrawUiMenuItem,
   TldrawUiMenuSubmenu,
@@ -37,6 +38,7 @@ import { imagePng } from "./externalContent.ts";
 import { groupRecipeOf, setGroupRecipe } from "./groupRecipes.ts";
 import { ungroup, wrapSelection } from "./groups.ts";
 import { platform } from "./platform.ts";
+import { pinnedAtom, togglePin } from "../artifacts/state.ts";
 
 const messageOf = (error: unknown) => (error instanceof UnframedError || error instanceof Error ? error.message : String(error));
 
@@ -60,6 +62,7 @@ const menuShape = (editor: Editor, shape: TLShape): MenuShape => {
     ...(isTextResult(shape) ? { textResult: true } : {}),
     ...(parent?.type === "frame" ? { parent: parent.id } : {}),
     ...(groupRecipeOf(shape) ? { recipe: true } : {}),
+    ...((shape.type === "page" || shape.type === "motion") && (shape.props as { file?: string }).file ? { filledArtifact: true } : {}),
   };
 };
 
@@ -112,6 +115,7 @@ const UnframedSections = () => {
     clipboard,
     libraryRegistered: currentSlots().addToLibrary !== undefined,
     platform: platform(),
+    pinned: pinnedAtom(project).get(),
   });
 
   const selectClickedWhenEmpty = () => {
@@ -160,6 +164,9 @@ const UnframedSections = () => {
       case "clear-recipe":
         if (opened.clicked) setGroupRecipe(editor, opened.clicked.id, undefined);
         return;
+      case "keep-playing":
+        if (opened.clicked) togglePin(project, opened.clicked.id);
+        return;
       case "add-to-library":
         selectClickedWhenEmpty();
         currentSlots().addToLibrary?.(editor);
@@ -190,6 +197,8 @@ const UnframedSections = () => {
               >
                 <span className="tlui-button__label">{item.label}</span>
               </div>
+            ) : item.action === "keep-playing" ? (
+              <TldrawUiMenuCheckboxItem key={item.action} id="unframed-keep-playing" label={item.label} checked={item.checked} onSelect={() => void run(item)} />
             ) : (
             <TldrawUiMenuItem
               key={item.action}

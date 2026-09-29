@@ -4,6 +4,7 @@ import { Tether } from "../generate/overlays.tsx";
 import { SelectionToolbar } from "../generate/SelectionToolbar.tsx";
 import { LibraryHost } from "../library/LibraryHost.tsx";
 import { MentionMenu } from "./MentionMenu.tsx";
+import { ArtifactsHost } from "../artifacts/ArtifactsHost.tsx";
 
 /** Everything Unframed draws in front of the canvas, inside tldraw's container. */
 export const InFront = () => (
@@ -14,5 +15,6 @@ export const InFront = () => (
     <BottomRight />
     <LibraryHost />
     <AgentHost />
+    <ArtifactsHost />
   </>
 );
