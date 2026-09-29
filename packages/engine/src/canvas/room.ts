@@ -44,6 +44,14 @@ export interface Applied {
   readonly inverse: CanvasChange;
 }
 
+/** One row of the canvas change log. */
+export interface ChangeLogRow {
+  readonly clock: number;
+  readonly origin: ChangeOrigin;
+  readonly put: ReadonlyArray<string>;
+  readonly removed: ReadonlyArray<string>;
+}
+
 /** A change the room refused: a record that fails the schema. */
 export class InvalidChange extends Error {}
 
@@ -244,6 +252,19 @@ export class CanvasRoom {
       }
     }
     return recordIds.filter((id) => changed.has(id));
+  }
+
+  /** Every change log row after `clock`, oldest first, with who asked for it. */
+  changeLog(clock: number): ChangeLogRow[] {
+    return this.db
+      .prepare("SELECT clock, origin_kind, origin_id, put, removed FROM canvas_changes WHERE clock > ? ORDER BY clock")
+      .all(clock)
+      .map((row) => ({
+        clock: Number(row.clock),
+        origin: { kind: String(row.origin_kind) as ChangeOrigin["kind"], id: String(row.origin_id) },
+        put: JSON.parse(String(row.put)) as string[],
+        removed: JSON.parse(String(row.removed)) as string[],
+      }));
   }
 
   /** Flushes storage, then disconnects every tab. The room cannot be used afterwards. */

@@ -29,6 +29,8 @@ import { preferencesStoreLayer } from "./preferencesStore.ts";
 import { projectDatabaseLayer } from "./projectDatabase.ts";
 import { Projects, projectsLayer } from "./projects.ts";
 import { rpcHandlersLayer } from "./rpc/handlers.ts";
+import { providerDetectionLayer } from "./agent/detection.ts";
+import { Agents, agentsLayer } from "./agent/layer.ts";
 import { RpcSockets, rpcSocketsLayer } from "./rpc/sockets.ts";
 import { Config } from "./services.ts";
 import { SettingsStore, settingsStoreLayer } from "./settingsStore.ts";
@@ -96,6 +98,7 @@ export const startEngine = async (host: EngineHost): Promise<RunningEngine> => {
   const services = Layer.mergeAll(RpcServer.layer(UnframedRpcs, { disableTracing: true })).pipe(
     Layer.provideMerge(rpcHandlersLayer),
     Layer.provideMerge(rpcSocketsLayer),
+    Layer.provideMerge(Layer.provideMerge(agentsLayer, providerDetectionLayer)),
     Layer.provideMerge(renderJobsLayer),
     Layer.provideMerge(shareLinksLayer),
     Layer.provideMerge(runsLayer),
@@ -115,7 +118,7 @@ export const startEngine = async (host: EngineHost): Promise<RunningEngine> => {
     Layer.provideMerge(Layer.succeed(Ipc, { send: host.send })),
   );
   const runtime = ManagedRuntime.make(services);
-  const { settings, sockets, rooms, media, projects, shutdown } = await runtime.runPromise(
+  const { settings, sockets, rooms, media, projects, shutdown, agents } = await runtime.runPromise(
     Effect.gen(function* () {
       const store = yield* SettingsStore;
       const shutdown = yield* Shutdown;
@@ -138,6 +141,7 @@ export const startEngine = async (host: EngineHost): Promise<RunningEngine> => {
         rooms: yield* CanvasRooms,
         media: yield* MediaStore,
         projects: yield* Projects,
+        agents: yield* Agents,
         shutdown,
       };
     }),
@@ -147,6 +151,7 @@ export const startEngine = async (host: EngineHost): Promise<RunningEngine> => {
     http: [
       projectFileRoute((project) => runtime.runPromise(projects.folder(project))),
       uploadRoute(media),
+      ...agents.routes,
       ...(config.clientDist === undefined ? [] : [clientRoute(config.clientDist)]),
     ],
     upgrade: [sockets.upgrade, rooms.upgrade],
@@ -155,6 +160,7 @@ export const startEngine = async (host: EngineHost): Promise<RunningEngine> => {
     throw new Error(`could not listen on ${LOOPBACK_HOST}:${port.port}: ${errorText(error)}`);
   });
 
+  agents.runtime.setApiPort(apiPort);
   process.stdout.write(banner(apiPort, settings));
   host.send?.({ type: "ready", port: apiPort, previewPort });
 

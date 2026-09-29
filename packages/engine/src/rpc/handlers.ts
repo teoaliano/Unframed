@@ -17,6 +17,8 @@ import { SettingsStore } from "../settingsStore.ts";
 import { guardHandlers } from "./guardHandlers.ts";
 import { copyPresetFiles } from "../library/presetCopier.ts";
 import { PresetStore } from "../library/presetStore.ts";
+import { ProviderDetection } from "../agent/detection.ts";
+import { Agents } from "../agent/layer.ts";
 
 export const rpcHandlersLayer = UnframedRpcs.toLayer(
   Effect.gen(function* () {
@@ -32,6 +34,8 @@ export const rpcHandlersLayer = UnframedRpcs.toLayer(
     const runs = yield* Runs;
     const renderJobs = yield* RenderJobs;
     const presets = yield* PresetStore;
+    const detection = yield* ProviderDetection;
+    const agents = yield* Agents;
     const context = yield* Effect.context<SettingsStore | Projects | Native>();
 
     const testOnly = <A, E>(run: () => Effect.Effect<A, E>) =>
@@ -40,7 +44,15 @@ export const rpcHandlersLayer = UnframedRpcs.toLayer(
     return guardHandlers({
       "server.health": () => Effect.map(settings.view, (view) => ({ ...view, ok: true as const })),
       "settings.get": () => settings.view,
-      "settings.update": (patch) => Effect.tap(settings.update(patch), () => clearStoredModels(preferences, patch)),
+      "settings.update": (patch) =>
+        Effect.tap(settings.update(patch), () =>
+          Effect.andThen(clearStoredModels(preferences, patch), () =>
+            Effect.all([
+              patch.claudePath !== undefined || patch.claudeConfigDir !== undefined ? detection.forget("claude") : Effect.void,
+              patch.codexPath !== undefined ? detection.forget("codex") : Effect.void,
+            ]),
+          ),
+        ),
       "settings.subscribe": () => settings.subscribe,
       "settings.pickFolder": () =>
         Effect.map(Effect.flatMap(settings.outputDir, native.pickFolder), (path) => ({ path })),
@@ -77,6 +89,14 @@ export const rpcHandlersLayer = UnframedRpcs.toLayer(
       "library.save": (input) => presets.save(input),
       "library.delete": ({ id }) => presets.remove(id),
       "library.copyFiles": ({ project, files }) => presets.serialised(copyPresetFiles(media, project, files)),
+      "providers.getStatuses": ({ refresh, projectId }) =>
+        Effect.flatMap(projectId === undefined ? Effect.succeed(undefined) : projects.folder(projectId), (projectFolder) =>
+          detection.statuses({ ...(refresh === undefined ? {} : { refresh }), ...(projectFolder === undefined ? {} : { projectFolder }) }),
+        ),
+      "orchestration.dispatchCommand": (command) => agents.dispatch(command),
+      "orchestration.subscribeShell": ({ projectId, afterSequence }) => agents.subscribeShell(projectId, afterSequence),
+      "orchestration.subscribeThread": ({ projectId, threadId, afterSequence }) => agents.subscribeThread(projectId, threadId, afterSequence),
+      "attachments.createUploadUrl": (input) => agents.createUploadUrl(input),
       "testCanvas.read": ({ project }) =>
         testOnly(() =>
           Effect.all({ clock: rooms.clock(project), records: Effect.map(rooms.read(project), (records) => [...records]) }),

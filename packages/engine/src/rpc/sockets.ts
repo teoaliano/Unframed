@@ -22,6 +22,13 @@ export const MAX_FRAME_BYTES = MAX_REQUEST_BYTES;
 export const RPC_PATH = "/ws";
 
 /**
+ * Methods whose payload refuses any field its schema does not name, at any depth. A chat
+ * command never carries a binary path or anything else a page could use to choose what
+ * runs (spec 07): paths arrive only through settings.
+ */
+const STRICT_PAYLOADS: ReadonlySet<string> = new Set(["orchestration.dispatchCommand"]);
+
+/**
  * The RPC socket at `/ws`: every connected client, and the RPC server protocol that
  * carries their messages. One bad frame closes only its own socket. Hand-written because
  * Effect's socket protocol answers a non-JSON frame and an undecodable payload with a
@@ -73,7 +80,10 @@ export const rpcSocketsLayer = Layer.effectContext(
       const rpc = UnframedRpcs.requests.get(tag);
       if (!rpc) return undefined;
       const made: RpcCodecs = {
-        decodePayload: Schema.decodeUnknownExit(Schema.toCodecJson(rpc.payloadSchema)) as RpcCodecs["decodePayload"],
+        decodePayload: Schema.decodeUnknownExit(
+          Schema.toCodecJson(rpc.payloadSchema),
+          STRICT_PAYLOADS.has(tag) ? { onExcessProperty: "error" } : undefined,
+        ) as RpcCodecs["decodePayload"],
         encodeExit: Schema.encodeSync(Schema.toCodecJson(Rpc.exitSchema(rpc))) as RpcCodecs["encodeExit"],
       };
       codecs.set(tag, made);

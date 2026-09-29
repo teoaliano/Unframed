@@ -5,6 +5,7 @@ import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { createCanvasChangesTable, createSyncStorageTables } from "./canvas/tables.ts";
+import { createChatTables } from "./agent/chatTables.ts";
 import { errorText } from "./log.ts";
 import { OpenProjects } from "./openProjects.ts";
 import { Config } from "./services.ts";
@@ -26,6 +27,7 @@ export interface Migration {
 export const MIGRATIONS: ReadonlyArray<Migration> = [
   { id: 1, name: "tldraw sync storage", up: createSyncStorageTables },
   { id: 2, name: "canvas_changes", up: createCanvasChangesTable },
+  { id: 3, name: "chat store and turn_changes", up: createChatTables },
 ];
 
 /** `UNFRAMED_TEST_MIGRATION`'s extra migration, numbered far past any real one. */

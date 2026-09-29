@@ -74,14 +74,14 @@ describe("the published bundle", () => {
     expect((await readdir(bundle)).sort()).toEqual(
       ["THIRD_PARTY_NOTICES", "client", "package.json", "server", ...(hasLicense ? ["LICENSE"] : [])].sort(),
     );
-    const engineVersion = JSON.parse(await readFile(join(repoRoot, "packages/engine/package.json"), "utf8")).version;
+    const engineManifest = JSON.parse(await readFile(join(repoRoot, "packages/engine/package.json"), "utf8"));
     const manifest = JSON.parse(await readFile(join(bundle, "package.json"), "utf8"));
     expect(manifest).toEqual({
       name: "unframed",
-      version: engineVersion,
+      version: engineManifest.version,
       type: "module",
       main: "server/index.js",
-      dependencies: {},
+      dependencies: { "@anthropic-ai/claude-agent-sdk": engineManifest.dependencies["@anthropic-ai/claude-agent-sdk"] },
     });
     const server = await listFiles(join(bundle, "server"));
     expect(server).toContain("index.js");
@@ -89,6 +89,7 @@ describe("the published bundle", () => {
     const code = await readFile(join(bundle, "server", "index.js"), "utf8");
     expect(code).not.toMatch(/sourceMappingURL/);
     expect(code).not.toMatch(/workspace:/);
+    expect(code).toMatch(/import\(["']@anthropic-ai\/claude-agent-sdk["']\)/);
     expect(code).not.toMatch(/from\s+["'][^"']+\.ts["']/);
     expect(code).not.toMatch(/(?:from\s+|require\()["']@unframed\//);
     expect(code).not.toMatch(/onTestFinished|startOpenRouterStub/);
@@ -140,7 +141,9 @@ describe("the published bundle", () => {
     const tarball = join(packs, stdout.trim().split("\n").at(-1)!);
     await npm(["install", tarball, "--no-audit", "--no-fund"], { cwd: target, env: npmEnv() });
     const installed = join(target, "node_modules", "unframed");
-    expect(await readdir(join(target, "node_modules"))).toEqual([".package-lock.json", "unframed"]);
+    // The Agent SDK is the one runtime dependency; npm brings it and its peers.
+    expect(await readdir(join(target, "node_modules"))).toEqual(expect.arrayContaining([".package-lock.json", "unframed", "@anthropic-ai"]));
+    expect(existsSync(join(target, "node_modules", "@anthropic-ai", "claude-agent-sdk", "package.json"))).toBe(true);
     const engine = await startEngine({
       entry: join(installed, "server", "index.js"),
       clientDist: join(installed, "client", "dist"),

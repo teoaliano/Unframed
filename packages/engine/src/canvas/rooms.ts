@@ -15,9 +15,9 @@ import { OpenProjects } from "../openProjects.ts";
 import { ProjectDatabase } from "../projectDatabase.ts";
 import { SettingsStore } from "../settingsStore.ts";
 import type { ChangeOrigin, CommittedChange } from "./loggedStorage.ts";
-import { CanvasRoom, InvalidChange, SYNC_ERROR_CLOSE, type Applied, type CanvasChange } from "./room.ts";
+import { CanvasRoom, InvalidChange, SYNC_ERROR_CLOSE, type Applied, type CanvasChange, type ChangeLogRow } from "./room.ts";
 
-export type { Applied, CanvasChange, ChangeOrigin, CommittedChange };
+export type { Applied, CanvasChange, ChangeLogRow, ChangeOrigin, CommittedChange };
 
 /** How long a room stays open after its last tab leaves. */
 export const ROOM_IDLE_MS = 60_000;
@@ -55,6 +55,8 @@ export class CanvasRooms extends Context.Service<
     readonly apply: (project: string, change: CanvasChange, origin: ChangeOrigin) => Effect.Effect<Applied, UnframedError>;
     /** The ids among `recordIds` a tab changed after `clock`. */
     readonly changedSince: (project: string, recordIds: ReadonlyArray<string>, clock: number) => Effect.Effect<ReadonlyArray<string>, UnframedError>;
+    /** Every change log row after `clock`, with its origin (spec 07 reads the log through this). */
+    readonly changeLog: (project: string, clock: number) => Effect.Effect<ReadonlyArray<ChangeLogRow>, UnframedError>;
     readonly close: (project: string) => Effect.Effect<void>;
     /** Closes every tab's socket with `code`, for shutdown. */
     readonly closeSockets: (code: number) => Promise<void>;
@@ -277,6 +279,7 @@ export const canvasRoomsLayer = Layer.effect(
       clock: (project) => engineCall(project, (room) => room.clock()),
       apply: (project, change, origin) => engineCall(project, (room) => room.apply(change, origin)),
       changedSince: (project, recordIds, clock) => engineCall(project, (room) => room.changedSince(recordIds, clock)),
+      changeLog: (project, clock) => engineCall(project, (room) => room.changeLog(clock)),
       close: (project) =>
         Effect.sync(() => {
           const room = rooms.get(projectSlug(project));

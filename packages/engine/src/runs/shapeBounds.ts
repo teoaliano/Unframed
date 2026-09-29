@@ -66,6 +66,14 @@ const localBox = (shape: ShapeLike): Box => {
   }
 };
 
+/** Every shape's box in its parent's space and on the page. */
+export const shapeBoxes = (records: ReadonlyArray<TLRecord>): Map<string, { local: Box; page: Box }> => {
+  const local = new Map(
+    (records.filter((record) => record.typeName === "shape") as unknown as ShapeLike[]).map((shape) => [shape.id, localBox(shape)] as const),
+  );
+  return new Map(shapePageBoxes(records).map((entry) => [entry.id, { local: local.get(entry.id)!, page: entry.box }] as const));
+};
+
 /** The page bounds of every shape in `records`, a group's members moved by their group's origin. */
 export const shapePageBoxes = (records: ReadonlyArray<TLRecord>): Array<{ readonly id: string; readonly type: string; readonly box: Box }> => {
   const shapes = records.filter((record) => record.typeName === "shape") as unknown as ShapeLike[];

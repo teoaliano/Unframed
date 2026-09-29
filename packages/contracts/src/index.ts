@@ -7,3 +7,4 @@ export * from "./generation.ts";
 export * from "./video.ts";
 export * from "./text.ts";
 export * from "./library.ts";
+export * from "./agent.ts";
