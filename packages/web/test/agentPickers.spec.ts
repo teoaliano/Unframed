@@ -1,4 +1,4 @@
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Locator, Page } from "@playwright/test";
@@ -269,5 +269,50 @@ test("the plan toggle reads Plan or Build with its tooltip, Shift+Tab flips it, 
     await expect.poll(async () => (await engineChat(agent, chatId)).interactionMode).toBe("default");
   } finally {
     await agent.dispose();
+  }
+});
+
+test("the context window meter fills to the scripted usage, turns red above 90 %, and its popover offers Compact context", async ({ page }) => {
+  const scripts = await mkdtemp(join(tmpdir(), "unframed-scripts-"));
+  await writeFile(
+    join(scripts, "usage.json"),
+    JSON.stringify({
+      when: "how full",
+      turns: [
+        { text: "Plenty left.", usage: { usedTokens: 50_000, maxTokens: 200_000, totalProcessedTokens: 420_000 } },
+        { text: "Nearly full.", usage: { usedTokens: 185_000, maxTokens: 200_000 } },
+        { text: "Compacted." },
+      ],
+    }),
+  );
+  const agent = await startAgentEngine({ script: scripts });
+  try {
+    await openCanvas(page, agent);
+    const panel = await openRail(page);
+    await expect(panel.getByTestId("context-meter")).toHaveCount(0);
+    await say(panel, "how full is the context?");
+    const meter = panel.getByTestId("context-meter");
+    await expect(meter).toHaveAttribute("aria-label", "Context window 25% used");
+    await expect(meter).not.toHaveAttribute("data-overloaded");
+    await meter.hover();
+    const popup = page.getByRole("dialog", { name: "Context Window" });
+    await expect(popup.getByText("Context Window", { exact: true })).toBeVisible();
+    await expect(popup.getByTestId("context-numbers")).toHaveText("25% · 50k/200k");
+    await expect(popup.getByRole("progressbar", { name: "Context window usage" })).toHaveAttribute("aria-valuenow", "25");
+    await expect(popup.getByText("Total processed")).toBeVisible();
+    await expect(popup.getByText("420k", { exact: true })).toBeVisible();
+    await expect(popup.getByText("Context compacts automatically when needed.", { exact: true })).toBeVisible();
+    await page.mouse.move(5, 5);
+
+    await say(panel, "and now?");
+    await expect(meter).toHaveAttribute("aria-label", "Context window 93% used");
+    await expect(meter).toHaveAttribute("data-overloaded", "");
+    await meter.hover();
+    await popup.getByRole("button", { name: "Compact context" }).click();
+    await expect(panel.locator("[data-role='user'] .unframed-agent-message__text").last()).toHaveText("/compact");
+    await expect(panel.locator("[data-role='assistant']").last()).toContainText("Compacted.");
+  } finally {
+    await agent.dispose();
+    await rm(scripts, { recursive: true, force: true });
   }
 });
