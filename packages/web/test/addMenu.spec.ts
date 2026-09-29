@@ -13,7 +13,7 @@ const addFromButton = async (page: Page, label: string) => {
   await page.getByRole("menuitem", { name: label, exact: true }).click();
 };
 
-test("the add button opens Inputs and Artifacts, 152 px wide, toward the start side", async ({ page, engine }) => {
+test("the add button opens Inputs and Artifacts, 152 px wide, above the bottom bar", async ({ page, engine }) => {
   await openCanvas(page, engine);
   const button = page.getByRole("button", { name: "Add" });
   await button.click();
@@ -25,22 +25,24 @@ test("the add button opens Inputs and Artifacts, 152 px wide, toward the start s
   await expect.poll(async () => (await popup.boundingBox())?.width).toBe(152);
   const menuBox = (await popup.boundingBox())!;
   const buttonBox = (await button.boundingBox())!;
-  expect(menuBox.x + menuBox.width).toBeLessThanOrEqual(buttonBox.x);
+  expect(menuBox.y + menuBox.height).toBeLessThanOrEqual(buttonBox.y);
 });
 
-test("the bottom-right card is glass with the kit's Library and Add buttons, and the add menu is the kit menu with its section labels", async ({ page, engine }) => {
+test("one bottom bar holds tldraw's quick actions and tools, then Library and Add, with no dividers; the add menu is the kit menu", async ({ page, engine }) => {
   await openCanvas(page, engine);
-  const card = page.getByTestId("chrome-bottom-right");
-  const add = card.getByRole("button", { name: "Add" });
-  const library = card.getByRole("button", { name: "Library" });
-  await expectSlot(add, "menu-trigger");
-  await expectSlot(library, "tooltip-trigger");
+  const bar = page.getByTestId("bottom-toolbar");
+  await expect(page.locator(".tlui-main-toolbar__extras")).toHaveCount(0);
+  // tldraw's labels carry their shortcut ("Undo — ⌘ Z"): the name before it.
+  const buttons = await bar.getByRole("button").evaluateAll((all) => all.map((button) => (button.getAttribute("aria-label") ?? "").split(" — ")[0]!));
+  expect(buttons.slice(0, 2)).toEqual(["Undo", "Redo"]);
+  expect(buttons.slice(-2)).toEqual(["Library", "Add"]);
+  expect(buttons.indexOf("Select")).toBeGreaterThan(buttons.indexOf("Redo"));
+  await expect(bar.locator("[data-slot='separator'], .tlui-toolbar__divider, hr")).toHaveCount(0);
+  const add = bar.getByRole("button", { name: "Add" });
   await inBothSchemes(page, async () => {
     await page.mouse.move(5, 500);
-    expect(await styleOf(card, "background-color")).toBe(await resolvedColor(page, "color-mix(in srgb, var(--background) var(--glass-opacity), transparent)"));
-    expect(await styleOf(card, "border-top-left-radius")).toBe("14px");
-    await expectToken(add, "background-color", "--primary");
-    expect(await styleOf(library, "background-color")).toBe("rgba(0, 0, 0, 0)");
+    // One panel: the bar carries tldraw's panel fill, mapped onto the kit's popover.
+    await expectToken(bar, "background-color", "--popover");
     await add.click();
     const popup = page.locator("[data-slot='menu-popup']");
     await expect(popup).toBeVisible();

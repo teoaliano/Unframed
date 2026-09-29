@@ -4,12 +4,9 @@
  */
 import { UnframedError } from "@unframed/contracts";
 import type { Preset } from "@unframed/domain";
-import { Library } from "lucide-react";
 import { useEffect } from "react";
-import { useEditor, useValue } from "tldraw";
-import { Button } from "~/components/ui/button";
+import { TldrawUiButtonIcon, TldrawUiToolbarButton, useEditor, useValue } from "tldraw";
 import { registerSlot } from "../chrome/slots.ts";
-import { Tip } from "../chrome/ui.tsx";
 import { useCanvasProject, useEngine, useSettings } from "../context.ts";
 import { showError } from "../toasts.tsx";
 import { AddToLibraryDialog } from "./AddToLibraryDialog.tsx";
@@ -21,14 +18,13 @@ const messageOf = (error: unknown) => (error instanceof UnframedError || error i
 
 export const LIBRARY_TOOLTIP = "Ready-made flows and styles";
 
+/** The Library in the bottom bar: a tldraw toolbar button beside the tools. */
 const LibraryButton = () => {
   const editor = useEditor();
   return (
-    <Tip label={LIBRARY_TOOLTIP} side="left">
-      <Button variant="ghost" size="icon-lg" aria-label="Library" onClick={() => libraryUi(editor).update((state) => ({ ...state, open: true }))}>
-        <Library aria-hidden />
-      </Button>
-    </Tip>
+    <TldrawUiToolbarButton type="tool" title="Library" tooltip={LIBRARY_TOOLTIP} onClick={() => libraryUi(editor).update((state) => ({ ...state, open: true }))}>
+      <TldrawUiButtonIcon icon="library" />
+    </TldrawUiToolbarButton>
   );
 };
 

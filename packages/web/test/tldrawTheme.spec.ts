@@ -10,7 +10,8 @@ test("tldraw's toolbar, style panel, zoom controls, menus and shortcuts dialog t
   await openCanvas(page, engine);
   const subject = await centre(shapeOnScreen(page, "shape:starter-subject"));
   await page.mouse.click(subject.x, subject.y);
-  const toolbar = page.locator(".tlui-main-toolbar__tools");
+  // tldraw's tools sit in Unframed's one bottom bar, which carries the panel fill.
+  const toolbar = page.getByTestId("bottom-toolbar");
   const selectTool = page.getByTestId("tools.select");
   const stylePanel = page.locator(".tlui-style-panel__wrapper");
   await expect(stylePanel).toBeVisible();

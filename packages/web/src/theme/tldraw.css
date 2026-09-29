@@ -132,3 +132,24 @@
 [data-artifact-editor] .tlui-layout {
   visibility: hidden;
 }
+
+/*
+ * The one bottom bar (spec 02): tldraw's quick actions, its tools and Unframed's buttons
+ * share one panel, with no dividers between them. tldraw's tools keep their own class, so
+ * its panel look moves to the bar and leaves the inner toolbars plain.
+ */
+[data-unframed-toolbar] {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  pointer-events: all;
+  border-radius: var(--tl-radius-4);
+  background: var(--tl-color-panel);
+  box-shadow: var(--tl-shadow-2);
+}
+
+[data-unframed-toolbar] .tlui-main-toolbar__tools,
+[data-unframed-toolbar] [data-unframed-toolbar-group] {
+  background: none;
+  box-shadow: none;
+}

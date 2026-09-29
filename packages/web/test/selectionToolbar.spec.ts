@@ -16,9 +16,9 @@ test("a usable selection gets Generate and its count; a named group reads by its
   await clickShape(page, "shape:starter-subject");
   await expect(toolbar(page).getByRole("button", { name: "Generate" })).toBeVisible();
   await expect(toolbar(page).getByTestId("selection-hint")).toHaveText("1 selected");
-  // The hint, a separator and Agent come before Generate, which ends the bar, once spec 08 registers the Agent tray.
+  // The hint and Agent come before Generate, which ends the bar, once spec 08 registers the Agent tray. No dividers.
   await expect(toolbar(page).getByRole("button")).toHaveText(["Agent", "Generate"]);
-  await expect(toolbar(page).locator("[data-slot='separator']")).toHaveCount(1);
+  await expect(toolbar(page).locator("[data-slot='separator']")).toHaveCount(0);
 
   await page.keyboard.press("ControlOrMeta+a");
   await expect(toolbar(page).getByTestId("selection-hint")).toHaveText("3 selected");
@@ -37,7 +37,6 @@ test("the bar is glass with the kit border and radius; Generate is the kit's pri
   const bar = toolbar(page);
   const generate = bar.getByRole("button", { name: "Generate" });
   await expectSlot(generate, "button");
-  await expectSlot(bar.locator("[data-slot='separator']"), "separator");
   await inBothSchemes(page, async () => {
     await page.mouse.move(5, 500);
     expect(await styleOf(bar, "background-color")).toBe(await resolvedColor(page, GLASS));

@@ -54,6 +54,7 @@ import {
   Image,
   Info,
   Italic,
+  Library,
   Link,
   List,
   Lock,
@@ -204,11 +205,14 @@ const LUCIDE: Partial<Record<TLUiIconType, LucideIcon>> = {
   "drag-handle-dots": GripVertical,
 };
 
+/** Icons Unframed's own toolbar buttons name, beside tldraw's. */
+const UNFRAMED: Readonly<Record<string, LucideIcon>> = { library: Library };
+
 /** Each mapped tldraw icon name and its Lucide SVG as a data URL, rendered once. */
 export const lucideIconUrls = (): Record<string, string> => {
   const host = document.createElement("div");
   const root = createRoot(host);
-  const entries = Object.entries(LUCIDE);
+  const entries = [...Object.entries(LUCIDE), ...Object.entries(UNFRAMED)];
   flushSync(() => root.render(entries.map(([name, Icon]) => <Icon key={name} />)));
   const urls = Object.fromEntries(entries.map(([name], index) => [name, `data:image/svg+xml;utf8,${encodeURIComponent(host.children[index]!.outerHTML)}`]));
   root.unmount();

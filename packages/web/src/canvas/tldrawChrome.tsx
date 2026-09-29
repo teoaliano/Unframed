@@ -6,6 +6,7 @@
 import { getAssetUrlsByImport } from "@tldraw/assets/imports.vite";
 import { DefaultStylePanel, useEditor, useValue, type TLComponents, type TldrawOptions, type TLUiStylePanelProps } from "tldraw";
 import "tldraw/tldraw.css";
+import { BottomToolbar } from "../chrome/BottomToolbar.tsx";
 import { lucideIconUrls } from "./icons.tsx";
 
 const tldrawAssets = getAssetUrlsByImport();
@@ -47,4 +48,6 @@ export const TLDRAW_CHROME: TLComponents = {
   ImageToolbar: null,
   VideoToolbar: null,
   StylePanel,
+  // One bottom bar: quick actions, tools and Unframed's own buttons (spec 02).
+  Toolbar: BottomToolbar,
 };

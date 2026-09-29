@@ -32,7 +32,7 @@ const twoPages = async (page: Page, engine: TestEngine): Promise<{ alpha: string
 const target = (page: Page) => composer(page).getByTestId("agent-target");
 const chips = (page: Page) => composer(page).getByRole("list", { name: "Context" }).getByRole("listitem");
 
-test("an empty page's bar is Agent alone, with no separator before it; its tray has one frame", async ({ page, agent }) => {
+test("an empty page's bar is Agent alone; its tray has one frame", async ({ page, agent }) => {
   await openCanvas(page, agent);
   await putRecords(agent, [artifactShape({ id: "shape:empty", kind: "page", ref: "170", at: { x: 0, y: 0 } })]);
   await clickShape(page, "shape:empty");

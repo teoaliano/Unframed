@@ -3,7 +3,6 @@ import { composeSelection, resultLine, toolbarState, type ToolbarState } from "@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useEditor, useValue, type Editor, type TLShapeId } from "tldraw";
 import { Button } from "~/components/ui/button";
-import { Separator } from "~/components/ui/separator";
 import { cn } from "~/lib/utils";
 import { groupRecipeOf } from "../canvas/groupRecipes.ts";
 import { Tip } from "../chrome/ui.tsx";
@@ -19,6 +18,7 @@ import { openOnRecipe, recipeProps, recipeRunProgress, runGroupRecipe } from "./
 import { repeatResult, varyBlocked, varyCapMessage } from "./results.ts";
 import { closeComposer, composerState, leaveRecipeMode, openComposer } from "./state.ts";
 import { composerGlassClass } from "../chrome/composerSurface.ts";
+import { useWheelToCanvas } from "../canvas/wheelToCanvas.ts";
 
 const messageOf = (error: unknown) => (error instanceof UnframedError || error instanceof Error ? error.message : String(error));
 
@@ -47,39 +47,6 @@ const selectionOnScreen = (editor: Editor): ScreenBox | undefined => {
   return { x: topLeft.x, y: topLeft.y, w: bottomRight.x - topLeft.x, h: bottomRight.y - topLeft.y };
 };
 
-/** A wheel over the bar or the composer moves the canvas, unless it is over something that scrolls itself. */
-const useWheelToCanvas = (editor: Editor, root: React.RefObject<HTMLDivElement | null>) => {
-  useEffect(() => {
-    const element = root.current;
-    if (!element) return;
-    const onWheel = (event: WheelEvent) => {
-      for (let node = event.target as HTMLElement | null; node && node !== element; node = node.parentElement) {
-        if (node.dataset.scrolls === "true" && node.scrollHeight > node.clientHeight) return;
-      }
-      event.preventDefault();
-      event.stopPropagation();
-      const canvas = editor.getContainer().querySelector(".tl-canvas");
-      canvas?.dispatchEvent(
-        new WheelEvent("wheel", {
-          bubbles: true,
-          cancelable: true,
-          clientX: event.clientX,
-          clientY: event.clientY,
-          deltaX: event.deltaX,
-          deltaY: event.deltaY,
-          deltaZ: event.deltaZ,
-          deltaMode: event.deltaMode,
-          ctrlKey: event.ctrlKey,
-          metaKey: event.metaKey,
-          shiftKey: event.shiftKey,
-          altKey: event.altKey,
-        }),
-      );
-    };
-    element.addEventListener("wheel", onWheel, { passive: false });
-    return () => element.removeEventListener("wheel", onWheel);
-  }, [editor, root]);
-};
 
 /**
  * The floating element that is the bar and grows into the composer on the same centre and
@@ -196,7 +163,6 @@ const AgentButton = ({ onOpen }: { onOpen: () => void }) => {
   const { agentToolbarButton: Registered } = useSlots();
   return (
     <>
-      <Separator orientation="vertical" className="mx-0.5 my-1 first:hidden" />
       {Registered ? (
         <Registered onOpen={onOpen} />
       ) : (

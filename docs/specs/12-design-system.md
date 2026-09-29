@@ -139,7 +139,7 @@ Copy rules:
 
 Every surface moves onto the kit. The mapping, by surface:
 
-- **Chrome corners, project menu, add menu, library button:** Button (`ghost` and icon sizes), Menu, Tooltip; the two corner cards and the bottom-right card use `surface-glass` with the kit border and radius. The `.unframed-chrome-left` and `.unframed-chrome-right` classes stay (spec 01).
+- **Chrome corners, project menu, add menu, library button:** Button (`ghost` and icon sizes), Menu, Tooltip; the two corner cards use `surface-glass` with the kit border and radius; Library and Add sit in the bottom bar as tldraw toolbar buttons (spec 02). The `.unframed-chrome-left` and `.unframed-chrome-right` classes stay (spec 01).
 - **Project name dialog and project delete confirms:** Dialog with Input and Label; AlertDialog with `destructive` Button.
 - **Toasts:** the kit Toast (Base UI Toast) with t3code's look. Position stays bottom-left as spec 02 has it.
 - **Connection notice:** a sticky kit Toast, as today.
@@ -214,7 +214,7 @@ Each task updates the spec passages for the surface it restyles, in the same com
 1. Theme foundation: t3code's default tokens, utilities, base rules and system font stacks replace the current theme; the dark variant keys on `data-unframed-theme`; the body and canvas are `--background`; `--unframed-text-secondary` resolves to the muted foreground; the index and `assets/theme/README.md` say spec 12 replaced the old theme. The spec 01 DOM hook tests pass with the new values in light and dark, and every surface still renders. Seam: browser.
 2. UI kit and lint: the kit components, `cn`, class-variance-authority and tailwind-merge are copied with their licences recorded; the lint runs in `pnpm typecheck`; the chrome corners (logo card, help button, their tooltips) render through kit Button and Tooltip on `surface-glass`, and the injected-CSS test still moves the left card. Seam: browser.
 3. Project menu, project name dialog and the project delete confirms on kit Menu, Dialog, Input and AlertDialog, with the existing project menu tests passing. Seam: browser.
-4. Add menu, bottom-right card and library button on kit Menu and Button, at 152 px, opening as today. Seam: browser.
+4. Add menu on the kit Menu at 152 px; Library and Add at the end of the one bottom bar (spec 02). Seam: browser.
 5. Toasts and the connection notice on the kit Toast, bottom-left, with their existing tests passing. Seam: browser.
 6. tldraw theme adapter: the toolbar, style panel, zoom controls, quick actions, shortcuts dialog and link dialog take the kit's colours, font, radii and shadows in both schemes; a toolbar button's background and the style panel's background equal the mapped tokens; the watermark stays uncovered. Seam: browser.
 7. Context menu: kit menu look for rows, headings and the disabled "Add to library" row, at 188 px, with every context menu test passing. Seam: browser.

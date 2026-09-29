@@ -1,29 +1,28 @@
-import { Plus } from "lucide-react";
-import { useEditor } from "tldraw";
-import { Button } from "~/components/ui/button";
-import { Menu, MenuGroup, MenuGroupLabel, MenuItem, MenuPopup, MenuTrigger } from "~/components/ui/menu";
+import { useRef, useState } from "react";
+import { TldrawUiButtonIcon, TldrawUiToolbar, TldrawUiToolbarButton, useEditor } from "tldraw";
+import { Menu, MenuGroup, MenuGroupLabel, MenuItem, MenuPopup } from "~/components/ui/menu";
 import { addShape, kindOfAddAction, viewportCentre } from "../canvas/addShapes.ts";
 import { ADD_ICONS, ADD_SECTIONS } from "./addItems.tsx";
 import { useSlots } from "./slots.ts";
-import { cornerCardClass } from "./ui.tsx";
 
 /**
- * The bottom-right corner: the Library button slot and the add menu. It sits above tldraw's
- * watermark, never over it.
+ * The end of the bottom bar: the Library slot and Add, as tldraw toolbar buttons beside
+ * tldraw's tools. Add opens the kit menu above it.
  */
-export const BottomRight = () => {
+export const ToolbarEnd = () => {
   const editor = useEditor();
   const { libraryButton: Library } = useSlots();
+  const [open, setOpen] = useState(false);
+  const add = useRef<HTMLButtonElement>(null);
   return (
-    // 56 px up clears tldraw's watermark (8 px from the corner, 36 px tall), which stays uncovered.
-    <div className={`pointer-events-auto absolute right-3 bottom-14 z-[300] ${cornerCardClass} flex-col`} data-testid="chrome-bottom-right">
+    <TldrawUiToolbar orientation="horizontal" label="Unframed" data-unframed-toolbar-group="">
       {Library && <Library />}
-      <Menu>
-        <MenuTrigger aria-label="Add" render={<Button size="icon-lg" />}>
-          <Plus aria-hidden />
-        </MenuTrigger>
+      <TldrawUiToolbarButton ref={add} type="tool" title="Add" isActive={open} aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen((was) => !was)}>
+        <TldrawUiButtonIcon icon="plus" />
+      </TldrawUiToolbarButton>
+      <Menu open={open} onOpenChange={setOpen}>
         {/* A new prompt keeps the keyboard: focus does not go back to the button. */}
-        <MenuPopup side="inline-start" align="end" sideOffset={8} className="w-[152px] min-w-0" finalFocus={() => editor.getEditingShapeId() === null}>
+        <MenuPopup anchor={add} side="top" align="end" sideOffset={8} className="w-[152px] min-w-0" finalFocus={() => editor.getEditingShapeId() === null}>
           {ADD_SECTIONS.map((section) => (
             <MenuGroup key={section.heading}>
               <MenuGroupLabel>{section.heading}</MenuGroupLabel>
@@ -40,6 +39,6 @@ export const BottomRight = () => {
           ))}
         </MenuPopup>
       </Menu>
-    </div>
+    </TldrawUiToolbar>
   );
 };
