@@ -8,7 +8,7 @@ import { AgentTray } from "../composer/AgentTray.tsx";
 import { noProviderReady } from "../providers.ts";
 import { ConfirmDialog } from "../ConfirmDialog.tsx";
 import { messageOf } from "../send.ts";
-import { NEW_CHAT, useChatClient, useChats, useProviders, useRailUi } from "../store.ts";
+import { NEW_CHAT, useChatClient, useChats, useProviders, useRailUi, useWatchedThread } from "../store.ts";
 import { EMPTY_CHAT, Transcript } from "../transcript/Transcript.tsx";
 import { NoProvider } from "./NoProvider.tsx";
 import { TabStrip } from "./TabStrip.tsx";
@@ -75,6 +75,11 @@ export const AgentRail = ({ project, embedded, filterTo, onLocate, onOpenEditor,
   const drafting = ui.chosen === NEW_CHAT;
   const active = drafting ? null : ui.pinned !== null && visible.some((chat) => chat.id === ui.pinned) ? ui.pinned : nextActive(ui.chosen, visible);
   const activeSummary = visible.find((chat) => chat.id === active);
+  // The session's failure shows here only when the transcript cannot say it: a failed turn's reply already ends with it.
+  const activeChat = useWatchedThread(client, active);
+  const lastError = activeChat?.session?.lastError ?? null;
+  const lastText = activeChat?.messages.at(-1)?.text ?? "";
+  const errorLine = ui.error ?? (lastError !== null && lastError.trim() !== "" && !lastText.includes(lastError.trim()) ? lastError : undefined);
   const none = noProviderReady(statuses);
   const artifactsSelected = selectedArtifacts.length > 0;
 
@@ -163,9 +168,9 @@ export const AgentRail = ({ project, embedded, filterTo, onLocate, onOpenEditor,
           </div>
         )}
       </div>
-      {ui.error !== undefined && (
+      {errorLine !== undefined && (
         <p role="alert" className="unframed-agent-rail__error">
-          {ui.error}
+          {errorLine}
         </p>
       )}
       <ConfirmDialog
