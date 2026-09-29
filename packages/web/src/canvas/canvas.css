@@ -314,3 +314,152 @@
   background-color: var(--unframed-canvas);
   background-image: radial-gradient(circle, color-mix(in srgb, var(--unframed-border-emphasized) 68%, var(--unframed-canvas)) 0.55px, transparent 0.8px);
 }
+
+/* Moved from generate.css: the canvas parts of generation (role badges, tether, placeholders, render placeholder). */
+
+/* Role badges: where a bare media shape's one fact sits, above its top-left corner. */
+.unframed-role-badge {
+  position: absolute;
+  left: 0;
+  top: 0;
+  height: 22px;
+  display: flex;
+  align-items: center;
+  font-family: var(--font-sans);
+  font-size: 11px;
+  line-height: 1;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--unframed-text-accent);
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.tl-container[data-label-level="off"] .unframed-role-badge {
+  display: none;
+}
+
+.unframed-tether {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  pointer-events: none;
+}
+
+.unframed-placeholder .unframed-media-empty__body {
+  flex-direction: row;
+  font-size: 13px;
+  color: var(--unframed-text-secondary);
+}
+
+.unframed-placeholder__spinner {
+  animation: unframed-spin 1s linear infinite;
+}
+
+/* The render placeholder (spec 04): the landing spot of a video render, and why it failed. */
+.unframed-render__body {
+  display: flex;
+  height: 100%;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 12px;
+  text-align: center;
+}
+
+.unframed-render__status,
+.unframed-render__error {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.4;
+  color: var(--unframed-text-secondary);
+}
+
+.unframed-render__error {
+  color: var(--unframed-error);
+  overflow-wrap: anywhere;
+}
+
+.unframed-render__forget {
+  cursor: pointer;
+  border: 0;
+  border-radius: var(--unframed-radius-inner);
+  background: transparent;
+  padding: 2px 6px;
+  font: inherit;
+  font-size: 12px;
+  color: var(--unframed-text-secondary);
+  pointer-events: all;
+}
+
+.unframed-render__forget:hover {
+  background-color: var(--unframed-overlay-hover);
+  color: var(--unframed-text-primary);
+}
+
+/* A text result placeholder (spec 05): the prompt hint slot, saying the run is in flight. */
+.unframed-prompt-running {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+
+/* Moved from artifacts.css: page and motion cards on the canvas (spec 09). */
+
+/* A filled artifact's title is its handle: a selected frame takes every press inside the shape. */
+.tl-container .unframed-shape-label[data-label-handle] {
+  pointer-events: all;
+  cursor: grab;
+}
+
+.unframed-artifact--filled {
+  border: 0;
+  border-radius: 0;
+  background-color: transparent;
+}
+
+.unframed-artifact__frame {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border: 0;
+  background-color: white;
+}
+
+.unframed-artifact__snapshot {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  pointer-events: none;
+  user-select: none;
+}
+
+.unframed-artifact__hint {
+  display: flex;
+  box-sizing: border-box;
+  width: 100%;
+  height: 100%;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 12px;
+  border: 1px solid var(--unframed-border-emphasized);
+  border-radius: var(--unframed-radius-container);
+  background-color: var(--unframed-card);
+  font-family: var(--font-sans);
+  font-size: 12px;
+  color: var(--unframed-text-secondary);
+  text-align: center;
+}
+
+.unframed-artifact__hint-title {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--unframed-text-primary);
+}
