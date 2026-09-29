@@ -30,3 +30,21 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
+
+--------------------------------------------------------------------------------
+HyperFrames, GSAP and DialKit (pages and motions, spec 09)
+--------------------------------------------------------------------------------
+
+Motions are HyperFrames compositions. HyperFrames (@hyperframes/core, @hyperframes/player,
+@hyperframes/producer, @hyperframes/engine) is used under the Apache License 2.0; the
+player's global build and the runtime build are copied into project folders, beside the
+compositions that load them, as hyperframes-player.js and hyperframes-runtime.js.
+
+GSAP (gsap) is used under the GSAP Standard "no charge" license
+(https://gsap.com/standard-license), free for commercial use since version 3.13. It is not
+MIT or Apache. Its gsap.min.js is copied into project folders as gsap.js.
+
+DialKit (dialkit) is used under the MIT License. It is bundled with the web client only and
+is never copied into a project folder.
+
+The full licence texts of these packages are listed with the rest of the bundle's packages.
