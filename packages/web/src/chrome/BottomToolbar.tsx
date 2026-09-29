@@ -28,8 +28,9 @@ export const BottomToolbar = () => {
                 {ActionsMenu && <ActionsMenu />}
               </TldrawUiToolbar>
             )}
+            {/* tldraw shows one tool past maxItems: 7 ends the bar at Media, so the shapes open from the chevron. */}
             {/* oxlint-disable-next-line shadcn/no-unknown-classes -- tldraw measures the room for its tools on this parent. */}
-            <OverflowingToolbar orientation="horizontal" sizingParentClassName="tlui-main-toolbar" minItems={4} maxItems={8} minSizePx={310} maxSizePx={470}>
+            <OverflowingToolbar orientation="horizontal" sizingParentClassName="tlui-main-toolbar" minItems={4} maxItems={7} minSizePx={310} maxSizePx={470}>
               <DefaultToolbarContent />
             </OverflowingToolbar>
             {End && <End />}
