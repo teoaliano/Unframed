@@ -51,7 +51,7 @@ test("an Escape the moment the Runs popup opens closes only the popup", async ({
   await openCanvas(page, generation.engine);
   await openOnSubject(page);
   await setRuns(page, 4);
-  expect(await openAndEscape(runsChip(page))).toEqual({ focusOnControl: true });
+  expect(await openAndEscape(runsChip(page))).toBe("control");
   await expect(runsPopup(page)).toHaveCount(0);
   await expect(runsChip(page)).toHaveText("4×");
   await expect(composer(page)).toBeVisible();

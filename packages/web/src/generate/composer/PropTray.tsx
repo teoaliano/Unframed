@@ -1,7 +1,7 @@
 import { Menu } from "@base-ui/react/menu";
 import { addablePropValue, modelPart, type ModelParams } from "@unframed/domain";
 import { Check } from "lucide-react";
-import { Fragment, useEffect, useState } from "react";
+import { Fragment, useLayoutEffect, useState } from "react";
 import { itemClass, popupClass, Tip } from "../../chrome/ui.tsx";
 import type { PropValue, TrayPropDefinition, TrayProps } from "../mediumRegistry.ts";
 
@@ -16,8 +16,8 @@ export interface PropTrayProps {
   readonly onChange: (props: Record<string, PropValue>) => void;
   /** The value "+ add prop" offers a prop with; the image rule when absent. */
   readonly addable?: ((params: ModelParams, key: string, props: TrayProps) => PropValue | undefined) | undefined;
-  /** Whether one of the tray's menus is open, so the shell leaves Esc to it. */
-  readonly onMenuOpen: (open: boolean) => void;
+  /** Whether one of the tray's menus is open, and how the shell closes them on Esc. */
+  readonly onMenuOpen: (open: boolean, close: () => void) => void;
 }
 
 export const chipClass =
@@ -36,8 +36,16 @@ export const PropTray = ({ model, catalogueReady, params, extra = [], props, onM
   const extraAddable = extra.filter((prop) => !prop.inTray(props) && openProp !== prop.key);
 
   // One flag for all of the tray's menus: a value menu can open as the add menu closes.
+  // Reported in the render that shows the menu, so an Esc right after it finds the flag set.
   const anyOpen = openProp !== undefined || addOpen;
-  useEffect(() => onMenuOpen(anyOpen), [anyOpen, onMenuOpen]);
+  useLayoutEffect(
+    () =>
+      onMenuOpen(anyOpen, () => {
+        setOpenProp(undefined);
+        setAddOpen(false);
+      }),
+    [anyOpen, onMenuOpen],
+  );
   const setOpen = (key: string | undefined) => setOpenProp(key);
 
   return (
