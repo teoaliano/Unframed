@@ -38,10 +38,10 @@ test("after a turn the recap card lists what it touched with Open and Locate, fo
   await expect(panel.locator("[data-role='assistant']").last()).toContainText("Retitled both.");
 
   const card = panel.getByTestId("recap-card");
-  const toggle = card.locator(".unframed-agent-recap__toggle");
+  const toggle = card.getByTestId("recap-toggle");
   await expect(toggle).toHaveText("2 filesHide");
   const rows = card.getByTestId("recap-row");
-  await expect(rows.locator(".unframed-agent-recap__label")).toHaveText(["Intro (red)", "Outro (red)"]);
+  await expect(rows.getByTestId("recap-label")).toHaveText(["Intro (red)", "Outro (red)"]);
   await expect(rows.nth(1).getByRole("button", { name: "Locate on canvas" })).toBeVisible();
   await expect(rows.getByRole("button", { name: "Open" })).toHaveCount(2);
   await expect(card.getByRole("button", { name: "View diff" })).toHaveCount(0);
@@ -60,7 +60,7 @@ test("after a turn the recap card lists what it touched with Open and Locate, fo
   await expect(rows.nth(1)).toHaveAttribute("data-deleted", "");
   await expect(rows.nth(1)).toHaveText("Outro (red)deleted");
   await expect(rows.nth(1).getByRole("button")).toHaveCount(0);
-  await expect(rows.nth(1).locator(".unframed-agent-recap__label")).toHaveCSS("text-decoration-line", "line-through");
+  await expect(rows.nth(1).getByTestId("recap-label")).toHaveCSS("text-decoration-line", "line-through");
 
   // Open goes into the editor (spec 09).
   await rows.nth(0).getByRole("button", { name: "Open" }).click();
@@ -77,11 +77,11 @@ test("Revert this turn takes the turn's changes back and reads Reverted", async 
   await say(panel, "retitle both please");
   const card = panel.getByTestId("recap-card");
   await card.getByRole("button", { name: "Revert this turn" }).click();
-  await expect(card.locator(".unframed-agent-recap__reverted")).toHaveText("Reverted");
+  await expect(card.getByTestId("recap-reverted")).toHaveText("Reverted");
   await expect(card.getByRole("button", { name: "Revert this turn" })).toHaveCount(0);
   await expect.poll(() => titleOf(agent, "shape:m1")).toBe("Intro");
   await expect.poll(() => titleOf(agent, "shape:m2")).toBe("Outro");
-  await expect(card.locator(".unframed-agent-recap__skipped")).toHaveCount(0);
+  await expect(card.getByTestId("recap-skipped")).toHaveCount(0);
 });
 
 test("a revert names the shape it left alone because the person changed it since", async ({ page, agent }) => {
@@ -95,8 +95,8 @@ test("a revert names the shape it left alone because the person changed it since
   const [intro] = artifactColumn([{ id: "shape:m1", kind: "motion", title: "Hand-made" }]);
   await putRecords(agent, [intro]);
   await card.getByRole("button", { name: "Revert this turn" }).click();
-  await expect(card.locator(".unframed-agent-recap__reverted")).toHaveText("Reverted");
-  await expect(card.locator(".unframed-agent-recap__skipped")).toHaveText("Left 1 shape alone because they changed since: Hand-made (by the person).");
+  await expect(card.getByTestId("recap-reverted")).toHaveText("Reverted");
+  await expect(card.getByTestId("recap-skipped")).toHaveText("Left 1 shape alone because they changed since: Hand-made (by the person).");
   await expect.poll(() => titleOf(agent, "shape:m2")).toBe("Outro");
   expect(await titleOf(agent, "shape:m1")).toBe("Hand-made");
 });

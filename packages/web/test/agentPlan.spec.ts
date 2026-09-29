@@ -22,7 +22,7 @@ const planned = async (page: Page, agent: TestEngine): Promise<{ panel: Locator;
 test("a proposed plan shows as a card with its title, a preview that expands, and a download named after it", async ({ page, agent }) => {
   const { panel } = await planned(page, agent);
   const card = panel.getByTestId("plan-card");
-  await expect(card.locator(".unframed-agent-plan__badge")).toHaveText("Plan");
+  await expect(card.locator("[data-slot='badge']")).toHaveText("Plan");
   await expect(card.getByRole("heading", { level: 3 })).toHaveText(TITLE);
   await expect(card).not.toContainText("One column on a narrow screen.");
   await card.getByRole("button", { name: "Expand plan" }).click();

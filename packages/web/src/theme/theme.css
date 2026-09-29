@@ -701,6 +701,22 @@ code {
   border-bottom: 1px solid color-mix(in srgb, var(--contrast-border) 60%, transparent);
 }
 
+.chat-markdown .chat-markdown-codeblock-header {
+  color: color-mix(in srgb, var(--contrast-foreground) 72%, transparent);
+}
+
+.chat-markdown .chat-markdown-codeblock pre {
+  margin: 0;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+}
+
+.chat-markdown .chat-markdown-codeblock[data-wrap="true"] pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
 :root {
   --diff-addition: var(--success);
   --diff-deletion: var(--destructive);

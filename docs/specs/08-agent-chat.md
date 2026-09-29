@@ -154,7 +154,7 @@ The selection toolbar (spec 03) ends with a filled **Agent** button (sparkles ic
 
 ### Recap card
 
-After the last message of each turn that touched anything, a recap card:
+After the last message of each turn that touched anything, a recap card on the card surface with the kit's border and radius:
 
 - Header: a chevron, "<n> file" or "<n> files", and Hide/Show. Open by default.
 - One row per artifact or project file the turn read or changed, in first-touch order: the shape kind's icon (an empty slot when there is none, so names line up), its label (title, else original file name without `.html`, else id), then **Open** (opens the editor; spec 09 registers the editor, and until it does the row shows Locate only) and **Locate on canvas** (crosshair icon; pans and zooms to the shape; absent in embedded mode). A row whose shape is gone is struck through, greyed, and reads "deleted" instead of the buttons.
@@ -213,7 +213,7 @@ Full access carries a "Default" badge in the list.
 
 - Queue: the message waits and is dispatched after the running turn's next completed tool call or when the turn ends, one per boundary, in order.
 - Steer: the message is dispatched at once with `steer: true` and joins the running turn.
-- A queued message shows in the transcript as a right-aligned bubble with a dashed border and dimmed text, a clock icon and "Queued", its tooltip "Sends after the next tool call or when the turn ends" (or "Sends after the messages above it"), a **Send now** button (steers it in; Cmd+Shift+Enter for the oldest) and a remove button "Cancel and return to the composer". Stop returns every queued message to the composer.
+- A queued message shows in the transcript as t3code's queued row: a right-aligned message bubble with a dashed border and dimmed text, a clock icon and "Queued", its tooltip "Sends after the next tool call or when the turn ends" (or "Sends after the messages above it"), a **Send now** button (steers it in; Cmd+Shift+Enter for the oldest) and a remove button "Cancel and return to the composer". Stop returns every queued message to the composer.
 
 **Prompt stash.** Cmd+S in the composer stashes the draft (text, chips and attachments) and clears it; up to 20 entries, the oldest dropped with the toast "Oldest stashed prompt discarded" / "The stash holds 20 prompts; the oldest was removed to make room." A "Stash" badge ("Stashed prompts: N. Open stash.") opens a menu of entries (a 90-character snippet and a relative time; arrow keys, Enter restores, Cmd+Backspace deletes "Delete stashed prompt", Escape closes); empty: "Nothing stashed yet. Press ⌘S with a prompt in the composer to stash it." With an empty composer Cmd+S restores the only entry or opens the menu. The stash is per project, stored as the `agent.stash.<project>` preference in spec 01's preferences store (text, chips and attachment ids; the attachments themselves stay in the data folder).
 
@@ -223,13 +223,13 @@ Full access carries a "Default" badge in the list.
 
 ### The transcript
 
-**Messages.** The person's messages are shown exactly as typed (never parsed as markdown), with their attachment chips and a "· N selected" note when they carried context; over 600 characters or 8 lines they collapse with "Show full message" / "Show less". Author headings: "You" and the provider's name.
+**Messages.** The person's messages are shown in t3code's message bubble (right-aligned, on the message surface), exactly as typed (never parsed as markdown), with their attachment chips and a "· N selected" note when they carried context; over 600 characters or 8 lines they collapse with "Show full message" / "Show less". Author headings: "You" and the provider's name.
 
-**Markdown.** The agent's text goes through react-markdown with `remark-gfm` and `remark-breaks`, and t3code's prose typography (`ChatMarkdown` and its `.chat-markdown` rules), with its theme variables swapped for the ported tokens. Raw HTML is never parsed: no `rehype-raw` and no sanitiser, so markup in a reply shows as the text it is. This is the one deliberate difference from t3code, for the same reason pages have their own origin. Links open in a new tab with `noopener noreferrer`; `javascript:` URLs are dropped. Code blocks get t3code's toolbar ("Wrap lines" / "Disable line wrap", "Copy code" turning "Copied" for 1.2 s, a language badge). Tables scroll in a wrapper and offer "Copy as Markdown" and "Copy as CSV". No syntax highlighter is loaded.
+**Markdown.** The agent's text goes through react-markdown with `remark-gfm` and `remark-breaks`, and t3code's prose typography (`ChatMarkdown` and its `.chat-markdown` rules, on t3code's tokens since spec 12). Raw HTML is never parsed: no `rehype-raw` and no sanitiser, so markup in a reply shows as the text it is. This is the one deliberate difference from t3code, for the same reason pages have their own origin. Links open in a new tab with `noopener noreferrer`; `javascript:` URLs are dropped. Code blocks get t3code's code block frame and toolbar ("Wrap lines" / "Disable line wrap", "Copy code" turning "Copied" for 1.2 s, a language badge). Tables scroll in a wrapper and offer "Copy as Markdown" and "Copy as CSV". No syntax highlighter is loaded.
 
 **Streaming.** A reply renders through the same component while it streams, so formatting appears as it arrives. An empty final reply reads "(empty response)". Reasoning shows as a "Thinking" row while live, then "Thought", collapsed.
 
-**Work log.** t3code's work log, derived from the chat's activities:
+**Work log.** t3code's work log, derived from the chat's activities and drawn as t3code's timeline rows (an icon slot, the muted label, a chevron that turns as the row opens, and the opened detail on the muted fill):
 
 - Tool calls of one turn merge by tool call id into rows with a label, a tone (thinking, tool, info, error) and a lifecycle state (in progress, completed, failed, declined, stopped). A row with a command, detail, changed files or image expands with a chevron.
 - Consecutive rows fold into a group whose summary counts actions: "Read N files", "Changed N files", "Ran N commands", "Searched the web N times", "Searched code N times", "Used N tools", joined into one sentence ("Read 2 files, ran 3 commands, and changed 1 file").
@@ -251,7 +251,7 @@ Full access carries a "Default" badge in the list.
 
 **Empty chat.** A chat with nothing in it shows one line at the foot of the transcript, as plain text: "Ask about what is on the canvas, or say what should change or be made. Whatever is selected comes with the message as context."
 
-**Scrolling.** Sending anchors the new message near the top; the view follows live output while within 40 px of the end; otherwise a "Scroll to end" pill appears.
+**Scrolling.** Sending anchors the new message near the top; the view follows live output while within 40 px of the end; otherwise a "Scroll to end" pill appears (t3code's: the kit's glass Button).
 
 ### Checkpoint diffs for page and motion files
 

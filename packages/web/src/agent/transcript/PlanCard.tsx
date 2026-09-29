@@ -1,8 +1,9 @@
-import { Menu } from "@base-ui/react/menu";
 import { collapsedPlanPreview, planCollapses, planFileName, planTitle, shownPlan } from "@unframed/domain";
 import { Ellipsis } from "lucide-react";
 import { useState } from "react";
-import { itemClass, popupClass } from "../../chrome/ui.tsx";
+import { Badge } from "~/components/ui/badge";
+import { Button } from "~/components/ui/button";
+import { Menu, MenuItem, MenuPopup, MenuTrigger } from "~/components/ui/menu";
 import { ChatMarkdown } from "./ChatMarkdown.tsx";
 
 const COPIED_MS = 2000;
@@ -34,36 +35,37 @@ export const PlanCard = ({ plan }: { readonly plan: string }) => {
     });
   };
   return (
-    <section className="unframed-agent-plan" data-testid="plan-card">
-      <header className="unframed-agent-plan__header">
-        <span className="unframed-agent-plan__badge">Plan</span>
-        <h3 className="unframed-agent-plan__title">{planTitle(plan) ?? "Proposed plan"}</h3>
-        <Menu.Root>
-          <Menu.Trigger className="unframed-agent-control unframed-agent-control--icon" aria-label="Plan actions">
-            <Ellipsis size={14} aria-hidden />
-          </Menu.Trigger>
-          <Menu.Portal>
-            <Menu.Positioner side="bottom" align="end" sideOffset={4} className="z-[1100]">
-              <Menu.Popup className={popupClass}>
-                <Menu.Item className={itemClass} closeOnClick={false} onClick={copy}>
-                  {copied ? "Copied!" : "Copy to clipboard"}
-                </Menu.Item>
-                <Menu.Item className={itemClass} onClick={() => download(planFileName(plan), exported(plan))}>
-                  Download as markdown
-                </Menu.Item>
-              </Menu.Popup>
-            </Menu.Positioner>
-          </Menu.Portal>
-        </Menu.Root>
+    <section className="rounded-3xl border border-border/80 bg-card/70 p-4" data-testid="plan-card">
+      <header className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex min-w-0 items-center gap-2">
+          <Badge variant="secondary">Plan</Badge>
+          <h3 className="m-0 truncate text-sm font-medium text-foreground">{planTitle(plan) ?? "Proposed plan"}</h3>
+        </div>
+        <Menu>
+          <MenuTrigger render={<Button aria-label="Plan actions" size="icon-xs" variant="outline" />}>
+            <Ellipsis aria-hidden className="size-4" />
+          </MenuTrigger>
+          <MenuPopup align="end">
+            <MenuItem closeOnClick={false} onClick={copy}>
+              {copied ? "Copied!" : "Copy to clipboard"}
+            </MenuItem>
+            <MenuItem onClick={() => download(planFileName(plan), exported(plan))}>Download as markdown</MenuItem>
+          </MenuPopup>
+        </Menu>
       </header>
-      <div className="unframed-agent-plan__body" data-collapsed={collapses && !expanded ? "" : undefined}>
-        <ChatMarkdown text={collapses && !expanded ? collapsedPlanPreview(plan) : shownPlan(plan)} />
+      <div className="mt-4">
+        <div className="relative data-collapsed:max-h-104 data-collapsed:overflow-hidden" data-collapsed={collapses && !expanded ? "" : undefined}>
+          <ChatMarkdown text={collapses && !expanded ? collapsedPlanPreview(plan) : shownPlan(plan)} />
+          {collapses && !expanded && <div className="pointer-events-none absolute inset-x-0 bottom-0 h-24 bg-linear-to-t from-card/95 via-card/80 to-transparent" />}
+        </div>
+        {collapses && (
+          <div className="mt-4 flex justify-center">
+            <Button size="sm" variant="outline" onClick={() => setExpanded(!expanded)}>
+              {expanded ? "Collapse plan" : "Expand plan"}
+            </Button>
+          </div>
+        )}
       </div>
-      {collapses && (
-        <button type="button" className="unframed-agent-button unframed-agent-plan__toggle" onClick={() => setExpanded(!expanded)}>
-          {expanded ? "Collapse plan" : "Expand plan"}
-        </button>
-      )}
     </section>
   );
 };

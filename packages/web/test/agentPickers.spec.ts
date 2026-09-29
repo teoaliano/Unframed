@@ -309,7 +309,7 @@ test("the context window meter fills to the scripted usage, turns red above 90 %
     await expect(meter).toHaveAttribute("data-overloaded", "");
     await meter.hover();
     await popup.getByRole("button", { name: "Compact context" }).click();
-    await expect(panel.locator("[data-role='user'] .unframed-agent-message__text").last()).toHaveText("/compact");
+    await expect(panel.locator("[data-role='user'] [data-testid='message-text']").last()).toHaveText("/compact");
     await expect(panel.locator("[data-role='assistant']").last()).toContainText("Compacted.");
   } finally {
     await agent.dispose();

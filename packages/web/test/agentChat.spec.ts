@@ -14,7 +14,7 @@ test("typing and Enter starts a chat: the message shows at once, the reply strea
   await expect(panel.locator("[data-role='user']")).toHaveCount(0);
 
   await box.press("Enter");
-  await expect(panel.locator("[data-role='user'] .unframed-agent-message__text")).toHaveText("what is on the board?\nin short");
+  await expect(panel.locator("[data-role='user'] [data-testid='message-text']")).toHaveText("what is on the board?\nin short");
   await expect(box).toHaveText("");
   await expect(panel.locator("[data-role='assistant']")).toContainText("Three shapes: motion m1");
   await expect(panel.locator("[data-role='assistant'] header")).toHaveText("Claude");

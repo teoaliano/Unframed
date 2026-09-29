@@ -37,8 +37,9 @@ test("a reply renders as markdown: headings, a table to copy, a task list, a cod
     await expect(tasks.nth(1)).not.toBeChecked();
     await expect(reply.locator("ol > li")).toHaveCount(3);
 
-    const code = reply.locator(".chat-markdown-codeblock");
-    await expect(code.locator(".chat-markdown-codeblock__language")).toHaveText("json");
+    const code = reply.getByTestId("code-block");
+    await expect(code).toHaveAttribute("data-language", "json");
+    await expect(code.getByText("json", { exact: true })).toBeVisible();
     await code.getByRole("button", { name: "Copy code" }).click();
     await expect(code.getByRole("button", { name: "Copied" })).toBeVisible();
     expect(await page.evaluate(() => navigator.clipboard.readText())).toContain('"type": "update", "id": "m1"');
@@ -66,7 +67,7 @@ test("HTML in a reply shows as text and never runs; the person's own **text** st
     await openCanvas(page, agent);
     const panel = await openRail(page);
     await say(panel, "html **not bold** # nor a heading");
-    await expect(panel.locator("[data-role='user'] .unframed-agent-message__text")).toHaveText("html **not bold** # nor a heading");
+    await expect(panel.locator("[data-role='user'] [data-testid='message-text']")).toHaveText("html **not bold** # nor a heading");
     await expect(panel.locator("[data-role='user'] strong")).toHaveCount(0);
     const reply = panel.locator("[data-role='assistant'] .chat-markdown");
     await expect(reply).toContainText("Inline <b>bold</b> and <img src=\"x\" onerror=\"window.__ran = true\">.");
