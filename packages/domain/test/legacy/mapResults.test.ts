@@ -179,6 +179,17 @@ describe("a media shape whose file a run made", () => {
   it("does not when its sidecar is an upload's, a copy's, a render's or an agent's", () => {
     const { ref } = shapesOf(mapSample("everything"));
     for (const id of ["106", "110", "202", "210"]) expect(ref(id).result).toBeUndefined();
+    const sidecars = {
+      "a.png": { source: "agent", kind: "page", threadId: "t-1", turn: 1, nodeId: "100", title: "A", bytes: 1, at: "x" },
+      "b.png": { kind: "agent-turn", threadId: "t-1", turn: 1, provider: "claude", model: "claude-sonnet-5", billing: "subscription", usage: {}, at: "x" },
+      "c.png": { source: "legacy-graph", fileName: "c.png", mime: "image/png", bytes: 1, at: "x" },
+    };
+    const mapped = mapNodes(
+      ["a", "b", "c"].map((name, index) => image(`10${index}`, { ...at(0, index * 300), data: { file: `${name}.png`, fileName: `${name}.png` } })),
+      [],
+      { files: ["a.png", "b.png", "c.png"], sidecars },
+    );
+    expect(shapesOf(mapped).list.every((shape) => shape.result === undefined)).toBe(true);
   });
 });
 
