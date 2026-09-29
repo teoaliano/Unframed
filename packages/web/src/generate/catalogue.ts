@@ -26,7 +26,7 @@ export const useCatalogue = (engine: EngineConnection, medium: Catalogue): Model
       live = false;
     };
   }, [engine, medium]);
-  // After a medium switch, never the other medium's catalogue.
+  // Another medium's answer is never this one's, even for the render before the switch lands.
   return answer.medium === medium ? answer.list : lists.get(medium);
 };
 

@@ -28,3 +28,8 @@ export * from "./videoRequest.ts";
 export * from "./videoTray.ts";
 export * from "./shareRegistry.ts";
 export * from "./renderJobs.ts";
+export * from "./runsValue.ts";
+export * from "./freeBatch.ts";
+export * from "./freeSource.ts";
+export * from "./freeNotes.ts";
+export * from "./freeRepair.ts";

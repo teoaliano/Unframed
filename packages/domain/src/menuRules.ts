@@ -8,6 +8,8 @@ export interface MenuShape {
   readonly file?: string;
   /** A video filled with an `https://` link: filled, but with no file to reveal. */
   readonly link?: boolean;
+  /** A prompt that is a text result (spec 05). */
+  readonly textResult?: boolean;
 }
 
 export type MenuTarget = { readonly kind: "canvas" } | { readonly kind: "shape"; readonly shape: MenuShape };
@@ -30,6 +32,8 @@ export type MenuItem =
   | { readonly action: "reveal"; readonly label: string; readonly files: ReadonlyArray<string> }
   | { readonly action: "copy-as-image"; readonly label: string }
   | { readonly action: "copy-ref"; readonly label: string; readonly ref: string }
+  /** Spec 05: a plain prompt with a text result's text, beside it, so its `@` tokens resolve. */
+  | { readonly action: "copy-as-prompt"; readonly label: string }
   | { readonly action: EditAction; readonly label: string; readonly shortcut: string }
   | { readonly action: "add-to-library"; readonly label: string }
   | { readonly action: AddAction; readonly label: string };
@@ -101,6 +105,7 @@ export const contextMenu = (input: MenuInput): MenuSection[] => {
   if (clicked && (clicked.type === "text" || clicked.type === "frame") && clicked.ref !== undefined) {
     referenceItems.push({ action: "copy-ref", label: `Copy @${clicked.ref}`, ref: clicked.ref });
   }
+  if (clicked?.type === "text" && clicked.textResult) referenceItems.push({ action: "copy-as-prompt", label: "Copy as prompt" });
   add("reference", "Reference", referenceItems);
 
   const edit = (action: EditAction): MenuItem => ({ action, label: EDIT_LABELS[action], shortcut: shortcutHint(action, platform) });

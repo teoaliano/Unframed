@@ -3,12 +3,14 @@ import { addablePropValue, modelPart, type ModelParams } from "@unframed/domain"
 import { Check } from "lucide-react";
 import { Fragment, useEffect, useState } from "react";
 import { itemClass, popupClass, Tip } from "../../chrome/ui.tsx";
-import type { PropValue, TrayProps } from "../mediumRegistry.ts";
+import type { PropValue, TrayPropDefinition, TrayProps } from "../mediumRegistry.ts";
 
 export interface PropTrayProps {
   readonly model: string | undefined;
   readonly catalogueReady: boolean;
   readonly params: ModelParams;
+  /** Props the model does not drive, after the model's own. */
+  readonly extra?: ReadonlyArray<TrayPropDefinition> | undefined;
   readonly props: TrayProps;
   readonly onModelClick: () => void;
   readonly onChange: (props: Record<string, PropValue>) => void;
@@ -18,18 +20,20 @@ export interface PropTrayProps {
   readonly onMenuOpen: (open: boolean) => void;
 }
 
-const chipClass =
+export const chipClass =
   "cursor-pointer rounded-inner border-0 bg-transparent px-1 py-0.5 text-[12.5px] text-primary hover:bg-hover data-[popup-open]:bg-hover disabled:cursor-default disabled:text-secondary";
 
 /**
  * The tray below the box: the model chip, one chip per prop that will be sent, and
  * "+ add prop". A prop comes off the way it went on: from its own menu.
  */
-export const PropTray = ({ model, catalogueReady, params, props, onModelClick, onChange, onMenuOpen, addable: addableValue }: PropTrayProps) => {
+export const PropTray = ({ model, catalogueReady, params, extra = [], props, onModelClick, onChange, onMenuOpen, addable: addableValue }: PropTrayProps) => {
   const [openProp, setOpenProp] = useState<string>();
   const [addOpen, setAddOpen] = useState(false);
   const inTray = params.props.filter((prop) => props[prop.key] !== undefined);
   const addable = params.props.filter((prop) => props[prop.key] === undefined);
+  const extraInTray = extra.filter((prop) => prop.inTray(props) || openProp === prop.key);
+  const extraAddable = extra.filter((prop) => !prop.inTray(props) && openProp !== prop.key);
 
   // One flag for all of the tray's menus: a value menu can open as the add menu closes.
   const anyOpen = openProp !== undefined || addOpen;
@@ -101,8 +105,16 @@ export const PropTray = ({ model, catalogueReady, params, props, onModelClick, o
             </Menu.Root>
           </Fragment>
         ))}
+        {extraInTray.map((prop) => (
+          <Fragment key={prop.key}>
+            <span aria-hidden className="text-[12.5px] text-[var(--unframed-border-emphasized)]">
+              ·
+            </span>
+            <prop.Chip props={props} onChange={onChange} open={openProp === prop.key} onOpenChange={(open) => setOpen(open ? prop.key : undefined)} />
+          </Fragment>
+        ))}
       </div>
-      {addable.length > 0 && (
+      {addable.length + extraAddable.length > 0 && (
         <Menu.Root
           open={addOpen}
           onOpenChange={setAddOpen}
@@ -127,6 +139,23 @@ export const PropTray = ({ model, catalogueReady, params, props, onModelClick, o
                     >
                       <span>{prop.label}</span>
                       <span className="text-secondary">{shown}</span>
+                    </Menu.Item>
+                  );
+                })}
+                {extraAddable.map((prop) => {
+                  const value = prop.addValue(props);
+                  return (
+                    <Menu.Item
+                      key={prop.key}
+                      aria-label={`${prop.label} ${value}`}
+                      className={`${itemClass} justify-between`}
+                      onClick={() => {
+                        onChange(prop.add(props));
+                        requestAnimationFrame(() => setOpen(prop.key));
+                      }}
+                    >
+                      <span>{prop.label}</span>
+                      <span className="text-secondary">{value}</span>
                     </Menu.Item>
                   );
                 })}

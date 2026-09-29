@@ -136,7 +136,7 @@ export const ModelEntry = Schema.Struct({
 });
 export type ModelEntry = typeof ModelEntry.Type;
 
-export const ModelsListRequest = Schema.Struct({ medium: Schema.Literals(["image", "video"]) });
+export const ModelsListRequest = Schema.Struct({ medium: Schema.Literals(["image", "video", "text"]) });
 
 export const ModelsListAnswer = Schema.Struct({ models: Schema.Array(ModelEntry), default: Schema.String });
 export type ModelsListAnswer = typeof ModelsListAnswer.Type;
@@ -165,6 +165,10 @@ export type ImageParams = typeof ImageParams.Type;
 
 export const PageBox = Schema.Struct({ x: Schema.Number, y: Schema.Number, w: Schema.Number, h: Schema.Number });
 
+/** How a Free section's `images:` line was read: the picks that named an image (`null` for all) and the rest. */
+export const FreePicks = Schema.Struct({ picks: Schema.NullOr(Schema.Array(Schema.Number)), dropped: Schema.Array(Schema.Number) });
+export type FreePicks = typeof FreePicks.Type;
+
 export const ImageRunRequest = Schema.Struct({
   project: Schema.String,
   /** `b-<epochMs>`; minted by the engine when absent. */
@@ -174,11 +178,22 @@ export const ImageRunRequest = Schema.Struct({
   params: ImageParams,
   selectionPrompt: Schema.String,
   instruction: Schema.String,
-  outputs: Schema.Array(Schema.Struct({ prompt: Schema.String, references: Schema.Array(RecipeRef) })),
+  outputs: Schema.Array(
+    Schema.Struct({
+      prompt: Schema.String,
+      references: Schema.Array(RecipeRef),
+      /** Spec 05, a Free output: its own recorded selection prompt, the shared context and its section. */
+      selectionPrompt: Schema.optionalKey(Schema.String),
+      /** Spec 05, a Free output: the image numbers its section picked (`null` for all) and the ones that named no image. */
+      free: Schema.optionalKey(FreePicks),
+    }),
+  ),
   sources: Schema.Array(Schema.String),
   /** Page coordinates: results land to its right. */
   anchor: PageBox,
   of: Schema.optionalKey(Schema.Struct({ shapeId: Schema.String, action: RecipeAction })),
+  /** Spec 05: a Free batch's repair call cost, set on every member's result meta. */
+  batchExtraCost: Schema.optionalKey(Schema.Number),
 });
 export type ImageRunRequest = typeof ImageRunRequest.Type;
 
@@ -226,4 +241,6 @@ export interface ImageSidecar {
   readonly createdAt: string;
   readonly file: string;
   readonly recipe: ResultRecipe;
+  /** Spec 05: a Free output's picks. */
+  readonly free?: FreePicks;
 }

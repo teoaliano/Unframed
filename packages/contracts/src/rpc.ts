@@ -5,6 +5,7 @@ import { UnframedError } from "./errors.ts";
 import { ImagePricingAnswer, ImageRunRequest, ModelsListAnswer, ModelsListRequest, ResultRecipe, RunEvent, RunStarted } from "./generation.ts";
 import { Health, Settings, SettingsPatch } from "./settings.ts";
 import { VideoForget, VideoPoll, VideoStart } from "./video.ts";
+import { RunText, TextComplete } from "./text.ts";
 
 const Empty = Schema.Struct({});
 
@@ -203,5 +204,7 @@ export const UnframedRpcs = RpcGroup.make(
   VideoStart,
   VideoPoll,
   VideoForget,
+  RunText,
+  TextComplete,
 );
 export type UnframedRpcs = typeof UnframedRpcs;

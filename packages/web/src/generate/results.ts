@@ -35,6 +35,21 @@ export const repeatResult = async (
 ): Promise<void> => {
   const recorded = recipe ?? (await engine.call("recipe.read", { project, shapeId }));
   if (recorded.medium === "video") return repeatVideo(editor, engine, project, shapeId, action, recorded);
+  if (recorded.medium === "text") {
+    // A text result (spec 05) has no Vary: Regenerate repeats its run through the text medium.
+    await engine.call("run.text", {
+      project,
+      model: recorded.model,
+      selectionPrompt: recorded.selectionPrompt,
+      instruction: recorded.instruction,
+      prompt: joinPromptParts(recorded.selectionPrompt, recorded.instruction),
+      references: [...recorded.references],
+      sources: [...recorded.sources],
+      anchor: pageBox(editor, shapeId) ?? { x: 0, y: 0, w: 0, h: 0 },
+      of: { shapeId, action: "regenerate" },
+    });
+    return;
+  }
   const references: RecipeRef[] = [...recorded.references];
   if (action === "vary") {
     const shape = editor.getShape(shapeId);

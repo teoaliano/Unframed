@@ -48,9 +48,12 @@ export const rpcHandlersLayer = UnframedRpcs.toLayer(
       "preferences.get": ({ keys }) => Effect.map(preferences.get(keys), (values) => ({ values })),
       "preferences.set": ({ key, value }) => Effect.as(preferences.set(key, value), {}),
       "preferences.subscribe": ({ keys }) => preferences.subscribe(keys),
-      "models.list": ({ medium }) => (medium === "video" ? videoCatalogue.list : catalogue.listImageModels),
+      "models.list": ({ medium }) =>
+        medium === "video" ? videoCatalogue.list : medium === "text" ? catalogue.listTextModels : catalogue.listImageModels,
       "models.imagePricing": ({ id }) => catalogue.imagePricing(id),
       "run.image": (request) => runs.image(request),
+      "run.text": (request) => runs.text(request),
+      "text.complete": (request) => runs.complete(request),
       "run.subscribe": ({ project }) => runs.subscribe(project),
       // A render placeholder has no sidecar until its clip lands: its recipe is in the job record (spec 04).
       "recipe.read": ({ project, shapeId }) =>

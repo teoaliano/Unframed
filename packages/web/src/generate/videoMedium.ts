@@ -206,8 +206,7 @@ export const videoMedium: MediumDefinition = {
     const value = estimateVideo({ pricing: entry?.pricing, resolution: settings.resolution, duration: settings.duration });
     return value === null ? undefined : formatVideoEstimate(value);
   },
-  status: ({ source, hasKey, values, entry }) => {
-    const props = values?.props ?? {};
+  status: ({ source, hasKey, props = {}, entry }) => {
     const plan = videoPlan(source, props, entry);
     const { error } = textOf(source, plan.request.prompt);
     const blockers: string[] = [];
@@ -221,7 +220,7 @@ export const videoMedium: MediumDefinition = {
   sendingLabel: "Starting…",
   addable: (params, key, props) => addableVideoValue(asVideo(params), key, props),
   Status: VideoStatus,
-  roles: ({ composition, props, entry }) => videoPlan({ kind: "selection", composition, selected: [] }, props, entry).roles,
+  roles: ({ composition, props, entry }) => videoPlan({ kind: "selection", composition, selected: [], shapes: [], instruction: "" }, props, entry).roles,
   heal: ({ props, entry, loaded }) => {
     if (!clearsInputMode({ loaded, entry, mode: props.inputMode })) return undefined;
     const { inputMode: _cleared, ...rest } = props;

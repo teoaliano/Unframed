@@ -47,7 +47,9 @@ export const GenerateTray = ({ project, recipe, onSent, onMenuOpen, handle }: Ge
   const medium = useValue("composer medium", () => composerState(editor).get().medium, [editor]);
   const definition = mediumDefinition(medium) ?? registeredMedia()[0]!;
   const catalogue = useCatalogue(engine, definition.catalogue);
-  const [lastUsed, setLastUsed] = useState<LastUsed | null>();
+  const [stored, setStored] = useState<{ readonly medium: Medium; readonly value: LastUsed | null }>();
+  // Another medium's values are never this one's, even for the render before the switch lands.
+  const lastUsed = stored?.medium === medium ? stored.value : undefined;
   const [valuesByMedium, setValuesByMedium] = useState<Partial<Record<Medium, TrayValues>>>({});
   const [instruction, setInstruction] = useState(recipe?.recipe.instruction ?? "");
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -57,7 +59,7 @@ export const GenerateTray = ({ project, recipe, onSent, onMenuOpen, handle }: Ge
   useEffect(() => {
     let live = true;
     void loadLastUsed(engine, medium).then((value) => {
-      if (live) setLastUsed(value ?? null);
+      if (live) setStored({ medium, value: value ?? null });
     });
     return () => {
       live = false;
@@ -100,10 +102,11 @@ export const GenerateTray = ({ project, recipe, onSent, onMenuOpen, handle }: Ge
   );
 
   const resolved = useValue("recipe instruction", () => (recipe ? resolveReferences(instruction, canvasShapes(editor)) : undefined), [editor, recipe, instruction]);
+  const shapes = useValue("canvas shapes", () => canvasShapes(editor), [editor]);
   const source: RunSource = recipe
     ? { kind: "recipe", recipe, instruction: resolved?.ok ? resolved.text.trim() : "", error: resolved?.ok === false ? resolved.error : undefined }
-    : { kind: "selection", composition, selected: editor.getSelectedShapeIds() };
-  const status = definition.status({ source, hasKey: settings?.hasKey ?? true, values, entry });
+    : { kind: "selection", composition, selected: editor.getSelectedShapeIds(), shapes, instruction };
+  const status = definition.status({ source, hasKey: settings?.hasKey ?? true, props: values?.props, entry });
   const estimate = values ? definition.estimate({ pricing, props: values.props, source, entry }) : undefined;
   const blocked = status.blockers.length > 0 || values === undefined;
 
@@ -138,8 +141,7 @@ export const GenerateTray = ({ project, recipe, onSent, onMenuOpen, handle }: Ge
     setSending(true);
     setFailure(undefined);
     try {
-      await definition.send({ editor, engine, project, values, source });
-      onSent();
+      if ((await definition.send({ editor, engine, project, values, source })) !== "stay") onSent();
     } catch (error) {
       setFailure(messageOf(error));
     } finally {
@@ -223,6 +225,7 @@ export const GenerateTray = ({ project, recipe, onSent, onMenuOpen, handle }: Ge
         model={values?.model}
         catalogueReady={catalogue !== undefined && catalogue.models.length > 0 && values !== undefined}
         params={params}
+        extra={definition.trayProps}
         props={values?.props ?? {}}
         addable={definition.addable}
         onModelClick={() => {
@@ -249,6 +252,7 @@ export const GenerateTray = ({ project, recipe, onSent, onMenuOpen, handle }: Ge
           setValues({ model, picked: true, props });
         }}
       />
+      {definition.Overlay && <definition.Overlay project={project} onSent={onSent} onMenuOpen={onMenuOpen} />}
     </div>
   );
 };
