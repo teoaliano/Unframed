@@ -91,7 +91,9 @@ const Floating = ({ target, hidden, expanded, framed, children }: { target: Scre
     "canvas size",
     () => {
       const bounds = editor.getViewportScreenBounds();
-      return { w: bounds.w, h: bounds.h };
+      // The bottom bar sits above the bar and composer in tldraw's layer: they stay clear of it.
+      const bar = editor.getContainer().querySelector<HTMLElement>("[data-unframed-toolbar]")?.getBoundingClientRect();
+      return { w: bounds.w, h: bar ? Math.min(bounds.h, bar.top - bounds.y) : bounds.h };
     },
     [editor],
   );

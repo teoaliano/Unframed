@@ -318,8 +318,12 @@ export const CompactControlsMenu = ({
           <MenuGroup>
             <MenuGroupLabel>Mode</MenuGroupLabel>
             <MenuRadioGroup value={interactionMode} onValueChange={(value) => value !== interactionMode && onInteractionMode(value as InteractionMode)}>
-              <MenuRadioItem value="default">Build</MenuRadioItem>
-              <MenuRadioItem value="plan">Plan</MenuRadioItem>
+              <MenuRadioItem value="default" closeOnClick>
+                Build
+              </MenuRadioItem>
+              <MenuRadioItem value="plan" closeOnClick>
+                Plan
+              </MenuRadioItem>
             </MenuRadioGroup>
           </MenuGroup>
           <MenuSeparator />
@@ -331,7 +335,7 @@ export const CompactControlsMenu = ({
           {RUNTIME_MODES.map((entry) => {
             const Icon = entry.icon;
             return (
-              <MenuRadioItem key={entry.mode} value={entry.mode}>
+              <MenuRadioItem key={entry.mode} value={entry.mode} closeOnClick>
                 <span className="flex min-w-0 items-start gap-2">
                   <Icon aria-hidden className="mt-0.5 size-3.5 shrink-0" />
                   <span className="flex min-w-0 flex-col">
