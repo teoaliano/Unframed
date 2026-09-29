@@ -97,3 +97,32 @@ test("the frame takes the pointer only while its shape is selected and not being
   await expect(frameOf(page, "shape:landing")).toHaveCount(0);
   await expect(frameOf(page, "shape:other")).toHaveCSS("pointer-events", "auto");
 });
+
+test("a selected page or motion moves by the six-dot handle in its toolbar, and one undo takes the move back", async ({ page, engine }) => {
+  await openCanvas(page, engine);
+  await filledArtifact(engine, { id: "shape:landing", kind: "page", ref: "150", at: { x: 420, y: 60 }, title: "Landing", html: "<h1>Hello</h1>" });
+  await filledArtifact(engine, { id: "shape:intro", kind: "motion", ref: "151", at: { x: -200, y: 60 }, size: { w: 300, h: 200 }, title: "Intro", html: "<h1>Intro</h1>" });
+  for (const id of ["shape:landing", "shape:intro"]) {
+    await expect(shapeOnScreen(page, id)).toBeVisible();
+    const before = (await settledRecord(engine, "default", id))!;
+    const box = (await shapeOnScreen(page, id).boundingBox())!;
+    await page.mouse.click(box.x + 20, box.y - 8);
+    await expect(shapeOnScreen(page, id)).toHaveAttribute("data-label-active", "true");
+    const handle = toolbar(page).getByRole("button", { name: "Drag to move" });
+    await expect(handle).toBeVisible();
+    await expect(toolbar(page).getByRole("button")).toHaveText(["", "Open", "Agent"]);
+    const grip = (await handle.boundingBox())!;
+    await page.mouse.move(grip.x + grip.width / 2, grip.y + grip.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(grip.x + grip.width / 2 + 120, grip.y + grip.height / 2 + 40, { steps: 8 });
+    await page.mouse.up();
+    const zoom = await page.evaluate(() => (window as unknown as { editor?: { getZoomLevel(): number } }).editor?.getZoomLevel() ?? 1);
+    await expect.poll(async () => Math.round(((await settledRecord(engine, "default", id))!.x as number) - (before.x as number)), { timeout: 15_000 }).toBeGreaterThan(0);
+    const moved = (await settledRecord(engine, "default", id))!;
+    expect((moved.x as number) - (before.x as number)).toBeCloseTo(120 / zoom, 0);
+    await page.keyboard.press("ControlOrMeta+z");
+    await expect.poll(async () => (await settledRecord(engine, "default", id))!.x).toBe(before.x);
+    await page.keyboard.press("Escape");
+    await expect(toolbar(page)).toHaveCount(0);
+  }
+});

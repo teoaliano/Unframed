@@ -2,6 +2,7 @@ import { resultMetaOf, UnframedError, type ResultRecipe } from "@unframed/contra
 import { composeSelection, resultLine, toolbarState, type ToolbarState } from "@unframed/domain";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useEditor, useValue, type Editor, type TLShapeId } from "tldraw";
+import { GripVertical } from "lucide-react";
 import { Button } from "~/components/ui/button";
 import { cn } from "~/lib/utils";
 import { groupRecipeOf } from "../canvas/groupRecipes.ts";
@@ -159,6 +160,52 @@ const useSelectedRecipe = (shapeId: string | undefined, sidecar: string | null |
     };
   }, [engine, project, shapeId, sidecar]);
   return recipe !== undefined && recipe.shapeId === shapeId ? recipe.recipe : undefined;
+};
+
+/**
+ * The six-dot handle on a filled page or motion: its frame takes the pointer, so the shape
+ * moves by this instead. A drag moves the selection with the pointer, and one undo takes
+ * the whole move back.
+ */
+const DragHandle = () => {
+  const editor = useEditor();
+  const drag = useRef<{ readonly from: { x: number; y: number }; readonly shapes: ReadonlyArray<{ id: TLShapeId; type: string; x: number; y: number }> }>(undefined);
+  return (
+    <Tip label="Drag to move" side="top">
+      <Button
+        variant="ghost"
+        size="icon-sm"
+        aria-label="Drag to move"
+        className="cursor-grab touch-none active:cursor-grabbing"
+        onPointerDown={(event) => {
+          if (event.button !== 0) return;
+          event.preventDefault();
+          event.currentTarget.setPointerCapture(event.pointerId);
+          editor.markHistoryStoppingPoint("drag handle");
+          drag.current = {
+            from: editor.screenToPage({ x: event.clientX, y: event.clientY }),
+            shapes: editor.getSelectedShapes().map((shape) => ({ id: shape.id, type: shape.type, x: shape.x, y: shape.y })),
+          };
+        }}
+        onPointerMove={(event) => {
+          const start = drag.current;
+          if (!start) return;
+          const now = editor.screenToPage({ x: event.clientX, y: event.clientY });
+          const dx = now.x - start.from.x;
+          const dy = now.y - start.from.y;
+          editor.updateShapes(start.shapes.map((shape) => ({ id: shape.id, type: shape.type, x: shape.x + dx, y: shape.y + dy })) as Parameters<typeof editor.updateShapes>[0]);
+        }}
+        onPointerUp={() => {
+          drag.current = undefined;
+        }}
+        onPointerCancel={() => {
+          drag.current = undefined;
+        }}
+      >
+        <GripVertical aria-hidden />
+      </Button>
+    </Tip>
+  );
 };
 
 const AgentButton = ({ onOpen }: { onOpen: () => void }) => {
@@ -334,6 +381,7 @@ const Bar = ({ state, onGenerate, agent }: { state: Exclude<ToolbarState, { kind
     case "open":
       return (
         <div className={barClass}>
+          <DragHandle />
           <Button size="sm" onClick={() => openArtifact?.(editor, state.shapeId as TLShapeId)}>
             Open
           </Button>
