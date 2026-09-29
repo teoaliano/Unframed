@@ -18,10 +18,10 @@ Checked 2026-09-28: Node v24.21.0, pnpm 9.15.4 through Corepack, Google Chrome, 
 | 04 | video generation | 4 | merged | ae89c78 | 66/66 tasks; merged after 05 (the agent resolved 13 conflicts, all two additions to one spot); 994 tests, 150 browser tests green on build |
 | 05 | text, multi-run and Free | 4 | merged | c1bb5a2 | 40/40 tasks; 790 tests green, 134 of 135 browser tests (the one failure is the spec 02 right-click flake, sent back to the spec 02 agent) |
 | 06 | groups, recipes and the library | 5 | merged | 5f399d1 | 39/39 tasks; 1144 tests, 185 browser tests green on build. Task 15's Agent button waits for spec 08 |
-| 07 | agent runtime | 6 | building | | |
-| 08 | agent chat | 7 | pending | | merge before 10 |
+| 07 | agent runtime | 6 | merged | ba20d56 | 55/55 tasks; 1356 tests, 185 browser tests green on build |
+| 08 | agent chat | 7 | building | | merge before 10 |
 | 09 | artifacts | 8 | pending | | |
-| 10 | settings and OpenRouter | 7 | pending | | merge after 08 |
+| 10 | settings and OpenRouter | 7 | building | | merge after 08 |
 | 11 | legacy import | 9 | pending | | |
 
 ## Decisions
@@ -34,6 +34,9 @@ Each entry names the decision, the answer, and the spec it changed.
 
 - Spec 03, task 36: the Agent tray part is untestable until spec 08 fills the `agentTray` slot. The spec 08 agent must cover it.
 - Spec 03: Regenerate and Recipe for imported (approximate) recipes belong to spec 11.
+- Spec 07: the Claude adapter and the zero-token probe never ran against a real CLI (spec 07 makes that a manual acceptance test; tests must not spend quota). The Codex adapter is covered end to end with a fake `codex app-server`.
+- Spec 07: the bundle lists `@anthropic-ai/claude-agent-sdk` as its one runtime dependency, and a plain `npm install` of the bundle pulls the SDK's native CLI packages. Spec 07 says the packaged app ships the SDK without its native CLI, so the desktop shell's packaging must drop them.
+- Spec 07: review items left alone, the 800-line `runtime.ts` and duplicated contract and domain type definitions (a compile-time check in `layer.ts` catches drift).
 - Spec 06, task 15: the recipe bar's Agent button shows only once spec 08 registers the Agent tray. The spec 08 agent must cover it.
 - Spec 06: review smells left alone, the 10 copies of `messageOf` across files and the paste fix-up that overlaps domain `instantiate`.
 - Spec 04: if a pending render job's project folder is gone, the collector fails and the sweep retries every tick, downloading the clip each time. Spec 10 fails such records before it deletes or moves a project; the spec 10 agent must check the sweep stops.
