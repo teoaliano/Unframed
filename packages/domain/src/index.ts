@@ -47,3 +47,7 @@ export * from "./agent/chatModel.ts";
 export * from "./agent/chatProjector.ts";
 export * from "./agent/chatDecider.ts";
 export * from "./agent/attachments.ts";
+export * from "./agent/runtimeEvents.ts";
+export * from "./agent/permissionPolicy.ts";
+export * from "./agent/turnText.ts";
+export * from "./agent/canvasTools.ts";
