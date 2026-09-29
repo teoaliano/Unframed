@@ -49,10 +49,12 @@ export class McpTokens {
   }
 }
 
-/** A tool result: JSON text, marked as an error for a refusal. Never bytes. */
+/** A tool result: JSON text, marked as an error for a refusal. Never bytes, except a preview's screenshot (spec 09). */
 export interface ToolAnswer {
   readonly value: unknown;
   readonly isError?: boolean;
+  /** Pictures that follow the JSON as MCP image content. */
+  readonly images?: ReadonlyArray<{ readonly data: string; readonly mimeType: string }>;
 }
 
 export interface McpTool {
@@ -89,7 +91,10 @@ const rpcResult = (id: JsonRpcRequest["id"], result: unknown) => ({ jsonrpc: "2.
 const rpcError = (id: JsonRpcRequest["id"], code: number, message: string) => ({ jsonrpc: "2.0", id: id ?? null, error: { code, message } });
 
 const toolText = (answer: ToolAnswer) => ({
-  content: [{ type: "text", text: JSON.stringify(answer.value) }],
+  content: [
+    { type: "text", text: JSON.stringify(answer.value) },
+    ...(answer.images ?? []).map((image) => ({ type: "image", data: image.data, mimeType: image.mimeType })),
+  ],
   ...(answer.isError ? { isError: true } : {}),
 });
 
