@@ -1,6 +1,6 @@
 import { parseAssetMarker, UnframedError } from "@unframed/contracts";
 import { contextMenu, readRef, type MenuItem, type MenuSection, type MenuShape } from "@unframed/domain";
-import { useEffect, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import {
   ArrangeMenuSubmenu,
   ConversionsMenuGroup,
@@ -208,6 +208,31 @@ const TldrawEditSubmenu = () => {
   );
 };
 
+/** The event tldraw's menu library dispatches on a closed menu before it refocuses the canvas. */
+const REFOCUS_EVENT = "focusScope.autoFocusOnUnmount";
+
+/**
+ * Hands keyboard focus back to the canvas the moment the menu closes. Left alone, the menu
+ * library does it on a timer; on a busy page a right-click can open the next menu before
+ * that timer runs, and the late focus then lands outside the new menu, which closes at
+ * once. So this cancels the timer's refocus and does it synchronously instead.
+ */
+const FocusHandBack = () => {
+  const editor = useEditor();
+  const marker = useRef<HTMLSpanElement>(null);
+  useLayoutEffect(() => {
+    const content = marker.current?.closest<HTMLElement>("[role='menu']");
+    if (!content) return;
+    // Left attached: the event fires after the menu has unmounted.
+    content.addEventListener(REFOCUS_EVENT, (event) => event.preventDefault());
+    return () => {
+      const active = content.ownerDocument.activeElement;
+      if (active === null || active === content.ownerDocument.body || content.contains(active)) editor.getContainer().focus();
+    };
+  }, [editor]);
+  return <span ref={marker} hidden />;
+};
+
 /**
  * The right-click menu: Unframed's sections, then tldraw's own groups minus its group,
  * ungroup, cut, copy and paste items. tldraw's frame-selection and remove-frame items
@@ -215,6 +240,7 @@ const TldrawEditSubmenu = () => {
  */
 export const ContextMenu = (props: TLUiContextMenuProps) => (
   <DefaultContextMenu {...props}>
+    <FocusHandBack />
     <UnframedSections />
     <TldrawUiMenuGroup id="modify">
       <TldrawEditSubmenu />

@@ -15,8 +15,8 @@ test("dragging a prompt's edge pins its size, a still press does not, and double
   await page.mouse.move(edge.x, edge.y);
   await page.mouse.down();
   await page.mouse.up();
-  await page.waitForTimeout(500);
-  expect((await roomRecords(engine, "default")).find((record) => record.id === SCENE)!.meta.sized).toBeUndefined();
+  await expect.poll(async () => (await box.boundingBox())!.width).toBe(hugged.width);
+  expect((await settledRecord(engine, "default", SCENE))!.meta.sized).toBeUndefined();
 
   await page.mouse.move(edge.x, edge.y);
   await page.mouse.down();
@@ -24,12 +24,13 @@ test("dragging a prompt's edge pins its size, a still press does not, and double
   for (let step = 1; step <= 10; step++) await page.mouse.move(edge.x + 3 + step * 25, edge.y);
   await page.mouse.up();
 
+  // The prompt shows its pinned width at once; the room holds it once the tab has sent it.
+  await expect.poll(async () => (await box.boundingBox())!.width).toBeCloseTo(hugged.width + 253, -1);
+  const wider = (await box.boundingBox())!;
+  expect(wider.height).toBeLessThan(hugged.height);
   const pinned = (await settledRecord(engine, "default", SCENE))!;
   expect(pinned.meta.sized).toBe(true);
-  expect(pinned.props.w).toBeGreaterThan(hugged.width + 100);
-  const wider = (await box.boundingBox())!;
-  expect(wider.width).toBeCloseTo(hugged.width + 253, -1);
-  expect(wider.height).toBeLessThan(hugged.height);
+  expect(pinned.props.w).toBeCloseTo(wider.width, 0);
 
   // Double-clicking the edge makes it hug its text again.
   const after = { x: wider.x + wider.width, y: wider.y + wider.height / 2 };

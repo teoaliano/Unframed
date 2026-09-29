@@ -75,15 +75,24 @@ export const emptyCanvasPoint = async (page: Page): Promise<{ x: number; y: numb
   throw new Error("no empty canvas left on screen");
 };
 
+/**
+ * tldraw's sync client, alone in a room, sends a tab's edits once a second. A record the
+ * room has not changed for longer than that has nothing left in flight.
+ */
+const SOLO_SEND_INTERVAL_MS = 1000;
+
 /** A record once the room has stopped changing it (a drag sends many moves). */
 export const settledRecord = async (engine: TestEngine, project: string, id: string): Promise<AnyRecord | undefined> => {
   let last = "";
+  let since = Date.now();
   for (;;) {
-    await new Promise((resolve) => setTimeout(resolve, 300));
+    await new Promise((resolve) => setTimeout(resolve, 250));
     const found = (await roomRecords(engine, project)).find((record) => record.id === id);
     const text = JSON.stringify(found);
-    if (text === last) return found;
-    last = text;
+    if (text !== last) {
+      last = text;
+      since = Date.now();
+    } else if (Date.now() - since > SOLO_SEND_INTERVAL_MS + 250) return found;
   }
 };
 
