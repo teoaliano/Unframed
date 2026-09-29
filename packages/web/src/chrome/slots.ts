@@ -30,7 +30,7 @@ export interface ChromeSlots {
   /** What Open on a filled page or motion does. */
   openArtifact?: (editor: Editor, shapeId: TLShapeId) => void;
   /** Set while the chat rail (spec 08) holds the right edge: the top-right card steps aside. */
-  leftCardAside?: boolean;
+  leftCardDocked?: boolean;
 }
 
 let slots: ChromeSlots = {};

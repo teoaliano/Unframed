@@ -30,7 +30,7 @@ const transitionsOnOpen = (page: import("@playwright/test").Page) =>
       }),
   );
 
-test("the Agent button slides the rail in from the left, the top-left card steps aside, and Close slides it out and removes it", async ({ page, agent }) => {
+test("the Agent button slides the rail in from the left, the top-left card becomes its top row, and Close slides it out and removes it", async ({ page, agent }) => {
   await openCanvas(page, agent);
   const card = page.locator(".unframed-chrome-left");
   await expect(agentChromeButton(page)).toBeVisible();
@@ -51,19 +51,23 @@ test("the Agent button slides the rail in from the left, the top-left card steps
   expect(box.x).toBeCloseTo(0, 0);
   expect(box.y).toBe(0);
 
-  // The top-left card fades out, drifts left and takes no input while the rail is open.
-  await expect(card).toHaveAttribute("inert", "");
-  expect(await computed(card, "transition-duration")).toEqual({ "transition-duration": "0.16s, 0.2s" });
-  await expect.poll(async () => (await computed(card, "opacity")).opacity).toBe("0");
-  expect((await computed(card, "transform")).transform).toBe("matrix(1, 0, 0, 1, -8, 0)");
+  // The top-left card becomes the rail's top row: no frame of its own, still usable, over
+  // the rail's chrome row, with the Agent header below it.
+  await expect(card).toHaveAttribute("data-docked", "");
+  await expect(card).not.toHaveAttribute("inert");
+  expect(await computed(card, "background-color", "border-top-color")).toEqual({ "background-color": "rgba(0, 0, 0, 0)", "border-top-color": "rgba(0, 0, 0, 0)" });
+  const cardBox = (await card.boundingBox())!;
+  const row = (await panel.getByTestId("rail-chrome-row").boundingBox())!;
+  expect(cardBox.y + cardBox.height).toBeLessThanOrEqual(row.y + row.height);
+  expect((await panel.getByRole("heading", { name: "Agent" }).boundingBox())!.y).toBeGreaterThanOrEqual(row.y + row.height);
+  await expect(card.getByRole("button", { name: /^(Settings|Add your API key)$/ })).toBeVisible();
 
   // Close runs the faster exit, then the rail leaves the page.
   await panel.getByRole("button", { name: "Close" }).click();
   await expect(panel).toHaveAttribute("data-state", "closed");
   expect(await computed(panel, "transition-duration")).toEqual({ "transition-duration": "0.2s, 0.16s" });
   await expect(panel).toHaveCount(0);
-  await expect(card).not.toHaveAttribute("inert");
-  await expect.poll(async () => (await computed(card, "opacity")).opacity).toBe("1");
+  await expect(card).not.toHaveAttribute("data-docked");
 
   // Reopened, it comes back at rest.
   await openRail(page);
@@ -137,8 +141,8 @@ test.describe("on a window of 980 px or less", () => {
     // Once it has slid in, it meets the left edge.
     await expect.poll(async () => Math.round((await sheet.boundingBox())!.x)).toBe(0);
     expect((await sheet.boundingBox())!.width).toBeLessThanOrEqual(384);
-    // Docked, the top-left card steps aside; under the Sheet it stays where it is.
-    await expect(page.locator(".unframed-chrome-left")).not.toHaveAttribute("data-aside", /.*/);
+    // Docked, the top-left card joins the rail; under the Sheet it stays as it is.
+    await expect(page.locator(".unframed-chrome-left")).not.toHaveAttribute("data-docked", /.*/);
 
     // Escape in one of the rail's own menus closes that menu, not the Sheet.
     await sheet.getByRole("button", { name: "More composer controls" }).click();

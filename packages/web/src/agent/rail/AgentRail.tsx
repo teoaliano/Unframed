@@ -49,6 +49,34 @@ const RAIL_CLASS =
 const EMBEDDED_CLASS = "relative box-border flex size-full min-h-0 flex-col font-sans text-foreground";
 
 /**
+ * The room at the top of the docked rail for the top-left chrome card (spec 02), which sits
+ * over it: as tall as the card reaches, plus its margin, so a shell that moves the card
+ * (spec 01) moves the row with it.
+ */
+const ChromeRow = () => {
+  const [height, setHeight] = useState(60);
+  const row = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const card = document.querySelector<HTMLElement>(".unframed-chrome-left");
+    const element = row.current;
+    if (!card || !element) return;
+    const measure = () => {
+      const top = element.parentElement?.getBoundingClientRect().top ?? 0;
+      setHeight(Math.max(0, Math.round(card.getBoundingClientRect().bottom - top + 12)));
+    };
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(card);
+    window.addEventListener("resize", measure);
+    return () => {
+      observer.disconnect();
+      window.removeEventListener("resize", measure);
+    };
+  }, []);
+  return <div ref={row} className="shrink-0 border-b" style={{ height }} data-testid="rail-chrome-row" />;
+};
+
+/**
  * The chat rail (spec 08): the project's chats as folder tabs filtered by the selected
  * artifacts, the active chat's transcript, its pending panels and the composer's Agent
  * tray, behind one component that the canvas and the artifact editor both mount.
@@ -139,6 +167,8 @@ export const AgentRail = ({ project, embedded, inSheet, filterTo, onLocate, onOp
       }}
       onKeyUp={(event) => event.stopPropagation()}
     >
+      {/* Docked, the top-left chrome card sits over this row as the rail's own top line. */}
+      {!embedded && !inSheet && <ChromeRow />}
       <header className="flex h-12 shrink-0 items-center gap-1 pr-2 pl-3.5">
         <Sparkles aria-hidden className="size-4 shrink-0 text-foreground" />
         <h2 className="m-0 ml-1 flex-1 text-sm font-medium">Agent</h2>

@@ -132,7 +132,7 @@ const CanvasRail = ({ client, openArtifact }: { readonly client: ChatClient; rea
   const editor = useEditor();
   const ui = useRailUi(client);
   const narrow = useNarrowWindow();
-  useEffect(() => (ui.open && !narrow ? registerSlot("leftCardAside", true) : undefined), [ui.open, narrow]);
+  useEffect(() => (ui.open && !narrow ? registerSlot("leftCardDocked", true) : undefined), [ui.open, narrow]);
   const close = useCallback(() => client.setUi({ open: false }), [client]);
   const locate = useCallback(
     (id: string) => {
