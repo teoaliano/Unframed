@@ -64,7 +64,11 @@ export const artifactDiff = async (
       files.push({ ...base, additions: 0, deletions: 0, patch: TOO_LARGE, tooLarge: true });
       continue;
     }
-    const patch = structuredPatch(span.before ?? "/dev/null", span.after ?? "/dev/null", before, after, undefined, undefined, { context: 3, ignoreWhitespace });
+    // Ignoring whitespace is git's `-w`: lines equal once every space is taken out, not only their ends.
+    const patch = structuredPatch(span.before ?? "/dev/null", span.after ?? "/dev/null", before, after, undefined, undefined, {
+      context: 3,
+      ...(ignoreWhitespace ? { comparator: (left: string, right: string) => left.replace(/\s+/g, "") === right.replace(/\s+/g, "") } : {}),
+    });
     let additions = 0;
     let deletions = 0;
     for (const hunk of patch.hunks) {
