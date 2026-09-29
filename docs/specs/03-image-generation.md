@@ -238,17 +238,17 @@ The composer opens on the app's last-used values per medium: the model (only whe
 
 ### The model dialog
 
-A centred modal dialog, 680 px wide, one per open picker.
+A centred modal dialog, 680 px wide, one per open picker: the kit's Dialog (spec 12), its title in the kit's dialog title, the header link an InlineButton in the muted tone, the search field the kit's InputGroup with a search icon, the table the kit's Table, and each sortable column header a Button `ghost` at `xs` size with its sort arrow.
 
 - Title: `Image models` (spec 04 and 05: `Video models`, `Text models`).
 - Header link `Browse on OpenRouter`, opening in a new tab: image `https://openrouter.ai/models?output_modalities=image`, video `https://openrouter.ai/models?output_modalities=video`, text `https://openrouter.ai/models?output_modalities=text&input_modalities=image`.
 - Search field, label `Search models` (visually hidden), placeholder `Search models…`. Matches, case-insensitively, the full slug or the display name.
 - A table with three sortable columns, sorted by Released, newest first, by default:
-  - **Model**: the slug after the first `/`. The cell is a button that picks the model and closes the dialog. The current model is bold with a check icon labelled `Current model`.
-  - **Provider**: a coloured token. The provider key is the slug's prefix before `/` with a leading `~` removed. Its label is the part before `:` of the first model in the catalogue under that key whose display name contains a colon, trimmed; if none has one, the key itself. The colour is assigned by the key's position in the catalogue's sorted list of provider keys, cycling through 11 hues in this order: blue, orange, purple, green, pink, teal, red, cyan, yellow, gray, neutral (values from `assets/theme/`).
+  - **Model**: the slug after the first `/`. The cell is a button (InlineButton) that picks the model and closes the dialog. The current model is bold with a check icon labelled `Current model`.
+  - **Provider**: a coloured token. The provider key is the slug's prefix before `/` with a leading `~` removed. Its label is the part before `:` of the first model in the catalogue under that key whose display name contains a colon, trimmed; if none has one, the key itself. The colour is assigned by the key's position in the catalogue's sorted list of provider keys, cycling through 11 hues in this order: blue, orange, purple, green, pink, teal, red, cyan, yellow, gray, neutral. The token is the kit's Badge `label`, tinted from `--label` set to the Tailwind palette colour of that hue at 500 (`--color-blue-500` and so on).
   - **Released**: OpenRouter's `created` (Unix seconds) formatted as a short local date (numeric year, short month, numeric day), right-aligned, 130 px; empty when absent. Sorting uses the number.
 - No match: `No model matches. Clear the search.`
-- The table scrolls inside the dialog with a sticky header.
+- The table scrolls inside the dialog with a sticky header: the header row is its own table with the same columns, above the scrolling rows.
 - The dialog handles Escape itself, in the capture phase, and stops it there, so Esc closes only the dialog.
 
 ### Pricing

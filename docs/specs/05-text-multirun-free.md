@@ -192,17 +192,18 @@ Recipes for Free outputs: each output's recipe records its own run exactly, so R
 
 ### The final prompt dialog
 
-A modal dialog, 640 px wide, opened by step 5 above. Nothing but the repair call has been paid for when it opens.
+A modal dialog, 640 px wide (the kit's Dialog, spec 12), opened by step 5 above. Nothing but the repair call has been paid for when it opens.
 
 - Title `Final prompt`. Subtitle `4 generations. Nothing has been sent yet.` (`1 generation.` in the singular), or `This list cannot be assembled yet.` when the current text has an error.
 - `Shared by every run` (label) and the shared text, read-only, when not empty. When an instruction was typed, `Added after every section` (label) and the instruction, read-only.
-- `Sections` (label) and an editable text area of 12 rows, spellcheck off, seeded with the list text as the pipeline has it (the repaired text when the repair was used, the source text otherwise), with its separators and directives intact.
+- `Sections` (label) and an editable text area of 12 rows (the kit's Textarea in the mono stack, 12 rows tall), spellcheck off, seeded with the list text as the pipeline has it (the repaired text when the repair was used, the source text otherwise), with its separators and directives intact.
 - Rows derived live from the text area through Free batch, one per run: `Run 1` on the left, `images 1, 5` or `all images` on the right.
 - Live warnings: `3 more sections beyond the 10-run cap will not run.` (singular `1 more section`), `2 sections with no prompt text will not run.` (singular `1 section`), and the dropped-images note.
-- The repair notes, as an info line.
+- The repair notes, as an info line in `text-xs` muted text.
 - Errors: a cycle's message, or `The list source is no longer selected.` when the source shape is gone.
+- Each warning is the kit's Alert `warning`, each error the kit's Alert `error`.
 - The rows and warnings scroll; the buttons do not.
-- Buttons: `Cancel`, and `Generate N×` (primary), disabled on an error or zero runs.
+- Buttons, in the kit's dialog footer: `Cancel` (Button `outline`), and `Generate N×` (primary, Button `default`), disabled on an error or zero runs.
 
 Confirm re-runs Free batch on the text as confirmed, against the canvas as it is at that moment, and sends `run.image` with the same batch id. There is no second text call. Its notes are recomputed from the confirmed text, plus the repair notes. Edits are never written back to the source shape. Cancel and Esc close the dialog and send nothing. The staged batch lives only in the web and is lost on reload, which costs nothing but the text call already made.
 

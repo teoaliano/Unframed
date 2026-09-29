@@ -169,6 +169,30 @@ test("the model dialog: title, link, newest first, sorts, search, provider token
   await expect(tray(page).getByTestId("model-chip")).toHaveText("flux-2");
 });
 
+test("the model dialog is the kit's Dialog at 680 px with the kit's search field, Table and sort Buttons, and provider tokens as label Badges", async ({ page, generation }) => {
+  await openCanvas(page, generation.engine);
+  await openOnSubject(page);
+  await tray(page).getByTestId("model-chip").click();
+  const box = dialog(page);
+  await expectSlot(box, "dialog-popup");
+  await expect.poll(async () => Math.round((await box.boundingBox())!.width)).toBe(680);
+  const title = box.locator("[data-slot='dialog-title']");
+  expect(await styleOf(title, "font-size")).toBe("20px");
+  expect(await styleOf(title, "font-weight")).toBe("600");
+  await expectSlot(box.getByPlaceholder("Search models…"), "input");
+  await expect(box.getByPlaceholder("Search models…")).toBeFocused();
+  await expect(box.locator("[data-slot='table']")).not.toHaveCount(0);
+  await expectSlot(box.getByRole("button", { name: "Released", exact: true }), "button");
+  await expectSlot(box.getByRole("button", { name: "flux-2", exact: true }), "inline-button");
+  const openai = box.locator('tr[data-model="openai/gpt-image-2"] [data-hue]');
+  await expectSlot(openai, "badge");
+  await inBothSchemes(page, async (scheme) => {
+    expect(await resolvedColor(page, "var(--color-purple-500)")).not.toBe("rgba(0, 0, 0, 0)");
+    const tint = `color-mix(in srgb, var(--color-purple-500) ${scheme === "light" ? 30 : 45}%, var(--color-foreground))`;
+    await expect.poll(async () => (await styleOf(openai, "color")) === (await resolvedColor(page, tint))).toBe(true);
+  });
+});
+
 test("Escape in the model dialog closes only the dialog", async ({ page, generation }) => {
   await openCanvas(page, generation.engine);
   await openOnSubject(page);

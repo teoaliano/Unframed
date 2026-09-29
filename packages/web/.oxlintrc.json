@@ -126,8 +126,6 @@
         "src/canvas/shapes/prompt.tsx",
         "src/canvas/shapes/renderPlaceholder.tsx",
         "src/chrome/DotGrid.tsx",
-        "src/generate/composer/FinalPromptDialog.tsx",
-        "src/generate/composer/ModelDialog.tsx",
         "src/generate/overlays.tsx",
         "src/legacy/ImportGate.tsx",
         "src/library/AddToLibraryDialog.tsx",
