@@ -24,7 +24,7 @@ import {
 } from "@unframed/domain";
 import type { TLRecord } from "@tldraw/tlschema";
 import type { ElementHandle, KeyInput, Page } from "puppeteer-core";
-import type { McpBinding, McpTool, ToolAnswer } from "../agent/mcp.ts";
+import { refusal as refuse, type McpBinding, type McpTool, type ToolAnswer } from "../agent/mcp.ts";
 import { errorText } from "../log.ts";
 import type { HeadlessChrome } from "./headlessChrome.ts";
 
@@ -69,8 +69,6 @@ export interface PreviewDeps {
 }
 
 class Refused extends Error {}
-
-const refuse = (message: string): ToolAnswer => ({ value: { error: message }, isError: true });
 
 const push = <T>(list: T[], item: T) => {
   list.push(item);

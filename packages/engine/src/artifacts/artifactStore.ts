@@ -43,8 +43,6 @@ const LIBRARY: ReadonlyArray<LibraryFile> = [
   { name: "gsap.js", bytes: installed(() => require.resolve("gsap/dist/gsap.min.js")) },
 ];
 
-export const LIBRARY_FILES: ReadonlyArray<string> = LIBRARY.map((file) => file.name);
-
 /**
  * Writes each file whose on-disk size differs from its source, or that is missing, and
  * leaves the rest alone, so a dependency bump or a generator change refreshes the copies.
@@ -81,21 +79,22 @@ export interface AgentSidecar {
 const taken = (folder: string) => (name: string) => existsSync(join(folder, name)) || existsSync(join(folder, sidecarFileName(name)));
 
 /**
- * Creates a new file named from `title` (or `fallback`) with exclusive create, retrying with
- * the next suffix when another write took the name first, then writes its sidecar.
+ * Creates a new file named from `title` (or `fallback`): `place` must create it exclusively
+ * and fail with EEXIST when another write took the name first, which retries with the next
+ * suffix. Then writes its sidecar.
  */
 const createNew = async (
   folder: string,
-  input: { readonly title: string; readonly fallback: string; readonly ext: string; readonly bytes: Buffer },
-  sidecar: (file: string) => string,
+  input: { readonly title: string; readonly fallback: string; readonly ext: string },
+  place: (path: string) => Promise<void>,
+  sidecar: () => string,
 ): Promise<string> => {
   const now = Date.now();
   const skipped = new Set<string>();
   for (let attempt = 0; attempt < 1000; attempt++) {
     const file = artifactFileName({ title: input.title, fallback: input.fallback, now, ext: input.ext, exists: (name) => skipped.has(name) || taken(folder)(name) });
-    let handle;
     try {
-      handle = await open(join(folder, file), "wx");
+      await place(join(folder, file));
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code === "EEXIST") {
         skipped.add(file);
@@ -103,15 +102,19 @@ const createNew = async (
       }
       throw error;
     }
-    try {
-      await handle.writeFile(input.bytes);
-    } finally {
-      await handle.close();
-    }
-    await writeFile(join(folder, sidecarFileName(file)), sidecar(file));
+    await writeFile(join(folder, sidecarFileName(file)), sidecar());
     return file;
   }
   throw new Error("No free file name.");
+};
+
+const writeExclusive = (bytes: Buffer) => async (path: string) => {
+  const handle = await open(path, "wx");
+  try {
+    await handle.writeFile(bytes);
+  } finally {
+    await handle.close();
+  }
 };
 
 /** An agent's new version of a page or motion, with its agent sidecar. */
@@ -120,7 +123,7 @@ export const writeAgentArtifact = async (
   input: { readonly kind: ArtifactKind; readonly html: string; readonly title: string; readonly chatId: string; readonly turn: number; readonly shapeId: string | null },
 ): Promise<{ file: string; bytes: number }> => {
   const bytes = Buffer.from(input.html, "utf8");
-  const file = await createNew(folder, { title: input.title, fallback: input.kind, ext: "html", bytes }, () => {
+  const file = await createNew(folder, { title: input.title, fallback: input.kind, ext: "html" }, writeExclusive(bytes), () => {
     const sidecar: AgentSidecar = {
       source: "agent",
       kind: input.kind,
@@ -140,7 +143,7 @@ export const writeAgentArtifact = async (
 export const writeUploadedArtifact = async (folder: string, input: { readonly html: string; readonly fileName: string }): Promise<{ file: string; bytes: number }> => {
   const bytes = Buffer.from(input.html, "utf8");
   const title = input.fileName.replace(/\.[^.]*$/, "");
-  const file = await createNew(folder, { title, fallback: "motion", ext: "html", bytes }, () =>
+  const file = await createNew(folder, { title, fallback: "motion", ext: "html" }, writeExclusive(bytes), () =>
     sidecarText({ source: "upload", fileName: input.fileName, mime: "text/html", bytes: bytes.length, at: new Date().toISOString() }),
   );
   return { file, bytes: bytes.length };
@@ -171,19 +174,8 @@ export const placeRenderOutput = async (
   input: { readonly from: string; readonly of: string; readonly title: string; readonly dials: Readonly<Record<string, unknown>> | null },
 ): Promise<{ file: string; bytes: number }> => {
   const bytes = (await stat(input.from)).size;
-  const now = Date.now();
-  const skipped = new Set<string>();
-  for (let attempt = 0; attempt < 1000; attempt++) {
-    const file = artifactFileName({ title: input.title, fallback: "motion", now, ext: "mp4", exists: (name) => skipped.has(name) || taken(folder)(name) });
-    try {
-      await copyFile(input.from, join(folder, file), constants.COPYFILE_EXCL);
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code === "EEXIST") {
-        skipped.add(file);
-        continue;
-      }
-      throw error;
-    }
+  const place = (path: string) => copyFile(input.from, path, constants.COPYFILE_EXCL);
+  const file = await createNew(folder, { title: input.title, fallback: "motion", ext: "mp4" }, place, () => {
     const sidecar: RenderSidecar = {
       source: "render",
       of: input.of,
@@ -195,8 +187,7 @@ export const placeRenderOutput = async (
       ...(input.dials !== null && Object.keys(input.dials).length > 0 ? { dials: input.dials } : {}),
       at: new Date().toISOString(),
     };
-    await writeFile(join(folder, sidecarFileName(file)), `${JSON.stringify(sidecar, null, 2)}\n`);
-    return { file, bytes };
-  }
-  throw new Error("No free file name.");
+    return `${JSON.stringify(sidecar, null, 2)}\n`;
+  });
+  return { file, bytes };
 };

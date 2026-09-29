@@ -13,7 +13,7 @@ import { guardUpgrade, refuseUpgrade } from "./guard.ts";
  * gain a second route: a page served anywhere else would be the app to the browser.
  */
 
-export const PREVIEW_CSP =
+const PREVIEW_CSP =
   "default-src 'none'; img-src 'self' data: blob:; media-src 'self' data: blob:; font-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; frame-src 'self'; connect-src 'none'; form-action 'none'; base-uri 'none'; object-src 'none'; frame-ancestors http://localhost:* http://127.0.0.1:* http://[::1]:*";
 
 /** The allow-list. Everything else is 404, which keeps sidecars, the database and temp files unservable. */
@@ -38,7 +38,7 @@ const CONTENT_TYPES: Readonly<Record<string, string>> = {
 const FILE_NAME = /^[A-Za-z0-9][A-Za-z0-9._-]{0,200}$/;
 const ROUTE = /^\/p\/([^/]+)\/([^/]+)$/;
 
-export type PreviewResolution =
+type PreviewResolution =
   | { readonly kind: "file"; readonly project: string; readonly file: string; readonly contentType: string }
   | { readonly kind: "refused"; readonly status: 403 | 404; readonly body: string };
 
@@ -56,7 +56,7 @@ const decode = (segment: string): string | undefined => {
  * The pure step: a request's method, URL and headers to the project file it names, or the
  * refusal. The guard runs first, with the same decision the app origin uses.
  */
-export const resolvePreview = (request: {
+const resolvePreview = (request: {
   readonly method: string | undefined;
   readonly url: string | undefined;
   readonly host: string | undefined;

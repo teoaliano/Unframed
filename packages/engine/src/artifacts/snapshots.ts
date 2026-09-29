@@ -9,7 +9,7 @@ import { mkdir, readdir, rename, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { crc32, deflateSync } from "node:zlib";
 import type { ArtifactSnapshot } from "@unframed/contracts";
-import { artifactUrl, parseSnapshotFileName, snapshotFileName, snapshotFits } from "@unframed/domain";
+import { artifactUrl, isArtifactKind, parseSnapshotFileName, snapshotFileName, snapshotFits, snapshotSeekSeconds } from "@unframed/domain";
 import type { TLRecord } from "@tldraw/tlschema";
 import { errorText, logError } from "../log.ts";
 import type { HeadlessChrome } from "./headlessChrome.ts";
@@ -70,7 +70,7 @@ export const stubSnapshotRenderer: SnapshotRenderer = async (job) => {
 
 /**
  * The real renderer: the artifact at the shape's size at 2x, its saved dials posted to it,
- * the load event plus 500 ms, a motion's player seeked to 1 s (half its length when shorter).
+ * the load event plus 500 ms, a motion's player seeked by the domain rule.
  */
 export const chromeSnapshotRenderer =
   (chrome: HeadlessChrome): SnapshotRenderer =>
@@ -86,9 +86,9 @@ export const chromeSnapshotRenderer =
         }
         if (job.kind === "motion") {
           await page.waitForFunction(`document.querySelector("hyperframes-player")?.ready === true`, { timeout: 10_000 }).catch(() => undefined);
-          // 1 s in, or half way through a motion shorter than 2 s.
+          const duration = Number(await page.evaluate(`Number(document.querySelector("hyperframes-player")?.duration)`));
           await page.evaluate(
-            `(() => { const player = document.querySelector("hyperframes-player"); if (!player) return; const duration = Number.isFinite(player.duration) ? player.duration : 0; player.pause?.(); player.seek?.(duration > 0 ? Math.min(1, duration / 2) : 1); })()`,
+            `(() => { const player = document.querySelector("hyperframes-player"); player?.pause?.(); player?.seek?.(${snapshotSeekSeconds(duration)}); })()`,
           );
         }
         await sleep(SETTLE_MS);
@@ -108,7 +108,7 @@ interface Seen {
 type ArtifactRecord = TLRecord & { type: "page" | "motion"; props: { w: number; h: number; file: string; dials?: Record<string, unknown> } };
 
 const isArtifact = (record: TLRecord | undefined): record is ArtifactRecord =>
-  record?.typeName === "shape" && (record.type === "page" || record.type === "motion") && typeof (record.props as { file?: unknown }).file === "string";
+  record?.typeName === "shape" && isArtifactKind(record.type) && typeof (record.props as { file?: unknown }).file === "string";
 
 export interface SnapshotDeps {
   readonly renderer: SnapshotRenderer | undefined;

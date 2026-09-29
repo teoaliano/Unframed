@@ -2,6 +2,9 @@ import { resolve } from "node:path";
 import { acceptTestOrigin } from "@unframed/domain";
 import { envFilePath, preferencesFilePath, resolveDataDir } from "./paths.ts";
 
+/** `UNFRAMED_TEST_RENDERER` (spec 01's table): stands in for the motion renderer and the Chrome search. */
+export type TestRenderer = "ok" | "fail" | "no-chrome";
+
 export const OPENROUTER_ORIGIN = "https://openrouter.ai";
 
 /**
@@ -43,7 +46,7 @@ export interface EngineConfig {
   /** `UNFRAMED_TEST_UPLOAD_URL_TTL_MS`: an attachment upload URL's lifetime, in place of 10 min. */
   readonly testUploadUrlTtlMs: number | undefined;
   /** `UNFRAMED_TEST_RENDERER`: `ok`, `fail` or `no-chrome` stand in for the motion renderer and the Chrome search. */
-  readonly testRenderer: "ok" | "fail" | "no-chrome" | undefined;
+  readonly testRenderer: TestRenderer | undefined;
   readonly platform: NodeJS.Platform;
 }
 

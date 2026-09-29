@@ -3,7 +3,7 @@
  * left filtered to it, the artifact live in the centre, its parameters on the right.
  */
 import type { ArtifactShapeProps } from "@unframed/contracts";
-import { artifactTitle, type ArtifactKind, type DialsAnnouncement } from "@unframed/domain";
+import { artifactTitle, isArtifactKind, type ArtifactKind, type DialsAnnouncement } from "@unframed/domain";
 import { AppWindow, ArrowLeft, Clapperboard, ExternalLink } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useEditor, useValue, type TLShapeId } from "tldraw";
@@ -53,7 +53,7 @@ export const ArtifactEditor = ({ shapeId, onClose, onOpen }: ArtifactEditorProps
     "edited artifact",
     () => {
       const shape = editor.getShape(shapeId);
-      if (!shape || (shape.type !== "page" && shape.type !== "motion")) return undefined;
+      if (!shape || !isArtifactKind(shape.type)) return undefined;
       const props = shape.props as ArtifactShapeProps;
       return { kind: shape.type as ArtifactKind, file: props.file, title: props.title, fileName: props.fileName, dials: props.dials };
     },

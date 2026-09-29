@@ -1,5 +1,5 @@
 import { parseAssetMarker, UnframedError } from "@unframed/contracts";
-import { contextMenu, readRef, type MenuItem, type MenuSection, type MenuShape } from "@unframed/domain";
+import { contextMenu, isArtifactKind, readRef, type MenuItem, type MenuSection, type MenuShape } from "@unframed/domain";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import {
   ArrangeMenuSubmenu,
@@ -62,7 +62,7 @@ const menuShape = (editor: Editor, shape: TLShape): MenuShape => {
     ...(isTextResult(shape) ? { textResult: true } : {}),
     ...(parent?.type === "frame" ? { parent: parent.id } : {}),
     ...(groupRecipeOf(shape) ? { recipe: true } : {}),
-    ...((shape.type === "page" || shape.type === "motion") && (shape.props as { file?: string }).file ? { filledArtifact: true } : {}),
+    ...(isArtifactKind(shape.type) && (shape.props as { file?: string }).file ? { filledArtifact: true } : {}),
   };
 };
 

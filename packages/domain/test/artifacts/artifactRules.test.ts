@@ -14,6 +14,7 @@ import {
   previewHostFor,
   RUNTIME_TAG,
   snapshotFileName,
+  snapshotSeekSeconds,
   snapshotFits,
 } from "../../src/index.ts";
 
@@ -193,6 +194,15 @@ describe("snapshot names and fit", () => {
     expect(snapshotFileName("1-a.html", { w: 480.4, h: 320 })).toBe("1-a.html-480x320.png");
     expect(parseSnapshotFileName("1-a.html-480x320.png")).toEqual({ file: "1-a.html", w: 480, h: 320 });
     expect(parseSnapshotFileName("photo.png-512.webp")).toBeUndefined();
+  });
+
+  it("catches a motion 1 s in, or half way through one shorter than that", () => {
+    expect(snapshotSeekSeconds(4)).toBe(1);
+    expect(snapshotSeekSeconds(1.5)).toBe(1);
+    expect(snapshotSeekSeconds(1)).toBe(1);
+    expect(snapshotSeekSeconds(0.6)).toBe(0.3);
+    expect(snapshotSeekSeconds(Number.NaN)).toBe(1);
+    expect(snapshotSeekSeconds(0)).toBe(1);
   });
 
   it("still fits within 10 % on each side", () => {

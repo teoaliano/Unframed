@@ -9,6 +9,7 @@ import {
   agentShapeId,
   ARTIFACT_PERFORMANCE,
   ARTIFACT_SIZE_LIMIT,
+  ARTIFACT_TITLE_MAX,
   artifactUrl,
   DIALS_CONTRACT,
   DIALS_TIMELINE,
@@ -32,15 +33,14 @@ import {
   type InteractionMode,
 } from "@unframed/domain";
 import type { TLRecord } from "@tldraw/tlschema";
-import { getIndexAbove, type IndexKey } from "@tldraw/utils";
 import type { Applied, CanvasChange, ChangeOrigin } from "../canvas/rooms.ts";
-import type { McpBinding, McpTool, ToolAnswer } from "../agent/mcp.ts";
+import { refusal as refuse, type McpBinding, type McpTool, type ToolAnswer } from "../agent/mcp.ts";
 import type { TurnChanges } from "../agent/turnChanges.ts";
+import { indexOnTop } from "../runs/placeholders.ts";
 import { shapeBoxes } from "../runs/shapeBounds.ts";
 import { ensureBridge, ensureLibrary, readArtifact, writeAgentArtifact } from "./artifactStore.ts";
 
 const PAGE_ID = "page:page";
-const TITLE_MAX = 120;
 
 /** What the agent's tools reach of the rest of the engine; the agent runtime supplies it. */
 export interface AgentToolContext {
@@ -55,22 +55,13 @@ export interface AgentToolContext {
   ) => { turnCount: number | undefined; turnId: string | undefined; interactionMode: InteractionMode; selection: ReadonlyArray<string> };
   /** Tags the chat with artifacts a write touched (the tag reactor). */
   readonly tag: (project: string, chatId: string, ids: ReadonlyArray<string>) => void;
-  /** Appends an activity to the chat. */
   readonly activity: (project: string, chatId: string, activity: ActivityInput) => void;
 }
-
-const refuse = (message: string): ToolAnswer => ({ value: { error: message }, isError: true });
 
 type Shape = TLRecord & { type: string; props: Record<string, unknown>; meta: Record<string, unknown> };
 
 const isShape = (record: TLRecord | undefined): record is Shape => record?.typeName === "shape";
 
-const topIndex = (records: ReadonlyArray<TLRecord>, pageId: string): IndexKey | null =>
-  records
-    .filter((record) => isShape(record) && (record as unknown as { parentId: string }).parentId === pageId)
-    .map((record) => (record as unknown as { index: IndexKey }).index)
-    .sort((a, b) => (a < b ? -1 : a > b ? 1 : 0))
-    .at(-1) ?? null;
 
 /** Finds the shape an argument names, as the agent names it, and refuses the wrong kind. */
 const findArtifact = (records: ReadonlyArray<TLRecord>, shapeId: string, kind: ArtifactKind): { shape: Shape } | { error: string } => {
@@ -107,7 +98,7 @@ export class ArtifactTools {
       if ("error" in found) return refuse(found.error);
       target = found.shape;
     }
-    const given = typeof args.title === "string" ? args.title.slice(0, TITLE_MAX) : undefined;
+    const given = typeof args.title === "string" ? args.title.slice(0, ARTIFACT_TITLE_MAX) : undefined;
     const title = (given ?? (typeof target?.props.title === "string" ? target.props.title : "")).trim();
 
     const folder = await context.folder(binding.project);
@@ -144,7 +135,7 @@ export class ArtifactTools {
         x: at.x,
         y: at.y,
         rotation: 0,
-        index: getIndexAbove(topIndex(records, pageId)),
+        index: indexOnTop(records, pageId),
         parentId: pageId,
         isLocked: false,
         opacity: 1,
@@ -208,7 +199,7 @@ export class ArtifactTools {
       properties: {
         html: { type: "string", description: args.html },
         shapeId: { type: "string", description: args.shapeId },
-        title: { type: "string", maxLength: TITLE_MAX, description: args.title },
+        title: { type: "string", maxLength: ARTIFACT_TITLE_MAX, description: args.title },
       },
       required: ["html"],
     });

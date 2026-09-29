@@ -5,10 +5,8 @@
  * a computed value keyed to that shape and answers in primitives, so panning re-renders no
  * shape.
  */
-import { farOffscreen, liveArtifacts, PIN_LIMIT } from "@unframed/domain";
+import { farOffscreen, isArtifactKind, liveArtifacts, LIVE_SELECTED_LIMIT, PIN_LIMIT } from "@unframed/domain";
 import { atom, computed, type Atom, type Computed, type Editor, type TLShapeId } from "tldraw";
-
-export const ARTIFACT_TYPES: ReadonlySet<string> = new Set(["page", "motion"]);
 
 /** The preview origin's port, from the engine's settings. Unknown until they arrive. */
 export const previewPort: Atom<number | undefined> = atom("preview port", undefined);
@@ -57,7 +55,7 @@ const canvases = new WeakMap<Editor, CanvasArtifacts>();
 
 const hasFile = (editor: Editor, id: TLShapeId): boolean => {
   const shape = editor.getShape(id);
-  return !!shape && ARTIFACT_TYPES.has(shape.type) && (shape.props as { file?: string }).file !== "";
+  return !!shape && isArtifactKind(shape.type) && (shape.props as { file?: string }).file !== "";
 };
 
 export const artifactsOf = (editor: Editor): CanvasArtifacts => {
@@ -71,9 +69,9 @@ export const artifactsOf = (editor: Editor): CanvasArtifacts => {
       const selected = editor.getSelectedShapeIds().filter((id) => hasFile(editor, id));
       const centreOf = (id: TLShapeId) => editor.getShapePageBounds(id)?.center ?? { x: 0, y: 0 };
       return liveArtifacts({
-        selected: selected.map((id) => ({ id, centre: selected.length > 3 ? centreOf(id) : { x: 0, y: 0 } })),
+        selected: selected.map((id) => ({ id, centre: selected.length > LIVE_SELECTED_LIMIT ? centreOf(id) : { x: 0, y: 0 } })),
         pinned: pinnedAtom(project.get()).get().filter((id) => hasFile(editor, id as TLShapeId)),
-        viewportCentre: selected.length > 3 ? editor.getViewportPageBounds().center : { x: 0, y: 0 },
+        viewportCentre: selected.length > LIVE_SELECTED_LIMIT ? editor.getViewportPageBounds().center : { x: 0, y: 0 },
       });
     });
     found = { project, editing, hold: atom("frame hold", false), live, problems: atom("artifact problems", new Map()) };

@@ -223,7 +223,7 @@ A motion is a HyperFrames composition: one HTML file. The contract given to the 
 
 **The viewer page** (`hyperframes-viewer.html`), generated:
 - Title `motion`. `html` and `body` have no margin, full height, black background, hidden overflow. The player fills the page.
-- Loads `hyperframes-player.js` and mounts `<hyperframes-player runtime-src="hyperframes-runtime.js" controls muted>`. `runtime-src` points at the sibling because the player's default is a CDN the policy refuses. `muted` lets it autoplay.
+- Loads `hyperframes-player.js` and mounts `<hyperframes-player runtime-src="hyperframes-runtime.js" controls muted autoplay>`. `runtime-src` points at the sibling because the player's default is a CDN the policy refuses. The player plays on its own only with `autoplay`, and `muted` lets the browser allow it.
 - Reads the `c` query parameter and sets it as the player's `src` only if it matches `^[A-Za-z0-9][A-Za-z0-9._-]*\.html?$`.
 - Relays dial messages (protocol below): a `unframed:dials` message from its own origin records the composition's window and the message, and forwards it to the canvas if one has said hello. From a loopback origin only: `unframed:dials:hello` records the sender and its origin as the canvas and replays the last announcement to it. `unframed:dials:set` is forwarded to the composition at the viewer's own origin. Everything else is ignored.
 - With no canvas above it, the viewer relays nothing and shows no controls.
@@ -308,7 +308,7 @@ For example `dials.scene.speed: an array must be ...`.
 
 **The bridge** (`unframed-dials.js`), generated at engine build from the domain dial module so the shipped copy and the tested definition are one. It starts with a comment saying it is generated and rewritten on every write, so it must not be edited in the project folder. It defines `window.unframed.dials` and `window.unframed.defaultDials`.
 - `dials(name, config, apply)`: normalise. On error, `console.error("[unframed] " + error)` and return null. Otherwise the state is name (`String(name)`, or `Parameters` when null), config, schema, values = merge(schema, `window.__hfVariables.unframedDials` or null), apply (a no-op when not a function). It calls apply with the values first (errors logged as `[unframed] applying parameters failed`), then announces, then returns `{ values, set(next) }`.
-- Announce posts `{ type: "unframed:dials", name, config, schema, values }` to `window.parent`, only when framed, addressed to a given origin or else its own.
+- Announce posts `{ type: "unframed:dials", name, config, schema, values }` to `window.parent`, only when framed, addressed to a given origin, else to the other-origin canvas that last said hello, else its own. So a page framed directly by the canvas still reaches it with a declaration made after its load event.
 - It accepts a message only when `event.source` is `window.parent` and the origin is its own or loopback (`^http://(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$`, case-insensitive). `unframed:dials:hello` answers with an announcement addressed to the asker's origin. `unframed:dials:set` merges `values` over the current values (a deep assign one level per folder, so a partial set keeps what it does not name), re-merges against the schema, and applies.
 - The last declaration wins.
 

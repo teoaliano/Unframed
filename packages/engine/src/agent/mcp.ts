@@ -57,6 +57,9 @@ export interface ToolAnswer {
   readonly images?: ReadonlyArray<{ readonly data: string; readonly mimeType: string }>;
 }
 
+/** A tool call the tool refuses, with the sentence the agent reads. */
+export const refusal = (message: string): ToolAnswer => ({ value: { error: message }, isError: true });
+
 export interface McpTool {
   readonly name: string;
   readonly description: string;

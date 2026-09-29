@@ -1,5 +1,5 @@
 import { parseAssetMarker, projectFileMarker, UnframedError } from "@unframed/contracts";
-import { isVideoLink, META_REF_TYPES, pastedFileName, readRef, rewriteRichTextTokens, uniqueName, VIDEO_FILE_LIMIT, VIDEO_TOO_LARGE_MESSAGE } from "@unframed/domain";
+import { isArtifactKind, isVideoLink, META_REF_TYPES, pastedFileName, readRef, rewriteRichTextTokens, uniqueName, VIDEO_FILE_LIMIT, VIDEO_TOO_LARGE_MESSAGE } from "@unframed/domain";
 import {
   AssetRecordType,
   createShapeId,
@@ -137,7 +137,7 @@ export const handleDrop = async (editor: Editor, ctx: ContentContext, files: Rea
   if (files.length === 1 && only) {
     const target = editor.getShapeAtPoint(point, { hitInside: true, hitFrameInside: false });
     const kind = kindOf(only);
-    if (target && (target.type === "page" || target.type === "motion") && kind === "page") return replaceArtifactFile(editor, ctx, target, only);
+    if (target && isArtifactKind(target.type) && kind === "page") return replaceArtifactFile(editor, ctx, target, only);
     if (target && (target.type === "image" || target.type === "video") && kind === target.type) {
       try {
         const asset = await uploadMediaFile(editor, kind, only);

@@ -7,8 +7,13 @@ import { ADD_PARAMETER_TEMPLATE } from "./prompts.ts";
 
 export type ArtifactKind = "page" | "motion";
 
+export const isArtifactKind = (type: unknown): type is ArtifactKind => type === "page" || type === "motion";
+
 /** An artifact file may be at most this many bytes once its tags are in (2 MiB). */
 export const ARTIFACT_SIZE_LIMIT = 2_097_152;
+
+/** An artifact title the agent or a render passes is cut to this many characters. */
+export const ARTIFACT_TITLE_MAX = 120;
 
 /** Agent-created sizes; the add menu makes both kinds 480 by 320. */
 export const AGENT_ARTIFACT_SIZE: Readonly<Record<ArtifactKind, { readonly w: number; readonly h: number }>> = {
@@ -174,6 +179,9 @@ export const farOffscreen = (box: PlacementBox, viewport: PlacementBox): boolean
 /** A snapshot still fits a shape of this size when neither side changed by more than 10 %. */
 export const snapshotFits = (snapshot: { readonly w: number; readonly h: number }, shape: { readonly w: number; readonly h: number }): boolean =>
   Math.abs(shape.w - snapshot.w) <= snapshot.w * 0.1 && Math.abs(shape.h - snapshot.h) <= snapshot.h * 0.1;
+
+/** Where a motion's snapshot catches it: 1 s in, or half way through a motion shorter than 1 s. An unknown length counts as long enough. */
+export const snapshotSeekSeconds = (duration: number): number => (Number.isFinite(duration) && duration > 0 && duration < 1 ? duration / 2 : 1);
 
 /** A snapshot's file in the cache folder: named after the artifact file and its size. */
 export const snapshotFileName = (file: string, size: { readonly w: number; readonly h: number }): string =>

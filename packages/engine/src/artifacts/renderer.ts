@@ -11,18 +11,15 @@ import { copyFile, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promis
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { runMarkerOf, type RenderStatus } from "@unframed/contracts";
-import { compositionSize, nextRef, NO_CHROME_RENDER_MESSAGE, placeResults } from "@unframed/domain";
+import { ARTIFACT_TITLE_MAX, compositionSize, nextRef, NO_CHROME_RENDER_MESSAGE, placeResults } from "@unframed/domain";
 import type { TLRecord } from "@tldraw/tlschema";
-import { getIndexAbove, type IndexKey } from "@tldraw/utils";
 import type { Applied, CanvasChange, ChangeOrigin } from "../canvas/rooms.ts";
 import { errorText, logError, logInfo } from "../log.ts";
-import { clearChange, fillFor, isShape, PLACEHOLDER_WIDTH, videoPlaceholder, type LandedClip, type RunOutcome } from "../runs/placeholders.ts";
+import { clearChange, fillFor, indexOnTop, isShape, PLACEHOLDER_WIDTH, videoPlaceholder, type LandedClip, type RunOutcome } from "../runs/placeholders.ts";
 import { shapePageBoxes } from "../runs/shapeBounds.ts";
 import { ensureLibrary, placeRenderOutput } from "./artifactStore.ts";
-import type { TestRenderer } from "./chrome.ts";
 
-export const COMPOSITION_FILE = /^[A-Za-z0-9][A-Za-z0-9._-]*\.html?$/;
-const TITLE_MAX = 120;
+const COMPOSITION_FILE = /^[A-Za-z0-9][A-Za-z0-9._-]*\.html?$/;
 
 /** One render's work handed to the producer: everything it reads and where it writes. */
 export interface ProducerRun {
@@ -122,23 +119,17 @@ export interface RendererDeps {
   readonly registerCloser: (project: string, close: () => Promise<void>) => Promise<unknown>;
 }
 
-interface Record_ extends RenderStatus {
+interface RenderJob extends RenderStatus {
   readonly project: string;
 }
 
 const origin = (id: string): ChangeOrigin => ({ kind: "server", id: `run:${id}` });
 
-const topIndex = (records: ReadonlyArray<TLRecord>, pageId: string): IndexKey | null =>
-  records
-    .filter((record) => isShape(record) && (record as unknown as { parentId: string }).parentId === pageId)
-    .map((record) => (record as unknown as { index: IndexKey }).index)
-    .sort((a, b) => (a < b ? -1 : a > b ? 1 : 0))
-    .at(-1) ?? null;
 
 const isPlainObject = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null && !Array.isArray(value);
 
 export class Renderer {
-  private readonly renders = new Map<string, Record_>();
+  private readonly renders = new Map<string, RenderJob>();
   /** Projects whose closer is registered with the open-project registry. */
   private readonly tracked = new Set<string>();
   private readonly deps: RendererDeps;
@@ -175,7 +166,7 @@ export class Renderer {
     } catch (error) {
       throw new RenderRefused("internal", `Could not prepare the motion library: ${errorText(error)}`);
     }
-    const title = (input.title ?? "").slice(0, TITLE_MAX);
+    const title = (input.title ?? "").slice(0, ARTIFACT_TITLE_MAX);
     const dials = isPlainObject(input.dials) ? input.dials : null;
     const startedAt = Date.now();
     const id = `r-${startedAt.toString(36)}-${[...randomBytes(6)].map((byte) => (byte % 36).toString(36)).join("")}`;
@@ -190,7 +181,7 @@ export class Renderer {
     const placeholder = videoPlaceholder({
       at: at!,
       size: { w: PLACEHOLDER_WIDTH, h: height },
-      index: getIndexAbove(topIndex(records, pageId)),
+      index: indexOnTop(records, pageId),
       parentId: pageId,
       ref: nextRef(records as ReadonlyArray<{ typeName: string; type?: string; meta?: unknown }>),
       marker: { runId: id, runIndex: 1, startedAt },

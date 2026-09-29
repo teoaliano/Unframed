@@ -3,6 +3,7 @@
  * point (double-click, the toolbar's Open and the recap card's Open all call it), the frame
  * hold, the snapshot stream and the preview origin's port.
  */
+import { isArtifactKind } from "@unframed/domain";
 import { Sparkles } from "lucide-react";
 import { lazy, Suspense, useCallback, useEffect, type SyntheticEvent } from "react";
 import { createPortal } from "react-dom";
@@ -50,7 +51,7 @@ const saved = new WeakMap<Editor, Opened>();
 /** Opens the editor on one artifact: saves the camera, selects it alone, closes the composer, then shows the editor. */
 export const openArtifactEditor = (editor: Editor, shapeId: TLShapeId): void => {
   const shape = editor.getShape(shapeId);
-  if (!shape || (shape.type !== "page" && shape.type !== "motion")) return;
+  if (!shape || !isArtifactKind(shape.type)) return;
   const state = artifactsOf(editor);
   if (state.editing.get() === undefined) saved.set(editor, { camera: editor.getCamera() });
   editor.select(shapeId);

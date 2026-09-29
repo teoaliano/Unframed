@@ -7,6 +7,7 @@ import { randomUUID } from "node:crypto";
 import { projectFileMarker, resultMetaOf, unframedMetaOf, type ImageRunRequest, type ResultMeta, type RunMarker } from "@unframed/contracts";
 import { plainText } from "@unframed/domain";
 import { toRichText, type TLRecord } from "@tldraw/tlschema";
+import { getIndexAbove, type IndexKey } from "@tldraw/utils";
 import type { CanvasChange } from "../canvas/rooms.ts";
 
 export const PLACEHOLDER_WIDTH = 320;
@@ -14,6 +15,16 @@ export const PLACEHOLDER_WIDTH = 320;
 export type Shape = TLRecord & { type: string; props: Record<string, unknown>; meta: Record<string, unknown> };
 
 export const isShape = (record: TLRecord | undefined): record is Shape => record?.typeName === "shape";
+
+/** An index above every shape on the page, so a new shape lands on top. */
+export const indexOnTop = (records: ReadonlyArray<TLRecord>, pageId: string): IndexKey =>
+  getIndexAbove(
+    records
+      .filter((record) => isShape(record) && (record as unknown as { parentId: string }).parentId === pageId)
+      .map((record) => (record as unknown as { index: IndexKey }).index)
+      .sort((a, b) => (a < b ? -1 : a > b ? 1 : 0))
+      .at(-1) ?? null,
+  );
 
 /** What landed for one output: enough to fill its placeholder, now or after an undo. */
 export interface Landed {
