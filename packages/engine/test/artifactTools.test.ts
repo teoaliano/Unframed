@@ -272,3 +272,34 @@ describe("motion_write", () => {
     expect(await artifactFiles(agent)).toEqual([]);
   });
 });
+
+describe("artifact diffs through the artifact tools", () => {
+  it("returns a page rewritten with page_write and a motion created with motion_write, the new motion as an added file", async () => {
+    const agent = await startAgentEngine({
+      script: await script([
+        {
+          tools: [
+            { name: "page_write", input: { shapeId: "pg1", html: "<h1>Landing</h1>\n<p>Two, changed</p>\n" } },
+            { name: "motion_write", input: { title: "Sequence", html: "<div id=root>seq</div>\n" } },
+          ],
+        },
+      ]),
+    });
+    await writeFile(join(agent.folder, "1-landing.html"), "<h1>Landing</h1>\n<p>Two</p>\n");
+    await seed(agent, [pageShape("pg1", "100", { file: "1-landing.html", title: "Landing" })]);
+    const { chatId, chat } = await run(agent);
+    const [page] = toolResults(chat, "page_write");
+    const [motion] = toolResults(chat, "motion_write");
+    const diff = await agent.rpc.call("orchestration.getTurnDiff", { projectId: "board", threadId: chatId, fromTurnCount: 0, toTurnCount: 1 });
+    expect(diff.files.map((file) => [file.shapeId, file.kind, file.before, file.after])).toEqual([
+      ["shape:pg1", "page", "1-landing.html", page!.result.file],
+      [`shape:${motion!.result.shapeId}`, "motion", null, motion!.result.file],
+    ]);
+    const [pageDiff, motionDiff] = diff.files;
+    expect(pageDiff!.patch).toContain("-<p>Two</p>");
+    expect(pageDiff!.patch).toContain("+<p>Two, changed</p>");
+    expect(motionDiff!.deletions).toBe(0);
+    expect(motionDiff!.additions).toBeGreaterThan(0);
+    expect(motionDiff!.patch).toContain("+<div id=root>seq</div>");
+  });
+});
