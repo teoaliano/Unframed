@@ -11,3 +11,5 @@ dist/
 .claude/worktrees/
 test-results/
 playwright-report/
+/preferences.json
+/attachments/

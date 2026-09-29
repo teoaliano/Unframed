@@ -35,6 +35,7 @@ Final verification, from a clean install (`node_modules` and `dist` removed) on 
 | 09 | artifacts | 8 | merged | 949cdd3 | 62/62 tasks |
 | 10 | settings and OpenRouter | 7 | merged | b7a1b78, fixture fix 18312a7 | 58/58 tasks plus the `oauth.cancel` render rule; merged after 08 |
 | 11 | legacy import | 9 | merged | c264c38 | 46/46 tasks; covers spec 03's imported-recipe Regenerate and Recipe |
+| 12 | design system | 10 | pending | | written after the first build, at the person's request: t3code palette, default theme only, browser seam plus lint |
 
 ## Performance budgets
 
@@ -63,6 +64,7 @@ The six-running case misses the 2 % line. Task 62 does not say how many artifact
 Made by the person:
 
 1. Repository license (spec 01, the published bundle): MIT. The root `LICENSE` names Matteo Aliano as copyright holder. Spec 01 says the bundle carries it.
+2. Spec 12, design system: restyle every surface on t3code's tokens and Base UI kit, and theme tldraw's UI to match. Take t3code's palette whole (canvas included), its default light and dark theme only (no named themes or appearance settings), and test at the browser seam plus t3code's lint rules as a build check.
 
 Settled by the orchestrator from the specs:
 
