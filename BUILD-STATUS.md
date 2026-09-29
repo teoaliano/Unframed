@@ -131,6 +131,7 @@ Open for the person:
 5. Run the manual acceptance checks no test can: a Claude chat and the zero-token probe on the real `claude` CLI, a Codex chat on the real `codex app-server`, and one real HyperFrames motion render.
 6. Make the desktop shell changes, in the private shell repo:
    - move to Electron 44 (the bundle targets its Node; an older shell cannot run it);
+   - use `assets/brand/app-icon.png` (1024 × 1024) for the app's window and dock icon: the mark changed;
    - expect `.unframed-chrome-right` to be empty: Agent moved to the bottom bar and Settings to the top-left card, which is now wider; the element stays so the shell's CSS still finds it;
    - target the new DOM hooks: `.unframed-chrome-left` and `.unframed-chrome-right` (were `.toolbar-card-left` and `.toolbar-card-right`), `data-unframed-theme` on `<html>` (was `data-astryx-theme`), `--unframed-text-secondary` (was `--color-text-secondary`);
    - handle the `{type: "reveal", files}` IPC message;
