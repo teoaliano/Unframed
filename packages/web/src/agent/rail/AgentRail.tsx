@@ -1,12 +1,13 @@
 import { visibleChats, nextActive } from "@unframed/domain";
 import { Plus, Sparkles, Trash2, X } from "lucide-react";
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useMaybeEditor, useValue } from "tldraw";
 import { iconButtonClass, Tip } from "../../chrome/ui.tsx";
 import { useEngine } from "../../context.ts";
 import { AgentTray } from "../composer/AgentTray.tsx";
 import { noProviderReady, readyProviders } from "../providers.ts";
-import { createChat } from "../send.ts";
+import { ConfirmDialog } from "../ConfirmDialog.tsx";
+import { createChat, messageOf } from "../send.ts";
 import { useChatClient, useChats, useProviders, useRailUi } from "../store.ts";
 import { Transcript } from "../transcript/Transcript.tsx";
 import { NoProvider } from "./NoProvider.tsx";
@@ -42,6 +43,7 @@ export const AgentRail = ({ project, embedded, filterTo, onLocate, onOpenEditor,
   const chats = useChats(client);
   const { statuses } = useProviders(client);
   const root = useRef<HTMLElement | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState(false);
 
   useEffect(() => {
     void client.loadProviders();
@@ -117,7 +119,13 @@ export const AgentRail = ({ project, embedded, filterTo, onLocate, onOpenEditor,
           </button>
         </Tip>
         <Tip label="Delete this chat">
-          <button type="button" aria-label="Delete chat" className={smallIconButton} disabled={!activeSummary || activeSummary.status === "running"}>
+          <button
+            type="button"
+            aria-label="Delete chat"
+            className={smallIconButton}
+            disabled={!activeSummary || activeSummary.status === "running"}
+            onClick={() => setConfirmDelete(true)}
+          >
             <Trash2 size={16} aria-hidden />
           </button>
         </Tip>
@@ -142,6 +150,23 @@ export const AgentRail = ({ project, embedded, filterTo, onLocate, onOpenEditor,
           {ui.error}
         </p>
       )}
+      <ConfirmDialog
+        open={confirmDelete}
+        onOpenChange={setConfirmDelete}
+        title="Delete this chat?"
+        description="The conversation is removed for good. What the agent changed on the canvas stays."
+        actions={[
+          {
+            label: "Delete chat",
+            destructive: true,
+            onClick: () => {
+              if (!active) return;
+              client.setUi({ chosen: null, pinned: null });
+              client.dispatch({ type: "thread.delete", threadId: active }).catch((error: unknown) => client.setUi({ error: messageOf(error) }));
+            },
+          },
+        ]}
+      />
       <div className="unframed-agent-rail__composer">
         <AgentTray client={client} variant="rail" chatId={active} newChatTags={selectedArtifacts} />
       </div>
