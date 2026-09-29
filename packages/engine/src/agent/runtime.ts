@@ -23,6 +23,7 @@ import {
   type ClientCommand,
   type InteractionMode,
   type MessageAttachment,
+  type ModelSelection,
   type RuntimeEvent,
   type RuntimeEventDraft,
   type RuntimeMode,
@@ -59,6 +60,8 @@ export interface AgentRuntimeDeps {
     readonly changeLog: (project: string, clock: number) => Promise<ReadonlyArray<ChangeLogRow>>;
   };
   readonly runEnvironment: (provider: AgentProvider) => Promise<RunEnvironment>;
+  /** The model an empty model setting means: the provider's first non-legacy row. */
+  readonly defaultModel: (provider: AgentProvider) => Promise<string | undefined>;
   /** Builds the real provider adapters; the scripted one replaces both under the test variable. */
   readonly realAdapter: (provider: AgentProvider, context: AdapterContext) => ProviderAdapter;
 }
@@ -77,6 +80,8 @@ interface ActiveTurn {
   readonly turnCount: number;
   readonly interactionMode: InteractionMode;
   readonly startedAt: number;
+  /** The model the turn runs on, an empty setting resolved. */
+  readonly model: string;
 }
 
 /** One project's chats: its store, its turn changes, and the queue its runtime events are taken in. */
@@ -383,12 +388,14 @@ export class AgentRuntime {
     if (!chat) return;
     const message = chat.messages.find((known) => known.id === requested.messageId);
     const steer = requested.steer === true;
+    const selection = await this.resolveModel((requested.modelSelection as ModelSelection | undefined) ?? chat.modelSelection);
     if (!steer) {
       this.activeTurns.set(chatId, {
         turnId: String(requested.turnId),
         turnCount: Number(requested.turnCount),
         interactionMode: requested.interactionMode,
         startedAt: Date.now(),
+        model: selection.model,
       });
       if (Number(requested.turnCount) === 1 && message?.context?.selection.length) {
         await this.tag(agent.slug, chatId, await this.artifactsAmong(agent.slug, message.context.selection));
@@ -399,7 +406,7 @@ export class AgentRuntime {
       const preamble = await this.preamble(agent, chat, message?.context?.selection ?? [], message?.attachments ?? [], records);
       const live = this.providers.has(chatId);
       if (!live) await this.internal(agent, chatId, { type: "thread.session.set", session: { status: "starting", activeTurnId: String(requested.turnId), lastError: null } });
-      await this.providers.ensure(agent.slug, agent.engine.chat(chatId) ?? chat, agent.folder, agent.engine);
+      await this.providers.ensure(agent.slug, agent.engine.chat(chatId) ?? chat, agent.folder, agent.engine, selection);
       await this.providers.sendTurn(chatId, {
         chatId,
         turnId: String(requested.turnId),
@@ -410,7 +417,7 @@ export class AgentRuntime {
           const path = this.attachments.path(attachment.id);
           return path === undefined ? [] : [{ ...attachment, path }];
         }),
-        modelSelection: requested.modelSelection ?? chat.modelSelection,
+        modelSelection: selection,
         interactionMode: requested.interactionMode ?? chat.interactionMode,
         steer,
       });
@@ -428,6 +435,13 @@ export class AgentRuntime {
       });
       await this.settle(agent, chatId, { state: "failed", errorMessage: text });
     }
+  }
+
+  /** A selection with an empty model resolved to the provider's first non-legacy one. */
+  private async resolveModel(selection: ModelSelection): Promise<ModelSelection> {
+    if (selection.model !== "") return selection;
+    const model = await this.deps.defaultModel(selection.provider).catch(() => undefined);
+    return model === undefined ? selection : { ...selection, model };
   }
 
   /** What the model is told before the person's message. */
@@ -668,7 +682,7 @@ export class AgentRuntime {
       chatId,
       turn: turn.turnCount,
       provider: chat.modelSelection.provider,
-      model: chat.modelSelection.model,
+      model: active?.turnId === turn.turnId ? active.model : chat.modelSelection.model,
       usage: outcome.usage ?? {},
       ...(outcome.totalCostUsd === undefined ? {} : { estimatedUsd: outcome.totalCostUsd }),
       ...(active?.turnId === turn.turnId ? { durationMs: Date.now() - active.startedAt } : {}),

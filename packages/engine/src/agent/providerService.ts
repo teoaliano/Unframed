@@ -1,4 +1,4 @@
-import type { AgentProvider, Chat, RuntimeMode } from "@unframed/domain";
+import type { AgentProvider, Chat, ModelSelection, RuntimeMode } from "@unframed/domain";
 import type { ProviderAdapter, TurnInput } from "./adapter.ts";
 import type { ChatEngine } from "./chatEngine.ts";
 import type { RunEnvironment } from "./detection.ts";
@@ -62,7 +62,7 @@ export class ProviderService {
   }
 
   /** Starts the chat's session, or resumes it from its stored cursor. Answers whether it was already live. */
-  async ensure(project: string, chat: Chat, projectDir: string, engine: ChatEngine): Promise<boolean> {
+  async ensure(project: string, chat: Chat, projectDir: string, engine: ChatEngine, modelSelection: ModelSelection = chat.modelSelection): Promise<boolean> {
     if (this.has(chat.id)) return true;
     const stale = this.sessions.get(chat.id);
     if (stale) this.forget(stale);
@@ -75,7 +75,7 @@ export class ProviderService {
       const started = await adapter.startSession({
         chatId: chat.id,
         projectDir,
-        modelSelection: chat.modelSelection,
+        modelSelection,
         runtimeMode: chat.runtimeMode,
         ...(runtime?.resumeCursor === undefined ? {} : { resumeCursor: runtime.resumeCursor }),
         mcp: { url: this.options.mcpUrl(), token },

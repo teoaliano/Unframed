@@ -1,7 +1,7 @@
 import { join } from "node:path";
 import type { ClientChatCommand, ShellStreamItem, ThreadStreamItem } from "@unframed/contracts";
 import { UnframedError, unframedError } from "@unframed/contracts";
-import { projectSlug, type ClientCommand } from "@unframed/domain";
+import { defaultModel, projectSlug, type ClientCommand } from "@unframed/domain";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -77,6 +77,7 @@ export const agentsLayer = Layer.effect(
         changeLog: (project, clock) => run(rooms.changeLog(project, clock)),
       },
       runEnvironment: (provider) => run(detection.runEnvironment(provider)),
+      defaultModel: async (provider) => defaultModel((await run(detection.statuses({})))[provider].models ?? []),
       realAdapter,
     });
 

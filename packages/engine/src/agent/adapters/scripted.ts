@@ -233,9 +233,16 @@ export const scriptedAdapter = (scriptPath: string, context: AdapterContext): Pr
       let script: AgentScript | undefined;
       let pickError: string | undefined;
       try {
-        const picked = pickScript(await scripts(), input.firstMessage);
-        if ("script" in picked) script = picked.script;
-        else pickError = picked.error;
+        const loaded = await scripts();
+        // The script a chat started on stays its script, even after its first message is rewound away.
+        const kept = (input.resumeCursor as { script?: unknown } | undefined)?.script;
+        const picked = loaded.find((known) => known.name === kept);
+        if (picked) script = picked;
+        else {
+          const chosen = pickScript(loaded, input.firstMessage);
+          if ("script" in chosen) script = chosen.script;
+          else pickError = chosen.error;
+        }
       } catch (error) {
         pickError = error instanceof Error ? error.message : String(error);
       }
