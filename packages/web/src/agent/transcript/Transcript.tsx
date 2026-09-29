@@ -1,11 +1,13 @@
-import { agentShapeId, revertSkipLine, type ChatMessage } from "@unframed/domain";
-import { useEffect, useRef, useState } from "react";
+import { activityLabel, agentShapeId, formatWorkDuration, revertSkipLine, type Chat, type ChatMessage, type ChatTurn } from "@unframed/domain";
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import { buildTimeline, type Block } from "./timeline.ts";
+import { WorkEntries } from "./WorkLog.tsx";
 import { useMaybeEditor } from "tldraw";
 import { describeShape } from "../composer/chips.tsx";
 import { ConfirmDialog } from "../ConfirmDialog.tsx";
 import { messageOf } from "../send.ts";
 import { providerName } from "../providers.ts";
-import { Clock, Undo2, X } from "lucide-react";
+import { ChevronRight, Clock, Undo2, X } from "lucide-react";
 import { Tip } from "../../chrome/ui.tsx";
 import { returnQueued, sendQueued } from "../queue.tsx";
 import { useQueue, useWatchedThread, type ChatClient } from "../store.ts";
@@ -134,22 +136,185 @@ export const Transcript = ({ client, chatId }: TranscriptProps) => {
       .then(() => client.handOff(chat.id, { text: message.text, selection: message.context?.selection ?? [], attachments: message.attachments ?? [] }))
       .catch((error: unknown) => client.setUi({ error: messageOf(error) }));
   };
+  const scroller = useRef<HTMLDivElement>(null);
+  const following = useRef(true);
+  const [pill, setPill] = useState(false);
+  const lastUser = [...(chat?.messages ?? [])].reverse().find((message) => message.role === "user")?.id;
+  const anchored = useRef<string | undefined>(undefined);
+  useLayoutEffect(() => {
+    const element = scroller.current;
+    if (!element || !chat) return;
+    if (anchored.current !== undefined && lastUser !== anchored.current) {
+      // A message just sent sits near the top, so the reply streams in under it.
+      const sent = element.querySelector<HTMLElement>(`[data-message-id="${CSS.escape(lastUser ?? "")}"]`);
+      if (sent) element.scrollTop = Math.max(0, sent.offsetTop - 12);
+      following.current = true;
+    } else if (following.current) {
+      element.scrollTop = element.scrollHeight;
+    }
+    anchored.current = lastUser;
+  });
+  const onScroll = () => {
+    const element = scroller.current;
+    if (!element) return;
+    following.current = element.scrollHeight - element.scrollTop - element.clientHeight <= 40;
+    setPill(!following.current);
+  };
+
   if (!chat) return <div className="unframed-agent-transcript" />;
   const author = providerName(chat.modelSelection.provider);
+  const timeline = buildTimeline(chat);
+  const latest = chat.latestTurn;
+  const streaming = chat.messages.some((message) => message.streaming && message.role === "assistant" && message.turnId === latest?.turnId);
+  const assistant = (message: ChatMessage) => (
+    <article key={message.id} className="unframed-agent-message" data-role="assistant" data-message-id={message.id} data-streaming={message.streaming ? "" : undefined}>
+      <header className="unframed-agent-message__author">{author}</header>
+      {message.text === "" && !message.streaming ? <p className="unframed-agent-muted">(empty response)</p> : <ChatMarkdown text={message.text} />}
+    </article>
+  );
+  const block = (item: Block) => {
+    if (item.kind === "work") return <WorkEntries key={item.id} entries={item.entries} />;
+    if (item.kind === "retry") return <RetryLine key={item.activity.id} payload={item.activity.payload} />;
+    const { message } = item;
+    if (message.role === "user") return <UserMessage key={message.id} message={message} running={running} onEdit={(restoreCanvas) => edit(message, restoreCanvas)} />;
+    if (message.role === "reasoning") return <Reasoning key={message.id} message={message} />;
+    return assistant(message);
+  };
   return (
-    <div className="unframed-agent-transcript" data-scrolls="true" data-testid="transcript">
-      {chat.messages.map((message) =>
-        message.role === "user" ? (
-          <UserMessage key={message.id} message={message} running={running} onEdit={(restoreCanvas) => edit(message, restoreCanvas)} />
-        ) : message.role === "assistant" ? (
-          <article key={message.id} className="unframed-agent-message" data-role="assistant" data-message-id={message.id} data-streaming={message.streaming ? "" : undefined}>
-            <header className="unframed-agent-message__author">{author}</header>
-            {message.text === "" && !message.streaming ? <p className="unframed-agent-muted">(empty response)</p> : <ChatMarkdown text={message.text} />}
-          </article>
-        ) : null,
+    <div className="unframed-agent-transcript-frame">
+      <div ref={scroller} className="unframed-agent-transcript" data-scrolls="true" data-testid="transcript" onScroll={onScroll}>
+        {timeline.map((turn) => {
+          if (!turn.settled) return <div key={turn.key} className="unframed-agent-turn">{turn.blocks.map(block)}</div>;
+          // A settled turn folds its work and thinking behind "Worked for"; what was said stays.
+          const users = turn.blocks.filter((item) => item.kind === "message" && item.message.role === "user");
+          const folded = turn.blocks.filter((item) => item.kind === "work" || (item.kind === "message" && item.message.role === "reasoning"));
+          const said = turn.blocks.filter((item) => (item.kind === "message" && item.message.role === "assistant") || item.kind === "retry");
+          return (
+            <div key={turn.key} className="unframed-agent-turn">
+              {users.map(block)}
+              {folded.length > 0 && turn.turn && <WorkedFor turn={turn.turn}>{folded.map(block)}</WorkedFor>}
+              {said.map(block)}
+            </div>
+          );
+        })}
+        <LimitLine chat={chat} />
+        <QueuedMessages client={client} chatId={chatId} />
+        {running && !streaming && latest && <ActivityLine label={activityLabel(chat.activities, latest.turnId)} since={latest.startedAt ?? latest.requestedAt} />}
+        {chat.messages.length === 0 && <p className="unframed-agent-empty">{EMPTY_CHAT}</p>}
+      </div>
+      {pill && (
+        <button
+          type="button"
+          className="unframed-agent-scroll-pill"
+          onClick={() => {
+            const element = scroller.current;
+            if (element) element.scrollTop = element.scrollHeight;
+            following.current = true;
+            setPill(false);
+          }}
+        >
+          Scroll to end
+        </button>
       )}
-      <QueuedMessages client={client} chatId={chatId} />
-      {chat.messages.length === 0 && <p className="unframed-agent-empty">{EMPTY_CHAT}</p>}
     </div>
   );
+};
+
+/** Reasoning: "Thinking" while it streams, then "Thought", folded. */
+const Reasoning = ({ message }: { readonly message: ChatMessage }) => {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="unframed-agent-reasoning" data-testid="reasoning">
+      <button type="button" className="unframed-agent-work-group__head" aria-expanded={open} onClick={() => setOpen(!open)}>
+        <ChevronRight size={12} aria-hidden className="unframed-agent-chevron" />
+        {message.streaming ? "Thinking" : "Thought"}
+      </button>
+      {open && <p className="unframed-agent-reasoning__text">{message.text}</p>}
+    </div>
+  );
+};
+
+/** A settled turn's work, behind how long it took ("You stopped after" when interrupted). */
+const WorkedFor = ({ turn, children }: { readonly turn: ChatTurn; readonly children: ReactNode }) => {
+  const [open, setOpen] = useState(false);
+  const started = Date.parse(turn.startedAt ?? turn.requestedAt);
+  const ended = Date.parse(turn.completedAt ?? turn.startedAt ?? turn.requestedAt);
+  const took = formatWorkDuration(Math.max(0, ended - started));
+  return (
+    <div className="unframed-agent-worked" data-testid="worked-for">
+      <button type="button" className="unframed-agent-work-group__head" aria-expanded={open} onClick={() => setOpen(!open)}>
+        <ChevronRight size={12} aria-hidden className="unframed-agent-chevron" />
+        {turn.state === "interrupted" ? `You stopped after ${took}` : `Worked for ${took}`}
+      </button>
+      {open && <div className="unframed-agent-worked__body">{children}</div>}
+    </div>
+  );
+};
+
+const record = (value: unknown): Record<string, unknown> => (typeof value === "object" && value !== null ? (value as Record<string, unknown>) : {});
+
+/** A provider retry, said in words. */
+export const retrySentence = (payload: unknown): string => {
+  const p = record(payload);
+  const status = typeof p.status === "number" || (typeof p.status === "string" && p.status !== "") ? ` (${String(p.status)})` : "";
+  const wait = typeof p.delayMs === "number" && p.delayMs > 0 ? ` in ${Math.round(p.delayMs / 1000)}s` : "";
+  return `The API is busy${status}, retrying${wait}. Attempt ${String(p.attempt ?? 1)} of ${String(p.maxRetries ?? 1)}…`;
+};
+
+const RetryLine = ({ payload }: { readonly payload: unknown }) => (
+  <p className="unframed-agent-notice" data-testid="retry-line">
+    {retrySentence(payload)}
+  </p>
+);
+
+const resetTime = (resetsAt: unknown): string | undefined => {
+  if (typeof resetsAt !== "string" || Number.isNaN(Date.parse(resetsAt))) return undefined;
+  return new Date(resetsAt).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
+};
+
+/**
+ * A usage limit: hit, or close. Shown for the chat's latest turn only, so the next turn
+ * clears it; a later "allowed" notice clears it too.
+ */
+const LimitLine = ({ chat }: { readonly chat: Chat }) => {
+  const latest = chat.latestTurn;
+  const notice = [...chat.activities].reverse().find((activity) => activity.kind === "rate-limit");
+  if (!notice || !latest || notice.turnId !== latest.turnId) return null;
+  const p = record(notice.payload);
+  const time = resetTime(p.resetsAt);
+  if (p.status === "rejected") {
+    return (
+      <p className="unframed-agent-notice" data-kind="limit" data-testid="limit-line">
+        {time === undefined ? "You have hit a usage limit." : `You have hit a usage limit. It resets at ${time}.`}
+      </p>
+    );
+  }
+  if (p.status === "allowed_warning") {
+    return (
+      <p className="unframed-agent-notice" data-testid="limit-line">
+        {time === undefined ? "Close to your usage limit." : `Close to your usage limit, which resets at ${time}.`}
+      </p>
+    );
+  }
+  return null;
+};
+
+/** What the agent is doing, with the time since the turn began once it passes ten seconds. */
+const ActivityLine = ({ label, since }: { readonly label: string; readonly since: string }) => (
+  <p className="unframed-agent-activity" data-testid="activity-line">
+    {label}
+    <Elapsed since={since} />
+  </p>
+);
+
+/** Its own component, so its tick never re-renders the transcript. */
+const Elapsed = ({ since }: { readonly since: string }) => {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const timer = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(timer);
+  }, []);
+  const seconds = Math.floor((now - Date.parse(since)) / 1000);
+  if (!(seconds >= 10)) return null;
+  return <span className="unframed-agent-activity__clock">{` ${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`}</span>;
 };
