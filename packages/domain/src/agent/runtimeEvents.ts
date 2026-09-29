@@ -101,6 +101,8 @@ export const classifyToolItem = (toolName: string, input: Readonly<Record<string
     if (/\.(png|jpe?g|gif|webp|bmp|svg|heic|avif)$/.test(path)) return "image_view";
   }
   if (name.startsWith("mcp__")) return "mcp_tool_call";
+  // Claude's to-do list writes no file.
+  if (name === "todowrite") return "dynamic_tool_call";
   if (name === "task" || name.includes("agent")) return "collab_agent_tool_call";
   if (name.includes("bash") || name.includes("command") || name.includes("shell") || name.includes("terminal")) return "command_execution";
   if (

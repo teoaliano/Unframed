@@ -52,3 +52,5 @@ export * from "./agent/permissionPolicy.ts";
 export * from "./agent/turnText.ts";
 export * from "./agent/canvasTools.ts";
 export * from "./agent/scriptedAgent.ts";
+export * from "./agent/claudeEvents.ts";
+export * from "./agent/codexEvents.ts";
