@@ -11,8 +11,12 @@ export const webDist = (): string => {
  * Starts an engine serving the built web, the way the desktop shell hosts it, with the
  * test-only canvas methods on so a test can read what the room holds.
  */
+// Provider detection must never find the machine's own Claude or Codex: a test that
+// needs them names fakes in the data folder's `.env`, which wins over these.
+const NO_AGENT_CLI = { CLAUDE_PATH: "/nonexistent/unframed-test/claude", CODEX_PATH: "/nonexistent/unframed-test/codex" };
+
 export const startHostedEngine = (options: EngineOptions = {}): Promise<TestEngine> =>
-  startEngine({ clientDist: webDist(), ...options, env: { UNFRAMED_TEST_CANVAS: "1", ...options.env } });
+  startEngine({ clientDist: webDist(), ...options, env: { UNFRAMED_TEST_CANVAS: "1", ...NO_AGENT_CLI, ...options.env } });
 
 type Fixtures = { engine: TestEngine };
 

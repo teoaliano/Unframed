@@ -15,8 +15,9 @@ test("a usable selection gets Generate and its count; a named group reads by its
   await clickShape(page, "shape:starter-subject");
   await expect(toolbar(page).getByRole("button", { name: "Generate" })).toBeVisible();
   await expect(toolbar(page).getByTestId("selection-hint")).toHaveText("1 selected");
-  // Spec 08 registers the Agent tray; until then there is no Agent button.
-  await expect(toolbar(page).getByRole("button", { name: "Agent" })).toHaveCount(0);
+  // Agent follows Generate and the hint, after a separator, once spec 08 registers the Agent tray.
+  await expect(toolbar(page).getByRole("button")).toHaveText(["Generate", "Agent"]);
+  await expect(toolbar(page).locator(".unframed-bar-separator")).toHaveCount(1);
 
   await page.keyboard.press("ControlOrMeta+a");
   await expect(toolbar(page).getByTestId("selection-hint")).toHaveText("3 selected");
@@ -27,7 +28,7 @@ test("a usable selection gets Generate and its count; a named group reads by its
   await expect(toolbar(page).getByTestId("selection-hint")).toHaveText("@character");
 });
 
-test("a selection with nothing to generate from shows no Generate; a filled page offers Open", async ({ page, generation }) => {
+test("a selection with nothing to generate from shows Agent only; a filled page offers Open and Agent", async ({ page, generation }) => {
   const { engine } = generation;
   await openCanvas(page, engine);
   await putRecords(engine, [emptyMedia("shape:empty", "image", "300", { x: 400, y: 60 }), artifactRecord("shape:page", "page", "301", { x: 400, y: 300 }, "hello.html", "hello.html")]);
@@ -36,11 +37,10 @@ test("a selection with nothing to generate from shows no Generate; a filled page
   const empty = (await shapeOnScreen(page, "shape:empty").boundingBox())!;
   await page.mouse.click(empty.x + 8, empty.y + 8);
   await expect(page.locator('[data-shape-id="shape:empty"]')).toBeVisible();
-  await expect(toolbar(page)).toHaveCount(0);
+  await expect(toolbar(page).getByRole("button")).toHaveText(["Agent"]);
 
   await clickShape(page, "shape:page");
-  await expect(toolbar(page).getByRole("button", { name: "Open" })).toBeVisible();
-  await expect(toolbar(page).getByRole("button", { name: "Generate" })).toHaveCount(0);
+  await expect(toolbar(page).getByRole("button")).toHaveText(["Open", "Agent"]);
 });
 
 test("the bar sits centred above the selection, flips below it at the top edge and stays inside the canvas", async ({ page, generation }) => {
