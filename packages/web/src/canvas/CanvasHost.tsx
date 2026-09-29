@@ -3,7 +3,7 @@ import { useSync } from "@tldraw/sync";
 import { canvasSchema } from "@unframed/contracts";
 import { UPLOAD_BODY_LIMIT } from "@unframed/domain";
 import { useCallback, useContext, useEffect, useMemo, useRef } from "react";
-import { Tldraw, type Editor, type TLComponents, type TldrawOptions } from "tldraw";
+import { DefaultStylePanel, Tldraw, useEditor, useValue, type Editor, type TLComponents, type TldrawOptions, type TLUiStylePanelProps } from "tldraw";
 import "tldraw/tldraw.css";
 import "./canvas.css";
 import "../generate/imageMedium.ts";
@@ -57,6 +57,16 @@ const OPTIONS: Partial<TldrawOptions> = {
 const SHAPE_UTILS = [PromptShapeUtil, ImageMediaUtil, VideoMediaUtil, GroupShapeUtil, PageShapeUtil, MotionShapeUtil];
 
 /** tldraw's main, page, help and debug menus and its share panel are hidden; the dot grid is the background. */
+/**
+ * tldraw's style panel, shown only when it has something to set: a drawing tool is on, or
+ * the selection holds shapes with styles (prompts, drawings). Media, artifacts and groups have none.
+ */
+const StylePanel = (props: TLUiStylePanelProps) => {
+  const editor = useEditor();
+  const styled = useValue("styled selection or tool", () => editor.getSharedStyles().size > 0, [editor]);
+  return styled ? <DefaultStylePanel {...props} /> : null;
+};
+
 const COMPONENTS: TLComponents = {
   MainMenu: null,
   PageMenu: null,
@@ -67,6 +77,7 @@ const COMPONENTS: TLComponents = {
   // One toolbar per selection: Unframed's selection toolbar, never tldraw's media bars beside it.
   ImageToolbar: null,
   VideoToolbar: null,
+  StylePanel,
   InFrontOfTheCanvas: InFront,
   OnTheCanvas: RoleBadges,
   Background: DotGrid,

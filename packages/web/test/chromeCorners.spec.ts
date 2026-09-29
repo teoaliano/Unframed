@@ -1,5 +1,6 @@
 import { centre, openCanvas, shapeOnScreen } from "./canvas.ts";
 import { expect, test } from "./fixtures.ts";
+import { emptyMedia, putRecords } from "./media.ts";
 import { expectSlot, inBothSchemes, resolvedColor, styleOf, tokenColor } from "./kit.ts";
 
 const HELP = "Reference a prompt or group with @id. Select images to number them, then type “image 1”.";
@@ -71,4 +72,23 @@ test("tldraw's style panel shows below the corner cards, never under them", asyn
   const panelBox = (await panel.boundingBox())!;
   const card = (await page.locator(".unframed-chrome-right").boundingBox())!;
   expect(panelBox.y).toBeGreaterThanOrEqual(card.y + card.height);
+});
+
+test("tldraw's style panel shows only while a drawing tool is on or the selection has styles", async ({ page, engine }) => {
+  await openCanvas(page, engine);
+  await putRecords(engine, [emptyMedia("shape:still", "image", "180", { x: -400, y: 300 })]);
+  const panel = page.locator(".tlui-style-panel");
+  await expect(panel).toHaveCount(0);
+  // A prompt is tldraw text: its font and size are styles.
+  const subject = await centre(shapeOnScreen(page, "shape:starter-subject"));
+  await page.mouse.click(subject.x, subject.y);
+  await expect(panel).toBeVisible();
+  const still = (await shapeOnScreen(page, "shape:still").boundingBox())!;
+  await page.mouse.click(still.x + 12, still.y + 12);
+  await expect(panel).toHaveCount(0);
+  await page.getByTestId("tools.draw").click();
+  await expect(panel).toBeVisible();
+  await page.getByTestId("tools.select").click();
+  await page.keyboard.press("Escape");
+  await expect(panel).toHaveCount(0);
 });
