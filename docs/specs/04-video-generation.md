@@ -162,7 +162,7 @@ The tray presents these through spec 03's prop tray ("+ add prop"): Seconds is a
 
 `localVideos` counts only local clips that will actually be sent as references. In a frame mode a clip is unused, so no share block appears.
 
-**Share block (web).** Shown only when `localVideos > 0`. A checkbox labelled `Share via temporary link while generating`, default on (only an explicit off is off), with an expandable note labelled `What sharing does`. Expanded, it shows:
+**Share block (web).** Shown only when `localVideos > 0`. A checkbox labelled `Share via temporary link while generating` (the kit's Checkbox with its Label), default on (only an explicit off is off), with an expandable note labelled `What sharing does` (an InlineButton in the muted tone, its chevron turning while the note is open). Expanded, it shows, as `text-xs` muted status lines:
 
 - On: an info line `While this generates, the clip is served from this machine through a temporary public link only the model provider receives. Nothing is uploaded to storage, and the link stops working when the job ends.`
 - Off: a warning line `Video generation only accepts a reference video as a public https:// link, and this one is a local file. Generating will fail unless you tick this, or use the clip in a text run instead, which does take local files.`

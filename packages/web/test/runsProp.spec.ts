@@ -1,6 +1,7 @@
 import type { Page } from "@playwright/test";
 import { openCanvas } from "./canvas.ts";
 import { clickShape, composer, openAndEscape, openComposer } from "./generation.ts";
+import { expectSlot, expectToken } from "./kit.ts";
 import { addRuns, expect, runsChip, runsField, runsPopup, setRuns, test, tray } from "./texting.ts";
 
 const openOnSubject = async (page: Page) => {
@@ -45,6 +46,24 @@ test("Runs: + add prop lists it at 1, its chip reads the count, Remove puts it b
   // Left at 1, it leaves the tray when its popup closes.
   await setRuns(page, 1);
   await expect(runsChip(page)).toHaveCount(0);
+});
+
+test("the Runs chip is the tray's chip; its popup is the kit's Popover with a NumberField, a Free toggle and a Checkbox", async ({ page, generation }) => {
+  await openCanvas(page, generation.engine);
+  await openOnSubject(page);
+  await addRuns(page);
+  await expectSlot(runsPopup(page), "popover-popup");
+  await expectSlot(runsField(page), "number-field-input");
+  const free = runsPopup(page).getByRole("button", { name: "Free" });
+  await expectSlot(free, "tooltip-trigger");
+  await free.click();
+  await expectSlot(runsPopup(page).getByRole("checkbox", { name: "View final prompt" }), "checkbox");
+  await expectSlot(runsPopup(page).getByRole("button", { name: "Remove" }), "button");
+  await page.keyboard.press("Escape");
+  await expect(runsPopup(page)).toHaveCount(0);
+  await expectSlot(runsChip(page), "popover-trigger");
+  expect((await runsChip(page).boundingBox())!.height).toBe(28);
+  await expectToken(runsChip(page), "border-top-color", "--color-input");
 });
 
 test("an Escape the moment the Runs popup opens closes only the popup", async ({ page, generation }) => {

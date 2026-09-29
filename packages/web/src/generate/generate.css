@@ -49,14 +49,6 @@
   line-height: 1.5;
 }
 
-.unframed-composer-tray {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  padding: 2px 2px 0;
-}
-
 @keyframes unframed-spin {
   to {
     transform: rotate(360deg);
@@ -135,45 +127,4 @@ th.unframed-models__released {
   border-radius: var(--unframed-radius-inner);
   font-size: 12px;
   white-space: nowrap;
-}
-
-/* The share consent and its note (spec 04). */
-.unframed-share {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.unframed-share__row {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: 4px 8px;
-  font-size: 12px;
-  color: var(--unframed-text-primary);
-}
-
-.unframed-share__consent {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  cursor: pointer;
-}
-
-.unframed-share__toggle {
-  display: inline-flex;
-  align-items: center;
-  gap: 2px;
-  cursor: pointer;
-  border: 0;
-  background: transparent;
-  padding: 0;
-  font: inherit;
-  font-size: 12px;
-  color: var(--unframed-text-secondary);
-}
-
-.unframed-share__toggle svg[data-open] {
-  transform: rotate(180deg);
 }

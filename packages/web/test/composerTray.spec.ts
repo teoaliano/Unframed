@@ -1,6 +1,7 @@
 import type { Page } from "@playwright/test";
 import { openCanvas } from "./canvas.ts";
 import { clickShape, composer, expect, openAndEscape, openComposer, sendRun, startGeneration, test, toolbar } from "./generation.ts";
+import { expectSlot, expectToken, inBothSchemes, resolvedColor, styleOf } from "./kit.ts";
 
 const openOnSubject = async (page: Page) => {
   await clickShape(page, "shape:starter-subject");
@@ -71,6 +72,35 @@ test("the tray: the model chip, the default props the model declares, value menu
   await tray(page).getByRole("button", { name: "+ add prop" }).click();
   await expect(page.getByRole("menu", { name: "Add prop" }).getByRole("menuitem")).toHaveText([/Runs\s*1/]);
   await page.keyboard.press("Escape");
+});
+
+const MENU_GLASS = "color-mix(in srgb, var(--popover) 18%, color-mix(in srgb, var(--popover) var(--glass-opacity), transparent))";
+
+test("the tray's chips are one chip recipe on the kit's outline Button, and its menus are kit menus with radio items", async ({ page, generation }) => {
+  await openCanvas(page, generation.engine);
+  await openOnSubject(page);
+  const model = tray(page).getByTestId("model-chip");
+  const low = chips(page).filter({ hasText: "low" });
+  const add = tray(page).getByRole("button", { name: "+ add prop" });
+  await expectSlot(model, "tooltip-trigger");
+  await expectSlot(low, "menu-trigger");
+  await expectSlot(add, "menu-trigger");
+  await inBothSchemes(page, async () => {
+    await page.mouse.move(5, 500);
+    for (const chip of [model, low]) {
+      expect((await chip.boundingBox())!.height).toBe(28);
+      await expectToken(chip, "border-top-color", "--color-input");
+    }
+    await low.click();
+    const menu = page.getByRole("menu", { name: "Quality" });
+    await expectSlot(menu, "menu-popup");
+    expect(await styleOf(menu, "background-color")).toBe(await resolvedColor(page, MENU_GLASS));
+    for (const item of await menu.getByRole("menuitemradio").all()) await expectSlot(item, "menu-radio-item");
+    await expectSlot(menu.getByRole("menuitem", { name: "Remove" }), "menu-item");
+    await expect(menu.locator("[data-slot='menu-separator']")).toHaveCount(1);
+    await page.keyboard.press("Escape");
+    await expect(menu).toHaveCount(0);
+  });
 });
 
 test("a model that declares a single format still offers Format, and props reset on a model change", async ({ page, generation }) => {

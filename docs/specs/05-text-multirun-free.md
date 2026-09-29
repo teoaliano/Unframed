@@ -127,7 +127,7 @@ The Runs prop is registered for the image medium only.
 
 - Label `Runs`. It is not a model trait, so a model change does not reset it.
 - Its tray chip shows `4×`, or `Free`. At 1 it is not in the tray, and `+ add prop` lists it as `Runs 1`. Remove sets it back to 1.
-- Its menu holds a number field (accessible name `Number of runs`, 1 to 10) and a `Free` option. When Free is chosen, the menu also shows a checkbox `View final prompt`.
+- Its chip is the tray's chip (spec 03). It opens a popup, the kit's Popover at 200 px, holding a number field (the kit's NumberField, accessible name `Number of runs`, 1 to 10), a `Free` option (the kit's Toggle, pressed while Free is chosen), a separator and `Remove` (Button `ghost`). When Free is chosen, the popup also shows a checkbox `View final prompt` (the kit's Checkbox with its Label).
 - Typing: only digits are kept, at most two; the value is rounded, a non-number becomes 1, and the result is clamped to 1 to 10. The field keeps what was typed while focused and shows the clamped value on blur. Focusing or pressing the number field selects a fixed count (leaves Free).
 - `Free` has the tooltip `Free takes the number of runs from the selection. Select a prompt or text result listing what to generate, as sections split by lines containing only ---, or prose a text model can split, and each item becomes one image.`
 - The cap of 10 lives in the runs value module and every limit message quotes it from there.

@@ -1,6 +1,9 @@
 import { videoStatusLines } from "@unframed/domain";
 import { ChevronDown } from "lucide-react";
 import { useState } from "react";
+import { InlineButton } from "~/components/ui/button";
+import { Checkbox } from "~/components/ui/checkbox";
+import { Label } from "~/components/ui/label";
 import type { MediumStatusProps } from "../mediumRegistry.ts";
 import { videoCounts } from "../videoPlan.ts";
 import { StatusBand, StatusLine } from "./StatusLine.tsx";
@@ -16,25 +19,23 @@ export const SHARE_OFF =
 const ShareBlock = ({ on, onChange }: { readonly on: boolean; readonly onChange: (on: boolean) => void }) => {
   const [open, setOpen] = useState(false);
   return (
-    <div className="unframed-share" data-testid="share-block">
-      <div className="unframed-share__row">
-        <label className="unframed-share__consent">
-          <input
-            type="checkbox"
+    <div className="flex flex-col gap-1" data-testid="share-block">
+      <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1 text-xs">
+        <Label>
+          <Checkbox
             checked={on}
-            onChange={(event) => {
-              const next = event.currentTarget.checked;
+            onCheckedChange={(next) => {
               onChange(next);
               // Turning sharing off opens the note, so the warning that generating will fail is read.
               if (!next) setOpen(true);
             }}
           />
           {SHARE_LABEL}
-        </label>
-        <button type="button" className="unframed-share__toggle" aria-expanded={open} onClick={() => setOpen(!open)}>
+        </Label>
+        <InlineButton tone="muted" aria-expanded={open} onClick={() => setOpen(!open)}>
           {SHARE_NOTE}
-          <ChevronDown size={12} aria-hidden data-open={open ? "true" : undefined} />
-        </button>
+          <ChevronDown aria-hidden className="size-3 transition-transform data-[open=true]:rotate-180" data-open={open ? "true" : undefined} />
+        </InlineButton>
       </div>
       {open &&
         (on ? <StatusLine kind="info">{SHARE_ON}</StatusLine> : <StatusLine kind="warning">{SHARE_OFF}</StatusLine>)}

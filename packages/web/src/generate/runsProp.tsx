@@ -4,12 +4,17 @@
  * model trait, so a model change leaves it. Its values live in the tray's props as `runs`
  * and `viewFinalPrompt`, which is also how last-used values store them.
  */
-import { Popover } from "@base-ui/react/popover";
-import { Tooltip } from "@base-ui/react/tooltip";
-import { clampRuns, readRunsValue, runsDraft, type RunsValue } from "@unframed/domain";
-import { useRef, useState } from "react";
-import { itemClass, popupClass } from "../chrome/ui.tsx";
-import { chipClass } from "./composer/PropTray.tsx";
+import { clampRuns, readRunsValue, RUNS_CAP, type RunsValue } from "@unframed/domain";
+import { useRef } from "react";
+import { Button } from "~/components/ui/button";
+import { Checkbox } from "~/components/ui/checkbox";
+import { Label } from "~/components/ui/label";
+import { NumberField, NumberFieldGroup, NumberFieldInput } from "~/components/ui/number-field";
+import { Popover, PopoverPopup, PopoverTrigger } from "~/components/ui/popover";
+import { Separator } from "~/components/ui/separator";
+import { Toggle } from "~/components/ui/toggle";
+import { Tip } from "../chrome/ui.tsx";
+import { TrayChip } from "./composer/PropTray.tsx";
 import type { PropValue, TrayPropChipProps, TrayPropDefinition, TrayProps } from "./mediumRegistry.ts";
 
 export const RUNS_KEY = "runs";
@@ -27,98 +32,93 @@ const chipText = (runs: RunsValue) => (runs === "free" ? "Free" : `${runs}×`);
 
 const RunsChip = ({ props, onChange, open, onOpenChange }: TrayPropChipProps) => {
   const runs = runsOf(props);
-  // What was typed, kept while the field has focus; the clamped value shows on blur.
-  const [draft, setDraft] = useState<string>();
   const field = useRef<HTMLInputElement>(null);
   const free = useRef<HTMLButtonElement>(null);
   const set = (next: Record<string, PropValue>) => onChange({ ...props, ...next });
+  // Focusing the field leaves Free for a count.
   const fixed = () => {
-    if (runs === "free") set({ [RUNS_KEY]: clampRuns(draft ?? "") });
+    if (runs === "free") set({ [RUNS_KEY]: 1 });
   };
 
   return (
-    <Popover.Root open={open} onOpenChange={onOpenChange}>
-      <Popover.Trigger className={chipClass} data-prop={RUNS_KEY} aria-label={`Runs ${chipText(runs)}`}>
+    <Popover open={open} onOpenChange={onOpenChange}>
+      <PopoverTrigger data-prop={RUNS_KEY} aria-label={`Runs ${chipText(runs)}`} render={<TrayChip />}>
         {chipText(runs)}
-      </Popover.Trigger>
-      <Popover.Portal>
-        <Popover.Positioner side="top" align="start" sideOffset={6} className="z-[1250]">
-          <Popover.Popup
-            className={`${popupClass} w-[200px]`}
-            aria-label="Runs"
-            initialFocus={() => (runs === "free" ? free.current : field.current)}
-            onKeyDown={(event) => {
-              // The composer keeps its keys from tldraw, so this popup closes itself on Esc.
-              if (event.key !== "Escape") return;
-              event.preventDefault();
+      </PopoverTrigger>
+      <PopoverPopup
+        side="top"
+        align="start"
+        sideOffset={6}
+        padding="compact"
+        className="w-[200px]"
+        aria-label="Runs"
+        initialFocus={() => (runs === "free" ? free.current : field.current)}
+        onKeyDown={(event) => {
+          // The composer keeps its keys from tldraw, so this popup closes itself on Esc.
+          if (event.key !== "Escape") return;
+          event.preventDefault();
+          onOpenChange(false);
+        }}
+      >
+        <div className="flex flex-col gap-2">
+          {/* The field keeps what is typed (digits, at most two) and clamps on blur; the chip follows the clamped count. */}
+          <NumberField
+            size="sm"
+            min={1}
+            max={RUNS_CAP}
+            value={runs === "free" ? null : runs}
+            onValueChange={(value) => set({ [RUNS_KEY]: clampRuns(value ?? "") })}
+            className="flex-row items-center justify-between"
+          >
+            <span className="text-sm text-foreground">Runs</span>
+            <NumberFieldGroup className="w-14">
+              <NumberFieldInput
+                ref={field}
+                aria-label="Number of runs"
+                placeholder="1"
+                maxLength={2}
+                onFocus={fixed}
+                onPointerDown={fixed}
+                onKeyDown={(event) => {
+                  // Digits only (spec 05): the number field would also take a sign or a separator.
+                  if (event.key.length === 1 && !/\d/.test(event.key) && !event.metaKey && !event.ctrlKey) event.preventDefault();
+                }}
+              />
+            </NumberFieldGroup>
+          </NumberField>
+          <Tip label={FREE_TOOLTIP} side="right">
+            <Toggle
+              ref={free}
+              size="sm"
+              pressed={runs === "free"}
+              onPressedChange={() => set({ [RUNS_KEY]: "free" })}
+              className="w-full justify-start"
+            >
+              Free
+            </Toggle>
+          </Tip>
+          {runs === "free" && (
+            <Label>
+              <Checkbox checked={viewsFinalPrompt(props)} onCheckedChange={(checked) => set({ [VIEW_FINAL_PROMPT_KEY]: checked })} />
+              View final prompt
+            </Label>
+          )}
+          <Separator />
+          <Button
+            variant="ghost"
+            size="sm"
+            className="w-full justify-start"
+            onClick={() => {
+              const { [RUNS_KEY]: _runs, ...rest } = props;
+              onChange(rest);
               onOpenChange(false);
             }}
           >
-            <label className={`${itemClass} justify-between`}>
-              <span>Runs</span>
-              <input
-                ref={field}
-                aria-label="Number of runs"
-                inputMode="numeric"
-                autoComplete="off"
-                placeholder="1"
-                className="h-6 w-12 rounded-md border border-input bg-card px-1.5 text-right text-[13px] text-foreground outline-none focus:border-primary"
-                value={draft ?? (runs === "free" ? "" : String(runs))}
-                onFocus={fixed}
-                onPointerDown={fixed}
-                onChange={(event) => {
-                  const typed = runsDraft(event.target.value);
-                  setDraft(typed);
-                  set({ [RUNS_KEY]: clampRuns(typed) });
-                }}
-                onBlur={() => setDraft(undefined)}
-              />
-            </label>
-            <Tooltip.Root>
-              <Tooltip.Trigger
-                render={
-                  <button
-                    ref={free}
-                    type="button"
-                    aria-pressed={runs === "free"}
-                    className={`${itemClass} w-full border-0 bg-transparent text-left text-foreground aria-pressed:font-semibold`}
-                    onClick={() => {
-                      setDraft(undefined);
-                      set({ [RUNS_KEY]: "free" });
-                    }}
-                  />
-                }
-              >
-                Free
-              </Tooltip.Trigger>
-              <Tooltip.Portal>
-                <Tooltip.Positioner side="right" sideOffset={8} className="z-[1260]">
-                  <Tooltip.Popup className="max-w-[280px] rounded-md bg-primary px-2 py-1 text-[12px] leading-snug text-primary-foreground shadow-lg">{FREE_TOOLTIP}</Tooltip.Popup>
-                </Tooltip.Positioner>
-              </Tooltip.Portal>
-            </Tooltip.Root>
-            {runs === "free" && (
-              <label className={itemClass}>
-                <input type="checkbox" checked={viewsFinalPrompt(props)} onChange={(event) => set({ [VIEW_FINAL_PROMPT_KEY]: event.target.checked })} />
-                View final prompt
-              </label>
-            )}
-            <div className="my-1 h-px bg-[var(--unframed-border)]" role="separator" />
-            <button
-              type="button"
-              className={`${itemClass} w-full border-0 bg-transparent text-left text-foreground`}
-              onClick={() => {
-                const { [RUNS_KEY]: _runs, ...rest } = props;
-                onChange(rest);
-                onOpenChange(false);
-              }}
-            >
-              Remove
-            </button>
-          </Popover.Popup>
-        </Popover.Positioner>
-      </Popover.Portal>
-    </Popover.Root>
+            Remove
+          </Button>
+        </div>
+      </PopoverPopup>
+    </Popover>
   );
 };
 
