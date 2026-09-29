@@ -70,6 +70,7 @@ interface ClaudeSession {
   readonly abort: AbortController;
   readonly gate: PermissionGate;
   readonly projectDir: string;
+  readonly attachmentsDir: string;
   state: ClaudeMapState;
   turnId: string | undefined;
   interactionMode: InteractionMode;
@@ -133,7 +134,7 @@ export const claudeAdapter = (context: AdapterContext): ProviderAdapter => {
             emit(session.chatId, { type: "thread.started", payload: { providerThreadId: session.state.sessionId ?? "", resumeCursor: cursor(session) } });
             session.turnId = undefined;
           }
-          emit(session.chatId, event);
+          emit(session.chatId, event.type === "session.configured" ? { ...event, payload: { ...event.payload, grantedDirectories: [session.attachmentsDir] } } : event);
         }
         if (mapped.toolsFailure !== undefined && session.turnId !== undefined) {
           const turnId = session.turnId;
@@ -234,6 +235,7 @@ export const claudeAdapter = (context: AdapterContext): ProviderAdapter => {
         abort,
         gate,
         projectDir: input.projectDir,
+        attachmentsDir: input.attachmentsDir,
         state: { ...initialClaudeState(), ...(stored.sessionId === undefined ? {} : { sessionId: stored.sessionId }), ...(stored.resumeSessionAt === undefined ? {} : { lastAssistantUuid: stored.resumeSessionAt }) },
         turnId: undefined,
         interactionMode: "default",

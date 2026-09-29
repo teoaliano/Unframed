@@ -46,6 +46,8 @@ export const loadScripts = async (path: string): Promise<AgentScript[]> => {
 
 interface ScriptedSession {
   readonly chatId: string;
+  /** The folders granted beyond the project folder, as a session reports them. */
+  readonly granted: ReadonlyArray<string>;
   readonly script: AgentScript | undefined;
   readonly pickError: string | undefined;
   readonly mcp: McpClient;
@@ -106,7 +108,7 @@ export const scriptedAdapter = (scriptPath: string, context: AdapterContext): Pr
         context.log(chatId, `scripted MCP: ${error instanceof Error ? error.message : String(error)}`);
       }
       const check = checkCanvasTools(context.registeredTools(), tools);
-      emit(chatId, { type: "session.configured", payload: { tools, foreign: check.foreign, grantedDirectories: [] } });
+      emit(chatId, { type: "session.configured", payload: { tools, foreign: check.foreign, grantedDirectories: session.granted } });
       if (check.failure) return fail(check.failure);
     }
 
@@ -239,6 +241,7 @@ export const scriptedAdapter = (scriptPath: string, context: AdapterContext): Pr
       }
       const session: ScriptedSession = {
         chatId: input.chatId,
+        granted: [input.attachmentsDir],
         script,
         pickError,
         mcp: new McpClient(input.mcp.url, input.mcp.token),

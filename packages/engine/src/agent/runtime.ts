@@ -752,7 +752,13 @@ export class AgentRuntime {
       if (restoreCanvas) {
         for (const turn of later) if (!turn.reverted) await this.revertOne(agent, chatId, turn.turnCount);
       }
-      await this.providers.rollback(chatId, later.length).catch((error: unknown) => logError(`chat ${chatId}: rollback: ${errorText(error)}`));
+      if (later.length > 0) {
+        // The provider conversation is rolled back on a live session: a closed one is resumed first.
+        await this.providers
+          .ensure(agent.slug, chat, agent.folder, agent.engine)
+          .then(() => this.providers.rollback(chatId, later.length))
+          .catch((error: unknown) => logError(`chat ${chatId}: rollback: ${errorText(error)}`));
+      }
       agent.turnChanges.dropAfter(chatId, keep);
     } finally {
       await this.internal(agent, chatId, { type: "thread.revert.complete", turnCount: keep });
