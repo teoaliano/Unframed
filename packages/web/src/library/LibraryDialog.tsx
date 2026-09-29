@@ -302,7 +302,7 @@ export const LibraryDialog = ({ onClose, onAdd }: { readonly onClose: () => void
                 </ul>
               )}
             </div>
-            {loaded && shown.total > 10 && (
+            {loaded && shown.pages > 1 && (
               <nav className="flex items-center justify-end gap-1 text-[12.5px] text-secondary" aria-label="Pages">
                 <span data-testid="library-range">{libraryRange(shown)}</span>
                 <button type="button" aria-label="Previous page" className={iconButton} disabled={shown.page <= 1} onClick={() => change({ page: shown.page - 1 })}>

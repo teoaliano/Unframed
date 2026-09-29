@@ -7,6 +7,7 @@
 import {
   instantiate,
   placeAt,
+  PRESET_NOT_ONE_GROUP_MESSAGE,
   presetFiles,
   presetWithTextModel,
   readRef,
@@ -61,7 +62,7 @@ export const insertPreset = async (input: {
   const taken = editor.getCurrentPageShapes().flatMap((shape) => readRef(shape) ?? []);
   const made = instantiate(content, taken, () => minter.mint());
   const group = made.content.shapes.find((shape) => shape.id === made.rootId);
-  if (!group) throw new Error("A preset is one group.");
+  if (!group) throw new Error(PRESET_NOT_ONE_GROUP_MESSAGE);
   const at = placeAt({ x: group.x, y: group.y, w: Number(group.props.w), h: Number(group.props.h) }, editor.getViewportPageBounds().center);
   const placed = { ...made.content, shapes: made.content.shapes.map((shape) => (shape.id === made.rootId ? { ...shape, ...at } : shape)) };
 

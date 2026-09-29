@@ -18,7 +18,6 @@ import { errorText } from "../log.ts";
 import { SettingsStore } from "../settingsStore.ts";
 
 export const PRESETS_INVALID_MESSAGE = "presets.json is not valid JSON.";
-export const PRESETS_NOT_A_LIST_MESSAGE = "presets.json does not hold a list of presets.";
 export const PRESET_UNKNOWN_MESSAGE = "That preset is not in your library.";
 
 export const presetsPath = (outputDir: string): string => join(outputDir, "presets.json");
@@ -37,6 +36,8 @@ export class PresetStore extends Context.Service<
     readonly list: Effect.Effect<{ presets: Preset[] }, UnframedError>;
     readonly save: (input: SaveInput) => Effect.Effect<{ preset: Preset }, UnframedError>;
     readonly remove: (id: string) => Effect.Effect<{ ok: true }, UnframedError>;
+    /** Runs `work` on the same queue as every read and write of `presets.json` (the media copier's calls). */
+    readonly serialised: <A>(work: Effect.Effect<A, UnframedError>) => Effect.Effect<A, UnframedError>;
   }
 >()("unframed/engine/PresetStore") {}
 
@@ -46,8 +47,8 @@ interface Entry {
   readonly raw: string;
 }
 
-const isPreset = Schema.is(Preset);
-const listed = (value: unknown): value is Preset => typeof value === "object" && value !== null && (value as { format?: unknown }).format === 2 && isPreset(value);
+/** An entry this version lists: `format: 2` and a whole preset. Every other entry is kept but never listed. */
+const listed = Schema.is(Preset);
 
 const idOf = (value: unknown): unknown => (typeof value === "object" && value !== null ? (value as { id?: unknown }).id : undefined);
 
@@ -66,7 +67,8 @@ const readEntries = async (path: string): Promise<Entry[]> => {
     throw unframedError("internal", PRESETS_INVALID_MESSAGE);
   }
   const raws = Array.isArray(parsed) ? splitJsonArray(text) : undefined;
-  if (!Array.isArray(parsed) || raws === undefined || raws.length !== parsed.length) throw unframedError("internal", PRESETS_NOT_A_LIST_MESSAGE);
+  // A file that parses but holds no list is as damaged as one that does not parse.
+  if (!Array.isArray(parsed) || raws === undefined || raws.length !== parsed.length) throw unframedError("internal", PRESETS_INVALID_MESSAGE);
   return parsed.map((value, index) => ({ value, raw: raws[index]! }));
 };
 
@@ -125,7 +127,9 @@ export const presetStoreLayer = Layer.effect(
             kind: described.kind,
             ...(described.medium === undefined ? {} : { medium: described.medium }),
             content: input.content,
-          } as Preset;
+          };
+          // Only a preset the list will show is written, so every save can be listed and deleted.
+          if (!listed(preset)) throw unframedError("bad_request", PRESET_NOT_ONE_GROUP_MESSAGE);
           await writeEntries(path, [{ value: preset, raw: JSON.stringify(preset, null, 2) }, ...entries]);
           return { preset };
         });
@@ -140,6 +144,14 @@ export const presetStoreLayer = Layer.effect(
         return { ok: true as const };
       });
 
-    return PresetStore.of({ list, save, remove });
+    const serialised = <A>(work: Effect.Effect<A, UnframedError>) =>
+      Effect.flatMap(settings.outputDir, (outputDir) =>
+        Effect.flatMap(
+          Effect.promise(() => onQueue(outputDir, () => Effect.runPromiseExit(work))),
+          (exit) => exit,
+        ),
+      );
+
+    return PresetStore.of({ list, save, remove, serialised });
   }),
 );

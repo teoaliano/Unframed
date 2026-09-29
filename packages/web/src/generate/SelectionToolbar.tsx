@@ -1,19 +1,18 @@
-import { resultMetaOf, UnframedError, type Medium, type ResultRecipe } from "@unframed/contracts";
-import { composeSelection, resultLine, toolbarState, trayFromRecipe, type ToolbarState } from "@unframed/domain";
+import { resultMetaOf, UnframedError, type ResultRecipe } from "@unframed/contracts";
+import { composeSelection, resultLine, toolbarState, type ToolbarState } from "@unframed/domain";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useEditor, useValue, type Editor, type TLShapeId } from "tldraw";
 import { groupRecipeOf } from "../canvas/groupRecipes.ts";
 import { Tip } from "../chrome/ui.tsx";
 import { useSlots } from "../chrome/slots.ts";
 import { useCanvasProject, useEngine, useSettings } from "../context.ts";
-import type { EngineConnection } from "../rpc/engine.ts";
 import { showError } from "../toasts.tsx";
-import { knownCatalogue, loadCatalogue, usePricing } from "./catalogue.ts";
+import { loadCatalogue, useKnownCatalogue, usePricing } from "./catalogue.ts";
 import { Composer } from "./composer/Composer.tsx";
 import { assetOf, canvasShapes, resultShapes, toolbarShape } from "./facts.ts";
 import { placeFloating, type ScreenBox } from "./floating.ts";
 import { mediumDefinition, type RunSource } from "./mediumRegistry.ts";
-import { openOnRecipe, recipeRunProgress, runGroupRecipe } from "./recipeRuns.ts";
+import { openOnRecipe, recipeProps, recipeRunProgress, runGroupRecipe } from "./recipeRuns.ts";
 import { repeatResult, varyBlocked, varyCapMessage } from "./results.ts";
 import { closeComposer, composerState, leaveRecipeMode, openComposer } from "./state.ts";
 
@@ -257,22 +256,6 @@ const ResultBar = ({ shapeId, agent }: { shapeId: TLShapeId; agent: ReactNode })
   );
 };
 
-/** The last catalogue answer for a medium, loaded once and kept for the session. */
-const useKnownCatalogue = (engine: EngineConnection, medium: Medium) => {
-  const [answer, setAnswer] = useState(() => knownCatalogue(medium));
-  useEffect(() => {
-    let live = true;
-    loadCatalogue(engine, medium).then(
-      (next) => live && setAnswer(next),
-      () => undefined,
-    );
-    return () => {
-      live = false;
-    };
-  }, [engine, medium]);
-  return answer ?? knownCatalogue(medium);
-};
-
 /**
  * The bar of a selection holding one recipe group: Generate runs the recipe at once (a
  * Free recipe stops at the final prompt), the hint names the group and the estimate, and
@@ -289,11 +272,7 @@ const RecipeBar = ({ state, agent }: { state: Extract<ToolbarState, { kind: "rec
   const definition = mediumDefinition(medium);
   const catalogue = useKnownCatalogue(engine, medium);
   const entry = catalogue?.models.find((model) => model.id === recipe?.model);
-  const props = useMemo(() => {
-    if (!recipe || !definition) return {};
-    const tray = trayFromRecipe(recipe).props;
-    return definition.keep(tray, definition.params(entry, tray));
-  }, [recipe, definition, entry]);
+  const props = useMemo(() => (recipe && definition ? recipeProps(definition, recipe, entry) : {}), [recipe, definition, entry]);
   const pricing = usePricing(engine, definition ?? mediumDefinition("image")!, recipe?.model);
   const source = useValue(
     "recipe source",

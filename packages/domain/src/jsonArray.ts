@@ -10,7 +10,7 @@ const WHITESPACE = /\s/;
 export const splitJsonArray = (text: string): string[] | undefined => {
   let at = 0;
   const skip = () => {
-    while (at < text.length && (WHITESPACE.test(text[at]!) || text[at] === "﻿")) at++;
+    while (at < text.length && WHITESPACE.test(text[at]!)) at++;
   };
   skip();
   if (text[at] !== "[") return undefined;

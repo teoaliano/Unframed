@@ -71,7 +71,7 @@ test("a right-clicked prompt is selected alone and offers its reference and the 
   await page.mouse.click(...Object.values(await centre(scene)) as [number, number]);
 
   const { headings, items } = await rightClick(page, await centre(shapeOnScreen(page, "shape:starter-subject")));
-  // Spec 06 has registered Add to library, so a selection gets the Library section.
+  // A selection always gets the Library section, whose Add to library the canvas registers.
   expect(headings).toEqual(["Reference", "Edit", "Library"]);
   expect(items.slice(0, 5)).toEqual(["Copy @100", "Cut ⌘X", "Copy ⌘C", "Group ⌘G", expect.not.stringMatching(/^(Paste|Ungroup)/)]);
   // Each edit item once: tldraw's own cut, copy and group are gone.

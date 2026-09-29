@@ -89,7 +89,8 @@ describe("the preset store", () => {
     await expect(rpc.call("library.save", { name: "   ", summary: "", content: groupContent("x") })).rejects.toMatchObject({ code: "bad_request", message: "Give it a name." });
     const twoRoots = { ...groupContent("x"), rootShapeIds: ["shape:g", "shape:p"] };
     const notAGroup = { ...groupContent("x"), rootShapeIds: ["shape:p"] };
-    for (const content of [twoRoots, notAGroup, { shapes: [] }, "nothing"]) {
+    const { assets: _assets, ...noAssets } = groupContent("x");
+    for (const content of [twoRoots, notAGroup, noAssets, { shapes: [] }, "nothing"]) {
       await expect(rpc.call("library.save", { name: "x", summary: "", content })).rejects.toMatchObject({ code: "bad_request", message: "A preset is one group." });
     }
     await expect(readFile(presetsFile(), "utf8")).rejects.toMatchObject({ code: "ENOENT" });

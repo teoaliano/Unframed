@@ -4,14 +4,14 @@
  * medium send as the composer, except that it leaves the last-used values alone. Its bar
  * counts what has settled from spec 03's run events.
  */
-import { runMarkerOf } from "@unframed/contracts";
+import { runMarkerOf, type ModelEntry } from "@unframed/contracts";
 import { composeSelection, trayFromRecipe, type GroupRecipe } from "@unframed/domain";
 import { atom, type Atom, type Editor, type TLShapeId } from "tldraw";
 import type { EngineConnection } from "../rpc/engine.ts";
 import { loadCatalogue } from "./catalogue.ts";
 import { canvasShapes } from "./facts.ts";
 import { stagedFree } from "./free.ts";
-import { mediumDefinition, type RunSource, type TrayValues } from "./mediumRegistry.ts";
+import { mediumDefinition, type MediumDefinition, type PropValue, type RunSource, type TrayValues } from "./mediumRegistry.ts";
 import { openComposer, setMedium } from "./state.ts";
 import { VIEW_FINAL_PROMPT_KEY } from "./runsProp.tsx";
 
@@ -88,14 +88,14 @@ export const recipeRunProgress = (editor: Editor, groupId: string): { readonly s
   return pending > 0 ? { settled: run.shapeIds.length - pending, total: run.shapeIds.length } : undefined;
 };
 
-/** The tray a recipe makes, through the same path the composer reopens a recipe with: props the model no longer declares are dropped. */
-export const recipeValues = async (engine: EngineConnection, recipe: GroupRecipe): Promise<TrayValues> => {
-  const definition = mediumDefinition(recipe.medium);
-  if (!definition) throw new Error(`There is no ${recipe.medium} medium.`);
-  const catalogue = await loadCatalogue(engine, definition.catalogue);
-  const entry = catalogue.models.find((model) => model.id === recipe.model);
+/**
+ * The tray props a recipe makes, through the same path the composer reopens a result's
+ * recipe with: a param the model no longer declares is dropped. `entry` is the recipe's
+ * model in the catalogue, undefined when it has left it.
+ */
+export const recipeProps = (definition: MediumDefinition, recipe: GroupRecipe, entry: ModelEntry | undefined): Record<string, PropValue> => {
   const { props } = trayFromRecipe(recipe);
-  return { model: recipe.model === "" ? undefined : recipe.model, picked: false, props: definition.keep(props, definition.params(entry, props)) };
+  return definition.keep(props, definition.params(entry, props));
 };
 
 /**
@@ -113,9 +113,14 @@ export const runGroupRecipe = async (input: {
   const { editor, engine, project, groupId, recipe } = input;
   const definition = mediumDefinition(recipe.medium);
   if (!definition) throw new Error(`There is no ${recipe.medium} medium.`);
-  const tray = await recipeValues(engine, recipe);
-  const values: TrayValues = recipe.runs === "free" ? { ...tray, props: { ...tray.props, [VIEW_FINAL_PROMPT_KEY]: true } } : tray;
   const entry = (await loadCatalogue(engine, definition.catalogue)).models.find((model) => model.id === recipe.model);
+  const props = recipeProps(definition, recipe, entry);
+  // The empty model of a system preset not yet given one runs on the default.
+  const values: TrayValues = {
+    model: recipe.model === "" ? undefined : recipe.model,
+    picked: false,
+    props: recipe.runs === "free" ? { ...props, [VIEW_FINAL_PROMPT_KEY]: true } : props,
+  };
   const selected = editor.getSelectedShapeIds();
   const shapes = canvasShapes(editor);
   const composition = composeSelection({ shapes, selected, instruction: "", medium: recipe.medium, referenceCap: definition.params(entry, values.props).referenceCap });

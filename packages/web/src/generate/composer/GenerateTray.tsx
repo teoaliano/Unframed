@@ -1,5 +1,5 @@
 import { UnframedError, type Medium } from "@unframed/contracts";
-import { composeSelection, readRef, recipeEquals, recipeFromTray, resolveReferences, selectionHint, trayFromRecipe } from "@unframed/domain";
+import { composeSelection, readRef, recipeEquals, recipeFromTray, resolveReferences, selectionHint } from "@unframed/domain";
 import { ArrowUp, LoaderCircle } from "lucide-react";
 import { useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState, type Ref } from "react";
 import { useEditor, useValue, type TLShapeId } from "tldraw";
@@ -10,6 +10,7 @@ import { useCatalogue, usePricing } from "../catalogue.ts";
 import { canvasShapes, resultShapes, toolbarShape } from "../facts.ts";
 import { loadLastUsed, type LastUsed } from "../lastUsed.ts";
 import { mediumDefinition, registeredMedia, type PropValue, type RunSource, type TrayValues } from "../mediumRegistry.ts";
+import { recipeProps } from "../recipeRuns.ts";
 import { composerState, setMedium, type RecipeMode } from "../state.ts";
 import { trayView } from "../trayView.ts";
 import { InstructionEditor } from "./InstructionEditor.tsx";
@@ -132,6 +133,9 @@ export const GenerateTray = ({ project, recipe, onSent, onMenuOpen, handle }: Ge
 
   // The one recipe group the selection held when the composer opened (spec 06): its recipe is the tray's start.
   const [standing] = useState(() => (recipe ? undefined : appliedRecipe(editor)?.recipe));
+  useEffect(() => {
+    if (standing && composerState(editor).get().medium !== standing.medium) setMedium(editor, standing.medium);
+  }, [editor, standing]);
 
   // The tray opens on the recipe's values in recipe mode or on a recipe group, else the last-used values, else the defaults.
   useEffect(() => {
@@ -142,10 +146,8 @@ export const GenerateTray = ({ project, recipe, onSent, onMenuOpen, handle }: Ge
       const recorded = definition.fromRecipe(recipe.recipe);
       values = { model: recipe.recipe.model, picked: false, props: definition.keep(recorded, definition.params(entryOf(recipe.recipe.model), recorded)) };
     } else if (standing && standing.medium === medium) {
-      // The same path a result's recipe reopens by: a param the model no longer declares is dropped.
-      const tray = trayFromRecipe(standing).props;
       const model = standing.model === "" ? catalogue.default : standing.model;
-      values = { model, picked: false, props: definition.keep(tray, definition.params(entryOf(model), tray)) };
+      values = { model, picked: false, props: recipeProps(definition, standing, entryOf(model)) };
     } else {
       const stored = lastUsed?.model !== undefined && catalogue.models.some((entry) => entry.id === lastUsed.model) ? lastUsed.model : undefined;
       const model = stored ?? catalogue.default;
