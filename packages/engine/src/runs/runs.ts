@@ -40,6 +40,7 @@ import {
   PLACEHOLDER_WIDTH,
   placeholderHeight,
   type Landed,
+  type LandedClip,
   type LandedText,
   type RunOutcome,
   type Shape,
@@ -74,10 +75,15 @@ export class Runs extends Context.Service<
     readonly copyRecipe: (project: string, from: string, sidecar: string, file: string) => Effect.Effect<{ sidecar: string }, UnframedError>;
     /** Spec 10: how many runs are still generating, in one project (a name, slugged) or in all. */
     readonly liveRuns: (project?: string) => Effect.Effect<number>;
+    /**
+     * Spec 09: a motion render joins the run registry as a live run of its project, so its
+     * placeholder is resolved like any non-durable run and spec 10's checks count it.
+     */
+    readonly track: (runId: string, project: string) => { settle: (outcome: RunOutcome<LandedClip>) => void; forget: () => void };
   }
 >()("unframed/engine/Runs") {}
 
-type Outcome = RunOutcome<Landed | LandedText>;
+type Outcome = RunOutcome<Landed | LandedText | LandedClip>;
 
 interface RunRecord {
   live: boolean;
@@ -189,6 +195,18 @@ export const runsLayer = Layer.effect(
         }),
       );
 
+    const track = (runId: string, project: string) => {
+      const run: RunRecord = { live: true, project: projectSlug(project), outputs: new Map() };
+      remember(runId, run);
+      return {
+        settle: (outcome: RunOutcome<Landed | LandedText | LandedClip>) => {
+          run.outputs.set(1, outcome);
+          run.live = false;
+        },
+        forget: () => void registry.delete(runId),
+      };
+    };
+
     const texts = makeTextRuns({
       settings,
       rooms,
@@ -196,17 +214,7 @@ export const runsLayer = Layer.effect(
       projectFolder,
       validateReferences,
       inline,
-      register: (runId, project) => {
-        const run: RunRecord = { live: true, project, outputs: new Map() };
-        remember(runId, run);
-        return {
-          settle: (outcome) => {
-            run.outputs.set(1, outcome);
-            run.live = false;
-          },
-          forget: () => registry.delete(runId),
-        };
-      },
+      register: (runId, project) => track(runId, project),
       publish,
       runPromise,
       obstacles,
@@ -458,6 +466,6 @@ export const runsLayer = Layer.effect(
         return [...registry.values()].filter((run) => run.live && (slug === undefined || run.project === slug)).length;
       });
 
-    return Runs.of({ image, text: texts.text, complete: texts.complete, subscribe, recipe, copyRecipe, liveRuns });
+    return Runs.of({ image, text: texts.text, complete: texts.complete, subscribe, recipe, copyRecipe, liveRuns, track });
   }),
 );

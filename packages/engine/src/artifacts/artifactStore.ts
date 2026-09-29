@@ -5,8 +5,8 @@
  * motion library (the viewer, the bridge, the player, the runtime and GSAP) beside the
  * compositions, so the preview origin never needs a second route.
  */
-import { existsSync } from "node:fs";
-import { mkdir, open, readFile, stat, writeFile } from "node:fs/promises";
+import { constants, existsSync } from "node:fs";
+import { copyFile, mkdir, open, readFile, stat, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { basename, dirname, join } from "node:path";
 import { artifactFileName, dialsBridgeSource, sidecarFileName, sidecarText, viewerPageSource, type ArtifactKind } from "@unframed/domain";
@@ -148,3 +148,55 @@ export const writeUploadedArtifact = async (folder: string, input: { readonly ht
 
 /** Reads an artifact file; the name is reduced to its basename first, so it cannot leave the folder. */
 export const readArtifact = (folder: string, file: string): Promise<string> => readFile(join(folder, basename(file)), "utf8");
+
+export interface RenderSidecar {
+  readonly source: "render";
+  readonly of: string;
+  readonly title: string;
+  readonly mime: "video/mp4";
+  readonly fps: 30;
+  readonly quality: "standard";
+  readonly bytes: number;
+  readonly dials?: Readonly<Record<string, unknown>>;
+  readonly at: string;
+}
+
+/**
+ * Copies a finished render out of its temp folder into the project with exclusive create, as
+ * `<epochMs>-<slug of the title, or motion>[-<n>].mp4`, with its render sidecar. There is no
+ * `cost` field: a render is free local compute.
+ */
+export const placeRenderOutput = async (
+  folder: string,
+  input: { readonly from: string; readonly of: string; readonly title: string; readonly dials: Readonly<Record<string, unknown>> | null },
+): Promise<{ file: string; bytes: number }> => {
+  const bytes = (await stat(input.from)).size;
+  const now = Date.now();
+  const skipped = new Set<string>();
+  for (let attempt = 0; attempt < 1000; attempt++) {
+    const file = artifactFileName({ title: input.title, fallback: "motion", now, ext: "mp4", exists: (name) => skipped.has(name) || taken(folder)(name) });
+    try {
+      await copyFile(input.from, join(folder, file), constants.COPYFILE_EXCL);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "EEXIST") {
+        skipped.add(file);
+        continue;
+      }
+      throw error;
+    }
+    const sidecar: RenderSidecar = {
+      source: "render",
+      of: input.of,
+      title: input.title,
+      mime: "video/mp4",
+      fps: 30,
+      quality: "standard",
+      bytes,
+      ...(input.dials !== null && Object.keys(input.dials).length > 0 ? { dials: input.dials } : {}),
+      at: new Date().toISOString(),
+    };
+    await writeFile(join(folder, sidecarFileName(file)), `${JSON.stringify(sidecar, null, 2)}\n`);
+    return { file, bytes };
+  }
+  throw new Error("No free file name.");
+};
