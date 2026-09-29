@@ -47,3 +47,33 @@ export const inBothSchemes = async (page: Page, check: (scheme: "light" | "dark"
   }
   await page.emulateMedia({ colorScheme: "light" });
 };
+
+/**
+ * The controls on screen that no kit component rendered: every visible button, menu item,
+ * field and dialog must carry a kit `data-slot`. tldraw's own UI is themed, not rebuilt,
+ * so it is left out, and so are spec 12's native exceptions (the hidden file picker and
+ * the video scrubber). Answers a short description of each offender.
+ */
+export const unkittedControls = (page: Page): Promise<string[]> =>
+  page.evaluate(() => {
+    const CONTROLS =
+      "button, [role=button], [role=menuitem], [role=menuitemradio], [role=menuitemcheckbox], [role=tab], [role=switch], [role=checkbox], [role=radio], [role=combobox], input, textarea, select, [role=dialog], [role=alertdialog]";
+    const TLDRAW = ".tlui-layout, .tlui-menu, .tlui-popover__content, .tlui-dialog__content, .tlui-button, [data-radix-popper-content-wrapper], [data-testid^='tl-watermark']";
+    const offenders: string[] = [];
+    for (const element of document.querySelectorAll<HTMLElement>(CONTROLS)) {
+      if (element.closest(TLDRAW)) continue;
+      if (element instanceof HTMLInputElement && ["hidden", "file", "range"].includes(element.type)) continue;
+      // Base UI's form inputs behind a Select or Combobox are hidden from people and assistive tech.
+      if (element instanceof HTMLInputElement && element.getAttribute("aria-hidden") === "true") continue;
+      if (!element.checkVisibility({ visibilityProperty: true })) continue;
+      // Tiptap's editable surface is the third-party editor the kit's composer recipe dresses.
+      if (element.isContentEditable) continue;
+      // Base UI's toast root carries no slot of its own; the kit's toast viewport around it does.
+      if (element.closest("[data-slot='toast-viewport'], [data-slot='toast-viewport-anchored']") && !element.matches("button")) continue;
+      if (element.hasAttribute("data-slot")) continue;
+      const name = element.getAttribute("aria-label") ?? element.textContent?.trim().slice(0, 40) ?? "";
+      const attributes = [...element.attributes].map((attribute) => attribute.name).filter((attribute) => attribute !== "class" && attribute !== "style");
+      offenders.push(`<${element.tagName.toLowerCase()} ${attributes.join(" ")}> ${name}`);
+    }
+    return offenders;
+  });
