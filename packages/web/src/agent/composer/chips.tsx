@@ -79,6 +79,7 @@ export const useSelectionChips = (editor: Editor | null, draftEmpty: boolean) =>
   return {
     shapes,
     remove: (removed: ReadonlyArray<string>) => setIds((current) => current.filter((id) => !removed.includes(id))),
+    add: (added: ReadonlyArray<string>) => setIds((current) => [...current, ...added.filter((id) => !current.includes(id))]),
     /** Replaces the chips, for a message put back into the composer. */
     set: (next: ReadonlyArray<string>) => setIds(next),
     clear: () => setIds([]),

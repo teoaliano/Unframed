@@ -9,6 +9,8 @@ import { createChat, messageOf, sendMessage } from "../send.ts";
 import { useChatClient, useChats, useProviders, useWatchedThread, type ChatClient } from "../store.ts";
 import { Tip } from "../../chrome/ui.tsx";
 import { ChipRow, contextSelection, useSelectionChips } from "./chips.tsx";
+import { ComposerMenu, type MenuItem } from "./ComposerMenu.tsx";
+import { mentionItems } from "./mentions.tsx";
 import { PromptEditor, type PromptEditorHandle, type Trigger } from "./PromptEditor.tsx";
 import { useMaybeEditor, useValue } from "tldraw";
 
@@ -38,6 +40,16 @@ export interface AgentTrayProps {
   readonly top?: ReactNode;
   /** A line beside Send (the toolbar's provider note). */
   readonly note?: (provider: string) => ReactNode;
+  /** Tells the composer shell a menu of the tray is open, so Esc closes the menu first. */
+  readonly onMenuOpen?: (key: string, open: boolean) => void;
+}
+
+interface OpenMenu {
+  readonly label: string;
+  readonly trigger: Trigger;
+  readonly items: ReadonlyArray<MenuItem>;
+  readonly empty: string;
+  readonly pick: (item: MenuItem) => void;
 }
 
 /**
@@ -45,7 +57,7 @@ export interface AgentTrayProps {
  * footer's pickers, Stop and Send. The rail's composer and the toolbar's are this one
  * component; only where a message goes differs.
  */
-export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, onSent, top, note }: AgentTrayProps) => {
+export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, onSent, top, note, onMenuOpen }: AgentTrayProps) => {
   const { statuses } = useProviders(client);
   const chat = useWatchedThread(client, chatId);
   const running = chat?.latestTurn?.state === "running";
@@ -64,6 +76,57 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
   useEffect(() => {
     void client.loadProviders();
   }, [client]);
+
+  const boxElement = useRef<HTMLDivElement>(null);
+  const [highlight, setHighlight] = useState(0);
+  const [dismissedAt, setDismissedAt] = useState<number>();
+  useEffect(() => setHighlight(0), [trigger?.char, trigger?.query, trigger?.from]);
+  // Reactive, so a shape that lands while the menu is open is offered.
+  const mentionRows = useValue("mentions", () => (trigger?.char === "@" && canvas ? mentionItems(canvas, trigger.query) : undefined), [canvas, trigger]);
+  const menu = useMemo((): OpenMenu | undefined => {
+    if (!trigger || dismissedAt === trigger.from) return undefined;
+    if (trigger.char === "@" && mentionRows) {
+      const items = mentionRows;
+      return {
+        label: "Mentions",
+        trigger,
+        items,
+        empty: "No matching shapes or files.",
+        pick: (item) => {
+          const chosen = items.find((known) => known.key === item.key);
+          if (!chosen) return;
+          box.current?.replaceTrigger(trigger, chosen.chip);
+          if (chosen.shapeId !== undefined) chips.add([chosen.shapeId]);
+        },
+      };
+    }
+    return undefined;
+  }, [trigger, dismissedAt, mentionRows, chips]);
+  useEffect(() => {
+    if (trigger === undefined || trigger.from !== dismissedAt) setDismissedAt(undefined);
+  }, [trigger, dismissedAt]);
+  useEffect(() => {
+    onMenuOpen?.("agent-menu", menu !== undefined);
+  }, [onMenuOpen, menu]);
+  useEffect(() => () => onMenuOpen?.("agent-menu", false), [onMenuOpen]);
+
+  /** Keys the box gives the tray first: an open menu takes its arrows, Enter, Tab and Esc. */
+  const onKey = (event: KeyboardEvent): boolean => {
+    if (menu) {
+      const count = menu.items.length;
+      if (event.key === "ArrowDown" && count > 0) setHighlight((highlight + 1) % count);
+      else if (event.key === "ArrowUp" && count > 0) setHighlight((highlight - 1 + count) % count);
+      else if ((event.key === "Enter" || event.key === "Tab") && !event.isComposing) {
+        const item = menu.items[highlight] ?? menu.items[0];
+        if (item) menu.pick(item);
+      } else if (event.key === "Escape") {
+        event.stopPropagation();
+        setDismissedAt(menu.trigger.from);
+      } else return false;
+      return true;
+    }
+    return false;
+  };
 
   /** The model a message runs on: the chat's, or for a new chat the one picked here, else the first ready provider's default. */
   const selection: ModelSelection = useMemo(
@@ -106,12 +169,11 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
   void setDraftModel;
   void setDraftRuntime;
   void setDraftInteraction;
-  void trigger;
 
   return (
     <div className="unframed-agent-tray" data-variant={variant} data-testid="agent-tray">
       {top}
-      <div className="unframed-agent-box">
+      <div className="unframed-agent-box" ref={boxElement}>
         <ChipRow
           shapes={chips.shapes}
           onRemove={(ids) => {
@@ -124,12 +186,13 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
           label={PROMPT_LABEL}
           onChange={setText}
           onTrigger={setTrigger}
-          onKey={() => false}
+          onKey={onKey}
           onSubmit={() => void send()}
           onPaste={() => false}
           handle={box}
           autofocus={variant === "toolbar"}
         />
+        {menu && <ComposerMenu label={menu.label} items={menu.items} highlight={highlight} empty={menu.empty} anchor={boxElement} onPick={menu.pick} onHighlight={setHighlight} />}
         <div className="unframed-agent-footer">
           <div className="unframed-agent-footer__tools" />
           <div className="unframed-agent-footer__send">
@@ -156,7 +219,7 @@ const ARTIFACT_TYPES = new Set(["page", "motion"]);
  * every selected artifact, or starts one tagged with them, and says which; Send opens the
  * rail on that chat before the message goes out.
  */
-export const ToolbarAgentTray = ({ project, close }: SlotProps) => {
+export const ToolbarAgentTray = ({ project, close, onMenuOpen }: SlotProps) => {
   const client = useChatClient(useEngine(), project);
   const canvas = useMaybeEditor();
   const chats = useChats(client);
@@ -177,6 +240,7 @@ export const ToolbarAgentTray = ({ project, close }: SlotProps) => {
       newChatTags={artifacts}
       beforeSend={(chatId) => client.setUi({ open: true, chosen: chatId, pinned: null })}
       onSent={close}
+      {...(onMenuOpen ? { onMenuOpen } : {})}
       top={
         <div className="unframed-agent-target" data-testid="agent-target">
           <span className="unframed-agent-target__line">

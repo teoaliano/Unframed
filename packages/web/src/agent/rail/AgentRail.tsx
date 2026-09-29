@@ -111,12 +111,15 @@ export const AgentRail = ({ project, embedded, filterTo, onLocate, onOpenEditor,
       data-embedded={embedded ? "" : undefined}
       onPointerDown={(event) => event.stopPropagation()}
       onKeyDown={(event) => {
+        // tldraw's shortcuts listen on the document: keys typed in the rail stop here.
+        event.stopPropagation();
         const command = platform() === "darwin" ? event.metaKey : event.ctrlKey;
         if (command && !event.shiftKey && event.key.toLowerCase() === "k") {
           event.preventDefault();
           client.setUi({ searchOpen: true });
         }
       }}
+      onKeyUp={(event) => event.stopPropagation()}
     >
       <header className="unframed-agent-rail__header">
         <Sparkles size={16} aria-hidden className="text-icon" />

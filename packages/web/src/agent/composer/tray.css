@@ -166,6 +166,71 @@
   color: var(--unframed-text-secondary);
 }
 
+/* The `@`, `/` and `$` menu over the box. */
+.unframed-agent-menu {
+  box-sizing: border-box;
+  max-height: 260px;
+  overflow-y: auto;
+  padding: 4px;
+  border: 1px solid var(--unframed-border);
+  border-radius: var(--unframed-radius-container);
+  background-color: var(--unframed-popover-translucent);
+  backdrop-filter: blur(var(--unframed-chrome-blur));
+  box-shadow: var(--unframed-shadow-med);
+  font-family: var(--font-sans);
+  color: var(--unframed-text-primary);
+}
+
+.unframed-agent-menu__empty {
+  margin: 0;
+  padding: 6px 8px;
+  font-size: 12.5px;
+  color: var(--unframed-text-secondary);
+}
+
+.unframed-agent-menu__row {
+  display: flex;
+  min-height: 28px;
+  align-items: center;
+  gap: 8px;
+  padding: 3px 8px;
+  border-radius: var(--unframed-radius-inner);
+  font-size: 12.5px;
+  cursor: default;
+}
+
+.unframed-agent-menu__row[aria-selected="true"] {
+  background-color: var(--unframed-overlay-hover);
+}
+
+.unframed-agent-menu__icon {
+  display: inline-flex;
+  color: var(--unframed-icon-secondary);
+}
+
+.unframed-agent-menu__label {
+  flex: none;
+  font-weight: 500;
+}
+
+.unframed-agent-menu__description {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--unframed-text-secondary);
+}
+
+.unframed-agent-menu__badge {
+  margin-left: auto;
+  padding: 0 6px;
+  border: 1px solid var(--unframed-border);
+  border-radius: 999px;
+  font-size: 11px;
+  color: var(--unframed-text-secondary);
+}
+
 /* A footer control: a ghost button with an icon and a short label. */
 .unframed-agent-control {
   display: inline-flex;

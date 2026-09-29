@@ -6,6 +6,8 @@ export interface AgentTrayProps {
   readonly project: string;
   /** Collapses the composer back to the selection toolbar. */
   readonly close: () => void;
+  /** Whether a menu of the tray is open, so the shell leaves Esc and the send key to it. */
+  readonly onMenuOpen?: (key: string, open: boolean) => void;
 }
 
 /**
