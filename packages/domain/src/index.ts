@@ -54,3 +54,6 @@ export * from "./agent/canvasTools.ts";
 export * from "./agent/scriptedAgent.ts";
 export * from "./agent/claudeEvents.ts";
 export * from "./agent/codexEvents.ts";
+export * from "./oauthAttempt.ts";
+export * from "./keyStatusCopy.ts";
+export * from "./jobLifecycle.ts";
