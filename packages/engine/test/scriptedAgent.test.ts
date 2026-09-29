@@ -1,17 +1,7 @@
 import { randomUUID } from "node:crypto";
-import { mkdir, writeFile } from "node:fs/promises";
-import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import WebSocket from "ws";
-import { PROJECT, startAgentEngine } from "./agent.ts";
-import { makeTempDir } from "./harness.ts";
-
-const scriptFolder = async (scripts: Record<string, unknown>) => {
-  const dir = await makeTempDir("unframed-scripts-");
-  await mkdir(dir, { recursive: true });
-  for (const [name, script] of Object.entries(scripts)) await writeFile(join(dir, `${name}.json`), typeof script === "string" ? script : JSON.stringify(script));
-  return dir;
-};
+import { PROJECT, scriptFolder, startAgentEngine } from "./agent.ts";
 
 describe("the scripted agent: one turn", () => {
   it("picks the script by its when, streams its text, settles the turn and uses the same script's turn 2", async () => {

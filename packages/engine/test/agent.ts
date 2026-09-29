@@ -4,11 +4,11 @@
  * folding a `subscribeThread` stream with the domain projector.
  */
 import { randomUUID } from "node:crypto";
-import { readdir, readFile } from "node:fs/promises";
+import { readdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { ChatSummary, ClientChatCommand, ShellStreamItem, ThreadStreamItem } from "@unframed/contracts";
 import { projectChat, type Chat, type ChatEvent } from "@unframed/domain";
-import { repoRoot, startEngine, type EngineOptions, type TestEngine } from "./harness.ts";
+import { makeTempDir, repoRoot, startEngine, type EngineOptions, type TestEngine } from "./harness.ts";
 import type { Subscription, TestRpcClient } from "./rpcClient.ts";
 
 export const FIXTURES = join(repoRoot, "assets", "fixtures");
@@ -163,6 +163,13 @@ export const shellChats = (items: ReadonlyArray<ShellStreamItem>): Map<string, C
     else if (item.kind === "chat-removed") chats.delete(item.id);
   }
   return chats;
+};
+
+/** A folder of scripts, one file per entry, for a test that needs its own. */
+export const scriptFolder = async (scripts: Record<string, unknown>): Promise<string> => {
+  const dir = await makeTempDir("unframed-scripts-");
+  for (const [name, script] of Object.entries(scripts)) await writeFile(join(dir, `${name}.json`), typeof script === "string" ? script : JSON.stringify(script));
+  return dir;
 };
 
 export { until };
