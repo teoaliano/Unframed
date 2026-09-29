@@ -15,7 +15,8 @@ export const BottomRight = () => {
   const editor = useEditor();
   const { libraryButton: Library } = useSlots();
   return (
-    <div className={`unframed-chrome-bottom-right ${cornerCardClass} flex-col`} data-testid="chrome-bottom-right">
+    // 56 px up clears tldraw's watermark (8 px from the corner, 36 px tall), which stays uncovered.
+    <div className={`pointer-events-auto absolute right-3 bottom-14 z-[300] ${cornerCardClass} flex-col`} data-testid="chrome-bottom-right">
       {Library && <Library />}
       <Menu>
         <MenuTrigger aria-label="Add" render={<Button size="icon-lg" />}>

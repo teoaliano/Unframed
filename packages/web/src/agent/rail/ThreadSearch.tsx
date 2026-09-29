@@ -4,6 +4,8 @@ import { X } from "lucide-react";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
+import { cn } from "~/lib/utils";
+import { listboxPopupClass, listboxRowClass } from "../../chrome/listbox.ts";
 import type { ChatClient } from "../store.ts";
 
 const MIN = 2;
@@ -123,7 +125,7 @@ export const ThreadSearch = ({ client, chats, onClose }: { readonly client: Chat
       </Button>
       {matches !== undefined && searchable && (
         // Focus stays in the field, which moves the highlight: the rows are options, not buttons.
-        <div className="dropdown-glass absolute top-full right-2 left-2 max-h-80 overflow-y-auto rounded-lg p-1 shadow-lg/5" role="listbox" aria-label="Search results">
+        <div className={`${listboxPopupClass} absolute top-full right-2 left-2 max-h-80`} role="listbox" aria-label="Search results">
           {rows.length === 0 ? (
             <p className="m-0 px-2 py-1.5 text-sm text-muted-foreground">No chats match.</p>
           ) : (
@@ -135,7 +137,7 @@ export const ThreadSearch = ({ client, chats, onClose }: { readonly client: Chat
                   role="option"
                   aria-selected={index === highlight}
                   data-highlighted={index === highlight ? "" : undefined}
-                  className="flex min-h-7 cursor-default select-none flex-col items-start gap-0.5 rounded-sm px-2 py-1 text-sm text-foreground outline-none data-highlighted:bg-accent data-highlighted:text-accent-foreground"
+                  className={cn(listboxRowClass, "flex-col items-start gap-0.5")}
                   onMouseEnter={() => setHighlight(index)}
                   onMouseDown={(event) => event.preventDefault()}
                   onClick={() => choose(row.threadId)}

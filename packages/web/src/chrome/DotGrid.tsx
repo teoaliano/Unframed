@@ -33,6 +33,7 @@ export const DotGrid = () => {
   return (
     <div
       ref={ref}
+      // oxlint-disable-next-line shadcn/no-unknown-classes -- tl-background is tldraw's own class, which places the background layer
       className="tl-background bg-background bg-[radial-gradient(circle,var(--canvas-dot)_0.55px,transparent_0.8px)]"
       data-testid="dot-grid"
       style={{ backgroundSize: `${screenGap}px ${screenGap}px` }}

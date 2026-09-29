@@ -758,16 +758,4 @@ code {
     transform: translateX(8px);
   }
 
-  /* Above tldraw's watermark (8 px from the corner, 36 px tall), which stays uncovered. */
-  .unframed-chrome-bottom-right {
-    position: absolute;
-    right: 12px;
-    bottom: 56px;
-    z-index: 300;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 8px;
-    pointer-events: all;
-  }
 }

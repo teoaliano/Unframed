@@ -193,9 +193,11 @@ const UnframedSections = () => {
                 aria-disabled="true"
                 data-disabled=""
                 title={item.tooltip}
+                // oxlint-disable-next-line shadcn/no-unknown-classes -- tldraw's own row classes, so the disabled row lines up with tldraw's rows
                 className="tlui-button tlui-button__menu"
                 data-testid={`context-menu.unframed-${item.action}`}
               >
+                {/* oxlint-disable-next-line shadcn/no-unknown-classes -- tldraw's own label class, as on its rows */}
                 <span className="tlui-button__label">{item.label}</span>
               </div>
             ) : item.action === "keep-playing" ? (

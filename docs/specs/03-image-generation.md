@@ -166,7 +166,7 @@ Roles (badges), shown only while the composer's Generate tray is open, on every 
 - the sketch shows `image N` at the top-left of the loose marks' bounds;
 - prompts, text results and marks show no badge (prompts already show their `@id`, spec 02).
 
-Badges sit where spec 02 puts a bare media shape's one fact (top-left, outside the content). Each is the kit's Badge `label` variant (spec 12) tinted by its role: `image N` teal, `video N`, `first` and `last` orange, the dash neutral (zinc). Video media (spec 04) may add `first` and `last` roles through the same map.
+Badges sit where spec 02 puts a bare media shape's one fact (top-left, outside the content). Each is the kit's Badge `label` variant (spec 12) in one hue, blue, for every role: the badges have always shared one colour. Video media (spec 04) may add `first` and `last` roles through the same map.
 
 ### Warnings and errors in the Generate tray (image medium)
 

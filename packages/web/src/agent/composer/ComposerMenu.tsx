@@ -1,6 +1,7 @@
 import { useLayoutEffect, useRef, useState, type ReactNode, type RefObject } from "react";
 import { createPortal } from "react-dom";
 import { Badge } from "~/components/ui/badge";
+import { listboxPopupClass, listboxRowClass } from "../../chrome/listbox.ts";
 
 export interface MenuItem {
   readonly key: string;
@@ -47,7 +48,7 @@ export const ComposerMenu = ({
       ref={list}
       role="listbox"
       aria-label={label}
-      className="dropdown-glass fixed z-[130] box-border max-h-65 overflow-y-auto rounded-lg p-1 font-sans text-foreground shadow-lg/5"
+      className={`${listboxPopupClass} fixed z-[130] max-h-65`}
       style={{ left: place.left, bottom: place.bottom, width: place.width }}
       onPointerDown={(event) => event.preventDefault()}
     >
@@ -61,7 +62,7 @@ export const ComposerMenu = ({
             aria-selected={index === highlight}
             data-index={index}
             data-highlighted={index === highlight ? "" : undefined}
-            className="flex min-h-7 cursor-default select-none items-center gap-2 rounded-sm px-2 py-1.5 text-sm outline-none data-highlighted:bg-accent data-highlighted:text-accent-foreground"
+            className={listboxRowClass}
             onPointerDown={(event) => {
               event.preventDefault();
               event.stopPropagation();

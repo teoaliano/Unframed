@@ -87,6 +87,12 @@
   font-size: var(--text-sm);
 }
 
+/* Toolbar and panel buttons: the kit control's radius on tldraw's hover and selected fill. */
+.tlui-button__tool::after,
+.tlui-layout .tlui-button:not(.tlui-button__menu)::after {
+  border-radius: var(--control-radius);
+}
+
 /* Tooltips: the kit's tooltip look. */
 .tlui-tooltip {
   border: 1px solid var(--contrast-border);

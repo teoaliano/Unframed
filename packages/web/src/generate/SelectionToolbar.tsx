@@ -18,6 +18,7 @@ import { mediumDefinition, type RunSource } from "./mediumRegistry.ts";
 import { openOnRecipe, recipeProps, recipeRunProgress, runGroupRecipe } from "./recipeRuns.ts";
 import { repeatResult, varyBlocked, varyCapMessage } from "./results.ts";
 import { closeComposer, composerState, leaveRecipeMode, openComposer } from "./state.ts";
+import { composerGlassClass } from "../chrome/composerSurface.ts";
 
 const messageOf = (error: unknown) => (error instanceof UnframedError || error instanceof Error ? error.message : String(error));
 
@@ -129,7 +130,7 @@ const Floating = ({ target, hidden, expanded, children }: { target: ScreenBox | 
         "pointer-events-auto absolute z-[500] box-border overflow-hidden border font-sans text-foreground data-[morphing=true]:transition-[left,top,width,height,border-radius,background-color,box-shadow] data-[morphing=true]:duration-200 data-[morphing=true]:ease-out motion-reduce:data-[morphing=true]:transition-none",
         // The bar is a glass card; the composer is t3code's composer shell.
         expanded
-          ? "rounded-3xl bg-card/(--glass-opacity) shadow-composer backdrop-blur-(--glass-blur) backdrop-saturate-(--glass-saturation) dark:bg-surface-raised/(--glass-opacity) dark:shadow-none"
+          ? `${composerGlassClass} rounded-3xl shadow-composer dark:shadow-none`
           : "rounded-xl shadow-lg/5 surface-glass",
       )}
       data-testid="selection-toolbar"

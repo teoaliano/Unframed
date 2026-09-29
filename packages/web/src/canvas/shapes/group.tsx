@@ -111,21 +111,24 @@ const RenameField = ({ shape }: { readonly shape: TLFrameShape }) => {
 /** A recipe group's chip, after its name: what its Generate makes. A click opens the composer on the recipe. */
 const RecipeChip = ({ shape, recipe }: { readonly shape: TLFrameShape; readonly recipe: GroupRecipe }) => {
   const editor = useEditor();
+  // The chip reads as the recipe spells it, not in the label's capitals: the wrapper sets the case the Badge inherits.
   return (
-    <Badge
-      variant="outline"
-      className="pointer-events-auto ml-1.5 tracking-normal normal-case"
-      // oxlint-disable-next-line react/forbid-elements -- the kit Badge rendered as a button: spec 12 makes the recipe chip a Badge
-      render={<button type="button" />}
-      data-testid="recipe-chip"
-      {...fieldEvents(editor)}
-      onClick={(event) => {
-        event.stopPropagation();
-        openOnRecipe(editor, shape.id, recipe);
-      }}
-    >
-      {recipeChip(recipe)}
-    </Badge>
+    <span className="ml-1.5 tracking-normal normal-case">
+      <Badge
+        variant="outline"
+        className="pointer-events-auto"
+        // oxlint-disable-next-line react/forbid-elements -- the kit Badge rendered as a button: spec 12 makes the recipe chip a Badge
+        render={<button type="button" />}
+        data-testid="recipe-chip"
+        {...fieldEvents(editor)}
+        onClick={(event) => {
+          event.stopPropagation();
+          openOnRecipe(editor, shape.id, recipe);
+        }}
+      >
+        {recipeChip(recipe)}
+      </Badge>
+    </span>
   );
 };
 

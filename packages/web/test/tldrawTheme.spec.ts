@@ -21,6 +21,8 @@ test("tldraw's toolbar, style panel, zoom controls, menus and shortcuts dialog t
     expect(await afterStyle(selectTool, "background-color")).toBe(await tokenColor(page, "--primary"));
     expect(await afterStyle(selectTool, "border-top-left-radius")).toBe("8px");
     await expectToken(stylePanel, "background-color", "--popover");
+    // The style panel's buttons share the kit control radius with the toolbar's.
+    expect(await afterStyle(stylePanel.locator(".tlui-button").first(), "border-top-left-radius")).toBe("8px");
     expect(await styleOf(stylePanel, "border-top-left-radius")).toBe("14px");
     // tldraw's UI chrome is in the kit's system font; the canvas keeps tldraw's shape font.
     const kitFont = await styleOf(page.locator("body"), "font-family");

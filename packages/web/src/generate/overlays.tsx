@@ -4,7 +4,6 @@
  * selected, and neither carries anything.
  */
 import { composeSelection, SKETCH_ROLE } from "@unframed/domain";
-import type { CSSProperties } from "react";
 import { useValue, useEditor, type Editor, type TLShapeId } from "tldraw";
 import { Badge } from "~/components/ui/badge";
 import { resultMetaOf } from "@unframed/contracts";
@@ -12,6 +11,7 @@ import { canvasShapes, pageBox } from "./facts.ts";
 import { mediumDefinition } from "./mediumRegistry.ts";
 import { composerState } from "./state.ts";
 import { trayView } from "./trayView.ts";
+import { labelHue } from "../chrome/hue.ts";
 
 interface Badge {
   readonly key: string;
@@ -38,10 +38,6 @@ const badgesOf = (editor: Editor): ReadonlyArray<Badge> => {
   });
 };
 
-/** A role's hue (spec 12): images and the sketch teal, video roles orange, a slot that sends nothing neutral. */
-const hueOf = (text: string): string =>
-  text.startsWith("image") ? "var(--color-teal-500)" : text.startsWith("video") || text === "first" || text === "last" ? "var(--color-orange-500)" : "var(--color-zinc-500)";
-
 /**
  * The role of every selected medium and artifact, and of the sketch, while the Generate tray
  * is open: where a bare media shape's one fact goes, above its top-left corner.
@@ -58,7 +54,7 @@ export const RoleBadges = () => {
           data-role-for={badge.key}
           style={{ transform: `translate(${badge.x}px, ${badge.y - 22}px)` }}
         >
-          <Badge variant="label" style={{ "--label": hueOf(badge.text) } as CSSProperties}>
+          <Badge variant="label" style={labelHue("blue")}>
             {badge.text}
           </Badge>
         </div>

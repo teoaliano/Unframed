@@ -1,30 +1,16 @@
 import type { ModelEntry } from "@unframed/contracts";
 import { modelPart } from "@unframed/domain";
 import { ArrowDown, ArrowUp, ArrowUpDown, Check, ExternalLink, Search } from "lucide-react";
-import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Badge } from "~/components/ui/badge";
 import { Button, InlineButton } from "~/components/ui/button";
 import { Dialog, DialogHeader, DialogPopup, DialogTitle } from "~/components/ui/dialog";
 import { InputGroup, InputGroupAddon, InputGroupInput } from "~/components/ui/input-group";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "~/components/ui/table";
+import { labelHue, type Hue } from "../../chrome/hue.ts";
 
 /** The provider token hues, in the order provider keys take them. */
-const PROVIDER_HUES = ["blue", "orange", "purple", "green", "pink", "teal", "red", "cyan", "yellow", "gray", "neutral"] as const;
-
-/** Each hue's Tailwind palette colour, the `--label` a provider token tints from. */
-const HUE_COLOR: Record<(typeof PROVIDER_HUES)[number], string> = {
-  blue: "var(--color-blue-500)",
-  orange: "var(--color-orange-500)",
-  purple: "var(--color-purple-500)",
-  green: "var(--color-green-500)",
-  pink: "var(--color-pink-500)",
-  teal: "var(--color-teal-500)",
-  red: "var(--color-red-500)",
-  cyan: "var(--color-cyan-500)",
-  yellow: "var(--color-yellow-500)",
-  gray: "var(--color-gray-500)",
-  neutral: "var(--color-neutral-500)",
-};
+const PROVIDER_HUES = ["blue", "orange", "purple", "green", "pink", "teal", "red", "cyan", "yellow", "gray", "neutral"] as const satisfies ReadonlyArray<Hue>;
 
 /** One column layout for the header table and the rows table, so their columns line up. */
 const Columns = () => (
@@ -203,7 +189,7 @@ export const ModelDialog = ({ open, onOpenChange, title, browseUrl, models, curr
                           </TableCell>
                           <TableCell>
                             {provider && (
-                              <Badge variant="label" data-hue={provider.hue} style={{ "--label": HUE_COLOR[provider.hue] } as CSSProperties}>
+                              <Badge variant="label" data-hue={provider.hue} style={labelHue(provider.hue)}>
                                 {provider.label}
                               </Badge>
                             )}

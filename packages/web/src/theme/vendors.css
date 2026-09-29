@@ -5,7 +5,7 @@
  */
 
 /*
- * Tiptap: the Generate composer's instruction box (spec 12 task 11), after t3code's
+ * Tiptap: the Generate composer's instruction box, after t3code's
  * .composer-tiptap, keyed on the box's own attribute.
  */
 [data-generate-prompt] {
@@ -27,7 +27,7 @@
   pointer-events: none;
 }
 
-/* Tiptap: the Agent tray's prompt editor (spec 12 task 17). */
+/* Tiptap: the Agent tray's prompt editor. */
 
 /* t3code's composer editor rules (its .composer-tiptap), keyed on the agent prompt's own attribute. */
 [data-agent-prompt] p {
@@ -48,21 +48,22 @@
   border-radius: 6px;
 }
 
-/* @pierre/diffs: t3code's diff colours and injected diff CSS (spec 12 task 19). */
+/* @pierre/diffs: t3code's diff colours and injected diff CSS. */
 
 /*
  * The renderer paints in a shadow root that no stylesheet reaches, so t3code's injected
- * diff CSS goes in through its unsafeCSS option (agent/diff/diffTheme.ts). The tokens it
+ * diff CSS goes in through its unsafeCSS option (theme/diffs.ts, beside this file). The tokens it
  * reads inherit into the shadow root: the --diff-* colours and --diffs-font-family in
  * theme.css, and the code surface tokens.
  */
 
-/* DialKit: its variables from the kit's dark tokens (spec 12 task 20). */
+/* DialKit: its variables from the kit's dark tokens. */
 
 /*
  * DialKit stays dark in both schemes (spec 09), so these are the values theme.css gives the
  * tokens in its dark block, written out, not var(--card) and the rest, which follow the
- * scheme. A change to that block changes these with it. The attribute outranks DialKit's
+ * scheme. Edit them with that block: artifactDials.spec.ts fails when the two differ. The
+ * attribute outranks DialKit's
  * own .dialkit-root rule, which loads after this file with the editor.
  */
 .dialkit-root[data-theme="dark"] {

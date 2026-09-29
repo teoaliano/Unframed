@@ -10,7 +10,7 @@ import { Menu, MenuPopup, MenuRadioGroup, MenuRadioItem, MenuTrigger } from "~/c
 import { Toggle } from "~/components/ui/toggle";
 import { Toggle as GroupToggle, ToggleGroup } from "~/components/ui/toggle-group";
 import { Tip } from "../../chrome/ui.tsx";
-import { DIFF_SURFACE_CSS } from "./diffTheme.ts";
+import { DIFF_SURFACE_CSS } from "../../theme/diffs.ts";
 import { messageOf } from "../send.ts";
 import type { ChatClient, RailUi } from "../store.ts";
 

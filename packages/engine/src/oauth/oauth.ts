@@ -41,7 +41,7 @@ const escapeHtml = (text: string) => text.replace(/&/g, "&amp;").replace(/</g, "
  * A complete dark page with one heading and one line. It links nowhere: the engine does not
  * know where the web is served. It is served outside the web build, so the kit's dark
  * `--background` (neutral-950) and `--foreground` (neutral-100) and its sans stack are
- * written out here (spec 12); a change to the kit's dark theme changes them with it.
+ * written out here (spec 12). Edit them with the dark block of packages/web/src/theme/theme.css.
  */
 const sendPage = (res: http.ServerResponse, status: number, heading: string, detail: string) => {
   const html = `<!doctype html>

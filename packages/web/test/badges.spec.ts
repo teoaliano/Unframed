@@ -69,11 +69,11 @@ test("badges show each selected medium's role only while the Generate tray is op
   await expect(badge(page, "shape:empty")).toHaveText("—");
   await expect(badge(page, "shape:page")).toHaveText("—");
   await expect(page.locator("[data-role-for]")).toHaveCount(4);
-  // Each is the kit's label Badge, tinted by its role: images teal, the empty slots neutral.
+  // Each is the kit's label Badge in one hue for every role, as the badges have always shared one colour.
   await expectSlot(badge(page, "shape:a").locator("[data-slot='badge']"), "badge");
-  const tint = (hue: string) => resolvedColor(page, `color-mix(in srgb, var(${hue}) 8%, transparent)`);
-  expect(await styleOf(badge(page, "shape:a").locator("[data-slot='badge']"), "background-color")).toBe(await tint("--color-teal-500"));
-  expect(await styleOf(badge(page, "shape:empty").locator("[data-slot='badge']"), "background-color")).toBe(await tint("--color-zinc-500"));
+  const tint = await resolvedColor(page, "color-mix(in srgb, var(--color-blue-500) 8%, transparent)");
+  expect(await styleOf(badge(page, "shape:a").locator("[data-slot='badge']"), "background-color")).toBe(tint);
+  expect(await styleOf(badge(page, "shape:empty").locator("[data-slot='badge']"), "background-color")).toBe(tint);
   // A badge sits above its shape's top-left corner.
   const shape = (await shapeOnScreen(page, "shape:a").boundingBox())!;
   const label = (await badge(page, "shape:a").boundingBox())!;

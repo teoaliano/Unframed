@@ -8,6 +8,7 @@ import { MessageAction } from "../../chrome/MessageAction.tsx";
 import type { ChatClient } from "../store.ts";
 import type { PromptEditorHandle } from "./PromptEditor.tsx";
 import { record } from "../record.ts";
+import { composerGlassClass } from "../../chrome/composerSurface.ts";
 
 /** The chat's open requests of a kind that its running turn waits on: a turn that ended waits on nothing. */
 export const waitingRequests = (chat: Chat, kind: "approval" | "user-input"): ChatActivity[] => {
@@ -28,7 +29,7 @@ const APPROVAL_HEADERS: Record<string, string> = {
  * what waits on the person. An approval takes its warning tint.
  */
 const BANNER =
-  "relative flex flex-col gap-1.5 rounded-2xl border bg-card/(--glass-opacity) px-3 py-2 text-xs/4 shadow-composer backdrop-blur-(--glass-blur) backdrop-saturate-(--glass-saturation) dark:bg-surface-raised/(--glass-opacity) dark:shadow-composer-dark";
+  `${composerGlassClass} relative flex flex-col gap-1.5 rounded-2xl border px-3 py-2 text-xs/4 shadow-composer dark:shadow-composer-dark`;
 const WARNING_BANNER = `${BANNER} border-warning/28 bg-linear-to-b from-warning/8 to-warning/8`;
 
 /** The banner's first line: its icon, what it is, and anything beside it. */

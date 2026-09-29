@@ -38,6 +38,7 @@ import { ContextMeter, declaredTraits, latestUsage, ModelPicker, PlanToggle, Run
 import { PromptEditor, type PromptEditorHandle, type Trigger } from "./PromptEditor.tsx";
 import { useMaybeEditor, useValue } from "tldraw";
 import { Input } from "~/components/ui/input";
+import { composerGlassClass } from "../../chrome/composerSurface.ts";
 
 export const PROMPT_LABEL = "Message the agent";
 
@@ -46,7 +47,7 @@ export const PROMPT_LABEL = "Message the agent";
  * and a hairline outline, the outline turning to the ring while files are dragged over.
  */
 const COMPOSER_SHELL =
-  "relative isolate flex flex-col gap-1.5 rounded-3xl px-3 pt-2.5 pb-2 shadow-composer dark:shadow-none bg-card/(--glass-opacity) backdrop-blur-(--glass-blur) backdrop-saturate-(--glass-saturation) dark:bg-surface-raised/(--glass-opacity) after:pointer-events-none after:absolute after:inset-0 after:rounded-[inherit] after:border after:border-border data-dragging:after:border-ring";
+  `${composerGlassClass} relative isolate flex flex-col gap-1.5 rounded-3xl px-3 pt-2.5 pb-2 shadow-composer dark:shadow-none after:pointer-events-none after:absolute after:inset-0 after:rounded-[inherit] after:border after:border-border data-dragging:after:border-ring`;
 
 export const PLACEHOLDERS = {
   approval: "Resolve this approval request to continue",

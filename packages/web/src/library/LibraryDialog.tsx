@@ -1,7 +1,7 @@
 import { UnframedError } from "@unframed/contracts";
 import { changeLibrary, legacyPresetLine, libraryRange, libraryView, type LibraryControls, type LibrarySort, type Preset } from "@unframed/domain";
 import { ChevronLeft, ChevronRight, Group, Image, LayoutGrid, List, Package, Search, SquarePlay, Trash2, Type, UserRound, Workflow, type LucideIcon } from "lucide-react";
-import { useCallback, useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { Alert } from "~/components/ui/alert";
 import {
   AlertDialog,
@@ -22,6 +22,7 @@ import { Tip } from "../chrome/ui.tsx";
 import { useEngine } from "../context.ts";
 import { showError } from "../toasts.tsx";
 import { builtInPresets } from "./systemPresets.ts";
+import { labelHue, type Hue } from "../chrome/hue.ts";
 
 const messageOf = (error: unknown) => (error instanceof UnframedError || error instanceof Error ? error.message : String(error));
 
@@ -39,14 +40,14 @@ const SORTS: ReadonlyArray<{ readonly value: LibrarySort; readonly label: string
 ];
 
 /** Each kind's chip: its label, icon and the Tailwind palette hue its label Badge tints from. */
-const CHIPS: Record<string, { readonly label: string; readonly Icon: LucideIcon; readonly hue: string }> = {
-  recipe: { label: "Recipe", Icon: Workflow, hue: "var(--color-purple-500)" },
-  group: { label: "Group", Icon: Group, hue: "var(--color-blue-500)" },
-  image: { label: "Image", Icon: Image, hue: "var(--color-teal-500)" },
-  video: { label: "Video", Icon: SquarePlay, hue: "var(--color-orange-500)" },
-  text: { label: "Text", Icon: Type, hue: "var(--color-cyan-500)" },
-  user: { label: "Custom", Icon: UserRound, hue: "var(--color-green-500)" },
-  system: { label: "System", Icon: Package, hue: "var(--color-pink-500)" },
+const CHIPS: Record<string, { readonly label: string; readonly Icon: LucideIcon; readonly hue: Hue }> = {
+  recipe: { label: "Recipe", Icon: Workflow, hue: "purple" },
+  group: { label: "Group", Icon: Group, hue: "blue" },
+  image: { label: "Image", Icon: Image, hue: "teal" },
+  video: { label: "Video", Icon: SquarePlay, hue: "orange" },
+  text: { label: "Text", Icon: Type, hue: "cyan" },
+  user: { label: "Custom", Icon: UserRound, hue: "green" },
+  system: { label: "System", Icon: Package, hue: "pink" },
 };
 
 /** What a preset is, what it makes (recipes only) and whose it is. */
@@ -55,7 +56,7 @@ const chipsOf = (preset: Preset): string[] => [preset.kind, ...(preset.kind === 
 const Chip = ({ kind }: { readonly kind: string }) => {
   const chip = CHIPS[kind]!;
   return (
-    <Badge variant="label" data-chip={kind} style={{ "--label": chip.hue } as CSSProperties}>
+    <Badge variant="label" data-chip={kind} style={labelHue(chip.hue)}>
       <chip.Icon aria-hidden />
       {chip.label}
     </Badge>

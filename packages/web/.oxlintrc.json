@@ -24,11 +24,7 @@
       {
         "allow": [
           "unframed-chrome-left",
-          "unframed-chrome-right",
-          "unframed-chrome-bottom-right",
-          // tldraw's own class names, where Unframed renders into tldraw's menus.
-          "tl-*",
-          "tlui-*"
+          "unframed-chrome-right"
         ]
       }
     ],
