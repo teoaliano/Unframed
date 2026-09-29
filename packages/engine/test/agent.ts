@@ -22,7 +22,7 @@ export interface AgentEngine {
   readonly rpc: TestRpcClient;
   readonly folder: string;
   dispatch(command: CommandInput): Promise<{ sequence: number }>;
-  /** Creates a chat (Claude, Full access, default mode unless overridden). */
+  /** Creates a chat on Claude, in the modes a new chat gets unless overridden. */
   createChat(overrides?: Partial<Extract<CommandInput, { type: "thread.create" }>>): Promise<string>;
   send(chatId: string, text: string, options?: { selection?: string[]; attachments?: Array<{ id: string; name: string }>; steer?: boolean }): Promise<{ sequence: number }>;
   watch(chatId: string): Promise<ChatWatch>;
@@ -107,8 +107,6 @@ export const startAgentEngine = async (options: EngineOptions & { script?: strin
       await dispatch({
         type: "thread.create",
         modelSelection: { provider: "claude", model: "", traits: {} },
-        runtimeMode: "full-access",
-        interactionMode: "default",
         createdAt: new Date().toISOString(),
         ...overrides,
         threadId,

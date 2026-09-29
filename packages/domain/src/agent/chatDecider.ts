@@ -15,6 +15,7 @@ import type {
   Rejection,
   RejectionCode,
 } from "./chatModel.ts";
+import { DEFAULT_RUNTIME_MODE } from "./chatModel.ts";
 import { requestActivity } from "./chatProjector.ts";
 
 export const TITLE_MAX = 60;
@@ -81,8 +82,8 @@ export const decide = (command: ChatCommand, model: ProjectChats, now: string): 
       event("thread.created", id, {
         projectId: command.projectId,
         modelSelection: command.modelSelection,
-        runtimeMode: command.runtimeMode,
-        interactionMode: command.interactionMode,
+        runtimeMode: command.runtimeMode ?? DEFAULT_RUNTIME_MODE,
+        interactionMode: command.interactionMode ?? "default",
         tags: [...new Set(command.tags ?? [])],
         createdAt: command.createdAt,
       }),

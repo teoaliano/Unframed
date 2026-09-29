@@ -185,8 +185,9 @@ export type ClientCommand = CommandBase &
     | {
         readonly type: "thread.create";
         readonly modelSelection: ModelSelection;
-        readonly runtimeMode: RuntimeMode;
-        readonly interactionMode: InteractionMode;
+        /** Full access when absent. */
+        readonly runtimeMode?: RuntimeMode;
+        readonly interactionMode?: InteractionMode;
         readonly tags?: ReadonlyArray<string>;
         readonly createdAt: string;
       }

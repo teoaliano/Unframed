@@ -125,8 +125,9 @@ export const ClientChatCommand = Schema.Union([
     type: Schema.Literal("thread.create"),
     ...Base,
     modelSelection: ModelSelection,
-    runtimeMode: RuntimeMode,
-    interactionMode: InteractionMode,
+    /** Full access when absent. */
+    runtimeMode: Schema.optionalKey(RuntimeMode),
+    interactionMode: Schema.optionalKey(InteractionMode),
     tags: Schema.optionalKey(Schema.Array(Schema.String)),
     createdAt: Schema.String,
   }),

@@ -178,7 +178,7 @@ describe("canvas_write batches", () => {
     if (!result.ok) throw new Error(result.error);
     expect(result.put.find((record) => record.id === "shape:m1")!.props).toEqual({ w: 640, h: 360, file: "intro.html", title: "Intro (red)", fileName: "" });
     expect(plainText(result.put.find((record) => record.id === "shape:p1")!.props!.richText)).toBe("new words");
-    expect(result.touched.sort()).toEqual(["shape:m1", "shape:p1"]);
+    expect([...result.touched].sort()).toEqual(["shape:m1", "shape:p1"]);
   });
 
   it("deletes a group's members with it", () => {
