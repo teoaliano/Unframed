@@ -22,7 +22,7 @@ Checked 2026-09-28: Node v24.21.0, pnpm 9.15.4 through Corepack, Google Chrome, 
 | 08 | agent chat | 7 | merged | 6c70830, fix b05f1c7 | 47/47 tasks. Fix: a tool call's completion stamped in the same millisecond as the reply started a new work stretch, so the row read "Stopped" (product bug; the timeline now lives in domain). 1514 tests, 261 browser tests green on build |
 | 09 | artifacts | 8 | merged | 949cdd3 | 62/62 tasks; after the spec 03 Escape fixes, 1635 tests and 295 browser tests green on build (40cea11) |
 | 10 | settings and OpenRouter | 7 | merged | b7a1b78, fixture fix 18312a7 | 58/58 tasks plus the oauth.cancel render rule; merged after 08 (2 conflicts resolved by the orchestrator); 1511 tests, 261 browser tests green on build |
-| 11 | legacy import | 9 | building | | |
+| 11 | legacy import | 9 | merged | c264c38 | 46/46 tasks, nothing deferred; also covers spec 03's imported-recipe Regenerate and Recipe; 1788 tests, 303 browser tests green on build |
 
 ## Decisions
 
@@ -37,7 +37,7 @@ Settled by the orchestrator from the specs (no decision needed from the person):
 ## Deferred items
 
 - Spec 03, task 36: the Agent tray part is untestable until spec 08 fills the `agentTray` slot. The spec 08 agent must cover it.
-- Spec 03: Regenerate and Recipe for imported (approximate) recipes belong to spec 11.
+- Spec 11: every sweep write prunes done and failed jobs older than 7 days, so an old finished job's clip from an imported `jobs.json` may never be placed if the sweep writes before its project is first opened.
 - Spec 07: the Claude adapter and the zero-token probe never ran against a real CLI (spec 07 makes that a manual acceptance test; tests must not spend quota). The Codex adapter is covered end to end with a fake `codex app-server`.
 - Spec 07: the bundle lists `@anthropic-ai/claude-agent-sdk` as its one runtime dependency, and a plain `npm install` of the bundle pulls the SDK's native CLI packages. Spec 07 says the packaged app ships the SDK without its native CLI, so the desktop shell's packaging must drop them.
 - Spec 07: review items left alone, the 800-line `runtime.ts` and duplicated contract and domain type definitions (a compile-time check in `layer.ts` catches drift).
