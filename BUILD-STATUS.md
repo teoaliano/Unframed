@@ -15,9 +15,9 @@ Checked 2026-09-28: Node v24.21.0, pnpm 9.15.4 through Corepack, Google Chrome, 
 | 01 | engine foundation | 1 | merged | f480398 | 54/54 tasks; 311 tests, 7 browser tests green on build |
 | 02 | canvas | 2 | merged | 901847a | 60/60 tasks; 421 tests, 83 browser tests green on build; all budgets met (see below) |
 | 03 | image generation | 3 | merged | f9649ab, fixes 5621a6a | 54/54 tasks; 626 tests, 112 browser tests green on build in 3.0 min. Task 36's Agent tray part waits for spec 08 |
-| 04 | video generation | 4 | building | | 66/66 tasks done on its branch; merging build (spec 05) into it to resolve 13 conflicts |
+| 04 | video generation | 4 | merged | ae89c78 | 66/66 tasks; merged after 05 (the agent resolved 13 conflicts, all two additions to one spot); 994 tests, 150 browser tests green on build |
 | 05 | text, multi-run and Free | 4 | merged | c1bb5a2 | 40/40 tasks; 790 tests green, 134 of 135 browser tests (the one failure is the spec 02 right-click flake, sent back to the spec 02 agent) |
-| 06 | groups, recipes and the library | 5 | pending | | |
+| 06 | groups, recipes and the library | 5 | building | | |
 | 07 | agent runtime | 6 | pending | | |
 | 08 | agent chat | 7 | pending | | merge before 10 |
 | 09 | artifacts | 8 | pending | | |
@@ -63,6 +63,7 @@ Measured by the spec agent in the hosted shape (production web served by the eng
 - Never run a bare `pkill -f workerProcessEntry`: it kills every worktree's Playwright workers. Kill by path (`<checkout>/node_modules/.pnpm/playwright.*/workerProcessEntry`) or orphans only.
 - Right-click after a Shift-click sometimes opens no context menu under load. It failed `menuActions.spec.ts` "Reveal shows the right-clicked file" after spec 02 and `contextMenu.spec.ts:86` after spec 05. Sent back to the spec 02 agent.
 - `promptPin.spec.ts` failed 3 of 3 on base sources at e3be34f in the spec 04 worktree, then passed. Sent to the spec 02 agent with the right-click flake.
+- `packages/engine/test/bundle.test.ts` timed out once at 30 s in a loaded full run in the spec 04 worktree and passed alone. Watch it.
 - `mediaResize.spec.ts` failed once under parallel load in the spec 05 worktree (a drag landed at the wrong width). Watch it.
 
 - Background sub-agents that a spec agent starts (the code-review reviewers) report to the orchestrator, not to the spec agent. The brief tells spec agents to start their sub-agents in the foreground. If one still waits, the orchestrator forwards the results with SendMessage.
