@@ -13,6 +13,7 @@ import { returnQueued, sendQueued } from "../queue.tsx";
 import { useQueue, useWatchedThread, type ChatClient } from "../store.ts";
 import { ChatMarkdown } from "./ChatMarkdown.tsx";
 import { PlanCard } from "./PlanCard.tsx";
+import { RecapCard } from "./RecapCard.tsx";
 
 export const EMPTY_CHAT = "Ask about what is on the canvas, or say what should change or be made. Whatever is selected comes with the message as context.";
 
@@ -102,7 +103,7 @@ export interface TranscriptProps {
 }
 
 /** One chat's messages, work log, recap cards and activity line (t3code's timeline). */
-export const Transcript = ({ client, chatId }: TranscriptProps) => {
+export const Transcript = ({ client, chatId, embedded, onLocate, onOpenEditor }: TranscriptProps) => {
   const chat = useWatchedThread(client, chatId);
   const editor = useMaybeEditor();
   const running = chat?.latestTurn?.state === "running";
@@ -173,6 +174,27 @@ export const Transcript = ({ client, chatId }: TranscriptProps) => {
       {message.text === "" && !message.streaming ? <p className="unframed-agent-muted">(empty response)</p> : <ChatMarkdown text={message.text} />}
     </article>
   );
+  const labelOf = (id: string) => (editor && describeShape(editor, id)?.label) ?? agentShapeId(id);
+  const newestChanged = Math.max(-1, ...chat.turns.filter((turn) => (turn.files?.length ?? 0) > 0).map((turn) => turn.turnCount));
+  const recap = (turn: ChatTurn) => (
+    <RecapCard
+      key={`recap:${turn.turnId}`}
+      editor={editor}
+      turn={turn}
+      activities={chat.activities.filter((activity) => activity.turnId === turn.turnId)}
+      running={running}
+      newest={turn.turnCount === newestChanged}
+      labelOf={labelOf}
+      onRevert={() => {
+        client.setUi({ error: undefined });
+        void client.dispatch({ type: "thread.turn.revert", threadId: chat.id, turnCount: turn.turnCount }).catch((error: unknown) => client.setUi({ error: messageOf(error) }));
+      }}
+      onDiff={(shapeId) => client.setUi({ diff: { threadId: chat.id, turnCount: turn.turnCount, ...(shapeId ? { shapeId } : {}) } })}
+      onDiffAll={() => client.setUi({ diff: { threadId: chat.id, turnCount: "all" } })}
+      onLocate={embedded ? undefined : onLocate}
+      onOpenEditor={onOpenEditor}
+    />
+  );
   const block = (item: Block) => {
     if (item.kind === "work") return <WorkEntries key={item.id} entries={item.entries} />;
     if (item.kind === "retry") return <RetryLine key={item.activity.id} payload={item.activity.payload} />;
@@ -186,7 +208,13 @@ export const Transcript = ({ client, chatId }: TranscriptProps) => {
     <div className="unframed-agent-transcript-frame">
       <div ref={scroller} className="unframed-agent-transcript" data-scrolls="true" data-testid="transcript" onScroll={onScroll}>
         {timeline.map((turn) => {
-          if (!turn.settled) return <div key={turn.key} className="unframed-agent-turn">{turn.blocks.map(block)}</div>;
+          if (!turn.settled)
+            return (
+              <div key={turn.key} className="unframed-agent-turn">
+                {turn.blocks.map(block)}
+                {turn.turn && recap(turn.turn)}
+              </div>
+            );
           // A settled turn folds its work and thinking behind "Worked for"; what was said stays.
           const users = turn.blocks.filter((item) => item.kind === "message" && item.message.role === "user");
           const folded = turn.blocks.filter((item) => item.kind === "work" || (item.kind === "message" && item.message.role === "reasoning"));
@@ -196,6 +224,7 @@ export const Transcript = ({ client, chatId }: TranscriptProps) => {
               {users.map(block)}
               {folded.length > 0 && turn.turn && <WorkedFor turn={turn.turn}>{folded.map(block)}</WorkedFor>}
               {said.map(block)}
+              {turn.turn && recap(turn.turn)}
             </div>
           );
         })}
