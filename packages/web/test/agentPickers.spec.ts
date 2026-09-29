@@ -4,7 +4,7 @@ import { join } from "node:path";
 import type { Locator, Page } from "@playwright/test";
 import type { TestEngine } from "../../engine/test/engineProcess.ts";
 import { openCanvas } from "./canvas.ts";
-import { createChat, engineChat, expect, openRail, promptBox, sendThrough, startAgentEngine, startProvidersEngine, tabs } from "./agent.ts";
+import { createChat, engineChat, expect, onlyChat, openRail, promptBox, say, sendThrough, startAgentEngine, startProvidersEngine, tabs } from "./agent.ts";
 import { test as base } from "./fixtures.ts";
 
 /** An engine whose providers are signed-in fakes, torn down with its folder. */
@@ -201,4 +201,73 @@ test("the traits picker offers only what the model declares, marks the default, 
   await expect(traits).toHaveText("High");
   await traits.click();
   await expect(popup.getByRole("radiogroup", { name: "Reasoning" }).getByRole("radio")).toHaveText(["HighDefault"]);
+});
+
+test("the runtime mode picker: four modes with what each does, Full access by default, and a change mid-turn", async ({ page }) => {
+  const agent = await startAgentEngine();
+  try {
+    await openCanvas(page, agent);
+    const panel = await openRail(page);
+    const mode = panel.getByRole("combobox", { name: "Runtime mode" });
+    await expect(mode).toHaveText("Full access");
+    await mode.hover();
+    await expect(page.getByText("Allow commands and edits without prompts.", { exact: true })).toBeVisible();
+    await mode.click();
+    const options = page.getByRole("option");
+    await expect(options).toHaveText([
+      "SupervisedAsk before commands and file changes.",
+      "Auto-accept editsAuto-approve edits, ask before other actions.",
+      "AutoSupported providers approve routine actions; others still ask.",
+      "Full accessAllow commands and edits without prompts.Default",
+    ]);
+    for (let index = 0; index < 4; index++) await expect(options.nth(index).locator("svg").first()).toBeVisible();
+    await options.filter({ hasText: "Supervised" }).click();
+    await expect(mode).toHaveText("Supervised");
+
+    // The new chat starts in Supervised, and parks on its approval.
+    await say(panel, "clean the build please");
+    const chat = await onlyChat(agent, (current) => current.latestTurn?.state === "running");
+    expect(chat.runtimeMode).toBe("approval-required");
+    await expect(tabs(page).first().getByTestId("live-dot")).toBeVisible();
+
+    // Mid-turn the mode still changes: Cmd+Shift+A from the box opens the picker.
+    await promptBox(panel).click();
+    await page.keyboard.press("ControlOrMeta+Shift+a");
+    await page.getByRole("option").filter({ hasText: "Auto-accept edits" }).click();
+    await expect(mode).toHaveText("Auto-accept edits");
+    await expect.poll(async () => (await engineChat(agent, chat.id)).runtimeMode).toBe("auto-accept-edits");
+    expect((await engineChat(agent, chat.id)).latestTurn?.state).toBe("running");
+  } finally {
+    await agent.dispose();
+  }
+});
+
+test("the plan toggle reads Plan or Build with its tooltip, Shift+Tab flips it, and the chat follows", async ({ page }) => {
+  const agent = await startAgentEngine();
+  try {
+    await openCanvas(page, agent);
+    const chatId = await createChat(agent, { title: "Planning" });
+    const panel = await openRail(page);
+    const toggle = panel.getByTestId("plan-toggle");
+    await expect(toggle).toHaveText("Build");
+    await expect(toggle).toHaveAttribute("aria-pressed", "false");
+    await toggle.hover();
+    await expect(page.getByText("Default mode. Click to enter plan mode.", { exact: true })).toBeVisible();
+    await toggle.click();
+    await expect(toggle).toHaveText("Plan");
+    await expect(toggle).toHaveAttribute("aria-pressed", "true");
+    await expect.poll(async () => (await engineChat(agent, chatId)).interactionMode).toBe("plan");
+    await page.mouse.move(5, 5);
+    await toggle.hover();
+    await expect(page.getByText("Plan mode. Click to return to normal build mode.", { exact: true })).toBeVisible();
+    await page.mouse.move(5, 5);
+    await expect(page.getByText("Plan mode. Click to return to normal build mode.", { exact: true })).toHaveCount(0);
+
+    await promptBox(panel).click();
+    await page.keyboard.press("Shift+Tab");
+    await expect(toggle).toHaveText("Build");
+    await expect.poll(async () => (await engineChat(agent, chatId)).interactionMode).toBe("default");
+  } finally {
+    await agent.dispose();
+  }
 });
