@@ -59,7 +59,7 @@ test("choosing video shows the default video model and only the props it declare
   await openCanvas(page, video.engine);
   await clickShape(page, "shape:starter-subject");
   await openComposer(page);
-  await expect(composer(page).getByRole("radio")).toHaveText(["image", "video"]);
+  await expect(composer(page).getByRole("radio")).toHaveText(["image", "video", "text"]);
   await chooseVideo(page);
   await expect(chips(page)).toHaveText(["References", "5"]);
   await tray(page).getByRole("button", { name: "+ add prop" }).click();
