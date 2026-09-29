@@ -114,14 +114,15 @@
 
 .unframed-agent-footer {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 4px;
 }
 
+/* The tools keep their width; when they and Send do not fit on one line, Send wraps to the next, on the right. */
 .unframed-agent-footer__tools {
   display: flex;
-  min-width: 0;
-  flex: 1;
+  flex-wrap: wrap;
   align-items: center;
   gap: 2px;
 }
@@ -129,6 +130,7 @@
 .unframed-agent-footer__send {
   display: flex;
   flex: none;
+  margin-left: auto;
   align-items: center;
   gap: 6px;
 }

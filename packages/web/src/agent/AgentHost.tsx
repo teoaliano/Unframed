@@ -72,7 +72,11 @@ const ToolbarAgentButton = ({ client, onOpen }: { readonly client: ChatClient; r
       Agent
     </button>
   );
-  return message === undefined ? button : <Tip label={message} side="top">{button}</Tip>;
+  return (
+    <Tip label={message} side="top" disabled={message === undefined}>
+      {button}
+    </Tip>
+  );
 };
 
 const AgentChromeButton = ({ client }: { readonly client: ChatClient }) => (
