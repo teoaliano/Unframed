@@ -10,7 +10,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "~
 import { DEMOS, ENTRIES, type Entry } from "./entries.ts";
 import { exportsOf, openInEditor, slotsOf, usagesOf, variantsOf, type Usage } from "./source.ts";
 
-const GROUPS = ["Foundations", "Kit components", "Unframed recipes"] as const;
+const GROUPS = ["Foundations", "Kit components", "Unframed recipes", "tldraw"] as const;
 
 const idFromHash = () => window.location.hash.slice(1) || ENTRIES[0]!.id;
 

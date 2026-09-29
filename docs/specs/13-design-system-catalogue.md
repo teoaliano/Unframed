@@ -25,7 +25,7 @@ A read-only catalogue page in the web dev server, in the style of a light Storyb
 
 **Where it lives.** `packages/web/design-system/`, with its own `index.html`. The web dev server (`pnpm dev`, `pnpm web`) serves it at `/design-system/`. The production build's only input is the app's `index.html`, so the published bundle and the desktop app carry none of it.
 
-**Menu.** Three groups: Foundations (Tokens), Kit components (one entry per `.tsx` file in `src/components/ui/`, found by listing the folder), and Unframed recipes (a fixed list: message action, corner card and Tip, listbox, composer surface, label hues, shape looks). The URL hash names the entry, so a link opens it. An entry with no demo reads "no demo" in the menu.
+**Menu.** Four groups: Foundations (Tokens), Kit components (one entry per `.tsx` file in `src/components/ui/`, found by listing the folder), Unframed recipes (a fixed list: message action, corner card and Tip, listbox, composer surface, label hues, shape looks), and tldraw (tldraw's UI, a small live editor mounted with the canvas's own tldraw setup, and the classes and variables `theme/tldraw.css` sets, read from that file; its context menu is tldraw's default, since Unframed's needs the engine). The URL hash names the entry, so a link opens it. An entry with no demo reads "no demo" in the menu.
 
 **Entry page.** The title, the module path (a link that opens it in the editor), and a count of the product lines and files that use it, or "Not used in the product". Then:
 
@@ -58,5 +58,4 @@ The browser seam, with the page served by the web dev server, which a test start
 
 - Editing styles, tokens or props from the page.
 - Both schemes side by side.
-- Documenting tldraw's own UI, which spec 12 themes but does not own.
 - Publishing the catalogue anywhere.

@@ -9,7 +9,7 @@ import { modulesUnder } from "./source.ts";
 export interface Entry {
   readonly id: string;
   readonly title: string;
-  readonly group: "Foundations" | "Kit components" | "Unframed recipes";
+  readonly group: "Foundations" | "Kit components" | "Unframed recipes" | "tldraw";
   /** The module the entry documents, from the package root. */
   readonly module?: string;
   readonly summary?: string;
@@ -37,6 +37,13 @@ export const ENTRIES: readonly Entry[] = [
     return { id: file, title: title(file), group: "Kit components", module };
   }),
   ...RECIPES.map((recipe): Entry => ({ ...recipe, group: "Unframed recipes" })),
+  {
+    id: "tldraw-ui",
+    title: "tldraw UI",
+    group: "tldraw",
+    module: "/src/canvas/tldrawChrome.tsx",
+    summary: "tldraw's own toolbar, style panel, zoom, quick actions and menus, as the canvas mounts them: Lucide icons, the hidden parts, the kit's tokens through theme/tldraw.css.",
+  },
 ];
 
 /** Each entry's demo, by id: a file in ./demos named after the entry. */
