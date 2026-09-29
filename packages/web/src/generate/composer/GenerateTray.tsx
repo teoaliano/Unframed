@@ -6,6 +6,7 @@ import { useEditor, useValue, type TLShapeId } from "tldraw";
 import { appliedRecipe, groupRecipeOf, setGroupRecipe } from "../../canvas/groupRecipes.ts";
 import { Tip } from "../../chrome/ui.tsx";
 import { useEngine, useSettings } from "../../context.ts";
+import { IMPORTED_RECIPE_NOTE, liveSource } from "../approximate.ts";
 import { useCatalogue, usePricing } from "../catalogue.ts";
 import { canvasShapes, resultShapes, toolbarShape } from "../facts.ts";
 import { loadLastUsed, type LastUsed } from "../lastUsed.ts";
@@ -185,9 +186,13 @@ export const GenerateTray = ({ project, recipe, onSent, onMenuOpen, handle }: Ge
 
   const resolved = useValue("recipe instruction", () => (recipe ? resolveReferences(instruction, canvasShapes(editor)) : undefined), [editor, recipe, instruction]);
   const shapes = useValue("canvas shapes", () => canvasShapes(editor), [editor]);
-  const source: RunSource = recipe
-    ? { kind: "recipe", recipe, instruction: resolved?.ok ? resolved.text.trim() : "", error: resolved?.ok === false ? resolved.error : undefined }
-    : { kind: "selection", composition, selected: editor.getSelectedShapeIds(), shapes, instruction };
+  // An imported result (spec 11) sends from its sources as they are now.
+  const live = useValue("imported recipe sources", () => (recipe?.recipe.approximate ? liveSource(editor, recipe.recipe, instruction) : undefined), [editor, recipe, instruction]);
+  const source: RunSource =
+    live ??
+    (recipe
+      ? { kind: "recipe", recipe, instruction: resolved?.ok ? resolved.text.trim() : "", error: resolved?.ok === false ? resolved.error : undefined }
+      : { kind: "selection", composition, selected: editor.getSelectedShapeIds(), shapes, instruction });
   const status = definition.status({ source, hasKey: settings?.hasKey ?? true, props: values?.props, entry });
   const estimate = values ? definition.estimate({ pricing, props: values.props, source, entry }) : undefined;
   const blocked = status.blockers.length > 0 || values === undefined;
@@ -252,9 +257,15 @@ export const GenerateTray = ({ project, recipe, onSent, onMenuOpen, handle }: Ge
           ))}
         </div>
         <span className="unframed-composer-count" data-testid="source-count" data-chip={!recipe && hint.startsWith("@") ? "group" : undefined}>
-          {recipe ? `recipe · ${recipeSources(recipe)} sources` : hint}
+          {recipe ? `recipe · ${live ? live.selected.length : recipeSources(recipe)} sources` : hint}
         </span>
       </div>
+      {live && recipe?.recipe.sentPrompt !== undefined && (
+        <div className="unframed-composer-sent" data-testid="recipe-sent">
+          <p>{IMPORTED_RECIPE_NOTE}</p>
+          <p>{recipe.recipe.sentPrompt}</p>
+        </div>
+      )}
       <div className="unframed-composer-box">
         <InstructionEditor
           initial={instruction}

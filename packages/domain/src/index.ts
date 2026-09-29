@@ -79,4 +79,4 @@ export { legacyReferencedFiles, mapProject, type Extraction, type LegacyJob, typ
 export type { LegacyDefaults } from "./legacy/recipes.ts";
 export { legacyIndexKey, legacyRecords, type RecordIds } from "./legacy/records.ts";
 export { parseDataUrl, type DataUrl } from "./legacy/media.ts";
-export { convertPreset, presetNotes, type ConvertedPreset } from "./legacy/presets.ts";
+export { convertPreset, legacyPresetLine, presetNotes, type ConvertedPreset } from "./legacy/presets.ts";

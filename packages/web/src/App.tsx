@@ -3,6 +3,7 @@ import { CanvasHost } from "./canvas/CanvasHost.tsx";
 import { TopCorners } from "./chrome/Corners.tsx";
 import { connectionMonitor } from "./connection/monitor.ts";
 import { ActivationContext, EngineContext, useActivation, useSettings } from "./context.ts";
+import { ImportGate } from "./legacy/ImportGate.tsx";
 import { LicenseKeyContext, tldrawLicenseKey } from "./license.ts";
 import { ProjectActivation, useActiveProject } from "./project/activation.ts";
 import type { EngineConnection } from "./rpc/engine.ts";
@@ -28,7 +29,11 @@ const Frame = () => {
   const project = useActiveProject(activation);
   return (
     <main className="relative h-full w-full overflow-hidden bg-canvas text-primary">
-      {project !== undefined && <CanvasHost key={project} project={project} activation={activation} />}
+      {project !== undefined && (
+        <ImportGate key={project} project={project}>
+          <CanvasHost project={project} activation={activation} />
+        </ImportGate>
+      )}
       <TopCorners />
       <SettingsHost />
     </main>

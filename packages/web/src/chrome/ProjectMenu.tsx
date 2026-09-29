@@ -3,9 +3,10 @@ import { Dialog } from "@base-ui/react/dialog";
 import { Menu } from "@base-ui/react/menu";
 import { UnframedError } from "@unframed/contracts";
 import { projectSlug } from "@unframed/domain";
-import { Check, ChevronDown, Pencil, Plus, Trash2 } from "lucide-react";
+import { Check, ChevronDown, FileText, Pencil, Plus, Trash2 } from "lucide-react";
 import { useEffect, useState, type FormEvent, type MouseEvent } from "react";
 import { useActivation, useEngine } from "../context.ts";
+import { reportState, useReportState } from "../legacy/reportState.ts";
 import { useActiveProject } from "../project/activation.ts";
 import { showError } from "../toasts.tsx";
 import { itemClass, popupClass, Tip } from "./ui.tsx";
@@ -157,6 +158,7 @@ export const ProjectMenu = () => {
   const [renaming, setRenaming] = useState<string>();
   const [deleting, setDeleting] = useState<Deleting>();
   const [busy, setBusy] = useState(false);
+  const imported = useReportState();
 
   const refresh = () =>
     engine.call("projects.list").then(
@@ -292,6 +294,14 @@ export const ProjectMenu = () => {
                   </span>
                 </Menu.Item>
               ))}
+              {imported.project === active && imported.report !== null && (
+                <Menu.Item className={itemClass} onClick={() => reportState.open()}>
+                  <span className="flex size-4 items-center justify-center">
+                    <FileText size={15} aria-hidden />
+                  </span>
+                  Import report
+                </Menu.Item>
+              )}
               <Menu.Item className={itemClass} onClick={() => setCreating(true)}>
                 <span className="flex size-4 items-center justify-center">
                   <Plus size={15} aria-hidden />

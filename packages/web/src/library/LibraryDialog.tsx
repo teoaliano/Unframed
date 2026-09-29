@@ -4,7 +4,7 @@ import { Select } from "@base-ui/react/select";
 import { Toggle } from "@base-ui/react/toggle";
 import { ToggleGroup } from "@base-ui/react/toggle-group";
 import { UnframedError } from "@unframed/contracts";
-import { changeLibrary, libraryRange, libraryView, type LibraryControls, type LibrarySort, type Preset } from "@unframed/domain";
+import { changeLibrary, legacyPresetLine, libraryRange, libraryView, type LibraryControls, type LibrarySort, type Preset } from "@unframed/domain";
 import { Check, ChevronDown, ChevronLeft, ChevronRight, Group, Image, LayoutGrid, List, Package, Search, SquarePlay, Trash2, Type, UserRound, Workflow, type LucideIcon } from "lucide-react";
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { Tip } from "../chrome/ui.tsx";
@@ -64,6 +64,14 @@ const Chips = ({ preset }: { readonly preset: Preset }) => (
   </span>
 );
 
+/** Under a converted old preset's summary (spec 11): where it came from and what it lost. */
+const LegacyLine = ({ preset }: { readonly preset: Preset }) =>
+  preset.legacy ? (
+    <span className="text-[12px] text-secondary" data-testid="preset-legacy">
+      {legacyPresetLine(preset.notes ?? [])}
+    </span>
+  ) : null;
+
 const smallButton = "inline-flex h-7 cursor-pointer items-center gap-1 rounded-element border border-line bg-transparent px-2.5 text-[12.5px] text-primary hover:bg-hover";
 const iconButton = "flex size-7 cursor-pointer items-center justify-center rounded-inner border-0 bg-transparent p-0 text-icon-secondary hover:bg-hover hover:text-icon";
 const toggleClass = "h-7 cursor-pointer rounded-inner border-0 bg-transparent px-2 text-[12.5px] text-secondary hover:text-primary data-[pressed]:bg-surface data-[pressed]:text-primary data-[pressed]:shadow-chrome";
@@ -90,6 +98,7 @@ const Card = ({ preset, onAdd, onDelete }: ItemProps) => (
         {preset.name}
       </span>
       {preset.summary !== "" && <span className="text-[12.5px] text-primary">{preset.summary}</span>}
+      <LegacyLine preset={preset} />
       {preset.needs !== undefined && <span className="text-[12px] text-secondary" data-testid="preset-needs">{preset.needs}</span>}
       <Chips preset={preset} />
     </div>
@@ -120,6 +129,7 @@ const Row = ({ preset, onAdd, onDelete }: ItemProps) => (
           {preset.summary}
         </span>
       )}
+      <LegacyLine preset={preset} />
     </div>
     <button type="button" className={smallButton} onClick={() => onAdd(preset)}>
       Add

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { convertPreset, describePresetContent, type ContentShape } from "../../src/index.ts";
+import { convertPreset, describePresetContent, legacyPresetLine, presetFiles, resolvePresetFiles, type ContentShape } from "../../src/index.ts";
 import { DEFAULTS } from "./facts.ts";
 import { edge, group, image, prompt, type Json } from "./journal.ts";
 import { at, PNG_64x40 } from "./mapping.ts";
@@ -199,6 +199,29 @@ describe("convertPreset: media", () => {
   it("reads an inline image's aspect from its bytes when the node has none", () => {
     const { member } = contentOf(convert(oldPreset([image("i", { width: 240, data: { fileName: "s.png", dataUrl: PNG_64x40 } })])));
     expect(member("i")!.props).toMatchObject({ w: 240, h: 150 });
+  });
+});
+
+describe("inserting a converted preset", () => {
+  it("copies its inline bytes and its target-project files in, and no data URL reaches the canvas", () => {
+    const content = convert(sample("user-mf1x9k4b"))!.preset.content;
+    const files = presetFiles(content);
+    expect(files).toEqual([{ dataUrl: expect.stringMatching(/^data:image\/png;base64,/) }]);
+    const resolved = resolvePresetFiles(content, [{ file: "9-upload.png" }], () => "asset:new");
+    expect(resolved.missing).toBe(0);
+    expect(resolved.content.assets.map((asset) => asset.props.src)).toEqual(["project-file:9-upload.png", "https://media.example.com/clips/fox-trot.mp4"]);
+    const hiker = convert(sample("user-mf0a3z7d"))!.preset.content;
+    expect(presetFiles(hiker)).toEqual([{ project: "", file: "1789030920022-hiker.png" }]);
+    const gone = resolvePresetFiles(hiker, [{ missing: true }], () => "asset:new");
+    expect(gone.missing).toBe(1);
+    expect(gone.content.assets).toEqual([]);
+  });
+
+  it("shows a line saying it is from the old app and what was not kept", () => {
+    expect(legacyPresetLine([])).toBe("From the old app.");
+    expect(legacyPresetLine(["Its old results were not kept.", "The text step @planner lost its model. Run it with the composer."])).toBe(
+      "From the old app. Not kept: Its old results were not kept. The text step @planner lost its model. Run it with the composer.",
+    );
   });
 });
 

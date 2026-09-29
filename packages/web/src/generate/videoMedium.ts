@@ -118,7 +118,7 @@ export const videoStartRequest = async (input: {
   };
 };
 
-const entryFor = (model: string | undefined) => knownCatalogue("video")?.models.find((entry) => entry.id === model);
+export const entryFor = (model: string | undefined) => knownCatalogue("video")?.models.find((entry) => entry.id === model);
 
 const send = async ({ editor, engine, project, values, source, remember }: SendInput) => {
   const anchor =
@@ -150,14 +150,14 @@ const send = async ({ editor, engine, project, values, source, remember }: SendI
 };
 
 /** The tray's props from a recipe: its recorded params, the duration as the tray names it. */
-const fromRecipe = (recipe: ResultRecipe): TrayProps => {
+export const fromRecipe = (recipe: ResultRecipe): TrayProps => {
   const props: Record<string, PropValue> = { ...recipe.params };
   if (typeof props.duration === "number") props.duration = String(props.duration);
   return props;
 };
 
 /** A recipe's recorded params as a request sends them: exactly as recorded, whatever the catalogue says now. */
-const recordedSettings = (params: ResultRecipe["params"]): VideoSettings => ({
+export const recordedSettings = (params: ResultRecipe["params"]): VideoSettings => ({
   ...(typeof params.duration === "number" ? { duration: params.duration } : {}),
   ...(typeof params.resolution === "string" ? { resolution: params.resolution } : {}),
   ...(typeof params.aspect_ratio === "string" ? { aspect_ratio: params.aspect_ratio } : {}),

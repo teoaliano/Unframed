@@ -31,6 +31,9 @@ export const presetNotes = {
   artifacts: "Pages and motions are not kept in a preset.",
 };
 
+/** The line the Library shows under a converted preset's summary. */
+export const legacyPresetLine = (notes: ReadonlyArray<string>): string => (notes.length === 0 ? "From the old app." : `From the old app. Not kept: ${notes.join(" ")}`);
+
 const MEDIA_WIDTH = 240;
 const SIDE_MARGIN = 28;
 const TOP_MARGIN = 56;

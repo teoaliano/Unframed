@@ -6,6 +6,7 @@ import type { RecipeRef, ResultRecipe } from "@unframed/contracts";
 import { joinPromptParts, modelParams } from "@unframed/domain";
 import type { Editor, TLShapeId } from "tldraw";
 import type { EngineConnection } from "../rpc/engine.ts";
+import { repeatApproximate } from "./approximate.ts";
 import { knownCatalogue } from "./catalogue.ts";
 import { mediaSource, pageBox } from "./facts.ts";
 import { imageParams } from "./imageMedium.ts";
@@ -34,6 +35,8 @@ export const repeatResult = async (
   recipe?: ResultRecipe,
 ): Promise<void> => {
   const recorded = recipe ?? (await engine.call("recipe.read", { project, shapeId }));
+  // Spec 11: an imported result recorded no references, so it runs from its sources as they are now.
+  if (recorded.approximate) return repeatApproximate(editor, engine, project, shapeId, action, recorded);
   if (recorded.medium === "video") return repeatVideo(editor, engine, project, shapeId, action, recorded);
   if (recorded.medium === "text") {
     // A text result (spec 05) has no Vary: Regenerate repeats its run through the text medium.
