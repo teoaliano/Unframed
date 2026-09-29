@@ -188,7 +188,7 @@ Decided from the selection by a pure function in the web (tested at the domain s
 | exactly one result (spec terms: a shape with a recipe) | Regenerate (primary), Vary, Recipe (ghost), separator, Agent; the result's line shows under it |
 | exactly one result still generating | the hint `Generating…`, separator, Agent |
 | exactly one page or motion with a file | Open, separator, Agent (spec 09 connects Open to its editor) |
-| usable | Generate (primary), hint, separator, Agent |
+| usable | hint, separator, Agent, Generate (primary, last) |
 | not usable | Agent only |
 
 The hint is `@<name>` when the selection is exactly one group, otherwise `N selected` where N counts the selected shapes as tldraw counts them (a group is one). When the selection is exactly the members of one batch (spec 05), the hint is `4 images · $0.6720`. Vary is hidden for a text result (spec 05). Regenerate and Vary are disabled while that result's own run marker is set.

@@ -375,13 +375,13 @@ const Bar = ({ state, onGenerate, agent }: { state: Exclude<ToolbarState, { kind
     case "generate":
       return (
         <div className={barClass}>
-          <Button size="sm" onClick={onGenerate}>
-            Generate
-          </Button>
           <span className={hintClass} data-testid="selection-hint">
             {state.hint}
           </span>
           {agent}
+          <Button size="sm" onClick={onGenerate}>
+            Generate
+          </Button>
         </div>
       );
     case "agent":
