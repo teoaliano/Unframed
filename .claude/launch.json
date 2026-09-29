@@ -1,0 +1,18 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "unframed-dev",
+      "runtimeExecutable": "/usr/bin/env",
+      "runtimeArgs": [
+        "PORT=8918",
+        "UNFRAMED_CLIENT_PORT=5304",
+        "/Users/matteoaliano/.local/share/vite-plus/bin/pnpm",
+        "--dir",
+        "/Users/matteoaliano/code/unframed-next",
+        "dev"
+      ],
+      "port": 5304
+    }
+  ]
+}
