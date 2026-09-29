@@ -9,6 +9,7 @@ import { noProviderReady } from "../providers.ts";
 import { ConfirmDialog } from "../ConfirmDialog.tsx";
 import { messageOf } from "../send.ts";
 import { useFocusMark } from "./focusMark.ts";
+import { DiffPanel } from "../diff/DiffPanel.tsx";
 import { NEW_CHAT, useChatClient, useChats, useProviders, useRailUi, useWatchedThread } from "../store.ts";
 import { EMPTY_CHAT, Transcript } from "../transcript/Transcript.tsx";
 import { NoProvider } from "./NoProvider.tsx";
@@ -192,6 +193,7 @@ export const AgentRail = ({ project, embedded, filterTo, onLocate, onOpenEditor,
           },
         ]}
       />
+      {ui.diff && activeChat && ui.diff.threadId === activeChat.id && <DiffPanel key={activeChat.id} client={client} chat={activeChat} diff={ui.diff} />}
       <div className="unframed-agent-rail__composer">
         <AgentTray client={client} variant="rail" chatId={active} newChatTags={selectedArtifacts} dropTarget={root} />
       </div>

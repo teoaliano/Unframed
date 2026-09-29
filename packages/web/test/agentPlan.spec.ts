@@ -74,3 +74,12 @@ test("Implement in a new chat opens a chat titled after the plan and sends the p
   expect((await engineChat(agent, fresh.id)).interactionMode).toBe("default");
   expect((await engineChat(agent, chatId)).proposedPlans[0]?.implementationThreadId).toBe(fresh.id);
 });
+
+test("Refine sends the draft as feedback and the chat stays in plan mode", async ({ page, agent }) => {
+  const { panel, chatId } = await planned(page, agent);
+  await promptBox(panel).click();
+  await promptBox(panel).pressSequentially("shorter please");
+  await panel.getByRole("button", { name: "Refine" }).click();
+  await expect.poll(() => userTexts(agent, chatId)).toEqual(["plan the landing page", "shorter please"]);
+  expect((await engineChat(agent, chatId)).interactionMode).toBe("plan");
+});
