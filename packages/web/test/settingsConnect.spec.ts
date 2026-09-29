@@ -140,13 +140,15 @@ test("the poll gives up after ten minutes", async ({ page }) => {
   const { engine, oauth } = await startSettingsEngine({ key: false });
   try {
     holdExchanges(oauth);
-    await page.clock.install();
     await openApp(page, engine);
     const dialog = settingsDialog(page);
+    const popup = page.waitForEvent("popup");
     await dialog.getByRole("button", { name: "Connect OpenRouter" }).click();
     await expect(dialog.getByTestId("settings-waiting")).toBeVisible();
-    await page.clock.fastForward("10:02");
-    await page.clock.runFor(3000);
+    // The clock is set for every page of the context, and the tab is still loading the held callback.
+    await (await popup).close();
+    // Timers keep their pace; only the wall clock the poll reads jumps past ten minutes.
+    await page.clock.setFixedTime(Date.now() + 10 * 60_000 + 5_000);
     await expect(dialog.getByRole("alert")).toHaveText("Nothing came back from OpenRouter. Try connecting again.");
     await expect(dialog.getByTestId("settings-waiting")).toHaveCount(0);
   } finally {
