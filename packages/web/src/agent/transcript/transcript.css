@@ -39,6 +39,18 @@
   margin-top: 4px;
 }
 
+.unframed-agent-message__actions {
+  display: flex;
+  margin-top: 2px;
+  opacity: 0;
+  transition: opacity 120ms ease-out;
+}
+
+.unframed-agent-message:hover .unframed-agent-message__actions,
+.unframed-agent-message__actions:focus-within {
+  opacity: 1;
+}
+
 .unframed-agent-message__context {
   text-transform: none;
   letter-spacing: normal;

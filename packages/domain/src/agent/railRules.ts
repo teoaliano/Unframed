@@ -161,3 +161,11 @@ export const recapRows = (
 };
 
 const kindOfCreate = (op: Record<string, unknown>): string | undefined => (typeof op.kind === "string" ? op.kind : undefined);
+
+/** What a revert that left shapes alone says, naming each and who changed it since. */
+export const revertSkipLine = (skipped: ReadonlyArray<{ readonly label: string; readonly by: "person" | "another chat" | "a later turn" }>, restored: number): string | undefined => {
+  if (skipped.length === 0) return undefined;
+  if (restored === 0) return "Nothing to revert: everything this turn changed has changed since.";
+  const names = skipped.map((shape) => `${shape.label} (by ${shape.by === "person" ? "the person" : shape.by})`).join(", ");
+  return `Left ${skipped.length} shape${skipped.length === 1 ? "" : "s"} alone because they changed since: ${names}.`;
+};

@@ -777,7 +777,25 @@ export class AgentRuntime {
     const chat = agent.engine.chat(chatId);
     if (!chat) return;
     try {
-      if (rewind.restoreCanvas) for (const turn of rewind.revertTurns) await this.revertOne(agent, chatId, turn);
+      if (rewind.restoreCanvas) {
+        const restored: string[] = [];
+        const skipped: Array<{ id: string; by: SkippedBy }> = [];
+        for (const turn of rewind.revertTurns) {
+          const outcome = await this.revertOne(agent, chatId, turn);
+          restored.push(...outcome.restored);
+          skipped.push(...outcome.skipped);
+        }
+        // Chat-wide, so it outlives the dropped turns: the rail says which shapes were left alone (spec 08).
+        await this.activity(agent, chatId, {
+          id: `checkpoint-reverted:${randomUUID()}`,
+          tone: "info",
+          kind: "checkpoint.reverted",
+          summary: "Rewound the canvas",
+          payload: { turnCount: rewind.keep, restored, skipped },
+          turnId: null,
+          createdAt: new Date().toISOString(),
+        });
+      }
     } catch (error) {
       logError(`chat ${chatId}: could not restore the canvas: ${errorText(error)}`);
     }
