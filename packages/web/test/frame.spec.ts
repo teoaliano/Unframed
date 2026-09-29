@@ -1,12 +1,12 @@
 import { expect, isSettingsChunk, test, watchRpcSockets } from "./fixtures.ts";
 
 /**
- * t3code's default theme as the browser resolves it (spec 12): the background is zinc-25
- * in light and neutral-950 in dark; the secondary text is the muted foreground, zinc-500
- * in light and neutral-500 mixed 90 % with white in dark.
+ * The shell's colour hooks keep the formats it has always read, a hex secondary text colour
+ * and an rgb() body, now from t3code's tokens (spec 12): the muted foreground (zinc-500 in
+ * light, neutral-500 mixed 90 % with white in dark) and the background (zinc-25, neutral-950).
  */
-const LIGHT = { background: "oklch(0.992 0 0)", secondary: "oklch(0.552 0.016 285.938)" };
-const DARK = { background: "oklch(0.145 0 none)", secondary: "color(srgb 0.506311 0.50639 0.506398)" };
+const LIGHT = { background: "rgb(252, 252, 252)", secondary: "#71717b" };
+const DARK = { background: "rgb(10, 10, 10)", secondary: "#818181" };
 
 const readHooks = () => ({
   theme: document.documentElement.getAttribute("data-unframed-theme"),

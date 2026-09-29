@@ -20,6 +20,20 @@ export const resolvedColor = (page: Page, expression: string): Promise<string> =
 /** The colour a token such as `--primary` resolves to in the scheme on screen. */
 export const tokenColor = (page: Page, token: string): Promise<string> => resolvedColor(page, `var(${token})`);
 
+/** A token's colour as `rgb(r, g, b)`, drawn through a canvas: what an sRGB colour set from it computes to. */
+export const tokenRgb = (page: Page, token: string): Promise<string> =>
+  page.evaluate((name) => {
+    const probe = document.createElement("span");
+    probe.style.color = `var(${name})`;
+    document.body.append(probe);
+    const context = new OffscreenCanvas(1, 1).getContext("2d")!;
+    context.fillStyle = getComputedStyle(probe).color;
+    probe.remove();
+    context.fillRect(0, 0, 1, 1);
+    const [r, g, b] = context.getImageData(0, 0, 1, 1).data;
+    return `rgb(${r}, ${g}, ${b})`;
+  }, token);
+
 /** One computed style property of the element. */
 export const styleOf = (locator: Locator, property: string): Promise<string> =>
   locator.evaluate((element, name) => getComputedStyle(element).getPropertyValue(name), property);

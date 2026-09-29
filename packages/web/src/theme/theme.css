@@ -464,16 +464,6 @@
   );
 }
 
-/*
- * Unframed: spec 01's shell hook. A registered colour, so getComputedStyle answers the
- * resolved muted foreground of the current scheme rather than a var() or color-mix().
- */
-@property --unframed-text-secondary {
-  syntax: "<color>";
-  inherits: true;
-  initial-value: transparent;
-}
-
 /* Unframed-only tokens (spec 12): canvas values t3code has no token for, built from its tokens. */
 :root {
   --canvas-dot: color-mix(in srgb, var(--foreground) 16%, var(--background));
@@ -482,6 +472,8 @@
   --group-fill: color-mix(in srgb, var(--primary) 4%, var(--background));
   /* A filled page's frame is white in both schemes (spec 09). */
   --artifact-page: var(--color-white);
+  /* Unframed: bottom-left toasts sit above tldraw's zoom controls (spec 02). */
+  --toast-footer-offset: 2rem;
 
   @variant dark {
     --canvas-dot: color-mix(in srgb, var(--foreground) 22%, var(--background));
@@ -492,12 +484,6 @@
   --color-canvas-dot: var(--canvas-dot);
   --color-group-fill: var(--group-fill);
   --color-artifact-page: var(--artifact-page);
-}
-
-:root {
-  --unframed-text-secondary: var(--muted-foreground);
-  /* Unframed: bottom-left toasts sit above tldraw's zoom controls (spec 02). */
-  --toast-footer-offset: 2rem;
 }
 
 body {

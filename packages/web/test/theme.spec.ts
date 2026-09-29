@@ -1,7 +1,7 @@
 import type { Page } from "@playwright/test";
 import { openCanvas } from "./canvas.ts";
 import { expect, test } from "./fixtures.ts";
-import { resolvedColor, tokenColor } from "./kit.ts";
+import { resolvedColor, tokenColor, tokenRgb } from "./kit.ts";
 import { groupRecord, putRecords } from "./media.ts";
 
 const looks = (page: Page) =>
@@ -17,9 +17,12 @@ const looks = (page: Page) =>
     };
   });
 
-/** What spec 12 says each surface is: the body and grid on --background, the corner card in glass over it. */
+/**
+ * What spec 12 says each surface is: the body and grid on --background (the body in sRGB,
+ * the format the shell reads), the corner card in glass over it.
+ */
 const expected = async (page: Page, theme: "light" | "dark") => ({
-  body: await tokenColor(page, "--background"),
+  body: await tokenRgb(page, "--background"),
   grid: await tokenColor(page, "--background"),
   card: await resolvedColor(page, "color-mix(in srgb, var(--background) var(--glass-opacity), transparent)"),
   group: expect.any(String),
