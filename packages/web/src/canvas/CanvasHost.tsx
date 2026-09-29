@@ -64,6 +64,9 @@ const COMPONENTS: TLComponents = {
   DebugMenu: null,
   DebugPanel: null,
   SharePanel: null,
+  // One toolbar per selection: Unframed's selection toolbar, never tldraw's media bars beside it.
+  ImageToolbar: null,
+  VideoToolbar: null,
   InFrontOfTheCanvas: InFront,
   OnTheCanvas: RoleBadges,
   Background: DotGrid,

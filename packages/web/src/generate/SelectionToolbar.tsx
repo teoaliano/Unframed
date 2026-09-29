@@ -106,7 +106,14 @@ const Floating = ({ target, hidden, expanded, framed, children }: { target: Scre
   useLayoutEffect(() => {
     const element = content.current;
     if (!element) return;
-    const measure = () => setSize((previous) => (previous?.w === element.offsetWidth && previous.h === element.offsetHeight ? previous : { w: element.offsetWidth, h: element.offsetHeight }));
+    const measure = () => {
+      // The floating element's own border sits outside its content, else it clips the content's far edges.
+      const outer = root.current;
+      const border = outer ? outer.offsetWidth - outer.clientWidth : 0;
+      const w = element.offsetWidth + border;
+      const h = element.offsetHeight + border;
+      setSize((previous) => (previous?.w === w && previous.h === h ? previous : { w, h }));
+    };
     measure();
     const observer = new ResizeObserver(measure);
     observer.observe(element);

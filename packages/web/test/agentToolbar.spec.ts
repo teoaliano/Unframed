@@ -2,9 +2,9 @@ import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Page } from "@playwright/test";
-import { emptyCanvasPoint, openCanvas } from "./canvas.ts";
+import { emptyCanvasPoint, openCanvas, shapeOnScreen } from "./canvas.ts";
 import { clickShape, composer, toolbar } from "./generation.ts";
-import { putRecords } from "./media.ts";
+import { emptyMedia, putRecords } from "./media.ts";
 import { artifactColumn, createChat, engineChat, engineChats, expect, promptBox, rail, startDetectingEngine, test, userTexts } from "./agent.ts";
 import type { TestEngine } from "../../engine/test/engineProcess.ts";
 import { expectSlot, expectToken, inBothSchemes } from "./kit.ts";
@@ -38,6 +38,14 @@ test("an empty page's bar is Agent alone, with no separator before it; its tray 
   await clickShape(page, "shape:empty");
   await expect(toolbar(page).getByRole("button")).toHaveText(["Agent"]);
   await expect(toolbar(page).locator("[data-slot='separator']")).toBeHidden();
+  // The same gap on every side of the button, inside the bar's border.
+  const insets = await toolbar(page).evaluate((bar) => {
+    const outer = bar.getBoundingClientRect();
+    const inner = bar.querySelector("button")!.getBoundingClientRect();
+    const border = parseFloat(getComputedStyle(bar).borderTopWidth);
+    return [inner.top - outer.top, outer.right - inner.right, outer.bottom - inner.bottom, inner.left - outer.left].map((gap) => Math.round(gap - border));
+  });
+  expect(new Set(insets).size).toBe(1);
   await toolbar(page).getByRole("button", { name: "Agent" }).click();
   await expect(promptBox(composer(page))).toBeVisible();
   // The tray draws its own shell; the floating element around it draws none.
@@ -171,5 +179,19 @@ test("with no provider ready, the toolbar's Agent tooltip is the provider's mess
     await expect(toolbar(page).getByRole("button", { name: "Agent" })).toHaveAttribute("title", "Claude is not installed or not on PATH.", { timeout: 15_000 });
   } finally {
     await engine.dispose();
+  }
+});
+
+test("a selected image or video shows one toolbar, Unframed's, and none of tldraw's media bars", async ({ page, agent }) => {
+  await openCanvas(page, agent);
+  await putRecords(agent, [emptyMedia("shape:still", "image", "180", { x: -300, y: 300 }), emptyMedia("shape:clip", "video", "181", { x: 100, y: 300 })]);
+  for (const id of ["shape:still", "shape:clip"]) {
+    // The card's centre holds Choose file; its corner selects it.
+    const box = (await shapeOnScreen(page, id).boundingBox())!;
+    await page.mouse.click(box.x + 12, box.y + 12);
+    await expect(toolbar(page)).toBeVisible();
+    await page.waitForTimeout(300);
+    await expect(page.locator(".tlui-contextual-toolbar")).toHaveCount(0);
+    await expect(page.getByRole("button", { name: /Replace media|Alternative text|Alt text/i })).toHaveCount(0);
   }
 });
