@@ -584,6 +584,7 @@ Turn = { text: string,
          tasks?: [{title, status}],        // sub-agents started and finished during the turn
          rateLimit?: {status, resetsAt?},  // a usage-limit notice; resetsAt an ISO 8601 time
          plan?: string,                    // captured as a proposed plan (plan mode)
+         usage?: {usedTokens, maxTokens?, totalProcessedTokens?},  // token usage as the turn ends (spec 08's meter)
          title?: string, isError?: boolean, errorSubtype?: string,
          expectPreamble?: "<regex>", refusedText?: string }
 ```
@@ -591,7 +592,7 @@ Turn = { text: string,
 - `when` is matched case-insensitively against a chat's first message. The chosen script sticks to that chat for its whole life. Fallbacks: a script with no `when`, then the only script when just one was loaded. With several and no match the turn fails with `no agent script matches "<first 60 characters>"`.
 - Turn N answers the chat's Nth message; past the end the turn fails with `agent script <name> has <n> turn(s); the chat is on turn <m>`.
 - `expectPreamble` must match the preamble the turn was given, or the turn fails with `agent script <name> turn <n>: preamble did not match /<re>/: it was "<preamble>"`.
-- Order within a turn: on turn 1, the canvas tools check and the session event; then retries and the rate-limit notice; then sub-agent tasks; then the question, if any, waiting for the answer; then each `provider` call goes through the real permission decision for the chat's mode (asking the person when the mode says so, and waiting); a decline stops the rest of the turn and the answer is `refusedText`; then each `tools` call runs the real handler; then the text streams as one delta and the turn settles.
+- Order within a turn: on turn 1, the canvas tools check and the session event; then retries and the rate-limit notice; then sub-agent tasks; then the question, if any, waiting for the answer; then each `provider` call goes through the real permission decision for the chat's mode (asking the person when the mode says so, and waiting); a decline stops the rest of the turn and the answer is `refusedText`; then each `tools` call runs the real handler; then `usage`, when given, is reported as `thread.token-usage.updated`; then the text streams as one delta and the turn settles.
 - `title` is used as the chat's name on turn 1 instead of asking a model; empty means no name.
 - A script file that is not an object, has no turns, or has a turn without a `text` string fails to load with `agent script <name>: <reason>`.
 - For tests, the scripted agent writes each session's MCP endpoint and token to `<data folder>/scripted-agent/<chatId>.json`, and each provider rollback it is asked for (in turns) as a line of `<data folder>/scripted-agent/<chatId>.rollbacks`. Both exist only under the test variable.
