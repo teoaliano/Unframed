@@ -34,8 +34,8 @@ export const RENDER_WIDTH = 320;
 
 const asVideo = (params: unknown) => params as VideoParams;
 
-/** The prompt and circular-reference error a run would send, from the selection or a recipe. */
-const textOf = (source: RunSource, prompt: string) => ({ prompt, error: source.kind === "selection" ? source.composition.error : source.error });
+/** The circular reference that stops a run, from the selection or the recipe mode's instruction. */
+const errorOf = (source: RunSource) => (source.kind === "selection" ? source.composition.error : source.error);
 
 /** The placeholder's height at its width: from the chosen ratio or exact size, else 16:9. */
 export const renderHeight = (settings: VideoSettings): number => {
@@ -76,6 +76,8 @@ export const videoStartRequest = async (input: {
   readonly entry: ModelEntry | undefined;
   readonly anchor: { x: number; y: number; w: number; h: number };
   readonly of?: ResultRecipe["of"] | undefined;
+  /** Sent as they are, in place of the tray's values checked against the model (Regenerate and Vary). */
+  readonly settings?: VideoSettings | undefined;
 }): Promise<Payload<"video.start">> => {
   const { editor, project, props, source, entry } = input;
   const arranged = videoPlan(source, props, entry);
@@ -85,31 +87,24 @@ export const videoStartRequest = async (input: {
       : arranged.sent.map((slot) => source.recipe.recipe.references[recipeSlotIndex(slot.shapeId)]!);
   const bySlot = new Map<Slot, RecipeRef>(arranged.sent.map((slot, index) => [slot, sentRefs[index]!]));
   const plan = videoPlan(source, props, entry, (slot) => urlOfRef(bySlot.get(slot)!));
-  const { prompt, input_references, frame_images, ...settings } = plan.request;
+  const { prompt, input_references, frame_images, ...checked } = plan.request;
+  const settings = input.settings ?? checked;
   const consent = shareConsent(props.shareLocalVideos);
   const model = input.model ?? knownCatalogue("video")?.default ?? "";
-  const recipe: ResultRecipe =
+  const text =
     source.kind === "selection"
-      ? {
-          medium: "video",
-          model,
-          params: recipeParams(plan.mode, settings, consent),
-          selectionPrompt: source.composition.promptParts.join("\n\n"),
-          instruction: source.composition.instruction,
-          references: sentRefs,
-          sources: [...source.composition.sources],
-          ...(input.of === undefined ? {} : { of: input.of }),
-        }
-      : {
-          medium: "video",
-          model,
-          params: recipeParams(plan.mode, settings, consent),
-          selectionPrompt: source.recipe.recipe.selectionPrompt,
-          instruction: source.instruction,
-          references: sentRefs,
-          sources: [...source.recipe.recipe.sources],
-          ...(input.of === undefined ? {} : { of: input.of }),
-        };
+      ? { selectionPrompt: source.composition.promptParts.join("\n\n"), instruction: source.composition.instruction, sources: source.composition.sources }
+      : { selectionPrompt: source.recipe.recipe.selectionPrompt, instruction: source.instruction, sources: source.recipe.recipe.sources };
+  const recipe: ResultRecipe = {
+    medium: "video",
+    model,
+    params: recipeParams(plan.mode, settings, consent),
+    selectionPrompt: text.selectionPrompt,
+    instruction: text.instruction,
+    references: sentRefs,
+    sources: [...text.sources],
+    ...(input.of === undefined ? {} : { of: input.of }),
+  };
   return {
     project,
     prompt,
@@ -158,10 +153,19 @@ const fromRecipe = (recipe: ResultRecipe): TrayProps => {
   return props;
 };
 
+/** A recipe's recorded params as a request sends them: exactly as recorded, whatever the catalogue says now. */
+const recordedSettings = (params: ResultRecipe["params"]): VideoSettings => ({
+  ...(typeof params.duration === "number" ? { duration: params.duration } : {}),
+  ...(typeof params.resolution === "string" ? { resolution: params.resolution } : {}),
+  ...(typeof params.aspect_ratio === "string" ? { aspect_ratio: params.aspect_ratio } : {}),
+  ...(typeof params.size === "string" ? { size: params.size } : {}),
+  ...(typeof params.generate_audio === "boolean" ? { generate_audio: params.generate_audio } : {}),
+});
+
 /**
- * Regenerate and Vary on a video result: the recorded recipe through `video.start`, beside
- * the result. Vary adds the result's own clip as the last video reference; the one video
- * rule then decides whether it is sent, so in a frame mode it is not.
+ * Regenerate and Vary on a video result: the recorded recipe exactly, through `video.start`,
+ * beside the result. Vary adds the result's own clip as the last video reference; the one
+ * video rule then decides whether it is sent, so in a frame mode it is not.
  */
 export const repeatVideo = async (
   editor: Editor,
@@ -184,6 +188,7 @@ export const repeatVideo = async (
     source: { kind: "recipe", recipe: { shapeId, recipe, selection: [] }, instruction: recorded.instruction },
     entry: entryFor(recorded.model),
     anchor: pageBox(editor, shapeId) ?? { x: 0, y: 0, w: 0, h: 0 },
+    settings: recordedSettings(recorded.params),
     ...(typeof sidecar === "string" ? { of: { sidecar, action } } : {}),
   });
   await engine.call("video.start", request);
@@ -208,7 +213,7 @@ export const videoMedium: MediumDefinition = {
   },
   status: ({ source, hasKey, props = {}, entry }) => {
     const plan = videoPlan(source, props, entry);
-    const { error } = textOf(source, plan.request.prompt);
+    const error = errorOf(source);
     const blockers: string[] = [];
     if (error !== undefined) blockers.push(error);
     else if (plan.request.prompt.trim() === "") blockers.push(NOTHING_TO_MAKE);
