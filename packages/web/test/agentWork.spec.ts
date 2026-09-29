@@ -75,3 +75,47 @@ test("a running call reads Running, a declined one Declined, and a stopped turn 
     await agent.dispose();
   }
 });
+
+test("sub-agents fold into one row per spawn that opens to each one's state and duration", async ({ page }) => {
+  const agent = await startAgentEngine({ script: FIXTURES });
+  try {
+    await openCanvas(page, agent);
+    const panel = await openRail(page);
+    await say(panel, "research these in parallel");
+    await expect(panel.locator("[data-role='assistant']")).toContainText("Two of the three helpers finished.");
+    await panel.getByTestId("worked-for").getByRole("button").first().click();
+    const spawn = panel.getByTestId("subagents");
+    await expect(spawn.locator(".unframed-agent-work-group__head")).toHaveText("Kicked off 3 subagents1 failed");
+    await spawn.locator(".unframed-agent-work-group__head").click();
+    const rows = spawn.locator("li");
+    await expect(rows).toHaveCount(3);
+    await expect(rows.nth(0)).toHaveText(/^Read the briefcompleted · \d+(\.\d)?s$/);
+    await expect(rows.nth(1)).toHaveText(/^Collect the stillscompleted · \d+(\.\d)?s$/);
+    await expect(rows.nth(2)).toHaveText(/^Check the fontsfailed · \d+(\.\d)?s$/);
+    await expect(rows.nth(2)).toHaveAttribute("data-state", "failed");
+  } finally {
+    await agent.dispose();
+  }
+});
+
+test("the activity line says what the agent is doing, Thinking… before any tool, and adds the time from ten seconds", async ({ page }) => {
+  const agent = await startAgentEngine({ script: FIXTURES });
+  try {
+    await page.clock.install();
+    await openCanvas(page, agent);
+    const asking = await createChat(agent, { title: "Asking", createdAt: "2026-09-01T10:00:00.000Z" });
+    await sendThrough(agent, asking, "ask me first about the page");
+    const panel = await openRail(page);
+    const line = panel.getByTestId("activity-line");
+    await expect(line).toHaveText("Thinking…");
+
+    const cleaning = await createChat(agent, { title: "Cleaning", runtimeMode: "approval-required", createdAt: "2026-09-02T10:00:00.000Z" });
+    await sendThrough(agent, cleaning, "clean the build please");
+    await panel.getByRole("tab", { name: "Cleaning" }).click();
+    await expect(line).toHaveText("Running a command…");
+    await page.clock.fastForward(11_000);
+    await expect(line).toHaveText(/^Running a command… 0:1\d$/);
+  } finally {
+    await agent.dispose();
+  }
+});
