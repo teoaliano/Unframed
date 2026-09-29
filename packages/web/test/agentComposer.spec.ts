@@ -3,7 +3,7 @@ import { openCanvas, shapeOnScreen, toast } from "./canvas.ts";
 import { clickShape, composer, toolbar } from "./generation.ts";
 import { pngBytes } from "./images.ts";
 import { filledMedia, putRecords } from "./media.ts";
-import { artifactColumn, enablePlanMode, expect, onlyChat, openRail, promptBox, rail, rpcOf, scriptFolder, startAgentEngine, test } from "./agent.ts";
+import { artifactColumn, chosenControl, enablePlanMode, expect, onlyChat, openRail, promptBox, rail, rpcOf, scriptFolder, startAgentEngine, test } from "./agent.ts";
 import type { TestEngine } from "../../engine/test/engineProcess.ts";
 import { expectSlot, expectToken, inBothSchemes, resolvedColor, styleOf } from "./kit.ts";
 
@@ -319,17 +319,15 @@ test("the Agent tray is t3code's composer on the kit: the rounded shell, kit chi
     await expectSlot(tray.getByRole("button", { name: "Remove Alpha" }), "button");
     await expectSlot(tray.getByRole("button", { name: "Attach files" }), "tooltip-trigger");
     await expectSlot(tray.getByTestId("model-picker"), "popover-trigger");
-    await expectSlot(tray.getByRole("combobox", { name: "Runtime mode" }), "tooltip-trigger");
+    await expectSlot(tray.getByRole("button", { name: "More composer controls" }), "menu-trigger");
     await expectSlot(tray.getByTestId("stash-badge"), "menu-trigger");
-    // The plan toggle is the kit Toggle, on the accent while pressed (Shift+Tab flips it from the box).
-    const toggle = tray.getByTestId("plan-toggle");
+    // The mode sits in the More menu as the kit's radio items; Shift+Tab flips it from the box.
     await promptBox(tray).click();
     await page.keyboard.press("Shift+Tab");
-    await expect(toggle).toHaveAttribute("aria-pressed", "true");
-    await page.mouse.move(10, 10);
-    await expectToken(toggle, "background-color", "--accent");
+    expect(await chosenControl(tray, "Mode")).toBe("Plan");
+    await promptBox(tray).click();
     await page.keyboard.press("Shift+Tab");
-    await expect(toggle).toHaveAttribute("aria-pressed", "false");
+    expect(await chosenControl(tray, "Mode")).toBe("Build");
     // Send is t3code's round message action.
     const send = tray.getByRole("button", { name: "Send", exact: true });
     await expectSlot(send, "message-action");

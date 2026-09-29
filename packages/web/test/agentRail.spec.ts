@@ -141,10 +141,10 @@ test.describe("on a window of 980 px or less", () => {
     await expect(page.locator(".unframed-chrome-left")).not.toHaveAttribute("data-aside", /.*/);
 
     // Escape in one of the rail's own menus closes that menu, not the Sheet.
-    await sheet.getByRole("combobox", { name: "Runtime mode" }).click();
-    await expect(page.getByRole("option").first()).toBeVisible();
+    await sheet.getByRole("button", { name: "More composer controls" }).click();
+    await expect(page.getByRole("menu")).toBeVisible();
     await page.keyboard.press("Escape");
-    await expect(page.getByRole("option")).toHaveCount(0);
+    await expect(page.getByRole("menu")).toHaveCount(0);
     await expect(sheet).toBeVisible();
 
     await sheet.getByRole("button", { name: "Close" }).click();

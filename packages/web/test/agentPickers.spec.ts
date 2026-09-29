@@ -4,7 +4,7 @@ import { join } from "node:path";
 import type { Locator, Page } from "@playwright/test";
 import type { TestEngine } from "../../engine/test/engineProcess.ts";
 import { openCanvas } from "./canvas.ts";
-import { createChat, enablePlanMode, engineChat, expect, onlyChat, openRail, promptBox, say, sendThrough, startAgentEngine, startProvidersEngine, tabs } from "./agent.ts";
+import { chosenControl, createChat, enablePlanMode, engineChat, expect, onlyChat, openRail, promptBox, say, sendThrough, startAgentEngine, startProvidersEngine, tabs } from "./agent.ts";
 import { test as base } from "./fixtures.ts";
 import { expectToken } from "./kit.ts";
 
@@ -64,11 +64,12 @@ test("/ offers the built-ins, the provider's commands and its skills; each does 
   await box.pressSequentially("pla");
   await expect(commands(page).getByRole("option").first()).toHaveText(/^\/plan/);
   await page.keyboard.press("Enter");
-  await expect(panel.getByTestId("plan-toggle")).toHaveText("Plan");
   await expect(box).toHaveText("");
+  expect(await chosenControl(panel, "Mode")).toBe("Plan");
+  await box.click();
   await box.pressSequentially("/default");
   await page.keyboard.press("Tab");
-  await expect(panel.getByTestId("plan-toggle")).toHaveText("Build");
+  expect(await chosenControl(panel, "Mode")).toBe("Build");
 
   // /model opens the model picker.
   await box.pressSequentially("/model");
@@ -215,26 +216,23 @@ test("the traits picker offers only what the model declares, marks the default, 
   await expect(popup.getByRole("radiogroup", { name: "Reasoning" }).getByRole("radio")).toHaveText(["HighDefault"]);
 });
 
-test("the runtime mode picker: four modes with what each does, Full access by default, and a change mid-turn", async ({ page }) => {
+test("the access mode in More composer controls: four modes with what each does, Full access by default, and a change mid-turn", async ({ page }) => {
   const agent = await startAgentEngine();
   try {
     await openCanvas(page, agent);
     const panel = await openRail(page);
-    const mode = panel.getByRole("combobox", { name: "Runtime mode" });
-    await expect(mode).toHaveText("Full access");
-    await mode.hover();
-    await expect(page.getByText("Allow commands and edits without prompts.", { exact: true })).toBeVisible();
-    await mode.click();
-    const options = page.getByRole("option");
-    await expect(options).toHaveText([
+    expect(await chosenControl(panel, "Access")).toMatch(/^Full access/);
+    await panel.getByRole("button", { name: "More composer controls" }).click();
+    const access = page.getByRole("menu").getByRole("group").filter({ hasText: "Access" }).getByRole("menuitemradio");
+    await expect(access).toHaveText([
       "SupervisedAsk before commands and file changes.",
       "Auto-accept editsAuto-approve edits, ask before other actions.",
       "AutoSupported providers approve routine actions; others still ask.",
-      "Full accessAllow commands and edits without prompts.Default",
+      "Full accessAllow commands and edits without prompts.",
     ]);
-    for (let index = 0; index < 4; index++) await expect(options.nth(index).locator("svg").first()).toBeVisible();
-    await options.filter({ hasText: "Supervised" }).click();
-    await expect(mode).toHaveText("Supervised");
+    for (let index = 0; index < 4; index++) await expect(access.nth(index).locator("svg").first()).toBeVisible();
+    await access.filter({ hasText: "Supervised" }).click();
+    expect(await chosenControl(panel, "Access")).toMatch(/^Supervised/);
 
     // The new chat starts in Supervised, and parks on its approval.
     await say(panel, "clean the build please");
@@ -242,11 +240,10 @@ test("the runtime mode picker: four modes with what each does, Full access by de
     expect(chat.runtimeMode).toBe("approval-required");
     await expect(tabs(page).first().getByTestId("live-dot")).toBeVisible();
 
-    // Mid-turn the mode still changes: Cmd+Shift+A from the box opens the picker.
+    // Mid-turn the mode still changes: Cmd+Shift+A from the box opens the menu.
     await promptBox(panel).click();
     await page.keyboard.press("ControlOrMeta+Shift+a");
-    await page.getByRole("option").filter({ hasText: "Auto-accept edits" }).click();
-    await expect(mode).toHaveText("Auto-accept edits");
+    await page.getByRole("menuitemradio").filter({ hasText: "Auto-accept edits" }).click();
     await expect.poll(async () => (await engineChat(agent, chat.id)).runtimeMode).toBe("auto-accept-edits");
     expect((await engineChat(agent, chat.id)).latestTurn?.state).toBe("running");
   } finally {
@@ -254,32 +251,23 @@ test("the runtime mode picker: four modes with what each does, Full access by de
   }
 });
 
-test("with plan mode on, the plan toggle reads Plan or Build with its tooltip, Shift+Tab flips it, and the chat follows", async ({ page }) => {
+test("with plan mode on, the More menu offers Build and Plan, Shift+Tab flips it, and the chat follows", async ({ page }) => {
   const agent = await startAgentEngine();
   try {
     await enablePlanMode(agent);
     await openCanvas(page, agent);
     const chatId = await createChat(agent, { title: "Planning" });
     const panel = await openRail(page);
-    const toggle = panel.getByTestId("plan-toggle");
-    await expect(toggle).toHaveText("Build");
-    await expect(toggle).toHaveAttribute("aria-pressed", "false");
-    await toggle.hover();
-    await expect(page.getByText("Default mode. Click to enter plan mode.", { exact: true })).toBeVisible();
-    await toggle.click();
-    await expect(toggle).toHaveText("Plan");
-    await expect(toggle).toHaveAttribute("aria-pressed", "true");
+    expect(await chosenControl(panel, "Mode")).toBe("Build");
+    await panel.getByRole("button", { name: "More composer controls" }).click();
+    await page.getByRole("menuitemradio", { name: "Plan" }).click();
     await expect.poll(async () => (await engineChat(agent, chatId)).interactionMode).toBe("plan");
-    await page.mouse.move(5, 5);
-    await toggle.hover();
-    await expect(page.getByText("Plan mode. Click to return to normal build mode.", { exact: true })).toBeVisible();
-    await page.mouse.move(5, 5);
-    await expect(page.getByText("Plan mode. Click to return to normal build mode.", { exact: true })).toHaveCount(0);
+    expect(await chosenControl(panel, "Mode")).toBe("Plan");
 
     await promptBox(panel).click();
     await page.keyboard.press("Shift+Tab");
-    await expect(toggle).toHaveText("Build");
     await expect.poll(async () => (await engineChat(agent, chatId)).interactionMode).toBe("default");
+    expect(await chosenControl(panel, "Mode")).toBe("Build");
   } finally {
     await agent.dispose();
   }
@@ -330,5 +318,26 @@ test("the context window meter fills to the scripted usage, turns red above 90 %
   } finally {
     await agent.dispose();
     await rm(scripts, { recursive: true, force: true });
+  }
+});
+
+test("below t3code's compact width the access mode folds into More composer controls, on one line with Send", async ({ page }) => {
+  const agent = await startAgentEngine();
+  try {
+    await openCanvas(page, agent);
+    const chatId = await createChat(agent, { title: "Compact" });
+    const panel = await openRail(page);
+    await expect(panel.getByRole("combobox", { name: "Runtime mode" })).toHaveCount(0);
+    const more = panel.getByRole("button", { name: "More composer controls" });
+    const send = panel.getByRole("button", { name: "Send", exact: true });
+    // One line: the More button and Send share a row.
+    const [a, b] = [(await more.boundingBox())!, (await send.boundingBox())!];
+    expect(Math.abs(a.y + a.height / 2 - (b.y + b.height / 2))).toBeLessThan(4);
+    await more.click();
+    await expect(page.getByRole("menuitemradio", { name: "Full access" })).toHaveAttribute("aria-checked", "true");
+    await page.getByRole("menuitemradio", { name: "Supervised" }).click();
+    await expect.poll(async () => (await engineChat(agent, chatId)).runtimeMode).toBe("approval-required");
+  } finally {
+    await agent.dispose();
   }
 });

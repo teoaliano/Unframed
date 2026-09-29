@@ -3,7 +3,7 @@ import { join } from "node:path";
 import type { Locator, Page } from "@playwright/test";
 import { openCanvas } from "./canvas.ts";
 import type { TestEngine } from "../../engine/test/engineProcess.ts";
-import { createChat, enablePlanMode, engineChat, engineChats, expect, FIXTURES, openRail, promptBox, rail, say, test, userTexts } from "./agent.ts";
+import { chosenControl, createChat, enablePlanMode, engineChat, engineChats, expect, FIXTURES, openRail, promptBox, rail, say, test, userTexts } from "./agent.ts";
 
 const PLAN: string = JSON.parse(await readFile(join(FIXTURES, "plan.json"), "utf8")).turns[0].plan;
 const TITLE = "Landing page from the three stills";
@@ -90,19 +90,21 @@ test("plan mode is off unless set: no Build/Plan toggle, Shift+Tab does nothing,
   const chatId = await createChat(agent, { title: "Old plan", interactionMode: "plan" });
   const panel = await openRail(page);
   await expect(promptBox(panel)).toBeVisible();
-  await expect(panel.getByTestId("plan-toggle")).toHaveCount(0);
-  await promptBox(panel).click();
-  await page.keyboard.press("Shift+Tab");
-  await expect(panel.getByTestId("plan-toggle")).toHaveCount(0);
+  await panel.getByRole("button", { name: "More composer controls" }).click();
+  await expect(page.getByRole("menu").getByText("Mode", { exact: true })).toHaveCount(0);
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("menu")).toHaveCount(0);
   await say(panel, "hello there");
   await expect.poll(async () => (await engineChat(agent, chatId)).interactionMode).toBe("default");
 });
 
-test("turning plan mode on shows the toggle at once, in the chat's own mode", async ({ page, agent }) => {
+test("turning plan mode on adds Mode to More composer controls at once, in the chat's own mode", async ({ page, agent }) => {
   await openCanvas(page, agent);
   await createChat(agent, { title: "Old plan", interactionMode: "plan" });
   const panel = await openRail(page);
-  await expect(panel.getByTestId("plan-toggle")).toHaveCount(0);
+  await panel.getByRole("button", { name: "More composer controls" }).click();
+  await expect(page.getByRole("menu").getByText("Mode", { exact: true })).toHaveCount(0);
+  await page.keyboard.press("Escape");
   await enablePlanMode(agent);
-  await expect(panel.getByTestId("plan-toggle")).toHaveText("Plan");
+  await expect.poll(() => chosenControl(panel, "Mode")).toBe("Plan");
 });

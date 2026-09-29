@@ -130,6 +130,18 @@ export const enablePlanMode = async (engine: TestEngine): Promise<void> => {
   await (await rpcOf(engine)).call("preferences.set", { key: "agent.planMode", value: true });
 };
 
+/** The mode the More composer controls menu shows as chosen in `group` ("Mode" or "Access"), closing the menu after. */
+export const chosenControl = async (scope: Locator, group: "Mode" | "Access"): Promise<string> => {
+  const page = scope.page();
+  await scope.getByRole("button", { name: "More composer controls" }).click();
+  const menu = page.getByRole("menu");
+  const checked = menu.getByRole("group").filter({ hasText: group }).getByRole("menuitemradio", { checked: true });
+  const label = ((await checked.textContent()) ?? "").trim();
+  await page.keyboard.press("Escape");
+  await expect(menu).toHaveCount(0);
+  return label;
+};
+
 /** Dispatches one chat command as the web would. */
 export const dispatch = async (engine: TestEngine, command: Record<string, unknown>, project = "default"): Promise<{ sequence: number }> =>
   (await rpcOf(engine)).call("orchestration.dispatchCommand", { commandId: crypto.randomUUID(), projectId: project, ...command } as never);

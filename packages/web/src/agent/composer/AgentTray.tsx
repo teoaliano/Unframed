@@ -34,7 +34,7 @@ import { ChipRow, contextSelection, useSelectionChips } from "./chips.tsx";
 import { ComposerMenu, type MenuItem } from "./ComposerMenu.tsx";
 import { mentionItems } from "./mentions.tsx";
 import { slashItems, skillMenuItems } from "./commands.tsx";
-import { ContextMeter, declaredTraits, latestUsage, ModelPicker, PlanToggle, RuntimeModePicker, TraitsPicker } from "./pickers.tsx";
+import { CompactControlsMenu, ContextMeter, declaredTraits, latestUsage, ModelPicker, TraitsPicker } from "./pickers.tsx";
 import { PromptEditor, type PromptEditorHandle, type Trigger } from "./PromptEditor.tsx";
 import { useMaybeEditor, useValue } from "tldraw";
 import { Input } from "~/components/ui/input";
@@ -286,6 +286,11 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
     onMenuOpen?.("agent-menu", menu !== undefined);
   }, [onMenuOpen, menu]);
   useEffect(() => () => onMenuOpen?.("agent-menu", false), [onMenuOpen]);
+  // The More menu too: an Escape in it closes the menu, not the toolbar's composer.
+  useEffect(() => {
+    onMenuOpen?.("more-controls", modeOpen);
+  }, [onMenuOpen, modeOpen]);
+  useEffect(() => () => onMenuOpen?.("more-controls", false), [onMenuOpen]);
 
   // ArrowUp in an empty box recalls this chat's earlier messages, newest first; editing one ends the recall.
   const recall = useRef<{ index: number; text: string } | undefined>(undefined);
@@ -541,9 +546,9 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
           autofocus={variant === "toolbar"}
         />
         {menu && <ComposerMenu label={menu.label} items={menu.items} highlight={highlight} empty={menu.empty} anchor={boxElement} onPick={menu.pick} onHighlight={setHighlight} />}
-        {/* The tools keep their width; when they and Send do not fit on one line, Send wraps to the next, on the right. */}
-        <div className="flex flex-wrap items-center gap-1">
-          <div className="flex min-w-0 flex-wrap items-center gap-0.5">
+        {/* One line: the access and plan controls sit in the More menu, as in t3code's compact footer. */}
+        <div className="flex items-center gap-1">
+          <div className="flex min-w-0 items-center gap-0.5">
             <Tip label="Attach files" side="top">
               <Button variant="ghost-muted" size="icon-sm" aria-label="Attach files" onClick={() => files.current?.click()}>
                 <Paperclip aria-hidden />
@@ -582,8 +587,13 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
               disabled={running}
               onChange={(traits) => setModelSelection({ ...selection, traits: declaredTraits(model, traits) })}
             />
-            <RuntimeModePicker mode={runtimeMode} open={modeOpen} onOpenChange={setModeOpen} onChange={setRuntime} />
-            {planMode && <PlanToggle mode={interactionMode} onToggle={() => setInteraction(interactionMode === "plan" ? "default" : "plan")} />}
+            <CompactControlsMenu
+              runtimeMode={runtimeMode}
+              onRuntimeMode={setRuntime}
+              {...(planMode ? { interactionMode, onInteractionMode: setInteraction } : {})}
+              open={modeOpen}
+              onOpenChange={setModeOpen}
+            />
             {usage && chat && (
               <ContextMeter
                 usage={usage}

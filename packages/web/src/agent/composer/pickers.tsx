@@ -1,13 +1,12 @@
 import type { AgentProvider, ModelSelection, ProviderModel, ProviderStatuses } from "@unframed/contracts";
 import { contextMeter, type Chat, type ContextUsage, type InteractionMode, type RuntimeMode, type Traits } from "@unframed/domain";
-import { Bot, Check, ChevronDown, Lock, LockOpen, Minimize2, PencilLine, PencilRuler, Sparkles, Zap, type LucideIcon } from "lucide-react";
+import { Check, ChevronDown, Ellipsis, Lock, LockOpen, Minimize2, PencilLine, Sparkles, Zap, type LucideIcon } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
+import { Menu, MenuGroup, MenuGroupLabel, MenuPopup, MenuRadioGroup, MenuRadioItem, MenuSeparator, MenuTrigger } from "~/components/ui/menu";
 import { Popover, PopoverPopup, PopoverTrigger } from "~/components/ui/popover";
-import { Select, SelectItem, SelectPopup, SelectTrigger } from "~/components/ui/select";
-import { Toggle } from "~/components/ui/toggle";
 import claudeLogo from "../../../../../assets/brand/provider-logos/claude.svg?url";
 import codexLogo from "../../../../../assets/brand/provider-logos/codex.svg?url";
 import { Tip } from "../../chrome/ui.tsx";
@@ -285,57 +284,69 @@ export const RUNTIME_MODES: ReadonlyArray<{ readonly mode: RuntimeMode; readonly
   { mode: "full-access", label: "Full access", description: "Allow commands and edits without prompts.", icon: LockOpen },
 ];
 
-/** A select of the four runtime modes; usable while a turn runs (the next tool call reads it). */
-export const RuntimeModePicker = ({ mode, open, onOpenChange, onChange }: { readonly mode: RuntimeMode; readonly open: boolean; readonly onOpenChange: (open: boolean) => void; readonly onChange: (mode: RuntimeMode) => void }) => {
-  const chosen = RUNTIME_MODES.find((known) => known.mode === mode) ?? RUNTIME_MODES[3]!;
-  const Icon = chosen.icon;
-  return (
-    <Select value={mode} open={open} onOpenChange={(next) => onOpenChange(next)} onValueChange={(next) => onChange(next as RuntimeMode)}>
-      <Tip label={chosen.description} side="top">
-        <SelectTrigger variant="ghost" size="xs" className="min-w-0" aria-label="Runtime mode" data-testid="runtime-mode">
-          <Icon aria-hidden />
-          <span className="min-w-0 truncate">{chosen.label}</span>
-        </SelectTrigger>
-      </Tip>
-      <SelectPopup side="top" align="start" sideOffset={6} alignItemWithTrigger={false} className="w-[300px]">
-        {RUNTIME_MODES.map((entry) => {
-          const EntryIcon = entry.icon;
-          return (
-            <SelectItem key={entry.mode} value={entry.mode}>
-              <span className="flex min-w-0 items-start gap-2">
-                <EntryIcon aria-hidden className="mt-0.5 size-3.5 shrink-0" />
-                <span className="flex min-w-0 flex-1 flex-col">
-                  <span className="font-medium">{entry.label}</span>
-                  <span className="text-xs text-muted-foreground">{entry.description}</span>
-                </span>
-                {entry.mode === "full-access" && (
-                  <Badge variant="outline" size="sm" className="ms-auto">
-                    Default
-                  </Badge>
-                )}
-              </span>
-            </SelectItem>
-          );
-        })}
-      </SelectPopup>
-    </Select>
-  );
-};
-
 // ---------------------------------------------------------------------------------------
-// The plan toggle.
+// t3code's compact controls menu.
 
-export const PlanToggle = ({ mode, onToggle }: { readonly mode: InteractionMode; readonly onToggle: () => void }) => {
-  const plan = mode === "plan";
-  return (
-    <Tip label={plan ? "Plan mode. Click to return to normal build mode." : "Default mode. Click to enter plan mode."} side="top">
-      <Toggle variant="ghost" size="compact" pressed={plan} onPressedChange={onToggle} data-testid="plan-toggle">
-        {plan ? <PencilRuler aria-hidden /> : <Bot aria-hidden />}
-        {plan ? "Plan" : "Build"}
-      </Toggle>
-    </Tip>
-  );
-};
+/**
+ * The access mode, and the plan mode when it is on, in one "More composer controls" menu,
+ * as t3code shows them below its compact footer width (620 px): every composer here is
+ * narrower. Usable while a turn runs; the next tool call reads the access mode.
+ */
+export const CompactControlsMenu = ({
+  runtimeMode,
+  onRuntimeMode,
+  interactionMode,
+  onInteractionMode,
+  open,
+  onOpenChange,
+}: {
+  readonly runtimeMode: RuntimeMode;
+  readonly onRuntimeMode: (mode: RuntimeMode) => void;
+  /** Present only while plan mode is on. */
+  readonly interactionMode?: InteractionMode;
+  readonly onInteractionMode?: (mode: InteractionMode) => void;
+  readonly open: boolean;
+  readonly onOpenChange: (open: boolean) => void;
+}) => (
+  <Menu open={open} onOpenChange={onOpenChange}>
+    <MenuTrigger render={<Button variant="ghost-muted" size="icon-sm" aria-label="More composer controls" />}>
+      <Ellipsis aria-hidden />
+    </MenuTrigger>
+    <MenuPopup side="top" align="start" className="w-[300px]">
+      {interactionMode !== undefined && onInteractionMode && (
+        <>
+          <MenuGroup>
+            <MenuGroupLabel>Mode</MenuGroupLabel>
+            <MenuRadioGroup value={interactionMode} onValueChange={(value) => value !== interactionMode && onInteractionMode(value as InteractionMode)}>
+              <MenuRadioItem value="default">Build</MenuRadioItem>
+              <MenuRadioItem value="plan">Plan</MenuRadioItem>
+            </MenuRadioGroup>
+          </MenuGroup>
+          <MenuSeparator />
+        </>
+      )}
+      <MenuGroup>
+        <MenuGroupLabel>Access</MenuGroupLabel>
+        <MenuRadioGroup value={runtimeMode} onValueChange={(value) => value !== runtimeMode && onRuntimeMode(value as RuntimeMode)}>
+          {RUNTIME_MODES.map((entry) => {
+            const Icon = entry.icon;
+            return (
+              <MenuRadioItem key={entry.mode} value={entry.mode}>
+                <span className="flex min-w-0 items-start gap-2">
+                  <Icon aria-hidden className="mt-0.5 size-3.5 shrink-0" />
+                  <span className="flex min-w-0 flex-col">
+                    <span>{entry.label}</span>
+                    <span className="text-xs text-muted-foreground">{entry.description}</span>
+                  </span>
+                </span>
+              </MenuRadioItem>
+            );
+          })}
+        </MenuRadioGroup>
+      </MenuGroup>
+    </MenuPopup>
+  </Menu>
+);
 
 // ---------------------------------------------------------------------------------------
 // The context window meter.
