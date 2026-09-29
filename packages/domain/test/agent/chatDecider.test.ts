@@ -182,6 +182,17 @@ describe("requests and questions", () => {
     expect(decideOn(withQuestion(), { type: "thread.user-input.respond", requestId: "r1", answers: { "Which look?": "Warm", "Which sections?": ["Hero"] } }).ok).toBe(true);
   });
 
+  it("reads a question cleared by an interrupt or a restart as no longer pending, not as answered", () => {
+    const cleared = run(withQuestion(), {
+      type: "thread.activity.append",
+      activity: { id: "q3", tone: "info", kind: "user-input.resolved", summary: "", payload: { requestId: "r1", answers: {}, cancelled: true }, turnId: "turn:m1", createdAt: NOW },
+    });
+    expect(rejection(decideOn(cleared, { type: "thread.user-input.respond", requestId: "r1", answers: { "Which look?": "Warm", "Which sections?": "Hero" } }))).toEqual({
+      code: "not_found",
+      message: "This question is no longer pending.",
+    });
+  });
+
   it("refuses dismissing a question the turn is blocked on", () => {
     expect(rejection(decideOn(withQuestion(), { type: "thread.user-input.dismiss", requestId: "r1" }))).toEqual({
       code: "conflict",
@@ -199,6 +210,20 @@ describe("reverts", () => {
       message: "Wait for the turn to finish before reverting.",
     });
     expect(rejection(decideOn(started(), { type: "thread.checkpoint.revert", turnCount: 0, restoreCanvas: true }))?.code).toBe("conflict");
+  });
+
+  it("refuses a second revert of a turn while the first is still being applied", () => {
+    const requested = run(completed(), { type: "thread.turn.revert", turnCount: 1 });
+    expect(rejection(decideOn(requested, { type: "thread.turn.revert", turnCount: 1 }))).toEqual({ code: "conflict", message: "That turn is already reverted." });
+  });
+
+  it("drops the later turns at once on a rewind, so the next message is numbered after the kept ones", () => {
+    let model = run(completed(), { type: "thread.turn.start", message: { messageId: "m2", text: "two", attachments: [] }, createdAt: NOW });
+    model = run(model, { type: "thread.session.set", session: { status: "ready", activeTurnId: null, lastError: null } });
+    model = run(model, { type: "thread.checkpoint.revert", turnCount: 1, restoreCanvas: true });
+    expect(chatOf(model).turns.map((turn) => turn.turnCount)).toEqual([1]);
+    const next = run(model, { type: "thread.turn.start", message: { messageId: "m3", text: "again", attachments: [] }, createdAt: NOW });
+    expect(chatOf(next).latestTurn).toMatchObject({ turnId: "turn:m3", turnCount: 2 });
   });
 
   it("refuses a turn reverted already, and a checkpoint past the last turn", () => {

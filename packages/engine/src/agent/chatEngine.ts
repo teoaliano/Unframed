@@ -366,6 +366,7 @@ export class ChatEngine {
           writeTurns();
           break;
         case "thread.turn-start-requested":
+        case "thread.turn-revert-requested":
         case "thread.turn-files-completed":
         case "thread.turn-reverted":
         case "thread.turn-settled":

@@ -179,7 +179,7 @@ Caching: each provider's status is cached for 5 minutes. `refresh: true` re-chec
 
 Claude model rows: `{id, name, description, efforts, legacy}`. The SDK's supported models come first, named from a static catalogue (in assets) by id or alias; a `[1m]` suffix is the 1M-context variant and its name gets " · 1M". The SDK's `default` row is dropped because it aliases another row. Then every catalogue model the SDK did not report follows, with the full effort list `low, medium, high, xhigh, max`. An empty model setting on a chat means the first non-legacy row.
 
-RPC: `providers.getStatuses {refresh?: boolean} -> {claude: ProviderStatus, codex: ProviderStatus}`.
+RPC: `providers.getStatuses {refresh?: boolean, projectId?: string} -> {claude: ProviderStatus, codex: ProviderStatus}`. With `projectId`, the skills include that project's own (`<project folder>/.claude/skills`, Codex's `skills/list` for its folder).
 
 ### The Unframed MCP server
 
@@ -196,6 +196,8 @@ Every tool result is JSON text. A refusal is `{"error": "<sentence>"}` marked as
 ### Canvas tools over the tldraw document
 
 The tools read and write the project's canvas through its sync room (spec 02), server-side, so every open tab sees an agent change at once. A deep module, the **canvas tool service**, sits behind the MCP handlers: `read(chat)` and `write(chat, turn, ops)`. Its batch preparation is pure and lives in `domain`. Every room write it makes goes through spec 02's `apply` with origin `chat:<chatId>`, and records its turn changes (below); spec 09's artifact tools write through the same path.
+
+Every id the agent reads or writes is tldraw's shape id without its `shape:` prefix (the fixtures' `m1` is the room's `shape:m1`); ids the engine stores on the chat (tags, turn files, revert results, a message's selection) keep the prefix.
 
 `canvas_read {}` returns:
 
@@ -424,7 +426,7 @@ A chat's summary, for the rail's tabs, is `{id, title, titledBy, preview (first 
 
 | Command | Payload (besides `commandId`, `projectId`, `threadId`) | Rejected when |
 | --- | --- | --- |
-| `thread.create` | `modelSelection`, `runtimeMode`, `interactionMode`, `tags?`, `createdAt` | the id exists: "Thread '<id>' already exists and cannot be created twice." |
+| `thread.create` | `modelSelection`, `runtimeMode?` (default `full-access`), `interactionMode?` (default `default`), `tags?`, `createdAt` | the id exists: "Thread '<id>' already exists and cannot be created twice." |
 | `thread.delete` | | the chat does not exist |
 | `thread.meta.update` | `title?`, `modelSelection?` | `modelSelection` names another provider: "A chat stays on the provider it started on."; a model change while a turn runs: "A turn is running; change the model when it finishes." |
 | `thread.runtime-mode.set` | `runtimeMode` | never mid-turn; applies to the next tool call |
@@ -437,18 +439,19 @@ A chat's summary, for the rail's tabs, is `{id, title, titledBy, preview (first 
 | `thread.turn.revert` | `turnCount` | a turn of this chat is running: "Wait for the turn to finish before reverting."; already reverted: "That turn is already reverted." |
 | `thread.checkpoint.revert` | `turnCount`, `restoreCanvas: boolean` | a turn is running; `turnCount` beyond the current count |
 | `thread.session.stop` | | |
-| internal: `thread.session.set`, `thread.message.assistant.delta`, `thread.message.assistant.complete`, `thread.message.reasoning.delta`, `thread.message.reasoning.complete`, `thread.proposed-plan.upsert`, `thread.activity.append`, `thread.tags.add`, `thread.turn.files.complete`, `thread.turn.reverted.complete`, `thread.revert.complete`, `thread.title.generate.complete`, `thread.turn.settle` | | |
+| internal: `thread.session.set`, `thread.message.assistant.delta`, `thread.message.assistant.complete`, `thread.message.reasoning.delta`, `thread.message.reasoning.complete`, `thread.proposed-plan.upsert`, `thread.activity.append`, `thread.tags.add`, `thread.turn.files.complete`, `thread.turn.reverted.complete`, `thread.title.generate.complete`, `thread.turn.settle` | | |
 
 `thread.turn.start` takes `runtimeMode` and `interactionMode` from the chat, never from the command. Model and traits in the command, when given, are applied to the chat first (same rule as `thread.meta.update`).
 
-**Events**: `thread.created`, `thread.deleted`, `thread.meta-updated`, `thread.runtime-mode-set`, `thread.interaction-mode-set`, `thread.message-sent` (user, assistant and reasoning, with `streaming`), `thread.turn-start-requested`, `thread.turn-interrupt-requested`, `thread.approval-response-requested`, `thread.user-input-response-requested`, `thread.checkpoint-revert-requested`, `thread.reverted`, `thread.session-stop-requested`, `thread.session-set`, `thread.proposed-plan-upserted`, `thread.activity-appended`, `thread.tagged`, `thread.turn-files-completed`, `thread.turn-reverted`, `thread.turn-settled`. Each carries t3code's base fields: `sequence`, `eventId`, `aggregateKind`, `aggregateId`, `occurredAt`, `commandId`, `causationEventId`, `correlationId`, `metadata`.
+**Events**: `thread.created`, `thread.deleted`, `thread.meta-updated`, `thread.runtime-mode-set`, `thread.interaction-mode-set`, `thread.message-sent` (user, assistant and reasoning, with `streaming`), `thread.turn-start-requested`, `thread.turn-interrupt-requested`, `thread.approval-response-requested`, `thread.user-input-response-requested`, `thread.checkpoint-revert-requested`, `thread.reverted`, `thread.turn-revert-requested`, `thread.session-stop-requested`, `thread.session-set`, `thread.proposed-plan-upserted`, `thread.activity-appended`, `thread.tagged`, `thread.turn-files-completed`, `thread.turn-reverted`, `thread.turn-settled`. Each carries t3code's base fields: `sequence`, `eventId`, `aggregateKind`, `aggregateId`, `occurredAt`, `commandId`, `causationEventId`, `correlationId`, `metadata`.
 
 Projector rules worth stating:
 
 - A streaming assistant message appends its delta; a completed one with non-empty text replaces the text.
 - `thread.session-set` leaving `running` settles the running turn: `idle` or `ready` becomes `completed`, `error` becomes `error`, `interrupted` or `stopped` becomes `interrupted`.
 - `thread.turn-settled` stamps `lastClock` (the room clock when the turn stopped touching it).
-- `thread.reverted {turnCount}` keeps the turns up to `turnCount` and their messages, activities and plans, and drops the rest.
+- `thread.reverted {turnCount}` keeps the turns up to `turnCount` and their messages, activities and plans, and drops the rest. `thread.checkpoint.revert` emits it together with `thread.checkpoint-revert-requested` (which names the dropped turns), so a message sent right after the rewind is numbered after the kept turns; the reactor then reverts the canvas and rolls the provider back before any later turn of the chat is sent.
+- `thread.turn-revert-requested` marks the turn, so a second `thread.turn.revert` is refused before the first lands.
 - `thread.tagged {ids}` appends ids the chat does not have yet, in order.
 
 **Reactors**:
@@ -474,7 +477,7 @@ Projector rules worth stating:
 | `orchestration.subscribeThread` | `{projectId, threadId, afterSequence?}` | stream: `{kind: "snapshot", snapshot: {snapshotSequence, thread}}`, `{kind: "synchronized"}`, `{kind: "event", event}`; with `afterSequence` the engine replays the chat's events past it when it can, else sends a snapshot; the web de-duplicates by sequence |
 | `orchestration.searchThreads` | `{projectId, query, limit?}` | spec 08 |
 | `orchestration.getTurnDiff`, `orchestration.getFullThreadDiff` | | spec 08 |
-| `providers.getStatuses` | `{refresh?}` | provider statuses |
+| `providers.getStatuses` | `{refresh?, projectId?}` | provider statuses |
 | `attachments.createUploadUrl` | `{name, mimeType, sizeBytes}` | `{relativeUrl, expiresAt}` (see Attachments) |
 
 Text and reasoning deltas are events too (`thread.message-sent` with `streaming: true`), as in t3code, so a reconnecting rail replays a half-streamed reply exactly.
@@ -501,7 +504,7 @@ This spec adds one table to the project database, `turn_changes`, which only the
 - Equal: restore `before` (delete the shape when `before` is null, recreate it when `after` is null, otherwise put the whole record back).
 - Not equal: skip the shape. Someone changed it since: the person, another chat, or a later turn of this chat.
 
-All restores go to the room as one write with origin `revert:<chatId>:<turn>`. The revert is recorded on the chat as a `thread.turn-reverted` event carrying `{turn, restored: [ids], skipped: [{id, by}]}`, where `by` is `person`, `another chat` or `a later turn`, read from the change log. A reverted turn stays reverted: its recap card shows it and offers no second revert. Revert is refused while the same chat has a turn running ("Wait for the turn to finish before reverting."). Files are never deleted by a revert; a page shape simply points back at its previous file. Tags are pointers and are not removed.
+All restores go to the room as one write with origin `revert:<chatId>:<turn>`. The revert is recorded on the chat as a `thread.turn-reverted` event carrying `{turn, restored: [ids], skipped: [{id, by}], at}`, where `by` is `person`, `another chat` or `a later turn`, read from the change log. A reverted turn stays reverted: its recap card shows it and offers no second revert. Revert is refused while the same chat has a turn running ("Wait for the turn to finish before reverting."). Files are never deleted by a revert; a page shape simply points back at its previous file. Tags are pointers and are not removed.
 
 The person's own Cmd-Z is tldraw's local undo (spec 02) and walks only their edits in their tab. It never undoes an agent change; Revert is the only way to take one back.
 
@@ -591,6 +594,7 @@ Turn = { text: string,
 - Order within a turn: on turn 1, the canvas tools check and the session event; then retries and the rate-limit notice; then sub-agent tasks; then the question, if any, waiting for the answer; then each `provider` call goes through the real permission decision for the chat's mode (asking the person when the mode says so, and waiting); a decline stops the rest of the turn and the answer is `refusedText`; then each `tools` call runs the real handler; then the text streams as one delta and the turn settles.
 - `title` is used as the chat's name on turn 1 instead of asking a model; empty means no name.
 - A script file that is not an object, has no turns, or has a turn without a `text` string fails to load with `agent script <name>: <reason>`.
+- For tests, the scripted agent writes each session's MCP endpoint and token to `<data folder>/scripted-agent/<chatId>.json`, and each provider rollback it is asked for (in turns) as a line of `<data folder>/scripted-agent/<chatId>.rollbacks`. Both exist only under the test variable.
 
 The fixtures are in `assets/fixtures/`, already in this format (its README says which shapes each one expects a test to seed).
 

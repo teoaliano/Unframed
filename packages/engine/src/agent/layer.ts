@@ -120,7 +120,11 @@ export const agentsLayer = Layer.effect(
 
     return Agents.of({
       runtime,
-      dispatch: (command) => Effect.tryPromise({ try: () => runtime.dispatch(command as ClientCommand), catch: toUnframed }),
+      dispatch: (command) => {
+        // The wire schema and the domain type describe one command: this assignment fails to compile if they drift.
+        const decided: ClientCommand = command;
+        return Effect.tryPromise({ try: () => runtime.dispatch(decided), catch: toUnframed });
+      },
       subscribeShell: (projectId, afterSequence) =>
         subscribe<ShellStreamItem>(projectId, () => true, (agent, emit) => openShell(agent.engine, afterSequence, emit)),
       subscribeThread: (projectId, threadId, afterSequence) =>

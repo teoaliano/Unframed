@@ -1,5 +1,5 @@
 import type { DatabaseSync } from "node:sqlite";
-import { agentShapeId, classifyOrigin, shapeKind, type SkippedBy, type TurnFile } from "@unframed/domain";
+import { classifyOrigin, shapeKind, type SkippedBy, type TurnFile } from "@unframed/domain";
 import type { TLRecord } from "@tldraw/tlschema";
 import type { CanvasChange, ChangeLogRow } from "../canvas/rooms.ts";
 
@@ -130,10 +130,10 @@ export const planRevert = (
       } else {
         put.push(row.before);
       }
-      restored.push(agentShapeId(row.shapeId));
+      restored.push(row.shapeId);
       continue;
     }
-    skipped.push({ id: agentShapeId(row.shapeId), by: changedBy(chatId, row, log) });
+    skipped.push({ id: row.shapeId, by: changedBy(chatId, row, log) });
   }
   return { change: { put, remove }, restored, skipped };
 };

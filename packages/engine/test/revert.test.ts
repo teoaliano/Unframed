@@ -59,7 +59,7 @@ describe("reverting a turn", () => {
     const watched = await agent.watch(chatId);
     const chat = await watched.until((current) => current.turns[0]?.reverted !== undefined, "the revert");
     expect(chat.turns[0]?.reverted).toMatchObject({ skipped: [] });
-    expect([...chat.turns[0]!.reverted!.restored].sort()).toEqual(["m1", "m2", "p1", "pg1", created].sort());
+    expect([...chat.turns[0]!.reverted!.restored].sort()).toEqual(["shape:m1", "shape:m2", "shape:p1", "shape:pg1", `shape:${created}`].sort());
     expect((await roomShape(agent, "m1")).props.title).toBe("Intro");
     expect((await roomShape(agent, "m2")).x).toBe(700);
     expect(textOf(await roomShape(agent, "p1"))).toBe("doomed");
@@ -91,7 +91,7 @@ describe("reverting a turn", () => {
 
     await agent.dispatch({ type: "thread.turn.revert", threadId: chatId, turnCount: 1 });
     const chat = await (await agent.watch(chatId)).until((current) => current.turns[0]?.reverted !== undefined, "the revert");
-    expect(chat.turns[0]?.reverted?.skipped).toEqual([{ id: "m2", by: "person" }]);
+    expect(chat.turns[0]?.reverted?.skipped).toEqual([{ id: "shape:m2", by: "person" }]);
     expect(await roomShape(agent, "m2")).toMatchObject({ x: 900, y: 55 });
     expect((await roomShape(agent, "m1")).props.title).toBe("Intro");
 

@@ -66,5 +66,33 @@ describe("Codex runs a chat", () => {
     expect(after.filter((message) => message.method === "thread/start" && message.params.ephemeral !== true)).toHaveLength(1);
     const turns = after.filter((message) => message.method === "turn/start" && message.params.threadId === turnStart.params.threadId);
     expect(turns[1].params).toMatchObject({ threadId: resume.params.threadId, approvalPolicy: "never", sandboxPolicy: { type: "dangerFullAccess" } });
+
+    await agent.dispatch({ type: "thread.checkpoint.revert", threadId: chatId, turnCount: 1, restoreCanvas: false });
+    await expect
+      .poll(async () => (await fakeCodexMessages(messages)).find((entry) => entry.message?.method === "thread/rollback")?.message.params, { timeout: 5000 })
+      .toEqual({ threadId: resume.params.threadId, numTurns: 1 });
+  });
+
+  it("revokes the token of a session that ended on its own, and fails the turn it was running", async () => {
+    const dir = await makeTempDir("unframed-codex-");
+    const codex = await fakeCodexAppServer(join(dir, "bin"));
+    const shell = await fakeShell(join(dir, "shell"));
+    const messages = join(dir, "messages.log");
+    const agent = await startAgentEngine({
+      dotenv: `CODEX_PATH=${codex}\nCLAUDE_PATH=${join(dir, "none")}\n`,
+      env: { UNFRAMED_TEST_AGENT_SCRIPT: undefined, SHELL: shell, FAKE_SHELL_PATH: "", FAKE_CODEX_MESSAGES: messages, FAKE_CODEX_THREADS: join(dir, "threads.log") },
+    });
+    const chatId = await agent.createChat({ modelSelection: { provider: "codex", model: "gpt-6", traits: {} } });
+    await agent.send(chatId, "crash now");
+    const chat = await agent.settled(chatId, 1);
+    expect(chat.latestTurn?.state).toBe("error");
+    const { token, argv } = (await fakeCodexMessages(messages)).find((entry) => entry.start === true);
+    const url = String(argv[2]).slice("mcp_servers.unframed.url=".length);
+    const listed = await agent.engine.request(new URL(url).pathname, {
+      method: "POST",
+      headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
+      body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/list", params: {} }),
+    });
+    expect(listed.status).toBe(401);
   });
 });

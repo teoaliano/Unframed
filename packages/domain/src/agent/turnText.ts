@@ -4,6 +4,7 @@
  */
 import { UNFRAMED_TOOL_PREFIX } from "./permissionPolicy.ts";
 import {
+  CHAT_TITLE_PROMPT,
   CHANGE_NOTE_ONE_REVERT,
   CHANGE_NOTE_OTHER,
   CHANGE_NOTE_PERSON,
@@ -158,3 +159,7 @@ export const agentShapeId = (id: string): string => (id.startsWith("shape:") ? i
 
 /** The tldraw shape id an id the agent wrote names. */
 export const roomShapeId = (id: string): string => (id.startsWith("shape:") ? id : `shape:${id}`);
+
+/** The title request's prompt: the first message, then the first 400 characters of the answer. */
+export const chatTitlePrompt = (firstMessage: string, answer: string): string =>
+  CHAT_TITLE_PROMPT.replace("<first message>", firstMessage).replace("<answer>", answer.slice(0, 400));

@@ -1,12 +1,12 @@
 import { randomUUID } from "node:crypto";
 import { stat } from "node:fs/promises";
-import { join } from "node:path";
 import type { DatabaseSync } from "node:sqlite";
 import {
   agentShapeId,
   buildPreamble,
   changeNote,
   chatSummary,
+  DEFAULT_RUNTIME_MODE,
   classifyToolItem,
   failureSentence,
   openRequests,
@@ -24,10 +24,13 @@ import {
   type InteractionMode,
   type MessageAttachment,
   type ModelSelection,
+  type RejectionCode,
   type RuntimeEvent,
   type RuntimeEventDraft,
   type RuntimeMode,
   type SelectedShape,
+  type SkippedBy,
+  type TurnOutcome,
 } from "@unframed/domain";
 import type { TLRecord } from "@tldraw/tlschema";
 import type { Applied, CanvasChange, ChangeLogRow, ChangeOrigin } from "../canvas/rooms.ts";
@@ -68,8 +71,8 @@ export interface AgentRuntimeDeps {
 
 /** A dispatch refusal the RPC layer answers as spec 01's error. */
 export class DispatchError extends Error {
-  readonly code: "not_found" | "conflict" | "bad_request";
-  constructor(code: "not_found" | "conflict" | "bad_request", message: string) {
+  readonly code: RejectionCode;
+  constructor(code: RejectionCode, message: string) {
     super(message);
     this.code = code;
   }
@@ -183,11 +186,9 @@ export class AgentRuntime {
   private runtimeModeOf(chatId: string): RuntimeMode {
     const project = this.chatProjects.get(chatId);
     const agent = project === undefined ? undefined : this.settledAgents.get(project);
-    return agent?.engine.chat(chatId)?.runtimeMode ?? "full-access";
+    return agent?.engine.chat(chatId)?.runtimeMode ?? DEFAULT_RUNTIME_MODE;
   }
 
-  // -------------------------------------------------------------------------------------
-  // Projects.
 
   /** Opens a project's chat store on first use, reconciling chats a quit left running. */
   project(name: string): Promise<ProjectAgent> {
@@ -267,8 +268,6 @@ export class AgentRuntime {
     }
   }
 
-  // -------------------------------------------------------------------------------------
-  // Dispatch.
 
   /** Dispatches a command the web sent: attachments and tags are resolved against the files and the canvas first. */
   async dispatch(command: ClientCommand): Promise<{ sequence: number }> {
@@ -335,8 +334,6 @@ export class AgentRuntime {
     };
   }
 
-  // -------------------------------------------------------------------------------------
-  // Reactors.
 
   private react(agent: ProjectAgent, events: ReadonlyArray<ChatEvent>): void {
     for (const event of events) {
@@ -374,7 +371,14 @@ export class AgentRuntime {
           void this.providers.serial(chatId, () => this.revertTurn(agent, chatId, Number(p.turnCount)));
           break;
         case "thread.checkpoint-revert-requested":
-          void this.providers.serial(chatId, () => this.revertToCheckpoint(agent, chatId, Number(p.turnCount), p.restoreCanvas === true));
+          void this.providers.serial(chatId, () =>
+            this.revertToCheckpoint(agent, chatId, {
+              keep: Number(p.turnCount),
+              restoreCanvas: p.restoreCanvas === true,
+              dropped: Number(p.dropped ?? 0),
+              revertTurns: Array.isArray(p.revertTurns) ? p.revertTurns.map(Number) : [],
+            }),
+          );
           break;
         default:
           break;
@@ -499,8 +503,6 @@ export class AgentRuntime {
     await this.internal(agent, chatId, { type: "thread.session.set", session: { status: "stopped", activeTurnId: null, lastError: null } });
   }
 
-  // -------------------------------------------------------------------------------------
-  // Provider runtime ingestion.
 
   private onRuntimeEvent(chatId: string, draft: RuntimeEventDraft): void {
     const project = this.chatProjects.get(chatId);
@@ -545,7 +547,7 @@ export class AgentRuntime {
       case "turn.completed":
       case "turn.aborted":
         await this.settle(agent, chatId, {
-          state: event.type === "turn.aborted" ? "interrupted" : String(p.state ?? "completed"),
+          state: event.type === "turn.aborted" ? "interrupted" : ((p.state as TurnOutcome | undefined) ?? "completed"),
           ...(typeof p.errorSubtype === "string" ? { errorSubtype: p.errorSubtype } : {}),
           ...(typeof p.errorMessage === "string" ? { errorMessage: p.errorMessage } : {}),
           ...(p.usage !== undefined ? { usage: p.usage } : {}),
@@ -631,6 +633,7 @@ export class AgentRuntime {
         await activity("error", "runtime.error", "Runtime error", p);
         return;
       case "session.exited":
+        void this.providers.serial(chatId, () => this.providers.stop(chatId, "closed"));
         if (chat.latestTurn?.state === "running") {
           await this.clearRequests(agent, chat);
           await this.settle(agent, chatId, { state: "failed", errorMessage: typeof p.detail === "string" ? p.detail : "The agent session ended unexpectedly." });
@@ -649,7 +652,7 @@ export class AgentRuntime {
   private async settle(
     agent: ProjectAgent,
     chatId: string,
-    outcome: { state: string; errorSubtype?: string; errorMessage?: string; usage?: unknown; totalCostUsd?: number },
+    outcome: { state: TurnOutcome; errorSubtype?: string; errorMessage?: string; usage?: unknown; totalCostUsd?: number },
   ): Promise<void> {
     const chat = agent.engine.chat(chatId);
     const turn = chat?.latestTurn;
@@ -692,8 +695,9 @@ export class AgentRuntime {
       session: { status: failed ? "error" : interrupted ? "interrupted" : "ready", activeTurnId: null, lastError: sentence ?? null },
     });
     if (active?.turnId === turn.turnId) this.activeTurns.delete(chatId);
-    if (interrupted) {
-      void this.providers.serial(chatId, () => this.providers.stop(chatId, "interrupted"));
+    // An interrupt is a hard stop, and a session that ended on its own must not keep its token.
+    if (interrupted || !this.providers.has(chatId)) {
+      void this.providers.serial(chatId, () => this.providers.stop(chatId, interrupted ? "interrupted" : "closed"));
     } else {
       this.providers.quiet(chatId);
     }
@@ -723,10 +727,8 @@ export class AgentRuntime {
     }
   }
 
-  // -------------------------------------------------------------------------------------
-  // Revert.
 
-  private async revertOne(agent: ProjectAgent, chatId: string, turn: number): Promise<{ restored: string[]; skipped: Array<{ id: string; by: "person" | "another chat" | "a later turn" }> }> {
+  private async revertOne(agent: ProjectAgent, chatId: string, turn: number): Promise<{ restored: string[]; skipped: Array<{ id: string; by: SkippedBy }> }> {
     const rows = agent.turnChanges.rows(chatId, turn);
     const records = await this.deps.rooms.read(agent.slug);
     const current = new Map(records.map((item) => [item.id as string, item]));
@@ -757,30 +759,33 @@ export class AgentRuntime {
     }
   }
 
-  /** Edit from here: drops the later turns, reverts their canvas changes newest first, and rolls the provider back. */
-  private async revertToCheckpoint(agent: ProjectAgent, chatId: string, keep: number, restoreCanvas: boolean): Promise<void> {
+  /**
+   * Edit from here, after the decider dropped the later turns: reverts their canvas changes
+   * newest first with the skip rule, rolls the provider conversation back, and forgets their
+   * turn changes. It runs before any later turn of the chat is sent.
+   */
+  private async revertToCheckpoint(
+    agent: ProjectAgent,
+    chatId: string,
+    rewind: { keep: number; restoreCanvas: boolean; dropped: number; revertTurns: ReadonlyArray<number> },
+  ): Promise<void> {
     const chat = agent.engine.chat(chatId);
     if (!chat) return;
-    const later = chat.turns.filter((turn) => turn.turnCount > keep).sort((a, b) => b.turnCount - a.turnCount);
     try {
-      if (restoreCanvas) {
-        for (const turn of later) if (!turn.reverted) await this.revertOne(agent, chatId, turn.turnCount);
-      }
-      if (later.length > 0) {
-        // The provider conversation is rolled back on a live session: a closed one is resumed first.
-        await this.providers
-          .ensure(agent.slug, chat, agent.folder, agent.engine)
-          .then(() => this.providers.rollback(chatId, later.length))
-          .catch((error: unknown) => logError(`chat ${chatId}: rollback: ${errorText(error)}`));
-      }
-      agent.turnChanges.dropAfter(chatId, keep);
-    } finally {
-      await this.internal(agent, chatId, { type: "thread.revert.complete", turnCount: keep });
+      if (rewind.restoreCanvas) for (const turn of rewind.revertTurns) await this.revertOne(agent, chatId, turn);
+    } catch (error) {
+      logError(`chat ${chatId}: could not restore the canvas: ${errorText(error)}`);
     }
+    if (rewind.dropped > 0) {
+      // The provider conversation is rolled back on a live session: a closed one is resumed first.
+      await this.providers
+        .ensure(agent.slug, chat, agent.folder, agent.engine)
+        .then(() => this.providers.rollback(chatId, rewind.dropped))
+        .catch((error: unknown) => logError(`chat ${chatId}: rollback: ${errorText(error)}`));
+    }
+    agent.turnChanges.dropAfter(chatId, rewind.keep);
   }
 
-  // -------------------------------------------------------------------------------------
-  // Reading.
 
   async chat(project: string, chatId: string): Promise<Chat | undefined> {
     return (await this.project(project)).engine.chat(chatId);
@@ -797,7 +802,3 @@ export class AgentRuntime {
   }
 }
 
-export type { ProjectAgent };
-
-/** The folder a project's chats live in, for tests of the store's own helpers. */
-export const chatFolder = (outputDir: string, project: string): string => join(outputDir, projectSlug(project));

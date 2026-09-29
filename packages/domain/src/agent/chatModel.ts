@@ -107,6 +107,8 @@ export interface ChatTurn {
   readonly usage?: unknown;
   readonly files?: ReadonlyArray<TurnFile>;
   readonly reverted?: TurnRevert;
+  /** Set when a revert of the turn was asked for, so a second one is refused before the first lands. */
+  readonly revertRequestedAt?: string;
 }
 
 export interface LatestTurn {
@@ -246,7 +248,6 @@ export type InternalCommand = CommandBase &
         readonly restored: ReadonlyArray<string>;
         readonly skipped: ReadonlyArray<{ readonly id: string; readonly by: SkippedBy }>;
       }
-    | { readonly type: "thread.revert.complete"; readonly turnCount: number }
     | { readonly type: "thread.title.generate.complete"; readonly title: string }
     | { readonly type: "thread.turn.settle"; readonly turnCount: number; readonly clock: number | null; readonly usage?: unknown }
   );

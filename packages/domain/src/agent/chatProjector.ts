@@ -167,8 +167,13 @@ const applyToChat = (chat: Chat, event: ChatEvent): Chat => {
       return withTurns(
         { ...chat, updatedAt: at },
         chat.turns.map((turn) =>
-          turn.turnCount === p.turnCount ? { ...turn, reverted: { restored: p.restored ?? [], skipped: p.skipped ?? [], at: str(p.at) || at } } : turn,
+          turn.turnCount === p.turn ? { ...turn, reverted: { restored: p.restored ?? [], skipped: p.skipped ?? [], at: str(p.at) || at } } : turn,
         ),
+      );
+    case "thread.turn-revert-requested":
+      return withTurns(
+        { ...chat, updatedAt: at },
+        chat.turns.map((turn) => (turn.turnCount === p.turnCount ? { ...turn, revertRequestedAt: at } : turn)),
       );
     case "thread.reverted": {
       const keep = Number(p.turnCount);
@@ -190,7 +195,6 @@ const applyToChat = (chat: Chat, event: ChatEvent): Chat => {
     case "thread.user-input-response-requested":
     case "thread.checkpoint-revert-requested":
     case "thread.session-stop-requested":
-    case "thread.turn-revert-requested":
       return chat;
     case "thread.created":
       return chat;

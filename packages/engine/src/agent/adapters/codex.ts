@@ -1,8 +1,7 @@
-import { randomUUID } from "node:crypto";
 import {
   AGENT_SYSTEM_PROMPT,
-  CHAT_TITLE_PROMPT,
   CHAT_TITLE_SYSTEM_PROMPT,
+  chatTitlePrompt,
   checkCanvasTools,
   codexApprovalAnswer,
   codexPlanCollaboration,
@@ -11,7 +10,6 @@ import {
   mapCodexNotification,
   modelMessage,
   readCodexRequest,
-  UNFRAMED_TOOL_PREFIX,
   type ApprovalDecision,
   type RuntimeEventDraft,
   type RuntimeMode,
@@ -19,7 +17,9 @@ import {
 import type { AdapterContext, ProviderAdapter, SessionStart, TitleInput, TurnInput } from "../adapter.ts";
 import { CodexRpc, CodexRpcError, initializeCodex } from "../codexRpc.ts";
 import { MCP_SERVER_NAME } from "../mcp.ts";
+import { PermissionGate } from "../permissionGate.ts";
 import { ENGINE_VERSION } from "../version.ts";
+import { errorText } from "../../log.ts";
 
 export const MCP_TOKEN_VARIABLE = "UNFRAMED_MCP_TOKEN";
 
@@ -41,8 +41,8 @@ interface CodexSession {
   turnId: string | undefined;
   codexTurnId: string | undefined;
   toolsFailure: string | undefined;
-  readonly approvals: Map<string, (decision: ApprovalDecision) => void>;
-  readonly questions: Map<string, (answers: Readonly<Record<string, unknown>> | undefined) => void>;
+  /** Codex decides its own approvals; the gate only holds the requests and questions it raises. */
+  readonly gate: PermissionGate;
   stopping: boolean;
 }
 
@@ -59,42 +59,16 @@ export const codexAdapter = (context: AdapterContext): ProviderAdapter => {
 
   const emit = (chatId: string, draft: RuntimeEventDraft) => context.emit(chatId, draft);
 
-  const settleRequests = (session: CodexSession) => {
-    for (const [id, resolve] of [...session.approvals]) {
-      session.approvals.delete(id);
-      resolve("cancel");
-    }
-    for (const [id, resolve] of [...session.questions]) {
-      session.questions.delete(id);
-      resolve(undefined);
-    }
-  };
-
   const onRequest = (chatId: string) => async (method: string, params: unknown): Promise<unknown> => {
     const session = sessions.get(chatId);
     const request = readCodexRequest(method, params);
-    const turn = session?.turnId === undefined ? {} : { turnId: session.turnId };
     switch (request.kind) {
-      case "approval": {
+      case "approval":
         if (!session) return codexApprovalAnswer("cancel");
-        const requestId = randomUUID();
-        const decision = await new Promise<ApprovalDecision>((resolve) => {
-          session.approvals.set(requestId, resolve);
-          emit(chatId, { type: "request.opened", ...turn, requestId, payload: { requestType: request.requestType, detail: request.detail, args: request.args } });
-        });
-        emit(chatId, { type: "request.resolved", ...turn, requestId, payload: { requestType: request.requestType, decision } });
-        return codexApprovalAnswer(decision);
-      }
-      case "question": {
+        return codexApprovalAnswer(await session.gate.request({ requestType: request.requestType, detail: request.detail, args: request.args }, session.turnId));
+      case "question":
         if (!session) return codexUserInputAnswer({});
-        const requestId = randomUUID();
-        const answers = await new Promise<Readonly<Record<string, unknown>> | undefined>((resolve) => {
-          session.questions.set(requestId, resolve);
-          emit(chatId, { type: "user-input.requested", ...turn, requestId, payload: { questions: request.questions } });
-        });
-        emit(chatId, { type: "user-input.resolved", ...turn, requestId, payload: { answers: answers ?? {}, ...(answers === undefined ? { cancelled: true } : {}) } });
-        return codexUserInputAnswer(answers ?? {});
-      }
+        return codexUserInputAnswer((await session.gate.ask(request.questions, session.turnId)) ?? {});
       case "elicitation":
         if (request.server === MCP_SERVER_NAME) return { action: "accept", content: {} };
         throw new CodexRpcError("method not found", -32601);
@@ -128,7 +102,7 @@ export const codexAdapter = (context: AdapterContext): ProviderAdapter => {
       emit(session.chatId, { type: "session.configured", payload: { tools, foreign: check.foreign, grantedDirectories: [] } });
       session.toolsFailure = check.failure;
     } catch (error) {
-      context.log(session.chatId, `codex mcpServerStatus/list: ${error instanceof Error ? error.message : String(error)}`);
+      context.log(session.chatId, `codex mcpServerStatus/list: ${errorText(error)}`);
     }
   };
 
@@ -149,7 +123,7 @@ export const codexAdapter = (context: AdapterContext): ProviderAdapter => {
     if (!session) return;
     sessions.delete(chatId);
     session.stopping = true;
-    settleRequests(session);
+    session.gate.cancelAll();
     session.rpc.close();
   };
 
@@ -171,7 +145,7 @@ export const codexAdapter = (context: AdapterContext): ProviderAdapter => {
         onExit: (code, signal) => {
           if (!session || session.stopping || sessions.get(input.chatId) !== session) return;
           sessions.delete(input.chatId);
-          settleRequests(session);
+          session.gate.cancelAll();
           emit(input.chatId, { type: "session.exited", payload: { exitKind: "error", detail: `Codex stopped (${code ?? signal}).` } });
         },
       });
@@ -196,8 +170,7 @@ export const codexAdapter = (context: AdapterContext): ProviderAdapter => {
           turnId: undefined,
           codexTurnId: undefined,
           toolsFailure: undefined,
-          approvals: new Map(),
-          questions: new Map(),
+          gate: new PermissionGate((draft) => emit(input.chatId, draft)),
           stopping: false,
         };
         sessions.set(input.chatId, session);
@@ -248,7 +221,7 @@ export const codexAdapter = (context: AdapterContext): ProviderAdapter => {
     async interruptTurn(chatId: string) {
       const session = sessions.get(chatId);
       if (!session) return;
-      settleRequests(session);
+      session.gate.cancelAll();
       const turnId = session.turnId;
       if (session.codexTurnId) {
         await session.rpc.request("turn/interrupt", { threadId: session.threadId, turnId: session.codexTurnId }, 10_000).catch(() => undefined);
@@ -260,18 +233,10 @@ export const codexAdapter = (context: AdapterContext): ProviderAdapter => {
       }
     },
     async respondToRequest(chatId: string, requestId: string, decision: ApprovalDecision) {
-      const session = sessions.get(chatId);
-      const resolve = session?.approvals.get(requestId);
-      if (!session || !resolve) return;
-      session.approvals.delete(requestId);
-      resolve(decision);
+      sessions.get(chatId)?.gate.respond(requestId, decision);
     },
     async respondToUserInput(chatId: string, requestId: string, answers: Readonly<Record<string, unknown>>) {
-      const session = sessions.get(chatId);
-      const resolve = session?.questions.get(requestId);
-      if (!session || !resolve) return;
-      session.questions.delete(requestId);
-      resolve(answers);
+      sessions.get(chatId)?.gate.answer(requestId, answers);
     },
     async setRuntimeMode(chatId: string, runtimeMode: RuntimeMode) {
       const session = sessions.get(chatId);
@@ -322,7 +287,7 @@ export const codexAdapter = (context: AdapterContext): ProviderAdapter => {
             developerInstructions: CHAT_TITLE_SYSTEM_PROMPT,
           }),
         );
-        const prompt = CHAT_TITLE_PROMPT.replace("<first message>", input.firstMessage).replace("<answer>", input.answer);
+        const prompt = chatTitlePrompt(input.firstMessage, input.answer);
         await rpc.request("turn/start", { threadId: thread, input: [{ type: "text", text: prompt }] });
         const timer = new Promise<void>((resolve) => setTimeout(resolve, 60_000).unref());
         await Promise.race([done, timer]);
@@ -333,5 +298,3 @@ export const codexAdapter = (context: AdapterContext): ProviderAdapter => {
     },
   };
 };
-
-export { UNFRAMED_TOOL_PREFIX };

@@ -1,4 +1,4 @@
-import { mkdir, readdir, readFile, stat, writeFile } from "node:fs/promises";
+import { appendFile, mkdir, readdir, readFile, stat, writeFile } from "node:fs/promises";
 import { basename, join } from "node:path";
 import {
   checkCanvasTools,
@@ -11,13 +11,13 @@ import {
   UNFRAMED_TOOL_PREFIX,
   type AgentScript,
   type ApprovalDecision,
-  type InteractionMode,
   type RuntimeEventDraft,
   type ScriptTurn,
 } from "@unframed/domain";
 import type { AdapterContext, ProviderAdapter, SessionStart, TitleInput, TurnInput } from "../adapter.ts";
 import { McpClient } from "../mcp.ts";
 import { PermissionGate } from "../permissionGate.ts";
+import { errorText } from "../../log.ts";
 
 /** Loads the script file, or every `*.json` in the folder sorted by name. A malformed script fails with its reason. */
 export const loadScripts = async (path: string): Promise<AgentScript[]> => {
@@ -35,7 +35,7 @@ export const loadScripts = async (path: string): Promise<AgentScript[]> => {
     try {
       json = JSON.parse(await readFile(file, "utf8"));
     } catch (error) {
-      throw new Error(`agent script ${name}: ${error instanceof Error ? error.message : String(error)}`);
+      throw new Error(`agent script ${name}: ${errorText(error)}`);
     }
     const loaded = parseScript(name, json);
     if (!loaded.ok) throw new Error(loaded.error);
@@ -105,7 +105,7 @@ export const scriptedAdapter = (scriptPath: string, context: AdapterContext): Pr
         await session.mcp.initialize();
         tools = (await session.mcp.listTools()).map((name) => `${UNFRAMED_TOOL_PREFIX}${name}`);
       } catch (error) {
-        context.log(chatId, `scripted MCP: ${error instanceof Error ? error.message : String(error)}`);
+        context.log(chatId, `scripted MCP: ${errorText(error)}`);
       }
       const check = checkCanvasTools(context.registeredTools(), tools);
       emit(chatId, { type: "session.configured", payload: { tools, foreign: check.foreign, grantedDirectories: session.granted } });
@@ -151,7 +151,7 @@ export const scriptedAdapter = (scriptPath: string, context: AdapterContext): Pr
       emit(chatId, { type: "item.completed", ...turn, itemId, payload: { itemType, status: "declined", title: call.name, detail: allowed.message } });
       if (allowed.interrupt || interrupted()) return finish({ state: "interrupted" });
       text = step.refusedText ?? "";
-      return streamText(session, input, text, step, finish, true);
+      return streamText(input, text, step, finish, true);
     }
 
     for (const call of step.tools ?? []) {
@@ -175,7 +175,7 @@ export const scriptedAdapter = (scriptPath: string, context: AdapterContext): Pr
       try {
         result = await session.mcp.callTool(call.name, call.input);
       } catch (error) {
-        result = { value: { error: error instanceof Error ? error.message : String(error) }, isError: true };
+        result = { value: { error: errorText(error) }, isError: true };
       }
       emit(chatId, {
         type: "item.completed",
@@ -194,11 +194,10 @@ export const scriptedAdapter = (scriptPath: string, context: AdapterContext): Pr
         interactionMode: input.interactionMode,
       });
     }
-    return streamText(session, input, text, step, finish, false);
+    return streamText(input, text, step, finish, false);
   };
 
   const streamText = (
-    _session: ScriptedSession,
     input: TurnInput,
     text: string,
     step: ScriptTurn,
@@ -244,7 +243,7 @@ export const scriptedAdapter = (scriptPath: string, context: AdapterContext): Pr
           else pickError = chosen.error;
         }
       } catch (error) {
-        pickError = error instanceof Error ? error.message : String(error);
+        pickError = errorText(error);
       }
       const session: ScriptedSession = {
         chatId: input.chatId,
@@ -270,7 +269,7 @@ export const scriptedAdapter = (scriptPath: string, context: AdapterContext): Pr
       session.turn = { turnId: input.turnId, abort };
       void runTurn(session, input, abort).catch((error: unknown) => {
         session.turn = undefined;
-        emit(input.chatId, { type: "turn.completed", turnId: input.turnId, payload: { state: "failed", errorMessage: error instanceof Error ? error.message : String(error) } });
+        emit(input.chatId, { type: "turn.completed", turnId: input.turnId, payload: { state: "failed", errorMessage: errorText(error) } });
       });
       return { turnId: input.turnId };
     },
@@ -287,7 +286,11 @@ export const scriptedAdapter = (scriptPath: string, context: AdapterContext): Pr
       sessions.get(chatId)?.gate.answer(requestId, answers);
     },
     async setRuntimeMode() {},
-    async rollbackThread() {
+    async rollbackThread(chatId: string, numTurns: number) {
+      // Nothing to roll back in a script; the rollback is recorded where a test can read it.
+      const folder = join(context.dataDir, "scripted-agent");
+      await mkdir(folder, { recursive: true }).catch(nothing);
+      await appendFile(join(folder, `${chatId}.rollbacks`), `${numTurns}\n`).catch(nothing);
       return {};
     },
     async stopSession(chatId: string) {
@@ -306,4 +309,3 @@ export const scriptedAdapter = (scriptPath: string, context: AdapterContext): Pr
   };
 };
 
-export type { InteractionMode };

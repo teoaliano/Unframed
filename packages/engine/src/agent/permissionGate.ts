@@ -7,6 +7,7 @@ import {
   type ApprovalDecision,
   type InteractionMode,
   type PermissionUpdate,
+  type RequestType,
   type RuntimeEventDraft,
   type RuntimeMode,
   type UserQuestion,
@@ -88,26 +89,39 @@ export class PermissionGate {
         return { behavior: "allow", updatedInput: { ...call.input, answers } };
       }
       case "ask": {
-        const requestId = randomUUID();
-        const decision = await new Promise<ApprovalDecision>((resolve) => {
-          this.requests.set(requestId, { resolve });
-          this.emit({
-            type: "request.opened",
-            ...turn,
-            requestId,
-            payload: {
-              requestType: answer.requestType,
-              detail: requestTarget(call.toolName, call.input),
-              args: { toolName: call.toolName, input: call.input, ...(call.toolUseId ? { toolUseId: call.toolUseId } : {}) },
-            },
-          });
-          call.signal?.addEventListener("abort", () => this.respond(requestId, "cancel"), { once: true });
-          if (call.signal?.aborted) this.respond(requestId, "cancel");
-        });
-        this.emit({ type: "request.resolved", ...turn, requestId, payload: { requestType: answer.requestType, decision } });
+        const decision = await this.request(
+          {
+            requestType: answer.requestType,
+            detail: requestTarget(call.toolName, call.input),
+            args: { toolName: call.toolName, input: call.input, ...(call.toolUseId ? { toolUseId: call.toolUseId } : {}) },
+          },
+          call.turnId,
+          call.signal,
+        );
         return answerPermission(decision, call.toolName, call.suggestions);
       }
     }
+  }
+
+  /** Opens a request and waits for the person's decision; an abort answers it as cancelled. */
+  request(
+    request: { readonly requestType: RequestType; readonly detail: string; readonly args: Readonly<Record<string, unknown>> },
+    turnId: string | undefined,
+    signal?: AbortSignal,
+  ): Promise<ApprovalDecision> {
+    const requestId = randomUUID();
+    const turn = turnId === undefined ? {} : { turnId };
+    return new Promise<ApprovalDecision>((resolve) => {
+      this.requests.set(requestId, {
+        resolve: (decision) => {
+          this.emit({ type: "request.resolved", ...turn, requestId, payload: { requestType: request.requestType, decision } });
+          resolve(decision);
+        },
+      });
+      this.emit({ type: "request.opened", ...turn, requestId, payload: { ...request } });
+      signal?.addEventListener("abort", () => this.respond(requestId, "cancel"), { once: true });
+      if (signal?.aborted) this.respond(requestId, "cancel");
+    });
   }
 
   /** Opens a question and waits for the answers; `undefined` when it was cancelled. */

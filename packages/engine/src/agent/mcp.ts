@@ -5,6 +5,7 @@ import type { Route } from "../http/api.ts";
 import { readJsonBody } from "../http/body.ts";
 import { sendJson } from "../http/respond.ts";
 import { ENGINE_VERSION } from "./version.ts";
+import { errorText } from "../log.ts";
 
 export const MCP_PATH = "/mcp";
 export const MCP_SERVER_NAME = "unframed";
@@ -169,7 +170,7 @@ const handle = async (
       try {
         answer = await tool.call(binding, args);
       } catch (error) {
-        answer = { value: { error: error instanceof Error ? error.message : String(error) }, isError: true };
+        answer = { value: { error: errorText(error) }, isError: true };
       }
       return rpcResult(message.id, toolText(answer));
     }

@@ -69,7 +69,7 @@ describe("reverting to a checkpoint", () => {
     });
     model = run(model, { type: "thread.proposed-plan.upsert", planId: "plan:chat-1:turn:2", turnId: "turn:m2", planMarkdown: "# Plan" });
     model = run(model, session("ready"));
-    const chat = chatOf(run(model, { type: "thread.revert.complete", turnCount: 1 }));
+    const chat = chatOf(run(model, { type: "thread.checkpoint.revert", turnCount: 1, restoreCanvas: false }));
     expect(chat.turns.map((turn) => turn.turnCount)).toEqual([1]);
     expect(chat.messages.map((message) => message.id)).toEqual(["m1"]);
     expect(chat.activities).toEqual([]);

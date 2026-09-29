@@ -66,6 +66,10 @@ const isResolvedAttachment = (value: unknown): value is MessageAttachment => {
   return typeof record.type === "string" && (record.kind === "image" || record.kind === "file") && typeof record.size === "number";
 };
 
+/** A question that was cleared by an interrupt or a restart, never answered. */
+const isCancelled = (activity: { readonly kind: string; readonly payload: unknown }): boolean =>
+  activity.kind === "user-input.resolved" && (activity.payload as { cancelled?: unknown } | null)?.cancelled === true;
+
 const answered = (value: unknown): boolean =>
   (typeof value === "string" && value.trim() !== "") ||
   (Array.isArray(value) && value.some((entry) => typeof entry === "string" && entry.trim() !== ""));
@@ -197,7 +201,7 @@ export const decide = (command: ChatCommand, model: ProjectChats, now: string): 
 
     case "thread.user-input.respond": {
       const request = requestActivity(chat, "user-input", command.requestId);
-      if (request === undefined) return reject("not_found", "This question is no longer pending.");
+      if (request === undefined || isCancelled(request)) return reject("not_found", "This question is no longer pending.");
       if (request.kind === "user-input.resolved") return reject("conflict", "This question has already been answered.");
       const questions = ((request.payload as { questions?: Array<{ id?: unknown }> }).questions ?? []).map((question) => String(question.id));
       if (questions.some((question) => !answered(command.answers[question]))) return reject("bad_request", "Answer each question before sending.");
@@ -208,7 +212,7 @@ export const decide = (command: ChatCommand, model: ProjectChats, now: string): 
 
     case "thread.user-input.dismiss": {
       const request = requestActivity(chat, "user-input", command.requestId);
-      if (request === undefined) return reject("not_found", "This question is no longer pending.");
+      if (request === undefined || isCancelled(request)) return reject("not_found", "This question is no longer pending.");
       if (request.kind === "user-input.resolved") return reject("conflict", "This question has already been answered.");
       if ((request.payload as { responseMode?: unknown }).responseMode !== "message") {
         return reject("conflict", "This question needs an answer. Answer it or stop the turn.");
@@ -232,7 +236,7 @@ export const decide = (command: ChatCommand, model: ProjectChats, now: string): 
       if (isRunning(chat)) return reject("conflict", "Wait for the turn to finish before reverting.");
       const turn = chat.turns.find((known) => known.turnCount === command.turnCount);
       if (!turn) return reject("not_found", "That turn is not in this chat.");
-      if (turn.reverted) return reject("conflict", "That turn is already reverted.");
+      if (turn.reverted || turn.revertRequestedAt !== undefined) return reject("conflict", "That turn is already reverted.");
       return accept(event("thread.turn-revert-requested", id, { turnCount: command.turnCount }));
     }
 
@@ -242,7 +246,18 @@ export const decide = (command: ChatCommand, model: ProjectChats, now: string): 
       if (!Number.isInteger(command.turnCount) || command.turnCount < 0 || command.turnCount > count) {
         return reject("bad_request", "That turn is not in this chat.");
       }
-      return accept(event("thread.checkpoint-revert-requested", id, { turnCount: command.turnCount, restoreCanvas: command.restoreCanvas }));
+      // The later turns leave the chat at once, so a message sent right after the rewind is
+      // numbered after the kept turns; the canvas and the provider catch up in the reactor.
+      const later = chat.turns.filter((turn) => turn.turnCount > command.turnCount).sort((a, b) => b.turnCount - a.turnCount);
+      return accept(
+        event("thread.checkpoint-revert-requested", id, {
+          turnCount: command.turnCount,
+          restoreCanvas: command.restoreCanvas,
+          dropped: later.length,
+          revertTurns: later.filter((turn) => !turn.reverted).map((turn) => turn.turnCount),
+        }),
+        event("thread.reverted", id, { turnCount: command.turnCount }),
+      );
     }
 
     case "thread.session.stop":
@@ -309,11 +324,8 @@ export const decide = (command: ChatCommand, model: ProjectChats, now: string): 
 
     case "thread.turn.reverted.complete":
       return accept(
-        event("thread.turn-reverted", id, { turnCount: command.turnCount, restored: command.restored, skipped: command.skipped, at: now }),
+        event("thread.turn-reverted", id, { turn: command.turnCount, restored: command.restored, skipped: command.skipped, at: now }),
       );
-
-    case "thread.revert.complete":
-      return accept(event("thread.reverted", id, { turnCount: command.turnCount }));
 
     case "thread.title.generate.complete": {
       const title = agentTitle(command.title);

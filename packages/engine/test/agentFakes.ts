@@ -99,6 +99,7 @@ const runTurn = async (message) => {
   const turnId = "cx-turn-" + runId + "-" + turns;
   send({ id: message.id, result: { turn: { id: turnId, status: "inProgress" } } });
   send({ method: "turn/started", params: { threadId, turn: { id: turnId } } });
+  if (JSON.stringify(message.params.input).includes("crash now")) process.exit(3);
   const tools = await listTools();
   send({ method: "item/started", params: { threadId, turnId, item: { type: "agentMessage", id: "msg-" + runId + "-" + turns } } });
   send({ method: "item/agentMessage/delta", params: { threadId, turnId, itemId: "msg-" + runId + "-" + turns, delta: "Tools: " + tools.join(", ") + ". " } });

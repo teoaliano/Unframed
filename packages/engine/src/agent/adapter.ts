@@ -38,7 +38,6 @@ export interface TurnInput {
   readonly chatId: string;
   readonly turnId: string;
   readonly turnCount: number;
-  /** The person's text. */
   readonly text: string;
   /** What the model is told first; the stored message never holds it. */
   readonly preamble: string;
@@ -68,7 +67,6 @@ export interface AdapterContext {
   readonly runtimeMode: (chatId: string) => RuntimeMode;
   readonly registeredTools: () => ReadonlyArray<string>;
   readonly log: (chatId: string, line: string) => void;
-  /** The engine's data folder. */
   readonly dataDir: string;
 }
 

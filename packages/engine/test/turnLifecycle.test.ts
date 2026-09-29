@@ -1,7 +1,7 @@
 import { openRequests, type Chat } from "@unframed/domain";
 import { describe, expect, it } from "vitest";
 import { PROJECT, scriptFolder, shellChats, startAgentEngine, until, type AgentEngine } from "./agent.ts";
-import { motionShape, roomShape, scriptedSession, seed } from "./agentCanvas.ts";
+import { motionShape, roomShape, scriptedRollbacks, scriptedSession, seed } from "./agentCanvas.ts";
 import { makeTempDir } from "./harness.ts";
 
 const QUIT = "Unframed stopped while this turn was running, so it never finished. Send again to carry on where it left off.";
@@ -174,16 +174,38 @@ describe("idle close", () => {
 });
 
 describe("Edit from here", () => {
-  const script = () =>
-    scriptFolder({
-      edits: {
-        when: "^retitle",
-        turns: [
-          { text: "A.", tools: [{ name: "canvas_write", input: { ops: [{ type: "update", id: "m1", props: { title: "A" } }] } }] },
-          { text: "B.", tools: [{ name: "canvas_write", input: { ops: [{ type: "update", id: "m1", props: { title: "B" } }] } }] },
-        ],
-      },
-    });
+  const retitle = (title: string) => ({ text: `${title}.`, tools: [{ name: "canvas_write", input: { ops: [{ type: "update", id: "m1", props: { title } }] } }] });
+  const script = () => scriptFolder({ edits: { when: "^retitle", turns: [retitle("A"), retitle("B"), retitle("C")] } });
+
+  it("reverts the dropped turns newest first, so a shape two turns changed goes back to the first one's before", async () => {
+    const agent = await startAgentEngine({ script: await script() });
+    await seed(agent, [motionShape("m1", "100", "Original")]);
+    const chatId = await agent.createChat();
+    for (const [index, text] of ["retitle it", "retitle it again", "retitle it a third time"].entries()) {
+      await agent.send(chatId, text);
+      await agent.settled(chatId, index + 1);
+    }
+    expect((await roomShape(agent, "m1")).props.title).toBe("C");
+    await agent.dispatch({ type: "thread.checkpoint.revert", threadId: chatId, turnCount: 1, restoreCanvas: true });
+    expect((await agent.watch(chatId)).chat().turns.map((turn) => turn.turnCount)).toEqual([1]);
+    await expect.poll(() => scriptedRollbacks(agent, chatId), { timeout: 5000 }).toEqual([2]);
+    expect((await roomShape(agent, "m1")).props.title).toBe("A");
+  });
+
+  it("numbers a message sent right after the rewind after the kept turns", async () => {
+    const agent = await startAgentEngine({ script: await script() });
+    await seed(agent, [motionShape("m1", "100", "Original")]);
+    const chatId = await agent.createChat();
+    await agent.send(chatId, "retitle it");
+    await agent.settled(chatId, 1);
+    await agent.send(chatId, "retitle it again");
+    await agent.settled(chatId, 2);
+    await agent.dispatch({ type: "thread.checkpoint.revert", threadId: chatId, turnCount: 1, restoreCanvas: true });
+    await agent.send(chatId, "retitle it once more");
+    const chat = await agent.settled(chatId, 2);
+    expect(chat.messages.map((message) => message.text)).toEqual(["retitle it", "A.", "retitle it once more", "B."]);
+    expect((await roomShape(agent, "m1")).props.title).toBe("B");
+  });
 
   it("drops the later turns and reverts their canvas changes, or leaves the canvas with restoreCanvas false", async () => {
     const agent = await startAgentEngine({ script: await script() });

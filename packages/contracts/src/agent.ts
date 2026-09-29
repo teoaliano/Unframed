@@ -234,6 +234,7 @@ export const ChatTurn = Schema.Struct({
   usage: Schema.optionalKey(Schema.Unknown),
   files: Schema.optionalKey(Schema.Array(TurnFile)),
   reverted: Schema.optionalKey(TurnRevert),
+  revertRequestedAt: Schema.optionalKey(Schema.String),
 });
 
 export const LatestTurn = Schema.Struct({

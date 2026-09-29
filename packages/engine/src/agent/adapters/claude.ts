@@ -2,8 +2,8 @@ import { readFile } from "node:fs/promises";
 import type { CanUseTool, Options, PermissionResult, PermissionUpdate, Query, SDKUserMessage } from "@anthropic-ai/claude-agent-sdk";
 import {
   AGENT_SYSTEM_PROMPT,
-  CHAT_TITLE_PROMPT,
   CHAT_TITLE_SYSTEM_PROMPT,
+  chatTitlePrompt,
   claudePermissionMode,
   claudeTurnPermissionMode,
   initialClaudeState,
@@ -17,9 +17,10 @@ import {
   type RuntimeEventDraft,
   type RuntimeMode,
 } from "@unframed/domain";
-import type { AdapterContext, ProviderAdapter, SessionStart, TitleInput, TurnAttachment, TurnInput } from "../adapter.ts";
+import type { AdapterContext, ProviderAdapter, SessionStart, TitleInput, TurnInput } from "../adapter.ts";
 import { MCP_SERVER_NAME } from "../mcp.ts";
 import { PermissionGate } from "../permissionGate.ts";
+import { errorText } from "../../log.ts";
 
 /** A queue of user messages as the streaming prompt of one long-lived query. */
 class PromptQueue implements AsyncIterable<SDKUserMessage> {
@@ -74,7 +75,6 @@ interface ClaudeSession {
   state: ClaudeMapState;
   turnId: string | undefined;
   interactionMode: InteractionMode;
-  runtimeMode: RuntimeMode;
   permissionMode: ClaudePermissionMode;
   model: string;
   boundaries: string[];
@@ -144,7 +144,7 @@ export const claudeAdapter = (context: AdapterContext): ProviderAdapter => {
         }
       }
     } catch (error) {
-      if (!session.stopped) context.log(session.chatId, `claude query: ${error instanceof Error ? error.message : String(error)}`);
+      if (!session.stopped) context.log(session.chatId, `claude query: ${errorText(error)}`);
     }
     if (!session.stopped && sessions.get(session.chatId) === session) {
       sessions.delete(session.chatId);
@@ -239,7 +239,6 @@ export const claudeAdapter = (context: AdapterContext): ProviderAdapter => {
         state: { ...initialClaudeState(), ...(stored.sessionId === undefined ? {} : { sessionId: stored.sessionId }), ...(stored.resumeSessionAt === undefined ? {} : { lastAssistantUuid: stored.resumeSessionAt }) },
         turnId: undefined,
         interactionMode: "default",
-        runtimeMode: input.runtimeMode,
         permissionMode: mode.permissionMode ?? "default",
         model: input.modelSelection.model,
         boundaries: [...(stored.boundaries ?? [])],
@@ -290,7 +289,6 @@ export const claudeAdapter = (context: AdapterContext): ProviderAdapter => {
     async setRuntimeMode(chatId: string, runtimeMode: RuntimeMode) {
       const session = sessions.get(chatId);
       if (!session) return;
-      session.runtimeMode = runtimeMode;
       if (session.interactionMode === "plan") return;
       const mode = claudeTurnPermissionMode(runtimeMode, "default");
       if (mode === session.permissionMode) return;
@@ -324,7 +322,7 @@ export const claudeAdapter = (context: AdapterContext): ProviderAdapter => {
       timer.unref();
       try {
         const handle = query({
-          prompt: CHAT_TITLE_PROMPT.replace("<first message>", input.firstMessage).replace("<answer>", input.answer),
+          prompt: chatTitlePrompt(input.firstMessage, input.answer),
           options: {
             pathToClaudeCodeExecutable: input.environment.executable,
             env: input.environment.env,
@@ -351,4 +349,3 @@ export const claudeAdapter = (context: AdapterContext): ProviderAdapter => {
   };
 };
 
-export type { TurnAttachment };

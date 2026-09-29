@@ -69,3 +69,10 @@ export const toolResults = (chat: Chat, tool?: string): Array<{ toolName: string
 /** A scripted session's MCP endpoint and token, as the scripted agent records it (a file it writes). */
 export const scriptedSession = async (agent: AgentEngine, chatId: string): Promise<{ url: string; token: string }> =>
   JSON.parse(await readFile(join(agent.engine.dataDir, "scripted-agent", `${chatId}.json`), "utf8"));
+
+/** Every rollback the scripted agent was asked for, in turns, oldest first. */
+export const scriptedRollbacks = async (agent: AgentEngine, chatId: string): Promise<number[]> =>
+  (await readFile(join(agent.engine.dataDir, "scripted-agent", `${chatId}.rollbacks`), "utf8").catch(() => ""))
+    .split("\n")
+    .filter((line) => line !== "")
+    .map(Number);
