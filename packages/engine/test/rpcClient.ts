@@ -26,6 +26,8 @@ export interface Subscription<A> {
   readonly values: A[];
   /** Resolves with the value at `index` once it arrives (the next one when omitted). */
   next(index?: number): Promise<A>;
+  /** Resolves once the engine ended the stream, or it failed. */
+  ended(): Promise<void>;
   close(): Promise<void>;
 }
 
@@ -101,6 +103,7 @@ export const connectRpc = async (url: string): Promise<TestRpcClient> => {
           ),
         ),
       );
+      const finished = Effect.runPromise(Fiber.await(fiber)).then(() => undefined);
       let consumed = 0;
       const subscription: Subscription<A> = {
         values,
@@ -112,6 +115,7 @@ export const connectRpc = async (url: string): Promise<TestRpcClient> => {
             flush();
           });
         },
+        ended: () => finished,
         async close() {
           subscriptions.delete(subscription as Subscription<unknown>);
           await Effect.runPromise(Fiber.interrupt(fiber));

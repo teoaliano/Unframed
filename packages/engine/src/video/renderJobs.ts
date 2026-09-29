@@ -5,7 +5,7 @@
  * placeholder's run marker is the second copy.
  */
 import { randomUUID } from "node:crypto";
-import { readFile, stat } from "node:fs/promises";
+import { mkdir, readFile, stat } from "node:fs/promises";
 import { basename, join } from "node:path";
 import {
   isBareFileName,
@@ -257,8 +257,16 @@ export const renderJobsLayer = Layer.effect(
       // A rename may have landed during the download (spec 10 repoints pending records).
       const current = (await readJobsLenient(dir)).find((job) => job.id === record.id) ?? record;
       const project = current.project ?? "";
-      const folder = await media.folder(project);
-      if (folder === undefined) throw new Error(`There is no project named "${project}".`);
+      // A project whose folder is gone (moved with the output folder, or removed by hand)
+      // still gets its paid clip: the folder is made again, and no room is touched (step 7).
+      // Failing here instead would retry, and download the clip again, on every sweep.
+      let folder = await media.folder(project);
+      const hadFolder = folder !== undefined;
+      if (folder === undefined) {
+        if (projectSlug(project) === "") throw new Error(`There is no project named "${project}".`);
+        folder = join(dir, projectSlug(project));
+        await mkdir(folder, { recursive: true });
+      }
       const params = current.params ?? record.params;
       const base = await writeResultFile(folder, `${fileStamp(Date.now())}-${projectSlug(params.prompt) || "video"}`, "mp4", bytes);
       const file = `${base}.mp4`;
@@ -298,7 +306,7 @@ export const renderJobsLayer = Layer.effect(
       await revokeShares(record.id);
 
       const landed: LandedClip = { file, sidecar: `${base}.json`, cost, bytes: bytes.length };
-      const records = await readRoom(project);
+      const records = hadFolder ? await readRoom(project) : undefined;
       if (records) {
         const shape = markedBy(records, record.id);
         if (shape) await applyRoom(project, fillChange(shape, landed), record.id);
