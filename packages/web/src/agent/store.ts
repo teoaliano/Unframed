@@ -30,6 +30,9 @@ export interface RailUi {
   readonly error: string | undefined;
 }
 
+/** The rail's choice when New chat was pressed: no tab is active and the next message starts a chat. */
+export const NEW_CHAT = "new-chat";
+
 const INITIAL_UI: RailUi = { open: false, chosen: null, pinned: null, searchOpen: false, diff: undefined, error: undefined };
 
 type Key = "shell" | "providers" | "ui" | `thread:${string}`;

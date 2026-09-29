@@ -5,11 +5,11 @@ import { useMaybeEditor, useValue } from "tldraw";
 import { iconButtonClass, Tip } from "../../chrome/ui.tsx";
 import { useEngine } from "../../context.ts";
 import { AgentTray } from "../composer/AgentTray.tsx";
-import { noProviderReady, readyProviders } from "../providers.ts";
+import { noProviderReady } from "../providers.ts";
 import { ConfirmDialog } from "../ConfirmDialog.tsx";
-import { createChat, messageOf } from "../send.ts";
-import { useChatClient, useChats, useProviders, useRailUi } from "../store.ts";
-import { Transcript } from "../transcript/Transcript.tsx";
+import { messageOf } from "../send.ts";
+import { NEW_CHAT, useChatClient, useChats, useProviders, useRailUi } from "../store.ts";
+import { EMPTY_CHAT, Transcript } from "../transcript/Transcript.tsx";
 import { NoProvider } from "./NoProvider.tsx";
 import { TabStrip } from "./TabStrip.tsx";
 import { ThreadSearch } from "./ThreadSearch.tsx";
@@ -71,7 +71,9 @@ export const AgentRail = ({ project, embedded, filterTo, onLocate, onOpenEditor,
     const pinned = ui.pinned === null ? undefined : chats.find((chat) => chat.id === ui.pinned);
     return pinned && !shown.includes(pinned) ? [pinned, ...shown] : shown;
   }, [chats, selectedArtifacts, ui.pinned]);
-  const active = ui.pinned !== null && visible.some((chat) => chat.id === ui.pinned) ? ui.pinned : nextActive(ui.chosen, visible);
+  // New chat leaves no tab active: the next message starts a chat.
+  const drafting = ui.chosen === NEW_CHAT;
+  const active = drafting ? null : ui.pinned !== null && visible.some((chat) => chat.id === ui.pinned) ? ui.pinned : nextActive(ui.chosen, visible);
   const activeSummary = visible.find((chat) => chat.id === active);
   const none = noProviderReady(statuses);
   const artifactsSelected = selectedArtifacts.length > 0;
@@ -89,15 +91,7 @@ export const AgentRail = ({ project, embedded, filterTo, onLocate, onOpenEditor,
     };
   }, [editor]);
 
-  const newChat = () => {
-    client.setUi({ chosen: null, pinned: null });
-    void startEmptyChat();
-  };
-  const startEmptyChat = async () => {
-    const provider = readyProviders(statuses)[0];
-    if (!provider) return;
-    await createChat(client, { modelSelection: { provider, model: "", traits: {} }, runtimeMode: "full-access", interactionMode: "default", tags: selectedArtifacts }).catch(() => undefined);
-  };
+  const newChat = () => client.setUi({ chosen: NEW_CHAT, pinned: null });
 
   return (
     <aside
@@ -163,7 +157,11 @@ export const AgentRail = ({ project, embedded, filterTo, onLocate, onOpenEditor,
           <NoProvider client={client} />
         ) : active ? (
           <Transcript client={client} chatId={active} embedded={embedded === true} {...(onLocate ? { onLocate } : {})} {...(onOpenEditor ? { onOpenEditor } : {})} />
-        ) : null}
+        ) : (
+          <div className="unframed-agent-transcript">
+            <p className="unframed-agent-empty">{EMPTY_CHAT}</p>
+          </div>
+        )}
       </div>
       {ui.error !== undefined && (
         <p role="alert" className="unframed-agent-rail__error">

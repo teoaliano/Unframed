@@ -5,7 +5,7 @@ import { createPortal } from "react-dom";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from "react";
 import type { AgentTrayProps as SlotProps } from "../../chrome/slots.ts";
 import { useEngine } from "../../context.ts";
-import { noProviderReady, providerName, readyProviders } from "../providers.ts";
+import { effectiveModel, noProviderReady, providerName, readyProviders } from "../providers.ts";
 import { createChat, messageOf, sendMessage } from "../send.ts";
 import { useChatClient, useChats, useProviders, useWatchedThread, type ChatClient } from "../store.ts";
 import { Tip } from "../../chrome/ui.tsx";
@@ -16,6 +16,8 @@ import { AttachmentShelf } from "./AttachmentShelf.tsx";
 import { ChipRow, contextSelection, useSelectionChips } from "./chips.tsx";
 import { ComposerMenu, type MenuItem } from "./ComposerMenu.tsx";
 import { mentionItems } from "./mentions.tsx";
+import { slashItems, skillMenuItems } from "./commands.tsx";
+import { ContextMeter, declaredTraits, latestUsage, ModelPicker, PlanToggle, RuntimeModePicker, TraitsPicker } from "./pickers.tsx";
 import { PromptEditor, type PromptEditorHandle, type Trigger } from "./PromptEditor.tsx";
 import { useMaybeEditor, useValue } from "tldraw";
 
@@ -80,6 +82,33 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
   const [draftRuntime, setDraftRuntime] = useState<RuntimeMode>(DEFAULT_RUNTIME_MODE);
   const [draftInteraction, setDraftInteraction] = useState<InteractionMode>("default");
   const showError = useCallback((message: string) => client.setUi({ error: message }), [client]);
+  const [modelOpen, setModelOpen] = useState(false);
+  const [modeOpen, setModeOpen] = useState(false);
+
+  /** The model a message runs on: the chat's, or for a new chat the one picked here, else the first ready provider's default. */
+  const selection: ModelSelection = useMemo(
+    () => chat?.modelSelection ?? draftModel ?? { provider: ready[0] ?? "claude", model: "", traits: {} },
+    [chat?.modelSelection, draftModel, ready],
+  );
+  const runtimeMode = chat?.runtimeMode ?? draftRuntime;
+  const interactionMode = chat?.interactionMode ?? draftInteraction;
+  const model = effectiveModel(statuses, selection.provider, selection.model);
+  const status = statuses?.[selection.provider];
+  const fail = useCallback((error: unknown) => client.setUi({ error: messageOf(error) }), [client]);
+  const setModelSelection = (next: ModelSelection) => {
+    if (!chat) return setDraftModel(next);
+    void client.dispatch({ type: "thread.meta.update", threadId: chat.id, modelSelection: next }).catch(fail);
+  };
+  const setRuntime = (mode: RuntimeMode) => {
+    if (!chat) return setDraftRuntime(mode);
+    void client.dispatch({ type: "thread.runtime-mode.set", threadId: chat.id, runtimeMode: mode }).catch(fail);
+  };
+  const setInteraction = (mode: InteractionMode) => {
+    if (!chat) return setDraftInteraction(mode);
+    void client.dispatch({ type: "thread.interaction-mode.set", threadId: chat.id, interactionMode: mode }).catch(fail);
+  };
+  const usage = latestUsage(chat);
+  const compactable = (status?.commands ?? []).some((command) => command.name === "compact");
   const attachments = useAttachments(client.engine, showError);
   const files = useRef<HTMLInputElement>(null);
   const root = useRef<HTMLDivElement>(null);
@@ -187,8 +216,42 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
         },
       };
     }
+    if (trigger.char === "/") {
+      const wholeDraft = text.trim() === `/${trigger.query}` && attachments.staged.length === 0;
+      const items = slashItems({ query: trigger.query, status, provider: selection.provider, wholeDraft });
+      return {
+        label: "Commands",
+        trigger,
+        items,
+        empty: status === undefined ? "Searching skills..." : "No matching command.",
+        pick: (item) => {
+          const chosen = items.find((known) => known.key === item.key);
+          if (!chosen) return;
+          if (chosen.kind === "builtin") {
+            box.current?.replaceTrigger(trigger, "");
+            if (chosen.name === "model") setModelOpen(true);
+            else setInteraction(chosen.name === "plan" ? "plan" : "default");
+          } else if (chosen.kind === "provider") {
+            box.current?.replaceTrigger(trigger, `/${chosen.name} `);
+          } else {
+            box.current?.replaceTrigger(trigger, { kind: "skill", label: "", title: chosen.name, ref: chosen.name });
+          }
+        },
+      };
+    }
+    if (trigger.char === "$") {
+      const items = skillMenuItems(trigger.query, status, selection.provider);
+      return {
+        label: "Skills",
+        trigger,
+        items,
+        empty: status === undefined ? "Searching skills..." : "No skills found. Try / to browse provider commands.",
+        pick: (item) => box.current?.replaceTrigger(trigger, { kind: "skill", label: "", title: item.key.slice("skill:".length), ref: item.key.slice("skill:".length) }),
+      };
+    }
     return undefined;
-  }, [trigger, dismissedAt, mentionRows, chips]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [trigger, dismissedAt, mentionRows, chips, text, attachments.staged.length, status, selection.provider, chat?.id]);
   useEffect(() => {
     if (trigger === undefined || trigger.from !== dismissedAt) setDismissedAt(undefined);
   }, [trigger, dismissedAt]);
@@ -203,6 +266,14 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
     if (command && event.shiftKey && event.key.toLowerCase() === "v") {
       inlineNext.current = Date.now();
       return false;
+    }
+    if (command && event.shiftKey && event.key.toLowerCase() === "a") {
+      setModeOpen(true);
+      return true;
+    }
+    if (event.key === "Tab" && event.shiftKey && !menu) {
+      setInteraction(interactionMode === "plan" ? "default" : "plan");
+      return true;
     }
     if (menu) {
       const count = menu.items.length;
@@ -219,12 +290,6 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
     }
     return false;
   };
-
-  /** The model a message runs on: the chat's, or for a new chat the one picked here, else the first ready provider's default. */
-  const selection: ModelSelection = useMemo(
-    () => chat?.modelSelection ?? draftModel ?? { provider: ready[0] ?? "claude", model: "", traits: {} },
-    [chat?.modelSelection, draftModel, ready],
-  );
 
   const placeholder = none ? PLACEHOLDERS.noProvider : PLACEHOLDERS.default;
   const canSend = !none && !sending && (text.trim() !== "" || attachments.staged.length > 0);
@@ -260,9 +325,6 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
     void client.dispatch({ type: "thread.turn.interrupt", threadId: chat.id, turnId: chat.latestTurn.turnId }).catch((error: unknown) => client.setUi({ error: messageOf(error) }));
   };
 
-  void setDraftModel;
-  void setDraftRuntime;
-  void setDraftInteraction;
 
   return (
     <div className="unframed-agent-tray" data-variant={variant} data-testid="agent-tray" ref={root}>
@@ -315,6 +377,33 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
                 if (chosen.length > 0) void attachments.add(chosen);
               }}
             />
+            <ModelPicker
+              statuses={statuses}
+              selection={selection}
+              providerLocked={chat !== undefined}
+              disabled={running}
+              open={modelOpen}
+              onOpenChange={setModelOpen}
+              onPick={(provider, picked) =>
+                setModelSelection({ provider, model: picked.id, traits: provider === selection.provider ? declaredTraits(picked, selection.traits) : {} })
+              }
+            />
+            <TraitsPicker
+              provider={selection.provider}
+              model={model}
+              traits={selection.traits}
+              disabled={running}
+              onChange={(traits) => setModelSelection({ ...selection, traits: declaredTraits(model, traits) })}
+            />
+            <RuntimeModePicker mode={runtimeMode} open={modeOpen} onOpenChange={setModeOpen} onChange={setRuntime} />
+            <PlanToggle mode={interactionMode} onToggle={() => setInteraction(interactionMode === "plan" ? "default" : "plan")} />
+            {usage && chat && (
+              <ContextMeter
+                usage={usage}
+                compactUnavailable={!compactable}
+                onCompact={() => void sendMessage(client, chat.id, { text: "/compact", selection: [], attachments: [] }, { steer: running }).catch(fail)}
+              />
+            )}
           </div>
           <div className="unframed-agent-footer__send">
             {note?.(providerName(selection.provider))}
