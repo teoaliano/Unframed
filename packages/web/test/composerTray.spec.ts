@@ -1,6 +1,6 @@
 import type { Page } from "@playwright/test";
 import { openCanvas } from "./canvas.ts";
-import { clickShape, composer, expect, openComposer, sendRun, startGeneration, test, toolbar } from "./generation.ts";
+import { clickShape, composer, expect, openAndEscape, openComposer, sendRun, startGeneration, test, toolbar } from "./generation.ts";
 
 const openOnSubject = async (page: Page) => {
   await clickShape(page, "shape:starter-subject");
@@ -149,6 +149,25 @@ test("Escape in the model dialog closes only the dialog", async ({ page, generat
   await expect(composer(page)).toBeVisible();
   await page.keyboard.press("Escape");
   await expect(composer(page)).toHaveCount(0);
+});
+
+test("an Escape the moment a tray menu or the model dialog opens closes only that, and keeps the selection", async ({ page, generation }) => {
+  await openCanvas(page, generation.engine);
+  await openOnSubject(page);
+
+  expect(await openAndEscape(tray(page).getByRole("button", { name: "+ add prop" }))).toEqual({ focusOnControl: true });
+  await expect(page.getByRole("menu", { name: "Add prop" })).toHaveCount(0);
+  await expect(composer(page)).toBeVisible();
+
+  expect(await openAndEscape(chips(page).filter({ hasText: "low" }))).toEqual({ focusOnControl: true });
+  await expect(page.getByRole("menu", { name: "Quality" })).toHaveCount(0);
+  await expect(composer(page)).toBeVisible();
+
+  // The dialog takes focus as it mounts, so this Esc goes down on the chip after focus left it.
+  await openAndEscape(tray(page).getByTestId("model-chip"));
+  await expect(dialog(page)).toHaveCount(0);
+  // The composer closes with the selection, so still showing means tldraw kept it.
+  await expect(composer(page)).toBeVisible();
 });
 
 test("the estimate shows beside send only when exact, and a reply for a model no longer selected is dropped", async ({ page, generation }) => {

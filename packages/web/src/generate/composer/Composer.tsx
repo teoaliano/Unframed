@@ -71,6 +71,10 @@ export const Composer = ({ mode, project, recipe, onCollapse }: ComposerProps) =
       data-testid="composer"
       data-tray={mode}
       onKeyDownCapture={(event) => {
+        // tldraw reads keys on its container, which holds the composer, before React's bubble
+        // handlers run. Unmarked, an Esc on a chip whose menu is still taking focus clears the
+        // selection, and that closes the composer.
+        editor.markEventAsHandled(event);
         // A menu or the model dialog inside the composer takes its keys first.
         if (menus.current.size > 0) return;
         if (event.key === "Escape") {
@@ -80,7 +84,7 @@ export const Composer = ({ mode, project, recipe, onCollapse }: ComposerProps) =
         }
       }}
       onKeyDown={(event) => {
-        // Keys typed in the composer are the composer's: tldraw's shortcuts never see them.
+        // Keys typed in the composer are the composer's: tldraw's shortcuts, on the body, never see them.
         event.stopPropagation();
       }}
     >
