@@ -134,9 +134,7 @@
         "src/generate/runsProp.tsx",
         "src/legacy/ImportGate.tsx",
         "src/library/AddToLibraryDialog.tsx",
-        "src/library/LibraryDialog.tsx",
-        "src/settings/SettingsHost.tsx",
-        "src/settings/fields.tsx"
+        "src/library/LibraryDialog.tsx"
       ],
       "rules": {
         "shadcn/no-unknown-classes": "off",

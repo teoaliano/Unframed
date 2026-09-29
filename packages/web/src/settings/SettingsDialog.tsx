@@ -2,15 +2,19 @@
  * The settings dialog (spec 10): the OpenRouter block (connect, paste, remove, key status),
  * default models, the output folder and the local agents. Save sends only what changed.
  */
-import { Dialog } from "@base-ui/react/dialog";
 import { UnframedError, type ProviderStatuses, type Settings, type SettingsPatch } from "@unframed/contracts";
 import { keyStatusCopy } from "@unframed/domain";
-import { CircleCheck, FolderOpen } from "lucide-react";
+import { CircleAlert, CircleCheck, FolderOpen } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+import { Alert, AlertDescription, AlertTitle } from "~/components/ui/alert";
+import { Button } from "~/components/ui/button";
+import { Dialog, DialogFooter, DialogHeader, DialogPanel, DialogPopup, DialogTitle } from "~/components/ui/dialog";
+import { Input } from "~/components/ui/input";
+import { Spinner } from "~/components/ui/spinner";
 import { useActivation, useEngine } from "../context.ts";
 import { loadCatalogue } from "../generate/catalogue.ts";
 import { showNotice } from "../toasts.tsx";
-import { Button, Copy, linkClass, ModelSelect, SectionHeading, TextField } from "./fields.tsx";
+import { Copy, linkClass, ModelSelect, SectionHeading } from "./fields.tsx";
 import { FOLLOW_UP_KEY, LocalAgents, type FollowUp } from "./LocalAgents.tsx";
 import { useSettingsUi, type SettingsUi } from "./settingsUi.ts";
 
@@ -222,172 +226,174 @@ export const SettingsDialog = ({ ui }: { readonly ui: SettingsUi }) => {
   const showsKeySection = hasKey || revealed;
 
   return (
-    <Dialog.Root open={open} onOpenChange={(next) => (next ? ui.open() : ui.close())}>
-      <Dialog.Portal>
-        <Dialog.Backdrop className="fixed inset-0 z-[1200] bg-[var(--unframed-scrim)] backdrop-blur-[10px] backdrop-saturate-[160%]" />
-        <Dialog.Popup
-          initialFocus={showsKeySection ? keyField : undefined}
-          data-testid="settings-dialog"
-          className="fixed left-1/2 top-1/2 z-[1201] flex max-h-[calc(100vh-32px)] w-[480px] max-w-[calc(100vw-32px)] -translate-x-1/2 -translate-y-1/2 flex-col rounded-xl border border-border bg-popover text-foreground shadow-lg outline-none"
-        >
-          <Dialog.Title className="m-0 px-5 pb-1 pt-5 text-[17px] font-semibold">{hasKey ? "Settings" : "Connect OpenRouter to start"}</Dialog.Title>
+    <Dialog open={open} onOpenChange={(next) => (next ? ui.open() : ui.close())}>
+      <DialogPopup
+        showCloseButton={false}
+        initialFocus={showsKeySection ? keyField : undefined}
+        data-testid="settings-dialog"
+        className="max-w-[480px]"
+        render={
           <form
-            className="flex min-h-0 flex-1 flex-col"
             onSubmit={(event) => {
               event.preventDefault();
               void save();
             }}
-          >
-            <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-5 pb-2 pt-3" data-testid="settings-form">
-              {!hasKey && !pending && (
-                <section className="flex flex-col items-start gap-3">
-                  <p className="m-0 text-[13.5px] leading-relaxed text-muted-foreground">
-                    Unframed has no image model of its own. It sends your prompts to{" "}
-                    <a href="https://openrouter.ai" target="_blank" rel="noreferrer" className={linkClass}>
-                      OpenRouter
-                    </a>
-                    , which runs the model and bills your OpenRouter account per image (a few cents for most models). Connecting takes you there to approve Unframed; the key it gives back is saved on this machine and used only by your local server.
-                  </p>
-                  <Button variant="primary" onClick={connect}>
-                    Connect OpenRouter
-                  </Button>
-                </section>
-              )}
+          />
+        }
+      >
+        <DialogHeader>
+          <DialogTitle>{hasKey ? "Settings" : "Connect OpenRouter to start"}</DialogTitle>
+        </DialogHeader>
+        <DialogPanel data-testid="settings-form">
+          {!hasKey && !pending && (
+            <section className="flex flex-col items-start gap-3">
+              <p className="m-0 text-sm leading-relaxed text-muted-foreground">
+                Unframed has no image model of its own. It sends your prompts to{" "}
+                <a href="https://openrouter.ai" target="_blank" rel="noreferrer" className={linkClass}>
+                  OpenRouter
+                </a>
+                , which runs the model and bills your OpenRouter account per image (a few cents for most models). Connecting takes you there to approve Unframed; the key it gives back is saved on this machine and used only by your local server.
+              </p>
+              <Button onClick={connect}>Connect OpenRouter</Button>
+            </section>
+          )}
 
-              {pending && (
-                <section className="flex flex-col items-start gap-2" data-testid="settings-waiting">
-                  <p className="m-0 text-[13.5px] text-foreground">Waiting for OpenRouter in your browser…</p>
-                  {connection !== undefined && (
-                    <p className="m-0 text-[12.5px] text-muted-foreground">
-                      Didn't open?{" "}
-                      <a href={connection.authorizeUrl} target="_blank" rel="noreferrer" className={linkClass}>
-                        Approve Unframed at OpenRouter
-                      </a>
-                      .
-                    </p>
-                  )}
-                  <Button variant="ghost" className="-ml-2" onClick={() => ui.cancel()}>
-                    Cancel
-                  </Button>
-                </section>
+          {pending && (
+            <section className="flex flex-col items-start gap-2" data-testid="settings-waiting">
+              <p className="m-0 text-sm text-foreground">Waiting for OpenRouter in your browser…</p>
+              {connection !== undefined && (
+                <p className="m-0 text-xs text-muted-foreground">
+                  Didn't open?{" "}
+                  <a href={connection.authorizeUrl} target="_blank" rel="noreferrer" className={linkClass}>
+                    Approve Unframed at OpenRouter
+                  </a>
+                  .
+                </p>
               )}
+              <Button variant="ghost" className="-ml-3" onClick={() => ui.cancel()}>
+                Cancel
+              </Button>
+            </section>
+          )}
 
-              {!showsKeySection && (
-                <Button variant="ghost" className="-ml-2 self-start" onClick={() => setRevealed(true)}>
-                  or paste a key instead
-                </Button>
-              )}
+          {!showsKeySection && (
+            <Button variant="ghost" className="-ml-3 self-start" onClick={() => setRevealed(true)}>
+              or paste a key instead
+            </Button>
+          )}
 
-              {showsKeySection && (
-                <section className="flex flex-col gap-2">
-                  <SectionHeading>{hasKey ? "OpenRouter" : "API key"}</SectionHeading>
-                  <div className="flex items-center gap-2">
-                    <TextField
-                      ref={keyField}
-                      type="password"
-                      aria-label="API key"
-                      placeholder="sk-or-v1-…"
-                      autoFocus
-                      value={draft.key}
-                      onChange={(event) => {
-                        edit({ key: event.target.value });
-                        if (confirmRemove) {
-                          setConfirmRemove(false);
-                          setFieldWarning(undefined);
-                        }
-                      }}
-                    />
-                    {hasKey && (
-                      <Button variant={confirmRemove ? "destructive" : "ghost"} loading={removing} disabled={removing} onClick={() => void removeKey()}>
-                        {confirmRemove ? "Yes, remove it" : "Remove key"}
-                      </Button>
-                    )}
-                  </div>
-                  <p className="m-0 text-[12.5px] leading-snug text-muted-foreground" data-testid="key-status">
-                    <Copy parts={copy.line} />
-                  </p>
-                  {copy.expiry !== undefined && (
-                    <p className="m-0 text-[12.5px] leading-snug text-foreground" data-testid="key-expiry">
-                      {copy.expiry}
-                    </p>
-                  )}
-                  {copy.reconnect && !pending && (
-                    <Button variant="primary" className="self-start" onClick={connect}>
-                      Reconnect OpenRouter
-                    </Button>
-                  )}
-                  {fieldWarning !== undefined && (
-                    <p className="m-0 text-[12.5px] leading-snug text-destructive-foreground" data-testid="key-warning">
-                      {fieldWarning}
-                    </p>
-                  )}
-                </section>
-              )}
-
-              {hasKey && settings !== undefined && (
-                <>
-                  <section className="flex flex-col gap-3 border-t border-border pt-4">
-                    <SectionHeading>Default models</SectionHeading>
-                    {MEDIA.map(({ medium, label, field }) => (
-                      <ModelSelect key={medium} label={label} value={draft[field]} models={catalogues[medium]} onChange={(value) => edit({ [field]: value })} />
-                    ))}
-                  </section>
-
-                  <section className="flex flex-col gap-2 border-t border-border pt-4">
-                    <SectionHeading>Output folder</SectionHeading>
-                    <div className="flex items-center gap-2">
-                      <TextField aria-label="Output folder" placeholder="./output" value={draft.outputDir} onChange={(event) => edit({ outputDir: event.target.value })} />
-                      <Button variant="secondary" onClick={() => void browse()}>
-                        <FolderOpen size={15} aria-hidden />
-                        Browse…
-                      </Button>
-                    </div>
-                  </section>
-
-                  <LocalAgents
-                    statuses={statuses}
-                    checking={checking}
-                    onCheckAgain={() => checkProviders(true)}
-                    claudePath={draft.claudePath}
-                    codexPath={draft.codexPath}
-                    claudeConfigDir={draft.claudeConfigDir}
-                    onChange={(field, value) => edit({ [field]: value })}
-                    followUp={followUp}
-                    onFollowUp={setFollowUpPreference}
-                  />
-                </>
-              )}
-            </div>
-
-            <div className="flex flex-col gap-3 border-t border-border px-5 pb-5 pt-3">
-              {banner?.kind === "error" && (
-                <div role="alert" className="rounded-lg border border-[var(--unframed-hue-red-bg)] bg-[var(--unframed-hue-red-bg)] px-3 py-2 text-[12.5px] leading-snug text-[var(--unframed-hue-red-text)]">
-                  {banner.message}
-                </div>
-              )}
-              {banner?.kind === "saved" && (
-                <div role="status" className="flex items-start gap-2 rounded-lg border border-border bg-card px-3 py-2 text-[12.5px] leading-snug">
-                  <CircleCheck size={15} aria-hidden className="mt-0.5 shrink-0 text-foreground" />
-                  <span className="flex flex-col">
-                    <span className="font-medium text-foreground">Saved to .env</span>
-                    <span className="text-muted-foreground">Applied right away, no restart needed.</span>
-                  </span>
-                </div>
-              )}
-              <div className="flex justify-end gap-2">
-                <Button variant="ghost" onClick={() => ui.close()}>
-                  Close
-                </Button>
-                {showsKeySection && (
-                  <Button variant="primary" type="submit" loading={saving} disabled={saving}>
-                    Save
+          {showsKeySection && (
+            <section className="flex flex-col gap-2">
+              <SectionHeading>{hasKey ? "OpenRouter" : "API key"}</SectionHeading>
+              <div className="flex items-center gap-2">
+                <Input
+                  ref={keyField}
+                  type="password"
+                  aria-label="API key"
+                  placeholder="sk-or-v1-…"
+                  autoFocus
+                  spellCheck={false}
+                  autoComplete="off"
+                  value={draft.key}
+                  onChange={(event) => {
+                    edit({ key: event.target.value });
+                    if (confirmRemove) {
+                      setConfirmRemove(false);
+                      setFieldWarning(undefined);
+                    }
+                  }}
+                />
+                {hasKey && (
+                  <Button variant={confirmRemove ? "destructive" : "ghost"} aria-busy={removing || undefined} disabled={removing} onClick={() => void removeKey()}>
+                    {removing && <Spinner aria-hidden />}
+                    {confirmRemove ? "Yes, remove it" : "Remove key"}
                   </Button>
                 )}
               </div>
-            </div>
-          </form>
-        </Dialog.Popup>
-      </Dialog.Portal>
-    </Dialog.Root>
+              <p className="m-0 text-xs text-muted-foreground" data-testid="key-status">
+                <Copy parts={copy.line} />
+              </p>
+              {copy.expiry !== undefined && (
+                <p className="m-0 text-xs text-foreground" data-testid="key-expiry">
+                  {copy.expiry}
+                </p>
+              )}
+              {copy.reconnect && !pending && (
+                <Button className="self-start" onClick={connect}>
+                  Reconnect OpenRouter
+                </Button>
+              )}
+              {fieldWarning !== undefined && (
+                <p className="m-0 text-xs text-destructive-foreground" data-testid="key-warning">
+                  {fieldWarning}
+                </p>
+              )}
+            </section>
+          )}
+
+          {hasKey && settings !== undefined && (
+            <>
+              <section className="flex flex-col gap-3 border-t pt-4">
+                <SectionHeading>Default models</SectionHeading>
+                {MEDIA.map(({ medium, label, field }) => (
+                  <ModelSelect key={medium} label={label} value={draft[field]} models={catalogues[medium]} onChange={(value) => edit({ [field]: value })} />
+                ))}
+              </section>
+
+              <section className="flex flex-col gap-2 border-t pt-4">
+                <SectionHeading>Output folder</SectionHeading>
+                <div className="flex items-center gap-2">
+                  <Input aria-label="Output folder" placeholder="./output" font="mono" spellCheck={false} autoComplete="off" value={draft.outputDir} onChange={(event) => edit({ outputDir: event.target.value })} />
+                  <Button variant="outline" onClick={() => void browse()}>
+                    <FolderOpen aria-hidden />
+                    Browse…
+                  </Button>
+                </div>
+              </section>
+
+              <LocalAgents
+                statuses={statuses}
+                checking={checking}
+                onCheckAgain={() => checkProviders(true)}
+                claudePath={draft.claudePath}
+                codexPath={draft.codexPath}
+                claudeConfigDir={draft.claudeConfigDir}
+                onChange={(field, value) => edit({ [field]: value })}
+                followUp={followUp}
+                onFollowUp={setFollowUpPreference}
+              />
+            </>
+          )}
+        </DialogPanel>
+
+        {banner !== undefined && (
+          <div className="px-6 pb-4">
+            {banner.kind === "error" ? (
+              <Alert variant="error">
+                <CircleAlert aria-hidden />
+                <AlertTitle>{banner.message}</AlertTitle>
+              </Alert>
+            ) : (
+              <Alert variant="success" role="status">
+                <CircleCheck aria-hidden />
+                <AlertTitle>Saved to .env</AlertTitle>
+                <AlertDescription>Applied right away, no restart needed.</AlertDescription>
+              </Alert>
+            )}
+          </div>
+        )}
+        <DialogFooter>
+          <Button variant="ghost" onClick={() => ui.close()}>
+            Close
+          </Button>
+          {showsKeySection && (
+            <Button type="submit" aria-busy={saving || undefined} disabled={saving}>
+              {saving && <Spinner aria-hidden />}
+              Save
+            </Button>
+          )}
+        </DialogFooter>
+      </DialogPopup>
+    </Dialog>
   );
 };

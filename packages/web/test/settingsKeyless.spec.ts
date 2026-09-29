@@ -2,6 +2,7 @@ import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { toast } from "./canvas.ts";
 import { expect, test } from "./fixtures.ts";
+import { expectSlot, expectToken } from "./kit.ts";
 import { openApp, settingsButton, settingsDialog, startSettingsEngine } from "./settings.ts";
 
 const INTRO =
@@ -17,6 +18,10 @@ test("a keyless first load opens the dialog by itself, with the intro, Connect, 
     await expect(dialog.getByText(INTRO)).toBeVisible();
     await expect(dialog.getByRole("link", { name: "OpenRouter", exact: true })).toHaveAttribute("href", "https://openrouter.ai");
     await expect(dialog.getByRole("button", { name: "Connect OpenRouter" })).toBeVisible();
+    await expectSlot(dialog, "dialog-popup");
+    await expectSlot(dialog.getByRole("button", { name: "Connect OpenRouter" }), "button");
+    await expectToken(dialog.getByRole("button", { name: "Connect OpenRouter" }), "background-color", "--primary");
+    await expectSlot(dialog.getByRole("button", { name: "or paste a key instead" }), "button");
     await expect(dialog.getByText("Default models")).toHaveCount(0);
     await expect(dialog.getByText("Output folder")).toHaveCount(0);
     await expect(dialog.getByText("Local agents")).toHaveCount(0);
