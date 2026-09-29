@@ -45,7 +45,8 @@ test("the Agent button slides the rail in, the top-right card steps aside, and C
     "transition-timing-function": "cubic-bezier(0.32, 0.72, 0, 1), ease-out",
   });
   await expect.poll(async () => (await computed(panel, "transform", "opacity")).opacity).toBe("1");
-  expect(["none", "matrix(1, 0, 0, 1, 0, 0)"]).toContain((await computed(panel, "transform")).transform);
+  // Opacity can reach 1 a frame before the slide's last fraction of a pixel.
+  await expect.poll(async () => ["none", "matrix(1, 0, 0, 1, 0, 0)"].includes((await computed(panel, "transform")).transform ?? "")).toBe(true);
   const box = (await panel.boundingBox())!;
   expect(box.x + box.width).toBeCloseTo(page.viewportSize()!.width, 0);
   expect(box.y).toBe(0);

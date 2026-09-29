@@ -1,7 +1,7 @@
 /** The settings dialog's small pieces: section headings, copy with links, the searchable model select. */
 import type { CopyPart } from "@unframed/domain";
 import { Check } from "lucide-react";
-import { useId, type ReactNode } from "react";
+import { useId, useState, type ReactNode } from "react";
 import { Combobox, ComboboxEmpty, ComboboxItem, ComboboxList, ComboboxPopup, ComboboxSearchInput, ComboboxTrigger } from "~/components/ui/combobox";
 import { Label } from "~/components/ui/label";
 import { SelectButton } from "~/components/ui/select";
@@ -47,6 +47,7 @@ export const ModelSelect = ({
   readonly onChange: (value: string) => void;
 }) => {
   const id = useId();
+  const [open, setOpen] = useState(false);
   const items = models === undefined ? (value === "" ? [] : [value]) : models.includes(value) || value === "" ? [...models] : [value, ...models];
   const placeholder = models === undefined ? "Loading models…" : "Pick a model";
   return (
@@ -54,8 +55,20 @@ export const ModelSelect = ({
       <Label id={id} render={<span />}>
         {label}
       </Label>
-      <Combobox items={items} value={value === "" ? null : value} onValueChange={(next) => typeof next === "string" && onChange(next)}>
-        <ComboboxTrigger aria-labelledby={id} data-model-select={label} render={<SelectButton />}>
+      <Combobox items={items} value={value === "" ? null : value} onValueChange={(next) => typeof next === "string" && onChange(next)} open={open} onOpenChange={setOpen}>
+        <ComboboxTrigger
+          aria-labelledby={id}
+          data-model-select={label}
+          render={<SelectButton />}
+          onKeyDown={(event) => {
+            // Until focus reaches the search field, an Escape lands here, and the settings
+            // dialog would close with the list.
+            if (open && event.key === "Escape") {
+              event.stopPropagation();
+              setOpen(false);
+            }
+          }}
+        >
           {value === "" ? <span className="text-placeholder">{placeholder}</span> : value}
         </ComboboxTrigger>
         <ComboboxPopup aria-label={`${label} models`}>

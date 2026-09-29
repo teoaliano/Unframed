@@ -18,13 +18,14 @@ import { watchSnapshots } from "./snapshots.ts";
 // Loaded with the editor only: DialKit and its stylesheet never reach a board that is not being edited.
 const ArtifactEditor = lazy(() => import("./editor/ArtifactEditor.tsx").then((module) => ({ default: module.ArtifactEditor })));
 
-/** The one small primary button an empty artifact shows: it selects the shape alone and opens the Agent tray on it. */
+/** The one small outline button an empty artifact shows: it selects the shape alone and opens the Agent tray on it. */
 const AgentButton = ({ shapeId }: { readonly shapeId: string }) => {
   const editor = useEditor();
   const handled = (event: SyntheticEvent) => editor.markEventAsHandled(event);
   return (
     // The empty card takes no pointer events; its one button does.
     <Button
+      variant="outline"
       size="sm"
       className="pointer-events-auto"
       onPointerDown={handled}

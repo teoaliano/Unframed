@@ -86,7 +86,7 @@ const useWheelToCanvas = (editor: Editor, root: React.RefObject<HTMLDivElement |
  * bottom edge (top edge when flipped below the selection). It measures its content and
  * animates to that size and place.
  */
-const Floating = ({ target, hidden, expanded, children }: { target: ScreenBox | undefined; hidden: boolean; expanded: boolean; children: ReactNode }) => {
+const Floating = ({ target, hidden, expanded, framed, children }: { target: ScreenBox | undefined; hidden: boolean; expanded: boolean; framed: boolean; children: ReactNode }) => {
   const editor = useEditor();
   const root = useRef<HTMLDivElement>(null);
   const content = useRef<HTMLDivElement>(null);
@@ -127,11 +127,9 @@ const Floating = ({ target, hidden, expanded, children }: { target: ScreenBox | 
     <div
       ref={root}
       className={cn(
-        "pointer-events-auto absolute z-[500] box-border overflow-hidden border font-sans text-foreground data-[morphing=true]:transition-[left,top,width,height,border-radius,background-color,box-shadow] data-[morphing=true]:duration-200 data-[morphing=true]:ease-out motion-reduce:data-[morphing=true]:transition-none",
-        // The bar is a glass card; the composer is t3code's composer shell.
-        expanded
-          ? `${composerGlassClass} rounded-3xl shadow-composer dark:shadow-none`
-          : "rounded-xl shadow-lg/5 surface-glass",
+        "pointer-events-auto absolute z-[500] box-border overflow-hidden font-sans text-foreground data-[morphing=true]:transition-[left,top,width,height,border-radius,background-color,box-shadow] data-[morphing=true]:duration-200 data-[morphing=true]:ease-out motion-reduce:data-[morphing=true]:transition-none",
+        // The bar is a glass card and the Generate composer t3code's composer shell. The Agent tray draws its own shell.
+        !expanded ? "rounded-xl border shadow-lg/5 surface-glass" : framed ? `${composerGlassClass} rounded-3xl border shadow-composer dark:shadow-none` : "rounded-3xl",
       )}
       data-testid="selection-toolbar"
       data-side={place?.side}
@@ -191,11 +189,11 @@ const AgentButton = ({ onOpen }: { onOpen: () => void }) => {
   const { agentToolbarButton: Registered } = useSlots();
   return (
     <>
-      <Separator orientation="vertical" className="mx-0.5 my-1" />
+      <Separator orientation="vertical" className="mx-0.5 my-1 first:hidden" />
       {Registered ? (
         <Registered onOpen={onOpen} />
       ) : (
-        <Button size="sm" onClick={onOpen}>
+        <Button variant="outline" size="sm" onClick={onOpen}>
           Agent
         </Button>
       )}
@@ -426,7 +424,7 @@ export const SelectionToolbar = () => {
   if (!expanded && (state === undefined || state.kind === "none" || (state.kind === "agent" && agent === null))) return null;
 
   return (
-    <Floating target={target ?? lastTarget.current} hidden={hidden} expanded={expanded}>
+    <Floating target={target ?? lastTarget.current} hidden={hidden} expanded={expanded} framed={composer.mode !== "agent"}>
       {expanded ? (
         <Composer mode={composer.mode === "agent" ? "agent" : "generate"} project={project} recipe={composer.recipe} onCollapse={collapse} />
       ) : state && state.kind !== "none" ? (

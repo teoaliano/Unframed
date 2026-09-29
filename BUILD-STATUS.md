@@ -20,6 +20,8 @@ Final verification, from a clean install (`node_modules` and `dist` removed) on 
 | bundle smoke test (`UNFRAMED_BUNDLE_DIR=dist pnpm test:bundle`) | 7 of 7 |
 | CI workflows | no step creates a GitHub Release |
 
+Spec 12's run on `build`, with the dev server stopped: `pnpm typecheck` exit 0 (it now runs the lint); `pnpm test` 1789 of 1789 (two engine tests fail in a checkout where `pnpm dev` has written `.env`, `preferences.json` and `output/` to the repo root, and pass in a clean worktree); `pnpm test:browser` 336 of 338, and the two failures are fixed: an Escape that reached a Settings model select before its search field closed the whole dialog (product bug), and the rail test read the slide's transform one frame early.
+
 ## Specs
 
 | # | Spec | Wave | State | Merge commit | Note |
@@ -35,7 +37,7 @@ Final verification, from a clean install (`node_modules` and `dist` removed) on 
 | 09 | artifacts | 8 | merged | 949cdd3 | 62/62 tasks |
 | 10 | settings and OpenRouter | 7 | merged | b7a1b78, fixture fix 18312a7 | 58/58 tasks plus the `oauth.cancel` render rule; merged after 08 |
 | 11 | legacy import | 9 | merged | c264c38 | 46/46 tasks; covers spec 03's imported-recipe Regenerate and Recipe |
-| 12 | design system | 10 | pending | | written after the first build, at the person's request: t3code palette, default theme only, browser seam plus lint |
+| 12 | design system | 10 | merged | 4935b8b to 834be6d (merges 2d7b5fa, 39a1d4a, f15d45f), review fixes 2d7627f to bde5664 | 25/25 tasks. Written after the first build, at the person's request. Decisions settled during the run are under "Decisions" |
 
 ## Performance budgets
 
@@ -57,6 +59,18 @@ Final run on `build` after the clean install: hosted shape (production web serve
 | 09 | same pan: long tasks over 50 ms | 0 | 0 |
 | 09 | same board, 6 running (3 pinned, 3 selected, the most spec 09 allows): median / over 33 ms / long tasks | not asserted by task 62 | 8.30 ms / 4.22 to 4.44 % / 0 |
 
+After spec 12's restyle, same shape and machine, one worker, three repeats:
+
+| Spec | Measure | Budget | Measured |
+| --- | --- | --- | --- |
+| 02 | drag one image, 300 shapes: median frame gap, frames over 33 ms | ≤ 16.7 ms, ≤ 2 % | 8.30 ms, 0.51 to 0.53 % |
+| 02 | pan: median frame gap, frames over 33 ms | not budgeted | 8.30 ms, 0.36 to 0.37 % |
+| 02 | 40 large images, zoom: median frame gap, frames over 33 ms, peak decoded memory | ≤ 16.7 ms, ≤ 2 %, under 518 MB | 8.30 ms, 0.00 %, 87 MB |
+| 09 | artifact pan, 3 running: median, over 33 ms, long tasks | ≤ 16.7 ms, ≤ 2 %, 0 | 8.30 ms, 0.81 to 1.01 %, 0 |
+| 09 | same board, 6 running: over 33 ms | not asserted | 4.18 to 5.05 % |
+| 12 | pan 300 shapes under the glass Generate composer: frames over 33 ms | ≤ 2 % (spec 02's) | 0.35 to 0.74 % |
+| 12 | pan 300 shapes with the rail open under the glass selection toolbar: frames over 33 ms | ≤ 2 % (spec 02's) | 0.38 to 1.12 % with the rail solid; on glass the rail reached 2.27 % in one run |
+
 The six-running case misses the 2 % line. Task 62 does not say how many artifacts run during the pan, so the build asserts three and reports six. Headless Chrome is not Electron: the numbers inside the desktop app still need a check there.
 
 ## Decisions
@@ -69,6 +83,18 @@ Made by the person:
 Settled by the orchestrator from the specs:
 
 - Spec 10, `oauth.cancel` after `done` (9949bd9): the cancel deletes the key, so it is a key removal under index contract 5 and spec 10's own removal step 4. It fails pending render jobs with the key-removed error and answers `{ endedRenders }`, the same as Remove key.
+
+Settled during spec 12, for the person's sign-off:
+
+- The Generate send is t3code's message-action labelled pill, not a round button. Task 11 now says so (bde5664).
+- Scroll to end is a kit Button on glass, and the current project is the kit's checked radio row, which gives spec 10's check and tint.
+- Role badges keep the one blue hue they have always shared, through the same hue helper as provider tokens and library chips.
+- The rail sits on solid `--background`: on glass it crossed spec 02's pan budget in one run of three.
+- The lint allows only spec 01's two contract classes as unknown classes. Where Unframed renders tldraw's own classes, each carries a one-line disable reason.
+- The shell hooks keep their old formats: `theme.ts` writes `--unframed-text-secondary` as hex and the body background as an inline colour that computes to `rgb()`, since the kit's tokens are oklch. The desktop shell was not run against them.
+- DialKit stays dark in both schemes with the dark token values written out in `vendors.css`; `artifactDials.spec.ts` fails if they drift from `theme.css`.
+- The Agent tray stays 440 px. No spec states its width; spec 12 names 420 px for the Generate composer only.
+- The sweep for controls no kit component rendered skips the diff panel, whose rows @pierre/diffs renders in a shadow root.
 
 Open for the person:
 
@@ -90,6 +116,9 @@ Open for the person:
 - Spec 09: a shape's last live still is kept for the session only.
 - Spec 10: Cancel's `renderCleanupError` display in the web has no browser test; the engine side is tested.
 - Spec 11: every sweep write prunes done and failed jobs older than 7 days, so an old finished job's clip from an imported `jobs.json` may never be placed if the sweep writes before its project is first opened.
+- Spec 12: `GenerateTray.tsx` copies the kit's field frame and focus ring into its classes instead of using InputGroup.
+- Spec 12: a few tests find elements by third-party class names that spec 12's test hooks section does not exempt (lucide icon classes in `addMenu.spec.ts` and `toasts.spec.ts`, DialKit's classes in `artifactDials.spec.ts`).
+- Spec 12: the sweep does not open the legacy import screens; `legacyImport.spec.ts` checks their kit slots.
 - The context-menu fix in `packages/web/src/canvas/ContextMenu.tsx` cancels the menu library's delayed refocus through an internal event name that tldraw bundles. A tldraw upgrade that renames it brings the bug back without failing anything else.
 
 ## Needs you

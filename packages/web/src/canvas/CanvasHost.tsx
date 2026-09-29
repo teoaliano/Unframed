@@ -129,6 +129,8 @@ export const CanvasHost = ({ project, activation }: { readonly project: string; 
   }, [activation, previews]);
 
   const onMount = useCallback((editor: Editor) => {
+    // tldraw otherwise follows the browser's language, and its menu rows would sit beside English ones.
+    editor.user.updateUserPreferences({ locale: "en" });
     const minter = new RefMinter(editor);
     const stopMinting = installRefMinting(editor, minter);
     const stopLabelLevel = installLabelLevel(editor);

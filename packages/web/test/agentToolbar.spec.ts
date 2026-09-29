@@ -8,6 +8,7 @@ import { putRecords } from "./media.ts";
 import { artifactColumn, createChat, engineChat, engineChats, expect, promptBox, rail, startDetectingEngine, test, userTexts } from "./agent.ts";
 import type { TestEngine } from "../../engine/test/engineProcess.ts";
 import { expectSlot, expectToken, inBothSchemes } from "./kit.ts";
+import { artifactShape } from "./artifacts.ts";
 
 const at = (day: number) => `2026-09-${String(day).padStart(2, "0")}T10:00:00.000Z`;
 
@@ -31,15 +32,26 @@ const twoPages = async (page: Page, engine: TestEngine): Promise<{ alpha: string
 const target = (page: Page) => composer(page).getByTestId("agent-target");
 const chips = (page: Page) => composer(page).getByRole("list", { name: "Context" }).getByRole("listitem");
 
-test("Agent on the toolbar is filled, and opens the Agent tray saying which chat the message continues, with the switch", async ({ page, agent }) => {
+test("an empty page's bar is Agent alone, with no separator before it; its tray has one frame", async ({ page, agent }) => {
+  await openCanvas(page, agent);
+  await putRecords(agent, [artifactShape({ id: "shape:empty", kind: "page", ref: "170", at: { x: 0, y: 0 } })]);
+  await clickShape(page, "shape:empty");
+  await expect(toolbar(page).getByRole("button")).toHaveText(["Agent"]);
+  await expect(toolbar(page).locator("[data-slot='separator']")).toBeHidden();
+  await toolbar(page).getByRole("button", { name: "Agent" }).click();
+  await expect(promptBox(composer(page))).toBeVisible();
+  // The tray draws its own shell; the floating element around it draws none.
+  await expect(toolbar(page)).toHaveCSS("border-top-width", "0px");
+  await expect(toolbar(page)).toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
+});
+
+test("Agent on the toolbar is an outline button, and opens the Agent tray saying which chat the message continues, with the switch", async ({ page, agent }) => {
   await twoPages(page, agent);
   await clickShape(page, "shape:p1");
   const button = toolbar(page).getByRole("button", { name: "Agent" });
   await expectSlot(button, "button");
-  await inBothSchemes(page, async () => {
-    await page.mouse.move(10, 10);
-    await expectToken(button, "background-color", "--primary");
-  });
+  await page.mouse.move(10, 10);
+  await expectToken(button, "background-color", "--popover");
   await expect(button.locator("svg")).toHaveCount(1);
   await button.click();
 

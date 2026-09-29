@@ -135,3 +135,14 @@ test("the menu has the kit's label and disabled looks, at 188 px, and its rows h
     await closeMenu(page);
   });
 });
+
+test.describe("in a browser set to Italian", () => {
+  test.use({ locale: "it-IT" });
+  test("tldraw's own rows are in English, like Unframed's", async ({ page, engine }) => {
+    await withEmptyClipboard(page);
+    await openCanvas(page, engine);
+    const { items } = await rightClick(page, await emptyCanvasPoint(page));
+    expect(items).toContain("Select all ⌘A");
+    await closeMenu(page);
+  });
+});
