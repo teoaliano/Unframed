@@ -169,7 +169,7 @@ export const GenerateTray = ({ project, recipe, onSent, onMenuOpen, handle }: Ge
             </button>
           ))}
         </div>
-        <span className="unframed-composer-count" data-testid="source-count">
+        <span className="unframed-composer-count" data-testid="source-count" data-chip={!recipe && hint.startsWith("@") ? "group" : undefined}>
           {recipe ? `recipe · ${recipeSources(recipe)} sources` : hint}
         </span>
       </div>

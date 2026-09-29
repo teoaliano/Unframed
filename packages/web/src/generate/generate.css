@@ -163,6 +163,15 @@
   white-space: nowrap;
 }
 
+/* One selected group is one source: a chip reading its @name. */
+.unframed-composer-count[data-chip="group"] {
+  padding: 1px 7px;
+  border: 1px solid var(--unframed-border);
+  border-radius: 999px;
+  background-color: var(--unframed-overlay-hover);
+  color: var(--unframed-text-accent);
+}
+
 .unframed-segmented {
   display: flex;
   gap: 3px;
