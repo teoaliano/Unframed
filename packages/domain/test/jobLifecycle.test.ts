@@ -59,6 +59,13 @@ describe("failing pending records", () => {
     expect(failed.failed.map((each) => each.id)).toEqual(["b"]);
     expect(failed.jobs.map((each) => each.status)).toEqual(["pending", "failed"]);
   });
+
+  it("fails only the pending records with the given ids when given ids", () => {
+    const jobs = [job("a"), job("b"), job("c", { status: "done" })];
+    const failed = failPendingJobs(jobs, { ids: ["b", "c"], error: "moved", now: 3 });
+    expect(failed.failed.map((each) => each.id)).toEqual(["b"]);
+    expect(failed.jobs.map((each) => each.status)).toEqual(["pending", "failed", "done"]);
+  });
 });
 
 describe("reassigning pending records", () => {

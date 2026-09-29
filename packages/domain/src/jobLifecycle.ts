@@ -19,14 +19,18 @@ export const dropPendingJobs = (jobs: ReadonlyArray<RenderJob>, ids: ReadonlyArr
   return jobs.filter((job) => !(job.status === "pending" && drop.has(job.id)));
 };
 
-/** Fails the pending records of one project (a slug), or of every project, stamping `resolvedAt`. */
+/**
+ * Fails the pending records of one project (a slug), or of every project, or only those
+ * with the given ids, stamping `resolvedAt`.
+ */
 export const failPendingJobs = (
   jobs: ReadonlyArray<RenderJob>,
-  options: { readonly project?: string; readonly error: string; readonly now: number },
+  options: { readonly project?: string; readonly ids?: ReadonlyArray<string>; readonly error: string; readonly now: number },
 ): { readonly jobs: RenderJob[]; readonly failed: RenderJob[] } => {
   const failed: RenderJob[] = [];
+  const only = options.ids === undefined ? undefined : new Set(options.ids);
   const next = jobs.map((job) => {
-    if (!isPendingIn(job, options.project)) return job;
+    if (!isPendingIn(job, options.project) || (only !== undefined && !only.has(job.id))) return job;
     const ended: RenderJob = { ...job, status: "failed", error: options.error, resolvedAt: options.now };
     failed.push(ended);
     return ended;

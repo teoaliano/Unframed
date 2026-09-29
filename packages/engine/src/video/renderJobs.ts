@@ -43,6 +43,7 @@ import { Config } from "../services.ts";
 import { SettingsStore } from "../settingsStore.ts";
 import { ShareLinks } from "../share/shareLinks.ts";
 import { Shutdown } from "../shutdown.ts";
+import { failPendingJobsIn, JobStoreError } from "./jobLifecycle.ts";
 import { persistJob, readJobsLenient } from "./jobStore.ts";
 
 export const EMPTY_VIDEO_PROMPT = "Prompt is empty. Select at least one prompt, or type an instruction.";
@@ -70,6 +71,12 @@ export class RenderJobs extends Context.Service<
     readonly forget: (project: string, jobId: string) => Effect.Effect<Record<string, never>, UnframedError>;
     /** The job record's recipe for a render placeholder whose sidecar is not written yet. */
     readonly placeholderRecipe: (project: string, shapeId: string) => Effect.Effect<ResultRecipe | undefined, UnframedError>;
+    /**
+     * Spec 10: fails the pending jobs of one project (a slug), or with these ids, or all, in
+     * the current output folder's store, read strictly. Each failed job loses its share
+     * links and its placeholder says why, as every other failure path does. Answers how many.
+     */
+    readonly failPending: (options: { readonly project?: string; readonly ids?: ReadonlyArray<string>; readonly error: string }) => Effect.Effect<number, JobStoreError>;
   }
 >()("unframed/engine/RenderJobs") {}
 
@@ -613,6 +620,18 @@ export const renderJobsLayer = Layer.effect(
       return job ? recipeOf(job.recipe) : undefined;
     };
 
+    const failPending = async (options: { readonly project?: string; readonly ids?: ReadonlyArray<string>; readonly error: string }) => {
+      const failed = await failPendingJobsIn(await outputDir(), options);
+      for (const job of failed) {
+        await revokeShares(job.id);
+        const project = job.project ?? "";
+        const records = await readRoom(project);
+        const shape = records && markedBy(records, job.id);
+        if (shape) await applyRoom(project, failChange(shape, options.error), job.id);
+      }
+      return failed.length;
+    };
+
     const attempt = <A>(run: () => Promise<A>) =>
       Effect.tryPromise({
         try: run,
@@ -624,6 +643,7 @@ export const renderJobsLayer = Layer.effect(
       poll: (request) => attempt(() => poll(request)),
       forget: (project, jobId) => attempt(() => forget(project, jobId)),
       placeholderRecipe: (project, shapeId) => attempt(() => placeholderRecipe(project, shapeId)),
+      failPending: (options) => Effect.tryPromise({ try: () => failPending(options), catch: (error) => new JobStoreError({ reason: errorText(error) }) }),
     });
   }),
 );
