@@ -1,7 +1,7 @@
 import type { ApprovalDecision } from "@unframed/contracts";
 import { openRequests, planTitle, type Chat, type ChatActivity, type ProposedPlan, type UserQuestion } from "@unframed/domain";
 import { Check, ChevronDown, ChevronRight, Ellipsis, ListChecks, ListTodo, MessageCircleQuestion, ShieldAlert, X } from "lucide-react";
-import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type RefObject } from "react";
+import { useEffect, useRef, useState, type RefObject } from "react";
 import { Button } from "~/components/ui/button";
 import { Menu, MenuItem, MenuPopup, MenuTrigger } from "~/components/ui/menu";
 import { MessageAction } from "../../chrome/MessageAction.tsx";
@@ -202,27 +202,23 @@ export const QuestionPanel = ({
             {question.options.map((option, index) => {
               const selected = chosen.includes(option.label);
               return (
-                <div
+                <Button
                   key={option.label}
+                  variant="ghost"
+                  size="sm-multiline"
                   role={question.multiSelect ? "checkbox" : "radio"}
-                  tabIndex={0}
                   aria-checked={selected}
-                  data-selected={selected ? "" : undefined}
-                  className="group flex w-full cursor-pointer items-center gap-2 rounded-md bg-transparent px-2.5 py-2 text-left text-foreground/85 outline-none transition-colors duration-150 hover:bg-muted/30 focus-visible:ring-1 focus-visible:ring-primary/25 data-selected:bg-muted/55 data-selected:text-foreground"
+                  data-pressed={selected ? "" : undefined}
+                  className="w-full justify-start"
                   onClick={() => onChoose(question, option.label)}
-                  onKeyDown={(event: ReactKeyboardEvent) => {
-                    if (event.key !== "Enter" && event.key !== " ") return;
-                    event.preventDefault();
-                    onChoose(question, option.label);
-                  }}
                 >
                   <kbd className="flex size-5 shrink-0 items-center justify-center font-sans text-3xs font-medium text-muted-foreground tabular-nums">{index + 1}</kbd>
-                  <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+                  <span className="flex min-w-0 flex-1 flex-col gap-0.5 py-1 text-start">
                     <span className="text-sm font-medium">{option.label}</span>
-                    {option.description !== "" && <span className="text-2xs text-secondary-label">{option.description}</span>}
+                    {option.description !== "" && <span className="text-2xs font-normal text-secondary-label">{option.description}</span>}
                   </span>
                   {selected && <Check aria-hidden className="size-3.5 shrink-0 text-primary" />}
-                </div>
+                </Button>
               );
             })}
           </div>

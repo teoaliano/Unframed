@@ -1,7 +1,7 @@
 import type { AgentProvider, ModelSelection, ProviderModel, ProviderStatuses } from "@unframed/contracts";
 import { contextMeter, type Chat, type ContextUsage, type InteractionMode, type RuntimeMode, type Traits } from "@unframed/domain";
 import { Bot, Check, ChevronDown, Lock, LockOpen, Minimize2, PencilLine, PencilRuler, Sparkles, Zap, type LucideIcon } from "lucide-react";
-import { useEffect, useMemo, useState, type KeyboardEvent } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
@@ -31,12 +31,6 @@ export const ProviderLogo = ({ provider }: { readonly provider: AgentProvider })
 const PICKER_ROW =
   "flex min-h-7 w-full cursor-pointer select-none items-center gap-2 rounded-sm px-2 py-1 text-left text-sm text-foreground outline-none data-chosen:bg-foreground/[0.08] data-highlighted:bg-accent data-highlighted:text-accent-foreground";
 
-/** A popover row that acts on Enter and Space as well as a click. */
-const activate = (run: () => void) => (event: KeyboardEvent) => {
-  if (event.key !== "Enter" && event.key !== " ") return;
-  event.preventDefault();
-  run();
-};
 
 // ---------------------------------------------------------------------------------------
 // The model picker.
@@ -215,18 +209,18 @@ export const declaredTraits = (model: ProviderModel | undefined, traits: Traits)
   ...(traits.fastMode !== undefined && model?.fastMode === true ? { fastMode: traits.fastMode } : {}),
 });
 
-/** A choice in the traits popover, in t3code's radio row look: its label, its hint, the default marked. */
+/** A choice in the traits popover: a kit ghost Button in the radio role, pressed while chosen, with its hint and the default marked. */
 const RadioRow = ({ checked, label, hint, badge, onSelect }: { readonly checked: boolean; readonly label: string; readonly hint?: string; readonly badge?: string; readonly onSelect: () => void }) => (
-  <div role="radio" tabIndex={0} aria-checked={checked} data-chosen={checked ? "" : undefined} className={`${PICKER_ROW} hover:bg-accent`} onClick={onSelect} onKeyDown={activate(onSelect)}>
+  <Button variant="ghost" size="sm" role="radio" aria-checked={checked} data-pressed={checked ? "" : undefined} className="w-full justify-start" onClick={onSelect}>
     <span className="flex size-3.5 shrink-0 items-center justify-center">{checked && <Check aria-hidden className="size-3.5" />}</span>
     <span className="shrink-0">{label}</span>
-    {hint !== undefined && <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground">{hint}</span>}
+    {hint !== undefined && <span className="min-w-0 flex-1 truncate text-start text-xs text-muted-foreground">{hint}</span>}
     {badge !== undefined && (
       <Badge variant="outline" size="sm" className="ms-auto">
         {badge}
       </Badge>
     )}
-  </div>
+  </Button>
 );
 
 const GROUP_LABEL = "px-2 pt-1.5 pb-1 text-xs font-medium text-muted-foreground";

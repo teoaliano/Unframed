@@ -137,7 +137,7 @@ test("the approval panel is t3code's pending approval: the warning-tinted banner
   await expect(approval).toHaveCount(0);
 });
 
-test("the question panel is t3code's: kit Buttons in its header, option rows that take a key and show the choice", async ({ page, agent }) => {
+test("the question panel is t3code's: kit Buttons in its header and for its options, which take a key and show the choice", async ({ page, agent }) => {
   await openCanvas(page, agent);
   await createChat(agent, { title: "Asking" });
   const panel = await openRail(page);
@@ -152,7 +152,8 @@ test("the question panel is t3code's: kit Buttons in its header, option rows tha
   await hero.click();
   await expect(hero).toHaveAttribute("aria-checked", "true");
   await page.mouse.move(10, 400);
-  const selected = await resolvedColor(page, "color-mix(in oklab, var(--muted) 55%, transparent)");
-  await expect.poll(() => styleOf(hero, "background-color")).toBe(selected);
+  // An option is a kit ghost Button in the checkbox or radio role; the chosen one shows the pressed fill.
+  await expectSlot(hero, "button");
+  await expectToken(hero, "background-color", "--accent");
   await expectSlot(panel.getByRole("button", { name: "Submit answers" }), "message-action");
 });

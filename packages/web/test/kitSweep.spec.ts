@@ -7,10 +7,11 @@ import { artifactColumn, createChat, openRail, promptBox, say, scriptFolder, sta
 import { filledArtifact } from "./artifacts.ts";
 import { centre, openCanvas, shapeOnScreen } from "./canvas.ts";
 import { expect, test } from "./fixtures.ts";
-import { clickShape, composer, openComposer, test as generationTest } from "./generation.ts";
+import { clickShape, composer, openComposer, pressSend, test as generationTest } from "./generation.ts";
+import { addRuns, setFree, test as textTest } from "./texting.ts";
 import { unkittedControls } from "./kit.ts";
 import { openLibrary } from "./library.ts";
-import { groupRecord, inGroup, promptRecord, putRecords } from "./media.ts";
+import { dropFiles, groupRecord, inGroup, promptRecord, putRecords } from "./media.ts";
 
 /*
  * Spec 12's sweep: every surface in turn, and on each no button, menu item, field or dialog
@@ -43,9 +44,25 @@ test("the chrome, canvas menus and dialogs render every control through the kit"
   await expect(page.getByTestId("settings-dialog")).toBeVisible();
   await sweep(page);
 
+  await page.locator(".unframed-chrome-left").getByRole("button", { name: "Project", exact: true }).click();
+  await page.getByRole("button", { name: "Delete default" }).click();
+  await expect(page.getByRole("alertdialog", { name: "Delete project?" })).toBeVisible();
+  await sweep(page);
+
   const subject = await centre(shapeOnScreen(page, "shape:starter-subject"));
   await page.mouse.click(subject.x, subject.y);
   await expect(page.getByTestId("selection-toolbar")).toBeVisible();
+  await sweep(page, false);
+
+  await dropFiles(page, { x: 5, y: 450 }, [{ name: "huge.mp4", mime: "video/mp4", size: 26_214_401 }]);
+  await expect(page.locator("[data-slot='toast-title']")).toBeVisible();
+  await sweep(page, false);
+
+  await putRecords(engine, [groupRecord("shape:named", "named", { x: -400, y: 20 }, { w: 380, h: 240 })]);
+  const group = (await shapeOnScreen(page, "shape:named").boundingBox())!;
+  await page.mouse.click(group.x + 2, group.y + group.height / 2);
+  await page.keyboard.press("F2");
+  await expect(page.getByRole("textbox", { name: "Group name" })).toBeFocused();
   await sweep(page, false);
 });
 
@@ -66,6 +83,9 @@ test("the chat rail, its transcript and the work log render every control throug
     await panel.getByTestId("work-group").getByRole("button").first().click();
     await panel.getByTestId("work-row").first().getByRole("button").click();
     await sweep(page, false);
+    await panel.getByRole("button", { name: "Delete chat" }).click();
+    await expect(page.getByRole("alertdialog")).toBeVisible();
+    await sweep(page);
   } finally {
     await agent.dispose();
   }
@@ -82,7 +102,16 @@ test("the Agent tray's pickers, menus and model dialog render every control thro
     await panel.getByTestId("model-picker").click();
     await expect(page.getByRole("dialog", { name: "Models" })).toBeVisible();
     await sweep(page);
+    await panel.getByTestId("traits-picker").click();
+    await expect(page.getByRole("dialog", { name: "Traits" })).toBeVisible();
+    await sweep(page);
     const box = promptBox(panel);
+    await box.click();
+    await box.pressSequentially("keep this for later");
+    await page.keyboard.press("ControlOrMeta+s");
+    await panel.getByTestId("stash-badge").click();
+    await expect(page.getByRole("menu", { name: "Stashed prompts" })).toBeVisible();
+    await sweep(page);
     await box.click();
     await box.pressSequentially("/");
     await expect(page.getByRole("listbox", { name: "Commands" })).toBeVisible();
@@ -121,7 +150,7 @@ test("the diff panel renders every control through the kit", async ({ page }) =>
   }
 });
 
-test("a pending approval renders every control through the kit", async ({ page }) => {
+test("a pending approval and a question render every control through the kit", async ({ page }) => {
   const agent = await startAgentEngine();
   try {
     await openCanvas(page, agent);
@@ -132,6 +161,15 @@ test("a pending approval renders every control through the kit", async ({ page }
     await sweep(page, false);
     await panel.getByTestId("approval-panel").getByRole("button", { name: "More approval options" }).click();
     await expect(page.locator("[data-slot='menu-popup']")).toBeVisible();
+    await sweep(page, false);
+    await page.keyboard.press("Escape");
+    await panel.getByTestId("approval-panel").getByRole("button", { name: "Decline" }).click();
+
+    await createChat(agent, { title: "Asking" });
+    await page.reload();
+    const asking = await openRail(page);
+    await say(asking, "ask me first about the page");
+    await expect(asking.getByTestId("question-panel")).toBeVisible();
     await sweep(page, false);
   } finally {
     await agent.dispose();
@@ -184,5 +222,19 @@ test("the Library and Add to library render every control through the kit", asyn
   await page.mouse.click(box.x + 10, box.y - 8, { button: "right" });
   await page.getByTestId("context-menu.unframed-add-to-library").click();
   await expect(page.getByTestId("add-to-library")).toBeVisible();
+  await sweep(page);
+});
+
+textTest("the Runs popup and the final prompt dialog render every control through the kit", async ({ page, generation }) => {
+  await openCanvas(page, generation.engine);
+  await putRecords(generation.engine, [promptRecord("shape:list", "301", "a fox\n---\na hare", { x: 40, y: -80 })]);
+  await expect(shapeOnScreen(page, "shape:list")).toBeVisible();
+  await clickShape(page, "shape:list");
+  await openComposer(page);
+  await addRuns(page);
+  await sweep(page);
+  await setFree(page, true);
+  await pressSend(page);
+  await expect(page.getByRole("dialog", { name: "Final prompt" })).toBeVisible();
   await sweep(page);
 });
