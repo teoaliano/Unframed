@@ -40,7 +40,7 @@ const start = () => {
   const readout = document.createElement("div");
   readout.setAttribute("data-fps-meter", "");
   readout.style.cssText =
-    "position:fixed;top:12px;left:50%;transform:translateX(-50%);z-index:2000;padding:4px 8px;border-radius:6px;font:11px ui-monospace,monospace;pointer-events:none;background:var(--unframed-popover);color:var(--unframed-text-secondary);border:1px solid var(--unframed-border)";
+    "position:fixed;top:12px;left:50%;transform:translateX(-50%);z-index:2000;padding:4px 8px;border-radius:6px;font:11px ui-monospace,monospace;pointer-events:none;background:var(--popover);color:var(--muted-foreground);border:1px solid var(--border)";
   readout.textContent = "fps: learning";
   document.body.append(readout);
 
