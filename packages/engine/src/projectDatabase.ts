@@ -6,6 +6,8 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { createCanvasChangesTable, createSyncStorageTables } from "./canvas/tables.ts";
 import { createChatTables } from "./agent/chatTables.ts";
+import { ImportFailed, makeLegacyImporter, type ImportState } from "./legacy/importer.ts";
+import { createLegacyImportReportTable } from "./legacy/reportTable.ts";
 import { errorText } from "./log.ts";
 import { OpenProjects } from "./openProjects.ts";
 import { Config } from "./services.ts";
@@ -28,6 +30,7 @@ export const MIGRATIONS: ReadonlyArray<Migration> = [
   { id: 1, name: "tldraw sync storage", up: createSyncStorageTables },
   { id: 2, name: "canvas_changes", up: createCanvasChangesTable },
   { id: 3, name: "chat store and turn_changes", up: createChatTables },
+  { id: 4, name: "legacy_import_report", up: createLegacyImportReportTable },
 ];
 
 /** `UNFRAMED_TEST_MIGRATION`'s extra migration, numbered far past any real one. */
@@ -81,6 +84,10 @@ export class ProjectDatabase extends Context.Service<
   {
     /** The project's handle, opened (and the file created and migrated) on first use. `project` is a slug. */
     readonly open: (project: string) => Effect.Effect<ProjectDb, UnframedError>;
+    /** How the project folder's import from the old app stands (spec 11), without starting it. */
+    readonly importState: (project: string) => Effect.Effect<ImportState>;
+    /** Forgets a failed import, so the next `open` runs it again. */
+    readonly retryImport: (project: string) => Effect.Effect<void>;
   }
 >()("unframed/engine/ProjectDatabase") {}
 
@@ -96,14 +103,31 @@ export const projectDatabaseLayer = Layer.effect(
         : [...MIGRATIONS, { id: TEST_MIGRATION_ID, name: "test migration", up: (db) => db.exec(config.testMigrationSql!) }];
     // By file, not by name: after an output folder change the same name is another project.
     const handles = new Map<string, ProjectDb>();
+    const importer = makeLegacyImporter({
+      migrate: (db) => void applyMigrations(db, migrations),
+      outputDir: () => Effect.runPromise(settings.outputDir),
+      defaults: () => Effect.runPromise(Effect.map(settings.read, (live) => ({ image: live.imageModel, video: live.videoModel, text: live.textModel }))),
+    });
+    const folderOf = (project: string) => Effect.map(settings.outputDir, (outputDir) => join(outputDir, project));
 
     const open = (project: string) =>
       Effect.gen(function* () {
-        const path = join(yield* settings.outputDir, project, DATABASE_FILE);
+        const folder = yield* folderOf(project);
+        const path = join(folder, DATABASE_FILE);
         const cached = handles.get(path);
         if (cached) return cached;
+        // Spec 11: a folder that still holds an old graph is imported before its file is first created.
+        yield* Effect.tryPromise({
+          try: () => importer.ensure(folder, project),
+          catch: (error) =>
+            error instanceof ImportFailed
+              ? unframedError("internal", error.message, { reason: "legacy_import" })
+              : unframedError("internal", `Could not open the project database: ${errorText(error)}`),
+        });
         const handle = yield* Effect.try({
           try: () => {
+            const opened = handles.get(path);
+            if (opened) return opened;
             const db = new DatabaseSync(path);
             try {
               db.exec("PRAGMA journal_mode = WAL");
@@ -118,6 +142,7 @@ export const projectDatabaseLayer = Layer.effect(
           },
           catch: (error) => unframedError("internal", `Could not open the project database: ${errorText(error)}`),
         });
+        if (handles.get(path) === handle) return handle;
         handles.set(path, handle);
         yield* openProjects.register(
           project,
@@ -130,6 +155,10 @@ export const projectDatabaseLayer = Layer.effect(
         return handle;
       });
 
-    return ProjectDatabase.of({ open });
+    return ProjectDatabase.of({
+      open,
+      importState: (project) => Effect.map(folderOf(project), (folder) => importer.state(folder)),
+      retryImport: (project) => Effect.map(folderOf(project), (folder) => importer.forgetFailure(folder)),
+    });
   }),
 );

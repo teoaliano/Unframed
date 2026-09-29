@@ -22,6 +22,8 @@ import { Agents } from "../agent/layer.ts";
 import { Lifecycle } from "../lifecycle.ts";
 import { OAuth } from "../oauth/oauth.ts";
 import { Artifacts } from "../artifacts/layer.ts";
+import { legacyImportMethods } from "../legacy/methods.ts";
+import { ProjectDatabase } from "../projectDatabase.ts";
 
 export const rpcHandlersLayer = UnframedRpcs.toLayer(
   Effect.gen(function* () {
@@ -42,6 +44,7 @@ export const rpcHandlersLayer = UnframedRpcs.toLayer(
     const lifecycle = yield* Lifecycle;
     const oauth = yield* OAuth;
     const artifacts = yield* Artifacts;
+    const legacy = legacyImportMethods(yield* ProjectDatabase, projects);
     const context = yield* Effect.context<SettingsStore | Projects | Native>();
 
     const testOnly = <A, E>(run: () => Effect.Effect<A, E>) =>
@@ -117,6 +120,10 @@ export const rpcHandlersLayer = UnframedRpcs.toLayer(
       "motion.renderStart": (input) => artifacts.renderStart(input),
       "motion.renderStatus": ({ project, id }) => artifacts.renderStatus(project, id),
       "artifact.snapshots": ({ project }) => artifacts.snapshots(project),
+      "legacyImport.status": ({ project }) => legacy.status(project),
+      "legacyImport.report": ({ project }) => legacy.report(project),
+      "legacyImport.markSeen": ({ project }) => legacy.markSeen(project),
+      "legacyImport.retry": ({ project }) => legacy.retry(project),
       "testCanvas.read": ({ project }) =>
         testOnly(() =>
           Effect.all({ clock: rooms.clock(project), records: Effect.map(rooms.read(project), (records) => [...records]) }),

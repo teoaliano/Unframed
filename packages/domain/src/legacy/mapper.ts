@@ -573,4 +573,29 @@ export const mapProject = (graph: LegacyGraph, facts: ProjectFacts, options: Map
   };
 };
 
+/**
+ * Every file name the mapper may read facts about: the files media nodes name, the files
+ * results name by saved path or URL, and the clips `jobs` saved. The engine reads the
+ * pixel size and sidecar of each of these that is in the folder.
+ */
+export const legacyReferencedFiles = (graph: LegacyGraph, jobs: ReadonlyArray<LegacyJob>): string[] => {
+  const names = new Set<string>();
+  const named = (value: unknown) => {
+    if (typeof value === "string" && value !== "") names.add(value);
+  };
+  const ofResult = (value: unknown) => {
+    const entry = record(value);
+    if (!entry) return;
+    if (typeof entry.savedPath === "string") named(baseName(entry.savedPath));
+    named(fileOfResultUrl(entry.url));
+  };
+  for (const node of graph.nodes) {
+    named(node.data.file);
+    if (Array.isArray(node.data.results)) for (const entry of node.data.results) ofResult(entry);
+    ofResult(node.data.result);
+  }
+  for (const job of jobs) if (typeof job.savedPath === "string") named(baseName(job.savedPath));
+  return [...names];
+};
+
 export type { GroupRecipe };

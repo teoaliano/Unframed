@@ -69,7 +69,8 @@ export const sidecarFileName = (file: string): string => `${withoutExtension(fil
  * record the marks they hold and the crop they were cut to.
  */
 export interface MediaSidecar {
-  readonly source: "upload" | "copy" | "composite" | "sketch";
+  /** Spec 11 adds `legacy-graph` (a file an import extracted) and `legacy-preset` (bytes an old preset carried inline). */
+  readonly source: "upload" | "copy" | "composite" | "sketch" | "legacy-graph" | "legacy-preset";
   readonly fileName: string;
   readonly mime: string;
   readonly bytes: number;
