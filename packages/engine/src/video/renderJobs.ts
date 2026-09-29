@@ -5,7 +5,7 @@
  * placeholder's run marker is the second copy.
  */
 import { randomUUID } from "node:crypto";
-import { readFile, stat } from "node:fs/promises";
+import { mkdir, readFile, stat } from "node:fs/promises";
 import { basename, join } from "node:path";
 import {
   isBareFileName,
@@ -24,7 +24,18 @@ import {
   type VideoSidecar,
   type VideoStartRequest,
 } from "@unframed/contracts";
-import { classifyVideoStatus, GENERATION_FAILED, givenUp, inputModeOf, nextRef, NO_KEY_MESSAGE, pendingFor, projectSlug, type RenderJob } from "@unframed/domain";
+import {
+  classifyVideoStatus,
+  GENERATION_FAILED,
+  givenUp,
+  inputModeOf,
+  nextRef,
+  NO_KEY_MESSAGE,
+  pendingFor,
+  projectSlug,
+  type FailPendingOptions,
+  type RenderJob,
+} from "@unframed/domain";
 import type { TLRecord } from "@tldraw/tlschema";
 import { getIndicesAbove, type IndexKey } from "@tldraw/utils";
 import * as Context from "effect/Context";
@@ -43,6 +54,7 @@ import { Config } from "../services.ts";
 import { SettingsStore } from "../settingsStore.ts";
 import { ShareLinks } from "../share/shareLinks.ts";
 import { Shutdown } from "../shutdown.ts";
+import { failPendingJobsIn, JobStoreError } from "./jobLifecycle.ts";
 import { persistJob, readJobsLenient } from "./jobStore.ts";
 
 export const EMPTY_VIDEO_PROMPT = "Prompt is empty. Select at least one prompt, or type an instruction.";
@@ -70,6 +82,12 @@ export class RenderJobs extends Context.Service<
     readonly forget: (project: string, jobId: string) => Effect.Effect<Record<string, never>, UnframedError>;
     /** The job record's recipe for a render placeholder whose sidecar is not written yet. */
     readonly placeholderRecipe: (project: string, shapeId: string) => Effect.Effect<ResultRecipe | undefined, UnframedError>;
+    /**
+     * Spec 10: fails the pending jobs of one project (a slug), or with these ids, or all, in
+     * the current output folder's store, read strictly. Each failed job loses its share
+     * links and its placeholder says why, as every other failure path does. Answers how many.
+     */
+    readonly failPending: (options: FailPendingOptions) => Effect.Effect<number, JobStoreError>;
   }
 >()("unframed/engine/RenderJobs") {}
 
@@ -224,6 +242,15 @@ export const renderJobsLayer = Layer.effect(
         },
       );
 
+    /** What failing a job does besides its record: its shares go, and its placeholder says why and loses its marker. */
+    const markFailed = async (job: RenderJob, error: string) => {
+      await revokeShares(job.id);
+      const project = job.project ?? "";
+      const records = await readRoom(project);
+      const shape = records && markedBy(records, job.id);
+      if (shape) await applyRoom(project, failChange(shape, error), job.id);
+    };
+
     const failJob = async (record: RenderJob, error: string) => {
       await revokeShares(record.id);
       const dir = await outputDir();
@@ -234,10 +261,7 @@ export const renderJobsLayer = Layer.effect(
         ...(record.project === undefined ? {} : { project: record.project }),
         ...(record.params === undefined ? {} : { params: record.params }),
       });
-      const project = failed.project ?? "";
-      const records = await readRoom(project);
-      const shape = records && markedBy(records, record.id);
-      if (shape) await applyRoom(project, failChange(shape, error), record.id);
+      await markFailed(failed, error);
       return failed;
     };
 
@@ -248,10 +272,21 @@ export const renderJobsLayer = Layer.effect(
       const bytes = await downloadClip(url, key);
       const dir = await outputDir();
       // A rename may have landed during the download (spec 10 repoints pending records).
-      const current = (await readJobsLenient(dir)).find((job) => job.id === record.id) ?? record;
+      const stored = (await readJobsLenient(dir)).find((job) => job.id === record.id);
+      // Resolved during the download (spec 10 fails the records of a deleted project): its outcome stands.
+      if (stored !== undefined && stored.status !== "pending") return stored;
+      const current = stored ?? record;
       const project = current.project ?? "";
-      const folder = await media.folder(project);
-      if (folder === undefined) throw new Error(`There is no project named "${project}".`);
+      // A project whose folder is gone (moved with the output folder, or removed by hand)
+      // still gets its paid clip: the folder is made again, and no room is touched (step 7).
+      // Failing here instead would retry, and download the clip again, on every sweep.
+      let folder = await media.folder(project);
+      const hadFolder = folder !== undefined;
+      if (folder === undefined) {
+        if (projectSlug(project) === "") throw new Error(`There is no project named "${project}".`);
+        folder = join(dir, projectSlug(project));
+        await mkdir(folder, { recursive: true });
+      }
       const params = current.params ?? record.params;
       const base = await writeResultFile(folder, `${fileStamp(Date.now())}-${projectSlug(params.prompt) || "video"}`, "mp4", bytes);
       const file = `${base}.mp4`;
@@ -291,7 +326,7 @@ export const renderJobsLayer = Layer.effect(
       await revokeShares(record.id);
 
       const landed: LandedClip = { file, sidecar: `${base}.json`, cost, bytes: bytes.length };
-      const records = await readRoom(project);
+      const records = hadFolder ? await readRoom(project) : undefined;
       if (records) {
         const shape = markedBy(records, record.id);
         if (shape) await applyRoom(project, fillChange(shape, landed), record.id);
@@ -482,7 +517,8 @@ export const renderJobsLayer = Layer.effect(
         const fresh = await findJob(jobId);
         if (fresh?.status === "done") return completedAnswer(fresh);
         if (fresh?.status === "failed") return { status: "failed", error: fresh.error ?? GENERATION_FAILED };
-        return completedAnswer(await collect(fresh ?? built, read.data, key));
+        const landed = await collect(fresh ?? built, read.data, key);
+        return landed.status === "done" ? completedAnswer(landed) : { status: "failed", error: landed.error ?? GENERATION_FAILED };
       } catch (error) {
         throw refusal("upstream", "upstream", errorText(error));
       } finally {
@@ -527,7 +563,7 @@ export const renderJobsLayer = Layer.effect(
         const fresh = (await readJobsLenient(dir)).find((each) => each.id === job.id);
         if (fresh && fresh.status !== "pending") return;
         const done = await collect(fresh ?? job, read.data, key);
-        logInfo(`video job ${job.id} collected by the sweep → ${done.savedPath}`);
+        if (done.status === "done") logInfo(`video job ${job.id} collected by the sweep → ${done.savedPath}`);
       } catch (error) {
         logError(`sweep could not collect ${job.id}: ${errorText(error)}`);
       } finally {
@@ -613,6 +649,15 @@ export const renderJobsLayer = Layer.effect(
       return job ? recipeOf(job.recipe) : undefined;
     };
 
+    // Records first, in one strict write: once it lands the renders are failed, and nothing after it may say otherwise.
+    const failPending = async (options: FailPendingOptions) => {
+      const failed = await failPendingJobsIn(await outputDir(), options);
+      for (const job of failed) {
+        await markFailed(job, options.error).catch((error: unknown) => logError(`${job.id}: ${errorText(error)}`));
+      }
+      return failed.length;
+    };
+
     const attempt = <A>(run: () => Promise<A>) =>
       Effect.tryPromise({
         try: run,
@@ -624,6 +669,7 @@ export const renderJobsLayer = Layer.effect(
       poll: (request) => attempt(() => poll(request)),
       forget: (project, jobId) => attempt(() => forget(project, jobId)),
       placeholderRecipe: (project, shapeId) => attempt(() => placeholderRecipe(project, shapeId)),
+      failPending: (options) => Effect.tryPromise({ try: () => failPending(options), catch: (error) => new JobStoreError({ reason: errorText(error) }) }),
     });
   }),
 );

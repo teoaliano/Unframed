@@ -19,6 +19,8 @@ import { copyPresetFiles } from "../library/presetCopier.ts";
 import { PresetStore } from "../library/presetStore.ts";
 import { ProviderDetection } from "../agent/detection.ts";
 import { Agents } from "../agent/layer.ts";
+import { Lifecycle } from "../lifecycle.ts";
+import { OAuth } from "../oauth/oauth.ts";
 
 export const rpcHandlersLayer = UnframedRpcs.toLayer(
   Effect.gen(function* () {
@@ -36,6 +38,8 @@ export const rpcHandlersLayer = UnframedRpcs.toLayer(
     const presets = yield* PresetStore;
     const detection = yield* ProviderDetection;
     const agents = yield* Agents;
+    const lifecycle = yield* Lifecycle;
+    const oauth = yield* OAuth;
     const context = yield* Effect.context<SettingsStore | Projects | Native>();
 
     const testOnly = <A, E>(run: () => Effect.Effect<A, E>) =>
@@ -45,7 +49,7 @@ export const rpcHandlersLayer = UnframedRpcs.toLayer(
       "server.health": () => Effect.map(settings.view, (view) => ({ ...view, ok: true as const })),
       "settings.get": () => settings.view,
       "settings.update": (patch) =>
-        Effect.tap(settings.update(patch), () =>
+        Effect.tap(lifecycle.updateSettings(patch), () =>
           Effect.andThen(clearStoredModels(preferences, patch), () =>
             Effect.all([
               patch.claudePath !== undefined || patch.claudeConfigDir !== undefined ? detection.forget("claude") : Effect.void,
@@ -54,6 +58,13 @@ export const rpcHandlersLayer = UnframedRpcs.toLayer(
           ),
         ),
       "settings.subscribe": () => settings.subscribe,
+      "settings.removeKey": () => lifecycle.removeKey,
+      "oauth.start": () => oauth.start,
+      "oauth.pending": () => oauth.pending,
+      "oauth.cancel": () => lifecycle.cancelConnection,
+      "oauth.status": () => oauth.status,
+      "projects.rename": ({ name, to }) => lifecycle.renameProject(name, to),
+      "projects.delete": ({ name, confirmRenders }) => lifecycle.deleteProject(name, confirmRenders === true),
       "settings.pickFolder": () =>
         Effect.map(Effect.flatMap(settings.outputDir, native.pickFolder), (path) => ({ path })),
       "projects.list": () => Effect.map(projects.list, (list) => ({ projects: [...list] })),

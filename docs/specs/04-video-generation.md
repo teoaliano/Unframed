@@ -241,8 +241,8 @@ Status classification, one home for both callers: `completed` is done; `failed`,
 **Collector (engine).** The only implementation of "a completed job becomes files, a record and a canvas result". Used by the poll and the sweep.
 
 1. Download URL: `data.unsigned_urls[0]`, else `data.urls[0]`; none fails with `Job completed without a video URL.` Fetch it with the bearer key and a 300 s total timeout; non-2xx fails with `Could not download the video (<status>).`
-2. After the download, re-read the store for the job's current `project` (a rename may have landed during the download; spec 10 repoints pending records). Fall back to the handed record when the store lacks it.
-3. Write `<stamp>-<slug(prompt)>.mp4` into that project's folder, where stamp is the ISO time with `:` and `.` replaced by `-`, and slug is spec 01's slug rule. Use spec 03's exclusive-create collision rule for the name.
+2. After the download, re-read the store for the job's current `project` (a rename may have landed during the download; spec 10 repoints pending records). Fall back to the handed record when the store lacks it. A record the store already holds as done or failed (spec 10 fails the records of a project deleted during the download) keeps that outcome: the clip is dropped and nothing below runs.
+3. Write `<stamp>-<slug(prompt)>.mp4` into that project's folder, where stamp is the ISO time with `:` and `.` replaced by `-`, and slug is spec 01's slug rule. Use spec 03's exclusive-create collision rule for the name. When the folder is gone (the render moved with an output folder change, or the folder was removed by hand), make it again: the paid clip is kept, and the sweep does not download it again on every tick.
 4. Write the sidecar next to it (format below). A sidecar write failure is logged (`  sidecar not written: <message>`) and does not fail collection.
 5. Persist the done record: `project` (the folder actually used), `status: "done"`, `savedPath` (absolute), `cost` (`data.usage.cost`, else `data.cost`, else null), `resolvedAt`. Add `params` and `refs` only when the handed record has them, so a merge never erases stored values.
 6. Revoke the job's shares.

@@ -13,6 +13,10 @@ export interface SettingsPatchInput {
 type Field = keyof SettingsPatchInput;
 
 const MODEL = /^[\w.-]+\/[\w.:-]+$/;
+const OPENROUTER_KEY = /^sk-or-[\w.-]{8,200}$/;
+
+/** The one key validator: a pasted key and a key OpenRouter returns (spec 10) pass the same check. */
+export const isOpenRouterKey = (value: string): boolean => OPENROUTER_KEY.test(value);
 const COMMAND = /^[^\n\r"'#;&|$`<>(){}\s][^\n\r"'#;&|$`<>(){}]{0,399}$/;
 const MODEL_MESSAGE = 'That does not look like a model slug. Expected something like "openai/gpt-image-2".';
 const COMMAND_MESSAGE = "That does not look like a command name or a path to one.";
@@ -28,7 +32,7 @@ const FIELDS: ReadonlyArray<{
   {
     field: "key",
     variable: "OPENROUTER_API_KEY",
-    pattern: /^sk-or-[\w.-]{8,200}$/,
+    pattern: OPENROUTER_KEY,
     message: 'That does not look like an OpenRouter key. Keys start with "sk-or-".',
     clearable: false,
   },
@@ -52,6 +56,12 @@ const FIELDS: ReadonlyArray<{
     clearable: true,
   },
 ];
+
+/** The setting each `.env` variable holds; the legacy `OPENROUTER_MODEL` is the image model. */
+export const SETTING_OF_VARIABLE: Readonly<Record<string, Field>> = {
+  ...Object.fromEntries(FIELDS.map(({ field, variable }) => [variable, field])),
+  OPENROUTER_MODEL: "imageModel",
+};
 
 export type SettingsPatchResult =
   | { readonly ok: true; readonly changes: Readonly<Record<string, string | null>> }

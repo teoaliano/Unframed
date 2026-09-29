@@ -8,3 +8,4 @@ export * from "./video.ts";
 export * from "./text.ts";
 export * from "./library.ts";
 export * from "./agent.ts";
+export * from "./openRouterKey.ts";
