@@ -10,10 +10,15 @@ import { useRender } from "@base-ui/react/use-render";
 const ROUND =
   "relative isolate flex size-8 shrink-0 items-center justify-center overflow-hidden rounded-full shadow-xs outline-none transition-all duration-150 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-background enabled:cursor-pointer enabled:inset-shadow-2xs enabled:inset-shadow-primary-foreground/16 hover:scale-105 active:shadow-none disabled:pointer-events-none disabled:opacity-64 disabled:shadow-none disabled:hover:scale-100 motion-reduce:transition-none motion-reduce:hover:scale-100";
 
+const PILL =
+  "inline-flex h-8 shrink-0 cursor-pointer items-center justify-center gap-1.5 whitespace-nowrap bg-message-action font-medium text-sm text-message-action-foreground shadow-xs shadow-message-action/24 outline-none hover:bg-message-action-hover focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-background disabled:pointer-events-none disabled:opacity-64 disabled:shadow-none sm:h-7 [&_svg]:size-3.5 [&_svg]:shrink-0";
+
 const TONES = {
   send: `${ROUND} bg-message-action text-message-action-foreground enabled:shadow-message-action/24 hover:bg-message-action-hover`,
   stop: `${ROUND} bg-destructive/90 text-primary-foreground shadow-destructive/24 hover:bg-destructive`,
-  pill: "inline-flex h-8 shrink-0 cursor-pointer items-center justify-center gap-1.5 whitespace-nowrap rounded-full bg-message-action px-3 font-medium text-sm text-message-action-foreground shadow-xs shadow-message-action/24 outline-none hover:bg-message-action-hover focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-background disabled:pointer-events-none disabled:opacity-64 disabled:shadow-none sm:h-7 [&_svg]:size-3.5 [&_svg]:shrink-0",
+  pill: `${PILL} rounded-full px-3`,
+  pillStart: `${PILL} rounded-l-full rounded-r-none ps-3 pe-2.5`,
+  pillEnd: `${PILL} rounded-l-none rounded-r-full border-l border-message-action-foreground/12 px-2`,
 } as const;
 
 export const MessageAction = ({ tone, render, ...props }: useRender.ComponentProps<"button"> & { readonly tone: keyof typeof TONES }) => {

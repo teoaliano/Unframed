@@ -94,7 +94,6 @@
     {
       "files": [
         "src/agent/ConfirmDialog.tsx",
-        "src/agent/composer/panels.tsx",
         "src/agent/diff/DiffPanel.tsx",
         "src/artifacts/ArtifactFrame.tsx",
         "src/artifacts/ArtifactsHost.tsx",
