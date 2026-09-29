@@ -219,7 +219,7 @@ Each task updates the spec passages for the surface it restyles, in the same com
 8. Canvas: selection line and grips in `--primary` and `--card`, dot grid on the new tokens, shape labels, prompt hint, empty media, Remove button, video transport, render placeholder, artifact cards (white page kept), role badges, tether and mention menu on the kit; the selection look, dot grid, media and badge tests pass with updated colours. Seam: browser.
 9. Group frame, its name field and recipe chip on the new tokens and kit Input and Badge; the group tests pass. Seam: browser.
 10. Selection toolbar and recipe bar on kit Button variants on `surface-glass`, placed as today. Seam: browser.
-11. Generate composer: t3code's composer shell at 420 px, segmented medium switch, the instruction editor, the round send button, status lines and the recipe line on the kit. Seam: browser.
+11. Generate composer: t3code's composer shell at 420 px, segmented medium switch, the instruction editor, t3code's message-action send (its labelled pill), status lines and the recipe line on the kit. Seam: browser.
 12. Prop tray, value menus, Runs popup and video share consent on the kit chip recipe, Menu, Popover, NumberField and Checkbox; the Escape and Runs tests pass. Seam: browser.
 13. Model dialog and final prompt dialog on kit Dialog, Table, Select, Input, Textarea, Alert and Badge `label` provider tokens, at 680 and 640 px. Seam: browser.
 14. Library dialog and Add to library dialog on the kit, with kind chips as Badge `label` in their hues and preset delete as AlertDialog. Seam: browser.
