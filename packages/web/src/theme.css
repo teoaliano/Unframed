@@ -52,6 +52,21 @@
   --unframed-hue-gray-text: #262626;
   --unframed-hue-neutral-bg: #0000000f;
   --unframed-hue-neutral-text: #262626;
+  /* The library's chips: each hue's border and icon, beside its background above. */
+  --unframed-hue-purple-border: #d8bbdf;
+  --unframed-hue-purple-icon: #700084;
+  --unframed-hue-blue-border: #b1c9e7;
+  --unframed-hue-blue-icon: #00458c;
+  --unframed-hue-teal-border: #94d6c8;
+  --unframed-hue-teal-icon: #005348;
+  --unframed-hue-orange-border: #e6bda2;
+  --unframed-hue-orange-icon: #6e3500;
+  --unframed-hue-cyan-border: #91d3e3;
+  --unframed-hue-cyan-icon: #00505f;
+  --unframed-hue-green-border: #b2d1ac;
+  --unframed-hue-green-icon: #0c5700;
+  --unframed-hue-pink-border: #e7b7c8;
+  --unframed-hue-pink-icon: #83004b;
 }
 
 :root[data-unframed-theme="dark"] {
@@ -98,6 +113,20 @@
   --unframed-hue-gray-text: #e5e5e5;
   --unframed-hue-neutral-bg: #ffffff1a;
   --unframed-hue-neutral-text: #e5e5e5;
+  --unframed-hue-purple-border: #dd74f0;
+  --unframed-hue-purple-icon: #f297ff;
+  --unframed-hue-blue-border: #6d9cfe;
+  --unframed-hue-blue-icon: #9eb7ff;
+  --unframed-hue-teal-border: #63ab9d;
+  --unframed-hue-teal-icon: #7ec6b8;
+  --unframed-hue-orange-border: #e2883e;
+  --unframed-hue-orange-icon: #ffa258;
+  --unframed-hue-cyan-border: #67a7b8;
+  --unframed-hue-cyan-icon: #83c2d4;
+  --unframed-hue-green-border: #69ad67;
+  --unframed-hue-green-icon: #84c980;
+  --unframed-hue-pink-border: #f273aa;
+  --unframed-hue-pink-icon: #ff99c3;
 }
 
 :root {
