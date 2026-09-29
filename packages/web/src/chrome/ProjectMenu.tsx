@@ -77,38 +77,37 @@ const ProjectNameDialog = ({
 
   return (
     <Dialog open={open} onOpenChange={close}>
-      <DialogPopup className="max-w-[360px]">
-        <form onSubmit={onSubmit}>
-          <DialogHeader>
-            <DialogTitle>{title}</DialogTitle>
-          </DialogHeader>
-          <DialogPanel>
-            <label className="grid gap-1.5">
-              <span className="text-xs font-medium text-foreground">Project name</span>
-              <Input
-                autoFocus
-                placeholder="e.g. product-shots"
-                value={name}
-                aria-invalid={problem !== undefined || undefined}
-                onChange={(event) => {
-                  setName(event.target.value);
-                  setProblem(undefined);
-                }}
-              />
-            </label>
-            {problem !== undefined && (
-              <p role="alert" className="m-0 text-sm text-destructive-foreground">
-                {problem}
-              </p>
-            )}
-          </DialogPanel>
-          <DialogFooter>
-            <DialogClose render={<Button variant="outline" />}>Cancel</DialogClose>
-            <Button type="submit" disabled={busy}>
-              {action}
-            </Button>
-          </DialogFooter>
-        </form>
+      {/* The popup is the form, so its header, panel and footer stay the popup's own column. */}
+      <DialogPopup className="max-w-[360px]" render={<form onSubmit={onSubmit} />}>
+        <DialogHeader>
+          <DialogTitle>{title}</DialogTitle>
+        </DialogHeader>
+        <DialogPanel>
+          <label className="grid gap-1.5">
+            <span className="text-xs font-medium text-foreground">Project name</span>
+            <Input
+              autoFocus
+              placeholder="e.g. product-shots"
+              value={name}
+              aria-invalid={problem !== undefined || undefined}
+              onChange={(event) => {
+                setName(event.target.value);
+                setProblem(undefined);
+              }}
+            />
+          </label>
+          {problem !== undefined && (
+            <p role="alert" className="m-0 text-sm text-destructive-foreground">
+              {problem}
+            </p>
+          )}
+        </DialogPanel>
+        <DialogFooter>
+          <DialogClose render={<Button variant="outline" />}>Cancel</DialogClose>
+          <Button type="submit" disabled={busy}>
+            {action}
+          </Button>
+        </DialogFooter>
       </DialogPopup>
     </Dialog>
   );

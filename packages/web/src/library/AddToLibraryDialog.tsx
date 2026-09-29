@@ -48,48 +48,54 @@ export const AddToLibraryDialog = ({ captured, onClose }: { readonly captured: C
 
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
-      <DialogPopup data-testid="add-to-library" className="max-w-[420px]" initialFocus={nameField}>
-        <form
-          onSubmit={(event) => {
-            event.preventDefault();
-            void save();
-          }}
-        >
-          <DialogHeader>
-            <DialogTitle>Add to library</DialogTitle>
-            <DialogDescription>{saveSubtitle(captured)}</DialogDescription>
-          </DialogHeader>
-          <DialogPanel>
-            <label className={fieldLabelClass}>
-              <span className={fieldNameClass}>Name</span>
-              <Input
-                ref={nameField}
-                placeholder="e.g. Portrait retouch"
-                value={name}
-                aria-invalid={problem !== undefined || undefined}
-                onChange={(event) => {
-                  setName(event.target.value);
-                  setProblem(undefined);
-                }}
-              />
-            </label>
-            {problem !== undefined && (
-              <p role="alert" className="m-0 text-sm text-destructive-foreground">
-                {problem}
-              </p>
-            )}
-            <label className={fieldLabelClass}>
-              <span className={fieldNameClass}>Description</span>
-              <Input placeholder="What it does, in a line" value={summary} onChange={(event) => setSummary(event.target.value)} />
-            </label>
-          </DialogPanel>
-          <DialogFooter>
-            <DialogClose render={<Button variant="outline" />}>Cancel</DialogClose>
-            <Button type="submit" disabled={busy}>
-              Save
-            </Button>
-          </DialogFooter>
-        </form>
+      {/* The popup is the form, so its header, panel and footer stay the popup's own column. */}
+      <DialogPopup
+        data-testid="add-to-library"
+        className="max-w-[420px]"
+        initialFocus={nameField}
+        render={
+          <form
+            onSubmit={(event) => {
+              event.preventDefault();
+              void save();
+            }}
+          />
+        }
+      >
+        <DialogHeader>
+          <DialogTitle>Add to library</DialogTitle>
+          <DialogDescription>{saveSubtitle(captured)}</DialogDescription>
+        </DialogHeader>
+        <DialogPanel>
+          <label className={fieldLabelClass}>
+            <span className={fieldNameClass}>Name</span>
+            <Input
+              ref={nameField}
+              placeholder="e.g. Portrait retouch"
+              value={name}
+              aria-invalid={problem !== undefined || undefined}
+              onChange={(event) => {
+                setName(event.target.value);
+                setProblem(undefined);
+              }}
+            />
+          </label>
+          {problem !== undefined && (
+            <p role="alert" className="m-0 text-sm text-destructive-foreground">
+              {problem}
+            </p>
+          )}
+          <label className={fieldLabelClass}>
+            <span className={fieldNameClass}>Description</span>
+            <Input placeholder="What it does, in a line" value={summary} onChange={(event) => setSummary(event.target.value)} />
+          </label>
+        </DialogPanel>
+        <DialogFooter>
+          <DialogClose render={<Button variant="outline" />}>Cancel</DialogClose>
+          <Button type="submit" disabled={busy}>
+            Save
+          </Button>
+        </DialogFooter>
       </DialogPopup>
     </Dialog>
   );

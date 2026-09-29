@@ -94,6 +94,10 @@ test("the save dialog counts the shapes and names the recipe, asks for a name, a
   await rightClickLabel(page, "shape:set");
   await addToLibrary(page).click();
   await expect(saveDialog(page).getByRole("heading", { name: "Add to library" })).toBeVisible();
+  // The footer sits inside the dialog's card.
+  const card = (await saveDialog(page).boundingBox())!;
+  const footer = (await saveDialog(page).locator("[data-slot='dialog-footer']").boundingBox())!;
+  expect(footer.y + footer.height).toBeLessThanOrEqual(card.y + card.height + 0.5);
   await expect(saveDialog(page)).toContainText("2 shapes, saved as you have them now.");
   await saveDialog(page).getByRole("button", { name: "Cancel" }).click();
   await expect(saveDialog(page)).toHaveCount(0);

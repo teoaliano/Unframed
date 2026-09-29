@@ -100,6 +100,11 @@ test("the project menu, the name dialog and the delete confirm are the kit's men
     expect(await styleOf(title, "font-weight")).toBe("600");
     await expectSlot(dialog.getByLabel("Project name"), "input");
     await expectToken(dialog.getByRole("button", { name: "Create" }), "background-color", "--primary");
+    // The footer sits inside the dialog's card, below its field.
+    const card = (await dialog.boundingBox())!;
+    const footer = (await dialog.locator("[data-slot='dialog-footer']").boundingBox())!;
+    expect(footer.y + footer.height).toBeLessThanOrEqual(card.y + card.height + 0.5);
+    expect(footer.y).toBeGreaterThan(card.y);
     await dialog.getByRole("button", { name: "Cancel" }).click();
     await expect(dialog).toHaveCount(0);
 
