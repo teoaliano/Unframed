@@ -7,12 +7,21 @@ export const webDist = (): string => {
   return dist;
 };
 
+/** The key a hosted engine has unless the test gives it a `.env` of its own. */
+export const FIXTURE_KEY = "sk-or-v1-test-key-0000abcd";
+
 /**
  * Starts an engine serving the built web, the way the desktop shell hosts it, with the
- * test-only canvas methods on so a test can read what the room holds.
+ * test-only canvas methods on so a test can read what the room holds. Without a `dotenv`
+ * it has a key from the process environment, because a keyless app opens the settings
+ * dialog over the canvas at first load (spec 10); `.env` stays untouched either way.
  */
 export const startHostedEngine = (options: EngineOptions = {}): Promise<TestEngine> =>
-  startEngine({ clientDist: webDist(), ...options, env: { UNFRAMED_TEST_CANVAS: "1", ...options.env } });
+  startEngine({
+    clientDist: webDist(),
+    ...options,
+    env: { UNFRAMED_TEST_CANVAS: "1", ...(options.dotenv === undefined ? { OPENROUTER_API_KEY: FIXTURE_KEY } : {}), ...options.env },
+  });
 
 type Fixtures = { engine: TestEngine };
 

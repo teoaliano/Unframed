@@ -52,6 +52,22 @@ export class ProjectActivation {
     });
   }
 
+  /** Lets the open canvas's pending edits reach the engine, before a change that closes its room. */
+  settle(): Promise<void> {
+    return this.beforeSwitch?.() ?? Promise.resolve();
+  }
+
+  /**
+   * After an output folder change (spec 10): the remembered project if the new folder has
+   * it, else the first, else a new `default`. The canvas unmounts first, because the same
+   * name is another project in the new folder.
+   */
+  async reopen(): Promise<void> {
+    this.active = undefined;
+    for (const listener of this.listeners) listener();
+    await this.initialLoad();
+  }
+
   /**
    * Waits for the engine, reads the remembered project and the project list, and opens
    * one: the remembered one, else the first, else a new `default`. A list that fails is

@@ -6,6 +6,7 @@ import { ActivationContext, EngineContext, useActivation, useSettings } from "./
 import { LicenseKeyContext, tldrawLicenseKey } from "./license.ts";
 import { ProjectActivation, useActiveProject } from "./project/activation.ts";
 import type { EngineConnection } from "./rpc/engine.ts";
+import { SettingsHost } from "./settings/SettingsHost.tsx";
 import { Toasts } from "./toasts.tsx";
 
 /** Feeds the RPC socket's state to the connection monitor. */
@@ -29,6 +30,7 @@ const Frame = () => {
     <main className="relative h-full w-full overflow-hidden bg-canvas text-primary">
       {project !== undefined && <CanvasHost key={project} project={project} activation={activation} />}
       <TopCorners />
+      <SettingsHost />
     </main>
   );
 };
