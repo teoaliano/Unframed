@@ -146,7 +146,7 @@ test("role badges show on selected media while the composer is open on video, an
   await expect(badge(page, "shape:low")).toHaveText(DASH);
 
   await page.keyboard.press("Escape");
-  await expect(page.locator(".unframed-role-badge")).toHaveCount(0);
+  await expect(page.locator("[data-role-for]")).toHaveCount(0);
 });
 
 test("moving one selected image above another swaps first and last live", async ({ page, videoEngine: video }) => {

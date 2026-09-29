@@ -4,6 +4,7 @@ import type { Page } from "@playwright/test";
 import { openCanvas, roomRecords, shapeOnScreen } from "./canvas.ts";
 import { clickShape, composer, expect, openComposer, sendRun, test, toolbar } from "./generation.ts";
 import { pngBytes } from "./images.ts";
+import { expectSlot, resolvedColor, styleOf } from "./kit.ts";
 import { artifactRecord, emptyMedia, filledMedia, putRecords } from "./media.ts";
 
 
@@ -60,14 +61,19 @@ test("badges show each selected medium's role only while the Generate tray is op
   await putRecords(engine, [emptyMedia("shape:empty", "image", "302", { x: 600, y: -60 }, { w: 140, h: 100 }), artifactRecord("shape:page", "page", "303", { x: 600, y: 150 }, "p.html", "p.html")]);
   await expect(shapeOnScreen(page, "shape:page")).toBeVisible();
   await page.keyboard.press("ControlOrMeta+a");
-  await expect(page.locator(".unframed-role-badge")).toHaveCount(0);
+  await expect(page.locator("[data-role-for]")).toHaveCount(0);
 
   await openComposer(page);
   await expect(badge(page, "shape:a")).toHaveText("image 1");
   await expect(badge(page, "shape:b")).toHaveText("image 2");
   await expect(badge(page, "shape:empty")).toHaveText("—");
   await expect(badge(page, "shape:page")).toHaveText("—");
-  await expect(page.locator(".unframed-role-badge")).toHaveCount(4);
+  await expect(page.locator("[data-role-for]")).toHaveCount(4);
+  // Each is the kit's label Badge, tinted by its role: images teal, the empty slots neutral.
+  await expectSlot(badge(page, "shape:a").locator("[data-slot='badge']"), "badge");
+  const tint = (hue: string) => resolvedColor(page, `color-mix(in srgb, var(${hue}) 8%, transparent)`);
+  expect(await styleOf(badge(page, "shape:a").locator("[data-slot='badge']"), "background-color")).toBe(await tint("--color-teal-500"));
+  expect(await styleOf(badge(page, "shape:empty").locator("[data-slot='badge']"), "background-color")).toBe(await tint("--color-zinc-500"));
   // A badge sits above its shape's top-left corner.
   const shape = (await shapeOnScreen(page, "shape:a").boundingBox())!;
   const label = (await badge(page, "shape:a").boundingBox())!;
@@ -75,7 +81,7 @@ test("badges show each selected medium's role only while the Generate tray is op
   expect(label.y + label.height).toBeCloseTo(shape.y, 0);
 
   await page.keyboard.press("Escape");
-  await expect(page.locator(".unframed-role-badge")).toHaveCount(0);
+  await expect(page.locator("[data-role-for]")).toHaveCount(0);
 
   // Moving b above a swaps their numbers live, and the request follows the badges.
   await openComposer(page);

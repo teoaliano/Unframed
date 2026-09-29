@@ -29,7 +29,7 @@ test("a text run lands its answer beside the selection as a text result with its
   expect(plainText(result)).toBe("A fox on a windswept cliff.\nGolden light.");
   expect(result!.meta.ref).toBe("102");
   expect(result!.meta.unframed.result).toMatchObject({ medium: "text", model: "google/gemini-3.5-flash-lite", cost: 0.0012, sources: ["shape:starter-subject"] });
-  await expect(shapeOnScreen(page, result!.id).locator(".unframed-shape-label")).toHaveText("$0.0012 · @102");
+  await expect(shapeOnScreen(page, result!.id).locator("[data-shape-label]")).toHaveText("$0.0012 · @102");
 
   const subject = (await roomRecords(generation.engine, "default")).find((record) => record.id === "shape:starter-subject")!;
   expect(result!.x).toBeGreaterThan(subject.x!);
@@ -123,7 +123,7 @@ test("a text result with no known cost shows its @id alone, and a failed run say
   generation.answerText(() => ({ kind: "text", text: "An answer.", cost: null }));
   await openCanvas(page, generation.engine);
   const result = await makeTextResult(page, generation);
-  await expect(shapeOnScreen(page, result.id).locator(".unframed-shape-label")).toHaveText(`@${result.meta.ref}`);
+  await expect(shapeOnScreen(page, result.id).locator("[data-shape-label]")).toHaveText(`@${result.meta.ref}`);
 
   generation.answerText(() => ({ kind: "status", status: 500, body: { error: { message: "model overloaded" } } }));
   await page.mouse.click(10, 400);

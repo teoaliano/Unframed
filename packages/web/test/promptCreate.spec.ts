@@ -15,7 +15,7 @@ test.describe("making a prompt", () => {
       records.find((record) => record.type === "text" && plainText(record) === "a fox in the snow"),
     );
     expect(prompt.meta.ref).toBe("102");
-    const label = shapeOnScreen(page, prompt.id).locator(".unframed-shape-label");
+    const label = shapeOnScreen(page, prompt.id).locator("[data-shape-label]");
     await expect(label).toHaveText("@102");
     const labelBox = (await label.boundingBox())!;
     const textBox = (await shapeOnScreen(page, prompt.id).locator(".tl-rich-text").boundingBox())!;
@@ -38,7 +38,7 @@ test.describe("making a prompt", () => {
     const box = (await shapeOnScreen(page, prompt.id).boundingBox())!;
     expect(Math.abs(box.x - point.x)).toBeLessThan(40);
     expect(Math.abs(box.y - point.y)).toBeLessThan(40);
-    await expect(shapeOnScreen(page, prompt.id).locator(".unframed-shape-label")).toHaveText("@102");
+    await expect(shapeOnScreen(page, prompt.id).locator("[data-shape-label]")).toHaveText("@102");
   });
 
   test("a new ref skips a number some prompt already mentions, even when nothing holds it", async ({ page, engine }) => {

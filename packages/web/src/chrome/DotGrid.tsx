@@ -29,5 +29,13 @@ export const DotGrid = () => {
     [editor, screenGap],
   );
 
-  return <div ref={ref} className="tl-background unframed-dot-grid" style={{ backgroundSize: `${screenGap}px ${screenGap}px` }} />;
+  // 1.1 px dots at every zoom, in the canvas dot token.
+  return (
+    <div
+      ref={ref}
+      className="tl-background bg-background bg-[radial-gradient(circle,var(--canvas-dot)_0.55px,transparent_0.8px)]"
+      data-testid="dot-grid"
+      style={{ backgroundSize: `${screenGap}px ${screenGap}px` }}
+    />
+  );
 };

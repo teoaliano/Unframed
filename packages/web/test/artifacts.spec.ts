@@ -30,7 +30,7 @@ test("a dropped .html file becomes a page whose title labels the card", async ({
   await dropFiles(page, await emptyCanvasPoint(page), [{ name: "Landing Page.html", mime: "text/html", bytes: Buffer.from("<h1>Hello</h1>") }]);
   const made = await waitForRoom(engine, "default", (records) => records.find((record) => record.type === "page"));
   expect(made.props).toMatchObject({ w: 480, h: 320, title: "Landing Page", fileName: "Landing Page.html" });
-  await expect(shapeOnScreen(page, made.id).locator(".unframed-shape-label")).toHaveText("Landing Page");
+  await expect(shapeOnScreen(page, made.id).locator("[data-shape-label]")).toHaveText("Landing Page");
 });
 
 test("a page resizes freely between 180 by 96 and 900 by 900", async ({ page, engine }) => {

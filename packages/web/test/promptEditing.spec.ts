@@ -50,7 +50,7 @@ test.describe("editing a prompt", () => {
     );
     await page.waitForTimeout(500);
     expect((await roomShapes(engine, "default", "text")).map((record) => record.id)).toContain(empty.id);
-    await expect(shapeOnScreen(page, empty.id).locator(".unframed-prompt-hint")).toHaveText("Add text…");
+    await expect(shapeOnScreen(page, empty.id).locator("[data-testid='prompt-hint']")).toHaveText("Add text…");
 
     // Clearing the text of an existing prompt keeps it too.
     await shapeOnScreen(page, SUBJECT).locator(".tl-rich-text").dblclick();
@@ -58,6 +58,6 @@ test.describe("editing a prompt", () => {
     await page.keyboard.press("Backspace");
     await page.keyboard.press("Escape");
     await waitForRoom(engine, "default", (records) => plainText(records.find((record) => record.id === SUBJECT)) === "");
-    await expect(shapeOnScreen(page, SUBJECT).locator(".unframed-prompt-hint")).toHaveText("Add text…");
+    await expect(shapeOnScreen(page, SUBJECT).locator("[data-testid='prompt-hint']")).toHaveText("Add text…");
   });
 });

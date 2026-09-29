@@ -5,10 +5,12 @@
 import { runMarkerOf, unframedMetaOf } from "@unframed/contracts";
 import { useEffect, useState, type SyntheticEvent } from "react";
 import { HTMLContainer, useEditor, type TLVideoShape } from "tldraw";
+import { Button } from "~/components/ui/button";
 import { Tip } from "../../chrome/ui.tsx";
 import { useCanvasProject, useEngine } from "../../context.ts";
 import { noteRender } from "../../fps/renders.ts";
 import { showError } from "../../toasts.tsx";
+import { mediaCardClass } from "./looks.ts";
 import { ShapeLabel } from "./ShapeLabel.tsx";
 
 export const FORGET_LABEL = "Forget this job";
@@ -37,13 +39,14 @@ const Rendering = ({ shape, jobId, startedAt }: { readonly shape: TLVideoShape; 
   const handled = (event: SyntheticEvent) => editor.markEventAsHandled(event);
   return (
     <>
-      <p role="status" className="unframed-render__status">
+      <p role="status" className="m-0 text-sm leading-snug text-muted-foreground">
         Rendering… ({minutes} min)
       </p>
       <Tip label={FORGET_TIP} side="bottom">
-        <button
-          type="button"
-          className="unframed-render__forget"
+        <Button
+          variant="ghost-muted"
+          size="xs"
+          className="pointer-events-auto"
           onPointerDown={handled}
           onPointerUp={handled}
           onClick={(event) => {
@@ -53,7 +56,7 @@ const Rendering = ({ shape, jobId, startedAt }: { readonly shape: TLVideoShape; 
           data-shape={shape.id}
         >
           {FORGET_LABEL}
-        </button>
+        </Button>
       </Tip>
     </>
   );
@@ -66,18 +69,19 @@ export const RenderPlaceholder = ({ shape }: { readonly shape: TLVideoShape }) =
   return (
     <HTMLContainer
       id={shape.id}
-      className="unframed-media-empty unframed-render"
+      className={mediaCardClass}
+      data-testid="media-empty"
       data-render={marker ? "pending" : "failed"}
       style={{ width: shape.props.w, height: shape.props.h }}
     >
       <ShapeLabel shapeId={shape.id} kind="video">
         Video
       </ShapeLabel>
-      <div className="unframed-render__body">
+      <div className="box-border flex h-full flex-col items-center justify-center gap-2 p-3 text-center">
         {marker ? (
           <Rendering shape={shape} jobId={marker.runId} startedAt={marker.startedAt} />
         ) : (
-          <p role="alert" className="unframed-render__error">
+          <p role="alert" className="m-0 text-sm leading-snug wrap-anywhere text-destructive-foreground">
             {typeof runError === "string" ? runError : ""}
           </p>
         )}

@@ -13,8 +13,8 @@ test("the add menu makes empty pages and motions of 480 by 320 with their kind t
     const made = await waitForRoom(engine, "default", (records) => records.find((record) => record.typeName === "shape" && !before.has(record.id)));
     expect(made).toMatchObject({ type: label.toLowerCase(), props: { w: 480, h: 320, file: "" } });
     const card = shapeOnScreen(page, made.id);
-    await expect(card.locator(".unframed-shape-label")).toHaveText(label.toLowerCase());
-    await expect(card.locator(".unframed-artifact")).toHaveCSS("border-top-style", "solid");
+    await expect(card.locator("[data-shape-label]")).toHaveText(label.toLowerCase());
+    await expect(card.locator("[data-testid='artifact-card']")).toHaveCSS("border-top-width", "1px");
     await expect(card.getByRole("button")).toHaveCount(1);
     await expect(card.getByRole("button", { name: "Agent" })).toBeVisible();
     await expect(card.getByRole("button", { name: "Agent" }).locator("svg")).toHaveCount(1);
@@ -40,11 +40,11 @@ test("a filled artifact drops its card, shows its title above the corner, and re
   await filledArtifact(engine, { id: "shape:landing", kind: "page", ref: "150", at: { x: 420, y: 60 }, title: "Landing", html: "<h1>Hello</h1>" });
   await filledArtifact(engine, { id: "shape:untitled", kind: "page", ref: "151", at: { x: 420, y: 520 }, html: "<h1>Plain</h1>", file: "1700-plain.html" });
   const card = shapeOnScreen(page, "shape:landing");
-  await expect(card.locator(".unframed-shape-label")).toHaveText("Landing");
-  await expect(card.locator(".unframed-artifact")).toHaveCSS("border-top-style", "none");
+  await expect(card.locator("[data-shape-label]")).toHaveText("Landing");
+  await expect(card.locator("[data-testid='artifact-card']")).toHaveCSS("border-top-width", "0px");
   await expect(card.getByRole("button", { name: "Agent" })).toHaveCount(0);
   // No title and no original name: no label at all.
-  await expect(shapeOnScreen(page, "shape:untitled").locator(".unframed-shape-label")).toHaveCount(0);
+  await expect(shapeOnScreen(page, "shape:untitled").locator("[data-shape-label]")).toHaveCount(0);
 
   await page.keyboard.press("Shift+1");
   await page.waitForTimeout(400);

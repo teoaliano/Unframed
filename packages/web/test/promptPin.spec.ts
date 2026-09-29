@@ -5,7 +5,7 @@ const SCENE = "shape:starter-scene";
 
 test("dragging a prompt's edge pins its size, a still press does not, and double-clicking the edge makes it hug again", async ({ page, engine }) => {
   await openCanvas(page, engine);
-  const box = shapeOnScreen(page, SCENE).locator(".unframed-prompt");
+  const box = shapeOnScreen(page, SCENE).locator("[data-testid='prompt']");
   const hugged = (await box.boundingBox())!;
   await shapeOnScreen(page, SCENE).locator(".tl-rich-text").click();
 

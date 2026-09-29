@@ -9,7 +9,7 @@ const zoomLevel = async (page: Page) => Number((await zoomReadout(page).innerTex
 /** The prompt's box in canvas units: its size on screen divided by the zoom. */
 const canvasBox = async (page: Page, id: string) => {
   const zoom = await zoomLevel(page);
-  const box = (await shapeOnScreen(page, id).locator(".unframed-prompt").boundingBox())!;
+  const box = (await shapeOnScreen(page, id).locator("[data-testid='prompt']").boundingBox())!;
   return { w: box.width / zoom, h: box.height / zoom, zoom };
 };
 
@@ -72,7 +72,7 @@ test("an empty prompt is measured from its hint, fully readable, and never small
   await openCanvas(page, engine);
   const empty = await makePrompt(page, engine, "");
   await page.keyboard.press("Shift+0");
-  const hint = shapeOnScreen(page, empty.id).locator(".unframed-prompt-hint");
+  const hint = shapeOnScreen(page, empty.id).locator("[data-testid='prompt-hint']");
   await expect(hint).toHaveText("Add text…");
   const fits = await hint.evaluate((element) => element.scrollWidth <= element.clientWidth + 1 && element.scrollHeight <= element.clientHeight + 1);
   expect(fits).toBe(true);

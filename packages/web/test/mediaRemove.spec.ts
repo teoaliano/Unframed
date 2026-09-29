@@ -19,15 +19,17 @@ test("a selected filled image shows its remove control, which empties the shape 
   });
   const shape = shapeOnScreen(page, "shape:photo");
   const remove = shape.getByRole("button", { name: "Remove photo.png" });
-  await expect(remove).toHaveCSS("opacity", "0");
+  // The control's wrapper shows it while the shape is selected; the kit button inside keeps its own look.
+  const shown = shape.getByTestId("media-remove");
+  await expect(shown).toHaveCSS("opacity", "0");
 
   const middle = await centre(shape.locator(".tl-html-container").first());
   await page.mouse.move(middle.x, middle.y);
   await page.waitForTimeout(300);
-  await expect(remove).toHaveCSS("opacity", "0");
+  await expect(shown).toHaveCSS("opacity", "0");
 
   await page.mouse.click(middle.x, middle.y);
-  await expect(remove).toHaveCSS("opacity", "1");
+  await expect(shown).toHaveCSS("opacity", "1");
   const box = (await remove.boundingBox())!;
   const image = (await shape.locator(".tl-html-container").first().boundingBox())!;
   expect(box.width).toBeCloseTo(20, 0);
@@ -40,6 +42,6 @@ test("a selected filled image shows its remove control, which empties the shape 
     return record && record.props.assetId === null ? record : undefined;
   });
   expect(emptied.props.w).toBe(240);
-  await expect(shape.locator(".unframed-media-empty")).toBeVisible();
+  await expect(shape.locator("[data-testid='media-empty']")).toBeVisible();
   expect(await readdir(join(engine.dataDir, "output", "default"))).toContain(file);
 });

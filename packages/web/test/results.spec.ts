@@ -203,7 +203,7 @@ test("Recipe reopens the composer on the recorded run; a selection change leaves
   await expect(composer(page).getByTestId("source-count")).toHaveText("recipe · 1 sources");
   await expect(instructionBox(page)).toHaveText("moody");
   await expect(composer(page).locator("[data-prop]")).toHaveText(["1K", "1:1", "high"]);
-  await expect(page.locator(".unframed-role-badge")).toHaveCount(0);
+  await expect(page.locator("[data-role-for]")).toHaveCount(0);
 
   // "Same thing, bigger": change a prop, add to the instruction (resolved like a prompt's) and send.
   await composer(page).locator("[data-prop]").filter({ hasText: "1K" }).click();

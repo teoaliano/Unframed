@@ -1,250 +1,23 @@
-/* The Unframed parts of shapes on the canvas. Every colour is a theme token. */
-
-.unframed-shape-label {
-  position: absolute;
-  left: 0;
-  bottom: 100%;
-  height: 22px;
-  display: flex;
-  align-items: center;
-  font-family: var(--font-sans);
-  font-size: 11px;
-  line-height: 1;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: var(--unframed-text-secondary);
-  white-space: nowrap;
-  pointer-events: none;
-}
+/*
+ * The canvas label rules (spec 12): rules for Unframed parts inside tldraw-rendered shapes
+ * that depend on tldraw's own DOM or on the canvas's label level. Everything else about a
+ * shape's look is on its elements, from the kit's tokens.
+ */
 
 /* Labels by zoom: the level is one attribute on the canvas container, so no shape re-renders. */
-.tl-container[data-label-level="off"] .unframed-shape-label {
+.tl-container[data-label-level="off"] [data-shape-label],
+.tl-container[data-label-level="off"] [data-role-for] {
   display: none;
 }
 
-.tl-container[data-label-level="hover"] .tl-shape:not([data-label-active]) .unframed-shape-label {
+.tl-container[data-label-level="hover"] .tl-shape:not([data-label-active]) [data-shape-label] {
   visibility: hidden;
 }
 
-.unframed-prompt {
-  position: relative;
-}
-
-.unframed-prompt-hint {
-  position: absolute;
-  top: 0;
-  left: 0;
-  color: var(--unframed-text-secondary);
-  white-space: pre-wrap;
-  pointer-events: none;
-}
-
-/* Media: a card that asks for a file while empty, bare once filled. */
-.unframed-media-empty {
-  box-sizing: border-box;
-  border: 1px solid var(--unframed-border-emphasized);
-  border-radius: var(--unframed-radius-element);
-  background-color: var(--unframed-card);
-  font-family: var(--font-sans);
-  color: var(--unframed-text-primary);
-}
-
-.unframed-media-empty__body {
-  display: flex;
-  height: 100%;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  padding: 10px;
-  box-sizing: border-box;
-}
-
-.unframed-media-button {
+/* A filled artifact's title is its handle: a selected frame takes every press inside the shape. */
+.tl-container [data-shape-label][data-label-handle] {
   pointer-events: all;
-  height: 28px;
-  padding: 0 12px;
-  border: 1px solid var(--unframed-border-emphasized);
-  border-radius: var(--unframed-radius-inner);
-  background-color: var(--unframed-surface);
-  color: var(--unframed-text-primary);
-  font: inherit;
-  font-size: 13px;
-  cursor: pointer;
-}
-
-.unframed-media-button:hover {
-  background-color: color-mix(in srgb, var(--unframed-surface) 100%, var(--unframed-overlay-hover));
-}
-
-.unframed-media-link {
-  display: flex;
-  width: 100%;
-  gap: 6px;
-}
-
-.unframed-media-link__input {
-  pointer-events: all;
-  min-width: 0;
-  flex: 1;
-  height: 28px;
-  padding: 0 8px;
-  border: 1px solid var(--unframed-border);
-  border-radius: var(--unframed-radius-inner);
-  background-color: var(--unframed-surface);
-  color: var(--unframed-text-primary);
-  font: inherit;
-  font-size: 12px;
-}
-
-.unframed-media-problem {
-  margin: 0;
-  font-size: 12px;
-  line-height: 1.3;
-  text-align: center;
-  color: var(--unframed-error);
-}
-
-.unframed-media-remove {
-  position: absolute;
-  top: 4px;
-  right: 4px;
-  display: flex;
-  width: 20px;
-  height: 20px;
-  align-items: center;
-  justify-content: center;
-  padding: 0;
-  border: 1px solid var(--unframed-border-emphasized);
-  border-radius: 0;
-  background-color: var(--unframed-popover);
-  color: var(--unframed-icon-primary);
-  cursor: pointer;
-  opacity: 0;
-  pointer-events: none;
-}
-
-.unframed-media-remove[data-selected],
-.unframed-media-remove:focus-visible {
-  opacity: 1;
-  pointer-events: all;
-}
-
-.unframed-video__clip {
-  display: block;
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
-
-/* The transport sits under the clip, outside its bounds: a press on it never drags the shape. */
-.unframed-transport {
-  position: absolute;
-  left: 0;
-  display: flex;
-  height: 28px;
-  margin-top: 4px;
-  align-items: center;
-  gap: 6px;
-  font-family: var(--font-sans);
-  font-size: 11px;
-  color: var(--unframed-text-secondary);
-  pointer-events: all;
-}
-
-.unframed-transport__play {
-  display: flex;
-  width: 24px;
-  height: 24px;
-  flex-shrink: 0;
-  align-items: center;
-  justify-content: center;
-  padding: 0;
-  border: 0;
-  border-radius: var(--unframed-radius-inner);
-  background: transparent;
-  color: var(--unframed-icon-primary);
-  cursor: pointer;
-}
-
-.unframed-transport__play:hover {
-  background-color: var(--unframed-overlay-hover);
-}
-
-.unframed-transport__slider {
-  min-width: 0;
-  flex: 1;
-  accent-color: var(--unframed-accent);
-}
-
-.unframed-transport__time {
-  flex-shrink: 0;
-  font-variant-numeric: tabular-nums;
-}
-
-/* Pages and motions: a card with the kind icon centred while empty. */
-.unframed-artifact {
-  box-sizing: border-box;
-  border: 1px solid var(--unframed-border-emphasized);
-  border-radius: var(--unframed-radius-container);
-  background-color: var(--unframed-card);
-}
-
-.unframed-artifact__empty {
-  display: flex;
-  height: 100%;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 12px;
-  color: var(--unframed-icon-secondary);
-}
-
-.unframed-mention-menu {
-  position: absolute;
-  z-index: 600;
-  width: 260px;
-  max-height: 168px;
-  overflow-y: auto;
-  padding: 4px;
-  box-sizing: border-box;
-  border: 1px solid var(--unframed-border);
-  border-radius: var(--unframed-radius-container);
-  background-color: var(--unframed-popover-translucent);
-  backdrop-filter: blur(var(--unframed-chrome-blur));
-  box-shadow: var(--unframed-shadow-med);
-  font-family: var(--font-sans);
-  font-size: 12px;
-  pointer-events: all;
-}
-
-.unframed-mention-row {
-  display: flex;
-  align-items: baseline;
-  gap: 8px;
-  height: 26px;
-  padding: 0 8px;
-  line-height: 26px;
-  border-radius: var(--unframed-radius-inner);
-  cursor: default;
-  white-space: nowrap;
-}
-
-.unframed-mention-row[aria-selected="true"],
-.unframed-mention-row:hover {
-  background-color: var(--unframed-overlay-hover);
-}
-
-.unframed-mention-ref {
-  flex-shrink: 0;
-  color: var(--unframed-text-accent);
-}
-
-.unframed-mention-preview {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  color: var(--unframed-text-secondary);
+  cursor: grab;
 }
 
 /* A group: a dashed box in the border colour; selected, a solid accent box with square corners. */
@@ -262,7 +35,7 @@
 }
 
 /* A group's name field shows at every zoom and takes the pointer; the name is typed as it is, not in capitals. */
-.tl-container .tl-shape .unframed-shape-label[data-label-open][data-label-kind] {
+.tl-container .tl-shape [data-shape-label][data-label-open][data-label-kind] {
   display: flex;
   visibility: visible;
 }
@@ -309,165 +82,10 @@
   outline: none;
 }
 
-/* The dot grid: 1.1 px dots at every zoom, the emphasized border mixed 68 % into the canvas colour. */
-.unframed-dot-grid {
-  background-color: var(--unframed-canvas);
-  background-image: radial-gradient(circle, color-mix(in srgb, var(--unframed-border-emphasized) 68%, var(--unframed-canvas)) 0.55px, transparent 0.8px);
-}
-
-/* Moved from generate.css: the canvas parts of generation (role badges, tether, placeholders, render placeholder). */
-
-/* Role badges: where a bare media shape's one fact sits, above its top-left corner. */
-.unframed-role-badge {
-  position: absolute;
-  left: 0;
-  top: 0;
-  height: 22px;
-  display: flex;
-  align-items: center;
-  font-family: var(--font-sans);
-  font-size: 11px;
-  line-height: 1;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: var(--unframed-text-accent);
-  white-space: nowrap;
-  pointer-events: none;
-}
-
-.tl-container[data-label-level="off"] .unframed-role-badge {
-  display: none;
-}
-
-.unframed-tether {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  overflow: visible;
-  pointer-events: none;
-}
-
-.unframed-placeholder .unframed-media-empty__body {
-  flex-direction: row;
-  font-size: 13px;
-  color: var(--unframed-text-secondary);
-}
-
-.unframed-placeholder__spinner {
-  animation: unframed-spin 1s linear infinite;
-}
-
-/* The render placeholder (spec 04): the landing spot of a video render, and why it failed. */
-.unframed-render__body {
-  display: flex;
-  height: 100%;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  padding: 12px;
-  text-align: center;
-}
-
-.unframed-render__status,
-.unframed-render__error {
-  margin: 0;
-  font-size: 13px;
-  line-height: 1.4;
-  color: var(--unframed-text-secondary);
-}
-
-.unframed-render__error {
-  color: var(--unframed-error);
-  overflow-wrap: anywhere;
-}
-
-.unframed-render__forget {
-  cursor: pointer;
-  border: 0;
-  border-radius: var(--unframed-radius-inner);
-  background: transparent;
-  padding: 2px 6px;
-  font: inherit;
-  font-size: 12px;
-  color: var(--unframed-text-secondary);
-  pointer-events: all;
-}
-
-.unframed-render__forget:hover {
-  background-color: var(--unframed-overlay-hover);
-  color: var(--unframed-text-primary);
-}
-
-/* A text result placeholder (spec 05): the prompt hint slot, saying the run is in flight. */
-.unframed-prompt-running {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  white-space: nowrap;
-}
-
-/* Moved from artifacts.css: page and motion cards on the canvas (spec 09). */
-
-/* A filled artifact's title is its handle: a selected frame takes every press inside the shape. */
-.tl-container .unframed-shape-label[data-label-handle] {
-  pointer-events: all;
-  cursor: grab;
-}
-
-.unframed-artifact--filled {
-  border: 0;
-  border-radius: 0;
-  background-color: transparent;
-}
-
-.unframed-artifact__frame {
-  display: block;
-  width: 100%;
-  height: 100%;
-  border: 0;
-  background-color: white;
-}
-
-.unframed-artifact__snapshot {
-  display: block;
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  pointer-events: none;
-  user-select: none;
-}
-
-.unframed-artifact__hint {
-  display: flex;
-  box-sizing: border-box;
-  width: 100%;
-  height: 100%;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 4px;
-  padding: 12px;
-  border: 1px solid var(--unframed-border-emphasized);
-  border-radius: var(--unframed-radius-container);
-  background-color: var(--unframed-card);
-  font-family: var(--font-sans);
-  font-size: 12px;
-  color: var(--unframed-text-secondary);
-  text-align: center;
-}
-
-.unframed-artifact__hint-title {
-  font-size: 14px;
-  font-weight: 500;
-  color: var(--unframed-text-primary);
-}
-
 /* Moved from agent.css: the agent's focus mark on shape labels (spec 08). */
 
 /* The focus mark: the active chat's artifacts, their label filled with the accent and a live dot. */
-.tl-container .tl-shape[data-agent-focus] .unframed-shape-label {
+.tl-container .tl-shape[data-agent-focus] [data-shape-label] {
   display: flex;
   gap: 5px;
   padding: 0 7px;
@@ -479,7 +97,7 @@
   visibility: visible;
 }
 
-.tl-container .tl-shape[data-agent-focus] .unframed-shape-label::before {
+.tl-container .tl-shape[data-agent-focus] [data-shape-label]::before {
   width: 5px;
   height: 5px;
   border-radius: 999px;

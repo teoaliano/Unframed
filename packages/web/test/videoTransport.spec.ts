@@ -21,10 +21,10 @@ test("a clip's transport sits below it, outside its bounds; scrubbing never move
   const shape = shapeOnScreen(page, "shape:clip");
   const clip = shape.locator("video");
   await expect.poll(() => clip.evaluate((element: HTMLVideoElement) => element.readyState >= 1)).toBe(true);
-  await expect(shape.locator(".unframed-transport__time")).toHaveText("0:00 / 0:04");
+  await expect(shape.locator("[data-testid='video-time']")).toHaveText("0:00 / 0:04");
 
   const clipBox = (await clip.boundingBox())!;
-  const transport = shape.locator(".unframed-transport");
+  const transport = shape.locator("[data-testid='video-transport']");
   const transportBox = (await transport.boundingBox())!;
   expect(transportBox.y).toBeGreaterThanOrEqual(clipBox.y + clipBox.height);
 
@@ -42,7 +42,7 @@ test("a clip's transport sits below it, outside its bounds; scrubbing never move
   for (let step = 1; step <= 8; step++) await page.mouse.move(sliderBox.x + 4 + step * ((sliderBox.width * 0.7) / 8), sliderBox.y + sliderBox.height / 2 + step);
   await page.mouse.up();
   await expect.poll(() => clip.evaluate((element: HTMLVideoElement) => element.currentTime)).toBeGreaterThan(2);
-  await expect(shape.locator(".unframed-transport__time")).toHaveText(/^0:0[23] \/ 0:04$/);
+  await expect(shape.locator("[data-testid='video-time']")).toHaveText(/^0:0[23] \/ 0:04$/);
   const afterScrub = await settledRecord(engine, "default", "shape:clip");
   expect({ x: afterScrub!.x, y: afterScrub!.y }).toEqual({ x: before.x, y: before.y });
 

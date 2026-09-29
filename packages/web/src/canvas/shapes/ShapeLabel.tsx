@@ -1,6 +1,7 @@
 import type { PointerEvent, ReactNode } from "react";
 import type { TLShapeId } from "tldraw";
 import { noteRender } from "../../fps/renders.ts";
+import { shapeLabelClass } from "./looks.ts";
 
 /**
  * The label above a shape's top-left corner, in a 22 px band that is part of the shape and
@@ -25,7 +26,8 @@ export const ShapeLabel = ({
   noteRender(shapeId);
   return (
     <div
-      className="unframed-shape-label"
+      className={shapeLabelClass}
+      data-shape-label=""
       data-label-kind={kind}
       data-label-open={active ? "true" : undefined}
       data-label-handle={onPointerDown ? "true" : undefined}

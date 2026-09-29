@@ -19,13 +19,24 @@ interface Colors {
 
 const cache = new Map<string, Colors>();
 
-/** The accent and card tokens as the canvas 2D context needs them, read once per colour mode. */
+/** A token resolved to a colour the canvas 2D context can parse, whatever CSS colour syntax defines it. */
+const resolved = (container: HTMLElement, token: string): string => {
+  const probe = container.ownerDocument.createElement("span");
+  probe.style.color = `var(${token})`;
+  probe.hidden = true;
+  container.append(probe);
+  const color = getComputedStyle(probe).color;
+  probe.remove();
+  return color;
+};
+
+/** The selection stroke and grip tokens as the canvas 2D context needs them, read once per colour mode. */
 const tokenColors = (editor: Editor): Colors => {
   const mode = editor.getColorMode();
   let colors = cache.get(mode);
   if (!colors) {
-    const style = getComputedStyle(editor.getContainer());
-    colors = { strokeColor: style.getPropertyValue("--unframed-accent").trim(), bgColor: style.getPropertyValue("--unframed-card").trim() };
+    const container = editor.getContainer();
+    colors = { strokeColor: resolved(container, "--selection-stroke"), bgColor: resolved(container, "--selection-grip") };
     if (colors.strokeColor !== "") cache.set(mode, colors);
   }
   return colors;
@@ -54,8 +65,9 @@ interface ForegroundInternals {
 }
 
 /**
- * The selection from the design: a 1.5 px accent line with 4 px corners around the
- * selection, and four 7 by 7 square grips with a card fill. tldraw decides what shows and
+ * The selection from the design: a 1.5 px line in the selection stroke (the kit's
+ * primary) with 4 px corners around the selection, and four 7 by 7 square grips in the
+ * grip fill (the kit's card). tldraw decides what shows and
  * where the handles are hit; this only paints. Edges paint nothing, as in tldraw.
  */
 export class SelectionLook extends SelectionForegroundOverlayUtil {
@@ -100,7 +112,7 @@ export class SelectionLook extends SelectionForegroundOverlayUtil {
   }
 }
 
-/** Outlines for selected and hinted shapes only, in the accent: nothing changes on hover alone. */
+/** Outlines for selected and hinted shapes only, in the selection stroke: nothing changes on hover alone. */
 export class SelectedOutlines extends ShapeIndicatorOverlayUtil {
   override getOverlays(): TLShapeIndicatorOverlay[] {
     const selected = new Set(this.editor.getSelectedShapeIds());

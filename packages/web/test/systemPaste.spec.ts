@@ -40,7 +40,7 @@ const hover = async (page: Page, point: { x: number; y: number }) => {
 
 /** A click on an empty media card away from its buttons. */
 const clickCard = async (page: Page, id: string, shift = false) => {
-  const box = (await shapeOnScreen(page, id).locator(".unframed-media-empty").boundingBox())!;
+  const box = (await shapeOnScreen(page, id).locator("[data-testid='media-empty']").boundingBox())!;
   if (shift) await page.keyboard.down("Shift");
   await page.mouse.click(box.x + 12, box.y + 12);
   if (shift) await page.keyboard.up("Shift");

@@ -23,14 +23,22 @@ export const MentionList = ({
     list.current?.querySelector(`[data-index="${highlight}"]`)?.scrollIntoView({ block: "nearest" });
   }, [highlight]);
   return (
-    <div ref={list} role="listbox" aria-label="Mentions" className="unframed-mention-menu" style={style} onPointerDown={(event) => event.stopPropagation()}>
+    // Not a kit Menu (the text editor keeps the keyboard), so it carries the kit menu popup and row recipes itself.
+    <div
+      ref={list}
+      role="listbox"
+      aria-label="Mentions"
+      className="dropdown-glass pointer-events-auto absolute z-[600] box-border max-h-[168px] w-[260px] overflow-y-auto rounded-lg p-1 font-sans text-sm text-foreground shadow-[0_16px_40px_-18px_rgb(0_0_0/55%)] dark:shadow-[0_18px_44px_-18px_rgb(0_0_0/80%)]"
+      style={style}
+      onPointerDown={(event) => event.stopPropagation()}
+    >
       {rows.map((row, index) => (
         <div
           key={row.ref}
           role="option"
           aria-selected={index === highlight}
           data-index={index}
-          className="unframed-mention-row"
+          className="flex min-h-7 cursor-default items-baseline gap-2 rounded-sm px-2 py-1 leading-5 whitespace-nowrap aria-selected:bg-accent aria-selected:text-accent-foreground"
           onPointerDown={(event) => {
             event.preventDefault();
             event.stopPropagation();
@@ -38,8 +46,8 @@ export const MentionList = ({
           }}
           onPointerEnter={() => onHighlight(index)}
         >
-          <span className="unframed-mention-ref">@{row.ref}</span>
-          {row.preview !== undefined && <span className="unframed-mention-preview">{row.preview}</span>}
+          <span className="shrink-0 text-primary">@{row.ref}</span>
+          {row.preview !== undefined && <span className="min-w-0 truncate text-muted-foreground">{row.preview}</span>}
         </div>
       ))}
     </div>

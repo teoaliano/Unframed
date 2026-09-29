@@ -4,7 +4,7 @@ import { clickShape, composer, expect, openComposer, selectGroup, sendRun, settl
 import { pngBytes } from "./images.ts";
 import { filledMedia, groupRecord, inGroup, promptRecord, putRecords } from "./media.ts";
 
-const badge = (page: Page, id: string) => page.locator(`.unframed-role-badge[data-role-for="${id}"]`);
+const badge = (page: Page, id: string) => page.locator(`[data-role-for][data-role-for="${id}"]`);
 
 /** A filled image inside the group `character`, at a point relative to it. */
 const memberImage = async (engine: Parameters<typeof filledMedia>[0], id: string, ref: string, at: { x: number; y: number }, bytes: Buffer) => {

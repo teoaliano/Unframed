@@ -1,5 +1,5 @@
 import { isHttpsLink, linkedVideoName, VIDEO_LINK_MESSAGE } from "@unframed/domain";
-import { LoaderCircle, Pause, Play, X } from "lucide-react";
+import { Pause, Play, X } from "lucide-react";
 import { useEffect, useRef, useState, type SyntheticEvent } from "react";
 import {
   HTMLContainer,
@@ -29,6 +29,10 @@ import {
   type MediaKind,
   type MediaShape,
 } from "../media.ts";
+import { Button } from "~/components/ui/button";
+import { Input } from "~/components/ui/input";
+import { Spinner } from "~/components/ui/spinner";
+import { mediaCardClass } from "./looks.ts";
 import { ShapeLabel } from "./ShapeLabel.tsx";
 import { isRenderPlaceholder, RenderPlaceholder } from "./renderPlaceholder.tsx";
 import { noteRender } from "../../fps/renders.ts";
@@ -101,14 +105,15 @@ const EmptyMedia = ({ shape, kind }: { readonly shape: MediaShape; readonly kind
   };
 
   return (
-    <HTMLContainer id={shape.id} className="unframed-media-empty" style={{ width: shape.props.w, height: shape.props.h }}>
+    <HTMLContainer id={shape.id} className={mediaCardClass} data-testid="media-empty" style={{ width: shape.props.w, height: shape.props.h }}>
       <ShapeLabel shapeId={shape.id} kind={kind}>
         {kind === "image" ? "Image" : "Video"}
       </ShapeLabel>
-      <div className="unframed-media-empty__body">
-        <button type="button" className="unframed-media-button" disabled={busy} onClick={() => input.current?.click()} {...events}>
+      <div className="box-border flex h-full flex-col items-center justify-center gap-2 p-2.5">
+        <Button variant="outline" size="sm" className="pointer-events-auto" disabled={busy} onClick={() => input.current?.click()} {...events}>
           Choose file
-        </button>
+        </Button>
+        {/* oxlint-disable-next-line react/forbid-elements -- a hidden native file picker, opened by Choose file */}
         <input
           ref={input}
           type="file"
@@ -120,10 +125,11 @@ const EmptyMedia = ({ shape, kind }: { readonly shape: MediaShape; readonly kind
           }}
         />
         {kind === "video" && (
-          <div className="unframed-media-link">
-            <input
+          <div className="flex w-full gap-1.5">
+            <Input
+              size="sm"
+              className="pointer-events-auto min-w-0 flex-1"
               type="text"
-              className="unframed-media-link__input"
               placeholder="or paste an https:// link"
               value={link}
               onChange={(event) => {
@@ -137,14 +143,14 @@ const EmptyMedia = ({ shape, kind }: { readonly shape: MediaShape; readonly kind
               {...events}
             />
             {/^https:\/\/./.test(link.trim()) && (
-              <button type="button" className="unframed-media-button" disabled={busy} onClick={onLink} {...events}>
+              <Button variant="outline" size="sm" className="pointer-events-auto" disabled={busy} onClick={onLink} {...events}>
                 Use link
-              </button>
+              </Button>
             )}
           </div>
         )}
         {problem !== undefined && (
-          <p role="alert" className="unframed-media-problem">
+          <p role="alert" className="m-0 text-center text-xs leading-snug text-destructive-foreground">
             {problem}
           </p>
         )}
@@ -157,12 +163,12 @@ const EmptyMedia = ({ shape, kind }: { readonly shape: MediaShape; readonly kind
 const Generating = ({ shape, kind }: { readonly shape: MediaShape; readonly kind: MediaKind }) => {
   noteRender(shape.id);
   return (
-    <HTMLContainer id={shape.id} className="unframed-media-empty unframed-placeholder" style={{ width: shape.props.w, height: shape.props.h }}>
+    <HTMLContainer id={shape.id} className={mediaCardClass} data-testid="media-empty" data-placeholder="" style={{ width: shape.props.w, height: shape.props.h }}>
       <ShapeLabel shapeId={shape.id} kind={kind}>
         {kind === "image" ? "Image" : "Video"}
       </ShapeLabel>
-      <div className="unframed-media-empty__body" role="status">
-        <LoaderCircle size={18} className="unframed-placeholder__spinner" aria-hidden />
+      <div className="box-border flex h-full items-center justify-center gap-2 p-2.5 text-sm text-muted-foreground" role="status">
+        <Spinner size="md" aria-hidden />
         <span>Generating…</span>
       </div>
     </HTMLContainer>
@@ -175,20 +181,26 @@ const RemoveButton = ({ shape, name }: { readonly shape: MediaShape; readonly na
   const editor = useEditor();
   const selected = useIsSelected(shape);
   return (
-    <button
-      type="button"
-      className="unframed-media-remove"
-      aria-label={`Remove ${name}`}
+    // Shown while the shape is selected or the control has keyboard focus; the wrapper owns that, the kit owns the look.
+    <div
+      className="pointer-events-none absolute top-1 right-1 opacity-0 data-[selected]:pointer-events-auto data-[selected]:opacity-100 has-focus-visible:pointer-events-auto has-focus-visible:opacity-100"
+      data-testid="media-remove"
       data-selected={selected ? "true" : undefined}
-      onClick={(event) => {
-        editor.markEventAsHandled(event);
-        editor.markHistoryStoppingPoint("remove media");
-        emptyShape(editor, shape.id);
-      }}
-      {...controlEvents(editor)}
     >
-      <X size={14} strokeWidth={2} aria-hidden />
-    </button>
+      <Button
+        variant="outline"
+        size="icon-micro"
+        aria-label={`Remove ${name}`}
+        onClick={(event) => {
+          editor.markEventAsHandled(event);
+          editor.markHistoryStoppingPoint("remove media");
+          emptyShape(editor, shape.id);
+        }}
+        {...controlEvents(editor)}
+      >
+        <X aria-hidden />
+      </Button>
+    </div>
   );
 };
 
@@ -262,12 +274,12 @@ const VideoClip = ({ shape }: { readonly shape: TLVideoShape }) => {
 
   return (
     <>
-      <HTMLContainer id={shape.id} className="unframed-video" style={{ width: shape.props.w, height: shape.props.h }}>
+      <HTMLContainer id={shape.id} style={{ width: shape.props.w, height: shape.props.h }}>
         {url && (
           <video
             key={url}
             ref={video}
-            className="unframed-video__clip"
+            className="block size-full object-cover"
             src={url}
             muted
             preload="metadata"
@@ -287,10 +299,15 @@ const VideoClip = ({ shape }: { readonly shape: TLVideoShape }) => {
           />
         )}
       </HTMLContainer>
-      <div className="unframed-transport" style={{ top: shape.props.h, width: shape.props.w }} {...events}>
-        <button
-          type="button"
-          className="unframed-transport__play"
+      <div
+        className="pointer-events-auto absolute left-0 mt-1 flex h-7 items-center gap-1.5 font-sans text-2xs text-muted-foreground"
+        data-testid="video-transport"
+        style={{ top: shape.props.h, width: shape.props.w }}
+        {...events}
+      >
+        <Button
+          variant="ghost"
+          size="icon-xs"
           aria-label={playing ? "Pause" : "Play"}
           onClick={() => {
             const clip = video.current;
@@ -300,12 +317,13 @@ const VideoClip = ({ shape }: { readonly shape: TLVideoShape }) => {
           }}
           {...events}
         >
-          {playing ? <Pause size={14} aria-hidden /> : <Play size={14} aria-hidden />}
-        </button>
+          {playing ? <Pause aria-hidden /> : <Play aria-hidden />}
+        </Button>
+        {/* oxlint-disable-next-line react/forbid-elements -- the kit has no slider, so the scrubber is the native range input */}
         <input
           type="range"
           aria-label="Position"
-          className="unframed-transport__slider"
+          className="min-w-0 flex-1 accent-primary"
           min={0}
           max={Number.isFinite(duration) && duration > 0 ? duration : 0}
           step={0.01}
@@ -317,7 +335,7 @@ const VideoClip = ({ shape }: { readonly shape: TLVideoShape }) => {
           }}
           {...events}
         />
-        <span className="unframed-transport__time">
+        <span className="shrink-0 tabular-nums" data-testid="video-time">
           {clock(time)} / {clock(duration)}
         </span>
       </div>

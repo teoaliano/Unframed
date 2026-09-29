@@ -3,7 +3,7 @@ import { openCanvas } from "./canvas.ts";
 import { expect, test } from "./fixtures.ts";
 
 const grid = async (page: Page) =>
-  page.locator(".unframed-dot-grid").evaluate((element) => {
+  page.locator("[data-testid='dot-grid']").evaluate((element) => {
     const style = getComputedStyle(element);
     return { size: style.backgroundSize, image: style.backgroundImage, position: style.backgroundPosition };
   });
@@ -15,7 +15,7 @@ const zoomStep = async (page: Page, key: "-" | "=") => {
 
 test("the dot grid doubles its gap while it is under 16 screen px, never shrinks it zooming in, and keeps 1.1 px dots", async ({ page, engine }) => {
   await openCanvas(page, engine);
-  await expect(page.locator(".unframed-dot-grid")).toHaveCount(1);
+  await expect(page.locator("[data-testid='dot-grid']")).toHaveCount(1);
   const atOne = await grid(page);
   expect(atOne.size).toBe("26px 26px");
   expect(atOne.image).toContain("0.55px");

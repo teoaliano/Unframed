@@ -74,7 +74,8 @@ export const ArtifactFrame = ({ project, kind, file, previewPort, dials, interac
   return (
     <iframe
       ref={frame}
-      className="unframed-artifact__frame"
+      className="block size-full border-0 bg-artifact-page"
+      data-artifact-frame=""
       title={file}
       src={url}
       sandbox="allow-scripts allow-same-origin"

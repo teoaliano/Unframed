@@ -5,7 +5,7 @@ import { expect, startHostedEngine, test } from "./fixtures.ts";
 import { clickShape } from "./generation.ts";
 import { filledArtifact } from "./artifacts.ts";
 
-const frames = (page: Page) => page.locator(".tl-shape iframe.unframed-artifact__frame");
+const frames = (page: Page) => page.locator(".tl-shape iframe[data-artifact-frame]");
 
 /** Opens the app the way the desktop shell loads it: served by the engine, on 127.0.0.1. */
 const openHosted = async (page: Page, engine: TestEngine) => {
@@ -78,7 +78,7 @@ test("only selected artifacts (three at most), pinned ones (three at most) and t
   const nearest = distances.sort((a, b) => a.distance - b.distance).slice(0, 3).map((entry) => entry.id).sort();
   await page.keyboard.press("ControlOrMeta+a");
   await expect(frames(page)).toHaveCount(3);
-  const liveIds = await page.locator(".tl-shape:has(iframe.unframed-artifact__frame)").evaluateAll((items) => items.map((item) => item.getAttribute("data-shape-id")));
+  const liveIds = await page.locator(".tl-shape:has(iframe[data-artifact-frame])").evaluateAll((items) => items.map((item) => item.getAttribute("data-shape-id")));
   expect(liveIds.sort()).toEqual(nearest);
   await page.mouse.click(640, 120);
   await expect(frames(page)).toHaveCount(0);
@@ -144,7 +144,7 @@ test("an artifact that is not live shows its snapshot once the engine has made o
     await filledArtifact(engine, { ...stillShape, html: "<h1>Still</h1>" });
     const shape = shapeOnScreen(page, "shape:still");
     await expect(shape.getByText("Select to preview")).toBeVisible();
-    const still = shape.locator("img.unframed-artifact__snapshot");
+    const still = shape.locator("img[data-testid='artifact-snapshot']");
     await expect(still).toHaveCount(1, { timeout: 10_000 });
     expect(await still.getAttribute("src")).toMatch(/^\/api\/file\/default\/[^?]+\?snapshot=300x200&v=\d+$/);
     await expect.poll(() => still.evaluate((image) => (image as HTMLImageElement).naturalWidth)).toBeGreaterThan(0);

@@ -63,10 +63,10 @@ export const filledArtifact = async (
 };
 
 /** The artifact's frame element on the canvas. */
-export const frameOf = (page: Page, id: string): Locator => shapeOnScreen(page, id).locator("iframe.unframed-artifact__frame");
+export const frameOf = (page: Page, id: string): Locator => shapeOnScreen(page, id).locator("iframe[data-artifact-frame]");
 
 /** Inside a page's frame. */
-export const insideFrame = (page: Page, id: string): FrameLocator => shapeOnScreen(page, id).frameLocator("iframe.unframed-artifact__frame");
+export const insideFrame = (page: Page, id: string): FrameLocator => shapeOnScreen(page, id).frameLocator("iframe[data-artifact-frame]");
 
 /** Inside a motion's composition: the viewer's player holds it in its own frame. */
 export const insideComposition = (outer: FrameLocator): FrameLocator => outer.locator("hyperframes-player").frameLocator("iframe");

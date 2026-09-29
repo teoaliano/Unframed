@@ -9,7 +9,7 @@ const looks = (page: Page) =>
     const css = (selector: string, property: string) => getComputedStyle(document.querySelector(selector)!).getPropertyValue(property);
     return {
       body: css("body", "background-color"),
-      grid: css(".unframed-dot-grid", "background-color"),
+      grid: css("[data-testid='dot-grid']", "background-color"),
       card: css(".unframed-chrome-left", "background-color"),
       group: css(".unframed-group", "border-top-color"),
       tldraw: document.querySelector(".tl-container")!.classList.contains("tl-theme__dark") ? "dark" : "light",

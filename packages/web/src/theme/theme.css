@@ -475,6 +475,26 @@
   initial-value: transparent;
 }
 
+/* Unframed-only tokens (spec 12): canvas values t3code has no token for, built from its tokens. */
+:root {
+  --canvas-dot: color-mix(in srgb, var(--foreground) 16%, var(--background));
+  --selection-stroke: var(--primary);
+  --selection-grip: var(--card);
+  --group-fill: color-mix(in srgb, var(--primary) 4%, var(--background));
+  /* A filled page's frame is white in both schemes (spec 09). */
+  --artifact-page: var(--color-white);
+
+  @variant dark {
+    --canvas-dot: color-mix(in srgb, var(--foreground) 22%, var(--background));
+  }
+}
+
+@theme inline {
+  --color-canvas-dot: var(--canvas-dot);
+  --color-group-fill: var(--group-fill);
+  --color-artifact-page: var(--artifact-page);
+}
+
 :root {
   --unframed-text-secondary: var(--muted-foreground);
   /* Unframed: bottom-left toasts sit above tldraw's zoom controls (spec 02). */

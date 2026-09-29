@@ -12,7 +12,7 @@ test.describe("an empty video", () => {
     await openCanvas(page, engine);
     await putRecords(engine, [emptyMedia("shape:empty-video", "video", "150", { x: 440, y: 120 })]);
     const shape = shapeOnScreen(page, "shape:empty-video");
-    await expect(shape.locator(".unframed-shape-label")).toHaveText("Video");
+    await expect(shape.locator("[data-shape-label]")).toHaveText("Video");
     const chooser = page.waitForEvent("filechooser");
     await shape.getByRole("button", { name: "Choose file" }).click();
     const picker = await chooser;

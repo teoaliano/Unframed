@@ -7,10 +7,10 @@ test("an empty image asks for a file, fills from the picker, and is then bare, k
   await openCanvas(page, engine);
   await putRecords(engine, [emptyMedia("shape:empty-image", "image", "150", { x: 440, y: 150 })]);
   const shape = shapeOnScreen(page, "shape:empty-image");
-  await expect(shape.locator(".unframed-media-empty")).toBeVisible();
-  await expect(shape.locator(".unframed-shape-label")).toHaveText("Image");
-  await expect(shape.locator(".unframed-shape-label")).toHaveCSS("text-transform", "uppercase");
-  const empty = (await shape.locator(".unframed-media-empty").boundingBox())!;
+  await expect(shape.locator("[data-testid='media-empty']")).toBeVisible();
+  await expect(shape.locator("[data-shape-label]")).toHaveText("Image");
+  await expect(shape.locator("[data-shape-label]")).toHaveCSS("text-transform", "uppercase");
+  const empty = (await shape.locator("[data-testid='media-empty']").boundingBox())!;
   expect(empty.width / empty.height).toBeCloseTo(240 / 140, 1);
 
   const chooser = page.waitForEvent("filechooser");
@@ -24,8 +24,8 @@ test("an empty image asks for a file, fills from the picker, and is then bare, k
     return record?.props.assetId ? record : undefined;
   });
   expect(filled.props).toMatchObject({ w: 240, h: 120 });
-  await expect(shape.locator(".unframed-media-empty")).toHaveCount(0);
-  await expect(shape.locator(".unframed-shape-label")).toHaveCount(0);
+  await expect(shape.locator("[data-testid='media-empty']")).toHaveCount(0);
+  await expect(shape.locator("[data-shape-label]")).toHaveCount(0);
   const image = shape.locator("img").first();
   await expect.poll(() => image.evaluate((element: HTMLImageElement) => element.complete && element.naturalWidth > 0)).toBe(true);
   const container = shape.locator(".tl-html-container").first();

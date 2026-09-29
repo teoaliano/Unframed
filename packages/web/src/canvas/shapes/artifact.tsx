@@ -8,6 +8,7 @@ import { snapshotsOf, snapshotUrl, stillOf } from "../../artifacts/snapshots.ts"
 import { isInteractive, isLive, previewPort } from "../../artifacts/state.ts";
 import { currentSlots, useSlots } from "../../chrome/slots.ts";
 import { useCanvasProject } from "../../context.ts";
+import { artifactCardClass } from "./looks.ts";
 import { ShapeLabel } from "./ShapeLabel.tsx";
 import { noteRender } from "../../fps/renders.ts";
 
@@ -37,12 +38,12 @@ const EmptyArtifact = ({ shape, kind }: { readonly shape: ArtifactShape; readonl
   const props = shape.props as ArtifactShapeProps;
   return (
     <>
-      <HTMLContainer id={shape.id} className="unframed-artifact" data-artifact-kind={kind} style={{ width: props.w, height: props.h }}>
+      <HTMLContainer id={shape.id} className={artifactCardClass} data-testid="artifact-card" data-artifact-kind={kind} style={{ width: props.w, height: props.h }}>
         <ShapeLabel shapeId={shape.id} kind={kind}>
           {kind}
         </ShapeLabel>
-        <div className="unframed-artifact__empty">
-          <Icon size={28} strokeWidth={1.5} aria-label={kind === "page" ? "Page" : "Motion"} />
+        <div className="flex h-full flex-col items-center justify-center gap-3 text-muted-foreground">
+          <Icon className="size-7" strokeWidth={1.5} aria-label={kind === "page" ? "Page" : "Motion"} />
           {EmptyState && <EmptyState shapeId={shape.id} />}
         </div>
       </HTMLContainer>
@@ -63,10 +64,10 @@ const Still = ({ shape, title }: { readonly shape: ArtifactShape; readonly title
     return snapshot === undefined ? undefined : snapshotUrl(project, snapshot);
   }, [project, file]);
   const src = stillOf(project, shape.id, current);
-  if (src !== undefined) return <img className="unframed-artifact__snapshot" src={src} alt="" draggable={false} />;
+  if (src !== undefined) return <img className="pointer-events-none block size-full object-cover select-none" data-testid="artifact-snapshot" src={src} alt="" draggable={false} />;
   return (
-    <div className="unframed-artifact__hint">
-      {title !== "" && <span className="unframed-artifact__hint-title">{title}</span>}
+    <div className={`${artifactCardClass} flex size-full flex-col items-center justify-center gap-1 p-3 text-center font-sans text-xs text-muted-foreground`}>
+      {title !== "" && <span className="text-sm font-medium text-foreground">{title}</span>}
       <span>Select to preview</span>
     </div>
   );
@@ -84,7 +85,7 @@ const FilledArtifact = ({ shape, kind }: { readonly shape: ArtifactShape; readon
   const title = artifactTitle(props);
   return (
     <>
-      <HTMLContainer id={shape.id} className="unframed-artifact unframed-artifact--filled" data-artifact-kind={kind} data-live={live ? "true" : undefined} style={{ width: props.w, height: props.h }}>
+      <HTMLContainer id={shape.id} data-testid="artifact-card" data-artifact-kind={kind} data-live={live ? "true" : undefined} style={{ width: props.w, height: props.h }}>
         {title !== "" && (
           <ShapeLabel
             shapeId={shape.id}

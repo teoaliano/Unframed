@@ -3,7 +3,7 @@ import { centre, openCanvas, shapeOnScreen } from "./canvas.ts";
 import { expect, test } from "./fixtures.ts";
 import { emptyMedia, groupRecord, putRecords } from "./media.ts";
 
-const label = (page: Page, id: string) => shapeOnScreen(page, id).locator(".unframed-shape-label");
+const label = (page: Page, id: string) => shapeOnScreen(page, id).locator("[data-shape-label]");
 
 /** Zooms one step about the centre of the view and lets the animation finish. */
 const zoomStep = async (page: Page, key: "-" | "=") => {

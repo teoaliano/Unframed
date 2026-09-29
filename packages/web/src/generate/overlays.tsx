@@ -4,7 +4,9 @@
  * selected, and neither carries anything.
  */
 import { composeSelection, SKETCH_ROLE } from "@unframed/domain";
+import type { CSSProperties } from "react";
 import { useValue, useEditor, type Editor, type TLShapeId } from "tldraw";
+import { Badge } from "~/components/ui/badge";
 import { resultMetaOf } from "@unframed/contracts";
 import { canvasShapes, pageBox } from "./facts.ts";
 import { mediumDefinition } from "./mediumRegistry.ts";
@@ -36,6 +38,10 @@ const badgesOf = (editor: Editor): ReadonlyArray<Badge> => {
   });
 };
 
+/** A role's hue (spec 12): images and the sketch teal, video roles orange, a slot that sends nothing neutral. */
+const hueOf = (text: string): string =>
+  text.startsWith("image") ? "var(--color-teal-500)" : text.startsWith("video") || text === "first" || text === "last" ? "var(--color-orange-500)" : "var(--color-zinc-500)";
+
 /**
  * The role of every selected medium and artifact, and of the sketch, while the Generate tray
  * is open: where a bare media shape's one fact goes, above its top-left corner.
@@ -46,8 +52,15 @@ export const RoleBadges = () => {
   return (
     <>
       {badges.map((badge) => (
-        <div key={badge.key} className="unframed-role-badge" data-role-for={badge.key} style={{ transform: `translate(${badge.x}px, ${badge.y - 22}px)` }}>
-          {badge.text}
+        <div
+          key={badge.key}
+          className="pointer-events-none absolute top-0 left-0 flex h-[22px] items-center"
+          data-role-for={badge.key}
+          style={{ transform: `translate(${badge.x}px, ${badge.y - 22}px)` }}
+        >
+          <Badge variant="label" style={{ "--label": hueOf(badge.text) } as CSSProperties}>
+            {badge.text}
+          </Badge>
         </div>
       ))}
     </>
@@ -99,10 +112,10 @@ export const Tether = () => {
   const lines = useValue("tether", () => tetherOf(editor), [editor]);
   if (lines.length === 0) return null;
   return (
-    <svg className="unframed-tether" aria-hidden data-testid="tether">
+    <svg className="pointer-events-none absolute inset-0 size-full overflow-visible" aria-hidden data-testid="tether">
       <defs>
         <marker id="unframed-tether-head" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
-          <path d="M 1 1 L 8 5 L 1 9" fill="none" stroke="var(--unframed-border-emphasized)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+          <path d="M 1 1 L 8 5 L 1 9" fill="none" className="stroke-border" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
         </marker>
       </defs>
       {lines.map((line) => (
@@ -113,7 +126,7 @@ export const Tether = () => {
           y1={line.from.y}
           x2={line.to.x}
           y2={line.to.y}
-          stroke="var(--unframed-border-emphasized)"
+          className="stroke-border"
           strokeWidth={1.5}
           strokeDasharray="4 5"
           markerEnd="url(#unframed-tether-head)"

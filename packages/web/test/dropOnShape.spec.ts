@@ -32,7 +32,7 @@ test("dropping a picture on an image, or a clip on a video, replaces its media; 
   const asset = (await roomRecords(engine, "default")).find((record) => record.id === replaced.props.assetId)!;
   expect(asset.props.name).toBe("square.png");
 
-  await dropFiles(page, await centre(shapeOnScreen(page, "shape:clip").locator(".unframed-media-empty")), [
+  await dropFiles(page, await centre(shapeOnScreen(page, "shape:clip").locator("[data-testid='media-empty']")), [
     { name: "clip.webm", mime: "video/webm", bytes: await readFile(clipPath) },
   ]);
   await waitForRoom(engine, "default", (records) => records.find((record) => record.id === "shape:clip")?.props.assetId);

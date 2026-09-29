@@ -66,7 +66,7 @@ const panBusyBoard = async (page: Page, engine: TestEngine, running: { pinned: n
   }
   const selected = ["shape:busy-5", "shape:busy-6", "shape:busy-7"].slice(0, running.selected);
   for (const [index, id] of selected.entries()) await clickShape(page, id, index === 0 ? undefined : ["Shift"]);
-  const frames = page.locator(".tl-shape iframe.unframed-artifact__frame");
+  const frames = page.locator(".tl-shape iframe[data-artifact-frame]");
   await expect(frames).toHaveCount(running.pinned + running.selected);
   for (const src of await frames.evaluateAll((items) => items.map((item) => (item as HTMLIFrameElement).src))) expect(new URL(src).hostname).toBe("localhost");
   // Let the frames load and start their loops, and the meter learn the display's frame time.
