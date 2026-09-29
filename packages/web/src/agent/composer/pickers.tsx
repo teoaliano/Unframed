@@ -11,7 +11,7 @@ import { Toggle } from "~/components/ui/toggle";
 import claudeLogo from "../../../../../assets/brand/provider-logos/claude.svg?url";
 import codexLogo from "../../../../../assets/brand/provider-logos/codex.svg?url";
 import { Tip } from "../../chrome/ui.tsx";
-import { Chevron } from "../transcript/WorkLog.tsx";
+import { Chevron, Disclosure } from "../transcript/WorkLog.tsx";
 import { effectiveModel, modelsOf, PROVIDERS, providerName } from "../providers.ts";
 import { record } from "../record.ts";
 
@@ -179,11 +179,11 @@ export const ModelPicker = ({ statuses, selection, providerLocked, disabled, ope
             <div role="listbox" aria-label={`${providerName(tab)} models`} className="flex max-h-72 flex-col gap-px overflow-y-auto">
               {currentRows.map(row)}
               {legacyRows.length > 0 && needle === "" && (
-                <div role="button" tabIndex={0} aria-expanded={legacyOpen} className={PICKER_ROW} onClick={() => setLegacyOpen(!legacyOpen)} onKeyDown={activate(() => setLegacyOpen(!legacyOpen))}>
+                <Disclosure open={legacyOpen} onToggle={() => setLegacyOpen(!legacyOpen)} className={PICKER_ROW}>
                   <Chevron open={legacyOpen} />
                   <span className="text-xs font-medium">Legacy models</span>
                   <span className="ml-auto text-xs text-muted-foreground">{`${legacyRows.length} models`}</span>
-                </div>
+                </Disclosure>
               )}
               {(legacyOpen || needle !== "") && legacyRows.map(row)}
               {all.length === 0 && <p className="m-0 px-2 py-1.5 text-xs text-muted-foreground">No models found</p>}

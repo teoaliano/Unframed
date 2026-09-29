@@ -8,7 +8,7 @@ import { Tip } from "../../chrome/ui.tsx";
 import { describeShape } from "../composer/chips.tsx";
 import { ConfirmDialog } from "../ConfirmDialog.tsx";
 import { providerName } from "../providers.ts";
-import { BODY_CLASS, Chevron, Disclosure, IconSlot, ROW_CLASS, TOGGLE_CLASS, WorkEntries } from "./WorkLog.tsx";
+import { BODY_CLASS, Chevron, Disclosure, IconSlot, ROW_CLASS, WorkEntries } from "./WorkLog.tsx";
 import { returnQueued, sendQueued } from "../queue.tsx";
 import { useQueue, useWatchedThread, type ChatClient } from "../store.ts";
 import { ChatMarkdown } from "./ChatMarkdown.tsx";
@@ -21,7 +21,6 @@ export const EMPTY_CHAT = "Ask about what is on the canvas, or say what should c
 /** The transcript's scroll area: the timeline's column, in t3code's type. */
 const SCROLLER_CLASS = "flex min-h-0 flex-1 flex-col gap-3.5 overflow-y-auto px-3.5 pt-3.5 pb-2.5 text-sm leading-relaxed";
 
-const TOGGLE_ROW_CLASS = `${ROW_CLASS} ${TOGGLE_CLASS}`;
 const REASONING_BODY_CLASS = `${BODY_CLASS} max-h-96 overflow-auto text-sm whitespace-pre-wrap text-muted-foreground select-text`;
 
 const COLLAPSE_CHARACTERS = 600;
@@ -283,7 +282,7 @@ const Reasoning = ({ message }: { readonly message: ChatMessage }) => {
   const [open, setOpen] = useState(false);
   return (
     <div className="flex flex-col" data-testid="reasoning">
-      <Disclosure open={open} onToggle={() => setOpen(!open)} className={TOGGLE_ROW_CLASS}>
+      <Disclosure open={open} onToggle={() => setOpen(!open)}>
         <IconSlot>
           <Brain aria-hidden className="size-4 shrink-0 opacity-70" />
         </IconSlot>

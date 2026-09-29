@@ -1,44 +1,39 @@
 import { formatWorkDuration, type SubagentRow, type WorkEntry, type WorkGroup, type WorkRow } from "@unframed/domain";
 import { Ban, Check, ChevronRight, CircleAlert, Layers, LoaderCircle, Square, Users } from "lucide-react";
-import { useState, type KeyboardEvent, type ReactNode } from "react";
+import { useState, type ReactNode } from "react";
+import { Collapsible, CollapsibleTrigger } from "~/components/ui/collapsible";
 
 /** t3code's timeline row: a quiet row that highlights on hover, its icon in a 24 px slot. */
 const ROW_CLASS =
   "group/timeline-row relative flex min-h-6 w-full min-w-0 select-none items-center gap-1.5 rounded-md px-0.5 py-0.5 text-left text-sm leading-relaxed transition-colors duration-150";
 const TOGGLE_CLASS = "cursor-pointer hover:bg-accent/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring/70";
+/** A row that toggles: the timeline row with its hover and focus ring, in one static string for the lint. */
+const TOGGLE_ROW_CLASS =
+  "group/timeline-row relative flex min-h-6 w-full min-w-0 select-none items-center gap-1.5 rounded-md px-0.5 py-0.5 text-left text-sm leading-relaxed transition-colors duration-150 cursor-pointer hover:bg-accent/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring/70";
 
 /**
- * A row that opens and closes what is under it. t3code's rows are buttons by role, not
- * `<button>`, so a row can hold its own layout; Enter and Space toggle it.
+ * A row that opens and closes what is under it: the kit's CollapsibleTrigger, whose class
+ * is its API, holding t3code's timeline row layout. The caller draws what opens.
  */
 export const Disclosure = ({
   open,
   onToggle,
-  className,
+  className = TOGGLE_ROW_CLASS,
   testId,
   children,
 }: {
   readonly open: boolean;
   readonly onToggle: () => void;
-  readonly className: string;
+  /** Defaults to the timeline row. Pass a static string: the lint reads a trigger's classes. */
+  readonly className?: string;
   readonly testId?: string;
   readonly children: ReactNode;
 }) => (
-  <div
-    role="button"
-    data-testid={testId}
-    tabIndex={0}
-    aria-expanded={open}
-    className={className}
-    onClick={onToggle}
-    onKeyDown={(event: KeyboardEvent) => {
-      if (event.key !== "Enter" && event.key !== " ") return;
-      event.preventDefault();
-      onToggle();
-    }}
-  >
-    {children}
-  </div>
+  <Collapsible open={open} onOpenChange={onToggle} className="contents">
+    <CollapsibleTrigger className={className} data-testid={testId}>
+      {children}
+    </CollapsibleTrigger>
+  </Collapsible>
 );
 
 /** The chevron at the end of a timeline row, turning a quarter when it opens. */
@@ -83,7 +78,7 @@ export const WorkRowView = ({ row }: { readonly row: WorkRow }) => {
   return (
     <div className="flex flex-col" data-state={row.state} data-tone={row.tone} data-testid="work-row">
       {expandable ? (
-        <Disclosure open={open} onToggle={() => setOpen(!open)} className={`${ROW_CLASS} ${TOGGLE_CLASS}`}>
+        <Disclosure open={open} onToggle={() => setOpen(!open)}>
           {head}
         </Disclosure>
       ) : (
@@ -116,7 +111,7 @@ const WorkGroupView = ({ group }: { readonly group: WorkGroup }) => {
   const [open, setOpen] = useState(false);
   return (
     <div className="flex flex-col" data-testid="work-group">
-      <Disclosure open={open} onToggle={() => setOpen(!open)} className={`${ROW_CLASS} ${TOGGLE_CLASS}`}>
+      <Disclosure open={open} onToggle={() => setOpen(!open)}>
         <IconSlot>
           <Layers className="size-4 shrink-0" aria-hidden />
         </IconSlot>
@@ -139,7 +134,7 @@ const SubagentsView = ({ entry }: { readonly entry: SubagentRow }) => {
   const [open, setOpen] = useState(false);
   return (
     <div className="flex flex-col" data-testid="subagents">
-      <Disclosure open={open} onToggle={() => setOpen(!open)} className={`${ROW_CLASS} ${TOGGLE_CLASS}`}>
+      <Disclosure open={open} onToggle={() => setOpen(!open)}>
         <IconSlot>
           <Users className="size-4 shrink-0" aria-hidden />
         </IconSlot>
@@ -175,4 +170,4 @@ export const WorkEntries = ({ entries }: { readonly entries: ReadonlyArray<WorkE
   </section>
 );
 
-export { BODY_CLASS, ROW_CLASS, TOGGLE_CLASS };
+export { BODY_CLASS, ROW_CLASS };
