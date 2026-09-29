@@ -160,7 +160,7 @@ Anything that redirects network traffic follows the loopback-only rule of the or
 Boot order:
 
 1. Resolve the data folder, read `.env` from it, merge settings over the process environment.
-2. Start the preview origin listener on `127.0.0.1` with an OS-assigned port. In this spec it applies the same Host check as the API (below) and answers 404 to every path; spec 09 adds its one route.
+2. Start the preview origin listener on `127.0.0.1` with an OS-assigned port. In this spec it applies the same Host check as the API (below) and answers 404 to every path; spec 09 adds its one route and a second listener on `[::1]` at the same port.
 3. Start the API listener on `127.0.0.1:<PORT>`. Never `0.0.0.0`, never `::1`. There is no option to widen the bind.
 4. Print the banner, then send the ready message.
 
@@ -400,7 +400,7 @@ The web build reads `TLDRAW_LICENSE_KEY` from the build environment and embeds i
 
 Built by `pnpm build`, published by CI. Layout at the bundle root:
 
-- `package.json`: `name` exactly `unframed` (the shell's dependency key depends on it), `version` equal to the engine package version, `"type": "module"`, `main` `server/index.js`, `dependencies` limited to runtime packages that cannot be inlined (packages that locate their own files on disk at runtime or spawn binaries, such as the Claude Agent SDK, the HyperFrames packages and GSAP), no `devDependencies`, no `workspaces`, no lifecycle scripts.
+- `package.json`: `name` exactly `unframed` (the shell's dependency key depends on it), `version` equal to the engine package version, `"type": "module"`, `main` `server/index.js`, `dependencies` limited to runtime packages that cannot be inlined (packages that locate their own files on disk at runtime or spawn binaries, such as the Claude Agent SDK, the HyperFrames packages and GSAP), no `devDependencies`, no `workspaces`, no lifecycle scripts. It also carries `"puppeteer": { "skipDownload": true }`: puppeteer comes in under the HyperFrames producer and downloads a browser on install unless told not to, and renders use the browser already on the machine (spec 09). Puppeteer reads that key from the nearest manifest above its own folder, so it covers an install run inside the bundle; an app that installs the bundle as its own dependency carries the same key in its manifest, or installs with `PUPPETEER_SKIP_DOWNLOAD=1`.
 - `server/index.js`: plain ESM JavaScript, the fork entry. All workspace code and every inlinable dependency are bundled into it (plus sibling chunk files under `server/` if the bundler splits). No TypeScript, no workspace references, no source maps, no test files.
 - `client/dist/`: the built web.
 - `client/package.json` and `client/package-lock.json`: a compatibility shim for a shell that still runs `npm --prefix <engine>/client ci && npm --prefix <engine>/client run build`. The manifest has no dependencies and a `build` script that does nothing and exits 0, and the lockfile matches it, so that command succeeds and leaves `client/dist` untouched. It can be removed once the shell stops building the client.

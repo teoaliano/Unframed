@@ -19,6 +19,9 @@ import { realAdapter } from "./adapters/real.ts";
 import { ProviderDetection } from "./detection.ts";
 import { mcpRoute } from "./mcp.ts";
 import { AgentRuntime, DispatchError } from "./runtime.ts";
+import { ArtifactTools } from "../artifacts/artifactTools.ts";
+import { Artifacts } from "../artifacts/layer.ts";
+import { PreviewTools } from "../artifacts/previewTools.ts";
 import { openShell, openThread } from "./subscriptions.ts";
 
 /**
@@ -54,11 +57,21 @@ export const agentsLayer = Layer.effect(
     const openProjects = yield* OpenProjects;
     const rooms = yield* CanvasRooms;
     const detection = yield* ProviderDetection;
+    const { previewPort } = yield* settings.view;
+    const artifacts = yield* Artifacts;
     const context = yield* Effect.context<never>();
     const run = <A, E>(effect: Effect.Effect<A, E>): Promise<A> =>
       Effect.runPromiseWith(context)(effect).catch((error: unknown) => {
         throw error instanceof UnframedError ? new Error(error.message) : error;
       });
+
+    const preview = new PreviewTools({
+      read: (project) => run(rooms.read(project)),
+      chrome: artifacts.chrome,
+      findChrome: artifacts.findChrome,
+      previewPort: () => previewPort,
+      registerCloser: (project, close) => void run(openProjects.register(project, "preview tabs", Effect.promise(close))),
+    });
 
     const runtime = new AgentRuntime({
       dataDir: config.dataDir,
@@ -81,6 +94,8 @@ export const agentsLayer = Layer.effect(
       runEnvironment: (provider) => run(detection.runEnvironment(provider)),
       defaultModel: async (provider) => defaultModel((await run(detection.statuses({})))[provider].models ?? []),
       realAdapter,
+      extraTools: (tools) => [...new ArtifactTools(tools, () => previewPort).tools(), ...preview.tools()],
+      onSessionClosed: (_project, chatId) => void preview.closeChat(chatId),
     });
 
     const opened = (projectId: string) =>

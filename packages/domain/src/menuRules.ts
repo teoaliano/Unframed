@@ -1,5 +1,6 @@
 import { mayBeGroupMember } from "./grouping.ts";
 import { presetCase, PRESET_SPLIT_MESSAGE } from "./presetRules.ts";
+import { PIN_LIMIT, PIN_LIMIT_MESSAGE } from "./artifacts/artifactRules.ts";
 
 /** What the menu rules need to know about a shape. `file` is its project file, when it has one. */
 export interface MenuShape {
@@ -15,6 +16,8 @@ export interface MenuShape {
   readonly parent?: string;
   /** A group with a standing recipe (spec 06). */
   readonly recipe?: boolean;
+  /** A page or motion that has a file (spec 09). */
+  readonly filledArtifact?: boolean;
 }
 
 export type MenuTarget = { readonly kind: "canvas" } | { readonly kind: "shape"; readonly shape: MenuShape };
@@ -28,6 +31,8 @@ export interface MenuInput {
   /** Spec 06 has registered the Add to library handler. */
   readonly libraryRegistered: boolean;
   readonly platform: string;
+  /** Spec 09: the artifacts this project has pinned with "Keep playing". */
+  readonly pinned?: ReadonlyArray<string>;
 }
 
 export type EditAction = "cut" | "copy" | "paste" | "group" | "ungroup";
@@ -42,11 +47,13 @@ export type MenuItem =
   | { readonly action: EditAction; readonly label: string; readonly shortcut: string }
   /** Spec 06: a recipe group back to a plain group. */
   | { readonly action: "clear-recipe"; readonly label: string }
+  /** Spec 09: pins a filled artifact so it keeps running; disabled at three, saying why. */
+  | { readonly action: "keep-playing"; readonly label: string; readonly checked: boolean; readonly disabled?: boolean; readonly tooltip?: string }
   /** Spec 06: shown for any selection, disabled when it cannot become one group. */
   | { readonly action: "add-to-library"; readonly label: string; readonly disabled?: boolean; readonly tooltip?: string }
   | { readonly action: AddAction; readonly label: string };
 
-export type MenuSectionId = "image" | "reference" | "edit" | "library" | "inputs" | "artifacts";
+export type MenuSectionId = "image" | "reference" | "artifact" | "edit" | "library" | "inputs" | "artifacts";
 
 export interface MenuSection {
   readonly section: MenuSectionId;
@@ -123,6 +130,16 @@ export const contextMenu = (input: MenuInput): MenuSection[] => {
   }
   if (clicked?.type === "text" && clicked.textResult) referenceItems.push({ action: "copy-as-prompt", label: "Copy as prompt" });
   add("reference", "Reference", referenceItems);
+
+  const pinned = input.pinned ?? [];
+  if (clicked?.filledArtifact) {
+    const checked = pinned.includes(clicked.id);
+    add("artifact", clicked.type === "motion" ? "Motion" : "Page", [
+      checked || pinned.length < PIN_LIMIT
+        ? { action: "keep-playing", label: "Keep playing", checked }
+        : { action: "keep-playing", label: "Keep playing", checked, disabled: true, tooltip: PIN_LIMIT_MESSAGE },
+    ]);
+  }
 
   const edit = (action: EditAction): MenuItem => ({ action, label: EDIT_LABELS[action], shortcut: shortcutHint(action, platform) });
   const editItems: MenuItem[] = [];

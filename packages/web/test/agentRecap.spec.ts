@@ -30,7 +30,7 @@ const twoMotions = async (engine: TestEngine) => {
 
 const titleOf = async (engine: TestEngine, id: string) => (await roomShapes(engine, "default", "motion")).find((shape) => shape.id === id)?.props.title;
 
-test("after a turn the recap card lists what it touched with Locate, folds with Hide and Show, and strikes a deleted shape through", async ({ page, agent }) => {
+test("after a turn the recap card lists what it touched with Open and Locate, folds with Hide and Show, and strikes a deleted shape through", async ({ page, agent }) => {
   await openCanvas(page, agent);
   await twoMotions(agent);
   const panel = await openRail(page);
@@ -43,8 +43,7 @@ test("after a turn the recap card lists what it touched with Locate, folds with 
   const rows = card.getByTestId("recap-row");
   await expect(rows.locator(".unframed-agent-recap__label")).toHaveText(["Intro (red)", "Outro (red)"]);
   await expect(rows.nth(1).getByRole("button", { name: "Locate on canvas" })).toBeVisible();
-  // Open arrives with the editor (spec 09); until then a row offers Locate only.
-  await expect(card.getByRole("button", { name: "Open" })).toHaveCount(0);
+  await expect(rows.getByRole("button", { name: "Open" })).toHaveCount(2);
   await expect(card.getByRole("button", { name: "View diff" })).toHaveCount(0);
 
   await expect(shapeOnScreen(page, "shape:m2")).not.toBeInViewport();
@@ -62,6 +61,13 @@ test("after a turn the recap card lists what it touched with Locate, folds with 
   await expect(rows.nth(1)).toHaveText("Outro (red)deleted");
   await expect(rows.nth(1).getByRole("button")).toHaveCount(0);
   await expect(rows.nth(1).locator(".unframed-agent-recap__label")).toHaveCSS("text-decoration-line", "line-through");
+
+  // Open goes into the editor (spec 09).
+  await rows.nth(0).getByRole("button", { name: "Open" }).click();
+  const region = page.getByRole("region", { name: "Editing Intro (red)" });
+  await expect(region).toBeVisible();
+  await region.getByRole("button", { name: "Back to canvas" }).click();
+  await expect(region).toHaveCount(0);
 });
 
 test("Revert this turn takes the turn's changes back and reads Reverted", async ({ page, agent }) => {

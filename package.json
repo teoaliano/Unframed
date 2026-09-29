@@ -33,6 +33,9 @@
       "@anthropic-ai/claude-agent-sdk>@anthropic-ai/claude-agent-sdk-linux-x64-musl": "-",
       "@anthropic-ai/claude-agent-sdk>@anthropic-ai/claude-agent-sdk-win32-arm64": "-",
       "@anthropic-ai/claude-agent-sdk>@anthropic-ai/claude-agent-sdk-win32-x64": "-"
-    }
+    },
+    "neverBuiltDependencies": [
+      "puppeteer"
+    ]
   }
 }

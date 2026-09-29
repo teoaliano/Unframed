@@ -64,6 +64,7 @@ process.exit(2);
  * A `codex` whose `app-server` replays a recorded session: every message it receives is
  * logged to `FAKE_CODEX_MESSAGES` with its argv and the MCP token variable; a turn lists
  * the Unframed MCP tools with that token, streams a reply, asks for one command approval
+ * (its MCP startup status reports the same tools, less `FAKE_CODEX_DROP_TOOL`)
  * and finishes with the decision it got. Threads it started are kept in `FAKE_CODEX_THREADS`
  * so a later process can resume them.
  */
@@ -130,7 +131,12 @@ rl.on("line", (line) => {
     case "thread/resume":
       if (known().includes(message.params.threadId)) return send({ id: message.id, result: { thread: { id: message.params.threadId } } });
       return send({ id: message.id, error: { code: -32600, message: "no rollout found for thread id" } });
-    case "mcpServerStatus/list": return send({ id: message.id, result: { data: [{ name: "unframed", tools: { canvas_read: {}, canvas_write: {} }, resources: [], resourceTemplates: [], authStatus: "unsupported" }] } });
+    case "mcpServerStatus/list":
+      // What the Unframed server lists, less FAKE_CODEX_DROP_TOOL: a session that came up without one tool.
+      return void listTools().then((names) => {
+        const tools = Object.fromEntries(names.filter((name) => name !== process.env.FAKE_CODEX_DROP_TOOL).map((name) => [name, {}]));
+        send({ id: message.id, result: { data: [{ name: "unframed", tools, resources: [], resourceTemplates: [], authStatus: "unsupported" }] } });
+      });
     case "turn/start": return void runTurn(message);
     case "turn/interrupt": return send({ id: message.id, result: {} });
     case "thread/rollback": return send({ id: message.id, result: { thread: { id: message.params.threadId } } });

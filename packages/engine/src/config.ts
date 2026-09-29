@@ -2,6 +2,9 @@ import { resolve } from "node:path";
 import { acceptTestOrigin } from "@unframed/domain";
 import { envFilePath, preferencesFilePath, resolveDataDir } from "./paths.ts";
 
+/** `UNFRAMED_TEST_RENDERER` (spec 01's table): stands in for the motion renderer and the Chrome search. */
+export type TestRenderer = "ok" | "fail" | "no-chrome";
+
 export const OPENROUTER_ORIGIN = "https://openrouter.ai";
 
 /**
@@ -42,6 +45,8 @@ export interface EngineConfig {
   readonly testAgentIdleMs: number | undefined;
   /** `UNFRAMED_TEST_UPLOAD_URL_TTL_MS`: an attachment upload URL's lifetime, in place of 10 min. */
   readonly testUploadUrlTtlMs: number | undefined;
+  /** `UNFRAMED_TEST_RENDERER`: `ok`, `fail` or `no-chrome` stand in for the motion renderer and the Chrome search. */
+  readonly testRenderer: TestRenderer | undefined;
   readonly platform: NodeJS.Platform;
 }
 
@@ -68,6 +73,7 @@ export const loadConfig = (
   const nativeLogPath = nonEmpty(env.UNFRAMED_TEST_NATIVE_LOG);
   const shutdownHook = nonEmpty(env.UNFRAMED_TEST_SHUTDOWN_HOOK_MS);
   const tunnel = nonEmpty(env.UNFRAMED_TEST_TUNNEL);
+  const renderer = nonEmpty(env.UNFRAMED_TEST_RENDERER);
   const wholeMs = (value: string | undefined) => (value !== undefined && /^\d+$/.test(value) && Number(value) > 0 ? Number(value) : undefined);
   return {
     config: {
@@ -91,6 +97,7 @@ export const loadConfig = (
       testAgentScript: nonEmpty(env.UNFRAMED_TEST_AGENT_SCRIPT) === undefined ? undefined : resolve(nonEmpty(env.UNFRAMED_TEST_AGENT_SCRIPT)!),
       testAgentIdleMs: wholeMs(nonEmpty(env.UNFRAMED_TEST_AGENT_IDLE_MS)),
       testUploadUrlTtlMs: wholeMs(nonEmpty(env.UNFRAMED_TEST_UPLOAD_URL_TTL_MS)),
+      testRenderer: renderer === "ok" || renderer === "fail" || renderer === "no-chrome" ? renderer : undefined,
       platform,
     },
     warnings,

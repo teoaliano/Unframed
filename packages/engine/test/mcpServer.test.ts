@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { startAgentEngine } from "./agent.ts";
+import { startAgentEngine, UNFRAMED_TOOLS } from "./agent.ts";
 import { scriptedSession } from "./agentCanvas.ts";
 
 const listTools = (headers: Record<string, string>) => ({
@@ -9,7 +9,7 @@ const listTools = (headers: Record<string, string>) => ({
 });
 
 describe("the Unframed MCP server", () => {
-  it("refuses no token, a revoked token and a non-loopback Origin, and lists the two canvas tools with a session's token", async () => {
+  it("refuses no token, a revoked token and a non-loopback Origin, and lists every Unframed tool with a session's token", async () => {
     const agent = await startAgentEngine();
     const chatId = await agent.createChat();
     await agent.send(chatId, "what is on the board?");
@@ -27,7 +27,7 @@ describe("the Unframed MCP server", () => {
     const listed = await agent.engine.request(path, listTools({ authorization: `Bearer ${token}` }));
     expect(listed.status).toBe(200);
     const tools = listed.json().result.tools as Array<{ name: string; description: string; inputSchema: unknown }>;
-    expect(tools.map((tool) => tool.name)).toEqual(["canvas_read", "canvas_write"]);
+    expect(tools.map((tool) => tool.name)).toEqual(UNFRAMED_TOOLS);
     expect(tools[0]!.description).toMatch(/^Read the whole canvas/);
 
     await agent.dispatch({ type: "thread.session.stop", threadId: chatId });
@@ -42,6 +42,6 @@ describe("the Unframed MCP server", () => {
     await agent.send(chatId, "what is on the board?");
     const chat = await agent.settled(chatId, 1);
     const configured = chat.activities.find((activity) => activity.kind === "session.configured");
-    expect(configured?.payload).toMatchObject({ tools: ["mcp__unframed__canvas_read", "mcp__unframed__canvas_write"], foreign: [] });
+    expect(configured?.payload).toMatchObject({ tools: UNFRAMED_TOOLS.map((name) => `mcp__unframed__${name}`), foreign: [] });
   });
 });

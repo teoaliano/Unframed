@@ -9,3 +9,4 @@ export * from "./text.ts";
 export * from "./library.ts";
 export * from "./agent.ts";
 export * from "./openRouterKey.ts";
+export * from "./artifacts.ts";

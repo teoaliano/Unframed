@@ -1,5 +1,5 @@
 import { parseAssetMarker, projectFileMarker, UnframedError } from "@unframed/contracts";
-import { isVideoLink, META_REF_TYPES, pastedFileName, readRef, rewriteRichTextTokens, uniqueName, VIDEO_FILE_LIMIT, VIDEO_TOO_LARGE_MESSAGE } from "@unframed/domain";
+import { isArtifactKind, isVideoLink, META_REF_TYPES, pastedFileName, readRef, rewriteRichTextTokens, uniqueName, VIDEO_FILE_LIMIT, VIDEO_TOO_LARGE_MESSAGE } from "@unframed/domain";
 import {
   AssetRecordType,
   createShapeId,
@@ -19,6 +19,7 @@ import { fileUrl, uploadFile } from "./assetStore.ts";
 import { fillShape, linkAsset, MEDIA_DEFAULT_SIZE, MediaRefused, sizeForAsset, type MediaKind, type MediaShape } from "./media.ts";
 import type { RefMinter } from "./refs.ts";
 import { ARTIFACT_DEFAULT_SIZE } from "./shapes/artifact.tsx";
+import { setProblem } from "../artifacts/state.ts";
 
 /** What paste and drop need to know about the open canvas. */
 export interface ContentContext {
@@ -100,15 +101,43 @@ const addFile = async (editor: Editor, ctx: ContentContext, file: File, kind: Dr
 };
 
 /**
+ * An `.html` dropped onto a page or a motion (spec 09) replaces its file: a page takes it as a
+ * plain upload, a motion through the motion upload, which adds the runtime and the bridge.
+ * The title keeps its value when it has one. One person edit, one undo step.
+ */
+const replaceArtifactFile = async (editor: Editor, ctx: ContentContext, target: TLShape, file: File) => {
+  setProblem(editor, target.id, undefined);
+  try {
+    const saved =
+      target.type === "motion"
+        ? await ctx.engine.call("motion.upload", { project: ctx.project, fileName: file.name, html: await file.text() })
+        : await uploadFile(ctx.project, file, file.name || "page.html");
+    const shape = editor.getShape(target.id);
+    if (!shape) return;
+    const props = shape.props as { title: string };
+    editor.markHistoryStoppingPoint(`replace ${shape.type}`);
+    editor.updateShape({
+      id: shape.id,
+      type: shape.type,
+      props: { file: saved.file, fileName: saved.fileName, title: props.title !== "" ? props.title : withoutExtension(saved.fileName) },
+    } as TLShape);
+  } catch (error) {
+    setProblem(editor, target.id, `Could not add ${file.name || "that file"}: ${messageOf(error)}`);
+  }
+};
+
+/**
  * Files dropped on the canvas. A picture dropped on an image, or a clip on a video,
- * replaces its media; anything else lands at the drop point, several files 24 px apart.
- * Only images, clips up to 25 MB and HTML pages are taken.
+ * replaces its media, and an `.html` dropped on a page or a motion replaces its file;
+ * anything else lands at the drop point, several files 24 px apart. Only images, clips up
+ * to 25 MB and HTML pages are taken.
  */
 export const handleDrop = async (editor: Editor, ctx: ContentContext, files: ReadonlyArray<File>, point: VecLike) => {
   const [only] = files;
   if (files.length === 1 && only) {
     const target = editor.getShapeAtPoint(point, { hitInside: true, hitFrameInside: false });
     const kind = kindOf(only);
+    if (target && isArtifactKind(target.type) && kind === "page") return replaceArtifactFile(editor, ctx, target, only);
     if (target && (target.type === "image" || target.type === "video") && kind === target.type) {
       try {
         const asset = await uploadMediaFile(editor, kind, only);

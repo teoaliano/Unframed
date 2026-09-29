@@ -21,6 +21,7 @@ import {
   TurnDiff,
   TurnDiffInput,
 } from "./agent.ts";
+import { ArtifactSnapshots, MotionRenderStart, MotionRenderStatus, MotionUpload } from "./artifacts.ts";
 
 const Empty = Schema.Struct({});
 
@@ -301,5 +302,9 @@ export const UnframedRpcs = RpcGroup.make(
   OrchestrationSearchThreads,
   OrchestrationGetTurnDiff,
   OrchestrationGetFullThreadDiff,
+  MotionUpload,
+  MotionRenderStart,
+  MotionRenderStatus,
+  ArtifactSnapshots,
 );
 export type UnframedRpcs = typeof UnframedRpcs;

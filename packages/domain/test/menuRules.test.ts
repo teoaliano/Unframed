@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { contextMenu, revealLabel, shortcutHint, type MenuShape } from "../src/index.ts";
+import { contextMenu, revealLabel, shortcutHint, type MenuInput, type MenuShape } from "../src/index.ts";
 
 const prompt: MenuShape = { id: "p", type: "text", ref: "100" };
 const image: MenuShape = { id: "i", type: "image", ref: "101", file: "1-fox.png" };
@@ -12,7 +12,7 @@ const mark: MenuShape = { id: "m", type: "geo" };
 
 const base = { clipboard: false, libraryRegistered: false, platform: "darwin" };
 
-const shape = (target: MenuShape, selection: MenuShape[] = [target], extra: Partial<typeof base> = {}) =>
+const shape = (target: MenuShape, selection: MenuShape[] = [target], extra: Partial<Omit<MenuInput, "target" | "selection">> = {}) =>
   contextMenu({ ...base, ...extra, target: { kind: "shape", shape: target }, selection });
 
 const outline = (menu: ReturnType<typeof contextMenu>) =>
@@ -137,6 +137,19 @@ describe("contextMenu", () => {
       ["inputs", ["Prompt", "Image", "Video", "Group"]],
       ["artifacts", ["Page", "Motion"]],
     ]);
+  });
+
+  it("offers Keep playing on a filled page or motion, checked when pinned, and disabled with the reason at three", () => {
+    const filled: MenuShape = { ...page, filledArtifact: true };
+    const motion: MenuShape = { id: "mo", type: "motion", ref: "107", filledArtifact: true };
+    expect(shape(filled)[0]).toEqual({ section: "artifact", heading: "Page", items: [{ action: "keep-playing", label: "Keep playing", checked: false }] });
+    expect(shape(motion, [motion], { pinned: ["mo"] })[0]).toEqual({ section: "artifact", heading: "Motion", items: [{ action: "keep-playing", label: "Keep playing", checked: true }] });
+    expect(shape(filled, [filled], { pinned: ["a", "b", "c"] })[0]?.items).toEqual([
+      { action: "keep-playing", label: "Keep playing", checked: false, disabled: true, tooltip: "Three are already playing. Stop one first." },
+    ]);
+    // A pinned one can always be stopped, even at three.
+    expect(shape(filled, [filled], { pinned: ["a", "b", "pg"] })[0]?.items).toEqual([{ action: "keep-playing", label: "Keep playing", checked: true }]);
+    expect(shape(page).map((section) => section.section)).not.toContain("artifact");
   });
 
   it("uses Ctrl hints and the platform's reveal label off macOS", () => {

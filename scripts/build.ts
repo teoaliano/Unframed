@@ -19,7 +19,16 @@ import { buildWeb, repoRoot } from "./buildWeb.ts";
  * spawn binaries. Each one here must also be in the engine's dependencies: the bundle's
  * package.json takes its version from there.
  */
-export const RUNTIME_DEPENDENCIES: ReadonlyArray<string> = ["@anthropic-ai/claude-agent-sdk"];
+export const RUNTIME_DEPENDENCIES: ReadonlyArray<string> = [
+  "@anthropic-ai/claude-agent-sdk",
+  // Spec 09: the player, runtime and GSAP are copied from their installed files; the producer and puppeteer-core drive Chrome.
+  "@hyperframes/core",
+  "@hyperframes/engine",
+  "@hyperframes/player",
+  "@hyperframes/producer",
+  "gsap",
+  "puppeteer-core",
+];
 
 /** Build-time packages whose output ships in the bundle anyway (Tailwind's base styles). */
 const SHIPPED_BUILD_PACKAGES = ["tailwindcss"];
@@ -118,7 +127,8 @@ export const buildBundle = async (out: string, env: Record<string, string | unde
   await writeFile(
     join(out, "package.json"),
     `${JSON.stringify(
-      { name: "unframed", version: engineManifest.version, type: "module", main: "server/index.js", dependencies },
+      // puppeteer comes with the HyperFrames producer and would download a browser on install: renders use the one on the machine.
+      { name: "unframed", version: engineManifest.version, type: "module", main: "server/index.js", dependencies, puppeteer: { skipDownload: true } },
       null,
       2,
     )}\n`,

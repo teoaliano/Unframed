@@ -21,6 +21,7 @@ import { ProviderDetection } from "../agent/detection.ts";
 import { Agents } from "../agent/layer.ts";
 import { Lifecycle } from "../lifecycle.ts";
 import { OAuth } from "../oauth/oauth.ts";
+import { Artifacts } from "../artifacts/layer.ts";
 
 export const rpcHandlersLayer = UnframedRpcs.toLayer(
   Effect.gen(function* () {
@@ -40,6 +41,7 @@ export const rpcHandlersLayer = UnframedRpcs.toLayer(
     const agents = yield* Agents;
     const lifecycle = yield* Lifecycle;
     const oauth = yield* OAuth;
+    const artifacts = yield* Artifacts;
     const context = yield* Effect.context<SettingsStore | Projects | Native>();
 
     const testOnly = <A, E>(run: () => Effect.Effect<A, E>) =>
@@ -111,6 +113,10 @@ export const rpcHandlersLayer = UnframedRpcs.toLayer(
       "orchestration.searchThreads": ({ projectId, query, limit }) => agents.searchThreads(projectId, query, limit),
       "orchestration.getTurnDiff": (input) => agents.turnDiff(input),
       "orchestration.getFullThreadDiff": ({ toTurnCount, ...rest }) => agents.turnDiff({ ...rest, fromTurnCount: 0, toTurnCount }),
+      "motion.upload": (input) => artifacts.upload(input),
+      "motion.renderStart": (input) => artifacts.renderStart(input),
+      "motion.renderStatus": ({ project, id }) => artifacts.renderStatus(project, id),
+      "artifact.snapshots": ({ project }) => artifacts.snapshots(project),
       "testCanvas.read": ({ project }) =>
         testOnly(() =>
           Effect.all({ clock: rooms.clock(project), records: Effect.map(rooms.read(project), (records) => [...records]) }),

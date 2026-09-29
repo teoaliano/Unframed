@@ -10,7 +10,7 @@ import { cp, mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/pr
 import { join, relative } from "node:path";
 import { promisify } from "node:util";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { buildBundle } from "../../../scripts/build.ts";
+import { buildBundle, RUNTIME_DEPENDENCIES } from "../../../scripts/build.ts";
 import { makeTempDir, repoRoot, startEngine } from "./harness.ts";
 
 const execFileAsync = promisify(execFile);
@@ -81,8 +81,19 @@ describe("the published bundle", () => {
       version: engineManifest.version,
       type: "module",
       main: "server/index.js",
-      dependencies: { "@anthropic-ai/claude-agent-sdk": engineManifest.dependencies["@anthropic-ai/claude-agent-sdk"] },
+      dependencies: Object.fromEntries(RUNTIME_DEPENDENCIES.map((name) => [name, engineManifest.dependencies[name]])),
+      puppeteer: { skipDownload: true },
     });
+    expect(Object.keys(manifest.dependencies)).toEqual([
+      "@anthropic-ai/claude-agent-sdk",
+      "@hyperframes/core",
+      "@hyperframes/engine",
+      "@hyperframes/player",
+      "@hyperframes/producer",
+      "gsap",
+      "puppeteer-core",
+    ]);
+    expect(Object.values(manifest.dependencies).every((version) => typeof version === "string" && /^\d/.test(version))).toBe(true);
     const server = await listFiles(join(bundle, "server"));
     expect(server).toContain("index.js");
     expect(server.every((file) => file.endsWith(".js"))).toBe(true);
@@ -90,6 +101,7 @@ describe("the published bundle", () => {
     expect(code).not.toMatch(/sourceMappingURL/);
     expect(code).not.toMatch(/workspace:/);
     expect(code).toMatch(/import\(["']@anthropic-ai\/claude-agent-sdk["']\)/);
+    expect(code).toMatch(/import\(["']@hyperframes\/producer["']\)/);
     expect(code).not.toMatch(/from\s+["'][^"']+\.ts["']/);
     expect(code).not.toMatch(/(?:from\s+|require\()["']@unframed\//);
     expect(code).not.toMatch(/onTestFinished|startOpenRouterStub/);
@@ -136,20 +148,31 @@ describe("the published bundle", () => {
     await mkdir(packs, { recursive: true });
     await mkdir(target, { recursive: true });
     // A manifest of its own, so npm installs here and does not walk up to the repository's.
-    await writeFile(join(target, "package.json"), `${JSON.stringify({ name: "install-check", private: true })}\n`);
+    // The key stands in for the installing app's own: puppeteer (under the HyperFrames producer) skips its browser download.
+    await writeFile(join(target, "package.json"), `${JSON.stringify({ name: "install-check", private: true, puppeteer: { skipDownload: true } })}\n`);
     const { stdout } = await npm(["pack", bundle, "--pack-destination", packs, "--silent"], { env: npmEnv() });
     const tarball = join(packs, stdout.trim().split("\n").at(-1)!);
-    await npm(["install", tarball, "--no-audit", "--no-fund"], { cwd: target, env: npmEnv() });
+    const browsers = join(scratch, "puppeteer-cache");
+    await npm(["install", tarball, "--no-audit", "--no-fund"], { cwd: target, env: { ...npmEnv(), PUPPETEER_CACHE_DIR: browsers } });
     const installed = join(target, "node_modules", "unframed");
-    // The Agent SDK is the one runtime dependency; npm brings it and its peers.
-    expect(await readdir(join(target, "node_modules"))).toEqual(expect.arrayContaining([".package-lock.json", "unframed", "@anthropic-ai"]));
+    // npm brings the runtime dependencies and theirs, and no browser.
+    expect(await readdir(join(target, "node_modules"))).toEqual(expect.arrayContaining([".package-lock.json", "unframed", "@anthropic-ai", "@hyperframes", "gsap", "puppeteer-core"]));
     expect(existsSync(join(target, "node_modules", "@anthropic-ai", "claude-agent-sdk", "package.json"))).toBe(true);
+    expect(existsSync(browsers)).toBe(false);
     const engine = await startEngine({
       entry: join(installed, "server", "index.js"),
       clientDist: join(installed, "client", "dist"),
     });
     expect(engine.messages).toContainEqual({ type: "ready", port: engine.port, previewPort: engine.previewPort });
     expect((await engine.request("/")).text).toContain("<title>Unframed</title>");
+    // The motion library comes from the installed packages' own files.
+    const rpc = await engine.rpc();
+    await rpc.call("projects.create", { name: "installed" });
+    await rpc.call("motion.upload", { project: "installed", fileName: "clip.html", html: "<!doctype html><html><head></head><body></body></html>" });
+    for (const file of ["hyperframes-player.js", "hyperframes-runtime.js", "gsap.js", "unframed-dials.js", "hyperframes-viewer.html"]) {
+      expect(existsSync(join(engine.dataDir, "output", "installed", file)), file).toBe(true);
+    }
+    expect(await readFile(join(engine.dataDir, "output", "installed", "gsap.js"))).toEqual(await readFile(join(target, "node_modules", "gsap", "dist", "gsap.min.js")));
   });
 
   it("keeps the client shim working: npm ci and npm run build in client/ succeed and leave client/dist untouched", { timeout: 120_000 }, async () => {

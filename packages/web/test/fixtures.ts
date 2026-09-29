@@ -27,6 +27,8 @@ export const startHostedEngine = (options: EngineOptions = {}): Promise<TestEngi
     ...options,
     env: {
       UNFRAMED_TEST_CANVAS: "1",
+      // Spec 09: no engine-owned Chrome for snapshots or renders unless a test asks for the stub.
+      UNFRAMED_TEST_RENDERER: "no-chrome",
       ...NO_AGENT_CLI,
       ...(options.dotenv === undefined ? { OPENROUTER_API_KEY: FIXTURE_KEY } : {}),
       ...options.env,
