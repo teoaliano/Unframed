@@ -10,7 +10,7 @@ The old app had a chat rail with tabs filtered by the selection, a composer with
 
 ## Solution
 
-A rail on the right of the canvas holds the project's chats as folder tabs, filtered by the selected artifacts. Under the tabs, a t3code transcript: markdown replies, streamed as they arrive, tool calls folded into work groups, sub-agent rows, the pending approval and question panels, proposed plan cards, and a recap card per turn listing what it touched with Open, Locate and Revert this turn. Below it, the shared composer of spec 03 in its Agent tray, built 1:1 on t3code's composer: a Tiptap editor, the selection as context chips, attachments, slash commands, the model, traits and runtime mode pickers, the plan toggle, the context window meter, queued messages, the prompt stash, ArrowUp history and Edit from here.
+A rail on the right of the canvas holds the project's chats as tabs, filtered by the selected artifacts. Under the tabs, a t3code transcript: markdown replies, streamed as they arrive, tool calls folded into work groups, sub-agent rows, the pending approval and question panels, proposed plan cards, and a recap card per turn listing what it touched with Open, Locate and Revert this turn. Below it, the shared composer of spec 03 in its Agent tray, built 1:1 on t3code's composer: a Tiptap editor, the selection as context chips, attachments, slash commands, the model, traits and runtime mode pickers, the plan toggle, the context window meter, queued messages, the prompt stash, ArrowUp history and Edit from here.
 
 The selection toolbar's Agent button opens the same composer on the selection and says whether the message continues an earlier chat or starts a new one. The editor of spec 09 embeds the same rail as its left column.
 
@@ -30,7 +30,7 @@ The rail
 
 Tabs and search
 
-8. As a person, I want one folder tab per chat, three inline and the rest under More, so that a narrow rail never scrolls its tabs out of reach.
+8. As a person, I want one tab per chat, three inline and the rest under More, so that a narrow rail never scrolls its tabs out of reach.
 9. As a person, I want a live dot on a chat whose turn is running, so that I can see which chats are busy.
 10. As a person, I want to double-click a tab to rename it, Enter or clicking away to commit and Escape to abandon, so that renaming is quick and safe to start by accident.
 11. As a person, I want a tab to read my name, else the agent's name, else the opening words, else "Chat", so that every tab says something.
@@ -109,22 +109,22 @@ The selection toolbar
 
 ### The rail
 
-- The top-right chrome's **Agent** button (sparkles icon) opens the rail. The rail is 380 px wide, docked to the right edge from the top down to just above tldraw's watermark band (which stays uncovered), over the canvas, on a translucent surface (the surface colour at 92% with the chrome blur, a left border in the border colour). While it is open the top-right chrome card (`.unframed-chrome-right`, spec 02) fades to 0 opacity and drifts 8 px right (160 ms opacity, 200 ms transform) and is made `inert`.
-- **Motion.** Opening slides the rail in from `translateX(100%)` with `opacity 0` to rest: `transform 260ms cubic-bezier(0.32, 0.72, 0, 1)` and `opacity 200ms ease-out`. Closing reverses it faster: `transform 200ms` on the same curve and `opacity 160ms ease-out`. It is a CSS transition, not keyframes, so reopening mid-exit reverses from where it is; the enter uses `@starting-style`. Under `prefers-reduced-motion: reduce` there is no transform, only `opacity 160ms ease-out`. The rail stays mounted through its exit and unmounts on its own `transitionend` (transform or opacity, on the rail element itself), with a 600 ms timer as the guarantee, since a hidden tab fires no transition events.
+- The top-right chrome's **Agent** button (sparkles icon) opens the rail. The rail is 380 px wide, docked to the right edge from the top down to just above tldraw's watermark band (which stays uncovered), over the canvas, on the kit's glass surface (spec 12's `surface-glass`: the background at the glass opacity with the glass blur) with the kit's left border and a rounded bottom-left corner. While it is open the top-right chrome card (`.unframed-chrome-right`, spec 02) fades to 0 opacity and drifts 8 px right (160 ms opacity, 200 ms transform) and is made `inert`.
+- **Motion.** Opening slides the rail in from `translateX(100%)` with `opacity 0` to rest: `transform 260ms` on t3code's `--ease-drawer` curve (`cubic-bezier(0.32, 0.72, 0, 1)`) and `opacity 200ms ease-out`. Closing reverses it faster: `transform 200ms` on the same curve and `opacity 160ms ease-out`. It is a CSS transition, not keyframes, so reopening mid-exit reverses from where it is; the enter uses `@starting-style`. Under `prefers-reduced-motion: reduce` there is no transform, only `opacity 160ms ease-out`. The rail stays mounted through its exit and unmounts on its own `transitionend` (transform or opacity, on the rail element itself), with a 600 ms timer as the guarantee, since a hidden tab fires no transition events.
 - **Embedded mode.** The editor (spec 09) mounts the same rail as its left column: no transition, no Close, no Locate, and its tab strip filtered to the artifact being edited.
-- **Header**: a sparkles icon and "Agent", then three icon buttons: **New chat** (tooltip "New chat about the selected artifacts" when artifacts are selected, else "New chat"; disabled with no provider ready), **Delete chat** (tooltip "Delete this chat"; disabled with no chat or while it runs) and **Close** (not in embedded mode).
+- **Header**: a sparkles icon and the heading "Agent", then the kit's ghost icon Buttons, Search chats (below) and three more: **New chat** (tooltip "New chat about the selected artifacts" when artifacts are selected, else "New chat"; disabled with no provider ready), **Delete chat** (tooltip "Delete this chat"; disabled with no chat or while it runs) and **Close** (not in embedded mode).
 - **Delete** asks first: title "Delete this chat?", description "The conversation is removed for good. What the agent changed on the canvas stays.", action "Delete chat". It dispatches `thread.delete`; canvas changes and files stay.
 - Closing the rail mid-turn changes nothing on the engine; reopening shows the turn where it is.
 
 ### Tabs
 
-- One folder-shaped tab per visible chat, newest first. The first three are inline; the rest sit behind a **More** menu whose trigger names the active chat when it is one of them. A running chat shows a live dot (inline: after the label; in the menu: before it).
+- One tab per visible chat, newest first, in t3code's panel tab look (spec 12; the old folder shape is gone): a 24 px kit ghost Button row, muted, the active one on the accent in the foreground colour. The first three are inline; the rest sit behind a **More** menu whose trigger names the active chat when it is one of them. A running chat shows a live dot (inline: after the label; in the menu: before it).
 - **Label**: the chat's title (the person's or the agent's), else the first 32 characters of its first message plus an ellipsis when cut, else "Chat". The tooltip is the label, then " · " and the opening words, when they differ.
-- **Rename**: double-click an inline tab to edit its name in place, in a box shaped like the tab that grows with the text. Enter or blur commits, Escape abandons, an empty name clears it (`thread.meta.update {title: ""}`), so the tab falls back to its default and the agent may name it again. Renaming is allowed mid-turn. A chat in the More menu cannot be renamed there.
+- **Rename**: double-click an inline tab to edit its name in place, in a compact kit field that grows with the text. Enter or blur commits, Escape abandons, an empty name clears it (`thread.meta.update {title: ""}`), so the tab falls back to its default and the agent may name it again. Renaming is allowed mid-turn. A chat in the More menu cannot be renamed there.
 - **Filter**: with no artifact selected, every chat shows. With one or more artifacts selected, only chats whose tags include any of them. A chat whose tagged artifacts are all deleted still shows.
 - **Active tab**: the one last chosen if it is still visible; else the newest visible one; else none. With none, the next message starts a chat.
 - **Empty strip**: "No chats yet" with nothing selected; "Nothing said about these yet. Your first message starts a chat." with two or more artifacts selected; nothing with exactly one (the composer already asks for the first message).
-- **Focus mark**: every artifact in the active chat's tags wears the focus mark on the canvas (spec 02's artifact label filled with the accent and a live dot). A tag whose shape is gone marks nothing.
+- **Focus mark**: every artifact in the active chat's tags wears the focus mark on the canvas (spec 02's artifact label filled with the primary colour, in the primary foreground, with a live dot, in the kit's small badge shape). A tag whose shape is gone marks nothing.
 
 ### Thread search
 
@@ -132,7 +132,7 @@ Added from t3code. A search button in the rail header ("Search chats"), and Cmd+
 
 ### No provider ready
 
-When neither provider is ready the transcript area shows:
+When neither provider is ready the transcript area shows the kit's empty state (spec 12), the provider lines in an alert frame:
 
 - "No Claude or Codex found on this Mac." (on other platforms: "No Claude or Codex found on this computer.")
 - "Install one and sign in, and the agent runs on your plan. Nothing is sent anywhere until then."
@@ -336,7 +336,7 @@ The embedded rail is exercised by spec 09's editor tests, since the editor is wh
 
 ## Further Notes
 
-- **Kept from the old app, unchanged:** the rail's size, surface and motion; the header actions; folder tabs with three inline and More; double-click rename; the any-of filter and the all-of continue rule (they answer different questions and must not be merged); the no-provider state; the activity line and its labels; the recap card with Open, Locate and struck-through deleted rows; markdown with no raw HTML; the toolbar's continues/new chat line.
+- **Kept from the old app, unchanged:** the rail's size and motion; the header actions; tabs with three inline and More; double-click rename; the any-of filter and the all-of continue rule (they answer different questions and must not be merged); the no-provider state; the activity line and its labels; the recap card with Open, Locate and struck-through deleted rows; markdown with no raw HTML; the toolbar's continues/new chat line.
 - **Changed:** the composer, transcript, work log, approval panel, question panel and plan flow are t3code's; the recap card is per turn rather than one per chat, because Revert this turn needs a home on each turn; Cmd-Z no longer undoes agent changes (decision Q23), so the delete confirmation no longer mentions it; UI copy that had em dashes now uses periods or commas ("Nothing said about these yet. Your first message starts a chat.", "The API is busy (529), retrying in 2s. Attempt 1 of 3…", the plan toggle tooltips).
 - **The old targeting words.** The design board for the toolbar says one artifact selected is the target, none means a new artifact, several means it asks. That is now how the agent is told to read the selection (spec 07's system prompt), not a field in the message: there is no target and no mode picker, and "asks" means the agent asks in its reply only when the sentence is genuinely ambiguous.
 

@@ -6,6 +6,9 @@ import { filledMedia, putRecords } from "./media.ts";
 import { artifactColumn, expect, onlyChat, openRail, promptBox, rail, rpcOf, scriptFolder, startAgentEngine, test } from "./agent.ts";
 import type { TestEngine } from "../../engine/test/engineProcess.ts";
 
+/** A toast's second line, by its text. */
+const toastDescription = (page: Page, text: string) => page.locator("[data-slot='toast-description']").filter({ hasText: text });
+
 /** A page and two filled images, left of the starter prompts. */
 const pageAndImages = async (page: Page, engine: TestEngine) => {
   await openCanvas(page, engine);
@@ -130,9 +133,9 @@ test("attach by button, by drag and by paste: thumbnails and file chips, a remov
   await expect(shelf.locator("[data-chip='file']")).toHaveCount(0);
 
   // Dragging files over the rail shows the overlay; dropping them attaches them.
-  await fileEvents(page, "aside[aria-label='Agent'] .unframed-agent-transcript, aside[aria-label='Agent'] .unframed-agent-tabs", ["dragenter", "dragover"], [{ name: "brief.pdf", mime: "application/pdf", bytes: Buffer.from("%PDF-1.4 brief") }]);
+  await fileEvents(page, "aside[aria-label='Agent'] [data-testid='chat-tabs']", ["dragenter", "dragover"], [{ name: "brief.pdf", mime: "application/pdf", bytes: Buffer.from("%PDF-1.4 brief") }]);
   await expect(panel.getByTestId("drop-overlay")).toHaveText("Drop files to attach");
-  await fileEvents(page, "aside[aria-label='Agent'] .unframed-agent-tabs", ["drop"], [{ name: "brief.pdf", mime: "application/pdf", bytes: Buffer.from("%PDF-1.4 brief") }]);
+  await fileEvents(page, "aside[aria-label='Agent'] [data-testid='chat-tabs']", ["drop"], [{ name: "brief.pdf", mime: "application/pdf", bytes: Buffer.from("%PDF-1.4 brief") }]);
   await expect(panel.getByTestId("drop-overlay")).toHaveCount(0);
   await expect(shelf.locator("[data-chip='file']")).toHaveText(["brief.pdf14 B"]);
 
@@ -141,7 +144,7 @@ test("attach by button, by drag and by paste: thumbnails and file chips, a remov
   await expect(shelf.getByRole("link", { name: "Preview pasted.png" })).toBeVisible();
 
   // Over the limit: the exact sentence, and nothing staged.
-  await fileEvents(page, "aside[aria-label='Agent'] .unframed-agent-tabs", ["dragenter", "drop"], [{ name: "huge.bin", mime: "application/octet-stream", size: 51 * 1024 * 1024 }]);
+  await fileEvents(page, "aside[aria-label='Agent'] [data-testid='chat-tabs']", ["dragenter", "drop"], [{ name: "huge.bin", mime: "application/octet-stream", size: 51 * 1024 * 1024 }]);
   await expect(panel.getByRole("alert")).toHaveText("'huge.bin' exceeds the 50 MB attachment limit.");
   await expect(shelf.locator("[data-chip='file']")).toHaveText(["brief.pdf14 B"]);
 
@@ -180,7 +183,7 @@ test("a large paste becomes pasted-text.txt with a toast; Cmd+Shift+V keeps it i
   const notice = toast(page, "Large paste attached as pasted-text.txt");
   await expect(notice).toBeVisible();
   const hint = process.platform === "darwin" ? "⌘⇧V" : "Ctrl+Shift+V";
-  await expect(notice).toContainText(`35.2 KB · Use ${hint} to keep a large paste inline.`);
+  await expect(toastDescription(page, `35.2 KB · Use ${hint} to keep a large paste inline.`)).toBeVisible();
   await expect(box).toHaveText("");
 
   await pasteText(page, big);
@@ -241,7 +244,8 @@ test("Cmd+S stashes the draft and clears it; the badge's menu restores and delet
     await expect(box).toHaveText("");
   }
   const notice = toast(page, "Oldest stashed prompt discarded");
-  await expect(notice).toContainText("The stash holds 20 prompts; the oldest was removed to make room.");
+  await expect(notice).toBeVisible();
+  await expect(toastDescription(page, "The stash holds 20 prompts; the oldest was removed to make room.")).toBeVisible();
   await expect(badge).toHaveAttribute("aria-label", "Stashed prompts: 20. Open stash.");
   await expect
     .poll(async () => {

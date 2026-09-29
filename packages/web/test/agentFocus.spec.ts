@@ -1,6 +1,7 @@
 import { openCanvas, shapeOnScreen } from "./canvas.ts";
 import { putRecords } from "./media.ts";
 import { artifactColumn, createChat, expect, openRail, rail, test } from "./agent.ts";
+import { expectToken, inBothSchemes } from "./kit.ts";
 
 test("the active chat's artifacts wear the focus mark, and switching tabs moves it", async ({ page, agent }) => {
   await openCanvas(page, agent);
@@ -24,17 +25,12 @@ test("the active chat's artifacts wear the focus mark, and switching tabs moves 
   await expect(outro).toHaveAttribute("data-agent-focus", "");
   await expect(intro).not.toHaveAttribute("data-agent-focus");
   await expect(landing).not.toHaveAttribute("data-agent-focus");
-  const accent = await page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue("--unframed-accent").trim());
-  const filled = await outro.locator(".unframed-shape-label").evaluate((element) => getComputedStyle(element).backgroundColor);
-  const probe = await page.evaluate((colour) => {
-    const element = document.createElement("div");
-    element.style.backgroundColor = colour;
-    document.body.append(element);
-    const value = getComputedStyle(element).backgroundColor;
-    element.remove();
-    return value;
-  }, accent);
-  expect(filled).toBe(probe);
+  // The label fills with the primary colour in both schemes.
+  const label = outro.locator("[data-shape-label], .unframed-shape-label");
+  await inBothSchemes(page, async () => {
+    await expectToken(label, "background-color", "--primary");
+    await expectToken(label, "color", "--primary-foreground");
+  });
 
   await rail(page).getByRole("tab", { name: "About the intro" }).click();
   await expect(intro).toHaveAttribute("data-agent-focus", "");

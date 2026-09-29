@@ -2,6 +2,8 @@ import type { ChatSummary, ThreadSearchMatch } from "@unframed/contracts";
 import { tabLabel } from "@unframed/domain";
 import { X } from "lucide-react";
 import { useEffect, useRef, useState, type ReactNode } from "react";
+import { Button } from "~/components/ui/button";
+import { Input } from "~/components/ui/input";
 import type { ChatClient } from "../store.ts";
 
 const MIN = 2;
@@ -17,7 +19,11 @@ const bolden = (text: string, query: string): ReactNode[] => {
   let at = 0;
   for (let found = lower.indexOf(needle); found !== -1; found = lower.indexOf(needle, at)) {
     if (found > at) parts.push(text.slice(at, found));
-    parts.push(<b key={found}>{text.slice(found, found + needle.length)}</b>);
+    parts.push(
+      <b key={found} className="font-semibold text-foreground">
+        {text.slice(found, found + needle.length)}
+      </b>,
+    );
     at = found + needle.length;
   }
   if (at < text.length) parts.push(text.slice(at));
@@ -82,10 +88,11 @@ export const ThreadSearch = ({ client, chats, onClose }: { readonly client: Chat
   };
 
   return (
-    <div className="unframed-agent-search" role="search">
-      <input
+    <div className="absolute inset-0 z-[2] flex items-center gap-1 border-b bg-background px-2" role="search">
+      <Input
         ref={field}
-        className="unframed-agent-search__field"
+        size="compact"
+        className="min-w-0 flex-1"
         aria-label="Search chats"
         placeholder="Search chats"
         value={query}
@@ -111,34 +118,36 @@ export const ThreadSearch = ({ client, chats, onClose }: { readonly client: Chat
           }
         }}
       />
-      <button type="button" className="unframed-agent-search__close" aria-label="Close search" onClick={onClose}>
-        <X size={14} aria-hidden />
-      </button>
+      <Button variant="ghost-muted" size="icon-xs" aria-label="Close search" onClick={onClose}>
+        <X aria-hidden />
+      </Button>
       {matches !== undefined && searchable && (
-        <div className="unframed-agent-search__results" role="listbox" aria-label="Search results">
+        // Focus stays in the field, which moves the highlight: the rows are options, not buttons.
+        <div className="dropdown-glass absolute top-full right-2 left-2 max-h-80 overflow-y-auto rounded-lg p-1 shadow-lg/5" role="listbox" aria-label="Search results">
           {rows.length === 0 ? (
-            <p className="unframed-agent-search__empty">No chats match.</p>
+            <p className="m-0 px-2 py-1.5 text-sm text-muted-foreground">No chats match.</p>
           ) : (
             rows.map((row, index) => {
               const chat = byId.get(row.threadId)!;
               return (
-                <button
+                <div
                   key={row.threadId}
-                  type="button"
                   role="option"
                   aria-selected={index === highlight}
-                  className="unframed-agent-search__row"
+                  data-highlighted={index === highlight ? "" : undefined}
+                  className="flex min-h-7 cursor-default select-none flex-col items-start gap-0.5 rounded-sm px-2 py-1 text-sm text-foreground outline-none data-highlighted:bg-accent data-highlighted:text-accent-foreground"
                   onMouseEnter={() => setHighlight(index)}
+                  onMouseDown={(event) => event.preventDefault()}
                   onClick={() => choose(row.threadId)}
                 >
-                  <span className="unframed-agent-search__label">{row.match ? tabLabel(chat) : bolden(tabLabel(chat), trimmed)}</span>
+                  <span className="max-w-full truncate font-medium">{row.match ? tabLabel(chat) : bolden(tabLabel(chat), trimmed)}</span>
                   {row.match && (
-                    <span className="unframed-agent-search__snippet">
-                      {row.match.source === "user" ? "You: " : "Agent: "}
+                    <span className="text-xs text-muted-foreground">
+                      <span className={row.match.source === "user" ? "text-info-foreground" : "text-success-foreground"}>{row.match.source === "user" ? "You: " : "Agent: "}</span>
                       {bolden(row.match.snippet, trimmed)}
                     </span>
                   )}
-                </button>
+                </div>
               );
             })
           )}

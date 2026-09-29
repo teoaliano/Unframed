@@ -2,7 +2,9 @@ import { visibleChats, nextActive } from "@unframed/domain";
 import { Plus, Search, Sparkles, Trash2, X } from "lucide-react";
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { useMaybeEditor, useValue } from "tldraw";
-import { iconButtonClass, Tip } from "../../chrome/ui.tsx";
+import { Alert, AlertDescription } from "~/components/ui/alert";
+import { Button } from "~/components/ui/button";
+import { Tip } from "../../chrome/ui.tsx";
 import { useEngine } from "../../context.ts";
 import { AgentTray } from "../composer/AgentTray.tsx";
 import { noProviderReady } from "../providers.ts";
@@ -32,7 +34,17 @@ export interface AgentRailProps {
 
 const ARTIFACT_TYPES = new Set(["page", "motion"]);
 
-const smallIconButton = `${iconButtonClass} size-8 disabled:cursor-default disabled:opacity-40 disabled:hover:bg-transparent`;
+/*
+ * 380 px, docked right over the canvas, on glass with the kit's border. It stops above
+ * tldraw's watermark band (8 px from the corner, 36 px tall), which stays uncovered. The
+ * slide is a CSS transition on `transform` (not Tailwind's `translate`), so reopening
+ * mid-exit reverses from where it is.
+ */
+const RAIL_CLASS =
+  "pointer-events-auto absolute top-0 right-0 bottom-[52px] z-[600] box-border flex w-[380px] flex-col rounded-bl-xl border-b border-l font-sans text-foreground surface-glass [transform:none] opacity-100 [transition:transform_260ms_var(--ease-drawer),opacity_200ms_ease-out] starting:data-[state=open]:[transform:translateX(100%)] starting:data-[state=open]:opacity-0 data-[state=closed]:pointer-events-none data-[state=closed]:[transform:translateX(100%)] data-[state=closed]:opacity-0 data-[state=closed]:[transition:transform_200ms_var(--ease-drawer),opacity_160ms_ease-out] motion-reduce:[transition:opacity_160ms_ease-out] motion-reduce:data-[state=closed]:[transform:none] motion-reduce:data-[state=closed]:[transition:opacity_160ms_ease-out]";
+
+/** The editor's left column: the same rail in place, with no surface or motion of its own. */
+const EMBEDDED_CLASS = "relative box-border flex size-full flex-col font-sans text-foreground";
 
 /**
  * The chat rail (spec 08): the project's chats as folder tabs filtered by the selected
@@ -108,7 +120,7 @@ export const AgentRail = ({ project, embedded, filterTo, onLocate, onOpenEditor,
         motion?.ref(element);
       }}
       aria-label="Agent"
-      className="unframed-agent-rail"
+      className={embedded ? EMBEDDED_CLASS : RAIL_CLASS}
       data-state={motion?.state}
       data-embedded={embedded ? "" : undefined}
       onPointerDown={(event) => event.stopPropagation()}
@@ -123,58 +135,51 @@ export const AgentRail = ({ project, embedded, filterTo, onLocate, onOpenEditor,
       }}
       onKeyUp={(event) => event.stopPropagation()}
     >
-      <header className="unframed-agent-rail__header">
-        <Sparkles size={16} aria-hidden className="text-foreground" />
-        <span className="unframed-agent-rail__title">Agent</span>
-        <span className="flex-1" />
+      <header className="flex h-12 shrink-0 items-center gap-1 pr-2 pl-3.5">
+        <Sparkles aria-hidden className="size-4 shrink-0 text-foreground" />
+        <h2 className="m-0 ml-1 flex-1 text-sm font-medium">Agent</h2>
         <Tip label="Search chats">
-          <button type="button" aria-label="Search chats" className={smallIconButton} onClick={() => client.setUi({ searchOpen: true })}>
-            <Search size={16} aria-hidden />
-          </button>
+          <Button variant="ghost" size="icon-sm" aria-label="Search chats" onClick={() => client.setUi({ searchOpen: true })}>
+            <Search aria-hidden />
+          </Button>
         </Tip>
         <Tip label={artifactsSelected ? "New chat about the selected artifacts" : "New chat"}>
-          <button type="button" aria-label="New chat" className={smallIconButton} disabled={none} onClick={newChat}>
-            <Plus size={17} aria-hidden />
-          </button>
+          <Button variant="ghost" size="icon-sm" aria-label="New chat" disabled={none} onClick={newChat}>
+            <Plus aria-hidden />
+          </Button>
         </Tip>
         <Tip label="Delete this chat">
-          <button
-            type="button"
-            aria-label="Delete chat"
-            className={smallIconButton}
-            disabled={!activeSummary || activeSummary.status === "running"}
-            onClick={() => setConfirmDelete(true)}
-          >
-            <Trash2 size={16} aria-hidden />
-          </button>
+          <Button variant="ghost" size="icon-sm" aria-label="Delete chat" disabled={!activeSummary || activeSummary.status === "running"} onClick={() => setConfirmDelete(true)}>
+            <Trash2 aria-hidden />
+          </Button>
         </Tip>
         {!embedded && (
           <Tip label="Close">
-            <button type="button" aria-label="Close" className={smallIconButton} onClick={onClose}>
-              <X size={17} aria-hidden />
-            </button>
+            <Button variant="ghost" size="icon-sm" aria-label="Close" onClick={onClose}>
+              <X aria-hidden />
+            </Button>
           </Tip>
         )}
       </header>
-      <div className="unframed-agent-rail__strip">
+      <div className="relative shrink-0">
         <TabStrip client={client} chats={visible} active={active} selectedCount={selectedArtifacts.length} />
         {ui.searchOpen && <ThreadSearch client={client} chats={chats} onClose={() => client.setUi({ searchOpen: false })} />}
       </div>
-      <div className="unframed-agent-rail__body">
+      <div className="relative flex min-h-0 flex-1 flex-col">
         {none && statuses ? (
           <NoProvider client={client} />
         ) : active ? (
           <Transcript client={client} chatId={active} embedded={embedded === true} {...(onLocate ? { onLocate } : {})} {...(onOpenEditor ? { onOpenEditor } : {})} />
         ) : (
-          <div className="unframed-agent-transcript">
-            <p className="unframed-agent-empty">{EMPTY_CHAT}</p>
+          <div className="flex min-h-0 flex-1 flex-col p-3.5" data-testid="transcript">
+            <p className="m-0 mt-auto text-xs text-muted-foreground">{EMPTY_CHAT}</p>
           </div>
         )}
       </div>
       {errorLine !== undefined && (
-        <p role="alert" className="unframed-agent-rail__error">
-          {errorLine}
-        </p>
+        <Alert variant="error" className="mx-2.5 mb-2">
+          <AlertDescription>{errorLine}</AlertDescription>
+        </Alert>
       )}
       <ConfirmDialog
         open={confirmDelete}
@@ -198,7 +203,7 @@ export const AgentRail = ({ project, embedded, filterTo, onLocate, onOpenEditor,
           <DiffPanel key={activeChat.id} client={client} chat={activeChat} diff={ui.diff} />
         </Suspense>
       )}
-      <div className="unframed-agent-rail__composer">
+      <div className="shrink-0 px-2.5 pb-2.5">
         <AgentTray client={client} variant="rail" chatId={active} newChatTags={selectedArtifacts} dropTarget={root} />
       </div>
     </aside>

@@ -93,7 +93,6 @@
     // Surfaces spec 12 has not moved onto the kit yet. Each task removes its files; the sweep (task 24) leaves this empty.
     {
       "files": [
-        "src/agent/AgentHost.tsx",
         "src/agent/ConfirmDialog.tsx",
         "src/agent/composer/AgentTray.tsx",
         "src/agent/composer/AttachmentShelf.tsx",
@@ -104,10 +103,6 @@
         "src/agent/composer/pickers.tsx",
         "src/agent/composer/stash.tsx",
         "src/agent/diff/DiffPanel.tsx",
-        "src/agent/rail/AgentRail.tsx",
-        "src/agent/rail/NoProvider.tsx",
-        "src/agent/rail/TabStrip.tsx",
-        "src/agent/rail/ThreadSearch.tsx",
         "src/agent/transcript/ChatMarkdown.tsx",
         "src/agent/transcript/PlanCard.tsx",
         "src/agent/transcript/RecapCard.tsx",
