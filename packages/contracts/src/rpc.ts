@@ -5,6 +5,7 @@ import { UnframedError } from "./errors.ts";
 import { ImagePricingAnswer, ImageRunRequest, ModelsListAnswer, ModelsListRequest, ResultRecipe, RunEvent, RunStarted } from "./generation.ts";
 import { Health, Settings, SettingsPatch } from "./settings.ts";
 import { VideoForget, VideoPoll, VideoStart } from "./video.ts";
+import { OAuthCancel, OAuthPending, OAuthStart, OAuthStatus, ProjectsDelete, ProjectsRename, SettingsRemoveKey } from "./openRouterKey.ts";
 import { RunText, TextComplete } from "./text.ts";
 import { LibraryCopyFiles, LibraryDelete, LibraryList, LibrarySave } from "./library.ts";
 import {
@@ -236,6 +237,13 @@ export const UnframedRpcs = RpcGroup.make(
   SettingsPickFolder,
   ProjectsList,
   ProjectsCreate,
+  SettingsRemoveKey,
+  OAuthStart,
+  OAuthPending,
+  OAuthCancel,
+  OAuthStatus,
+  ProjectsRename,
+  ProjectsDelete,
   FilesReveal,
   PreferencesGet,
   PreferencesSet,

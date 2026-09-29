@@ -19,6 +19,7 @@ import { copyPresetFiles } from "../library/presetCopier.ts";
 import { PresetStore } from "../library/presetStore.ts";
 import { ProviderDetection } from "../agent/detection.ts";
 import { Agents } from "../agent/layer.ts";
+import { Lifecycle } from "../lifecycle.ts";
 
 export const rpcHandlersLayer = UnframedRpcs.toLayer(
   Effect.gen(function* () {
@@ -36,6 +37,7 @@ export const rpcHandlersLayer = UnframedRpcs.toLayer(
     const presets = yield* PresetStore;
     const detection = yield* ProviderDetection;
     const agents = yield* Agents;
+    const lifecycle = yield* Lifecycle;
     const context = yield* Effect.context<SettingsStore | Projects | Native>();
 
     const testOnly = <A, E>(run: () => Effect.Effect<A, E>) =>
@@ -45,7 +47,7 @@ export const rpcHandlersLayer = UnframedRpcs.toLayer(
       "server.health": () => Effect.map(settings.view, (view) => ({ ...view, ok: true as const })),
       "settings.get": () => settings.view,
       "settings.update": (patch) =>
-        Effect.tap(settings.update(patch), () =>
+        Effect.tap(lifecycle.updateSettings(patch), () =>
           Effect.andThen(clearStoredModels(preferences, patch), () =>
             Effect.all([
               patch.claudePath !== undefined || patch.claudeConfigDir !== undefined ? detection.forget("claude") : Effect.void,
@@ -54,6 +56,13 @@ export const rpcHandlersLayer = UnframedRpcs.toLayer(
           ),
         ),
       "settings.subscribe": () => settings.subscribe,
+      "settings.removeKey": () => Effect.fail(unframedError("unavailable", "Not yet.")),
+      "oauth.start": () => Effect.fail(unframedError("unavailable", "Not yet.")),
+      "oauth.pending": () => Effect.fail(unframedError("unavailable", "Not yet.")),
+      "oauth.cancel": () => Effect.fail(unframedError("unavailable", "Not yet.")),
+      "oauth.status": () => Effect.fail(unframedError("unavailable", "Not yet.")),
+      "projects.rename": () => Effect.fail(unframedError("unavailable", "Not yet.")),
+      "projects.delete": () => Effect.fail(unframedError("unavailable", "Not yet.")),
       "settings.pickFolder": () =>
         Effect.map(Effect.flatMap(settings.outputDir, native.pickFolder), (path) => ({ path })),
       "projects.list": () => Effect.map(projects.list, (list) => ({ projects: [...list] })),
