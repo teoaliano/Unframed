@@ -6,8 +6,6 @@ import { Sparkles } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { useEditor, type TLShapeId } from "tldraw";
-import "./rail/rail.css";
-import "./diff/diff.css";
 import { registerSlot, type AgentTrayProps } from "../chrome/slots.ts";
 import { useSlots } from "../chrome/slots.ts";
 import { Button } from "~/components/ui/button";

@@ -6,6 +6,7 @@ import { putRecords, promptRecord } from "./media.ts";
 import { artifactColumn, expect, openRail, rail, rpcOf, say, scriptFolder, startAgentEngine } from "./agent.ts";
 import { test as base } from "./fixtures.ts";
 import type { TestEngine } from "../../engine/test/engineProcess.ts";
+import { expectSlot, expectToken, inBothSchemes, tokenColor } from "./kit.ts";
 
 const SCRIPT = {
   when: "^rewrite",
@@ -54,7 +55,7 @@ test("View diff opens the panel on that page: its turn, the changed file with it
   const files = diff.getByRole("navigation", { name: "Changed files" }).getByRole("button");
   await expect(files).toHaveText(["Landing+2−1"]);
   const patch = diff.locator("[data-diff-file='shape:pg1']");
-  await expect(patch.locator(".unframed-agent-diff__names")).toHaveText("landing-v1.html → landing-v2.html");
+  await expect(patch.getByTestId("diff-names")).toHaveText("landing-v1.html → landing-v2.html");
   await expect(patch).toContainText("Landing, again");
   // Highlighted as HTML: a tag name is coloured apart from the text between tags.
   const colourOf = (text: string) =>
@@ -124,4 +125,32 @@ test("Stacked and Split are remembered; line wrapping and whitespace say what th
   const again = await openRail(page);
   await again.getByTestId("recap-card").first().getByRole("button", { name: "View diff" }).click();
   await expect(diffPanel(page).getByRole("button", { name: "Split diff view" })).toHaveAttribute("aria-pressed", "true");
+});
+
+test("the diff panel is t3code's diff panel shell: kit header controls, t3code's diff colours, and its injected CSS on the renderer's surface", async ({ page, agent }) => {
+  const panel = await twoTurns(page, agent);
+  await panel.getByTestId("recap-card").first().getByRole("button", { name: "View diff" }).click();
+  const diff = diffPanel(page);
+  const patch = diff.locator("[data-diff-file='shape:pg1']");
+  await expect(patch).toContainText("Landing, again");
+  /** The background the renderer paints its diff body with, inside its shadow root. */
+  const surface = () =>
+    patch.evaluate((element) => {
+      const all = (scope: Element | ShadowRoot): Element[] => [...scope.querySelectorAll("*")].flatMap((node) => [node, ...(node.shadowRoot ? all(node.shadowRoot) : [])]);
+      const body = all(element).find((node) => node.hasAttribute("data-diff"));
+      return body ? getComputedStyle(body).backgroundColor : undefined;
+    });
+  await inBothSchemes(page, async () => {
+    await page.mouse.move(10, 400);
+    await expectToken(diff, "background-color", "--background");
+    await expectToken(diff, "border-top-color", "--color-border");
+    await expectSlot(diff.getByRole("button", { name: /^Diff scope/ }), "menu-trigger");
+    await expectSlot(diff.getByRole("button", { name: "Stacked diff view" }), "toggle");
+    await expectSlot(diff.getByRole("button", { name: "Enable line wrapping" }), "tooltip-trigger");
+    const files = diff.getByRole("navigation", { name: "Changed files" });
+    await expectToken(files.getByTestId("diff-additions"), "color", "--diff-addition");
+    await expectToken(files.getByTestId("diff-deletions"), "color", "--diff-deletion");
+    const code = await tokenColor(page, "--code-background");
+    await expect.poll(surface).toBe(code);
+  });
 });
