@@ -4,7 +4,7 @@
  * hold, the snapshot stream and the preview origin's port.
  */
 import { Sparkles } from "lucide-react";
-import { lazy, Suspense, useCallback, useEffect, useRef, type SyntheticEvent } from "react";
+import { lazy, Suspense, useCallback, useEffect, type SyntheticEvent } from "react";
 import { createPortal } from "react-dom";
 import { useEditor, useValue, type Editor, type TLCamera, type TLShapeId } from "tldraw";
 import "./artifacts.css";
@@ -103,12 +103,10 @@ export const ArtifactsHost = () => {
 const EditorOverlay = ({ editor, shapeId }: { readonly editor: Editor; readonly shapeId: TLShapeId }) => {
   const host = editor.getContainer().parentElement;
   const close = useCallback(() => closeArtifactEditor(editor), [editor]);
-  const blurred = useRef(false);
 
   useEffect(() => {
     host?.setAttribute("data-artifact-editor", "");
     editor.blur();
-    blurred.current = true;
     // Keep the canvas out of the keyboard's way for as long as the editor is open.
     const stop = editor.store.listen(() => {
       if (editor.getInstanceState().isFocused) editor.blur();
@@ -116,6 +114,8 @@ const EditorOverlay = ({ editor, shapeId }: { readonly editor: Editor; readonly 
     return () => {
       stop();
       host?.removeAttribute("data-artifact-editor");
+      // Back on the canvas, the keyboard is the canvas's again: Cmd-Z undoes a dial change.
+      if (!editor.isDisposed) editor.focus();
     };
   }, [editor, host]);
 
