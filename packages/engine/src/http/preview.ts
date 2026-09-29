@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { pipeline } from "node:stream/promises";
 import { loopbackGuard, projectSlug } from "@unframed/domain";
 import { NOT_FOUND } from "./respond.ts";
-import { refuseUpgrade } from "./guard.ts";
+import { guardUpgrade, refuseUpgrade } from "./guard.ts";
 
 /**
  * The preview origin (spec 09): a second loopback listener that serves artifact files and
@@ -170,7 +170,9 @@ export const startPreviewOrigin = async (outputDir: () => Promise<string>): Prom
         else res.destroy();
       });
     });
-    server.on("upgrade", (_req, socket) => refuseUpgrade(socket, 404, NOT_FOUND));
+    server.on("upgrade", (req, socket) => {
+      if (guardUpgrade(req, socket)) refuseUpgrade(socket, 404, NOT_FOUND);
+    });
     return server;
   };
   for (let attempt = 0; ; attempt++) {
