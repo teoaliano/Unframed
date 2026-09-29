@@ -140,10 +140,13 @@ const makeArtifactUtil = (kind: Kind) =>
       return resizeBox(shape, info, { minWidth: ARTIFACT_MIN.w, minHeight: ARTIFACT_MIN.h, maxWidth: ARTIFACT_MAX.w, maxHeight: ARTIFACT_MAX.h });
     }
 
-    /** Double-click opens the editor; it never enters tldraw's editing state. */
+    /**
+     * Double-click opens the editor; it never enters tldraw's editing state. It answers an
+     * empty change, because answering none makes tldraw put a new prompt where it landed.
+     */
     override onDoubleClick(shape: ArtifactShape) {
       currentSlots().openArtifact?.(this.editor, shape.id);
-      return undefined;
+      return { id: shape.id, type: shape.type };
     }
   };
 
