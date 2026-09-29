@@ -157,7 +157,7 @@ export const PromptEditor = ({ placeholder, label, onChange, onTrigger, onKey, o
         strike: false,
         listKeymap: false,
       }),
-      Placeholder.configure({ placeholder: () => placeholderRef.current }),
+      Placeholder.configure({ placeholder: () => placeholderRef.current, showOnlyWhenEditable: false }),
       ChipNode,
     ],
     content: { type: "doc", content: [{ type: "paragraph" }] },

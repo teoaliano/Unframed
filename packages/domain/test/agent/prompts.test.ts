@@ -18,6 +18,7 @@ import {
   FAILURE_NO_SUBTYPE,
   FAILURE_OTHER_SUBTYPE,
   FAILURE_SENTENCES,
+  IMPLEMENT_PLAN_PROMPT,
   PLAN_CAPTURED_MESSAGE,
   PLAN_NO_WRITES_MESSAGE,
   QUIT_MID_TURN,
@@ -60,6 +61,10 @@ describe("the agent's model-facing text is the assets' text", () => {
     expect(PLAN_NO_WRITES_MESSAGE).toBe(blocks("plan-no-writes.md")[0]);
     expect(CODEX_PLAN_MODE_INSTRUCTIONS).toBe(blocks("plan-mode.md")[0]);
     expect([CHAT_TITLE_SYSTEM_PROMPT, CHAT_TITLE_PROMPT]).toEqual(blocks("chat-title.md"));
+  });
+
+  it("holds the text Implement sends before the plan", () => {
+    expect(IMPLEMENT_PLAN_PROMPT).toBe(blocks("implement-plan.md")[0]);
   });
 
   it("holds the Claude catalogue", () => {

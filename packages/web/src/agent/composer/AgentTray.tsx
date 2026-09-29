@@ -1,5 +1,18 @@
 import type { ChatAttachment, ModelSelection } from "@unframed/contracts";
-import { continuableChat, DEFAULT_RUNTIME_MODE, pasteBecomesFile, pastedTextFileName, tabLabel, type InteractionMode, type RuntimeMode } from "@unframed/domain";
+import {
+  actionablePlan,
+  continuableChat,
+  DEFAULT_RUNTIME_MODE,
+  implementPlanText,
+  implementPlanTitle,
+  openRequests,
+  pasteBecomesFile,
+  pastedTextFileName,
+  tabLabel,
+  type InteractionMode,
+  type RuntimeMode,
+  type UserQuestion,
+} from "@unframed/domain";
 import { ArrowLeft, ArrowUp, Paperclip, Square } from "lucide-react";
 import { createPortal } from "react-dom";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from "react";
@@ -12,6 +25,7 @@ import { latestCompletedTool, returnQueued, sendQueued } from "../queue.tsx";
 import { Tip } from "../../chrome/ui.tsx";
 import { formatSize, useAttachments } from "./attachments.ts";
 import { StashMenu, useStash } from "./stash.tsx";
+import { ApprovalPanel, choiceOnly, openQuestion, PlanActions, PlanReady, QuestionPanel } from "./panels.tsx";
 import { platform } from "../../canvas/platform.ts";
 import { showNotice } from "../../toasts.tsx";
 import { AttachmentShelf } from "./AttachmentShelf.tsx";
@@ -342,8 +356,114 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
     return false;
   };
 
-  const placeholder = none ? PLACEHOLDERS.noProvider : PLACEHOLDERS.default;
-  const canSend = !none && !sending && (text.trim() !== "" || attachments.staged.length > 0);
+  // What waits on the person in this chat: an approval, a question, a plan to implement.
+  const approvalPending = variant === "rail" && chat !== undefined && openRequests(chat, "approval").length > 0;
+  const asked = variant === "rail" ? openQuestion(chat) : undefined;
+  const [questionIndex, setQuestionIndex] = useState(0);
+  const [chosen, setChosen] = useState<Record<string, ReadonlyArray<string>>>({});
+  const ownAnswers = useRef<Record<string, string>>({});
+  const [submitting, setSubmitting] = useState(false);
+  useEffect(() => {
+    setQuestionIndex(0);
+    setChosen({});
+    ownAnswers.current = {};
+  }, [asked?.requestId]);
+  const question = asked?.questions[questionIndex];
+  const answering = asked !== undefined && question !== undefined;
+  const planFollowUp = variant === "rail" && chat !== undefined && !running && !answering && interactionMode === "plan" && attachments.staged.length === 0 ? actionablePlan(chat) : undefined;
+
+  const placeholder = approvalPending
+    ? PLACEHOLDERS.approval
+    : answering
+      ? choiceOnly(question)
+        ? PLACEHOLDERS.choiceOnly
+        : PLACEHOLDERS.customAnswer
+      : planFollowUp
+        ? PLACEHOLDERS.planFollowUp
+        : none
+          ? PLACEHOLDERS.noProvider
+          : PLACEHOLDERS.default;
+
+  /** One question's answer: what was typed for it, else the options chosen. */
+  const answerOf = (current: UserQuestion, typed: string): string | string[] | undefined => {
+    if (typed.trim() !== "") return typed.trim();
+    const picked = chosen[current.id] ?? [];
+    if (picked.length === 0) return undefined;
+    return current.multiSelect ? [...picked] : picked[0];
+  };
+  const questionAnswered = answering && answerOf(question, text) !== undefined;
+  const allAnswered = answering && asked.questions.every((each) => answerOf(each, each.id === question.id ? text : (ownAnswers.current[each.id] ?? "")) !== undefined);
+  const lastQuestion = answering && questionIndex === asked.questions.length - 1;
+  const canSend = answering ? !submitting && (lastQuestion ? allAnswered : questionAnswered) : planFollowUp ? !sending : !none && !sending && (text.trim() !== "" || attachments.staged.length > 0);
+
+  const moveQuestion = (index: number) => {
+    if (!asked || !question) return;
+    ownAnswers.current = { ...ownAnswers.current, [question.id]: box.current?.text() ?? "" };
+    setQuestionIndex(index);
+    const next = asked.questions[index];
+    box.current?.setText(next ? (ownAnswers.current[next.id] ?? "") : "");
+  };
+  const chooseOption = (current: UserQuestion, label: string) => {
+    setChosen((known) => {
+      const was = known[current.id] ?? [];
+      const next = current.multiSelect ? (was.includes(label) ? was.filter((item) => item !== label) : [...was, label]) : [label];
+      return { ...known, [current.id]: next };
+    });
+    if (!current.multiSelect && asked && questionIndex < asked.questions.length - 1) {
+      setTimeout(() => moveQuestion(questionIndex + 1), 200);
+    }
+  };
+  /** Send while a question waits: the next question, or every answer at once from the last. */
+  const answer = async () => {
+    if (!asked || !question || !chat || !canSend) return;
+    if (!lastQuestion) return moveQuestion(questionIndex + 1);
+    const typed = { ...ownAnswers.current, [question.id]: box.current?.text() ?? "" };
+    const answers: Record<string, string | string[]> = {};
+    for (const each of asked.questions) {
+      const value = answerOf(each, typed[each.id] ?? "");
+      if (value !== undefined) answers[each.id] = value;
+    }
+    setSubmitting(true);
+    try {
+      await client.dispatch({ type: "thread.user-input.respond", threadId: chat.id, requestId: asked.requestId, answers });
+      box.current?.clear();
+    } catch (error) {
+      client.setUi({ error: messageOf(error) });
+    } finally {
+      setSubmitting(false);
+    }
+  };
+  const dismissQuestion = () => {
+    if (!asked || !chat) return;
+    void client.dispatch({ type: "thread.user-input.dismiss", threadId: chat.id, requestId: asked.requestId }).catch(fail);
+  };
+
+  /** Implement: the chat back to building, then the plan after t3code's prefix; or the same in a new chat named after it. */
+  const implementPlan = async (inNewChat: boolean) => {
+    if (!chat || !planFollowUp || sending) return;
+    const message = { text: implementPlanText(planFollowUp.planMarkdown), selection: [], attachments: [] };
+    const source = { sourceProposedPlan: { threadId: chat.id, planId: planFollowUp.id } };
+    setSending(true);
+    client.setUi({ error: undefined });
+    try {
+      if (inNewChat) {
+        const target = await createChat(
+          client,
+          { modelSelection: chat.modelSelection, runtimeMode: chat.runtimeMode, interactionMode: "default", tags: chat.tags, title: implementPlanTitle(planFollowUp.planMarkdown) },
+          message.text,
+        );
+        client.setUi({ chosen: target, pinned: null });
+        await sendMessage(client, target, message, source);
+      } else {
+        await client.dispatch({ type: "thread.interaction-mode.set", threadId: chat.id, interactionMode: "default" });
+        await sendMessage(client, chat.id, message, source);
+      }
+    } catch (error) {
+      client.setUi({ error: messageOf(error) });
+    } finally {
+      setSending(false);
+    }
+  };
 
   const followUp = useFollowUp(client);
   const stash = useStash(client.engine, client.project);
@@ -368,8 +488,10 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
       setStashOpen(true);
     }
   };
-  const send = useCallback(async (invert = false) => {
+  const send = async (invert = false) => {
+    if (answering) return answer();
     const message = box.current?.text() ?? "";
+    if (planFollowUp && message.trim() === "") return implementPlan(false);
     if (none || (message.trim() === "" && attachments.staged.length === 0) || sending) return;
     setSending(true);
     client.setUi({ error: undefined });
@@ -401,7 +523,7 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
     } finally {
       setSending(false);
     }
-  }, [none, sending, client, chatId, selection, draftRuntime, draftInteraction, newChatTags, beforeSend, onSent, canvas, chips, attachments, followUp]);
+  };
 
   // A draft handed back to this chat (a cancelled queued message, Edit from here) lands in the box.
   const handoffs = useHandoffVersion(client);
@@ -428,6 +550,9 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
   return (
     <div className="unframed-agent-tray" data-variant={variant} data-testid="agent-tray" ref={root}>
       {top}
+      {approvalPending && chat && <ApprovalPanel client={client} chat={chat} />}
+      {asked && question && <QuestionPanel state={{ ...asked, index: questionIndex, chosen }} onChoose={chooseOption} onDismiss={dismissQuestion} />}
+      {planFollowUp && <PlanReady plan={planFollowUp} />}
       {dragging &&
         dropElement &&
         createPortal(
@@ -454,6 +579,7 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
           onSubmit={(event) => void send(platform() === "darwin" ? event.metaKey : event.ctrlKey)}
           onPaste={onPaste}
           handle={box}
+          disabled={answering && choiceOnly(question)}
           autofocus={variant === "toolbar"}
         />
         {menu && <ComposerMenu label={menu.label} items={menu.items} highlight={highlight} empty={menu.empty} anchor={boxElement} onPick={menu.pick} onHighlight={setHighlight} />}
@@ -524,9 +650,24 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
                 <Square size={12} aria-hidden fill="currentColor" />
               </button>
             )}
-            <button type="button" className="unframed-agent-send" aria-label={running ? "Queue message" : "Send"} disabled={!canSend} onClick={() => void send()}>
-              <ArrowUp size={15} aria-hidden />
-            </button>
+            {answering ? (
+              <>
+                {questionIndex > 0 && (
+                  <button type="button" className="unframed-agent-button" disabled={submitting} onClick={() => moveQuestion(questionIndex - 1)}>
+                    Previous
+                  </button>
+                )}
+                <button type="button" className="unframed-agent-button unframed-agent-button--primary" disabled={!canSend} onClick={() => void answer()}>
+                  {submitting ? "Submitting..." : !lastQuestion ? "Next question" : questionIndex > 0 ? "Submit answers" : "Submit answer"}
+                </button>
+              </>
+            ) : planFollowUp ? (
+              <PlanActions refine={text.trim() !== ""} busy={sending} onSend={() => void send()} onNewChat={() => void implementPlan(true)} />
+            ) : (
+              <button type="button" className="unframed-agent-send" aria-label={running ? "Queue message" : "Send"} disabled={!canSend} onClick={() => void send()}>
+                <ArrowUp size={15} aria-hidden />
+              </button>
+            )}
           </div>
         </div>
       </div>

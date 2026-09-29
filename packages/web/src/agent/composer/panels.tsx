@@ -1,6 +1,6 @@
 import { Menu } from "@base-ui/react/menu";
 import type { ApprovalDecision } from "@unframed/contracts";
-import { openRequests, type Chat, type ChatActivity, type UserQuestion } from "@unframed/domain";
+import { openRequests, planTitle, type Chat, type ChatActivity, type ProposedPlan, type UserQuestion } from "@unframed/domain";
 import { ChevronDown, ChevronRight, Ellipsis, ListChecks, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { itemClass, popupClass } from "../../chrome/ui.tsx";
@@ -131,7 +131,8 @@ export const QuestionPanel = ({
     if (!question) return;
     const onKey = (event: KeyboardEvent) => {
       const target = event.target as HTMLElement | null;
-      if (target?.closest("input, textarea, [contenteditable='true']")) return;
+      if (event.metaKey || event.ctrlKey || event.altKey || event.shiftKey) return;
+      if (target?.closest("input, textarea, select, [contenteditable='true']")) return;
       const n = Number(event.key);
       if (!Number.isInteger(n) || n < 1 || n > 9) return;
       const option = question.options[n - 1];
@@ -139,8 +140,9 @@ export const QuestionPanel = ({
       event.preventDefault();
       onChoose(question, option.label);
     };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
+    // Capture: the rail stops keys from bubbling to the document, where tldraw listens.
+    window.addEventListener("keydown", onKey, true);
+    return () => window.removeEventListener("keydown", onKey, true);
   }, [question, onChoose]);
   if (!question) return null;
   const chosen = state.chosen[question.id] ?? [];
@@ -185,5 +187,51 @@ export const QuestionPanel = ({
         </>
       )}
     </section>
+  );
+};
+
+// ---------------------------------------------------------------------------------------
+// A plan ready to implement.
+
+/** Above the composer once a plan waits (t3code's banner): "Plan ready" and its title. */
+export const PlanReady = ({ plan }: { readonly plan: ProposedPlan }) => {
+  const title = planTitle(plan.planMarkdown);
+  return (
+    <section className="unframed-agent-banner" data-testid="plan-ready">
+      <span className="unframed-agent-banner__label">Plan ready</span>
+      {title !== undefined && <span className="unframed-agent-banner__title">{title}</span>}
+    </section>
+  );
+};
+
+/** In place of Send while a plan waits: Refine with a draft, else Implement and its menu. */
+export const PlanActions = ({ refine, busy, onSend, onNewChat }: { readonly refine: boolean; readonly busy: boolean; readonly onSend: () => void; readonly onNewChat: () => void }) => {
+  if (refine) {
+    return (
+      <button type="button" className="unframed-agent-button unframed-agent-button--primary" disabled={busy} onClick={onSend}>
+        {busy ? "Sending..." : "Refine"}
+      </button>
+    );
+  }
+  return (
+    <div className="unframed-agent-split" data-testid="implement-actions">
+      <button type="button" className="unframed-agent-button unframed-agent-button--primary" disabled={busy} onClick={onSend}>
+        {busy ? "Sending..." : "Implement"}
+      </button>
+      <Menu.Root>
+        <Menu.Trigger className="unframed-agent-button unframed-agent-button--primary" aria-label="Implementation actions" disabled={busy}>
+          <ChevronDown size={13} aria-hidden />
+        </Menu.Trigger>
+        <Menu.Portal>
+          <Menu.Positioner side="top" align="end" sideOffset={4} className="z-[1100]">
+            <Menu.Popup className={popupClass}>
+              <Menu.Item className={itemClass} onClick={onNewChat}>
+                Implement in a new chat
+              </Menu.Item>
+            </Menu.Popup>
+          </Menu.Positioner>
+        </Menu.Portal>
+      </Menu.Root>
+    </div>
   );
 };

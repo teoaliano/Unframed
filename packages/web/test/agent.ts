@@ -131,7 +131,7 @@ export const dispatch = async (engine: TestEngine, command: Record<string, unkno
 /** Creates a chat through the engine, named when `title` is given; answers its id. */
 export const createChat = async (
   engine: TestEngine,
-  fields: { id?: string; title?: string; tags?: string[]; createdAt?: string; runtimeMode?: string; provider?: "claude" | "codex" } = {},
+  fields: { id?: string; title?: string; tags?: string[]; createdAt?: string; runtimeMode?: string; interactionMode?: "default" | "plan"; provider?: "claude" | "codex" } = {},
   project = "default",
 ): Promise<string> => {
   const threadId = fields.id ?? `chat-${crypto.randomUUID().slice(0, 8)}`;
@@ -142,6 +142,7 @@ export const createChat = async (
       threadId,
       modelSelection: { provider: fields.provider ?? "claude", model: "", traits: {} },
       ...(fields.runtimeMode ? { runtimeMode: fields.runtimeMode } : {}),
+      ...(fields.interactionMode ? { interactionMode: fields.interactionMode } : {}),
       ...(fields.tags ? { tags: fields.tags } : {}),
       createdAt: fields.createdAt ?? new Date().toISOString(),
     },

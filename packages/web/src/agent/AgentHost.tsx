@@ -10,6 +10,7 @@ import "./agent.css";
 import "./rail/rail.css";
 import "./composer/tray.css";
 import "./composer/pickers.css";
+import "./composer/panels.css";
 import "./transcript/transcript.css";
 import { registerSlot, type AgentTrayProps } from "../chrome/slots.ts";
 import { useSlots } from "../chrome/slots.ts";
