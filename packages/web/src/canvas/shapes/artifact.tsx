@@ -6,7 +6,7 @@ import { ArtifactFrame } from "../../artifacts/ArtifactFrame.tsx";
 import { ProblemLine, RenderRow } from "../../artifacts/RenderRow.tsx";
 import { snapshotsOf, snapshotUrl, stillOf } from "../../artifacts/snapshots.ts";
 import { isInteractive, isLive, previewPort } from "../../artifacts/state.ts";
-import { currentSlots, useSlots } from "../../chrome/slots.ts";
+import { currentSlots } from "../../chrome/slots.ts";
 import { useCanvasProject } from "../../context.ts";
 import { artifactCardClass } from "./looks.ts";
 import { ShapeLabel } from "./ShapeLabel.tsx";
@@ -33,7 +33,6 @@ const RENDER_ROW_HEIGHT = 34;
 /** An empty artifact: its frame, its kind tab and one Agent button, and why a drop onto it failed. */
 const EmptyArtifact = ({ shape, kind }: { readonly shape: ArtifactShape; readonly kind: ArtifactKind }) => {
   noteRender(shape.id);
-  const { artifactEmptyState: EmptyState } = useSlots();
   const Icon = kind === "page" ? AppWindow : Clapperboard;
   const props = shape.props as ArtifactShapeProps;
   return (
@@ -44,7 +43,6 @@ const EmptyArtifact = ({ shape, kind }: { readonly shape: ArtifactShape; readonl
         </ShapeLabel>
         <div className="flex h-full flex-col items-center justify-center gap-3 text-muted-foreground">
           <Icon className="size-7" strokeWidth={1.5} aria-label={kind === "page" ? "Page" : "Motion"} />
-          {EmptyState && <EmptyState shapeId={shape.id} />}
         </div>
       </HTMLContainer>
       <ProblemLine shapeId={shape.id} offset={props.h} width={props.w} />

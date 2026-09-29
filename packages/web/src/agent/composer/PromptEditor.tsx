@@ -165,7 +165,7 @@ export const PromptEditor = ({ placeholder, label, onChange, onTrigger, onKey, o
     autofocus: autofocus === true ? "end" : false,
     editorProps: {
       attributes: {
-        class: "block min-h-10.5 whitespace-pre-wrap break-words bg-transparent leading-relaxed text-foreground focus:outline-none",
+        class: "block min-h-12 whitespace-pre-wrap break-words bg-transparent leading-relaxed text-foreground focus:outline-none",
         "data-agent-prompt": "",
         "aria-label": label,
         role: "textbox",

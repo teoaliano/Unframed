@@ -1,10 +1,10 @@
 import { openCanvas, roomRecords, settledRecord, shapeOnScreen, waitForRoom } from "./canvas.ts";
 import { expect, test } from "./fixtures.ts";
-import { clickShape, composer } from "./generation.ts";
+import { clickShape, composer, toolbar } from "./generation.ts";
 import { putRecords } from "./media.ts";
 import { artifactShape, filledArtifact, frameOf } from "./artifacts.ts";
 
-test("the add menu makes empty pages and motions of 480 by 320 with their kind tab and one Agent button", async ({ page, engine }) => {
+test("the add menu makes empty pages and motions of 480 by 320 with their kind tab and icon, and no button", async ({ page, engine }) => {
   await openCanvas(page, engine);
   for (const label of ["Page", "Motion"] as const) {
     const before = new Set((await roomRecords(engine, "default")).map((record) => record.id));
@@ -15,20 +15,18 @@ test("the add menu makes empty pages and motions of 480 by 320 with their kind t
     const card = shapeOnScreen(page, made.id);
     await expect(card.locator("[data-shape-label]")).toHaveText(label.toLowerCase());
     await expect(card.locator("[data-testid='artifact-card']")).toHaveCSS("border-top-width", "1px");
-    await expect(card.getByRole("button")).toHaveCount(1);
-    await expect(card.getByRole("button", { name: "Agent" })).toBeVisible();
-    await expect(card.getByRole("button", { name: "Agent" }).locator("svg")).toHaveCount(1);
+    await expect(card.getByRole("img", { name: label })).toBeVisible();
+    await expect(card.getByRole("button")).toHaveCount(0);
     await page.keyboard.press("Escape");
   }
 });
 
-test("the Agent button selects that artifact alone and opens the composer's Agent tray on it", async ({ page, engine }) => {
+test("an empty artifact, selected, offers Agent in the toolbar, which opens the Agent tray on it", async ({ page, engine }) => {
   await openCanvas(page, engine);
   await putRecords(engine, [artifactShape({ id: "shape:empty", kind: "page", ref: "150", at: { x: 400, y: 80 } })]);
   await expect(shapeOnScreen(page, "shape:empty")).toBeVisible();
-  // Something else is selected first: the button leaves the page selected alone.
-  await clickShape(page, "shape:starter-subject");
-  await shapeOnScreen(page, "shape:empty").getByRole("button", { name: "Agent" }).click();
+  await clickShape(page, "shape:empty");
+  await toolbar(page).getByRole("button", { name: "Agent" }).click();
   await expect(composer(page)).toHaveAttribute("data-tray", "agent");
   await expect(composer(page).getByRole("list", { name: "Context" }).getByRole("listitem")).toHaveCount(1);
   await expect(shapeOnScreen(page, "shape:empty")).toHaveAttribute("data-label-active", "true");

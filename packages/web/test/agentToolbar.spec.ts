@@ -43,6 +43,14 @@ test("an empty page's bar is Agent alone, with no separator before it; its tray 
   // The tray draws its own shell; the floating element around it draws none.
   await expect(toolbar(page)).toHaveCSS("border-top-width", "0px");
   await expect(toolbar(page)).toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
+  // The prompt box hugs its placeholder, then scrolls from its 180 px cap.
+  const scroller = composer(page).locator("[data-scrolls='true']").first();
+  const fits = () => scroller.evaluate((element) => element.scrollHeight <= element.clientHeight);
+  expect(await fits()).toBe(true);
+  await promptBox(composer(page)).click();
+  for (let line = 0; line < 12; line++) await page.keyboard.press("Shift+Enter");
+  expect(await fits()).toBe(false);
+  expect((await scroller.boundingBox())!.height).toBe(180);
 });
 
 test("Agent on the toolbar is an outline button, and opens the Agent tray saying which chat the message continues, with the switch", async ({ page, agent }) => {

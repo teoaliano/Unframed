@@ -131,12 +131,8 @@ test("deleting the artifact from another tab closes the editor", async ({ page, 
   await expect(shapeOnScreen(page, "shape:landing")).toHaveCount(0);
 });
 
-test("the empty card's Agent button and the editor's columns, header actions and parameter box are the kit's, in both schemes", async ({ page, agent }) => {
+test("the editor's columns, header actions and parameter box are the kit's, in both schemes", async ({ page, agent }) => {
   await onBoard(page, agent);
-  const agentButton = shapeOnScreen(page, "shape:draft").getByRole("button", { name: "Agent" });
-  await expectSlot(agentButton, "button");
-  await inBothSchemes(page, () => expectToken(agentButton, "background-color", "--primary"));
-
   const at = await centre(shapeOnScreen(page, "shape:landing"));
   await page.mouse.dblclick(at.x, at.y);
   const region = page.getByRole("region", { name: "Editing Landing" });

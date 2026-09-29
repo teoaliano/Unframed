@@ -1,47 +1,19 @@
 /**
- * Artifacts on the canvas (spec 09): the empty artifact's Agent button, the editor's entry
- * point (double-click, the toolbar's Open and the recap card's Open all call it), the frame
+ * Artifacts on the canvas (spec 09): the editor's entry point (double-click, the toolbar's Open and the recap card's Open all call it), the frame
  * hold, the snapshot stream and the preview origin's port.
  */
 import { isArtifactKind } from "@unframed/domain";
-import { Sparkles } from "lucide-react";
-import { lazy, Suspense, useCallback, useEffect, type SyntheticEvent } from "react";
+import { lazy, Suspense, useCallback, useEffect } from "react";
 import { createPortal } from "react-dom";
 import { useEditor, useValue, type Editor, type TLCamera, type TLShapeId } from "tldraw";
-import { Button } from "~/components/ui/button";
 import { registerSlot } from "../chrome/slots.ts";
 import { useCanvasProject, useEngine, useSettings } from "../context.ts";
-import { closeComposer, openComposer } from "../generate/state.ts";
+import { closeComposer } from "../generate/state.ts";
 import { artifactsOf, installFrameHold, previewPort } from "./state.ts";
 import { watchSnapshots } from "./snapshots.ts";
 
 // Loaded with the editor only: DialKit and its stylesheet never reach a board that is not being edited.
 const ArtifactEditor = lazy(() => import("./editor/ArtifactEditor.tsx").then((module) => ({ default: module.ArtifactEditor })));
-
-/** The one small outline button an empty artifact shows: it selects the shape alone and opens the Agent tray on it. */
-const AgentButton = ({ shapeId }: { readonly shapeId: string }) => {
-  const editor = useEditor();
-  const handled = (event: SyntheticEvent) => editor.markEventAsHandled(event);
-  return (
-    // The empty card takes no pointer events; its one button does.
-    <Button
-      variant="outline"
-      size="sm"
-      className="pointer-events-auto"
-      onPointerDown={handled}
-      onPointerUp={handled}
-      onDoubleClick={handled}
-      onClick={(event) => {
-        handled(event);
-        editor.select(shapeId as TLShapeId);
-        openComposer(editor, "agent");
-      }}
-    >
-      <Sparkles aria-hidden />
-      Agent
-    </Button>
-  );
-};
 
 /** What opening the editor saved, to put back on close. */
 interface Opened {
@@ -86,7 +58,6 @@ export const ArtifactsHost = () => {
     const stops = [
       installFrameHold(editor),
       watchSnapshots(engine, project),
-      registerSlot("artifactEmptyState", AgentButton),
       registerSlot("openArtifact", openArtifactEditor),
     ];
     return () => {

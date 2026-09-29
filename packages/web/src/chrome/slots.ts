@@ -21,7 +21,6 @@ export interface ChromeSlots {
   settingsButton?: ComponentType;
   libraryButton?: ComponentType;
   addToLibrary?: (editor: Editor) => void;
-  artifactEmptyState?: ComponentType<{ shapeId: string }>;
   /** The composer's Agent tray. The toolbar shows Agent only once one is registered. */
   agentTray?: ComponentType<AgentTrayProps>;
   /** The toolbar's Agent button itself, when the Agent tray's spec draws it (spec 08). */

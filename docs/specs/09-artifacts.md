@@ -26,8 +26,8 @@ This spec also owns the agent's artifact tools (`page_write`, `page_read`, `moti
 
 1. As a person, I want to add an empty page shape from the add menu, so that I have a place for the agent to write into.
 2. As a person, I want to add an empty motion shape from the add menu, so that I can ask for an animation in a specific spot.
-3. As a person, I want an empty artifact to show one "Agent" button, so that the way to fill it is obvious.
-4. As a person, I want the empty artifact's Agent button to select that shape alone and open the composer's Agent tray on it, so that my message is about that artifact.
+3. As a person, I want an empty artifact to show only its kind, and Agent in the selection toolbar when I select it, so that the card stays quiet until I act on it.
+4. As a person, I want the toolbar's Agent on a selected empty artifact to open the composer's Agent tray on it, so that my message is about that artifact.
 5. As a person, I want an empty artifact to keep its frame and name tab, so that it reads as a box asking to be filled.
 6. As a person, I want a filled artifact to drop its card chrome and show only its content, so that the page is the thing I look at.
 7. As a person, I want the artifact's title shown where the tab used to be, so that I can tell pages apart.
@@ -107,7 +107,7 @@ Two custom tldraw shapes, `page` and `motion`, both artifacts. They are the one 
 - Default size from the add menu: 480 by 320 for both kinds. Agent-created: page 480 by 320, motion 480 by 300.
 - Resize is free on both axes. No aspect lock.
 - **Title shown on canvas and in the editor**: `title`, else `fileName` without `.html`/`.htm`, else nothing on the canvas and the shape id in the editor.
-- **Empty** (`file` is ""): the card (spec 12: `--card` fill, the kit border, 14 px radius) keeps its frame and name tab (the kind word, "page" or "motion") and shows one small outline button (Button `outline`) "Agent" with the Sparkles icon, centred. Pressing it selects the shape alone and opens the composer (spec 08) in its Agent tray with that shape as context.
+- **Empty** (`file` is ""): the card (spec 12: `--card` fill, the kit border, 14 px radius) keeps its frame and name tab (the kind word, "page" or "motion") and shows its kind icon, centred, with no button. Selected, it shows Agent alone in the selection toolbar (spec 03), which opens the composer (spec 08) in its Agent tray with that shape as context.
 - **Filled**: no card, no tab, no border. The frame fills the shape. The title sits where spec 02 puts a shape's label, above the top-left corner, and follows spec 02's labels-by-zoom rule.
 - The frame: an iframe with `src` set to the artifact URL on the preview origin, `sandbox="allow-scripts allow-same-origin"`, `referrerpolicy="no-referrer"`, `allow=""`, `loading="lazy"`, white background (the `--artifact-page` token, white in both schemes), no border. It is keyed by `file`, so a new version is a fresh document. It exists only while the shape is live (see "Keeping artifacts off the canvas thread" below); otherwise the shape shows its snapshot.
 - The frame takes pointer events only when the shape is selected and not being dragged or resized. Otherwise every pointer event goes to tldraw.
@@ -412,8 +412,8 @@ A good test drives one of the three seams from 00-index and asserts only on what
 28. A stub render goes queued, rendering, done with non-decreasing progress capped at 99 until 100, places `<ms>-<slug>.mp4` and a render sidecar with no `cost`. Seam: engine
 29. Render `dials` reach the producer as `unframedDials` and are recorded in the sidecar; absent when empty. Seam: engine
 30. A failed render leaves no file in the project and reports the error; `no-chrome` reports the no-Chromium message. Seam: engine
-31. The add menu creates empty page and motion shapes at 480 by 320 showing the kind tab and the Agent button. Seam: browser
-32. The Agent button selects the shape alone and opens the composer's Agent tray on it. Seam: browser
+31. The add menu creates empty page and motion shapes at 480 by 320 showing the kind tab and icon and no button. Seam: browser
+32. A selected empty artifact's toolbar Agent opens the composer's Agent tray on it. Seam: browser
 33. A filled artifact drops its chrome, shows its title line, and resizes freely on both axes. Seam: browser
 34. The frame takes pointer events only when the shape is selected and not dragging. Seam: browser
 35. Dropping `.html` files on the canvas creates page shapes at the drop point, offset 24 each; a failed upload shows the toast. Seam: browser
