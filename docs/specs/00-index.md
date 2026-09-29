@@ -19,7 +19,7 @@ This is a rewrite of an existing app. Every capability the old app had is kept. 
 | Server | Effect (Schema, RPC over one WebSocket, SQL on SQLite, Layers) |
 | Shared contracts | one package of Effect Schemas used by server and web |
 | Canvas | tldraw SDK, with tldraw sync (a sync room per project, served by the engine) |
-| UI | React, Base UI, Tailwind |
+| UI | React, Base UI, Tailwind, with t3code's UI kit and its default light and dark tokens (spec 12) |
 | Chat composer | Tiptap, following t3code's composer (MIT) |
 | Agents | Claude through the Claude Agent SDK, Codex through `codex app-server`, both behind t3code's provider adapter pattern |
 | Tests | Vitest, Playwright |
@@ -114,9 +114,9 @@ These hold across every spec. A spec that needs to bend one must say so explicit
 ## Reference material in this repo
 
 - `assets/brand/`: logo and favicon.
-- `assets/theme/`: the colour and chrome values the UI must match.
+- `assets/theme/`: the old app's colour and chrome values. History only: spec 12 replaced them with t3code's tokens, so they are not the visual reference.
 - `assets/prompts/`: model-facing text to use verbatim (agent system prompt, tool descriptions, repair prompts, starter content, bundled presets).
 - `assets/design/`: the design canvas for selection-based generation. Open the `.dc.html` files in a browser.
-- `assets/screenshots/`: the old app, for visual parity where the specs describe a look.
+- `assets/screenshots/`: the old app. History only since spec 12, not the visual reference.
 - `assets/legacy-samples/`: old-format project and preset files for spec 11.
 - `assets/fixtures/`: scripted-agent scenarios the old app tested against.

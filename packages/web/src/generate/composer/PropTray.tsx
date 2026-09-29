@@ -21,7 +21,7 @@ export interface PropTrayProps {
 }
 
 export const chipClass =
-  "cursor-pointer rounded-inner border-0 bg-transparent px-1 py-0.5 text-[12.5px] text-primary hover:bg-hover data-[popup-open]:bg-hover disabled:cursor-default disabled:text-secondary";
+  "cursor-pointer rounded-md border-0 bg-transparent px-1 py-0.5 text-[12.5px] text-foreground hover:bg-accent data-[popup-open]:bg-accent disabled:cursor-default disabled:text-muted-foreground";
 
 /**
  * The tray below the box: the model chip, one chip per prop that will be sent, and
@@ -127,7 +127,7 @@ export const PropTray = ({ model, catalogueReady, params, extra = [], props, onM
           open={addOpen}
           onOpenChange={setAddOpen}
         >
-          <Menu.Trigger className={`${chipClass} shrink-0 text-secondary`}>+ add prop</Menu.Trigger>
+          <Menu.Trigger className={`${chipClass} shrink-0 text-muted-foreground`}>+ add prop</Menu.Trigger>
           <Menu.Portal>
             <Menu.Positioner side="top" align="end" sideOffset={6} className="z-[1250]">
               <Menu.Popup className={`${popupClass} min-w-[186px]`} aria-label="Add prop">
@@ -146,7 +146,7 @@ export const PropTray = ({ model, catalogueReady, params, extra = [], props, onM
                       }}
                     >
                       <span>{prop.label}</span>
-                      <span className="text-secondary">{shown}</span>
+                      <span className="text-muted-foreground">{shown}</span>
                     </Menu.Item>
                   );
                 })}
@@ -163,7 +163,7 @@ export const PropTray = ({ model, catalogueReady, params, extra = [], props, onM
                       }}
                     >
                       <span>{prop.label}</span>
-                      <span className="text-secondary">{value}</span>
+                      <span className="text-muted-foreground">{value}</span>
                     </Menu.Item>
                   );
                 })}

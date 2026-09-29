@@ -62,7 +62,7 @@ const RunsChip = ({ props, onChange, open, onOpenChange }: TrayPropChipProps) =>
                 inputMode="numeric"
                 autoComplete="off"
                 placeholder="1"
-                className="h-6 w-12 rounded-inner border border-line-strong bg-surface px-1.5 text-right text-[13px] text-primary outline-none focus:border-accent"
+                className="h-6 w-12 rounded-md border border-input bg-card px-1.5 text-right text-[13px] text-foreground outline-none focus:border-primary"
                 value={draft ?? (runs === "free" ? "" : String(runs))}
                 onFocus={fixed}
                 onPointerDown={fixed}
@@ -81,7 +81,7 @@ const RunsChip = ({ props, onChange, open, onOpenChange }: TrayPropChipProps) =>
                     ref={free}
                     type="button"
                     aria-pressed={runs === "free"}
-                    className={`${itemClass} w-full border-0 bg-transparent text-left text-primary aria-pressed:font-semibold`}
+                    className={`${itemClass} w-full border-0 bg-transparent text-left text-foreground aria-pressed:font-semibold`}
                     onClick={() => {
                       setDraft(undefined);
                       set({ [RUNS_KEY]: "free" });
@@ -93,7 +93,7 @@ const RunsChip = ({ props, onChange, open, onOpenChange }: TrayPropChipProps) =>
               </Tooltip.Trigger>
               <Tooltip.Portal>
                 <Tooltip.Positioner side="right" sideOffset={8} className="z-[1260]">
-                  <Tooltip.Popup className="max-w-[280px] rounded-inner bg-accent px-2 py-1 text-[12px] leading-snug text-on-accent shadow-popover">{FREE_TOOLTIP}</Tooltip.Popup>
+                  <Tooltip.Popup className="max-w-[280px] rounded-md bg-primary px-2 py-1 text-[12px] leading-snug text-primary-foreground shadow-lg">{FREE_TOOLTIP}</Tooltip.Popup>
                 </Tooltip.Positioner>
               </Tooltip.Portal>
             </Tooltip.Root>
@@ -106,7 +106,7 @@ const RunsChip = ({ props, onChange, open, onOpenChange }: TrayPropChipProps) =>
             <div className="my-1 h-px bg-[var(--unframed-border)]" role="separator" />
             <button
               type="button"
-              className={`${itemClass} w-full border-0 bg-transparent text-left text-primary`}
+              className={`${itemClass} w-full border-0 bg-transparent text-left text-foreground`}
               onClick={() => {
                 const { [RUNS_KEY]: _runs, ...rest } = props;
                 onChange(rest);

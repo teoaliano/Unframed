@@ -19,7 +19,7 @@ export const BottomRight = () => {
       <Menu.Root>
         <Menu.Trigger
           aria-label="Add"
-          className="flex size-12 cursor-pointer items-center justify-center rounded-container border-0 bg-accent p-0 text-on-accent shadow-chrome hover:bg-[color-mix(in_srgb,var(--unframed-accent)_88%,var(--unframed-on-accent))] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+          className="flex size-12 cursor-pointer items-center justify-center rounded-xl border-0 bg-primary p-0 text-primary-foreground shadow-lg hover:bg-[color-mix(in_srgb,var(--unframed-accent)_88%,var(--unframed-on-accent))] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
         >
           <Plus size={22} aria-hidden />
         </Menu.Trigger>

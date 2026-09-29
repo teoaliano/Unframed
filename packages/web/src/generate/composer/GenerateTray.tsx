@@ -27,8 +27,8 @@ const recipeSources = (recipe: RecipeMode): number =>
   recipe.recipe.references.length + recipe.recipe.selectionPrompt.split(/\n\n+/).filter((part) => part.trim() !== "").length;
 
 const quietButton =
-  "h-6 cursor-pointer rounded-inner border-0 bg-transparent px-1.5 text-[12.5px] text-secondary hover:bg-hover hover:text-primary disabled:cursor-default disabled:opacity-50";
-const plainButton = "h-6 cursor-pointer rounded-inner border border-line bg-transparent px-2 text-[12.5px] text-primary hover:bg-hover";
+  "h-6 cursor-pointer rounded-md border-0 bg-transparent px-1.5 text-[12.5px] text-muted-foreground hover:bg-accent hover:text-foreground disabled:cursor-default disabled:opacity-50";
+const plainButton = "h-6 cursor-pointer rounded-md border border-border bg-transparent px-2 text-[12.5px] text-foreground hover:bg-accent";
 
 /**
  * The line under the tray while the selection is exactly one group: Save as recipe for a
@@ -73,7 +73,7 @@ const RecipeLine = ({
   return (
     <div className="unframed-composer-recipe" data-testid="recipe-line">
       {current && recipeEquals(current, standing) ? (
-        <span className="text-[12.5px] text-secondary">Recipe of @{name}</span>
+        <span className="text-[12.5px] text-muted-foreground">Recipe of @{name}</span>
       ) : (
         <button type="button" className={plainButton} disabled={!current} onClick={save}>
           Update recipe

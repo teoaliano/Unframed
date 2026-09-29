@@ -19,7 +19,7 @@ export const TopCorners = () => {
         <span
           role="img"
           aria-label="Unframed"
-          className="ml-1 block size-7 shrink-0 bg-icon"
+          className="ml-1 block size-7 shrink-0 bg-foreground"
           style={{ mask: `url("${logoUrl}") center / contain no-repeat`, WebkitMask: `url("${logoUrl}") center / contain no-repeat` }}
         />
         <ProjectMenu />

@@ -10,10 +10,10 @@ import type { TrayOverlayProps } from "../mediumRegistry.ts";
 
 const messageOf = (error: unknown) => (error instanceof UnframedError || error instanceof Error ? error.message : String(error));
 
-const labelClass = "m-0 text-[11px] font-medium uppercase tracking-[0.04em] text-secondary";
-const readOnlyClass = "m-0 max-h-[96px] overflow-y-auto whitespace-pre-wrap rounded-element border border-line bg-surface px-2.5 py-2 text-[13px] text-primary";
+const labelClass = "m-0 text-[11px] font-medium uppercase tracking-[0.04em] text-muted-foreground";
+const readOnlyClass = "m-0 max-h-[96px] overflow-y-auto whitespace-pre-wrap rounded-lg border border-border bg-card px-2.5 py-2 text-[13px] text-foreground";
 const buttonClass =
-  "inline-flex h-8 cursor-pointer items-center gap-1.5 rounded-element border-0 px-3 text-[13px] disabled:cursor-default disabled:opacity-50";
+  "inline-flex h-8 cursor-pointer items-center gap-1.5 rounded-lg border-0 px-3 text-[13px] disabled:cursor-default disabled:opacity-50";
 
 /** A run's row: which images it receives. */
 const imagesOf = (used: ReadonlyArray<number> | null): string =>
@@ -69,11 +69,11 @@ const FinalPromptDialog = ({ staged, onClose, onSent }: { staged: StagedFree; on
         <Dialog.Backdrop className="fixed inset-0 z-[1300] bg-[var(--unframed-scrim)] backdrop-blur-[10px] backdrop-saturate-[160%]" />
         <Dialog.Popup
           data-testid="final-prompt"
-          className="fixed left-1/2 top-1/2 z-[1301] flex max-h-[min(760px,calc(100vh-48px))] w-[640px] max-w-[calc(100vw-32px)] -translate-x-1/2 -translate-y-1/2 flex-col gap-3 rounded-container border border-line bg-popover p-5 text-primary shadow-popover outline-none"
+          className="fixed left-1/2 top-1/2 z-[1301] flex max-h-[min(760px,calc(100vh-48px))] w-[640px] max-w-[calc(100vw-32px)] -translate-x-1/2 -translate-y-1/2 flex-col gap-3 rounded-xl border border-border bg-popover p-5 text-foreground shadow-lg outline-none"
         >
           <div>
             <Dialog.Title className="m-0 text-[18px] font-semibold">Final prompt</Dialog.Title>
-            <Dialog.Description className="m-0 mt-1 text-[13px] text-secondary">{subtitle}</Dialog.Description>
+            <Dialog.Description className="m-0 mt-1 text-[13px] text-muted-foreground">{subtitle}</Dialog.Description>
           </div>
           <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto" data-scrolls="true">
             {batch.shared !== "" && (
@@ -93,7 +93,7 @@ const FinalPromptDialog = ({ staged, onClose, onSent }: { staged: StagedFree; on
               <textarea
                 rows={12}
                 spellCheck={false}
-                className="resize-none rounded-element border border-line-strong bg-surface px-2.5 py-2 font-mono text-[12.5px] leading-snug text-primary outline-none focus:border-accent"
+                className="resize-none rounded-lg border border-input bg-card px-2.5 py-2 font-mono text-[12.5px] leading-snug text-foreground outline-none focus:border-primary"
                 value={text}
                 onChange={(event) => setText(event.target.value)}
               />
@@ -101,9 +101,9 @@ const FinalPromptDialog = ({ staged, onClose, onSent }: { staged: StagedFree; on
             {runs > 0 && (
               <ol className="m-0 flex list-none flex-col p-0" aria-label="Runs">
                 {batch.runs.map((run, index) => (
-                  <li key={index} className="flex h-7 items-center justify-between border-b border-line text-[13px] last:border-b-0">
+                  <li key={index} className="flex h-7 items-center justify-between border-b border-border text-[13px] last:border-b-0">
                     <span>Run {index + 1}</span>
-                    <span className="text-secondary">{imagesOf(run.used)}</span>
+                    <span className="text-muted-foreground">{imagesOf(run.used)}</span>
                   </li>
                 ))}
               </ol>
@@ -114,7 +114,7 @@ const FinalPromptDialog = ({ staged, onClose, onSent }: { staged: StagedFree; on
               </p>
             ))}
             {staged.repairNotes.length > 0 && (
-              <p role="status" data-kind="info" className="m-0 text-[12.5px] text-secondary">
+              <p role="status" data-kind="info" className="m-0 text-[12.5px] text-muted-foreground">
                 {staged.repairNotes.join(" · ")}
               </p>
             )}
@@ -130,12 +130,12 @@ const FinalPromptDialog = ({ staged, onClose, onSent }: { staged: StagedFree; on
             )}
           </div>
           <div className="flex justify-end gap-2">
-            <button type="button" className={`${buttonClass} bg-transparent text-primary hover:bg-hover`} onClick={onClose}>
+            <button type="button" className={`${buttonClass} bg-transparent text-foreground hover:bg-accent`} onClick={onClose}>
               Cancel
             </button>
             <button
               type="button"
-              className={`${buttonClass} bg-accent text-on-accent`}
+              className={`${buttonClass} bg-primary text-primary-foreground`}
               disabled={batch.error !== undefined || runs === 0 || sending}
               aria-busy={sending || undefined}
               onClick={() => void confirm()}

@@ -3,7 +3,7 @@ import { Ban, Check, ChevronRight, CircleAlert, LoaderCircle, Square, Users } fr
 import { useState } from "react";
 
 const StateIcon = ({ state, tone }: { readonly state: WorkRow["state"]; readonly tone: WorkRow["tone"] }) => {
-  if (tone === "error" || state === "failed") return <CircleAlert size={12} aria-label="Failed" className="text-error" />;
+  if (tone === "error" || state === "failed") return <CircleAlert size={12} aria-label="Failed" className="text-destructive-foreground" />;
   if (state === "inProgress") return <LoaderCircle size={12} aria-label="In progress" className="animate-spin" />;
   if (state === "declined") return <Ban size={12} aria-label="Declined" />;
   if (state === "stopped") return <Square size={10} aria-label="Stopped" />;

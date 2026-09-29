@@ -23,7 +23,7 @@ export const ProviderLogo = ({ provider, size = 14 }: { readonly provider: Agent
 );
 
 const popupClass =
-  "z-[1100] rounded-container border border-line bg-[var(--unframed-popover-translucent)] p-1 text-[13px] text-primary shadow-popover outline-none backdrop-blur-[var(--unframed-chrome-blur)]";
+  "z-[1100] rounded-xl border border-border bg-[var(--unframed-popover-translucent)] p-1 text-[13px] text-foreground shadow-lg outline-none backdrop-blur-[var(--unframed-chrome-blur)]";
 
 // ---------------------------------------------------------------------------------------
 // The model picker.
@@ -168,7 +168,7 @@ export const ModelPicker = ({ statuses, selection, providerLocked, disabled, ope
                     <button type="button" className="unframed-agent-legacy" aria-expanded={legacyOpen} onClick={() => setLegacyOpen(!legacyOpen)}>
                       <ChevronRight size={13} aria-hidden className="unframed-agent-legacy__chevron" />
                       Legacy models
-                      <span className="ml-auto text-secondary">{`${legacyRows.length} models`}</span>
+                      <span className="ml-auto text-muted-foreground">{`${legacyRows.length} models`}</span>
                     </button>
                   )}
                   {(legacyOpen || needle !== "") && legacyRows.map(row)}
@@ -380,8 +380,8 @@ export const ContextMeter = ({ usage, onCompact, compactUnavailable }: { readonl
         <Popover.Positioner side="top" align="end" sideOffset={6} className="z-[1100]">
           <Popover.Popup className={`${popupClass} w-[240px] p-3`} aria-label="Context Window">
             <div className="flex items-center justify-between gap-3">
-              <span className="text-[12px] font-medium text-secondary">Context Window</span>
-              <span className="text-[11px] tabular-nums text-secondary" data-testid="context-numbers">
+              <span className="text-[12px] font-medium text-muted-foreground">Context Window</span>
+              <span className="text-[11px] tabular-nums text-muted-foreground" data-testid="context-numbers">
                 {view.percentText !== null ? `${view.percentText} · ${view.usedText}/${view.maxText}` : view.usedText}
               </span>
             </div>
@@ -391,17 +391,17 @@ export const ContextMeter = ({ usage, onCompact, compactUnavailable }: { readonl
               </div>
             )}
             {view.totalProcessedText !== null && (
-              <div className="mt-2 flex justify-between text-[11px] text-secondary">
+              <div className="mt-2 flex justify-between text-[11px] text-muted-foreground">
                 <span>Total processed</span>
                 <span className="tabular-nums">{view.totalProcessedText}</span>
               </div>
             )}
-            <p className="m-0 mt-2 text-[11px] text-secondary">Context compacts automatically when needed.</p>
+            <p className="m-0 mt-2 text-[11px] text-muted-foreground">Context compacts automatically when needed.</p>
             <button type="button" className="unframed-agent-button mt-2 w-full justify-center" disabled={compactUnavailable} onClick={onCompact}>
               <Minimize2 size={13} aria-hidden />
               Compact context
             </button>
-            {compactUnavailable && <p className="m-0 mt-1 text-[11px] text-secondary">Compaction is unavailable for this provider</p>}
+            {compactUnavailable && <p className="m-0 mt-1 text-[11px] text-muted-foreground">Compaction is unavailable for this provider</p>}
           </Popover.Popup>
         </Popover.Positioner>
       </Popover.Portal>

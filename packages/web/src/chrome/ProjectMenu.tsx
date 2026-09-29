@@ -69,14 +69,14 @@ const ProjectNameDialog = ({
     <Dialog.Root open={open} onOpenChange={close}>
       <Dialog.Portal>
         <Dialog.Backdrop className="fixed inset-0 z-[900] bg-[var(--unframed-scrim)] backdrop-blur-[10px] backdrop-saturate-[160%]" />
-        <Dialog.Popup className="fixed left-1/2 top-1/2 z-[901] w-[360px] max-w-[calc(100vw-32px)] -translate-x-1/2 -translate-y-1/2 rounded-container border border-line bg-popover p-4 text-primary shadow-popover outline-none">
+        <Dialog.Popup className="fixed left-1/2 top-1/2 z-[901] w-[360px] max-w-[calc(100vw-32px)] -translate-x-1/2 -translate-y-1/2 rounded-xl border border-border bg-popover p-4 text-foreground shadow-lg outline-none">
           <Dialog.Title className="m-0 text-[15px] font-semibold">{title}</Dialog.Title>
           <form className="mt-3 flex flex-col gap-2" onSubmit={onSubmit}>
-            <label className="flex flex-col gap-1 text-[12px] text-secondary">
+            <label className="flex flex-col gap-1 text-[12px] text-muted-foreground">
               Project name
               <input
                 autoFocus
-                className="h-9 rounded-element border border-line-strong bg-surface px-2.5 text-[14px] text-primary outline-none focus:border-accent"
+                className="h-9 rounded-lg border border-input bg-card px-2.5 text-[14px] text-foreground outline-none focus:border-primary"
                 placeholder="e.g. product-shots"
                 value={name}
                 onChange={(event) => {
@@ -86,15 +86,15 @@ const ProjectNameDialog = ({
               />
             </label>
             {problem !== undefined && (
-              <p role="alert" className="m-0 text-[12px] text-error">
+              <p role="alert" className="m-0 text-[12px] text-destructive-foreground">
                 {problem}
               </p>
             )}
             <div className="mt-2 flex justify-end gap-2">
-              <Dialog.Close className="h-8 cursor-pointer rounded-element border border-line bg-transparent px-3 text-[13px] text-primary hover:bg-hover">
+              <Dialog.Close className="h-8 cursor-pointer rounded-lg border border-border bg-transparent px-3 text-[13px] text-foreground hover:bg-accent">
                 Cancel
               </Dialog.Close>
-              <button type="submit" className="h-8 cursor-pointer rounded-element border-0 bg-accent px-3 text-[13px] text-on-accent" disabled={busy}>
+              <button type="submit" className="h-8 cursor-pointer rounded-lg border-0 bg-primary px-3 text-[13px] text-primary-foreground" disabled={busy}>
                 {action}
               </button>
             </div>
@@ -105,7 +105,7 @@ const ProjectNameDialog = ({
   );
 };
 
-const alertButton = "h-8 cursor-pointer rounded-element px-3 text-[13px]";
+const alertButton = "h-8 cursor-pointer rounded-lg px-3 text-[13px]";
 
 /** A destructive confirm: title, description, Cancel and the action. */
 const Confirm = ({
@@ -128,12 +128,12 @@ const Confirm = ({
   <AlertDialog.Root open={open} onOpenChange={(next) => !next && onCancel()}>
     <AlertDialog.Portal>
       <AlertDialog.Backdrop className="fixed inset-0 z-[900] bg-[var(--unframed-scrim)]" />
-      <AlertDialog.Popup className="fixed left-1/2 top-1/2 z-[901] w-[400px] max-w-[calc(100vw-32px)] -translate-x-1/2 -translate-y-1/2 rounded-container border border-line bg-popover p-5 text-primary shadow-popover outline-none">
+      <AlertDialog.Popup className="fixed left-1/2 top-1/2 z-[901] w-[400px] max-w-[calc(100vw-32px)] -translate-x-1/2 -translate-y-1/2 rounded-xl border border-border bg-popover p-5 text-foreground shadow-lg outline-none">
         <AlertDialog.Title className="m-0 text-[16px] font-semibold">{title}</AlertDialog.Title>
-        <AlertDialog.Description className="m-0 mt-2 text-[13px] text-secondary">{description}</AlertDialog.Description>
+        <AlertDialog.Description className="m-0 mt-2 text-[13px] text-muted-foreground">{description}</AlertDialog.Description>
         <div className="mt-4 flex justify-end gap-2">
-          <AlertDialog.Close className={`${alertButton} border border-line bg-transparent text-primary hover:bg-hover`}>Cancel</AlertDialog.Close>
-          <button type="button" className={`${alertButton} border-0 bg-error text-on-accent`} disabled={busy} onClick={onConfirm}>
+          <AlertDialog.Close className={`${alertButton} border border-border bg-transparent text-foreground hover:bg-accent`}>Cancel</AlertDialog.Close>
+          <button type="button" className={`${alertButton} border-0 bg-destructive text-primary-foreground`} disabled={busy} onClick={onConfirm}>
             {action}
           </button>
         </div>
@@ -143,7 +143,7 @@ const Confirm = ({
 );
 
 const rowButton =
-  "flex size-6 cursor-pointer items-center justify-center rounded-inner border-0 bg-transparent p-0 text-icon-secondary hover:bg-hover hover:text-icon focus-visible:outline-2 focus-visible:outline-accent";
+  "flex size-6 cursor-pointer items-center justify-center rounded-md border-0 bg-transparent p-0 text-muted-foreground hover:bg-accent hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring";
 
 type Deleting = { readonly project: string; readonly pendingRenders?: number };
 
@@ -263,7 +263,7 @@ export const ProjectMenu = () => {
       >
         <Menu.Trigger
           aria-label="Project"
-          className="flex h-9 cursor-pointer items-center gap-1.5 rounded-element border-0 bg-transparent pl-2.5 pr-2 text-[15px] text-primary hover:bg-hover data-[popup-open]:bg-hover"
+          className="flex h-9 cursor-pointer items-center gap-1.5 rounded-lg border-0 bg-transparent pl-2.5 pr-2 text-[15px] text-foreground hover:bg-accent data-[popup-open]:bg-accent"
         >
           <span data-testid="active-project">{active ?? ""}</span>
           <ChevronDown size={16} aria-hidden />
@@ -274,7 +274,7 @@ export const ProjectMenu = () => {
               {projects.map((project) => (
                 <Menu.Item
                   key={project}
-                  className={`${itemClass} group pr-1 ${project === active ? "bg-hover" : ""}`}
+                  className={`${itemClass} group pr-1 ${project === active ? "bg-accent" : ""}`}
                   data-active={project === active ? "true" : undefined}
                   onClick={() => void activation.activate(project)}
                 >

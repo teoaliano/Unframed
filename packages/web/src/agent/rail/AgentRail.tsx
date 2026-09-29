@@ -124,7 +124,7 @@ export const AgentRail = ({ project, embedded, filterTo, onLocate, onOpenEditor,
       onKeyUp={(event) => event.stopPropagation()}
     >
       <header className="unframed-agent-rail__header">
-        <Sparkles size={16} aria-hidden className="text-icon" />
+        <Sparkles size={16} aria-hidden className="text-foreground" />
         <span className="unframed-agent-rail__title">Agent</span>
         <span className="flex-1" />
         <Tip label="Search chats">

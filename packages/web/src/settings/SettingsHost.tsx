@@ -29,7 +29,7 @@ const SettingsButton = ({ ui }: { readonly ui: SettingsUi }) => {
         type="button"
         aria-label="Add your API key"
         data-keyless="true"
-        className="flex size-9 cursor-pointer items-center justify-center rounded-element border-0 bg-accent p-0 text-on-accent hover:opacity-90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+        className="flex size-9 cursor-pointer items-center justify-center rounded-lg border-0 bg-primary p-0 text-primary-foreground hover:opacity-90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
         onClick={() => ui.open()}
       >
         <KeyRound size={18} aria-hidden />

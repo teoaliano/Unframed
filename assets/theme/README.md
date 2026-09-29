@@ -1,3 +1,5 @@
+Spec 12 replaced these values with t3code's default tokens. They stay here as history and are no longer the visual reference.
+
 # Theme values
 
 The old app's look, as values. Match these through the Tailwind theme (CSS variables on the root, a light and a dark value each). They are values, not code to port.

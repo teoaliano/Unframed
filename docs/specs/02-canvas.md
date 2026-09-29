@@ -353,7 +353,7 @@ A newly created canvas (a new project, or the `default` project on a fresh insta
 
 ### Theme
 
-Tailwind with the colour and chrome tokens from `assets/theme`, light and dark, following the OS setting (`prefers-color-scheme`). tldraw's colour scheme follows the same setting. Every theme change sets `data-unframed-theme` on `<html>` and `--unframed-text-secondary` to the current secondary text colour in the same frame (spec 01's hooks). The canvas background is the body background token. Every colour comes from a token; a variant is a `color-mix` of tokens, never a new hex value in a component. Base UI supplies the dialog, menu, tooltip and toast primitives.
+Tailwind with t3code's default light and dark tokens (spec 12), following the OS setting (`prefers-color-scheme`). tldraw's colour scheme follows the same setting. Every theme change sets `data-unframed-theme` on `<html>` and `--unframed-text-secondary` to the resolved muted foreground in the same frame (spec 01's hooks). The canvas background is `--background`, the same as the body. Every colour comes from a token; a variant is a `color-mix` of tokens, never a new hex value in a component. Base UI supplies the dialog, menu, tooltip and toast primitives through spec 12's UI kit.
 
 ### Toasts
 
@@ -486,7 +486,7 @@ Prior art: the old app's forked-engine tests (temporary data folder, `PORT=0`) a
 ### Assets this spec needs
 
 - `assets/prompts/starter-canvas.md`: the scene prompt text (with a placeholder for the subject's ref) and the subject prompt text. Source: old repo `client/src/graph/starter.js`, `initialNodes` (scene text and subject text).
-- `assets/theme/`: light and dark values for every token this spec names (body, card, surface and popover backgrounds, overlay, overlay hover, border, border emphasized, accent, on accent, text primary, text secondary, text accent, icon primary, radius values, fast duration) plus the chrome values (chrome blur 20 px, scrim filter, grain texture, the corner card, tools bar and floating button styles, mention menu surface). Source: old repo `client/src/theme.js`, the resolved Astryx theme-neutral token values, and the custom properties and `.toolbar-card`, `.tools`, `.fab`, `.fab-library`, `.mention-menu`, `.xnode-media-remove`, `.xnode-group`, `.xnode-line` rules in `client/src/styles.css`.
+- `assets/theme/`: history since spec 12, which replaced these values with t3code's tokens. It held light and dark values for every token this spec named (body, card, surface and popover backgrounds, overlay, overlay hover, border, border emphasized, accent, on accent, text primary, text secondary, text accent, icon primary, radius values, fast duration) plus the chrome values (chrome blur 20 px, scrim filter, grain texture, the corner card, tools bar and floating button styles, mention menu surface). Source: old repo `client/src/theme.js`, the resolved Astryx theme-neutral token values, and the custom properties and `.toolbar-card`, `.tools`, `.fab`, `.fab-library`, `.mention-menu`, `.xnode-media-remove`, `.xnode-group`, `.xnode-line` rules in `client/src/styles.css`.
 - `assets/brand/logo.svg` and `assets/brand/favicon.svg`. Source: old repo `client/public/logo.svg`, `client/public/favicon.svg`.
 - `assets/design/` Main, Selected and Group artboards (selection look). Source: the design canvas files already collected.
-- `assets/screenshots/` canvas views of the old app for visual parity of prompt, media, group and chrome. Source: screenshots of the old app.
+- `assets/screenshots/` canvas views of the old app. History since spec 12, not the visual reference. Source: screenshots of the old app.

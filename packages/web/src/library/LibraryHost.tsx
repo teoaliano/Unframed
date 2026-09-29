@@ -27,7 +27,7 @@ const LibraryButton = () => {
       <button
         type="button"
         aria-label="Library"
-        className="flex size-12 cursor-pointer items-center justify-center rounded-container border border-line bg-[var(--unframed-card-translucent)] p-0 text-icon shadow-chrome backdrop-blur-[var(--unframed-chrome-blur)] hover:bg-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+        className="flex size-12 cursor-pointer items-center justify-center rounded-xl border border-border bg-[var(--unframed-card-translucent)] p-0 text-foreground shadow-lg backdrop-blur-[var(--unframed-chrome-blur)] hover:bg-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
         onClick={() => libraryUi(editor).update((state) => ({ ...state, open: true }))}
       >
         <Library size={20} aria-hidden />

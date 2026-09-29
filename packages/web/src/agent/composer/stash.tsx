@@ -115,7 +115,7 @@ export const StashMenu = ({
         <Menu.Positioner side="top" align="end" sideOffset={6} className="z-[1100]">
           <Menu.Popup className={`${popupClass} w-[300px]`} aria-label="Stashed prompts">
             {entries.length === 0 ? (
-              <p className="m-0 p-2 text-[12.5px] text-secondary">{`Nothing stashed yet. Press ${mac ? "⌘S" : "Ctrl+S"} with a prompt in the composer to stash it.`}</p>
+              <p className="m-0 p-2 text-[12.5px] text-muted-foreground">{`Nothing stashed yet. Press ${mac ? "⌘S" : "Ctrl+S"} with a prompt in the composer to stash it.`}</p>
             ) : (
               entries.map((entry) => (
                 <Menu.Item
@@ -131,7 +131,7 @@ export const StashMenu = ({
                 >
                   <span className="flex min-w-0 flex-1 flex-col">
                     <span className="truncate">{snippet(entry.text) || "(attachments only)"}</span>
-                    <span className="text-[11px] text-secondary">{relativeTime(entry.at)}</span>
+                    <span className="text-[11px] text-muted-foreground">{relativeTime(entry.at)}</span>
                   </span>
                   <button
                     type="button"

@@ -1,5 +1,13 @@
 import { expect, isSettingsChunk, test, watchRpcSockets } from "./fixtures.ts";
 
+/**
+ * t3code's default theme as the browser resolves it (spec 12): the background is zinc-25
+ * in light and neutral-950 in dark; the secondary text is the muted foreground, zinc-500
+ * in light and neutral-500 mixed 90 % with white in dark.
+ */
+const LIGHT = { background: "oklch(0.992 0 0)", secondary: "oklch(0.552 0.016 285.938)" };
+const DARK = { background: "oklch(0.145 0 none)", secondary: "color(srgb 0.506311 0.50639 0.506398)" };
+
 const readHooks = () => ({
   theme: document.documentElement.getAttribute("data-unframed-theme"),
   secondary: getComputedStyle(document.documentElement).getPropertyValue("--unframed-text-secondary").trim(),
@@ -21,8 +29,8 @@ test.describe("web frame", () => {
     await expect(page.locator(".unframed-chrome-right")).toBeVisible();
     expect(await page.evaluate(readHooks)).toEqual({
       theme: "light",
-      secondary: "#525252",
-      body: "rgb(247, 247, 247)",
+      secondary: LIGHT.secondary,
+      body: LIGHT.background,
       title: "Unframed",
       left: 1,
       right: 1,
@@ -35,13 +43,13 @@ test.describe("web frame", () => {
     await expect(page.locator("html")).toHaveAttribute("data-unframed-theme", "dark");
     expect(await page.evaluate(readHooks)).toMatchObject({
       theme: "dark",
-      secondary: "#a3a3a3",
-      body: "rgb(26, 26, 26)",
+      secondary: DARK.secondary,
+      body: DARK.background,
     });
 
     await page.emulateMedia({ colorScheme: "light" });
     await expect(page.locator("html")).toHaveAttribute("data-unframed-theme", "light");
-    expect(await page.evaluate(readHooks)).toMatchObject({ secondary: "#525252", body: "rgb(247, 247, 247)" });
+    expect(await page.evaluate(readHooks)).toMatchObject({ secondary: LIGHT.secondary, body: LIGHT.background });
   });
 
   test("positions the chrome cards with ordinary CSS the shell can override", async ({ page, engine }) => {

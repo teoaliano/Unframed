@@ -1,6 +1,7 @@
 import type { Page } from "@playwright/test";
 import { openCanvas } from "./canvas.ts";
 import { expect, test } from "./fixtures.ts";
+import { resolvedColor, tokenColor } from "./kit.ts";
 import { groupRecord, putRecords } from "./media.ts";
 
 const looks = (page: Page) =>
@@ -16,29 +17,30 @@ const looks = (page: Page) =>
     };
   });
 
+/** What spec 12 says each surface is: the body and grid on --background, the corner card in glass over it. */
+const expected = async (page: Page, theme: "light" | "dark") => ({
+  body: await tokenColor(page, "--background"),
+  grid: await tokenColor(page, "--background"),
+  card: await resolvedColor(page, "color-mix(in srgb, var(--background) var(--glass-opacity), transparent)"),
+  group: expect.any(String),
+  tldraw: theme,
+  theme,
+});
+
 test("light and dark tokens follow the OS, and tldraw's scheme follows with them", async ({ page, engine }) => {
   await page.emulateMedia({ colorScheme: "light" });
   await openCanvas(page, engine);
   await putRecords(engine, [groupRecord("shape:group", "160", { x: 440, y: 60 })]);
   await expect(page.locator(".unframed-group")).toBeVisible();
 
-  await expect.poll(() => looks(page)).toEqual({
-    body: "rgb(247, 247, 247)",
-    grid: "rgb(247, 247, 247)",
-    card: "color(srgb 1 1 1 / 0.88)",
-    group: expect.any(String),
-    tldraw: "light",
-    theme: "light",
-  });
-  const lightGroup = (await looks(page)).group;
+  await expect.poll(async () => (await looks(page)).theme).toBe("light");
+  expect(await looks(page)).toEqual(await expected(page, "light"));
+  const light = await looks(page);
 
   await page.emulateMedia({ colorScheme: "dark" });
-  await expect.poll(() => looks(page)).toMatchObject({
-    body: "rgb(26, 26, 26)",
-    grid: "rgb(26, 26, 26)",
-    card: "color(srgb 0.164706 0.164706 0.164706 / 0.88)",
-    tldraw: "dark",
-    theme: "dark",
-  });
-  expect((await looks(page)).group).not.toBe(lightGroup);
+  await expect.poll(async () => (await looks(page)).tldraw).toBe("dark");
+  const dark = await looks(page);
+  expect(dark).toEqual(await expected(page, "dark"));
+  expect(dark.body).not.toBe(light.body);
+  expect(dark.group).not.toBe(light.group);
 });

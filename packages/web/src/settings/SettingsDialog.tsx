@@ -228,7 +228,7 @@ export const SettingsDialog = ({ ui }: { readonly ui: SettingsUi }) => {
         <Dialog.Popup
           initialFocus={showsKeySection ? keyField : undefined}
           data-testid="settings-dialog"
-          className="fixed left-1/2 top-1/2 z-[1201] flex max-h-[calc(100vh-32px)] w-[480px] max-w-[calc(100vw-32px)] -translate-x-1/2 -translate-y-1/2 flex-col rounded-container border border-line bg-popover text-primary shadow-popover outline-none"
+          className="fixed left-1/2 top-1/2 z-[1201] flex max-h-[calc(100vh-32px)] w-[480px] max-w-[calc(100vw-32px)] -translate-x-1/2 -translate-y-1/2 flex-col rounded-xl border border-border bg-popover text-foreground shadow-lg outline-none"
         >
           <Dialog.Title className="m-0 px-5 pb-1 pt-5 text-[17px] font-semibold">{hasKey ? "Settings" : "Connect OpenRouter to start"}</Dialog.Title>
           <form
@@ -241,7 +241,7 @@ export const SettingsDialog = ({ ui }: { readonly ui: SettingsUi }) => {
             <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-5 pb-2 pt-3" data-testid="settings-form">
               {!hasKey && !pending && (
                 <section className="flex flex-col items-start gap-3">
-                  <p className="m-0 text-[13.5px] leading-relaxed text-secondary">
+                  <p className="m-0 text-[13.5px] leading-relaxed text-muted-foreground">
                     Unframed has no image model of its own. It sends your prompts to{" "}
                     <a href="https://openrouter.ai" target="_blank" rel="noreferrer" className={linkClass}>
                       OpenRouter
@@ -256,9 +256,9 @@ export const SettingsDialog = ({ ui }: { readonly ui: SettingsUi }) => {
 
               {pending && (
                 <section className="flex flex-col items-start gap-2" data-testid="settings-waiting">
-                  <p className="m-0 text-[13.5px] text-primary">Waiting for OpenRouter in your browser…</p>
+                  <p className="m-0 text-[13.5px] text-foreground">Waiting for OpenRouter in your browser…</p>
                   {connection !== undefined && (
-                    <p className="m-0 text-[12.5px] text-secondary">
+                    <p className="m-0 text-[12.5px] text-muted-foreground">
                       Didn't open?{" "}
                       <a href={connection.authorizeUrl} target="_blank" rel="noreferrer" className={linkClass}>
                         Approve Unframed at OpenRouter
@@ -303,11 +303,11 @@ export const SettingsDialog = ({ ui }: { readonly ui: SettingsUi }) => {
                       </Button>
                     )}
                   </div>
-                  <p className="m-0 text-[12.5px] leading-snug text-secondary" data-testid="key-status">
+                  <p className="m-0 text-[12.5px] leading-snug text-muted-foreground" data-testid="key-status">
                     <Copy parts={copy.line} />
                   </p>
                   {copy.expiry !== undefined && (
-                    <p className="m-0 text-[12.5px] leading-snug text-primary" data-testid="key-expiry">
+                    <p className="m-0 text-[12.5px] leading-snug text-foreground" data-testid="key-expiry">
                       {copy.expiry}
                     </p>
                   )}
@@ -317,7 +317,7 @@ export const SettingsDialog = ({ ui }: { readonly ui: SettingsUi }) => {
                     </Button>
                   )}
                   {fieldWarning !== undefined && (
-                    <p className="m-0 text-[12.5px] leading-snug text-error" data-testid="key-warning">
+                    <p className="m-0 text-[12.5px] leading-snug text-destructive-foreground" data-testid="key-warning">
                       {fieldWarning}
                     </p>
                   )}
@@ -326,14 +326,14 @@ export const SettingsDialog = ({ ui }: { readonly ui: SettingsUi }) => {
 
               {hasKey && settings !== undefined && (
                 <>
-                  <section className="flex flex-col gap-3 border-t border-line pt-4">
+                  <section className="flex flex-col gap-3 border-t border-border pt-4">
                     <SectionHeading>Default models</SectionHeading>
                     {MEDIA.map(({ medium, label, field }) => (
                       <ModelSelect key={medium} label={label} value={draft[field]} models={catalogues[medium]} onChange={(value) => edit({ [field]: value })} />
                     ))}
                   </section>
 
-                  <section className="flex flex-col gap-2 border-t border-line pt-4">
+                  <section className="flex flex-col gap-2 border-t border-border pt-4">
                     <SectionHeading>Output folder</SectionHeading>
                     <div className="flex items-center gap-2">
                       <TextField aria-label="Output folder" placeholder="./output" value={draft.outputDir} onChange={(event) => edit({ outputDir: event.target.value })} />
@@ -359,18 +359,18 @@ export const SettingsDialog = ({ ui }: { readonly ui: SettingsUi }) => {
               )}
             </div>
 
-            <div className="flex flex-col gap-3 border-t border-line px-5 pb-5 pt-3">
+            <div className="flex flex-col gap-3 border-t border-border px-5 pb-5 pt-3">
               {banner?.kind === "error" && (
-                <div role="alert" className="rounded-element border border-[var(--unframed-hue-red-bg)] bg-[var(--unframed-hue-red-bg)] px-3 py-2 text-[12.5px] leading-snug text-[var(--unframed-hue-red-text)]">
+                <div role="alert" className="rounded-lg border border-[var(--unframed-hue-red-bg)] bg-[var(--unframed-hue-red-bg)] px-3 py-2 text-[12.5px] leading-snug text-[var(--unframed-hue-red-text)]">
                   {banner.message}
                 </div>
               )}
               {banner?.kind === "saved" && (
-                <div role="status" className="flex items-start gap-2 rounded-element border border-line bg-surface px-3 py-2 text-[12.5px] leading-snug">
-                  <CircleCheck size={15} aria-hidden className="mt-0.5 shrink-0 text-icon" />
+                <div role="status" className="flex items-start gap-2 rounded-lg border border-border bg-card px-3 py-2 text-[12.5px] leading-snug">
+                  <CircleCheck size={15} aria-hidden className="mt-0.5 shrink-0 text-foreground" />
                   <span className="flex flex-col">
-                    <span className="font-medium text-primary">Saved to .env</span>
-                    <span className="text-secondary">Applied right away, no restart needed.</span>
+                    <span className="font-medium text-foreground">Saved to .env</span>
+                    <span className="text-muted-foreground">Applied right away, no restart needed.</span>
                   </span>
                 </div>
               )}

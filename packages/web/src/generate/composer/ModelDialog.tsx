@@ -110,20 +110,20 @@ export const ModelDialog = ({ open, onOpenChange, title, browseUrl, models, curr
         <Dialog.Backdrop className="fixed inset-0 z-[1300] bg-[var(--unframed-scrim)] backdrop-blur-[10px] backdrop-saturate-[160%]" />
         <Dialog.Popup
           {...(finalFocus === undefined ? {} : { finalFocus: () => finalFocus() ?? true })}
-          className="unframed-models fixed left-1/2 top-1/2 z-[1301] flex max-h-[min(720px,calc(100vh-48px))] w-[680px] max-w-[calc(100vw-32px)] -translate-x-1/2 -translate-y-1/2 flex-col rounded-container border border-line bg-popover p-5 text-primary shadow-popover outline-none">
+          className="unframed-models fixed left-1/2 top-1/2 z-[1301] flex max-h-[min(720px,calc(100vh-48px))] w-[680px] max-w-[calc(100vw-32px)] -translate-x-1/2 -translate-y-1/2 flex-col rounded-xl border border-border bg-popover p-5 text-foreground shadow-lg outline-none">
           <div className="flex items-center justify-between gap-4">
             <Dialog.Title className="m-0 text-[18px] font-semibold">{title}</Dialog.Title>
-            <a href={browseUrl} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-[12px] text-secondary no-underline hover:text-primary">
+            <a href={browseUrl} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-[12px] text-muted-foreground no-underline hover:text-foreground">
               Browse on OpenRouter
               <ExternalLink size={12} aria-hidden />
             </a>
           </div>
-          <label className="mt-4 flex h-9 items-center gap-2 rounded-element border border-line-strong bg-surface px-2.5">
-            <Search size={14} aria-hidden className="text-secondary" />
+          <label className="mt-4 flex h-9 items-center gap-2 rounded-lg border border-input bg-card px-2.5">
+            <Search size={14} aria-hidden className="text-muted-foreground" />
             <span className="sr-only">Search models</span>
             <input
               autoFocus
-              className="h-full min-w-0 flex-1 border-0 bg-transparent text-[14px] text-primary outline-none"
+              className="h-full min-w-0 flex-1 border-0 bg-transparent text-[14px] text-foreground outline-none"
               placeholder="Search models…"
               value={query}
               onChange={(event) => setQuery(event.target.value)}
@@ -131,7 +131,7 @@ export const ModelDialog = ({ open, onOpenChange, title, browseUrl, models, curr
           </label>
           <div className="unframed-models__scroll mt-3 min-h-0 flex-1 overflow-y-auto">
             {rows.length === 0 ? (
-              <p className="m-0 py-6 text-center text-[13px] text-secondary">No model matches. Clear the search.</p>
+              <p className="m-0 py-6 text-center text-[13px] text-muted-foreground">No model matches. Clear the search.</p>
             ) : (
               <table className="unframed-models__table">
                 <thead>

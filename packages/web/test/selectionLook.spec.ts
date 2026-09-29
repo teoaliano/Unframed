@@ -25,14 +25,18 @@ const screenPixels = async (page: Page, clip: { x: number; y: number; width: num
   };
 };
 
+/** A token's colour as sRGB bytes, drawn through a canvas so any CSS colour syntax reads the same. */
 const token = (page: Page, name: string) =>
   page.evaluate((property) => {
     const probe = document.createElement("div");
     probe.style.color = `var(${property})`;
     document.body.append(probe);
-    const [r, g, b] = getComputedStyle(probe).color.match(/\d+/g)!.map(Number);
+    const context = new OffscreenCanvas(1, 1).getContext("2d")!;
+    context.fillStyle = getComputedStyle(probe).color;
     probe.remove();
-    return [r, g, b] as [number, number, number];
+    context.fillRect(0, 0, 1, 1);
+    const [r, g, b] = context.getImageData(0, 0, 1, 1).data;
+    return [r!, g!, b!] as [number, number, number];
   }, name);
 
 const distance = (a: Rgb, b: Rgb) => Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
@@ -41,8 +45,8 @@ test("the selection is a thin accent line with square grips, drawn from the sele
   await openCanvas(page, engine);
   await putRecords(engine, [emptyMedia("shape:a", "image", "150", { x: 440, y: 60 }), emptyMedia("shape:b", "image", "151", { x: 440, y: 300 })]);
   await expect(shapeOnScreen(page, "shape:b")).toBeVisible();
-  const accent = await token(page, "--unframed-accent");
-  const canvas = await token(page, "--unframed-canvas");
+  const accent = await token(page, "--primary");
+  const canvas = await token(page, "--background");
 
   const a = (await shapeOnScreen(page, "shape:a").boundingBox())!;
   const b = (await shapeOnScreen(page, "shape:b").boundingBox())!;

@@ -50,10 +50,10 @@ const ImportReportDialog = ({ project }: { readonly project: string }) => {
         <Dialog.Backdrop className="fixed inset-0 z-[900] bg-[var(--unframed-scrim)] backdrop-blur-[10px] backdrop-saturate-[160%]" />
         <Dialog.Popup
           data-testid="import-report"
-          className="fixed left-1/2 top-1/2 z-[901] flex max-h-[min(640px,calc(100vh-48px))] w-[520px] max-w-[calc(100vw-32px)] -translate-x-1/2 -translate-y-1/2 flex-col gap-3 rounded-container border border-line bg-popover p-5 text-primary shadow-popover outline-none"
+          className="fixed left-1/2 top-1/2 z-[901] flex max-h-[min(640px,calc(100vh-48px))] w-[520px] max-w-[calc(100vw-32px)] -translate-x-1/2 -translate-y-1/2 flex-col gap-3 rounded-xl border border-border bg-popover p-5 text-foreground shadow-lg outline-none"
         >
           <Dialog.Title className="m-0 text-[16px] font-semibold">{REPORT_TITLE}</Dialog.Title>
-          <Dialog.Description className="m-0 text-[13px] text-secondary">{REPORT_BODY}</Dialog.Description>
+          <Dialog.Description className="m-0 text-[13px] text-muted-foreground">{REPORT_BODY}</Dialog.Description>
           <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto" data-scrolls="true">
             {SECTIONS.map(({ section, title }) => {
               const items = report.items.filter((item) => item.section === section);
@@ -61,7 +61,7 @@ const ImportReportDialog = ({ project }: { readonly project: string }) => {
               return (
                 <section key={section} data-section={section} aria-label={title}>
                   <h3 className="m-0 mb-1 text-[13px] font-semibold">{title}</h3>
-                  <ul className="m-0 flex list-disc flex-col gap-1 pl-5 text-[12.5px] text-primary">
+                  <ul className="m-0 flex list-disc flex-col gap-1 pl-5 text-[12.5px] text-foreground">
                     {items.map((item, index) => (
                       <li key={index}>{item.text}</li>
                     ))}
@@ -71,7 +71,7 @@ const ImportReportDialog = ({ project }: { readonly project: string }) => {
             })}
           </div>
           <div className="flex justify-end">
-            <Dialog.Close className="h-8 cursor-pointer rounded-element border-0 bg-accent px-3 text-[13px] text-on-accent">Got it</Dialog.Close>
+            <Dialog.Close className="h-8 cursor-pointer rounded-lg border-0 bg-primary px-3 text-[13px] text-primary-foreground">Got it</Dialog.Close>
           </div>
         </Dialog.Popup>
       </Dialog.Portal>
@@ -83,14 +83,14 @@ const ImportReportDialog = ({ project }: { readonly project: string }) => {
 const Standing = ({ gate, onRetry }: { readonly gate: Gate; readonly onRetry: () => void }) => (
   <div className="absolute inset-0 flex items-center justify-center p-6" data-import-state={gate.kind}>
     {gate.kind === "importing" && (
-      <p role="status" className="m-0 text-[14px] text-secondary">
+      <p role="status" className="m-0 text-[14px] text-muted-foreground">
         {IMPORTING_MESSAGE}
       </p>
     )}
     {gate.kind === "failed" && (
       <div role="alert" className="flex max-w-[520px] flex-col items-center gap-3 text-center">
-        <p className="m-0 text-[14px] text-primary">{gate.message}</p>
-        <button type="button" className="h-8 cursor-pointer rounded-element border-0 bg-accent px-3 text-[13px] text-on-accent" onClick={onRetry}>
+        <p className="m-0 text-[14px] text-foreground">{gate.message}</p>
+        <button type="button" className="h-8 cursor-pointer rounded-lg border-0 bg-primary px-3 text-[13px] text-primary-foreground" onClick={onRetry}>
           Try again
         </button>
       </div>

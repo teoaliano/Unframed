@@ -7,7 +7,7 @@ import type { Captured } from "./state.ts";
 
 export const SAVE_FAILED_MESSAGE = "Could not save. Is the local server running?";
 
-const fieldClass = "h-9 rounded-element border border-line-strong bg-surface px-2.5 text-[14px] text-primary outline-none focus:border-accent";
+const fieldClass = "h-9 rounded-lg border border-input bg-card px-2.5 text-[14px] text-foreground outline-none focus:border-primary";
 
 /** `N shape(s), saved as you have them now.`, naming the recipe when the group has one. */
 export const saveSubtitle = (captured: Pick<Captured, "members" | "recipe">): string =>
@@ -48,10 +48,10 @@ export const AddToLibraryDialog = ({ captured, onClose }: { readonly captured: C
         <Dialog.Backdrop className="fixed inset-0 z-[1300] bg-[var(--unframed-scrim)] backdrop-blur-[10px] backdrop-saturate-[160%]" />
         <Dialog.Popup
           data-testid="add-to-library"
-          className="fixed left-1/2 top-1/2 z-[1301] w-[420px] max-w-[calc(100vw-32px)] -translate-x-1/2 -translate-y-1/2 rounded-container border border-line bg-popover p-5 text-primary shadow-popover outline-none"
+          className="fixed left-1/2 top-1/2 z-[1301] w-[420px] max-w-[calc(100vw-32px)] -translate-x-1/2 -translate-y-1/2 rounded-xl border border-border bg-popover p-5 text-foreground shadow-lg outline-none"
         >
           <Dialog.Title className="m-0 text-[18px] font-semibold">Add to library</Dialog.Title>
-          <Dialog.Description className="m-0 mt-1 text-[13px] text-secondary">{saveSubtitle(captured)}</Dialog.Description>
+          <Dialog.Description className="m-0 mt-1 text-[13px] text-muted-foreground">{saveSubtitle(captured)}</Dialog.Description>
           <form
             className="mt-4 flex flex-col gap-3"
             onSubmit={(event) => {
@@ -73,7 +73,7 @@ export const AddToLibraryDialog = ({ captured, onClose }: { readonly captured: C
               />
             </label>
             {problem !== undefined && (
-              <p role="alert" className="-mt-1 m-0 text-[12px] text-error">
+              <p role="alert" className="-mt-1 m-0 text-[12px] text-destructive-foreground">
                 {problem}
               </p>
             )}
@@ -82,8 +82,8 @@ export const AddToLibraryDialog = ({ captured, onClose }: { readonly captured: C
               <input className={fieldClass} placeholder="What it does, in a line" value={summary} onChange={(event) => setSummary(event.target.value)} />
             </label>
             <div className="mt-2 flex justify-end gap-2">
-              <Dialog.Close className="h-8 cursor-pointer rounded-element border border-line bg-transparent px-3 text-[13px] text-primary hover:bg-hover">Cancel</Dialog.Close>
-              <button type="submit" className="h-8 cursor-pointer rounded-element border-0 bg-accent px-3 text-[13px] text-on-accent disabled:opacity-50" disabled={busy}>
+              <Dialog.Close className="h-8 cursor-pointer rounded-lg border border-border bg-transparent px-3 text-[13px] text-foreground hover:bg-accent">Cancel</Dialog.Close>
+              <button type="submit" className="h-8 cursor-pointer rounded-lg border-0 bg-primary px-3 text-[13px] text-primary-foreground disabled:opacity-50" disabled={busy}>
                 Save
               </button>
             </div>

@@ -1,0 +1,111 @@
+/*
+ * The old token names, mapped onto the kit's tokens while the feature stylesheets still
+ * read them. Spec 12's sweep (task 24) deletes this file with the last reader.
+ */
+:root {
+  --unframed-canvas: var(--background);
+  --unframed-card: var(--card);
+  --unframed-surface: var(--card);
+  --unframed-popover: var(--popover);
+  --unframed-scrim: color-mix(in srgb, var(--background) 60%, transparent);
+  --unframed-overlay: color-mix(in srgb, var(--background) 60%, transparent);
+  --unframed-overlay-hover: var(--accent);
+  --unframed-overlay-pressed: color-mix(in srgb, var(--foreground) 8%, transparent);
+  --unframed-border: var(--border);
+  --unframed-border-emphasized: var(--input);
+  --unframed-accent: var(--primary);
+  --unframed-on-accent: var(--primary-foreground);
+  --unframed-text-primary: var(--foreground);
+  --unframed-text-accent: var(--primary);
+  --unframed-icon-primary: var(--foreground);
+  --unframed-icon-secondary: var(--muted-foreground);
+  --unframed-error: var(--destructive-foreground);
+  --unframed-shadow-low: var(--shadow-lg);
+  --unframed-shadow-med: var(--shadow-lg);
+  --unframed-chrome-blur: var(--glass-blur);
+  --unframed-radius-container: var(--radius-xl);
+  --unframed-radius-element: var(--radius-lg);
+  --unframed-radius-inner: var(--radius-md);
+  --unframed-duration-fast: 125ms;
+  --unframed-card-translucent: color-mix(in srgb, var(--card) var(--glass-opacity), transparent);
+  --unframed-popover-translucent: color-mix(in srgb, var(--popover) var(--glass-opacity), transparent);
+}
+
+/* The category hues, until the library, model dialog and role badges move to Badge label. */
+:root {
+  --unframed-hue-blue-bg: #c4ddfb;
+  --unframed-hue-blue-text: #00458c;
+  --unframed-hue-orange-bg: #fad0b5;
+  --unframed-hue-orange-text: #6e3500;
+  --unframed-hue-purple-bg: #eccef3;
+  --unframed-hue-purple-text: #700084;
+  --unframed-hue-green-bg: #c5e5c0;
+  --unframed-hue-green-text: #0c5700;
+  --unframed-hue-pink-bg: #fccadc;
+  --unframed-hue-pink-text: #83004b;
+  --unframed-hue-teal-bg: #a5e3d6;
+  --unframed-hue-teal-text: #005348;
+  --unframed-hue-red-bg: #facecb;
+  --unframed-hue-red-text: #89001a;
+  --unframed-hue-cyan-bg: #a3e0ef;
+  --unframed-hue-cyan-text: #00505f;
+  --unframed-hue-yellow-bg: #f8da9d;
+  --unframed-hue-yellow-text: #584400;
+  --unframed-hue-gray-bg: #e5e5e5;
+  --unframed-hue-gray-text: #262626;
+  --unframed-hue-neutral-bg: #0000000f;
+  --unframed-hue-neutral-text: #262626;
+  --unframed-hue-purple-border: #d8bbdf;
+  --unframed-hue-purple-icon: #700084;
+  --unframed-hue-blue-border: #b1c9e7;
+  --unframed-hue-blue-icon: #00458c;
+  --unframed-hue-teal-border: #94d6c8;
+  --unframed-hue-teal-icon: #005348;
+  --unframed-hue-orange-border: #e6bda2;
+  --unframed-hue-orange-icon: #6e3500;
+  --unframed-hue-cyan-border: #91d3e3;
+  --unframed-hue-cyan-icon: #00505f;
+  --unframed-hue-green-border: #b2d1ac;
+  --unframed-hue-green-icon: #0c5700;
+  --unframed-hue-pink-border: #e7b7c8;
+  --unframed-hue-pink-icon: #83004b;
+}
+
+:root[data-unframed-theme="dark"] {
+  --unframed-hue-blue-bg: #9eb7ff3d;
+  --unframed-hue-blue-text: #c7d3ff;
+  --unframed-hue-orange-bg: #ffa2583d;
+  --unframed-hue-orange-text: #ffc9a2;
+  --unframed-hue-purple-bg: #f297ff3d;
+  --unframed-hue-purple-text: #fac1ff;
+  --unframed-hue-green-bg: #84c9803d;
+  --unframed-hue-green-text: #9fe59b;
+  --unframed-hue-pink-bg: #ff99c33d;
+  --unframed-hue-pink-text: #ffc3da;
+  --unframed-hue-teal-bg: #7ec6b83d;
+  --unframed-hue-teal-text: #99e2d3;
+  --unframed-hue-red-bg: #ff9e973d;
+  --unframed-hue-red-text: #ffc6c1;
+  --unframed-hue-cyan-bg: #83c2d43d;
+  --unframed-hue-cyan-text: #9edef0;
+  --unframed-hue-yellow-bg: #deb4333d;
+  --unframed-hue-yellow-text: #fdcf4f;
+  --unframed-hue-gray-bg: #ffffff1a;
+  --unframed-hue-gray-text: #e5e5e5;
+  --unframed-hue-neutral-bg: #ffffff1a;
+  --unframed-hue-neutral-text: #e5e5e5;
+  --unframed-hue-purple-border: #dd74f0;
+  --unframed-hue-purple-icon: #f297ff;
+  --unframed-hue-blue-border: #6d9cfe;
+  --unframed-hue-blue-icon: #9eb7ff;
+  --unframed-hue-teal-border: #63ab9d;
+  --unframed-hue-teal-icon: #7ec6b8;
+  --unframed-hue-orange-border: #e2883e;
+  --unframed-hue-orange-icon: #ffa258;
+  --unframed-hue-cyan-border: #67a7b8;
+  --unframed-hue-cyan-icon: #83c2d4;
+  --unframed-hue-green-border: #69ad67;
+  --unframed-hue-green-icon: #84c980;
+  --unframed-hue-pink-border: #f273aa;
+  --unframed-hue-pink-icon: #ff99c3;
+}

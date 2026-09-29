@@ -28,7 +28,7 @@ const Frame = () => {
   const activation = useActivation();
   const project = useActiveProject(activation);
   return (
-    <main className="relative h-full w-full overflow-hidden bg-canvas text-primary">
+    <main className="relative h-full w-full overflow-hidden bg-background text-foreground">
       {project !== undefined && (
         <ImportGate key={project} project={project}>
           <CanvasHost project={project} activation={activation} />

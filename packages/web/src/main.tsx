@@ -2,8 +2,8 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { App } from "./App.tsx";
 import { connectEngine } from "./rpc/engine.ts";
-import { followSystemTheme } from "./theme.ts";
-import "./theme.css";
+import { followSystemTheme } from "./theme/theme.ts";
+import "./theme/theme.css";
 
 followSystemTheme();
 
