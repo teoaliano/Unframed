@@ -3,7 +3,6 @@ import { openCanvas } from "./canvas.ts";
 import { agentChromeButton, createChat, expect, openRail, rail, tabs, test } from "./agent.ts";
 import { expectSlot, expectToken, inBothSchemes, resolvedColor, styleOf, tokenColor } from "./kit.ts";
 
-const GLASS = "color-mix(in srgb, var(--background) var(--glass-opacity), transparent)";
 const MENU_GLASS = "color-mix(in srgb, var(--popover) 18%, color-mix(in srgb, var(--popover) var(--glass-opacity), transparent))";
 
 const computed = (locator: Locator, ...names: string[]) =>
@@ -86,14 +85,15 @@ test("with reduced motion the rail only fades, and still leaves the page on Clos
   await expect(panel).toHaveCount(0);
 });
 
-test("the rail is t3code's chat panel on the kit: a glass shell with a left border, kit header buttons, panel tabs, a kit More menu and search field", async ({ page, agent }) => {
+test("the rail is t3code's chat panel on the kit: a shell on --background with a left border, kit header buttons, panel tabs, a kit More menu and search field", async ({ page, agent }) => {
   await openCanvas(page, agent);
   for (const [index, title] of ["First", "Second", "Third", "Fourth"].entries()) await createChat(agent, { title, createdAt: `2026-09-0${index + 1}T10:00:00.000Z` });
   const panel = await openRail(page);
   await expect(tabs(page)).toHaveText(["Fourth", "Third", "Second"]);
   await inBothSchemes(page, async () => {
     await page.mouse.move(10, 400);
-    expect(await styleOf(panel, "background-color")).toBe(await resolvedColor(page, GLASS));
+    // Solid --background, not glass: spec 12's budget decides, and the glass rail crossed spec 02's pan budget.
+    await expectToken(panel, "background-color", "--background");
     await expectToken(panel, "border-left-color", "--color-border");
     await expect(panel.getByRole("heading", { name: "Agent" })).toBeVisible();
     for (const name of ["Search chats", "New chat", "Delete chat", "Close"]) await expectSlot(panel.getByRole("button", { name, exact: true }), "tooltip-trigger");

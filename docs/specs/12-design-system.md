@@ -174,7 +174,7 @@ Every surface moves onto the kit. The mapping, by surface:
 ### Performance
 
 - Glass (backdrop blur) is allowed on surfaces over the canvas only while spec 02's and spec 09's frame budgets hold in the hosted shape. The corner cards already blur at 20 px within budget; the composer, selection toolbar and rail are measured after they move to glass.
-- If a surface pushes a budget over, that surface uses its solid token fill (`--popover` or `--card`) instead of glass. The budget decides, not the look.
+- If a surface pushes a budget over, that surface uses its solid token fill (`--popover` or `--card`) instead of glass. The budget decides, not the look. Measured after the restyle: the selection toolbar and the Generate composer hold the pan budget on glass; the rail on glass reached 2.27 % of frames over 33 ms in one of three runs, so it is on solid `--background`.
 
 ### Licensing
 
