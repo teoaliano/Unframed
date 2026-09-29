@@ -4,6 +4,7 @@
  */
 import { Sparkles } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { useEditor, type TLShapeId } from "tldraw";
 import "./agent.css";
 import "./rail/rail.css";
@@ -17,6 +18,7 @@ import { useCanvasProject, useEngine } from "../context.ts";
 import { AgentRail } from "./rail/AgentRail.tsx";
 import { ToolbarAgentTray } from "./composer/AgentTray.tsx";
 import { providerMessage } from "./providers.ts";
+import { QueueSender } from "./queue.tsx";
 import { useChatClient, useProviders, useRailUi, type ChatClient } from "./store.ts";
 
 /** How long the rail waits for its own transitionend before it unmounts anyway: a hidden tab fires none. */
@@ -104,7 +106,12 @@ export const AgentHost = () => {
     };
   }, [client]);
 
-  return <CanvasRail client={client} openArtifact={openArtifact ? (id: string) => openArtifact(editor, id as TLShapeId) : undefined} />;
+  return (
+    <>
+      <QueueSender client={client} />
+      <CanvasRail client={client} openArtifact={openArtifact ? (id: string) => openArtifact(editor, id as TLShapeId) : undefined} />
+    </>
+  );
 };
 
 const CanvasRail = ({ client, openArtifact }: { readonly client: ChatClient; readonly openArtifact: ((id: string) => void) | undefined }) => {
@@ -120,11 +127,14 @@ const CanvasRail = ({ client, openArtifact }: { readonly client: ChatClient; rea
     [editor],
   );
   const props = useMemo(() => ({ onClose: close, onLocate: locate, ...(openArtifact ? { onOpenEditor: openArtifact } : {}) }), [close, locate, openArtifact]);
-  return (
+  // Beside tldraw's container, not in it: its own panels (the style panel) would sit on top of the rail.
+  const host = editor.getContainer().parentElement;
+  const rail = (
     <RailMotion open={ui.open}>
       {(ref, state) => <AgentRail project={client.project} motion={{ ref, state }} {...props} />}
     </RailMotion>
   );
+  return host ? createPortal(rail, host) : rail;
 };
 
 export type { AgentTrayProps };

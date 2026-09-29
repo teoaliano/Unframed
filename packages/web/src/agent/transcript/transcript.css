@@ -214,3 +214,36 @@
   border-bottom: 1px solid var(--unframed-border);
   text-align: left;
 }
+
+/* A queued message: right-aligned, a dashed border, dimmed until it goes. */
+.unframed-agent-queued {
+  align-self: flex-end;
+  display: flex;
+  max-width: 85%;
+  flex-direction: column;
+  gap: 4px;
+  padding: 7px 10px;
+  border: 1px dashed var(--unframed-border-emphasized);
+  border-radius: var(--unframed-radius-container);
+  color: var(--unframed-text-secondary);
+}
+
+.unframed-agent-queued__status {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+}
+
+.unframed-agent-queued__text {
+  white-space: pre-wrap;
+  word-break: break-word;
+  opacity: 0.75;
+}
+
+.unframed-agent-queued__actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 2px;
+}

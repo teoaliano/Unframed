@@ -118,7 +118,8 @@ export interface PromptEditorProps {
    * (without Shift or Option, never while composing) is `submit`.
    */
   readonly onKey: (event: KeyboardEvent) => boolean;
-  readonly onSubmit: () => void;
+  /** Enter, with the key event: Cmd+Enter flips queue and steer for one message. */
+  readonly onSubmit: (event: KeyboardEvent) => void;
   readonly onPaste: (event: ClipboardEvent) => boolean;
   readonly handle: Ref<PromptEditorHandle>;
   readonly disabled?: boolean;
@@ -175,7 +176,7 @@ export const PromptEditor = ({ placeholder, label, onChange, onTrigger, onKey, o
           view.dispatch(view.state.tr.split(view.state.selection.from).scrollIntoView());
           return true;
         }
-        latest.current.onSubmit();
+        latest.current.onSubmit(event);
         return true;
       },
       handlePaste: (_view, event) => latest.current.onPaste(event),

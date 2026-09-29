@@ -1,4 +1,4 @@
-import type { ChatSummary, ClientChatCommand, ProviderStatuses, ShellStreamItem, ThreadStreamItem } from "@unframed/contracts";
+import type { ChatAttachment, ChatSummary, ClientChatCommand, ProviderStatuses, ShellStreamItem, ThreadStreamItem } from "@unframed/contracts";
 import { projectChat, type Chat, type ChatEvent, type ChatMessage } from "@unframed/domain";
 import { useEffect, useMemo, useSyncExternalStore } from "react";
 import type { EngineConnection } from "../rpc/engine.ts";
@@ -35,7 +35,25 @@ export const NEW_CHAT = "new-chat";
 
 const INITIAL_UI: RailUi = { open: false, chosen: null, pinned: null, searchOpen: false, diff: undefined, error: undefined };
 
-type Key = "shell" | "providers" | "ui" | `thread:${string}`;
+type Key = "shell" | "providers" | "ui" | "queues" | "handoff" | `thread:${string}` | `queue:${string}`;
+
+/** A message waiting for the running turn: sent after its next tool call, or when it ends. */
+export interface QueuedMessage {
+  readonly id: string;
+  readonly message: { readonly text: string; readonly selection: ReadonlyArray<string>; readonly attachments: ReadonlyArray<ChatAttachment> };
+  /** The latest completed tool call when it was queued: the next one is its boundary. */
+  readonly after: string | null;
+  readonly state: "waiting" | "sending";
+}
+
+/** A draft put back into a chat's composer. */
+export interface Handoff {
+  readonly text: string;
+  readonly selection: ReadonlyArray<string>;
+  readonly attachments: ReadonlyArray<ChatAttachment>;
+}
+
+const EMPTY_QUEUE: ReadonlyArray<QueuedMessage> = [];
 
 /**
  * The chat client state (spec 08, t3code's client-runtime shape): the project's chat
@@ -62,6 +80,10 @@ export class ChatClient {
   private checking = false;
   private statusRequest: Promise<void> | undefined;
   private uiState: RailUi = INITIAL_UI;
+  private readonly queues = new Map<string, ReadonlyArray<QueuedMessage>>();
+  private readonly handoffs = new Map<string, Handoff[]>();
+  private followUpValue: "queue" | "steer" = "queue";
+  private followUpWatch: (() => void) | undefined;
   private readonly stopShell: () => void;
 
   constructor(engine: EngineConnection, project: string) {
@@ -72,6 +94,7 @@ export class ChatClient {
 
   dispose(): void {
     this.stopShell();
+    this.followUpWatch?.();
     for (const entry of this.threads.values()) entry.stop();
     this.threads.clear();
   }
@@ -270,6 +293,73 @@ export class ChatClient {
     return request;
   }
 
+  /** Whether a message sent from here has not reached the chat yet. */
+  inFlight(threadId: string): boolean {
+    return (this.optimistic.get(threadId)?.length ?? 0) > 0;
+  }
+
+  // -------------------------------------------------------------------------------------
+  // Queued messages: kept here, not in the engine, since they are not sent yet. A reload
+  // loses them harmlessly.
+
+  queue(threadId: string): ReadonlyArray<QueuedMessage> {
+    return this.queues.get(threadId) ?? EMPTY_QUEUE;
+  }
+
+  queuedThreads(): string[] {
+    return [...this.queues.keys()];
+  }
+
+  enqueue(threadId: string, message: QueuedMessage["message"], after: string | null): void {
+    this.queues.set(threadId, [...this.queue(threadId), { id: newId("queued"), message, after, state: "waiting" }]);
+    this.changed(`queue:${threadId}`);
+    this.changed("queues");
+  }
+
+  updateQueue(threadId: string, update: (queue: ReadonlyArray<QueuedMessage>) => ReadonlyArray<QueuedMessage>): void {
+    const next = update(this.queue(threadId));
+    if (next.length === 0) this.queues.delete(threadId);
+    else this.queues.set(threadId, next);
+    this.changed(`queue:${threadId}`);
+    this.changed("queues");
+  }
+
+  /** Takes queued messages out (one, or all of them) and answers them. */
+  takeQueued(threadId: string, id?: string): QueuedMessage[] {
+    const taken = this.queue(threadId).filter((item) => id === undefined || item.id === id);
+    this.updateQueue(threadId, (queue) => queue.filter((item) => !taken.includes(item)));
+    return taken;
+  }
+
+  // -------------------------------------------------------------------------------------
+  // Handing a draft back to a chat's composer (a cancelled queued message, Edit from here).
+
+  handOff(threadId: string, draft: Handoff): void {
+    this.handoffs.set(threadId, [...(this.handoffs.get(threadId) ?? []), draft]);
+    this.changed("handoff");
+  }
+
+  /** The drafts handed to a chat's composer since it last took them. */
+  takeHandoffs(threadId: string): Handoff[] {
+    const drafts = this.handoffs.get(threadId) ?? [];
+    this.handoffs.delete(threadId);
+    return drafts;
+  }
+
+  // -------------------------------------------------------------------------------------
+  // The Follow-up behavior preference (spec 10 shows its control): Queue unless set.
+
+  get followUp(): "queue" | "steer" {
+    if (!this.followUpWatch) {
+      this.followUpWatch = this.engine.subscribe("preferences.subscribe", { keys: ["agent.followUp"] }, (change) => {
+        if (change.key !== "agent.followUp") return;
+        this.followUpValue = change.value === "steer" ? "steer" : "queue";
+        this.changed("ui");
+      });
+    }
+    return this.followUpValue;
+  }
+
   // -------------------------------------------------------------------------------------
   // The rail's own state.
 
@@ -358,6 +448,25 @@ export const useRailUi = (client: ChatClient): RailUi => {
 };
 
 /** Subscribes to a chat while the component shows it, and answers it. */
+export const useQueue = (client: ChatClient, threadId: string | null | undefined): ReadonlyArray<QueuedMessage> => {
+  useKey(client, `queue:${threadId ?? ""}`);
+  return threadId ? client.queue(threadId) : EMPTY_QUEUE;
+};
+
+export const useQueuedThreads = (client: ChatClient): string[] => {
+  useKey(client, "queues");
+  return client.queuedThreads();
+};
+
+/** Changes whenever a draft is handed to a composer. */
+export const useHandoffVersion = (client: ChatClient): number => useKey(client, "handoff");
+
+/** The Follow-up behavior preference, live. */
+export const useFollowUp = (client: ChatClient): "queue" | "steer" => {
+  useKey(client, "ui");
+  return client.followUp;
+};
+
 export const useWatchedThread = (client: ChatClient, threadId: string | null | undefined): Chat | undefined => {
   useEffect(() => (threadId ? client.watch(threadId) : undefined), [client, threadId]);
   return useThread(client, threadId);

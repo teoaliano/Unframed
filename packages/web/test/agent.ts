@@ -3,7 +3,8 @@
  * the scripted agent over the fixture scripts, the rail and its composer on screen, and
  * the chats the engine holds.
  */
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Locator, Page } from "@playwright/test";
 import type { ChatSummary, ShellStreamItem, ThreadStreamItem } from "@unframed/contracts";
@@ -208,3 +209,34 @@ export const onlyChat = async (engine: TestEngine, check: (chat: Chat) => boolea
     .toBe(true);
   return found!;
 };
+
+/** The open approval request of a chat, as the engine holds it. */
+export const pendingRequest = async (engine: TestEngine, threadId: string): Promise<string | undefined> => {
+  const chat = await engineChat(engine, threadId);
+  const open = new Map<string, true>();
+  for (const activity of chat.activities) {
+    const id = (activity.payload as { requestId?: string } | null)?.requestId;
+    if (!id) continue;
+    if (activity.kind === "approval.requested") open.set(id, true);
+    else if (activity.kind === "approval.resolved") open.delete(id);
+  }
+  return [...open.keys()][0];
+};
+
+/** Waits for a chat to park on an approval, then answers it through the engine. */
+export const answerApproval = async (engine: TestEngine, threadId: string, decision: "accept" | "acceptForSession" | "decline" | "cancel" = "accept") => {
+  let requestId: string | undefined;
+  await expect.poll(async () => (requestId = await pendingRequest(engine, threadId)) !== undefined, { timeout: 15_000 }).toBe(true);
+  await dispatch(engine, { type: "thread.approval.respond", threadId, requestId, decision });
+};
+
+/** A folder holding one script, written for a test. */
+export const scriptFolder = async (scripts: Record<string, unknown>): Promise<string> => {
+  const dir = await mkdtemp(join(tmpdir(), "unframed-scripts-"));
+  for (const [name, script] of Object.entries(scripts)) await writeFile(join(dir, `${name}.json`), JSON.stringify(script));
+  return dir;
+};
+
+/** The person's messages in a chat, as the engine holds them. */
+export const userTexts = async (engine: TestEngine, threadId: string): Promise<string[]> =>
+  (await engineChat(engine, threadId)).messages.filter((message) => message.role === "user").map((message) => message.text);

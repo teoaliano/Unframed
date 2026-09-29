@@ -1,7 +1,10 @@
 import type { ChatMessage } from "@unframed/domain";
 import { useState } from "react";
 import { providerName } from "../providers.ts";
-import { useWatchedThread, type ChatClient } from "../store.ts";
+import { Clock, X } from "lucide-react";
+import { Tip } from "../../chrome/ui.tsx";
+import { returnQueued, sendQueued } from "../queue.tsx";
+import { useQueue, useWatchedThread, type ChatClient } from "../store.ts";
 import { ChatMarkdown } from "./ChatMarkdown.tsx";
 
 export const EMPTY_CHAT = "Ask about what is on the canvas, or say what should change or be made. Whatever is selected comes with the message as context.";
@@ -40,6 +43,32 @@ const UserMessage = ({ message }: { readonly message: ChatMessage }) => {
   );
 };
 
+/** Messages waiting for the running turn: right-aligned, dashed, with Send now and a way back to the composer. */
+const QueuedMessages = ({ client, chatId }: { readonly client: ChatClient; readonly chatId: string }) => {
+  const queue = useQueue(client, chatId);
+  return queue.map((item, index) => (
+    <div key={item.id} className="unframed-agent-queued" data-testid="queued-message" data-state={item.state}>
+      <Tip label={index === 0 ? "Sends after the next tool call or when the turn ends" : "Sends after the messages above it"} side="left">
+        <span className="unframed-agent-queued__status">
+          <Clock size={12} aria-hidden />
+          Queued
+        </span>
+      </Tip>
+      <div className="unframed-agent-queued__text">{item.message.text}</div>
+      <div className="unframed-agent-queued__actions">
+        <button type="button" className="unframed-agent-button unframed-agent-button--ghost" disabled={item.state === "sending"} onClick={() => void sendQueued(client, chatId, item.id)}>
+          Send now
+        </button>
+        <Tip label="Cancel and return to the composer" side="top">
+          <button type="button" className="unframed-agent-control unframed-agent-control--icon" aria-label="Cancel and return to the composer" onClick={() => returnQueued(client, chatId, item.id)}>
+            <X size={13} aria-hidden />
+          </button>
+        </Tip>
+      </div>
+    </div>
+  ));
+};
+
 export interface TranscriptProps {
   readonly client: ChatClient;
   readonly chatId: string;
@@ -65,6 +94,7 @@ export const Transcript = ({ client, chatId }: TranscriptProps) => {
           </article>
         ) : null,
       )}
+      <QueuedMessages client={client} chatId={chatId} />
       {chat.messages.length === 0 && <p className="unframed-agent-empty">{EMPTY_CHAT}</p>}
     </div>
   );

@@ -7,7 +7,8 @@ import type { AgentTrayProps as SlotProps } from "../../chrome/slots.ts";
 import { useEngine } from "../../context.ts";
 import { effectiveModel, noProviderReady, providerName, readyProviders } from "../providers.ts";
 import { createChat, messageOf, sendMessage } from "../send.ts";
-import { useChatClient, useChats, useProviders, useWatchedThread, type ChatClient } from "../store.ts";
+import { useChatClient, useChats, useFollowUp, useHandoffVersion, useProviders, useWatchedThread, type ChatClient } from "../store.ts";
+import { latestCompletedTool, returnQueued, sendQueued } from "../queue.tsx";
 import { Tip } from "../../chrome/ui.tsx";
 import { formatSize, useAttachments } from "./attachments.ts";
 import { platform } from "../../canvas/platform.ts";
@@ -267,6 +268,11 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
       inlineNext.current = Date.now();
       return false;
     }
+    if (command && event.shiftKey && event.key === "Enter" && chat) {
+      const oldest = client.queue(chat.id)[0];
+      if (oldest) void sendQueued(client, chat.id, oldest.id);
+      return true;
+    }
     if (command && event.shiftKey && event.key.toLowerCase() === "a") {
       setModeOpen(true);
       return true;
@@ -294,7 +300,8 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
   const placeholder = none ? PLACEHOLDERS.noProvider : PLACEHOLDERS.default;
   const canSend = !none && !sending && (text.trim() !== "" || attachments.staged.length > 0);
 
-  const send = useCallback(async () => {
+  const followUp = useFollowUp(client);
+  const send = useCallback(async (invert = false) => {
     const message = box.current?.text() ?? "";
     if (none || (message.trim() === "" && attachments.staged.length === 0) || sending) return;
     setSending(true);
@@ -310,7 +317,16 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
       box.current?.clear();
       attachments.clear();
       chips.set(canvas?.getSelectedShapeIds() ?? []);
-      await sendMessage(client, target, { text: message, selection: context, attachments: uploaded });
+      const outgoing = { text: message, selection: context, attachments: uploaded };
+      const current = client.thread(target);
+      if (current?.latestTurn?.state === "running") {
+        // Queue waits for the turn's next tool call or its end; Steer joins the turn now. Cmd+Enter flips it once.
+        const steer = (followUp === "steer") !== invert;
+        if (steer) await sendMessage(client, target, outgoing, { steer: true });
+        else client.enqueue(target, outgoing, latestCompletedTool(current));
+      } else {
+        await sendMessage(client, target, outgoing);
+      }
       onSent?.();
     } catch (error) {
       client.setUi({ error: messageOf(error) });
@@ -318,10 +334,26 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
     } finally {
       setSending(false);
     }
-  }, [none, sending, client, chatId, selection, draftRuntime, draftInteraction, newChatTags, beforeSend, onSent, canvas, chips, attachments]);
+  }, [none, sending, client, chatId, selection, draftRuntime, draftInteraction, newChatTags, beforeSend, onSent, canvas, chips, attachments, followUp]);
+
+  // A draft handed back to this chat (a cancelled queued message, Edit from here) lands in the box.
+  const handoffs = useHandoffVersion(client);
+  useEffect(() => {
+    if (chatId === null) return;
+    const drafts = client.takeHandoffs(chatId);
+    if (drafts.length === 0) return;
+    const current = box.current?.text() ?? "";
+    const returned = drafts.map((draft) => draft.text).join("\n\n");
+    box.current?.setText(current.trim() === "" ? returned : `${current}\n\n${returned}`);
+    chips.set([...new Set(drafts.flatMap((draft) => draft.selection))]);
+    attachments.restore(drafts.flatMap((draft) => draft.attachments));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [handoffs, chatId, client]);
 
   const interrupt = () => {
     if (!chat?.latestTurn) return;
+    // Stop gives every queued message back to the composer.
+    returnQueued(client, chat.id);
     void client.dispatch({ type: "thread.turn.interrupt", threadId: chat.id, turnId: chat.latestTurn.turnId }).catch((error: unknown) => client.setUi({ error: messageOf(error) }));
   };
 
@@ -352,7 +384,7 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
           onChange={setText}
           onTrigger={setTrigger}
           onKey={onKey}
-          onSubmit={() => void send()}
+          onSubmit={(event) => void send(platform() === "darwin" ? event.metaKey : event.ctrlKey)}
           onPaste={onPaste}
           handle={box}
           autofocus={variant === "toolbar"}
