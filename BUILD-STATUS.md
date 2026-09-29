@@ -14,15 +14,15 @@ Checked 2026-09-28: Node v24.21.0, pnpm 9.15.4 through Corepack, Google Chrome, 
 | --- | --- | --- | --- | --- | --- |
 | 01 | engine foundation | 1 | merged | f480398 | 54/54 tasks; 311 tests, 7 browser tests green on build |
 | 02 | canvas | 2 | merged | 901847a, fixes 19a4177 | 60/60 tasks; all budgets met (see below). Fixes: context menu closed itself when a right-click beat tldraw's delayed refocus (product bug), and `settledRecord` now outwaits the sync client's 1 s send interval |
-| 03 | image generation | 3 | merged | f9649ab, fixes 5621a6a | 54/54 tasks; 626 tests, 112 browser tests green on build in 3.0 min. Task 36's Agent tray part waits for spec 08 |
+| 03 | image generation | 3 | merged | f9649ab, fixes 5621a6a, 3cb90d0, 40cea11 | 54/54 tasks. Later fixes: an Escape pressed as a composer menu showed reached tldraw's container listener and closed the composer, then (once tldraw skipped it) closed nothing; the composer now closes the open tray menu wherever focus is |
 | 04 | video generation | 4 | merged | ae89c78 | 66/66 tasks; merged after 05 (the agent resolved 13 conflicts, all two additions to one spot); 994 tests, 150 browser tests green on build |
 | 05 | text, multi-run and Free | 4 | merged | c1bb5a2 | 40/40 tasks; 790 tests green, 134 of 135 browser tests (the one failure is the spec 02 right-click flake, sent back to the spec 02 agent) |
 | 06 | groups, recipes and the library | 5 | merged | 5f399d1 | 39/39 tasks; 1144 tests, 185 browser tests green on build. Task 15's Agent button waits for spec 08 |
 | 07 | agent runtime | 6 | merged | ba20d56 | 55/55 tasks; 1356 tests, 185 browser tests green on build |
 | 08 | agent chat | 7 | merged | 6c70830, fix b05f1c7 | 47/47 tasks. Fix: a tool call's completion stamped in the same millisecond as the reply started a new work stretch, so the row read "Stopped" (product bug; the timeline now lives in domain). 1514 tests, 261 browser tests green on build |
-| 09 | artifacts | 8 | merged | 949cdd3 | 62/62 tasks; 1635 tests green; browser suite 291-292 of 292 per run, the misses being load flakes (see watch list). Suite not yet fully green: the `runsProp` Escape race is with the spec 03 agent |
+| 09 | artifacts | 8 | merged | 949cdd3 | 62/62 tasks; after the spec 03 Escape fixes, 1635 tests and 295 browser tests green on build (40cea11) |
 | 10 | settings and OpenRouter | 7 | merged | b7a1b78, fixture fix 18312a7 | 58/58 tasks plus the oauth.cancel render rule; merged after 08 (2 conflicts resolved by the orchestrator); 1511 tests, 261 browser tests green on build |
-| 11 | legacy import | 9 | pending | | |
+| 11 | legacy import | 9 | building | | |
 
 ## Decisions
 
@@ -84,7 +84,9 @@ The six-running case misses the 2 % line. Task 62 does not say how many artifact
 - `pnpm -s typecheck` prints nothing when it fails. Read the exit code.
 - Browser test engines point `CLAUDE_PATH` and `CODEX_PATH` at missing files and use `SHELL=/bin/sh` (spec 08), so provider detection never starts the machine's real CLIs. An engine gets the fixture OpenRouter key unless its test writes a `.env`; a test that writes one and wants a key must include `OPENROUTER_API_KEY` (spec 10).
 - After spec 09 the browser suite has 292 tests and takes 6.5 to 6.7 minutes. Fixed by the orchestrator: `assetStore.spec.ts:7` pressed Cmd+U before tldraw had the keyboard (7a7b6b7). Seen once: two `startGeneration` engines printed nothing in 15 s during one loaded run (boot is 0.7 s idle, 1.1 to 1.8 s under load); watch it.
-- `runsProp.spec.ts:17` fails about once per full run: an Escape pressed as the Add prop menu shows closes the whole composer. Product race in spec 03's composer, with the spec 03 agent. Switching the menu-open reports to `useLayoutEffect` did not fix it.
+- Fixed in 3cb90d0 and 40cea11: `runsProp.spec.ts:17` and `videoTray.spec.ts:58`, the composer Escape race.
+- `artifactLive.spec.ts:139` ("Select to preview" not visible on a non-live artifact) failed once in a full run and passed 8 of 8 alone. Watch it.
+- `previewTools.test.ts` ("Timed out waiting for chat … to settle") failed once while the machine was loaded. Watch it.
 - `previews.spec.ts:16` and `catalogue.test.ts` each failed once under load in a spec worktree and passed on rerun. Watch them.
 - Never run a bare `pkill -f workerProcessEntry`: it kills every worktree's Playwright workers. Kill by path (`<checkout>/node_modules/.pnpm/playwright.*/workerProcessEntry`) or orphans only.
 - Fixed in 19a4177: the right-click flake (`menuActions` "Reveal", `contextMenu.spec.ts:86`), `promptPin.spec.ts` and the `mediaResize.spec.ts` crop flake. The context-menu fix in `packages/web/src/canvas/ContextMenu.tsx` cancels the menu library's delayed refocus through an internal event name that tldraw bundles. A tldraw upgrade that renames it brings the flake back silently.
