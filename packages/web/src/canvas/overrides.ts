@@ -62,6 +62,8 @@ export const overrides: TLUiOverrides = {
   },
   // tldraw works out its actions before its tools, so both sets of keys are known here.
   tools(editor, tools) {
+    // No Media tool (and no Cmd+U): Image and Video from Add, drop and paste bring files in.
+    delete tools.asset;
     const taken = new Set([...actionKeys, ...Object.values(tools).flatMap((tool) => bindings(tool.kbd))]);
     for (const [kind, key] of ADD_KEYS) {
       const id = `unframed-add-${kind}`;

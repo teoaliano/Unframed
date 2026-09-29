@@ -37,10 +37,13 @@ test("one bottom bar holds tldraw's quick actions and tools, then Library and Ad
   expect(buttons.slice(0, 2)).toEqual(["Undo", "Redo"]);
   expect(buttons.slice(-2)).toEqual(["Library", "Add"]);
   expect(buttons.indexOf("Select")).toBeGreaterThan(buttons.indexOf("Redo"));
-  // The tools end at Media; the rectangle and the other shapes open from the chevron.
-  expect(buttons).toContain("Media");
+  // No Media tool: the tools end at Note; the arrow, the rectangle and the other shapes open from the chevron.
+  expect(buttons).not.toContain("Media");
+  expect(buttons).toContain("Note");
   await expect(bar.getByTestId("tools.rectangle")).toBeHidden();
+  await expect(bar.getByTestId("tools.arrow")).toBeHidden();
   await bar.getByTestId("tools.more-button").click();
+  await expect(page.getByTestId("tools.more.arrow")).toBeVisible();
   await expect(page.getByTestId("tools.more.rectangle")).toBeVisible();
   await page.keyboard.press("Escape");
   await expect(bar.locator("[data-slot='separator'], .tlui-toolbar__divider, hr")).toHaveCount(0);

@@ -4,9 +4,79 @@
  * replaces tldraw's toolbar, which stacks its quick actions in a second small bar above.
  */
 import { useRef } from "react";
-import { DefaultToolbarContent, OverflowingToolbar, TldrawUiOrientationProvider, TldrawUiToolbar, useEditor, useReadonly, useTldrawUiComponents } from "tldraw";
+import {
+  ArrowDownToolbarItem,
+  ArrowLeftToolbarItem,
+  ArrowRightToolbarItem,
+  ArrowToolbarItem,
+  ArrowUpToolbarItem,
+  CheckBoxToolbarItem,
+  CloudToolbarItem,
+  DiamondToolbarItem,
+  DrawToolbarItem,
+  EllipseToolbarItem,
+  EraserToolbarItem,
+  FrameToolbarItem,
+  HandToolbarItem,
+  HeartToolbarItem,
+  HexagonToolbarItem,
+  HighlightToolbarItem,
+  LaserToolbarItem,
+  LineToolbarItem,
+  NoteToolbarItem,
+  OvalToolbarItem,
+  OverflowingToolbar,
+  RectangleToolbarItem,
+  RhombusToolbarItem,
+  SelectToolbarItem,
+  StarToolbarItem,
+  TextToolbarItem,
+  TldrawUiOrientationProvider,
+  TldrawUiToolbar,
+  TriangleToolbarItem,
+  XBoxToolbarItem,
+  useEditor,
+  useReadonly,
+  useTldrawUiComponents,
+} from "tldraw";
 import { useWheelToCanvas } from "../canvas/wheelToCanvas.ts";
 import { useSlots } from "./slots.ts";
+
+/**
+ * tldraw's tools in Unframed's order: the six in the bar, then the arrow and every shape
+ * under the overflow chevron. No Media tool: Image and Video from Add bring files in.
+ */
+const ToolbarContent = () => (
+  <>
+    <SelectToolbarItem />
+    <HandToolbarItem />
+    <DrawToolbarItem />
+    <EraserToolbarItem />
+    <TextToolbarItem />
+    <NoteToolbarItem />
+    <ArrowToolbarItem />
+    <RectangleToolbarItem />
+    <EllipseToolbarItem />
+    <TriangleToolbarItem />
+    <DiamondToolbarItem />
+    <HexagonToolbarItem />
+    <OvalToolbarItem />
+    <RhombusToolbarItem />
+    <StarToolbarItem />
+    <CloudToolbarItem />
+    <HeartToolbarItem />
+    <XBoxToolbarItem />
+    <CheckBoxToolbarItem />
+    <ArrowLeftToolbarItem />
+    <ArrowUpToolbarItem />
+    <ArrowDownToolbarItem />
+    <ArrowRightToolbarItem />
+    <LineToolbarItem />
+    <HighlightToolbarItem />
+    <LaserToolbarItem />
+    <FrameToolbarItem />
+  </>
+);
 
 export const BottomToolbar = () => {
   const editor = useEditor();
@@ -28,10 +98,10 @@ export const BottomToolbar = () => {
                 {ActionsMenu && <ActionsMenu />}
               </TldrawUiToolbar>
             )}
-            {/* tldraw shows one tool past maxItems: 7 ends the bar at Media, so the shapes open from the chevron. */}
+            {/* tldraw shows one tool past maxItems: 5 ends the bar at Note, so the arrow and shapes open from the chevron. */}
             {/* oxlint-disable-next-line shadcn/no-unknown-classes -- tldraw measures the room for its tools on this parent. */}
-            <OverflowingToolbar orientation="horizontal" sizingParentClassName="tlui-main-toolbar" minItems={4} maxItems={7} minSizePx={310} maxSizePx={470}>
-              <DefaultToolbarContent />
+            <OverflowingToolbar orientation="horizontal" sizingParentClassName="tlui-main-toolbar" minItems={4} maxItems={5} minSizePx={310} maxSizePx={470}>
+              <ToolbarContent />
             </OverflowingToolbar>
             {End && <End />}
           </div>
