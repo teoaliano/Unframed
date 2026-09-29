@@ -60,7 +60,7 @@ test("pasting into another project copies every file in; a pasted page always ge
 
   // Into another project, every file is copied in.
   await page.getByRole("button", { name: "Project", exact: true }).click();
-  await page.getByRole("menuitem", { name: "beta" }).click();
+  await page.getByRole("menuitemradio", { name: "beta" }).click();
   await expect(page.locator("[data-canvas-project='beta'] .tl-canvas")).toBeVisible();
   await page.keyboard.press("ControlOrMeta+v");
   const betaRecords = await waitForRoom(engine, "beta", (records) => {

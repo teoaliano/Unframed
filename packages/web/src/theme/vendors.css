@@ -6,20 +6,20 @@
 
 /*
  * Tiptap: the Generate composer's instruction box (spec 12 task 11), after t3code's
- * .composer-tiptap. The Agent tray's prompt editor carries the same class.
+ * .composer-tiptap, keyed on the box's own attribute.
  */
-.unframed-composer-input {
+[data-generate-prompt] {
   min-height: 1lh;
   outline: none;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
 
-.unframed-composer-input p {
+[data-generate-prompt] p {
   margin: 0;
 }
 
-.unframed-composer-input p.is-editor-empty:first-child::before {
+[data-generate-prompt] p.is-editor-empty:first-child::before {
   content: attr(data-placeholder);
   float: left;
   height: 0;

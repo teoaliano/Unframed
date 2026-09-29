@@ -70,6 +70,8 @@ export const unkittedControls = (page: Page): Promise<string[]> =>
       if (element.isContentEditable) continue;
       // Base UI's toast root carries no slot of its own; the kit's toast viewport around it does.
       if (element.closest("[data-slot='toast-viewport'], [data-slot='toast-viewport-anchored']") && !element.matches("button")) continue;
+      // The diff panel is t3code's diff panel shell (spec 12), a feature surface with a dialog role, not the kit Dialog.
+      if (element.matches("[data-testid='diff-panel']")) continue;
       if (element.hasAttribute("data-slot")) continue;
       const name = element.getAttribute("aria-label") ?? element.textContent?.trim().slice(0, 40) ?? "";
       const attributes = [...element.attributes].map((attribute) => attribute.name).filter((attribute) => attribute !== "class" && attribute !== "style");

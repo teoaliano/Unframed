@@ -8,6 +8,7 @@ import { Button, InlineButton } from "~/components/ui/button";
 import { Spinner } from "~/components/ui/spinner";
 import { Toggle, ToggleGroup } from "~/components/ui/toggle-group";
 import { appliedRecipe, groupRecipeOf, setGroupRecipe } from "../../canvas/groupRecipes.ts";
+import { MessageAction } from "../../chrome/MessageAction.tsx";
 import { Tip } from "../../chrome/ui.tsx";
 import { useEngine, useSettings } from "../../context.ts";
 import { IMPORTED_RECIPE_NOTE, liveSource } from "../approximate.ts";
@@ -293,10 +294,10 @@ export const GenerateTray = ({ project, recipe, onSent, onMenuOpen, handle }: Ge
               {estimate}
             </span>
           )}
-          <Button size="sm" aria-busy={sending || undefined} data-sending={sending ? "true" : undefined} disabled={blocked || sending} onClick={() => void send()}>
+          <MessageAction tone="pill" aria-busy={sending || undefined} data-sending={sending ? "true" : undefined} disabled={blocked || sending} onClick={() => void send()}>
             {sending ? <Spinner aria-hidden /> : <ArrowUp aria-hidden />}
             {sending && definition.sendingLabel !== undefined ? definition.sendingLabel : definition.sendLabel(values ?? { model: undefined, picked: false, props: {} })}
-          </Button>
+          </MessageAction>
         </div>
       </div>
       {definition.Status && values ? (

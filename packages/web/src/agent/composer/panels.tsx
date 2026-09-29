@@ -4,7 +4,7 @@ import { Check, ChevronDown, ChevronRight, Ellipsis, ListChecks, ListTodo, Messa
 import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type RefObject } from "react";
 import { Button } from "~/components/ui/button";
 import { Menu, MenuItem, MenuPopup, MenuTrigger } from "~/components/ui/menu";
-import { MessageAction } from "./MessageAction.tsx";
+import { MessageAction } from "../../chrome/MessageAction.tsx";
 import type { ChatClient } from "../store.ts";
 import type { PromptEditorHandle } from "./PromptEditor.tsx";
 import { record } from "../record.ts";

@@ -89,17 +89,6 @@
         "shadcn/require-static-classes": "off",
         "react/forbid-elements": "off"
       }
-    },
-    // Surfaces spec 12 has not moved onto the kit yet. Each task removes its files; the sweep (task 24) leaves this empty.
-    {
-      "files": [],
-      "rules": {
-        "shadcn/no-unknown-classes": "off",
-        "shadcn/no-raw-colors": "off",
-        "shadcn/require-static-classes": "off",
-        "shadcn/no-restyle": "off",
-        "react/forbid-elements": "off"
-      }
     }
   ]
 }

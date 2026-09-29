@@ -6,7 +6,6 @@ import { useCallback, useContext, useEffect, useMemo, useRef } from "react";
 import { Tldraw, type Editor, type TLComponents, type TldrawOptions } from "tldraw";
 import "tldraw/tldraw.css";
 import "./canvas.css";
-import "../generate/generate.css";
 import "../generate/imageMedium.ts";
 import "../generate/videoMedium.ts";
 import "../generate/textMedium.ts";

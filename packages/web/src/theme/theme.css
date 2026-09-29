@@ -1,7 +1,6 @@
 @import "tailwindcss";
 @import "./tldraw.css";
 @import "./vendors.css";
-@import "./legacy.css";
 
 /*
  * The token stylesheet: t3code's default light and dark theme (apps/web/src/index.css,

@@ -44,7 +44,7 @@ const shadowOf = (page: Page, expression: string) =>
     return resolved;
   }, expression);
 
-test("the composer is t3code's composer shell, with the kit's segmented medium switch and its primary send button", async ({ page, generation }) => {
+test("the composer is t3code's composer shell, with the kit's segmented medium switch and t3code's message-action send", async ({ page, generation }) => {
   await openCanvas(page, generation.engine);
   await clickShape(page, "shape:starter-subject");
   await openComposer(page);
@@ -52,7 +52,7 @@ test("the composer is t3code's composer shell, with the kit's segmented medium s
   const media = composer(page).getByRole("radiogroup", { name: "Medium" });
   await expectSlot(media, "toggle-group");
   for (const option of await media.getByRole("radio").all()) await expectSlot(option, "toggle");
-  await expectSlot(sendButton(page), "button");
+  await expectSlot(sendButton(page), "message-action");
   await expect.poll(async () => Math.round((await shell.boundingBox())!.width)).toBe(420);
   await inBothSchemes(page, async (scheme) => {
     await page.mouse.move(5, 500);

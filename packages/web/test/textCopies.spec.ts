@@ -23,7 +23,7 @@ test("a copied text result is still a text result, in this project and pasted in
   await expect(shapeOnScreen(page, copy.id).locator("[data-shape-label]")).toHaveText(`$0.0012 · @${copy.meta.ref}`);
 
   await page.getByRole("button", { name: "Project", exact: true }).click();
-  await page.getByRole("menuitem", { name: "beta" }).click();
+  await page.getByRole("menuitemradio", { name: "beta" }).click();
   await expect(page.locator("[data-canvas-project='beta'] .tl-canvas")).toBeVisible();
   await page.keyboard.press("ControlOrMeta+v");
   await expect.poll(async () => (await roomShapes(engine, "beta", "text")).find((shape) => shape.meta?.unframed?.result)?.meta.unframed.result.sidecar ?? null).not.toBeNull();

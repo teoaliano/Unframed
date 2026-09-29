@@ -23,7 +23,7 @@ import { latestCompletedTool, returnQueued, sendQueued } from "../queue.tsx";
 import { Alert, AlertDescription } from "~/components/ui/alert";
 import { Button } from "~/components/ui/button";
 import { Tip } from "../../chrome/ui.tsx";
-import { MessageAction, SendArrow, StopSquare } from "./MessageAction.tsx";
+import { MessageAction, SendArrow, StopSquare } from "../../chrome/MessageAction.tsx";
 import { formatSize, useAttachments } from "./attachments.ts";
 import { StashMenu, useStash } from "./stash.tsx";
 import { ApprovalPanel, choiceOnly, PlanActions, PlanReady, useQuestionAnswers, waitingRequests } from "./panels.tsx";

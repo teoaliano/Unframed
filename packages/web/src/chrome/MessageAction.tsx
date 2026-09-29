@@ -3,8 +3,9 @@ import { useRender } from "@base-ui/react/use-render";
 
 /*
  * t3code's message actions (ComposerPrimaryActions): the round Send and Stop and the
- * labelled pill that takes Send's place (Submit answer, Implement). They are the
- * composer's own buttons, not restyled kit Buttons, as they are in t3code.
+ * labelled pill that takes Send's place (Generate, Submit answer, Implement). They are
+ * the composer's own buttons, shared by its Generate and Agent trays, not restyled kit
+ * Buttons, as they are in t3code.
  */
 
 const ROUND =

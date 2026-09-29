@@ -85,7 +85,7 @@ export const InstructionEditor = ({ initial, placeholder, onChange, onMenuOpen, 
     content: toDoc(initial),
     autofocus: "end",
     editorProps: {
-      attributes: { class: "unframed-composer-input", "aria-label": placeholder, role: "textbox", "aria-multiline": "true" },
+      attributes: { "data-generate-prompt": "", "aria-label": placeholder, role: "textbox", "aria-multiline": "true" },
       handleKeyDown: (_view, event) => {
         const { open, rows, highlight: index, mention: at } = latest.current;
         if (!open || !at) return false;
