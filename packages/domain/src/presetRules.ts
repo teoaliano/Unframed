@@ -455,7 +455,7 @@ export const systemPresets = (input: {
   readonly layerizeTextHeight?: number;
   readonly proseTextHeight?: number;
 }): Preset[] => {
-  const planHeight = input.layerizeTextHeight ?? 470;
+  const planHeight = input.layerizeTextHeight ?? 520;
   const imageY = TOP + planHeight + GAP;
   const layerize: Preset = {
     format: 2,
@@ -482,7 +482,7 @@ export const systemPresets = (input: {
       bindings: [],
     },
   };
-  const proseHeight = input.proseTextHeight ?? 640;
+  const proseHeight = input.proseTextHeight ?? 720;
   const toJson: Preset = {
     format: 2,
     id: "to-json",
