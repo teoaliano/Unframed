@@ -15,7 +15,8 @@ import { iconButtonClass, Tip } from "../chrome/ui.tsx";
 import { useCanvasProject, useEngine } from "../context.ts";
 import { AgentRail } from "./rail/AgentRail.tsx";
 import { ToolbarAgentTray } from "./composer/AgentTray.tsx";
-import { useChatClient, useRailUi, type ChatClient } from "./store.ts";
+import { providerMessage } from "./providers.ts";
+import { useChatClient, useProviders, useRailUi, type ChatClient } from "./store.ts";
 
 /** How long the rail waits for its own transitionend before it unmounts anyway: a hidden tab fires none. */
 const EXIT_GUARANTEE_MS = 600;
@@ -48,6 +49,28 @@ const RailMotion = ({ open, children }: { readonly open: boolean; readonly child
   return <>{children((node) => (element.current = node), open ? "open" : "closed")}</>;
 };
 
+/** The selection toolbar's filled Agent button; with no provider ready its tooltip is the provider's message. */
+const ToolbarAgentButton = ({ client, onOpen }: { readonly client: ChatClient; readonly onOpen: () => void }) => {
+  const { statuses } = useProviders(client);
+  const message = providerMessage(statuses);
+  const button = (
+    <button
+      type="button"
+      className="unframed-bar-button unframed-bar-button--primary"
+      onPointerEnter={() => void client.loadProviders()}
+      onFocus={() => void client.loadProviders()}
+      onClick={() => {
+        void client.loadProviders();
+        onOpen();
+      }}
+    >
+      <Sparkles size={14} aria-hidden />
+      Agent
+    </button>
+  );
+  return message === undefined ? button : <Tip label={message} side="top">{button}</Tip>;
+};
+
 const AgentChromeButton = ({ client }: { readonly client: ChatClient }) => (
   <Tip label="Agent">
     <button
@@ -73,7 +96,8 @@ export const AgentHost = () => {
 
   useEffect(() => {
     const Button = () => <AgentChromeButton client={client} />;
-    const stops = [registerSlot("agentButton", Button), registerSlot("agentTray", ToolbarAgentTray)];
+    const OnToolbar = ({ onOpen }: { readonly onOpen: () => void }) => <ToolbarAgentButton client={client} onOpen={onOpen} />;
+    const stops = [registerSlot("agentButton", Button), registerSlot("agentTray", ToolbarAgentTray), registerSlot("agentToolbarButton", OnToolbar)];
     return () => {
       for (const stop of stops) stop();
     };

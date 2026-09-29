@@ -1,13 +1,16 @@
 import type { ModelSelection } from "@unframed/contracts";
-import { DEFAULT_RUNTIME_MODE, type InteractionMode, type RuntimeMode } from "@unframed/domain";
-import { ArrowUp, Square } from "lucide-react";
+import { continuableChat, DEFAULT_RUNTIME_MODE, tabLabel, type InteractionMode, type RuntimeMode } from "@unframed/domain";
+import { ArrowLeft, ArrowUp, Square } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type { AgentTrayProps as SlotProps } from "../../chrome/slots.ts";
 import { useEngine } from "../../context.ts";
 import { noProviderReady, providerName, readyProviders } from "../providers.ts";
 import { createChat, messageOf, sendMessage } from "../send.ts";
-import { useChatClient, useProviders, useWatchedThread, type ChatClient } from "../store.ts";
+import { useChatClient, useChats, useProviders, useWatchedThread, type ChatClient } from "../store.ts";
+import { Tip } from "../../chrome/ui.tsx";
+import { ChipRow, contextSelection, useSelectionChips } from "./chips.tsx";
 import { PromptEditor, type PromptEditorHandle, type Trigger } from "./PromptEditor.tsx";
+import { useMaybeEditor, useValue } from "tldraw";
 
 export const PROMPT_LABEL = "Message the agent";
 
@@ -48,8 +51,10 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
   const running = chat?.latestTurn?.state === "running";
   const none = noProviderReady(statuses);
   const ready = readyProviders(statuses);
+  const canvas = useMaybeEditor();
   const box = useRef<PromptEditorHandle>(null);
   const [text, setText] = useState("");
+  const chips = useSelectionChips(canvas, text.trim() === "");
   const [trigger, setTrigger] = useState<Trigger>();
   const [sending, setSending] = useState(false);
   const [draftModel, setDraftModel] = useState<ModelSelection | undefined>();
@@ -80,8 +85,10 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
         target = await createChat(client, { modelSelection: selection, runtimeMode: draftRuntime, interactionMode: draftInteraction, tags: newChatTags }, message);
       }
       beforeSend?.(target);
+      const context = contextSelection(canvas, chips.shapes);
       box.current?.clear();
-      await sendMessage(client, target, { text: message, selection: [], attachments: [] });
+      chips.set(canvas?.getSelectedShapeIds() ?? []);
+      await sendMessage(client, target, { text: message, selection: context, attachments: [] });
       onSent?.();
     } catch (error) {
       client.setUi({ error: messageOf(error) });
@@ -89,7 +96,7 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
     } finally {
       setSending(false);
     }
-  }, [none, sending, client, chatId, selection, draftRuntime, draftInteraction, newChatTags, beforeSend, onSent]);
+  }, [none, sending, client, chatId, selection, draftRuntime, draftInteraction, newChatTags, beforeSend, onSent, canvas, chips]);
 
   const interrupt = () => {
     if (!chat?.latestTurn) return;
@@ -105,6 +112,13 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
     <div className="unframed-agent-tray" data-variant={variant} data-testid="agent-tray">
       {top}
       <div className="unframed-agent-box">
+        <ChipRow
+          shapes={chips.shapes}
+          onRemove={(ids) => {
+            chips.remove(ids);
+            box.current?.focus();
+          }}
+        />
         <PromptEditor
           placeholder={placeholder}
           label={PROMPT_LABEL}
@@ -114,6 +128,7 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
           onSubmit={() => void send()}
           onPaste={() => false}
           handle={box}
+          autofocus={variant === "toolbar"}
         />
         <div className="unframed-agent-footer">
           <div className="unframed-agent-footer__tools" />
@@ -134,17 +149,62 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
   );
 };
 
-/** The toolbar composer's Agent tray: the chat chosen by the continue rule, the rail opened on it before the send. */
+const ARTIFACT_TYPES = new Set(["page", "motion"]);
+
+/**
+ * The toolbar composer's Agent tray: the message continues the newest chat that has seen
+ * every selected artifact, or starts one tagged with them, and says which; Send opens the
+ * rail on that chat before the message goes out.
+ */
 export const ToolbarAgentTray = ({ project, close }: SlotProps) => {
   const client = useChatClient(useEngine(), project);
+  const canvas = useMaybeEditor();
+  const chats = useChats(client);
+  const artifactKey = useValue(
+    "selected artifacts",
+    () => (canvas?.getSelectedShapes() ?? []).filter((shape) => ARTIFACT_TYPES.has(shape.type)).map((shape) => shape.id).join(" "),
+    [canvas],
+  );
+  const artifacts = useMemo(() => (artifactKey === "" ? [] : artifactKey.split(" ")), [artifactKey]);
+  const continuable = continuableChat(chats, artifacts);
+  const [fresh, setFresh] = useState(false);
+  const target = fresh || !continuable ? null : continuable.id;
   return (
     <AgentTray
       client={client}
       variant="toolbar"
-      chatId={null}
-      newChatTags={[]}
+      chatId={target}
+      newChatTags={artifacts}
       beforeSend={(chatId) => client.setUi({ open: true, chosen: chatId, pinned: null })}
       onSent={close}
+      top={
+        <div className="unframed-agent-target" data-testid="agent-target">
+          <span className="unframed-agent-target__line">
+            {target !== null && continuable ? (
+              <>
+                continues <em>{tabLabel(continuable)}</em>
+              </>
+            ) : (
+              "new chat"
+            )}
+          </span>
+          {target !== null ? (
+            <button type="button" className="unframed-agent-button unframed-agent-button--ghost" onClick={() => setFresh(true)}>
+              New chat instead
+            </button>
+          ) : continuable ? (
+            <button type="button" className="unframed-agent-button unframed-agent-button--ghost" onClick={() => setFresh(false)}>
+              Continue the earlier chat
+            </button>
+          ) : null}
+          <span className="flex-1" />
+          <Tip label="Back to tools (Esc)" side="top">
+            <button type="button" className="unframed-agent-control unframed-agent-control--icon" aria-label="Back to tools (Esc)" onClick={close}>
+              <ArrowLeft size={14} aria-hidden />
+            </button>
+          </Tip>
+        </div>
+      }
       note={(provider) => <span className="unframed-agent-note">{`${provider} · not metered`}</span>}
     />
   );

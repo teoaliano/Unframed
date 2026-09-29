@@ -169,14 +169,21 @@ const useSelectedRecipe = (shapeId: string | undefined, sidecar: string | null |
   return recipe !== undefined && recipe.shapeId === shapeId ? recipe.recipe : undefined;
 };
 
-const AgentButton = ({ onOpen }: { onOpen: () => void }) => (
-  <>
-    <span className="unframed-bar-separator" aria-hidden />
-    <button type="button" className={buttonClass("plain")} onClick={onOpen}>
-      Agent
-    </button>
-  </>
-);
+const AgentButton = ({ onOpen }: { onOpen: () => void }) => {
+  const { agentToolbarButton: Registered } = useSlots();
+  return (
+    <>
+      <span className="unframed-bar-separator" aria-hidden />
+      {Registered ? (
+        <Registered onOpen={onOpen} />
+      ) : (
+        <button type="button" className={buttonClass("plain")} onClick={onOpen}>
+          Agent
+        </button>
+      )}
+    </>
+  );
+};
 
 const ResultBar = ({ shapeId, agent }: { shapeId: TLShapeId; agent: ReactNode }) => {
   const editor = useEditor();

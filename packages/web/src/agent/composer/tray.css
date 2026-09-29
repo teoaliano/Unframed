@@ -10,6 +10,76 @@
   width: 440px;
 }
 
+/* The toolbar composer's line: which chat the message joins, and the switch. */
+.unframed-agent-target {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 28px;
+  padding: 0 2px;
+  font-size: 12.5px;
+  color: var(--unframed-text-secondary);
+}
+
+.unframed-agent-target__line {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.unframed-agent-target__line em {
+  font-style: italic;
+  color: var(--unframed-text-primary);
+}
+
+/* The selection as chips: an artifact by its name, the rest as one count. */
+.unframed-agent-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.unframed-agent-chip {
+  display: inline-flex;
+  max-width: 100%;
+  height: 22px;
+  align-items: center;
+  gap: 4px;
+  padding: 0 2px 0 7px;
+  border: 1px solid var(--unframed-border);
+  border-radius: 999px;
+  background-color: var(--unframed-overlay-hover);
+  color: var(--unframed-text-primary);
+  font-size: 12px;
+}
+
+.unframed-agent-chip__label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.unframed-agent-chip button {
+  display: inline-flex;
+  width: 16px;
+  height: 16px;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--unframed-icon-secondary);
+  cursor: pointer;
+}
+
+.unframed-agent-chip button:hover {
+  background-color: var(--unframed-overlay-pressed);
+}
+
 .unframed-agent-box {
   position: relative;
   display: flex;

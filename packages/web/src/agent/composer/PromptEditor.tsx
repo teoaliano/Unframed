@@ -122,6 +122,7 @@ export interface PromptEditorProps {
   readonly onPaste: (event: ClipboardEvent) => boolean;
   readonly handle: Ref<PromptEditorHandle>;
   readonly disabled?: boolean;
+  readonly autofocus?: boolean;
 }
 
 /**
@@ -129,7 +130,7 @@ export interface PromptEditorProps {
  * formatting off, so typed markdown stays literal, and one paragraph per line. Enter
  * sends; Shift+Enter and Option+Enter break the line.
  */
-export const PromptEditor = ({ placeholder, label, onChange, onTrigger, onKey, onSubmit, onPaste, handle, disabled }: PromptEditorProps) => {
+export const PromptEditor = ({ placeholder, label, onChange, onTrigger, onKey, onSubmit, onPaste, handle, disabled, autofocus }: PromptEditorProps) => {
   const latest = useRef({ onChange, onTrigger, onKey, onSubmit, onPaste });
   latest.current = { onChange, onTrigger, onKey, onSubmit, onPaste };
   const placeholderRef = useRef(placeholder);
@@ -159,6 +160,7 @@ export const PromptEditor = ({ placeholder, label, onChange, onTrigger, onKey, o
       ChipNode,
     ],
     content: { type: "doc", content: [{ type: "paragraph" }] },
+    autofocus: autofocus === true ? "end" : false,
     editorProps: {
       attributes: { class: "unframed-composer-input unframed-agent-input", "aria-label": label, role: "textbox", "aria-multiline": "true" },
       handleKeyDown: (view, event) => {
