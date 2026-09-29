@@ -82,7 +82,10 @@ const UserMessage = ({ message, running, onEdit }: { readonly message: ChatMessa
   );
 };
 
-/** Messages waiting for the running turn (t3code's queued row): a dashed, dimmed bubble with Send now and a way back to the composer. */
+/**
+ * Messages waiting for the running turn (t3code's queued row): a dashed, dimmed bubble with
+ * Send now and a way back to the composer. A press on either keeps the focus in the composer.
+ */
 const QueuedMessages = ({ client, chatId }: { readonly client: ChatClient; readonly chatId: string }) => {
   const queue = useQueue(client, chatId);
   return queue.map((item, index) => (
@@ -96,11 +99,17 @@ const QueuedMessages = ({ client, chatId }: { readonly client: ChatClient; reado
           </span>
         </Tip>
         <div className="ml-auto flex items-center gap-0.5">
-          <Button variant="ghost-muted" size="xs" disabled={item.state === "sending"} onClick={() => void sendQueued(client, chatId, item.id)}>
+          <Button variant="ghost-muted" size="xs" disabled={item.state === "sending"} onPointerDown={(event) => event.preventDefault()} onClick={() => void sendQueued(client, chatId, item.id)}>
             Send now
           </Button>
           <Tip label="Cancel and return to the composer" side="bottom">
-            <Button variant="ghost-muted" size="icon-xs" aria-label="Cancel and return to the composer" onClick={() => returnQueued(client, chatId, item.id)}>
+            <Button
+              variant="ghost-muted"
+              size="icon-xs"
+              aria-label="Cancel and return to the composer"
+              onPointerDown={(event) => event.preventDefault()}
+              onClick={() => returnQueued(client, chatId, item.id)}
+            >
               <X aria-hidden />
             </Button>
           </Tip>

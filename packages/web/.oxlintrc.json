@@ -94,14 +94,7 @@
     {
       "files": [
         "src/agent/ConfirmDialog.tsx",
-        "src/agent/composer/AgentTray.tsx",
-        "src/agent/composer/AttachmentShelf.tsx",
-        "src/agent/composer/ComposerMenu.tsx",
-        "src/agent/composer/PromptEditor.tsx",
-        "src/agent/composer/chips.tsx",
         "src/agent/composer/panels.tsx",
-        "src/agent/composer/pickers.tsx",
-        "src/agent/composer/stash.tsx",
         "src/agent/diff/DiffPanel.tsx",
         "src/artifacts/ArtifactFrame.tsx",
         "src/artifacts/ArtifactsHost.tsx",

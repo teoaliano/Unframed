@@ -37,7 +37,7 @@ const ChipNode = Node.create({
     mergeAttributes(HTMLAttributes, {
       "data-agent-chip": node.attrs.kind,
       "data-ref": node.attrs.ref,
-      class: "unframed-agent-inline-chip",
+      class: "mx-px inline-flex h-[1.41em] max-w-full items-center rounded-[0.5em] border border-border/70 bg-accent/40 px-[0.5em] align-middle font-medium text-[0.86em] leading-none whitespace-nowrap text-foreground",
       contenteditable: "false",
     }),
     node.attrs.kind === "skill" ? `$${node.attrs.ref}` : `${node.attrs.title}`,
@@ -164,7 +164,13 @@ export const PromptEditor = ({ placeholder, label, onChange, onTrigger, onKey, o
     content: { type: "doc", content: [{ type: "paragraph" }] },
     autofocus: autofocus === true ? "end" : false,
     editorProps: {
-      attributes: { class: "unframed-composer-input unframed-agent-input", "aria-label": label, role: "textbox", "aria-multiline": "true" },
+      attributes: {
+        class: "block min-h-10.5 whitespace-pre-wrap break-words bg-transparent leading-relaxed text-foreground focus:outline-none",
+        "data-agent-prompt": "",
+        "aria-label": label,
+        role: "textbox",
+        "aria-multiline": "true",
+      },
       handleKeyDown: (view, event) => {
         if (latest.current.onKey(event)) {
           event.preventDefault();
@@ -234,7 +240,7 @@ export const PromptEditor = ({ placeholder, label, onChange, onTrigger, onKey, o
   );
 
   return (
-    <div className="unframed-composer-editor" data-scrolls="true">
+    <div className="relative max-h-45 overflow-y-auto text-sm" data-scrolls="true">
       <EditorContent editor={editor} />
     </div>
   );

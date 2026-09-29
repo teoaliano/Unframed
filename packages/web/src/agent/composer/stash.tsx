@@ -1,9 +1,9 @@
-import { Menu } from "@base-ui/react/menu";
 import type { ChatAttachment } from "@unframed/contracts";
 import { Archive, Trash2 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { platform } from "../../canvas/platform.ts";
-import { itemClass, popupClass } from "../../chrome/ui.tsx";
+import { Button } from "~/components/ui/button";
+import { Menu, MenuItem, MenuPopup, MenuTrigger } from "~/components/ui/menu";
 import type { EngineConnection } from "../../rpc/engine.ts";
 import { showNotice } from "../../toasts.tsx";
 import { newId } from "../store.ts";
@@ -101,55 +101,53 @@ export const StashMenu = ({
 }) => {
   const mac = platform() === "darwin";
   return (
-    <Menu.Root open={open} onOpenChange={(next) => onOpenChange(next)}>
-      <Menu.Trigger
-        className="unframed-agent-stash"
-        aria-label={`Stashed prompts: ${entries.length}. Open stash.`}
-        data-testid="stash-badge"
-        data-empty={entries.length === 0 ? "" : undefined}
-      >
-        <Archive size={12} aria-hidden />
-        Stash
-      </Menu.Trigger>
-      <Menu.Portal>
-        <Menu.Positioner side="top" align="end" sideOffset={6} className="z-[1100]">
-          <Menu.Popup className={`${popupClass} w-[300px]`} aria-label="Stashed prompts">
-            {entries.length === 0 ? (
-              <p className="m-0 p-2 text-[12.5px] text-muted-foreground">{`Nothing stashed yet. Press ${mac ? "⌘S" : "Ctrl+S"} with a prompt in the composer to stash it.`}</p>
-            ) : (
-              entries.map((entry) => (
-                <Menu.Item
-                  key={entry.id}
-                  className={`${itemClass} h-auto min-h-8 py-1.5`}
-                  onClick={() => onRestore(entry)}
-                  onKeyDown={(event) => {
-                    if (event.key === "Backspace" && (mac ? event.metaKey : event.ctrlKey)) {
-                      event.preventDefault();
-                      onDelete(entry);
-                    }
-                  }}
-                >
-                  <span className="flex min-w-0 flex-1 flex-col">
-                    <span className="truncate">{snippet(entry.text) || "(attachments only)"}</span>
-                    <span className="text-[11px] text-muted-foreground">{relativeTime(entry.at)}</span>
-                  </span>
-                  <button
-                    type="button"
-                    aria-label="Delete stashed prompt"
-                    className="unframed-agent-control unframed-agent-control--icon"
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      onDelete(entry);
-                    }}
-                  >
-                    <Trash2 size={13} aria-hidden />
-                  </button>
-                </Menu.Item>
-              ))
-            )}
-          </Menu.Popup>
-        </Menu.Positioner>
-      </Menu.Portal>
-    </Menu.Root>
+    <Menu open={open} onOpenChange={(next) => onOpenChange(next)}>
+      {/* Kept in place while empty, hidden, so the menu opened from the keyboard still has its anchor. */}
+      <span className={entries.length === 0 ? "invisible inline-flex w-0 overflow-hidden" : "inline-flex"}>
+        <MenuTrigger
+          render={<Button variant="outline" size="xs" />}
+          aria-label={`Stashed prompts: ${entries.length}. Open stash.`}
+          data-testid="stash-badge"
+          data-empty={entries.length === 0 ? "" : undefined}
+        >
+          <Archive aria-hidden />
+          Stash
+        </MenuTrigger>
+      </span>
+      <MenuPopup side="top" align="end" sideOffset={6} className="w-[300px]" aria-label="Stashed prompts">
+        {entries.length === 0 ? (
+          <p className="m-0 px-2 py-1.5 text-xs text-muted-foreground">{`Nothing stashed yet. Press ${mac ? "⌘S" : "Ctrl+S"} with a prompt in the composer to stash it.`}</p>
+        ) : (
+          entries.map((entry) => (
+            <MenuItem
+              key={entry.id}
+              onClick={() => onRestore(entry)}
+              onKeyDown={(event) => {
+                if (event.key === "Backspace" && (mac ? event.metaKey : event.ctrlKey)) {
+                  event.preventDefault();
+                  onDelete(entry);
+                }
+              }}
+            >
+              <span className="flex min-w-0 flex-1 flex-col py-0.5">
+                <span className="truncate text-foreground/80">{snippet(entry.text) || "(attachments only)"}</span>
+                <span className="text-2xs text-muted-foreground tabular-nums">{relativeTime(entry.at)}</span>
+              </span>
+              <Button
+                variant="ghost-muted"
+                size="icon-xs"
+                aria-label="Delete stashed prompt"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  onDelete(entry);
+                }}
+              >
+                <Trash2 aria-hidden />
+              </Button>
+            </MenuItem>
+          ))
+        )}
+      </MenuPopup>
+    </Menu>
   );
 };

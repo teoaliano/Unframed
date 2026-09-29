@@ -6,6 +6,7 @@ import type { TestEngine } from "../../engine/test/engineProcess.ts";
 import { openCanvas } from "./canvas.ts";
 import { createChat, engineChat, expect, onlyChat, openRail, promptBox, say, sendThrough, startAgentEngine, startProvidersEngine, tabs } from "./agent.ts";
 import { test as base } from "./fixtures.ts";
+import { expectToken } from "./kit.ts";
 
 /** An engine whose providers are signed-in fakes, torn down with its folder. */
 const test = base.extend<{ providers: TestEngine }>({
@@ -108,7 +109,7 @@ test("the model picker: provider tabs with logos, search, the Legacy section, an
   await expect(popup.getByRole("tab")).toHaveText(["Claude", "Codex"]);
   await expect(popup.getByRole("tab", { name: "Claude" }).locator("[data-logo='claude']")).toHaveCount(1);
   await expect(popup.getByRole("tab", { name: "Codex" }).locator("[data-logo='codex']")).toHaveCount(1);
-  const rows = popup.getByRole("listbox").locator(".unframed-agent-model-row__name");
+  const rows = popup.getByRole("listbox").getByTestId("model-name");
   await expect(rows).toHaveText(["Opus 5.5", "Sonnet 5", "Fable 5.1", "Haiku 4.5"]);
   const legacy = popup.getByRole("button", { name: /Legacy models/ });
   await expect(legacy).toHaveText("Legacy models7 models");
@@ -294,6 +295,8 @@ test("the context window meter fills to the scripted usage, turns red above 90 %
     const meter = panel.getByTestId("context-meter");
     await expect(meter).toHaveAttribute("aria-label", "Context window 25% used");
     await expect(meter).not.toHaveAttribute("data-overloaded");
+    await expect(meter).toHaveAttribute("data-slot", "popover-trigger");
+    await expectToken(meter.getByTestId("context-ring"), "stroke", "--primary");
     await meter.hover();
     const popup = page.getByRole("dialog", { name: "Context Window" });
     await expect(popup.getByText("Context Window", { exact: true })).toBeVisible();
@@ -307,6 +310,7 @@ test("the context window meter fills to the scripted usage, turns red above 90 %
     await say(panel, "and now?");
     await expect(meter).toHaveAttribute("aria-label", "Context window 93% used");
     await expect(meter).toHaveAttribute("data-overloaded", "");
+    await expectToken(meter.getByTestId("context-ring"), "stroke", "--error");
     await meter.hover();
     await popup.getByRole("button", { name: "Compact context" }).click();
     await expect(panel.locator("[data-role='user'] [data-testid='message-text']").last()).toHaveText("/compact");

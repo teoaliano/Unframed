@@ -1,5 +1,6 @@
 import { useLayoutEffect, useRef, useState, type ReactNode, type RefObject } from "react";
 import { createPortal } from "react-dom";
+import { Badge } from "~/components/ui/badge";
 
 export interface MenuItem {
   readonly key: string;
@@ -46,12 +47,12 @@ export const ComposerMenu = ({
       ref={list}
       role="listbox"
       aria-label={label}
-      className="unframed-agent-menu"
-      style={{ position: "fixed", left: place.left, bottom: place.bottom, width: place.width, zIndex: 1200 }}
+      className="dropdown-glass fixed z-[130] box-border max-h-65 overflow-y-auto rounded-lg p-1 font-sans text-foreground shadow-lg/5"
+      style={{ left: place.left, bottom: place.bottom, width: place.width }}
       onPointerDown={(event) => event.preventDefault()}
     >
       {items.length === 0 ? (
-        <p className="unframed-agent-menu__empty">{empty}</p>
+        <p className="m-0 px-2 py-1.5 text-xs text-secondary-label">{empty}</p>
       ) : (
         items.map((item, index) => (
           <div
@@ -59,7 +60,8 @@ export const ComposerMenu = ({
             role="option"
             aria-selected={index === highlight}
             data-index={index}
-            className="unframed-agent-menu__row"
+            data-highlighted={index === highlight ? "" : undefined}
+            className="flex min-h-7 cursor-default select-none items-center gap-2 rounded-sm px-2 py-1.5 text-sm outline-none data-highlighted:bg-accent data-highlighted:text-accent-foreground"
             onPointerDown={(event) => {
               event.preventDefault();
               event.stopPropagation();
@@ -67,10 +69,14 @@ export const ComposerMenu = ({
             }}
             onPointerEnter={() => onHighlight(index)}
           >
-            {item.icon !== undefined && <span className="unframed-agent-menu__icon">{item.icon}</span>}
-            <span className="unframed-agent-menu__label">{item.label}</span>
-            {item.description !== undefined && item.description !== "" && <span className="unframed-agent-menu__description">{item.description}</span>}
-            {item.badge !== undefined && <span className="unframed-agent-menu__badge">{item.badge}</span>}
+            {item.icon !== undefined && <span className="inline-flex shrink-0 text-muted-foreground">{item.icon}</span>}
+            <span className="min-w-0 max-w-[45%] shrink-0 truncate text-xs font-medium">{item.label}</span>
+            {item.description !== undefined && item.description !== "" && <span className="min-w-0 flex-1 truncate text-left text-xs text-secondary-label">{item.description}</span>}
+            {item.badge !== undefined && (
+              <Badge variant="secondary" className="ms-auto">
+                {item.badge}
+              </Badge>
+            )}
           </div>
         ))
       )}

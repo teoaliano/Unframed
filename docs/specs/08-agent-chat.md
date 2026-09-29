@@ -164,7 +164,7 @@ After the last message of each turn that touched anything, a recap card on the c
 
 ### The Agent tray
 
-The composer is one component (spec 03) with two trays. This spec builds its Agent tray, 1:1 on t3code's composer (`apps/web/src/components/chat/` and its composer editor), inside Unframed's look (Base UI, Tailwind, the ported tokens). Where a detail below is not stated, follow t3code.
+The composer is one component (spec 03) with two trays. This spec builds its Agent tray, 1:1 on t3code's composer (`apps/web/src/components/chat/` and its composer editor), on the kit and tokens of spec 12: t3code's composer shell (the rounded glass box with the composer shadow), its round message-action Send and Stop, kit Badge chips, Popover and Select pickers with t3code's picker rows, and the kit menu look for the `@`, `/` and `$` menus. It shares the Generate composer's 420 px. Where a detail below is not stated, follow t3code.
 
 **Editor.** Tiptap with StarterKit minus blockquote, bullet and ordered lists, code block, heading, horizontal rule, link, underline, dropcursor, gapcursor, trailing node and code, and with bold, italic and strike off, so typed markdown markers stay literal. Custom atom nodes for context chips, mentions and skills; ArrowLeft and ArrowRight step over a whole chip in one press. The draft's plain text is the source of truth.
 
@@ -203,9 +203,9 @@ The composer is one component (spec 03) with two trays. This spec builds its Age
 
 Full access carries a "Default" badge in the list.
 
-**Plan toggle.** A toggle button reading "Plan" (ruler-pencil icon) in plan mode and "Build" (bot icon) otherwise, `aria-pressed` set in plan mode. Tooltip: "Plan mode. Click to return to normal build mode." or "Default mode. Click to enter plan mode." Shift+Tab in the composer toggles it.
+**Plan toggle.** The kit's Toggle reading "Plan" (ruler-pencil icon) in plan mode and "Build" (bot icon) otherwise, `aria-pressed` set in plan mode. Tooltip: "Plan mode. Click to return to normal build mode." or "Default mode. Click to enter plan mode." Shift+Tab in the composer toggles it.
 
-**Context window meter.** A 20 px ring in a 28 px ghost button, filled to the share of the context used (from spec 07's token usage), muted normally and red above 90%. Its label reads "Context window NN% used" (one decimal under 10%), or "Context window <N> tokens used" with no known maximum. Hovering for 150 ms opens a popover: "Context Window", "NN% · <used>/<max>" (tokens as `N`, `N.Nk`, `Nk`, `N.Nm`), a progress bar, "Total processed <N>", "Context compacts automatically when needed.", and a **Compact context** button that sends the provider's compaction (disabled with "Compaction is unavailable for this provider" when it has none).
+**Context window meter.** A 20 px ring in a 28 px ghost button, filled to the share of the context used (from spec 07's token usage), in the primary colour, turning to the error colour above 90%. Its label reads "Context window NN% used" (one decimal under 10%), or "Context window <N> tokens used" with no known maximum. Hovering for 150 ms opens a popover: "Context Window", "NN% · <used>/<max>" (tokens as `N`, `N.Nk`, `Nk`, `N.Nm`), a progress bar, "Total processed <N>", "Context compacts automatically when needed.", and a **Compact context** button that sends the provider's compaction (disabled with "Compaction is unavailable for this provider" when it has none).
 
 **Send and Stop.** Send is disabled with no provider, or with an empty draft and no attachments. While a turn runs, Stop ("Stop generation") interrupts it, and Send becomes "Queue message".
 

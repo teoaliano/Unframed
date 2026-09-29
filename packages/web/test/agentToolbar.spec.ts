@@ -44,13 +44,13 @@ test("Agent on the toolbar is filled, and opens the Agent tray saying which chat
   await button.click();
 
   await expect(composer(page)).toHaveAttribute("data-tray", "agent");
-  await expect(target(page).locator(".unframed-agent-target__line")).toHaveText("continues About both");
+  await expect(target(page).getByTestId("agent-target-line")).toHaveText("continues About both");
   await expect(target(page).locator("em")).toHaveText("About both");
   await expect(composer(page).getByText("Claude · not metered", { exact: true })).toBeVisible();
   await target(page).getByRole("button", { name: "New chat instead" }).click();
-  await expect(target(page).locator(".unframed-agent-target__line")).toHaveText("new chat");
+  await expect(target(page).getByTestId("agent-target-line")).toHaveText("new chat");
   await target(page).getByRole("button", { name: "Continue the earlier chat" }).click();
-  await expect(target(page).locator(".unframed-agent-target__line")).toHaveText("continues About both");
+  await expect(target(page).getByTestId("agent-target-line")).toHaveText("continues About both");
 
   // Back to tools (Esc) closes it; so does Escape.
   await target(page).getByRole("button", { name: "Back to tools (Esc)" }).click();
@@ -65,7 +65,7 @@ test("Agent on the toolbar is filled, and opens the Agent tray saying which chat
   // Nothing the chats know selected: a new chat, and nothing to switch to.
   await clickShape(page, "shape:starter-subject");
   await toolbar(page).getByRole("button", { name: "Agent" }).click();
-  await expect(target(page).locator(".unframed-agent-target__line")).toHaveText("new chat");
+  await expect(target(page).getByTestId("agent-target-line")).toHaveText("new chat");
   await expect(target(page).getByRole("button", { name: "Continue the earlier chat" })).toHaveCount(0);
 });
 
@@ -74,7 +74,7 @@ test("while the tray is open a clicked shape joins the context and stays selecte
   await clickShape(page, "shape:p1");
   await toolbar(page).getByRole("button", { name: "Agent" }).click();
   await expect(chips(page)).toHaveText(["Alpha"]);
-  await expect(target(page).locator(".unframed-agent-target__line")).toHaveText("continues About both");
+  await expect(target(page).getByTestId("agent-target-line")).toHaveText("continues About both");
 
   await clickShape(page, "shape:p2");
   await expect(chips(page)).toHaveText(["Alpha", "Beta"]);

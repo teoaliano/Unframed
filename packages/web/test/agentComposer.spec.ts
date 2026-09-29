@@ -5,6 +5,7 @@ import { pngBytes } from "./images.ts";
 import { filledMedia, putRecords } from "./media.ts";
 import { artifactColumn, expect, onlyChat, openRail, promptBox, rail, rpcOf, scriptFolder, startAgentEngine, test } from "./agent.ts";
 import type { TestEngine } from "../../engine/test/engineProcess.ts";
+import { expectSlot, expectToken, inBothSchemes, resolvedColor, styleOf } from "./kit.ts";
 
 /** A toast's second line, by its text. */
 const toastDescription = (page: Page, text: string) => page.locator("[data-slot='toast-description']").filter({ hasText: text });
@@ -178,7 +179,7 @@ test("a large paste becomes pasted-text.txt with a toast; Cmd+Shift+V keeps it i
   await box.click();
   const big = "log line\n".repeat(4000);
   await pasteText(page, big);
-  const files = panel.getByTestId("attachments").locator("[data-chip='file'] .unframed-agent-chip__label");
+  const files = panel.getByTestId("attachments").locator("[data-chip='file'] [data-testid='chip-label']");
   await expect(files).toHaveText(["pasted-text.txt"]);
   const notice = toast(page, "Large paste attached as pasted-text.txt");
   await expect(notice).toBeVisible();
@@ -299,4 +300,47 @@ test("ArrowUp in an empty box recalls this chat's earlier messages, newest first
   } finally {
     await agent.dispose();
   }
+});
+
+const MENU_GLASS = "color-mix(in srgb, var(--popover) 18%, color-mix(in srgb, var(--popover) var(--glass-opacity), transparent))";
+
+test("the Agent tray is t3code's composer on the kit: the rounded shell, kit chips and controls, the round Send, the kit menu look", async ({ page, agent }) => {
+  await pageAndImages(page, agent);
+  await openAgentTray(page);
+  const tray = composer(page);
+  const shell = tray.getByTestId("agent-composer");
+  await inBothSchemes(page, async (scheme) => {
+    await page.mouse.move(10, 10);
+    expect(await styleOf(shell, "border-top-left-radius")).toBe("22px");
+    // t3code's composer shadow in light; none in dark.
+    expect((await styleOf(shell, "box-shadow")).includes("0px 12px 28px -18px")).toBe(scheme === "light");
+    for (const chip of await chips(page).all()) await expectSlot(chip, "badge");
+    await expectSlot(tray.getByRole("button", { name: "Remove Alpha" }), "button");
+    await expectSlot(tray.getByRole("button", { name: "Attach files" }), "tooltip-trigger");
+    await expectSlot(tray.getByTestId("model-picker"), "popover-trigger");
+    await expectSlot(tray.getByRole("combobox", { name: "Runtime mode" }), "tooltip-trigger");
+    await expectSlot(tray.getByTestId("stash-badge"), "menu-trigger");
+    // The plan toggle is the kit Toggle, on the accent while pressed (Shift+Tab flips it from the box).
+    const toggle = tray.getByTestId("plan-toggle");
+    await promptBox(tray).click();
+    await page.keyboard.press("Shift+Tab");
+    await expect(toggle).toHaveAttribute("aria-pressed", "true");
+    await page.mouse.move(10, 10);
+    await expectToken(toggle, "background-color", "--accent");
+    await page.keyboard.press("Shift+Tab");
+    await expect(toggle).toHaveAttribute("aria-pressed", "false");
+    // Send is t3code's round message action.
+    const send = tray.getByRole("button", { name: "Send", exact: true });
+    await expectSlot(send, "message-action");
+    await expectToken(send, "background-color", "--message-action");
+
+    // The @ menu has the kit's menu popup look.
+    await promptBox(tray).click();
+    await promptBox(tray).pressSequentially("@");
+    const mentions = page.getByRole("listbox", { name: "Mentions" });
+    await expect(mentions).toBeVisible();
+    expect(await styleOf(mentions, "background-color")).toBe(await resolvedColor(page, MENU_GLASS));
+    await page.keyboard.press("Backspace");
+    await expect(mentions).toHaveCount(0);
+  });
 });

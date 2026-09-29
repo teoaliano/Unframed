@@ -7,8 +7,6 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 import { createPortal } from "react-dom";
 import { useEditor, type TLShapeId } from "tldraw";
 import "./rail/rail.css";
-import "./composer/tray.css";
-import "./composer/pickers.css";
 import "./composer/panels.css";
 import "./diff/diff.css";
 import { registerSlot, type AgentTrayProps } from "../chrome/slots.ts";
