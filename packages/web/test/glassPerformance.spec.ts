@@ -28,7 +28,7 @@ test("panning under the glass rail and selection toolbar keeps spec 02's frame b
       await page.mouse.wheel(step < 30 ? 12 : -12, step < 30 ? 8 : -8);
       await page.waitForTimeout(16);
     }
-    const pan = await lastGesture(page, before);
+    const pan = await lastGesture(page, before, "wheel");
     const stats = frameStats(pan);
     console.log(`glass pan: median ${stats.median.toFixed(2)} ms, over 33 ms ${(stats.over33 * 100).toFixed(2)} % of ${stats.frames} frames, display frame ${pan.frameTime.toFixed(2)} ms`);
     expect(stats.median).toBeLessThanOrEqual(16.7);
