@@ -1,6 +1,7 @@
 import type { Page } from "@playwright/test";
 import { editorFocused, emptyCanvasPoint, openCanvas, plainText, roomRecords, settledRecord, shapeOnScreen, waitForRoom } from "./canvas.ts";
 import { expect, test } from "./fixtures.ts";
+import { expectSlot, expectToken, inBothSchemes, resolvedColor, styleOf } from "./kit.ts";
 
 const added = async (engine: Parameters<typeof roomRecords>[0], before: Set<string>) =>
   waitForRoom(engine, "default", (records) => records.find((record) => record.typeName === "shape" && !before.has(record.id)));
@@ -25,6 +26,32 @@ test("the add button opens Inputs and Artifacts, 152 px wide, toward the start s
   const menuBox = (await popup.boundingBox())!;
   const buttonBox = (await button.boundingBox())!;
   expect(menuBox.x + menuBox.width).toBeLessThanOrEqual(buttonBox.x);
+});
+
+test("the bottom-right card is glass with the kit's Library and Add buttons, and the add menu is the kit menu with its section labels", async ({ page, engine }) => {
+  await openCanvas(page, engine);
+  const card = page.getByTestId("chrome-bottom-right");
+  const add = card.getByRole("button", { name: "Add" });
+  const library = card.getByRole("button", { name: "Library" });
+  await expectSlot(add, "menu-trigger");
+  await expectSlot(library, "tooltip-trigger");
+  await inBothSchemes(page, async () => {
+    await page.mouse.move(5, 500);
+    expect(await styleOf(card, "background-color")).toBe(await resolvedColor(page, "color-mix(in srgb, var(--background) var(--glass-opacity), transparent)"));
+    expect(await styleOf(card, "border-top-left-radius")).toBe("14px");
+    await expectToken(add, "background-color", "--primary");
+    expect(await styleOf(library, "background-color")).toBe("rgba(0, 0, 0, 0)");
+    await add.click();
+    const popup = page.locator("[data-slot='menu-popup']");
+    await expect(popup).toBeVisible();
+    await expect(popup.locator("[data-slot='menu-label']")).toHaveText(["Inputs", "Artifacts"]);
+    for (const item of await popup.getByRole("menuitem").all()) {
+      await expectSlot(item, "menu-item");
+      expect((await item.boundingBox())!.height).toBe(28);
+    }
+    await page.keyboard.press("Escape");
+    await expect(popup).toHaveCount(0);
+  });
 });
 
 test("from the button a shape lands centred in the view; a new prompt starts editing", async ({ page, engine }) => {

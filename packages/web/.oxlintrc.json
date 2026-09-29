@@ -137,7 +137,6 @@
         "src/legacy/ImportGate.tsx",
         "src/library/AddToLibraryDialog.tsx",
         "src/library/LibraryDialog.tsx",
-        "src/library/LibraryHost.tsx",
         "src/settings/SettingsHost.tsx",
         "src/settings/fields.tsx",
         "src/toasts.tsx"

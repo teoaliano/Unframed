@@ -7,6 +7,7 @@ import type { Preset } from "@unframed/domain";
 import { Library } from "lucide-react";
 import { useEffect } from "react";
 import { useEditor, useValue } from "tldraw";
+import { Button } from "~/components/ui/button";
 import { registerSlot } from "../chrome/slots.ts";
 import { Tip } from "../chrome/ui.tsx";
 import { useCanvasProject, useEngine, useSettings } from "../context.ts";
@@ -24,14 +25,9 @@ const LibraryButton = () => {
   const editor = useEditor();
   return (
     <Tip label={LIBRARY_TOOLTIP} side="left">
-      <button
-        type="button"
-        aria-label="Library"
-        className="flex size-12 cursor-pointer items-center justify-center rounded-xl border border-border bg-[var(--unframed-card-translucent)] p-0 text-foreground shadow-lg backdrop-blur-[var(--unframed-chrome-blur)] hover:bg-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
-        onClick={() => libraryUi(editor).update((state) => ({ ...state, open: true }))}
-      >
-        <Library size={20} aria-hidden />
-      </button>
+      <Button variant="ghost" size="icon-lg" aria-label="Library" onClick={() => libraryUi(editor).update((state) => ({ ...state, open: true }))}>
+        <Library aria-hidden />
+      </Button>
     </Tip>
   );
 };

@@ -30,7 +30,12 @@ export const expectSlot = (locator: Locator, slot: string) => expect(locator).to
 /** Asserts a style property equals what the token resolves to, polling while a theme switch lands. */
 export const expectToken = async (locator: Locator, property: string, token: string) => {
   const page = locator.page();
-  await expect.poll(async () => (await styleOf(locator, property)) === (await tokenColor(page, token))).toBe(true);
+  await expect
+    .poll(async () => {
+      const [actual, expected] = [await styleOf(locator, property), await tokenColor(page, token)];
+      return actual === expected ? "match" : `${property} ${actual}, ${token} ${expected}`;
+    })
+    .toBe("match");
 };
 
 /** Runs the check in light, then in dark, then leaves the page in light. */
