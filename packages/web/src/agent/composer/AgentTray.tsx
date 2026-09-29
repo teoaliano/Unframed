@@ -1,13 +1,16 @@
 import type { ModelSelection } from "@unframed/contracts";
 import { continuableChat, DEFAULT_RUNTIME_MODE, tabLabel, type InteractionMode, type RuntimeMode } from "@unframed/domain";
-import { ArrowLeft, ArrowUp, Square } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { ArrowLeft, ArrowUp, Paperclip, Square } from "lucide-react";
+import { createPortal } from "react-dom";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from "react";
 import type { AgentTrayProps as SlotProps } from "../../chrome/slots.ts";
 import { useEngine } from "../../context.ts";
 import { noProviderReady, providerName, readyProviders } from "../providers.ts";
 import { createChat, messageOf, sendMessage } from "../send.ts";
 import { useChatClient, useChats, useProviders, useWatchedThread, type ChatClient } from "../store.ts";
 import { Tip } from "../../chrome/ui.tsx";
+import { useAttachments } from "./attachments.ts";
+import { AttachmentShelf } from "./AttachmentShelf.tsx";
 import { ChipRow, contextSelection, useSelectionChips } from "./chips.tsx";
 import { ComposerMenu, type MenuItem } from "./ComposerMenu.tsx";
 import { mentionItems } from "./mentions.tsx";
@@ -42,6 +45,8 @@ export interface AgentTrayProps {
   readonly note?: (provider: string) => ReactNode;
   /** Tells the composer shell a menu of the tray is open, so Esc closes the menu first. */
   readonly onMenuOpen?: (key: string, open: boolean) => void;
+  /** The element files may be dropped on (the whole rail); the tray itself when absent. */
+  readonly dropTarget?: RefObject<HTMLElement | null>;
 }
 
 interface OpenMenu {
@@ -57,7 +62,7 @@ interface OpenMenu {
  * footer's pickers, Stop and Send. The rail's composer and the toolbar's are this one
  * component; only where a message goes differs.
  */
-export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, onSent, top, note, onMenuOpen }: AgentTrayProps) => {
+export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, onSent, top, note, onMenuOpen, dropTarget }: AgentTrayProps) => {
   const { statuses } = useProviders(client);
   const chat = useWatchedThread(client, chatId);
   const running = chat?.latestTurn?.state === "running";
@@ -72,6 +77,65 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
   const [draftModel, setDraftModel] = useState<ModelSelection | undefined>();
   const [draftRuntime, setDraftRuntime] = useState<RuntimeMode>(DEFAULT_RUNTIME_MODE);
   const [draftInteraction, setDraftInteraction] = useState<InteractionMode>("default");
+  const showError = useCallback((message: string) => client.setUi({ error: message }), [client]);
+  const attachments = useAttachments(client.engine, showError);
+  const files = useRef<HTMLInputElement>(null);
+  const root = useRef<HTMLDivElement>(null);
+  const [dragging, setDragging] = useState(false);
+  const [dropElement, setDropElement] = useState<HTMLElement | null>(null);
+  useEffect(() => setDropElement(dropTarget?.current ?? root.current), [dropTarget]);
+
+  // Files dragged onto the drop target show the overlay and are staged when dropped.
+  useEffect(() => {
+    const element = dropElement;
+    if (!element) return;
+    let depth = 0;
+    const hasFiles = (event: DragEvent) => [...(event.dataTransfer?.types ?? [])].includes("Files");
+    const enter = (event: DragEvent) => {
+      if (!hasFiles(event)) return;
+      event.preventDefault();
+      event.stopPropagation();
+      depth++;
+      setDragging(true);
+    };
+    const over = (event: DragEvent) => {
+      if (!hasFiles(event)) return;
+      event.preventDefault();
+      event.stopPropagation();
+    };
+    const leave = (event: DragEvent) => {
+      if (!hasFiles(event)) return;
+      depth = Math.max(0, depth - 1);
+      if (depth === 0) setDragging(false);
+    };
+    const drop = (event: DragEvent) => {
+      if (!hasFiles(event)) return;
+      event.preventDefault();
+      event.stopPropagation();
+      depth = 0;
+      setDragging(false);
+      void attachments.add([...(event.dataTransfer?.files ?? [])]);
+    };
+    element.addEventListener("dragenter", enter);
+    element.addEventListener("dragover", over);
+    element.addEventListener("dragleave", leave);
+    element.addEventListener("drop", drop);
+    return () => {
+      element.removeEventListener("dragenter", enter);
+      element.removeEventListener("dragover", over);
+      element.removeEventListener("dragleave", leave);
+      element.removeEventListener("drop", drop);
+    };
+  }, [dropElement, attachments]);
+
+  /** A paste of files attaches them; text is the box's own. */
+  const onPaste = (event: ClipboardEvent): boolean => {
+    const pasted = [...(event.clipboardData?.files ?? [])];
+    if (pasted.length === 0) return false;
+    event.preventDefault();
+    void attachments.add(pasted);
+    return !(event.clipboardData?.getData("text/plain") ?? "");
+  };
 
   useEffect(() => {
     void client.loadProviders();
@@ -135,11 +199,11 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
   );
 
   const placeholder = none ? PLACEHOLDERS.noProvider : PLACEHOLDERS.default;
-  const canSend = !none && !sending && text.trim() !== "";
+  const canSend = !none && !sending && (text.trim() !== "" || attachments.staged.length > 0);
 
   const send = useCallback(async () => {
     const message = box.current?.text() ?? "";
-    if (none || message.trim() === "" || sending) return;
+    if (none || (message.trim() === "" && attachments.staged.length === 0) || sending) return;
     setSending(true);
     client.setUi({ error: undefined });
     try {
@@ -149,9 +213,11 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
       }
       beforeSend?.(target);
       const context = contextSelection(canvas, chips.shapes);
+      const uploaded = await attachments.settle();
       box.current?.clear();
+      attachments.clear();
       chips.set(canvas?.getSelectedShapeIds() ?? []);
-      await sendMessage(client, target, { text: message, selection: context, attachments: [] });
+      await sendMessage(client, target, { text: message, selection: context, attachments: uploaded });
       onSent?.();
     } catch (error) {
       client.setUi({ error: messageOf(error) });
@@ -159,7 +225,7 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
     } finally {
       setSending(false);
     }
-  }, [none, sending, client, chatId, selection, draftRuntime, draftInteraction, newChatTags, beforeSend, onSent, canvas, chips]);
+  }, [none, sending, client, chatId, selection, draftRuntime, draftInteraction, newChatTags, beforeSend, onSent, canvas, chips, attachments]);
 
   const interrupt = () => {
     if (!chat?.latestTurn) return;
@@ -171,9 +237,18 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
   void setDraftInteraction;
 
   return (
-    <div className="unframed-agent-tray" data-variant={variant} data-testid="agent-tray">
+    <div className="unframed-agent-tray" data-variant={variant} data-testid="agent-tray" ref={root}>
       {top}
-      <div className="unframed-agent-box" ref={boxElement}>
+      {dragging &&
+        dropElement &&
+        createPortal(
+          <div className="unframed-agent-drop" data-testid="drop-overlay">
+            Drop files to attach
+          </div>,
+          dropElement,
+        )}
+      <div className="unframed-agent-box" ref={boxElement} data-dragging={dragging ? "" : undefined}>
+        <AttachmentShelf staged={attachments.staged} onRemove={attachments.remove} onRetry={attachments.retry} />
         <ChipRow
           shapes={chips.shapes}
           onRemove={(ids) => {
@@ -188,13 +263,31 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
           onTrigger={setTrigger}
           onKey={onKey}
           onSubmit={() => void send()}
-          onPaste={() => false}
+          onPaste={onPaste}
           handle={box}
           autofocus={variant === "toolbar"}
         />
         {menu && <ComposerMenu label={menu.label} items={menu.items} highlight={highlight} empty={menu.empty} anchor={boxElement} onPick={menu.pick} onHighlight={setHighlight} />}
         <div className="unframed-agent-footer">
-          <div className="unframed-agent-footer__tools" />
+          <div className="unframed-agent-footer__tools">
+            <Tip label="Attach files" side="top">
+              <button type="button" className="unframed-agent-control unframed-agent-control--icon" aria-label="Attach files" onClick={() => files.current?.click()}>
+                <Paperclip size={15} aria-hidden />
+              </button>
+            </Tip>
+            <input
+              ref={files}
+              type="file"
+              multiple
+              hidden
+              data-testid="attach-input"
+              onChange={(event) => {
+                const chosen = [...(event.currentTarget.files ?? [])];
+                event.currentTarget.value = "";
+                if (chosen.length > 0) void attachments.add(chosen);
+              }}
+            />
+          </div>
           <div className="unframed-agent-footer__send">
             {note?.(providerName(selection.provider))}
             {running && (

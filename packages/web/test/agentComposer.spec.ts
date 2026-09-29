@@ -95,3 +95,67 @@ test("@ lists the project's shapes and files; choosing one puts a chip in the te
   expect(sent.text).toBe("[Page: Alpha; ref=p1] what is on the board?");
   expect(sent.context).toEqual({ selection: ["shape:p1"] });
 });
+
+/** Files as a page event carries them: drag events on an element, or a paste into the box. */
+const fileEvents = (page: Page, selector: string, events: string[], files: Array<{ name: string; mime: string; bytes?: Buffer; size?: number }>) =>
+  page.evaluate(
+    ({ selector, events, files }) => {
+      const transfer = new DataTransfer();
+      for (const file of files) {
+        const bytes = file.size !== undefined ? new Uint8Array(file.size) : Uint8Array.from(atob(file.base64), (char) => char.charCodeAt(0));
+        transfer.items.add(new File([bytes], file.name, { type: file.mime }));
+      }
+      const target = document.querySelector(selector)!;
+      for (const type of events) {
+        const event = type === "paste" ? new ClipboardEvent("paste", { bubbles: true, cancelable: true, clipboardData: transfer }) : new DragEvent(type, { bubbles: true, cancelable: true, dataTransfer: transfer });
+        target.dispatchEvent(event);
+      }
+    },
+    { selector, events, files: files.map((file) => ({ name: file.name, mime: file.mime, base64: file.bytes?.toString("base64") ?? "", size: file.size })) },
+  );
+
+test("attach by button, by drag and by paste: thumbnails and file chips, a remove, and the limit said in words", async ({ page, agent }) => {
+  await openCanvas(page, agent);
+  const panel = await openRail(page);
+  const chooser = page.waitForEvent("filechooser");
+  await panel.getByRole("button", { name: "Attach files" }).click();
+  await (await chooser).setFiles([
+    { name: "hero.png", mimeType: "image/png", buffer: pngBytes(20, 20) },
+    { name: "notes.txt", mimeType: "text/plain", buffer: Buffer.from("eleven char") },
+  ]);
+  const shelf = panel.getByTestId("attachments");
+  await expect(shelf.getByRole("link", { name: "Preview hero.png" })).toBeVisible();
+  await expect(shelf.locator("[data-chip='file']")).toHaveText(["notes.txt11 B"]);
+  await shelf.getByRole("button", { name: "Remove notes.txt" }).click();
+  await expect(shelf.locator("[data-chip='file']")).toHaveCount(0);
+
+  // Dragging files over the rail shows the overlay; dropping them attaches them.
+  await fileEvents(page, "aside[aria-label='Agent'] .unframed-agent-transcript, aside[aria-label='Agent'] .unframed-agent-tabs", ["dragenter", "dragover"], [{ name: "brief.pdf", mime: "application/pdf", bytes: Buffer.from("%PDF-1.4 brief") }]);
+  await expect(panel.getByTestId("drop-overlay")).toHaveText("Drop files to attach");
+  await fileEvents(page, "aside[aria-label='Agent'] .unframed-agent-tabs", ["drop"], [{ name: "brief.pdf", mime: "application/pdf", bytes: Buffer.from("%PDF-1.4 brief") }]);
+  await expect(panel.getByTestId("drop-overlay")).toHaveCount(0);
+  await expect(shelf.locator("[data-chip='file']")).toHaveText(["brief.pdf14 B"]);
+
+  // A pasted file attaches too.
+  await fileEvents(page, "aside[aria-label='Agent'] .ProseMirror", ["paste"], [{ name: "pasted.png", mime: "image/png", bytes: pngBytes(12, 12, 3) }]);
+  await expect(shelf.getByRole("link", { name: "Preview pasted.png" })).toBeVisible();
+
+  // Over the limit: the exact sentence, and nothing staged.
+  await fileEvents(page, "aside[aria-label='Agent'] .unframed-agent-tabs", ["dragenter", "drop"], [{ name: "huge.bin", mime: "application/octet-stream", size: 51 * 1024 * 1024 }]);
+  await expect(panel.getByRole("alert")).toHaveText("'huge.bin' exceeds the 50 MB attachment limit.");
+  await expect(shelf.locator("[data-chip='file']")).toHaveText(["brief.pdf14 B"]);
+
+  await promptBox(panel).click();
+  await promptBox(panel).pressSequentially("what is in this picture?");
+  await promptBox(panel).press("Enter");
+  await expect(panel.locator("[data-role='assistant']")).toContainText("A small red square.");
+  await expect(panel.locator("[data-role='user']").getByRole("listitem")).toHaveText(["hero.png", "brief.pdf", "pasted.png"]);
+  await expect(panel.getByTestId("attachments")).toHaveCount(0);
+  const chat = await onlyChat(agent, (current) => current.latestTurn?.state === "completed");
+  const sent = chat.messages.find((message) => message.role === "user")!;
+  expect(sent.attachments?.map(({ name, type, kind, size }) => ({ name, type, kind, size }))).toEqual([
+    { name: "hero.png", type: "image/png", kind: "image", size: pngBytes(20, 20).length },
+    { name: "brief.pdf", type: "application/pdf", kind: "file", size: 14 },
+    { name: "pasted.png", type: "image/png", kind: "image", size: pngBytes(12, 12, 3).length },
+  ]);
+});

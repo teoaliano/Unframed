@@ -22,6 +22,15 @@ const UserMessage = ({ message }: { readonly message: ChatMessage }) => {
       <div className="unframed-agent-message__text" data-collapsed={long && !open ? "" : undefined}>
         {message.text}
       </div>
+      {(message.attachments?.length ?? 0) > 0 && (
+        <div className="unframed-agent-message__attachments" role="list" aria-label="Attachments">
+          {message.attachments!.map((attachment) => (
+            <span key={attachment.id} role="listitem" className="unframed-agent-chip" data-chip={attachment.kind}>
+              <span className="unframed-agent-chip__label">{attachment.name}</span>
+            </span>
+          ))}
+        </div>
+      )}
       {long && (
         <button type="button" className="unframed-agent-link" onClick={() => setOpen(!open)}>
           {open ? "Show less" : "Show full message"}

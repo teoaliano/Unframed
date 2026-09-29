@@ -166,6 +166,105 @@
   color: var(--unframed-text-secondary);
 }
 
+/* Staged attachments: a shelf of thumbnails, then file chips. */
+.unframed-agent-attachments {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.unframed-agent-thumbs {
+  display: flex;
+  width: 100%;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.unframed-agent-thumb {
+  position: relative;
+  width: 64px;
+  height: 64px;
+  overflow: hidden;
+  border: 1px solid var(--unframed-border);
+  border-radius: var(--unframed-radius-inner);
+  background-color: var(--unframed-overlay-hover);
+}
+
+.unframed-agent-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.unframed-agent-thumb a,
+.unframed-agent-thumb__blank {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.unframed-agent-thumb__progress,
+.unframed-agent-thumb__retry {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  background-color: color-mix(in srgb, var(--unframed-surface) 60%, transparent);
+  color: var(--unframed-text-primary);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.unframed-agent-thumb__retry {
+  cursor: pointer;
+}
+
+.unframed-agent-thumb__remove {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  display: inline-flex;
+  width: 16px;
+  height: 16px;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 1px solid var(--unframed-border-emphasized);
+  border-radius: 999px;
+  background-color: var(--unframed-popover);
+  color: var(--unframed-text-primary);
+  cursor: pointer;
+}
+
+.unframed-agent-chip__meta {
+  color: var(--unframed-text-secondary);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.unframed-agent-chip[data-status="failed"] .unframed-agent-chip__meta {
+  color: var(--unframed-error);
+}
+
+/* Files dragged over the rail. */
+.unframed-agent-drop {
+  position: absolute;
+  inset: 0;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 2px dashed var(--unframed-accent);
+  border-radius: inherit;
+  background-color: color-mix(in srgb, var(--unframed-surface) 80%, transparent);
+  color: var(--unframed-text-primary);
+  font-size: 14px;
+  font-weight: 500;
+  pointer-events: none;
+}
+
 /* The `@`, `/` and `$` menu over the box. */
 .unframed-agent-menu {
   box-sizing: border-box;

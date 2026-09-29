@@ -32,6 +32,13 @@
   overflow: hidden;
 }
 
+.unframed-agent-message__attachments {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 4px;
+}
+
 .unframed-agent-message__context {
   text-transform: none;
   letter-spacing: normal;

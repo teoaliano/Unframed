@@ -188,7 +188,7 @@ export const AgentRail = ({ project, embedded, filterTo, onLocate, onOpenEditor,
         ]}
       />
       <div className="unframed-agent-rail__composer">
-        <AgentTray client={client} variant="rail" chatId={active} newChatTags={selectedArtifacts} />
+        <AgentTray client={client} variant="rail" chatId={active} newChatTags={selectedArtifacts} dropTarget={root} />
       </div>
     </aside>
   );
