@@ -9,6 +9,7 @@ import { injectTags, projectSlug } from "@unframed/domain";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as PubSub from "effect/PubSub";
 import * as Stream from "effect/Stream";
 import { CanvasRooms } from "../canvas/rooms.ts";
 import { errorText } from "../log.ts";
@@ -19,6 +20,10 @@ import { Config } from "../services.ts";
 import { ensureLibrary, writeUploadedArtifact } from "./artifactStore.ts";
 import { findChrome } from "./chrome.ts";
 import { producerBackend, Renderer, RenderRefused, stubBackend } from "./renderer.ts";
+import { HeadlessChrome } from "./headlessChrome.ts";
+import { chromeSnapshotRenderer, Snapshots, stubSnapshotRenderer, type SnapshotRenderer } from "./snapshots.ts";
+import { SettingsStore } from "../settingsStore.ts";
+import { Shutdown } from "../shutdown.ts";
 
 /** A composition upload may be at most 20 MB. */
 const UPLOAD_LIMIT = 20 * 1_048_576;
@@ -38,6 +43,8 @@ export class Artifacts extends Context.Service<
     readonly snapshots: (project: string) => Stream.Stream<ArtifactSnapshot, UnframedError>;
     /** The Chromium this machine has, for the agent's previews and snapshots. */
     readonly findChrome: () => Promise<string | undefined>;
+    /** The engine-owned headless Chrome that snapshots and the agent's previews share. */
+    readonly chrome: HeadlessChrome;
   }
 >()("unframed/engine/Artifacts") {}
 
@@ -52,12 +59,33 @@ export const artifactsLayer = Layer.effect(
     const rooms = yield* CanvasRooms;
     const runs = yield* Runs;
     const openProjects = yield* OpenProjects;
+    const settings = yield* SettingsStore;
+    const shutdown = yield* Shutdown;
     const context = yield* Effect.context<never>();
     const run = <A, E>(effect: Effect.Effect<A, E>): Promise<A> => Effect.runPromiseWith(context)(effect);
 
     const chrome = () => findChrome({ chromePath: config.chromePath, platform: config.platform, testRenderer: config.testRenderer });
     const fixture = join(config.installRoot, "assets", "fixtures", "render-stub.mp4");
     const backend = config.testRenderer === "ok" || config.testRenderer === "fail" ? stubBackend(config.testRenderer, fixture) : producerBackend(chrome);
+
+    const headless = new HeadlessChrome(chrome);
+    yield* shutdown.register("headless Chrome", Effect.promise(() => headless.close()));
+
+    const snapshotRenderer: SnapshotRenderer | undefined =
+      config.testRenderer === "ok" ? stubSnapshotRenderer : config.testRenderer === "fail" || config.testRenderer === "no-chrome" ? undefined : chromeSnapshotRenderer(headless);
+    const written = yield* PubSub.unbounded<{ readonly project: string; readonly snapshot: ArtifactSnapshot }>();
+    const snapshots = new Snapshots({
+      renderer: snapshotRenderer,
+      folder: (project) => media.folder(project),
+      read: (project) => run(rooms.read(project)),
+      previewPort: (yield* settings.view).previewPort,
+      publish: (project, snapshot) => void run(PubSub.publish(written, { project, snapshot })),
+    });
+    yield* rooms.afterOpen((project, room) => {
+      snapshots.opened(project, room.read());
+      void run(openProjects.register(project, "artifact snapshots", Effect.sync(() => snapshots.forget(project))));
+    });
+    yield* rooms.afterCommit((project, change) => snapshots.committed(project, [...change.records.values()]));
 
     const renderer = new Renderer({
       backend,
@@ -91,8 +119,21 @@ export const artifactsLayer = Layer.effect(
       upload,
       renderStart: (input) => Effect.tryPromise({ try: () => renderer.start(input), catch: refused }),
       renderStatus: (project, id) => Effect.try({ try: () => renderer.status(project, id), catch: refused }),
-      snapshots: () => Stream.empty,
+      snapshots: (project) =>
+        Stream.unwrap(
+          Effect.map(PubSub.subscribe(written), (subscription) => {
+            const slug = projectSlug(project);
+            return Stream.concat(
+              Stream.unwrap(Effect.map(Effect.promise(() => snapshots.list(slug)), (known) => Stream.fromIterable(known))),
+              Stream.fromSubscription(subscription).pipe(
+                Stream.filter((item) => item.project === slug),
+                Stream.map((item) => item.snapshot),
+              ),
+            );
+          }),
+        ),
       findChrome: chrome,
+      chrome: headless,
     });
   }),
 );

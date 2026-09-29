@@ -1,7 +1,7 @@
 import type { Page } from "@playwright/test";
 import type { TestEngine } from "../../engine/test/engineProcess.ts";
 import { centre, shapeOnScreen } from "./canvas.ts";
-import { expect, test } from "./fixtures.ts";
+import { expect, startHostedEngine, test } from "./fixtures.ts";
 import { clickShape } from "./generation.ts";
 import { filledArtifact } from "./artifacts.ts";
 
@@ -134,4 +134,21 @@ test("a live frame far off screen unmounts, and mounts again on return", async (
     await page.waitForTimeout(16);
   }
   await expect(shapeOnScreen(page, "shape:p0").locator("iframe")).toHaveCount(1);
+});
+
+test("an artifact that is not live shows its snapshot once the engine has made one, and runs nothing", async ({ page }) => {
+  const engine = await startHostedEngine({ env: { UNFRAMED_TEST_RENDERER: "ok" } });
+  try {
+    await openHosted(page, engine);
+    await filledArtifact(engine, { id: "shape:still", kind: "page", ref: "150", at: { x: -520, y: -40 }, size: { w: 300, h: 200 }, title: "Still", html: "<h1>Still</h1>" });
+    const shape = shapeOnScreen(page, "shape:still");
+    await expect(shape.getByText("Select to preview")).toBeVisible();
+    const still = shape.locator("img.unframed-artifact__snapshot");
+    await expect(still).toHaveCount(1, { timeout: 10_000 });
+    expect(await still.getAttribute("src")).toMatch(/^\/api\/file\/default\/[^?]+\?snapshot=300x200&v=\d+$/);
+    await expect.poll(() => still.evaluate((image) => (image as HTMLImageElement).naturalWidth)).toBeGreaterThan(0);
+    await expect(shape.locator("iframe")).toHaveCount(0);
+  } finally {
+    await engine.dispose();
+  }
 });
