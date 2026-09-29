@@ -57,3 +57,4 @@ export * from "./agent/codexEvents.ts";
 export * from "./agent/railRules.ts";
 export * from "./agent/threadSearch.ts";
 export * from "./agent/composerRules.ts";
+export * from "./agent/workLog.ts";
