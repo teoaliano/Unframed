@@ -34,8 +34,8 @@ export const copySelection = async (page: Page, types: string[] = ["text/html"])
     .toEqual(expect.arrayContaining(types));
 };
 
-/** A toast on screen, by its text. */
-export const toast = (page: Page, text: string | RegExp): Locator => page.locator(".unframed-toast").filter({ hasText: text });
+/** A toast on screen, by its title. */
+export const toast = (page: Page, text: string | RegExp): Locator => page.locator("[data-slot='toast-title']").filter({ hasText: text });
 
 /** Everything the room holds, straight from the engine. */
 export const roomRecords = async (engine: TestEngine, project: string): Promise<AnyRecord[]> =>

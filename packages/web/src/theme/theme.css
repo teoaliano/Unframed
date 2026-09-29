@@ -476,6 +476,8 @@
 
 :root {
   --unframed-text-secondary: var(--muted-foreground);
+  /* Unframed: bottom-left toasts sit above tldraw's zoom controls (spec 02). */
+  --toast-footer-offset: 2rem;
 }
 
 body {

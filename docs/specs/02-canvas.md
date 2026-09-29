@@ -357,7 +357,7 @@ Tailwind with t3code's default light and dark tokens (spec 12), following the OS
 
 ### Toasts
 
-Base UI toasts at the bottom start corner. A toast with an id replaces the previous toast with that id instead of stacking. Error toasts auto-hide; the connection-lost notice and the failed-list toast are sticky. Copy strings are the ones listed in this spec.
+The kit's toasts (spec 12, Base UI underneath) at the bottom start corner, above tldraw's zoom controls, stacked behind the newest, each with the kit's close button and a type icon. A toast with an id replaces the previous toast with that id instead of stacking. Error toasts auto-hide; the connection-lost notice and the failed-list toast are sticky. Copy strings are the ones listed in this spec.
 
 ### Performance budget
 

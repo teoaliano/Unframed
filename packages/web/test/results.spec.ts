@@ -80,10 +80,10 @@ test("a failed run says why in a toast, a partial run counts its successes, and 
   await expect(toast(page, /^1 of 2 succeeded\. OpenRouter refused this as unpaid/)).toBeVisible();
 
   generation.answer(() => ({ kind: "image", bytes: pngBytes(8, 8) }));
-  const count = await page.locator(".unframed-toast").count();
+  const count = await page.locator("[data-slot='toast-title']").count();
   await makeResult(page, generation);
   await page.waitForTimeout(500);
-  await expect(page.locator(".unframed-toast")).toHaveCount(count);
+  await expect(page.locator("[data-slot='toast-title']")).toHaveCount(count);
 });
 
 test("the tether runs from each surviving source to the selected result, selects nothing and goes on deselect", async ({ page, generation }) => {
