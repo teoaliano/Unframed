@@ -128,8 +128,6 @@
         "src/chrome/DotGrid.tsx",
         "src/generate/overlays.tsx",
         "src/legacy/ImportGate.tsx",
-        "src/library/AddToLibraryDialog.tsx",
-        "src/library/LibraryDialog.tsx",
         "src/settings/SettingsHost.tsx",
         "src/settings/fields.tsx"
       ],

@@ -2,6 +2,7 @@ import { readFile } from "node:fs/promises";
 import type { Page } from "@playwright/test";
 import { emptyCanvasPoint, openCanvas, roomRecords, shapeOnScreen, toast } from "./canvas.ts";
 import { expect, test } from "./fixtures.ts";
+import { expectSlot, expectToken } from "./kit.ts";
 import { presetsFile, writePresets } from "./library.ts";
 import { artifactRecord, emptyMedia, groupRecord, inGroup, promptRecord, putRecords } from "./media.ts";
 
@@ -11,6 +12,11 @@ const saveDialog = (page: Page) => page.getByTestId("add-to-library");
 
 const rightClickLabel = async (page: Page, id: string) => {
   const box = (await shapeOnScreen(page, id).boundingBox())!;
+  // A person's pointer arrives before it clicks. tldraw updates the hovered shape at most every
+  // 32 ms and a right click selects the hovered shape, so a click in the same instant as the move
+  // can select whatever was under the pointer before (here, under a dialog that just closed).
+  await page.mouse.move(box.x + 10, box.y - 8);
+  await page.waitForTimeout(50);
   await page.mouse.click(box.x + 10, box.y - 8, { button: "right" });
 };
 
@@ -100,6 +106,13 @@ test("the save dialog counts the shapes and names the recipe, asks for a name, a
   await expect(name).toBeFocused();
   await expect(name).toHaveAttribute("placeholder", "e.g. Portrait retouch");
   await expect(dialog.getByRole("textbox", { name: "Description" })).toHaveAttribute("placeholder", "What it does, in a line");
+  // The kit's Dialog at 420 px, its Inputs and its Buttons.
+  await expectSlot(dialog, "dialog-popup");
+  await expect.poll(async () => Math.round((await dialog.boundingBox())!.width)).toBe(420);
+  await expectSlot(name, "input");
+  await expectSlot(dialog.getByRole("textbox", { name: "Description" }), "input");
+  await expectSlot(dialog.getByRole("button", { name: "Cancel" }), "dialog-close");
+  await expectToken(dialog.getByRole("button", { name: "Save" }), "background-color", "--primary");
 
   await dialog.getByRole("button", { name: "Save" }).click();
   await expect(dialog.getByRole("alert")).toHaveText("Give it a name.");
