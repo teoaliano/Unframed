@@ -43,8 +43,8 @@ test("a page cannot reach the engine, load its files, leave its frame or read th
   const out = insideFrame(page, "shape:probe").locator("#out");
   await expect(out).not.toHaveText("running", { timeout: 15_000 });
   const results = JSON.parse((await out.textContent()) ?? "{}");
-  expect(results).toMatchObject({ fetch: "blocked", socket: "blocked", enginePicture: "blocked", sibling: "loaded", sidecar: "blocked", parent: "blocked", open: "blocked" });
-  // Whatever top navigation reported, the app is where it was.
+  expect(results).toMatchObject({ fetch: "blocked", socket: "blocked", enginePicture: "blocked", sibling: "loaded", sidecar: "blocked", parent: "blocked", open: "blocked", top: "blocked" });
+  // The app is where it was.
   await page.waitForTimeout(500);
   expect(new URL(page.url()).search).toBe("");
   expect(page.context().pages()).toHaveLength(1);
