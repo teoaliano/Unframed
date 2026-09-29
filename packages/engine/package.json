@@ -17,6 +17,7 @@
     "@tldraw/utils": "5.4.2",
     "@unframed/contracts": "workspace:*",
     "@unframed/domain": "workspace:*",
+    "diff": "9.0.0",
     "effect": "4.0.0-rc.115",
     "localtunnel": "2.0.2",
     "ws": "8.22.0"

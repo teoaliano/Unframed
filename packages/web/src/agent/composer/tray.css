@@ -1,0 +1,143 @@
+/* The Agent tray: the chips, the box, then the footer row of pickers, Stop and Send. */
+
+.unframed-agent-tray {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.unframed-composer[data-tray="agent"] {
+  width: 440px;
+}
+
+.unframed-agent-box {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 9px 10px 7px;
+  border: 1px solid var(--unframed-border);
+  border-radius: var(--unframed-radius-container);
+  background-color: var(--unframed-surface);
+}
+
+.unframed-agent-box[data-dragging] {
+  border-color: var(--unframed-accent);
+}
+
+.unframed-agent-input {
+  min-height: 42px;
+}
+
+.unframed-agent-inline-chip {
+  display: inline-flex;
+  align-items: center;
+  margin: 0 1px;
+  padding: 0 5px;
+  border: 1px solid var(--unframed-border);
+  border-radius: 999px;
+  background-color: var(--unframed-overlay-hover);
+  font-size: 12.5px;
+  line-height: 18px;
+  white-space: nowrap;
+}
+
+.unframed-agent-footer {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.unframed-agent-footer__tools {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  align-items: center;
+  gap: 2px;
+}
+
+.unframed-agent-footer__send {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 6px;
+}
+
+.unframed-agent-note {
+  font-size: 11.5px;
+  color: var(--unframed-text-secondary);
+  white-space: nowrap;
+}
+
+.unframed-agent-send,
+.unframed-agent-stop {
+  display: inline-flex;
+  width: 28px;
+  height: 28px;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background-color: var(--unframed-accent);
+  color: var(--unframed-on-accent);
+  cursor: pointer;
+}
+
+.unframed-agent-stop {
+  background-color: var(--unframed-overlay-pressed);
+  color: var(--unframed-text-primary);
+}
+
+.unframed-agent-send:disabled {
+  cursor: default;
+  background-color: var(--unframed-overlay-hover);
+  color: var(--unframed-text-secondary);
+}
+
+/* A footer control: a ghost button with an icon and a short label. */
+.unframed-agent-control {
+  display: inline-flex;
+  min-width: 0;
+  height: 28px;
+  flex: none;
+  align-items: center;
+  gap: 4px;
+  padding: 0 7px;
+  border: 0;
+  border-radius: var(--unframed-radius-inner);
+  background: transparent;
+  color: var(--unframed-text-secondary);
+  font: inherit;
+  font-size: 12px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.unframed-agent-control:hover:not(:disabled),
+.unframed-agent-control[data-popup-open] {
+  background-color: var(--unframed-overlay-hover);
+  color: var(--unframed-text-primary);
+}
+
+.unframed-agent-control:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
+.unframed-agent-control[aria-pressed="true"] {
+  color: var(--unframed-text-primary);
+  background-color: var(--unframed-overlay-hover);
+}
+
+.unframed-agent-control__label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.unframed-agent-control--icon {
+  width: 28px;
+  justify-content: center;
+  padding: 0;
+}

@@ -24,6 +24,8 @@ export interface ChromeSlots {
   agentTray?: ComponentType<AgentTrayProps>;
   /** What Open on a filled page or motion does. */
   openArtifact?: (editor: Editor, shapeId: TLShapeId) => void;
+  /** Set while the chat rail (spec 08) holds the right edge: the top-right card steps aside. */
+  rightCardAside?: boolean;
 }
 
 let slots: ChromeSlots = {};

@@ -44,6 +44,7 @@ export const ProviderModel = Schema.Struct({
   thinking: Schema.optionalKey(Schema.Boolean),
   fastMode: Schema.optionalKey(Schema.Boolean),
 });
+export type ProviderModel = typeof ProviderModel.Type;
 
 /** A slash command or a skill the composer offers (spec 08). */
 export const ProviderCommand = Schema.Struct({

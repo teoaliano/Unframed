@@ -1,3 +1,4 @@
+import { AgentHost } from "../agent/AgentHost.tsx";
 import { BottomRight } from "../chrome/AddMenu.tsx";
 import { Tether } from "../generate/overlays.tsx";
 import { SelectionToolbar } from "../generate/SelectionToolbar.tsx";
@@ -12,5 +13,6 @@ export const InFront = () => (
     <SelectionToolbar />
     <BottomRight />
     <LibraryHost />
+    <AgentHost />
   </>
 );
