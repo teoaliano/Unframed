@@ -132,7 +132,6 @@
         "src/generate/composer/VideoStatus.tsx",
         "src/generate/overlays.tsx",
         "src/generate/runsProp.tsx",
-        "src/legacy/ImportGate.tsx",
         "src/library/AddToLibraryDialog.tsx",
         "src/library/LibraryDialog.tsx"
       ],

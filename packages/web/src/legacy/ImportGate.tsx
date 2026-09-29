@@ -4,9 +4,14 @@
  * says so; a failed import says why and offers Try again; once there is a canvas, a
  * report nobody has seen opens in its dialog.
  */
-import { Dialog } from "@base-ui/react/dialog";
 import { UnframedError, type ImportReport } from "@unframed/contracts";
+import { CircleAlert } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
+import { Alert, AlertAction, AlertDescription } from "~/components/ui/alert";
+import { Button } from "~/components/ui/button";
+import { Dialog, DialogClose, DialogDescription, DialogFooter, DialogHeader, DialogPanel, DialogPopup, DialogTitle } from "~/components/ui/dialog";
+import { Empty, EmptyDescription, EmptyMedia } from "~/components/ui/empty";
+import { Spinner } from "~/components/ui/spinner";
 import { useEngine } from "../context.ts";
 import { reportState, useReportState } from "./reportState.ts";
 
@@ -45,58 +50,58 @@ const ImportReportDialog = ({ project }: { readonly project: string }) => {
     void engine.call("legacyImport.markSeen", { project }).catch(() => undefined);
   };
   return (
-    <Dialog.Root open={open} onOpenChange={(next) => !next && close()}>
-      <Dialog.Portal>
-        <Dialog.Backdrop className="fixed inset-0 z-[900] bg-[var(--unframed-scrim)] backdrop-blur-[10px] backdrop-saturate-[160%]" />
-        <Dialog.Popup
-          data-testid="import-report"
-          className="fixed left-1/2 top-1/2 z-[901] flex max-h-[min(640px,calc(100vh-48px))] w-[520px] max-w-[calc(100vw-32px)] -translate-x-1/2 -translate-y-1/2 flex-col gap-3 rounded-xl border border-border bg-popover p-5 text-foreground shadow-lg outline-none"
-        >
-          <Dialog.Title className="m-0 text-[16px] font-semibold">{REPORT_TITLE}</Dialog.Title>
-          <Dialog.Description className="m-0 text-[13px] text-muted-foreground">{REPORT_BODY}</Dialog.Description>
-          <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto" data-scrolls="true">
-            {SECTIONS.map(({ section, title }) => {
-              const items = report.items.filter((item) => item.section === section);
-              if (items.length === 0) return null;
-              return (
-                <section key={section} data-section={section} aria-label={title}>
-                  <h3 className="m-0 mb-1 text-[13px] font-semibold">{title}</h3>
-                  <ul className="m-0 flex list-disc flex-col gap-1 pl-5 text-[12.5px] text-foreground">
-                    {items.map((item, index) => (
-                      <li key={index}>{item.text}</li>
-                    ))}
-                  </ul>
-                </section>
-              );
-            })}
-          </div>
-          <div className="flex justify-end">
-            <Dialog.Close className="h-8 cursor-pointer rounded-lg border-0 bg-primary px-3 text-[13px] text-primary-foreground">Got it</Dialog.Close>
-          </div>
-        </Dialog.Popup>
-      </Dialog.Portal>
-    </Dialog.Root>
+    <Dialog open={open} onOpenChange={(next) => !next && close()}>
+      <DialogPopup data-testid="import-report" className="max-w-[520px]" showCloseButton={false}>
+        <DialogHeader>
+          <DialogTitle>{REPORT_TITLE}</DialogTitle>
+          <DialogDescription>{REPORT_BODY}</DialogDescription>
+        </DialogHeader>
+        <DialogPanel>
+          {SECTIONS.map(({ section, title }) => {
+            const items = report.items.filter((item) => item.section === section);
+            if (items.length === 0) return null;
+            return (
+              <section key={section} data-section={section} aria-label={title}>
+                <h3 className="m-0 mb-1.5 text-sm font-medium text-foreground">{title}</h3>
+                <ul className="m-0 flex list-disc flex-col gap-1 pl-5 text-sm text-foreground">
+                  {items.map((item, index) => (
+                    <li key={index}>{item.text}</li>
+                  ))}
+                </ul>
+              </section>
+            );
+          })}
+        </DialogPanel>
+        <DialogFooter>
+          <DialogClose render={<Button />}>Got it</DialogClose>
+        </DialogFooter>
+      </DialogPopup>
+    </Dialog>
   );
 };
 
 /** In the canvas's place: the import running, or why it failed and a way to try again. */
-const Standing = ({ gate, onRetry }: { readonly gate: Gate; readonly onRetry: () => void }) => (
-  <div className="absolute inset-0 flex items-center justify-center p-6" data-import-state={gate.kind}>
-    {gate.kind === "importing" && (
-      <p role="status" className="m-0 text-[14px] text-muted-foreground">
-        {IMPORTING_MESSAGE}
-      </p>
-    )}
-    {gate.kind === "failed" && (
-      <div role="alert" className="flex max-w-[520px] flex-col items-center gap-3 text-center">
-        <p className="m-0 text-[14px] text-foreground">{gate.message}</p>
-        <button type="button" className="h-8 cursor-pointer rounded-lg border-0 bg-primary px-3 text-[13px] text-primary-foreground" onClick={onRetry}>
-          Try again
-        </button>
-      </div>
-    )}
-  </div>
-);
+const Standing = ({ gate, onRetry }: { readonly gate: Gate; readonly onRetry: () => void }) =>
+  gate.kind === "importing" ? (
+    <Empty className="absolute inset-0" data-import-state="importing">
+      <EmptyMedia>
+        <Spinner size="lg" tone="muted" aria-hidden />
+      </EmptyMedia>
+      <EmptyDescription role="status">{IMPORTING_MESSAGE}</EmptyDescription>
+    </Empty>
+  ) : gate.kind === "failed" ? (
+    <div className="absolute inset-0 flex items-center justify-center p-6" data-import-state="failed">
+      <Alert variant="error" controlAlignment="first-line" className="max-w-[520px]">
+        <CircleAlert aria-hidden />
+        <AlertDescription>{gate.message}</AlertDescription>
+        <AlertAction>
+          <Button size="sm" onClick={onRetry}>
+            Try again
+          </Button>
+        </AlertAction>
+      </Alert>
+    </div>
+  ) : null;
 
 export const ImportGate = ({ project, children }: { readonly project: string; readonly children: ReactNode }) => {
   const engine = useEngine();

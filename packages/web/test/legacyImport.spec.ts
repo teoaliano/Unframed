@@ -4,6 +4,7 @@ import { chmod, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { roomRecords } from "./canvas.ts";
 import { expect, test } from "./fixtures.ts";
+import { expectSlot, expectToken, inBothSchemes, styleOf } from "./kit.ts";
 import { canvasOf, IMPORTING, openImported, reportDialog, startLegacyApp } from "./legacy.ts";
 
 test("the canvas's place says the import is running, and a second tab waits for the same import", async ({ browser }) => {
@@ -24,6 +25,12 @@ test("the canvas's place says the import is running, and a second tab waits for 
     await first.goto(app.engine.origin);
     await expect(first.getByText(IMPORTING)).toBeVisible({ timeout: 20_000 });
     await expect(first.locator("[data-canvas-project]")).toHaveCount(0);
+    // The kit's Empty with a Spinner, the line in muted text.
+    const importing = first.locator("[data-import-state='importing']");
+    await expectSlot(importing, "empty");
+    await expect(importing.locator("svg[aria-label='Loading']")).toHaveCount(1);
+    await expect(importing.getByRole("status")).toHaveText(IMPORTING);
+    await expectToken(importing.getByRole("status"), "color", "--color-muted-foreground");
     await second.goto(app.engine.origin);
     await expect(second.getByText(IMPORTING)).toBeVisible({ timeout: 20_000 });
     expect(existsSync(join(app.folder("everything"), "unframed.sqlite"))).toBe(false);
@@ -52,6 +59,11 @@ test("a failed import says why, writes no database, and Try again imports once t
     await expect(failure).toContainText("EACCES");
     await expect(failure).toContainText("Its files are unchanged.");
     await expect(page.locator("[data-canvas-project]")).toHaveCount(0);
+    // The kit's error Alert with a default Button.
+    await expectSlot(failure, "alert");
+    await expect(failure).toHaveAttribute("data-variant", "error");
+    await expectSlot(failure.getByRole("button", { name: "Try again" }), "button");
+    await expectToken(failure.getByRole("button", { name: "Try again" }), "background-color", "--primary");
     expect(existsSync(join(app.folder("everything"), "unframed.sqlite"))).toBe(false);
 
     // A reload still shows the failure: nothing reruns the import but Try again.
@@ -75,6 +87,17 @@ test("the report shows once across reloads and tabs, with its sections, and the 
     const dialog = reportDialog(page);
     await expect(dialog).toBeVisible();
     await expect(dialog.getByRole("heading", { name: "Imported from the old Unframed" })).toBeVisible();
+    // The kit Dialog: its title, one Got it in its footer, no corner close.
+    await expectSlot(dialog, "dialog-popup");
+    await expect(dialog.getByRole("button")).toHaveCount(1);
+    await page.mouse.move(4, 700);
+    await inBothSchemes(page, async () => {
+      const title = dialog.locator("[data-slot='dialog-title']");
+      expect(await styleOf(title, "font-size")).toBe("20px");
+      expect(await styleOf(title, "font-weight")).toBe("600");
+      await expectToken(dialog.locator("[data-slot='dialog-description']"), "color", "--color-muted-foreground");
+      await expectToken(dialog.getByRole("button", { name: "Got it" }), "background-color", "--primary");
+    });
     await expect(dialog).toContainText(
       "This project was made with an older version. Its canvas was rebuilt for this one. graph.json and graph.log are still in the project folder, unchanged. Undo history from the old app does not carry over.",
     );
