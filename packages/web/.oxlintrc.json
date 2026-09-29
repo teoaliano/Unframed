@@ -117,7 +117,6 @@
         "src/artifacts/RenderRow.tsx",
         "src/artifacts/editor/ArtifactEditor.tsx",
         "src/artifacts/editor/Parameters.tsx",
-        "src/canvas/shapes/group.tsx",
         "src/generate/SelectionToolbar.tsx",
         "src/generate/composer/Composer.tsx",
         "src/generate/composer/FinalPromptDialog.tsx",

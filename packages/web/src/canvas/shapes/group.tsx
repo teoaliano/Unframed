@@ -17,6 +17,8 @@ import {
   type TLShape,
   type TLShapeId,
 } from "tldraw";
+import { Badge } from "~/components/ui/badge";
+import { Input } from "~/components/ui/input";
 import { ShapeLabel } from "./ShapeLabel.tsx";
 import { noteRender } from "../../fps/renders.ts";
 import { renameGroup, renamingGroup, startRename, stopRename } from "../groupRename.ts";
@@ -87,18 +89,21 @@ const RenameField = ({ shape }: { readonly shape: TLFrameShape }) => {
   }, [editor, id]);
 
   return (
-    <span className="unframed-group-rename">
+    // The name is typed as it is, not in the label's capitals; the kit Input sits unstyled inside this frame.
+    <span className="pointer-events-auto flex items-center gap-px tracking-normal normal-case">
       <span data-testid="group-rename-prefix">@</span>
-      <input
-        ref={input}
-        aria-label="Group name"
-        className="unframed-group-rename__field"
-        defaultValue={shape.props.name}
-        size={Math.max(4, shape.props.name.length + 2)}
-        spellCheck={false}
-        autoComplete="off"
-        {...fieldEvents(editor)}
-      />
+      <span className="inline-flex h-5 items-center overflow-hidden rounded-md border border-primary bg-background text-foreground">
+        <Input
+          ref={input}
+          unstyled
+          aria-label="Group name"
+          defaultValue={shape.props.name}
+          size={Math.max(4, shape.props.name.length + 2)}
+          spellCheck={false}
+          autoComplete="off"
+          {...fieldEvents(editor)}
+        />
+      </span>
     </span>
   );
 };
@@ -107,9 +112,11 @@ const RenameField = ({ shape }: { readonly shape: TLFrameShape }) => {
 const RecipeChip = ({ shape, recipe }: { readonly shape: TLFrameShape; readonly recipe: GroupRecipe }) => {
   const editor = useEditor();
   return (
-    <button
-      type="button"
-      className="unframed-recipe-chip"
+    <Badge
+      variant="outline"
+      className="pointer-events-auto ml-1.5 tracking-normal normal-case"
+      // oxlint-disable-next-line react/forbid-elements -- the kit Badge rendered as a button: spec 12 makes the recipe chip a Badge
+      render={<button type="button" />}
       data-testid="recipe-chip"
       {...fieldEvents(editor)}
       onClick={(event) => {
@@ -118,7 +125,7 @@ const RecipeChip = ({ shape, recipe }: { readonly shape: TLFrameShape; readonly 
       }}
     >
       {recipeChip(recipe)}
-    </button>
+    </Badge>
   );
 };
 
@@ -130,7 +137,13 @@ const GroupBox = ({ shape }: { readonly shape: TLFrameShape }) => {
   const renaming = useValue("group renaming", () => renamingGroup(editor).get() === id, [editor, id]);
   const recipe = groupRecipeOf(shape);
   return (
-    <HTMLContainer id={shape.id} className="unframed-group" data-selected={selected ? "true" : undefined} style={{ width: shape.props.w, height: shape.props.h }}>
+    <HTMLContainer
+      id={shape.id}
+      className="box-border rounded-xl border-[1.5px] border-dashed border-border bg-group-fill data-[selected]:rounded-none data-[selected]:border-solid data-[selected]:border-primary"
+      data-testid="group-frame"
+      data-selected={selected ? "true" : undefined}
+      style={{ width: shape.props.w, height: shape.props.h }}
+    >
       <ShapeLabel shapeId={shape.id} kind="group" active={renaming}>
         {renaming ? <RenameField shape={shape} /> : <>@{shape.props.name}</>}
         {recipe && !renaming && <RecipeChip shape={shape} recipe={recipe} />}

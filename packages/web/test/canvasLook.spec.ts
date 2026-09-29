@@ -5,7 +5,7 @@ import { expect, test } from "./fixtures.ts";
 import { expectSlot, expectToken, inBothSchemes, resolvedColor, styleOf, tokenColor } from "./kit.ts";
 import { artifactShape, filledArtifact } from "./artifacts.ts";
 import { pngBytes } from "./images.ts";
-import { emptyMedia, filledMedia, putRecords } from "./media.ts";
+import { emptyMedia, filledMedia, groupRecord, putRecords } from "./media.ts";
 
 const clipPath = fileURLToPath(new URL("./media/clip.webm", import.meta.url));
 
@@ -76,5 +76,38 @@ test("the mention menu is the kit's popup with its row look", async ({ page, eng
     expect((await row.boundingBox())!.height).toBe(28);
     await expect(row).toHaveAttribute("aria-selected", "true");
     await expectToken(row, "background-color", "--accent");
+  });
+});
+
+test("a group is a dashed frame in the border colour on the group fill, solid primary when selected; its name field and recipe chip are the kit's", async ({ page, engine }) => {
+  await openCanvas(page, engine);
+  const recipe = { medium: "image", model: "openai/gpt-image-2", params: {}, runs: 2 };
+  await putRecords(engine, [{ ...groupRecord("shape:character", "character", { x: -400, y: -100 }), meta: { unframed: { recipe } } }]);
+  const group = shapeOnScreen(page, "shape:character");
+  const frame = group.getByTestId("group-frame");
+  await expect(frame).toBeVisible();
+  const chip = group.getByTestId("recipe-chip");
+  await expectSlot(chip, "badge");
+
+  await inBothSchemes(page, async () => {
+    await page.mouse.click(5, 400);
+    expect(await styleOf(frame, "border-top-style")).toBe("dashed");
+    expect(await styleOf(frame, "border-top-color")).toBe(await tokenColor(page, "--color-border"));
+    expect(await styleOf(frame, "border-top-left-radius")).toBe("14px");
+    await expectToken(frame, "background-color", "--group-fill");
+
+    const box = (await frame.boundingBox())!;
+    await page.mouse.click(box.x + 2, box.y + box.height / 2);
+    await expect(frame).toHaveAttribute("data-selected", "true");
+    expect(await styleOf(frame, "border-top-style")).toBe("solid");
+    expect(await styleOf(frame, "border-top-color")).toBe(await tokenColor(page, "--primary"));
+    expect(await styleOf(frame, "border-top-left-radius")).toBe("0px");
+
+    await page.keyboard.press("F2");
+    const field = page.getByRole("textbox", { name: "Group name" });
+    await expectSlot(field, "input");
+    await expect(field).toBeFocused();
+    await page.keyboard.press("Escape");
+    await expect(field).toHaveCount(0);
   });
 });

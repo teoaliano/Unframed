@@ -11,7 +11,7 @@ const looks = (page: Page) =>
       body: css("body", "background-color"),
       grid: css("[data-testid='dot-grid']", "background-color"),
       card: css(".unframed-chrome-left", "background-color"),
-      group: css(".unframed-group", "border-top-color"),
+      group: css("[data-testid='group-frame']", "border-top-color"),
       tldraw: document.querySelector(".tl-container")!.classList.contains("tl-theme__dark") ? "dark" : "light",
       theme: document.documentElement.getAttribute("data-unframed-theme"),
     };
@@ -31,7 +31,7 @@ test("light and dark tokens follow the OS, and tldraw's scheme follows with them
   await page.emulateMedia({ colorScheme: "light" });
   await openCanvas(page, engine);
   await putRecords(engine, [groupRecord("shape:group", "160", { x: 440, y: 60 })]);
-  await expect(page.locator(".unframed-group")).toBeVisible();
+  await expect(page.getByTestId("group-frame")).toBeVisible();
 
   await expect.poll(async () => (await looks(page)).theme).toBe("light");
   expect(await looks(page)).toEqual(await expected(page, "light"));

@@ -266,7 +266,7 @@ Custom shape props and every later change to them use tldraw's shape migrations,
 
 ### Group behaviour (this spec's part)
 
-- **Look.** Dashed border 1.5 px in the border colour, radius 12 px, fill the border colour mixed 8 % into transparent. Label `@<name>` above the top-left, same type as a prompt's label. tldraw's own frame heading is replaced by this label. Selected: the border goes solid accent and the corners square.
+- **Look.** Dashed border 1.5 px in the kit's `--border`, the kit's 14 px radius, filled with the `--group-fill` token (spec 12: `--primary` mixed 4 % into `--background`). Label `@<name>` above the top-left, same type as a prompt's label. tldraw's own frame heading is replaced by this label. Selected: the border goes solid `--primary` and the corners square.
 - **Members.** A group may hold prompts, images, videos and marks. It may not hold a group, a page or a motion. tldraw's drag-into-frame reparenting applies to allowed shapes only; a disallowed shape dropped over a group stays on the page.
 - **`Cmd-G`** wraps the selected shapes that may be members in a new group whose box is their bounding box plus 28 px left, right and bottom and 56 px on top. The name is `nextRef`. Members keep their positions on screen. Shapes already in another group move into the new one. The new group is selected alone. If nothing selected may be a member, nothing happens. tldraw's own group action and shape are not available anywhere.
 - **Frame tool (`F`)** draws an empty group named with `nextRef`. Minimum 180 × 96, maximum 4000 × 4000. Default size from the add menu: 420 × 280.

@@ -127,7 +127,7 @@ Spec 03's selection to request already expands a selected group in place (one sl
 
 **Schema.** A group's standing recipe is spec 03's `GroupRecipe` (medium, model, params, runs), stored on the group shape as `meta.unframed.recipe` and synced like any shape property. Unlike a result's recipe it holds no per-run instruction, no selection prompt and no references: its sources are always the group's members as they are when it runs. The keys in `params` are exactly the ones the Generate tray holds for that medium (specs 03, 04, 05 own them). The recipe holds no text: an instruction that should persist belongs in a prompt member. A recipe is applied through the same path the composer uses to reopen a result's recipe (spec 03), so a model that has left the catalogue or a parameter the model no longer declares is handled the same way there.
 
-**Chip.** The label shows the chip after the name, in the same row, in a pill with the chip style from `assets/theme/`. Its text is built from the recipe, parts joined by ` · ` (space, middle dot, space), parts left out when the recipe does not set them:
+**Chip.** The label shows the chip after the name, in the same row, as the kit's outline Badge (spec 12), in normal case. Its text is built from the recipe, parts joined by ` · ` (space, middle dot, space), parts left out when the recipe does not set them:
 - the model's name without its provider prefix (`openai/gpt-image-2` becomes `gpt-image-2`);
 - image: the exact size when set, as `1024²` when width equals height and `1024×1536` otherwise; else the aspect ratio (`2:3`);
 - video: the duration as `5s`, then the resolution (`720p`);
