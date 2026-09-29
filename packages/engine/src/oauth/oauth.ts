@@ -37,7 +37,12 @@ const AGAIN = "Close this tab and press Connect in Unframed again.";
 
 const escapeHtml = (text: string) => text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 
-/** A complete dark page with one heading and one line. It links nowhere: the engine does not know where the web is served. */
+/**
+ * A complete dark page with one heading and one line. It links nowhere: the engine does not
+ * know where the web is served. It is served outside the web build, so the kit's dark
+ * `--background` (neutral-950) and `--foreground` (neutral-100) and its sans stack are
+ * written out here (spec 12); a change to the kit's dark theme changes them with it.
+ */
 const sendPage = (res: http.ServerResponse, status: number, heading: string, detail: string) => {
   const html = `<!doctype html>
 <html lang="en">
@@ -47,7 +52,7 @@ const sendPage = (res: http.ServerResponse, status: number, heading: string, det
 <title>Unframed</title>
 <style>
 :root { color-scheme: dark; }
-body { margin: 0; background: #111112; color: #DFE2E5; font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; font-size: 16px; line-height: 1.5; }
+body { margin: 0; background: #0a0a0a; color: #f5f5f5; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif; font-size: 16px; line-height: 1.5; }
 main { max-width: 32em; margin: 12vh auto 0; padding: 0 1.5em; }
 h1 { font-size: 1.3em; }
 </style>
