@@ -6,6 +6,7 @@ import { ImagePricingAnswer, ImageRunRequest, ModelsListAnswer, ModelsListReques
 import { Health, Settings, SettingsPatch } from "./settings.ts";
 import { VideoForget, VideoPoll, VideoStart } from "./video.ts";
 import { RunText, TextComplete } from "./text.ts";
+import { LibraryCopyFiles, LibraryDelete, LibraryList, LibrarySave } from "./library.ts";
 
 const Empty = Schema.Struct({});
 
@@ -206,5 +207,9 @@ export const UnframedRpcs = RpcGroup.make(
   VideoForget,
   RunText,
   TextComplete,
+  LibraryList,
+  LibrarySave,
+  LibraryDelete,
+  LibraryCopyFiles,
 );
 export type UnframedRpcs = typeof UnframedRpcs;

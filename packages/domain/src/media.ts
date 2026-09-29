@@ -75,6 +75,8 @@ export interface MediaSidecar {
   readonly bytes: number;
   readonly at: string;
   readonly of?: string;
+  /** Spec 06: the project a copy for a preset came from. */
+  readonly ofProject?: string;
   readonly marks?: ReadonlyArray<string>;
   readonly crop?: unknown;
 }
@@ -91,6 +93,7 @@ export const sidecarText = (sidecar: MediaSidecar): string => {
     at: sidecar.at,
   };
   if (sidecar.of !== undefined) ordered.of = sidecar.of;
+  if (sidecar.ofProject !== undefined) ordered.ofProject = sidecar.ofProject;
   if (sidecar.marks !== undefined) ordered.marks = sidecar.marks;
   if (sidecar.source === "composite" || sidecar.source === "sketch") ordered.crop = sidecar.crop ?? null;
   return `${JSON.stringify(ordered, null, 2)}\n`;

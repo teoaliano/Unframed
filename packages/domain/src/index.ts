@@ -36,3 +36,4 @@ export * from "./freeRepair.ts";
 export * from "./groupRules.ts";
 export * from "./recipeRules.ts";
 export * from "./presetRules.ts";
+export * from "./jsonArray.ts";
