@@ -69,8 +69,12 @@ export const LibraryDelete = Rpc.make("library.delete", {
   error: UnframedError,
 });
 
-/** A file a preset points at: `project` is the one it was saved from, `''` for the target project. */
-export const PresetFileRef = Schema.Struct({ project: Schema.String, file: Schema.String });
+/**
+ * A file a preset points at: `project` is the one it was saved from, `''` for the target
+ * project. A converted old preset (spec 11) may instead carry the bytes as a `data:` URL.
+ */
+export const PresetFileRef = Schema.Union([Schema.Struct({ project: Schema.String, file: Schema.String }), Schema.Struct({ dataUrl: Schema.String })]);
+export type PresetFileRef = typeof PresetFileRef.Type;
 
 export const CopiedPresetFile = Schema.Union([Schema.Struct({ file: Schema.String }), Schema.Struct({ missing: Schema.Literal(true) })]);
 export type CopiedPresetFile = typeof CopiedPresetFile.Type;
