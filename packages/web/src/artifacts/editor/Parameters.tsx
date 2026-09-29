@@ -173,9 +173,9 @@ export const Parameters = ({ shapeId, kind, title, announcement, saved, post }: 
         <SlidersHorizontal aria-hidden className="size-4 shrink-0 text-muted-foreground" />
         <span className="truncate text-sm font-semibold">Parameters</span>
       </ColumnHeader>
-      <div className="min-h-0 flex-1 overflow-auto p-2">
+      <div className="min-h-0 flex-1 overflow-auto">
         {announcement === undefined ? (
-          <p className="mx-2 my-4 text-sm text-muted-foreground">No parameters yet.</p>
+          <p className="mx-2.5 my-4 text-sm text-muted-foreground">No parameters yet.</p>
         ) : (
           <Controls shapeId={shapeId} announcement={announcement} saved={saved} post={post} />
         )}

@@ -35,6 +35,15 @@ test("an artifact that declares parameters shows them as DialKit controls; one t
   await expect(dials.getByText("Caption")).toBeVisible();
   await expect(dials.getByText("Scene")).toBeVisible();
   await expect(editor(page).getByRole("textbox", { name: "Add a parameter" })).toHaveAttribute("placeholder", "Add a parameter… (e.g. the background colour, the title size)");
+  // One inset down the column: the header's icon, the dials' title and the parameter box line up.
+  const lefts = await Promise.all([
+    editor(page).getByTestId("artifact-dials").locator("xpath=ancestor::*[.//header][1]").locator("header svg").first().boundingBox(),
+    dials.locator(".dialkit-folder-title-root").boundingBox(),
+    editor(page).getByRole("textbox", { name: "Add a parameter" }).boundingBox(),
+  ]);
+  const [icon, title, box] = lefts.map((each) => Math.round(each!.x));
+  expect(Math.abs(title! - icon!)).toBeLessThanOrEqual(1);
+  expect(Math.abs(box! - icon!)).toBeLessThanOrEqual(1);
   await page.keyboard.press("Escape");
 
   await page.mouse.click(640, 600);

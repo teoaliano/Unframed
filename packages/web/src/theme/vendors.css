@@ -92,3 +92,8 @@
   --dial-radius: var(--control-radius);
   font-family: var(--font-sans);
 }
+
+/* The editor's Parameters column insets its header and its prompt box 10 px: DialKit's panel matches. */
+.dialkit-root[data-theme="dark"] .dialkit-panel-inline {
+  padding: 10px;
+}
