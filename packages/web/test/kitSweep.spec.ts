@@ -40,7 +40,7 @@ test("the chrome, canvas menus and dialogs render every control through the kit"
   await expect(page.getByRole("menu")).toBeVisible();
   await sweep(page);
 
-  await page.locator(".unframed-chrome-right").getByRole("button", { name: "Settings" }).click();
+  await page.locator(".unframed-chrome-left").getByRole("button", { name: "Settings" }).click();
   await expect(page.getByTestId("settings-dialog")).toBeVisible();
   await sweep(page);
 

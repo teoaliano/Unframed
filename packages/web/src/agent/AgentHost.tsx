@@ -1,16 +1,15 @@
 /**
  * The agent on the canvas (spec 08): the Agent button in the top-right chrome, the
- * composer's Agent tray, and the chat rail docked to the right edge.
+ * composer's Agent tray, and the chat rail docked to the left edge.
  */
 import { Sparkles } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import { createPortal } from "react-dom";
-import { useEditor, type TLShapeId } from "tldraw";
+import { TldrawUiButtonIcon, TldrawUiToolbarButton, useEditor, type TLShapeId } from "tldraw";
 import { registerSlot, type AgentTrayProps } from "../chrome/slots.ts";
 import { useSlots } from "../chrome/slots.ts";
 import { Button } from "~/components/ui/button";
 import { Sheet, SheetPopup } from "~/components/ui/sheet";
-import { Tip } from "../chrome/ui.tsx";
 import { useCanvasProject, useEngine } from "../context.ts";
 import { AgentRail } from "./rail/AgentRail.tsx";
 import { ToolbarAgentTray } from "./composer/AgentTray.tsx";
@@ -87,21 +86,23 @@ const ToolbarAgentButton = ({ client, onOpen }: { readonly client: ChatClient; r
   );
 };
 
-const AgentChromeButton = ({ client }: { readonly client: ChatClient }) => (
-  <Tip label="Agent">
-    <Button
-      variant="ghost"
-      size="icon-lg"
-      aria-label="Agent"
+/** Agent in the bottom bar: a tldraw toolbar button that opens the rail, pressed while it is open. */
+const AgentBarButton = ({ client }: { readonly client: ChatClient }) => {
+  const ui = useRailUi(client);
+  return (
+    <TldrawUiToolbarButton
+      type="tool"
+      title="Agent"
+      isActive={ui.open}
       onClick={() => {
         void client.loadProviders();
-        client.setUi({ open: true });
+        client.setUi({ open: !ui.open });
       }}
     >
-      <Sparkles aria-hidden />
-    </Button>
-  </Tip>
-);
+      <TldrawUiButtonIcon icon="sparkles" />
+    </TldrawUiToolbarButton>
+  );
+};
 
 export const AgentHost = () => {
   const editor = useEditor();
@@ -111,7 +112,7 @@ export const AgentHost = () => {
   const client = useChatClient(engine, project);
 
   useEffect(() => {
-    const Button = () => <AgentChromeButton client={client} />;
+    const Button = () => <AgentBarButton client={client} />;
     const OnToolbar = ({ onOpen }: { readonly onOpen: () => void }) => <ToolbarAgentButton client={client} onOpen={onOpen} />;
     const stops = [registerSlot("agentButton", Button), registerSlot("agentTray", ToolbarAgentTray), registerSlot("agentToolbarButton", OnToolbar)];
     return () => {
@@ -131,7 +132,7 @@ const CanvasRail = ({ client, openArtifact }: { readonly client: ChatClient; rea
   const editor = useEditor();
   const ui = useRailUi(client);
   const narrow = useNarrowWindow();
-  useEffect(() => (ui.open && !narrow ? registerSlot("rightCardAside", true) : undefined), [ui.open, narrow]);
+  useEffect(() => (ui.open && !narrow ? registerSlot("leftCardAside", true) : undefined), [ui.open, narrow]);
   const close = useCallback(() => client.setUi({ open: false }), [client]);
   const locate = useCallback(
     (id: string) => {
@@ -163,7 +164,7 @@ const CanvasRail = ({ client, openArtifact }: { readonly client: ChatClient; rea
   if (narrow) {
     return (
       <Sheet open={ui.open} onOpenChange={(open) => !open && close()}>
-        <SheetPopup side="right" showCloseButton={false} className="w-[min(88vw,24rem)]">
+        <SheetPopup side="left" showCloseButton={false} className="w-[min(88vw,24rem)]">
           <AgentRail project={client.project} inSheet {...sheetProps} />
         </SheetPopup>
       </Sheet>

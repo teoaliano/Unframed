@@ -26,7 +26,8 @@ test.describe("web frame", () => {
     expect(new URL(watch.sockets[0]!.socket.url()).host).toBe(`localhost:${engine.port}`);
 
     await expect(page.locator(".unframed-chrome-left")).toBeVisible();
-    await expect(page.locator(".unframed-chrome-right")).toBeVisible();
+    // Empty since the chrome moved: present for the shell's CSS, drawing nothing.
+    await expect(page.locator(".unframed-chrome-right")).toHaveCount(1);
     expect(await page.evaluate(readHooks)).toEqual({
       theme: "light",
       secondary: LIGHT.secondary,

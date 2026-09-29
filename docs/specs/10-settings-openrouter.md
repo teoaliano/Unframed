@@ -246,7 +246,7 @@ The fields these operations touch on a job record (spec 04 owns the full format)
 
 ### The settings dialog
 
-The settings entry in the top-right chrome card: with a key, a ghost icon button with a gear icon, label `Settings`, tooltip `Settings: key …<keyHint>, default models, output folder` (the `…<keyHint>` part omitted when there is no hint). Without a key, a primary icon button with a key icon, label `Add your API key`, tooltip `No OpenRouter key yet. Click to add one`. Until the first settings answer arrives the web assumes a key exists, so the keyless dialog does not flash for everyone at load; when the first answer says there is no key, the dialog opens on its own.
+The settings entry in the top-left chrome card, after the project menu: with a key, a ghost icon button with a gear icon, label `Settings`, tooltip `Settings: key …<keyHint>, default models, output folder` (the `…<keyHint>` part omitted when there is no hint). Without a key, a primary icon button with a key icon, label `Add your API key`, tooltip `No OpenRouter key yet. Click to add one`. Until the first settings answer arrives the web assumes a key exists, so the keyless dialog does not flash for everyone at load; when the first answer says there is no key, the dialog opens on its own.
 
 Dialog: the kit Dialog (spec 12), 480 px wide, with its title, panel and footer and no corner close button. Title `Settings` with a key, `Connect OpenRouter to start` without. The form scrolls inside the dialog; the banner and the buttons stay fixed below it, so a short window never hides Save.
 

@@ -74,7 +74,7 @@ test("the selection is a thin accent line with square grips, drawn from the sele
   expect(distance(selected.at(a.x - 7, a.y + 1), canvas)).toBeLessThan(10);
 
   // Focus moving elsewhere leaves the selection drawn.
-  await page.getByRole("button", { name: "Help" }).focus();
+  await page.getByTestId("bottom-toolbar").getByRole("button", { name: "Library" }).focus();
   await page.waitForTimeout(200);
   const focusedAway = await screenPixels(page, { x: Math.floor(a.x) - 12, y: Math.floor(a.y) - 12, width: Math.ceil(a.width) + 24, height: Math.ceil(a.height) + 24 });
   expect(distance(focusedAway.at(a.x - 3, a.y + 1), canvas)).toBeGreaterThan(10);

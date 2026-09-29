@@ -1,22 +1,19 @@
-import { Info } from "lucide-react";
-import { Button } from "~/components/ui/button";
 import { TooltipProvider } from "~/components/ui/tooltip";
 import logoUrl from "../../../../assets/brand/logo.svg?url";
 import { ProjectMenu } from "./ProjectMenu.tsx";
 import { useSlots } from "./slots.ts";
-import { cornerCardClass, Tip } from "./ui.tsx";
-
-export const HELP_TEXT = "Reference a prompt or group with @id. Select images to number them, then type “image 1”.";
+import { cornerCardClass } from "./ui.tsx";
 
 /**
- * The two top corner cards. The shell targets them by these exact class names and moves
- * them with its own CSS.
+ * The top corners. The left card holds the logo, the project menu and Settings. The right
+ * one is spec 01's hook: the shell's CSS expects exactly one such element, so it stays in
+ * the page, empty, now that its buttons have moved (Agent to the bottom bar, Settings left).
  */
 export const TopCorners = () => {
-  const { agentButton: Agent, settingsButton: SettingsButton, rightCardAside } = useSlots();
+  const { settingsButton: SettingsButton, leftCardAside } = useSlots();
   return (
     <TooltipProvider delay={400}>
-      <div className={`unframed-chrome-left ${cornerCardClass}`}>
+      <div className={`unframed-chrome-left ${cornerCardClass}`} data-aside={leftCardAside ? "" : undefined} inert={leftCardAside === true}>
         <span
           role="img"
           aria-label="Unframed"
@@ -24,16 +21,9 @@ export const TopCorners = () => {
           style={{ mask: `url("${logoUrl}") center / contain no-repeat`, WebkitMask: `url("${logoUrl}") center / contain no-repeat` }}
         />
         <ProjectMenu />
-      </div>
-      <div className={`unframed-chrome-right ${cornerCardClass}`} data-aside={rightCardAside ? "" : undefined} inert={rightCardAside === true}>
-        {Agent && <Agent />}
         {SettingsButton && <SettingsButton />}
-        <Tip label={HELP_TEXT}>
-          <Button variant="ghost" size="icon-lg" aria-label="Help">
-            <Info aria-hidden />
-          </Button>
-        </Tip>
       </div>
+      <div className="unframed-chrome-right" />
     </TooltipProvider>
   );
 };

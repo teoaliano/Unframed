@@ -383,7 +383,7 @@ A contract with the desktop shell. Renaming any of these is a breaking change th
 | Hook | Contract |
 | --- | --- |
 | `.unframed-chrome-left` | exactly one element: the top-left floating chrome card (logo and project menu, filled by spec 02). Its position comes from ordinary CSS properties with no `!important`, so the shell's injected CSS can move it |
-| `.unframed-chrome-right` | exactly one element: the top-right floating chrome card (agent, settings, help). Same rule |
+| `.unframed-chrome-right` | exactly one element: the top-right chrome card. Since the chrome moved (Agent to the bottom bar, Settings to the top-left card) it holds nothing and draws nothing, and stays in the page so the shell's CSS still finds it. Same rule |
 | `data-unframed-theme` on `<html>` | `"light"` or `"dark"`: the theme currently shown, updated live when it changes |
 | `--unframed-text-secondary` on `<html>` | the secondary text colour of the current theme, readable with `getComputedStyle(document.documentElement)` |
 | `<body>` background | an explicit, opaque `background-color` equal to the canvas background of the current theme |

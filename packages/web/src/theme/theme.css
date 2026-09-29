@@ -756,19 +756,19 @@ code {
 
   .unframed-chrome-left {
     left: 12px;
-  }
-
-  .unframed-chrome-right {
-    right: 12px;
     transition:
       opacity 160ms ease-out,
       transform 200ms ease-out;
   }
 
-  /* Spec 08: the top-right card steps aside while the chat rail holds the right edge. */
-  .unframed-chrome-right[data-aside] {
+  .unframed-chrome-right {
+    right: 12px;
+  }
+
+  /* Spec 08: the top-left card steps aside while the chat rail holds the left edge. */
+  .unframed-chrome-left[data-aside] {
     opacity: 0;
-    transform: translateX(8px);
+    transform: translateX(-8px);
   }
 
 }

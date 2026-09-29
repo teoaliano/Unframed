@@ -69,7 +69,7 @@ export { expect };
 
 export const rail = (page: Page): Locator => page.getByRole("complementary", { name: "Agent" });
 
-export const agentChromeButton = (page: Page): Locator => page.locator(".unframed-chrome-right").getByRole("button", { name: "Agent" });
+export const agentChromeButton = (page: Page): Locator => page.getByTestId("bottom-toolbar").getByRole("button", { name: "Agent" });
 
 /** Opens the rail from the top-right chrome and waits until it is at rest. */
 export const openRail = async (page: Page): Promise<Locator> => {
@@ -106,15 +106,15 @@ export const rpcOf = (engine: TestEngine): ReturnType<TestEngine["rpc"]> => {
 };
 
 /**
- * Small pages (and motions) in a column left of the starter prompts, so the view that
- * opens on them keeps them clear of the rail. Put them before opening the canvas.
+ * Small pages (and motions) in a column right of the starter prompts, so the view that
+ * opens on them keeps them clear of the rail on the left. Put them before opening the canvas.
  */
 export const artifactColumn = (items: ReadonlyArray<{ id: string; kind?: "page" | "motion"; title: string; file?: string }>) =>
   items.map((item, index) => ({
     id: item.id,
     typeName: "shape",
     type: item.kind ?? "page",
-    x: -600,
+    x: 600,
     y: 60 + index * 130,
     rotation: 0,
     index: `a${String.fromCharCode(66 + index)}`,

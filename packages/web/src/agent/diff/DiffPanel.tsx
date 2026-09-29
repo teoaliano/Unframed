@@ -103,7 +103,7 @@ export const DiffPanel = ({ client, chat, diff }: { readonly client: ChatClient;
     // t3code's diff panel shell, beside the rail on its left and as tall as it.
     <section
       ref={root}
-      className="absolute top-0 right-[calc(100%+8px)] bottom-0 flex w-[min(760px,calc(100vw-540px))] min-w-0 flex-col overflow-hidden rounded-xl border bg-background text-sm shadow-lg/5 outline-none"
+      className="absolute top-0 left-[calc(100%+8px)] bottom-0 flex w-[min(760px,calc(100vw-540px))] min-w-0 flex-col overflow-hidden rounded-xl border bg-background text-sm shadow-lg/5 outline-none"
       role="dialog"
       aria-label="Changes"
       tabIndex={-1}

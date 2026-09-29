@@ -26,13 +26,13 @@ const transitionsOnOpen = (page: import("@playwright/test").Page) =>
           read(element);
         });
         observer.observe(document.body, { childList: true, subtree: true });
-        document.querySelector<HTMLElement>(".unframed-chrome-right button[aria-label='Agent']")!.click();
+        document.querySelector<HTMLElement>("[data-testid='bottom-toolbar'] button[aria-label='Agent']")!.click();
       }),
   );
 
-test("the Agent button slides the rail in, the top-right card steps aside, and Close slides it out and removes it", async ({ page, agent }) => {
+test("the Agent button slides the rail in from the left, the top-left card steps aside, and Close slides it out and removes it", async ({ page, agent }) => {
   await openCanvas(page, agent);
-  const card = page.locator(".unframed-chrome-right");
+  const card = page.locator(".unframed-chrome-left");
   await expect(agentChromeButton(page)).toBeVisible();
 
   expect(await transitionsOnOpen(page)).toEqual(["opacity", "transform"]);
@@ -48,14 +48,14 @@ test("the Agent button slides the rail in, the top-right card steps aside, and C
   // Opacity can reach 1 a frame before the slide's last fraction of a pixel.
   await expect.poll(async () => ["none", "matrix(1, 0, 0, 1, 0, 0)"].includes((await computed(panel, "transform")).transform ?? "")).toBe(true);
   const box = (await panel.boundingBox())!;
-  expect(box.x + box.width).toBeCloseTo(page.viewportSize()!.width, 0);
+  expect(box.x).toBeCloseTo(0, 0);
   expect(box.y).toBe(0);
 
-  // The top-right card fades out, drifts right and takes no input while the rail is open.
+  // The top-left card fades out, drifts left and takes no input while the rail is open.
   await expect(card).toHaveAttribute("inert", "");
   expect(await computed(card, "transition-duration")).toEqual({ "transition-duration": "0.16s, 0.2s" });
   await expect.poll(async () => (await computed(card, "opacity")).opacity).toBe("0");
-  expect((await computed(card, "transform")).transform).toBe("matrix(1, 0, 0, 1, 8, 0)");
+  expect((await computed(card, "transform")).transform).toBe("matrix(1, 0, 0, 1, -8, 0)");
 
   // Close runs the faster exit, then the rail leaves the page.
   await panel.getByRole("button", { name: "Close" }).click();
@@ -127,18 +127,18 @@ test("the rail is t3code's chat panel on the kit: a shell on --background with a
 test.describe("on a window of 980 px or less", () => {
   test.use({ viewport: { width: 900, height: 760 } });
 
-  test("the rail opens as the kit Sheet from the right, over a backdrop, and Close or Escape closes it", async ({ page, agent }) => {
+  test("the rail opens as the kit Sheet from the left, over a backdrop, and Close or Escape closes it", async ({ page, agent }) => {
     await openCanvas(page, agent);
     await agentChromeButton(page).click();
     const sheet = page.locator("[data-slot='sheet-popup']");
     await expect(sheet).toBeVisible();
     await expect(sheet.getByRole("complementary", { name: "Agent" })).toBeVisible();
     await expect(page.locator("[data-slot='sheet-backdrop']")).toBeVisible();
-    // Once it has slid in, it meets the right edge.
-    await expect.poll(async () => Math.round(((await sheet.boundingBox())!.x + (await sheet.boundingBox())!.width))).toBe(900);
+    // Once it has slid in, it meets the left edge.
+    await expect.poll(async () => Math.round((await sheet.boundingBox())!.x)).toBe(0);
     expect((await sheet.boundingBox())!.width).toBeLessThanOrEqual(384);
-    // Docked, the top-right card steps aside; over the Sheet it stays where it is.
-    await expect(page.locator(".unframed-chrome-right")).not.toHaveAttribute("data-aside", /.*/);
+    // Docked, the top-left card steps aside; under the Sheet it stays where it is.
+    await expect(page.locator(".unframed-chrome-left")).not.toHaveAttribute("data-aside", /.*/);
 
     // Escape in one of the rail's own menus closes that menu, not the Sheet.
     await sheet.getByRole("combobox", { name: "Runtime mode" }).click();

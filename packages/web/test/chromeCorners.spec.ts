@@ -3,41 +3,30 @@ import { expect, test } from "./fixtures.ts";
 import { emptyMedia, putRecords } from "./media.ts";
 import { expectSlot, inBothSchemes, resolvedColor, styleOf, tokenColor } from "./kit.ts";
 
-const HELP = "Reference a prompt or group with @id. Select images to number them, then type “image 1”.";
-
-test("the top-right card ends with Help, whose tooltip explains references", async ({ page, engine }) => {
+test("the top-left card holds the logo, the project menu and Settings; the right hook stays in the page, empty; there is no Help", async ({ page, engine }) => {
   await openCanvas(page, engine);
-  const card = page.locator(".unframed-chrome-right");
-  await expect(card).toHaveCount(1);
-  const help = card.getByRole("button", { name: "Help" });
-  await expect(help).toBeVisible();
-  await help.hover();
-  await expect(page.getByText(HELP, { exact: true })).toBeVisible();
+  const left = page.locator(".unframed-chrome-left");
+  await expect(left.getByRole("img", { name: "Unframed" })).toBeVisible();
+  await expect(left.getByRole("button", { name: /^(Settings|Add your API key)$/ })).toBeVisible();
+  // Spec 01: the shell's CSS expects exactly one right card; it holds nothing now.
+  await expect(page.locator(".unframed-chrome-right")).toHaveCount(1);
+  await expect(page.locator(".unframed-chrome-right").locator("*")).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Help" })).toHaveCount(0);
 });
 
-test("the corner cards are glass with the kit's border and radius, and Help is a kit ghost button with a kit tooltip", async ({ page, engine }) => {
+test("the top-left card is glass with the kit's border and radius, and Settings is a kit ghost button with a kit tooltip", async ({ page, engine }) => {
   await openCanvas(page, engine);
-  const cards = [page.locator(".unframed-chrome-left"), page.locator(".unframed-chrome-right")];
-  const help = page.locator(".unframed-chrome-right").getByRole("button", { name: "Help" });
-  // A Button rendered as a kit tooltip's trigger carries the trigger's slot, as in t3code.
-  await expectSlot(help, "tooltip-trigger");
+  const card = page.locator(".unframed-chrome-left");
+  const settings = card.getByRole("button", { name: /^(Settings|Add your API key)$/ });
+  await expectSlot(settings, "tooltip-trigger");
   await inBothSchemes(page, async () => {
     const glass = await resolvedColor(page, "color-mix(in srgb, var(--background) var(--glass-opacity), transparent)");
-    for (const card of cards) {
-      await expect.poll(() => styleOf(card, "background-color")).toBe(glass);
-      expect(await styleOf(card, "border-top-color")).toBe(await tokenColor(page, "--color-border"));
-      expect(await styleOf(card, "border-top-left-radius")).toBe("14px");
-      expect(await styleOf(card, "backdrop-filter")).toMatch(/^blur\(/);
-    }
-    // A ghost button: transparent until hovered, then the accent fill.
-    expect(await styleOf(help, "background-color")).toBe("rgba(0, 0, 0, 0)");
-    await help.hover();
-    await expect.poll(async () => (await styleOf(help, "background-color")) === (await tokenColor(page, "--accent"))).toBe(true);
-    const tip = page.locator("[data-slot='tooltip-popup']").filter({ hasText: HELP });
-    await expect(tip).toBeVisible();
-    expect(await styleOf(tip, "background-color")).toBe(await tokenColor(page, "--popover"));
+    await expect.poll(() => styleOf(card, "background-color")).toBe(glass);
+    expect(await styleOf(card, "border-top-color")).toBe(await tokenColor(page, "--color-border"));
+    expect(await styleOf(card, "border-top-left-radius")).toBe("14px");
+    expect(await styleOf(card, "backdrop-filter")).toMatch(/^blur\(/);
     await page.mouse.move(5, 500);
-    await expect(tip).toHaveCount(0);
+    await expect.poll(() => styleOf(settings, "background-color")).toBe("rgba(0, 0, 0, 0)");
   });
 });
 
@@ -63,14 +52,14 @@ test("the toolbar names text Prompt and frame Group, and the zoom controls sit b
   await expect(page.locator(".tlui-share-zone, .tlui-debug-panel")).toHaveCount(0);
 });
 
-test("tldraw's style panel shows below the corner cards, never under them", async ({ page, engine }) => {
+test("tldraw's style panel shows below the top of the page, clear of the corner card", async ({ page, engine }) => {
   await openCanvas(page, engine);
   const subject = await centre(shapeOnScreen(page, "shape:starter-subject"));
   await page.mouse.click(subject.x, subject.y);
   const panel = page.locator(".tlui-style-panel");
   await expect(panel).toBeVisible();
   const panelBox = (await panel.boundingBox())!;
-  const card = (await page.locator(".unframed-chrome-right").boundingBox())!;
+  const card = (await page.locator(".unframed-chrome-left").boundingBox())!;
   expect(panelBox.y).toBeGreaterThanOrEqual(card.y + card.height);
 });
 

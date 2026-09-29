@@ -6,16 +6,17 @@ import { ADD_ICONS, ADD_SECTIONS } from "./addItems.tsx";
 import { useSlots } from "./slots.ts";
 
 /**
- * The end of the bottom bar: the Library slot and Add, as tldraw toolbar buttons beside
+ * The end of the bottom bar: the Agent and Library slots and Add, as tldraw toolbar buttons beside
  * tldraw's tools. Add opens the kit menu above it.
  */
 export const ToolbarEnd = () => {
   const editor = useEditor();
-  const { libraryButton: Library } = useSlots();
+  const { agentButton: Agent, libraryButton: Library } = useSlots();
   const [open, setOpen] = useState(false);
   const add = useRef<HTMLButtonElement>(null);
   return (
     <TldrawUiToolbar orientation="horizontal" label="Unframed" data-unframed-toolbar-group="">
+      {Agent && <Agent />}
       {Library && <Library />}
       <TldrawUiToolbarButton ref={add} type="tool" title="Add" isActive={open} aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen((was) => !was)}>
         <TldrawUiButtonIcon icon="plus" />

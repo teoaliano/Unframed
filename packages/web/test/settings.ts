@@ -48,7 +48,7 @@ export const startSettingsEngine = async (options: EngineOptions & { readonly ke
 export const settingsDialog = (page: Page): Locator => page.getByTestId("settings-dialog");
 
 /** The chrome's settings entry, in either of its two looks. */
-export const settingsButton = (page: Page): Locator => page.locator(".unframed-chrome-right").getByRole("button", { name: /^(Settings|Add your API key)$/ });
+export const settingsButton = (page: Page): Locator => page.locator(".unframed-chrome-left").getByRole("button", { name: /^(Settings|Add your API key)$/ });
 
 /** Opens the app and waits for the canvas; a keyless app has opened its dialog by then. */
 export const openApp = async (page: Page, engine: TestEngine): Promise<void> => {
