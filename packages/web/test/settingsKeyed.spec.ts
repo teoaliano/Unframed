@@ -5,6 +5,7 @@ import { makeTempDir } from "../../engine/test/engineProcess.ts";
 import { liveKey } from "../../engine/test/oauthStub.ts";
 import { gate } from "../../engine/test/openRouterStub.ts";
 import { expect, test } from "./fixtures.ts";
+import { expectSlot, expectToken, inBothSchemes, resolvedColor, styleOf } from "./kit.ts";
 import { IMAGE_MODELS, KEY, openApp, openSettings, settingsDialog, startSettingsEngine, TEXT_MODELS, VIDEO_MODELS } from "./settings.ts";
 
 test("with a key: the title, the OpenRouter heading, the spend, cap and remaining line and a 30-hour expiry note", async ({ page }) => {
@@ -240,5 +241,71 @@ test("Follow-up behavior shows Queue by default, saves Steer at once without Sav
     await expect(dialog.getByRole("combobox", { name: "Follow-up behavior" })).toHaveText("Steer");
   } finally {
     await second.engine.dispose();
+  }
+});
+
+const MENU_GLASS = "color-mix(in srgb, var(--popover) 18%, color-mix(in srgb, var(--popover) var(--glass-opacity), transparent))";
+
+test("the settings dialog is the kit's dialog at 480 px, with kit fields, comboboxes, select, buttons and banners, in both schemes", async ({ page }) => {
+  const { engine } = await startSettingsEngine({ env: { UNFRAMED_TEST_PICK_FOLDER: "none" } });
+  try {
+    await openApp(page, engine);
+    const dialog = await openSettings(page);
+    await expectSlot(dialog, "dialog-popup");
+    // The layout width: the box scales while the dialog animates in.
+    expect(await dialog.evaluate((element) => (element as HTMLElement).offsetWidth)).toBe(480);
+    const title = dialog.locator("[data-slot='dialog-title']");
+    await expect(title).toHaveText("Settings");
+    expect(await styleOf(title, "font-size")).toBe("20px");
+    expect(await styleOf(title, "font-weight")).toBe("600");
+    // One Close: the footer's, with no corner close beside it.
+    await expect(dialog.getByRole("button", { name: "Close" })).toHaveCount(1);
+
+    await expectSlot(dialog.getByLabel("API key"), "input");
+    await expectSlot(dialog.getByRole("button", { name: "Remove key" }), "button");
+    for (const label of ["Image", "Text", "Video"]) await expectSlot(dialog.getByRole("combobox", { name: label, exact: true }), "combobox-trigger");
+    await expectSlot(dialog.getByLabel("Output folder"), "input");
+    await expectSlot(dialog.getByRole("button", { name: "Browse…" }), "button");
+    const agents = dialog.getByRole("region", { name: "Local agents" });
+    await expectSlot(agents.getByRole("button", { name: "Check again" }), "button");
+    await expectSlot(dialog.getByLabel("Claude command or path"), "input");
+    await expectSlot(dialog.getByLabel("Codex command or path"), "input");
+    await expectSlot(dialog.getByLabel("Claude config folder (optional)"), "input");
+    await expectSlot(dialog.getByRole("combobox", { name: "Follow-up behavior" }), "select-trigger");
+    const save = dialog.getByRole("button", { name: "Save" });
+    await expectSlot(save, "button");
+
+    await page.mouse.move(4, 700);
+    await inBothSchemes(page, async () => {
+      await expectToken(save, "background-color", "--primary");
+      expect(await styleOf(dialog.getByRole("button", { name: "Close", exact: true }), "background-color")).toBe("rgba(0, 0, 0, 0)");
+      await expectToken(dialog.getByTestId("key-status"), "color", "--color-muted-foreground");
+
+      const image = dialog.getByRole("combobox", { name: "Image", exact: true });
+      await image.click();
+      const popup = page.locator("[data-slot='combobox-popup']");
+      await expect(popup).toBeVisible();
+      expect(await styleOf(popup.locator(".."), "background-color")).toBe(await resolvedColor(page, MENU_GLASS));
+      await expectSlot(page.getByRole("combobox", { name: "Search image models" }), "combobox-input");
+      for (const option of await page.getByRole("option").all()) await expectSlot(option, "combobox-item");
+      await page.keyboard.press("Escape");
+      await expect(page.getByRole("option")).toHaveCount(0);
+    });
+
+    // The error banner is the kit's error Alert, the saved one its success Alert.
+    await dialog.getByRole("button", { name: "Browse…" }).click();
+    const failure = dialog.getByRole("alert");
+    await expect(failure).toHaveText("No folder picker available here. Type the path instead.");
+    await expectSlot(failure, "alert");
+    await expect(failure).toHaveAttribute("data-variant", "error");
+    await dialog.getByLabel("Claude config folder (optional)").fill("/tmp/claude-config");
+    await expect(failure).toHaveCount(0);
+    await save.click();
+    const saved = dialog.getByRole("status").filter({ hasText: "Saved to .env" });
+    await expect(saved).toContainText("Applied right away, no restart needed.");
+    await expectSlot(saved, "alert");
+    await expect(saved).toHaveAttribute("data-variant", "success");
+  } finally {
+    await engine.dispose();
   }
 });

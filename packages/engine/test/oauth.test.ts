@@ -329,6 +329,12 @@ describe("the callback page", () => {
     expect(await readFile(envPath, "utf8")).toBe("OPENROUTER_TEXT_MODEL=anthropic/claude-sonnet-5\n");
   });
 
+  /**
+   * The kit's dark `--background` (Tailwind's neutral-950, oklch(14.5% 0 0)) and `--foreground`
+   * (neutral-100, oklch(97% 0 0)) as sRGB, and the kit's sans stack (spec 12).
+   */
+  const DARK_PAGE = /body \{[^}]*margin: 0;[^}]*background: #0a0a0a;[^}]*color: #f5f5f5;[^}]*font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;/;
+
   it("is a dark page titled Unframed that escapes OpenRouter's words", async () => {
     const { stub, connect } = await connecting();
     stub.exchange(() => ({ kind: "status", status: 403, body: { error: { message: `<script>alert("x")</script> & more` } } }));
@@ -338,13 +344,31 @@ describe("the callback page", () => {
     expect(page.text).toContain('<meta charset="utf-8">');
     expect(page.text).toContain("<title>Unframed</title>");
     expect(page.text).toContain("color-scheme: dark");
-    expect(page.text).toMatch(/body \{[^}]*margin: 0;[^}]*background: #111112;[^}]*color: #DFE2E5;/);
+    expect(page.text).toMatch(DARK_PAGE);
     expect(page.text).toMatch(/max-width: 32em; margin: 12vh auto 0; padding: 0 1\.5em;/);
     expect(page.text).toContain("font-size: 16px; line-height: 1.5;");
     expect(page.text).toContain("h1 { font-size: 1.3em; }");
     expect(page.text).not.toContain("<script>");
     expect(page.text).toContain(`<p>&lt;script&gt;alert("x")&lt;/script&gt; &amp; more</p>`);
     expect(page.text).not.toMatch(/<a |http-equiv="refresh"|<script/);
+  });
+
+  it("is the same dark page in the kit's colours and font for every outcome", async () => {
+    const { rpc, stub, approve, land } = await connecting();
+    const pages: RawResponse[] = [];
+    const connected = await approve((await rpc.call("oauth.start")).authorizeUrl);
+    pages.push(await land(connected));
+    pages.push(await land(connected));
+    const noCode = await approve((await rpc.call("oauth.start")).authorizeUrl);
+    noCode.searchParams.delete("code");
+    pages.push(await land(noCode));
+    stub.exchange(() => ({ kind: "status", status: 500, body: {} }));
+    pages.push(await land(await approve((await rpc.call("oauth.start")).authorizeUrl)));
+    expect(pages.map((page) => page.status)).toEqual([200, 400, 400, 502]);
+    for (const page of pages) {
+      expect(page.text).toMatch(DARK_PAGE);
+      expect(page.text).toContain("color-scheme: dark");
+    }
   });
 });
 

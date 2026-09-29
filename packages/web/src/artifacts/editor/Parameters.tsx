@@ -6,12 +6,20 @@ import { addParameterInstruction, continuableChat, DEFAULT_RUNTIME_MODE, mergeDi
 import { createDialKit, createDialRoot } from "dialkit/vanilla";
 import "dialkit/vanilla/styles.css";
 import { SlidersHorizontal, Sparkles } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useEditor, type TLShapeId } from "tldraw";
+import { Button } from "~/components/ui/button";
+import { Textarea } from "~/components/ui/textarea";
 import { readyProviders } from "../../agent/providers.ts";
 import { createChat, sendMessage } from "../../agent/send.ts";
 import { messageOf, useChatClient, useChats, useProviders } from "../../agent/store.ts";
 import { useCanvasProject, useEngine } from "../../context.ts";
+
+/** Each editor column is a card: the kit's card fill, border and radius. */
+export const COLUMN = "flex min-h-0 min-w-0 flex-col overflow-hidden rounded-xl border bg-card";
+
+/** A column's one-row header, 48 px tall over a border. */
+export const ColumnHeader = ({ children }: { readonly children: ReactNode }) => <header className="flex h-12 flex-none items-center gap-2 border-b px-2.5">{children}</header>;
 
 /** A dial change is written to the shape this long after the last one. */
 const WRITE_DELAY_MS = 400;
@@ -84,7 +92,7 @@ const Controls = ({ shapeId, announcement, saved, post }: Pick<ParametersProps, 
     };
   }, [announcement]);
 
-  return <div ref={host} className="unframed-artifact-parameters__dials" data-testid="artifact-dials" />;
+  return <div ref={host} data-testid="artifact-dials" />;
 };
 
 /** The box at the foot of the column: describe a parameter, and the agent adds it through the artifact's own chat. */
@@ -127,11 +135,11 @@ const AddParameter = ({ shapeId, kind, title, hasParameters }: Pick<ParametersPr
   };
 
   return (
-    <div className="unframed-artifact-parameters__add">
-      <textarea
+    <div className="flex flex-none flex-col gap-1.5 border-t p-2.5">
+      <Textarea
         aria-label="Add a parameter"
         rows={2}
-        className="unframed-artifact-parameters__box"
+        size="sm"
         placeholder={hasParameters ? "Add a parameter… (e.g. the background colour, the title size)" : "Describe a parameter… (e.g. the accent colour and the intro speed)"}
         value={text}
         onChange={(event) => setText(event.currentTarget.value)}
@@ -141,15 +149,15 @@ const AddParameter = ({ shapeId, kind, title, hasParameters }: Pick<ParametersPr
           void send();
         }}
       />
-      <div className="unframed-artifact-parameters__actions">
-        <span className="unframed-artifact-parameters__note">The agent writes it</span>
-        <button type="button" className="unframed-artifact-parameters__send" disabled={text.trim() === "" || sending} onClick={() => void send()}>
-          <Sparkles size={13} aria-hidden />
+      <div className="flex items-center gap-2">
+        <span className="flex-1 text-xs text-muted-foreground">The agent writes it</span>
+        <Button variant="outline" size="xs" disabled={text.trim() === "" || sending} onClick={() => void send()}>
+          <Sparkles aria-hidden />
           {sending ? "Asking…" : "Add"}
-        </button>
+        </Button>
       </div>
       {error !== undefined && (
-        <p role="alert" className="unframed-artifact-parameters__error">
+        <p role="alert" className="m-0 text-xs text-destructive-foreground">
           {error}
         </p>
       )}
@@ -160,14 +168,14 @@ const AddParameter = ({ shapeId, kind, title, hasParameters }: Pick<ParametersPr
 export const Parameters = ({ shapeId, kind, title, announcement, saved, post }: ParametersProps) => {
   const hasParameters = announcement !== undefined && Object.keys(announcement.schema ?? {}).length > 0;
   return (
-    <div className="unframed-artifact-parameters">
-      <header className="unframed-artifact-editor__header">
-        <SlidersHorizontal size={16} aria-hidden className="unframed-artifact-editor__kind-icon" />
-        <span className="unframed-artifact-editor__title">Parameters</span>
-      </header>
-      <div className="unframed-artifact-parameters__body">
+    <div className="flex min-h-0 flex-1 flex-col">
+      <ColumnHeader>
+        <SlidersHorizontal aria-hidden className="size-4 shrink-0 text-muted-foreground" />
+        <span className="truncate text-sm font-semibold">Parameters</span>
+      </ColumnHeader>
+      <div className="min-h-0 flex-1 overflow-auto p-2">
         {announcement === undefined ? (
-          <p className="unframed-artifact-parameters__none">No parameters yet.</p>
+          <p className="mx-2 my-4 text-sm text-muted-foreground">No parameters yet.</p>
         ) : (
           <Controls shapeId={shapeId} announcement={announcement} saved={saved} post={post} />
         )}

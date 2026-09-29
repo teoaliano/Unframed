@@ -6,7 +6,7 @@ import { createChat, engineChat, engineChats, expect, test, userTexts } from "./
 import { test as plain } from "./fixtures.ts";
 import { dialsPage, filledArtifact, writeBridge } from "./artifacts.ts";
 
-const editor = (page: Page) => page.locator(".unframed-artifact-editor");
+const editor = (page: Page) => page.getByTestId("artifact-editor");
 const box = (page: Page) => editor(page).getByRole("textbox", { name: "Add a parameter" });
 
 const openOnPage = async (page: Page, engine: TestEngine) => {

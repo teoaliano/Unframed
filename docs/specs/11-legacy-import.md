@@ -66,7 +66,7 @@ A one-time, automatic import, built last.
 
 A project folder **needs an import** when it holds `graph.json` or `graph.log` and no `unframed.sqlite`. Every path in the engine that opens a project's database (the sync room, the chat store, the agent's canvas tools, anything else) goes through spec 01's one opener, and that opener runs the check first. So the import happens on the first open of that project in the new app, whatever caused the open, and before anything else can create the database.
 
-Only one import per project runs at a time; a second open waits for the first and then opens the result. While it runs, the canvas shows "Importing from the old Unframed…" in place of the canvas.
+Only one import per project runs at a time; a second open waits for the first and then opens the result. While it runs, the canvas shows "Importing from the old Unframed…" in place of the canvas (spec 12: the kit's Empty with a Spinner, the line in muted text).
 
 The import is not offered as a menu action. A manual step would leave an empty canvas the person could start editing, and a later import would then have to overwrite or merge those edits.
 
@@ -83,7 +83,7 @@ The importer reads `graph.json`, `graph.log`, sidecars, `jobs.json` and media fi
 
 ### Failure
 
-If the import fails, no database is written. The project shows: "Could not import this project from the old Unframed: <message>. Its files are unchanged." with a "Try again" button that reruns the import. The canvas is not created, so the project cannot be edited until the import succeeds.
+If the import fails, no database is written. The project shows: "Could not import this project from the old Unframed: <message>. Its files are unchanged." with a "Try again" button that reruns the import (spec 12: the kit's error Alert, centred in the canvas's place, with a primary Button as its action). The canvas is not created, so the project cannot be edited until the import succeeds.
 
 ### The old output folder
 
@@ -374,7 +374,7 @@ The item texts, exactly (`<n>`, `<id>` and so on are filled in; `<medium>` is im
 - missing: "<Image|Video|Page|Motion> @<id> named <file>, which is not in the project folder. It is empty now."
 - missing: "<n> results of @<id> are no longer in the project folder."
 
-**Dialog.** Shown when a project opens with a report whose `seen` is false; closing it calls `markSeen`, so it shows once across tabs. Title "Imported from the old Unframed". Body: "This project was made with an older version. Its canvas was rebuilt for this one. graph.json and graph.log are still in the project folder, unchanged. Undo history from the old app does not carry over." Then up to three sections, each shown only when it has items: "Changed", "Not kept", "Missing files". Button "Got it". The project menu of an imported project has "Import report", which opens the same dialog.
+**Dialog.** The kit Dialog (spec 12), 520 px wide, with its title, description, panel and footer and no corner close. Shown when a project opens with a report whose `seen` is false; closing it calls `markSeen`, so it shows once across tabs. Title "Imported from the old Unframed". Body: "This project was made with an older version. Its canvas was rebuilt for this one. graph.json and graph.log are still in the project folder, unchanged. Undo history from the old app does not carry over." Then up to three sections, each shown only when it has items: "Changed", "Not kept", "Missing files". A primary button "Got it" in the footer. The project menu of an imported project has "Import report", which opens the same dialog.
 
 After an import the canvas opens zoomed to fit its content.
 

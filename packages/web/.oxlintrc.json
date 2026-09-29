@@ -113,10 +113,6 @@
         "src/agent/transcript/RecapCard.tsx",
         "src/agent/transcript/Transcript.tsx",
         "src/agent/transcript/WorkLog.tsx",
-        "src/artifacts/ArtifactsHost.tsx",
-        "src/artifacts/RenderRow.tsx",
-        "src/artifacts/editor/ArtifactEditor.tsx",
-        "src/artifacts/editor/Parameters.tsx",
         "src/generate/SelectionToolbar.tsx",
         "src/generate/composer/Composer.tsx",
         "src/generate/composer/FinalPromptDialog.tsx",
@@ -126,11 +122,8 @@
         "src/generate/composer/PropTray.tsx",
         "src/generate/composer/VideoStatus.tsx",
         "src/generate/runsProp.tsx",
-        "src/legacy/ImportGate.tsx",
         "src/library/AddToLibraryDialog.tsx",
-        "src/library/LibraryDialog.tsx",
-        "src/settings/SettingsHost.tsx",
-        "src/settings/fields.tsx"
+        "src/library/LibraryDialog.tsx"
       ],
       "rules": {
         "shadcn/no-unknown-classes": "off",

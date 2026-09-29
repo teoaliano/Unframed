@@ -120,3 +120,9 @@
 .tlui-layout__top {
   padding-top: 64px;
 }
+
+/* While the artifact editor is open it replaces the canvas on screen (spec 09); tldraw's watermark stays visible below it. */
+[data-artifact-editor] .tl-canvas,
+[data-artifact-editor] .tlui-layout {
+  visibility: hidden;
+}

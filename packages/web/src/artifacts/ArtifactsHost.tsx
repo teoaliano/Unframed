@@ -8,7 +8,7 @@ import { Sparkles } from "lucide-react";
 import { lazy, Suspense, useCallback, useEffect, type SyntheticEvent } from "react";
 import { createPortal } from "react-dom";
 import { useEditor, useValue, type Editor, type TLCamera, type TLShapeId } from "tldraw";
-import "./artifacts.css";
+import { Button } from "~/components/ui/button";
 import { registerSlot } from "../chrome/slots.ts";
 import { useCanvasProject, useEngine, useSettings } from "../context.ts";
 import { closeComposer, openComposer } from "../generate/state.ts";
@@ -23,9 +23,10 @@ const AgentButton = ({ shapeId }: { readonly shapeId: string }) => {
   const editor = useEditor();
   const handled = (event: SyntheticEvent) => editor.markEventAsHandled(event);
   return (
-    <button
-      type="button"
-      className="unframed-artifact__agent"
+    // The empty card takes no pointer events; its one button does.
+    <Button
+      size="sm"
+      className="pointer-events-auto"
       onPointerDown={handled}
       onPointerUp={handled}
       onDoubleClick={handled}
@@ -35,9 +36,9 @@ const AgentButton = ({ shapeId }: { readonly shapeId: string }) => {
         openComposer(editor, "agent");
       }}
     >
-      <Sparkles size={14} aria-hidden />
+      <Sparkles aria-hidden />
       Agent
-    </button>
+    </Button>
   );
 };
 

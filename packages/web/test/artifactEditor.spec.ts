@@ -4,8 +4,10 @@ import { expect, test } from "./agent.ts";
 import { putRecords } from "./media.ts";
 import { artifactShape, filledArtifact } from "./artifacts.ts";
 import { connectTab } from "../../engine/test/syncClient.ts";
+import { expectSlot, expectToken, inBothSchemes, styleOf } from "./kit.ts";
 
-const editor = (page: Page) => page.locator(".unframed-artifact-editor");
+const editor = (page: Page) => page.getByTestId("artifact-editor");
+const column = (page: Page, name: "rail" | "centre" | "parameters") => editor(page).locator(`[data-editor-column="${name}"]`);
 
 const onBoard = async (page: Page, engine: Parameters<typeof openCanvas>[1]) => {
   await openCanvas(page, engine);
@@ -23,17 +25,17 @@ test("double-click opens the editor: rail, live frame and parameters, with Back 
 
   const region = page.getByRole("region", { name: "Editing Landing" });
   await expect(region).toBeVisible();
-  await expect(editor(page).locator(".unframed-artifact-editor__column")).toHaveCount(3);
-  await expect(editor(page).locator(".unframed-artifact-editor__rail").getByRole("complementary", { name: "Agent" })).toBeVisible();
-  await expect(editor(page).locator(".unframed-artifact-editor__rail").getByRole("button", { name: "Close" })).toHaveCount(0);
+  await expect(editor(page).locator("[data-editor-column]")).toHaveCount(3);
+  await expect(column(page, "rail").getByRole("complementary", { name: "Agent" })).toBeVisible();
+  await expect(column(page, "rail").getByRole("button", { name: "Close" })).toHaveCount(0);
   await expect(region.getByRole("button", { name: "Back to canvas" })).toBeVisible();
-  await expect(region.locator(".unframed-artifact-editor__title")).toHaveText("Landing");
-  await expect(region.locator(".unframed-artifact-editor__kind")).toHaveText("page");
+  await expect(region.getByTestId("artifact-editor-title")).toHaveText("Landing");
+  await expect(region.getByTestId("artifact-editor-kind")).toHaveText("page");
   await expect(region.getByRole("button", { name: "Open in a new tab" })).toBeVisible();
-  const frame = region.locator("iframe.unframed-artifact__frame");
+  const frame = region.locator("iframe[data-artifact-frame]");
   await expect(frame).not.toHaveAttribute("loading", "lazy");
-  await expect(region.frameLocator("iframe.unframed-artifact__frame").getByRole("heading", { name: "Welcome" })).toBeVisible();
-  await expect(editor(page).locator(".unframed-artifact-editor__parameters")).toContainText("Parameters");
+  await expect(region.frameLocator("iframe[data-artifact-frame]").getByRole("heading", { name: "Welcome" })).toBeVisible();
+  await expect(column(page, "parameters")).toContainText("Parameters");
   // The canvas's own frames unload while the editor is open.
   await expect(shapeOnScreen(page, "shape:landing").locator("iframe")).toHaveCount(0);
   // tldraw's watermark stays visible below the editor.
@@ -95,7 +97,7 @@ test("an artifact with no file says so and offers no new tab; Open in a new tab 
   await page.mouse.dblclick(empty.x, empty.y - 30);
   const region = page.getByRole("region", { name: "Editing draft" });
   await expect(region).toBeVisible();
-  await expect(region.locator(".unframed-artifact-editor__kind")).toHaveText("motion");
+  await expect(region.getByTestId("artifact-editor-kind")).toHaveText("motion");
   await expect(region.getByText("This motion has no file yet. Ask the agent to write one.")).toBeVisible();
   await expect(region.getByRole("button", { name: "Open in a new tab" })).toHaveCount(0);
   await page.keyboard.press("Escape");
@@ -127,4 +129,48 @@ test("deleting the artifact from another tab closes the editor", async ({ page, 
   await tab.close();
   await expect(editor(page)).toHaveCount(0, { timeout: 10_000 });
   await expect(shapeOnScreen(page, "shape:landing")).toHaveCount(0);
+});
+
+test("the empty card's Agent button and the editor's columns, header actions and parameter box are the kit's, in both schemes", async ({ page, agent }) => {
+  await onBoard(page, agent);
+  const agentButton = shapeOnScreen(page, "shape:draft").getByRole("button", { name: "Agent" });
+  await expectSlot(agentButton, "button");
+  await inBothSchemes(page, () => expectToken(agentButton, "background-color", "--primary"));
+
+  const at = await centre(shapeOnScreen(page, "shape:landing"));
+  await page.mouse.dblclick(at.x, at.y);
+  const region = page.getByRole("region", { name: "Editing Landing" });
+  await expect(region).toBeVisible();
+  // The grid stays 360, flexible, 320, with 12 px gaps and padding.
+  expect((await column(page, "rail").boundingBox())!.width).toBe(360);
+  expect((await column(page, "parameters").boundingBox())!.width).toBe(320);
+  const [rail, centreColumn] = [(await column(page, "rail").boundingBox())!, (await column(page, "centre").boundingBox())!];
+  expect(centreColumn.x - (rail.x + rail.width)).toBe(12);
+  expect(rail.x).toBe(12);
+  // The centre's frame fills the space under the header.
+  const frame = (await region.locator("iframe[data-artifact-frame]").boundingBox())!;
+  expect(frame.width).toBeGreaterThan(centreColumn.width - 4);
+  expect(frame.y + frame.height).toBeGreaterThan(centreColumn.y + centreColumn.height - 4);
+
+  const back = region.getByRole("button", { name: "Back to canvas" });
+  const newTab = region.getByRole("button", { name: "Open in a new tab" });
+  const box = editor(page).getByRole("textbox", { name: "Add a parameter" });
+  const add = editor(page).getByRole("button", { name: "Add", exact: true });
+  await expectSlot(back, "tooltip-trigger");
+  await expectSlot(newTab, "tooltip-trigger");
+  await expectSlot(box, "textarea");
+  await expectSlot(add, "button");
+  expect((await back.boundingBox())!.height).toBe(32);
+  await page.mouse.move(640, 700);
+  await inBothSchemes(page, async () => {
+    for (const name of ["rail", "centre", "parameters"] as const) {
+      await expectToken(column(page, name), "background-color", "--card");
+      await expectToken(column(page, name), "border-top-color", "--color-border");
+    }
+    expect(await styleOf(back, "background-color")).toBe("rgba(0, 0, 0, 0)");
+    await expectToken(region.getByTestId("artifact-editor-title"), "color", "--color-foreground");
+    await expectToken(region.getByTestId("artifact-editor-kind"), "color", "--color-muted-foreground");
+    await expectToken(editor(page).getByText("The agent writes it"), "color", "--color-muted-foreground");
+    await expectToken(editor(page), "background-color", "--background");
+  });
 });

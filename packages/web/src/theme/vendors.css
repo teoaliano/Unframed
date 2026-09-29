@@ -11,3 +11,36 @@
 /* @pierre/diffs: t3code's diff colours and injected diff CSS (spec 12 task 19). */
 
 /* DialKit: its variables from the kit's dark tokens (spec 12 task 20). */
+
+/*
+ * DialKit stays dark in both schemes (spec 09), so these are the values theme.css gives the
+ * tokens in its dark block, written out, not var(--card) and the rest, which follow the
+ * scheme. A change to that block changes these with it. The attribute outranks DialKit's
+ * own .dialkit-root rule, which loads after this file with the editor.
+ */
+.dialkit-root[data-theme="dark"] {
+  /* --card and --popover */
+  --dial-glass-bg: color-mix(in srgb, var(--color-neutral-950) 97%, var(--color-white));
+  --dial-dropdown-bg: color-mix(in srgb, var(--color-neutral-950) 97%, var(--color-white));
+  /* --accent, --input, then the foreground mixes the kit uses for selected rows */
+  --dial-surface: --alpha(var(--color-white) / 4%);
+  --dial-surface-hover: --alpha(var(--color-white) / 8%);
+  --dial-surface-active: color-mix(in srgb, var(--color-neutral-100) 12%, transparent);
+  /* --border */
+  --dial-surface-subtle: --alpha(var(--color-white) / 6%);
+  --dial-border: --alpha(var(--color-white) / 6%);
+  --dial-border-hover: color-mix(in srgb, var(--color-neutral-100) 20%, transparent);
+  /* --foreground */
+  --dial-text-root: var(--color-neutral-100);
+  --dial-text-focus: var(--color-neutral-100);
+  --dial-text-primary: var(--color-neutral-100);
+  /* --muted-foreground */
+  --dial-text-section: color-mix(in srgb, var(--color-neutral-500) 90%, var(--color-white));
+  --dial-text-label: color-mix(in srgb, var(--color-neutral-500) 90%, var(--color-white));
+  --dial-text-secondary: color-mix(in srgb, var(--color-neutral-500) 90%, var(--color-white));
+  --dial-text-tertiary: color-mix(in srgb, var(--color-neutral-500) 90%, var(--color-white));
+  /* --ring */
+  --dial-focus-ring: oklch(0.571 0.21 264);
+  --dial-radius: var(--control-radius);
+  font-family: var(--font-sans);
+}
