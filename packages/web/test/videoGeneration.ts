@@ -62,10 +62,14 @@ export const startVideoGeneration = async (options: { env?: Record<string, strin
   return { engine, jobs };
 };
 
-export const test = base.extend<{ video: VideoEngine }>({
-  video: async ({}, use) => {
+export const test = base.extend<{ videoEngine: VideoEngine }>({
+  // Not named "video": that is Playwright's own recording option. The pages close before the
+  // engine goes: a live tab would otherwise reconnect to whichever engine is given the freed
+  // port next and push this test's canvas into another test.
+  videoEngine: async ({ context }, use) => {
     const video = await startVideoGeneration();
     await use(video);
+    await context.close();
     await video.engine.dispose();
   },
 });

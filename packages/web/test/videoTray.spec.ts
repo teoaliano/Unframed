@@ -55,7 +55,7 @@ const openOnAll = async (page: Page) => {
   await chooseVideo(page);
 };
 
-test("choosing video shows the default video model and only the props it declares, Seconds always, no Runs", async ({ page, video }) => {
+test("choosing video shows the default video model and only the props it declares, Seconds always, no Runs", async ({ page, videoEngine: video }) => {
   await openCanvas(page, video.engine);
   await clickShape(page, "shape:starter-subject");
   await openComposer(page);
@@ -99,7 +99,7 @@ test("choosing video shows the default video model and only the props it declare
   await expect(page.getByRole("dialog", { name: "Video models" })).toHaveCount(0);
 });
 
-test("changing the model resets the props in the tray", async ({ page, video }) => {
+test("changing the model resets the props in the tray", async ({ page, videoEngine: video }) => {
   await openCanvas(page, video.engine);
   await clickShape(page, "shape:starter-subject");
   await openComposer(page);
@@ -115,7 +115,7 @@ test("changing the model resets the props in the tray", async ({ page, video }) 
   await expect(chips(page)).toHaveText(["References", "5s"]);
 });
 
-test("role badges show on selected media while the composer is open on video, and go when it closes", async ({ page, video }) => {
+test("role badges show on selected media while the composer is open on video, and go when it closes", async ({ page, videoEngine: video }) => {
   const { engine } = video;
   await openCanvas(page, engine);
   await image(engine, "shape:top", "300", { x: 460, y: -80 }, 10);
@@ -136,7 +136,7 @@ test("role badges show on selected media while the composer is open on video, an
   await expect(page.locator(".unframed-role-badge")).toHaveCount(0);
 });
 
-test("moving one selected image above another swaps first and last live", async ({ page, video }) => {
+test("moving one selected image above another swaps first and last live", async ({ page, videoEngine: video }) => {
   const { engine } = video;
   await openCanvas(page, engine);
   await putRecords(engine, [promptRecord("shape:say", "310", "a slow pan", { x: 700, y: -200 })]);
@@ -162,7 +162,7 @@ test("moving one selected image above another swaps first and last live", async 
   await expect(badge(page, "shape:b")).toHaveText("last");
 });
 
-test("the tray warns about unused inputs, about phrasing with a clip, and about a model known not to take video", async ({ page, video }) => {
+test("the tray warns about unused inputs, about phrasing with a clip, and about a model known not to take video", async ({ page, videoEngine: video }) => {
   const { engine } = video;
   await openCanvas(page, engine);
   await image(engine, "shape:one", "320", { x: 460, y: -80 }, 10);
@@ -186,7 +186,7 @@ test("the tray warns about unused inputs, about phrasing with a clip, and about 
   await expect(composer(page).getByTestId("share-block")).toHaveCount(0);
 });
 
-test("the share block shows only for a local clip that will be sent, on by default, with its note", async ({ page, video }) => {
+test("the share block shows only for a local clip that will be sent, on by default, with its note", async ({ page, videoEngine: video }) => {
   const { engine } = video;
   await openCanvas(page, engine);
   await image(engine, "shape:still", "330", { x: 460, y: -80 }, 10);
@@ -210,7 +210,7 @@ test("the share block shows only for a local clip that will be sent, on by defau
   await expect(statusLines(page)).toHaveText([UNUSED]);
 });
 
-test("the estimate reads est. ~$x.xx and follows Seconds and Size", async ({ page, video }) => {
+test("the estimate reads est. ~$x.xx and follows Seconds and Size", async ({ page, videoEngine: video }) => {
   await openCanvas(page, video.engine);
   await clickShape(page, "shape:starter-subject");
   await openComposer(page);

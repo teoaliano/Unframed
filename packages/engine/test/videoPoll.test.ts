@@ -6,7 +6,13 @@ import { eventually, jobsText, MODEL, pendingRecord, readJobs, recipe, roomRecor
 import { completed } from "./videoStub.ts";
 
 const CLIP = Buffer.concat([Buffer.from("\x00\x00\x00\x18ftypmp42"), Buffer.alloc(2048, 3)]);
-const PARAMS = { prompt: "a fox running", model: MODEL, duration: 5, resolution: null, size: null };
+const PARAMS: { prompt: string; model: string; duration: number | null; resolution: string | null; size: string | null } = {
+  prompt: "a fox running",
+  model: MODEL,
+  duration: 5,
+  resolution: null,
+  size: null,
+};
 const STAMPED = /^\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}-\d{3}Z-a-fox-running\.mp4$/;
 
 const videoRef = (url: string) => ({ type: "video_url", video_url: { url } });

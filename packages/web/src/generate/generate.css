@@ -412,3 +412,90 @@ th.unframed-models__released {
   font-size: 12px;
   white-space: nowrap;
 }
+
+/* The render placeholder (spec 04): the landing spot of a video render, and why it failed. */
+.unframed-render__body {
+  display: flex;
+  height: 100%;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 12px;
+  text-align: center;
+}
+
+.unframed-render__status,
+.unframed-render__error {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.4;
+  color: var(--unframed-text-secondary);
+}
+
+.unframed-render__error {
+  color: var(--unframed-error);
+  overflow-wrap: anywhere;
+}
+
+.unframed-render__forget {
+  cursor: pointer;
+  border: 0;
+  border-radius: var(--unframed-radius-inner);
+  background: transparent;
+  padding: 2px 6px;
+  font: inherit;
+  font-size: 12px;
+  color: var(--unframed-text-secondary);
+  pointer-events: all;
+}
+
+.unframed-render__forget:hover {
+  background-color: var(--unframed-overlay-hover);
+  color: var(--unframed-text-primary);
+}
+
+/* The share consent and its note (spec 04). */
+.unframed-share {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.unframed-share__row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px 8px;
+  font-size: 12px;
+  color: var(--unframed-text-primary);
+}
+
+.unframed-share__consent {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+}
+
+.unframed-share__toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  cursor: pointer;
+  border: 0;
+  background: transparent;
+  padding: 0;
+  font: inherit;
+  font-size: 12px;
+  color: var(--unframed-text-secondary);
+}
+
+.unframed-share__toggle svg[data-open] {
+  transform: rotate(180deg);
+}
+
+.unframed-composer-status p[data-kind="info"] {
+  color: var(--unframed-text-secondary);
+}

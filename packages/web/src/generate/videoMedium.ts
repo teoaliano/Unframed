@@ -19,10 +19,10 @@ import {
   type VideoSettings,
 } from "@unframed/domain";
 import type { Editor, TLShapeId } from "tldraw";
-import type { Payload } from "../rpc/engine.ts";
+import type { EngineConnection, Payload } from "../rpc/engine.ts";
 import { knownCatalogue } from "./catalogue.ts";
 import { VideoStatus } from "./composer/VideoStatus.tsx";
-import { pageBox, selectionBox } from "./facts.ts";
+import { mediaSource, pageBox, selectionBox } from "./facts.ts";
 import { NOTHING_TO_MAKE } from "./imageMedium.ts";
 import { saveLastUsed } from "./lastUsed.ts";
 import { registerMedium, type MediumDefinition, type PropValue, type RunSource, type SendInput, type TrayProps } from "./mediumRegistry.ts";
@@ -156,6 +156,37 @@ const fromRecipe = (recipe: ResultRecipe): TrayProps => {
   const props: Record<string, PropValue> = { ...recipe.params };
   if (typeof props.duration === "number") props.duration = String(props.duration);
   return props;
+};
+
+/**
+ * Regenerate and Vary on a video result: the recorded recipe through `video.start`, beside
+ * the result. Vary adds the result's own clip as the last video reference; the one video
+ * rule then decides whether it is sent, so in a frame mode it is not.
+ */
+export const repeatVideo = async (
+  editor: Editor,
+  engine: EngineConnection,
+  project: string,
+  shapeId: TLShapeId,
+  action: "regenerate" | "vary",
+  recorded: ResultRecipe,
+): Promise<void> => {
+  const shape = editor.getShape(shapeId);
+  const clip = shape ? mediaSource(editor, shape).file : undefined;
+  if (action === "vary" && clip === undefined) throw new Error("This result has no clip to vary.");
+  const recipe: ResultRecipe = action === "vary" ? { ...recorded, references: [...recorded.references, { kind: "video", file: clip! }] } : recorded;
+  const sidecar = shape ? resultMetaOf(shape)?.sidecar : undefined;
+  const request = await videoStartRequest({
+    editor,
+    project,
+    model: recorded.model,
+    props: fromRecipe(recorded),
+    source: { kind: "recipe", recipe: { shapeId, recipe, selection: [] }, instruction: recorded.instruction },
+    entry: entryFor(recorded.model),
+    anchor: pageBox(editor, shapeId) ?? { x: 0, y: 0, w: 0, h: 0 },
+    ...(typeof sidecar === "string" ? { of: { sidecar, action } } : {}),
+  });
+  await engine.call("video.start", request);
 };
 
 export const videoMedium: MediumDefinition = {

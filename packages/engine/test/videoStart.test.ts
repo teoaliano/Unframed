@@ -185,7 +185,7 @@ describe("video.start's upstream failures", () => {
     rendering.jobs.create(() => answer);
     const failure = rendering.rpc.call("video.start", startRequest());
     await expect(failure).rejects.toMatchObject({ code: "upstream", details: { reason } });
-    const error = await failure.catch((caught: { message: string }) => caught);
+    const error = (await failure.catch((caught: { message: string }) => caught)) as { message: string };
     if (typeof message === "string") expect(error.message).toBe(message);
     else expect(error.message).toMatch(message);
     expect(existsSync(`${rendering.output}/jobs.json`)).toBe(false);
