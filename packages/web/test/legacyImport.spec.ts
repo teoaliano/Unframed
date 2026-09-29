@@ -141,7 +141,7 @@ test("a report shows only the sections it has, and a project never imported has 
     await (await app.engine.rpc()).call("projects.create", { name: "fresh" });
     await page.getByRole("button", { name: "Project", exact: true }).click();
     await expect(page.getByRole("menuitem", { name: "Import report" })).toBeVisible();
-    await page.getByRole("menuitem", { name: "fresh" }).click();
+    await page.getByRole("menuitemradio", { name: "fresh" }).click();
     await expect(canvasOf(page, "fresh")).toBeVisible({ timeout: 20_000 });
     await page.getByRole("button", { name: "Project", exact: true }).click();
     await expect(page.getByRole("menuitem", { name: "Add project" })).toBeVisible();

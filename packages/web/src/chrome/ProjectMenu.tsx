@@ -14,7 +14,7 @@ import {
 import { Button } from "~/components/ui/button";
 import { Dialog, DialogClose, DialogFooter, DialogHeader, DialogPanel, DialogPopup, DialogTitle } from "~/components/ui/dialog";
 import { Input } from "~/components/ui/input";
-import { Menu, MenuItem, MenuPopup, MenuTrigger } from "~/components/ui/menu";
+import { Menu, MenuItem, MenuPopup, MenuRadioGroup, MenuRadioItem, MenuRadioItemIndicator, MenuTrigger } from "~/components/ui/menu";
 import { useActivation, useEngine } from "../context.ts";
 import { reportState, useReportState } from "../legacy/reportState.ts";
 import { useActiveProject } from "../project/activation.ts";
@@ -269,24 +269,33 @@ export const ProjectMenu = () => {
           <ChevronDown aria-hidden />
         </MenuTrigger>
         <MenuPopup sideOffset={8} align="start" className="min-w-[220px]">
-          {projects.map((project) => (
-            <MenuItem key={project} data-active={project === active ? "true" : undefined} onClick={() => void activation.activate(project)}>
-              {project === active ? <Check aria-label="Active" /> : <span aria-hidden className="size-4 shrink-0" />}
-              <span className="min-w-0 flex-1 truncate">{project}</span>
-              <span className="ml-3 flex items-center gap-0.5">
-                <Tip label="Rename" side="top">
-                  <Button variant="ghost-muted" size="icon-micro" aria-label={`Rename ${project}`} onClick={(event) => rowAction(event, () => setRenaming(project))}>
-                    <Pencil aria-hidden />
-                  </Button>
-                </Tip>
-                <Tip label="Delete" side="top">
-                  <Button variant="ghost-destructive" size="icon-micro" aria-label={`Delete ${project}`} onClick={(event) => rowAction(event, () => setDeleting({ project }))}>
-                    <Trash2 aria-hidden />
-                  </Button>
-                </Tip>
-              </span>
-            </MenuItem>
-          ))}
+          {/* The current project is the kit's checked radio item: its check and its tint. */}
+          <MenuRadioGroup value={active ?? ""}>
+            {projects.map((project) => (
+              <MenuRadioItem key={project} value={project} closeOnClick data-active={project === active ? "true" : undefined} onClick={() => void activation.activate(project)}>
+                <span className="flex min-w-0 items-center gap-2">
+                  <span className="flex size-4 shrink-0 items-center justify-center">
+                    <MenuRadioItemIndicator>
+                      <Check aria-label="Active" />
+                    </MenuRadioItemIndicator>
+                  </span>
+                  <span className="min-w-0 flex-1 truncate">{project}</span>
+                  <span className="ml-3 flex items-center gap-0.5">
+                    <Tip label="Rename" side="top">
+                      <Button variant="ghost-muted" size="icon-micro" aria-label={`Rename ${project}`} onClick={(event) => rowAction(event, () => setRenaming(project))}>
+                        <Pencil aria-hidden />
+                      </Button>
+                    </Tip>
+                    <Tip label="Delete" side="top">
+                      <Button variant="ghost-destructive" size="icon-micro" aria-label={`Delete ${project}`} onClick={(event) => rowAction(event, () => setDeleting({ project }))}>
+                        <Trash2 aria-hidden />
+                      </Button>
+                    </Tip>
+                  </span>
+                </span>
+              </MenuRadioItem>
+            ))}
+          </MenuRadioGroup>
           {imported.project === active && imported.report !== null && (
             <MenuItem onClick={() => reportState.open()}>
               <FileText aria-hidden />

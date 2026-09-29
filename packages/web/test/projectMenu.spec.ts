@@ -17,13 +17,13 @@ test("the top-left card holds the logo and the project menu, which lists every p
   await expect(trigger).toHaveText("default");
 
   await trigger.click();
-  const items = page.getByRole("menuitem");
+  const items = page.locator("[role=menuitem], [role=menuitemradio]");
   await expect(items).toHaveText(["beta", "default", "Add project"]);
-  await expect(page.getByRole("menuitem", { name: "default" })).toHaveAttribute("data-active", "true");
-  await expect(page.getByRole("menuitem", { name: "default" }).getByLabel("Active")).toBeVisible();
-  await expect(page.getByRole("menuitem", { name: "beta" }).getByLabel("Active")).toHaveCount(0);
+  await expect(page.getByRole("menuitemradio", { name: "default" })).toHaveAttribute("data-active", "true");
+  await expect(page.getByRole("menuitemradio", { name: "default" }).getByLabel("Active")).toBeVisible();
+  await expect(page.getByRole("menuitemradio", { name: "beta" }).getByLabel("Active")).toHaveCount(0);
 
-  await page.getByRole("menuitem", { name: "beta" }).click();
+  await page.getByRole("menuitemradio", { name: "beta" }).click();
   await expect(page.locator("[data-canvas-project='beta'] .tl-canvas")).toBeVisible();
   await expect(trigger).toHaveText("beta");
 });
@@ -81,11 +81,15 @@ test("the project menu, the name dialog and the delete confirm are the kit's men
     const popup = page.locator("[data-slot='menu-popup']");
     await expect(popup).toBeVisible();
     expect(await styleOf(popup, "background-color")).toBe(await resolvedColor(page, MENU_GLASS));
-    const rows = page.getByRole("menuitem");
+    const rows = page.locator("[role=menuitem], [role=menuitemradio]");
+    // Project rows are the kit's radio items, the current one checked and tinted; Add project is a plain item.
     for (const row of await rows.all()) {
-      await expectSlot(row, "menu-item");
+      expect(["menu-item", "menu-radio-item"]).toContain(await row.getAttribute("data-slot"));
       expect((await row.boundingBox())!.height).toBe(28);
     }
+    // Highlight moved elsewhere, the current project keeps the checked tint.
+    await page.getByRole("menuitem", { name: "Add project" }).hover();
+    expect(await styleOf(page.getByRole("menuitemradio", { name: "default" }), "background-color")).toBe(await resolvedColor(page, "color-mix(in oklab, var(--color-foreground) 8%, transparent)"));
     await expectSlot(page.getByRole("button", { name: "Rename default" }), "tooltip-trigger");
 
     await page.getByRole("menuitem", { name: "Add project" }).click();

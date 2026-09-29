@@ -26,9 +26,9 @@ test("each project row has a check on the current one and Rename and Delete butt
   await openCanvas(page, engine, "default");
   await (await engine.rpc()).call("projects.create", { name: "beta" });
   await menu(page);
-  await expect(page.getByRole("menuitem")).toHaveText(["beta", "default", "Add project"]);
-  await expect(page.getByRole("menuitem", { name: "default" }).getByLabel("Active")).toBeVisible();
-  await expect(page.getByRole("menuitem", { name: "beta" }).getByLabel("Active")).toHaveCount(0);
+  await expect(page.locator("[role=menuitem], [role=menuitemradio]")).toHaveText(["beta", "default", "Add project"]);
+  await expect(page.getByRole("menuitemradio", { name: "default" }).getByLabel("Active")).toBeVisible();
+  await expect(page.getByRole("menuitemradio", { name: "beta" }).getByLabel("Active")).toHaveCount(0);
   for (const project of ["beta", "default"]) {
     await expect(page.getByRole("button", { name: `Rename ${project}` })).toBeVisible();
     await expect(page.getByRole("button", { name: `Delete ${project}` })).toBeVisible();
@@ -85,7 +85,7 @@ test("renaming the active project renames it everywhere and keeps its canvas; an
   });
   expect(prompts.map(plainText)).toContain("lone red fox");
   await menu(page);
-  await expect(page.getByRole("menuitem")).toHaveText(["beta", "product-shots", "Add project"]);
+  await expect(page.locator("[role=menuitem], [role=menuitemradio]")).toHaveText(["beta", "product-shots", "Add project"]);
 
   // The same slug closes the dialog without a call.
   await page.getByRole("button", { name: "Rename beta" }).click();
@@ -116,7 +116,7 @@ test("deleting asks first, asks again when renders are in progress, and opens th
   expect(jobs.map((job: any) => job.status)).toEqual(["failed", "failed"]);
   await expect(page.getByRole("button", { name: "Project", exact: true })).toHaveText("default");
   await menu(page);
-  await expect(page.getByRole("menuitem")).toHaveText(["default", "Add project"]);
+  await expect(page.locator("[role=menuitem], [role=menuitemradio]")).toHaveText(["default", "Add project"]);
   await page.keyboard.press("Escape");
 
   // The active and last project: a new default replaces it, with the starter content.
@@ -152,7 +152,7 @@ test("after saving a new output folder, the menu lists its projects and the canv
     await expect(page.getByRole("button", { name: "Project", exact: true })).toHaveText("alpha");
     await expect(activeCanvas(page, "alpha")).toBeVisible();
     await menu(page);
-    await expect(page.getByRole("menuitem")).toHaveText(["alpha", "zeta", "Add project"]);
+    await expect(page.locator("[role=menuitem], [role=menuitemradio]")).toHaveText(["alpha", "zeta", "Add project"]);
     await page.keyboard.press("Escape");
 
     const empty = join(await makeTempDir(), "empty");
@@ -166,7 +166,7 @@ test("after saving a new output folder, the menu lists its projects and the canv
     expect(existsSync(join(empty, "default"))).toBe(true);
     await expect.poll(async () => (await roomShapes(engine, "default", "text")).length).toBe(2);
     await menu(page);
-    await expect(page.getByRole("menuitem")).toHaveText(["default", "Add project"]);
+    await expect(page.locator("[role=menuitem], [role=menuitemradio]")).toHaveText(["default", "Add project"]);
   } finally {
     await engine.dispose();
   }
