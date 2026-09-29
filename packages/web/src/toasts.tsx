@@ -18,9 +18,9 @@ export const showError = (message: string, options: { id?: string; sticky?: bool
     timeout: options.sticky ? 0 : ERROR_TIMEOUT_MS,
   });
 
-/** A notice that is not a failure: a warning when something went partly wrong, or information. */
-export const showNotice = (message: string, type: "warning" | "info"): string =>
-  toastManager.add({ title: message, type, priority: type === "warning" ? "high" : "low", timeout: ERROR_TIMEOUT_MS });
+/** A notice that is not a failure: a warning when something went partly wrong, or information, with an optional second line. */
+export const showNotice = (message: string, type: "warning" | "info", description?: string): string =>
+  toastManager.add({ title: message, ...(description === undefined ? {} : { description }), type, priority: type === "warning" ? "high" : "low", timeout: ERROR_TIMEOUT_MS });
 
 export const closeToast = (id: string): void => toastManager.close(id);
 
@@ -35,7 +35,10 @@ const ToastList = () => {
       className="unframed-toast pointer-events-auto relative box-border w-[340px] max-w-[calc(100vw-24px)] rounded-container border border-line bg-popover px-3 py-2.5 text-[13px] leading-snug text-primary shadow-popover transition-[opacity,transform] duration-150 data-[ending-style]:opacity-0 data-[starting-style]:translate-y-2 data-[starting-style]:opacity-0"
     >
       <Toast.Content className="flex items-start gap-2">
-        <Toast.Title className="m-0 min-w-0 flex-1 text-[13px] font-normal" />
+        <div className="min-w-0 flex-1">
+          <Toast.Title className="m-0 text-[13px] font-normal" />
+          <Toast.Description className="m-0 mt-0.5 text-[12px] text-secondary empty:hidden" />
+        </div>
         <Toast.Close
           aria-label="Dismiss"
           className="flex size-5 shrink-0 cursor-pointer items-center justify-center rounded-inner border-0 bg-transparent p-0 text-secondary hover:bg-hover"

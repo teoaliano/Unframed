@@ -1,5 +1,5 @@
 import type { ModelSelection } from "@unframed/contracts";
-import { continuableChat, DEFAULT_RUNTIME_MODE, tabLabel, type InteractionMode, type RuntimeMode } from "@unframed/domain";
+import { continuableChat, DEFAULT_RUNTIME_MODE, pasteBecomesFile, pastedTextFileName, tabLabel, type InteractionMode, type RuntimeMode } from "@unframed/domain";
 import { ArrowLeft, ArrowUp, Paperclip, Square } from "lucide-react";
 import { createPortal } from "react-dom";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from "react";
@@ -9,7 +9,9 @@ import { noProviderReady, providerName, readyProviders } from "../providers.ts";
 import { createChat, messageOf, sendMessage } from "../send.ts";
 import { useChatClient, useChats, useProviders, useWatchedThread, type ChatClient } from "../store.ts";
 import { Tip } from "../../chrome/ui.tsx";
-import { useAttachments } from "./attachments.ts";
+import { formatSize, useAttachments } from "./attachments.ts";
+import { platform } from "../../canvas/platform.ts";
+import { showNotice } from "../../toasts.tsx";
 import { AttachmentShelf } from "./AttachmentShelf.tsx";
 import { ChipRow, contextSelection, useSelectionChips } from "./chips.tsx";
 import { ComposerMenu, type MenuItem } from "./ComposerMenu.tsx";
@@ -128,13 +130,34 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
     };
   }, [dropElement, attachments]);
 
-  /** A paste of files attaches them; text is the box's own. */
+  /** Cmd+Shift+V (Ctrl+Shift+V off Mac) keeps the next large paste inline. */
+  const inlineNext = useRef(0);
+
+  /**
+   * A paste of files attaches them (text pasted with them stays text); a large text paste
+   * becomes a text file attachment, unless Cmd+Shift+V asked for it inline.
+   */
   const onPaste = (event: ClipboardEvent): boolean => {
-    const pasted = [...(event.clipboardData?.files ?? [])];
-    if (pasted.length === 0) return false;
+    const data = event.clipboardData;
+    const pasted = [...(data?.files ?? [])];
+    const pastedText = data?.getData("text/plain") ?? "";
+    if (pasted.length > 0) {
+      void attachments.add(pasted);
+      if (pastedText === "") {
+        event.preventDefault();
+        return true;
+      }
+      return false;
+    }
+    const inline = Date.now() - inlineNext.current < 1500;
+    inlineNext.current = 0;
+    if (pastedText === "" || inline || !pasteBecomesFile(pastedText, text.length)) return false;
     event.preventDefault();
-    void attachments.add(pasted);
-    return !(event.clipboardData?.getData("text/plain") ?? "");
+    const name = pastedTextFileName(attachments.staged.map((item) => item.name));
+    const file = new File([pastedText], name, { type: "text/plain;charset=utf-8" });
+    void attachments.add([file]);
+    showNotice(`Large paste attached as ${name}`, "info", `${formatSize(file.size)} · Use ${platform() === "darwin" ? "⌘⇧V" : "Ctrl+Shift+V"} to keep a large paste inline.`);
+    return true;
   };
 
   useEffect(() => {
@@ -176,6 +199,11 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
 
   /** Keys the box gives the tray first: an open menu takes its arrows, Enter, Tab and Esc. */
   const onKey = (event: KeyboardEvent): boolean => {
+    const command = platform() === "darwin" ? event.metaKey : event.ctrlKey;
+    if (command && event.shiftKey && event.key.toLowerCase() === "v") {
+      inlineNext.current = Date.now();
+      return false;
+    }
     if (menu) {
       const count = menu.items.length;
       if (event.key === "ArrowDown" && count > 0) setHighlight((highlight + 1) % count);

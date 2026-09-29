@@ -1,5 +1,5 @@
 import type { Page } from "@playwright/test";
-import { openCanvas, shapeOnScreen } from "./canvas.ts";
+import { openCanvas, shapeOnScreen, toast } from "./canvas.ts";
 import { clickShape, composer, toolbar } from "./generation.ts";
 import { pngBytes } from "./images.ts";
 import { filledMedia, putRecords } from "./media.ts";
@@ -158,4 +158,39 @@ test("attach by button, by drag and by paste: thumbnails and file chips, a remov
     { name: "brief.pdf", type: "application/pdf", kind: "file", size: 14 },
     { name: "pasted.png", type: "image/png", kind: "image", size: pngBytes(12, 12, 3).length },
   ]);
+});
+
+/** A paste of text into the rail's box, as the page receives it. */
+const pasteText = (page: Page, text: string) =>
+  page.evaluate((text) => {
+    const transfer = new DataTransfer();
+    transfer.setData("text/plain", text);
+    document.querySelector("aside[aria-label='Agent'] .ProseMirror")!.dispatchEvent(new ClipboardEvent("paste", { bubbles: true, cancelable: true, clipboardData: transfer }));
+  }, text);
+
+test("a large paste becomes pasted-text.txt with a toast; Cmd+Shift+V keeps it inline", async ({ page, agent }) => {
+  await openCanvas(page, agent);
+  const panel = await openRail(page);
+  const box = promptBox(panel);
+  await box.click();
+  const big = "log line\n".repeat(4000);
+  await pasteText(page, big);
+  const files = panel.getByTestId("attachments").locator("[data-chip='file'] .unframed-agent-chip__label");
+  await expect(files).toHaveText(["pasted-text.txt"]);
+  const notice = toast(page, "Large paste attached as pasted-text.txt");
+  await expect(notice).toBeVisible();
+  const hint = process.platform === "darwin" ? "⌘⇧V" : "Ctrl+Shift+V";
+  await expect(notice).toContainText(`35.2 KB · Use ${hint} to keep a large paste inline.`);
+  await expect(box).toHaveText("");
+
+  await pasteText(page, big);
+  await expect(files).toHaveText(["pasted-text.txt", "pasted-text-2.txt"]);
+
+  // Cmd+Shift+V first: the next paste goes into the box as it is.
+  await page.evaluate((mac) => {
+    document.querySelector("aside[aria-label='Agent'] .ProseMirror")!.dispatchEvent(new KeyboardEvent("keydown", { key: "V", shiftKey: true, metaKey: mac, ctrlKey: !mac, bubbles: true, cancelable: true }));
+  }, process.platform === "darwin");
+  await pasteText(page, "x".repeat(33 * 1024));
+  await expect(files).toHaveCount(2);
+  await expect.poll(async () => (await box.textContent())?.length).toBe(33 * 1024);
 });
