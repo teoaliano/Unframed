@@ -23,6 +23,8 @@ export interface AgentRailProps {
   readonly project: string;
   /** The editor's left column (spec 09): no transition, no Close, no Locate. */
   readonly embedded?: boolean;
+  /** Inside the kit Sheet, on a window too narrow to dock it: the Sheet is the surface and the motion. */
+  readonly inSheet?: boolean;
   /** The artifacts the tab strip is filtered to, in place of the canvas selection. */
   readonly filterTo?: ReadonlyArray<string>;
   readonly onLocate?: (shapeId: string) => void;
@@ -43,15 +45,15 @@ const ARTIFACT_TYPES = new Set(["page", "motion"]);
 const RAIL_CLASS =
   "pointer-events-auto absolute top-0 right-0 bottom-[52px] z-[600] box-border flex w-[380px] flex-col rounded-bl-xl border-b border-l bg-background font-sans text-foreground [transform:none] opacity-100 [transition:transform_260ms_var(--ease-drawer),opacity_200ms_ease-out] starting:data-[state=open]:[transform:translateX(100%)] starting:data-[state=open]:opacity-0 data-[state=closed]:pointer-events-none data-[state=closed]:[transform:translateX(100%)] data-[state=closed]:opacity-0 data-[state=closed]:[transition:transform_200ms_var(--ease-drawer),opacity_160ms_ease-out] motion-reduce:[transition:opacity_160ms_ease-out] motion-reduce:data-[state=closed]:[transform:none] motion-reduce:data-[state=closed]:[transition:opacity_160ms_ease-out]";
 
-/** The editor's left column: the same rail in place, with no surface or motion of its own. */
-const EMBEDDED_CLASS = "relative box-border flex size-full flex-col font-sans text-foreground";
+/** The editor's left column, or the Sheet: the same rail in place, with no surface or motion of its own. */
+const EMBEDDED_CLASS = "relative box-border flex size-full min-h-0 flex-col font-sans text-foreground";
 
 /**
  * The chat rail (spec 08): the project's chats as folder tabs filtered by the selected
  * artifacts, the active chat's transcript, its pending panels and the composer's Agent
  * tray, behind one component that the canvas and the artifact editor both mount.
  */
-export const AgentRail = ({ project, embedded, filterTo, onLocate, onOpenEditor, onClose, motion }: AgentRailProps) => {
+export const AgentRail = ({ project, embedded, inSheet, filterTo, onLocate, onOpenEditor, onClose, motion }: AgentRailProps) => {
   const engine = useEngine();
   const client = useChatClient(engine, project);
   const editor = useMaybeEditor();
@@ -120,13 +122,15 @@ export const AgentRail = ({ project, embedded, filterTo, onLocate, onOpenEditor,
         motion?.ref(element);
       }}
       aria-label="Agent"
-      className={embedded ? EMBEDDED_CLASS : RAIL_CLASS}
+      className={embedded || inSheet ? EMBEDDED_CLASS : RAIL_CLASS}
       data-state={motion?.state}
       data-embedded={embedded ? "" : undefined}
       onPointerDown={(event) => event.stopPropagation()}
       onKeyDown={(event) => {
         // tldraw's shortcuts listen on the document: keys typed in the rail stop here.
         event.stopPropagation();
+        // So the Sheet never hears Escape: the rail closes it, unless a menu of its own took the key.
+        if (inSheet && event.key === "Escape" && !event.defaultPrevented && root.current?.contains(event.target as Node)) onClose?.();
         const command = platform() === "darwin" ? event.metaKey : event.ctrlKey;
         if (command && !event.shiftKey && event.key.toLowerCase() === "k") {
           event.preventDefault();

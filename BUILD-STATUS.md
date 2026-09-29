@@ -119,7 +119,6 @@ Open for the person:
 - Spec 11: every sweep write prunes done and failed jobs older than 7 days, so an old finished job's clip from an imported `jobs.json` may never be placed if the sweep writes before its project is first opened.
 - Spec 12: `GenerateTray.tsx` copies the kit's field frame and focus ring into its classes instead of using InputGroup.
 - Spec 12: a few tests find elements by third-party class names that spec 12's test hooks section does not exempt (lucide icon classes in `addMenu.spec.ts` and `toasts.spec.ts`, DialKit's classes in `artifactDials.spec.ts`).
-- Spec 12: the kit's Command reads `--command-shell-inset` and `--command-content-inset`, which no stylesheet defines; the catalogue's demo sets them itself. Define them before the product uses Command.
 - Spec 12: the sweep does not open the legacy import screens; `legacyImport.spec.ts` checks their kit slots.
 - The context-menu fix in `packages/web/src/canvas/ContextMenu.tsx` cancels the menu library's delayed refocus through an internal event name that tldraw bundles. A tldraw upgrade that renames it brings the bug back without failing anything else.
 

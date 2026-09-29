@@ -3,12 +3,13 @@
  * composer's Agent tray, and the chat rail docked to the right edge.
  */
 import { Sparkles } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { useEditor, type TLShapeId } from "tldraw";
 import { registerSlot, type AgentTrayProps } from "../chrome/slots.ts";
 import { useSlots } from "../chrome/slots.ts";
 import { Button } from "~/components/ui/button";
+import { Sheet, SheetPopup } from "~/components/ui/sheet";
 import { Tip } from "../chrome/ui.tsx";
 import { useCanvasProject, useEngine } from "../context.ts";
 import { AgentRail } from "./rail/AgentRail.tsx";
@@ -16,6 +17,19 @@ import { ToolbarAgentTray } from "./composer/AgentTray.tsx";
 import { providerMessage } from "./providers.ts";
 import { QueueSender } from "./queue.tsx";
 import { useChatClient, useProviders, useRailUi, type ChatClient } from "./store.ts";
+
+/** t3code's width at and below which its right panel stops docking and opens as a Sheet. */
+const SHEET_QUERY = "(max-width: 980px)";
+
+const useNarrowWindow = (): boolean =>
+  useSyncExternalStore(
+    (changed) => {
+      const query = window.matchMedia(SHEET_QUERY);
+      query.addEventListener("change", changed);
+      return () => query.removeEventListener("change", changed);
+    },
+    () => window.matchMedia(SHEET_QUERY).matches,
+  );
 
 /** How long the rail waits for its own transitionend before it unmounts anyway: a hidden tab fires none. */
 const EXIT_GUARANTEE_MS = 600;
@@ -116,7 +130,8 @@ export const AgentHost = () => {
 const CanvasRail = ({ client, openArtifact }: { readonly client: ChatClient; readonly openArtifact: ((id: string) => void) | undefined }) => {
   const editor = useEditor();
   const ui = useRailUi(client);
-  useEffect(() => (ui.open ? registerSlot("rightCardAside", true) : undefined), [ui.open]);
+  const narrow = useNarrowWindow();
+  useEffect(() => (ui.open && !narrow ? registerSlot("rightCardAside", true) : undefined), [ui.open, narrow]);
   const close = useCallback(() => client.setUi({ open: false }), [client]);
   const locate = useCallback(
     (id: string) => {
@@ -126,6 +141,34 @@ const CanvasRail = ({ client, openArtifact }: { readonly client: ChatClient; rea
     [editor],
   );
   const props = useMemo(() => ({ onClose: close, onLocate: locate, ...(openArtifact ? { onOpenEditor: openArtifact } : {}) }), [close, locate, openArtifact]);
+  // The Sheet covers the canvas, so going to a shape or into the editor closes it first.
+  const sheetProps = useMemo(
+    () => ({
+      onClose: close,
+      onLocate: (id: string) => {
+        close();
+        locate(id);
+      },
+      ...(openArtifact
+        ? {
+            onOpenEditor: (id: string) => {
+              close();
+              openArtifact(id);
+            },
+          }
+        : {}),
+    }),
+    [close, locate, openArtifact],
+  );
+  if (narrow) {
+    return (
+      <Sheet open={ui.open} onOpenChange={(open) => !open && close()}>
+        <SheetPopup side="right" showCloseButton={false} className="w-[min(88vw,24rem)]">
+          <AgentRail project={client.project} inSheet {...sheetProps} />
+        </SheetPopup>
+      </Sheet>
+    );
+  }
   // Beside tldraw's container, not in it: its own panels (the style panel) would sit on top of the rail.
   const host = editor.getContainer().parentElement;
   const rail = (

@@ -1,5 +1,5 @@
 import { Film, Image, MessageSquare, Search, Settings, Sparkles, Type } from "lucide-react";
-import type { CSSProperties, ReactNode } from "react";
+import type { ReactNode } from "react";
 import { AutocompleteEmpty } from "~/components/ui/autocomplete";
 import { Button } from "~/components/ui/button";
 import {
@@ -20,9 +20,6 @@ import {
 } from "~/components/ui/command";
 import { Kbd } from "~/components/ui/kbd";
 import { Demos, Row, Section } from "../frame.tsx";
-
-// The kit reads these insets from the page; the app shell sets them, the catalogue sets them here.
-const INSETS = { "--command-shell-inset": "0.5rem", "--command-content-inset": "1rem" } as CSSProperties;
 
 const ICONS: Record<string, ReactNode> = {
   "New image prompt": <Image />,
@@ -87,7 +84,7 @@ export default function CommandDemo() {
               <Search />
               Open command palette
             </CommandDialogTrigger>
-            <CommandDialogPopup aria-label="Command palette" style={INSETS}>
+            <CommandDialogPopup aria-label="Command palette">
               <Palette autoFocus />
             </CommandDialogPopup>
           </CommandDialog>
@@ -95,12 +92,12 @@ export default function CommandDemo() {
       </Section>
       <Section title="Inline">
         <Row label="primitive highlight">
-          <div className="w-full max-w-xl rounded-2xl border" style={INSETS}>
+          <div className="w-full max-w-xl rounded-2xl border">
             <Palette />
           </div>
         </Row>
         <Row label="active item">
-          <div className="w-full max-w-xl rounded-2xl border" style={INSETS}>
+          <div className="w-full max-w-xl rounded-2xl border">
             <Palette activeItem="Ask Claude about the selection" />
           </div>
         </Row>

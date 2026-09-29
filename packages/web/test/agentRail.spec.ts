@@ -123,3 +123,35 @@ test("the rail is t3code's chat panel on the kit: a shell on --background with a
     await expect(field).toHaveCount(0);
   });
 });
+
+test.describe("on a window of 980 px or less", () => {
+  test.use({ viewport: { width: 900, height: 760 } });
+
+  test("the rail opens as the kit Sheet from the right, over a backdrop, and Close or Escape closes it", async ({ page, agent }) => {
+    await openCanvas(page, agent);
+    await agentChromeButton(page).click();
+    const sheet = page.locator("[data-slot='sheet-popup']");
+    await expect(sheet).toBeVisible();
+    await expect(sheet.getByRole("complementary", { name: "Agent" })).toBeVisible();
+    await expect(page.locator("[data-slot='sheet-backdrop']")).toBeVisible();
+    // Once it has slid in, it meets the right edge.
+    await expect.poll(async () => Math.round(((await sheet.boundingBox())!.x + (await sheet.boundingBox())!.width))).toBe(900);
+    expect((await sheet.boundingBox())!.width).toBeLessThanOrEqual(384);
+    // Docked, the top-right card steps aside; over the Sheet it stays where it is.
+    await expect(page.locator(".unframed-chrome-right")).not.toHaveAttribute("data-aside", /.*/);
+
+    // Escape in one of the rail's own menus closes that menu, not the Sheet.
+    await sheet.getByRole("combobox", { name: "Runtime mode" }).click();
+    await expect(page.getByRole("option").first()).toBeVisible();
+    await page.keyboard.press("Escape");
+    await expect(page.getByRole("option")).toHaveCount(0);
+    await expect(sheet).toBeVisible();
+
+    await sheet.getByRole("button", { name: "Close" }).click();
+    await expect(sheet).toHaveCount(0);
+    await agentChromeButton(page).click();
+    await expect(sheet).toBeVisible();
+    await page.keyboard.press("Escape");
+    await expect(sheet).toHaveCount(0);
+  });
+});
