@@ -1,6 +1,8 @@
 /*
- * The composer, and the toolbar button look the Agent spec's toolbar button still reads
- * (spec 12 moves the selection toolbar onto the kit). Every colour is a theme token.
+ * What is left of the composer's stylesheet (spec 12 moves the composer onto the kit):
+ * the toolbar button look the Agent spec's toolbar button reads, the editor wrapper the
+ * Agent tray's prompt editor reads, and the spin canvas.css animates its placeholders with.
+ * Every colour is a theme token.
  */
 
 .unframed-bar-button {
@@ -39,190 +41,12 @@
   background-color: color-mix(in srgb, var(--unframed-accent) 88%, var(--unframed-on-accent));
 }
 
-/* The composer: three bands, 420 px wide. */
-.unframed-composer {
-  width: 420px;
-  box-sizing: border-box;
-  padding: 12px;
-}
-
-.unframed-composer-generate {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.unframed-composer-top {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  padding: 0 2px;
-}
-
-.unframed-composer-count {
-  font-size: 12.5px;
-  color: var(--unframed-text-secondary);
-  white-space: nowrap;
-}
-
-/* Under the tray while one group is selected: its recipe, and the buttons that write it. */
-.unframed-composer-recipe {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 2px 10px 8px;
-}
-
-/* One selected group is one source: a chip reading its @name. */
-.unframed-composer-count[data-chip="group"] {
-  padding: 1px 7px;
-  border: 1px solid var(--unframed-border);
-  border-radius: 999px;
-  background-color: var(--unframed-overlay-hover);
-  color: var(--unframed-text-accent);
-}
-
-.unframed-segmented {
-  display: flex;
-  gap: 3px;
-  padding: 3px;
-  border-radius: var(--unframed-radius-inner);
-  background-color: var(--unframed-overlay-hover);
-}
-
-.unframed-segmented > button {
-  height: 24px;
-  padding: 0 12px;
-  border: 0;
-  border-radius: calc(var(--unframed-radius-inner) - 2px);
-  background: transparent;
-  color: var(--unframed-text-secondary);
-  font: inherit;
-  font-size: 12.5px;
-  font-weight: 500;
-  cursor: pointer;
-}
-
-.unframed-segmented > button[data-on] {
-  background-color: var(--unframed-surface);
-  color: var(--unframed-text-primary);
-  box-shadow: var(--unframed-shadow-low);
-}
-
-/* Above the box in the Recipe mode of an imported result (spec 11): the prompt the old app sent. */
-.unframed-composer-sent {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  padding: 0 2px;
-  font-size: 12.5px;
-  color: var(--unframed-text-secondary);
-}
-
-.unframed-composer-sent > p {
-  margin: 0;
-}
-
-.unframed-composer-sent > p + p {
-  max-height: 96px;
-  overflow-y: auto;
-  color: var(--unframed-text-primary);
-  white-space: pre-wrap;
-}
-
-.unframed-composer-box {
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  min-height: 108px;
-  box-sizing: border-box;
-  padding: 11px 12px 48px;
-  border: 1px solid var(--unframed-border);
-  border-radius: var(--unframed-radius-container);
-  background-color: var(--unframed-surface);
-}
-
+/* The Agent tray's prompt editor wrapper. */
 .unframed-composer-editor {
   max-height: 180px;
   overflow-y: auto;
   font-size: 14px;
   line-height: 1.5;
-}
-
-.unframed-composer-input {
-  outline: none;
-  min-height: 21px;
-  white-space: pre-wrap;
-  word-break: break-word;
-}
-
-.unframed-composer-input p {
-  margin: 0;
-}
-
-.unframed-composer-input p.is-editor-empty:first-child::before {
-  content: attr(data-placeholder);
-  float: left;
-  height: 0;
-  color: var(--unframed-text-secondary);
-  pointer-events: none;
-}
-
-.unframed-composer-send {
-  position: absolute;
-  right: 10px;
-  bottom: 10px;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.unframed-composer-estimate {
-  font-size: 12.5px;
-  color: var(--unframed-text-secondary);
-  font-variant-numeric: tabular-nums;
-}
-
-.unframed-composer-go {
-  display: inline-flex;
-  height: 30px;
-  align-items: center;
-  gap: 6px;
-  padding: 0 12px;
-  border: 0;
-  border-radius: 999px;
-  background-color: var(--unframed-accent);
-  color: var(--unframed-on-accent);
-  font: inherit;
-  font-size: 13px;
-  font-weight: 500;
-  cursor: pointer;
-}
-
-.unframed-composer-go:disabled {
-  cursor: default;
-  background-color: var(--unframed-overlay-hover);
-  color: var(--unframed-text-secondary);
-}
-
-.unframed-composer-status {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  padding: 0 2px;
-}
-
-.unframed-composer-status p {
-  margin: 0;
-  font-size: 12px;
-  line-height: 1.4;
-  color: var(--unframed-text-secondary);
-}
-
-.unframed-composer-status p[data-kind="blocked"],
-.unframed-composer-status p[data-kind="error"] {
-  color: var(--unframed-error);
 }
 
 .unframed-composer-tray {
@@ -352,8 +176,4 @@ th.unframed-models__released {
 
 .unframed-share__toggle svg[data-open] {
   transform: rotate(180deg);
-}
-
-.unframed-composer-status p[data-kind="info"] {
-  color: var(--unframed-text-secondary);
 }

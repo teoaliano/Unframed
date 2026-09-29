@@ -1,8 +1,10 @@
+import type { Page } from "@playwright/test";
 import { gate } from "../../engine/test/openRouterStub.ts";
 import { closeSettings } from "./settings.ts";
 import { emptyCanvasPoint, openCanvas, roomShapes, shapeOnScreen } from "./canvas.ts";
 import { clickShape, composer, expect, instructionBox, openComposer, pressSend, selectGroup, sendButton, sendRun, startGeneration, test, toolbar } from "./generation.ts";
 import { pngBytes } from "./images.ts";
+import { expectSlot, expectToken, inBothSchemes, resolvedColor, styleOf } from "./kit.ts";
 import { emptyMedia, filledMedia, groupRecord, inGroup, promptRecord, putRecords } from "./media.ts";
 
 const GEO = { geo: "rectangle", dash: "draw", url: "", w: 60, h: 40, growY: 0, scale: 1, flipX: false, flipY: false, labelColor: "black", color: "red", fill: "none", size: "m", font: "draw", align: "middle", verticalAlign: "middle", richText: { type: "doc", content: [{ type: "paragraph" }] } };
@@ -29,6 +31,41 @@ test("Generate grows the bar into the composer on the same centre and bottom edg
   await page.keyboard.press("Escape");
   await expect(composer(page)).toHaveCount(0);
   await expect(bar.getByRole("button", { name: "Generate" })).toBeVisible();
+});
+
+/** What a box-shadow value computes to on this page. */
+const shadowOf = (page: Page, expression: string) =>
+  page.evaluate((value) => {
+    const probe = document.createElement("div");
+    probe.style.boxShadow = value;
+    document.body.append(probe);
+    const resolved = getComputedStyle(probe).boxShadow;
+    probe.remove();
+    return resolved;
+  }, expression);
+
+test("the composer is t3code's composer shell, with the kit's segmented medium switch and its primary send button", async ({ page, generation }) => {
+  await openCanvas(page, generation.engine);
+  await clickShape(page, "shape:starter-subject");
+  await openComposer(page);
+  const shell = toolbar(page);
+  const media = composer(page).getByRole("radiogroup", { name: "Medium" });
+  await expectSlot(media, "toggle-group");
+  for (const option of await media.getByRole("radio").all()) await expectSlot(option, "toggle");
+  await expectSlot(sendButton(page), "button");
+  await expect.poll(async () => Math.round((await shell.boundingBox())!.width)).toBe(420);
+  await inBothSchemes(page, async (scheme) => {
+    await page.mouse.move(5, 500);
+    await expect.poll(() => styleOf(shell, "border-top-left-radius")).toBe("22px");
+    const glass = scheme === "light" ? "var(--card)" : "var(--surface-raised)";
+    expect(await styleOf(shell, "background-color")).toBe(await resolvedColor(page, `color-mix(in oklab, ${glass} var(--glass-opacity), transparent)`));
+    // Light carries t3code's composer shadow; dark drops it, as t3code does.
+    const composerShadow = await shadowOf(page, "var(--shadow-composer)");
+    if (scheme === "light") expect(await styleOf(shell, "box-shadow")).toContain(composerShadow);
+    else expect(await styleOf(shell, "box-shadow")).not.toContain(composerShadow);
+    await expectToken(sendButton(page), "background-color", "--message-action");
+    await expectToken(composer(page).getByTestId("source-count"), "color", "--color-muted-foreground");
+  });
 });
 
 test("Agent opens the composer on its Agent tray, the slot spec 08 fills; Esc closes it back to the bar", async ({ page, generation }) => {
@@ -150,6 +187,8 @@ test("warnings and the states that disable send", async ({ page, generation }) =
   await openComposer(page);
   const status = composer(page).getByTestId("composer-status");
   await expect(status).toHaveText("Nothing says what to make. Select a prompt, or type an instruction.");
+  // What stops the send is a kit Alert; a warning is muted text.
+  await expectSlot(status.locator("[data-kind='blocked']"), "alert");
   await expect(sendButton(page)).toBeDisabled();
   await page.keyboard.type("make it blue");
   await expect(status).toHaveCount(0);
@@ -158,6 +197,7 @@ test("warnings and the states that disable send", async ({ page, generation }) =
   // A video in an image run is warned about but still allowed.
   await clickShape(page, "shape:clip");
   await expect(status).toHaveText("A video is selected, but image models do not take video input. It will be sent and probably ignored.");
+  await expectToken(status.locator("[data-kind='warning']"), "color", "--color-muted-foreground");
   await expect(sendButton(page)).toBeEnabled();
   await page.keyboard.press("Escape");
 

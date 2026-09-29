@@ -127,7 +127,7 @@ export const InstructionEditor = ({ initial, placeholder, onChange, onMenuOpen, 
   }, [open, mention?.from]);
 
   return (
-    <div ref={box} className="unframed-composer-editor" data-scrolls="true">
+    <div ref={box} className="max-h-45 overflow-y-auto text-sm leading-normal" data-scrolls="true">
       <EditorContent editor={text} />
       {open &&
         anchor &&

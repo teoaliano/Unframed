@@ -3,6 +3,7 @@ import { ChevronDown } from "lucide-react";
 import { useState } from "react";
 import type { MediumStatusProps } from "../mediumRegistry.ts";
 import { videoCounts } from "../videoPlan.ts";
+import { StatusBand, StatusLine } from "./StatusLine.tsx";
 
 export const SHARE_LABEL = "Share via temporary link while generating";
 export const SHARE_NOTE = "What sharing does";
@@ -36,15 +37,7 @@ const ShareBlock = ({ on, onChange }: { readonly on: boolean; readonly onChange:
         </button>
       </div>
       {open &&
-        (on ? (
-          <p role="status" data-kind="info">
-            {SHARE_ON}
-          </p>
-        ) : (
-          <p role="status" data-kind="warning">
-            {SHARE_OFF}
-          </p>
-        ))}
+        (on ? <StatusLine kind="info">{SHARE_ON}</StatusLine> : <StatusLine kind="warning">{SHARE_OFF}</StatusLine>)}
     </div>
   );
 };
@@ -54,27 +47,23 @@ export const VideoStatus = ({ status, failure, values, source, entry, setProps }
   const lines = videoStatusLines({ counts: videoCounts(source, values.props, entry), entry, shareLocalVideos: values.props.shareLocalVideos });
   if (lines.length === 0 && status.blockers.length === 0 && failure === undefined) return null;
   return (
-    <div className="unframed-composer-status" data-testid="composer-status">
+    <StatusBand>
       {lines.map((line) =>
         line.kind === "share" ? (
           <ShareBlock key="share" on={line.on} onChange={(on) => setProps({ ...values.props, shareLocalVideos: on })} />
         ) : (
-          <p key={line.text} role="status" data-kind="warning">
+          <StatusLine key={line.text} kind="warning">
             {line.text}
-          </p>
+          </StatusLine>
         ),
       )}
       {status.blockers.map((line) => (
-        <p key={line} role="status" data-kind="blocked">
+        <StatusLine key={line} kind="blocked">
           {line}
-        </p>
+        </StatusLine>
       ))}
-      {failure !== undefined && (
-        <p role="alert" data-kind="error">
-          {failure}
-        </p>
-      )}
-    </div>
+      {failure !== undefined && <StatusLine kind="error">{failure}</StatusLine>}
+    </StatusBand>
   );
 };
 

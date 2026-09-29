@@ -170,7 +170,7 @@ Badges sit where spec 02 puts a bare media shape's one fact (top-left, outside t
 
 ### Warnings and errors in the Generate tray (image medium)
 
-Shown under the box, above the tray, as status lines. Exact strings:
+Shown under the box, above the tray, as status lines. A line that disables send is the kit's Alert (`warning` for a blocker, `error` for a failed start); a warning that lets the run go is `text-xs` muted text. Exact strings:
 
 - Videos in an image run: `A video is selected, but image models do not take video input. It will be sent and probably ignored.` With several: `3 videos are selected, but image models do not take video input. They will be sent and probably ignored.` Videos are still sent.
 - Over the cap (image slots, including composites and the sketch, above the model's `input_references` maximum): `5 images are selected, but this model takes at most 4. Deselect the rest, or pick a model that takes more.` When the cap is 1: `... but this model takes only one. ...`.
@@ -199,11 +199,11 @@ Placement: centred above the selection's screen bounds, 12 px gap, clamped 8 px 
 
 ### The composer and its Generate tray
 
-Width 420 px. Three bands.
+Width 420 px. Three bands. The bar grows into t3code's composer shell (spec 12): `rounded-3xl`, a glass fill of `--card` (dark: `--surface-raised`) at the glass opacity with the glass blur, the kit border, and `shadow-composer` in light (none in dark, as in t3code). The radius, fill and shadow change within the same 200 ms morph.
 
-Top band: the medium switch (a segmented control of the registered media, lowercase labels `image`, `video`, `text`) on the left; the source count on the right, the same text as the toolbar hint (`3 selected`, `@character`), or `recipe · N sources` in recipe mode.
+Top band: the medium switch (the kit's `segmented` ToggleGroup of the registered media, with radio semantics, lowercase labels `image`, `video`, `text`) on the left; the source count on the right in `text-xs` muted foreground, the same text as the toolbar hint (`3 selected`, `@character`), or `recipe · N sources` in recipe mode.
 
-Box: the instruction editor (Tiptap, one paragraph per line, the `@` mention menu of spec 02's prompt editing), placeholder `What should this make?`, autofocused on open. Attachments and chips are off in the Generate tray. The send button sits at the box's bottom right with the price estimate immediately to its left. Send label: `Generate` (spec 05 adds `Generate 4×`). Cmd+Enter (Ctrl+Enter off macOS) sends wherever focus is while the composer is open, except in a text field outside it or while one of its menus is open; Enter and Shift+Enter insert a line. While the send is being acknowledged, the button shows a spinner and is disabled; a second press does nothing.
+Box: the instruction editor (Tiptap, one paragraph per line, the `@` mention menu of spec 02's prompt editing), placeholder `What should this make?`, autofocused on open, inside the kit's field frame (input border, background, `rounded-lg`, the focus ring while the editor has focus). Attachments and chips are off in the Generate tray. The send button sits at the box's bottom right with the price estimate immediately to its left; it is the kit's Button `default` at `sm` size with an up arrow, in `--message-action` (the primary colour), since the kit has no round labelled button. Send label: `Generate` (spec 05 adds `Generate 4×`). Cmd+Enter (Ctrl+Enter off macOS) sends wherever focus is while the composer is open, except in a text field outside it or while one of its menus is open; Enter and Shift+Enter insert a line. While the send is being acknowledged, the button shows a spinner and is disabled; a second press does nothing.
 
 Tray band, below the box's border: the model chip first, then one chip per prop that will be sent, joined visually with ` · `, then `+ add prop`. Chip text is the value (`2:3`, `high`, `1K`, `transparent`, `svg`); the model chip shows the part of the slug after the first `/`, with the full slug as its tooltip, and `Loading models…` until the catalogue arrives (disabled while the catalogue is empty).
 

@@ -4,6 +4,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, typ
 import { useEditor, useValue, type Editor, type TLShapeId } from "tldraw";
 import { Button } from "~/components/ui/button";
 import { Separator } from "~/components/ui/separator";
+import { cn } from "~/lib/utils";
 import { groupRecipeOf } from "../canvas/groupRecipes.ts";
 import { Tip } from "../chrome/ui.tsx";
 import { useSlots } from "../chrome/slots.ts";
@@ -124,7 +125,13 @@ const Floating = ({ target, hidden, expanded, children }: { target: ScreenBox | 
   return (
     <div
       ref={root}
-      className="pointer-events-auto absolute z-[500] box-border overflow-hidden rounded-xl border font-sans text-foreground shadow-lg/5 surface-glass data-[morphing=true]:transition-[left,top,width,height] data-[morphing=true]:duration-200 data-[morphing=true]:ease-out motion-reduce:data-[morphing=true]:transition-none"
+      className={cn(
+        "pointer-events-auto absolute z-[500] box-border overflow-hidden border font-sans text-foreground data-[morphing=true]:transition-[left,top,width,height,border-radius,background-color,box-shadow] data-[morphing=true]:duration-200 data-[morphing=true]:ease-out motion-reduce:data-[morphing=true]:transition-none",
+        // The bar is a glass card; the composer is t3code's composer shell.
+        expanded
+          ? "rounded-3xl bg-card/(--glass-opacity) shadow-composer backdrop-blur-(--glass-blur) backdrop-saturate-(--glass-saturation) dark:bg-surface-raised/(--glass-opacity) dark:shadow-none"
+          : "rounded-xl shadow-lg/5 surface-glass",
+      )}
       data-testid="selection-toolbar"
       data-side={place?.side}
       data-expanded={expanded ? "true" : undefined}

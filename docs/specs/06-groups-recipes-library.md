@@ -119,7 +119,7 @@ F2 is used rather than Cmd-R because Cmd-R reloads the page.
 
 Spec 03's selection to request already expands a selected group in place (one slot at the box's top edge, members in their own order inside it, a member selected with its group counted once) and resolves `@group` to its prompt members' text without media. Every rule specs 03 to 05 apply to selected shapes applies to members the same way. Selecting only a member (clicking inside a box selects the child) treats it as a loose shape.
 
-**Hint.** When the selection is exactly one group, the toolbar hint reads `@<name>` instead of "N selected" (spec 03's toolbar states). In the composer's sources band the group shows as one chip reading `@<name>`, and its members keep their role badges on the canvas while the composer is open.
+**Hint.** When the selection is exactly one group, the toolbar hint reads `@<name>` instead of "N selected" (spec 03's toolbar states). In the composer's sources band the group shows as one chip (the kit's Badge `outline`) reading `@<name>`, and its members keep their role badges on the canvas while the composer is open.
 
 **Agent.** Agent on a selection containing a group sends every member as context, as spec 08 sends any selected shape.
 
@@ -144,9 +144,9 @@ Example: `gpt-image-2 · 1024² · ×3`. Clicking the chip opens the composer on
 - "Recipe" opens the composer on the recipe.
 The run is an ordinary run: the same request, sidecars, batch and results as specs 03 to 05. Results land beside the box, outside it, by spec 03's placement rule. A recipe run does not change the composer's last-used values.
 
-**Composer on a group.** When the selection is exactly one group, the composer shows a recipe line under the tray. Its content depends on the state:
+**Composer on a group.** When the selection is exactly one group, the composer shows a recipe line under the tray, in `text-xs`. Its buttons are the kit's InlineButton: a quiet button is the `muted` tone, a plain one the `default` tone. Its content depends on the state:
 - group without a recipe: a quiet button "Save as recipe" (tooltip "Keep these settings on @<name>. Its Generate uses them.");
-- recipe applies and the tray matches it (`recipeEquals`): the text "Recipe of @<name>" and a quiet button "Clear recipe";
+- recipe applies and the tray matches it (`recipeEquals`): the text "Recipe of @<name>" (muted) and a quiet button "Clear recipe";
 - recipe applies and the tray differs: a button "Update recipe" and a quiet button "Clear recipe".
 When a recipe applies, the composer opens with the tray set from the recipe instead of last-used values. Editing the tray never writes to the group; only "Save as recipe" and "Update recipe" do. Generate from the composer uses the tray as it stands.
 

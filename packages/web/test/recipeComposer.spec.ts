@@ -1,6 +1,7 @@
 import type { Page } from "@playwright/test";
 import { openCanvas, roomRecords, shapeOnScreen } from "./canvas.ts";
 import { composer, openComposer, selectGroup, toolbar } from "./generation.ts";
+import { expectSlot } from "./kit.ts";
 import { groupRecord, inGroup, promptRecord, putRecords } from "./media.ts";
 import { expect, mediumOption, runsChip, setRuns, test, tray } from "./texting.ts";
 
@@ -100,6 +101,7 @@ test("the recipe line: Recipe of @name while the tray matches, Update recipe onc
   await setRuns(page, 4);
   await expect(recipeLine(page).getByRole("button", { name: "Update recipe" })).toBeVisible();
   await expect(recipeLine(page).getByRole("button", { name: "Clear recipe" })).toBeVisible();
+  for (const name of ["Update recipe", "Clear recipe"]) await expectSlot(recipeLine(page).getByRole("button", { name }), "inline-button");
   await expect(recipeLine(page)).not.toContainText("Recipe of @character");
   await page.waitForTimeout(300);
   expect(await recipeOf(engine)).toEqual(STANDING);

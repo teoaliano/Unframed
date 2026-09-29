@@ -4,7 +4,28 @@
  * are in theme.css.
  */
 
-/* Tiptap: the Generate composer's instruction box (spec 12 task 11). */
+/*
+ * Tiptap: the Generate composer's instruction box (spec 12 task 11), after t3code's
+ * .composer-tiptap. The Agent tray's prompt editor carries the same class.
+ */
+.unframed-composer-input {
+  min-height: 1lh;
+  outline: none;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.unframed-composer-input p {
+  margin: 0;
+}
+
+.unframed-composer-input p.is-editor-empty:first-child::before {
+  content: attr(data-placeholder);
+  float: left;
+  height: 0;
+  color: color-mix(in srgb, var(--color-placeholder) 75%, transparent);
+  pointer-events: none;
+}
 
 /* Tiptap: the Agent tray's prompt editor (spec 12 task 17). */
 
