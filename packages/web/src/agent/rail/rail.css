@@ -14,6 +14,114 @@
   font-weight: 600;
 }
 
+.unframed-agent-rail__strip {
+  position: relative;
+  flex: none;
+}
+
+/* Thread search: a field over the tab strip and its results below it. */
+.unframed-agent-search {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0 10px 2px;
+  background-color: var(--unframed-surface);
+  border-bottom: 1px solid var(--unframed-border);
+}
+
+.unframed-agent-search__field {
+  min-width: 0;
+  flex: 1;
+  height: 28px;
+  padding: 0 8px;
+  border: 1px solid var(--unframed-border-emphasized);
+  border-radius: var(--unframed-radius-inner);
+  background-color: var(--unframed-surface);
+  color: var(--unframed-text-primary);
+  font: inherit;
+  font-size: 13px;
+  outline: none;
+}
+
+.unframed-agent-search__field:focus {
+  border-color: var(--unframed-accent);
+}
+
+.unframed-agent-search__close {
+  display: inline-flex;
+  width: 26px;
+  height: 26px;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 0;
+  border-radius: var(--unframed-radius-inner);
+  background: transparent;
+  color: var(--unframed-icon-secondary);
+  cursor: pointer;
+}
+
+.unframed-agent-search__results {
+  position: absolute;
+  top: 100%;
+  left: 8px;
+  right: 8px;
+  max-height: 320px;
+  overflow-y: auto;
+  padding: 4px;
+  border: 1px solid var(--unframed-border);
+  border-radius: var(--unframed-radius-container);
+  background-color: var(--unframed-popover-translucent);
+  backdrop-filter: blur(var(--unframed-chrome-blur));
+  box-shadow: var(--unframed-shadow-med);
+}
+
+.unframed-agent-search__empty {
+  margin: 0;
+  padding: 8px;
+  font-size: 12.5px;
+  color: var(--unframed-text-secondary);
+}
+
+.unframed-agent-search__row {
+  display: flex;
+  width: 100%;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  padding: 6px 8px;
+  border: 0;
+  border-radius: var(--unframed-radius-inner);
+  background: transparent;
+  color: var(--unframed-text-primary);
+  font: inherit;
+  font-size: 12.5px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.unframed-agent-search__row[aria-selected="true"] {
+  background-color: var(--unframed-overlay-hover);
+}
+
+.unframed-agent-search__label {
+  font-weight: 500;
+}
+
+.unframed-agent-search__snippet {
+  color: var(--unframed-text-secondary);
+  line-height: 1.4;
+}
+
+.unframed-agent-search__snippet b,
+.unframed-agent-search__label b {
+  color: var(--unframed-text-primary);
+  font-weight: 600;
+}
+
 /* Folder tabs: three inline and More, the active one joined to the transcript below. */
 .unframed-agent-tabs {
   position: relative;

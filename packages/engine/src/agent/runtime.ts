@@ -13,6 +13,8 @@ import {
   plainText,
   projectSlug,
   QUIT_MID_TURN,
+  SEARCH_LIMIT_MAX,
+  searchChats,
   selectionLabel,
   shapeKind,
   type ActivityInput,
@@ -30,8 +32,10 @@ import {
   type RuntimeMode,
   type SelectedShape,
   type SkippedBy,
+  type ThreadSearchMatch,
   type TurnOutcome,
 } from "@unframed/domain";
+import type { ArtifactDiffFile } from "@unframed/contracts";
 import type { TLRecord } from "@tldraw/tlschema";
 import type { Applied, CanvasChange, ChangeLogRow, ChangeOrigin } from "../canvas/rooms.ts";
 import { errorText, logError, logInfo } from "../log.ts";
@@ -45,6 +49,7 @@ import { McpTokens, McpToolRegistry, MCP_PATH } from "./mcp.ts";
 import { ProviderService, SESSION_IDLE_MS } from "./providerService.ts";
 import { writeTurnSidecar } from "./sidecar.ts";
 import { planRevert, TurnChanges } from "./turnChanges.ts";
+import { artifactDiff } from "./turnDiff.ts";
 
 export interface AgentRuntimeDeps {
   readonly dataDir: string;
@@ -786,6 +791,21 @@ export class AgentRuntime {
     agent.turnChanges.dropAfter(chatId, rewind.keep);
   }
 
+
+  /** Thread search (spec 08): this project's chats whose messages or final replies match. */
+  async searchThreads(project: string, query: string, limit: number | undefined): Promise<ThreadSearchMatch[]> {
+    const agent = await this.project(project);
+    return searchChats(Object.values(agent.engine.model.chats), query, limit ?? SEARCH_LIMIT_MAX);
+  }
+
+  /** The pages and motions a chat's turns `from + 1` to `to` wrote, as diffs (spec 08). */
+  async turnDiff(project: string, chatId: string, from: number, to: number, ignoreWhitespace: boolean): Promise<{ files: ArtifactDiffFile[] }> {
+    const agent = await this.project(project);
+    const chat = agent.engine.chat(chatId);
+    if (!chat || chat.deletedAt !== null) throw new DispatchError("not_found", "That chat does not exist.");
+    if (to < from) throw new DispatchError("bad_request", "A diff runs from an earlier turn to a later one.");
+    return { files: await artifactDiff(agent.turnChanges, agent.folder, chatId, from, to, ignoreWhitespace) };
+  }
 
   async chat(project: string, chatId: string): Promise<Chat | undefined> {
     return (await this.project(project)).engine.chat(chatId);

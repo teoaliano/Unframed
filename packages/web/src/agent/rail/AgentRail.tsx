@@ -1,5 +1,5 @@
 import { visibleChats, nextActive } from "@unframed/domain";
-import { Plus, Sparkles, Trash2, X } from "lucide-react";
+import { Plus, Search, Sparkles, Trash2, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useMaybeEditor, useValue } from "tldraw";
 import { iconButtonClass, Tip } from "../../chrome/ui.tsx";
@@ -12,6 +12,8 @@ import { useChatClient, useChats, useProviders, useRailUi } from "../store.ts";
 import { Transcript } from "../transcript/Transcript.tsx";
 import { NoProvider } from "./NoProvider.tsx";
 import { TabStrip } from "./TabStrip.tsx";
+import { ThreadSearch } from "./ThreadSearch.tsx";
+import { platform } from "../../canvas/platform.ts";
 
 export interface AgentRailProps {
   readonly project: string;
@@ -108,11 +110,23 @@ export const AgentRail = ({ project, embedded, filterTo, onLocate, onOpenEditor,
       data-state={motion?.state}
       data-embedded={embedded ? "" : undefined}
       onPointerDown={(event) => event.stopPropagation()}
+      onKeyDown={(event) => {
+        const command = platform() === "darwin" ? event.metaKey : event.ctrlKey;
+        if (command && !event.shiftKey && event.key.toLowerCase() === "k") {
+          event.preventDefault();
+          client.setUi({ searchOpen: true });
+        }
+      }}
     >
       <header className="unframed-agent-rail__header">
         <Sparkles size={16} aria-hidden className="text-icon" />
         <span className="unframed-agent-rail__title">Agent</span>
         <span className="flex-1" />
+        <Tip label="Search chats">
+          <button type="button" aria-label="Search chats" className={smallIconButton} onClick={() => client.setUi({ searchOpen: true })}>
+            <Search size={16} aria-hidden />
+          </button>
+        </Tip>
         <Tip label={artifactsSelected ? "New chat about the selected artifacts" : "New chat"}>
           <button type="button" aria-label="New chat" className={smallIconButton} disabled={none} onClick={newChat}>
             <Plus size={17} aria-hidden />
@@ -137,7 +151,10 @@ export const AgentRail = ({ project, embedded, filterTo, onLocate, onOpenEditor,
           </Tip>
         )}
       </header>
-      <TabStrip client={client} chats={visible} active={active} selectedCount={selectedArtifacts.length} />
+      <div className="unframed-agent-rail__strip">
+        <TabStrip client={client} chats={visible} active={active} selectedCount={selectedArtifacts.length} />
+        {ui.searchOpen && <ThreadSearch client={client} chats={chats} onClose={() => client.setUi({ searchOpen: false })} />}
+      </div>
       <div className="unframed-agent-rail__body">
         {none && statuses ? (
           <NoProvider client={client} />
