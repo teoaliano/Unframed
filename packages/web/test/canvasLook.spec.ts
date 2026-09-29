@@ -32,7 +32,7 @@ test("labels, the dot grid, empty media, the remove control, the transport and a
 
   await inBothSchemes(page, async () => {
     expect(await styleOf(label, "font-size")).toBe("11px");
-    expect(await styleOf(label, "text-transform")).toBe("uppercase");
+    expect(await styleOf(label, "text-transform")).toBe("none");
     expect(await styleOf(label, "color")).toBe(await tokenColor(page, "--color-muted-foreground"));
 
     const grid = page.getByTestId("dot-grid");

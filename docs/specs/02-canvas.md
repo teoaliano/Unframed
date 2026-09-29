@@ -210,7 +210,7 @@ Custom shape props and every later change to them use tldraw's shape migrations,
 ### Prompt behaviour
 
 - **Look.** Bare text on the canvas: no fill, no border, no shadow. Default style: tldraw's sans font, size `s`, left aligned; tldraw's style panel may change these.
-- **Label.** `@<ref>` sits above the top-left corner in a 22 px band: the kit's `text-2xs` (11 px), uppercase, `0.06em` letter spacing, the muted foreground, no dot, never ellipsised. It is part of the shape and scales with the canvas.
+- **Label.** `@<ref>` sits above the top-left corner in a 22 px band: the kit's `text-2xs` (11 px), in the case it is written (kind words in sentence case: Image, Video, Page, Motion), the muted foreground, no dot, never ellipsised. It is part of the shape and scales with the canvas.
 - **Hug.** While `meta.sized` is false the prompt is measured from its own text on creation and on every change to the text: it grows sideways until its content is 320 canvas px wide, then wraps and grows downward. An empty prompt is measured from its hint so the hint is fully readable. Measurement is in canvas units, independent of zoom, and widths round up so the last word never wraps into a line the box has no room for. Minimum box 40 × 28.
 - **Pin.** The first pointer move of a resize drag (at least 2 px) sets `meta.sized` to true. From then the box keeps whatever size it is dragged to, and text wraps inside it. A press with no movement does not pin.
 - **Re-hug.** Double-clicking a prompt's resize edge sets `meta.sized` to false and refits immediately.

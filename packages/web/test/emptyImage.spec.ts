@@ -9,7 +9,7 @@ test("an empty image asks for a file, fills from the picker, and is then bare, k
   const shape = shapeOnScreen(page, "shape:empty-image");
   await expect(shape.locator("[data-testid='media-empty']")).toBeVisible();
   await expect(shape.locator("[data-shape-label]")).toHaveText("Image");
-  await expect(shape.locator("[data-shape-label]")).toHaveCSS("text-transform", "uppercase");
+  await expect(shape.locator("[data-shape-label]")).toHaveCSS("text-transform", "none");
   const empty = (await shape.locator("[data-testid='media-empty']").boundingBox())!;
   expect(empty.width / empty.height).toBeCloseTo(240 / 140, 1);
 

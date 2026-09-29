@@ -39,7 +39,7 @@ const EmptyArtifact = ({ shape, kind }: { readonly shape: ArtifactShape; readonl
     <>
       <HTMLContainer id={shape.id} className={artifactCardClass} data-testid="artifact-card" data-artifact-kind={kind} style={{ width: props.w, height: props.h }}>
         <ShapeLabel shapeId={shape.id} kind={kind}>
-          {kind}
+          {kind === "page" ? "Page" : "Motion"}
         </ShapeLabel>
         <div className="flex h-full flex-col items-center justify-center gap-3 text-muted-foreground">
           <Icon className="size-7" strokeWidth={1.5} aria-label={kind === "page" ? "Page" : "Motion"} />

@@ -3,9 +3,9 @@
  * these are class recipes on plain elements rather than kit components.
  */
 
-/** The label band above a shape's top-left corner: extra-small uppercase muted text. */
+/** The label band above a shape's top-left corner: extra-small muted text, in the case it is written. */
 export const shapeLabelClass =
-  "pointer-events-none absolute bottom-full left-0 flex h-[22px] items-center whitespace-nowrap font-sans text-2xs leading-none tracking-[0.06em] text-muted-foreground uppercase";
+  "pointer-events-none absolute bottom-full left-0 flex h-[22px] items-center whitespace-nowrap font-sans text-2xs leading-none text-muted-foreground";
 
 /** An empty media shape, a placeholder and a render placeholder: a card that asks for or awaits a file. */
 export const mediaCardClass = "box-border rounded-lg border bg-card font-sans text-foreground";

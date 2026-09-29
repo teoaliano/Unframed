@@ -90,7 +90,7 @@ const RenameField = ({ shape }: { readonly shape: TLFrameShape }) => {
 
   return (
     // The name is typed as it is, not in the label's capitals; the kit Input sits unstyled inside this frame.
-    <span className="pointer-events-auto flex items-center gap-px tracking-normal normal-case">
+    <span className="pointer-events-auto flex items-center gap-px">
       <span data-testid="group-rename-prefix">@</span>
       <span className="inline-flex h-5 items-center overflow-hidden rounded-md border border-highlight bg-background text-foreground">
         <Input
@@ -113,7 +113,7 @@ const RecipeChip = ({ shape, recipe }: { readonly shape: TLFrameShape; readonly 
   const editor = useEditor();
   // The chip reads as the recipe spells it, not in the label's capitals: the wrapper sets the case the Badge inherits.
   return (
-    <span className="ml-1.5 tracking-normal normal-case">
+    <span className="ml-1.5">
       <Badge
         variant="outline"
         className="pointer-events-auto"

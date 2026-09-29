@@ -13,7 +13,7 @@ test("the add menu makes empty pages and motions of 480 by 320 with their kind t
     const made = await waitForRoom(engine, "default", (records) => records.find((record) => record.typeName === "shape" && !before.has(record.id)));
     expect(made).toMatchObject({ type: label.toLowerCase(), props: { w: 480, h: 320, file: "" } });
     const card = shapeOnScreen(page, made.id);
-    await expect(card.locator("[data-shape-label]")).toHaveText(label.toLowerCase());
+    await expect(card.locator("[data-shape-label]")).toHaveText(label);
     await expect(card.locator("[data-testid='artifact-card']")).toHaveCSS("border-top-width", "1px");
     await expect(card.getByRole("img", { name: label })).toBeVisible();
     await expect(card.getByRole("button")).toHaveCount(0);
