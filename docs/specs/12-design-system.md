@@ -122,6 +122,7 @@ Copy rules:
 - `--tl-radius-0` to `-4` onto the kit's radius scale; `--tl-shadow-1` to `-4` onto the kit's popup shadows.
 - `--tl-font-sans` for tldraw's UI chrome (not for shape content) to the kit's sans stack.
 - tldraw's menu rows, toolbar buttons and panel paddings get the kit's row height, radius and highlight through tldraw's own class names, in this one stylesheet only.
+- tldraw's UI icons (tools, menus, zoom and quick actions) are Lucide's, the kit's icon set, passed through tldraw's icon asset URLs. The style panel's fill, dash, size, font and arrowhead swatches, which Lucide has no match for, keep tldraw's icons.
 - The watermark is never targeted: no rule changes its visibility, opacity, position or size, and no kit surface is placed over it (index contract 7).
 - The context menu keeps spec 02's structure and width; its headings and the greyed "Add to library" row use the kit's menu label and disabled styles.
 

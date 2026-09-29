@@ -47,3 +47,15 @@ test("tldraw's toolbar, style panel, zoom controls, menus and shortcuts dialog t
     await page.mouse.click(subject.x, subject.y);
   });
 });
+
+test("tldraw's toolbar and menu icons are Lucide's; style swatches Lucide has no match for stay tldraw's", async ({ page, engine }) => {
+  await openCanvas(page, engine);
+  const maskOf = (locator: import("@playwright/test").Locator) => locator.locator(".tlui-icon").first().evaluate((icon) => (icon as HTMLElement).style.mask || (icon as HTMLElement).style.webkitMask);
+  for (const [tool, lucide] of [["select", "mouse-pointer-2"], ["hand", "hand"], ["draw", "pencil"], ["eraser", "eraser"], ["text", "type"]] as const) {
+    expect(await maskOf(page.getByTestId(`tools.${tool}`))).toContain(encodeURIComponent(`lucide-${lucide}`));
+  }
+  await page.getByTestId("tools.draw").click();
+  const fill = page.locator(".tlui-style-panel [data-testid^='style.fill']").first();
+  await expect(fill).toBeVisible();
+  expect(await maskOf(fill)).not.toContain("lucide");
+});

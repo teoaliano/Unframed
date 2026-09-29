@@ -33,9 +33,11 @@ import { MotionShapeUtil, PageShapeUtil } from "./shapes/artifact.tsx";
 import { GroupShapeUtil } from "./shapes/group.tsx";
 import { ImageMediaUtil, VideoMediaUtil } from "./shapes/media.tsx";
 import { PromptShapeUtil } from "./shapes/prompt.tsx";
+import { lucideIconUrls } from "./icons.tsx";
 import { SyncSocket } from "./syncSocket.ts";
 
-const assetUrls = getAssetUrlsByImport();
+const tldrawAssets = getAssetUrlsByImport();
+const assetUrls = { ...tldrawAssets, icons: { ...tldrawAssets.icons, ...lucideIconUrls() } };
 
 /** How long a project switch waits for the room to acknowledge this tab's pending edits. */
 const SETTLE_BEFORE_SWITCH_MS = 2000;
