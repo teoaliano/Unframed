@@ -16,7 +16,7 @@ import { pageBox, selectionBox } from "./facts.ts";
 import { FinalPromptOverlay } from "./composer/FinalPromptDialog.tsx";
 import { freeBlockers, mintBatchId, sendFree } from "./free.ts";
 import { saveLastUsed } from "./lastUsed.ts";
-import { registerMedium, type MediumDefinition, type PropValue, type RunSource, type SendInput, type TrayProps } from "./mediumRegistry.ts";
+import { registerMedium, type MediumDefinition, type PropValue, type RunSource, type SendInput, type SendOutcome, type TrayProps } from "./mediumRegistry.ts";
 import { referencesFor } from "./render.ts";
 import { runsOf, runsProp } from "./runsProp.tsx";
 
@@ -48,10 +48,12 @@ export const planOf = (source: RunSource) => {
   return { prompt: joinPromptParts(recipe.selectionPrompt, source.instruction), error: source.error, selectionPrompt: recipe.selectionPrompt, instruction: source.instruction };
 };
 
-const send = async (input: SendInput): Promise<void | "stay"> => {
+const send = async (input: SendInput): Promise<SendOutcome> => {
   const { editor, engine, project, values, source } = input;
   const runs = runsOf(values.props);
-  const remember = () => void saveLastUsed(engine, "image", { ...(values.picked && values.model !== undefined ? { model: values.model } : {}), props: { ...values.props } });
+  const remember = () => {
+    if (input.remember !== false) void saveLastUsed(engine, "image", { ...(values.picked && values.model !== undefined ? { model: values.model } : {}), props: { ...values.props } });
+  };
   if (runs === "free") {
     const outcome = await sendFree(input, imageParams(values.props));
     remember();
@@ -87,8 +89,9 @@ const send = async (input: SendInput): Promise<void | "stay"> => {
       of: { shapeId, action: "recipe" },
     };
   }
-  await engine.call("run.image", request);
+  const started = await engine.call("run.image", request);
   remember();
+  return { batchId: started.batchId };
 };
 
 export const imageMedium: MediumDefinition = {

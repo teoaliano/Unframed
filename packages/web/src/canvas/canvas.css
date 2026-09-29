@@ -267,6 +267,27 @@
   visibility: visible;
 }
 
+/* A recipe group's chip after its name: a pill in the chip style, written as the recipe spells it. */
+.unframed-recipe-chip {
+  margin-left: 6px;
+  height: 16px;
+  padding: 0 6px;
+  border: 1px solid var(--unframed-border);
+  border-radius: 999px;
+  background-color: var(--unframed-overlay-hover);
+  color: var(--unframed-text-secondary);
+  font: inherit;
+  letter-spacing: normal;
+  text-transform: none;
+  cursor: pointer;
+  pointer-events: all;
+}
+
+.unframed-recipe-chip:hover {
+  background-color: var(--unframed-overlay-pressed);
+  color: var(--unframed-text-primary);
+}
+
 .unframed-group-rename {
   display: flex;
   align-items: center;

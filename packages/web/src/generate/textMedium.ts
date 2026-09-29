@@ -66,8 +66,9 @@ export const textMedium: MediumDefinition = {
   },
   sendLabel: () => "Run",
   send: async (input) => {
-    await input.engine.call("run.text", await textRunRequest(input));
-    void saveLastUsed(input.engine, "text", { ...(input.values.picked && input.values.model !== undefined ? { model: input.values.model } : {}), props: {} });
+    const started = await input.engine.call("run.text", await textRunRequest(input));
+    if (input.remember !== false) void saveLastUsed(input.engine, "text", { ...(input.values.picked && input.values.model !== undefined ? { model: input.values.model } : {}), props: {} });
+    return { batchId: started.batchId };
   },
   fromRecipe: () => ({}),
 };

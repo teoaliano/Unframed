@@ -2,8 +2,8 @@
  * What the generation rules read from the canvas: the canvas description the domain's
  * selection to request rule takes, and the facts of results and run markers on shapes.
  */
-import { kindOfShapeType, parseAssetMarker, resultMetaOf, runMarkerOf } from "@unframed/contracts";
-import { plainText, readRef, type CanvasShape, type Crop, type ToolbarShape } from "@unframed/domain";
+import { kindOfShapeType, parseAssetMarker, resultMetaOf, runMarkerOf, unframedMetaOf } from "@unframed/contracts";
+import { plainText, readGroupRecipe, readRef, type CanvasShape, type Crop, type ToolbarShape } from "@unframed/domain";
 import { computed, type Computed, type Editor, type TLAsset, type TLShape } from "tldraw";
 
 const field = (value: unknown, key: string): unknown =>
@@ -74,10 +74,12 @@ export const toolbarShape = (editor: Editor, shape: TLShape): ToolbarShape => {
   const kind = kindOfShapeType(shape.type);
   const result = resultMetaOf(shape);
   const file = kind === "page" || kind === "motion" ? field(shape.props, "file") : undefined;
+  const recipe = kind === "group" ? readGroupRecipe(unframedMetaOf(shape).recipe) : undefined;
   return {
     id: shape.id,
     kind,
     ...(kind === "group" ? { ref: readRef(shape) } : {}),
+    ...(recipe ? { recipe: { runs: recipe.runs } } : {}),
     ...(typeof file === "string" && file !== "" ? { file } : {}),
     ...(result ? { result: { batchId: result.batchId, cost: result.cost, ...(result.batchExtraCost === undefined ? {} : { batchExtraCost: result.batchExtraCost }) } } : {}),
     ...(runMarkerOf(shape) ? { generating: true } : {}),

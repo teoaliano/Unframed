@@ -1,4 +1,6 @@
-import { GROUP_DEFAULT, GROUP_MAX, GROUP_MIN, mayBeGroupMember } from "@unframed/domain";
+import { GROUP_DEFAULT, GROUP_MAX, GROUP_MIN, mayBeGroupMember, recipeChip, type GroupRecipe } from "@unframed/domain";
+import { openOnRecipe } from "../../generate/recipeRuns.ts";
+import { groupRecipeOf } from "../groupRecipes.ts";
 import { useLayoutEffect, useRef, type SyntheticEvent } from "react";
 import {
   FrameShapeUtil,
@@ -101,16 +103,37 @@ const RenameField = ({ shape }: { readonly shape: TLFrameShape }) => {
   );
 };
 
+/** A recipe group's chip, after its name: what its Generate makes. A click opens the composer on the recipe. */
+const RecipeChip = ({ shape, recipe }: { readonly shape: TLFrameShape; readonly recipe: GroupRecipe }) => {
+  const editor = useEditor();
+  return (
+    <button
+      type="button"
+      className="unframed-recipe-chip"
+      data-testid="recipe-chip"
+      {...fieldEvents(editor)}
+      onClick={(event) => {
+        event.stopPropagation();
+        openOnRecipe(editor, shape.id, recipe);
+      }}
+    >
+      {recipeChip(recipe)}
+    </button>
+  );
+};
+
 const GroupBox = ({ shape }: { readonly shape: TLFrameShape }) => {
   noteRender(shape.id);
   const editor = useEditor();
   const id: TLShapeId = shape.id;
   const selected = useValue("group selected", () => editor.getSelectedShapeIds().includes(id), [editor, id]);
   const renaming = useValue("group renaming", () => renamingGroup(editor).get() === id, [editor, id]);
+  const recipe = groupRecipeOf(shape);
   return (
     <HTMLContainer id={shape.id} className="unframed-group" data-selected={selected ? "true" : undefined} style={{ width: shape.props.w, height: shape.props.h }}>
       <ShapeLabel shapeId={shape.id} kind="group" active={renaming}>
         {renaming ? <RenameField shape={shape} /> : <>@{shape.props.name}</>}
+        {recipe && !renaming && <RecipeChip shape={shape} recipe={recipe} />}
       </ShapeLabel>
     </HTMLContainer>
   );

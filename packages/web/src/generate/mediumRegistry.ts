@@ -48,7 +48,15 @@ export interface SendInput {
   readonly project: string;
   readonly values: TrayValues;
   readonly source: RunSource;
+  /** False for a run that is not the composer's (spec 06's recipe group run): the last-used values stay as they were. */
+  readonly remember?: boolean;
 }
+
+/**
+ * What a send started: the batch whose events report its progress, or the shapes that
+ * hold its work (spec 04's render placeholder). `"stay"` when nothing was sent yet.
+ */
+export type SendOutcome = void | "stay" | { readonly batchId?: string; readonly shapeIds?: ReadonlyArray<string> };
 
 /** What a medium's own status band shows: its status, the last send failure, and a way to change the tray. */
 export interface MediumStatusProps {
@@ -96,7 +104,7 @@ export interface MediumDefinition {
    * Renders, uploads and starts the run. Resolves once the engine acknowledged it, or with
    * `"stay"` when nothing was sent yet and the composer stays open (spec 05's final prompt).
    */
-  readonly send: (input: SendInput) => Promise<void | "stay">;
+  readonly send: (input: SendInput) => Promise<SendOutcome>;
   /** The tray's values from a recipe, for recipe mode. */
   readonly fromRecipe: (recipe: ResultRecipe) => TrayProps;
   /** Tray props the model does not drive (spec 05's Runs), after the model's own. */

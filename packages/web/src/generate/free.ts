@@ -99,7 +99,7 @@ export const batchNow = (editor: Editor, stage: Pick<StagedFree, "sourceId" | "i
   });
 
 /** Sends a built batch as one image run with the staged batch id, its notes kept for the run report. */
-export const sendBatch = async (editor: Editor, engine: EngineConnection, stage: StagedFree, batch: FreeBatch): Promise<void> => {
+export const sendBatch = async (editor: Editor, engine: EngineConnection, stage: StagedFree, batch: FreeBatch): Promise<{ batchId: string }> => {
   if (batch.error !== undefined) throw new Error(batch.error);
   if (batch.runs.length === 0) throw new Error(NO_SECTIONS);
   const selected = editor.getSelectedShapeIds();
@@ -114,7 +114,7 @@ export const sendBatch = async (editor: Editor, engine: EngineConnection, stage:
     });
   }
   noteBatch(stage.batchId, freeNotes(batch, stage.repairNotes));
-  await engine.call("run.image", {
+  return engine.call("run.image", {
     project: stage.project,
     batchId: stage.batchId,
     ...(stage.model === undefined ? {} : { model: stage.model }),
@@ -133,7 +133,7 @@ export const sendBatch = async (editor: Editor, engine: EngineConnection, stage:
  * sections, then the batch, sent or staged for the final prompt dialog (`"stay"`). `params`
  * are the image params the tray's props make.
  */
-export const sendFree = async ({ editor, engine, project, values, source }: SendInput, params: ImageParams): Promise<void | "stay"> => {
+export const sendFree = async ({ editor, engine, project, values, source }: SendInput, params: ImageParams): Promise<{ batchId: string } | "stay"> => {
   if (source.kind !== "selection") throw new Error(NO_FREE_SOURCE);
   const found = freeSource(source);
   if (found.source === undefined) throw new Error(NO_FREE_SOURCE);
@@ -189,5 +189,5 @@ export const sendFree = async ({ editor, engine, project, values, source }: Send
     stagedFree(editor).set(stage);
     return "stay";
   }
-  await sendBatch(editor, engine, stage, batch);
+  return sendBatch(editor, engine, stage, batch);
 };

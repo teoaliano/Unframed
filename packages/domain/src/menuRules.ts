@@ -1,4 +1,5 @@
 import { mayBeGroupMember } from "./grouping.ts";
+import { presetCase, PRESET_SPLIT_MESSAGE } from "./presetRules.ts";
 
 /** What the menu rules need to know about a shape. `file` is its project file, when it has one. */
 export interface MenuShape {
@@ -10,6 +11,10 @@ export interface MenuShape {
   readonly link?: boolean;
   /** A prompt that is a text result (spec 05). */
   readonly textResult?: boolean;
+  /** The group this shape is a member of. */
+  readonly parent?: string;
+  /** A group with a standing recipe (spec 06). */
+  readonly recipe?: boolean;
 }
 
 export type MenuTarget = { readonly kind: "canvas" } | { readonly kind: "shape"; readonly shape: MenuShape };
@@ -35,7 +40,10 @@ export type MenuItem =
   /** Spec 05: a plain prompt with a text result's text, beside it, so its `@` tokens resolve. */
   | { readonly action: "copy-as-prompt"; readonly label: string }
   | { readonly action: EditAction; readonly label: string; readonly shortcut: string }
-  | { readonly action: "add-to-library"; readonly label: string }
+  /** Spec 06: a recipe group back to a plain group. */
+  | { readonly action: "clear-recipe"; readonly label: string }
+  /** Spec 06: shown for any selection, disabled when it cannot become one group. */
+  | { readonly action: "add-to-library"; readonly label: string; readonly disabled?: boolean; readonly tooltip?: string }
   | { readonly action: AddAction; readonly label: string };
 
 export type MenuSectionId = "image" | "reference" | "edit" | "library" | "inputs" | "artifacts";
@@ -74,6 +82,14 @@ export const ARTIFACT_ITEMS: ReadonlyArray<{ action: AddAction; label: string }>
   { action: "add-page", label: "Page" },
   { action: "add-motion", label: "Motion" },
 ];
+
+/** Add to library: enabled when the selection can become one group; otherwise shown disabled, with the reason when there is one. */
+const libraryItem = (selection: ReadonlyArray<MenuShape>): MenuItem => {
+  const found = presetCase(selection);
+  if (found.kind === "split") return { action: "add-to-library", label: "Add to library", disabled: true, tooltip: PRESET_SPLIT_MESSAGE };
+  if (found.kind === "empty") return { action: "add-to-library", label: "Add to library", disabled: true };
+  return { action: "add-to-library", label: "Add to library" };
+};
 
 const isFilledMedia = (shape: MenuShape): boolean =>
   (shape.type === "image" || shape.type === "video") && shape.file !== undefined;
@@ -115,9 +131,10 @@ export const contextMenu = (input: MenuInput): MenuSection[] => {
   if (input.clipboard) editItems.push(edit("paste"));
   if (selection.some((shape) => mayBeGroupMember(shape.type))) editItems.push(edit("group"));
   if (clicked?.type === "frame" || selection.some((shape) => shape.type === "frame")) editItems.push(edit("ungroup"));
+  if (clicked?.type === "frame" && clicked.recipe) editItems.push({ action: "clear-recipe", label: "Clear recipe" });
   add("edit", "Edit", editItems);
 
-  add("library", "Library", input.libraryRegistered && selection.length > 0 ? [{ action: "add-to-library", label: "Add to library" }] : []);
+  add("library", "Library", input.libraryRegistered && selection.length > 0 ? [libraryItem(selection)] : []);
 
   if (target.kind === "canvas") {
     add("inputs", "Inputs", [...INPUT_ITEMS]);
