@@ -1,15 +1,25 @@
-import { AlertDialog } from "@base-ui/react/alert-dialog";
-import { Dialog } from "@base-ui/react/dialog";
-import { Menu } from "@base-ui/react/menu";
 import { UnframedError } from "@unframed/contracts";
 import { projectSlug } from "@unframed/domain";
 import { Check, ChevronDown, FileText, Pencil, Plus, Trash2 } from "lucide-react";
 import { useEffect, useState, type FormEvent, type MouseEvent } from "react";
+import {
+  AlertDialog,
+  AlertDialogClose,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogPopup,
+  AlertDialogTitle,
+} from "~/components/ui/alert-dialog";
+import { Button } from "~/components/ui/button";
+import { Dialog, DialogClose, DialogFooter, DialogHeader, DialogPanel, DialogPopup, DialogTitle } from "~/components/ui/dialog";
+import { Input } from "~/components/ui/input";
+import { Menu, MenuItem, MenuPopup, MenuTrigger } from "~/components/ui/menu";
 import { useActivation, useEngine } from "../context.ts";
 import { reportState, useReportState } from "../legacy/reportState.ts";
 import { useActiveProject } from "../project/activation.ts";
 import { showError } from "../toasts.tsx";
-import { itemClass, popupClass, Tip } from "./ui.tsx";
+import { Tip } from "./ui.tsx";
 
 const messageOf = (error: unknown) => (error instanceof UnframedError || error instanceof Error ? error.message : String(error));
 
@@ -66,19 +76,20 @@ const ProjectNameDialog = ({
   };
 
   return (
-    <Dialog.Root open={open} onOpenChange={close}>
-      <Dialog.Portal>
-        <Dialog.Backdrop className="fixed inset-0 z-[900] bg-[var(--unframed-scrim)] backdrop-blur-[10px] backdrop-saturate-[160%]" />
-        <Dialog.Popup className="fixed left-1/2 top-1/2 z-[901] w-[360px] max-w-[calc(100vw-32px)] -translate-x-1/2 -translate-y-1/2 rounded-xl border border-border bg-popover p-4 text-foreground shadow-lg outline-none">
-          <Dialog.Title className="m-0 text-[15px] font-semibold">{title}</Dialog.Title>
-          <form className="mt-3 flex flex-col gap-2" onSubmit={onSubmit}>
-            <label className="flex flex-col gap-1 text-[12px] text-muted-foreground">
-              Project name
-              <input
+    <Dialog open={open} onOpenChange={close}>
+      <DialogPopup className="max-w-[360px]">
+        <form onSubmit={onSubmit}>
+          <DialogHeader>
+            <DialogTitle>{title}</DialogTitle>
+          </DialogHeader>
+          <DialogPanel>
+            <label className="grid gap-1.5">
+              <span className="text-xs font-medium text-foreground">Project name</span>
+              <Input
                 autoFocus
-                className="h-9 rounded-lg border border-input bg-card px-2.5 text-[14px] text-foreground outline-none focus:border-primary"
                 placeholder="e.g. product-shots"
                 value={name}
+                aria-invalid={problem !== undefined || undefined}
                 onChange={(event) => {
                   setName(event.target.value);
                   setProblem(undefined);
@@ -86,26 +97,22 @@ const ProjectNameDialog = ({
               />
             </label>
             {problem !== undefined && (
-              <p role="alert" className="m-0 text-[12px] text-destructive-foreground">
+              <p role="alert" className="m-0 text-sm text-destructive-foreground">
                 {problem}
               </p>
             )}
-            <div className="mt-2 flex justify-end gap-2">
-              <Dialog.Close className="h-8 cursor-pointer rounded-lg border border-border bg-transparent px-3 text-[13px] text-foreground hover:bg-accent">
-                Cancel
-              </Dialog.Close>
-              <button type="submit" className="h-8 cursor-pointer rounded-lg border-0 bg-primary px-3 text-[13px] text-primary-foreground" disabled={busy}>
-                {action}
-              </button>
-            </div>
-          </form>
-        </Dialog.Popup>
-      </Dialog.Portal>
-    </Dialog.Root>
+          </DialogPanel>
+          <DialogFooter>
+            <DialogClose render={<Button variant="outline" />}>Cancel</DialogClose>
+            <Button type="submit" disabled={busy}>
+              {action}
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogPopup>
+    </Dialog>
   );
 };
-
-const alertButton = "h-8 cursor-pointer rounded-lg px-3 text-[13px]";
 
 /** A destructive confirm: title, description, Cancel and the action. */
 const Confirm = ({
@@ -125,25 +132,21 @@ const Confirm = ({
   readonly onCancel: () => void;
   readonly onConfirm: () => void;
 }) => (
-  <AlertDialog.Root open={open} onOpenChange={(next) => !next && onCancel()}>
-    <AlertDialog.Portal>
-      <AlertDialog.Backdrop className="fixed inset-0 z-[900] bg-[var(--unframed-scrim)]" />
-      <AlertDialog.Popup className="fixed left-1/2 top-1/2 z-[901] w-[400px] max-w-[calc(100vw-32px)] -translate-x-1/2 -translate-y-1/2 rounded-xl border border-border bg-popover p-5 text-foreground shadow-lg outline-none">
-        <AlertDialog.Title className="m-0 text-[16px] font-semibold">{title}</AlertDialog.Title>
-        <AlertDialog.Description className="m-0 mt-2 text-[13px] text-muted-foreground">{description}</AlertDialog.Description>
-        <div className="mt-4 flex justify-end gap-2">
-          <AlertDialog.Close className={`${alertButton} border border-border bg-transparent text-foreground hover:bg-accent`}>Cancel</AlertDialog.Close>
-          <button type="button" className={`${alertButton} border-0 bg-destructive text-primary-foreground`} disabled={busy} onClick={onConfirm}>
-            {action}
-          </button>
-        </div>
-      </AlertDialog.Popup>
-    </AlertDialog.Portal>
-  </AlertDialog.Root>
+  <AlertDialog open={open} onOpenChange={(next) => !next && onCancel()}>
+    <AlertDialogPopup className="max-w-[400px]">
+      <AlertDialogHeader>
+        <AlertDialogTitle>{title}</AlertDialogTitle>
+        <AlertDialogDescription>{description}</AlertDialogDescription>
+      </AlertDialogHeader>
+      <AlertDialogFooter>
+        <AlertDialogClose render={<Button variant="outline" />}>Cancel</AlertDialogClose>
+        <Button variant="destructive" disabled={busy} onClick={onConfirm}>
+          {action}
+        </Button>
+      </AlertDialogFooter>
+    </AlertDialogPopup>
+  </AlertDialog>
 );
-
-const rowButton =
-  "flex size-6 cursor-pointer items-center justify-center rounded-md border-0 bg-transparent p-0 text-muted-foreground hover:bg-accent hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring";
 
 type Deleting = { readonly project: string; readonly pendingRenders?: number };
 
@@ -254,64 +257,48 @@ export const ProjectMenu = () => {
 
   return (
     <>
-      <Menu.Root
+      <Menu
         open={menuOpen}
         onOpenChange={(open) => {
           setMenuOpen(open);
           if (open) void refresh();
         }}
       >
-        <Menu.Trigger
-          aria-label="Project"
-          className="flex h-9 cursor-pointer items-center gap-1.5 rounded-lg border-0 bg-transparent pl-2.5 pr-2 text-[15px] text-foreground hover:bg-accent data-[popup-open]:bg-accent"
-        >
+        <MenuTrigger aria-label="Project" render={<Button variant="ghost" size="lg" />}>
           <span data-testid="active-project">{active ?? ""}</span>
-          <ChevronDown size={16} aria-hidden />
-        </Menu.Trigger>
-        <Menu.Portal>
-          <Menu.Positioner sideOffset={8} align="start" className="z-[800]">
-            <Menu.Popup className={`${popupClass} min-w-[220px]`}>
-              {projects.map((project) => (
-                <Menu.Item
-                  key={project}
-                  className={`${itemClass} group pr-1 ${project === active ? "bg-accent" : ""}`}
-                  data-active={project === active ? "true" : undefined}
-                  onClick={() => void activation.activate(project)}
-                >
-                  <span className="flex size-4 items-center justify-center">{project === active && <Check size={15} aria-label="Active" />}</span>
-                  <span className="min-w-0 flex-1 truncate">{project}</span>
-                  <span className="ml-3 flex items-center gap-0.5">
-                    <Tip label="Rename" side="top">
-                      <button type="button" aria-label={`Rename ${project}`} className={rowButton} onClick={(event) => rowAction(event, () => setRenaming(project))}>
-                        <Pencil size={14} aria-hidden />
-                      </button>
-                    </Tip>
-                    <Tip label="Delete" side="top">
-                      <button type="button" aria-label={`Delete ${project}`} className={rowButton} onClick={(event) => rowAction(event, () => setDeleting({ project }))}>
-                        <Trash2 size={14} aria-hidden />
-                      </button>
-                    </Tip>
-                  </span>
-                </Menu.Item>
-              ))}
-              {imported.project === active && imported.report !== null && (
-                <Menu.Item className={itemClass} onClick={() => reportState.open()}>
-                  <span className="flex size-4 items-center justify-center">
-                    <FileText size={15} aria-hidden />
-                  </span>
-                  Import report
-                </Menu.Item>
-              )}
-              <Menu.Item className={itemClass} onClick={() => setCreating(true)}>
-                <span className="flex size-4 items-center justify-center">
-                  <Plus size={15} aria-hidden />
-                </span>
-                Add project
-              </Menu.Item>
-            </Menu.Popup>
-          </Menu.Positioner>
-        </Menu.Portal>
-      </Menu.Root>
+          <ChevronDown aria-hidden />
+        </MenuTrigger>
+        <MenuPopup sideOffset={8} align="start" className="min-w-[220px]">
+          {projects.map((project) => (
+            <MenuItem key={project} data-active={project === active ? "true" : undefined} onClick={() => void activation.activate(project)}>
+              {project === active ? <Check aria-label="Active" /> : <span aria-hidden className="size-4 shrink-0" />}
+              <span className="min-w-0 flex-1 truncate">{project}</span>
+              <span className="ml-3 flex items-center gap-0.5">
+                <Tip label="Rename" side="top">
+                  <Button variant="ghost-muted" size="icon-micro" aria-label={`Rename ${project}`} onClick={(event) => rowAction(event, () => setRenaming(project))}>
+                    <Pencil aria-hidden />
+                  </Button>
+                </Tip>
+                <Tip label="Delete" side="top">
+                  <Button variant="ghost-destructive" size="icon-micro" aria-label={`Delete ${project}`} onClick={(event) => rowAction(event, () => setDeleting({ project }))}>
+                    <Trash2 aria-hidden />
+                  </Button>
+                </Tip>
+              </span>
+            </MenuItem>
+          ))}
+          {imported.project === active && imported.report !== null && (
+            <MenuItem onClick={() => reportState.open()}>
+              <FileText aria-hidden />
+              Import report
+            </MenuItem>
+          )}
+          <MenuItem onClick={() => setCreating(true)}>
+            <Plus aria-hidden />
+            Add project
+          </MenuItem>
+        </MenuPopup>
+      </Menu>
       <ProjectNameDialog open={creating} onOpenChange={setCreating} title="New project" action="Create" initial="" submit={create} />
       <ProjectNameDialog
         open={renaming !== undefined}

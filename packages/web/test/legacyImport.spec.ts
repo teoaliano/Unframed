@@ -99,7 +99,7 @@ test("the report shows once across reloads and tabs, with its sections, and the 
     await expect(reportDialog(page)).toHaveCount(0);
     await expect(reportDialog(other)).toHaveCount(0);
 
-    await page.getByRole("button", { name: "Project" }).click();
+    await page.getByRole("button", { name: "Project", exact: true }).click();
     await page.getByRole("menuitem", { name: "Import report" }).click();
     await expect(reportDialog(page)).toBeVisible();
     await page.keyboard.press("Escape");
@@ -116,11 +116,11 @@ test("a report shows only the sections it has, and a project never imported has 
     await expect(reportDialog(page).locator("section h3")).toHaveText(["Changed"]);
     await reportDialog(page).getByRole("button", { name: "Got it" }).click();
     await (await app.engine.rpc()).call("projects.create", { name: "fresh" });
-    await page.getByRole("button", { name: "Project" }).click();
+    await page.getByRole("button", { name: "Project", exact: true }).click();
     await expect(page.getByRole("menuitem", { name: "Import report" })).toBeVisible();
     await page.getByRole("menuitem", { name: "fresh" }).click();
     await expect(canvasOf(page, "fresh")).toBeVisible({ timeout: 20_000 });
-    await page.getByRole("button", { name: "Project" }).click();
+    await page.getByRole("button", { name: "Project", exact: true }).click();
     await expect(page.getByRole("menuitem", { name: "Add project" })).toBeVisible();
     await expect(page.getByRole("menuitem", { name: "Import report" })).toHaveCount(0);
   } finally {

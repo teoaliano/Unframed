@@ -1,5 +1,8 @@
 import { openCanvas, plainText, waitForRoom } from "./canvas.ts";
 import { expect, test } from "./fixtures.ts";
+import { expectSlot, expectToken, inBothSchemes, resolvedColor, styleOf } from "./kit.ts";
+
+const MENU_GLASS = "color-mix(in srgb, var(--popover) 18%, color-mix(in srgb, var(--popover) var(--glass-opacity), transparent))";
 
 test("the top-left card holds the logo and the project menu, which lists every project, checks the active one and switches", async ({ page, engine }) => {
   await openCanvas(page, engine, "default");
@@ -10,7 +13,7 @@ test("the top-left card holds the logo and the project menu, which lists every p
   const logo = card.getByRole("img", { name: "Unframed" });
   await expect(logo).toBeVisible();
   expect(await logo.boundingBox()).toMatchObject({ width: 28, height: 28 });
-  const trigger = card.getByRole("button", { name: "Project" });
+  const trigger = card.getByRole("button", { name: "Project", exact: true });
   await expect(trigger).toHaveText("default");
 
   await trigger.click();
@@ -30,7 +33,7 @@ test("New project refuses an empty or taken name, and creates, opens and seeds a
   await (await engine.rpc()).call("projects.create", { name: "beta" });
 
   const openDialog = async () => {
-    await page.getByRole("button", { name: "Project" }).click();
+    await page.getByRole("button", { name: "Project", exact: true }).click();
     await page.getByRole("menuitem", { name: "Add project" }).click();
     const dialog = page.getByRole("dialog", { name: "New project" });
     await expect(dialog).toBeVisible();
@@ -61,10 +64,47 @@ test("New project refuses an empty or taken name, and creates, opens and seeds a
   await again.getByLabel("Project name").press("Enter");
   await expect(again).toBeHidden();
   await expect(page.locator("[data-canvas-project='product-shots'] .tl-canvas")).toBeVisible();
-  await expect(page.getByRole("button", { name: "Project" })).toHaveText("product-shots");
+  await expect(page.getByRole("button", { name: "Project", exact: true })).toHaveText("product-shots");
   const prompts = await waitForRoom(engine, "product-shots", (records) => {
     const texts = records.filter((record) => record.type === "text");
     return texts.length === 2 ? texts : undefined;
   });
   expect(prompts.map(plainText)).toContain("lone red fox");
+});
+
+test("the project menu, the name dialog and the delete confirm are the kit's menu, dialog and alert dialog", async ({ page, engine }) => {
+  await openCanvas(page, engine, "default");
+  const trigger = page.locator(".unframed-chrome-left").getByRole("button", { name: "Project", exact: true });
+  await expectSlot(trigger, "menu-trigger");
+  await inBothSchemes(page, async () => {
+    await trigger.click();
+    const popup = page.locator("[data-slot='menu-popup']");
+    await expect(popup).toBeVisible();
+    expect(await styleOf(popup, "background-color")).toBe(await resolvedColor(page, MENU_GLASS));
+    const rows = page.getByRole("menuitem");
+    for (const row of await rows.all()) {
+      await expectSlot(row, "menu-item");
+      expect((await row.boundingBox())!.height).toBe(28);
+    }
+    await expectSlot(page.getByRole("button", { name: "Rename default" }), "tooltip-trigger");
+
+    await page.getByRole("menuitem", { name: "Add project" }).click();
+    const dialog = page.getByRole("dialog", { name: "New project" });
+    await expectSlot(dialog, "dialog-popup");
+    const title = dialog.locator("[data-slot='dialog-title']");
+    expect(await styleOf(title, "font-size")).toBe("20px");
+    expect(await styleOf(title, "font-weight")).toBe("600");
+    await expectSlot(dialog.getByLabel("Project name"), "input");
+    await expectToken(dialog.getByRole("button", { name: "Create" }), "background-color", "--primary");
+    await dialog.getByRole("button", { name: "Cancel" }).click();
+    await expect(dialog).toHaveCount(0);
+
+    await trigger.click();
+    await page.getByRole("button", { name: "Delete default" }).click();
+    const confirm = page.getByRole("alertdialog", { name: "Delete project?" });
+    await expectSlot(confirm, "alert-dialog-popup");
+    await expectToken(confirm.getByRole("button", { name: "Delete project" }), "background-color", "--destructive");
+    await confirm.getByRole("button", { name: "Cancel" }).click();
+    await expect(confirm).toHaveCount(0);
+  });
 });

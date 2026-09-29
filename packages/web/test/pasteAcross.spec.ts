@@ -59,7 +59,7 @@ test("pasting into another project copies every file in; a pasted page always ge
   expect(await readFile(join(engine.dataDir, "output", "alpha", samePaste.props.file), "utf8")).toBe("<h1>alpha</h1>");
 
   // Into another project, every file is copied in.
-  await page.getByRole("button", { name: "Project" }).click();
+  await page.getByRole("button", { name: "Project", exact: true }).click();
   await page.getByRole("menuitem", { name: "beta" }).click();
   await expect(page.locator("[data-canvas-project='beta'] .tl-canvas")).toBeVisible();
   await page.keyboard.press("ControlOrMeta+v");

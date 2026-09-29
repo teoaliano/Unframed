@@ -76,7 +76,7 @@ test.describe("project activation", () => {
     await page.goto(engine.origin);
     await expect.poll(() => firstList).toBeDefined();
 
-    await page.getByRole("button", { name: "Project" }).click();
+    await page.getByRole("button", { name: "Project", exact: true }).click();
     await page.getByRole("menuitem", { name: "beta" }).click();
     await expect(page.locator("[data-canvas-project='beta'] .tl-canvas")).toBeVisible();
 

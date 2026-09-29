@@ -39,7 +39,7 @@ test("the add keys type into a prompt being edited or a dialog's field instead",
   await page.keyboard.press("Escape");
   await expect(subject.locator(".tl-rich-text")).toHaveText("iu");
 
-  await page.getByRole("button", { name: "Project" }).click();
+  await page.getByRole("button", { name: "Project", exact: true }).click();
   await page.getByRole("menuitem", { name: "Add project" }).click();
   await page.getByLabel("Project name").pressSequentially("iu");
   await expect(page.getByLabel("Project name")).toHaveValue("iu");

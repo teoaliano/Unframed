@@ -124,7 +124,6 @@
         "src/canvas/shapes/prompt.tsx",
         "src/canvas/shapes/renderPlaceholder.tsx",
         "src/chrome/DotGrid.tsx",
-        "src/chrome/ProjectMenu.tsx",
         "src/generate/SelectionToolbar.tsx",
         "src/generate/composer/Composer.tsx",
         "src/generate/composer/FinalPromptDialog.tsx",

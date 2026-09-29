@@ -70,7 +70,7 @@ test("a result pasted into another project brings its sidecar and its reference 
   await clickShape(page, result!.id);
   await copySelection(page, ["text/html", "image/png"]);
 
-  await page.getByRole("button", { name: "Project" }).click();
+  await page.getByRole("button", { name: "Project", exact: true }).click();
   await page.getByRole("menuitem", { name: "beta" }).click();
   await expect(page.locator("[data-canvas-project='beta'] .tl-canvas")).toBeVisible();
   await page.keyboard.press("ControlOrMeta+v");
