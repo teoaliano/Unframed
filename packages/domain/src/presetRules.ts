@@ -59,6 +59,10 @@ export interface Preset {
   readonly kind: PresetKind;
   readonly medium?: RecipeMedium;
   readonly content: PresetContent;
+  /** Spec 11: converted from an old entry on read, never written back. */
+  readonly legacy?: true;
+  /** Spec 11: what the conversion could not keep. */
+  readonly notes?: ReadonlyArray<string>;
 }
 
 export const PRESET_NOT_ONE_GROUP_MESSAGE = "A preset is one group.";

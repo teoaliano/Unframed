@@ -37,6 +37,10 @@ export const Preset = Schema.Struct({
   /** The recipe's medium; absent for a plain group. */
   medium: Schema.optionalKey(Medium),
   content: PresetContent,
+  /** Spec 11: an old entry the library converted when it read the file. It is never written back. */
+  legacy: Schema.optionalKey(Schema.Literal(true)),
+  /** Spec 11: what the conversion could not keep. */
+  notes: Schema.optionalKey(Schema.Array(Schema.String)),
 });
 export type Preset = typeof Preset.Type;
 
