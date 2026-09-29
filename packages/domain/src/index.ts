@@ -23,3 +23,8 @@ export * from "./estimate.ts";
 export * from "./placement.ts";
 export * from "./imageDimensions.ts";
 export * from "./runMessages.ts";
+export * from "./runsValue.ts";
+export * from "./freeBatch.ts";
+export * from "./freeSource.ts";
+export * from "./freeNotes.ts";
+export * from "./freeRepair.ts";

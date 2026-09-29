@@ -5,7 +5,8 @@
  */
 import { randomUUID } from "node:crypto";
 import { projectFileMarker, resultMetaOf, unframedMetaOf, type ImageRunRequest, type ResultMeta, type RunMarker } from "@unframed/contracts";
-import type { TLRecord } from "@tldraw/tlschema";
+import { plainText } from "@unframed/domain";
+import { toRichText, type TLRecord } from "@tldraw/tlschema";
 import type { CanvasChange } from "../canvas/rooms.ts";
 
 export const PLACEHOLDER_WIDTH = 320;
@@ -93,8 +94,64 @@ export const fillChange = (shape: Shape, landed: Landed): CanvasChange => {
   return { put: [asset, filled], remove: [] };
 };
 
+/** How one output of a run ended: what landed, or the sentence the person sees. */
+export type RunOutcome<L> = { readonly ok: true; readonly landed: L } | { readonly ok: false; readonly error: string };
+
+/** What landed for a text run (spec 05): the answer and its sidecar, `null` when none could be written. */
+export interface LandedText {
+  readonly kind: "text";
+  readonly text: string;
+  readonly sidecar: string | null;
+  readonly cost: number | null;
+}
+
+/** A text result's placeholder: an empty prompt (spec 02's text shape) carrying its marker and unfilled result meta. */
+export const textPlaceholder = (input: {
+  readonly at: { readonly x: number; readonly y: number };
+  readonly index: string;
+  readonly parentId: string;
+  readonly ref: string;
+  readonly marker: RunMarker;
+  readonly result: ResultMeta;
+}): TLRecord =>
+  ({
+    id: `shape:${randomUUID()}`,
+    typeName: "shape",
+    type: "text",
+    x: input.at.x,
+    y: input.at.y,
+    rotation: 0,
+    index: input.index,
+    parentId: input.parentId,
+    isLocked: false,
+    opacity: 1,
+    props: { color: "black", size: "s", w: PLACEHOLDER_WIDTH, font: "sans", textAlign: "start", autoSize: false, scale: 1, richText: toRichText("") },
+    meta: { ref: input.ref, unframed: { run: input.marker, result: input.result } },
+  }) as unknown as TLRecord;
+
+/** The change that fills a text placeholder: the answer as its text, the sidecar and cost, no marker. */
+const textFillChange = (shape: Shape, landed: LandedText): CanvasChange => {
+  const { run: _run, ...unframed } = unframedMetaOf(shape);
+  const result = resultMetaOf(shape);
+  const filled = {
+    ...shape,
+    props: { ...shape.props, richText: toRichText(landed.text) },
+    meta: { ...shape.meta, unframed: { ...unframed, ...(result ? { result: { ...result, sidecar: landed.sidecar, cost: landed.cost } } : {}) } },
+  } as unknown as TLRecord;
+  return { put: [filled], remove: [] };
+};
+
+/** The change that fills a placeholder with whatever landed for it. */
+export const fillFor = (shape: Shape, landed: Landed | LandedText): CanvasChange =>
+  "kind" in landed ? textFillChange(shape, landed) : fillChange(shape, landed);
+
 /** The change that settles a marker whose work did not land: the marker goes, and an empty shape goes too. */
 export const clearChange = (shape: Shape): CanvasChange => {
+  if (shape.type === "text") {
+    if (plainText(shape.props.richText).trim() === "") return { put: [], remove: [shape.id] };
+    const { run: _run, ...unframed } = unframedMetaOf(shape);
+    return { put: [{ ...shape, meta: { ...shape.meta, unframed } } as unknown as TLRecord], remove: [] };
+  }
   if (shape.props.assetId === null || shape.props.assetId === undefined) return { put: [], remove: [shape.id] };
   const { run: _run, ...unframed } = unframedMetaOf(shape);
   return { put: [{ ...shape, meta: { ...shape.meta, unframed } } as unknown as TLRecord], remove: [] };

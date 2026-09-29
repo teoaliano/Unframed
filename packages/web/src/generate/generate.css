@@ -412,3 +412,11 @@ th.unframed-models__released {
   font-size: 12px;
   white-space: nowrap;
 }
+
+/* A text result placeholder (spec 05): the prompt hint slot, saying the run is in flight. */
+.unframed-prompt-running {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}

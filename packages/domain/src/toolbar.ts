@@ -50,18 +50,24 @@ export const formatCost = (cost: number): string => `$${cost.toFixed(4)}`;
 export const selectionHint = (selected: ReadonlyArray<ToolbarShape>, results: ReadonlyArray<ToolbarShape>): string => {
   const [only] = selected;
   if (selected.length === 1 && only?.kind === "group" && only.ref !== undefined) return `@${only.ref}`;
-  const batchId = only?.result?.batchId;
-  if (selected.length >= 2 && batchId !== undefined && selected.every((shape) => shape.result?.batchId === batchId)) {
-    const members = results.filter((shape) => shape.result?.batchId === batchId);
-    const chosen = new Set(selected.map((shape) => shape.id));
-    if (members.length === selected.length && members.every((shape) => chosen.has(shape.id))) {
-      const costs = selected.map((shape) => shape.result!.cost).filter((cost): cost is number => cost !== null);
-      const extra = selected.find((shape) => shape.result?.batchExtraCost !== undefined)?.result?.batchExtraCost ?? 0;
-      if (costs.length === 0) return `${selected.length} images`;
-      return `${selected.length} images · ${formatCost(costs.reduce((sum, cost) => sum + cost, 0) + extra)}`;
-    }
-  }
-  return `${selected.length} selected`;
+  return batchHint(selected, results) ?? `${selected.length} selected`;
+};
+
+/**
+ * `<n> images · $<total>` when the selection is exactly every result on the canvas sharing
+ * one batch id, and there are at least two: the members' costs plus the batch's extra cost
+ * (a Free batch's repair call) once. Without any known cost, `<n> images`.
+ */
+export const batchHint = (selected: ReadonlyArray<ToolbarShape>, results: ReadonlyArray<ToolbarShape>): string | undefined => {
+  const batchId = selected[0]?.result?.batchId;
+  if (selected.length < 2 || batchId === undefined || !selected.every((shape) => shape.result?.batchId === batchId)) return undefined;
+  const members = results.filter((shape) => shape.result?.batchId === batchId);
+  const chosen = new Set(selected.map((shape) => shape.id));
+  if (members.length !== selected.length || !members.every((shape) => chosen.has(shape.id))) return undefined;
+  const costs = selected.map((shape) => shape.result!.cost).filter((cost): cost is number => cost !== null);
+  const extra = selected.find((shape) => shape.result?.batchExtraCost !== undefined)?.result?.batchExtraCost ?? 0;
+  if (costs.length === 0) return `${selected.length} images`;
+  return `${selected.length} images · ${formatCost(costs.reduce((sum, cost) => sum + cost, 0) + extra)}`;
 };
 
 /** The selection toolbar's buttons, decided from the selection. */

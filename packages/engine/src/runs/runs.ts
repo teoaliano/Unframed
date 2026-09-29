@@ -13,6 +13,9 @@ import {
   type RecipeRef,
   type ResultRecipe,
   type RunEvent,
+  type TextCompleteAnswer,
+  type TextCompleteRequest,
+  type TextRunRequest,
 } from "@unframed/contracts";
 import { imageDimensions, NO_KEY_MESSAGE, nextRef, placeResults, projectSlug, sidecarFileName, type Box } from "@unframed/domain";
 import type { TLRecord } from "@tldraw/tlschema";
@@ -26,10 +29,23 @@ import { CanvasRooms, type ChangeOrigin, type RoomAccess } from "../canvas/rooms
 import { errorText, logError, logInfo } from "../log.ts";
 import { MediaStore } from "../media/mediaStore.ts";
 import { generateImage, imageRequestBody } from "../openRouter/images.ts";
+import type { ReferencePart } from "../openRouter/text.ts";
 import { Config } from "../services.ts";
 import { SettingsStore } from "../settingsStore.ts";
-import { clearChange, fillChange, imagePlaceholder, isShape, PLACEHOLDER_WIDTH, placeholderHeight, type Landed, type Shape } from "./placeholders.ts";
-import { extensionFor, mimeForFile, referenceName, resultBase, writeResultFile, writeSidecar } from "./resultFiles.ts";
+import {
+  clearChange,
+  fillFor,
+  imagePlaceholder,
+  isShape,
+  PLACEHOLDER_WIDTH,
+  placeholderHeight,
+  type Landed,
+  type LandedText,
+  type RunOutcome,
+  type Shape,
+} from "./placeholders.ts";
+import { makeTextRuns } from "./textRuns.ts";
+import { extensionFor, mimeForFile, referenceName, resultBase, writeLoneSidecar, writeResultFile, writeSidecar } from "./resultFiles.ts";
 import { shapePageBoxes } from "./shapeBounds.ts";
 import { readResultSidecar } from "./sidecars.ts";
 
@@ -48,6 +64,10 @@ export class Runs extends Context.Service<
   Runs,
   {
     readonly image: (request: ImageRunRequest) => Effect.Effect<{ runId: string; batchId: string; placeholders: string[] }, UnframedError>;
+    /** Spec 05: answers once the run's empty text result is in the room; the answer fills it later. */
+    readonly text: (request: TextRunRequest) => Effect.Effect<{ runId: string; batchId: string; placeholders: string[] }, UnframedError>;
+    /** Spec 05: one text call that lands nothing. */
+    readonly complete: (request: TextCompleteRequest) => Effect.Effect<TextCompleteAnswer, UnframedError>;
     readonly subscribe: (project: string) => Stream.Stream<RunEvent>;
     readonly recipe: (project: string, shapeId: string) => Effect.Effect<ResultRecipe, UnframedError>;
     /** Copies a result's sidecar and the files its recipe names from `from` into `project`, beside `file`. */
@@ -55,7 +75,7 @@ export class Runs extends Context.Service<
   }
 >()("unframed/engine/Runs") {}
 
-type Outcome = { readonly ok: true; readonly landed: Landed } | { readonly ok: false; readonly error: string };
+type Outcome = RunOutcome<Landed | LandedText>;
 
 interface RunRecord {
   live: boolean;
@@ -72,7 +92,7 @@ const contains = (box: Box, point: { readonly x: number; readonly y: number }) =
  * size is an estimate; a prompt among the run's sources that starts inside the anchor is
  * inside the selection, and only the estimate could put it in the row's way.
  */
-const obstacles = (records: ReadonlyArray<TLRecord>, request: ImageRunRequest): Box[] => {
+const obstacles = (records: ReadonlyArray<TLRecord>, request: Pick<ImageRunRequest, "sources" | "anchor">): Box[] => {
   const sources = new Set(request.sources);
   return shapePageBoxes(records)
     .filter((shape) => !(shape.type === "text" && sources.has(shape.id) && contains(request.anchor, shape.box)))
@@ -112,7 +132,7 @@ export const runsLayer = Layer.effect(
       const run = registry.get(marker.runId);
       const outcome = run?.outputs.get(marker.runIndex);
       if (run && !outcome) return;
-      room.change(outcome?.ok ? fillChange(shape, outcome.landed) : clearChange(shape), runOrigin(marker.runId));
+      room.change(outcome?.ok ? fillFor(shape, outcome.landed) : clearChange(shape), runOrigin(marker.runId));
     };
 
     yield* rooms.afterOpen((_project, room) => {
@@ -135,7 +155,12 @@ export const runsLayer = Layer.effect(
         if ((yield* settings.read).key === "") return yield* unframedError("unavailable", NO_KEY_MESSAGE);
         if (request.outputs.length < 1 || request.outputs.length > MAX_OUTPUTS) return yield* unframedError("bad_request", OUTPUT_COUNT_MESSAGE);
         if (request.outputs.every((output) => output.prompt.trim() === "")) return yield* unframedError("bad_request", EMPTY_PROMPT_MESSAGE);
-        for (const ref of request.outputs.flatMap((output) => output.references)) {
+        yield* validateReferences(request.outputs.flatMap((output) => output.references), folder);
+      });
+
+    const validateReferences = (refs: ReadonlyArray<RecipeRef>, folder: string) =>
+      Effect.gen(function* () {
+        for (const ref of refs) {
           if ("url" in ref) {
             if (!ref.url.startsWith("https://")) return yield* unframedError("bad_request", LINK_MESSAGE);
             continue;
@@ -152,13 +177,37 @@ export const runsLayer = Layer.effect(
       });
 
     /** Each project file becomes a data URL at this boundary; links are sent as given. */
-    const inline = async (folder: string, refs: ReadonlyArray<RecipeRef>) =>
+    const inline = async (folder: string, refs: ReadonlyArray<RecipeRef>): Promise<ReferencePart[]> =>
       Promise.all(
-        refs.map(async (ref) => {
+        refs.map(async (ref): Promise<ReferencePart> => {
           const url = "url" in ref ? ref.url : `data:${mimeForFile(ref.file)};base64,${(await readFile(join(folder, referenceName(ref.file)))).toString("base64")}`;
           return ref.kind === "video" ? { type: "video_url", video_url: { url } } : { type: "image_url", image_url: { url } };
         }),
       );
+
+    const texts = makeTextRuns({
+      settings,
+      rooms,
+      openRouterOrigin: config.openRouterOrigin,
+      projectFolder,
+      validateReferences,
+      inline,
+      register: (runId) => {
+        const run: RunRecord = { live: true, outputs: new Map() };
+        remember(runId, run);
+        return {
+          settle: (outcome) => {
+            run.outputs.set(1, outcome);
+            run.live = false;
+          },
+          forget: () => registry.delete(runId),
+        };
+      },
+      publish,
+      runPromise,
+      obstacles,
+      emptyPromptMessage: EMPTY_PROMPT_MESSAGE,
+    });
 
     const image = (request: ImageRunRequest) =>
       Effect.gen(function* () {
@@ -203,7 +252,17 @@ export const runsLayer = Layer.effect(
             parentId: pageId,
             ref,
             marker: { runId, runIndex: index + 1, startedAt },
-            result: { sidecar: null, medium: "image", model, batchId, runIndex: index + 1, runCount, cost: null, sources: [...request.sources] },
+            result: {
+              sidecar: null,
+              medium: "image",
+              model,
+              batchId,
+              runIndex: index + 1,
+              runCount,
+              cost: null,
+              sources: [...request.sources],
+              ...(request.batchExtraCost === undefined ? {} : { batchExtraCost: request.batchExtraCost }),
+            },
           });
         });
 
@@ -248,12 +307,13 @@ export const runsLayer = Layer.effect(
               medium: "image",
               model,
               params: { ...request.params } as Record<string, string>,
-              selectionPrompt: request.selectionPrompt,
+              selectionPrompt: output.selectionPrompt ?? request.selectionPrompt,
               instruction: request.instruction,
               references: [...references],
               sources: [...request.sources],
               ...(of === undefined ? {} : { of }),
             },
+            ...(output.free === undefined ? {} : { free: output.free }),
           };
           await writeSidecar(folder, base, sidecar).catch((error: unknown) => logError(`could not write the sidecar of ${file}: ${errorText(error)}`));
           logInfo(`generated → ${join(folder, file)}${cost === null ? "" : `  ($${cost.toFixed(4)})`}`);
@@ -274,7 +334,7 @@ export const runsLayer = Layer.effect(
           const runIndex = index + 1;
           const shapeId = placeholders[index]!.id;
           const body = imageRequestBody(model, output.prompt, request.params);
-          let outcome: Outcome;
+          let outcome: RunOutcome<Landed>;
           try {
             if (output.references.length > 0) body.input_references = await inline(folder, output.references);
             const answer = await generateImage(config.openRouterOrigin, current.key, body);
@@ -287,7 +347,7 @@ export const runsLayer = Layer.effect(
             Effect.map(rooms.read(request.project), (now) => {
               const shape = now.find((record) => record.id === shapeId);
               if (!isShape(shape)) return undefined;
-              return outcome.ok ? fillChange(shape, outcome.landed) : runMarkerOf(shape)?.runId === runId ? clearChange(shape) : undefined;
+              return outcome.ok ? fillFor(shape, outcome.landed) : runMarkerOf(shape)?.runId === runId ? clearChange(shape) : undefined;
             }),
           ).catch(() => undefined);
           if (change) {
@@ -370,6 +430,14 @@ export const runsLayer = Layer.effect(
           else if (ref.original === undefined) references.push({ kind: ref.kind, file: yield* copyOf(ref.file) });
           else references.push({ kind: ref.kind, file: yield* copyOf(ref.file), original: yield* copyOf(ref.original) });
         }
+        // Spec 05: a text result's only file is its sidecar, so its copy is a new sidecar that never overwrites.
+        if (source.recipe.medium === "text") {
+          const next = { ...source.sidecar, recipe: { ...source.recipe, references } };
+          return yield* Effect.tryPromise({
+            try: async () => ({ sidecar: await writeLoneSidecar(targetDir, file.replace(/\.json$/, ""), next) }),
+            catch: (error) => unframedError("internal", `Could not copy the recipe: ${errorText(error)}`),
+          });
+        }
         // The result's sidecar sits beside its image, as a run leaves it, in place of the copy's own.
         const target = sidecarFileName(file);
         const next = { ...source.sidecar, file, recipe: { ...source.recipe, references } };
@@ -380,6 +448,6 @@ export const runsLayer = Layer.effect(
         return { sidecar: target };
       });
 
-    return Runs.of({ image, subscribe, recipe, copyRecipe });
+    return Runs.of({ image, text: texts.text, complete: texts.complete, subscribe, recipe, copyRecipe });
   }),
 );

@@ -93,7 +93,7 @@ const markOwners = (shapes: ReadonlyArray<CanvasShape>): Map<string, string> => 
  * selected group takes one place and its members fill it in their own order; a member
  * selected with its group counts in the group's place only.
  */
-const flatten = (shapes: ReadonlyArray<CanvasShape>, selected: ReadonlyArray<string>): CanvasShape[] => {
+export const selectionOrder = (shapes: ReadonlyArray<CanvasShape>, selected: ReadonlyArray<string>): CanvasShape[] => {
   const byId = new Map(shapes.map((shape) => [shape.id, shape]));
   const chosen = new Set(selected.filter((id) => byId.has(id)));
   const top = [...chosen]
@@ -135,7 +135,7 @@ export const composeSelection = (input: CompositionInput): Composition => {
   const { shapes, medium } = input;
   const resolver = createResolver(shapes);
   const owners = markOwners(shapes);
-  const list = flatten(shapes, input.selected);
+  const list = selectionOrder(shapes, input.selected);
   const inList = new Set(list.map((shape) => shape.id));
 
   let error: string | undefined;
