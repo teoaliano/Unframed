@@ -36,6 +36,10 @@ export interface EngineConfig {
   readonly testSweepMs: number | undefined;
   /** `UNFRAMED_TEST_SHARE_TTL_MS`: the share link TTL, in place of 30 min. */
   readonly testShareTtlMs: number | undefined;
+  /** `UNFRAMED_TEST_AGENT_SCRIPT`: a script file or folder; every chat runs on the scripted adapter. */
+  readonly testAgentScript: string | undefined;
+  /** `UNFRAMED_TEST_AGENT_IDLE_MS`: the agent session idle close, in place of 10 min. */
+  readonly testAgentIdleMs: number | undefined;
   readonly platform: NodeJS.Platform;
 }
 
@@ -82,6 +86,8 @@ export const loadConfig = (
       testTunnel: tunnel === "loopback" || tunnel === "never" ? tunnel : undefined,
       testSweepMs: wholeMs(nonEmpty(env.UNFRAMED_TEST_SWEEP_MS)),
       testShareTtlMs: wholeMs(nonEmpty(env.UNFRAMED_TEST_SHARE_TTL_MS)),
+      testAgentScript: nonEmpty(env.UNFRAMED_TEST_AGENT_SCRIPT) === undefined ? undefined : resolve(nonEmpty(env.UNFRAMED_TEST_AGENT_SCRIPT)!),
+      testAgentIdleMs: wholeMs(nonEmpty(env.UNFRAMED_TEST_AGENT_IDLE_MS)),
       platform,
     },
     warnings,

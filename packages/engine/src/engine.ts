@@ -29,6 +29,7 @@ import { preferencesStoreLayer } from "./preferencesStore.ts";
 import { projectDatabaseLayer } from "./projectDatabase.ts";
 import { Projects, projectsLayer } from "./projects.ts";
 import { rpcHandlersLayer } from "./rpc/handlers.ts";
+import { providerDetectionLayer } from "./agent/detection.ts";
 import { RpcSockets, rpcSocketsLayer } from "./rpc/sockets.ts";
 import { Config } from "./services.ts";
 import { SettingsStore, settingsStoreLayer } from "./settingsStore.ts";
@@ -96,6 +97,7 @@ export const startEngine = async (host: EngineHost): Promise<RunningEngine> => {
   const services = Layer.mergeAll(RpcServer.layer(UnframedRpcs, { disableTracing: true })).pipe(
     Layer.provideMerge(rpcHandlersLayer),
     Layer.provideMerge(rpcSocketsLayer),
+    Layer.provideMerge(providerDetectionLayer),
     Layer.provideMerge(renderJobsLayer),
     Layer.provideMerge(shareLinksLayer),
     Layer.provideMerge(runsLayer),

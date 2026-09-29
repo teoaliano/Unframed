@@ -7,6 +7,14 @@ import { Health, Settings, SettingsPatch } from "./settings.ts";
 import { VideoForget, VideoPoll, VideoStart } from "./video.ts";
 import { RunText, TextComplete } from "./text.ts";
 import { LibraryCopyFiles, LibraryDelete, LibraryList, LibrarySave } from "./library.ts";
+import {
+  ClientChatCommand,
+  CreateUploadUrlAnswer,
+  CreateUploadUrlInput,
+  ProviderStatuses,
+  ShellStreamItem,
+  ThreadStreamItem,
+} from "./agent.ts";
 
 const Empty = Schema.Struct({});
 
@@ -180,6 +188,46 @@ export const RunSubscribe = Rpc.make("run.subscribe", {
   stream: true,
 });
 
+/** Records a chat command. Answers once its intent is committed, not once a provider answered. */
+export const OrchestrationDispatchCommand = Rpc.make("orchestration.dispatchCommand", {
+  payload: ClientChatCommand,
+  success: Schema.Struct({ sequence: Schema.Number }),
+  error: UnframedError,
+});
+
+/** The project's chats as summaries: a snapshot, `synchronized`, then one item per change. */
+export const OrchestrationSubscribeShell = Rpc.make("orchestration.subscribeShell", {
+  payload: Schema.Struct({ projectId: Schema.String, afterSequence: Schema.optionalKey(Schema.Number) }),
+  success: ShellStreamItem,
+  error: UnframedError,
+  stream: true,
+});
+
+/** One chat: a snapshot (or the events past `afterSequence`), `synchronized`, then its events as they commit. */
+export const OrchestrationSubscribeThread = Rpc.make("orchestration.subscribeThread", {
+  payload: Schema.Struct({ projectId: Schema.String, threadId: Schema.String, afterSequence: Schema.optionalKey(Schema.Number) }),
+  success: ThreadStreamItem,
+  error: UnframedError,
+  stream: true,
+});
+
+/**
+ * Each provider's status, cached for five minutes unless `refresh` is set. With `projectId`
+ * the skills include that project's own.
+ */
+export const ProvidersGetStatuses = Rpc.make("providers.getStatuses", {
+  payload: Schema.Struct({ refresh: Schema.optionalKey(Schema.Boolean), projectId: Schema.optionalKey(Schema.String) }),
+  success: ProviderStatuses,
+  error: UnframedError,
+});
+
+/** A signed, one-use upload path for one attachment, valid ten minutes. */
+export const AttachmentsCreateUploadUrl = Rpc.make("attachments.createUploadUrl", {
+  payload: CreateUploadUrlInput,
+  success: CreateUploadUrlAnswer,
+  error: UnframedError,
+});
+
 export const UnframedRpcs = RpcGroup.make(
   ServerHealth,
   SettingsGet,
@@ -211,5 +259,10 @@ export const UnframedRpcs = RpcGroup.make(
   LibrarySave,
   LibraryDelete,
   LibraryCopyFiles,
+  OrchestrationDispatchCommand,
+  OrchestrationSubscribeShell,
+  OrchestrationSubscribeThread,
+  ProvidersGetStatuses,
+  AttachmentsCreateUploadUrl,
 );
 export type UnframedRpcs = typeof UnframedRpcs;

@@ -1,6 +1,7 @@
 import { UnframedRpcs, unframedError, type ResultRecipe, type UnframedError } from "@unframed/contracts";
 import type { TLRecord } from "@tldraw/tlschema";
 import * as Effect from "effect/Effect";
+import * as Stream from "effect/Stream";
 import { CanvasRooms } from "../canvas/rooms.ts";
 import { MediaStore } from "../media/mediaStore.ts";
 import { clearStoredModels } from "../lastUsed.ts";
@@ -17,6 +18,7 @@ import { SettingsStore } from "../settingsStore.ts";
 import { guardHandlers } from "./guardHandlers.ts";
 import { copyPresetFiles } from "../library/presetCopier.ts";
 import { PresetStore } from "../library/presetStore.ts";
+import { ProviderDetection } from "../agent/detection.ts";
 
 export const rpcHandlersLayer = UnframedRpcs.toLayer(
   Effect.gen(function* () {
@@ -32,6 +34,7 @@ export const rpcHandlersLayer = UnframedRpcs.toLayer(
     const runs = yield* Runs;
     const renderJobs = yield* RenderJobs;
     const presets = yield* PresetStore;
+    const detection = yield* ProviderDetection;
     const context = yield* Effect.context<SettingsStore | Projects | Native>();
 
     const testOnly = <A, E>(run: () => Effect.Effect<A, E>) =>
@@ -40,7 +43,15 @@ export const rpcHandlersLayer = UnframedRpcs.toLayer(
     return guardHandlers({
       "server.health": () => Effect.map(settings.view, (view) => ({ ...view, ok: true as const })),
       "settings.get": () => settings.view,
-      "settings.update": (patch) => Effect.tap(settings.update(patch), () => clearStoredModels(preferences, patch)),
+      "settings.update": (patch) =>
+        Effect.tap(settings.update(patch), () =>
+          Effect.andThen(clearStoredModels(preferences, patch), () =>
+            Effect.all([
+              patch.claudePath !== undefined || patch.claudeConfigDir !== undefined ? detection.forget("claude") : Effect.void,
+              patch.codexPath !== undefined ? detection.forget("codex") : Effect.void,
+            ]),
+          ),
+        ),
       "settings.subscribe": () => settings.subscribe,
       "settings.pickFolder": () =>
         Effect.map(Effect.flatMap(settings.outputDir, native.pickFolder), (path) => ({ path })),
@@ -77,6 +88,14 @@ export const rpcHandlersLayer = UnframedRpcs.toLayer(
       "library.save": (input) => presets.save(input),
       "library.delete": ({ id }) => presets.remove(id),
       "library.copyFiles": ({ project, files }) => presets.serialised(copyPresetFiles(media, project, files)),
+      "providers.getStatuses": ({ refresh, projectId }) =>
+        Effect.flatMap(projectId === undefined ? Effect.succeed(undefined) : projects.folder(projectId), (projectFolder) =>
+          detection.statuses({ ...(refresh === undefined ? {} : { refresh }), ...(projectFolder === undefined ? {} : { projectFolder }) }),
+        ),
+      "orchestration.dispatchCommand": () => Effect.fail(unframedError("unavailable", "Not yet.")),
+      "orchestration.subscribeShell": () => Stream.fail(unframedError("unavailable", "Not yet.")),
+      "orchestration.subscribeThread": () => Stream.fail(unframedError("unavailable", "Not yet.")),
+      "attachments.createUploadUrl": () => Effect.fail(unframedError("unavailable", "Not yet.")),
       "testCanvas.read": ({ project }) =>
         testOnly(() =>
           Effect.all({ clock: rooms.clock(project), records: Effect.map(rooms.read(project), (records) => [...records]) }),

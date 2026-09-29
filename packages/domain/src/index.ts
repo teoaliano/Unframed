@@ -40,3 +40,6 @@ export * from "./jsonArray.ts";
 export * from "./systemPresets.ts";
 export * from "./agent/providerStatus.ts";
 export * from "./agent/runEnvironment.ts";
+export * from "./agent/prompts.ts";
+export * from "./agent/claudeCatalogue.ts";
+export * from "./agent/skills.ts";
