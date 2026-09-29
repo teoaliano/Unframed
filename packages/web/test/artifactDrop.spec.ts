@@ -69,13 +69,17 @@ test("an .html dropped on a page replaces its file and keeps its title, and Cmd-
   await expect(insideFrame(page, "shape:landing").getByRole("heading", { name: "First version" })).toBeVisible();
 });
 
-test("a composition dropped on a motion goes through the motion upload and plays in the viewer", async ({ page, engine }) => {
+test("a composition dropped on a motion goes through the motion upload and plays in the viewer; a refused one says why under the shape", async ({ page, engine }) => {
   await openCanvas(page, engine);
   await putRecords(engine, [artifactShape({ id: "shape:intro", kind: "motion", ref: "150", at: { x: 440, y: 60 }, title: "Intro" })]);
   await expect(shapeOnScreen(page, "shape:intro")).toBeVisible();
+  await dropFiles(page, await centre(shapeOnScreen(page, "shape:intro")), [{ name: "blank.html", mime: "text/html", bytes: Buffer.from("  \n") }]);
+  await expect(shapeOnScreen(page, "shape:intro").getByRole("alert")).toHaveText("Could not add blank.html: No composition in the request body.");
+  expect((await settledRecord(engine, "default", "shape:intro"))?.props.file).toBe("");
   await dropFiles(page, await centre(shapeOnScreen(page, "shape:intro")), [{ name: "intro.html", mime: "text/html", bytes: Buffer.from(COMPOSITION) }]);
   const filled = await waitForRoom(engine, "default", (records) => records.find((record) => record.id === "shape:intro" && record.props.file !== ""));
   expect(filled.props).toMatchObject({ title: "Intro", fileName: "intro.html" });
+  await expect(shapeOnScreen(page, "shape:intro").getByRole("alert")).toHaveCount(0);
   const saved = await readFile(projectPath(engine, filled.props.file), "utf8");
   expect(saved).toContain("data-hyperframes-preview-runtime");
   expect(saved).toContain('<script src="unframed-dials.js"></script>');

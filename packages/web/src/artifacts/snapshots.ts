@@ -30,6 +30,18 @@ export const watchSnapshots = (engine: EngineConnection, project: string): (() =
   });
 };
 
+const lastStills = new Map<string, string>();
+
+/**
+ * The still a shape shows: its file's newest snapshot, else the last one it showed. Kept here
+ * rather than in the component, because the still unmounts whenever the shape goes live.
+ */
+export const stillOf = (project: string, shapeId: string, current: string | undefined): string | undefined => {
+  const key = `${project}\n${shapeId}`;
+  if (current !== undefined) lastStills.set(key, current);
+  return current ?? lastStills.get(key);
+};
+
 /** A snapshot's picture, served from the project's cache folder by the app's file route. */
 export const snapshotUrl = (project: string, snapshot: ArtifactSnapshot): string =>
   `/api/file/${encodeURIComponent(project)}/${encodeURIComponent(snapshot.file)}?snapshot=${Math.round(snapshot.w)}x${Math.round(snapshot.h)}&v=${snapshot.at}`;

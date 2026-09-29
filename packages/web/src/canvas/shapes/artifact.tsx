@@ -1,11 +1,10 @@
 import type { ArtifactShapeProps } from "@unframed/contracts";
-import { artifactTitle } from "@unframed/domain";
+import { artifactTitle, type ArtifactKind } from "@unframed/domain";
 import { AppWindow, Clapperboard } from "lucide-react";
-import { useRef } from "react";
 import { BaseBoxShapeUtil, getPointerInfo, HTMLContainer, resizeBox, T, useEditor, useValue, type RecordProps, type TLResizeInfo, type TLShape } from "tldraw";
 import { ArtifactFrame } from "../../artifacts/ArtifactFrame.tsx";
 import { ProblemLine, RenderRow } from "../../artifacts/RenderRow.tsx";
-import { snapshotsOf, snapshotUrl } from "../../artifacts/snapshots.ts";
+import { snapshotsOf, snapshotUrl, stillOf } from "../../artifacts/snapshots.ts";
 import { isInteractive, isLive, previewPort } from "../../artifacts/state.ts";
 import { currentSlots, useSlots } from "../../chrome/slots.ts";
 import { useCanvasProject } from "../../context.ts";
@@ -17,7 +16,6 @@ export const ARTIFACT_MIN = { w: 180, h: 96 };
 export const ARTIFACT_MAX = { w: 900, h: 900 };
 
 type ArtifactShape = TLShape<"page"> | TLShape<"motion">;
-type Kind = "page" | "motion";
 
 const artifactProps: RecordProps<ArtifactShape> = {
   w: T.nonZeroNumber,
@@ -31,22 +29,25 @@ const artifactProps: RecordProps<ArtifactShape> = {
 /** The row under a motion (Render) is this tall; the status line goes below it. */
 const RENDER_ROW_HEIGHT = 34;
 
-/** An empty artifact: its frame, its kind tab and one Agent button. */
-const EmptyArtifact = ({ shape, kind }: { readonly shape: ArtifactShape; readonly kind: Kind }) => {
+/** An empty artifact: its frame, its kind tab and one Agent button, and why a drop onto it failed. */
+const EmptyArtifact = ({ shape, kind }: { readonly shape: ArtifactShape; readonly kind: ArtifactKind }) => {
   noteRender(shape.id);
   const { artifactEmptyState: EmptyState } = useSlots();
   const Icon = kind === "page" ? AppWindow : Clapperboard;
   const props = shape.props as ArtifactShapeProps;
   return (
-    <HTMLContainer id={shape.id} className="unframed-artifact" data-artifact-kind={kind} style={{ width: props.w, height: props.h }}>
-      <ShapeLabel shapeId={shape.id} kind={kind}>
-        {kind}
-      </ShapeLabel>
-      <div className="unframed-artifact__empty">
-        <Icon size={28} strokeWidth={1.5} aria-label={kind === "page" ? "Page" : "Motion"} />
-        {EmptyState && <EmptyState shapeId={shape.id} />}
-      </div>
-    </HTMLContainer>
+    <>
+      <HTMLContainer id={shape.id} className="unframed-artifact" data-artifact-kind={kind} style={{ width: props.w, height: props.h }}>
+        <ShapeLabel shapeId={shape.id} kind={kind}>
+          {kind}
+        </ShapeLabel>
+        <div className="unframed-artifact__empty">
+          <Icon size={28} strokeWidth={1.5} aria-label={kind === "page" ? "Page" : "Motion"} />
+          {EmptyState && <EmptyState shapeId={shape.id} />}
+        </div>
+      </HTMLContainer>
+      <ProblemLine shapeId={shape.id} offset={props.h} width={props.w} />
+    </>
   );
 };
 
@@ -61,9 +62,7 @@ const Still = ({ shape, title }: { readonly shape: ArtifactShape; readonly title
     const snapshot = snapshotsOf(project).get().get(file);
     return snapshot === undefined ? undefined : snapshotUrl(project, snapshot);
   }, [project, file]);
-  const shown = useRef<string | undefined>(undefined);
-  if (current !== undefined) shown.current = current;
-  const src = current ?? shown.current;
+  const src = stillOf(project, shape.id, current);
   if (src !== undefined) return <img className="unframed-artifact__snapshot" src={src} alt="" draggable={false} />;
   return (
     <div className="unframed-artifact__hint">
@@ -74,7 +73,7 @@ const Still = ({ shape, title }: { readonly shape: ArtifactShape; readonly title
 };
 
 /** A filled artifact: no card, the title above its corner, and its frame while live, else its still. */
-const FilledArtifact = ({ shape, kind }: { readonly shape: ArtifactShape; readonly kind: Kind }) => {
+const FilledArtifact = ({ shape, kind }: { readonly shape: ArtifactShape; readonly kind: ArtifactKind }) => {
   noteRender(shape.id);
   const editor = useEditor();
   const project = useCanvasProject();
@@ -112,7 +111,7 @@ const FilledArtifact = ({ shape, kind }: { readonly shape: ArtifactShape; readon
 };
 
 /** A page or a motion: empty, it asks for the agent; filled, it shows its content. */
-const makeArtifactUtil = (kind: Kind) =>
+const makeArtifactUtil = (kind: ArtifactKind) =>
   class ArtifactShapeUtil extends BaseBoxShapeUtil<ArtifactShape> {
     static override type = kind;
     static override props = artifactProps;
