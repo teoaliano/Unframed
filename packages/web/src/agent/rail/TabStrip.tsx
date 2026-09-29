@@ -1,10 +1,10 @@
 import type { ChatSummary } from "@unframed/contracts";
 import { tabLabel, tabTooltip } from "@unframed/domain";
-import { ChevronDown } from "lucide-react";
+import { ChevronDown, Pencil, Trash2 } from "lucide-react";
 import { useRef, useState } from "react";
 import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
-import { Menu, MenuItem, MenuPopup, MenuTrigger } from "~/components/ui/menu";
+import { Menu, MenuItem, MenuPopup, MenuSeparator, MenuTrigger } from "~/components/ui/menu";
 import { Tip } from "../../chrome/ui.tsx";
 import type { ChatClient } from "../store.ts";
 
@@ -21,6 +21,8 @@ export interface TabStripProps {
   readonly active: string | null;
   /** How many artifacts are selected, for the empty strip's copy. */
   readonly selectedCount: number;
+  /** Asks to delete a chat; the rail confirms first. */
+  readonly onDelete: (id: string) => void;
 }
 
 const STRIP_CLASS = "flex h-9 shrink-0 items-center gap-1 border-b px-2";
@@ -29,10 +31,18 @@ const STRIP_CLASS = "flex h-9 shrink-0 items-center gap-1 border-b px-2";
  * One panel tab per visible chat (t3code's right panel tabs), newest first: three inline,
  * the rest under More, whose trigger names the active chat when it is one of them. A
  * running chat shows a live dot. The selected look is the kit Button's pressed state.
+ * A right-click on a tab, or a click on the active one, opens its menu: Rename and Delete.
  */
-export const TabStrip = ({ client, chats, active, selectedCount }: TabStripProps) => {
+export const TabStrip = ({ client, chats, active, selectedCount, onDelete }: TabStripProps) => {
   const choose = (id: string) => client.setUi({ chosen: id, pinned: client.ui.pinned === id ? id : null });
   const [renaming, setRenaming] = useState<{ readonly id: string; readonly value: string }>();
+  const [menuFor, setMenuFor] = useState<{ readonly id: string; readonly anchor: HTMLElement }>();
+  const menuChat = menuFor && chats.find((chat) => chat.id === menuFor.id);
+  const rename = (chat: ChatSummary) => {
+    abandoned.current = false;
+    choose(chat.id);
+    setRenaming({ id: chat.id, value: chat.title });
+  };
   const abandoned = useRef(false);
   const commit = () => {
     if (!renaming) return;
@@ -93,11 +103,19 @@ export const TabStrip = ({ client, chats, active, selectedCount }: TabStripProps
               aria-selected={chat.id === active}
               data-pressed={chat.id === active ? "" : undefined}
               data-chat-id={chat.id}
-              onClick={() => choose(chat.id)}
-              onDoubleClick={() => {
-                abandoned.current = false;
+              onClick={(event) => {
+                // A click on the active tab opens its menu; the second click of a double-click renames instead.
+                if (chat.id === active && event.detail === 1) setMenuFor({ id: chat.id, anchor: event.currentTarget });
                 choose(chat.id);
-                setRenaming({ id: chat.id, value: chat.title });
+              }}
+              onContextMenu={(event) => {
+                event.preventDefault();
+                choose(chat.id);
+                setMenuFor({ id: chat.id, anchor: event.currentTarget });
+              }}
+              onDoubleClick={() => {
+                setMenuFor(undefined);
+                rename(chat);
               }}
             >
               <span className="min-w-0 truncate">{tabLabel(chat)}</span>
@@ -106,6 +124,23 @@ export const TabStrip = ({ client, chats, active, selectedCount }: TabStripProps
           </Tip>
         ),
       )}
+      {/* Not modal, so the second click of a double-click reaches the tab. */}
+      <Menu modal={false} open={menuChat !== undefined} onOpenChange={(open) => !open && setMenuFor(undefined)}>
+        {menuChat && menuFor && (
+          // Rename puts a field where the tab was: focus goes there, not back to the tab.
+          <MenuPopup anchor={menuFor.anchor} side="bottom" align="start" sideOffset={4} finalFocus={() => false} aria-label={`${tabLabel(menuChat)} actions`}>
+            <MenuItem onClick={() => rename(menuChat)}>
+              <Pencil aria-hidden />
+              Rename
+            </MenuItem>
+            <MenuSeparator />
+            <MenuItem variant="destructive" disabled={menuChat.status === "running"} onClick={() => onDelete(menuChat.id)}>
+              <Trash2 aria-hidden />
+              Delete
+            </MenuItem>
+          </MenuPopup>
+        )}
+      </Menu>
       {more.length > 0 && (
         <Menu>
           <MenuTrigger

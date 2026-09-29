@@ -89,7 +89,8 @@ export const AgentRail = ({ project, embedded, inSheet, filterTo, onLocate, onOp
   const chats = useChats(client);
   const { statuses } = useProviders(client);
   const root = useRef<HTMLElement | null>(null);
-  const [confirmDelete, setConfirmDelete] = useState(false);
+  /** The chat the delete confirmation is about: the active one from the header, any from its tab menu. */
+  const [deleting, setDeleting] = useState<string | null>(null);
 
   useEffect(() => {
     void client.loadProviders();
@@ -183,7 +184,7 @@ export const AgentRail = ({ project, embedded, inSheet, filterTo, onLocate, onOp
           </Button>
         </Tip>
         <Tip label="Delete this chat">
-          <Button variant="ghost" size="icon-sm" aria-label="Delete chat" disabled={!activeSummary || activeSummary.status === "running"} onClick={() => setConfirmDelete(true)}>
+          <Button variant="ghost" size="icon-sm" aria-label="Delete chat" disabled={!activeSummary || activeSummary.status === "running"} onClick={() => setDeleting(active)}>
             <Trash2 aria-hidden />
           </Button>
         </Tip>
@@ -196,7 +197,7 @@ export const AgentRail = ({ project, embedded, inSheet, filterTo, onLocate, onOp
         )}
       </header>
       <div className="relative shrink-0">
-        <TabStrip client={client} chats={visible} active={active} selectedCount={selectedArtifacts.length} />
+        <TabStrip client={client} chats={visible} active={active} selectedCount={selectedArtifacts.length} onDelete={setDeleting} />
         {ui.searchOpen && <ThreadSearch client={client} chats={chats} onClose={() => client.setUi({ searchOpen: false })} />}
       </div>
       <div className="relative flex min-h-0 flex-1 flex-col">
@@ -216,8 +217,8 @@ export const AgentRail = ({ project, embedded, inSheet, filterTo, onLocate, onOp
         </Alert>
       )}
       <ConfirmDialog
-        open={confirmDelete}
-        onOpenChange={setConfirmDelete}
+        open={deleting !== null}
+        onOpenChange={(open) => !open && setDeleting(null)}
         title="Delete this chat?"
         description="The conversation is removed for good. What the agent changed on the canvas stays."
         actions={[
@@ -225,9 +226,9 @@ export const AgentRail = ({ project, embedded, inSheet, filterTo, onLocate, onOp
             label: "Delete chat",
             destructive: true,
             onClick: () => {
-              if (!active) return;
-              client.setUi({ chosen: null, pinned: null });
-              client.dispatch({ type: "thread.delete", threadId: active }).catch((error: unknown) => client.reportError(error));
+              if (!deleting) return;
+              if (deleting === active) client.setUi({ chosen: null, pinned: null });
+              client.dispatch({ type: "thread.delete", threadId: deleting }).catch((error: unknown) => client.reportError(error));
             },
           },
         ]}

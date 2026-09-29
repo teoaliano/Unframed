@@ -75,3 +75,31 @@ test("double-click renames a tab in place: Enter and blur commit, Escape abandon
   await expect(tabs(page)).toHaveText(["name this chat please"]);
   await expect.poll(async () => (await engineChat(agent, chatId)).titledBy).toBeNull();
 });
+
+test("a right-click on a tab, or a click on the active one, opens Rename and Delete; Delete asks first", async ({ page, agent }) => {
+  await openCanvas(page, agent);
+  const first = await createChat(agent, { title: "First", createdAt: at(1) });
+  const second = await createChat(agent, { title: "Second", createdAt: at(2) });
+  const panel = await openRail(page);
+  await expect(tabs(page)).toHaveText(["Second", "First"]);
+
+  // A right-click on the inactive tab chooses it and opens its menu.
+  await tabs(page).nth(1).click({ button: "right" });
+  const menu = page.getByRole("menu", { name: "First actions" });
+  await expect(menu.getByRole("menuitem")).toHaveText(["Rename", "Delete"]);
+  await menu.getByRole("menuitem", { name: "Rename" }).click();
+  const rename = panel.getByRole("textbox", { name: "Rename chat" });
+  await expect(rename).toBeFocused();
+  await rename.fill("Renamed");
+  await page.keyboard.press("Enter");
+  await expect.poll(async () => (await engineChat(agent, first)).title).toBe("Renamed");
+
+  // A click on the active tab opens the same menu; Delete confirms, then removes that chat.
+  await tabs(page).filter({ hasText: "Renamed" }).click();
+  await page.getByRole("menu", { name: "Renamed actions" }).getByRole("menuitem", { name: "Delete" }).click();
+  const confirm = page.getByRole("alertdialog", { name: "Delete this chat?" });
+  await expect(confirm).toBeVisible();
+  await confirm.getByRole("button", { name: "Delete chat" }).click();
+  await expect(tabs(page)).toHaveText(["Second"]);
+  expect((await engineChat(agent, second)).title).toBe("Second");
+});
