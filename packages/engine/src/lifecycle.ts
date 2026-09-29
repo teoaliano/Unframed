@@ -4,11 +4,11 @@
  * Each reads the job store strictly, touches the job records first and takes the
  * destructive step last, compensating when a later step fails. They run one at a time.
  */
-import { mkdir, stat } from "node:fs/promises";
+import { lstat, mkdir, rename, rm, stat } from "node:fs/promises";
 import { join } from "node:path";
 import type { Settings, SettingsPatch } from "@unframed/contracts";
 import { UnframedError, unframedError } from "@unframed/contracts";
-import { normaliseSettingsPatch } from "@unframed/domain";
+import { normaliseSettingsPatch, projectSlug } from "@unframed/domain";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -19,11 +19,14 @@ import { OpenProjects } from "./openProjects.ts";
 import { resolveOutputDir } from "./paths.ts";
 import { Config } from "./services.ts";
 import { SettingsStore } from "./settingsStore.ts";
-import { copyPendingJobsTo, dropPendingJobsIn } from "./video/jobLifecycle.ts";
+import { copyPendingJobsTo, dropPendingJobsIn, readPendingJobs, reassignPendingJobsIn } from "./video/jobLifecycle.ts";
 import { RenderJobs } from "./video/renderJobs.ts";
 
 export const KEY_REMOVED_ERROR =
   "Stopped tracking this render: the OpenRouter key was removed, so its progress can no longer be checked. It may still finish upstream, but nothing here will save the result.";
+
+export const PROJECT_DELETED_ERROR =
+  "Stopped tracking this render: the project it belonged to was deleted. It may still finish upstream, but nothing here will save the result.";
 
 export const MOVED_WHILE_REMOVED_ERROR = "The OpenRouter key was removed while this render was being moved to a new folder.";
 
@@ -36,6 +39,8 @@ const sameDirectory = async (a: string, b: string): Promise<boolean> => {
     return false;
   }
 };
+
+const exists = (path: string): Promise<boolean> => lstat(path).then(() => true, () => false);
 
 interface FolderMove {
   readonly from: string;
@@ -56,6 +61,9 @@ export class Lifecycle extends Context.Service<
     readonly updateSettings: (patch: SettingsPatch) => Effect.Effect<Settings, UnframedError>;
     /** Removing a key is a security action: it stands even when the job store cannot be read. */
     readonly removeKey: Effect.Effect<RemovedKey, UnframedError>;
+    readonly renameProject: (name: string, to: string) => Effect.Effect<{ name: string; movedRenders: number }, UnframedError>;
+    /** Refuses with `conflict` and `details.pendingRenders` while renders are in progress, unless `confirmRenders`. */
+    readonly deleteProject: (name: string, confirmRenders: boolean) => Effect.Effect<{ endedRenders: number }, UnframedError>;
   }
 >()("unframed/engine/Lifecycle") {}
 
@@ -168,6 +176,88 @@ export const lifecycleLayer = Layer.effect(
     // The attempt is cancelled first, outside the lock: the key is being removed anyway.
     const removeKey = Effect.andThen(oauth.cancelAttempt, removeKeyLocked.pipe(lock.withPermits(1)));
 
-    return Lifecycle.of({ updateSettings, removeKey });
+    const closeProject = (project: string) =>
+      Effect.flatMap(openProjects.close(project), (failures) =>
+        Effect.sync(() => {
+          for (const failure of failures) logError(`could not close ${failure.name} of ${failure.project}: ${failure.reason}`);
+        }),
+      );
+
+    /** The project's folder; an empty slug names none, and would otherwise name the output folder itself. */
+    const projectFolder = (slug: string) =>
+      Effect.gen(function* () {
+        if (slug === "") return yield* unframedError("not_found", 'There is no project named "".');
+        return join(yield* settings.outputDir, slug);
+      });
+
+    const renameProject = (name: string, target: string) =>
+      Effect.gen(function* () {
+        // One slug for the folder and for the job records, so the two never disagree.
+        const from = projectSlug(name);
+        const to = projectSlug(target);
+        if (to === "") return yield* unframedError("bad_request", "New name is empty.");
+        const folder = yield* projectFolder(from);
+        const outputDir = yield* settings.outputDir;
+        const destination = join(outputDir, to);
+        if (yield* Effect.promise(() => exists(destination))) return yield* unframedError("conflict", `A project named "${to}" already exists.`);
+
+        // Records first: a render finishing after the rename would otherwise recreate the old
+        // folder, and undoing a record write is another record write.
+        const moved = yield* Effect.tryPromise({
+          try: () => reassignPendingJobsIn(outputDir, from, to),
+          catch: (error) => unframedError("internal", `Could not update the renders in progress for this project, so it was not renamed: ${errorText(error)}`),
+        });
+        yield* closeProject(from);
+        const renamed = yield* Effect.promise(() => rename(folder, destination).then(() => undefined, (error: unknown) => errorText(error)));
+        if (renamed !== undefined) {
+          const restored = yield* Effect.promise(() =>
+            moved === 0 ? Promise.resolve(undefined) : reassignPendingJobsIn(outputDir, to, from).then(() => undefined, (error: unknown) => errorText(error)),
+          );
+          if (restored === undefined) return yield* unframedError("internal", `Could not rename: ${renamed}`);
+          logError(`could not restore job records after a failed rename: ${restored}`);
+          return yield* unframedError(
+            "internal",
+            `Could not rename (${renamed}), and ${moved} render(s) in progress are now recorded under "${to}". Renaming the project to "${to}" by hand will reunite them.`,
+          );
+        }
+        return { name: to, movedRenders: moved };
+      }).pipe(lock.withPermits(1));
+
+    const deleteProject = (name: string, confirmRenders: boolean) =>
+      Effect.gen(function* () {
+        // One slug for the gate and the folder, so the confirm cannot check one spelling and remove another.
+        const slug = projectSlug(name);
+        const folder = yield* projectFolder(slug);
+        const outputDir = yield* settings.outputDir;
+        const pending = yield* Effect.tryPromise({
+          try: () => readPendingJobs(outputDir, slug),
+          catch: (error) => unframedError("internal", `Could not check whether this project has renders in progress, so nothing was deleted: ${errorText(error)}`),
+        });
+        if (pending.length > 0 && !confirmRenders) {
+          return yield* unframedError("conflict", `This project has ${pending.length} video render${pending.length === 1 ? "" : "s"} in progress.`, {
+            pendingRenders: pending.length,
+          });
+        }
+        // Records first, folder second: a failed removal leaves an intact project to retry on,
+        // where the other order would leave records pointing at a folder that is gone.
+        const ended =
+          pending.length === 0
+            ? 0
+            : yield* renderJobs
+                .failPending({ project: slug, error: PROJECT_DELETED_ERROR })
+                .pipe(Effect.mapError((error) => unframedError("internal", `Could not stop the renders in progress, so the project was not deleted: ${error.reason}`)));
+        yield* closeProject(slug);
+        const removed = yield* Effect.promise(() => rm(folder, { recursive: true, force: true }).then(() => undefined, (error: unknown) => errorText(error)));
+        if (removed !== undefined) {
+          // No compensation: un-failing a record would claim a render is watched when its project may be half gone.
+          return yield* unframedError(
+            "internal",
+            ended > 0 ? `Stopped ${ended} render(s), but the project folder could not be deleted: ${removed}. Deleting again is safe.` : `Could not delete the project: ${removed}`,
+          );
+        }
+        return { endedRenders: ended };
+      }).pipe(lock.withPermits(1));
+
+    return Lifecycle.of({ updateSettings, removeKey, renameProject, deleteProject });
   }),
 );

@@ -63,8 +63,8 @@ export const rpcHandlersLayer = UnframedRpcs.toLayer(
       "oauth.pending": () => oauth.pending,
       "oauth.cancel": () => oauth.cancel,
       "oauth.status": () => oauth.status,
-      "projects.rename": () => Effect.fail(unframedError("unavailable", "Not yet.")),
-      "projects.delete": () => Effect.fail(unframedError("unavailable", "Not yet.")),
+      "projects.rename": ({ name, to }) => lifecycle.renameProject(name, to),
+      "projects.delete": ({ name, confirmRenders }) => lifecycle.deleteProject(name, confirmRenders === true),
       "settings.pickFolder": () =>
         Effect.map(Effect.flatMap(settings.outputDir, native.pickFolder), (path) => ({ path })),
       "projects.list": () => Effect.map(projects.list, (list) => ({ projects: [...list] })),
