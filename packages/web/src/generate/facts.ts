@@ -5,6 +5,7 @@
 import { kindOfShapeType, parseAssetMarker, resultMetaOf, runMarkerOf, unframedMetaOf } from "@unframed/contracts";
 import { plainText, readGroupRecipe, readRef, type CanvasShape, type Crop, type ToolbarShape } from "@unframed/domain";
 import { computed, type Computed, type Editor, type TLAsset, type TLShape } from "tldraw";
+import type { RunSource } from "./mediumRegistry.ts";
 
 const field = (value: unknown, key: string): unknown =>
   typeof value === "object" && value !== null ? (value as Record<string, unknown>)[key] : undefined;
@@ -93,6 +94,16 @@ export const resultShapes = (editor: Editor): ToolbarShape[] =>
     .getCurrentPageShapes()
     .filter((shape) => resultMetaOf(shape) !== undefined)
     .map((shape) => toolbarShape(editor, shape));
+
+/** The result a Recipe mode run answers for: its recipe's shape, or the imported result a live run stands in for. */
+export const answeredShape = (source: RunSource): string | undefined => (source.kind === "recipe" ? source.recipe.shapeId : source.answersFor);
+
+/** Where a run's outputs land beside: the result it answers for, else the selection. */
+export const anchorOf = (editor: Editor, source: RunSource) => {
+  const answered = answeredShape(source);
+  const box = answered !== undefined ? pageBox(editor, answered as TLShape["id"]) : source.kind === "selection" ? selectionBox(editor, source.selected as TLShape["id"][]) : undefined;
+  return box ?? { x: 0, y: 0, w: 0, h: 0 };
+};
 
 /** The union of the page bounds of `ids`. */
 export const selectionBox = (editor: Editor, ids: ReadonlyArray<TLShape["id"]>) => {

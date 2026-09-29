@@ -70,6 +70,34 @@ const initialSnapshot = (): RoomSnapshot => ({
   ],
 });
 
+/** Refuses records that fail the canvas schema, naming the first one. */
+const validateRecords = (records: ReadonlyArray<TLRecord>): void => {
+  const schema = canvasSchema();
+  for (const record of records) {
+    const type = schema.types[record.typeName as keyof typeof schema.types];
+    if (!type) throw new InvalidChange(`There is no record type "${String(record.typeName)}".`);
+    try {
+      type.validate(record);
+    } catch (error) {
+      throw new InvalidChange(`${record.id}: ${errorText(error)}`);
+    }
+  }
+};
+
+/**
+ * Writes a project's first canvas into a database no room has opened (spec 11's import):
+ * tldraw's document and page, then `records` as one change in the change log with
+ * `origin`. A room opened on it later finds a canvas and seeds no starter content.
+ */
+export const writeFirstCanvas = (db: DatabaseSync, records: ReadonlyArray<TLRecord>, origin: ChangeOrigin): void => {
+  validateRecords(records);
+  const sql = new NodeSqliteWrapper(db, { tablePrefix: SYNC_TABLE_PREFIX }) as unknown as TLSyncSqliteWrapper;
+  const storage = new LoggedStorage(new SQLiteSyncStorage<TLRecord>({ sql, snapshot: initialSnapshot() }), db, () => origin, () => {});
+  storage.transaction((txn) => {
+    for (const record of records) txn.set(record.id, record);
+  });
+};
+
 const frameText = (data: RawData): string =>
   Buffer.isBuffer(data) ? data.toString("utf8") : Array.isArray(data) ? Buffer.concat(data).toString("utf8") : Buffer.from(data).toString("utf8");
 
@@ -209,16 +237,7 @@ export class CanvasRoom {
    * refuses the whole change.
    */
   apply(change: CanvasChange, origin: ChangeOrigin): Applied {
-    const schema = canvasSchema();
-    for (const record of change.put) {
-      const type = schema.types[record.typeName as keyof typeof schema.types];
-      if (!type) throw new InvalidChange(`There is no record type "${String(record.typeName)}".`);
-      try {
-        type.validate(record);
-      } catch (error) {
-        throw new InvalidChange(`${record.id}: ${errorText(error)}`);
-      }
-    }
+    validateRecords(change.put);
     const inverse: { put: TLRecord[]; remove: string[] } = { put: [], remove: [] };
     const result = this.withOrigin(origin, () =>
       this.storage.transaction((txn) => {

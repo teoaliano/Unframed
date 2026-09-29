@@ -207,6 +207,27 @@
   box-shadow: var(--unframed-shadow-low);
 }
 
+/* Above the box in the Recipe mode of an imported result (spec 11): the prompt the old app sent. */
+.unframed-composer-sent {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 0 2px;
+  font-size: 12.5px;
+  color: var(--unframed-text-secondary);
+}
+
+.unframed-composer-sent > p {
+  margin: 0;
+}
+
+.unframed-composer-sent > p + p {
+  max-height: 96px;
+  overflow-y: auto;
+  color: var(--unframed-text-primary);
+  white-space: pre-wrap;
+}
+
 .unframed-composer-box {
   position: relative;
   display: flex;

@@ -59,6 +59,10 @@ export interface Preset {
   readonly kind: PresetKind;
   readonly medium?: RecipeMedium;
   readonly content: PresetContent;
+  /** Spec 11: converted from an old entry on read, never written back. */
+  readonly legacy?: true;
+  /** Spec 11: what the conversion could not keep. */
+  readonly notes?: ReadonlyArray<string>;
 }
 
 export const PRESET_NOT_ONE_GROUP_MESSAGE = "A preset is one group.";
@@ -261,22 +265,27 @@ export const placeAt = (bounds: Box, centre: { readonly x: number; readonly y: n
   y: centre.y - bounds.h / 2,
 });
 
-export interface PresetFile {
-  /** The project a `preset-file:` pointer names; `''` means the project the preset goes into. */
-  readonly project: string;
-  readonly file: string;
-}
+export type PresetFile =
+  | {
+      /** The project a `preset-file:` pointer names; `''` means the project the preset goes into. */
+      readonly project: string;
+      readonly file: string;
+    }
+  /** Bytes a converted old preset (spec 11) carries inline, written into the project on insert. */
+  | { readonly dataUrl: string };
 
 const pointerOf = (src: unknown): PresetFile | undefined => {
-  if (typeof src !== "string" || !src.startsWith(PRESET_FILE)) return undefined;
+  if (typeof src !== "string") return undefined;
+  if (src.startsWith("data:")) return { dataUrl: src };
+  if (!src.startsWith(PRESET_FILE)) return undefined;
   const rest = src.slice(PRESET_FILE.length);
   const slash = rest.indexOf("/");
   return slash < 0 ? undefined : { project: rest.slice(0, slash), file: rest.slice(slash + 1) };
 };
 
-const pointerKey = (file: PresetFile) => `${file.project}/${file.file}`;
+const pointerKey = (file: PresetFile) => ("dataUrl" in file ? file.dataUrl : `${file.project}/${file.file}`);
 
-/** Every distinct file a preset's assets point at, in order: what the media copier copies in. */
+/** Every distinct file a preset's assets point at, and every `data:` URL one carries (spec 11), in order: what the media copier copies in. */
 export const presetFiles = (content: PresetContent): PresetFile[] => {
   const seen = new Map<string, PresetFile>();
   for (const asset of content.assets) {

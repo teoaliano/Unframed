@@ -12,7 +12,7 @@ import {
 } from "@unframed/domain";
 import type { TLShapeId } from "tldraw";
 import type { Payload } from "../rpc/engine.ts";
-import { pageBox, selectionBox } from "./facts.ts";
+import { anchorOf, pageBox } from "./facts.ts";
 import { FinalPromptOverlay } from "./composer/FinalPromptDialog.tsx";
 import { freeBlockers, mintBatchId, sendFree } from "./free.ts";
 import { saveLastUsed } from "./lastUsed.ts";
@@ -77,7 +77,8 @@ const send = async (input: SendInput): Promise<SendOutcome> => {
       ...common,
       outputs: outputs(references),
       sources: [...source.composition.sources],
-      anchor: selectionBox(editor, source.selected as TLShapeId[]) ?? { x: 0, y: 0, w: 0, h: 0 },
+      anchor: anchorOf(editor, source),
+      ...(source.answersFor === undefined ? {} : { of: { shapeId: source.answersFor, action: "recipe" as const } }),
     };
   } else {
     const { recipe, shapeId } = source.recipe;

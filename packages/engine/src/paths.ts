@@ -35,3 +35,6 @@ export const fileNameOf = (name: string): string | undefined => {
 };
 
 export const preferencesFilePath = (dataDir: string): string => join(dataDir, "preferences.json");
+
+/** A project's one SQLite file, in its folder (spec 01). */
+export const DATABASE_FILE = "unframed.sqlite";

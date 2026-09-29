@@ -3,12 +3,22 @@
  * array. Every call runs on one queue per output folder and re-reads the file first; every
  * write replaces the whole array through a temp file renamed over it. Only a missing file
  * reads as empty: reading a damaged file as empty is what would let the next save erase it.
- * Entries this version does not understand are kept in place, byte for byte.
+ * Entries this version does not understand are kept in place, byte for byte. Old entries
+ * (spec 11) are listed converted, and the converted form is never written.
  */
 import { mkdir, readFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
-import { Preset, UnframedError, unframedError } from "@unframed/contracts";
-import { describePresetContent, joinJsonArray, PRESET_EMPTY_NAME_MESSAGE, PRESET_NOT_ONE_GROUP_MESSAGE, splitJsonArray } from "@unframed/domain";
+import { canvasSchema, Preset, UnframedError, unframedError } from "@unframed/contracts";
+import {
+  convertPreset,
+  describePresetContent,
+  joinJsonArray,
+  legacyDefaults,
+  PRESET_EMPTY_NAME_MESSAGE,
+  PRESET_NOT_ONE_GROUP_MESSAGE,
+  splitJsonArray,
+  type LegacyDefaults,
+} from "@unframed/domain";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -32,7 +42,7 @@ export interface SaveInput {
 export class PresetStore extends Context.Service<
   PresetStore,
   {
-    /** The entries with `format: 2` that read as presets, in file order. */
+    /** The entries with `format: 2` that read as presets, in file order, then every old entry converted (spec 11). */
     readonly list: Effect.Effect<{ presets: Preset[] }, UnframedError>;
     readonly save: (input: SaveInput) => Effect.Effect<{ preset: Preset }, UnframedError>;
     readonly remove: (id: string) => Effect.Effect<{ ok: true }, UnframedError>;
@@ -85,6 +95,14 @@ const onQueue = <T>(outputDir: string, task: () => Promise<T>): Promise<T> => {
   return run;
 };
 
+/** An old entry (spec 11) as the preset it lists as, stamped with the canvas schema its records are written in. */
+const converted = (value: unknown, defaults: LegacyDefaults): Preset | undefined => {
+  const old = convertPreset(value, { defaults });
+  if (!old) return undefined;
+  const preset = { ...old, content: { ...old.content, schema: canvasSchema().serialize() } };
+  return listed(preset) ? preset : undefined;
+};
+
 const failure = (error: unknown): UnframedError => (error instanceof UnframedError ? error : unframedError("internal", errorText(error)));
 
 /** `user-` and the epoch ms in base 36, the millisecond moved on until no entry in the file has that id. */
@@ -105,7 +123,14 @@ export const presetStoreLayer = Layer.effect(
         Effect.tryPromise({ try: () => onQueue(outputDir, () => task(presetsPath(outputDir))), catch: failure }),
       );
 
-    const list = queued(async (path) => ({ presets: (await readEntries(path)).map((entry) => entry.value).filter(listed) }));
+    const defaults = Effect.map(settings.read, legacyDefaults);
+
+    const list = Effect.flatMap(defaults, (models) =>
+      queued(async (path) => {
+        const values = (await readEntries(path)).map((entry) => entry.value);
+        return { presets: [...values.filter(listed), ...values.flatMap((value) => converted(value, models) ?? [])] };
+      }),
+    );
 
     const save = (input: SaveInput) =>
       Effect.gen(function* () {
@@ -136,13 +161,16 @@ export const presetStoreLayer = Layer.effect(
       });
 
     const remove = (id: string) =>
-      queued(async (path) => {
-        const entries = await readEntries(path);
-        const index = entries.findIndex((entry) => listed(entry.value) && entry.value.id === id);
-        if (index < 0) throw unframedError("not_found", PRESET_UNKNOWN_MESSAGE);
-        await writeEntries(path, entries.filter((_entry, at) => at !== index));
-        return { ok: true as const };
-      });
+      Effect.flatMap(defaults, (models) =>
+        queued(async (path) => {
+          const entries = await readEntries(path);
+          // A converted preset (spec 11) is deleted by removing the old entry it came from.
+          const index = entries.findIndex((entry) => idOf(entry.value) === id && (listed(entry.value) || converted(entry.value, models) !== undefined));
+          if (index < 0) throw unframedError("not_found", PRESET_UNKNOWN_MESSAGE);
+          await writeEntries(path, entries.filter((_entry, at) => at !== index));
+          return { ok: true as const };
+        }),
+      );
 
     const serialised = <A>(work: Effect.Effect<A, UnframedError>) =>
       Effect.flatMap(settings.outputDir, (outputDir) =>

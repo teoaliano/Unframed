@@ -56,10 +56,13 @@ export const EMPTY_BODY_MESSAGE = "No file bytes in the request body.";
 export class MediaStore extends Context.Service<
   MediaStore,
   {
-    /** Streams `body` into a new project file and writes its sidecar. Rejects with `SaveRefused`. */
+    /**
+     * Streams `body` into a new project file and writes its sidecar, whose source is
+     * `upload` unless `source` says otherwise. Rejects with `SaveRefused`.
+     */
     readonly save: (
       project: string,
-      input: { originalName: string; mime: string; body: AsyncIterable<Buffer>; rendered?: RenderedSidecar | undefined },
+      input: { originalName: string; mime: string; body: AsyncIterable<Buffer>; rendered?: RenderedSidecar | undefined; source?: MediaSidecar["source"] },
     ) => Promise<SavedFile>;
     /** Writes a regenerable display preview of `file` into the cache folder. No sidecar. */
     readonly savePreview: (project: string, file: string, size: PreviewSize, body: AsyncIterable<Buffer>) => Promise<{ bytes: number }>;
@@ -157,14 +160,14 @@ export const mediaStoreLayer = Layer.effect(
 
     const save = async (
       project: string,
-      input: { originalName: string; mime: string; body: AsyncIterable<Buffer>; rendered?: RenderedSidecar | undefined },
+      input: { originalName: string; mime: string; body: AsyncIterable<Buffer>; rendered?: RenderedSidecar | undefined; source?: MediaSidecar["source"] },
     ) => {
       const dir = await folder(project);
       if (dir === undefined) throw new SaveRefused(404, `There is no project named "${projectSlug(project)}".`);
       const mime = input.mime || "application/octet-stream";
       try {
         const { file, bytes } = await writeNew(dir, input.originalName, mime, input.body, (bytes) => ({
-          source: "upload",
+          source: input.source ?? "upload",
           fileName: input.originalName,
           mime,
           bytes,

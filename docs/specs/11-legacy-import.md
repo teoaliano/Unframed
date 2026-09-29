@@ -226,7 +226,7 @@ Outputs are processed top to bottom by position, ties left to right. For each ou
 | old | recipe |
 | --- | --- |
 | `imageOutput` | `{ medium: "image", model: data.model or the default image model, params: { resolution, quality, aspect_ratio, background, output_format, size } (only keys that are set), runs: "free" when freeRuns, else runs (default 1) }`; `previewPrompt` is dropped: a Free recipe group always stops at spec 05's final prompt dialog (spec 06) |
-| `videoOutput` | `{ medium: "video", model: data.videoModel or the default video model, params: { duration, resolution, aspect_ratio, size, generateAudio, inputMode, shareLocalVideos }, runs: 1 }`, with `inputMode` default `"reference"` and `shareLocalVideos` default true |
+| `videoOutput` | `{ medium: "video", model: data.videoModel or the default video model, params: { duration, resolution, aspect_ratio, size, generate_audio, inputMode, shareLocalVideos }, runs: 1 }`, with `generate_audio` from the old `generateAudio` (the video tray's name for it), `inputMode` default `"reference"` and `shareLocalVideos` default true |
 | `textOutput` | `{ medium: "text", model: data.model or the default text model, params: {}, runs: 1 }` |
 
 Where the recipe goes, first match wins:
@@ -349,7 +349,7 @@ type ImportReport = {
 };
 ```
 
-RPC methods: `legacyImport.report({ project })` returns the report or `null` for a project that was never imported; `legacyImport.markSeen({ project })`; `legacyImport.retry({ project })` reruns a failed import.
+RPC methods: `legacyImport.status({ project })` answers `none`, `pending` (an import is needed or running) or `failed` with the failure message, without starting an import, so the web can show the loading or failure state before it opens the canvas; `legacyImport.report({ project })` returns the report or `null` for a project that was never imported, running a pending import first; `legacyImport.markSeen({ project })`; `legacyImport.retry({ project })` reruns a failed import. A failed import is remembered until `retry`: every opener answers its message, with `details.reason` `legacy_import`.
 
 The item texts, exactly (`<n>`, `<id>` and so on are filled in; `<medium>` is image, video or text):
 

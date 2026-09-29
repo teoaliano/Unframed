@@ -22,7 +22,7 @@ import type { Editor, TLShapeId } from "tldraw";
 import type { EngineConnection, Payload } from "../rpc/engine.ts";
 import { knownCatalogue } from "./catalogue.ts";
 import { VideoStatus } from "./composer/VideoStatus.tsx";
-import { mediaSource, pageBox, selectionBox } from "./facts.ts";
+import { anchorOf, answeredShape, mediaSource, pageBox } from "./facts.ts";
 import { NOTHING_TO_MAKE } from "./imageMedium.ts";
 import { saveLastUsed } from "./lastUsed.ts";
 import { registerMedium, type MediumDefinition, type PropValue, type RunSource, type SendInput, type TrayProps } from "./mediumRegistry.ts";
@@ -118,14 +118,12 @@ export const videoStartRequest = async (input: {
   };
 };
 
-const entryFor = (model: string | undefined) => knownCatalogue("video")?.models.find((entry) => entry.id === model);
+export const entryFor = (model: string | undefined) => knownCatalogue("video")?.models.find((entry) => entry.id === model);
 
 const send = async ({ editor, engine, project, values, source, remember }: SendInput) => {
-  const anchor =
-    source.kind === "selection"
-      ? (selectionBox(editor, source.selected as TLShapeId[]) ?? { x: 0, y: 0, w: 0, h: 0 })
-      : (pageBox(editor, source.recipe.shapeId as TLShapeId) ?? { x: 0, y: 0, w: 0, h: 0 });
-  const recorded = source.kind === "recipe" ? editor.getShape(source.recipe.shapeId as TLShapeId) : undefined;
+  const anchor = anchorOf(editor, source);
+  const answered = answeredShape(source);
+  const recorded = answered === undefined ? undefined : editor.getShape(answered as TLShapeId);
   const sidecar = recorded ? resultMetaOf(recorded)?.sidecar : undefined;
   const request = await videoStartRequest({
     editor,
@@ -150,14 +148,14 @@ const send = async ({ editor, engine, project, values, source, remember }: SendI
 };
 
 /** The tray's props from a recipe: its recorded params, the duration as the tray names it. */
-const fromRecipe = (recipe: ResultRecipe): TrayProps => {
+export const fromRecipe = (recipe: ResultRecipe): TrayProps => {
   const props: Record<string, PropValue> = { ...recipe.params };
   if (typeof props.duration === "number") props.duration = String(props.duration);
   return props;
 };
 
 /** A recipe's recorded params as a request sends them: exactly as recorded, whatever the catalogue says now. */
-const recordedSettings = (params: ResultRecipe["params"]): VideoSettings => ({
+export const recordedSettings = (params: ResultRecipe["params"]): VideoSettings => ({
   ...(typeof params.duration === "number" ? { duration: params.duration } : {}),
   ...(typeof params.resolution === "string" ? { resolution: params.resolution } : {}),
   ...(typeof params.aspect_ratio === "string" ? { aspect_ratio: params.aspect_ratio } : {}),

@@ -4,6 +4,7 @@
  * Runs prop.
  */
 import type { Locator, Page } from "@playwright/test";
+import type { StubHandler } from "../../engine/test/engineProcess.ts";
 import { chatCompletions, listedModel, textCatalogue, type ChatAnswer, type ChatRequest } from "../../engine/test/textStub.ts";
 import { roomShapes, type AnyRecord } from "./canvas.ts";
 import { expect, test as base } from "./fixtures.ts";
@@ -21,10 +22,10 @@ export interface TextGeneration extends GenerationEngine {
   answerText(script: (request: ChatRequest) => ChatAnswer | Promise<ChatAnswer>): void;
 }
 
-export const startTextGeneration = async (): Promise<TextGeneration> => {
+export const startTextGeneration = async (options: { readonly dataDir?: string; readonly extra?: StubHandler[] } = {}): Promise<TextGeneration> => {
   let script: (request: ChatRequest) => ChatAnswer | Promise<ChatAnswer> = () => ({ kind: "text", text: "A fox on a windswept cliff.", cost: 0.0012 });
   const chat = chatCompletions((request) => script(request));
-  const generation = await startGeneration({ extra: [textCatalogue({ data: TEXT_CATALOGUE }), chat.handler] });
+  const generation = await startGeneration({ ...options, extra: [textCatalogue({ data: TEXT_CATALOGUE }), chat.handler, ...(options.extra ?? [])] });
   return {
     ...generation,
     chat: chat.requests,
