@@ -19,7 +19,7 @@ Checked 2026-09-28: Node v24.21.0, pnpm 9.15.4 through Corepack, Google Chrome, 
 | 05 | text, multi-run and Free | 4 | merged | c1bb5a2 | 40/40 tasks; 790 tests green, 134 of 135 browser tests (the one failure is the spec 02 right-click flake, sent back to the spec 02 agent) |
 | 06 | groups, recipes and the library | 5 | merged | 5f399d1 | 39/39 tasks; 1144 tests, 185 browser tests green on build. Task 15's Agent button waits for spec 08 |
 | 07 | agent runtime | 6 | merged | ba20d56 | 55/55 tasks; 1356 tests, 185 browser tests green on build |
-| 08 | agent chat | 7 | merged | 6c70830 | 47/47 tasks. Open: the web chat client drops one engine event in about 1 in 5 loaded runs of `agentWork.spec.ts:24` (product bug); sent back to the spec 08 agent |
+| 08 | agent chat | 7 | merged | 6c70830, fix b05f1c7 | 47/47 tasks. Fix: a tool call's completion stamped in the same millisecond as the reply started a new work stretch, so the row read "Stopped" (product bug; the timeline now lives in domain). 1514 tests, 261 browser tests green on build |
 | 09 | artifacts | 8 | building | | |
 | 10 | settings and OpenRouter | 7 | merged | b7a1b78, fixture fix 18312a7 | 58/58 tasks plus the oauth.cancel render rule; merged after 08 (2 conflicts resolved by the orchestrator); 1511 tests, 261 browser tests green on build |
 | 11 | legacy import | 9 | pending | | |
@@ -76,6 +76,7 @@ Measured by the spec agent in the hosted shape (production web served by the eng
 - `previews.spec.ts:16`, `runsProp.spec.ts:17` and `catalogue.test.ts` each failed once under load in a spec worktree and passed on rerun. Watch them.
 - Never run a bare `pkill -f workerProcessEntry`: it kills every worktree's Playwright workers. Kill by path (`<checkout>/node_modules/.pnpm/playwright.*/workerProcessEntry`) or orphans only.
 - Fixed in 19a4177: the right-click flake (`menuActions` "Reveal", `contextMenu.spec.ts:86`), `promptPin.spec.ts` and the `mediaResize.spec.ts` crop flake. The context-menu fix in `packages/web/src/canvas/ContextMenu.tsx` cancels the menu library's delayed refocus through an internal event name that tldraw bundles. A tldraw upgrade that renames it brings the flake back silently.
+- `projectLifecycle.test.ts` "projects.delete ... the sweep stops asking" failed under load because it counted a legitimate sweep poll from before the delete. The orchestrator fixed the test to count from after the delete.
 - `packages/engine/test/bundle.test.ts` timed out once at 30 s in a loaded full run in the spec 04 worktree and passed alone. Watch it.
 - `composerTray.spec.ts:20` and `:76` failed together once in a full run on build at load average 11 (composer not visible in 5 s; model chip click timed out), then passed 21 of 21 alone and in the next full run. Watch them.
 
