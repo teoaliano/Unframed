@@ -17,8 +17,8 @@ Checked 2026-09-28: Node v24.21.0, pnpm 9.15.4 through Corepack, Google Chrome, 
 | 03 | image generation | 3 | merged | f9649ab, fixes 5621a6a | 54/54 tasks; 626 tests, 112 browser tests green on build in 3.0 min. Task 36's Agent tray part waits for spec 08 |
 | 04 | video generation | 4 | merged | ae89c78 | 66/66 tasks; merged after 05 (the agent resolved 13 conflicts, all two additions to one spot); 994 tests, 150 browser tests green on build |
 | 05 | text, multi-run and Free | 4 | merged | c1bb5a2 | 40/40 tasks; 790 tests green, 134 of 135 browser tests (the one failure is the spec 02 right-click flake, sent back to the spec 02 agent) |
-| 06 | groups, recipes and the library | 5 | building | | |
-| 07 | agent runtime | 6 | pending | | |
+| 06 | groups, recipes and the library | 5 | merged | 5f399d1 | 39/39 tasks; 1144 tests, 185 browser tests green on build. Task 15's Agent button waits for spec 08 |
+| 07 | agent runtime | 6 | building | | |
 | 08 | agent chat | 7 | pending | | merge before 10 |
 | 09 | artifacts | 8 | pending | | |
 | 10 | settings and OpenRouter | 7 | pending | | merge after 08 |
@@ -34,6 +34,8 @@ Each entry names the decision, the answer, and the spec it changed.
 
 - Spec 03, task 36: the Agent tray part is untestable until spec 08 fills the `agentTray` slot. The spec 08 agent must cover it.
 - Spec 03: Regenerate and Recipe for imported (approximate) recipes belong to spec 11.
+- Spec 06, task 15: the recipe bar's Agent button shows only once spec 08 registers the Agent tray. The spec 08 agent must cover it.
+- Spec 06: review smells left alone, the 10 copies of `messageOf` across files and the paste fix-up that overlaps domain `instantiate`.
 - Spec 04: if a pending render job's project folder is gone, the collector fails and the sweep retries every tick, downloading the clip each time. Spec 10 fails such records before it deletes or moves a project; the spec 10 agent must check the sweep stops.
 - Spec 04, task 21: the test moves the image through the room, not with a mouse drag, because dragging a selected shape moves the whole selection.
 - Spec 05: some logic is duplicated between `textRuns.ts` and spec 03's `runs.ts` (run-id minting, the `of` lookup, top-index lookup), and between the image and text catalogue functions. The agent left spec 03's files alone because spec 04 edits them in parallel. Fold them together after wave 4.
