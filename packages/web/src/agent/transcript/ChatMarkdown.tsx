@@ -108,6 +108,31 @@ const COMPONENTS: Components = {
     ),
 };
 
+interface MarkdownNode {
+  type: string;
+  value?: string;
+  children?: MarkdownNode[];
+}
+
+/**
+ * Raw HTML becomes the text it is: an inline tag is plain text, a block of it a paragraph
+ * of text. Nothing a model writes as markup is ever parsed.
+ */
+const htmlAsText = () => (tree: MarkdownNode) => {
+  const walk = (node: MarkdownNode) => {
+    if (!node.children) return;
+    node.children = node.children.map((child) => {
+      if (child.type !== "html") {
+        walk(child);
+        return child;
+      }
+      const text: MarkdownNode = { type: "text", value: child.value ?? "" };
+      return node.type === "root" || node.type === "blockquote" || node.type === "listItem" ? { type: "paragraph", children: [text] } : text;
+    });
+  };
+  walk(tree);
+};
+
 /** Drops `javascript:` and every other unsafe scheme, as react-markdown does. */
 const urlTransform = (url: string): string => defaultUrlTransform(url);
 
@@ -118,7 +143,7 @@ const urlTransform = (url: string): string => defaultUrlTransform(url);
  */
 export const ChatMarkdown = memo(({ text }: { readonly text: string }) => (
   <div className="chat-markdown">
-    <ReactMarkdown remarkPlugins={[remarkGfm, remarkBreaks]} components={COMPONENTS} urlTransform={urlTransform} skipHtml={false}>
+    <ReactMarkdown remarkPlugins={[remarkGfm, remarkBreaks, htmlAsText]} components={COMPONENTS} urlTransform={urlTransform}>
       {text}
     </ReactMarkdown>
   </div>
