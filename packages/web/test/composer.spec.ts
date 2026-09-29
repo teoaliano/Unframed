@@ -1,4 +1,5 @@
 import { gate } from "../../engine/test/openRouterStub.ts";
+import { closeSettings } from "./settings.ts";
 import { emptyCanvasPoint, openCanvas, roomShapes, shapeOnScreen } from "./canvas.ts";
 import { clickShape, composer, expect, instructionBox, openComposer, pressSend, selectGroup, sendButton, sendRun, startGeneration, test, toolbar } from "./generation.ts";
 import { pngBytes } from "./images.ts";
@@ -159,6 +160,8 @@ test("without a key, send is disabled and the tray says where to add one", async
   const generation = await startGeneration({ key: false });
   try {
     await openCanvas(page, generation.engine);
+    // A keyless first load opens the settings dialog (spec 10).
+    await closeSettings(page);
     await clickShape(page, "shape:starter-subject");
     await openComposer(page);
     await expect(composer(page).getByTestId("composer-status")).toHaveText(
