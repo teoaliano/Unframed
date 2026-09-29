@@ -104,7 +104,7 @@ export const ModelPicker = ({ statuses, selection, providerLocked, disabled, ope
 
   return (
     <Popover open={open} onOpenChange={(next) => onOpenChange(next)}>
-      <PopoverTrigger render={<Button variant="ghost-muted" size="xs" className="min-w-0" />} aria-label="Model" data-testid="model-picker" disabled={disabled}>
+      <PopoverTrigger render={<Button variant="ghost-muted" size="xs" className="min-w-0 shrink" />} aria-label="Model" data-testid="model-picker" disabled={disabled}>
         <ProviderLogo provider={selection.provider} />
         <span className="min-w-0 truncate">{current?.name ?? (selection.model === "" ? providerName(selection.provider) : selection.model)}</span>
         <ChevronDown aria-hidden className="size-3 opacity-60" />
@@ -234,7 +234,7 @@ export const TraitsPicker = ({ provider, model, traits, disabled, onChange }: { 
   const labels = [effort !== undefined ? effortLabel(effort) : undefined, traits.thinking === true ? "Thinking" : undefined].filter((label): label is string => label !== undefined);
   return (
     <Popover>
-      <PopoverTrigger render={<Button variant="ghost-muted" size="xs" className="min-w-0" />} aria-label="Traits" data-testid="traits-picker" disabled={disabled}>
+      <PopoverTrigger render={<Button variant="ghost-muted" size="xs" className="min-w-0 shrink-[2]" />} aria-label="Traits" data-testid="traits-picker" disabled={disabled}>
         <span className="min-w-0 truncate">{labels.length > 0 ? labels.join(" · ") : "Default"}</span>
         {traits.fastMode === true && <Zap aria-label="Fast mode" />}
         <ChevronDown aria-hidden className="size-3 opacity-60" />

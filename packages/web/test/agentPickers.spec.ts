@@ -4,7 +4,7 @@ import { join } from "node:path";
 import type { Locator, Page } from "@playwright/test";
 import type { TestEngine } from "../../engine/test/engineProcess.ts";
 import { openCanvas } from "./canvas.ts";
-import { chosenControl, createChat, enablePlanMode, engineChat, expect, onlyChat, openRail, promptBox, say, sendThrough, startAgentEngine, startProvidersEngine, tabs } from "./agent.ts";
+import { agentChromeButton, chosenControl, createChat, enablePlanMode, engineChat, expect, onlyChat, openRail, promptBox, say, sendThrough, startAgentEngine, startProvidersEngine, tabs } from "./agent.ts";
 import { test as base } from "./fixtures.ts";
 import { expectToken } from "./kit.ts";
 
@@ -340,4 +340,25 @@ test("below t3code's compact width the access mode folds into More composer cont
   } finally {
     await agent.dispose();
   }
+});
+
+test.describe("on a narrow window", () => {
+  test.use({ viewport: { width: 360, height: 720 } });
+
+  test("no two controls in the Agent tray's footer overlap: the labels truncate first", async ({ page, providers }) => {
+    await openCanvas(page, providers);
+    await agentChromeButton(page).click();
+    const tray = page.locator("[data-slot='sheet-popup']");
+    await expect(tray.getByTestId("model-picker")).toHaveText(/^Opus/, { timeout: 20_000 });
+    const send = tray.getByRole("button", { name: "Send", exact: true });
+    const row = send.locator("xpath=ancestor::div[contains(@class,'items-center')][2]");
+    const boxes = await row.getByRole("button").evaluateAll((buttons) =>
+      buttons.filter((button) => button.getClientRects().length > 0).map((button) => { const box = button.getBoundingClientRect(); return { label: button.getAttribute("aria-label") ?? button.textContent ?? "", left: box.left, right: box.right }; }),
+    );
+    expect(boxes.length).toBeGreaterThanOrEqual(4);
+    const sorted = [...boxes].sort((a, b) => a.left - b.left);
+    for (let index = 1; index < sorted.length; index++) expect(sorted[index]!.left, `${sorted[index - 1]!.label} overlaps ${sorted[index]!.label}`).toBeGreaterThanOrEqual(sorted[index - 1]!.right - 0.5);
+    const sheet = (await tray.boundingBox())!;
+    expect(sorted.at(-1)!.right).toBeLessThanOrEqual(sheet.x + sheet.width);
+  });
 });

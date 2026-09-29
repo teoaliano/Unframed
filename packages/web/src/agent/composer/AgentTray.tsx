@@ -547,8 +547,9 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
         />
         {menu && <ComposerMenu label={menu.label} items={menu.items} highlight={highlight} empty={menu.empty} anchor={boxElement} onPick={menu.pick} onHighlight={setHighlight} />}
         {/* One line: the access and plan controls sit in the More menu, as in t3code's compact footer. */}
+        {/* Nothing overlaps: the tools share the line's width, the traits and then the model label truncate first, and Send's group keeps its size. */}
         <div className="flex items-center gap-1">
-          <div className="flex min-w-0 items-center gap-0.5">
+          <div className="flex min-w-0 flex-1 items-center gap-0.5">
             <Tip label="Attach files" side="top">
               <Button variant="ghost-muted" size="icon-sm" aria-label="Attach files" onClick={() => files.current?.click()}>
                 <Paperclip aria-hidden />
