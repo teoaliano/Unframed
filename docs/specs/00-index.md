@@ -110,6 +110,7 @@ These hold across every spec. A spec that needs to bend one must say so explicit
 | 10 | [Settings and OpenRouter](10-settings-openrouter.md) | settings dialog, OAuth key flow, key status, output folder moves, project rename and delete |
 | 11 | [Legacy import](11-legacy-import.md) | one-time import of old projects and presets |
 | 12 | [Design system](12-design-system.md) | t3code's tokens and UI kit on every surface, tldraw's UI themed to match, the lint that keeps it |
+| 13 | [Design-system catalogue](13-design-system-catalogue.md) | a dev-only page showing every token, kit component and recipe, its API from the source, and where the product uses it |
 
 ## Reference material in this repo
 

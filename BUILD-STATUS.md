@@ -38,6 +38,7 @@ Spec 12's run on `build`, with the dev server stopped: `pnpm typecheck` exit 0 (
 | 10 | settings and OpenRouter | 7 | merged | b7a1b78, fixture fix 18312a7 | 58/58 tasks plus the `oauth.cancel` render rule; merged after 08 |
 | 11 | legacy import | 9 | merged | c264c38 | 46/46 tasks; covers spec 03's imported-recipe Regenerate and Recipe |
 | 12 | design system | 10 | merged | 4935b8b to 834be6d (merges 2d7b5fa, 39a1d4a, f15d45f), review fixes 2d7627f to bde5664 | 25/25 tasks. Written after the first build, at the person's request. Decisions settled during the run are under "Decisions" |
+| 13 | design-system catalogue | 11 | merged | see git log | 4/4 tasks. Written after spec 12's live review, at the person's request: a dev-only page at `/design-system/` on the web dev server |
 
 ## Performance budgets
 
@@ -118,6 +119,7 @@ Open for the person:
 - Spec 11: every sweep write prunes done and failed jobs older than 7 days, so an old finished job's clip from an imported `jobs.json` may never be placed if the sweep writes before its project is first opened.
 - Spec 12: `GenerateTray.tsx` copies the kit's field frame and focus ring into its classes instead of using InputGroup.
 - Spec 12: a few tests find elements by third-party class names that spec 12's test hooks section does not exempt (lucide icon classes in `addMenu.spec.ts` and `toasts.spec.ts`, DialKit's classes in `artifactDials.spec.ts`).
+- Spec 12: the kit's Command reads `--command-shell-inset` and `--command-content-inset`, which no stylesheet defines; the catalogue's demo sets them itself. Define them before the product uses Command.
 - Spec 12: the sweep does not open the legacy import screens; `legacyImport.spec.ts` checks their kit slots.
 - The context-menu fix in `packages/web/src/canvas/ContextMenu.tsx` cancels the menu library's delayed refocus through an internal event name that tldraw bundles. A tldraw upgrade that renames it brings the bug back without failing anything else.
 
