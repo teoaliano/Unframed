@@ -13,7 +13,7 @@ Checked 2026-09-28: Node v24.21.0, pnpm 9.15.4 through Corepack, Google Chrome, 
 | # | Spec | Wave | State | Merge commit | Note |
 | --- | --- | --- | --- | --- | --- |
 | 01 | engine foundation | 1 | merged | f480398 | 54/54 tasks; 311 tests, 7 browser tests green on build |
-| 02 | canvas | 2 | merged | 901847a | 60/60 tasks; 421 tests, 83 browser tests green on build; all budgets met (see below) |
+| 02 | canvas | 2 | merged | 901847a, fixes 19a4177 | 60/60 tasks; all budgets met (see below). Fixes: context menu closed itself when a right-click beat tldraw's delayed refocus (product bug), and `settledRecord` now outwaits the sync client's 1 s send interval |
 | 03 | image generation | 3 | merged | f9649ab, fixes 5621a6a | 54/54 tasks; 626 tests, 112 browser tests green on build in 3.0 min. Task 36's Agent tray part waits for spec 08 |
 | 04 | video generation | 4 | merged | ae89c78 | 66/66 tasks; merged after 05 (the agent resolved 13 conflicts, all two additions to one spot); 994 tests, 150 browser tests green on build |
 | 05 | text, multi-run and Free | 4 | merged | c1bb5a2 | 40/40 tasks; 790 tests green, 134 of 135 browser tests (the one failure is the spec 02 right-click flake, sent back to the spec 02 agent) |
