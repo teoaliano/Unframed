@@ -329,7 +329,10 @@ export const renderJobsLayer = Layer.effect(
       const records = hadFolder ? await readRoom(project) : undefined;
       if (records) {
         const shape = markedBy(records, record.id);
+        // Opening the room can import an old project (spec 11) that finds this job done and puts the clip on the canvas itself.
+        const shown = records.some((each) => each.typeName === "asset" && (each.props as { src?: unknown }).src === projectFileMarker(file));
         if (shape) await applyRoom(project, fillChange(shape, landed), record.id);
+        else if (shown) return done;
         else if (done.landing?.shapeId === undefined && done.forgotten !== true) {
           // A record from before placeholders: the result lands at its spot, else right of everything.
           const boxes = shapePageBoxes(records).map((each) => each.box);

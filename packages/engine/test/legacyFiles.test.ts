@@ -186,8 +186,10 @@ describe("a failed import", () => {
   it("answers not_found for a project that does not exist", async () => {
     const { engine } = await startLegacyEngine();
     const rpc = await engine.rpc();
-    for (const method of ["legacyImport.status", "legacyImport.report", "legacyImport.markSeen", "legacyImport.retry"] as const) {
-      await expect(rpc.call(method, { project: "no-such-project" })).rejects.toMatchObject({ code: "not_found" });
-    }
+    const project = { project: "no-such-project" };
+    await expect(rpc.call("legacyImport.status", project)).rejects.toMatchObject({ code: "not_found" });
+    await expect(rpc.call("legacyImport.report", project)).rejects.toMatchObject({ code: "not_found" });
+    await expect(rpc.call("legacyImport.markSeen", project)).rejects.toMatchObject({ code: "not_found" });
+    await expect(rpc.call("legacyImport.retry", project)).rejects.toMatchObject({ code: "not_found" });
   });
 });
