@@ -20,7 +20,7 @@ Checked 2026-09-28: Node v24.21.0, pnpm 9.15.4 through Corepack, Google Chrome, 
 | 06 | groups, recipes and the library | 5 | merged | 5f399d1 | 39/39 tasks; 1144 tests, 185 browser tests green on build. Task 15's Agent button waits for spec 08 |
 | 07 | agent runtime | 6 | merged | ba20d56 | 55/55 tasks; 1356 tests, 185 browser tests green on build |
 | 08 | agent chat | 7 | merged | 6c70830, fix b05f1c7 | 47/47 tasks. Fix: a tool call's completion stamped in the same millisecond as the reply started a new work stretch, so the row read "Stopped" (product bug; the timeline now lives in domain). 1514 tests, 261 browser tests green on build |
-| 09 | artifacts | 8 | building | | |
+| 09 | artifacts | 8 | merged | 949cdd3 | 62/62 tasks; 1635 tests green; browser suite 291-292 of 292 per run, the misses being load flakes (see watch list). Suite not yet fully green: the `runsProp` Escape race is with the spec 03 agent |
 | 10 | settings and OpenRouter | 7 | merged | b7a1b78, fixture fix 18312a7 | 58/58 tasks plus the oauth.cancel render rule; merged after 08 (2 conflicts resolved by the orchestrator); 1511 tests, 261 browser tests green on build |
 | 11 | legacy import | 9 | pending | | |
 
@@ -45,7 +45,11 @@ Settled by the orchestrator from the specs (no decision needed from the person):
 - Spec 06: review smells left alone, the 10 copies of `messageOf` across files and the paste fix-up that overlaps domain `instantiate`.
 - Spec 08: `AgentTray.tsx` is 686 lines; splitting it was left as a refactor beyond the spec.
 - Spec 10: Cancel's `renderCleanupError` display in the web has no browser test (no reliable way to click Cancel between the approval landing and the 1.5 s poll). The engine behaviour is tested.
-- Spec 09: motion-render runs are not in spec 10's live-run check for an output folder change yet. The spec 09 agent must add them.
+- Spec 09: the real HyperFrames render is untested; tests use the `UNFRAMED_TEST_RENDERER` stub. The producer path needs one manual render.
+- Spec 09: `The render failed.` (a failure with no message) cannot be reached, because the stub's `fail` mode always carries a message.
+- Spec 09: the bundle now depends on HyperFrames, which brings puppeteer. The bundle manifest carries `"puppeteer": {"skipDownload": true}`, which covers installs inside the bundle folder only. The desktop shell must set the same key in its own manifest or install with `PUPPETEER_SKIP_DOWNLOAD=1` (spec 01 says so now).
+- Spec 09: `sharp`, a native addon, is installed through `@hyperframes/studio-server`. The render path never loads it today (spec 01 forbids native addons on runtime paths). Recheck on a HyperFrames upgrade.
+- Spec 09: a shape's last live still is kept for the session only, so it is lost on reload.
 - Spec 04, task 21: the test moves the image through the room, not with a mouse drag, because dragging a selected shape moves the whole selection.
 - Spec 05: some logic is duplicated between `textRuns.ts` and spec 03's `runs.ts` (run-id minting, the `of` lookup, top-index lookup), and between the image and text catalogue functions. The agent left spec 03's files alone because spec 04 edits them in parallel. Fold them together after wave 4.
 - Spec 05: a text result whose sidecar could not be written gets `sidecar: null`, and duplicating it drops its result meta, because the copy rules read null as an unfilled placeholder.
@@ -65,6 +69,12 @@ Measured by the spec agent in the hosted shape (production web served by the eng
 | 02 | 40 images of 6000 × 4000, zoom 55 % to 376 %: median frame gap | ≤ 16.7 ms | 8.30 ms |
 | 02 | same zoom: frames over 33 ms | ≤ 2 % | 0.47 % |
 | 02 | same zoom: peak decoded image memory | under 518 MB | 87 MB |
+| 09 | ten busy pages and five motions, 4 s pan, 3 running (1 pinned, 2 selected): median frame gap | ≤ 16.7 ms | 8.30 ms |
+| 09 | same pan: frames over 33 ms | ≤ 2 % | 0.40 to 0.82 % |
+| 09 | same pan: long tasks over 50 ms | 0 | 0 |
+| 09 | same board, 6 running (3 pinned, 3 selected, the most the rules allow): median / over 33 ms / long tasks | not asserted by task 62 | 8.30 ms / 4.19 to 4.21 % / 0 |
+
+The six-running case misses the 2 % line. Task 62 does not say how many artifacts run during the pan, so the build treats three as the measured case and reports six. Whether to lower the pin or selection caps is the person's call.
 
 ## Orchestration notes
 
@@ -73,7 +83,9 @@ Measured by the spec agent in the hosted shape (production web served by the eng
 - A spec agent stalls (10 minutes with no stream progress) when one command runs long with no output, such as a browser suite hung in teardown. Briefs cap each command at 5 minutes with `--global-timeout 280000 --reporter=list`, and tell agents not to use background commands, whose notifications reach the orchestrator. A stalled agent resumes with SendMessage and keeps its context.
 - `pnpm -s typecheck` prints nothing when it fails. Read the exit code.
 - Browser test engines point `CLAUDE_PATH` and `CODEX_PATH` at missing files and use `SHELL=/bin/sh` (spec 08), so provider detection never starts the machine's real CLIs. An engine gets the fixture OpenRouter key unless its test writes a `.env`; a test that writes one and wants a key must include `OPENROUTER_API_KEY` (spec 10).
-- `previews.spec.ts:16`, `runsProp.spec.ts:17` and `catalogue.test.ts` each failed once under load in a spec worktree and passed on rerun. Watch them.
+- After spec 09 the browser suite has 292 tests and takes 6.5 to 6.7 minutes. Fixed by the orchestrator: `assetStore.spec.ts:7` pressed Cmd+U before tldraw had the keyboard (7a7b6b7). Seen once: two `startGeneration` engines printed nothing in 15 s during one loaded run (boot is 0.7 s idle, 1.1 to 1.8 s under load); watch it.
+- `runsProp.spec.ts:17` fails about once per full run: an Escape pressed as the Add prop menu shows closes the whole composer. Product race in spec 03's composer, with the spec 03 agent. Switching the menu-open reports to `useLayoutEffect` did not fix it.
+- `previews.spec.ts:16` and `catalogue.test.ts` each failed once under load in a spec worktree and passed on rerun. Watch them.
 - Never run a bare `pkill -f workerProcessEntry`: it kills every worktree's Playwright workers. Kill by path (`<checkout>/node_modules/.pnpm/playwright.*/workerProcessEntry`) or orphans only.
 - Fixed in 19a4177: the right-click flake (`menuActions` "Reveal", `contextMenu.spec.ts:86`), `promptPin.spec.ts` and the `mediaResize.spec.ts` crop flake. The context-menu fix in `packages/web/src/canvas/ContextMenu.tsx` cancels the menu library's delayed refocus through an internal event name that tldraw bundles. A tldraw upgrade that renames it brings the flake back silently.
 - `projectLifecycle.test.ts` "projects.delete ... the sweep stops asking" failed under load because it counted a legitimate sweep poll from before the delete. The orchestrator fixed the test to count from after the delete.
