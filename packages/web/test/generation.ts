@@ -59,12 +59,13 @@ export interface GenerationEngine {
   holdPricing(model: string): () => void;
 }
 
-export const startGeneration = async (options: { key?: boolean; dotenv?: string; extra?: StubHandler[] } = {}): Promise<GenerationEngine> => {
+export const startGeneration = async (options: { key?: boolean; dotenv?: string; extra?: StubHandler[]; dataDir?: string } = {}): Promise<GenerationEngine> => {
   let script: (request: ImageRequest) => ImageAnswer | Promise<ImageAnswer> = () => ({ kind: "image", bytes: pngBytes(96, 64), cost: 0.19 });
   const images = imageGeneration((request) => script(request));
   const held = new Map<string, Promise<void>>();
   const pricing = imagePricing(PRICING);
   const engine = await startHostedEngine({
+    ...(options.dataDir === undefined ? {} : { dataDir: options.dataDir }),
     dotenv: options.dotenv ?? (options.key === false ? "" : `OPENROUTER_API_KEY=${KEY}\n`),
     stub: routes(imageCatalogue({ data: CATALOGUE }), (req, body, res) => {
       const match = /^\/api\/v1\/images\/models\/(.+)\/endpoints$/.exec(new URL(req.url ?? "/", "http://stub").pathname);
