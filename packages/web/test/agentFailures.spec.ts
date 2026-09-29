@@ -13,7 +13,7 @@ test("a failed turn shows its retry line and ends its reply with the failure sen
   await expect(panel.getByRole("alert")).toHaveCount(0);
 });
 
-test("a usage limit warns, then says it was hit with the time it resets, and clears when a turn goes through", async ({ page, agent }) => {
+test("being close to a usage limit shows nothing; a hit limit says so with the time it resets, and clears when a turn goes through", async ({ page, agent }) => {
   await openCanvas(page, agent);
   await createChat(agent, { title: "Limits" });
   const panel = await openRail(page);
@@ -22,7 +22,7 @@ test("a usage limit warns, then says it was hit with the time it resets, and cle
 
   await say(panel, "near the usage limit");
   await expect(panel.locator("[data-role='assistant']").last()).toContainText("Done, but you are close to your usage limit.");
-  await expect(line).toHaveText(`Close to your usage limit, which resets at ${time}.`);
+  await expect(line).toHaveCount(0);
 
   await say(panel, "one more");
   await expect(line).toHaveText(`You have hit a usage limit. It resets at ${time}.`);

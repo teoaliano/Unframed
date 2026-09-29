@@ -341,8 +341,8 @@ const resetTime = (resetsAt: unknown): string | undefined => {
 };
 
 /**
- * A usage limit: hit, or close. Shown for the chat's latest turn only, so the next turn
- * clears it; a later "allowed" notice clears it too.
+ * A usage limit that was hit, for the chat's latest turn only, so the next turn clears it; a
+ * later "allowed" notice clears it too. Claude's "close to the limit" warnings show nothing.
  */
 const LimitLine = ({ chat }: { readonly chat: Chat }) => {
   const latest = chat.latestTurn;
@@ -354,13 +354,6 @@ const LimitLine = ({ chat }: { readonly chat: Chat }) => {
     return (
       <p className="m-0 px-1 text-sm leading-relaxed text-destructive-foreground" data-kind="limit" data-testid="limit-line">
         {time === undefined ? "You have hit a usage limit." : `You have hit a usage limit. It resets at ${time}.`}
-      </p>
-    );
-  }
-  if (p.status === "allowed_warning") {
-    return (
-      <p className={NOTICE_CLASS} data-testid="limit-line">
-        {time === undefined ? "Close to your usage limit." : `Close to your usage limit, which resets at ${time}.`}
       </p>
     );
   }
