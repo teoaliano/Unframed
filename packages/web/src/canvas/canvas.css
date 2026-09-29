@@ -261,6 +261,33 @@
   border-radius: 0;
 }
 
+/* A group's name field shows at every zoom and takes the pointer; the name is typed as it is, not in capitals. */
+.tl-container .tl-shape .unframed-shape-label[data-label-open][data-label-kind] {
+  display: flex;
+  visibility: visible;
+}
+
+.unframed-group-rename {
+  display: flex;
+  align-items: center;
+  gap: 1px;
+  pointer-events: all;
+}
+
+.unframed-group-rename__field {
+  height: 18px;
+  min-width: 0;
+  padding: 0 4px;
+  border: 1px solid var(--unframed-accent);
+  border-radius: var(--unframed-radius-inner);
+  background-color: var(--unframed-surface);
+  color: var(--unframed-text-primary);
+  font: inherit;
+  letter-spacing: normal;
+  text-transform: none;
+  outline: none;
+}
+
 /* The right-click menu: 188 px wide, Unframed's sections headed in small secondary text. */
 .tlui-menu[data-testid="context-menu"] {
   width: 188px;
