@@ -1,0 +1,155 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "plugins": [
+    "react"
+  ],
+  "jsPlugins": [
+    "@shadcn/lint"
+  ],
+  "categories": {
+    "correctness": "off"
+  },
+  "settings": {
+    "shadcn": {
+      "ui": "~/components/ui"
+    }
+  },
+  "ignorePatterns": [
+    "dist",
+    "node_modules"
+  ],
+  "rules": {
+    "shadcn/no-unknown-classes": [
+      "error",
+      {
+        "allow": [
+          "unframed-chrome-left",
+          "unframed-chrome-right",
+          "unframed-chrome-bottom-right"
+        ]
+      }
+    ],
+    "shadcn/no-raw-colors": "error",
+    "shadcn/require-static-classes": "error",
+    "shadcn/no-restyle": [
+      "error",
+      {
+        "allow": [
+          "layout"
+        ],
+        "contracts": [
+          {
+            "pattern": "^CollapsibleTrigger$",
+            "allow": [
+              "layout",
+              "color",
+              "typography",
+              "spacing",
+              "shape",
+              "effects",
+              "motion"
+            ]
+          }
+        ]
+      }
+    ],
+    "react/forbid-elements": [
+      "error",
+      {
+        "forbid": [
+          {
+            "element": "button",
+            "message": "Render the kit's Button (or InlineButton) from ~/components/ui/button."
+          },
+          {
+            "element": "input",
+            "message": "Render the kit's Input, Checkbox, Switch or NumberField from ~/components/ui."
+          },
+          {
+            "element": "select",
+            "message": "Render the kit's Select from ~/components/ui/select."
+          }
+        ]
+      }
+    ]
+  },
+  "overrides": [
+    // The kit and the theme define the looks and tokens the rest of the app may only pick from.
+    {
+      "files": [
+        "src/components/ui/**",
+        "src/theme/**"
+      ],
+      "rules": {
+        "shadcn/no-raw-colors": "off",
+        "shadcn/no-restyle": "off",
+        "shadcn/require-static-classes": "off",
+        "react/forbid-elements": "off"
+      }
+    },
+    // Surfaces spec 12 has not moved onto the kit yet. Each task removes its files; the sweep (task 24) leaves this empty.
+    {
+      "files": [
+        "src/agent/AgentHost.tsx",
+        "src/agent/ConfirmDialog.tsx",
+        "src/agent/composer/AgentTray.tsx",
+        "src/agent/composer/AttachmentShelf.tsx",
+        "src/agent/composer/ComposerMenu.tsx",
+        "src/agent/composer/PromptEditor.tsx",
+        "src/agent/composer/chips.tsx",
+        "src/agent/composer/panels.tsx",
+        "src/agent/composer/pickers.tsx",
+        "src/agent/composer/stash.tsx",
+        "src/agent/diff/DiffPanel.tsx",
+        "src/agent/rail/AgentRail.tsx",
+        "src/agent/rail/NoProvider.tsx",
+        "src/agent/rail/TabStrip.tsx",
+        "src/agent/rail/ThreadSearch.tsx",
+        "src/agent/transcript/ChatMarkdown.tsx",
+        "src/agent/transcript/PlanCard.tsx",
+        "src/agent/transcript/RecapCard.tsx",
+        "src/agent/transcript/Transcript.tsx",
+        "src/agent/transcript/WorkLog.tsx",
+        "src/artifacts/ArtifactFrame.tsx",
+        "src/artifacts/ArtifactsHost.tsx",
+        "src/artifacts/RenderRow.tsx",
+        "src/artifacts/editor/ArtifactEditor.tsx",
+        "src/artifacts/editor/Parameters.tsx",
+        "src/canvas/ContextMenu.tsx",
+        "src/canvas/MentionList.tsx",
+        "src/canvas/shapes/ShapeLabel.tsx",
+        "src/canvas/shapes/artifact.tsx",
+        "src/canvas/shapes/group.tsx",
+        "src/canvas/shapes/media.tsx",
+        "src/canvas/shapes/prompt.tsx",
+        "src/canvas/shapes/renderPlaceholder.tsx",
+        "src/chrome/DotGrid.tsx",
+        "src/chrome/ProjectMenu.tsx",
+        "src/generate/SelectionToolbar.tsx",
+        "src/generate/composer/Composer.tsx",
+        "src/generate/composer/FinalPromptDialog.tsx",
+        "src/generate/composer/GenerateTray.tsx",
+        "src/generate/composer/InstructionEditor.tsx",
+        "src/generate/composer/ModelDialog.tsx",
+        "src/generate/composer/PropTray.tsx",
+        "src/generate/composer/VideoStatus.tsx",
+        "src/generate/overlays.tsx",
+        "src/generate/runsProp.tsx",
+        "src/legacy/ImportGate.tsx",
+        "src/library/AddToLibraryDialog.tsx",
+        "src/library/LibraryDialog.tsx",
+        "src/library/LibraryHost.tsx",
+        "src/settings/SettingsHost.tsx",
+        "src/settings/fields.tsx",
+        "src/toasts.tsx"
+      ],
+      "rules": {
+        "shadcn/no-unknown-classes": "off",
+        "shadcn/no-raw-colors": "off",
+        "shadcn/require-static-classes": "off",
+        "shadcn/no-restyle": "off",
+        "react/forbid-elements": "off"
+      }
+    }
+  ]
+}

@@ -1,5 +1,8 @@
-import { Tooltip } from "@base-ui/react/tooltip";
 import type { ReactElement, ReactNode } from "react";
+import { Tooltip, TooltipPopup, TooltipTrigger } from "~/components/ui/tooltip";
+
+/** The look of the chrome's floating cards (spec 12): glass over the canvas, the kit's border and radius. */
+export const cornerCardClass = "box-border flex min-h-12 min-w-12 items-center gap-1 rounded-xl border p-1.5 shadow-lg/5 surface-glass";
 
 /** The menu and popover surface: popover fill at 88 %, the chrome blur, the popover shadow. */
 export const popupClass =
@@ -13,16 +16,12 @@ export const sectionHeadingClass = "px-2 pb-0.5 pt-1.5 text-[11px] text-muted-fo
 export const iconButtonClass =
   "flex size-9 cursor-pointer items-center justify-center rounded-lg border-0 bg-transparent p-0 text-foreground hover:bg-accent active:bg-accent focus-visible:outline-2 focus-visible:outline-ring";
 
-/** A tooltip on `children`, which must be the trigger element. */
+/** A kit tooltip on `children`, which must be the trigger element. */
 export const Tip = ({ label, children, side = "bottom" }: { readonly label: ReactNode; readonly children: ReactElement; readonly side?: "top" | "bottom" | "left" | "right" }) => (
-  <Tooltip.Root>
-    <Tooltip.Trigger render={children} />
-    <Tooltip.Portal>
-      <Tooltip.Positioner side={side} sideOffset={8} className="z-[1100]">
-        <Tooltip.Popup className="max-w-[280px] rounded-md bg-primary px-2 py-1 text-[12px] leading-snug text-primary-foreground shadow-lg">
-          {label}
-        </Tooltip.Popup>
-      </Tooltip.Positioner>
-    </Tooltip.Portal>
-  </Tooltip.Root>
+  <Tooltip>
+    <TooltipTrigger render={children} />
+    <TooltipPopup side={side} sideOffset={8}>
+      {label}
+    </TooltipPopup>
+  </Tooltip>
 );

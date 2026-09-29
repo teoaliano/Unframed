@@ -27,8 +27,9 @@ const Frame = () => {
   useSettings();
   const activation = useActivation();
   const project = useActiveProject(activation);
+  // isolate: the canvas and its chrome stack below every kit popup, which portals to <body> at t3code's z-50 to 140.
   return (
-    <main className="relative h-full w-full overflow-hidden bg-background text-foreground">
+    <main className="relative isolate h-full w-full overflow-hidden bg-background text-foreground">
       {project !== undefined && (
         <ImportGate key={project} project={project}>
           <CanvasHost project={project} activation={activation} />

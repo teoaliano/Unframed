@@ -5,7 +5,9 @@
     "module": "esnext",
     "moduleResolution": "bundler",
     "jsx": "react-jsx",
-    "types": ["vite/client"]
+    "types": ["vite/client"],
+    // t3code's UI kit imports itself through "~" (spec 12), kept so its files stay a mechanical merge.
+    "paths": { "~/*": ["./src/*"] }
   },
   "include": ["src", "vite.config.ts"]
 }

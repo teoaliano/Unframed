@@ -15,7 +15,8 @@ import "./transcript/transcript.css";
 import "./diff/diff.css";
 import { registerSlot, type AgentTrayProps } from "../chrome/slots.ts";
 import { useSlots } from "../chrome/slots.ts";
-import { iconButtonClass, Tip } from "../chrome/ui.tsx";
+import { Button } from "~/components/ui/button";
+import { Tip } from "../chrome/ui.tsx";
 import { useCanvasProject, useEngine } from "../context.ts";
 import { AgentRail } from "./rail/AgentRail.tsx";
 import { ToolbarAgentTray } from "./composer/AgentTray.tsx";
@@ -81,17 +82,17 @@ const ToolbarAgentButton = ({ client, onOpen }: { readonly client: ChatClient; r
 
 const AgentChromeButton = ({ client }: { readonly client: ChatClient }) => (
   <Tip label="Agent">
-    <button
-      type="button"
+    <Button
+      variant="ghost"
+      size="icon-lg"
       aria-label="Agent"
-      className={iconButtonClass}
       onClick={() => {
         void client.loadProviders();
         client.setUi({ open: true });
       }}
     >
-      <Sparkles size={20} aria-hidden />
-    </button>
+      <Sparkles aria-hidden />
+    </Button>
   </Tip>
 );
 

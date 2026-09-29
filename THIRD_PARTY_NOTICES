@@ -2,8 +2,12 @@ Third-party notices
 
 Unframed follows t3code (https://github.com/pingdotgg/t3code) for its agent runtime, chat
 composer, event store and RPC transport, and carries some of its files (provider marks,
-the Claude model catalogue, some model-facing prompt text). t3code is used under the MIT
-License:
+the Claude model catalogue, some model-facing prompt text). Since spec 12 it also carries
+t3code's design system: the UI kit in packages/web/src/components/ui with its cn helper
+and visible-animation helper, the default light and dark tokens, utilities, base rules and
+chat markdown rules in packages/web/src/theme, and the class recipes of its composer,
+message bubbles, timeline rows, approval and question panels and diff panel. t3code is
+used under the MIT License:
 
 --------------------------------------------------------------------------------
 t3code
@@ -30,6 +34,16 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
+
+--------------------------------------------------------------------------------
+coss ui and shadcn/ui (sources of t3code's UI kit, spec 12)
+--------------------------------------------------------------------------------
+
+t3code's UI kit files come from coss ui (https://github.com/cosscom/coss, the apps/ui
+directory, by Cal.com, Inc.), which that repository's LICENSING.md places under the MIT
+License, the same terms as t3code's above. The Collapsible follows shadcn/ui
+(https://ui.shadcn.com), MIT License, Copyright (c) 2023 shadcn. Both are built on Base
+UI (@base-ui/react), which is listed with the rest of the bundle's packages.
 
 --------------------------------------------------------------------------------
 HyperFrames, GSAP and DialKit (pages and motions, spec 09)

@@ -1,5 +1,6 @@
 import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
+import { fileURLToPath } from "node:url";
 import { defineConfig } from "vite";
 
 const clientPort = process.env.UNFRAMED_CLIENT_PORT;
@@ -7,6 +8,8 @@ const serverPort = process.env.UNFRAMED_SERVER_PORT ?? "8787";
 
 export default defineConfig({
   plugins: [react(), tailwindcss()],
+  // t3code's UI kit imports itself through "~" (spec 12), kept so its files stay a mechanical merge.
+  resolve: { alias: { "~": fileURLToPath(new URL("./src", import.meta.url)) } },
   // No .env files: the repo's .env holds the OpenRouter key, and nothing from it may
   // reach the client. The one build-time value is read explicitly below.
   envDir: false,

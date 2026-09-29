@@ -1,9 +1,10 @@
-import { Tooltip } from "@base-ui/react/tooltip";
 import { Info } from "lucide-react";
+import { Button } from "~/components/ui/button";
+import { TooltipProvider } from "~/components/ui/tooltip";
 import logoUrl from "../../../../assets/brand/logo.svg?url";
 import { ProjectMenu } from "./ProjectMenu.tsx";
 import { useSlots } from "./slots.ts";
-import { iconButtonClass, Tip } from "./ui.tsx";
+import { cornerCardClass, Tip } from "./ui.tsx";
 
 export const HELP_TEXT = "Reference a prompt or group with @id. Select images to number them, then type “image 1”.";
 
@@ -14,8 +15,8 @@ export const HELP_TEXT = "Reference a prompt or group with @id. Select images to
 export const TopCorners = () => {
   const { agentButton: Agent, settingsButton: SettingsButton, rightCardAside } = useSlots();
   return (
-    <Tooltip.Provider delay={400}>
-      <div className="unframed-chrome-left">
+    <TooltipProvider delay={400}>
+      <div className={`unframed-chrome-left ${cornerCardClass}`}>
         <span
           role="img"
           aria-label="Unframed"
@@ -24,15 +25,15 @@ export const TopCorners = () => {
         />
         <ProjectMenu />
       </div>
-      <div className="unframed-chrome-right" data-aside={rightCardAside ? "" : undefined} inert={rightCardAside === true}>
+      <div className={`unframed-chrome-right ${cornerCardClass}`} data-aside={rightCardAside ? "" : undefined} inert={rightCardAside === true}>
         {Agent && <Agent />}
         {SettingsButton && <SettingsButton />}
         <Tip label={HELP_TEXT}>
-          <button type="button" aria-label="Help" className={iconButtonClass}>
-            <Info size={20} aria-hidden />
-          </button>
+          <Button variant="ghost" size="icon-lg" aria-label="Help">
+            <Info aria-hidden />
+          </Button>
         </Tip>
       </div>
-    </Tooltip.Provider>
+    </TooltipProvider>
   );
 };

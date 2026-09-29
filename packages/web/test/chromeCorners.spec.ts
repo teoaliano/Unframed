@@ -1,5 +1,6 @@
 import { centre, openCanvas, shapeOnScreen } from "./canvas.ts";
 import { expect, test } from "./fixtures.ts";
+import { expectSlot, inBothSchemes, resolvedColor, styleOf, tokenColor } from "./kit.ts";
 
 const HELP = "Reference a prompt or group with @id. Select images to number them, then type “image 1”.";
 
@@ -11,6 +12,32 @@ test("the top-right card ends with Help, whose tooltip explains references", asy
   await expect(help).toBeVisible();
   await help.hover();
   await expect(page.getByText(HELP, { exact: true })).toBeVisible();
+});
+
+test("the corner cards are glass with the kit's border and radius, and Help is a kit ghost button with a kit tooltip", async ({ page, engine }) => {
+  await openCanvas(page, engine);
+  const cards = [page.locator(".unframed-chrome-left"), page.locator(".unframed-chrome-right")];
+  const help = page.locator(".unframed-chrome-right").getByRole("button", { name: "Help" });
+  // A Button rendered as a kit tooltip's trigger carries the trigger's slot, as in t3code.
+  await expectSlot(help, "tooltip-trigger");
+  await inBothSchemes(page, async () => {
+    const glass = await resolvedColor(page, "color-mix(in srgb, var(--background) var(--glass-opacity), transparent)");
+    for (const card of cards) {
+      await expect.poll(() => styleOf(card, "background-color")).toBe(glass);
+      expect(await styleOf(card, "border-top-color")).toBe(await tokenColor(page, "--color-border"));
+      expect(await styleOf(card, "border-top-left-radius")).toBe("14px");
+      expect(await styleOf(card, "backdrop-filter")).toMatch(/^blur\(/);
+    }
+    // A ghost button: transparent until hovered, then the accent fill.
+    expect(await styleOf(help, "background-color")).toBe("rgba(0, 0, 0, 0)");
+    await help.hover();
+    await expect.poll(async () => (await styleOf(help, "background-color")) === (await tokenColor(page, "--accent"))).toBe(true);
+    const tip = page.locator("[data-slot='tooltip-popup']").filter({ hasText: HELP });
+    await expect(tip).toBeVisible();
+    expect(await styleOf(tip, "background-color")).toBe(await tokenColor(page, "--popover"));
+    await page.mouse.move(5, 500);
+    await expect(tip).toHaveCount(0);
+  });
 });
 
 test("the toolbar names text Prompt and frame Group, and the zoom controls sit bottom left", async ({ page, engine }) => {

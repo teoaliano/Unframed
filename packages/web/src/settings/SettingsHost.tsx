@@ -5,7 +5,8 @@
 import { KeyRound, Settings as Gear } from "lucide-react";
 import { useEffect, useMemo } from "react";
 import { registerSlot } from "../chrome/slots.ts";
-import { iconButtonClass, Tip } from "../chrome/ui.tsx";
+import { Button } from "~/components/ui/button";
+import { Tip } from "../chrome/ui.tsx";
 import { useEngine } from "../context.ts";
 import { SettingsDialog } from "./SettingsDialog.tsx";
 import { SettingsUi, useSettingsUi } from "./settingsUi.ts";
@@ -17,23 +18,17 @@ const SettingsButton = ({ ui }: { readonly ui: SettingsUi }) => {
     const hint = settings?.keyHint ?? "";
     return (
       <Tip label={`Settings: ${hint === "" ? "" : `key …${hint}, `}default models, output folder`}>
-        <button type="button" aria-label="Settings" className={iconButtonClass} onClick={() => ui.open()}>
-          <Gear size={20} aria-hidden />
-        </button>
+        <Button variant="ghost" size="icon-lg" aria-label="Settings" onClick={() => ui.open()}>
+          <Gear aria-hidden />
+        </Button>
       </Tip>
     );
   }
   return (
     <Tip label="No OpenRouter key yet. Click to add one">
-      <button
-        type="button"
-        aria-label="Add your API key"
-        data-keyless="true"
-        className="flex size-9 cursor-pointer items-center justify-center rounded-lg border-0 bg-primary p-0 text-primary-foreground hover:opacity-90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
-        onClick={() => ui.open()}
-      >
-        <KeyRound size={18} aria-hidden />
-      </button>
+      <Button size="icon-lg" aria-label="Add your API key" data-keyless="true" onClick={() => ui.open()}>
+        <KeyRound aria-hidden />
+      </Button>
     </Tip>
   );
 };
