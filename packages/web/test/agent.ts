@@ -3,12 +3,13 @@
  * the scripted agent over the fixture scripts, the rail and its composer on screen, and
  * the chats the engine holds.
  */
+import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { Locator, Page } from "@playwright/test";
 import type { ChatSummary, ShellStreamItem, ThreadStreamItem } from "@unframed/contracts";
 import { projectChat, type Chat, type ChatEvent } from "@unframed/domain";
 import { FIXTURES } from "../../engine/test/agent.ts";
-import { fakeShell } from "../../engine/test/agentFakes.ts";
+import { fakeCodex, fakeShell, fakeSignedInClaude } from "../../engine/test/agentFakes.ts";
 import type { EngineOptions, TestEngine } from "../../engine/test/engineProcess.ts";
 import { expect, startHostedEngine, test as base } from "./fixtures.ts";
 
@@ -32,6 +33,26 @@ export const startDetectingEngine = async (dir: string, options: EngineOptions =
     dotenv: `CLAUDE_PATH=${join(dir, "bin", "claude")}\nCODEX_PATH=${join(dir, "bin", "codex")}\n${options.dotenv ?? ""}`,
     env: { SHELL: shell, FAKE_SHELL_PATH: "", ...options.env },
   });
+};
+
+/**
+ * A detecting engine whose Claude and Codex are signed-in fakes: Claude reports Opus 5.5
+ * (every effort, thinking, fast mode) and Sonnet 5 (three efforts) and a `review` command,
+ * and its config folder holds a `brand` skill; Codex lists GPT-5.5 Codex and GPT-6. Chats
+ * on it never run a turn.
+ */
+export const startProvidersEngine = async (dir: string): Promise<TestEngine> => {
+  await fakeSignedInClaude(join(dir, "bin"), {
+    models: [
+      { value: "claude-opus-5-5", displayName: "Opus", description: "Most capable", supportedEffortLevels: ["low", "medium", "high", "xhigh", "max"], supportsAdaptiveThinking: true, supportsFastMode: true },
+      { value: "claude-sonnet-5", displayName: "Sonnet", description: "Balanced", supportedEffortLevels: ["low", "medium", "high"] },
+    ],
+    commands: [{ name: "review", description: "Review the code" }],
+  });
+  await fakeCodex(join(dir, "bin"));
+  await mkdir(join(dir, "claude-config", "skills", "brand"), { recursive: true });
+  await writeFile(join(dir, "claude-config", "skills", "brand", "SKILL.md"), "---\nname: brand\ndescription: Apply the house brand\n---\nUse the brand colours.\n");
+  return startDetectingEngine(dir, { dotenv: `CLAUDE_CONFIG_DIR=${join(dir, "claude-config")}\n` });
 };
 
 export const test = base.extend<{ agent: TestEngine }>({
