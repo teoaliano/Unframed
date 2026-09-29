@@ -4,14 +4,13 @@
  * the dialog so that closing the dialog never abandons a connection.
  */
 import { UnframedError, type KeyStatus, type Settings } from "@unframed/contracts";
+import { OAUTH_ATTEMPT_MS, OAUTH_NOTHING_CAME_BACK } from "@unframed/domain";
 import { useSyncExternalStore } from "react";
 import type { EngineConnection } from "../rpc/engine.ts";
 import { showError, showNotice } from "../toasts.tsx";
 
 export const POLL_MS = 1500;
-export const CONNECT_LIFETIME_MS = 10 * 60_000;
 export const CONNECTED_MESSAGE = "Connected to OpenRouter.";
-export const NOTHING_CAME_BACK = "Nothing came back from OpenRouter. Try connecting again.";
 export const CONNECTION_LOST = "That connection was lost before it finished. Try connecting again.";
 export const CONNECT_FAILED = "Connecting failed. Try again.";
 
@@ -148,7 +147,7 @@ export class SettingsUi {
     })();
   }
 
-  /** The engine cancelled the attempt when a key was saved or removed; the next poll would read a lost connection. */
+  /** The engine cancelled the attempt when a key was sent or removed; the next poll would read a lost connection. */
   keyChosen() {
     this.stopPolling();
   }
@@ -162,9 +161,10 @@ export class SettingsUi {
   private async tick() {
     const connection = this.state.connection;
     if (connection === undefined || this.polling) return;
-    if (Date.now() - connection.since > CONNECT_LIFETIME_MS) {
+    // A backstop: the engine fails its own attempt on the same clock.
+    if (Date.now() - connection.since > OAUTH_ATTEMPT_MS) {
       this.stopPolling();
-      this.report(NOTHING_CAME_BACK);
+      this.report(OAUTH_NOTHING_CAME_BACK);
       return;
     }
     this.polling = true;

@@ -170,6 +170,8 @@ export const SettingsDialog = ({ ui }: { readonly ui: SettingsUi }) => {
       if (patch.claudePath !== undefined || patch.codexPath !== undefined || patch.claudeConfigDir !== undefined) checkProviders(false);
       if (patch.outputDir !== undefined) void activation.reopen();
     } catch (error) {
+      // Only a refused field leaves the attempt alone: the engine cancels it right after validation.
+      if (patch.key !== undefined && !(error instanceof UnframedError && error.code === "bad_request")) ui.keyChosen();
       setBanner({ kind: "error", message: messageOf(error) });
     } finally {
       setSaving(false);

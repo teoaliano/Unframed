@@ -1,5 +1,5 @@
 import type { Settings } from "@unframed/contracts";
-import { effectiveSettings, keyHint, type EffectiveSettings } from "@unframed/domain";
+import { effectiveSettings, keyHint, SETTING_OF_VARIABLE, type EffectiveSettings } from "@unframed/domain";
 import * as Context from "effect/Context";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
@@ -13,19 +13,6 @@ import { Config } from "./services.ts";
 
 /** A `.env` write that did not land. Nothing in the running process changed. */
 export class EnvWriteError extends Data.TaggedError("EnvWriteError")<{ readonly reason: string }> {}
-
-/** The live value each settings variable sets. */
-const FIELD_OF: Readonly<Record<string, keyof EffectiveSettings>> = {
-  OPENROUTER_API_KEY: "key",
-  OPENROUTER_IMAGE_MODEL: "imageModel",
-  OPENROUTER_MODEL: "imageModel",
-  OPENROUTER_TEXT_MODEL: "textModel",
-  OPENROUTER_VIDEO_MODEL: "videoModel",
-  OUTPUT_DIR: "outputDir",
-  CLAUDE_PATH: "claudePath",
-  CODEX_PATH: "codexPath",
-  CLAUDE_CONFIG_DIR: "claudeConfigDir",
-};
 
 /**
  * The person's settings: the live values and the only code that changes `.env`. Callers
@@ -46,7 +33,9 @@ export class SettingsStore extends Context.Service<
      * a write is on disk the running process takes every variable it changed, except the
      * output folder when `holdOutputDir` is set (a folder move switches it later with
      * `useOutputDir`). A variable deleted from the file falls back to the process
-     * environment. Nothing is emitted: call `emit`.
+     * environment, except the key: deleting it clears the key in the running process
+     * (spec 10), and a key the shell provides applies again only at the next launch.
+     * Nothing is emitted: call `emit`.
      */
     readonly write: (
       changes: Readonly<Record<string, string | null>>,
@@ -95,10 +84,10 @@ export const settingsStoreLayer = (options: {
           const fromFile = effectiveSettings(parseEnvText(text), options.processEnv);
           // Applied inside the write chain, so two writes apply in the order they landed.
           const next: Record<string, string> = { ...live };
-          for (const variable of Object.keys(changes)) {
-            const field = FIELD_OF[variable];
+          for (const [variable, value] of Object.entries(changes)) {
+            const field = SETTING_OF_VARIABLE[variable];
             if (field === undefined || (field === "outputDir" && writeOptions.holdOutputDir === true)) continue;
-            next[field] = fromFile[field];
+            next[field] = field === "key" && value === null ? "" : fromFile[field];
           }
           live = next as unknown as EffectiveSettings;
           return live;

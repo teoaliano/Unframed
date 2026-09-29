@@ -57,6 +57,12 @@ const FIELDS: ReadonlyArray<{
   },
 ];
 
+/** The setting each `.env` variable holds; the legacy `OPENROUTER_MODEL` is the image model. */
+export const SETTING_OF_VARIABLE: Readonly<Record<string, Field>> = {
+  ...Object.fromEntries(FIELDS.map(({ field, variable }) => [variable, field])),
+  OPENROUTER_MODEL: "imageModel",
+};
+
 export type SettingsPatchResult =
   | { readonly ok: true; readonly changes: Readonly<Record<string, string | null>> }
   | { readonly ok: false; readonly message: string };

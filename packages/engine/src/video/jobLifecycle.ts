@@ -11,6 +11,7 @@ import {
   pendingFor,
   pruneJobs,
   reassignPendingJobs,
+  type FailPendingOptions,
   type RenderJob,
 } from "@unframed/domain";
 import * as Data from "effect/Data";
@@ -49,10 +50,7 @@ export const dropPendingJobsIn = (outputDir: string, ids: ReadonlyArray<string>)
   });
 
 /** Fails pending records (of one project, or with these ids, or all); answers the records it failed. */
-export const failPendingJobsIn = (
-  outputDir: string,
-  options: { readonly project?: string; readonly ids?: ReadonlyArray<string>; readonly error: string },
-): Promise<RenderJob[]> =>
+export const failPendingJobsIn = (outputDir: string, options: FailPendingOptions): Promise<RenderJob[]> =>
   edit(outputDir, (jobs) => {
     const { jobs: next, failed } = failPendingJobs(jobs, { ...options, now: Date.now() });
     return { jobs: next, result: failed, changed: failed.length > 0 };

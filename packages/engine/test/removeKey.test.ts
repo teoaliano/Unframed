@@ -52,6 +52,16 @@ describe("settings.removeKey", () => {
     });
   });
 
+  it("clears a key the shell environment provides in the running process, without writing an empty line", async () => {
+    const rendering = await startRendering({ key: false, env: { OPENROUTER_API_KEY: KEY }, seed: [pendingRecord("job-board")] });
+    expect((await rendering.rpc.call("settings.get")).hasKey).toBe(true);
+    const answer = await rendering.rpc.call("settings.removeKey");
+    expect(answer.settings.hasKey).toBe(false);
+    expect(answer.endedRenders).toBe(1);
+    expect((await rendering.rpc.call("settings.get")).hasKey).toBe(false);
+    expect(await readFile(join(rendering.engine.dataDir, ".env"), "utf8")).toBe("");
+  });
+
   it("still removes the key when jobs.json is not valid, and says the renders could not be stopped", async () => {
     const rendering = await startRendering({ seedText: "{ not json" });
     const answer = await rendering.rpc.call("settings.removeKey");

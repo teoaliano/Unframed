@@ -2,6 +2,7 @@ import { existsSync } from "node:fs";
 import { chmod, mkdir, readdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
+import { gate } from "./openRouterStub.ts";
 import { connectTab } from "./syncClient.ts";
 import { completedHere, eventually, jobsText, pendingRecord, readJobs, shareCopies, startRendering, startRequest } from "./video.ts";
 
@@ -156,6 +157,25 @@ describe("projects.delete", () => {
     expect(rendering.jobs.downloads.map((request) => request.path)).not.toContain(`/files/${started.jobId}.mp4`);
     expect(rendering.jobs.polls.filter((request) => request.path.endsWith(started.jobId))).toHaveLength(0);
     expect(existsSync(rendering.folder)).toBe(false);
+  });
+
+  it("keeps a render failed and its folder gone when the delete lands during the clip's download", async () => {
+    const rendering = await startRendering({
+      seed: [pendingRecord("job-a")],
+      env: { UNFRAMED_TEST_SWEEP_MS: "150" },
+      status: (id, request) => completedHere(id, request),
+    });
+    const download = gate<void>();
+    rendering.jobs.clip(async (id) => {
+      await download.promise;
+      return Buffer.from(`clip of ${id}`);
+    });
+    await eventually(async () => rendering.jobs.downloads.length > 0, "the sweep to start the download");
+    expect(await rendering.rpc.call("projects.delete", { name: "board", confirmRenders: true })).toEqual({ endedRenders: 1 });
+    download.release();
+    await new Promise((resolve) => setTimeout(resolve, 600));
+    expect(existsSync(rendering.folder)).toBe(false);
+    expect((await readJobs(rendering))[0]).toMatchObject({ id: "job-a", status: "failed", error: PROJECT_DELETED });
   });
 
   it("says the renders were stopped but the folder remains when removal fails, and a retry succeeds", async () => {

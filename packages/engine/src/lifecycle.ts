@@ -92,6 +92,9 @@ export const lifecycleLayer = Layer.effect(
             ),
       );
 
+    /** Every change that wrote `.env` ends here: subscribers hear of it, and the caller gets what the web may see. */
+    const published = Effect.andThen(settings.emit, settings.view);
+
     const writeEnv = (changes: Readonly<Record<string, string | null>>, options?: { readonly holdOutputDir?: boolean }) =>
       Effect.mapError(settings.write(changes, options), (error) => unframedError("internal", `Could not write .env: ${error.reason}`));
 
@@ -112,8 +115,7 @@ export const lifecycleLayer = Layer.effect(
         }
         if (move !== undefined) return yield* moveOutputDir(changes, move);
         yield* writeEnv(changes);
-        yield* settings.emit;
-        return yield* settings.view;
+        return yield* published;
       });
 
     /**
@@ -144,7 +146,7 @@ export const lifecycleLayer = Layer.effect(
         yield* settings.useOutputDir(move.written);
 
         if (copied.length > 0 && (yield* settings.read).key === "") {
-          // A key removal that ran during the move failed only the old store it could see.
+          // The sweep cannot poll the copies without a key: they fail as a key removal fails renders.
           yield* renderJobs
             .failPending({ ids: copied, error: MOVED_WHILE_REMOVED_ERROR })
             .pipe(Effect.catch((error) => Effect.sync(() => logError(`could not stop the moved renders: ${error.reason}`))));
@@ -157,8 +159,7 @@ export const lifecycleLayer = Layer.effect(
             ),
           );
         }
-        yield* settings.emit;
-        return yield* settings.view;
+        return yield* published;
       });
 
     const updateSettings = (patch: SettingsPatch) =>
@@ -175,8 +176,7 @@ export const lifecycleLayer = Layer.effect(
     const removeKeyLocked = Effect.gen(function* () {
       // A delete, not an empty line, so a key the shell environment provides is not shadowed.
       yield* writeEnv({ OPENROUTER_API_KEY: null });
-      yield* settings.emit;
-      const view = yield* settings.view;
+      const view = yield* published;
       // The sweep cannot poll without a key, so pending renders would sit stranded for 24 hours.
       return yield* renderJobs.failPending({ error: KEY_REMOVED_ERROR }).pipe(
         Effect.map((endedRenders): RemovedKey => ({ settings: view, endedRenders })),

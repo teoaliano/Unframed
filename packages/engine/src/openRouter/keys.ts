@@ -14,6 +14,16 @@ const reason = (error: unknown): string => {
   return cause instanceof Error ? cause.message : errorText(error);
 };
 
+/** The body as JSON, or `undefined` when it is not JSON. A read that fails mid-body rejects. */
+const bodyOf = async (response: Response): Promise<unknown> => {
+  const text = await response.text();
+  try {
+    return JSON.parse(text);
+  } catch {
+    return undefined;
+  }
+};
+
 /** OpenRouter's own message: `error.message`, a string `error`, or `message`. */
 const upstreamWords = (body: unknown): string | undefined => {
   const error = field(body, "error");
@@ -40,12 +50,7 @@ export const exchangeCode = async (origin: string, code: string, verifier: strin
       body: JSON.stringify({ code, code_verifier: verifier, code_challenge_method: "S256" }),
       signal: AbortSignal.timeout(EXCHANGE_TIMEOUT_MS),
     });
-    const text = await response.text();
-    try {
-      body = JSON.parse(text);
-    } catch {
-      body = undefined;
-    }
+    body = await bodyOf(response);
   } catch (error) {
     return { ok: false, network: true, message: reason(error) };
   }
@@ -68,12 +73,7 @@ export const fetchKeyStatus = async (origin: string, key: string): Promise<KeySt
   try {
     response = await fetch(`${origin}/api/v1/key`, { headers: { Authorization: `Bearer ${key}` }, signal: AbortSignal.timeout(STATUS_TIMEOUT_MS) });
     if (response.status === 401 || response.status === 403) return { ok: true, status: { hasKey: true, revoked: true } };
-    const text = await response.text();
-    try {
-      body = JSON.parse(text);
-    } catch {
-      body = undefined;
-    }
+    body = await bodyOf(response);
   } catch (error) {
     return { ok: false, message: reason(error) };
   }

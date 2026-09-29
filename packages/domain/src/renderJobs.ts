@@ -75,9 +75,12 @@ export const givenUp = (job: RenderJob, now: number): boolean => {
   return typeof job.unreachableSince === "number" && Number.isFinite(since) && since >= GIVE_UP_MS;
 };
 
+/** Whether a record is pending: of any project without one, else of that project (missing counts as ''). */
+export const isPendingFor = (job: RenderJob, project?: string | null): boolean =>
+  job.status === "pending" && (project === undefined || project === null || (job.project ?? "") === project);
+
 /** Pending records: all of them without a project, else those of that project (missing counts as ''). */
-export const pendingFor = (jobs: ReadonlyArray<RenderJob>, project?: string | null): RenderJob[] =>
-  jobs.filter((job) => job.status === "pending" && (project === undefined || project === null || (job.project ?? "") === project));
+export const pendingFor = (jobs: ReadonlyArray<RenderJob>, project?: string | null): RenderJob[] => jobs.filter((job) => isPendingFor(job, project));
 
 /** A list, or `[]` for anything that is not a JSON list. */
 export const parseJobsLenient = (text: string): RenderJob[] => {

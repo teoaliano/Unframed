@@ -116,11 +116,17 @@ test("a refused exchange with the dialog closed is a toast", async ({ page }) =>
 test("Cancel returns to the Connect state, and a Connect straight after still completes", async ({ page }) => {
   const { engine, oauth } = await startSettingsEngine({ key: false });
   try {
-    const release = holdExchanges(oauth);
+    const late = gate<void>();
+    oauth.exchange(async () => {
+      await late.promise;
+      return { kind: "key", key: "sk-or-v1-late-approval-00001111" };
+    });
     await openApp(page, engine);
     const dialog = settingsDialog(page);
+    const firstTab = page.waitForEvent("popup");
     await dialog.getByRole("button", { name: "Connect OpenRouter" }).click();
     await expect(dialog.getByTestId("settings-waiting")).toBeVisible();
+    await expect.poll(() => oauth.exchanges.length).toBe(1);
     await dialog.getByRole("button", { name: "Cancel" }).click();
     await expect(dialog.getByTestId("settings-waiting")).toHaveCount(0);
     await expect(dialog.getByRole("button", { name: "Connect OpenRouter" })).toBeVisible();
@@ -128,8 +134,9 @@ test("Cancel returns to the Connect state, and a Connect straight after still co
     await dialog.getByRole("button", { name: "Connect OpenRouter" }).click();
     await expect(toast(page, "Connected to OpenRouter.")).toBeVisible();
     await expect(dialog).toBeHidden();
-    // The first attempt's callback, released late, was refused.
-    release();
+    // The cancelled attempt's approval, landing last, is refused and saves nothing.
+    late.release();
+    await expect((await firstTab).locator("h1")).toHaveText("That connection was cancelled");
     expect(await readFile(join(engine.dataDir, ".env"), "utf8")).toBe(`OPENROUTER_API_KEY=${CONNECTED_KEY}\n`);
   } finally {
     await engine.dispose();
