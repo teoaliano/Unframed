@@ -151,11 +151,17 @@ describe("projects.delete", () => {
     expect(await shareCopies(rendering)).toEqual([]);
     expect((await fetch(shared)).status).toBe(404);
 
+    // The sweep may have polled before the delete, and a poll it sent just before may still
+    // land, so count from two sweep intervals after it.
+    const pollsOfJob = () => rendering.jobs.polls.filter((request) => request.path.endsWith(started.jobId)).length;
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    const polledBefore = pollsOfJob();
+
     // Even once upstream says it finished, nothing collects it or recreates the folder.
     rendering.jobs.status((id, request) => completedHere(id, request));
     await new Promise((resolve) => setTimeout(resolve, 900));
     expect(rendering.jobs.downloads.map((request) => request.path)).not.toContain(`/files/${started.jobId}.mp4`);
-    expect(rendering.jobs.polls.filter((request) => request.path.endsWith(started.jobId))).toHaveLength(0);
+    expect(pollsOfJob()).toBe(polledBefore);
     expect(existsSync(rendering.folder)).toBe(false);
   });
 
