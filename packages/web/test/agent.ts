@@ -82,6 +82,26 @@ export const rpcOf = (engine: TestEngine): ReturnType<TestEngine["rpc"]> => {
   return socket;
 };
 
+/**
+ * Small pages (and motions) in a column left of the starter prompts, so the view that
+ * opens on them keeps them clear of the rail. Put them before opening the canvas.
+ */
+export const artifactColumn = (items: ReadonlyArray<{ id: string; kind?: "page" | "motion"; title: string; file?: string }>) =>
+  items.map((item, index) => ({
+    id: item.id,
+    typeName: "shape",
+    type: item.kind ?? "page",
+    x: -600,
+    y: 60 + index * 130,
+    rotation: 0,
+    index: `a${String.fromCharCode(66 + index)}`,
+    parentId: "page:page",
+    isLocked: false,
+    opacity: 1,
+    props: { w: 180, h: 96, file: item.file ?? "", fileName: item.file ?? "", title: item.title },
+    meta: { ref: String(700 + index) },
+  }));
+
 /** Dispatches one chat command as the web would. */
 export const dispatch = async (engine: TestEngine, command: Record<string, unknown>, project = "default"): Promise<{ sequence: number }> =>
   (await rpcOf(engine)).call("orchestration.dispatchCommand", { commandId: crypto.randomUUID(), projectId: project, ...command } as never);

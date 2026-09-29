@@ -1,5 +1,5 @@
 import { openCanvas } from "./canvas.ts";
-import { createChat, expect, openRail, sendThrough, tabs, test } from "./agent.ts";
+import { createChat, engineChat, expect, openRail, sendThrough, tabs, test } from "./agent.ts";
 
 const at = (day: number) => `2026-09-${String(day).padStart(2, "0")}T10:00:00.000Z`;
 
@@ -26,8 +26,51 @@ test("three tabs inline and the rest under More, whose trigger names the active 
   await expect(panel.getByRole("button", { name: "More chats: First" })).toHaveText("First");
   await expect(tabs(page).and(page.locator("[aria-selected='true']"))).toHaveCount(0);
 
+  // A chat under More cannot be renamed there: its row is a menu item, not a tab.
+  await panel.getByRole("button", { name: "More chats" }).click();
+  await page.getByRole("menu").getByRole("menuitem", { name: "Second" }).dblclick();
+  await expect(panel.getByRole("textbox", { name: "Rename chat" })).toHaveCount(0);
+
   // An inline tab chosen again leaves the More trigger reading More.
   await tabs(page).nth(1).click();
   await expect(tabs(page).nth(1)).toHaveAttribute("aria-selected", "true");
   await expect(panel.getByRole("button", { name: "More chats" })).toHaveText("More");
+});
+
+test("double-click renames a tab in place: Enter and blur commit, Escape abandons, an empty name falls back to the default", async ({ page, agent }) => {
+  await openCanvas(page, agent);
+  const chatId = await createChat(agent);
+  await sendThrough(agent, chatId, "name this chat please");
+  const panel = await openRail(page);
+  await expect(tabs(page)).toHaveText(["A named conversation"]);
+  const rename = panel.getByRole("textbox", { name: "Rename chat" });
+
+  await tabs(page).first().dblclick();
+  await expect(rename).toBeFocused();
+  await expect(rename).toHaveValue("A named conversation");
+  await rename.fill("Brief");
+  await rename.press("Enter");
+  await expect(rename).toHaveCount(0);
+  await expect(tabs(page)).toHaveText(["Brief"]);
+  await expect.poll(async () => (await engineChat(agent, chatId)).title).toBe("Brief");
+  expect((await engineChat(agent, chatId)).titledBy).toBe("user");
+
+  await tabs(page).first().dblclick();
+  await rename.fill("Not this");
+  await rename.press("Escape");
+  await expect(rename).toHaveCount(0);
+  await expect(tabs(page)).toHaveText(["Brief"]);
+
+  await tabs(page).first().dblclick();
+  await rename.fill("Blurred");
+  await panel.locator(".unframed-agent-rail__title").click();
+  await expect(tabs(page)).toHaveText(["Blurred"]);
+  await expect.poll(async () => (await engineChat(agent, chatId)).title).toBe("Blurred");
+
+  // Clearing the name lets the tab fall back to the opening words, and the agent may name it again.
+  await tabs(page).first().dblclick();
+  await rename.fill("");
+  await rename.press("Enter");
+  await expect(tabs(page)).toHaveText(["name this chat please"]);
+  await expect.poll(async () => (await engineChat(agent, chatId)).titledBy).toBeNull();
 });
