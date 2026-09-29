@@ -19,9 +19,9 @@ Checked 2026-09-28: Node v24.21.0, pnpm 9.15.4 through Corepack, Google Chrome, 
 | 05 | text, multi-run and Free | 4 | merged | c1bb5a2 | 40/40 tasks; 790 tests green, 134 of 135 browser tests (the one failure is the spec 02 right-click flake, sent back to the spec 02 agent) |
 | 06 | groups, recipes and the library | 5 | merged | 5f399d1 | 39/39 tasks; 1144 tests, 185 browser tests green on build. Task 15's Agent button waits for spec 08 |
 | 07 | agent runtime | 6 | merged | ba20d56 | 55/55 tasks; 1356 tests, 185 browser tests green on build |
-| 08 | agent chat | 7 | building | | merge before 10 |
-| 09 | artifacts | 8 | pending | | |
-| 10 | settings and OpenRouter | 7 | building | | 58/58 tasks done on its branch; adding the oauth.cancel render rule below; merges after 08 |
+| 08 | agent chat | 7 | merged | 6c70830 | 47/47 tasks. Open: the web chat client drops one engine event in about 1 in 5 loaded runs of `agentWork.spec.ts:24` (product bug); sent back to the spec 08 agent |
+| 09 | artifacts | 8 | building | | |
+| 10 | settings and OpenRouter | 7 | merged | b7a1b78, fixture fix 18312a7 | 58/58 tasks plus the oauth.cancel render rule; merged after 08 (2 conflicts resolved by the orchestrator); 1511 tests, 261 browser tests green on build |
 | 11 | legacy import | 9 | pending | | |
 
 ## Decisions
@@ -43,6 +43,8 @@ Settled by the orchestrator from the specs (no decision needed from the person):
 - Spec 07: review items left alone, the 800-line `runtime.ts` and duplicated contract and domain type definitions (a compile-time check in `layer.ts` catches drift).
 - Spec 06, task 15: the recipe bar's Agent button shows only once spec 08 registers the Agent tray. The spec 08 agent must cover it.
 - Spec 06: review smells left alone, the 10 copies of `messageOf` across files and the paste fix-up that overlaps domain `instantiate`.
+- Spec 08: `AgentTray.tsx` is 686 lines; splitting it was left as a refactor beyond the spec.
+- Spec 10: Cancel's `renderCleanupError` display in the web has no browser test (no reliable way to click Cancel between the approval landing and the 1.5 s poll). The engine behaviour is tested.
 - Spec 09: motion-render runs are not in spec 10's live-run check for an output folder change yet. The spec 09 agent must add them.
 - Spec 04, task 21: the test moves the image through the room, not with a mouse drag, because dragging a selected shape moves the whole selection.
 - Spec 05: some logic is duplicated between `textRuns.ts` and spec 03's `runs.ts` (run-id minting, the `of` lookup, top-index lookup), and between the image and text catalogue functions. The agent left spec 03's files alone because spec 04 edits them in parallel. Fold them together after wave 4.
@@ -69,6 +71,9 @@ Measured by the spec agent in the hosted shape (production web served by the eng
 - Local Playwright runs use the installed Chrome. Chrome 147 on this Mac starts `GoogleUpdater` about 19 s after launch, which holds Chrome's stdout and stderr open, so `browser.close()` waited seconds to minutes and left orphaned workers. Since the spec 03 fixes, a local Mac run starts Chrome through `packages/web/test/chrome.sh`, which sends its output to `/dev/null`. Chrome 148 or later honours `--disable-updater-scheduler` and would fix it too. Still run browser tests with `--global-timeout`, and kill -9 orphaned `workerProcessEntry.js` processes before a rerun.
 - Browser specs that touch the system clipboard run one at a time in their own Playwright project (spec 03 fixes). New clipboard tests go there.
 - A spec agent stalls (10 minutes with no stream progress) when one command runs long with no output, such as a browser suite hung in teardown. Briefs cap each command at 5 minutes with `--global-timeout 280000 --reporter=list`, and tell agents not to use background commands, whose notifications reach the orchestrator. A stalled agent resumes with SendMessage and keeps its context.
+- `pnpm -s typecheck` prints nothing when it fails. Read the exit code.
+- Browser test engines point `CLAUDE_PATH` and `CODEX_PATH` at missing files and use `SHELL=/bin/sh` (spec 08), so provider detection never starts the machine's real CLIs. An engine gets the fixture OpenRouter key unless its test writes a `.env`; a test that writes one and wants a key must include `OPENROUTER_API_KEY` (spec 10).
+- `previews.spec.ts:16`, `runsProp.spec.ts:17` and `catalogue.test.ts` each failed once under load in a spec worktree and passed on rerun. Watch them.
 - Never run a bare `pkill -f workerProcessEntry`: it kills every worktree's Playwright workers. Kill by path (`<checkout>/node_modules/.pnpm/playwright.*/workerProcessEntry`) or orphans only.
 - Fixed in 19a4177: the right-click flake (`menuActions` "Reveal", `contextMenu.spec.ts:86`), `promptPin.spec.ts` and the `mediaResize.spec.ts` crop flake. The context-menu fix in `packages/web/src/canvas/ContextMenu.tsx` cancels the menu library's delayed refocus through an internal event name that tldraw bundles. A tldraw upgrade that renames it brings the flake back silently.
 - `packages/engine/test/bundle.test.ts` timed out once at 30 s in a loaded full run in the spec 04 worktree and passed alone. Watch it.
