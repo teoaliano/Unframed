@@ -1,5 +1,6 @@
 import { centre, emptyCanvasPoint, openCanvas, shapeOnScreen } from "./canvas.ts";
 import { clickShape, expect, selectGroup, test, toolbar } from "./generation.ts";
+import { expectSlot, expectToken, inBothSchemes, resolvedColor, styleOf } from "./kit.ts";
 import { artifactRecord, emptyMedia, groupRecord, inGroup, promptRecord, putRecords } from "./media.ts";
 
 test("a usable selection gets Generate and its count; a named group reads by its name", async ({ page, generation }) => {
@@ -17,7 +18,7 @@ test("a usable selection gets Generate and its count; a named group reads by its
   await expect(toolbar(page).getByTestId("selection-hint")).toHaveText("1 selected");
   // Agent follows Generate and the hint, after a separator, once spec 08 registers the Agent tray.
   await expect(toolbar(page).getByRole("button")).toHaveText(["Generate", "Agent"]);
-  await expect(toolbar(page).locator(".unframed-bar-separator")).toHaveCount(1);
+  await expect(toolbar(page).locator("[data-slot='separator']")).toHaveCount(1);
 
   await page.keyboard.press("ControlOrMeta+a");
   await expect(toolbar(page).getByTestId("selection-hint")).toHaveText("3 selected");
@@ -26,6 +27,25 @@ test("a usable selection gets Generate and its count; a named group reads by its
   await expect(toolbar(page)).toHaveCount(0);
   await selectGroup(page, "shape:character");
   await expect(toolbar(page).getByTestId("selection-hint")).toHaveText("@character");
+});
+
+const GLASS = "color-mix(in srgb, var(--background) var(--glass-opacity), transparent)";
+
+test("the bar is glass with the kit border and radius; Generate is the kit's primary Button and the hint is muted", async ({ page, generation }) => {
+  await openCanvas(page, generation.engine);
+  await clickShape(page, "shape:starter-subject");
+  const bar = toolbar(page);
+  const generate = bar.getByRole("button", { name: "Generate" });
+  await expectSlot(generate, "button");
+  await expectSlot(bar.locator("[data-slot='separator']"), "separator");
+  await inBothSchemes(page, async () => {
+    await page.mouse.move(5, 500);
+    expect(await styleOf(bar, "background-color")).toBe(await resolvedColor(page, GLASS));
+    expect(await styleOf(bar, "border-top-left-radius")).toBe("14px");
+    await expectToken(bar, "border-top-color", "--color-border");
+    await expectToken(generate, "background-color", "--primary");
+    await expectToken(bar.getByTestId("selection-hint"), "color", "--color-muted-foreground");
+  });
 });
 
 test("a selection with nothing to generate from shows Agent only; a filled page offers Open and Agent", async ({ page, generation }) => {

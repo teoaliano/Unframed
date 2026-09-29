@@ -137,7 +137,7 @@ Example: `gpt-image-2 · 1024² · ×3`. Clicking the chip opens the composer on
 
 **When a recipe applies.** When the selection contains exactly one recipe group, whatever else is selected. Other selected shapes join the run as sources in the usual order. With two or more recipe groups selected, no recipe applies and the composer opens on last-used values.
 
-**Toolbar.** When a recipe applies, the selection toolbar shows, in order: the primary button, the hint, a "Recipe" button, and "Agent".
+**Toolbar.** When a recipe applies, the selection toolbar shows, in order: the primary button (Button `default`), the hint, a "Recipe" button (Button `ghost`), and "Agent".
 - The primary button reads "Generate" for one output and "Generate N×" for N, and while the run it started is going "Generating d / t…", where t is the run's output count and d how many have settled, counted from spec 03's `run.subscribe` events. Clicking it starts the run at once with the recipe's medium, model, params and runs, with the expanded selection as sources and no instruction. It does not open the composer.
 - For a Free recipe, the primary button reads "Generate" and opens the final prompt dialog from spec 05 first; nothing is spent until that dialog's "Generate N×".
 - The hint reads `@<name>` and, when spec 03 can estimate the run, ` · ` and the estimate (`~$0.57`).

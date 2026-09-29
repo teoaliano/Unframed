@@ -1,99 +1,7 @@
-/* The selection toolbar, the composer it grows into, the role badges and the tether. Every colour is a theme token. */
-
-.unframed-floating {
-  position: absolute;
-  z-index: 500;
-  box-sizing: border-box;
-  overflow: hidden;
-  pointer-events: all;
-  border: 1px solid var(--unframed-border);
-  border-radius: var(--unframed-radius-container);
-  background-color: var(--unframed-card-translucent);
-  box-shadow: var(--unframed-shadow-med);
-  backdrop-filter: blur(var(--unframed-chrome-blur));
-  font-family: var(--font-sans);
-  color: var(--unframed-text-primary);
-}
-
-/* The bar grows into the composer on the same centre and bottom edge: size and place animate together. */
-.unframed-floating[data-morphing="true"] {
-  transition:
-    left 200ms ease-out,
-    top 200ms ease-out,
-    width 200ms ease-out,
-    height 200ms ease-out;
-}
-
-.unframed-floating__content {
-  position: absolute;
-  left: 0;
-  top: 0;
-}
-
-.unframed-floating__content[data-side="above"] {
-  top: auto;
-  bottom: 0;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .unframed-floating[data-morphing="true"] {
-    transition: none;
-  }
-
-  /* Bar and composer are different children, so each one fades in as it replaces the other. */
-  .unframed-floating__content > * {
-    animation: unframed-crossfade 120ms linear;
-  }
-}
-
-@keyframes unframed-crossfade {
-  from {
-    opacity: 0;
-  }
-  to {
-    opacity: 1;
-  }
-}
-
-.unframed-bar {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 5px;
-  white-space: nowrap;
-}
-
-.unframed-bar--result {
-  flex-direction: column;
-  align-items: stretch;
-  gap: 2px;
-}
-
-.unframed-bar__row {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.unframed-bar__line {
-  padding: 2px 6px 3px;
-  font-size: 12px;
-  color: var(--unframed-text-secondary);
-  font-variant-numeric: tabular-nums;
-}
-
-.unframed-bar__hint {
-  padding: 0 4px;
-  font-size: 12px;
-  color: var(--unframed-text-secondary);
-}
-
-.unframed-bar-separator {
-  width: 1px;
-  align-self: stretch;
-  margin: 4px 2px;
-  background-color: var(--unframed-border);
-}
+/*
+ * The composer, and the toolbar button look the Agent spec's toolbar button still reads
+ * (spec 12 moves the selection toolbar onto the kit). Every colour is a theme token.
+ */
 
 .unframed-bar-button {
   display: inline-flex;
@@ -129,11 +37,6 @@
 
 .unframed-bar-button--primary:hover:not(:disabled) {
   background-color: color-mix(in srgb, var(--unframed-accent) 88%, var(--unframed-on-accent));
-}
-
-.unframed-bar-button--quiet {
-  border-color: transparent;
-  background-color: transparent;
 }
 
 /* The composer: three bands, 420 px wide. */
