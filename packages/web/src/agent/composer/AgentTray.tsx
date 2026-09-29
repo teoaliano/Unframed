@@ -452,7 +452,6 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
           { modelSelection: chat.modelSelection, runtimeMode: chat.runtimeMode, interactionMode: "default", tags: chat.tags, title: implementPlanTitle(planFollowUp.planMarkdown) },
           message.text,
         );
-        client.setUi({ chosen: target, pinned: null });
         await sendMessage(client, target, message, source);
       } else {
         await client.dispatch({ type: "thread.interaction-mode.set", threadId: chat.id, interactionMode: "default" });

@@ -12,6 +12,7 @@ import { Tip } from "../../chrome/ui.tsx";
 import { returnQueued, sendQueued } from "../queue.tsx";
 import { useQueue, useWatchedThread, type ChatClient } from "../store.ts";
 import { ChatMarkdown } from "./ChatMarkdown.tsx";
+import { PlanCard } from "./PlanCard.tsx";
 
 export const EMPTY_CHAT = "Ask about what is on the canvas, or say what should change or be made. Whatever is selected comes with the message as context.";
 
@@ -175,6 +176,7 @@ export const Transcript = ({ client, chatId }: TranscriptProps) => {
   const block = (item: Block) => {
     if (item.kind === "work") return <WorkEntries key={item.id} entries={item.entries} />;
     if (item.kind === "retry") return <RetryLine key={item.activity.id} payload={item.activity.payload} />;
+    if (item.kind === "plan") return <PlanCard key={item.plan.id} plan={item.plan.planMarkdown} />;
     const { message } = item;
     if (message.role === "user") return <UserMessage key={message.id} message={message} running={running} onEdit={(restoreCanvas) => edit(message, restoreCanvas)} />;
     if (message.role === "reasoning") return <Reasoning key={message.id} message={message} />;
@@ -188,7 +190,7 @@ export const Transcript = ({ client, chatId }: TranscriptProps) => {
           // A settled turn folds its work and thinking behind "Worked for"; what was said stays.
           const users = turn.blocks.filter((item) => item.kind === "message" && item.message.role === "user");
           const folded = turn.blocks.filter((item) => item.kind === "work" || (item.kind === "message" && item.message.role === "reasoning"));
-          const said = turn.blocks.filter((item) => (item.kind === "message" && item.message.role === "assistant") || item.kind === "retry");
+          const said = turn.blocks.filter((item) => (item.kind === "message" && item.message.role === "assistant") || item.kind === "retry" || item.kind === "plan");
           return (
             <div key={turn.key} className="unframed-agent-turn">
               {users.map(block)}

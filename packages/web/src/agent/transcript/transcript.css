@@ -434,3 +434,63 @@
     transition: none;
   }
 }
+
+/* A proposed plan. */
+.unframed-agent-plan {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px solid var(--unframed-border-emphasized);
+  border-radius: var(--unframed-radius-container);
+  background-color: var(--unframed-surface);
+}
+
+.unframed-agent-plan__header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.unframed-agent-plan__badge {
+  flex-shrink: 0;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background-color: var(--unframed-overlay-hover);
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--unframed-text-secondary);
+}
+
+.unframed-agent-plan__title {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  font-size: 13px;
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.unframed-agent-plan__body {
+  position: relative;
+}
+
+.unframed-agent-plan__body[data-collapsed] {
+  max-height: 26rem;
+  overflow: hidden;
+}
+
+.unframed-agent-plan__body[data-collapsed]::after {
+  position: absolute;
+  inset: auto 0 0;
+  height: 4rem;
+  background: linear-gradient(to top, var(--unframed-surface), transparent);
+  content: "";
+  pointer-events: none;
+}
+
+.unframed-agent-plan__toggle {
+  align-self: center;
+}

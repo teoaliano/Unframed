@@ -1,9 +1,10 @@
-import { workLog, type Chat, type ChatActivity, type ChatMessage, type ChatTurn, type WorkEntry } from "@unframed/domain";
+import { workLog, type Chat, type ChatActivity, type ChatMessage, type ChatTurn, type ProposedPlan, type WorkEntry } from "@unframed/domain";
 
 export type Block =
   | { readonly kind: "message"; readonly message: ChatMessage }
   | { readonly kind: "work"; readonly id: string; readonly entries: ReadonlyArray<WorkEntry> }
-  | { readonly kind: "retry"; readonly activity: ChatActivity };
+  | { readonly kind: "retry"; readonly activity: ChatActivity }
+  | { readonly kind: "plan"; readonly plan: ProposedPlan };
 
 export interface TurnView {
   readonly key: string;
@@ -23,25 +24,27 @@ const isWork = (activity: ChatActivity) => WORK_KINDS.has(activity.kind) || (act
  */
 export const buildTimeline = (chat: Chat): TurnView[] => {
   const turns: TurnView[] = [];
-  const byTurn = new Map<string | null, { messages: ChatMessage[]; activities: ChatActivity[] }>();
+  const byTurn = new Map<string | null, { messages: ChatMessage[]; activities: ChatActivity[]; plans: ProposedPlan[] }>();
   const bucket = (turnId: string | null) => {
     let found = byTurn.get(turnId);
     if (!found) {
-      found = { messages: [], activities: [] };
+      found = { messages: [], activities: [], plans: [] };
       byTurn.set(turnId, found);
     }
     return found;
   };
   for (const message of chat.messages) bucket(message.turnId).messages.push(message);
+  for (const plan of chat.proposedPlans) bucket(plan.turnId).plans.push(plan);
   for (const activity of chat.activities) if (isWork(activity) || activity.kind === "retry") bucket(activity.turnId).activities.push(activity);
 
   const view = (key: string, turn: ChatTurn | undefined, turnId: string | null): TurnView => {
-    const { messages, activities } = byTurn.get(turnId) ?? { messages: [], activities: [] };
+    const { messages, activities, plans } = byTurn.get(turnId) ?? { messages: [], activities: [], plans: [] };
     const settled = turn !== undefined && turn.state !== "running";
-    type Item = { at: string; order: number; message?: ChatMessage; activity?: ChatActivity };
+    type Item = { at: string; order: number; message?: ChatMessage; activity?: ChatActivity; plan?: ProposedPlan };
     const items: Item[] = [
       ...messages.map((message, order): Item => ({ at: message.createdAt, order, message })),
       ...activities.map((activity): Item => ({ at: activity.createdAt, order: messages.length + activity.sequence, activity })),
+      ...plans.map((plan, order): Item => ({ at: plan.createdAt, order: Number.MAX_SAFE_INTEGER - plans.length + order, plan })),
     ].sort((a, b) => (a.at < b.at ? -1 : a.at > b.at ? 1 : a.order - b.order));
     const blocks: Block[] = [];
     let work: ChatActivity[] = [];
@@ -59,6 +62,9 @@ export const buildTimeline = (chat: Chat): TurnView[] => {
       } else if (item.message) {
         flush();
         blocks.push({ kind: "message", message: item.message });
+      } else if (item.plan) {
+        flush();
+        blocks.push({ kind: "plan", plan: item.plan });
       }
     }
     flush();

@@ -6,7 +6,7 @@ import { defineConfig } from "@playwright/test";
  * shares one system clipboard, so these run one at a time in their own project, and no
  * other spec may touch the clipboard: a spec that starts to must be added here.
  */
-const CLIPBOARD = /\/(agentMarkdown|contextMenu|copyImage|copyPaste|groupPaste|groupRefs|menuActions|pasteAcross|resultCopies|systemPaste|textCopies)\.spec\.ts$/;
+const CLIPBOARD = /\/(agentMarkdown|agentPlanCopy|contextMenu|copyImage|copyPaste|groupPaste|groupRefs|menuActions|pasteAcross|resultCopies|systemPaste|textCopies)\.spec\.ts$/;
 
 /** A local run on a Mac starts the installed Chrome through this script: it says why. */
 const macChrome = process.env.CI || process.platform !== "darwin" ? undefined : fileURLToPath(new URL("packages/web/test/chrome.sh", import.meta.url));
