@@ -39,7 +39,7 @@ export interface TextRunDeps {
   readonly validateReferences: (refs: ReadonlyArray<RecipeRef>, folder: string) => Effect.Effect<void, UnframedError>;
   readonly inline: (folder: string, refs: ReadonlyArray<RecipeRef>) => Promise<ReferencePart[]>;
   /** Registers a live run; `settle` records its one output's outcome and ends it, `forget` drops a run that never started. */
-  readonly register: (runId: string) => {
+  readonly register: (runId: string, project: string) => {
     readonly settle: (outcome: RunOutcome<LandedText>) => void;
     readonly forget: () => void;
   };
@@ -163,7 +163,7 @@ export const makeTextRuns = (deps: TextRunDeps) => {
       });
       const shapeId = placeholder.id as string;
 
-      const run = deps.register(runId);
+      const run = deps.register(runId, project);
       yield* rooms.apply(request.project, { put: [placeholder], remove: [] }, origin(runId)).pipe(Effect.tapError(() => Effect.sync(run.forget)));
       yield* Effect.promise(() => deps.publish(project, { type: "started", runId, batchId, count: 1 }));
 

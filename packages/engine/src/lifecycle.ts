@@ -20,6 +20,7 @@ import { resolveOutputDir } from "./paths.ts";
 import { Config } from "./services.ts";
 import { SettingsStore } from "./settingsStore.ts";
 import { copyPendingJobsTo, dropPendingJobsIn, readPendingJobs, reassignPendingJobsIn } from "./video/jobLifecycle.ts";
+import { Runs } from "./runs/runs.ts";
 import { RenderJobs } from "./video/renderJobs.ts";
 
 export const KEY_REMOVED_ERROR =
@@ -75,7 +76,21 @@ export const lifecycleLayer = Layer.effect(
     const oauth = yield* OAuth;
     const renderJobs = yield* RenderJobs;
     const openProjects = yield* OpenProjects;
+    const runs = yield* Runs;
     const lock = yield* Semaphore.make(1);
+
+    /**
+     * Image and text runs are not durable, so they have no record to move or fail: a change
+     * that touches their project waits for them. This comes before every other step.
+     */
+    const refuseLiveRuns = (project?: string) =>
+      Effect.flatMap(runs.liveRuns(project), (count) =>
+        count === 0
+          ? Effect.void
+          : Effect.fail(
+              unframedError("conflict", `Wait for the ${count} run${count === 1 ? "" : "s"} still generating in this project to finish, then try again.`, { liveRuns: count }),
+            ),
+      );
 
     const writeEnv = (changes: Readonly<Record<string, string | null>>, options?: { readonly holdOutputDir?: boolean }) =>
       Effect.mapError(settings.write(changes, options), (error) => unframedError("internal", `Could not write .env: ${error.reason}`));
@@ -87,6 +102,8 @@ export const lifecycleLayer = Layer.effect(
         if (typeof outputDir === "string") {
           const to = resolveOutputDir(outputDir, config.dataDir);
           const from = yield* settings.outputDir;
+          // Every project is in the folder being left.
+          if (to !== from) yield* refuseLiveRuns();
           yield* Effect.tryPromise({
             try: () => mkdir(to, { recursive: true }),
             catch: (error) => unframedError("bad_request", `Cannot use that folder: ${errorText(error)}`),
@@ -195,6 +212,7 @@ export const lifecycleLayer = Layer.effect(
         // One slug for the folder and for the job records, so the two never disagree.
         const from = projectSlug(name);
         const to = projectSlug(target);
+        yield* refuseLiveRuns(from);
         if (to === "") return yield* unframedError("bad_request", "New name is empty.");
         const folder = yield* projectFolder(from);
         const outputDir = yield* settings.outputDir;
@@ -227,6 +245,7 @@ export const lifecycleLayer = Layer.effect(
       Effect.gen(function* () {
         // One slug for the gate and the folder, so the confirm cannot check one spelling and remove another.
         const slug = projectSlug(name);
+        yield* refuseLiveRuns(slug);
         const folder = yield* projectFolder(slug);
         const outputDir = yield* settings.outputDir;
         const pending = yield* Effect.tryPromise({

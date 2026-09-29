@@ -72,6 +72,8 @@ export class Runs extends Context.Service<
     readonly recipe: (project: string, shapeId: string) => Effect.Effect<ResultRecipe, UnframedError>;
     /** Copies a result's sidecar and the files its recipe names from `from` into `project`, beside `file`. */
     readonly copyRecipe: (project: string, from: string, sidecar: string, file: string) => Effect.Effect<{ sidecar: string }, UnframedError>;
+    /** Spec 10: how many runs are still generating, in one project (a name, slugged) or in all. */
+    readonly liveRuns: (project?: string) => Effect.Effect<number>;
   }
 >()("unframed/engine/Runs") {}
 
@@ -79,6 +81,8 @@ type Outcome = RunOutcome<Landed | LandedText>;
 
 interface RunRecord {
   live: boolean;
+  /** The project slug. */
+  readonly project: string;
   readonly outputs: Map<number, Outcome>;
 }
 
@@ -192,8 +196,8 @@ export const runsLayer = Layer.effect(
       projectFolder,
       validateReferences,
       inline,
-      register: (runId) => {
-        const run: RunRecord = { live: true, outputs: new Map() };
+      register: (runId, project) => {
+        const run: RunRecord = { live: true, project, outputs: new Map() };
         remember(runId, run);
         return {
           settle: (outcome) => {
@@ -266,7 +270,7 @@ export const runsLayer = Layer.effect(
           });
         });
 
-        const run: RunRecord = { live: true, outputs: new Map() };
+        const run: RunRecord = { live: true, project, outputs: new Map() };
         remember(runId, run);
         yield* rooms.apply(request.project, { put: placeholders, remove: [] }, runOrigin(runId)).pipe(
           Effect.tapError(() => Effect.sync(() => registry.delete(runId))),
@@ -448,6 +452,12 @@ export const runsLayer = Layer.effect(
         return { sidecar: target };
       });
 
-    return Runs.of({ image, text: texts.text, complete: texts.complete, subscribe, recipe, copyRecipe });
+    const liveRuns = (project?: string) =>
+      Effect.sync(() => {
+        const slug = project === undefined ? undefined : projectSlug(project);
+        return [...registry.values()].filter((run) => run.live && (slug === undefined || run.project === slug)).length;
+      });
+
+    return Runs.of({ image, text: texts.text, complete: texts.complete, subscribe, recipe, copyRecipe, liveRuns });
   }),
 );
