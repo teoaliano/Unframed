@@ -1,0 +1,9 @@
+{
+  "name": "unframed-client",
+  "version": "0.6.2",
+  "private": true,
+  "description": "Compatibility shim: the client is already built into client/dist.",
+  "scripts": {
+    "build": "exit 0"
+  }
+}
