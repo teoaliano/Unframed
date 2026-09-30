@@ -21,6 +21,11 @@ This codebase replaced an older Unframed (a React Flow canvas with output nodes)
 4. **Changes land by pull request, never a direct push to `main`**, not even one-liners. The desktop shell ships builds from tags on `main`. During the first build everything lands on the local `build` branch and the person opens the pull requests.
 5. **When a spec's behaviour changes after it is built**, update the spec in the same PR, so the spec stays the description of the app.
 
+## Commands
+
+- `pnpm typecheck`, `pnpm test` (engine and domain seams), `pnpm test:browser` (browser seam; CI runs it on Linux with Playwright's Chromium, a local Mac run uses the installed Chrome).
+- `pnpm test:perf` runs the frame-budget specs (specs 02, 09 and 12) with the budgets enforced. Run it on real hardware: under `CI` the same specs run and assert everything except the timing thresholds, because a shared runner cannot hold them.
+
 ## Rules that are expensive to break
 
 1. **Never create a GitHub Release for an engine tag.** The desktop app's updater reads this repo's latest Release and expects installers on it. Engine versions are plain git tags. Spec 01 defines the published bundle.

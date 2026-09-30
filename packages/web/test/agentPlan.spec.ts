@@ -91,6 +91,8 @@ test("plan mode is off unless set: no Build/Plan toggle, Shift+Tab does nothing,
   const panel = await openRail(page);
   await expect(promptBox(panel)).toBeVisible();
   await panel.getByRole("button", { name: "More composer controls" }).click();
+  // Open first: a count of zero holds just as well before the menu has rendered.
+  await expect(page.getByRole("menu").getByText("Access", { exact: true })).toBeVisible();
   await expect(page.getByRole("menu").getByText("Mode", { exact: true })).toHaveCount(0);
   await page.keyboard.press("Escape");
   await expect(page.getByRole("menu")).toHaveCount(0);
@@ -103,8 +105,11 @@ test("turning plan mode on adds Mode to More composer controls at once, in the c
   await createChat(agent, { title: "Old plan", interactionMode: "plan" });
   const panel = await openRail(page);
   await panel.getByRole("button", { name: "More composer controls" }).click();
+  // Open first: a count of zero holds just as well before the menu has rendered.
+  await expect(page.getByRole("menu").getByText("Access", { exact: true })).toBeVisible();
   await expect(page.getByRole("menu").getByText("Mode", { exact: true })).toHaveCount(0);
   await page.keyboard.press("Escape");
+  await expect(page.getByRole("menu")).toHaveCount(0);
   await enablePlanMode(agent);
   await expect.poll(() => chosenControl(panel, "Mode")).toBe("Plan");
 });

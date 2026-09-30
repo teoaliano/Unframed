@@ -1,5 +1,5 @@
 import { openRail, startAgentEngine } from "./agent.ts";
-import { busyBoard, frameStats, gestureCount, lastGesture, openMetered } from "./board.ts";
+import { busyBoard, expectFrameBudget, frameStats, gestureCount, lastGesture, openMetered } from "./board.ts";
 import { centre, shapeOnScreen } from "./canvas.ts";
 import { expect, test } from "./fixtures.ts";
 
@@ -36,8 +36,7 @@ test("panning with the rail open under the glass selection toolbar keeps spec 02
     const pan = await lastGesture(page, before, "wheel");
     const stats = frameStats(pan);
     console.log(`glass pan: median ${stats.median.toFixed(2)} ms, over 33 ms ${(stats.over33 * 100).toFixed(2)} % of ${stats.frames} frames, display frame ${pan.frameTime.toFixed(2)} ms`);
-    expect(stats.median).toBeLessThanOrEqual(16.7);
-    expect(stats.over33).toBeLessThanOrEqual(0.02);
+    expectFrameBudget(stats, "glass pan", { median: 16.7, over33: 0.02 });
   } finally {
     await engine.dispose();
   }
@@ -61,6 +60,5 @@ test("panning under the glass Generate composer keeps spec 02's frame budget", a
   const pan = await lastGesture(page, before, "wheel");
   const stats = frameStats(pan);
   console.log(`glass composer pan: median ${stats.median.toFixed(2)} ms, over 33 ms ${(stats.over33 * 100).toFixed(2)} % of ${stats.frames} frames, display frame ${pan.frameTime.toFixed(2)} ms`);
-  expect(stats.median).toBeLessThanOrEqual(16.7);
-  expect(stats.over33).toBeLessThanOrEqual(0.02);
+  expectFrameBudget(stats, "glass composer pan", { median: 16.7, over33: 0.02 });
 });

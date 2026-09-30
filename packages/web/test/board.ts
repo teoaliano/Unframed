@@ -1,7 +1,7 @@
 /** Large boards for the performance budgets, written through the engine as a run would. */
 import type { Page } from "@playwright/test";
 import type { TestEngine } from "../../engine/test/engineProcess.ts";
-import { expect } from "./fixtures.ts";
+import { expect, test } from "./fixtures.ts";
 import { pngBytes } from "./images.ts";
 import { putRecords, uploadToEngine } from "./media.ts";
 
@@ -157,4 +157,32 @@ export const frameStats = (gesture: Measured) => {
   const median = gesture.median;
   const over33 = gesture.gaps.filter((gap) => gap > 33).length / Math.max(1, gesture.gaps.length);
   return { median, over33, frames: gesture.gaps.length };
+};
+
+/**
+ * The timing thresholds (median frame gap, share of frames over 33 ms, long tasks) are for real
+ * hardware. A shared CI runner, two cores shared with the other worker and with the busy frames,
+ * misses them by chance. So under `CI` a budget spec still runs its gestures and every other
+ * assertion, and these two helpers skip only the thresholds, leaving an annotation with the
+ * measured numbers. `pnpm test:perf` enforces them on a real machine.
+ */
+const timingEnforced = (what: string, measured: string, budget: string): boolean => {
+  if (!process.env.CI) return true;
+  test.info().annotations.push({ type: "timing budget not enforced on CI", description: `${what}: ${measured} (budget: ${budget}); pnpm test:perf enforces it on real hardware` });
+  return false;
+};
+
+/** The median frame gap and, when given, the share of frames over 33 ms. */
+export const expectFrameBudget = (stats: ReturnType<typeof frameStats>, what: string, budget: { median: number; over33?: number }): void => {
+  const measured = `median ${stats.median.toFixed(2)} ms, ${(stats.over33 * 100).toFixed(2)} % of ${stats.frames} frames over 33 ms`;
+  const allowed = `median at most ${budget.median} ms${budget.over33 === undefined ? "" : `, at most ${budget.over33 * 100} % over 33 ms`}`;
+  if (!timingEnforced(what, measured, allowed)) return;
+  expect(stats.median, `${what}: median frame gap`).toBeLessThanOrEqual(budget.median);
+  if (budget.over33 !== undefined) expect(stats.over33, `${what}: share of frames over 33 ms`).toBeLessThanOrEqual(budget.over33);
+};
+
+/** No long task over 50 ms on the canvas thread; `longTasks` holds the durations over 50 ms. */
+export const expectNoLongTasks = (longTasks: number[], what: string): void => {
+  if (!timingEnforced(what, `long tasks over 50 ms: ${JSON.stringify(longTasks)}`, "none")) return;
+  expect(longTasks, `${what}: long tasks over 50 ms`).toEqual([]);
 };

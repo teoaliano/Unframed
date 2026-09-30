@@ -58,8 +58,11 @@ test("a selection with nothing to generate from shows Agent only; a filled page 
   await expect(page.locator('[data-shape-id="shape:empty"]')).toBeVisible();
   await expect(toolbar(page).getByRole("button")).toHaveText(["Agent"]);
 
+  // A filled page's frame takes the pointer, so its bar leads with the drag handle, an icon button.
   await clickShape(page, "shape:page");
-  await expect(toolbar(page).getByRole("button")).toHaveText(["Open", "Agent"]);
+  const buttons = toolbar(page).getByRole("button");
+  await expect(buttons).toHaveText(["", "Open", "Agent"]);
+  await expect(buttons.first()).toHaveAccessibleName("Drag to move");
 });
 
 test("the bar sits centred above the selection, flips below it at the top edge and stays inside the canvas", async ({ page, generation }) => {

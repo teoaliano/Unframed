@@ -151,7 +151,9 @@ test("the poll gives up after ten minutes", async ({ page }) => {
     const dialog = settingsDialog(page);
     const popup = page.waitForEvent("popup");
     await dialog.getByRole("button", { name: "Connect OpenRouter" }).click();
-    await expect(dialog.getByTestId("settings-waiting")).toBeVisible();
+    // The waiting block shows while the engine starts the attempt; the poll's clock starts once
+    // it answers, which the Approve link marks. A jump before that would start the clock after it.
+    await expect(dialog.getByTestId("settings-waiting").getByRole("link", { name: "Approve Unframed at OpenRouter" })).toBeVisible();
     // The clock is set for every page of the context, and the tab is still loading the held callback.
     await (await popup).close();
     // Timers keep their pace; only the wall clock the poll reads jumps past ten minutes.

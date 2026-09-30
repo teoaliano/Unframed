@@ -445,7 +445,7 @@ A good test drives one of the three seams from 00-index and asserts only on what
 59. Only selected (at most three), pinned (at most three, "Keep playing") and editor artifacts have a frame; every other artifact shape shows its snapshot, the hint card, or nothing that runs script. Seam: browser
 60. A live frame more than one viewport width off screen unmounts and remounts on return. Seam: browser
 61. Snapshots render after a write, a file replacement, a saved dial change and a resize over 10 %, with the saved dials applied, into `.cache/snapshots/`, debounced per shape and one at a time; no Chrome means no snapshot and the hint card. Seam: engine
-62. Artifact performance budget: a board with ten pages each running the busy fixture from `assets/perf/` and five motions pans for 4 s in the hosted shape with the median frame gap at or under 16.7 ms, no more than 2 % of frames over 33 ms, and no long task on the canvas thread over 50 ms. Seam: browser
+62. Artifact performance budget: a board with ten pages each running the busy fixture from `assets/perf/` and five motions pans for 4 s in the hosted shape with the median frame gap at or under 16.7 ms, no more than 2 % of frames over 33 ms, and no long task on the canvas thread over 50 ms. The frame-gap and long-task thresholds are enforced by `pnpm test:perf` on real hardware, not on shared CI runners (spec 02's performance budget); the live frame caps are asserted everywhere. Seam: browser
 
 ## Out of Scope
 

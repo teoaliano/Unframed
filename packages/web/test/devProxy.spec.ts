@@ -1,4 +1,5 @@
 import { spawn, type ChildProcess } from "node:child_process";
+import http from "node:http";
 import { mkdir, writeFile } from "node:fs/promises";
 import net from "node:net";
 import { join } from "node:path";
@@ -17,6 +18,24 @@ const freePort = (): Promise<number> =>
     });
   });
 
+/**
+ * Whether Vite answers 200 on either loopback address. It listens on the first address that
+ * `localhost` resolves to, which is `::1` in some Linux containers, while Node's own HTTP
+ * clients connected to `127.0.0.1` there and gave up.
+ */
+const viteAnswers = async (port: number): Promise<boolean> => {
+  const status = (host: string) =>
+    new Promise<number>((resolve) => {
+      http
+        .get({ host, port, path: "/" }, (response) => {
+          response.resume();
+          resolve(response.statusCode ?? 0);
+        })
+        .on("error", () => resolve(0));
+    });
+  return (await Promise.all([status("127.0.0.1"), status("::1")])).includes(200);
+};
+
 const startVite = async (serverPort: number): Promise<{ port: number; child: ChildProcess; output: () => string }> => {
   const port = await freePort();
   let output = "";
@@ -28,8 +47,8 @@ const startVite = async (serverPort: number): Promise<{ port: number; child: Chi
   child.stdout?.on("data", (chunk) => (output += String(chunk)));
   child.stderr?.on("data", (chunk) => (output += String(chunk)));
   await expect
-    .poll(async () => fetch(`http://localhost:${port}/`).then((response) => response.status, () => 0), { timeout: 30_000 })
-    .toBe(200);
+    .poll(() => viteAnswers(port), { timeout: 30_000 })
+    .toBe(true);
   return { port, child, output: () => output };
 };
 
