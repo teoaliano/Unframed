@@ -73,7 +73,9 @@ jobs:
         run: |
           npx --yes playwright@1.63.0 install-deps chromium
           npm install --no-save --no-audit --no-fund --prefix "$RUNNER_TEMP/electron" electron@44
-          electron="$(node -p "require('$RUNNER_TEMP/electron/node_modules/electron')")"
+          # The electron package downloads its binary on first require and says so on stdout
+          # first, so only the last line is the path.
+          electron="$(node -p "require('$RUNNER_TEMP/electron/node_modules/electron')" | tail -n 1)"
           node scripts/electronSmoke.ts bundle "$electron"
 
       - name: Commit the bundle to dist and tag it
