@@ -47,6 +47,12 @@ const ready = await new Promise<ReadyMessage | undefined>((done) => {
     done(message as ReadyMessage);
   });
   child.on("exit", () => done(undefined));
+  // A binary that cannot start emits "error" and never "exit"; without this the smoke waited
+  // out its timer and reported no ready message instead of the reason.
+  child.on("error", (error) => {
+    process.stderr.write(`electron smoke: could not start ${electronArg}: ${error.message}\n`);
+    done(undefined);
+  });
 });
 if (!ready) await fail("no ready message");
 if (!stdout.includes(`Unframed server  →  http://localhost:${ready!.port}`)) await fail("no banner");
