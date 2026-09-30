@@ -143,8 +143,10 @@ test("an artifact that is not live shows its snapshot once the engine has made o
     const stillShape = { id: "shape:still", kind: "page", ref: "150", at: { x: -520, y: -40 }, size: { w: 300, h: 200 }, title: "Still" } as const;
     await filledArtifact(engine, { ...stillShape, html: "<h1>Still</h1>" });
     const shape = shapeOnScreen(page, "shape:still");
-    await expect(shape.getByText("Select to preview")).toBeVisible();
     const still = shape.locator("img[data-testid='artifact-snapshot']");
+    // The hint shows only until the first snapshot exists, and the stub renderer can finish
+    // before the shape first paints, so either one is a correct first state.
+    await expect(shape.getByText("Select to preview").or(still)).toBeVisible({ timeout: 10_000 });
     await expect(still).toHaveCount(1, { timeout: 10_000 });
     expect(await still.getAttribute("src")).toMatch(/^\/api\/file\/default\/[^?]+\?snapshot=300x200&v=\d+$/);
     await expect.poll(() => still.evaluate((image) => (image as HTMLImageElement).naturalWidth)).toBeGreaterThan(0);

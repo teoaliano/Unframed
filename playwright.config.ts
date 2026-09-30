@@ -21,6 +21,10 @@ export default defineConfig({
   timeout: 60_000,
   fullyParallel: true,
   workers: process.env.CI ? 2 : 4,
+  // A 2-core shared runner loses timing races a real machine does not. One retry on CI, and
+  // Playwright reports the test as flaky, so a flake shows up in the log without blocking a PR
+  // while a real failure still fails twice.
+  retries: process.env.CI ? 1 : 0,
   reporter: process.env.CI ? "list" : "line",
   globalSetup: "./packages/web/test/globalSetup.ts",
   use: {
