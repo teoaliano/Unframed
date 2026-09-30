@@ -12,7 +12,7 @@ test("the top-left card holds the logo and the project menu, which lists every p
   await expect(card).toHaveCount(1);
   const logo = card.getByRole("img", { name: "Unframed" });
   await expect(logo).toBeVisible();
-  expect(await logo.boundingBox()).toMatchObject({ width: 28, height: 28 });
+  expect(await logo.boundingBox()).toMatchObject({ width: 24, height: 24 });
   const trigger = card.getByRole("button", { name: "Project", exact: true });
   await expect(trigger).toHaveText("default");
 
