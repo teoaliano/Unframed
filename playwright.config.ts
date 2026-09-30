@@ -25,7 +25,9 @@ export default defineConfig({
   globalSetup: "./packages/web/test/globalSetup.ts",
   use: {
     channel: process.env.CI ? undefined : "chrome",
-    ...(macChrome === undefined ? {} : { launchOptions: { executablePath: macChrome } }),
+    // Chrome and Electron put each site in a process of its own, and artifact frames rely on it
+    // (spec 09). Playwright's headless Chromium does not unless asked; the flag is a no-op for Chrome.
+    launchOptions: { args: ["--site-per-process"], ...(macChrome === undefined ? {} : { executablePath: macChrome }) },
     headless: true,
   },
   projects: [
