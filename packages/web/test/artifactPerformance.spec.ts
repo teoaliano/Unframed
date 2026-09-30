@@ -2,7 +2,7 @@ import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import type { Page } from "@playwright/test";
 import type { TestEngine } from "../../engine/test/engineProcess.ts";
-import { frameStats, gestureCount, lastGesture } from "./board.ts";
+import { expectFrameBudget, expectNoLongTasks, frameStats, gestureCount, lastGesture } from "./board.ts";
 import { centre, shapeOnScreen } from "./canvas.ts";
 import { expect, test } from "./fixtures.ts";
 import { clickShape } from "./generation.ts";
@@ -96,15 +96,14 @@ const panBusyBoard = async (page: Page, engine: TestEngine, running: { pinned: n
 
 test("ten busy pages and five motions pan for 4 s in the hosted shape within the frame budget, three busy pages running", async ({ page, engine }) => {
   const { stats, longTasks } = await panBusyBoard(page, engine, { pinned: 1, selected: 2 });
-  expect(stats.median).toBeLessThanOrEqual(16.7);
-  expect(stats.over33).toBeLessThanOrEqual(0.02);
-  expect(longTasks).toEqual([]);
+  expectFrameBudget(stats, "artifact pan, three running", { median: 16.7, over33: 0.02 });
+  expectNoLongTasks(longTasks, "artifact pan, three running");
 });
 
 test("with the most that may run at once, three pinned and three selected, the canvas thread still has no long task", async ({ page, engine }) => {
   // Six busy loops each keep a core of the machine busy, so their share of late frames depends on
   // the hardware and its load: measured and reported, while the canvas thread itself stays clear.
   const { stats, longTasks } = await panBusyBoard(page, engine, { pinned: 3, selected: 3 });
-  expect(stats.median).toBeLessThanOrEqual(16.7);
-  expect(longTasks).toEqual([]);
+  expectFrameBudget(stats, "artifact pan, six running", { median: 16.7 });
+  expectNoLongTasks(longTasks, "artifact pan, six running");
 });

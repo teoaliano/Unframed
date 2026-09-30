@@ -1,4 +1,4 @@
-import { busyBoard, frameStats, gestureCount, lastGesture, openMetered } from "./board.ts";
+import { busyBoard, expectFrameBudget, frameStats, gestureCount, lastGesture, openMetered } from "./board.ts";
 import { expect, test } from "./fixtures.ts";
 import { openCanvas, roomRecords, shapeOnScreen } from "./canvas.ts";
 
@@ -26,8 +26,7 @@ test("on a 300-shape board, dragging one image renders only it and keeps frames;
   expect(drag.kind).toBe("drag");
   expect(Object.keys(drag.renders).filter((id) => id !== dragged)).toEqual([]);
   expect(drag.renders[dragged] ?? 0).toBeLessThanOrEqual(50);
-  expect(dragStats.median).toBeLessThanOrEqual(16.7);
-  expect(dragStats.over33).toBeLessThanOrEqual(0.02);
+  expectFrameBudget(dragStats, "drag", { median: 16.7, over33: 0.02 });
 
   before = await gestureCount(page);
   await page.mouse.move(640, 360);

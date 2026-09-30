@@ -1,6 +1,6 @@
 import { readdir } from "node:fs/promises";
 import { join } from "node:path";
-import { frameStats, gestureCount, imageRecords, lastGesture, openMetered } from "./board.ts";
+import { expectFrameBudget, frameStats, gestureCount, imageRecords, lastGesture, openMetered } from "./board.ts";
 import { openCanvas } from "./canvas.ts";
 import { expect, test } from "./fixtures.ts";
 import { flatPngBytes } from "./images.ts";
@@ -66,7 +66,6 @@ test("40 images of 6000 by 4000 zoom in and out 20 steps within the frame budget
   );
   // The steps in reach close to the 400 % limit, where images want their 2048 previews.
   expect(closest).toBeGreaterThanOrEqual(300);
-  expect(stats.median).toBeLessThanOrEqual(16.7);
-  expect(stats.over33).toBeLessThanOrEqual(0.02);
+  expectFrameBudget(stats, "large images zoom", { median: 16.7, over33: 0.02 });
   expect(peak).toBeLessThan(budget);
 });

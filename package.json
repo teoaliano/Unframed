@@ -13,6 +13,7 @@
     "typecheck": "tsc --noEmit -p tsconfig.json && pnpm -r --no-bail typecheck",
     "test": "vitest run",
     "test:browser": "playwright test",
+    "test:perf": "playwright test performance.spec.ts artifactPerformance.spec.ts glassPerformance.spec.ts largeImages.spec.ts",
     "test:bundle": "vitest run --project engine packages/engine/test/bundle.test.ts",
     "build": "node scripts/build.ts"
   },
