@@ -5,6 +5,10 @@ import { expect, test } from "./fixtures.ts";
 import { pngBytes, sha } from "./images.ts";
 
 test("the asset store uploads through the engine, keeps the original pixels, and resolves the marker to the project's file URL", async ({ page, engine }) => {
+  // Playwright turns on file chooser interception without waiting when the first listener
+  // attaches. A press that reaches the page first opens an ordinary chooser, which headless
+  // Chromium dismisses, and the event never comes; so the listener attaches before the page loads.
+  const chooser = page.waitForEvent("filechooser");
   await openCanvas(page, engine);
   // The upload key only works once tldraw has the keyboard, which a busy machine can delay.
   const at = await emptyCanvasPoint(page);
@@ -12,7 +16,6 @@ test("the asset store uploads through the engine, keeps the original pixels, and
   await expect(page.locator(".tl-container.tl-container__focused")).toHaveCount(1);
   // Wider than tldraw's own 5000 px import limit, which would scale it down.
   const original = pngBytes(6000, 90);
-  const chooser = page.waitForEvent("filechooser");
   await page.keyboard.press("ControlOrMeta+u");
   await (await chooser).setFiles({ name: "Wide Strip.png", mimeType: "image/png", buffer: original });
 
