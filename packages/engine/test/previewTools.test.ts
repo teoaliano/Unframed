@@ -9,6 +9,8 @@ import { scriptedSession, seed, toolResults } from "./agentCanvas.ts";
 import { imageShape, pageShape } from "./canvasRecords.ts";
 
 /** These run a real headless Chrome, as the agent's previews do: they skip, saying so, on a machine without one. */
+/** A cold Chrome launch on a CI runner takes several seconds, well past the helper's 10 s default. */
+const CHROME_TURN_MS = 45_000;
 const chrome = chromeCandidates({
   platform: process.platform,
   env: process.env,
@@ -67,7 +69,7 @@ describe.skipIf(chrome === undefined)("the agent's preview tools", () => {
     ]);
     const chatId = await agent.createChat();
     await agent.send(chatId, "look at it");
-    const chat = await agent.settled(chatId, 1);
+    const chat = await agent.settled(chatId, 1, CHROME_TURN_MS);
     const [status, opened, snapshot, clicked, evaluated, missing, wrongKind, empty, ambiguous] = results(chat);
     expect(status).toMatchObject({ status: "completed", result: { exists: false } });
     expect(opened).toMatchObject({
@@ -119,14 +121,14 @@ describe.skipIf(chrome === undefined)("the agent's preview tools", () => {
     ]);
     const chatId = await agent.createChat();
     await agent.send(chatId, "look around");
-    const first = results(await agent.settled(chatId, 1));
+    const first = results(await agent.settled(chatId, 1, CHROME_TURN_MS));
     expect(first.at(-1)?.result).toMatchObject({ exists: true, url: `http://127.0.0.1:${agent.engine.previewPort}/p/board/1-clicker.html` });
 
     // The session closes: its tab goes with it.
     await agent.dispatch({ type: "thread.session.stop", threadId: chatId });
     await (await agent.watch(chatId)).until((chat) => chat.session?.status === "stopped", "the session to stop");
     await agent.send(chatId, "look again");
-    const second = results(await agent.settled(chatId, 2));
+    const second = results(await agent.settled(chatId, 2, CHROME_TURN_MS));
     expect(second[0]?.result).toMatchObject({ exists: false });
     expect(second[1]?.result).toMatchObject({ exists: true });
 
@@ -158,7 +160,7 @@ describe("the agent's preview tools without a browser", () => {
     const agent = await startPreviewing([[call("preview_status"), call("preview_open", { shapeId: "pg1" }), call("preview_snapshot")]], "no-chrome");
     const chatId = await agent.createChat();
     await agent.send(chatId, "look at it");
-    for (const result of results(await agent.settled(chatId, 1))) {
+    for (const result of results(await agent.settled(chatId, 1, CHROME_TURN_MS))) {
       expect(result).toMatchObject({ status: "failed", result: { error: NO_CHROME_PREVIEW_MESSAGE } });
     }
   });
