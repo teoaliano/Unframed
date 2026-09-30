@@ -49,7 +49,7 @@ export interface AgentEngine {
   send(chatId: string, text: string, options?: { selection?: string[]; attachments?: Array<{ id: string; name: string }>; steer?: boolean }): Promise<{ sequence: number }>;
   watch(chatId: string): Promise<ChatWatch>;
   /** Waits for the chat's latest turn to leave running, and answers the chat. */
-  settled(chatId: string, turnCount?: number): Promise<Chat>;
+  settled(chatId: string, turnCount?: number, timeoutMs?: number): Promise<Chat>;
   sidecars(): Promise<Array<Record<string, unknown>>>;
 }
 
@@ -150,7 +150,7 @@ export const startAgentEngine = async (options: EngineOptions & { script?: strin
       });
     },
     watch,
-    async settled(chatId, turnCount) {
+    async settled(chatId, turnCount, timeoutMs) {
       const watched = await watch(chatId);
       try {
         return await watched.until(
@@ -161,6 +161,7 @@ export const startAgentEngine = async (options: EngineOptions & { script?: strin
             chat.session?.status !== "running" &&
             chat.session?.status !== "starting",
           `chat ${chatId} to settle`,
+          timeoutMs,
         );
       } finally {
         await watched.close();
