@@ -18,7 +18,7 @@ const SettingsButton = ({ ui }: { readonly ui: SettingsUi }) => {
     const hint = settings?.keyHint ?? "";
     return (
       <Tip label={`Settings: ${hint === "" ? "" : `key …${hint}, `}default models, output folder`}>
-        <Button variant="ghost" size="icon-lg" aria-label="Settings" onClick={() => ui.open()}>
+        <Button variant="ghost" size="icon" aria-label="Settings" onClick={() => ui.open()}>
           <Gear aria-hidden />
         </Button>
       </Tip>
@@ -26,7 +26,7 @@ const SettingsButton = ({ ui }: { readonly ui: SettingsUi }) => {
   }
   return (
     <Tip label="No OpenRouter key yet. Click to add one">
-      <Button size="icon-lg" aria-label="Add your API key" data-keyless="true" onClick={() => ui.open()}>
+      <Button size="icon" aria-label="Add your API key" data-keyless="true" onClick={() => ui.open()}>
         <KeyRound aria-hidden />
       </Button>
     </Tip>

@@ -263,7 +263,7 @@ export const ProjectMenu = () => {
           if (open) void refresh();
         }}
       >
-        <MenuTrigger aria-label="Project" render={<Button variant="ghost" size="lg" />}>
+        <MenuTrigger aria-label="Project" render={<Button variant="ghost" size="default" />}>
           <span data-testid="active-project">{active ?? ""}</span>
           <ChevronDown aria-hidden />
         </MenuTrigger>
