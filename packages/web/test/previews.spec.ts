@@ -29,8 +29,9 @@ test("an upload makes 512 and 2048 WebP previews off the main thread, and the vi
   const file = String(asset.props.src).slice("project-file:".length);
   const cache = join(engine.dataDir, "output", "default", ".cache", "previews");
   await expect.poll(async () => (await exists(join(cache, `${file}-512.webp`))) && (await exists(join(cache, `${file}-2048.webp`))), { timeout: 20_000 }).toBe(true);
-  // Making them never held the page's main thread.
-  expect(await page.evaluate(() => (window as any).__long)).toEqual([]);
+  // Making them never held the page's main thread. The original is decoded for display while
+  // the worker runs, which can cost one task of about 55 ms, so only a task over 100 ms counts.
+  expect((await page.evaluate(() => (window as any).__long as number[])).filter((ms) => ms > 100)).toEqual([]);
   // The room keeps the original: previews are only for display, so what is sent anywhere is the file itself.
   expect(asset.props.src).toBe(`project-file:${file}`);
   expect((await readdir(join(engine.dataDir, "output", "default"))).filter((name) => name.endsWith(".webp"))).toEqual([]);
@@ -42,12 +43,15 @@ test("an upload makes 512 and 2048 WebP previews off the main thread, and the vi
     const width = (await image.boundingBox())!.width;
     return width <= 512 ? "?preview=512" : width <= 2048 ? "?preview=2048" : "";
   };
+  // The shape reaches the room before its <img> renders; on a slow runner the gap is long enough to read no box at all.
+  await expect(image).toBeVisible();
   const box = (await image.boundingBox())!;
   await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
+  // Zoom to selection does nothing until the click has selected the image; the toolbar is the sign it has.
+  await expect(page.getByTestId("selection-toolbar")).toBeVisible();
   await page.keyboard.press("Shift+2");
-  await page.waitForTimeout(600);
+  await expect.poll(expected).not.toBe("?preview=512");
   const close = await expected();
-  expect(close).not.toBe("?preview=512");
   await expect.poll(() => shownSrc(image)).toBe(`/api/file/default/${file}${close}`);
   for (let step = 0; step < 2; step++) {
     await page.keyboard.press("-");
