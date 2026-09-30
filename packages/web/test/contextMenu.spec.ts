@@ -12,6 +12,10 @@ const menu = (page: Page) => page.getByTestId("context-menu");
 
 /** Right-clicks a screen point and answers the menu's section headings and item texts, in order. */
 const rightClick = async (page: Page, at: { x: number; y: number }) => {
+  // tldraw's right click acts on the hovered shape, and it updates the hover at most every 32 ms,
+  // so a press in the same instant as the move lands on the shape the pointer came from.
+  await page.mouse.move(at.x, at.y);
+  await page.waitForTimeout(100);
   await page.mouse.click(at.x, at.y, { button: "right" });
   await expect(menu(page)).toBeVisible();
   await page.waitForTimeout(200);
