@@ -750,16 +750,16 @@ code {
   .unframed-chrome-left,
   .unframed-chrome-right {
     position: fixed;
-    top: 12px;
+    top: 8px;
     z-index: 400;
   }
 
   .unframed-chrome-left {
-    left: 12px;
+    left: 8px;
   }
 
   .unframed-chrome-right {
-    right: 12px;
+    right: 8px;
   }
 
 }

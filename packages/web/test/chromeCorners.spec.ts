@@ -14,6 +14,24 @@ test("the top-left card holds the logo, the project menu and Settings; the right
   await expect(page.getByRole("button", { name: "Help" })).toHaveCount(0);
 });
 
+test("the top-left card sits at 8, 8, is 44 tall with 5 of padding and 8 between items, and centres every item at y 30", async ({ page, engine }) => {
+  await openCanvas(page, engine);
+  const card = page.locator(".unframed-chrome-left");
+  const box = (await card.boundingBox())!;
+  expect([box.x, box.y, box.height]).toEqual([8, 8, 44]);
+  expect(await styleOf(card, "padding")).toBe("5px");
+  expect(await styleOf(card, "column-gap")).toBe("8px");
+  const logo = (await card.getByRole("img", { name: "Unframed" }).boundingBox())!;
+  expect([logo.width, logo.height]).toEqual([24, 24]);
+  expect(logo.x).toBe(8 + 1 + 5);
+  const project = (await card.getByRole("button", { name: "Project", exact: true }).boundingBox())!;
+  const settings = (await card.getByRole("button", { name: /^(Settings|Add your API key)$/ }).boundingBox())!;
+  expect([project.height, settings.width, settings.height]).toEqual([32, 32, 32]);
+  for (const item of [logo, project, settings]) expect(item.y + item.height / 2).toBe(30);
+  const right = await page.locator(".unframed-chrome-right").evaluate((element) => ({ top: getComputedStyle(element).top, right: getComputedStyle(element).right }));
+  expect(right).toEqual({ top: "8px", right: "8px" });
+});
+
 test("the top-left card is glass with the kit's border and radius, and Settings is a kit ghost button with a kit tooltip", async ({ page, engine }) => {
   await openCanvas(page, engine);
   const card = page.locator(".unframed-chrome-left");
