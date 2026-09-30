@@ -42703,7 +42703,7 @@ var initializeCodex = async (rpc, version) => {
 };
 
 // packages/engine/src/agent/version.ts
-var ENGINE_VERSION = "0.6.2";
+var ENGINE_VERSION = "0.6.3";
 
 // packages/engine/src/agent/detection.ts
 var STATUS_CACHE_MS = 5 * 6e4;
