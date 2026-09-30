@@ -1,0 +1,20 @@
+{
+  "prompt": "A red fox standing on a windswept cliff at golden hour, 35mm",
+  "model": "openai/gpt-image-2",
+  "resolution": "1K",
+  "quality": "low",
+  "aspect_ratio": "3:2",
+  "output_format": "png",
+  "background": null,
+  "referenceCount": 1,
+  "references": {
+    "images": 1,
+    "videos": 0
+  },
+  "batchId": "b-1789032600000",
+  "runIndex": 1,
+  "runCount": 3,
+  "cost": 0.0061,
+  "createdAt": "2026-09-10T09:30:07.000Z",
+  "file": "2026-09-10T09-30-07-000Z-a-red-fox-standing-on-a-windswept-cliff--1.png"
+}

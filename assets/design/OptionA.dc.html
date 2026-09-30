@@ -1,0 +1,67 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    *{box-sizing:border-box}
+    body{margin:0;font-family:ui-sans-serif,-apple-system,"Segoe UI",Helvetica,Arial,sans-serif;color:#262626;background:#f7f7f7;-webkit-font-smoothing:antialiased}
+    a{color:#262626}a:hover{color:#000}
+    .canvas{position:relative;width:100%;height:100%;overflow:hidden;background-color:#f7f7f7;background-image:radial-gradient(#dedede 1px,transparent 1px);background-size:24px 24px}
+    .stage{position:absolute;inset:0;padding:40px;display:flex;flex-direction:column;gap:28px}
+    .boardname{position:absolute;left:20px;top:16px;font-size:11px;letter-spacing:.09em;text-transform:uppercase;color:#9a9a9a}
+    .chrome{background:rgba(255,255,255,.94);border:1px solid #e3e3e3;border-radius:12px;box-shadow:0 10px 30px rgba(0,0,0,.10)}
+    .btn{display:inline-flex;align-items:center;gap:7px;height:30px;padding:0 11px;border-radius:8px;border:1px solid #e0e0e0;background:#fff;font-size:13px;font-weight:500;color:#262626;white-space:nowrap}
+    .btn--primary{background:#262626;border-color:#262626;color:#fff}
+    .btn--quiet{border-color:transparent;background:transparent}
+    .btn--lg{height:34px;padding:0 14px}
+    .sep{width:1px;align-self:stretch;margin:4px 2px;background:#e6e6e6}
+    .hint{font-size:12px;color:#8d8d8d;white-space:nowrap}
+    .lbl{font-size:11px;color:#8d8d8d;letter-spacing:.02em}
+    .card{background:#fff;border:1px solid #e3e3e3;border-radius:10px}
+    .media{border-radius:8px;overflow:hidden;position:relative}
+    .selrect{position:absolute;border:1.5px solid #262626;border-radius:4px;pointer-events:none}
+    .grip{position:absolute;width:7px;height:7px;background:#fff;border:1.5px solid #262626}
+    .chip{display:inline-flex;align-items:center;gap:6px;height:24px;padding:0 9px;border-radius:999px;border:1px solid #e3e3e3;background:#fafafa;font-size:12px;color:#4a4a4a}
+    .seg{display:flex;padding:3px;gap:3px;background:#f1f1f1;border-radius:9px}
+    .seg > button{height:26px;padding:0 13px;border:0;border-radius:7px;background:transparent;font:inherit;font-size:13px;font-weight:500;color:#6a6a6a}
+    .seg > button[data-on]{background:#fff;color:#262626;box-shadow:0 1px 2px rgba(0,0,0,.09)}
+    .field{width:100%;min-height:64px;padding:9px 10px;border:1px solid #e3e3e3;border-radius:9px;background:#fff;font-size:13px;line-height:1.45;color:#3a3a3a}
+    .field--empty{color:#a6a6a6}
+    .sheet{width:420px;padding:12px 13px 13px;display:flex;flex-direction:column;gap:12px}
+    .row{display:flex;align-items:center;gap:8px}
+    .col{display:flex;flex-direction:column;gap:6px}
+    .note{max-width:300px;font-size:12.5px;line-height:1.5;color:#6a6a6a}
+    .note b{color:#262626;font-weight:600}
+    .pill{display:inline-block;padding:2px 7px;border-radius:5px;background:#262626;color:#fff;font-size:10px;letter-spacing:.06em;text-transform:uppercase}
+    .group{border:1.5px dashed #c7c7c7;border-radius:12px;position:relative}
+    .grouplabel{position:absolute;top:-10px;left:12px;background:#f7f7f7;padding:0 6px;font-size:12px;color:#6a6a6a}
+  </style>
+</helmet>
+<div class="canvas">
+  <div class="boardname">Option A — the result is the only record</div>
+  <div style="position:absolute;left:60px;top:84px;width:400px">
+    <div class="pill">A</div>
+    <div style="margin-top:12px;font-size:19px;font-weight:600;line-height:1.35">A recipe only exists once something has been made.</div>
+    <div class="note" style="max-width:400px;margin-top:12px">Every generated node carries the run that made it. Select it and you get Regenerate, Vary, and Recipe (the sheet, prefilled). Nothing on the canvas holds settings before a run — the sheet opens on the app’s last&#8209;used values.</div>
+  </div>
+
+  <div class="media" style="position:absolute;left:78px;top:290px;width:150px;height:150px"><svg viewBox="0 0 150 150" width="150" height="150"><rect width="150" height="150" fill="#cdbfa9"/><circle cx="54" cy="60" r="32" fill="#b09a7c"/></svg></div>
+  <div class="hint" style="position:absolute;left:78px;top:448px">carries run · v1</div>
+  <div class="media" style="position:absolute;left:252px;top:290px;width:150px;height:150px"><svg viewBox="0 0 150 150" width="150" height="150"><rect width="150" height="150" fill="#c2b49e"/><circle cx="60" cy="56" r="34" fill="#a08a6d"/></svg></div>
+  <div class="hint" style="position:absolute;left:252px;top:448px">carries run · v2</div>
+
+  <div style="position:absolute;left:60px;top:500px;width:400px">
+    <div class="lbl" style="letter-spacing:.08em;text-transform:uppercase">Gains</div>
+    <div class="note" style="margin-top:6px;max-width:400px">One object type on the canvas. Nothing to configure before you start, nothing stale left behind afterwards. Iteration reads as a row of versions you can compare.</div>
+    <div class="lbl" style="letter-spacing:.08em;text-transform:uppercase;margin-top:16px">Costs</div>
+    <div class="note" style="margin-top:6px;max-width:400px">You cannot set something up and run it later — the first run of a new idea is always configured from scratch. Presets have to carry the settings instead, and multi&#8209;run has no standing home.</div>
+  </div>
+</div>
+</x-dc>
+</body>
+</html>

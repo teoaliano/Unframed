@@ -1,0 +1,731 @@
+{
+  "version": 4,
+  "nodes": [
+    {
+      "id": "100",
+      "type": "prompt",
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "width": 320,
+      "height": 100,
+      "selected": true,
+      "measured": {
+        "width": 320,
+        "height": 100
+      },
+      "data": {
+        "text": "A @101 standing on a windswept cliff at golden hour, 35mm",
+        "sized": true
+      }
+    },
+    {
+      "id": "106",
+      "type": "image",
+      "position": {
+        "x": 0,
+        "y": 140
+      },
+      "width": 240,
+      "dragging": false,
+      "data": {
+        "file": "1789030860011-cliff.png",
+        "fileName": "cliff.png"
+      }
+    },
+    {
+      "id": "101",
+      "type": "prompt",
+      "position": {
+        "x": 0,
+        "y": 360
+      },
+      "width": 96,
+      "height": 30,
+      "data": {
+        "text": "red fox"
+      }
+    },
+    {
+      "id": "140",
+      "type": "imageOutput",
+      "position": {
+        "x": 440,
+        "y": 0
+      },
+      "data": {
+        "model": "openai/gpt-image-2",
+        "resolution": "1K",
+        "quality": "low",
+        "aspect_ratio": "3:2",
+        "runs": 3,
+        "freeRuns": false,
+        "results": [
+          {
+            "url": "/api/file/everything/2026-09-10T09-30-07-000Z-a-red-fox-standing-on-a-windswept-cliff--1.png",
+            "savedPath": "/Users/sample/Unframed/output/everything/2026-09-10T09-30-07-000Z-a-red-fox-standing-on-a-windswept-cliff--1.png",
+            "cost": 0.0061,
+            "runIndex": 0
+          },
+          {
+            "url": "/api/file/everything/2026-09-10T09-30-14-000Z-a-red-fox-standing-on-a-windswept-cliff--2.png",
+            "savedPath": "/Users/sample/Unframed/output/everything/2026-09-10T09-30-14-000Z-a-red-fox-standing-on-a-windswept-cliff--2.png",
+            "cost": 0.0061,
+            "runIndex": 1
+          },
+          {
+            "url": "/api/file/everything/2026-09-10T09-30-21-000Z-a-red-fox-standing-on-a-windswept-cliff--3.png",
+            "savedPath": "/Users/sample/Unframed/output/everything/2026-09-10T09-30-21-000Z-a-red-fox-standing-on-a-windswept-cliff--3.png",
+            "cost": 0.0061,
+            "runIndex": 2
+          }
+        ]
+      }
+    },
+    {
+      "id": "141",
+      "type": "image",
+      "position": {
+        "x": 440,
+        "y": 260
+      },
+      "width": 240,
+      "data": {
+        "file": "2026-09-10T09-30-07-000Z-a-red-fox-standing-on-a-windswept-cliff--1.png",
+        "fileName": "2026-09-10T09-30-07-000Z-a-red-fox-standing-on-a-windswept-cliff--1.png",
+        "aspect": 1.6
+      }
+    },
+    {
+      "id": "104",
+      "type": "prompt",
+      "position": {
+        "x": 1300,
+        "y": 0
+      },
+      "width": 260,
+      "height": 30,
+      "data": {
+        "text": "Add a small @lighthouse far out at sea"
+      }
+    },
+    {
+      "id": "132",
+      "type": "text",
+      "position": {
+        "x": 1300,
+        "y": 360
+      },
+      "data": {
+        "text": "",
+        "result": ""
+      }
+    },
+    {
+      "id": "153",
+      "type": "prompt",
+      "position": {
+        "x": 0,
+        "y": 800
+      },
+      "width": 320,
+      "height": 80,
+      "data": {
+        "text": "List every separate part of image 1. Write one short section per part, split by a line with only ---."
+      }
+    },
+    {
+      "id": "152",
+      "type": "image",
+      "position": {
+        "x": 0,
+        "y": 940
+      },
+      "width": 240,
+      "data": {
+        "file": "1789030980033-sea.png",
+        "fileName": "sea.png",
+        "aspect": 1.6
+      }
+    },
+    {
+      "id": "151",
+      "type": "textOutput",
+      "position": {
+        "x": 440,
+        "y": 800
+      },
+      "data": {
+        "text": "",
+        "result": "The red fox\n---\nThe rocky cliff\n---\nThe evening sky",
+        "cost": 0.0005,
+        "model": "google/gemini-3.5-flash-lite",
+        "resultSize": {
+          "width": "260px",
+          "height": "140px"
+        }
+      }
+    },
+    {
+      "id": "150",
+      "type": "imageOutput",
+      "position": {
+        "x": 820,
+        "y": 800
+      },
+      "data": {
+        "model": "openai/gpt-image-2",
+        "runs": 1,
+        "freeRuns": true,
+        "previewPrompt": true,
+        "output_format": "png",
+        "background": "transparent"
+      }
+    },
+    {
+      "id": "161",
+      "type": "prompt",
+      "position": {
+        "x": 0,
+        "y": 1400
+      },
+      "width": 280,
+      "height": 30,
+      "data": {
+        "text": "The fox turns its head toward the camera"
+      }
+    },
+    {
+      "id": "162",
+      "type": "image",
+      "position": {
+        "x": 0,
+        "y": 1460
+      },
+      "width": 240,
+      "data": {
+        "file": "1789031040044-fox-sitting.png",
+        "fileName": "fox sitting.png",
+        "aspect": 1.6
+      }
+    },
+    {
+      "id": "160",
+      "type": "videoOutput",
+      "position": {
+        "x": 440,
+        "y": 1400
+      },
+      "data": {
+        "videoModel": "bytedance/seedance-2.0",
+        "duration": 5,
+        "resolution": "480p",
+        "aspect_ratio": "16:9",
+        "generateAudio": false,
+        "inputMode": "first_frame",
+        "result": {
+          "url": "/api/file/everything/2026-09-10T09-40-00-000Z-the-fox-turns-its-head-toward-the-camera.mp4",
+          "cost": 0.12,
+          "savedPath": "/Users/sample/Unframed/output/everything/2026-09-10T09-40-00-000Z-the-fox-turns-its-head-toward-the-camera.mp4"
+        }
+      }
+    },
+    {
+      "id": "164",
+      "type": "prompt",
+      "position": {
+        "x": 0,
+        "y": 1900
+      },
+      "width": 300,
+      "height": 30,
+      "data": {
+        "text": "Slow push-in toward the cliff at dusk"
+      }
+    },
+    {
+      "id": "163",
+      "type": "videoOutput",
+      "position": {
+        "x": 440,
+        "y": 1900
+      },
+      "data": {
+        "videoModel": "bytedance/seedance-2.0",
+        "duration": 5,
+        "resolution": "720p",
+        "shareLocalVideos": false,
+        "job": {
+          "id": "vid_2f8c1e7a9b",
+          "startedAt": 1789036200000,
+          "params": {
+            "prompt": "Slow push-in toward the cliff at dusk",
+            "model": "bytedance/seedance-2.0",
+            "duration": 5,
+            "resolution": "720p",
+            "size": null
+          }
+        }
+      }
+    },
+    {
+      "id": "172",
+      "type": "image",
+      "position": {
+        "x": 0,
+        "y": 2300
+      },
+      "width": 240,
+      "data": {
+        "file": "1789031100055-grass.png",
+        "fileName": "grass.png",
+        "aspect": 1.6
+      }
+    },
+    {
+      "id": "170",
+      "type": "textOutput",
+      "position": {
+        "x": 440,
+        "y": 2300
+      },
+      "data": {
+        "text": "Describe image 1 in one sentence.",
+        "result": "A patch of green grass under a pale sky.",
+        "cost": 0.0004,
+        "model": "google/gemini-3.5-flash-lite",
+        "size": {
+          "width": "280px",
+          "height": "80px"
+        }
+      }
+    },
+    {
+      "id": "102",
+      "type": "prompt",
+      "position": {
+        "x": 900,
+        "y": 2300
+      },
+      "width": 220,
+      "height": 30,
+      "data": {
+        "text": "Use this as the mood: @170"
+      }
+    },
+    {
+      "id": "134",
+      "type": "prompt",
+      "position": {
+        "x": 0,
+        "y": 2800
+      },
+      "width": 250,
+      "height": 30,
+      "data": {
+        "text": "A travel poster of a fox on a cliff",
+        "size": {
+          "width": "240px",
+          "height": "60px"
+        }
+      }
+    },
+    {
+      "id": "133",
+      "type": "textOutput",
+      "position": {
+        "x": 440,
+        "y": 2800
+      },
+      "data": {
+        "text": "Write a caption in five words.",
+        "result": "",
+        "model": "google/gemini-3.5-flash-lite"
+      }
+    },
+    {
+      "id": "105",
+      "type": "prompt",
+      "position": {
+        "x": 900,
+        "y": 2800
+      },
+      "width": 220,
+      "height": 30,
+      "data": {
+        "text": "Caption for the poster: @133"
+      }
+    },
+    {
+      "id": "hero",
+      "type": "group",
+      "position": {
+        "x": 0,
+        "y": 3200
+      },
+      "width": 420,
+      "height": 300,
+      "data": {
+        "name": "Hiker"
+      }
+    },
+    {
+      "id": "120",
+      "type": "prompt",
+      "position": {
+        "x": 28,
+        "y": 56
+      },
+      "parentId": "hero",
+      "extent": "parent",
+      "width": 300,
+      "height": 50,
+      "data": {
+        "text": "A hiker in a yellow jacket and brown boots, seen from slightly below"
+      }
+    },
+    {
+      "id": "121",
+      "type": "image",
+      "position": {
+        "x": 28,
+        "y": 130
+      },
+      "parentId": "hero",
+      "extent": "parent",
+      "width": 160,
+      "data": {
+        "file": "1789030920022-hiker.png",
+        "fileName": "hiker.png",
+        "aspect": 1.6
+      }
+    },
+    {
+      "id": "180",
+      "type": "imageOutput",
+      "position": {
+        "x": 500,
+        "y": 3200
+      },
+      "data": {
+        "model": "openai/gpt-image-2",
+        "quality": "high",
+        "size": "1024x1536",
+        "runs": 3,
+        "freeRuns": false
+      }
+    },
+    {
+      "id": "103",
+      "type": "prompt",
+      "position": {
+        "x": 900,
+        "y": 3200
+      },
+      "width": 200,
+      "height": 30,
+      "data": {
+        "text": "@hero looks out over the sea"
+      }
+    },
+    {
+      "id": "130",
+      "type": "output",
+      "position": {
+        "x": 440,
+        "y": 3700
+      },
+      "data": {
+        "kind": "image",
+        "model": "openai/gpt-image-2",
+        "resolution": "1K",
+        "quality": "medium",
+        "aspect_ratio": "1:1",
+        "runs": 2
+      }
+    },
+    {
+      "id": "131",
+      "type": "output",
+      "position": {
+        "x": 440,
+        "y": 3950
+      },
+      "data": {
+        "kind": "video",
+        "videoModel": "bytedance/seedance-2.0",
+        "duration": 7,
+        "resolution": "720p",
+        "job": {
+          "id": "vid_7d3a0c5e11",
+          "startedAt": 1789036500000,
+          "params": {
+            "prompt": "The fox walks along the ridge",
+            "model": "bytedance/seedance-2.0",
+            "duration": 7,
+            "resolution": "720p",
+            "size": null
+          }
+        }
+      }
+    },
+    {
+      "id": "191",
+      "type": "prompt",
+      "position": {
+        "x": 0,
+        "y": 4200
+      },
+      "width": 260,
+      "height": 30,
+      "data": {
+        "text": "A close-up of fox fur in the wind"
+      }
+    },
+    {
+      "id": "108",
+      "type": "image",
+      "position": {
+        "x": 150,
+        "y": 4230
+      },
+      "width": 240,
+      "data": {
+        "fileName": "",
+        "dataUrl": ""
+      }
+    },
+    {
+      "id": "190",
+      "type": "imageOutput",
+      "position": {
+        "x": 440,
+        "y": 4200
+      },
+      "data": {
+        "model": "openai/gpt-image-2",
+        "resolution": "1K",
+        "runs": 1,
+        "freeRuns": false,
+        "running": {
+          "startedAt": 1789036740000,
+          "session": "s-1789037700000-p8d2w6r4t0z"
+        }
+      }
+    },
+    {
+      "id": "107",
+      "type": "image",
+      "position": {
+        "x": 1300,
+        "y": 800
+      },
+      "width": 240,
+      "data": {
+        "fileName": "sketch.png",
+        "dataUrl": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAAAoCAIAAADBrGu+AAAACXBIWXMAAAABAAAAAQBPJcTWAAAATElEQVR4nO3PQQ3AIADAQEgQjAMkYHkieFyW9BS0c587/mzpgFcNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaB9sPwIc9v2hJAAAAABJRU5ErkJggg=="
+      }
+    },
+    {
+      "id": "109",
+      "type": "image",
+      "position": {
+        "x": 1300,
+        "y": 1200
+      },
+      "width": 240,
+      "data": {
+        "file": "1789031280088-gone.png",
+        "fileName": "gone.png",
+        "aspect": 1.6
+      }
+    },
+    {
+      "id": "110",
+      "type": "video",
+      "position": {
+        "x": 1300,
+        "y": 1400
+      },
+      "width": 240,
+      "data": {
+        "file": "1789031160066-waves.mp4",
+        "fileName": "waves.mp4",
+        "aspect": 1.7778
+      }
+    },
+    {
+      "id": "111",
+      "type": "video",
+      "position": {
+        "x": 1300,
+        "y": 1650
+      },
+      "width": 240,
+      "data": {
+        "dataUrl": "https://media.example.com/clips/fox-trot.mp4?v=2",
+        "fileName": "fox-trot.mp4"
+      }
+    },
+    {
+      "id": "202",
+      "type": "video",
+      "position": {
+        "x": 1300,
+        "y": 1900
+      },
+      "width": 240,
+      "data": {
+        "file": "1789035600303-cliff-intro.mp4",
+        "fileName": "1789035600303-cliff-intro.mp4",
+        "aspect": 1.7778
+      }
+    },
+    {
+      "id": "210",
+      "type": "image",
+      "position": {
+        "x": 1300,
+        "y": 2150
+      },
+      "parentId": "old-box",
+      "width": 240,
+      "data": {
+        "file": "1789031220077-cliff.png",
+        "fileName": "cliff.png",
+        "aspect": 1.6
+      }
+    },
+    {
+      "id": "220",
+      "type": "sticky",
+      "position": {
+        "x": 1300,
+        "y": 2400
+      },
+      "width": 200,
+      "height": 120,
+      "data": {
+        "text": "remember to try a wider shot"
+      }
+    },
+    {
+      "id": "200",
+      "type": "page",
+      "position": {
+        "x": 1700,
+        "y": 0
+      },
+      "width": 480,
+      "height": 320,
+      "data": {
+        "file": "1789035000101-fox-landing.html",
+        "title": "Fox landing",
+        "fileName": "",
+        "dials": {
+          "headline": "The fox at dusk",
+          "accent": "#7c3aed"
+        }
+      }
+    },
+    {
+      "id": "201",
+      "type": "motion",
+      "position": {
+        "x": 1700,
+        "y": 400
+      },
+      "width": 480,
+      "height": 300,
+      "data": {
+        "file": "1789035300202-cliff-intro.html",
+        "title": "Cliff intro",
+        "fileName": ""
+      }
+    }
+  ],
+  "edges": [
+    {
+      "id": "e-100-140",
+      "source": "100",
+      "target": "140",
+      "animated": true
+    },
+    {
+      "id": "e-106-140",
+      "source": "106",
+      "target": "140",
+      "animated": true
+    },
+    {
+      "id": "e-101-132",
+      "source": "101",
+      "target": "132"
+    },
+    {
+      "id": "e-153-151",
+      "source": "153",
+      "target": "151",
+      "animated": true
+    },
+    {
+      "id": "e-152-151",
+      "source": "152",
+      "target": "151",
+      "animated": true
+    },
+    {
+      "id": "e-151-150",
+      "source": "151",
+      "target": "150",
+      "animated": true
+    },
+    {
+      "id": "e-152-150",
+      "source": "152",
+      "target": "150",
+      "animated": true
+    },
+    {
+      "id": "e-161-160",
+      "source": "161",
+      "target": "160"
+    },
+    {
+      "id": "e-162-160",
+      "source": "162",
+      "target": "160"
+    },
+    {
+      "id": "e-164-163",
+      "source": "164",
+      "target": "163",
+      "animated": true
+    },
+    {
+      "id": "xy-edge__172out-170in",
+      "source": "172",
+      "sourceHandle": "out",
+      "target": "170",
+      "targetHandle": "in",
+      "animated": true
+    },
+    {
+      "id": "e-134-133",
+      "source": "134",
+      "target": "133"
+    },
+    {
+      "id": "e-hero-180",
+      "source": "hero",
+      "target": "180",
+      "animated": true
+    },
+    {
+      "id": "e-191-190",
+      "source": "191",
+      "target": "190"
+    }
+  ]
+}

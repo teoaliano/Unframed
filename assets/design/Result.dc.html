@@ -1,0 +1,93 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    *{box-sizing:border-box}
+    body{margin:0;font-family:ui-sans-serif,-apple-system,"Segoe UI",Helvetica,Arial,sans-serif;color:#262626;background:#f7f7f7;-webkit-font-smoothing:antialiased}
+    a{color:#262626}a:hover{color:#000}
+    .canvas{position:relative;width:100%;height:100%;overflow:hidden;background-color:#f7f7f7;background-image:radial-gradient(#dedede 1px,transparent 1px);background-size:24px 24px}
+    .stage{position:absolute;inset:0;padding:40px;display:flex;flex-direction:column;gap:28px}
+    .boardname{position:absolute;left:20px;top:16px;font-size:11px;letter-spacing:.09em;text-transform:uppercase;color:#9a9a9a}
+    .chrome{background:rgba(255,255,255,.94);border:1px solid #e3e3e3;border-radius:12px;box-shadow:0 10px 30px rgba(0,0,0,.10)}
+    .btn{display:inline-flex;align-items:center;gap:7px;height:30px;padding:0 11px;border-radius:8px;border:1px solid #e0e0e0;background:#fff;font-size:13px;font-weight:500;color:#262626;white-space:nowrap}
+    .btn--primary{background:#262626;border-color:#262626;color:#fff}
+    .btn--quiet{border-color:transparent;background:transparent}
+    .btn--lg{height:34px;padding:0 14px}
+    .sep{width:1px;align-self:stretch;margin:4px 2px;background:#e6e6e6}
+    .hint{font-size:12px;color:#8d8d8d;white-space:nowrap}
+    .lbl{font-size:11px;color:#8d8d8d;letter-spacing:.02em}
+    .card{background:#fff;border:1px solid #e3e3e3;border-radius:10px}
+    .media{border-radius:8px;overflow:hidden;position:relative}
+    .selrect{position:absolute;border:1.5px solid #262626;border-radius:4px;pointer-events:none}
+    .grip{position:absolute;width:7px;height:7px;background:#fff;border:1.5px solid #262626}
+    .chip{display:inline-flex;align-items:center;gap:6px;height:24px;padding:0 9px;border-radius:999px;border:1px solid #e3e3e3;background:#fafafa;font-size:12px;color:#4a4a4a}
+    .seg{display:flex;padding:3px;gap:3px;background:#f1f1f1;border-radius:9px}
+    .seg > button{height:26px;padding:0 13px;border:0;border-radius:7px;background:transparent;font:inherit;font-size:13px;font-weight:500;color:#6a6a6a}
+    .seg > button[data-on]{background:#fff;color:#262626;box-shadow:0 1px 2px rgba(0,0,0,.09)}
+    .field{width:100%;min-height:64px;padding:9px 10px;border:1px solid #e3e3e3;border-radius:9px;background:#fff;font-size:13px;line-height:1.45;color:#3a3a3a}
+    .field--empty{color:#a6a6a6}
+    .sheet{width:420px;padding:12px 13px 13px;display:flex;flex-direction:column;gap:12px}
+    .row{display:flex;align-items:center;gap:8px}
+    .col{display:flex;flex-direction:column;gap:6px}
+    .note{max-width:300px;font-size:12.5px;line-height:1.5;color:#6a6a6a}
+    .note b{color:#262626;font-weight:600}
+    .pill{display:inline-block;padding:2px 7px;border-radius:5px;background:#262626;color:#fff;font-size:10px;letter-spacing:.06em;text-transform:uppercase}
+    .group{border:1.5px dashed #c7c7c7;border-radius:12px;position:relative}
+    .grouplabel{position:absolute;top:-10px;left:12px;background:#f7f7f7;padding:0 6px;font-size:12px;color:#6a6a6a}
+  </style>
+</helmet>
+<div class="canvas">
+  <div class="boardname">4 · What lands, and what it remembers</div>
+  <div style="position:absolute;left:92px;top:100px;opacity:.55">
+    <div class="row" style="gap:10px">
+      <div class="media" style="width:112px;height:134px"><svg viewBox="0 0 112 134" width="112" height="134"><rect width="112" height="134" fill="#d8d2c7"/><circle cx="38" cy="50" r="25" fill="#b9ae9b"/><rect x="0" y="94" width="112" height="40" fill="#a89c88"/></svg></div>
+      <div class="media" style="width:112px;height:134px"><svg viewBox="0 0 112 134" width="112" height="134"><rect width="112" height="134" fill="#c9d2d6"/><rect x="18" y="28" width="76" height="80" fill="#9aabb3"/></svg></div>
+    </div>
+    <div style="margin-top:10px;width:234px;font-size:12px;line-height:1.45;color:#6a6a6a">@scene — late afternoon, low sun…</div>
+  </div>
+
+  <svg style="position:absolute;left:330px;top:160px" width="120" height="60" viewBox="0 0 120 60" fill="none">
+    <path d="M2 30 H104" stroke="#c4c4c4" stroke-width="1.5" stroke-dasharray="4 5"/>
+    <path d="M98 24 L106 30 L98 36" stroke="#c4c4c4" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+  </svg>
+
+  <div class="media" style="position:absolute;left:452px;top:100px;width:268px;height:268px;box-shadow:0 12px 32px rgba(0,0,0,.12)">
+    <svg viewBox="0 0 268 268" width="268" height="268"><rect width="268" height="268" fill="#cdbfa9"/><circle cx="96" cy="108" r="58" fill="#b09a7c"/><rect x="0" y="196" width="268" height="72" fill="#8f7c63"/></svg>
+  </div>
+  <div class="selrect" style="left:446px;top:94px;width:280px;height:280px"></div>
+  <div class="grip" style="left:442px;top:90px"></div>
+  <div class="grip" style="left:720px;top:90px"></div>
+  <div class="grip" style="left:442px;top:370px"></div>
+  <div class="grip" style="left:720px;top:370px"></div>
+  <div class="hint" style="position:absolute;left:452px;top:378px">gpt-image-2 · 1024×1024 · $0.19</div>
+
+  <div class="chrome" style="position:absolute;left:452px;top:412px;display:flex;align-items:center;gap:6px;padding:5px">
+    <button class="btn btn--primary">Regenerate</button>
+    <button class="btn">Vary</button>
+    <button class="btn btn--quiet">Recipe</button>
+    <span class="sep"></span>
+    <button class="btn">Agent</button>
+  </div>
+
+  <div class="note" style="position:absolute;left:790px;top:100px">
+    <b>The result is an ordinary image node</b> — the same one an upload makes. It can be selected into the next generation with no conversion step, which is the whole point of dropping the output node.
+  </div>
+  <div class="note" style="position:absolute;left:790px;top:236px">
+    <b>It carries its own recipe</b> (the sidecar already on disk): sources, model, parameters, the run’s instruction. That is what makes <b>Regenerate</b> and <b>Vary</b> possible with no wires and no second object.
+  </div>
+  <div class="note" style="position:absolute;left:790px;top:388px">
+    <b>Recipe</b> reopens the Generate sheet filled in, so “same thing, bigger” is two clicks. The open question is how far that memory should reach — see the next page.
+  </div>
+  <div class="note" style="position:absolute;left:92px;top:400px;max-width:270px">
+    The dashed tether is <b>provenance, not a wire</b>: it is drawn only while the result is selected, it carries nothing, and deleting a source does not break the node.
+  </div>
+</div>
+</x-dc>
+</body>
+</html>

@@ -1,0 +1,2 @@
+{"version":1,"op":{"type":"updateNode","id":"100","patch":{"text":"A wolf running along the beach"}},"inverse":{"type":"updateNode","id":"100","patch":{"text":"A fox running along the beach at low tide"}},"origin":{"kind":"session","id":"s-1789100000000-ls1"},"at":1789043400000}
+{"version":2,"op":{"type":"addNode","node":{"id":"104","type":"prompt","position":{"x":0,"y":400},"data":{"text":"gulls overhead"}}},"inverse":{"type":"removeNode","id":"104"},"origin":{"kind":"session","id":"s-1789100000000-ls1"},"at":1789043460000}

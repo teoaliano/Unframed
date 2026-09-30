@@ -1,0 +1,126 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    *{box-sizing:border-box}
+    body{margin:0;font-family:ui-sans-serif,-apple-system,"Segoe UI",Helvetica,Arial,sans-serif;color:#262626;background:#f7f7f7;-webkit-font-smoothing:antialiased}
+    a{color:#262626}a:hover{color:#000}
+    .canvas{position:relative;width:100%;height:100%;overflow:hidden;background-color:#f7f7f7;background-image:radial-gradient(#dedede 1px,transparent 1px);background-size:24px 24px}
+    .stage{position:absolute;inset:0;padding:40px;display:flex;flex-direction:column;gap:28px}
+    .boardname{position:absolute;left:20px;top:16px;font-size:11px;letter-spacing:.09em;text-transform:uppercase;color:#9a9a9a}
+    .chrome{background:rgba(255,255,255,.94);border:1px solid #e3e3e3;border-radius:12px;box-shadow:0 10px 30px rgba(0,0,0,.10)}
+    .btn{display:inline-flex;align-items:center;gap:7px;height:30px;padding:0 11px;border-radius:8px;border:1px solid #e0e0e0;background:#fff;font-size:13px;font-weight:500;color:#262626;white-space:nowrap}
+    .btn--primary{background:#262626;border-color:#262626;color:#fff}
+    .btn--quiet{border-color:transparent;background:transparent}
+    .btn--lg{height:34px;padding:0 14px}
+    .sep{width:1px;align-self:stretch;margin:4px 2px;background:#e6e6e6}
+    .hint{font-size:12px;color:#8d8d8d;white-space:nowrap}
+    .lbl{font-size:11px;color:#8d8d8d;letter-spacing:.02em}
+    .card{background:#fff;border:1px solid #e3e3e3;border-radius:10px}
+    .media{border-radius:8px;overflow:hidden;position:relative}
+    .selrect{position:absolute;border:1.5px solid #262626;border-radius:4px;pointer-events:none}
+    .grip{position:absolute;width:7px;height:7px;background:#fff;border:1.5px solid #262626}
+    .chip{display:inline-flex;align-items:center;gap:6px;height:24px;padding:0 9px;border-radius:999px;border:1px solid #e3e3e3;background:#fafafa;font-size:12px;color:#4a4a4a}
+    .seg{display:flex;padding:3px;gap:3px;background:#f1f1f1;border-radius:9px}
+    .seg > button{height:26px;padding:0 13px;border:0;border-radius:7px;background:transparent;font:inherit;font-size:13px;font-weight:500;color:#6a6a6a}
+    .seg > button[data-on]{background:#fff;color:#262626;box-shadow:0 1px 2px rgba(0,0,0,.09)}
+    .field{width:100%;min-height:64px;padding:9px 10px;border:1px solid #e3e3e3;border-radius:9px;background:#fff;font-size:13px;line-height:1.45;color:#3a3a3a}
+    .field--empty{color:#a6a6a6}
+    .sheet{width:420px;padding:12px 13px 13px;display:flex;flex-direction:column;gap:12px}
+    .row{display:flex;align-items:center;gap:8px}
+    .col{display:flex;flex-direction:column;gap:6px}
+    .note{max-width:300px;font-size:12.5px;line-height:1.5;color:#6a6a6a}
+    .note b{color:#262626;font-weight:600}
+    .pill{display:inline-block;padding:2px 7px;border-radius:5px;background:#262626;color:#fff;font-size:10px;letter-spacing:.06em;text-transform:uppercase}
+    .group{border:1.5px dashed #c7c7c7;border-radius:12px;position:relative}
+    .grouplabel{position:absolute;top:-10px;left:12px;background:#f7f7f7;padding:0 6px;font-size:12px;color:#6a6a6a}
+  </style>
+</helmet>
+<div class="canvas">
+  <div class="boardname">Generate — from a selection</div>
+
+  <!-- selection cluster -->
+  <div class="media" style="position:absolute;left:112px;top:128px;width:208px;height:252px">
+    <svg viewBox="0 0 208 252" width="208" height="252"><rect width="208" height="252" fill="#d8d2c7"/><circle cx="72" cy="94" r="46" fill="#b9ae9b"/><rect x="0" y="176" width="208" height="76" fill="#a89c88"/></svg>
+  </div>
+  <div class="media" style="position:absolute;left:344px;top:128px;width:208px;height:252px">
+    <svg viewBox="0 0 208 252" width="208" height="252"><rect width="208" height="252" fill="#c9d2d6"/><rect x="34" y="52" width="140" height="148" fill="#9aabb3"/><circle cx="104" cy="126" r="34" fill="#dfe5e8"/></svg>
+  </div>
+  <div style="position:absolute;left:112px;top:404px;width:440px">
+    <div class="lbl" style="margin-bottom:5px">@scene</div>
+    <div style="font-size:15px;line-height:1.5;color:#262626">Late afternoon, low sun through the window. Keep the palette warm and the grain heavy.</div>
+  </div>
+
+  <div class="selrect" style="left:98px;top:112px;width:470px;height:392px"></div>
+  <div class="grip" style="left:94px;top:108px"></div>
+  <div class="grip" style="left:562px;top:108px"></div>
+  <div class="grip" style="left:94px;top:500px"></div>
+  <div class="grip" style="left:562px;top:500px"></div>
+
+  <!-- the sheet: the toolbar grown into the generate menu -->
+  <div class="chrome sheet" style="position:absolute;left:123px;top:536px">
+    <div class="row" style="justify-content:space-between">
+      <div class="row" style="gap:7px">
+        <span class="pill">Generate</span>
+        <span class="hint">3 selected</span>
+      </div>
+      <span class="hint">Esc</span>
+    </div>
+
+    <div class="seg" style="align-self:flex-start">
+      <button data-on="">Image</button>
+      <button>Video</button>
+      <button>Text</button>
+    </div>
+
+    <div class="col">
+      <div class="lbl">Model</div>
+      <button class="btn" style="justify-content:space-between;width:100%">
+        <span>openai/gpt-image-2</span>
+        <span class="hint">Change</span>
+      </button>
+    </div>
+
+    <div class="row" style="flex-wrap:wrap;gap:8px">
+      <div class="col" style="gap:4px"><span class="lbl">Size</span><button class="btn">1024×1024 · 1:1</button></div>
+      <div class="col" style="gap:4px"><span class="lbl">Quality</span><button class="btn">high</button></div>
+      <div class="col" style="gap:4px"><span class="lbl">Runs</span><button class="btn">1</button></div>
+    </div>
+
+    <div class="col" style="gap:7px">
+      <div class="lbl">From</div>
+      <div class="row" style="flex-wrap:wrap;gap:6px">
+        <span class="chip">image 1</span>
+        <span class="chip">image 2</span>
+        <span class="chip">@scene</span>
+      </div>
+    </div>
+
+    <div class="field field--empty">Add instructions for this run (optional)</div>
+
+    <div class="row" style="justify-content:space-between">
+      <span class="hint">~$0.19</span>
+      <div class="row" style="gap:7px">
+        <span class="hint">⌘↵</span>
+        <button class="btn btn--primary btn--lg">Generate</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- annotations -->
+  <div style="position:absolute;left:660px;top:128px;display:flex;flex-direction:column;gap:26px;width:320px">
+    <div class="note"><b>No output node exists yet.</b> The selection is the input set. Order is the same rule as today — top&#8209;to&#8209;bottom Y — so “image 1” and “image 2” are read off the canvas, not off a wire.</div>
+    <div class="note"><b>The sheet is the output node’s body,</b> lifted out of the canvas: type, model, every model&#8209;driven parameter, runs, cost. Nothing new to learn, nothing left behind when the run finishes.</div>
+    <div class="note"><b>The composer is per&#8209;run instruction,</b> not a prompt node. It is appended after the selected prompts and is <i>not</i> saved into the graph — if you want it to persist, it belongs in a prompt.</div>
+    <div class="note"><b>Generate and Agent are siblings, never modes.</b> Same selection, two verbs: one spends money on a model call, the other hands the set to the local agent. See <b>Agent</b>.</div>
+  </div>
+</div>
+</x-dc>
+</body>
+</html>

@@ -1,0 +1,131 @@
+{
+  "artboards": [
+    {
+      "file": "Main.dc.html",
+      "x": 0,
+      "y": 0,
+      "w": 1240,
+      "h": 1020,
+      "page": "page-1",
+      "title": "Generate from a selection"
+    },
+    {
+      "file": "Selected.dc.html",
+      "x": 1360,
+      "y": 0,
+      "w": 900,
+      "h": 560,
+      "page": "page-1"
+    },
+    {
+      "file": "Group.dc.html",
+      "x": 2360,
+      "y": 0,
+      "w": 900,
+      "h": 580,
+      "page": "page-1"
+    },
+    {
+      "file": "Agent.dc.html",
+      "x": 1360,
+      "y": 700,
+      "w": 900,
+      "h": 640,
+      "page": "page-1"
+    },
+    {
+      "file": "Result.dc.html",
+      "x": 2360,
+      "y": 700,
+      "w": 1160,
+      "h": 600,
+      "page": "page-1"
+    },
+    {
+      "file": "OptionA.dc.html",
+      "x": 0,
+      "y": 0,
+      "w": 520,
+      "h": 780,
+      "page": "page-2"
+    },
+    {
+      "file": "OptionB.dc.html",
+      "x": 620,
+      "y": 0,
+      "w": 520,
+      "h": 780,
+      "page": "page-2"
+    },
+    {
+      "file": "OptionC.dc.html",
+      "x": 1240,
+      "y": 0,
+      "w": 520,
+      "h": 780,
+      "page": "page-2"
+    },
+    {
+      "file": "QuietLine.dc.html",
+      "x": 0,
+      "y": 0,
+      "w": 760,
+      "h": 880,
+      "page": "page-3",
+      "title": "A · One quiet line"
+    },
+    {
+      "file": "Composer.dc.html",
+      "x": 860,
+      "y": 0,
+      "w": 760,
+      "h": 1140,
+      "page": "page-3",
+      "title": "The composer"
+    }
+  ],
+  "annotations": [
+    {
+      "id": "flow-read",
+      "x": 0,
+      "y": -140,
+      "w": 600,
+      "page": "page-1",
+      "text": "Read left to right: the big board is the whole idea, the three small ones are the states, and the last is what happens after a run.\n\nNothing here is wired. The selection IS the input set."
+    },
+    {
+      "id": "q-head",
+      "x": 0,
+      "y": -190,
+      "w": 760,
+      "page": "page-2",
+      "text": "The output node held three things: what to make, from what, and with which settings — and it held them BETWEEN runs. Selection replaces the first two. These are three answers to the third.\n\nThey are not exclusive: A is the floor, B and C are things you can add on top of it."
+    },
+    {
+      "id": "quiet-head",
+      "x": 0,
+      "y": -150,
+      "w": 620,
+      "page": "page-3",
+      "text": "Direction A for the Generate sheet's settings row: every parameter is a word in one footer line rather than a control.\n\nThe three states are the same sheet — untouched, configured, and with one word open."
+    }
+  ],
+  "launch": {
+    "view": "canvas",
+    "page": "page-3"
+  },
+  "pages": [
+    {
+      "id": "page-1",
+      "name": "Flow"
+    },
+    {
+      "id": "page-2",
+      "name": "Open question"
+    },
+    {
+      "id": "page-3",
+      "name": "Sheet directions"
+    }
+  ]
+}

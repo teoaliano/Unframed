@@ -1,0 +1,90 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "plugins": [
+    "react"
+  ],
+  "jsPlugins": [
+    "@shadcn/lint"
+  ],
+  "categories": {
+    "correctness": "off"
+  },
+  "settings": {
+    "shadcn": {
+      "ui": "~/components/ui"
+    }
+  },
+  "ignorePatterns": [
+    "dist",
+    "node_modules"
+  ],
+  "rules": {
+    "shadcn/no-unknown-classes": [
+      "error",
+      {
+        "allow": [
+          "unframed-chrome-left",
+          "unframed-chrome-right"
+        ]
+      }
+    ],
+    "shadcn/no-raw-colors": "error",
+    "shadcn/require-static-classes": "error",
+    "shadcn/no-restyle": [
+      "error",
+      {
+        "allow": [
+          "layout"
+        ],
+        "contracts": [
+          {
+            "pattern": "^CollapsibleTrigger$",
+            "allow": [
+              "layout",
+              "color",
+              "typography",
+              "spacing",
+              "shape",
+              "effects",
+              "motion"
+            ]
+          }
+        ]
+      }
+    ],
+    "react/forbid-elements": [
+      "error",
+      {
+        "forbid": [
+          {
+            "element": "button",
+            "message": "Render the kit's Button (or InlineButton) from ~/components/ui/button."
+          },
+          {
+            "element": "input",
+            "message": "Render the kit's Input, Checkbox, Switch or NumberField from ~/components/ui."
+          },
+          {
+            "element": "select",
+            "message": "Render the kit's Select from ~/components/ui/select."
+          }
+        ]
+      }
+    ]
+  },
+  "overrides": [
+    // The kit and the theme define the looks and tokens the rest of the app may only pick from.
+    {
+      "files": [
+        "src/components/ui/**",
+        "src/theme/**"
+      ],
+      "rules": {
+        "shadcn/no-raw-colors": "off",
+        "shadcn/no-restyle": "off",
+        "shadcn/require-static-classes": "off",
+        "react/forbid-elements": "off"
+      }
+    }
+  ]
+}

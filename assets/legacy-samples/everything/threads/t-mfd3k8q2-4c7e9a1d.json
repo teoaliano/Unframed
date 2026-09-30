@@ -1,0 +1,73 @@
+{
+  "id": "t-mfd3k8q2-4c7e9a1d",
+  "project": "everything",
+  "tags": [
+    "200",
+    "201"
+  ],
+  "provider": "claude",
+  "model": "claude-sonnet-5",
+  "effort": "",
+  "mode": "auto",
+  "pending": null,
+  "grants": [],
+  "status": "idle",
+  "title": "Landing page for the fox",
+  "titledBy": "agent",
+  "lastVersion": 4,
+  "messages": [
+    {
+      "role": "user",
+      "text": "Make a landing page from the cliff picture",
+      "at": 1789034970101,
+      "turn": 1,
+      "selection": [
+        "106"
+      ]
+    },
+    {
+      "role": "assistant",
+      "text": "I made the page \"Fox landing\".",
+      "at": 1789035000901,
+      "turn": 1
+    },
+    {
+      "role": "user",
+      "text": "Now a short intro clip",
+      "at": 1789035270202,
+      "turn": 2
+    },
+    {
+      "role": "assistant",
+      "text": "I made the motion \"Cliff intro\".",
+      "at": 1789035301002,
+      "turn": 2
+    }
+  ],
+  "events": [
+    {
+      "seq": 1,
+      "at": 1789034971101,
+      "turn": 1,
+      "type": "turn"
+    },
+    {
+      "seq": 2,
+      "at": 1789035000001,
+      "turn": 1,
+      "type": "tool_use",
+      "name": "page_write"
+    },
+    {
+      "seq": 3,
+      "at": 1789035000951,
+      "turn": 1,
+      "type": "result",
+      "ok": true
+    }
+  ],
+  "seq": 3,
+  "turns": 2,
+  "createdAt": 1789034970101,
+  "updatedAt": 1789035301002
+}

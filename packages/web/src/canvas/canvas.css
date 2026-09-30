@@ -1,0 +1,27 @@
+/*
+ * The canvas label rules (spec 12): rules for Unframed parts inside tldraw-rendered shapes
+ * that depend on tldraw's own DOM or on the canvas's label level. Everything else about a
+ * shape's look is on its elements, from the kit's tokens.
+ */
+
+/* Labels by zoom: the level is one attribute on the canvas container, so no shape re-renders. */
+.tl-container[data-label-level="off"] [data-shape-label],
+.tl-container[data-label-level="off"] [data-role-for] {
+  display: none;
+}
+
+.tl-container[data-label-level="hover"] .tl-shape:not([data-label-active]) [data-shape-label] {
+  visibility: hidden;
+}
+
+/* A filled artifact's title is its handle: a selected frame takes every press inside the shape. */
+.tl-container [data-shape-label][data-label-handle] {
+  pointer-events: all;
+  cursor: grab;
+}
+
+/* A group's name field shows at every zoom and takes the pointer; the name is typed as it is, not in capitals. */
+.tl-container .tl-shape [data-shape-label][data-label-open][data-label-kind] {
+  display: flex;
+  visibility: visible;
+}

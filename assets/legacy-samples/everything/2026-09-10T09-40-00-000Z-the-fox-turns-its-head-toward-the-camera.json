@@ -1,0 +1,18 @@
+{
+  "kind": "video",
+  "prompt": "The fox turns its head toward the camera",
+  "model": "bytedance/seedance-2.0",
+  "duration": 5,
+  "resolution": "480p",
+  "size": null,
+  "references": {
+    "images": 0,
+    "videos": 0,
+    "frames": 1
+  },
+  "usage": {
+    "cost": 0.12
+  },
+  "cost": 0.12,
+  "createdAt": "2026-09-10T09:40:00.000Z"
+}

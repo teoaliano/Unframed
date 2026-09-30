@@ -1,0 +1,14 @@
+{
+  "kind": "text",
+  "prompt": "List every separate part of image 1. Write one short section per part, split by a line with only ---.",
+  "model": "google/gemini-3.5-flash-lite",
+  "result": "The red fox\n---\nThe rocky cliff\n---\nThe evening sky",
+  "referenceCount": 1,
+  "references": {
+    "images": 1,
+    "videos": 0
+  },
+  "batchId": "b-1789033800000",
+  "cost": 0.0005,
+  "createdAt": "2026-09-10T09:50:00.000Z"
+}

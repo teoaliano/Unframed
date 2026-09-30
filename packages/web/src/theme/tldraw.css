@@ -1,0 +1,155 @@
+/*
+ * The tldraw theme adapter (spec 12): tldraw's own variables mapped onto the kit's tokens,
+ * so its toolbar, style panel, zoom controls, menus, tooltips and dialogs read as part of
+ * the app. The ":root" prefix outranks tldraw.css, which loads after this file. Nothing
+ * here targets the watermark: its visibility, opacity, position and size are tldraw's.
+ */
+:root .tl-theme__light,
+:root .tl-theme__dark {
+  --tl-color-background: var(--background);
+  --tl-color-panel: var(--popover);
+  --tl-color-panel-contrast: var(--popover);
+  --tl-color-panel-overlay: color-mix(in srgb, var(--popover) 82%, transparent);
+  --tl-color-panel-transparent: color-mix(in srgb, var(--popover) 0%, transparent);
+  --tl-color-low: var(--muted);
+  --tl-color-low-border: var(--border);
+  --tl-color-muted-none: transparent;
+  --tl-color-muted-0: color-mix(in srgb, var(--accent) 50%, transparent);
+  --tl-color-muted-1: color-mix(in srgb, var(--foreground) 10%, transparent);
+  --tl-color-muted-2: var(--accent);
+  --tl-color-hint: var(--accent);
+  --tl-color-overlay: color-mix(in srgb, var(--background) 60%, transparent);
+  --tl-color-divider: var(--border);
+  --tl-color-selected: var(--primary);
+  --tl-color-selected-contrast: var(--primary-foreground);
+  --tl-color-focus: var(--ring);
+  --tl-color-tooltip: var(--popover);
+  --tl-color-text: var(--foreground);
+  --tl-color-text-0: var(--foreground);
+  --tl-color-text-1: var(--foreground);
+  --tl-color-text-3: var(--muted-foreground);
+  --tl-color-text-disabled: var(--foreground);
+  --tl-color-text-shadow: var(--background);
+  --tl-color-primary: var(--primary);
+  --tl-color-danger: var(--destructive);
+  --tl-color-warning: var(--warning);
+  --tl-color-success: var(--success);
+  --tl-color-info: var(--info);
+  --tl-color-selection-stroke: var(--highlight);
+  --tl-color-selection-fill: color-mix(in srgb, var(--highlight) 16%, transparent);
+  --tl-radius-0: calc(var(--radius) - 8px);
+  --tl-radius-1: calc(var(--radius) - 6px);
+  --tl-radius-2: var(--radius-sm);
+  --tl-radius-3: var(--radius-lg);
+  --tl-radius-4: var(--radius-xl);
+  /* 1: controls. 2: panels, bordered like the kit's cards. 3: menus and popovers. 4: dialogs. */
+  --tl-shadow-1: 0 1px 2px rgb(0 0 0 / 5%);
+  --tl-shadow-2:
+    inset 0 0 0 1px var(--contrast-border), 0 10px 15px -3px rgb(0 0 0 / 5%),
+    0 4px 6px -4px rgb(0 0 0 / 5%);
+  --tl-shadow-3:
+    inset 0 0 0 1px color-mix(in srgb, var(--contrast-foreground) 10%, transparent),
+    0 16px 40px -18px rgb(0 0 0 / 55%);
+  --tl-shadow-4:
+    inset 0 0 0 1px color-mix(in srgb, var(--contrast-foreground) 10%, transparent),
+    0 24px 64px -24px rgb(0 0 0 / 65%);
+}
+
+:root .tl-theme__dark {
+  --tl-shadow-3:
+    inset 0 0 0 1px color-mix(in srgb, var(--color-white) 8%, transparent),
+    0 18px 44px -18px rgb(0 0 0 / 80%);
+  --tl-shadow-4:
+    inset 0 0 0 1px color-mix(in srgb, var(--color-white) 8%, transparent),
+    0 24px 72px -20px rgb(0 0 0 / 90%);
+}
+
+/* tldraw's UI chrome takes the kit's sans stack; shape content keeps tldraw_sans. */
+.tlui-layout,
+.tlui-menu,
+.tlui-popover__content,
+.tlui-dialog__content,
+.tlui-tooltip {
+  --tl-font-sans: var(--font-sans);
+}
+
+/* Menu rows: the kit's 28 px highlight, radius and text size inside tldraw's 32 px row. */
+.tlui-menu .tlui-button__menu {
+  height: 32px;
+  min-height: 32px;
+}
+
+.tlui-menu .tlui-button__menu::after {
+  inset: 2px 4px;
+}
+
+.tlui-menu .tlui-button__menu .tlui-button__label {
+  font-size: var(--text-sm);
+}
+
+/* Toolbar and panel buttons: the kit control's radius on tldraw's hover and selected fill. */
+.tlui-button__tool::after,
+.tlui-layout .tlui-button:not(.tlui-button__menu)::after {
+  border-radius: var(--control-radius);
+}
+
+/* Tooltips: the kit's tooltip look. */
+.tlui-tooltip {
+  border: 1px solid var(--contrast-border);
+  border-radius: var(--radius-md);
+  padding: 4px 8px;
+  color: var(--contrast-popover-foreground);
+  font-size: var(--text-xs);
+  line-height: 1.375;
+  box-shadow: 0 4px 6px -1px rgb(0 0 0 / 5%);
+}
+
+/* The style panel is a panel like the toolbar and the corner cards, not a menu. */
+.tlui-style-panel__wrapper {
+  border-radius: var(--tl-radius-4);
+}
+
+/* Disabled buttons and rows: the kit's disabled look, the control's own colour at 64 %. */
+.tlui-button:disabled,
+.tlui-button[data-disabled] {
+  opacity: 0.64;
+  cursor: not-allowed;
+}
+
+/* The right-click menu keeps spec 02's 188 px. */
+.tlui-menu[data-testid="context-menu"] {
+  width: 188px;
+  min-width: 188px;
+}
+
+/* tldraw's top zone (its style panel) starts below the corner cards, so nothing hides under them. */
+.tlui-layout__top {
+  padding-top: 64px;
+}
+
+/* While the artifact editor is open it replaces the canvas on screen (spec 09); tldraw's watermark stays visible below it. */
+[data-artifact-editor] .tl-canvas,
+[data-artifact-editor] .tlui-layout {
+  visibility: hidden;
+}
+
+/*
+ * The one bottom bar (spec 02): tldraw's quick actions, its tools and Unframed's buttons
+ * share one panel, with no dividers between them. tldraw's tools keep their own class, so
+ * its panel look moves to the bar and leaves the inner toolbars plain.
+ */
+[data-unframed-toolbar] {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  pointer-events: all;
+  border-radius: var(--tl-radius-4);
+  background: var(--tl-color-panel);
+  box-shadow: var(--tl-shadow-2);
+}
+
+[data-unframed-toolbar] .tlui-main-toolbar__tools,
+[data-unframed-toolbar] [data-unframed-toolbar-group] {
+  background: none;
+  box-shadow: none;
+}

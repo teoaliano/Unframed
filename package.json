@@ -1,31 +1,42 @@
 {
-  "name": "unframed",
+  "name": "unframed-monorepo",
   "private": true,
-  "version": "0.5.0",
   "type": "module",
-  "description": "A tiny local node-based image generator (GPT Image 2 via OpenRouter).",
-  "license": "MIT",
-  "scripts": {
-    "install:all": "npm install && npm --prefix client install",
-    "dev": "concurrently -n server,client -c yellow,magenta \"npm run server\" \"npm run client\"",
-    "server": "node --watch server/index.js",
-    "client": "npm --prefix client run dev",
-    "test": "node client/src/graph/resolve.test.js && node client/src/graph/bulkWire.test.js && node client/src/graph/edgeHits.test.js && node client/src/graph/grouping.test.js && node client/src/graph/ops.test.js && node client/src/nodes/fieldResize.test.js && node client/src/nodes/output/pricing.test.js && node client/src/keyExpiry.test.js && node client/src/toolbar/placement.test.js && node client/src/toolbar/actions.test.js && node client/src/toolbar/target.test.js && node client/src/agent/tabs.test.js && node client/src/agent/models.test.js && node server/env.test.js && node server/share.test.js && node server/preview.test.js && node server/presets.test.js && node server/jobs.test.js && node server/graph.test.js && node server/document.test.js && node server/media.test.js && node server/motion.test.js && node server/dials.test.js && node server/attachments.test.js && node server/permissions.test.js && node server/providers.test.js && node server/threads.test.js && node server/agentTools.test.js && node server/agentScript.test.js && node server/agentFlow.test.js && node server/host.test.js && node server/oauth.test.js"
+  "packageManager": "pnpm@9.15.4",
+  "engines": {
+    "node": ">=24"
   },
-  "dependencies": {
-    "@anthropic-ai/claude-agent-sdk": "^0.3.260",
-    "@hyperframes/core": "^0.8.29",
-    "@hyperframes/player": "^0.8.29",
-    "@hyperframes/producer": "^0.8.29",
-    "@modelcontextprotocol/sdk": "^1.30.0",
-    "cors": "^2.8.5",
-    "dotenv": "^16.4.7",
-    "express": "^4.21.2",
-    "gsap": "^3.15.0",
-    "localtunnel": "^2.0.2",
-    "zod": "^4.5.4"
+  "scripts": {
+    "dev": "node scripts/dev.ts",
+    "engine": "node packages/engine/src/main.ts",
+    "web": "pnpm --filter @unframed/web dev",
+    "typecheck": "tsc --noEmit -p tsconfig.json && pnpm -r --no-bail typecheck",
+    "test": "vitest run",
+    "test:browser": "playwright test",
+    "test:perf": "playwright test performance.spec.ts artifactPerformance.spec.ts glassPerformance.spec.ts largeImages.spec.ts",
+    "test:bundle": "vitest run --project engine packages/engine/test/bundle.test.ts",
+    "build": "node scripts/build.ts"
   },
   "devDependencies": {
-    "concurrently": "^9.1.0"
+    "@playwright/test": "1.63.0",
+    "@types/node": "24.19.0",
+    "esbuild": "0.28.2",
+    "typescript": "7.0.2",
+    "vitest": "5.0.2"
+  },
+  "pnpm": {
+    "overrides": {
+      "@anthropic-ai/claude-agent-sdk>@anthropic-ai/claude-agent-sdk-darwin-arm64": "-",
+      "@anthropic-ai/claude-agent-sdk>@anthropic-ai/claude-agent-sdk-darwin-x64": "-",
+      "@anthropic-ai/claude-agent-sdk>@anthropic-ai/claude-agent-sdk-linux-arm64": "-",
+      "@anthropic-ai/claude-agent-sdk>@anthropic-ai/claude-agent-sdk-linux-arm64-musl": "-",
+      "@anthropic-ai/claude-agent-sdk>@anthropic-ai/claude-agent-sdk-linux-x64": "-",
+      "@anthropic-ai/claude-agent-sdk>@anthropic-ai/claude-agent-sdk-linux-x64-musl": "-",
+      "@anthropic-ai/claude-agent-sdk>@anthropic-ai/claude-agent-sdk-win32-arm64": "-",
+      "@anthropic-ai/claude-agent-sdk>@anthropic-ai/claude-agent-sdk-win32-x64": "-"
+    },
+    "neverBuiltDependencies": [
+      "puppeteer"
+    ]
   }
 }

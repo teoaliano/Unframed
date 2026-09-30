@@ -1,0 +1,22 @@
+<!doctype html>
+<html>
+<head><meta charset="utf-8"><title>Busy fixture</title>
+<style>html,body{margin:0;height:100%;background:#111}canvas{width:100%;height:100%;display:block}</style></head>
+<body>
+<canvas id="c" width="1024" height="1024"></canvas>
+<script>
+// Performance fixture: the worst common case the old app met on real boards.
+// A requestAnimationFrame loop that redraws a large canvas and reads its pixels back every frame.
+var c = document.getElementById('c'), g = c.getContext('2d'), t = 0;
+function frame() {
+  t++;
+  for (var i = 0; i < 64; i++) { g.fillStyle = 'hsl(' + ((t * 3 + i * 7) % 360) + ',70%,50%)'; g.fillRect((i * 97 + t * 5) % 1024, (i * 53 + t * 3) % 1024, 128, 128); }
+  var d = g.getImageData(0, 0, 1024, 1024).data, s = 0;
+  for (var j = 0; j < d.length; j += 4096) s += d[j];
+  g.putImageData(g.getImageData(0, 0, 512, 512), 512, 512);
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>

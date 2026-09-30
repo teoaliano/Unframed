@@ -1,0 +1,479 @@
+[
+  {
+    "format": 2,
+    "id": "user-mfe1q9w2",
+    "source": "user",
+    "savedAt": "2026-09-10T15:40:00.000Z",
+    "name": "Fox on the cliff",
+    "summary": "A fox prompt and its cliff picture, kept together",
+    "needs": "Select the box with a prompt of your own, then Generate.",
+    "kind": "group",
+    "content": {
+      "schema": {
+        "schemaVersion": 2,
+        "sequences": {
+          "com.tldraw.store": 4,
+          "com.tldraw.asset": 1,
+          "com.tldraw.camera": 1,
+          "com.tldraw.document": 2,
+          "com.tldraw.instance": 25,
+          "com.tldraw.instance_page_state": 5,
+          "com.tldraw.page": 1,
+          "com.tldraw.instance_presence": 6,
+          "com.tldraw.pointer": 1,
+          "com.tldraw.shape": 4,
+          "com.tldraw.asset.bookmark": 2,
+          "com.tldraw.asset.image": 5,
+          "com.tldraw.asset.video": 5,
+          "com.tldraw.shape.frame": 1,
+          "com.tldraw.shape.image": 5,
+          "com.tldraw.shape.text": 3,
+          "com.tldraw.shape.video": 4,
+          "com.tldraw.binding.arrow": 1
+        }
+      },
+      "rootShapeIds": [
+        "shape:pfFoxCliffBox"
+      ],
+      "shapes": [
+        {
+          "id": "shape:pfFoxCliffBox",
+          "typeName": "shape",
+          "type": "frame",
+          "x": 0,
+          "y": 0,
+          "rotation": 0,
+          "index": "a1",
+          "parentId": "page:page",
+          "isLocked": false,
+          "opacity": 1,
+          "props": {
+            "w": 360,
+            "h": 330,
+            "name": "fox-cliff",
+            "color": "black"
+          },
+          "meta": {}
+        },
+        {
+          "id": "shape:pfFoxPrompt",
+          "typeName": "shape",
+          "type": "text",
+          "x": 28,
+          "y": 56,
+          "rotation": 0,
+          "index": "a1",
+          "parentId": "shape:pfFoxCliffBox",
+          "isLocked": false,
+          "opacity": 1,
+          "props": {
+            "color": "black",
+            "size": "m",
+            "font": "sans",
+            "textAlign": "start",
+            "w": 280,
+            "scale": 1,
+            "autoSize": false,
+            "richText": {
+              "type": "doc",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "A red fox resting on a cliff edge at dawn"
+                    }
+                  ]
+                }
+              ]
+            }
+          },
+          "meta": {
+            "ref": "100",
+            "sized": false
+          }
+        },
+        {
+          "id": "shape:pfCliffImage",
+          "typeName": "shape",
+          "type": "image",
+          "x": 28,
+          "y": 124,
+          "rotation": 0,
+          "index": "a2",
+          "parentId": "shape:pfFoxCliffBox",
+          "isLocked": false,
+          "opacity": 1,
+          "props": {
+            "w": 240,
+            "h": 150,
+            "playing": true,
+            "url": "",
+            "assetId": "asset:pfCliff",
+            "crop": null,
+            "flipX": false,
+            "flipY": false,
+            "altText": ""
+          },
+          "meta": {
+            "ref": "101"
+          }
+        }
+      ],
+      "assets": [
+        {
+          "id": "asset:pfCliff",
+          "typeName": "asset",
+          "type": "image",
+          "props": {
+            "name": "cliff.png",
+            "src": "preset-file:everything/1789030860011-cliff.png",
+            "w": 64,
+            "h": 40,
+            "mimeType": "image/png",
+            "isAnimated": false,
+            "fileSize": 150
+          },
+          "meta": {}
+        }
+      ],
+      "bindings": []
+    }
+  },
+  {
+    "id": "user-mf2k8a1c",
+    "source": "user",
+    "savedAt": "2026-09-08T07:00:00.000Z",
+    "name": "Split into parts",
+    "summary": "Plan the parts of a picture, then make one image per part",
+    "type": "flow",
+    "kind": "text",
+    "needs": "Drop your picture into the image, run the planner, then run the image output",
+    "fragment": {
+      "nodes": [
+        {
+          "id": "plan",
+          "type": "prompt",
+          "position": {
+            "x": 0,
+            "y": 0
+          },
+          "data": {
+            "text": "List every separate part of image 1. Write one section per part, split by a line with only ---. Start each section with \"From image 1, recreate\" and name the part."
+          }
+        },
+        {
+          "id": "planner",
+          "type": "textOutput",
+          "position": {
+            "x": 380,
+            "y": 0
+          },
+          "data": {
+            "text": "",
+            "result": ""
+          }
+        },
+        {
+          "id": "out",
+          "type": "imageOutput",
+          "position": {
+            "x": 760,
+            "y": 0
+          },
+          "data": {
+            "model": "openai/gpt-image-2",
+            "freeRuns": true,
+            "runs": 1,
+            "results": [
+              {
+                "url": "/api/file/everything/2026-09-10T09-30-07-000Z-a-red-fox-standing-on-a-windswept-cliff--1.png",
+                "savedPath": "/Users/sample/Unframed/output/everything/2026-09-10T09-30-07-000Z-a-red-fox-standing-on-a-windswept-cliff--1.png",
+                "cost": 0.0061,
+                "runIndex": 0
+              }
+            ]
+          }
+        },
+        {
+          "id": "ref",
+          "type": "image",
+          "position": {
+            "x": 0,
+            "y": 320
+          },
+          "data": {
+            "fileName": "",
+            "dataUrl": ""
+          }
+        }
+      ],
+      "edges": [
+        {
+          "id": "e-plan",
+          "source": "plan",
+          "target": "planner"
+        },
+        {
+          "id": "e-out",
+          "source": "planner",
+          "target": "out"
+        },
+        {
+          "id": "e-ref-planner",
+          "source": "ref",
+          "target": "planner"
+        },
+        {
+          "id": "e-ref-out",
+          "source": "ref",
+          "target": "out"
+        }
+      ]
+    }
+  },
+  {
+    "id": "user-mf1x9k4b",
+    "source": "user",
+    "savedAt": "2026-09-09T16:20:00.000Z",
+    "name": "Fox walk clip",
+    "summary": "A walking clip from a sketch and a sample motion",
+    "type": "flow",
+    "kind": "video",
+    "fragment": {
+      "nodes": [
+        {
+          "id": "pose",
+          "type": "group",
+          "position": {
+            "x": 0,
+            "y": -320
+          },
+          "width": 360,
+          "height": 200,
+          "data": {}
+        },
+        {
+          "id": "p1",
+          "type": "prompt",
+          "position": {
+            "x": 28,
+            "y": 56
+          },
+          "parentId": "pose",
+          "width": 240,
+          "height": 30,
+          "data": {
+            "text": "Head low, tail straight out"
+          }
+        },
+        {
+          "id": "walk",
+          "type": "prompt",
+          "position": {
+            "x": 0,
+            "y": 0
+          },
+          "width": 300,
+          "height": 30,
+          "data": {
+            "text": "The fox from image 1 walks along the cliff edge"
+          }
+        },
+        {
+          "id": "sketch",
+          "type": "image",
+          "position": {
+            "x": 0,
+            "y": 80
+          },
+          "width": 240,
+          "data": {
+            "fileName": "sketch.png",
+            "dataUrl": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAAAoCAIAAADBrGu+AAAACXBIWXMAAAABAAAAAQBPJcTWAAAATElEQVR4nO3PQQ3AIADAQEgQjAMkYHkieFyW9BS0c587/mzpgFcNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaB9sPwIc9v2hJAAAAABJRU5ErkJggg==",
+            "aspect": 1.6
+          }
+        },
+        {
+          "id": "motion",
+          "type": "video",
+          "position": {
+            "x": 0,
+            "y": 260
+          },
+          "width": 240,
+          "data": {
+            "dataUrl": "https://media.example.com/clips/fox-trot.mp4",
+            "fileName": "fox-trot.mp4"
+          }
+        },
+        {
+          "id": "clip",
+          "type": "videoOutput",
+          "position": {
+            "x": 440,
+            "y": 0
+          },
+          "data": {
+            "videoModel": "bytedance/seedance-2.0",
+            "duration": 5,
+            "resolution": "480p",
+            "inputMode": "reference",
+            "job": {
+              "id": "vid_0c3e5a7b91",
+              "startedAt": 1788964800000,
+              "params": {
+                "prompt": "The fox from image 1 walks along the cliff edge",
+                "model": "bytedance/seedance-2.0",
+                "duration": 5,
+                "resolution": "480p",
+                "size": null
+              }
+            }
+          }
+        },
+        {
+          "id": "still",
+          "type": "imageOutput",
+          "position": {
+            "x": 440,
+            "y": 300
+          },
+          "data": {
+            "model": "openai/gpt-image-2",
+            "runs": 1,
+            "running": {
+              "startedAt": 1788964800000,
+              "session": "s-1789031400000-k3v9q2x7m1a"
+            }
+          }
+        },
+        {
+          "id": "notes",
+          "type": "page",
+          "position": {
+            "x": 900,
+            "y": 0
+          },
+          "width": 480,
+          "height": 320,
+          "data": {
+            "file": "1789035000101-fox-landing.html",
+            "title": "Fox landing",
+            "fileName": ""
+          }
+        }
+      ],
+      "edges": [
+        {
+          "id": "e-pose-clip",
+          "source": "pose",
+          "target": "clip"
+        },
+        {
+          "id": "e-walk-clip",
+          "source": "walk",
+          "target": "clip",
+          "animated": true
+        },
+        {
+          "id": "e-sketch-clip",
+          "source": "sketch",
+          "target": "clip",
+          "animated": true
+        },
+        {
+          "id": "e-motion-clip",
+          "source": "motion",
+          "target": "clip"
+        },
+        {
+          "id": "e-walk-still",
+          "source": "walk",
+          "target": "still"
+        }
+      ]
+    }
+  },
+  {
+    "id": "user-mf1b5y2e",
+    "source": "user",
+    "savedAt": "2026-09-08T23:40:00.000Z",
+    "name": "Detail list",
+    "summary": "Turn a prompt into a list of visual details",
+    "type": "block",
+    "kind": "text",
+    "fragment": {
+      "nodes": [
+        {
+          "id": "details",
+          "type": "textOutput",
+          "position": {
+            "x": 0,
+            "y": 0
+          },
+          "data": {
+            "text": "Rewrite the wired prompt as a short list of visual details, one per line. Keep every colour and material it names.",
+            "result": "",
+            "model": "google/gemini-3.5-flash-lite"
+          }
+        }
+      ],
+      "edges": []
+    }
+  },
+  {
+    "id": "user-mf0a3z7d",
+    "source": "user",
+    "name": "Hiker character",
+    "summary": "The hiker in the yellow jacket, as a reusable group",
+    "type": "block",
+    "kind": "image",
+    "fragment": {
+      "nodes": [
+        {
+          "id": "character",
+          "type": "group",
+          "position": {
+            "x": 0,
+            "y": 0
+          },
+          "width": 420,
+          "height": 280,
+          "data": {}
+        },
+        {
+          "id": "c1",
+          "type": "prompt",
+          "position": {
+            "x": 28,
+            "y": 56
+          },
+          "parentId": "character",
+          "width": 300,
+          "height": 50,
+          "data": {
+            "text": "A hiker in a yellow jacket and brown boots, seen from slightly below"
+          }
+        },
+        {
+          "id": "c2",
+          "type": "image",
+          "position": {
+            "x": 28,
+            "y": 130
+          },
+          "parentId": "character",
+          "width": 160,
+          "data": {
+            "file": "1789030920022-hiker.png",
+            "fileName": "hiker.png",
+            "aspect": 1.6
+          }
+        }
+      ],
+      "edges": []
+    }
+  }
+]

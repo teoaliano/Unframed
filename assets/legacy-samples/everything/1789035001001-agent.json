@@ -1,0 +1,15 @@
+{
+  "kind": "agent-turn",
+  "threadId": "t-mfd3k8q2-4c7e9a1d",
+  "turn": 1,
+  "provider": "claude",
+  "model": "claude-sonnet-5",
+  "billing": "subscription",
+  "usage": {
+    "input_tokens": 5120,
+    "output_tokens": 840
+  },
+  "estimatedUsd": 0.03,
+  "durationMs": 21000,
+  "at": "2026-09-10T10:10:01.001Z"
+}
