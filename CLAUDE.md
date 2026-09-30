@@ -6,13 +6,11 @@ This file loads into every session. It holds the rules that apply to any change.
 
 Unframed: a local, pay-per-generation image, video and text generator on a tldraw canvas. You select material on the canvas and either Generate (a paid OpenRouter call) or hand the selection to a local coding agent (Claude or Codex on your own subscription). `docs/specs/00-index.md` has the product, the stack, the vocabulary, the test seams and the build order. Read it before anything else.
 
-## Clean room: never read the old code
+## The old implementation
 
-This repo is a from-scratch rewrite of an older Unframed. The old code exists on this machine and on GitHub. **You must never read it, search it, clone it, fetch it or ask a subagent to.** That covers any checkout of the old engine or of the private desktop shell, by absolute or relative path, and their GitHub repositories. The point of the rewrite is to leave the old implementation's debt behind, and an agent that copies from it brings the debt along.
+This codebase replaced an older Unframed (a React Flow canvas with output nodes) in engine 0.6.0. The old code survives only in git history, before the merge that brought this one in. It is not a source: the specs in `docs/specs/` describe what the app does, and when one is missing or ambiguous, ask the person rather than mining the old history.
 
-- The specs describe every behaviour, limit, message and file format you need. If one is missing or ambiguous, stop and ask the person. Do not go looking for the answer outside this repo.
-- Never search or list outside this repository's root, even to "just check". Two exceptions: `.reference/t3code/`, a gitignored clone of t3code (MIT) that the specs tell you to follow, and the skill files in `~/.claude/skills/`, which `/implement` and the build orchestrator read.
-- `.claude/settings.json` and `.claude/hooks/clean-room.mjs` enforce this. Never edit, disable or work around them.
+- `.reference/t3code/` (gitignored) is a clone of t3code (MIT), the reference the agent and composer specs follow. Clone it with `git clone --depth 1 https://github.com/pingdotgg/t3code .reference/t3code`.
 - `assets/` holds files carried over on purpose: brand marks, theme values, model-facing prompt text to use verbatim, the design canvas, screenshots of the old app, legacy sample files, scripted-agent scenarios. They are data, not code.
 
 ## How work happens here
