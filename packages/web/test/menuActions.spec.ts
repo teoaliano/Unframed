@@ -5,6 +5,7 @@ import { centre, openCanvas, shapeOnScreen, toast } from "./canvas.ts";
 import { expect, test } from "./fixtures.ts";
 import { pngBytes } from "./images.ts";
 import { filledMedia } from "./media.ts";
+import { platformOf } from "./platform.ts";
 
 test.use({ permissions: ["clipboard-read", "clipboard-write"] });
 
@@ -26,15 +27,16 @@ const twoPhotos = async (page: Page, engine: Parameters<typeof filledMedia>[0]) 
 test("Reveal shows the right-clicked file, or every selected one, and says when it cannot", async ({ page, engine }) => {
   const { one, two, at } = await twoPhotos(page, engine);
   const folder = join(engine.dataDir, "output", "default");
+  const { reveal } = await platformOf(page);
 
-  await choose(page, at.one, "Reveal in Finder");
+  await choose(page, at.one, reveal());
   await expect.poll(() => engine.messages.filter((message: any) => message.type === "reveal").at(-1)).toMatchObject({ files: [join(folder, one.file)] });
 
   await page.mouse.click(at.one.x, at.one.y);
   await page.keyboard.down("Shift");
   await page.mouse.click(at.two.x, at.two.y);
   await page.keyboard.up("Shift");
-  await choose(page, at.two, "Reveal in Finder (2)");
+  await choose(page, at.two, reveal(2));
   await expect
     .poll(() => (engine.messages.filter((message: any) => message.type === "reveal").at(-1) as any)?.files?.slice().sort())
     .toEqual([join(folder, one.file), join(folder, two.file)].sort());
@@ -42,10 +44,10 @@ test("Reveal shows the right-clicked file, or every selected one, and says when 
   // With the project folder moved away there is nothing to show.
   await rename(folder, `${folder}-away`);
   try {
-    await choose(page, at.two, "Reveal in Finder (2)");
+    await choose(page, at.two, reveal(2));
     await expect(toast(page, "Could not show those 2 files: No files for this project yet.")).toBeVisible();
     await page.mouse.click(10, 400);
-    await choose(page, at.one, "Reveal in Finder");
+    await choose(page, at.one, reveal());
     await expect(toast(page, "Could not show that file: No files for this project yet.")).toBeVisible();
   } finally {
     await rename(`${folder}-away`, folder);

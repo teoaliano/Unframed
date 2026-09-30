@@ -4,6 +4,7 @@ import { expect, test } from "./fixtures.ts";
 import { pngBytes } from "./images.ts";
 import { inBothSchemes, styleOf, tokenColor } from "./kit.ts";
 import { filledMedia, groupRecord, putRecords } from "./media.ts";
+import { platformOf } from "./platform.ts";
 
 test.use({ permissions: ["clipboard-read", "clipboard-write"] });
 
@@ -27,6 +28,9 @@ const rightClick = async (page: Page, at: { x: number; y: number }) => {
   return { headings, items };
 };
 
+/** An edit row: Cut, Copy, Paste, Group or Ungroup, bare or with its shortcut on any platform. */
+const editRow = (item: string) => /^(Cut|Copy|Paste|Group|Ungroup)( (⌘|⇧|Ctrl\+).*)?$/.test(item);
+
 const closeMenu = async (page: Page) => {
   await page.keyboard.press("Escape");
   await expect(menu(page)).toBeHidden();
@@ -46,12 +50,13 @@ const photo = { type: "image" as const, bytes: pngBytes(300, 150), name: "photo.
 test("on empty canvas the menu offers the add items, then tldraw's own groups; nothing that would do nothing", async ({ page, engine }) => {
   await withEmptyClipboard(page);
   await openCanvas(page, engine);
+  const { shortcut } = await platformOf(page);
   const { headings, items } = await rightClick(page, await emptyCanvasPoint(page));
   expect(headings).toEqual(["Inputs", "Artifacts"]);
   expect(items.slice(0, 6)).toEqual(["Prompt", "Image", "Video", "Group", "Page", "Motion"]);
   // tldraw's groups follow, without its cut, copy, paste, group and ungroup.
-  expect(items.slice(6)).toContain("Select all ⌘A");
-  expect(items.filter((item) => /^(Cut|Copy|Paste|Group|Ungroup)( ⌘| ⇧|$)/.test(item))).toEqual(["Group"]);
+  expect(items.slice(6)).toContain(`Select all ${shortcut("A")}`);
+  expect(items.filter(editRow)).toEqual(["Group"]);
   expect((await menu(page).boundingBox())!.width).toBe(188);
   await closeMenu(page);
 
@@ -62,7 +67,7 @@ test("on empty canvas the menu offers the add items, then tldraw's own groups; n
   });
   const withText = await rightClick(page, await emptyCanvasPoint(page));
   expect(withText.headings).toEqual(["Edit", "Inputs", "Artifacts"]);
-  expect(withText.items[0]).toBe("Paste ⌘V");
+  expect(withText.items[0]).toBe(`Paste ${shortcut("V")}`);
 });
 
 test("a right-clicked prompt is selected alone and offers its reference and the edit items", async ({ page, engine }) => {
@@ -71,12 +76,14 @@ test("a right-clicked prompt is selected alone and offers its reference and the 
   const scene = shapeOnScreen(page, "shape:starter-scene");
   await page.mouse.click(...Object.values(await centre(scene)) as [number, number]);
 
+  const { shortcut } = await platformOf(page);
   const { headings, items } = await rightClick(page, await centre(shapeOnScreen(page, "shape:starter-subject")));
   // A selection always gets the Library section, whose Add to library the canvas registers.
   expect(headings).toEqual(["Reference", "Edit", "Library"]);
-  expect(items.slice(0, 5)).toEqual(["Copy @100", "Cut ⌘X", "Copy ⌘C", "Group ⌘G", expect.not.stringMatching(/^(Paste|Ungroup)/)]);
+  const edits = [`Cut ${shortcut("X")}`, `Copy ${shortcut("C")}`, `Group ${shortcut("G")}`];
+  expect(items.slice(0, 5)).toEqual(["Copy @100", ...edits, expect.not.stringMatching(/^(Paste|Ungroup)/)]);
   // Each edit item once: tldraw's own cut, copy and group are gone.
-  expect(items.filter((item) => /^(Cut|Copy|Paste|Group|Ungroup)( ⌘| ⇧|$)/.test(item))).toEqual(["Cut ⌘X", "Copy ⌘C", "Group ⌘G"]);
+  expect(items.filter(editRow)).toEqual(edits);
   await closeMenu(page);
 
   // The subject alone is selected now: deleting it leaves the scene.
@@ -92,10 +99,11 @@ test("a filled image offers reveal and copy as image; inside a selection of two 
   await filledMedia(engine, { ...photo, id: "shape:two", ref: "151", at: { x: 440, y: 260 } });
   await expect(shapeOnScreen(page, "shape:two").locator("img")).toBeVisible();
 
+  const { shortcut, reveal } = await platformOf(page);
   const one = await centre(shapeOnScreen(page, "shape:one"));
   const single = await rightClick(page, one);
   expect(single.headings).toEqual(["Image", "Edit", "Library"]);
-  expect(single.items.slice(0, 5)).toEqual(["Reveal in Finder", "Copy as image", "Cut ⌘X", "Copy ⌘C", "Group ⌘G"]);
+  expect(single.items.slice(0, 5)).toEqual([reveal(), "Copy as image", `Cut ${shortcut("X")}`, `Copy ${shortcut("C")}`, `Group ${shortcut("G")}`]);
   await closeMenu(page);
 
   await page.mouse.click(one.x, one.y);
@@ -104,7 +112,7 @@ test("a filled image offers reveal and copy as image; inside a selection of two 
   await page.mouse.click(two.x, two.y);
   await page.keyboard.up("Shift");
   const both = await rightClick(page, two);
-  expect(both.items[0]).toBe("Reveal in Finder (2)");
+  expect(both.items[0]).toBe(reveal(2));
   await closeMenu(page);
 });
 
@@ -112,11 +120,12 @@ test("a right-clicked group offers its reference and Ungroup, not Group", async 
   await withEmptyClipboard(page);
   await openCanvas(page, engine);
   await putRecords(engine, [groupRecord("shape:group", "160", { x: 440, y: 60 })]);
+  const { shortcut } = await platformOf(page);
   const box = (await shapeOnScreen(page, "shape:group").boundingBox())!;
   const { headings, items } = await rightClick(page, { x: box.x + 10, y: box.y - 8 });
   expect(headings).toEqual(["Reference", "Edit", "Library"]);
-  expect(items.slice(0, 4)).toEqual(["Copy @160", "Cut ⌘X", "Copy ⌘C", "Ungroup ⇧⌘G"]);
-  expect(items).not.toContain("Group ⌘G");
+  expect(items.slice(0, 4)).toEqual(["Copy @160", `Cut ${shortcut("X")}`, `Copy ${shortcut("C")}`, `Ungroup ${shortcut("G", { shift: true })}`]);
+  expect(items).not.toContain(`Group ${shortcut("G")}`);
 });
 
 test("the menu has the kit's label and disabled looks, at 188 px, and its rows highlight like the kit's", async ({ page, engine }) => {
@@ -141,8 +150,9 @@ test.describe("in a browser set to Italian", () => {
   test("tldraw's own rows are in English, like Unframed's", async ({ page, engine }) => {
     await withEmptyClipboard(page);
     await openCanvas(page, engine);
+    const { shortcut } = await platformOf(page);
     const { items } = await rightClick(page, await emptyCanvasPoint(page));
-    expect(items).toContain("Select all ⌘A");
+    expect(items).toContain(`Select all ${shortcut("A")}`);
     await closeMenu(page);
   });
 });

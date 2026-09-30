@@ -6,6 +6,7 @@ import { filledMedia, putRecords } from "./media.ts";
 import { artifactColumn, chosenControl, enablePlanMode, expect, onlyChat, openRail, promptBox, rail, rpcOf, scriptFolder, startAgentEngine, test } from "./agent.ts";
 import type { TestEngine } from "../../engine/test/engineProcess.ts";
 import { expectSlot, expectToken, inBothSchemes, resolvedColor, styleOf } from "./kit.ts";
+import { platformOf } from "./platform.ts";
 
 /** A toast's second line, by its text. */
 const toastDescription = (page: Page, text: string) => page.locator("[data-slot='toast-description']").filter({ hasText: text });
@@ -183,7 +184,8 @@ test("a large paste becomes pasted-text.txt with a toast; Cmd+Shift+V keeps it i
   await expect(files).toHaveText(["pasted-text.txt"]);
   const notice = toast(page, "Large paste attached as pasted-text.txt");
   await expect(notice).toBeVisible();
-  const hint = process.platform === "darwin" ? "⌘⇧V" : "Ctrl+Shift+V";
+  const { mac } = await platformOf(page);
+  const hint = mac ? "⌘⇧V" : "Ctrl+Shift+V";
   await expect(toastDescription(page, `35.2 KB · Use ${hint} to keep a large paste inline.`)).toBeVisible();
   await expect(box).toHaveText("");
 
@@ -193,7 +195,7 @@ test("a large paste becomes pasted-text.txt with a toast; Cmd+Shift+V keeps it i
   // Cmd+Shift+V first: the next paste goes into the box as it is.
   await page.evaluate((mac) => {
     document.querySelector("aside[aria-label='Agent'] .ProseMirror")!.dispatchEvent(new KeyboardEvent("keydown", { key: "V", shiftKey: true, metaKey: mac, ctrlKey: !mac, bubbles: true, cancelable: true }));
-  }, process.platform === "darwin");
+  }, mac);
   await pasteText(page, "x".repeat(33 * 1024));
   await expect(files).toHaveCount(2);
   await expect.poll(async () => (await box.textContent())?.length).toBe(33 * 1024);
@@ -205,12 +207,12 @@ test("Cmd+S stashes the draft and clears it; the badge's menu restores and delet
   const box = promptBox(panel);
   const badge = panel.getByTestId("stash-badge");
   const menu = page.getByRole("menu", { name: "Stashed prompts" });
-  const mac = process.platform === "darwin";
+  const { shortcut } = await platformOf(page);
 
   // An empty stash: Cmd+S in an empty box opens the menu with its hint.
   await box.click();
   await page.keyboard.press("ControlOrMeta+s");
-  await expect(menu.getByText(`Nothing stashed yet. Press ${mac ? "⌘S" : "Ctrl+S"} with a prompt in the composer to stash it.`, { exact: true })).toBeVisible();
+  await expect(menu.getByText(`Nothing stashed yet. Press ${shortcut("S")} with a prompt in the composer to stash it.`, { exact: true })).toBeVisible();
   await page.keyboard.press("Escape");
 
   await box.click();
@@ -230,7 +232,7 @@ test("Cmd+S stashes the draft and clears it; the badge's menu restores and delet
   await badge.click();
   await expect(menu.getByRole("menuitem")).toHaveText([/^second ideajust now/, /^first ideajust now/]);
   await menu.getByRole("menuitem").first().hover();
-  await page.keyboard.press(mac ? "Meta+Backspace" : "Control+Backspace");
+  await page.keyboard.press("ControlOrMeta+Backspace");
   await expect(menu.getByRole("menuitem")).toHaveText([/^first idea/]);
   await menu.getByRole("menuitem").first().click();
   await expect(box).toHaveText("first idea");

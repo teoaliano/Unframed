@@ -5,8 +5,7 @@ import { fakeCodex } from "../../engine/test/agentFakes.ts";
 import { openCanvas } from "./canvas.ts";
 import { expect, openRail, promptBox, startDetectingEngine } from "./agent.ts";
 import { test } from "./fixtures.ts";
-
-const where = process.platform === "darwin" ? "Mac" : "computer";
+import { platformOf } from "./platform.ts";
 
 test("with no provider ready the rail shows each status and how to install, Send stays off, and Check again re-checks", async ({ page }) => {
   const dir = await mkdtemp(join(tmpdir(), "unframed-noprovider-"));
@@ -17,7 +16,7 @@ test("with no provider ready the rail shows each status and how to install, Send
     const none = panel.getByTestId("no-provider");
     await expect(none).toHaveAttribute("data-slot", "empty");
     await expect(none.getByRole("button", { name: "Check again" })).toHaveAttribute("data-slot", "button");
-    await expect(none.getByText(`No Claude or Codex found on this ${where}.`, { exact: true })).toBeVisible();
+    await expect(none.getByText(`No Claude or Codex found on this ${(await platformOf(page)).machine}.`, { exact: true })).toBeVisible();
     await expect(none.getByText("Install one and sign in, and the agent runs on your plan. Nothing is sent anywhere until then.", { exact: true })).toBeVisible();
     const claude = none.locator("li[data-provider='claude']");
     await expect(claude).toHaveText("Claude · Claude is not installed or not on PATH. How to install");
