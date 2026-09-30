@@ -1,9 +1,10 @@
 import { createReadStream } from "node:fs";
 import { stat } from "node:fs/promises";
 import http from "node:http";
-import { join } from "node:path";
+import { basename, dirname, join } from "node:path";
 import { pipeline } from "node:stream/promises";
 import { loopbackGuard, projectSlug } from "@unframed/domain";
+import { BRIDGE_FILE, ensureBridge } from "../artifacts/artifactStore.ts";
 import { NOT_FOUND } from "./respond.ts";
 import { guardUpgrade, refuseUpgrade } from "./guard.ts";
 
@@ -104,6 +105,9 @@ const handler =
     } catch {
       return refuse(res, 404, "not found", head);
     }
+    // The bridge is generated: a frame asking for it gets the current one, so a bridge fix
+    // reaches artifacts written before it.
+    if (basename(path) === BRIDGE_FILE) await ensureBridge(dirname(path)).catch(() => undefined);
     const info = await stat(path).catch(() => undefined);
     if (!info?.isFile()) return refuse(res, 404, "not found", head);
     const etag = etagOf(info.size, info.mtimeMs);

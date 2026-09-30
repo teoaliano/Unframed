@@ -1,3 +1,4 @@
+import { BRIDGE_TAG } from "@unframed/domain";
 import { openCanvas, roomRecords, settledRecord, shapeOnScreen, waitForRoom } from "./canvas.ts";
 import { expect, test } from "./fixtures.ts";
 import { clickShape, composer, toolbar } from "./generation.ts";
@@ -125,4 +126,26 @@ test("a selected page or motion moves by the six-dot handle in its toolbar, and 
     await page.keyboard.press("Escape");
     await expect(toolbar(page)).toHaveCount(0);
   }
+});
+
+test("a pinch over a selected page zooms the canvas, not the app, even for a page written before the fix", async ({ page, engine }) => {
+  await openCanvas(page, engine);
+  // No bridge file is written: the preview origin serves the current one when the page asks.
+  await filledArtifact(engine, { id: "shape:tuned", kind: "page", ref: "150", at: { x: 420, y: 60 }, title: "Tuned", html: `<!doctype html><html><head>${BRIDGE_TAG}</head><body style="margin:0;height:100vh">Pinch me</body></html>` });
+  const shape = shapeOnScreen(page, "shape:tuned");
+  await expect(shape).toBeVisible();
+  const box = (await shape.boundingBox())!;
+  await page.mouse.click(box.x + 20, box.y - 8);
+  await expect(page.frameLocator("iframe[data-artifact-frame]").first().getByText("Pinch me")).toBeVisible();
+  // Past the double-click hold the frame takes the pointer, which is when a pinch reaches it.
+  await expect(shape.locator("iframe[data-artifact-frame]")).toHaveAttribute("data-interactive", "true");
+  const zoom = page.getByTestId("minimap.zoom-menu-button");
+  const before = await zoom.textContent();
+  const appZoom = await page.evaluate(() => window.visualViewport?.scale ?? 1);
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  await page.keyboard.down("Control");
+  for (let step = 0; step < 6; step++) await page.mouse.wheel(0, -40);
+  await page.keyboard.up("Control");
+  await expect.poll(async () => await zoom.textContent()).not.toBe(before);
+  expect(await page.evaluate(() => window.visualViewport?.scale ?? 1)).toBe(appZoom);
 });

@@ -152,12 +152,28 @@ export interface DialsAnnouncement {
   readonly values: DialValues;
 }
 
+/** The parts of a wheel event the bridge reads and forwards. */
+export interface BridgeWheel {
+  readonly ctrlKey: boolean;
+  readonly metaKey: boolean;
+  readonly shiftKey: boolean;
+  readonly altKey: boolean;
+  readonly deltaX: number;
+  readonly deltaY: number;
+  readonly deltaZ: number;
+  readonly deltaMode: number;
+  readonly clientX: number;
+  readonly clientY: number;
+  preventDefault(): void;
+}
+
 /** The window the bridge runs against: a browser's, or a test's stub. */
 export interface BridgeWindow {
   /** The framer; the window itself when nothing frames it. */
   parent: { postMessage(message: unknown, targetOrigin: string): void };
   location: { readonly origin: string };
   addEventListener(type: "message", listener: (event: { source: unknown; origin: string; data: unknown }) => void): void;
+  addEventListener(type: "wheel", listener: (event: BridgeWheel) => void, options: { passive: boolean }): void;
   __hfVariables?: { unframedDials?: unknown };
   unframed?: unknown;
   console: { error(...args: unknown[]): void };
@@ -240,6 +256,26 @@ export function installDialsBridge(win: BridgeWindow, dials: DialRules): void {
       set(data.values);
     }
   });
+
+  // A pinch (Ctrl or Cmd with the wheel) over a framed artifact would zoom the whole app:
+  // the frame keeps it and hands it to the canvas that said hello, which zooms instead.
+  if (framed) {
+    win.addEventListener(
+      "wheel",
+      (event) => {
+        if (!event.ctrlKey && !event.metaKey) return;
+        event.preventDefault();
+        if (asker === undefined) return;
+        const { ctrlKey, metaKey, shiftKey, altKey, deltaX, deltaY, deltaZ, deltaMode, clientX, clientY } = event;
+        try {
+          win.parent.postMessage({ type: "unframed:wheel", ctrlKey, metaKey, shiftKey, altKey, deltaX, deltaY, deltaZ, deltaMode, clientX, clientY }, asker);
+        } catch (error) {
+          win.console.error("[unframed] could not hand the zoom to the canvas", error);
+        }
+      },
+      { passive: false },
+    );
+  }
 
   const existing = typeof win.unframed === "object" && win.unframed !== null ? (win.unframed as Record<string, unknown>) : {};
   win.unframed = { ...existing, dials: declare, defaultDials };

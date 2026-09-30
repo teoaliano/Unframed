@@ -8,10 +8,11 @@ const stubWindow = (options: { origin?: string; framed?: boolean; variables?: un
   const posted: Array<{ message: any; targetOrigin: string }> = [];
   const errors: unknown[][] = [];
   const listeners: Listener[] = [];
+  const wheels: Array<(event: unknown) => void> = [];
   const parent = { postMessage: (message: unknown, targetOrigin: string) => posted.push({ message, targetOrigin }) };
   const win: any = {
     location: { origin: options.origin ?? "http://127.0.0.1:5001" },
-    addEventListener: (_type: string, listener: Listener) => listeners.push(listener),
+    addEventListener: (type: string, listener: Listener) => (type === "wheel" ? wheels.push(listener as (event: unknown) => void) : listeners.push(listener)),
     console: { error: (...args: unknown[]) => errors.push(args) },
     ...(options.variables === undefined ? {} : { __hfVariables: options.variables }),
   };
@@ -21,7 +22,14 @@ const stubWindow = (options: { origin?: string; framed?: boolean; variables?: un
   const send = (data: unknown, from: { source?: unknown; origin?: string } = {}) => {
     for (const listener of listeners) listener({ source: from.source ?? parent, origin: from.origin ?? "http://localhost:8787", data });
   };
-  return { win, parent, posted, errors, send };
+  /** A wheel over the document; answers whether the bridge kept it from the browser. */
+  const wheel = (init: Partial<Record<"ctrlKey" | "metaKey", boolean>> & { deltaY?: number }) => {
+    let prevented = false;
+    const event = { ctrlKey: false, metaKey: false, shiftKey: false, altKey: false, deltaX: 0, deltaY: 0, deltaZ: 0, deltaMode: 0, clientX: 40, clientY: 30, ...init, preventDefault: () => (prevented = true) };
+    for (const listener of wheels) listener(event);
+    return prevented;
+  };
+  return { win, parent, posted, errors, send, wheel };
 };
 
 describe("the built bridge", () => {
@@ -121,5 +129,20 @@ describe("the built bridge", () => {
       { accent: "#000000", scene: { speed: 3, label: "x" } },
     ]);
     expect(applied.filter((item) => item === "old")).toHaveLength(1);
+  });
+
+  it("keeps a pinch from zooming the app and hands it to the canvas that said hello; a plain scroll passes", () => {
+    const { posted, send, wheel } = stubWindow();
+    // Before any hello there is no canvas to hand it to: the pinch is still kept from the browser.
+    expect(wheel({ ctrlKey: true, deltaY: -10 })).toBe(true);
+    expect(posted).toEqual([]);
+    send({ type: "unframed:dials:hello" });
+    expect(wheel({ ctrlKey: true, deltaY: -10 })).toBe(true);
+    expect(wheel({ metaKey: true, deltaY: 4 })).toBe(true);
+    expect(wheel({ deltaY: 12 })).toBe(false);
+    expect(posted.map((each) => [each.message.type, each.message.deltaY, each.message.ctrlKey, each.message.clientX, each.targetOrigin])).toEqual([
+      ["unframed:wheel", -10, true, 40, "http://localhost:8787"],
+      ["unframed:wheel", 4, false, 40, "http://localhost:8787"],
+    ]);
   });
 });
