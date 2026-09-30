@@ -1,18 +1,15 @@
 node_modules/
-.env
-# Anchored with a leading slash: this is the generated-images folder at the project
-# root only. Unanchored, `output/` matches at EVERY depth, which silently swallowed
-# client/src/nodes/output/ -- the shared core of the three output nodes -- so a fresh
-# clone could not build the canvas at all.
-/output/
 dist/
+.env
+.env.local
+/output/
+.reference/
 *.log
+# The spec 11 samples hold old journals named graph.log.
+!assets/legacy-samples/**/graph.log
 .DS_Store
-
-# Working notes, not for the repo
-status.md
-
-# Agent worktrees. Each is an embedded git repo, so `git add -A` commits it as a
-# gitlink -- once done and undone with `git rm --cached`. Only the worktrees dir:
-# .claude/launch.json is checked in and stays that way.
 .claude/worktrees/
+test-results/
+playwright-report/
+/preferences.json
+/attachments/

@@ -1,0 +1,114 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    *{box-sizing:border-box}
+    body{margin:0;font-family:ui-sans-serif,-apple-system,"Segoe UI",Helvetica,Arial,sans-serif;color:#e9e7e3;background:#191919;-webkit-font-smoothing:antialiased}
+    a{color:#e9e7e3}a:hover{color:#ffffff}
+    .canvas{position:relative;width:100%;height:100%;overflow:hidden;background-color:#191919;background-image:radial-gradient(#2d2d2d 1px,transparent 1px);background-size:24px 24px}
+    .sec{font-size:10.5px;letter-spacing:.11em;text-transform:uppercase;color:#7b7773}
+    .sheet{background:#242424;border:1px solid #343434;border-radius:12px;padding:13px 14px;display:flex;flex-direction:column;gap:14px}
+    .row{display:flex;align-items:center;gap:8px}
+    .tab{height:26px;padding:0 12px;border-radius:7px;border:1px solid transparent;font-size:12.5px;color:#8e8a85;display:inline-flex;align-items:center}
+    .tab-on{height:26px;padding:0 12px;border-radius:7px;border:1px solid #3e3e3e;background:#2f2f2f;color:#eceae6;font-size:12.5px;display:inline-flex;align-items:center}
+    .foot{display:flex;align-items:center;gap:9px;font-size:12.5px;color:#8e8a85}
+    .set{color:#c9c5c0;border-bottom:1px dotted #6c6864;padding-bottom:1px}
+    .slot{color:#6f6b67;border-bottom:1px dotted #4a4644;padding-bottom:1px}
+    .dot{color:#4f4b48}
+    .gen{height:28px;padding:0 13px;border-radius:8px;border:1px solid #4a4a4a;background:#2e2e2e;color:#eceae6;font:inherit;font-size:12.5px;font-weight:500}
+    .cost{font-size:12.5px;color:#a8a49f}
+    .menu{background:#262626;border:1px solid #3a3a3a;border-radius:10px;box-shadow:0 18px 44px rgba(0,0,0,.55);padding:8px 0;width:205px}
+    .it{display:flex;justify-content:space-between;align-items:center;padding:7px 12px;font-size:12.5px;color:#d6d3ce}
+    .it-on{display:flex;justify-content:space-between;align-items:center;padding:7px 12px;font-size:12.5px;color:#eceae6;background:#2f2f2f}
+    .cite{border-left:1px solid #343434;padding-left:14px;width:300px}
+    .cite h4{margin:0 0 7px;font-size:12.5px;font-weight:600;color:#e9e7e3}
+    .cite p{margin:0;font-size:12.5px;line-height:1.6;color:#8e8a85}
+    code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11.5px;color:#c9c5c0}
+  </style>
+</helmet>
+<div class="canvas">
+  <div style="position:absolute;left:48px;top:36px;width:400px">
+    <div style="font-size:14.5px;font-weight:600">A · One quiet line</div>
+    <div style="margin-top:9px;font-size:13px;line-height:1.55;color:#8e8a85">Every setting is a word in one footer line, dotted-underlined. Nothing is a control until you click it.</div>
+  </div>
+
+  <div class="sec" style="position:absolute;left:48px;top:122px">At rest</div>
+  <div class="sheet" style="position:absolute;left:48px;top:140px;width:385px">
+    <div class="row" style="justify-content:space-between">
+      <div class="row" style="gap:4px"><span class="tab-on">image</span><span class="tab">video</span><span class="tab">text</span></div>
+      <span style="font-size:12.5px;color:#7b7773">3 selected</span>
+    </div>
+    <div style="font-size:14px;color:#6f6b67">What should this make?</div>
+    <div class="row" style="justify-content:space-between">
+      <div class="foot">
+        <span class="set">gpt-image-2</span><span class="dot">·</span>
+        <span class="slot">+ size</span><span class="dot">·</span>
+        <span class="slot">+ quality</span><span class="dot">·</span>
+        <span class="slot">+ runs</span>
+      </div>
+      <button class="gen">Generate</button>
+    </div>
+  </div>
+
+  <div class="sec" style="position:absolute;left:48px;top:322px">Configured — only what you set is spoken</div>
+  <div class="sheet" style="position:absolute;left:48px;top:343px;width:385px">
+    <div class="row" style="justify-content:space-between">
+      <div class="row" style="gap:4px"><span class="tab-on">image</span><span class="tab">video</span><span class="tab">text</span></div>
+      <div class="row" style="gap:2px">
+        <span style="display:block;width:11px;height:18px;border-radius:2px;background:#b4753a"></span>
+        <span style="display:block;width:11px;height:18px;border-radius:2px;background:#5d7f9c"></span>
+        <span style="display:block;width:11px;height:18px;border-radius:2px;background:#6f6b67"></span>
+      </div>
+    </div>
+    <div style="font-size:14px;line-height:1.5;color:#e9e7e3">Crop tighter than the reference. Leave the top third empty for the headline.</div>
+    <div class="row" style="justify-content:space-between">
+      <div class="foot">
+        <span class="set">gpt-image-2</span><span class="dot">·</span>
+        <span class="set">2:3</span><span class="dot">·</span>
+        <span class="set">high</span><span class="dot">·</span>
+        <span class="set">4×</span>
+      </div>
+      <div class="row" style="gap:10px"><span class="cost">$0.168</span><button class="gen">Generate</button></div>
+    </div>
+  </div>
+
+  <div class="sec" style="position:absolute;left:48px;top:533px">One setting open</div>
+  <div class="sheet" style="position:absolute;left:48px;top:553px;width:385px">
+    <div class="row" style="justify-content:space-between">
+      <div class="foot">
+        <span class="set" style="color:#eceae6;border-bottom-color:#8e8a85">gpt-image-2</span><span class="dot">·</span>
+        <span class="set">2:3</span><span class="dot">·</span>
+        <span class="set">high</span>
+      </div>
+      <span style="font-size:12.5px;color:#7b7773">Esc</span>
+    </div>
+  </div>
+
+  <div class="menu" style="position:absolute;left:57px;top:455px">
+    <div style="font-size:9.5px;letter-spacing:.11em;text-transform:uppercase;color:#7b7773;padding:2px 12px 7px">Image models</div>
+    <div class="it-on">gpt-image-2 <span style="color:#8e8a85;font-size:12px">$0.042</span></div>
+    <div class="it">flux-1.1-pro <span style="color:#8e8a85;font-size:12px">$0.040</span></div>
+    <div class="it">nano-banana-2 <span style="color:#8e8a85;font-size:12px">$0.030</span></div>
+    <div style="padding:8px 12px 2px;margin-top:5px;border-top:1px solid #333333;font-size:12.5px;color:#6f6b67">Search all 24…</div>
+  </div>
+
+  <div style="position:absolute;left:48px;top:680px;display:flex;gap:44px">
+    <div class="cite">
+      <h4>Why it fits</h4>
+      <p>It is the node’s footer cost line (<code>CostFoot</code>) grown one notch: supporting text, uppercase-free, no boxes. The composer stays the only thing with a border.</p>
+    </div>
+    <div class="cite">
+      <h4>What it costs</h4>
+      <p>Eight words in a row need spacing discipline or they read as a sentence you cannot parse. And “+ size” is an empty slot showing itself, which is the one thing at rest that is not content.</p>
+    </div>
+  </div>
+</div>
+</x-dc>
+</body>
+</html>

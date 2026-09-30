@@ -1,0 +1,99 @@
+/*
+ * Third-party adapters (spec 12): each library's look set from the kit's tokens. The
+ * tldraw adapter lives beside this file; t3code's .chat-markdown rules for react-markdown
+ * are in theme.css.
+ */
+
+/*
+ * Tiptap: the Generate composer's instruction box, after t3code's
+ * .composer-tiptap, keyed on the box's own attribute.
+ */
+[data-generate-prompt] {
+  min-height: 1lh;
+  outline: none;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+[data-generate-prompt] p {
+  margin: 0;
+}
+
+[data-generate-prompt] p.is-editor-empty:first-child::before {
+  content: attr(data-placeholder);
+  float: left;
+  height: 0;
+  color: color-mix(in srgb, var(--color-placeholder) 75%, transparent);
+  pointer-events: none;
+}
+
+/* Tiptap: the Agent tray's prompt editor. */
+
+/* t3code's composer editor rules (its .composer-tiptap), keyed on the agent prompt's own attribute. */
+[data-agent-prompt] p {
+  margin: 0;
+}
+
+[data-agent-prompt] p.is-editor-empty:first-child::before {
+  content: attr(data-placeholder);
+  float: left;
+  height: 0;
+  color: color-mix(in srgb, var(--contrast-placeholder) 75%, transparent);
+  pointer-events: none;
+}
+
+[data-agent-prompt] .ProseMirror-selectednode {
+  outline: 2px solid var(--ring);
+  outline-offset: 1px;
+  border-radius: 6px;
+}
+
+/* @pierre/diffs: t3code's diff colours and injected diff CSS. */
+
+/*
+ * The renderer paints in a shadow root that no stylesheet reaches, so t3code's injected
+ * diff CSS goes in through its unsafeCSS option (theme/diffs.ts, beside this file). The tokens it
+ * reads inherit into the shadow root: the --diff-* colours and --diffs-font-family in
+ * theme.css, and the code surface tokens.
+ */
+
+/* DialKit: its variables from the kit's dark tokens. */
+
+/*
+ * DialKit stays dark in both schemes (spec 09), so these are the values theme.css gives the
+ * tokens in its dark block, written out, not var(--card) and the rest, which follow the
+ * scheme. Edit them with that block: artifactDials.spec.ts fails when the two differ. The
+ * attribute outranks DialKit's
+ * own .dialkit-root rule, which loads after this file with the editor.
+ */
+.dialkit-root[data-theme="dark"] {
+  /* --card and --popover */
+  --dial-glass-bg: color-mix(in srgb, var(--color-neutral-950) 97%, var(--color-white));
+  --dial-dropdown-bg: color-mix(in srgb, var(--color-neutral-950) 97%, var(--color-white));
+  /* --accent, --input, then the foreground mixes the kit uses for selected rows */
+  --dial-surface: --alpha(var(--color-white) / 4%);
+  --dial-surface-hover: --alpha(var(--color-white) / 8%);
+  --dial-surface-active: color-mix(in srgb, var(--color-neutral-100) 12%, transparent);
+  /* --border */
+  --dial-surface-subtle: --alpha(var(--color-white) / 6%);
+  --dial-border: --alpha(var(--color-white) / 6%);
+  --dial-border-hover: color-mix(in srgb, var(--color-neutral-100) 20%, transparent);
+  /* --foreground */
+  --dial-text-root: var(--color-neutral-100);
+  --dial-text-focus: var(--color-neutral-100);
+  --dial-text-primary: var(--color-neutral-100);
+  /* --muted-foreground */
+  --dial-text-section: color-mix(in srgb, var(--color-neutral-500) 90%, var(--color-white));
+  --dial-text-label: color-mix(in srgb, var(--color-neutral-500) 90%, var(--color-white));
+  --dial-text-secondary: color-mix(in srgb, var(--color-neutral-500) 90%, var(--color-white));
+  --dial-text-tertiary: color-mix(in srgb, var(--color-neutral-500) 90%, var(--color-white));
+  /* --ring */
+  --dial-focus-ring: var(--color-sky-300);
+  --dial-radius: var(--control-radius);
+  font-family: var(--font-sans);
+}
+
+/* The editor's Parameters column insets its header and its prompt box 10 px: DialKit's panel matches. */
+.dialkit-root[data-theme="dark"] .dialkit-panel-inline {
+  padding: 10px;
+}

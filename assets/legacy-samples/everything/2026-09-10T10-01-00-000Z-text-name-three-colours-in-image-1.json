@@ -1,0 +1,14 @@
+{
+  "kind": "text",
+  "prompt": "Name three colours in image 1.",
+  "model": "google/gemini-3.5-flash-lite",
+  "result": "Green, pale blue, white.",
+  "referenceCount": 1,
+  "references": {
+    "images": 1,
+    "videos": 0
+  },
+  "batchId": "b-1789034460000",
+  "cost": 0.0002,
+  "createdAt": "2026-09-10T10:01:00.000Z"
+}

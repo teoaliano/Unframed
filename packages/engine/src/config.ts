@@ -1,0 +1,105 @@
+import { resolve } from "node:path";
+import { acceptTestOrigin } from "@unframed/domain";
+import { envFilePath, preferencesFilePath, resolveDataDir } from "./paths.ts";
+
+/** `UNFRAMED_TEST_RENDERER` (spec 01's table): stands in for the motion renderer and the Chrome search. */
+export type TestRenderer = "ok" | "fail" | "no-chrome";
+
+export const OPENROUTER_ORIGIN = "https://openrouter.ai";
+
+/**
+ * What the process was started with: the install layout, the hosting variables and the
+ * test-only variables. All of it comes from the process environment, never from `.env`.
+ */
+export interface EngineConfig {
+  readonly installRoot: string;
+  readonly dataDir: string;
+  readonly envPath: string;
+  readonly preferencesPath: string;
+  /** `UNFRAMED_CLIENT_DIST`, resolved. Also the marker that the engine is hosted. */
+  readonly clientDist: string | undefined;
+  /** Every OpenRouter URL the engine builds starts with this. */
+  readonly openRouterOrigin: string;
+  readonly oauthBounce: string | undefined;
+  readonly chromePath: string | undefined;
+  readonly agentDebug: boolean;
+  /** `UNFRAMED_TEST_NATIVE_LOG`: record native commands here instead of spawning them. */
+  readonly nativeLogPath: string | undefined;
+  /** `UNFRAMED_TEST_PICK_FOLDER`, only meaningful with the native log. */
+  readonly pickFolderAnswer: string | undefined;
+  /** `UNFRAMED_TEST_SHUTDOWN_HOOK_MS`: one extra shutdown hook that takes this long. */
+  readonly testShutdownHookMs: number | undefined;
+  /** `UNFRAMED_TEST_MIGRATION`: SQL run as one extra migration at the end of the list. */
+  readonly testMigrationSql: string | undefined;
+  /** `UNFRAMED_TEST_CANVAS=1`: the testCanvas.* RPC methods answer instead of refusing. */
+  readonly testCanvasRpc: boolean;
+  /** `UNFRAMED_TEST_TUNNEL`: `loopback` serves shares on the share server itself, `never` fails every probe at once. */
+  readonly testTunnel: "loopback" | "never" | undefined;
+  /** `UNFRAMED_TEST_SWEEP_MS`: the render sweep's interval, in place of 30 s. */
+  readonly testSweepMs: number | undefined;
+  /** `UNFRAMED_TEST_SHARE_TTL_MS`: the share link TTL, in place of 30 min. */
+  readonly testShareTtlMs: number | undefined;
+  /** `UNFRAMED_TEST_AGENT_SCRIPT`: a script file or folder; every chat runs on the scripted adapter. */
+  readonly testAgentScript: string | undefined;
+  /** `UNFRAMED_TEST_AGENT_IDLE_MS`: the agent session idle close, in place of 10 min. */
+  readonly testAgentIdleMs: number | undefined;
+  /** `UNFRAMED_TEST_UPLOAD_URL_TTL_MS`: an attachment upload URL's lifetime, in place of 10 min. */
+  readonly testUploadUrlTtlMs: number | undefined;
+  /** `UNFRAMED_TEST_RENDERER`: `ok`, `fail` or `no-chrome` stand in for the motion renderer and the Chrome search. */
+  readonly testRenderer: TestRenderer | undefined;
+  readonly platform: NodeJS.Platform;
+}
+
+const nonEmpty = (value: string | undefined): string | undefined => {
+  const trimmed = value?.trim();
+  return trimmed ? trimmed : undefined;
+};
+
+export const loadConfig = (
+  env: NodeJS.ProcessEnv,
+  installRoot: string,
+  platform: NodeJS.Platform,
+): { config: EngineConfig; warnings: string[] } => {
+  const warnings: string[] = [];
+  const dataDir = resolveDataDir(env, installRoot);
+  const clientDist = nonEmpty(env.UNFRAMED_CLIENT_DIST);
+  const testOrigin = nonEmpty(env.UNFRAMED_TEST_OPENROUTER_ORIGIN);
+  let openRouterOrigin = OPENROUTER_ORIGIN;
+  if (testOrigin !== undefined) {
+    const accepted = acceptTestOrigin(testOrigin);
+    if (accepted === undefined) warnings.push(`test origin ignored: ${testOrigin} is not a loopback origin`);
+    else openRouterOrigin = accepted;
+  }
+  const nativeLogPath = nonEmpty(env.UNFRAMED_TEST_NATIVE_LOG);
+  const shutdownHook = nonEmpty(env.UNFRAMED_TEST_SHUTDOWN_HOOK_MS);
+  const tunnel = nonEmpty(env.UNFRAMED_TEST_TUNNEL);
+  const renderer = nonEmpty(env.UNFRAMED_TEST_RENDERER);
+  const wholeMs = (value: string | undefined) => (value !== undefined && /^\d+$/.test(value) && Number(value) > 0 ? Number(value) : undefined);
+  return {
+    config: {
+      installRoot,
+      dataDir,
+      envPath: envFilePath(dataDir),
+      preferencesPath: preferencesFilePath(dataDir),
+      clientDist: clientDist === undefined ? undefined : resolve(clientDist),
+      openRouterOrigin,
+      oauthBounce: nonEmpty(env.UNFRAMED_OAUTH_BOUNCE),
+      chromePath: nonEmpty(env.UNFRAMED_CHROME_PATH),
+      agentDebug: nonEmpty(env.UNFRAMED_AGENT_DEBUG) !== undefined,
+      nativeLogPath: nativeLogPath === undefined ? undefined : resolve(nativeLogPath),
+      pickFolderAnswer: nativeLogPath === undefined ? undefined : env.UNFRAMED_TEST_PICK_FOLDER,
+      testShutdownHookMs: shutdownHook !== undefined && /^\d+$/.test(shutdownHook) ? Number(shutdownHook) : undefined,
+      testMigrationSql: nonEmpty(env.UNFRAMED_TEST_MIGRATION),
+      testCanvasRpc: nonEmpty(env.UNFRAMED_TEST_CANVAS) === "1",
+      testTunnel: tunnel === "loopback" || tunnel === "never" ? tunnel : undefined,
+      testSweepMs: wholeMs(nonEmpty(env.UNFRAMED_TEST_SWEEP_MS)),
+      testShareTtlMs: wholeMs(nonEmpty(env.UNFRAMED_TEST_SHARE_TTL_MS)),
+      testAgentScript: nonEmpty(env.UNFRAMED_TEST_AGENT_SCRIPT) === undefined ? undefined : resolve(nonEmpty(env.UNFRAMED_TEST_AGENT_SCRIPT)!),
+      testAgentIdleMs: wholeMs(nonEmpty(env.UNFRAMED_TEST_AGENT_IDLE_MS)),
+      testUploadUrlTtlMs: wholeMs(nonEmpty(env.UNFRAMED_TEST_UPLOAD_URL_TTL_MS)),
+      testRenderer: renderer === "ok" || renderer === "fail" || renderer === "no-chrome" ? renderer : undefined,
+      platform,
+    },
+    warnings,
+  };
+};

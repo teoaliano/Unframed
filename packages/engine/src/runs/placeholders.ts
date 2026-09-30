@@ -1,0 +1,225 @@
+/**
+ * Placeholders and their lifecycle as canvas changes: the shape a run writes before it is
+ * answered, the change that fills it when its output lands, and the one that clears a
+ * marker whose work did not land.
+ */
+import { randomUUID } from "node:crypto";
+import { projectFileMarker, resultMetaOf, unframedMetaOf, type ImageRunRequest, type ResultMeta, type RunMarker } from "@unframed/contracts";
+import { plainText } from "@unframed/domain";
+import { toRichText, type TLRecord } from "@tldraw/tlschema";
+import { getIndexAbove, type IndexKey } from "@tldraw/utils";
+import type { CanvasChange } from "../canvas/rooms.ts";
+
+export const PLACEHOLDER_WIDTH = 320;
+
+export type Shape = TLRecord & { type: string; props: Record<string, unknown>; meta: Record<string, unknown> };
+
+export const isShape = (record: TLRecord | undefined): record is Shape => record?.typeName === "shape";
+
+/** An index above every shape on the page, so a new shape lands on top. */
+export const indexOnTop = (records: ReadonlyArray<TLRecord>, pageId: string): IndexKey =>
+  getIndexAbove(
+    records
+      .filter((record) => isShape(record) && (record as unknown as { parentId: string }).parentId === pageId)
+      .map((record) => (record as unknown as { index: IndexKey }).index)
+      .sort((a, b) => (a < b ? -1 : a > b ? 1 : 0))
+      .at(-1) ?? null,
+  );
+
+/** What landed for one output: enough to fill its placeholder, now or after an undo. */
+export interface Landed {
+  readonly file: string;
+  readonly sidecar: string;
+  readonly cost: number | null;
+  readonly width: number | undefined;
+  readonly height: number | undefined;
+  readonly mime: string;
+  readonly bytes: number;
+}
+
+/** The height of an image placeholder: from the requested `W:H` ratio or exact size, else square. */
+export const placeholderHeight = (params: ImageRunRequest["params"]): number => {
+  const ratio =
+    params.size !== undefined
+      ? /^(\d+)x(\d+)$/.exec(params.size)
+      : params.aspect_ratio !== undefined
+        ? /^(\d+(?:\.\d+)?):(\d+(?:\.\d+)?)$/.exec(params.aspect_ratio)
+        : null;
+  const w = ratio ? Number(ratio[1]) : 0;
+  const h = ratio ? Number(ratio[2]) : 0;
+  return w > 0 && h > 0 ? (PLACEHOLDER_WIDTH * h) / w : PLACEHOLDER_WIDTH;
+};
+
+/** An empty image where an output will land, carrying its marker and unfilled result meta. */
+export const imagePlaceholder = (input: {
+  readonly at: { readonly x: number; readonly y: number };
+  readonly height: number;
+  readonly index: string;
+  readonly parentId: string;
+  readonly ref: string;
+  readonly marker: RunMarker;
+  readonly result: ResultMeta;
+}): TLRecord =>
+  ({
+    id: `shape:${randomUUID()}`,
+    typeName: "shape",
+    type: "image",
+    x: input.at.x,
+    y: input.at.y,
+    rotation: 0,
+    index: input.index,
+    parentId: input.parentId,
+    isLocked: false,
+    opacity: 1,
+    props: { w: PLACEHOLDER_WIDTH, h: input.height, playing: true, url: "", assetId: null, crop: null, flipX: false, flipY: false, altText: "" },
+    meta: { ref: input.ref, unframed: { run: input.marker, result: input.result } },
+  }) as unknown as TLRecord;
+
+/** The change that fills a placeholder: the file as its asset, the file's aspect at its width, the sidecar, no marker. */
+export const fillChange = (shape: Shape, landed: Landed): CanvasChange => {
+  const assetId = `asset:${randomUUID()}`;
+  const width = typeof shape.props.w === "number" ? shape.props.w : PLACEHOLDER_WIDTH;
+  const height = landed.width && landed.height ? (width * landed.height) / landed.width : typeof shape.props.h === "number" ? shape.props.h : width;
+  const { run: _run, ...unframed } = unframedMetaOf(shape);
+  const result = resultMetaOf(shape);
+  const asset = {
+    id: assetId,
+    typeName: "asset",
+    type: "image",
+    props: {
+      w: landed.width ?? Math.round(width),
+      h: landed.height ?? Math.round(height),
+      name: landed.file,
+      isAnimated: landed.mime === "image/gif",
+      mimeType: landed.mime,
+      src: projectFileMarker(landed.file),
+      ...(landed.bytes > 0 ? { fileSize: landed.bytes } : {}),
+    },
+    meta: {},
+  } as unknown as TLRecord;
+  const filled = {
+    ...shape,
+    props: { ...shape.props, assetId, h: height, crop: null },
+    meta: { ...shape.meta, unframed: { ...unframed, ...(result ? { result: { ...result, sidecar: landed.sidecar, cost: landed.cost } } : {}) } },
+  } as unknown as TLRecord;
+  return { put: [asset, filled], remove: [] };
+};
+
+/** How one output of a run ended: what landed, or the sentence the person sees. */
+export type RunOutcome<L> = { readonly ok: true; readonly landed: L } | { readonly ok: false; readonly error: string };
+
+/** What landed for a text run (spec 05): the answer and its sidecar, `null` when none could be written. */
+export interface LandedText {
+  readonly kind: "text";
+  readonly text: string;
+  readonly sidecar: string | null;
+  readonly cost: number | null;
+}
+
+/** A text result's placeholder: an empty prompt (spec 02's text shape) carrying its marker and unfilled result meta. */
+export const textPlaceholder = (input: {
+  readonly at: { readonly x: number; readonly y: number };
+  readonly index: string;
+  readonly parentId: string;
+  readonly ref: string;
+  readonly marker: RunMarker;
+  readonly result: ResultMeta;
+}): TLRecord =>
+  ({
+    id: `shape:${randomUUID()}`,
+    typeName: "shape",
+    type: "text",
+    x: input.at.x,
+    y: input.at.y,
+    rotation: 0,
+    index: input.index,
+    parentId: input.parentId,
+    isLocked: false,
+    opacity: 1,
+    props: { color: "black", size: "s", w: PLACEHOLDER_WIDTH, font: "sans", textAlign: "start", autoSize: false, scale: 1, richText: toRichText("") },
+    meta: { ref: input.ref, unframed: { run: input.marker, result: input.result } },
+  }) as unknown as TLRecord;
+
+/** The change that fills a text placeholder: the answer as its text, the sidecar and cost, no marker. */
+const textFillChange = (shape: Shape, landed: LandedText): CanvasChange => {
+  const { run: _run, ...unframed } = unframedMetaOf(shape);
+  const result = resultMetaOf(shape);
+  const filled = {
+    ...shape,
+    props: { ...shape.props, richText: toRichText(landed.text) },
+    meta: { ...shape.meta, unframed: { ...unframed, ...(result ? { result: { ...result, sidecar: landed.sidecar, cost: landed.cost } } : {}) } },
+  } as unknown as TLRecord;
+  return { put: [filled], remove: [] };
+};
+
+/** What landed for a motion render (spec 09): the MP4 in the project folder and its pixel size. */
+export interface LandedClip {
+  readonly kind: "clip";
+  readonly file: string;
+  readonly bytes: number;
+  readonly w: number;
+  readonly h: number;
+}
+
+/** An empty video where a render will land, carrying its marker and no result meta: a render is not a paid result. */
+export const videoPlaceholder = (input: {
+  readonly at: { readonly x: number; readonly y: number };
+  readonly size: { readonly w: number; readonly h: number };
+  readonly index: string;
+  readonly parentId: string;
+  readonly ref: string;
+  readonly marker: RunMarker;
+}): TLRecord =>
+  ({
+    id: `shape:${randomUUID()}`,
+    typeName: "shape",
+    type: "video",
+    x: input.at.x,
+    y: input.at.y,
+    rotation: 0,
+    index: input.index,
+    parentId: input.parentId,
+    isLocked: false,
+    opacity: 1,
+    props: { w: input.size.w, h: input.size.h, time: 0, playing: false, autoplay: false, url: "", assetId: null, altText: "" },
+    meta: { ref: input.ref, unframed: { run: input.marker } },
+  }) as unknown as TLRecord;
+
+/** Fills a render's placeholder with its MP4: the file is the asset's `src` and `name`, and the marker goes. */
+const clipFillChange = (shape: Shape, landed: LandedClip): CanvasChange => {
+  const assetId = `asset:${randomUUID()}`;
+  const { run: _run, ...unframed } = unframedMetaOf(shape);
+  const asset = {
+    id: assetId,
+    typeName: "asset",
+    type: "video",
+    props: {
+      w: Math.round(landed.w),
+      h: Math.round(landed.h),
+      name: landed.file,
+      isAnimated: true,
+      mimeType: "video/mp4",
+      src: projectFileMarker(landed.file),
+      ...(landed.bytes > 0 ? { fileSize: landed.bytes } : {}),
+    },
+    meta: {},
+  } as unknown as TLRecord;
+  const filled = { ...shape, props: { ...shape.props, assetId }, meta: { ...shape.meta, unframed } } as unknown as TLRecord;
+  return { put: [asset, filled], remove: [] };
+};
+
+/** The change that fills a placeholder with whatever landed for it. */
+export const fillFor = (shape: Shape, landed: Landed | LandedText | LandedClip): CanvasChange =>
+  "kind" in landed ? (landed.kind === "clip" ? clipFillChange(shape, landed) : textFillChange(shape, landed)) : fillChange(shape, landed);
+
+/** The change that settles a marker whose work did not land: the marker goes, and an empty shape goes too. */
+export const clearChange = (shape: Shape): CanvasChange => {
+  if (shape.type === "text") {
+    if (plainText(shape.props.richText).trim() === "") return { put: [], remove: [shape.id] };
+    const { run: _run, ...unframed } = unframedMetaOf(shape);
+    return { put: [{ ...shape, meta: { ...shape.meta, unframed } } as unknown as TLRecord], remove: [] };
+  }
+  if (shape.props.assetId === null || shape.props.assetId === undefined) return { put: [], remove: [shape.id] };
+  const { run: _run, ...unframed } = unframedMetaOf(shape);
+  return { put: [{ ...shape, meta: { ...shape.meta, unframed } } as unknown as TLRecord], remove: [] };
+};

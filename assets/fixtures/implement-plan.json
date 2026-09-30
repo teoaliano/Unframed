@@ -1,0 +1,22 @@
+{
+  "when": "^please implement this plan:",
+  "turns": [
+    {
+      "title": "Implement the landing page",
+      "tools": [
+        {
+          "name": "canvas_read",
+          "input": {}
+        },
+        {
+          "name": "page_write",
+          "input": {
+            "title": "Landing",
+            "html": "<!doctype html><html><head><style>body{margin:0;font:16px system-ui;background:#faf7f2}</style></head><body><h1>Landing</h1></body></html>"
+          }
+        }
+      ],
+      "text": "Built the landing page from the plan."
+    }
+  ]
+}

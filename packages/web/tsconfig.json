@@ -1,0 +1,13 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "lib": ["es2024", "dom", "dom.iterable"],
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "jsx": "react-jsx",
+    "types": ["vite/client"],
+    // t3code's UI kit imports itself through "~" (spec 12), kept so its files stay a mechanical merge.
+    "paths": { "~/*": ["./src/*"] }
+  },
+  "include": ["src", "design-system", "vite.config.ts"]
+}
