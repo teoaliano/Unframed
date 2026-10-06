@@ -53,16 +53,17 @@ const menuShape = (editor: Editor, shape: TLShape): MenuShape => {
   const marker = shape.type === "image" || shape.type === "video" ? parseAssetMarker(assetSrc(editor, shape) ?? "") : undefined;
   const ref = readRef(shape);
   const parent = editor.getShape(shape.parentId as TLShapeId);
+  const artifactFile = isArtifactKind(shape.type) ? (shape.props as { file?: string }).file : undefined;
   return {
     id: shape.id,
     type: shape.type,
     ...(ref !== undefined ? { ref } : {}),
-    ...(marker?.kind === "project-file" ? { file: marker.file } : {}),
+    ...(marker?.kind === "project-file" ? { file: marker.file } : artifactFile ? { file: artifactFile } : {}),
     ...(marker?.kind === "link" ? { link: true } : {}),
     ...(isTextResult(shape) ? { textResult: true } : {}),
     ...(parent?.type === "frame" ? { parent: parent.id } : {}),
     ...(groupRecipeOf(shape) ? { recipe: true } : {}),
-    ...(isArtifactKind(shape.type) && (shape.props as { file?: string }).file ? { filledArtifact: true } : {}),
+    ...(artifactFile ? { filledArtifact: true } : {}),
   };
 };
 
@@ -131,6 +132,12 @@ const UnframedSections = () => {
         });
         return;
       }
+      case "copy-path":
+        engine.call("files.path", { project, fileName: item.file }).then(
+          ({ path }) => navigator.clipboard.writeText(path).catch(() => showError("Could not copy that path to the clipboard.")),
+          (error: unknown) => showError(`Could not copy that path: ${messageOf(error)}`),
+        );
+        return;
       case "copy-as-image": {
         const png = opened.clicked ? imagePng(editor, project, opened.clicked) : undefined;
         const failed = () => showError("Could not copy that image to the clipboard.");

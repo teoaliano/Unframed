@@ -56,9 +56,9 @@ describe("contextMenu", () => {
     expect(outline(shape(prompt))[0]).toEqual(["reference", ["Copy @100"]]);
   });
 
-  it("offers reveal and copy as image on a filled image, then the edit items", () => {
+  it("offers reveal, copy path and copy as image on a filled image, then the edit items", () => {
     expect(outline(shape(image))).toEqual([
-      ["image", ["Reveal in Finder", "Copy as image"]],
+      ["image", ["Reveal in Finder", "Copy path", "Copy as image"]],
       ["edit", ["Cut ⌘X", "Copy ⌘C", "Group ⌘G"]],
     ]);
   });
@@ -71,13 +71,20 @@ describe("contextMenu", () => {
 
   it("reveals the right-clicked file alone when no filled media is selected", () => {
     const menu = contextMenu({ ...base, target: { kind: "shape", shape: video }, selection: [] });
-    expect(menu[0]!.items).toEqual([{ action: "reveal", label: "Reveal in Finder", files: ["2-waves.mp4"] }]);
+    expect(menu[0]!.items).toEqual([
+      { action: "reveal", label: "Reveal in Finder", files: ["2-waves.mp4"] },
+      { action: "copy-path", label: "Copy path", file: "2-waves.mp4" },
+    ]);
+  });
+
+  it("copies the right-clicked file's path alone, whatever else is selected", () => {
+    expect(shape(image, [image, video])[0]!.items[1]).toEqual({ action: "copy-path", label: "Copy path", file: "1-fox.png" });
   });
 
   it("drops the image section on an empty image and a linked clip, and copy as image on a video", () => {
     expect(outline(shape(emptyImage))[0]![0]).toBe("edit");
     expect(outline(shape(linkedVideo))[0]![0]).toBe("edit");
-    expect(outline(shape(video))[0]).toEqual(["image", ["Reveal in Finder"]]);
+    expect(outline(shape(video))[0]).toEqual(["image", ["Reveal in Finder", "Copy path"]]);
   });
 
   it("offers Copy @id on a prompt and a group", () => {
@@ -152,9 +159,28 @@ describe("contextMenu", () => {
     expect(shape(page).map((section) => section.section)).not.toContain("artifact");
   });
 
+  it("offers reveal and copy path on a filled page or motion with a file, after Keep playing", () => {
+    const filled: MenuShape = { ...page, filledArtifact: true, file: "1-brief.html" };
+    const motion: MenuShape = { id: "mo", type: "motion", ref: "107", filledArtifact: true, file: "2-intro.html" };
+    expect(shape(filled)[0]).toEqual({
+      section: "artifact",
+      heading: "Page",
+      items: [
+        { action: "keep-playing", label: "Keep playing", checked: false },
+        { action: "reveal", label: "Reveal in Finder", files: ["1-brief.html"] },
+        { action: "copy-path", label: "Copy path", file: "1-brief.html" },
+      ],
+    });
+    // Every selected filled artifact is revealed; the path is the right-clicked one's.
+    expect(shape(motion, [filled, motion, image], { platform: "win32" })[0]?.items.slice(1)).toEqual([
+      { action: "reveal", label: "Show in Explorer (2)", files: ["1-brief.html", "2-intro.html"] },
+      { action: "copy-path", label: "Copy path", file: "2-intro.html" },
+    ]);
+  });
+
   it("uses Ctrl hints and the platform's reveal label off macOS", () => {
     expect(outline(shape(image, [image], { platform: "win32" }))).toEqual([
-      ["image", ["Show in Explorer", "Copy as image"]],
+      ["image", ["Show in Explorer", "Copy path", "Copy as image"]],
       ["edit", ["Cut Ctrl+X", "Copy Ctrl+C", "Group Ctrl+G"]],
     ]);
   });

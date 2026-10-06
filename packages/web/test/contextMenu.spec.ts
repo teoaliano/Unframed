@@ -3,6 +3,7 @@ import { centre, emptyCanvasPoint, openCanvas, shapeOnScreen } from "./canvas.ts
 import { expect, test } from "./fixtures.ts";
 import { pngBytes } from "./images.ts";
 import { inBothSchemes, styleOf, tokenColor } from "./kit.ts";
+import { filledArtifact, projectPath } from "./artifacts.ts";
 import { filledMedia, groupRecord, putRecords } from "./media.ts";
 import { platformOf } from "./platform.ts";
 
@@ -48,6 +49,17 @@ const withEmptyClipboard = (page: Page) =>
   page.addInitScript(() => {
     Object.defineProperty(navigator.clipboard, "read", { configurable: true, value: async () => [] });
   });
+
+/** Keeps every text the page puts on the clipboard, which other workers share, so a test reads its own copy. */
+const recordCopies = (page: Page) =>
+  page.addInitScript(() => {
+    const copies: string[] = [];
+    (window as { copies?: string[] }).copies = copies;
+    const writeText = navigator.clipboard.writeText.bind(navigator.clipboard);
+    Object.defineProperty(navigator.clipboard, "writeText", { configurable: true, value: (text: string) => (copies.push(text), writeText(text)) });
+  });
+
+const lastCopy = (page: Page) => page.evaluate(() => (window as { copies?: string[] }).copies?.at(-1));
 
 const photo = { type: "image" as const, bytes: pngBytes(300, 150), name: "photo.png", mime: "image/png", natural: { w: 300, h: 150 } };
 
@@ -96,10 +108,11 @@ test("a right-clicked prompt is selected alone and offers its reference and the 
   await expect(scene).toHaveCount(1);
 });
 
-test("a filled image offers reveal and copy as image; inside a selection of two it reveals both", async ({ page, engine }) => {
+test("a filled image offers reveal, copy path and copy as image; inside a selection of two it reveals both", async ({ page, engine }) => {
   await withEmptyClipboard(page);
+  await recordCopies(page);
   await openCanvas(page, engine);
-  await filledMedia(engine, { ...photo, id: "shape:one", ref: "150", at: { x: 440, y: 60 } });
+  const { file } = await filledMedia(engine, { ...photo, id: "shape:one", ref: "150", at: { x: 440, y: 60 } });
   await filledMedia(engine, { ...photo, id: "shape:two", ref: "151", at: { x: 440, y: 260 } });
   await expect(shapeOnScreen(page, "shape:two").locator("img")).toBeVisible();
 
@@ -107,8 +120,9 @@ test("a filled image offers reveal and copy as image; inside a selection of two 
   const one = await centre(shapeOnScreen(page, "shape:one"));
   const single = await rightClick(page, one);
   expect(single.headings).toEqual(["Image", "Edit", "Library"]);
-  expect(single.items.slice(0, 5)).toEqual([reveal(), "Copy as image", `Cut ${shortcut("X")}`, `Copy ${shortcut("C")}`, `Group ${shortcut("G")}`]);
-  await closeMenu(page);
+  expect(single.items.slice(0, 6)).toEqual([reveal(), "Copy path", "Copy as image", `Cut ${shortcut("X")}`, `Copy ${shortcut("C")}`, `Group ${shortcut("G")}`]);
+  await menu(page).getByRole("menuitem", { name: "Copy path" }).click();
+  await expect.poll(() => lastCopy(page)).toBe(projectPath(engine, file));
 
   await page.mouse.click(one.x, one.y);
   await page.keyboard.down("Shift");
@@ -118,6 +132,30 @@ test("a filled image offers reveal and copy as image; inside a selection of two 
   const both = await rightClick(page, two);
   expect(both.items[0]).toBe(reveal(2));
   await closeMenu(page);
+});
+
+test("a filled page offers Keep playing, reveal and copy path, which the engine answers with the file's absolute path", async ({ page, engine }) => {
+  await withEmptyClipboard(page);
+  await recordCopies(page);
+  await openCanvas(page, engine);
+  const { file } = await filledArtifact(engine, { id: "shape:brief", kind: "page", ref: "170", at: { x: 440, y: 60 }, title: "Brief", html: "<h1>Brief</h1>" });
+  await expect(shapeOnScreen(page, "shape:brief")).toHaveCount(1);
+
+  const { reveal } = await platformOf(page);
+  const at = await centre(shapeOnScreen(page, "shape:brief"));
+  const { headings, items } = await rightClick(page, at);
+  expect(headings).toEqual(["Page", "Edit", "Library"]);
+  await expect(menu(page).getByRole("menuitemcheckbox", { name: "Keep playing" })).toBeVisible();
+  expect(items.slice(0, 2)).toEqual([reveal(), "Copy path"]);
+  await menu(page).getByRole("menuitem", { name: "Copy path" }).click();
+  await expect.poll(() => lastCopy(page)).toBe(projectPath(engine, file));
+
+  // Selected, the page's frame takes the pointer, so it is deselected before the next right-click.
+  const empty = await emptyCanvasPoint(page);
+  await page.mouse.click(empty.x, empty.y);
+  await rightClick(page, at);
+  await menu(page).getByRole("menuitem", { name: reveal() }).click();
+  expect(await engine.waitForMessage((message) => message.type === "reveal")).toEqual({ type: "reveal", files: [projectPath(engine, file)] });
 });
 
 test("a right-clicked group offers its reference and Ungroup, not Group", async ({ page, engine }) => {
