@@ -61,6 +61,39 @@ test("double-click opens the editor: rail, live frame and parameters, with Back 
   expect(await shapeOnScreen(page, "shape:landing").boundingBox()).toEqual(moved);
 });
 
+test("the rail's header clears the corner the desktop shell moved the top-left card out of; in a browser it stays at the top", async ({ page, agent }) => {
+  await onBoard(page, agent);
+  const railHeader = column(page, "rail").locator("header").first();
+  const centreHeader = column(page, "centre").getByRole("button", { name: "Back to canvas" });
+  const open = async () => {
+    const at = await centre(shapeOnScreen(page, "shape:landing"));
+    await page.mouse.dblclick(at.x, at.y);
+    await expect(railHeader).toBeVisible();
+    await page.waitForTimeout(100);
+    return { rail: (await column(page, "rail").boundingBox())!, header: (await railHeader.boundingBox())!, back: (await centreHeader.boundingBox())! };
+  };
+
+  const plain = await open();
+  // In a browser the header is the column's first row.
+  expect(plain.header.y - plain.rail.y).toBeLessThanOrEqual(1);
+  await page.keyboard.press("Escape");
+  await expect(editor(page)).toHaveCount(0);
+
+  // The shell's injected CSS moves the card to make room for its window buttons (spec 01).
+  await page.evaluate(() => {
+    const style = document.createElement("style");
+    style.textContent = ".unframed-chrome-left { top: 40px; left: 80px; }";
+    document.head.append(style);
+  });
+  await page.mouse.click(640, 560);
+  const shell = await open();
+  const card = (await page.locator(".unframed-chrome-left").boundingBox())!;
+  expect(shell.header.y).toBeGreaterThanOrEqual(card.y + card.height);
+  // Only the rail moves: the other columns keep their places.
+  expect(shell.rail).toEqual(plain.rail);
+  expect(shell.back).toEqual(plain.back);
+});
+
 test("Escape typed in the composer or the parameter box stays in the editor, and canvas shortcuts do nothing while it is open", async ({ page, agent }) => {
   await onBoard(page, agent);
   const at = await centre(shapeOnScreen(page, "shape:landing"));

@@ -1,6 +1,6 @@
 import { visibleChats, nextActive } from "@unframed/domain";
 import { Plus, Search, Sparkles, Trash2, X } from "lucide-react";
-import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
+import { lazy, Suspense, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useMaybeEditor, useValue } from "tldraw";
 import { Alert, AlertDescription } from "~/components/ui/alert";
 import { Button } from "~/components/ui/button";
@@ -47,21 +47,30 @@ const RAIL_CLASS =
 /** The editor's left column, or the Sheet: the same rail in place, with no surface or motion of its own. */
 const EMBEDDED_CLASS = "relative box-border flex size-full min-h-0 flex-col font-sans text-foreground";
 
+/** Where theme.css puts the top-left card when no shell has moved it. */
+const CARD_HOME = 8;
+
 /**
  * The room at the top of the docked rail for the top-left chrome card (spec 02), which sits
  * over it: as tall as the card reaches, plus its margin, so a shell that moves the card
  * (spec 01) moves the row with it.
+ *
+ * In the editor (`shellOnly`) the card is hidden, and the row is there only when a shell has
+ * moved the card from its home: the shell did that to make room for its window buttons,
+ * which would otherwise sit on the rail's header. In a browser it has no height.
  */
-const ChromeRow = () => {
-  const [height, setHeight] = useState(60);
+const ChromeRow = ({ shellOnly = false }: { readonly shellOnly?: boolean }) => {
+  const [height, setHeight] = useState(shellOnly ? 0 : 60);
   const row = useRef<HTMLDivElement>(null);
-  useEffect(() => {
+  useLayoutEffect(() => {
     const card = document.querySelector<HTMLElement>(".unframed-chrome-left");
     const element = row.current;
     if (!card || !element) return;
     const measure = () => {
+      const box = card.getBoundingClientRect();
+      if (shellOnly && box.left <= CARD_HOME + 0.5 && box.top <= CARD_HOME + 0.5) return setHeight(0);
       const top = element.parentElement?.getBoundingClientRect().top ?? 0;
-      setHeight(Math.max(0, Math.round(card.getBoundingClientRect().bottom - top + 12)));
+      setHeight(Math.max(0, Math.round(box.bottom - top + 12)));
     };
     measure();
     const observer = new ResizeObserver(measure);
@@ -71,8 +80,8 @@ const ChromeRow = () => {
       observer.disconnect();
       window.removeEventListener("resize", measure);
     };
-  }, []);
-  return <div ref={row} className="shrink-0 border-b" style={{ height }} data-testid="rail-chrome-row" />;
+  }, [shellOnly]);
+  return <div ref={row} className={shellOnly ? "shrink-0" : "shrink-0 border-b"} style={{ height }} data-testid="rail-chrome-row" />;
 };
 
 /**
@@ -168,6 +177,7 @@ export const AgentRail = ({ project, embedded, inSheet, filterTo, onLocate, onOp
     >
       {/* Docked, the top-left chrome card sits over this row as the rail's own top line. */}
       {!embedded && !inSheet && <ChromeRow />}
+      {embedded && <ChromeRow shellOnly />}
       <header className="flex h-12 shrink-0 items-center gap-1 pr-2 pl-3.5">
         <Sparkles aria-hidden className="size-4 shrink-0 text-foreground" />
         <h2 className="m-0 ml-1 flex-1 text-sm font-medium">Agent</h2>

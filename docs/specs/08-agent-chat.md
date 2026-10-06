@@ -10,7 +10,7 @@ The old app had a chat rail with tabs filtered by the selection, a composer with
 
 ## Solution
 
-A rail on the left of the canvas, where the artifact editor's chat column sits, holds the project's chats as tabs, filtered by the selected artifacts. Under the tabs, a t3code transcript: markdown replies, streamed as they arrive, tool calls folded into work groups, sub-agent rows, the pending approval and question panels, proposed plan cards, and a recap card per turn listing what it touched with Open, Locate and Revert this turn. Below it, the shared composer of spec 03 in its Agent tray, built 1:1 on t3code's composer: a Tiptap editor, the selection as context chips, attachments, slash commands, the model, traits and runtime mode pickers, the plan toggle, the context window meter, queued messages, the prompt stash, ArrowUp history and Edit from here.
+A rail on the left of the canvas, where the artifact editor's chat column sits, holds the project's chats as tabs, filtered by the selected artifacts. Under the tabs, a t3code transcript: markdown replies, streamed as they arrive, tool calls folded into work groups, sub-agent rows, the pending approval and question panels, proposed plan cards, and a recap card per turn listing what it touched with Editor, Locate and Revert this turn. Below it, the shared composer of spec 03 in its Agent tray, built 1:1 on t3code's composer: a Tiptap editor, the selection as context chips, attachments, slash commands, the model, traits and runtime mode pickers, the plan toggle, the context window meter, queued messages, the prompt stash, ArrowUp history and Edit from here.
 
 The selection toolbar's Agent button opens the same composer on the selection and says whether the message continues an earlier chat or starts a new one. The editor of spec 09 embeds the same rail as its left column.
 
@@ -75,7 +75,7 @@ The transcript
 41. As a person, I want a request whose command was clipped to say how many characters I was not shown, so that I never approve what I could not read.
 42. As a person, I want the agent's questions shown as a panel I can answer by option or in my own words, so that the agent can ask instead of guessing.
 43. As a person in plan mode, I want the proposed plan shown as a card with a way to implement it, so that a plan turns into work with one click.
-44. As a person, I want a recap card after each turn listing the files and artifacts it touched, with Open, Locate and Revert this turn, so that I can reach or undo what a turn did.
+44. As a person, I want a recap card after each turn listing the files and artifacts it touched, with Editor, Locate and Revert this turn, so that I can reach or undo what a turn did.
 45. As a person, I want a deleted artifact struck through in the recap, so that a stale row does not look clickable.
 46. As a person, I want a revert that skipped shapes to say which, so that I know what stayed.
 47. As a person, I want failures, retries and usage limits shown as plain lines in the transcript, so that I know what happened and what to do.
@@ -158,7 +158,7 @@ The selection toolbar (spec 03) ends with a filled **Agent** button (sparkles ic
 After the last message of each turn that touched anything, a recap card on the card surface with the kit's border and radius:
 
 - Header: a chevron, "<n> file" or "<n> files", and Hide/Show. Open by default.
-- One row per artifact or project file the turn read or changed, in first-touch order: the shape kind's icon (an empty slot when there is none, so names line up), its label (title, else original file name without `.html`, else id), then **Open** (opens the editor; spec 09 registers the editor, and until it does the row shows Locate only) and **Locate on canvas** (crosshair icon; pans and zooms to the shape; absent in embedded mode). A row whose shape is gone is struck through, greyed, and reads "deleted" instead of the buttons.
+- One row per artifact or project file the turn read or changed, in first-touch order: the shape kind's icon (an empty slot when there is none, so names line up), its label (title, else original file name without `.html`, else id), then **Editor** (opens the editor; spec 09 registers the editor, and until it does the row shows Locate only) and **Locate on canvas** (crosshair icon; pans and zooms to the shape; absent in embedded mode). A row whose shape is gone is struck through, greyed, and reads "deleted" instead of the buttons.
 - Reads and writes are not distinguished. `canvas_read` contributes nothing (it reads everything, every turn). The rows come from the turn's `page_*`/`motion_*` tool inputs, the shapes its `canvas_write` ops named, and its turn changes; they are derived from the activities, not stored separately.
 - Footer: **Revert this turn**, shown when the turn has turn changes and is not running. After a revert the button becomes the text "Reverted", and when shapes were skipped a line follows: "Left <n> shape(s) alone because they changed since: <label> (by the person), <label> (by another chat)." With every shape skipped: "Nothing to revert: everything this turn changed has changed since."
 - **View diff** on a row for a page or motion the turn rewrote (see diffs below).
@@ -320,7 +320,7 @@ The embedded rail is exercised by spec 09's editor tests, since the editor is wh
 37. **Question panel.** A scripted question shows its options and header; choosing an option and submitting releases the turn. Seam: browser.
 38. **Proposed plan.** In plan mode a scripted plan shows as a card with Expand, Copy and Download; the Plan ready banner's Implement sends the plan in default mode; Implement in a new chat opens a new chat titled "Implement <title>". Seam: browser.
 39. **Recap rows.** Rows from artifact tool inputs, `canvas_write` targets and turn changes, first-touch order, `canvas_read` contributing nothing, deleted shapes marked stale. Seam: domain.
-40. **Recap card.** After a scripted write the card lists the artifact with Open and Locate; deleting the artifact strikes it through as "deleted"; Hide and Show. Seam: browser.
+40. **Recap card.** After a scripted write the card lists the artifact with Editor and Locate; deleting the artifact strikes it through as "deleted"; Hide and Show. Seam: browser.
 41. **Revert this turn.** Revert restores the canvas and the card reads "Reverted"; after the person edits one of the shapes first, the card names it as left alone. Seam: browser.
 42. **Failure, retry and limit lines.** The failure fixture shows the retry line during the turn and the failure sentence in the reply; a scripted limit shows its line; the error line does not repeat the reply. Seam: browser.
 43. (Removed: the focus mark. Shape labels keep their one look, at the person's request.) Seam: none.
@@ -339,7 +339,7 @@ The embedded rail is exercised by spec 09's editor tests, since the editor is wh
 
 ## Further Notes
 
-- **Kept from the old app, unchanged:** the rail's size and motion; the header actions; tabs with three inline and More; double-click rename; the any-of filter and the all-of continue rule (they answer different questions and must not be merged); the no-provider state; the activity line and its labels; the recap card with Open, Locate and struck-through deleted rows; markdown with no raw HTML; the toolbar's continues/new chat line.
+- **Kept from the old app, unchanged:** the rail's size and motion; the header actions; tabs with three inline and More; double-click rename; the any-of filter and the all-of continue rule (they answer different questions and must not be merged); the no-provider state; the activity line and its labels; the recap card with Editor (named Open in the old app), Locate and struck-through deleted rows; markdown with no raw HTML; the toolbar's continues/new chat line.
 - **Changed:** the composer, transcript, work log, approval panel, question panel and plan flow are t3code's; the recap card is per turn rather than one per chat, because Revert this turn needs a home on each turn; Cmd-Z no longer undoes agent changes (decision Q23), so the delete confirmation no longer mentions it; UI copy that had em dashes now uses periods or commas ("Nothing said about these yet. Your first message starts a chat.", "The API is busy (529), retrying in 2s. Attempt 1 of 3…", the plan toggle tooltips).
 - **The old targeting words.** The design board for the toolbar says one artifact selected is the target, none means a new artifact, several means it asks. That is now how the agent is told to read the selection (spec 07's system prompt), not a field in the message: there is no target and no mode picker, and "asks" means the agent asks in its reply only when the sentence is genuinely ambiguous.
 
