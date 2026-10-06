@@ -1,4 +1,4 @@
-import { FAILURE_SENTENCES } from "@unframed/domain";
+import { clockTime, FAILURE_SENTENCES } from "@unframed/domain";
 import { openCanvas } from "./canvas.ts";
 import { createChat, expect, openRail, say, test } from "./agent.ts";
 
@@ -13,21 +13,30 @@ test("a failed turn shows its retry line and ends its reply with the failure sen
   await expect(panel.getByRole("alert")).toHaveCount(0);
 });
 
-test("being close to a usage limit shows nothing; a hit limit says so with the time it resets, and clears when a turn goes through", async ({ page, agent }) => {
-  await openCanvas(page, agent);
-  await createChat(agent, { title: "Limits" });
-  const panel = await openRail(page);
-  const time = await page.evaluate(() => new Date("2026-10-01T15:00:00.000Z").toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" }));
-  const line = panel.getByTestId("limit-line");
+test.describe(() => {
+  test.use({ locale: "en-GB" });
 
-  await say(panel, "near the usage limit");
-  await expect(panel.locator("[data-role='assistant']").last()).toContainText("Done, but you are close to your usage limit.");
-  await expect(line).toHaveCount(0);
+  test("being close to a usage limit shows nothing; a hit limit says so with the time it resets, with am or pm in a 24-hour locale, and clears when a turn goes through", async ({ page, agent }) => {
+    await openCanvas(page, agent);
+    await createChat(agent, { title: "Limits" });
+    const panel = await openRail(page);
+    const [hours, minutes] = await page.evaluate(() => {
+      const reset = new Date("2026-10-01T15:00:00.000Z");
+      return [reset.getHours(), reset.getMinutes()] as const;
+    });
+    const time = clockTime(new Date(2026, 9, 1, hours, minutes));
+    expect(time).toMatch(/^\d{1,2}:\d{2} (am|pm)$/);
+    const line = panel.getByTestId("limit-line");
 
-  await say(panel, "one more");
-  await expect(line).toHaveText(`You have hit a usage limit. It resets at ${time}.`);
+    await say(panel, "near the usage limit");
+    await expect(panel.locator("[data-role='assistant']").last()).toContainText("Done, but you are close to your usage limit.");
+    await expect(line).toHaveCount(0);
 
-  await say(panel, "and again");
-  await expect(panel.locator("[data-role='assistant']").last()).toContainText("Back under the limit.");
-  await expect(line).toHaveCount(0);
+    await say(panel, "one more");
+    await expect(line).toHaveText(`You have hit a usage limit. It resets at ${time}.`);
+
+    await say(panel, "and again");
+    await expect(panel.locator("[data-role='assistant']").last()).toContainText("Back under the limit.");
+    await expect(line).toHaveCount(0);
+  });
 });

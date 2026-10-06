@@ -1,4 +1,4 @@
-import { activityLabel, agentShapeId, buildTimeline, type TimelineBlock, formatWorkDuration, revertSkipLine, type Chat, type ChatMessage, type ChatTurn } from "@unframed/domain";
+import { activityLabel, agentShapeId, clockTime, buildTimeline, type TimelineBlock, formatWorkDuration, revertSkipLine, type Chat, type ChatMessage, type ChatTurn } from "@unframed/domain";
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { Brain, ChevronDown, ChevronRight, Clock, Undo2, X } from "lucide-react";
 import { useMaybeEditor } from "tldraw";
@@ -337,7 +337,7 @@ const RetryLine = ({ payload }: { readonly payload: unknown }) => (
 
 const resetTime = (resetsAt: unknown): string | undefined => {
   if (typeof resetsAt !== "string" || Number.isNaN(Date.parse(resetsAt))) return undefined;
-  return new Date(resetsAt).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
+  return clockTime(new Date(resetsAt));
 };
 
 /**
