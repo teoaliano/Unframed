@@ -17,9 +17,14 @@ export interface ClaudeMapState {
   readonly sessionId: string | undefined;
   /** The last assistant message's uuid: where a resume picks up. */
   readonly lastAssistantUuid: string | undefined;
+  /**
+   * The tokens the latest top-level API call of this turn read and wrote: how full the context is.
+   * The result's usage cannot say this, because it sums every call of the turn.
+   */
+  readonly lastCallTokens: number | undefined;
 }
 
-export const initialClaudeState = (): ClaudeMapState => ({ streamingMessageId: undefined, streamedBlocks: [], tools: {}, sessionId: undefined, lastAssistantUuid: undefined });
+export const initialClaudeState = (): ClaudeMapState => ({ streamingMessageId: undefined, streamedBlocks: [], tools: {}, sessionId: undefined, lastAssistantUuid: undefined, lastCallTokens: undefined });
 
 export interface ClaudeMapContext {
   /** The chat's turn these messages belong to. */
@@ -39,9 +44,9 @@ const obj = (value: unknown): Record<string, any> => (typeof value === "object" 
 
 const num = (value: unknown): number | undefined => (typeof value === "number" && Number.isFinite(value) ? value : undefined);
 
-/** The result's usage as the sidecar and the context meter read it. */
-export const claudeUsage = (result: Record<string, any>): Record<string, number> => {
-  const usage = obj(result.usage);
+/** A message's usage (the result's, summed over the turn, or one API call's) as the sidecar and the context meter read it. */
+export const claudeUsage = (message: Record<string, any>): Record<string, number> => {
+  const usage = obj(message.usage);
   const out: Record<string, number> = {};
   const input = num(usage.input_tokens);
   const output = num(usage.output_tokens);
@@ -53,6 +58,9 @@ export const claudeUsage = (result: Record<string, any>): Record<string, number>
   if (created !== undefined) out.cacheCreationInputTokens = created;
   return out;
 };
+
+const usageTotal = (usage: Record<string, number>): number =>
+  (usage.inputTokens ?? 0) + (usage.cachedInputTokens ?? 0) + (usage.cacheCreationInputTokens ?? 0) + (usage.outputTokens ?? 0);
 
 /** The context window the result's model usage reports, the largest when there are several. */
 const contextWindow = (result: Record<string, any>): number | undefined => {
@@ -173,6 +181,7 @@ export const mapClaudeMessage = (state: ClaudeMapState, message: unknown, contex
       const body = obj(m.message);
       const agentId = typeof m.parent_tool_use_id === "string" ? m.parent_tool_use_id : undefined;
       if (typeof m.uuid === "string" && agentId === undefined) next = { ...next, lastAssistantUuid: m.uuid };
+      if (agentId === undefined && Object.keys(obj(body.usage)).length > 0) next = { ...next, lastCallTokens: usageTotal(claudeUsage(body)) };
       const content: unknown[] = Array.isArray(body.content) ? body.content : [];
       for (const [index, raw] of content.entries()) {
         const block = obj(raw);
@@ -244,11 +253,11 @@ export const mapClaudeMessage = (state: ClaudeMapState, message: unknown, contex
       const failed = m.subtype !== "success" || overloaded || m.is_error === true;
       const usage = claudeUsage(m);
       const window = contextWindow(m);
-      const used = (usage.inputTokens ?? 0) + (usage.cachedInputTokens ?? 0) + (usage.cacheCreationInputTokens ?? 0) + (usage.outputTokens ?? 0);
+      const processed = usageTotal(usage);
       events.push({
         type: "thread.token-usage.updated",
         ...turn,
-        payload: { usage: { usedTokens: used, ...(window === undefined ? {} : { maxTokens: window }), ...usage } },
+        payload: { usage: { usedTokens: next.lastCallTokens ?? processed, ...(window === undefined ? {} : { maxTokens: window }), totalProcessedTokens: processed, ...usage } },
       });
       const errors: string[] = Array.isArray(m.errors) ? m.errors.filter((error: unknown): error is string => typeof error === "string") : [];
       events.push({
@@ -263,7 +272,7 @@ export const mapClaudeMessage = (state: ClaudeMapState, message: unknown, contex
           ...(overloaded ? { errorMessage: "Claude's API is overloaded (529). Try again shortly." } : failed && errors[0] ? { errorMessage: errors[0] } : failed && typeof m.result === "string" && m.result !== "" ? { errorMessage: m.result } : {}),
         },
       });
-      next = { ...next, streamedBlocks: [], streamingMessageId: undefined };
+      next = { ...next, streamedBlocks: [], streamingMessageId: undefined, lastCallTokens: undefined };
       break;
     }
 
