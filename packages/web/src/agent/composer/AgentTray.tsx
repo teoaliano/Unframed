@@ -18,7 +18,7 @@ import type { AgentTrayProps as SlotProps } from "../../chrome/slots.ts";
 import { useEngine } from "../../context.ts";
 import { effectiveModel, noProviderReady, providerName, readyProviders } from "../providers.ts";
 import { createChat, sendMessage } from "../send.ts";
-import { useChatClient, useChats, useFollowUp, useHandoffVersion, usePlanMode, useProviders, useRailUi, useWatchedThread, type ChatClient } from "../store.ts";
+import { NEW_CHAT, useChatClient, useChats, useDraftVersion, useFollowUp, useHandoffVersion, usePlanMode, useProviders, useRailUi, useWatchedThread, type ChatClient } from "../store.ts";
 import { latestCompletedTool, returnQueued, sendQueued } from "../queue.tsx";
 import { Alert, AlertDescription } from "~/components/ui/alert";
 import { Button } from "~/components/ui/button";
@@ -101,7 +101,24 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
   const ready = readyProviders(statuses);
   const canvas = useMaybeEditor();
   const box = useRef<PromptEditorHandle>(null);
-  const [text, setText] = useState("");
+  // A rail's draft lives on the client, one per chat, so the editor's rail and the canvas
+  // rail show the same text whichever is mounted. The toolbar's tray keeps its own.
+  const draftKey = variant === "rail" ? (chatId ?? NEW_CHAT) : undefined;
+  const [initialDraft] = useState(() => (draftKey === undefined ? "" : client.draft(draftKey)));
+  const [text, setText] = useState(initialDraft);
+  const draftKeyRef = useRef(draftKey);
+  const draftVersion = useDraftVersion(client, draftKey ?? "");
+  const onDraftChange = (value: string) => {
+    setText(value);
+    if (draftKeyRef.current !== undefined) client.setDraft(draftKeyRef.current, value);
+  };
+  // Declared before the handoff effect: on a chat switch the chat's draft lands first, then any handoff joins it.
+  useEffect(() => {
+    draftKeyRef.current = draftKey;
+    if (draftKey === undefined) return;
+    const stored = client.draft(draftKey);
+    if ((box.current?.text() ?? "") !== stored) box.current?.setText(stored, { focus: false });
+  }, [client, draftKey, draftVersion]);
   const chips = useSelectionChips(canvas, text.trim() === "");
   const [trigger, setTrigger] = useState<Trigger>();
   const [sending, setSending] = useState(false);
@@ -450,6 +467,7 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
   const send = async (invert = false) => {
     if (answering) return questions.answer();
     const message = box.current?.text() ?? "";
+    const sentFrom = draftKeyRef.current;
     if (planFollowUp && message.trim() === "") return implementPlan(false);
     if (noProvider || (message.trim() === "" && attachments.staged.length === 0) || sending) return;
     setSending(true);
@@ -463,6 +481,8 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
       const context = contextSelection(canvas, chips.shapes);
       const uploaded = await attachments.settle();
       box.current?.clear();
+      // A new chat's send switches this tray to the chat it made, so the draft it came from is cleared by key.
+      if (sentFrom !== undefined) client.setDraft(sentFrom, "");
       attachments.clear();
       chips.set(canvas?.getSelectedShapeIds() ?? []);
       const outgoing = { text: message, selection: context, attachments: uploaded };
@@ -536,7 +556,8 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
         <PromptEditor
           placeholder={placeholder}
           label={PROMPT_LABEL}
-          onChange={setText}
+          onChange={onDraftChange}
+          initialText={initialDraft}
           onTrigger={setTrigger}
           onKey={onKey}
           onSubmit={(event) => void send(platform() === "darwin" ? event.metaKey : event.ctrlKey)}

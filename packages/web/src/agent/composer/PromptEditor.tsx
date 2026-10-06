@@ -100,7 +100,8 @@ export interface PromptEditorHandle {
   readonly element: () => HTMLElement | null;
   focus(): void;
   text(): string;
-  setText(text: string): void;
+  /** Replaces the draft; it takes the focus unless `focus` is false (a draft shown, not one the person asked for). */
+  setText(text: string, options?: { readonly focus?: boolean }): void;
   clear(): void;
   /** Replaces a trigger's text with a chip, or with plain text. */
   replaceTrigger(trigger: Trigger, insert: DraftChip | string): void;
@@ -125,6 +126,8 @@ export interface PromptEditorProps {
   readonly handle: Ref<PromptEditorHandle>;
   readonly disabled?: boolean;
   readonly autofocus?: boolean;
+  /** The draft the box opens with. */
+  readonly initialText?: string;
 }
 
 /**
@@ -132,7 +135,7 @@ export interface PromptEditorProps {
  * formatting off, so typed markdown stays literal, and one paragraph per line. Enter
  * sends; Shift+Enter and Option+Enter break the line.
  */
-export const PromptEditor = ({ placeholder, label, onChange, onTrigger, onKey, onSubmit, onPaste, handle, disabled, autofocus }: PromptEditorProps) => {
+export const PromptEditor = ({ placeholder, label, onChange, onTrigger, onKey, onSubmit, onPaste, handle, disabled, autofocus, initialText }: PromptEditorProps) => {
   const latest = useRef({ onChange, onTrigger, onKey, onSubmit, onPaste });
   latest.current = { onChange, onTrigger, onKey, onSubmit, onPaste };
   const placeholderRef = useRef(placeholder);
@@ -161,7 +164,7 @@ export const PromptEditor = ({ placeholder, label, onChange, onTrigger, onKey, o
       Placeholder.configure({ placeholder: () => placeholderRef.current, showOnlyWhenEditable: false }),
       ChipNode,
     ],
-    content: { type: "doc", content: [{ type: "paragraph" }] },
+    content: initialText ? draftDoc(initialText) : { type: "doc", content: [{ type: "paragraph" }] },
     autofocus: autofocus === true ? "end" : false,
     editorProps: {
       attributes: {
@@ -204,10 +207,12 @@ export const PromptEditor = ({ placeholder, label, onChange, onTrigger, onKey, o
     () => ({
       element: () => (editor?.view.dom as HTMLElement | undefined) ?? null,
       focus: () => editor?.commands.focus("end"),
-      text: () => (editor ? draftText(editor.getJSON()) : ""),
-      setText: (text) => {
-        if (!editor) return;
+      text: () => (editor && !editor.isDestroyed ? draftText(editor.getJSON()) : ""),
+      // The first editor can be destroyed and replaced while the box mounts: a call then does nothing.
+      setText: (text, options) => {
+        if (!editor || editor.isDestroyed) return;
         editor.commands.setContent(draftDoc(text), { emitUpdate: true });
+        if (options?.focus === false) return;
         // Focused already, the caret goes to the end at once: Tiptap's focus lands a frame
         // later and would put it back after an arrow key the person pressed meanwhile.
         if (editor.view.hasFocus()) editor.view.dispatch(editor.state.tr.setSelection(Selection.atEnd(editor.state.doc)));
