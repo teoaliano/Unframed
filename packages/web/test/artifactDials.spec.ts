@@ -1,12 +1,12 @@
 import type { FrameLocator, Page } from "@playwright/test";
-import { BRIDGE_TAG } from "@unframed/domain";
+import { addParameterInstruction, BRIDGE_TAG } from "@unframed/domain";
 import { connectTab } from "../../engine/test/syncClient.ts";
 import { centre, openCanvas, roomRecords, settledRecord, shapeOnScreen } from "./canvas.ts";
-import { expect, test } from "./agent.ts";
+import { engineChats, expect, test, userTexts } from "./agent.ts";
 import { clickShape } from "./generation.ts";
 import { putRecords } from "./media.ts";
 import { dialsPage, filledArtifact, insideComposition, insideFrame, writeBridge, writeProjectFile } from "./artifacts.ts";
-import { inBothSchemes, styleOf, tokenColor } from "./kit.ts";
+import { expectToken, inBothSchemes, styleOf } from "./kit.ts";
 
 const editor = (page: Page) => page.getByTestId("artifact-editor");
 const editorFrame = (page: Page): FrameLocator => editor(page).frameLocator("iframe[data-artifact-frame]");
@@ -163,34 +163,37 @@ test("a new version that drops or retypes a parameter keeps the rest and rebuild
   await expect.poll(() => shown(editorFrame(page))).toEqual({ accent: "#ff0000", size: "big", glow: true });
 });
 
-test("the dials panel stays dark in both schemes, in the kit's dark tokens", async ({ page, agent }) => {
+test("DialKit follows the app's scheme in the kit's tokens, as one card with its column and with the canvas panel", async ({ page, agent }) => {
   await openCanvas(page, agent);
   await writeBridge(agent);
   await filledArtifact(agent, { id: "shape:tuned", kind: "page", ref: "150", at: { x: -520, y: -40 }, size: { w: 300, h: 200 }, title: "Tuned", html: dialsPage({ size: [12, 8, 40] }) });
   await expect(shapeOnScreen(page, "shape:tuned")).toBeVisible();
-  await openEditor(page, "shape:tuned", "Tuned");
-  const dials = editor(page).getByTestId("artifact-dials");
+
   // DialKit's own class names, as tldraw's are in the tldraw tests: they are the library's, not ours.
-  const panel = dials.locator(".dialkit-panel-inner");
-  const title = dials.locator(".dialkit-folder-title-root");
-  const label = dials.locator(".dialkit-slider-label");
-  const track = dials.locator(".dialkit-slider");
-  await expect(title).toHaveText("Look");
+  const themed = async (dials: ReturnType<Page["locator"]>, card: ReturnType<Page["locator"]>) => {
+    const panel = dials.locator(".dialkit-panel-inner");
+    await expect(dials.locator(".dialkit-folder-title-root")).toHaveText("Look");
+    await inBothSchemes(page, async (scheme) => {
+      await expect(dials.locator(".dialkit-root")).toHaveAttribute("data-theme", scheme);
+      // The same fill as the card around it: one surface, not a dark block on a light card.
+      await expectToken(panel, "background-color", "--card");
+      await expectToken(card, "background-color", "--card");
+      await expectToken(dials.locator(".dialkit-slider"), "background-color", "--accent");
+      await expectToken(dials.locator(".dialkit-folder-title-root"), "color", "--foreground");
+      await expectToken(dials.locator(".dialkit-slider-label"), "color", "--muted-foreground");
+      expect(await styleOf(panel, "font-family")).toBe(await styleOf(page.locator("body"), "font-family"));
+    });
+  };
 
-  await page.emulateMedia({ colorScheme: "dark" });
-  await expect(page.locator("html")).toHaveAttribute("data-unframed-theme", "dark");
-  const dark = { card: await tokenColor(page, "--card"), foreground: await tokenColor(page, "--foreground"), muted: await tokenColor(page, "--muted-foreground"), accent: await tokenColor(page, "--accent") };
-  await page.emulateMedia({ colorScheme: "light" });
-  await expect(page.locator("html")).toHaveAttribute("data-unframed-theme", "light");
-  expect(await tokenColor(page, "--card")).not.toBe(dark.card);
+  await clickShape(page, "shape:tuned");
+  await parametersToggle(page).click();
+  const canvas = canvasPanel(page, "Tuned");
+  await themed(canvas.getByTestId("artifact-dials"), canvas);
+  await page.keyboard.press("Escape");
 
-  await inBothSchemes(page, async () => {
-    await expect.poll(() => styleOf(panel, "background-color")).toBe(dark.card);
-    expect(await styleOf(track, "background-color")).toBe(dark.accent);
-    await expect.poll(() => styleOf(title, "color")).toBe(dark.foreground);
-    await expect.poll(() => styleOf(label, "color")).toBe(dark.muted);
-    expect(await styleOf(panel, "font-family")).toBe(await styleOf(page.locator("body"), "font-family"));
-  });
+  await page.mouse.click(640, 600);
+  await openEditor(page, "shape:tuned", "Tuned");
+  await themed(editor(page).getByTestId("artifact-dials"), editor(page).locator('[data-editor-column="parameters"]'));
 });
 
 /** Whether DialKit's own stylesheet is on the page (the app's theme only sets its variables): it comes with the first panel. */
@@ -225,6 +228,8 @@ test("Parameters on a selected page opens its dials beside it on the canvas: the
   await expect(parametersToggle(page)).toHaveAttribute("aria-pressed", "true");
   await expect(editor(page)).toHaveCount(0);
   expect(await dialKitLoaded(page)).toBe(true);
+  // Its header says Parameters once: DialKit names the declaration, and the page is beside it.
+  await expect(panel.locator("header")).toHaveText("Parameters");
   // Beside the page, not over it.
   const shapeBox = (await shapeOnScreen(page, "shape:tuned").boundingBox())!;
   const panelBox = (await panel.boundingBox())!;
@@ -314,4 +319,30 @@ test("the canvas panel saves a change made just before it closes, shows one arti
   const panelBox = (await intro.boundingBox())!;
   await page.mouse.click(panelBox.x + panelBox.width + 120, panelBox.y + 40);
   await expect(intro).toHaveCount(0);
+});
+
+test("a page with no parameters opens a panel that asks the agent for one, in the page's own chat", async ({ page, agent }) => {
+  await openCanvas(page, agent);
+  await filledArtifact(agent, { id: "shape:plain", kind: "page", ref: "150", at: { x: -520, y: -40 }, size: { w: 300, h: 200 }, title: "Plain", html: "<h1>No parameters here</h1>" });
+  await expect(shapeOnScreen(page, "shape:plain")).toBeVisible();
+  await clickShape(page, "shape:plain");
+  await expect(insideFrame(page, "shape:plain").getByRole("heading", { name: "No parameters here" })).toBeVisible();
+  await parametersToggle(page).click();
+  const panel = canvasPanel(page, "Plain");
+  await expect(panel.getByText("No parameters yet.")).toBeVisible();
+  const box = panel.getByRole("textbox", { name: "Add a parameter" });
+  await expect(box).toHaveAttribute("placeholder", "Describe a parameter… (e.g. the accent colour and the intro speed)");
+  await expect(panel.getByText("The agent writes it")).toBeVisible();
+  await expect(panel.getByRole("button", { name: "Add", exact: true })).toBeDisabled();
+  // Typing stays in the box: Backspace deletes a letter, not the page.
+  await box.fill("the background colourx");
+  await page.keyboard.press("Backspace");
+  await expect(box).toHaveValue("the background colour");
+  await panel.getByRole("button", { name: "Add", exact: true }).click();
+  // The instruction goes to a new chat tagged with the page, and the rail opens on it.
+  await expect(box).toHaveValue("", { timeout: 10_000 });
+  const [chat] = await engineChats(agent);
+  expect(chat?.tags).toEqual(["shape:plain"]);
+  expect(await userTexts(agent, chat!.id)).toEqual([addParameterInstruction({ wanted: "the background colour", kind: "page", title: "Plain" })]);
+  await expect(page.getByRole("complementary", { name: "Agent" })).toBeVisible();
 });

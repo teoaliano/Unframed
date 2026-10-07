@@ -13,7 +13,7 @@ import { showError } from "../toasts.tsx";
 import { loadCatalogue, useKnownCatalogue, usePricing } from "./catalogue.ts";
 import { Composer } from "./composer/Composer.tsx";
 import { assetOf, canvasShapes, resultShapes, toolbarShape } from "./facts.ts";
-import { placeFloating, type ScreenBox } from "./floating.ts";
+import { canvasRoom, placeFloating, type ScreenBox } from "./floating.ts";
 import { mediumDefinition, type RunSource } from "./mediumRegistry.ts";
 import { openOnRecipe, recipeProps, recipeRunProgress, runGroupRecipe } from "./recipeRuns.ts";
 import { repeatResult, varyBlocked, varyCapMessage } from "./results.ts";
@@ -88,16 +88,7 @@ const Floating = ({ target, hidden, expanded, framed, children }: { target: Scre
     return () => observer.disconnect();
   }, []);
 
-  const canvas = useValue(
-    "canvas size",
-    () => {
-      const bounds = editor.getViewportScreenBounds();
-      // The bottom bar sits above the bar and composer in tldraw's layer: they stay clear of it.
-      const bar = editor.getContainer().querySelector<HTMLElement>("[data-unframed-toolbar]")?.getBoundingClientRect();
-      return { w: bounds.w, h: bar ? Math.min(bounds.h, bar.top - bounds.y) : bounds.h };
-    },
-    [editor],
-  );
+  const canvas = useValue("canvas room", () => canvasRoom(editor), [editor]);
   const place = size && target ? placeFloating(target, size, canvas) : undefined;
 
   return (

@@ -53,7 +53,13 @@ export const DialControls = ({ shapeId, announcement, saved, post }: DialControl
     const normalised = normaliseDials(announcement.config);
     if (!target || !normalised.ok) return;
     const name = announcement.name === "" ? "Parameters" : announcement.name;
-    const root = createDialRoot({ target, mode: "inline", theme: "dark", productionEnabled: true, defaultOpen: true });
+    // DialKit follows the app's scheme; its colours come from the tokens (theme/vendors.css).
+    const scheme = () => (document.documentElement.getAttribute("data-unframed-theme") === "dark" ? "dark" : "light");
+    const root = createDialRoot({ target, mode: "inline", theme: scheme(), productionEnabled: true, defaultOpen: true });
+    const follow = new MutationObserver(() => {
+      root.element.dataset.theme = scheme();
+    });
+    follow.observe(document.documentElement, { attributes: true, attributeFilter: ["data-unframed-theme"] });
     const kit = createDialKit(name, normalised.dialkit as Parameters<typeof createDialKit>[1], { id: `unframed-${name}` });
     const merged = mergeDialValues(normalised.schema, savedNow.current ?? null);
     for (const [key, value] of Object.entries(merged)) {
@@ -70,6 +76,7 @@ export const DialControls = ({ shapeId, announcement, saved, post }: DialControl
       timer.current = setTimeout(() => writeNow.current(), WRITE_DELAY_MS);
     }, false);
     return () => {
+      follow.disconnect();
       stop();
       writeNow.current();
       kit.destroy();

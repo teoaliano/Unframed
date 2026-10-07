@@ -85,9 +85,13 @@ test("the bar sits centred above the selection, flips below it at the top edge a
   const moved = (await subject.boundingBox())!;
   await expect.poll(async () => (await bar.boundingBox())!.y).toBeCloseTo(moved.y + moved.height + 12, 0);
 
-  // Scroll it past the left edge: the bar stays 8 px inside.
+  // Scroll it past the left edge: the bar stays inside, and beside the top-left card, never under it.
   for (let step = 0; step < 60 && ((await subject.boundingBox())!.x > -100); step++) await page.mouse.wheel(40, 0);
   const canvas = (await page.locator(".tl-container").boundingBox())!;
+  const card = (await page.locator(".unframed-chrome-left").boundingBox())!;
+  await expect.poll(async () => (await bar.boundingBox())!.x).toBeCloseTo(card.x + card.width + 8, 0);
+  // Lower down, clear of the card's band, it keeps 8 px from the canvas's edge.
+  for (let step = 0; step < 20 && ((await subject.boundingBox())!.y < 200); step++) await page.mouse.wheel(0, -40);
   await expect.poll(async () => (await bar.boundingBox())!.x).toBeCloseTo(canvas.x + 8, 0);
 });
 

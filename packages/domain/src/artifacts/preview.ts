@@ -106,9 +106,12 @@ export const editorPreviewViewport = (size: EditorPreviewSize): { readonly width
   return "viewport" in asked ? { width: asked.viewport.width, height: asked.viewport.height } : undefined;
 };
 
-/** A typed custom side: whole CSS pixels from 1 to 4096; an empty or unreadable entry keeps the previous side. */
+/** The smallest custom side: below it a preview shows nothing a person can judge. */
+export const MIN_CUSTOM_SIDE = 100;
+
+/** A typed custom side: whole CSS pixels from 100 to 4096; an empty or unreadable entry keeps the previous side. */
 export const customPreviewSide = (typed: number | null, previous: number): number =>
-  typed === null || !Number.isFinite(typed) ? previous : Math.min(MAX_SIDE, Math.max(1, Math.round(typed)));
+  typed === null || !Number.isFinite(typed) ? previous : Math.min(MAX_SIDE, Math.max(MIN_CUSTOM_SIDE, Math.round(typed)));
 
 /** How far the preview shrinks to fit the column on both sides. It never grows past its size. */
 export const previewScale = (viewport: { readonly width: number; readonly height: number }, area: { readonly w: number; readonly h: number }): number =>

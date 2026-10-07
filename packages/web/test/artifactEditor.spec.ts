@@ -190,17 +190,18 @@ test("the editor sizes its preview to Fill, Desktop, Tablet, Mobile or a typed s
     await page.mouse.dblclick(at.x, at.y);
     await expect(page.getByRole("region", { name: `Editing ${title}` })).toBeVisible();
   };
+  const trigger = () => editor(page).getByRole("button", { name: "Preview size" });
+  const popup = () => page.getByRole("dialog", { name: "Preview size" });
   const choose = async (label: string) => {
-    await editor(page).getByRole("combobox", { name: "Preview size" }).click();
-    await page.getByRole("option", { name: label }).click();
+    await trigger().click();
+    await popup().getByRole("radio", { name: label }).click();
   };
 
   await open("shape:landing", "Landing");
   const region = page.getByRole("region", { name: "Editing Landing" });
   const inside = region.frameLocator("iframe[data-artifact-frame]");
   const frame = region.locator("iframe[data-artifact-frame]");
-  const size = region.getByRole("combobox", { name: "Preview size" });
-  await expect(size).toHaveText("Fill");
+  await expect(trigger()).toContainText("Fill");
   await expect(inside.locator("#vp")).toHaveText(/^\d+x\d+$/);
   const boot = await inside.locator("#boot").textContent();
   const body = (await column(page, "centre").boundingBox())!;
@@ -211,7 +212,9 @@ test("the editor sizes its preview to Fill, Desktop, Tablet, Mobile or a typed s
     ["Mobile 390", [390, 844]],
   ] as const) {
     await choose(label);
-    await expect(size).toHaveText(label);
+    // A named size closes the popover; reopened, the choice carries the check.
+    await expect(popup()).toHaveCount(0);
+    await expect(trigger()).toContainText(label);
     await expect(inside.locator("#vp")).toHaveText(`${viewport[0]}x${viewport[1]}`);
     // Shrunk to fit inside the column, its shape kept.
     const box = (await frame.boundingBox())!;
@@ -223,30 +226,56 @@ test("the editor sizes its preview to Fill, Desktop, Tablet, Mobile or a typed s
     const scale = Number((await region.getByTestId("artifact-preview-scale").textContent())!.replace("%", ""));
     expect(Math.abs(scale - (box.width / viewport[0]) * 100)).toBeLessThanOrEqual(1);
   }
+  await trigger().click();
+  await expect(popup().getByRole("radio", { name: "Mobile 390" })).toHaveAttribute("aria-checked", "true");
+  await expect(popup().getByRole("radio", { name: "Mobile 390" }).locator("svg")).toHaveCount(1);
+  await expect(popup().getByRole("radio", { name: "Fill" }).locator("svg")).toHaveCount(0);
 
-  // A typed size that fits shows at its own size, unscaled.
-  await choose("Custom");
-  await region.getByLabel("Preview width").fill("400");
-  await region.getByLabel("Preview width").press("Enter");
-  await region.getByLabel("Preview height").fill("300");
-  await region.getByLabel("Preview height").press("Enter");
+  // A typed size, in the popover: Custom keeps it open; a size that fits shows unscaled.
+  await popup().getByRole("radio", { name: "Custom" }).click();
+  await expect(popup()).toBeVisible();
+  await expect(popup().getByLabel("Preview width")).toBeFocused();
+  await popup().getByLabel("Preview width").fill("400");
+  await popup().getByLabel("Preview width").press("Enter");
+  await popup().getByLabel("Preview height").fill("300");
+  await popup().getByLabel("Preview height").press("Enter");
   await expect(inside.locator("#vp")).toHaveText("400x300");
+  await expect(trigger()).toContainText("400 × 300");
   await expect.poll(async () => {
     const box = (await frame.boundingBox())!;
     return [Math.round(box.width), Math.round(box.height)];
   }).toEqual([400, 300]);
   await expect(region.getByTestId("artifact-preview-scale")).toHaveCount(0);
+
+  // An emptied side shows the size in use again; a side under 100 px is held at 100.
+  await popup().getByLabel("Preview width").fill("");
+  await popup().getByLabel("Preview width").press("Enter");
+  await expect(popup().getByLabel("Preview width")).toHaveValue("400");
+  await expect(inside.locator("#vp")).toHaveText("400x300");
+  await popup().getByLabel("Preview height").fill("5");
+  await popup().getByLabel("Preview height").press("Enter");
+  await expect(popup().getByLabel("Preview height")).toHaveValue("100");
+  await expect(inside.locator("#vp")).toHaveText("400x100");
+  await popup().getByLabel("Preview height").fill("300");
+  await popup().getByLabel("Preview height").press("Enter");
+  await expect(inside.locator("#vp")).toHaveText("400x300");
   // Every change resized the same document; none reloaded it.
   await expect(inside.locator("#boot")).toHaveText(boot!);
 
-  // Remembered for this artifact; another one opens on Fill; nothing is written to the shape.
+  // Esc closes the popover and leaves the editor open; the next one closes the editor.
   await page.keyboard.press("Escape");
+  await expect(popup()).toHaveCount(0);
+  await expect(region).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(region).toHaveCount(0);
+
+  // Remembered for this artifact; another one opens on Fill; nothing is written to the shape.
   await open("shape:landing", "Landing");
-  await expect(size).toHaveText("Custom");
+  await expect(trigger()).toContainText("400 × 300");
   await expect(inside.locator("#vp")).toHaveText("400x300");
   await page.keyboard.press("Escape");
   await open("shape:other", "Other");
-  await expect(page.getByRole("region", { name: "Editing Other" }).getByRole("combobox", { name: "Preview size" })).toHaveText("Fill");
+  await expect(trigger()).toContainText("Fill");
   await page.keyboard.press("Escape");
   const record = (await roomRecords(agent, "default")).find((item) => item.id === "shape:landing")!;
   expect(Object.keys(record.props).sort()).toEqual(["fileName", "file", "h", "title", "w"].sort());
@@ -256,11 +285,49 @@ test("the editor sizes its preview to Fill, Desktop, Tablet, Mobile or a typed s
   await expect(page.locator("[data-canvas-project] .tl-canvas")).toBeVisible({ timeout: 20_000 });
   await expect(shapeOnScreen(page, "shape:landing")).toBeVisible();
   await open("shape:landing", "Landing");
-  await expect(size).toHaveText("Fill");
+  await expect(trigger()).toContainText("Fill");
 
   // Back to Fill from a size: the frame takes the column again.
   await choose("Mobile 390");
   await expect(inside.locator("#vp")).toHaveText("390x844");
   await choose("Fill");
   await expect.poll(async () => (await frame.boundingBox())!.width).toBeGreaterThan((await column(page, "centre").boundingBox())!.width - 4);
+});
+
+const MOTION = `<!doctype html><html><head><style>#root{position:relative;width:640px;height:360px;background:#000}</style></head><body>
+<div id="root" data-composition-id="main" data-start="0" data-duration="2" data-width="640" data-height="360"></div>
+<script src="gsap.js"></script><script>window.__timelines = { main: gsap.timeline({ paused: true }) };</script></body></html>`;
+
+test("in a narrow window the editor's header never overflows: the title stays, and every action stays whole", async ({ page, agent }) => {
+  await page.setViewportSize({ width: 1024, height: 700 });
+  await openCanvas(page, agent);
+  await filledArtifact(agent, { id: "shape:intro", kind: "motion", ref: "150", at: { x: -520, y: -40 }, size: { w: 320, h: 180 }, title: "A motion with a long title", html: MOTION });
+  await expect(shapeOnScreen(page, "shape:intro")).toBeVisible();
+  // The narrow window shows only part of the motion: double-click the middle of what shows.
+  const shown = (await shapeOnScreen(page, "shape:intro").boundingBox())!;
+  const left = Math.max(shown.x, 0);
+  await page.mouse.dblclick((left + Math.min(shown.x + shown.width, 1024)) / 2, shown.y + shown.height / 2);
+  const region = page.getByRole("region", { name: "Editing A motion with a long title" });
+  await expect(region).toBeVisible();
+  const header = region.locator("header").first();
+
+  const whole = async () => {
+    expect(await header.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true);
+    const bounds = (await header.boundingBox())!;
+    const title = (await region.getByTestId("artifact-editor-title").boundingBox())!;
+    expect(title.width).toBeGreaterThanOrEqual(40);
+    for (const name of ["Back to canvas", "Preview size", "Render", "Open in a new tab"]) {
+      const box = (await region.getByRole("button", { name, exact: true }).boundingBox())!;
+      expect(box.x).toBeGreaterThanOrEqual(bounds.x);
+      expect(box.x + box.width).toBeLessThanOrEqual(bounds.x + bounds.width);
+    }
+  };
+  await whole();
+  await region.getByRole("button", { name: "Preview size" }).click();
+  await page.getByRole("dialog", { name: "Preview size" }).getByRole("radio", { name: "Custom" }).click();
+  await page.getByRole("dialog", { name: "Preview size" }).getByLabel("Preview width").fill("1800");
+  await page.getByRole("dialog", { name: "Preview size" }).getByLabel("Preview width").press("Enter");
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("dialog", { name: "Preview size" })).toHaveCount(0);
+  await whole();
 });

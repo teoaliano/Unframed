@@ -120,20 +120,22 @@ export const ArtifactEditor = ({ shapeId, onClose, onOpen }: ArtifactEditorProps
         <AgentRail project={project} embedded filterTo={[shapeId]} onOpenEditor={onOpen} />
       </section>
       <section data-editor-column="centre" className={COLUMN} aria-label={`Editing ${title}`}>
-        <ColumnHeader>
+        {/* A container, so a narrow column folds its labels into icons rather than overflow. */}
+        <ColumnHeader className="@container/editor-header">
           <Tip label="Back to canvas (Esc)">
-            <Button variant="ghost" size="icon" aria-label="Back to canvas" onClick={onClose}>
+            <Button variant="ghost" size="icon" className="shrink-0" aria-label="Back to canvas" onClick={onClose}>
               <ArrowLeft aria-hidden />
             </Button>
           </Tip>
           <Icon aria-hidden className="size-4 shrink-0 text-muted-foreground" />
-          <span data-testid="artifact-editor-title" className="truncate text-sm font-semibold">
-            {title}
+          <span className="flex min-w-12 flex-1 items-baseline gap-2">
+            <span data-testid="artifact-editor-title" className="truncate text-sm font-semibold">
+              {title}
+            </span>
+            <span data-testid="artifact-editor-kind" className="shrink-0 text-sm text-muted-foreground @max-[520px]/editor-header:hidden">
+              {facts.kind}
+            </span>
           </span>
-          <span data-testid="artifact-editor-kind" className="text-sm text-muted-foreground">
-            {facts.kind}
-          </span>
-          <span className="flex-1" />
           {facts.file !== "" && <PreviewSizeControl size={size} onChange={setSize} scale={scale} />}
           {facts.kind === "motion" && facts.file !== "" && <RenderButton shapeId={shapeId} />}
           {facts.file !== "" && port !== undefined && (
@@ -141,6 +143,7 @@ export const ArtifactEditor = ({ shapeId, onClose, onOpen }: ArtifactEditorProps
               <Button
                 variant="ghost"
                 size="icon"
+                className="shrink-0"
                 aria-label="Open in a new tab"
                 onClick={() => window.open(urlOf(project, facts.kind, facts.file, port), "_blank", "noopener,noreferrer")}
               >

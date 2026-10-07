@@ -3,15 +3,16 @@
  * frame on the canvas. Loaded the first time a panel opens, with DialKit.
  */
 import type { ArtifactShapeProps } from "@unframed/contracts";
-import { artifactTitle, isArtifactKind } from "@unframed/domain";
+import { artifactTitle, isArtifactKind, type ArtifactKind } from "@unframed/domain";
 import { SlidersHorizontal, X } from "lucide-react";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { atom, react, useEditor, useValue, type TLShapeId } from "tldraw";
 import { Button } from "~/components/ui/button";
 import { useWheelToCanvas } from "../canvas/wheelToCanvas.ts";
 import { Tip } from "../chrome/ui.tsx";
-import { placeBeside } from "../generate/floating.ts";
+import { canvasRoom, placeBeside } from "../generate/floating.ts";
 import { DialControls } from "./DialControls.tsx";
+import { AddParameter } from "./editor/Parameters.tsx";
 import { artifactsOf } from "./state.ts";
 
 const stop = (event: { stopPropagation(): void }) => event.stopPropagation();
@@ -26,7 +27,7 @@ export const ParametersPanel = ({ shapeId }: { readonly shapeId: TLShapeId }) =>
       const shape = editor.getShape(shapeId);
       if (!shape || !isArtifactKind(shape.type)) return undefined;
       const props = shape.props as ArtifactShapeProps;
-      return { title: artifactTitle(props), dials: props.dials };
+      return { kind: shape.type as ArtifactKind, title: artifactTitle(props), dials: props.dials };
     },
     [editor, shapeId],
   );
@@ -72,10 +73,7 @@ export const ParametersPanel = ({ shapeId }: { readonly shapeId: TLShapeId }) =>
       if (!bounds || measured.w === 0) return;
       const topLeft = editor.pageToViewport({ x: bounds.minX, y: bounds.minY });
       const bottomRight = editor.pageToViewport({ x: bounds.maxX, y: bounds.maxY });
-      const screen = editor.getViewportScreenBounds();
-      // The bottom bar sits above the canvas in tldraw's layer: the panel stays clear of it, as the toolbar does.
-      const bar = editor.getContainer().querySelector<HTMLElement>("[data-unframed-toolbar]")?.getBoundingClientRect();
-      const canvas = { w: screen.w, h: bar ? Math.min(screen.h, bar.top - screen.y) : screen.h };
+      const canvas = canvasRoom(editor);
       const place = placeBeside({ x: topLeft.x, y: topLeft.y, w: bottomRight.x - topLeft.x, h: bottomRight.y - topLeft.y }, measured, canvas);
       element.style.transform = `translate(${Math.round(place.left)}px, ${Math.round(place.top)}px)`;
       element.style.maxHeight = `${Math.max(120, canvas.h - 16)}px`;
@@ -101,8 +99,8 @@ export const ParametersPanel = ({ shapeId }: { readonly shapeId: TLShapeId }) =>
     >
       <header className="flex h-12 flex-none items-center gap-2 border-b px-2.5">
         <SlidersHorizontal aria-hidden className="size-4 shrink-0 text-muted-foreground" />
-        <span className="text-sm font-semibold">Parameters</span>
-        <span className="min-w-0 flex-1 truncate text-sm text-muted-foreground">{title}</span>
+        {/* The artifact is beside the panel and DialKit names its parameters: no title here. */}
+        <span className="min-w-0 flex-1 truncate text-sm font-semibold">Parameters</span>
         <Tip label="Close (Esc)">
           <Button variant="ghost" size="icon-sm" aria-label="Close parameters" onClick={close}>
             <X aria-hidden />
@@ -116,6 +114,8 @@ export const ParametersPanel = ({ shapeId }: { readonly shapeId: TLShapeId }) =>
           <DialControls shapeId={shapeId} announcement={announcement} saved={facts.dials} post={post} />
         )}
       </div>
+      {/* With nothing to tune, the panel asks the agent for parameters rather than end there. */}
+      {announcement === undefined && <AddParameter shapeId={shapeId} kind={facts.kind} title={title} hasParameters={false} openRail />}
     </section>
   );
 };

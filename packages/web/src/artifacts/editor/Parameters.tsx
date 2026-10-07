@@ -8,6 +8,7 @@ import { useState, type ReactNode } from "react";
 import type { TLShapeId } from "tldraw";
 import { Button } from "~/components/ui/button";
 import { Textarea } from "~/components/ui/textarea";
+import { cn } from "~/lib/utils";
 import { readyProviders } from "../../agent/providers.ts";
 import { createChat, sendMessage } from "../../agent/send.ts";
 import { messageOf, useChatClient, useChats, useProviders } from "../../agent/store.ts";
@@ -18,7 +19,9 @@ import { DialControls } from "../DialControls.tsx";
 export const COLUMN = "flex min-h-0 min-w-0 flex-col overflow-hidden rounded-xl border bg-card";
 
 /** A column's one-row header, 48 px tall over a border. */
-export const ColumnHeader = ({ children }: { readonly children: ReactNode }) => <header className="flex h-12 flex-none items-center gap-2 border-b px-2.5">{children}</header>;
+export const ColumnHeader = ({ children, className }: { readonly children: ReactNode; readonly className?: string }) => (
+  <header className={cn("flex h-12 min-w-0 flex-none items-center gap-2 border-b px-2.5", className)}>{children}</header>
+);
 
 export interface ParametersProps {
   readonly shapeId: TLShapeId;
@@ -32,8 +35,17 @@ export interface ParametersProps {
   readonly post: (values: unknown) => void;
 }
 
-/** The box at the foot of the column: describe a parameter, and the agent adds it through the artifact's own chat. */
-const AddParameter = ({ shapeId, kind, title, hasParameters }: Pick<ParametersProps, "shapeId" | "kind" | "title"> & { readonly hasParameters: boolean }) => {
+/**
+ * The box at the foot of the column, and in the canvas panel of an artifact with no parameters: describe a
+ * parameter, and the agent adds it through the artifact's own chat. On the canvas it also opens the rail.
+ */
+export const AddParameter = ({
+  shapeId,
+  kind,
+  title,
+  hasParameters,
+  openRail = false,
+}: Pick<ParametersProps, "shapeId" | "kind" | "title"> & { readonly hasParameters: boolean; readonly openRail?: boolean }) => {
   const client = useChatClient(useEngine(), useCanvasProject());
   const chats = useChats(client);
   const { statuses } = useProviders(client);
@@ -61,7 +73,7 @@ const AddParameter = ({ shapeId, kind, title, hasParameters }: Pick<ParametersPr
           { modelSelection: { provider: ready[0]!, model: "", traits: {} }, runtimeMode: DEFAULT_RUNTIME_MODE, interactionMode: "default", tags: [shapeId] },
           instruction,
         ));
-      client.setUi({ chosen: target, pinned: null });
+      client.setUi(openRail ? { open: true, chosen: target, pinned: null } : { chosen: target, pinned: null });
       await sendMessage(client, target, { text: instruction, selection: [shapeId], attachments: [] });
       setText("");
     } catch (failure) {

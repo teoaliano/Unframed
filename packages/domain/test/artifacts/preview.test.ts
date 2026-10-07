@@ -36,10 +36,12 @@ describe("the editor's preview sizes", () => {
     expect(editorPreviewViewport({ choice: "custom", custom })).toEqual({ width: 600, height: 400 });
   });
 
-  it("keeps a custom side to whole pixels from 1 to 4096, and an empty or unreadable entry keeps the last one", () => {
+  it("keeps a custom side to whole pixels from 100 to 4096, and an empty or unreadable entry keeps the last one", () => {
     expect(customPreviewSide(600.4, 800)).toBe(600);
-    expect(customPreviewSide(0, 800)).toBe(1);
-    expect(customPreviewSide(-20, 800)).toBe(1);
+    expect(customPreviewSide(0, 800)).toBe(100);
+    expect(customPreviewSide(99.4, 800)).toBe(100);
+    expect(customPreviewSide(100, 800)).toBe(100);
+    expect(customPreviewSide(-20, 800)).toBe(100);
     expect(customPreviewSide(5000, 800)).toBe(4096);
     expect(customPreviewSide(null, 800)).toBe(800);
     expect(customPreviewSide(Number.NaN, 800)).toBe(800);
