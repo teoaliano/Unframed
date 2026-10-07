@@ -49,6 +49,17 @@ export interface QueuedMessage {
 }
 
 /** A draft put back into a chat's composer. */
+/** A chat's unsent text, and the shapes its @ mentions put among the context chips. */
+export interface ChatDraft {
+  readonly text: string;
+  readonly mentions: ReadonlyArray<string>;
+}
+
+export const EMPTY_DRAFT: ChatDraft = { text: "", mentions: [] };
+
+export const sameDraft = (a: ChatDraft, b: ChatDraft): boolean =>
+  a.text === b.text && a.mentions.length === b.mentions.length && a.mentions.every((id, index) => b.mentions[index] === id);
+
 export interface Handoff {
   readonly text: string;
   readonly selection: ReadonlyArray<string>;
@@ -84,7 +95,7 @@ export class ChatClient {
   private uiState: RailUi = INITIAL_UI;
   private readonly queues = new Map<string, ReadonlyArray<QueuedMessage>>();
   private readonly handoffs = new Map<string, Handoff[]>();
-  private readonly drafts = new Map<string, string>();
+  private readonly drafts = new Map<string, ChatDraft>();
   private followUpValue: "queue" | "steer" = "queue";
   private followUpWatch: (() => void) | undefined;
   private planModeValue = false;
@@ -356,14 +367,14 @@ export class ChatClient {
   // Each chat's unsent text (or `NEW_CHAT`'s), so the canvas rail and the editor's rail show
   // the same draft and closing the editor loses nothing. In memory only: a reload drops it.
 
-  draft(key: string): string {
-    return this.drafts.get(key) ?? "";
+  draft(key: string): ChatDraft {
+    return this.drafts.get(key) ?? EMPTY_DRAFT;
   }
 
-  setDraft(key: string, text: string): void {
-    if (this.draft(key) === text) return;
-    if (text === "") this.drafts.delete(key);
-    else this.drafts.set(key, text);
+  setDraft(key: string, draft: ChatDraft): void {
+    if (sameDraft(this.draft(key), draft)) return;
+    if (draft.text === "" && draft.mentions.length === 0) this.drafts.delete(key);
+    else this.drafts.set(key, draft);
     this.changed(`draft:${key}`);
   }
 

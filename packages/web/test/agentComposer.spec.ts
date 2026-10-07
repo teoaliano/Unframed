@@ -396,3 +396,41 @@ test("a chat's unsent draft follows it between the canvas rail and the editor's 
   await panel.getByRole("button", { name: "New chat" }).click();
   await expect(promptBox(panel)).toHaveText("");
 });
+
+test("a context chip from a draft's @ mention follows the draft between chats; the canvas selection's chips stay", async ({ page, agent }) => {
+  await openCanvas(page, agent);
+  await putRecords(agent, artifactColumn([{ id: "shape:p1", title: "Alpha" }]));
+  await openCanvas(page, agent);
+  await createChat(agent, { title: "Brief" });
+  await createChat(agent, { title: "Other" });
+  const panel = await openRail(page);
+  const context = panel.getByRole("list", { name: "Context" }).getByRole("listitem");
+  await panel.getByRole("tab", { name: "Brief" }).click();
+  await promptBox(panel).click();
+  await promptBox(panel).pressSequentially("@alp");
+  await page.keyboard.press("Tab");
+  await expect(context).toHaveText(["Alpha"]);
+
+  await panel.getByRole("tab", { name: "Other" }).click();
+  await expect(promptBox(panel)).toHaveText("");
+  await expect(context).toHaveCount(0);
+  await panel.getByRole("tab", { name: "Brief" }).click();
+  await expect(promptBox(panel).locator("[data-agent-chip]")).toHaveText(["Alpha"]);
+  await expect(context).toHaveText(["Alpha"]);
+});
+
+test("a draft shown again after a tab switch is not an undo step", async ({ page, agent }) => {
+  await openCanvas(page, agent);
+  await createChat(agent, { title: "Brief" });
+  await createChat(agent, { title: "Other" });
+  const panel = await openRail(page);
+  await panel.getByRole("tab", { name: "Brief" }).click();
+  await promptBox(panel).click();
+  await promptBox(panel).pressSequentially("Make the title bigger");
+  await panel.getByRole("tab", { name: "Other" }).click();
+  await panel.getByRole("tab", { name: "Brief" }).click();
+  await expect(promptBox(panel)).toHaveText("Make the title bigger");
+  await promptBox(panel).click();
+  await page.keyboard.press("ControlOrMeta+z");
+  await expect(promptBox(panel)).not.toHaveText("");
+});

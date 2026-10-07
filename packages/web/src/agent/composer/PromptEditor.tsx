@@ -100,8 +100,11 @@ export interface PromptEditorHandle {
   readonly element: () => HTMLElement | null;
   focus(): void;
   text(): string;
-  /** Replaces the draft; it takes the focus unless `focus` is false (a draft shown, not one the person asked for). */
-  setText(text: string, options?: { readonly focus?: boolean }): void;
+  /**
+   * Replaces the draft; it takes the focus unless `focus` is false (a draft shown, not one the
+   * person asked for), and is an undo step unless `undoable` is false.
+   */
+  setText(text: string, options?: { readonly focus?: boolean; readonly undoable?: boolean }): void;
   clear(): void;
   /** Replaces a trigger's text with a chip, or with plain text. */
   replaceTrigger(trigger: Trigger, insert: DraftChip | string): void;
@@ -211,7 +214,11 @@ export const PromptEditor = ({ placeholder, label, onChange, onTrigger, onKey, o
       // The first editor can be destroyed and replaced while the box mounts: a call then does nothing.
       setText: (text, options) => {
         if (!editor || editor.isDestroyed) return;
-        editor.commands.setContent(draftDoc(text), { emitUpdate: true });
+        editor
+          .chain()
+          .setMeta("addToHistory", options?.undoable !== false)
+          .setContent(draftDoc(text), { emitUpdate: true })
+          .run();
         if (options?.focus === false) return;
         // Focused already, the caret goes to the end at once: Tiptap's focus lands a frame
         // later and would put it back after an arrow key the person pressed meanwhile.
