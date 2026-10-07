@@ -77,6 +77,11 @@ describe("contextMenu", () => {
     ]);
   });
 
+  it("heads the section Video on a video and Image on an image", () => {
+    expect(shape(video)[0]).toMatchObject({ section: "image", heading: "Video" });
+    expect(shape(image)[0]).toMatchObject({ section: "image", heading: "Image" });
+  });
+
   it("copies the right-clicked file's path alone, whatever else is selected", () => {
     expect(shape(image, [image, video])[0]!.items[1]).toEqual({ action: "copy-path", label: "Copy path", file: "1-fox.png" });
   });

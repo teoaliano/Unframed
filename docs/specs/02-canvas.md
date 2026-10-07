@@ -282,12 +282,12 @@ Custom shape props and every later change to them use tldraw's shape migrations,
 
 ### Context menu
 
-Sections appear in this order, each only when it has at least one item. An item that would do nothing is left out, never greyed. After the Unframed sections come tldraw's own context menu groups, minus tldraw's group, ungroup, cut, copy and paste items, which Unframed's Edit section replaces.
+Sections appear in this order, each only when it has at least one item. The Image section is headed "Video" when the right-clicked shape is a video. A checkbox row (spec 09's Keep playing) starts its label where the plain rows do, with its check at the end of the row. An item that would do nothing is left out, never greyed. After the Unframed sections come tldraw's own context menu groups, minus tldraw's group, ungroup, cut, copy and paste items, which Unframed's Edit section replaces.
 
 | Section | Item | Shown when |
 | --- | --- | --- |
 | Image | "Reveal in Finder" on macOS, "Show in Explorer" on Windows, "Show in file manager" elsewhere, with " (<n>)" appended when more than one file | the right-clicked shape is a filled image or video with a project file; the files are every selected filled image and video, else the right-clicked one |
-| Image | "Copy path" | the right-clicked shape is a filled image or video with a project file; copies that file's absolute path |
+| Image | "Copy path" | the right-clicked shape is a filled image or video with a project file; copies that file's absolute path and says "Path copied" in a toast, since a path on the clipboard cannot be seen |
 | Image | "Copy as image" | the right-clicked shape is a filled image |
 | Reference | "Copy @<ref>" | the right-clicked shape is a prompt or group |
 | Edit | "Cut ⌘X", "Copy ⌘C" | something is selected or right-clicked |

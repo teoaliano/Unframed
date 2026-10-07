@@ -132,7 +132,7 @@ export const contextMenu = (input: MenuInput): MenuSection[] => {
   if (clicked && clicked.type === "image" && clicked.file !== undefined) {
     imageItems.push({ action: "copy-as-image", label: "Copy as image" });
   }
-  add("image", "Image", imageItems);
+  add("image", clicked?.type === "video" ? "Video" : "Image", imageItems);
 
   const referenceItems: MenuItem[] = [];
   if (clicked && (clicked.type === "text" || clicked.type === "frame") && clicked.ref !== undefined) {
