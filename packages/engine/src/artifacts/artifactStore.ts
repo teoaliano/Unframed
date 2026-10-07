@@ -12,7 +12,9 @@ import { basename, dirname, join } from "node:path";
 import {
   artifactFileName,
   dialsBridgeSource,
+  LIVE_CHECK_FILE,
   LIVE_VIEWER_FILE,
+  liveCheckSource,
   liveViewerSource,
   sidecarFileName,
   sidecarText,
@@ -70,10 +72,13 @@ const ensure = async (folder: string, files: ReadonlyArray<LibraryFile>): Promis
 /** A page write ensures only the bridge; a page never gets the player, runtime or GSAP. */
 export const ensureBridge = (folder: string): Promise<void> => ensure(folder, [BRIDGE]);
 
-const LIVE_VIEWER: LibraryFile = { name: LIVE_VIEWER_FILE, bytes: async () => Buffer.from(liveViewerSource(), "utf8") };
+const LIVE_FILES: ReadonlyArray<LibraryFile> = [
+  { name: LIVE_VIEWER_FILE, bytes: async () => Buffer.from(liveViewerSource(), "utf8") },
+  { name: LIVE_CHECK_FILE, bytes: async () => Buffer.from(liveCheckSource(), "utf8") },
+];
 
-/** The live viewer "Open in a new tab" opens, beside every shape's pointer. */
-export const ensureLiveViewer = (folder: string): Promise<void> => ensure(folder, [LIVE_VIEWER]);
+/** The live viewer "Open in a new tab" opens, and the check it uses to tell whether Unframed is running. */
+export const ensureLiveViewer = (folder: string): Promise<void> => ensure(folder, LIVE_FILES);
 
 /** A motion write, a motion upload and a render start each ensure the whole library first. */
 export const ensureLibrary = (folder: string): Promise<void> => ensure(folder, LIBRARY);

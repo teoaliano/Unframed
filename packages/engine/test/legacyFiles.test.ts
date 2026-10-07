@@ -79,12 +79,7 @@ describe("never rewriting the old files", () => {
     const added = Object.keys(after)
       .filter((path) => !(path in before))
       .sort();
-    // Not the importer's: the live viewer and a pointer per artifact, which every opened room gets (spec 09).
-    const live = added.filter((path) => /\/unframed-live[^/]*$/.test(path));
-    expect(live.filter((path) => path.endsWith(".js"))).toHaveLength(2);
-    expect(live.every((path) => path.startsWith("everything/"))).toBe(true);
-    expect(live).toContain("everything/unframed-live.html");
-    expect(added.filter((path) => !live.includes(path))).toEqual(
+    expect(added).toEqual(
       [
         "broken-snapshot/unframed.sqlite",
         "everything/legacy-5c59251f1b05f008-sketch.json",

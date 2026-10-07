@@ -1,9 +1,10 @@
+import { readdir } from "node:fs/promises";
 import type { FrameLocator, Page } from "@playwright/test";
 import { liveViewerUrl } from "@unframed/domain";
 import { centre, openCanvas, roomRecords, shapeOnScreen } from "./canvas.ts";
 import { expect, test } from "./agent.ts";
 import { putRecords } from "./media.ts";
-import { dialsPage, filledArtifact, insideComposition, writeBridge, writeProjectFile } from "./artifacts.ts";
+import { dialsPage, filledArtifact, insideComposition, projectPath, writeBridge, writeProjectFile } from "./artifacts.ts";
 
 const shown = async (frame: FrameLocator) => JSON.parse((await frame.locator("#values").textContent().catch(() => null)) ?? "null");
 
@@ -42,7 +43,50 @@ test("a page opened in a new tab follows the shape: a new version swaps in witho
   await putRecords(agent, [{ ...tuned, props: { ...tuned.props, dials: { size: 64 } } }]);
   await expect.poll(() => shown(showing(tab)), { timeout: 5_000 }).toEqual({ size: 64 });
   expect(await tab.evaluate(() => (window as unknown as { kept?: boolean }).kept)).toBe(true);
+
+  // Only the shape opened in a tab has a pointer.
+  expect((await readdir(projectPath(agent, ""))).filter((name) => name.startsWith("unframed-live")).sort()).toEqual([
+    "unframed-live-tuned.js",
+    "unframed-live.html",
+    "unframed-live.js",
+  ]);
+
+  // Deleted from the canvas: the tab says so, and shows it again when an undo brings it back.
+  await page.keyboard.press("Escape");
+  await (await agent.rpc()).call("testCanvas.apply", { project: "default", change: { put: [], remove: ["shape:tuned"] }, origin: { kind: "server", id: "test" } });
+  await expect(tab.getByText("This page was deleted from the canvas.")).toBeVisible({ timeout: 5_000 });
+  await expect(tab.locator("iframe")).toHaveCount(0);
+  await putRecords(agent, [tuned]);
+  await expect(showing(tab).getByRole("heading", { name: "Version two" })).toBeVisible({ timeout: 5_000 });
+  await expect(tab.getByText("This page was deleted from the canvas.")).toBeHidden();
+
+  // Unframed quits: the last version stays, with a line saying the tab is not updating.
+  await agent.stop();
+  await expect(tab.getByRole("status")).toHaveText("Unframed is not running, so this tab is not updating.", { timeout: 5_000 });
+  await expect(showing(tab).getByRole("heading", { name: "Version two" })).toBeVisible();
   await tab.close();
+});
+
+test("a link to a shape Unframed does not have says so, and one opened while Unframed is not running says that", async ({ page, agent }) => {
+  await openCanvas(page, agent);
+  await filledArtifact(agent, { id: "shape:landing", kind: "page", ref: "150", at: { x: -520, y: -40 }, title: "Landing", html: "<h1>Welcome</h1>" });
+  await (await agent.rpc()).call("artifact.openLive", { project: "default", shapeId: "shape:landing" });
+
+  const unknown = await page.context().newPage();
+  await unknown.goto(liveViewerUrl({ appHostname: "localhost", previewPort: agent.previewPort, project: "default", shapeId: "shape:nothere" })!);
+  await expect(unknown.getByText("Looking for this page or motion in Unframed.")).toBeVisible();
+  await expect(unknown.getByText("Unframed has no page or motion for this link.")).toBeVisible({ timeout: 10_000 });
+
+  const url = liveViewerUrl({ appHostname: "localhost", previewPort: agent.previewPort, project: "default", shapeId: "shape:landing" })!;
+  const known = await page.context().newPage();
+  await known.goto(url);
+  await expect(showing(known).getByRole("heading", { name: "Welcome" })).toBeVisible({ timeout: 10_000 });
+
+  // With nothing on screen (here the shape was deleted), Unframed quitting is the whole message.
+  await (await agent.rpc()).call("testCanvas.apply", { project: "default", change: { put: [], remove: ["shape:landing"] }, origin: { kind: "server", id: "test" } });
+  await expect(known.getByText("This page was deleted from the canvas.")).toBeVisible({ timeout: 5_000 });
+  await agent.stop();
+  await expect(known.getByText("Unframed is not running. This tab picks up again once it is open.")).toBeVisible({ timeout: 5_000 });
 });
 
 const DIALS_MOTION = (label: string) => `<!doctype html><html><head><style>#root{position:relative;width:640px;height:360px;overflow:hidden;background:#000;color:#fff}.clip{position:absolute;inset:0}</style></head><body>
@@ -58,6 +102,7 @@ test("a motion opened in a new tab plays through its viewer and follows its dial
   await filledArtifact(agent, { id: "shape:intro", kind: "motion", ref: "151", at: { x: -520, y: 260 }, size: { w: 320, h: 180 }, title: "Intro", html: DIALS_MOTION("one"), dials: { speed: 2.5 } });
   await expect(shapeOnScreen(page, "shape:intro")).toBeVisible();
 
+  await (await agent.rpc()).call("artifact.openLive", { project: "default", shapeId: "shape:intro" });
   const tab = await page.context().newPage();
   await tab.goto(liveViewerUrl({ appHostname: "localhost", previewPort: agent.previewPort, project: "default", shapeId: "shape:intro" })!);
   const composition = () => insideComposition(showing(tab));

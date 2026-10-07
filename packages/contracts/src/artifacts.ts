@@ -54,6 +54,16 @@ export const ArtifactSnapshot = Schema.Struct({
 });
 export type ArtifactSnapshot = typeof ArtifactSnapshot.Type;
 
+/**
+ * "Open in a new tab": writes the shape's live viewer pointer, which the engine keeps current
+ * from then on. Shapes never opened in a tab have none.
+ */
+export const ArtifactOpenLive = Rpc.make("artifact.openLive", {
+  payload: Schema.Struct({ project: Schema.String, shapeId: Schema.String }),
+  success: Schema.Struct({}),
+  error: UnframedError,
+});
+
 /** Every snapshot the project's cache holds, then one item per snapshot written. */
 export const ArtifactSnapshots = Rpc.make("artifact.snapshots", {
   payload: Schema.Struct({ project: Schema.String }),

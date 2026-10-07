@@ -21,7 +21,7 @@ import {
   TurnDiff,
   TurnDiffInput,
 } from "./agent.ts";
-import { ArtifactSnapshots, MotionRenderStart, MotionRenderStatus, MotionUpload } from "./artifacts.ts";
+import { ArtifactOpenLive, ArtifactSnapshots, MotionRenderStart, MotionRenderStatus, MotionUpload } from "./artifacts.ts";
 import { LegacyImportMarkSeen, LegacyImportReport, LegacyImportRetry, LegacyImportStatus } from "./legacy.ts";
 
 const Empty = Schema.Struct({});
@@ -307,6 +307,7 @@ export const UnframedRpcs = RpcGroup.make(
   MotionRenderStart,
   MotionRenderStatus,
   ArtifactSnapshots,
+  ArtifactOpenLive,
   LegacyImportStatus,
   LegacyImportReport,
   LegacyImportMarkSeen,
