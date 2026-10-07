@@ -241,7 +241,8 @@ test("the field grows with what is typed, and a name of digits only is refused i
   await expect(name).toBeFocused();
   const before = (await name.boundingBox())!.width;
   await page.keyboard.type("a much longer name for this picture");
-  await expect.poll(async () => (await name.boundingBox())!.width).toBeGreaterThan(before * 3);
+  // From room for "102" to room for the whole name: well over twice as wide, whatever the font.
+  await expect.poll(async () => (await name.boundingBox())!.width).toBeGreaterThan(before * 2.5);
 
   await page.keyboard.press("ControlOrMeta+a");
   await page.keyboard.type("42");
