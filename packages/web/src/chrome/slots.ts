@@ -33,6 +33,8 @@ export interface ChromeSlots {
   renderButton?: ComponentType<{ shapeId: TLShapeId }>;
   /** Set while the chat rail (spec 08) holds the right edge: the top-right card steps aside. */
   leftCardDocked?: boolean;
+  /** Set while the full-screen artifact editor (spec 09) is open: the top-left card stays under it, docked or not. */
+  artifactEditorOpen?: boolean;
 }
 
 let slots: ChromeSlots = {};
