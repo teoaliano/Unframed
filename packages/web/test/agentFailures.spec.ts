@@ -1,4 +1,4 @@
-import { clockTime, FAILURE_SENTENCES } from "@unframed/domain";
+import { FAILURE_SENTENCES, resetMoment } from "@unframed/domain";
 import { openCanvas } from "./canvas.ts";
 import { createChat, expect, openRail, say, test } from "./agent.ts";
 
@@ -16,16 +16,16 @@ test("a failed turn shows its retry line and ends its reply with the failure sen
 test.describe(() => {
   test.use({ locale: "en-GB" });
 
-  test("being close to a usage limit shows nothing; a hit limit says so with the time it resets, with am or pm in a 24-hour locale, and clears when a turn goes through", async ({ page, agent }) => {
+  test("being close to a usage limit shows nothing; a hit limit says when it resets, with the weekday and am or pm in a 24-hour locale, and clears when a turn goes through", async ({ page, agent }) => {
+    // Three days before the scripted reset (Thursday 1 October, 15:00 UTC): the line names the day.
+    const now = new Date("2026-09-28T12:00:00.000Z");
+    await page.clock.setFixedTime(now);
     await openCanvas(page, agent);
     await createChat(agent, { title: "Limits" });
     const panel = await openRail(page);
-    const [hours, minutes] = await page.evaluate(() => {
-      const reset = new Date("2026-10-01T15:00:00.000Z");
-      return [reset.getHours(), reset.getMinutes()] as const;
-    });
-    const time = clockTime(new Date(2026, 9, 1, hours, minutes));
-    expect(time).toMatch(/^\d{1,2}:\d{2} (am|pm)$/);
+    // The browser and this process share the machine's time zone.
+    const when = resetMoment(new Date("2026-10-01T15:00:00.000Z"), now);
+    expect(when).toMatch(/^Thursday at \d{1,2}:\d{2} (am|pm)$/);
     const line = panel.getByTestId("limit-line");
 
     await say(panel, "near the usage limit");
@@ -33,7 +33,7 @@ test.describe(() => {
     await expect(line).toHaveCount(0);
 
     await say(panel, "one more");
-    await expect(line).toHaveText(`You have hit a usage limit. It resets at ${time}.`);
+    await expect(line).toHaveText(`You have hit a usage limit. It resets ${when}.`);
 
     await say(panel, "and again");
     await expect(panel.locator("[data-role='assistant']").last()).toContainText("Back under the limit.");

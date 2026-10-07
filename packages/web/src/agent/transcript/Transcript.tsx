@@ -1,4 +1,4 @@
-import { activityLabel, agentShapeId, clockTime, buildTimeline, type TimelineBlock, formatWorkDuration, revertSkipLine, type Chat, type ChatMessage, type ChatTurn } from "@unframed/domain";
+import { activityLabel, agentShapeId, resetMoment, buildTimeline, type TimelineBlock, formatWorkDuration, revertSkipLine, type Chat, type ChatMessage, type ChatTurn } from "@unframed/domain";
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { Brain, ChevronDown, ChevronRight, Clock, Undo2, X } from "lucide-react";
 import { useMaybeEditor } from "tldraw";
@@ -337,7 +337,7 @@ const RetryLine = ({ payload }: { readonly payload: unknown }) => (
 
 const resetTime = (resetsAt: unknown): string | undefined => {
   if (typeof resetsAt !== "string" || Number.isNaN(Date.parse(resetsAt))) return undefined;
-  return clockTime(new Date(resetsAt));
+  return resetMoment(new Date(resetsAt), new Date());
 };
 
 /**
@@ -353,7 +353,7 @@ const LimitLine = ({ chat }: { readonly chat: Chat }) => {
   if (p.status === "rejected") {
     return (
       <p className="m-0 px-1 text-sm leading-relaxed text-destructive-foreground" data-kind="limit" data-testid="limit-line">
-        {time === undefined ? "You have hit a usage limit." : `You have hit a usage limit. It resets at ${time}.`}
+        {time === undefined ? "You have hit a usage limit." : `You have hit a usage limit. It resets ${time}.`}
       </p>
     );
   }
