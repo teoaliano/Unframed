@@ -136,13 +136,6 @@ export const contextMenu = (input: MenuInput): MenuSection[] => {
   }
   add("image", clicked?.type === "video" ? "Video" : "Image", imageItems);
 
-  const referenceItems: MenuItem[] = [];
-  if (clicked?.ref !== undefined) {
-    referenceItems.push({ action: "copy-ref", label: `Copy @${clicked.ref}`, ref: clicked.ref }, { action: "rename", label: "Rename", shortcut: "F2" });
-  }
-  if (clicked?.type === "text" && clicked.textResult) referenceItems.push({ action: "copy-as-prompt", label: "Copy as prompt" });
-  add("reference", "Reference", referenceItems);
-
   const pinned = input.pinned ?? [];
   if (clicked?.filledArtifact) {
     const checked = pinned.includes(clicked.id);
@@ -153,6 +146,13 @@ export const contextMenu = (input: MenuInput): MenuSection[] => {
       ...(isFilledArtifact(clicked) ? fileItems(clicked, selection, isFilledArtifact, platform) : []),
     ]);
   }
+
+  const referenceItems: MenuItem[] = [];
+  if (clicked?.ref !== undefined) {
+    referenceItems.push({ action: "copy-ref", label: `Copy @${clicked.ref}`, ref: clicked.ref }, { action: "rename", label: "Rename", shortcut: "F2" });
+  }
+  if (clicked?.type === "text" && clicked.textResult) referenceItems.push({ action: "copy-as-prompt", label: "Copy as prompt" });
+  add("reference", "Reference", referenceItems);
 
   const edit = (action: EditAction): MenuItem => ({ action, label: EDIT_LABELS[action], shortcut: shortcutHint(action, platform) });
   const editItems: MenuItem[] = [];

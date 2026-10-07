@@ -145,7 +145,7 @@ test("a filled page offers Keep playing, reveal and copy path, lined up; Copy pa
   const { reveal } = await platformOf(page);
   const at = await centre(shapeOnScreen(page, "shape:brief"));
   const { headings, items } = await rightClick(page, at);
-  expect(headings).toEqual(["Page", "Edit", "Library"]);
+  expect(headings).toEqual(["Page", "Reference", "Edit", "Library"]);
   const keep = menu(page).getByRole("menuitemcheckbox", { name: "Keep playing" });
   await expect(keep).toBeVisible();
   expect(items.slice(0, 2)).toEqual([reveal(), "Copy path"]);
@@ -178,7 +178,7 @@ test("right-clicking inside a selected, live page opens its shape menu, and with
   // Live and taking the pointer: the right-click lands in the page's own document.
   await expect(one.locator("iframe[data-artifact-frame]")).toHaveAttribute("data-interactive", "true");
   const inside = await rightClick(page, await centre(one));
-  expect(inside.headings).toEqual(["Page", "Edit", "Library"]);
+  expect(inside.headings).toEqual(["Page", "Reference", "Edit", "Library"]);
   expect(inside.items[0]).toBe(reveal());
   await closeMenu(page);
 

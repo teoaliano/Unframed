@@ -165,13 +165,13 @@ describe("contextMenu", () => {
   it("offers Keep playing on a filled page or motion, checked when pinned, and disabled with the reason at three", () => {
     const filled: MenuShape = { ...page, filledArtifact: true };
     const motion: MenuShape = { id: "mo", type: "motion", ref: "107", filledArtifact: true };
-    expect(shape(filled)[1]).toEqual({ section: "artifact", heading: "Page", items: [{ action: "keep-playing", label: "Keep playing", checked: false }] });
-    expect(shape(motion, [motion], { pinned: ["mo"] })[1]).toEqual({ section: "artifact", heading: "Motion", items: [{ action: "keep-playing", label: "Keep playing", checked: true }] });
-    expect(shape(filled, [filled], { pinned: ["a", "b", "c"] })[1]?.items).toEqual([
+    expect(shape(filled)[0]).toEqual({ section: "artifact", heading: "Page", items: [{ action: "keep-playing", label: "Keep playing", checked: false }] });
+    expect(shape(motion, [motion], { pinned: ["mo"] })[0]).toEqual({ section: "artifact", heading: "Motion", items: [{ action: "keep-playing", label: "Keep playing", checked: true }] });
+    expect(shape(filled, [filled], { pinned: ["a", "b", "c"] })[0]?.items).toEqual([
       { action: "keep-playing", label: "Keep playing", checked: false, disabled: true, tooltip: "Three are already playing. Stop one first." },
     ]);
     // A pinned one can always be stopped, even at three.
-    expect(shape(filled, [filled], { pinned: ["a", "b", "pg"] })[1]?.items).toEqual([{ action: "keep-playing", label: "Keep playing", checked: true }]);
+    expect(shape(filled, [filled], { pinned: ["a", "b", "pg"] })[0]?.items).toEqual([{ action: "keep-playing", label: "Keep playing", checked: true }]);
     expect(shape(page).map((section) => section.section)).not.toContain("artifact");
   });
 
@@ -187,6 +187,8 @@ describe("contextMenu", () => {
         { action: "copy-path", label: "Copy path", file: "1-brief.html" },
       ],
     });
+    // The file section comes first, as an image's does, then the reference.
+    expect(shape(filled).map((section) => section.section).slice(0, 3)).toEqual(["artifact", "reference", "edit"]);
     // Every selected filled artifact is revealed; the path is the right-clicked one's.
     expect(shape(motion, [filled, motion, image], { platform: "win32" })[0]?.items.slice(1)).toEqual([
       { action: "reveal", label: "Show in Explorer (2)", files: ["1-brief.html", "2-intro.html"] },
