@@ -275,11 +275,11 @@ After creating, the same dialog shows the setup: each step's text, and its code 
 ### The outside chat in the rail
 
 - **Tab**: the chat's title, a live dot while its outside turn is open, tooltip `<title> · <client label>, outside Unframed`.
-- **Transcript**: work log rows and spec 08's recap card per turn, with Open, Locate, View diff and Revert this turn. Revert shows on the open turn too (above). While a turn is open the activity line reads `Working from outside Unframed…` with spec 08's elapsed clock.
+- **Transcript**: work log rows and spec 08's recap card per turn, with Editor, Locate, View diff and Revert this turn. Revert shows on the open turn too (above). While a turn is open the activity line reads `Working from outside Unframed…` with spec 08's elapsed clock.
 - **Notes**: an empty outside chat never exists (its first call makes a row). After revoke, an info line at the foot: `Disconnected. This connection was revoked in Settings.`
 - **Composer**: with an outside chat active, the Agent tray is replaced by a line, `<title> works from outside Unframed. Talk to it where it runs.`, and an outline `New chat` button that starts an in-app chat. No Send, no pickers, no Edit from here.
-- **Continuable chat** (spec 08's domain rule): outside chats are never continuable, so the toolbar's Agent button and the editor's add-a-parameter box never send into one.
-- Search, tags, the filter and Delete work as for any chat.
+- **Continuable chat** (spec 08's domain rule): outside chats are never continuable, so the toolbar's Agent button and the add-a-parameter box (in the editor and in the canvas Parameters panel, spec 09) never send into one.
+- Search, tags, the filter, Delete, Detach and Clear all chats (spec 08) work as for any chat. Clear all counts an outside chat with an open outside turn as running, so it is kept. A later call after Delete or Clear all makes a new outside chat, and a later write to a detached artifact tags the chat again.
 
 ### The hosting contract with the desktop shell
 
