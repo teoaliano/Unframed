@@ -14,7 +14,9 @@ Tuning is the other half. A person wants to drag a slider and see the accent col
 
 Two shape kinds, **page** and **motion**, together called artifacts. Each names one HTML file in the project folder. Every edit writes a new file and points the shape at it, so no file is ever overwritten and undo (or an agent turn's Revert) shows the previous version.
 
-Artifact files are served only by the **preview origin**: a second loopback HTTP server on its own OS-assigned port that answers one path shape, from an extension allow-list, with a content policy that forbids all network access. The canvas and the editor frame artifacts from there in a sandboxed iframe.
+Artifact files are served only by the **preview origin**: a second loopback HTTP server on its own fixed port (an OS-assigned one when another program holds it) that answers one path shape, from an extension allow-list, with a content policy that forbids all network access. The canvas and the editor frame artifacts from there in a sandboxed iframe.
+
+"Open in a new tab" opens the artifact's **live viewer** in the person's own browser: a small page in the project folder that frames the shape's newest file with its current dials, and swaps to a new version or applies new dials about a second after the shape changes, with no reload. It learns both from a small pointer file per shape that the engine rewrites, read the only way the origin's policy allows: by loading it as a script.
 
 A motion's player, runtime, GSAP and a small viewer page are plain files copied into the project folder beside the compositions, so the preview server never needs a second route and a project folder renders outside Unframed too. Rendering runs HyperFrames' producer against the person's own Chrome, in the engine, and the MP4 lands as a video shape beside the motion.
 
@@ -88,7 +90,7 @@ This spec also owns the agent's artifact tools (`page_write`, `page_read`, `moti
 62. As a person, I want Cmd-Z on the canvas after closing the editor to undo my dial change, so that the editor is not an undo dead end.
 63. As a person, I want the editor to close itself if its artifact is deleted elsewhere, so that I never look at a dead frame.
 64. As a person, I want canvas shortcuts (Delete, tool keys) to do nothing while the editor is open, so that typing or pressing Backspace cannot delete the artifact I am editing.
-65. As a person, I want an artifact opened outside the app to play with the values it was written with and show no panel, so that the file is self-contained.
+65. As a person, I want an artifact I opened in my own browser with "Open in a new tab" to show my current dial values and follow my dial changes while the app is open, with no panel in it, so that the tab shows what I am tuning. A versioned artifact file opened on its own still plays with the values it was written with and shows no panel, so that the file is self-contained.
 66. As a maintainer, I want a project folder with motions to render with `npx hyperframes render` outside Unframed, so that the folder is self-contained.
 67. As a person, I want the agent to open a page or motion it wrote in a browser, look at it and click through it, so that it checks its own work before telling me it is done.
 68. As a person, I want a board full of pages and motions to pan and zoom as smoothly as an empty one, so that artifacts never make the canvas heavy.
@@ -97,6 +99,8 @@ This spec also owns the agent's artifact tools (`page_write`, `page_read`, `moti
 71. As a person, I want to pin a few artifacts with "Keep playing", so that the ones I am presenting keep moving while I work elsewhere.
 72. As a person, I want a snapshot to follow my saved dials and my resizes, so that the still picture matches what the artifact shows live.
 73. As a maintainer, I want artifact documents to run in a different browser process from the canvas, so that no page script, however heavy, can freeze the canvas.
+74. As a person, I want a page or motion I opened in my own browser to swap to the agent's newest version within a few seconds without my refreshing it, so that I can keep it open beside the app while the agent works.
+75. As a person, I want that tab's link to keep working after I quit and reopen the app, so that a bookmark or a tab left open does not go dead.
 
 ## Implementation Decisions
 
@@ -129,11 +133,12 @@ This section exists because of a measured failure in the old app, and every rule
 **Artifact URLs** (the web builds them from `previewPort` and the project's slug):
 - page: `http://127.0.0.1:<previewPort>/p/<project>/<file>`
 - motion: `http://127.0.0.1:<previewPort>/p/<project>/hyperframes-viewer.html?c=<file>`
+- live viewer, either kind: `http://127.0.0.1:<previewPort>/p/<project>/unframed-live.html?s=<key>`, where `<key>` is the shape id without `shape:` (see "The live viewer")
 with each segment URL-encoded.
 
 ### Artifact files
 
-**Every edit is a new file.** No artifact file is ever overwritten or deleted by Unframed. An agent write opens the file with exclusive create (`wx`) and retries with the next suffix on `EEXIST`. A shape changes version only by its `file` prop changing, so tldraw's local undo (for a person's edit) and an agent turn's Revert (spec 07, for an agent's edit) both restore the previous version by restoring the prop.
+**Every edit is a new file.** No artifact file is ever overwritten or deleted by Unframed. An artifact file is a page or composition a shape names; the engine's own helper files beside them are not artifact files and are kept current by rewriting: the motion library and the bridge (below), and the live viewer and its pointers ("The live viewer"). An agent write opens the file with exclusive create (`wx`) and retries with the next suffix on `EEXIST`. A shape changes version only by its `file` prop changing, so tldraw's local undo (for a person's edit) and an agent turn's Revert (spec 07, for an agent's edit) both restore the previous version by restoring the prop.
 
 **Names**: `<epochMs>-<slug>[-<n>].html`, where slug is spec 01's slug rule applied to the title, or to `page`/`motion` when the title is empty. If the slug is empty, the base is `upload`. `n` starts at 1 on collision.
 
@@ -158,7 +163,7 @@ with each segment URL-encoded.
 
 ### The preview origin
 
-A second HTTP server inside the engine process, bound to `127.0.0.1` (and `[::1]` on the same port where available, see "Keeping artifacts off the canvas thread") on an OS-assigned port. Spec 01 already starts this listener (answering 404 to everything, with the Host check) and reports its port as `previewPort` in the `ready` IPC message and in `server.health`; this spec adds its one route and its headers. It reads the output folder through a getter, so a settings change moves it without a restart.
+A second HTTP server inside the engine process, bound to `127.0.0.1` (and `[::1]` on the same port where available, see "Keeping artifacts off the canvas thread") on the fixed preview port, 18787, or an OS-assigned one when another program holds it (spec 01 states the rule and `UNFRAMED_PREVIEW_PORT`). Spec 01 already starts this listener (answering 404 to everything, with the Host check) and reports its port as `previewPort` in the `ready` IPC message and in `server.health`; this spec adds its one route and its headers. It reads the output folder through a getter, so a settings change moves it without a restart.
 
 It answers exactly one path shape and nothing else, and it must never gain a second route:
 
@@ -187,6 +192,19 @@ Every 200 and 304 carries:
 - A request whose `If-None-Match` equals the ETag gets 304 with the same headers minus `Content-Length`, and no body.
 - `connect-src 'none'` means a page cannot fetch, open sockets or send beacons, so the engine is unreachable from a page even by URL. `frame-src 'self'` exists so the motion viewer can frame its sibling composition. `allow-same-origin` in the iframe sandbox is required: without it the document has an opaque origin and CORP blocks its own sibling pictures. With it the document sits on the preview origin, which is not the app's, and cannot lift its own sandbox.
 - **Never route an artifact through the app origin**: no app-origin file route may serve `.html` as a document, and the web never frames anything but the preview origin in an artifact frame.
+
+### The live viewer
+
+What "Open in a new tab" opens, so that a tab in the person's own browser follows the shape instead of one frozen version. It adds no route and no header to the preview origin: it is two kinds of ordinary file under `/p/<project>/<file>`, like the motion viewer.
+
+- **Files.** `unframed-live.html`, the viewer, one per project folder, generated by the engine from the domain module and refreshed by the motion library's size rule; the preview origin also refreshes it when a frame asks for it, as it does the bridge (only in a project folder that exists: a request never creates a folder). And one pointer per artifact shape, `unframed-live-<key>.js`, where `<key>` is the shape id without `shape:`. A shape whose key is not 1 to 150 characters of `[A-Za-z0-9_-]` has no live viewer (tldraw's ids always qualify), and "Open in a new tab" opens its artifact URL instead.
+- **The pointer** is one line of script: `typeof unframedLive === "function" && unframedLive({ kind, file, title, dials });` with the shape's kind, its current `file` (`""` when empty), its title by the title rule above, and its `dials`, or `null` when never tuned or empty. The engine writes it when a room opens (for every artifact shape) and after every commit that changes an artifact shape's file, title or dials (spec 02's after-commit work, so a person's edit, an agent write, a Revert, an undo and a paste all count; the engine's own `system` writes do not, as for every after-commit hook). It writes only when the text changed, in commit order on one queue, through a temp file and a rename, so the viewer never reads half a pointer. A project close forgets what was written; the next open compares with the files again. Pointers stay when their shape is deleted, so an open tab keeps showing the last version.
+- **The viewer** reads `s` from its query, and with a valid key loads `unframed-live-<key>.js?n=<count>` as a `<script>` at once and then every second (a new query each time, so no cache answers it), removing each script element when it loads or fails. That is how it reads anything at all: `connect-src 'none'` forbids fetch, and `script-src 'self'` allows a script from its own origin. With no valid key it says `This link does not name a page or motion.` and loads nothing. Until a pointer arrives it shows `Waiting for Unframed to open this project.`
+- On each pointer: the tab's title becomes the title, or the kind. A file not matching `^[A-Za-z0-9][A-Za-z0-9._-]*\.html?$` (an empty shape) shows `This {kind} has no file yet.` and no frame. A new file (or kind) mounts a new frame: the page itself, or `hyperframes-viewer.html?c=<file>` for a motion, with the canvas frame's `sandbox`, `referrerpolicy` and `allow`, hidden behind the one on screen until its load event, then shown in its place, so a new version replaces the old one without a blank moment and without reloading the tab. Dials cleared back to none also mount a fresh frame, since a set only ever adds values. Otherwise changed dials are posted at once as `unframed:dials:set` to the frame.
+- **Dials** follow the canvas side's rules from "Saved values in canvas frames", with the viewer as the canvas: hello on each frame's load event, and the pointer's dials (when non-empty) in answer to an `unframed:dials` announcement whose `event.source` is one of its frames and whose origin is its own. A page answers through the bridge; a motion's viewer relays both ways, as it does for the canvas. The viewer shows no controls: tuning happens in the editor, and the tab follows it about a second after each saved change (the editor's 400 ms write, then the next check).
+- The versioned file opened on its own is unchanged: no pointer, no panel, the values it was written with.
+- While the app is closed the tab keeps showing what it last showed, and its checks fail quietly; when the engine comes back on the same port it carries on. The port is fixed for this reason (spec 01).
+- Any page on the preview origin can load a pointer of its project and learn the shape's file name, title and dials. It could already frame and read every artifact of the project, so this exposes nothing new.
 
 ### Motion
 
@@ -308,7 +326,7 @@ For example `dials.scene.speed: an array must be ...`.
 
 **The bridge** (`unframed-dials.js`), generated at engine build from the domain dial module so the shipped copy and the tested definition are one. It starts with a comment saying it is generated and rewritten on every write, so it must not be edited in the project folder. It defines `window.unframed.dials` and `window.unframed.defaultDials`.
 
-**Pinch to zoom.** In a framed artifact the bridge keeps a wheel with Ctrl or Cmd (a trackpad pinch) from the browser, which would zoom the whole app, and posts it to the canvas that said hello as `{ type: "unframed:wheel" }` with the wheel's deltas, modifiers and position. The canvas replays it on the canvas at the same point on screen, so a pinch over a selected page or motion zooms the canvas as it does with nothing selected; in the editor it does nothing. A plain scroll still scrolls the document. The preview origin refreshes `unframed-dials.js` from the current source whenever a frame requests it, so artifacts written before a bridge change get the new one.
+**Pinch to zoom.** In a framed artifact the bridge keeps a wheel with Ctrl or Cmd (a trackpad pinch) from the browser, which would zoom the whole app, and posts it to the canvas that said hello as `{ type: "unframed:wheel" }` with the wheel's deltas, modifiers and position. The canvas replays it on the canvas at the same point on screen, so a pinch over a selected page or motion zooms the canvas as it does with nothing selected; in the editor it does nothing. A plain scroll still scrolls the document. The preview origin refreshes `unframed-dials.js` from the current source whenever a frame requests it from a project folder that exists (a request never creates a folder), so artifacts written before a bridge change get the new one.
 - `dials(name, config, apply)`: normalise. On error, `console.error("[unframed] " + error)` and return null. Otherwise the state is name (`String(name)`, or `Parameters` when null), config, schema, values = merge(schema, `window.__hfVariables.unframedDials` or null), apply (a no-op when not a function). It calls apply with the values first (errors logged as `[unframed] applying parameters failed`), then announces, then returns `{ values, set(next) }`.
 - Announce posts `{ type: "unframed:dials", name, config, schema, values }` to `window.parent`, only when framed, addressed to a given origin, else to the other-origin canvas that last said hello, else its own. So a page framed directly by the canvas still reaches it with a declaration made after its load event.
 - It accepts a message only when `event.source` is `window.parent` and the origin is its own or loopback (`^http://(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$`, case-insensitive). `unframed:dials:hello` answers with an announcement addressed to the asker's origin. `unframed:dials:set` merges `values` over the current values (a deep assign one level per folder, so a partial set keeps what it does not name), re-merges against the schema, and applies.
@@ -335,7 +353,7 @@ Opened by double-click on an artifact, by the selection toolbar's Open on one fi
 - **Full screen, replacing the canvas on screen.** The canvas's own artifact frames and players unload while it is open. The tldraw editor instance and its local undo history survive, so Cmd-Z after closing undoes a dial change. Canvas keyboard shortcuts are inactive while the editor is open.
 - **Layout**: a three-column grid, 360 px, flexible, 320 px, gap 12 px, padding 12 px, on the body background. Each column is a card on `--card` with the kit border and a 14 px radius (spec 12).
 - **Left column**: spec 08's chat rail in embedded mode, without its own floating card styling, filtered by the selection (this artifact alone).
-- **Centre header**, one row, 48 px over a border: ghost icon button (the kit Button, `ghost`, 32 px) ArrowLeft, label `Back to canvas`, tooltip `Back to canvas (Esc)`; the kind icon (page AppWindow, motion Clapperboard); the title; the kind word (`page` or `motion`) in secondary text; then, right-aligned and only when the artifact has a file, ghost icon button ExternalLink, label and tooltip `Open in a new tab`, which opens the artifact URL with `noopener,noreferrer`.
+- **Centre header**, one row, 48 px over a border: ghost icon button (the kit Button, `ghost`, 32 px) ArrowLeft, label `Back to canvas`, tooltip `Back to canvas (Esc)`; the kind icon (page AppWindow, motion Clapperboard); the title; the kind word (`page` or `motion`) in secondary text; then, right-aligned and only when the artifact has a file, ghost icon button ExternalLink, label and tooltip `Open in a new tab`, which opens the artifact's live viewer URL (or the artifact URL for a shape with no live viewer) with `noopener,noreferrer`.
 - **Centre body**: the artifact frame (same attributes as on the canvas, live from the start, not lazy), keyed by file. With no file: `This {kind} has no file yet. Ask the agent to write one.`
 - The region has `aria-label` `Editing {title}`.
 - **Esc** closes the editor unless the event was already handled or the focus is in an input, textarea or contenteditable.
@@ -368,7 +386,9 @@ Tool descriptions are model-facing: use the text in `assets/prompts/preview-tool
 ### Modules
 
 - **Preview origin** (engine): deep module, interface = start with an output-folder getter, returns the port; one pure resolve step (URL, Host, folder to file-or-status) behind it.
-- **Artifact store** (engine): write new artifact file with sidecar, read artifact, ensure bridge, ensure library, motion upload. Adapter over the file system.
+- **Artifact store** (engine): write new artifact file with sidecar, read artifact, ensure bridge, ensure library, ensure live viewer, motion upload. Adapter over the file system.
+- **Live pointers** (engine): after a room opens and after each commit, writes the pointer of every artifact shape whose file, title or dials changed.
+- **Live viewer** (domain): the key rule, the pointer text, the viewer URL and the viewer page, whose script is built from the same module.
 - **Renderer** (engine): start and status, with the producer behind a seam the test hook replaces.
 - **Artifact rules** (domain): file names, tag injection, Chrome candidate list, placement beside selection, the add-a-parameter instruction builder. (A render's placeholder is placed by spec 03's result placement.)
 - **Dials** (domain): normalise, default values, merge, and the bridge built from them.
@@ -378,7 +398,7 @@ Tool descriptions are model-facing: use the text in `assets/prompts/preview-tool
 
 A good test drives one of the three seams from 00-index and asserts only on what that seam exposes: HTTP responses, RPC replies, files written, what is on screen. Prior art in the old app: the preview origin tested by resolving requests and asserting status, headers and body; the dial rules tested case by case; the shipped bridge tested by evaluating its actual source against a stub `window` and driving it with messages; renders tested with the producer replaced.
 
-- **Domain**: naming, tag injection, dial normalisation, defaults and merge, Chrome candidates per platform, placement, the instruction builder. Also the built bridge file, evaluated against a stub window (parent, origin, `postMessage`, `__hfVariables`), because it is a domain artefact.
+- **Domain**: naming, tag injection, dial normalisation, defaults and merge, Chrome candidates per platform, placement, the instruction builder. Also the built bridge file, evaluated against a stub window (parent, origin, `postMessage`, `__hfVariables`), because it is a domain artefact, and the built live viewer the same way.
 - **Engine**: the preview origin over real HTTP (fetch with a crafted `Host` header), the four artifact tools and the preview tools through the scripted agent (fixtures `dials`, `revise`, `stitch` exist in `assets/fixtures/`), motion upload and render RPCs with `UNFRAMED_TEST_RENDERER`, and the files each leaves in the project folder.
 - **Browser**: shapes, drop, paste, delete, the frame's live state, the sandbox probe, render from the button, the editor, dials end to end, the add-a-parameter box. A real render (Chrome plus ffmpeg) is a manual check, not a test.
 
@@ -429,7 +449,7 @@ A good test drives one of the three seams from 00-index and asserts only on what
 43. A failed render shows its error, or `The render failed.`, on the shape. Seam: browser
 44. Double-click opens the editor with the three columns, header controls and live frame; Back and Esc close it and restore the camera. Seam: browser
 45. Esc typed in the composer or the parameter box does not close the editor; canvas shortcuts are inactive while it is open. Seam: browser
-46. An artifact with no file shows the no-file message and no "Open in a new tab"; "Open in a new tab" opens the artifact URL. Seam: browser
+46. An artifact with no file shows the no-file message and no "Open in a new tab"; "Open in a new tab" opens the artifact's live viewer URL, which shows the artifact. Seam: browser
 47. Deleting the artifact from another tab closes the editor. Seam: browser
 48. An artifact that declares dials shows DialKit controls; one that does not shows `No parameters yet.` Seam: browser
 49. Dragging a dial updates the frame live and writes `dials` once, 400 ms after the drag stops, as one undo step that Cmd-Z on the canvas reverts after closing. Seam: browser
@@ -446,6 +466,10 @@ A good test drives one of the three seams from 00-index and asserts only on what
 60. A live frame more than one viewport width off screen unmounts and remounts on return. Seam: browser
 61. Snapshots render after a write, a file replacement, a saved dial change and a resize over 10 %, with the saved dials applied, into `.cache/snapshots/`, debounced per shape and one at a time; no Chrome means no snapshot and the hint card. Seam: engine
 62. Artifact performance budget: a board with ten pages each running the busy fixture from `assets/perf/` and five motions pans for 4 s in the hosted shape with the median frame gap at or under 16.7 ms, no more than 2 % of frames over 33 ms, and no long task on the canvas thread over 50 ms. The frame-gap and long-task thresholds are enforced by `pnpm test:perf` on real hardware, not on shared CI runners (spec 02's performance budget); the live frame caps are asserted everywhere. Seam: browser
+63. Live viewer rules: the key from a shape id and the ids that have none, the pointer file name, the pointer text calling `unframedLive` (and harmless without it), the viewer URL under the other loopback name; the built viewer, run against a stub window, refuses a bad key, checks at once and every second with a new query, frames a page directly and a motion through its viewer, says hello on load and answers an announcement with the saved values, posts changed dials, remounts on cleared dials, swaps a new version in only once it loaded, and shows the no-file line. Seam: domain
+64. After a `page_write` that makes a new version, the shape's pointer names the new file, and after a dial change it carries the new dials; the old file is untouched. Seam: engine
+65. One pointer per artifact shape and one viewer per project; the preview origin serves both under `/p/<project>/<file>` with its usual headers (`text/javascript` for a pointer), and rewrites a viewer that differs from the engine's own when a frame asks for it. Seam: engine
+66. A page opened with "Open in a new tab" shows its saved dials; a new version swaps in within a few seconds without the tab reloading; a dial change on the shape reaches it. A motion's live viewer shows its saved dials through the motion viewer and follows a dial change and a new version. Seam: browser
 
 ## Out of Scope
 
@@ -462,7 +486,7 @@ A good test drives one of the three seams from 00-index and asserts only on what
 - Three kinds of parameter, which the tool descriptions teach and the add-a-parameter instruction repeats: a value nothing animates goes straight to the DOM in the callback; a value the animation is made of is fed into the timeline, which the callback rebuilds from the values (keep the playhead, clear, re-add tweens, seek back); a value that changes over time is its start, its end and a duration as separate controls. GSAP rewrites `transform` on every tweened element each frame, so a DOM write beside a tween holds while the clip is still and is lost the moment it plays.
 - The canvas read (spec 07) reports `dials` on an artifact that has them, and spec 07's system prompt tells the agent to carry current values into anything built from an artifact. The file the agent reads back holds the defaults.
 - Known HyperFrames quirks, not chased: in the preview a `<video>` clip's `currentTime` may not follow a seek (renders are unaffected); the player may report the timeline's length rather than the root's `data-duration` when shorter (the render uses `data-duration`).
-- In the packaged shell, `window.open` from "Open in a new tab" becomes the shell's external-open handler.
+- In the packaged shell, `window.open` from "Open in a new tab" becomes the shell's external-open handler, which opens the live viewer URL in the person's browser. The app there is on `127.0.0.1`, so the link is `http://localhost:18787/...`, the same on every launch while the fixed port is free.
 
 **Licences** (list each in the third-party notices):
 - HyperFrames (`@hyperframes/core`, `@hyperframes/player`, `@hyperframes/producer`, `@hyperframes/engine`): Apache-2.0. The player and runtime builds are copied into project folders.

@@ -226,6 +226,8 @@ export const startEngine = async (options: EngineOptions = {}): Promise<TestEngi
   }
   Object.assign(env, {
     PORT: "0",
+    // Parallel engines would fight over the fixed preview port.
+    UNFRAMED_PREVIEW_PORT: "0",
     UNFRAMED_DATA_DIR: dataDir,
     UNFRAMED_TEST_NATIVE_LOG: nativeLogPath,
   });

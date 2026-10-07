@@ -21,6 +21,7 @@ import { ensureLibrary, writeUploadedArtifact } from "./artifactStore.ts";
 import { findChrome } from "./chrome.ts";
 import { producerBackend, Renderer, RenderRefused, stubBackend } from "./renderer.ts";
 import { HeadlessChrome } from "./headlessChrome.ts";
+import { LivePointers } from "./livePointers.ts";
 import { chromeSnapshotRenderer, Snapshots, stubSnapshotRenderer, type SnapshotRenderer } from "./snapshots.ts";
 import { SettingsStore } from "../settingsStore.ts";
 import { Shutdown } from "../shutdown.ts";
@@ -86,6 +87,13 @@ export const artifactsLayer = Layer.effect(
       void run(openProjects.register(project, "artifact snapshots", Effect.sync(() => snapshots.forget(project))));
     });
     yield* rooms.afterCommit((project, change) => snapshots.committed(project, [...change.records.values()]));
+
+    const pointers = new LivePointers((project) => media.folder(project));
+    yield* rooms.afterOpen((project, room) => {
+      pointers.update(project, room.read());
+      void run(openProjects.register(project, "live viewer pointers", Effect.sync(() => pointers.forget(project))));
+    });
+    yield* rooms.afterCommit((project, change) => pointers.update(project, change.records.values()));
 
     const renderer = new Renderer({
       backend,

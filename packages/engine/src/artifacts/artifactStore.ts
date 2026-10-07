@@ -9,7 +9,16 @@ import { constants, existsSync } from "node:fs";
 import { copyFile, mkdir, open, readFile, stat, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { basename, dirname, join } from "node:path";
-import { artifactFileName, dialsBridgeSource, sidecarFileName, sidecarText, viewerPageSource, type ArtifactKind } from "@unframed/domain";
+import {
+  artifactFileName,
+  dialsBridgeSource,
+  LIVE_VIEWER_FILE,
+  liveViewerSource,
+  sidecarFileName,
+  sidecarText,
+  viewerPageSource,
+  type ArtifactKind,
+} from "@unframed/domain";
 
 const require = createRequire(import.meta.url);
 
@@ -60,6 +69,11 @@ const ensure = async (folder: string, files: ReadonlyArray<LibraryFile>): Promis
 
 /** A page write ensures only the bridge; a page never gets the player, runtime or GSAP. */
 export const ensureBridge = (folder: string): Promise<void> => ensure(folder, [BRIDGE]);
+
+const LIVE_VIEWER: LibraryFile = { name: LIVE_VIEWER_FILE, bytes: async () => Buffer.from(liveViewerSource(), "utf8") };
+
+/** The live viewer "Open in a new tab" opens, beside every shape's pointer. */
+export const ensureLiveViewer = (folder: string): Promise<void> => ensure(folder, [LIVE_VIEWER]);
 
 /** A motion write, a motion upload and a render start each ensure the whole library first. */
 export const ensureLibrary = (folder: string): Promise<void> => ensure(folder, LIBRARY);

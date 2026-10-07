@@ -62,7 +62,8 @@ Use these words, and only these, for these things.
 - **Artifact**: a page or a motion.
 - **Editor**: the full-screen view of one artifact: chat on the left, the artifact in the centre, **dials** (DialKit parameters) on the right.
 - **Render job**: a durable record of a paid video generation that outlives the browser tab.
-- **Preview origin**: the second loopback HTTP server that serves artifact files and nothing else.
+- **Preview origin**: the second loopback HTTP server that serves artifact files and nothing else, on a fixed port (18787) unless something else holds it.
+- **Live viewer**: the small page "Open in a new tab" opens. It shows a page or motion's newest version with its current dials, and follows both while the app is open (spec 09).
 - **Share link**: a temporary public URL that serves one local file so a video model can fetch it.
 - **Sketch**: marks rendered to an image at run time, either composited onto the image they sit on or, when loose, as a standalone reference image.
 - **Placeholder**: the shape the engine puts on the canvas where a result will land, before the work that makes it is answered, carrying a run marker until the engine fills it (spec 03 defines it; specs 04, 05 and 09 use it).
@@ -74,7 +75,7 @@ Use these words, and only these, for these things.
 
 There are exactly three. Every task in every spec names one of them.
 
-1. **Engine seam.** The real engine process, forked by the test into a temporary data folder, on an OS-assigned port (`PORT=0`), with every OpenRouter call (image, text, video, catalogue, pricing, key and auth endpoints) pointed at an in-test stub server through spec 01's single loopback-only `UNFRAMED_TEST_OPENROUTER_ORIGIN`, every other test hook set from spec 01's one table of test-only variables, and with the agent provider replaced by a scripted agent (a JSON script of turns, tool calls and failures, chosen by matching the first message). Tests drive it through its public interface only: the RPC socket, the sync socket, the plain HTTP routes, the IPC messages it sends its parent, and the files it writes. Nothing that spends money runs here.
+1. **Engine seam.** The real engine process, forked by the test into a temporary data folder, on an OS-assigned port (`PORT=0`) with an OS-assigned preview port too (`UNFRAMED_PREVIEW_PORT=0`, so engines running side by side never compete for the fixed one), with every OpenRouter call (image, text, video, catalogue, pricing, key and auth endpoints) pointed at an in-test stub server through spec 01's single loopback-only `UNFRAMED_TEST_OPENROUTER_ORIGIN`, every other test hook set from spec 01's one table of test-only variables, and with the agent provider replaced by a scripted agent (a JSON script of turns, tool calls and failures, chosen by matching the first message). Tests drive it through its public interface only: the RPC socket, the sync socket, the plain HTTP routes, the IPC messages it sends its parent, and the files it writes. Nothing that spends money runs here.
 2. **Domain seam.** The pure modules in `domain`, called directly. Use it for rules with many cases: request composition from a selection, `@id` resolution, numbering and roles, Free-mode splitting, pricing estimates, dial shorthand, job-store pruning, `.env` editing, permission decisions.
 3. **Browser seam.** Playwright driving the built web client served by an engine running at the engine seam (stubbed upstreams, scripted agent). Use it for anything a person does on the canvas or in a dialog. Assert on what is on screen and on what the engine then holds.
 

@@ -11,7 +11,7 @@ import { Button } from "~/components/ui/button";
 import { AgentRail } from "../../agent/rail/AgentRail.tsx";
 import { Tip } from "../../chrome/ui.tsx";
 import { useCanvasProject } from "../../context.ts";
-import { ArtifactFrame, urlOf } from "../ArtifactFrame.tsx";
+import { ArtifactFrame, outsideUrlOf } from "../ArtifactFrame.tsx";
 import { previewPort } from "../state.ts";
 import { RenderButton } from "../render.tsx";
 import { COLUMN, ColumnHeader, Parameters } from "./Parameters.tsx";
@@ -123,7 +123,7 @@ export const ArtifactEditor = ({ shapeId, onClose, onOpen }: ArtifactEditorProps
                 variant="ghost"
                 size="icon"
                 aria-label="Open in a new tab"
-                onClick={() => window.open(urlOf(project, facts.kind, facts.file, port), "_blank", "noopener,noreferrer")}
+                onClick={() => window.open(outsideUrlOf(project, shapeId, facts.kind, facts.file, port), "_blank", "noopener,noreferrer")}
               >
                 <ExternalLink aria-hidden />
               </Button>

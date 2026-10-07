@@ -3,8 +3,8 @@ import { stat } from "node:fs/promises";
 import http from "node:http";
 import { basename, dirname, join } from "node:path";
 import { pipeline } from "node:stream/promises";
-import { loopbackGuard, projectSlug } from "@unframed/domain";
-import { BRIDGE_FILE, ensureBridge } from "../artifacts/artifactStore.ts";
+import { LIVE_VIEWER_FILE, loopbackGuard, projectSlug } from "@unframed/domain";
+import { BRIDGE_FILE, ensureBridge, ensureLiveViewer } from "../artifacts/artifactStore.ts";
 import { NOT_FOUND } from "./respond.ts";
 import { guardUpgrade, refuseUpgrade } from "./guard.ts";
 
@@ -105,9 +105,11 @@ const handler =
     } catch {
       return refuse(res, 404, "not found", head);
     }
-    // The bridge is generated: a frame asking for it gets the current one, so a bridge fix
-    // reaches artifacts written before it.
-    if (basename(path) === BRIDGE_FILE) await ensureBridge(dirname(path)).catch(() => undefined);
+    // The bridge and the live viewer are generated: a frame asking for one gets the current
+    // one, so a fix reaches projects written before it. Only in a project that exists: a
+    // request never makes a folder.
+    const refresh = basename(path) === BRIDGE_FILE ? ensureBridge : basename(path) === LIVE_VIEWER_FILE ? ensureLiveViewer : undefined;
+    if (refresh !== undefined && (await stat(dirname(path)).catch(() => undefined))?.isDirectory()) await refresh(dirname(path)).catch(() => undefined);
     const info = await stat(path).catch(() => undefined);
     if (!info?.isFile()) return refuse(res, 404, "not found", head);
     const etag = etagOf(info.size, info.mtimeMs);
@@ -155,18 +157,21 @@ const NO_IPV6 = new Set(["EADDRNOTAVAIL", "EAFNOSUPPORT", "EINVAL"]);
 
 export interface PreviewOrigin {
   readonly port: number;
+  /** The fixed port it asked for when something else held it, so it took an OS-assigned one. */
+  readonly taken: number | undefined;
   /** Stops accepting connections on every address it listens on. */
   readonly stopListening: () => void;
   readonly closeAllConnections: () => void;
 }
 
 /**
- * Starts the preview origin on `127.0.0.1` with an OS-assigned port, and on `[::1]` at the
- * same port where the machine has it, so `localhost` answers whichever address it resolves
- * to. It reads the output folder through `outputDir` on every request, so a settings change
- * moves it without a restart.
+ * Starts the preview origin on `127.0.0.1` at `wanted`, and on `[::1]` at the same port
+ * where the machine has it, so `localhost` answers whichever address it resolves to. When
+ * another program holds `wanted` on either address it takes an OS-assigned port instead
+ * (`0` asks for one from the start). It reads the output folder through `outputDir` on
+ * every request, so a settings change moves it without a restart.
  */
-export const startPreviewOrigin = async (outputDir: () => Promise<string>): Promise<PreviewOrigin> => {
+export const startPreviewOrigin = async (outputDir: () => Promise<string>, wanted: number): Promise<PreviewOrigin> => {
   const make = () => {
     const server = http.createServer({ requireHostHeader: false }, (req, res) => {
       void handler(outputDir)(req, res).catch(() => {
@@ -179,26 +184,36 @@ export const startPreviewOrigin = async (outputDir: () => Promise<string>): Prom
     });
     return server;
   };
+  let fixed = wanted !== 0;
   for (let attempt = 0; ; attempt++) {
     const v4 = make();
-    const port = await listenOn(v4, "127.0.0.1", 0);
+    const port = await listenOn(v4, "127.0.0.1", fixed ? wanted : 0).catch((error: unknown) => {
+      if (fixed) return undefined;
+      throw error;
+    });
+    if (port === undefined) {
+      fixed = false;
+      continue;
+    }
     const v6 = make();
     const both = await listenOn(v6, "::1", port).then(
       () => true,
       (error: NodeJS.ErrnoException) => {
         if (NO_IPV6.has(error.code ?? "")) return false;
-        if (attempt < 5) return undefined;
+        if (fixed || attempt < 5) return undefined;
         return false;
       },
     );
     if (both === undefined) {
-      // Something else holds this port on ::1: try another pair.
+      // Something else holds this port on ::1, where `localhost` may reach it: try another pair.
       v4.close();
+      fixed = false;
       continue;
     }
     const servers = both ? [v4, v6] : [v4];
     return {
       port,
+      taken: wanted !== 0 && port !== wanted ? wanted : undefined,
       stopListening: () => {
         for (const server of servers) {
           server.close();

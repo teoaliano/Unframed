@@ -1,4 +1,4 @@
-import { artifactUrl, type ArtifactKind, type DialsAnnouncement } from "@unframed/domain";
+import { artifactUrl, liveViewerUrl, type ArtifactKind, type DialsAnnouncement } from "@unframed/domain";
 import { useEffect, useRef } from "react";
 
 export interface ArtifactFrameProps {
@@ -21,6 +21,13 @@ const nonEmpty = (dials: Readonly<Record<string, unknown>> | undefined) => dials
 /** An artifact's URL on the preview origin, under the loopback name the app is not using. */
 export const urlOf = (project: string, kind: ArtifactKind, file: string, port: number): string =>
   artifactUrl({ appHostname: window.location.hostname, previewPort: port, project, file, kind });
+
+/**
+ * What "Open in a new tab" opens: the shape's live viewer, which follows its newest file and
+ * dials, or the file itself for a shape id the viewer cannot be named by.
+ */
+export const outsideUrlOf = (project: string, shapeId: string, kind: ArtifactKind, file: string, port: number): string =>
+  liveViewerUrl({ appHostname: window.location.hostname, previewPort: port, project, shapeId }) ?? urlOf(project, kind, file, port);
 
 interface FrameWheel {
   readonly type: "unframed:wheel";
