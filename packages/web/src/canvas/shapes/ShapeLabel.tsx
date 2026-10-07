@@ -10,21 +10,24 @@ const KIND_WORDS: Readonly<Record<string, string>> = { prompt: "Prompt", group: 
 /**
  * The label above a shape's top-left corner, in a 22 px band that is part of the shape and
  * scales with the canvas. Whether it shows is decided by CSS from the canvas's label level
- * and the shape element's `data-label-active` mark. A label is a handle: a press on it
- * presses the shape, and a double-click on it opens the name field in its place, which
- * shows at every zoom. `name` is the `@id` the field starts from; `after` follows the
- * label's text and hides while the field is open.
+ * and the shape element's `data-label-active` mark. Its text is cut with an ellipsis at
+ * `width` (the shape's width), and a cut label shows its whole text on hover. A label is a
+ * handle: a press on it presses the shape, and a double-click on it opens the name field in
+ * its place, which shows at every zoom. `name` is the `@id` the field starts from; `after`
+ * follows the text and hides while the field is open.
  */
 export const ShapeLabel = ({
   shapeId,
-  children,
+  text,
   kind,
+  width,
   name,
   after,
 }: {
   readonly shapeId: TLShapeId;
-  readonly children: ReactNode;
+  readonly text: string;
   readonly kind: string;
+  readonly width: number;
   readonly name?: string | undefined;
   readonly after?: ReactNode;
 }) => {
@@ -33,7 +36,7 @@ export const ShapeLabel = ({
   const renaming = useValue("label renaming", () => renamingShape(editor).get() === shapeId, [editor, shapeId]);
   const open = renaming && name !== undefined;
   // An untitled, unnamed artifact has no label until its name field opens.
-  if (!open && (children === "" || children === undefined) && !after) return null;
+  if (!open && text === "" && !after) return null;
 
   const onPointerDown = (event: PointerEvent) => {
     if (open || editor.wasEventAlreadyHandled(event)) return;
@@ -57,9 +60,21 @@ export const ShapeLabel = ({
       data-label-kind={kind}
       data-label-open={open ? "true" : undefined}
       data-label-handle="true"
+      style={open ? undefined : { maxWidth: width }}
       onPointerDown={onPointerDown}
+      // Measured under the pointer rather than on every render, so a label subscribes to nothing.
+      onPointerMove={(event) => {
+        const shown = event.currentTarget.querySelector<HTMLElement>("[data-label-text]");
+        event.currentTarget.title = shown && shown.scrollWidth > shown.clientWidth ? text : "";
+      }}
     >
-      {open ? <RenameField shapeId={shapeId} current={name} kind={KIND_WORDS[kind] ?? kind} /> : children}
+      {open ? (
+        <RenameField shapeId={shapeId} current={name} kind={KIND_WORDS[kind] ?? kind} />
+      ) : (
+        <span data-label-text="" className="min-w-0 truncate">
+          {text}
+        </span>
+      )}
       {!open && after}
     </div>
   );

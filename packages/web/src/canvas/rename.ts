@@ -100,9 +100,18 @@ export const installRename = (editor: Editor): (() => void) => {
     event.preventDefault();
     startRename(editor, only!.id);
   };
+  // The field takes the keyboard a frame after it opens. A key typed in that gap belongs to
+  // the name, never to the canvas, where a letter is a shortcut (I adds an image).
+  const holdKeys = (event: KeyboardEvent) => {
+    if (renamingShape(editor).get() === undefined || typingSomewhere()) return;
+    event.preventDefault();
+    event.stopImmediatePropagation();
+  };
   window.addEventListener("keydown", onKeyDown);
+  window.addEventListener("keydown", holdKeys, true);
   return () => {
     window.removeEventListener("keydown", onKeyDown);
+    window.removeEventListener("keydown", holdKeys, true);
     renamingShape(editor).set(undefined);
   };
 };

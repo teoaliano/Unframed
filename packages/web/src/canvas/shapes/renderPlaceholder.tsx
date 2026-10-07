@@ -12,6 +12,7 @@ import { useCanvasProject, useEngine } from "../../context.ts";
 import { noteRender } from "../../fps/renders.ts";
 import { showError } from "../../toasts.tsx";
 import { mediaCardClass } from "./looks.ts";
+import { waitingLabel } from "./labels.ts";
 import { ShapeLabel } from "./ShapeLabel.tsx";
 
 export const FORGET_LABEL = "Forget this job";
@@ -75,9 +76,7 @@ export const RenderPlaceholder = ({ shape }: { readonly shape: TLVideoShape }) =
       data-render={marker ? "pending" : "failed"}
       style={{ width: shape.props.w, height: shape.props.h }}
     >
-      <ShapeLabel shapeId={shape.id} kind="video" name={readRef(shape)}>
-        Video
-      </ShapeLabel>
+      <ShapeLabel shapeId={shape.id} kind="video" name={readRef(shape)} width={shape.props.w} text={waitingLabel(shape, "Video")} />
       <div className="box-border flex h-full flex-col items-center justify-center gap-2 p-3 text-center">
         {marker ? (
           <Rendering shape={shape} jobId={marker.runId} startedAt={marker.startedAt} />

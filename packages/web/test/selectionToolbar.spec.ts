@@ -73,7 +73,7 @@ test("the bar sits centred above the selection, flips below it at the top edge a
   await expect(bar).toBeVisible();
 
   const shape = (await subject.boundingBox())!;
-  await expect.poll(async () => { const box = (await bar.boundingBox())!; return box.y + box.height; }).toBeCloseTo(shape.y - 12, 0);
+  await expect.poll(async () => { const box = (await bar.boundingBox())!; return box.y + box.height; }).toBeCloseTo(shape.y - 22 - 12, 0);
   const box = (await bar.boundingBox())!;
   expect(box.x + box.width / 2).toBeCloseTo(shape.x + shape.width / 2, 0);
 

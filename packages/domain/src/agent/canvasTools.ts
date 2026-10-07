@@ -8,7 +8,7 @@ import { boxesOverlap, clampGroupSize, mayBeGroupMember } from "../grouping.ts";
 import { planRename } from "../groupRules.ts";
 import { nextRef, plainText, readRef, rewriteRichTextTokens } from "../refs.ts";
 import { readingOrder, type CanvasShape, type ShapeKind } from "../canvasShapes.ts";
-import { slugName, uniqueName } from "../groupRules.ts";
+import { nameRefusal, slugName, uniqueName } from "../groupRules.ts";
 import { agentShapeId, roomShapeId } from "./turnText.ts";
 
 /** A canvas record as these rules read it: tldraw's fields, loosely typed. */
@@ -597,6 +597,8 @@ const create = (batch: Batch, ctx: BatchContext, op: Record<string, unknown>): v
 const renameShape = (batch: Batch, ctx: BatchContext, shape: CanvasRecord, typed: unknown, op: string): void => {
   if (readRef(shape) === undefined) refuse(`${op}: ${agentShapeId(shape.id)} has no @id to rename`);
   if (typeof typed !== "string") refuse(`${op}: name must be a string`);
+  const refusal = nameRefusal(typed as string, readRef(shape)!);
+  if (refusal !== undefined) refuse(`${op}: ${refusal}`);
   const records = batch.records();
   const plan = planRename(canvasShapesOf(records, ctx.boxes), shape.id, typed as string);
   if (plan === undefined) return;

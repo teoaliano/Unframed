@@ -1,5 +1,5 @@
 import type { ArtifactShapeProps } from "@unframed/contracts";
-import { artifactTitle, isMintedRef, readRef, type ArtifactKind } from "@unframed/domain";
+import { artifactTitle, readRef, type ArtifactKind } from "@unframed/domain";
 import { AppWindow, Clapperboard } from "lucide-react";
 import { BaseBoxShapeUtil, HTMLContainer, resizeBox, T, useEditor, useValue, type RecordProps, type TLResizeInfo, type TLShape } from "tldraw";
 import { ArtifactFrame } from "../../artifacts/ArtifactFrame.tsx";
@@ -9,6 +9,7 @@ import { isInteractive, isLive, previewPort } from "../../artifacts/state.ts";
 import { currentSlots } from "../../chrome/slots.ts";
 import { useCanvasProject } from "../../context.ts";
 import { artifactCardClass } from "./looks.ts";
+import { nameOf, waitingLabel } from "./labels.ts";
 import { ShapeLabel } from "./ShapeLabel.tsx";
 import { noteRender } from "../../fps/renders.ts";
 
@@ -27,12 +28,6 @@ const artifactProps: RecordProps<ArtifactShape> = {
   dials: T.dict(T.string, T.jsonValue).optional(),
 };
 
-/** A person's name for the artifact, as its `@id`; `undefined` while its `@id` is a minted number. */
-const nameOf = (shape: ArtifactShape): string | undefined => {
-  const ref = readRef(shape);
-  return ref !== undefined && !isMintedRef(ref) ? ref : undefined;
-};
-
 /** The row under a motion (Render) is this tall; the status line goes below it. */
 const RENDER_ROW_HEIGHT = 34;
 
@@ -44,9 +39,7 @@ const EmptyArtifact = ({ shape, kind }: { readonly shape: ArtifactShape; readonl
   return (
     <>
       <HTMLContainer id={shape.id} className={artifactCardClass} data-testid="artifact-card" data-artifact-kind={kind} style={{ width: props.w, height: props.h }}>
-        <ShapeLabel shapeId={shape.id} kind={kind} name={readRef(shape)}>
-          {nameOf(shape) !== undefined ? `@${nameOf(shape)}` : kind === "page" ? "Page" : "Motion"}
-        </ShapeLabel>
+        <ShapeLabel shapeId={shape.id} kind={kind} name={readRef(shape)} width={props.w} text={waitingLabel(shape, kind === "page" ? "Page" : "Motion")} />
         <div className="flex h-full flex-col items-center justify-center gap-3 text-muted-foreground">
           <Icon className="size-7" strokeWidth={1.5} aria-label={kind === "page" ? "Page" : "Motion"} />
         </div>
@@ -91,9 +84,7 @@ const FilledArtifact = ({ shape, kind }: { readonly shape: ArtifactShape; readon
   return (
     <>
       <HTMLContainer id={shape.id} data-testid="artifact-card" data-artifact-kind={kind} data-live={live ? "true" : undefined} style={{ width: props.w, height: props.h }}>
-        <ShapeLabel shapeId={shape.id} kind={kind} name={readRef(shape)}>
-          {name !== undefined ? `@${name}` : title}
-        </ShapeLabel>
+        <ShapeLabel shapeId={shape.id} kind={kind} name={readRef(shape)} width={props.w} text={name !== undefined ? `@${name}` : title} />
         {live && port !== undefined ? (
           <ArtifactFrame key={props.file} project={project} kind={kind} file={props.file} previewPort={port} dials={props.dials} interactive={interactive} lazy />
         ) : (

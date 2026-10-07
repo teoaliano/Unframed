@@ -1,5 +1,6 @@
 import { resultMetaOf, UnframedError, type ResultRecipe } from "@unframed/contracts";
-import { composeSelection, resultLine, toolbarState, type ToolbarState } from "@unframed/domain";
+import { composeSelection, labelLevel, readRef, resultLine, toolbarState, type ToolbarState } from "@unframed/domain";
+import { renamingShape } from "../canvas/rename.ts";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useEditor, useValue, type Editor, type TLShapeId } from "tldraw";
 import { GripVertical } from "lucide-react";
@@ -39,11 +40,20 @@ const GESTURES = [
 const hiddenByGesture = (editor: Editor): boolean =>
   editor.isInAny(...GESTURES) || (editor.inputs.getIsPanning() && editor.inputs.getIsPointing());
 
-/** The selection's bounds on screen, relative to the canvas. */
+/** The band a shape's label takes above its top edge, in canvas units (spec 02). */
+const LABEL_BAND = 22;
+
+/**
+ * The selection's bounds on screen, relative to the canvas, with the band of its labels on
+ * top while a selected shape has a shown label, so the bar never covers the label of what it
+ * is about.
+ */
 const selectionOnScreen = (editor: Editor): ScreenBox | undefined => {
   const bounds = editor.getSelectionPageBounds();
   if (!bounds) return undefined;
-  const topLeft = editor.pageToViewport({ x: bounds.minX, y: bounds.minY });
+  const labelled = labelLevel(editor.getZoomLevel()) !== "off" && editor.getSelectedShapes().some((shape) => readRef(shape) !== undefined);
+  const band = labelled ? LABEL_BAND : 0;
+  const topLeft = editor.pageToViewport({ x: bounds.minX, y: bounds.minY - band });
   const bottomRight = editor.pageToViewport({ x: bounds.maxX, y: bounds.maxY });
   return { x: topLeft.x, y: topLeft.y, w: bottomRight.x - topLeft.x, h: bottomRight.y - topLeft.y };
 };
@@ -415,7 +425,8 @@ export const SelectionToolbar = () => {
   const project = useCanvasProject();
   const { agentTray } = useSlots();
   const composer = useValue("composer", () => composerState(editor).get(), [editor]);
-  const hidden = useValue("toolbar hidden", () => hiddenByGesture(editor), [editor]);
+  // A name field sits in a label, right under the bar: the bar steps aside while it is open.
+  const hidden = useValue("toolbar hidden", () => hiddenByGesture(editor) || renamingShape(editor).get() !== undefined, [editor]);
   const selectionKey = useValue("selection", () => editor.getSelectedShapeIds().join(" "), [editor]);
   const expanded = composer.mode !== "bar";
 

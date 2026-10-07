@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isMintedRef, planRename, refOnPaste, renamePlan, slugName, uniqueName } from "../src/index.ts";
+import { isMintedRef, NAME_NEEDS_A_LETTER, nameRefusal, planRename, refOnPaste, renamePlan, slugName, uniqueName } from "../src/index.ts";
 import { artifact, group, image, mark, prompt, textResult, video } from "./shapes.ts";
 
 describe("slugName", () => {
@@ -10,6 +10,8 @@ describe("slugName", () => {
     ["nothing a prompt can reference is left: empty", "!!!", ""],
     ["an @ typed in front is not part of the name", "@fox", "fox"],
     ["spec 01's 40-character cap", "a".repeat(50), "a".repeat(40)],
+    ["accented letters lose their accents rather than disappear", "Café #1 / Été", "cafe-1-ete"],
+    ["an accent at the end is kept as its letter", "città", "citta"],
   ])("%s", (_case, typed, slug) => {
     expect(slugName(typed)).toBe(slug);
   });
@@ -96,8 +98,7 @@ describe("planRename", () => {
 
   it("suffixes a name any @id on the canvas uses", () => {
     expect(planRename(board, "g", "Vixen")?.to).toBe("vixen-2");
-    expect(planRename(board, "g", "100")?.to).toBe("100-2");
-    expect(planRename(board, "g", "102")?.to).toBe("102-2");
+    expect(planRename(board, "g", "100 x")?.to).toBe("100-x");
     expect(planRename(board, "i", "landing")?.to).toBe("landing-2");
     expect(planRename(board, "p", "fox")?.to).toBe("fox-2");
   });
@@ -109,9 +110,24 @@ describe("planRename", () => {
     expect(planRename(board, "i", "@102")).toBeUndefined();
   });
 
+  it("refuses a name of digits only, which would read as a number the canvas minted", () => {
+    expect(planRename(board, "g", "42")).toBeUndefined();
+    expect(planRename(board, "i", " 2024 ")).toBeUndefined();
+  });
+
   it("answers nothing for a mark or a shape that is not there", () => {
     expect(planRename(board, "m", "fox")).toBeUndefined();
     expect(planRename(board, "missing", "fox")).toBeUndefined();
+  });
+});
+
+describe("nameRefusal", () => {
+  it("says why a typed name cannot be used, and nothing for one that can, or for the current @id", () => {
+    expect(nameRefusal("42", "fox")).toBe(NAME_NEEDS_A_LETTER);
+    expect(nameRefusal("#42!", "fox")).toBe(NAME_NEEDS_A_LETTER);
+    expect(nameRefusal("102", "102")).toBeUndefined();
+    expect(nameRefusal("hero 2", "102")).toBeUndefined();
+    expect(nameRefusal("!!!", "102")).toBeUndefined();
   });
 });
 

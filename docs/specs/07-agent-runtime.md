@@ -222,7 +222,7 @@ A member's `x, y` is relative to its group, as the document holds it, and `paren
 | `resize` | `id`, `w`, `h` | media keeps its aspect lock (spec 02) |
 | `delete` | `id` | deleting a group deletes its members, as on the canvas |
 | `reparent` | `id`, `parent` | into a group, or `null` to take it out; spec 02's group membership rules apply |
-| `rename` | `id`, `name` | renames any shape with an `@id` (a prompt, image, video, page, motion or group) exactly as the canvas does (spec 06): slugified, collision-suffixed, a page or motion retitled with the name, and every `@` reference to it rewritten in the same batch. A mark is refused with "rename: <id> has no @id to rename" |
+| `rename` | `id`, `name` | renames any shape with an `@id` (a prompt, image, video, page, motion or group) exactly as the canvas does (spec 06): slugified, collision-suffixed, a page or motion retitled with the name, and every `@` reference to it rewritten in the same batch. A mark is refused with "rename: <id> has no @id to rename", and a name of digits only with "rename: A name needs a letter." |
 
 Refused before the canvas sees the batch, with these messages:
 

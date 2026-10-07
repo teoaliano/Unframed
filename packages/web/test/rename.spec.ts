@@ -169,9 +169,17 @@ test("typing @ in a prompt offers images, videos, pages and motions by their nam
   const point = await emptyCanvasPoint(page);
   await page.mouse.dblclick(point.x, point.y);
   await editorFocused(page);
-  await page.keyboard.type("put @hero");
+  await page.keyboard.type("put @");
   const rows = page.getByRole("listbox", { name: "Mentions" }).getByRole("option");
-  await expect(rows).toHaveText(["@heroImage", "@hero-clipVideo", "@hero-pageLanding"]);
+  // Names first, then the numbered ones; a picture shows itself, an empty one and an artifact their kind.
+  await expect(rows).toHaveText(["@heroImage", "@hero-clipVideo", "@hero-pageLanding", "@100lone red fox", /^@101A @100/]);
+  await expect(rows.nth(0).getByTestId("mention-thumb")).toHaveAttribute("data-thumb", "image");
+  await expect(rows.nth(0).locator("img")).toHaveCount(1);
+  await expect(rows.nth(1).getByTestId("mention-thumb")).toHaveAttribute("data-thumb", "icon");
+  await expect(rows.nth(2).getByTestId("mention-thumb")).toHaveAttribute("data-thumb", "icon");
+  await expect(rows.nth(3).getByTestId("mention-thumb")).toHaveCount(0);
+  await page.keyboard.type("hero");
+  await expect(rows).toHaveCount(3);
   await page.keyboard.press("Enter");
   await page.keyboard.press("Escape");
   const made = await waitForRoom(engine, "default", (records) => records.find((record) => record.type === "text" && plainText(record).startsWith("put @hero")));
@@ -201,4 +209,102 @@ generationTest("a prompt that names an image by @ sends that image as a referenc
   expect(body.input_references.map((ref: { image_url: { url: string } }) => ref.image_url.url)).toEqual(
     [other, hero].map((bytes) => `data:image/png;base64,${bytes.toString("base64")}`),
   );
+});
+
+test("while a name field is open the selection bar steps aside, and comes back above the label after", async ({ page, engine }) => {
+  await openCanvas(page, engine);
+  await heroImage(engine);
+  await clickShape(page, "shape:hero");
+  const bar = page.getByTestId("selection-toolbar");
+  await expect(bar).toBeVisible();
+  // The bar clears the label, not only the picture.
+  const tag = (await label(page, "shape:hero").boundingBox())!;
+  await expect.poll(async () => { const box = (await bar.boundingBox())!; return box.y + box.height; }).toBeCloseTo(tag.y - 12, 0);
+
+  await page.keyboard.press("F2");
+  await expect(field(page, "Image")).toBeFocused();
+  await expect(bar).toBeHidden();
+  await page.keyboard.type("hero");
+  await page.keyboard.press("Enter");
+  await expect(bar).toBeVisible();
+  await page.keyboard.press("F2");
+  await expect(bar).toBeHidden();
+  await page.keyboard.press("Escape");
+  await expect(bar).toBeVisible();
+});
+
+test("the field grows with what is typed, and a name of digits only is refused in place", async ({ page, engine }) => {
+  await openCanvas(page, engine);
+  await heroImage(engine);
+  await dblclickLabel(page, "shape:hero");
+  const name = field(page, "Image");
+  await expect(name).toBeFocused();
+  const before = (await name.boundingBox())!.width;
+  await page.keyboard.type("a much longer name for this picture");
+  await expect.poll(async () => (await name.boundingBox())!.width).toBeGreaterThan(before * 3);
+
+  await page.keyboard.press("ControlOrMeta+a");
+  await page.keyboard.type("42");
+  await page.keyboard.press("Enter");
+  await expect(name).toBeFocused();
+  await expect(page.getByRole("alert").filter({ hasText: "A name needs a letter." })).toBeVisible();
+  expect(await refOf(engine, "shape:hero")).toBe("102");
+  // Typing again clears the message; a letter makes it a name.
+  await page.keyboard.type("b");
+  await expect(page.getByRole("alert").filter({ hasText: "A name needs a letter." })).toHaveCount(0);
+  await page.keyboard.press("Enter");
+  await expect.poll(() => refOf(engine, "shape:hero")).toBe("42b");
+});
+
+test("accents are kept as their letters, and a long name is cut to its shape's width with the whole name on hover", async ({ page, engine }) => {
+  await openCanvas(page, engine);
+  await filledMedia(engine, { id: "shape:hero", type: "image", ref: "102", at: { x: 480, y: 120 }, bytes: pngBytes(64, 40, 7), name: "hero.png", mime: "image/png", natural: { w: 64, h: 40 }, width: 140 });
+  await dblclickLabel(page, "shape:hero");
+  const long = "Città vista dal mare al tramonto con nuvole basse";
+  await page.keyboard.type(long);
+  await page.keyboard.press("Enter");
+  const named = "citta-vista-dal-mare-al-tramonto-con-nuv";
+  await expect.poll(() => refOf(engine, "shape:hero")).toBe(named);
+  const shape = (await shapeOnScreen(page, "shape:hero").boundingBox())!;
+  const tag = label(page, "shape:hero");
+  expect((await tag.boundingBox())!.width).toBeLessThanOrEqual(shape.width + 0.5);
+  await tag.hover();
+  await expect(tag).toHaveAttribute("title", `@${named}`);
+});
+
+test("the field stays readable when the board is zoomed out", async ({ page, engine }) => {
+  await openCanvas(page, engine);
+  await heroImage(engine);
+  await clickShape(page, "shape:hero");
+  await page.keyboard.press("Minus");
+  await expect.poll(() => page.locator(".tl-container").getAttribute("data-label-level")).not.toBe("on");
+  await page.keyboard.press("F2");
+  const name = field(page, "Image");
+  await expect(name).toBeFocused();
+  const size = await name.evaluate((input: HTMLInputElement) => parseFloat(getComputedStyle(input).fontSize) * (input.getBoundingClientRect().height / input.offsetHeight));
+  // 11 px is the label's size at 100 %.
+  expect(size).toBeGreaterThanOrEqual(10.9);
+});
+
+test("a render placeholder shows its name once named", async ({ page, engine }) => {
+  await openCanvas(page, engine);
+  const failed = emptyMedia("shape:render", "video", "intro-render", { x: 480, y: 120 });
+  await putRecords(engine, [{ ...failed, meta: { ref: "intro-render", unframed: { runError: "The render failed." } } }]);
+  await expect(shapeOnScreen(page, "shape:render").locator("[data-render='failed']")).toBeVisible();
+  await expect(label(page, "shape:render")).toHaveText("@intro-render");
+});
+
+test("keys pressed right after F2, before the field has the keyboard, never reach the canvas's shortcuts", async ({ page, engine }) => {
+  await openCanvas(page, engine);
+  const failed = emptyMedia("shape:render", "video", "521", { x: 480, y: 120 });
+  await putRecords(engine, [{ ...failed, meta: { ref: "521", unframed: { runError: "The render failed." } } }]);
+  await clickShape(page, "shape:render");
+  const before = (await roomRecords(engine, "default")).filter((record) => record.type === "image").length;
+  // I straight after F2, as a quick typist would: on the canvas, I alone adds an image.
+  await page.keyboard.press("F2");
+  await page.keyboard.type("intro");
+  await expect(field(page, "Video")).toBeFocused();
+  await page.waitForTimeout(300);
+  expect((await roomRecords(engine, "default")).filter((record) => record.type === "image")).toHaveLength(before);
+  await page.keyboard.press("Escape");
 });

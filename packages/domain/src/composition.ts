@@ -112,15 +112,34 @@ export const joinPromptParts = (...parts: ReadonlyArray<string>): string =>
 
 const plural = (count: number, one: string, many: string) => (count === 1 ? one : many);
 
-const imageWarnings = (videos: number, images: number, cap: number | undefined): string[] => {
+/** How many of a kind go with a run: those selected (the sketch counts as selected) and those named by `@`. */
+interface Counted {
+  readonly selected: number;
+  readonly named: number;
+}
+
+/**
+ * What the warnings say goes with the run: "selected" when nothing was named by `@`, "named
+ * with @" when everything was, and both counts when the run mixes them.
+ */
+const whatGoes = ({ selected, named }: Counted, one: string, many: string): string => {
+  const total = selected + named;
+  if (named === 0) return total === 1 ? `${one} is selected` : `${total} ${many} are selected`;
+  if (selected === 0) return total === 1 ? `${one} is named with @` : `${total} ${many} are named with @`;
+  return `${total} ${many} go with this run (${selected} selected, ${named} named with @)`;
+};
+
+const imageWarnings = (videos: Counted, images: Counted, cap: number | undefined): string[] => {
   const warnings: string[] = [];
-  if (videos === 1) warnings.push("A video is selected, but image models do not take video input. It will be sent and probably ignored.");
-  else if (videos > 1) warnings.push(`${videos} videos are selected, but image models do not take video input. They will be sent and probably ignored.`);
-  if (cap !== undefined && images > cap) {
+  const videoCount = videos.selected + videos.named;
+  if (videoCount > 0) {
+    warnings.push(`${whatGoes(videos, "A video", "videos")}, but image models do not take video input. ${plural(videoCount, "It", "They")} will be sent and probably ignored.`);
+  }
+  const imageCount = images.selected + images.named;
+  if (cap !== undefined && imageCount > cap) {
     const takes = cap === 1 ? "only one" : `at most ${cap}`;
-    warnings.push(
-      `${images} ${plural(images, "image is", "images are")} selected, but this model takes ${takes}. Deselect the rest, or pick a model that takes more.`,
-    );
+    const fix = images.named === 0 ? "Deselect the rest" : images.selected === 0 ? "Take out an @ name" : "Deselect some, take out an @ name";
+    warnings.push(`${whatGoes(images, "1 image", "images")}, but this model takes ${takes}. ${fix}, or pick a model that takes more.`);
   }
   return warnings;
 };
@@ -251,6 +270,9 @@ export const composeSelection = (input: CompositionInput): Composition => {
 
   const instruction = resolve(input.instruction).trim();
   for (const id of named) sources.push(...(contributes.get(id) ?? []));
+  const namedOf = (kind: Slot["kind"]) => named.filter((id) => slots.get(id)?.kind === kind).length;
+  const namedImages = namedOf("image");
+  const namedVideos = namedOf("video");
   const prompt = joinPromptParts(...promptParts, instruction);
   return {
     promptParts,
@@ -260,7 +282,10 @@ export const composeSelection = (input: CompositionInput): Composition => {
     roles,
     usable: promptParts.length > 0 || references.length > 0 || (error !== undefined && hadText),
     sources,
-    warnings: medium === "image" ? imageWarnings(videos, images, input.referenceCap) : [],
+    warnings:
+      medium === "image"
+        ? imageWarnings({ selected: videos - namedVideos, named: namedVideos }, { selected: images - namedImages, named: namedImages }, input.referenceCap)
+        : [],
     ...(error === undefined ? {} : { error }),
   };
 };

@@ -1,4 +1,4 @@
-import { isHttpsLink, isMintedRef, linkedVideoName, VIDEO_LINK_MESSAGE } from "@unframed/domain";
+import { isHttpsLink, linkedVideoName, readRef, VIDEO_LINK_MESSAGE } from "@unframed/domain";
 import { Pause, Play, X } from "lucide-react";
 import { useEffect, useRef, useState, type SyntheticEvent } from "react";
 import {
@@ -33,6 +33,7 @@ import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
 import { Spinner } from "~/components/ui/spinner";
 import { mediaCardClass } from "./looks.ts";
+import { waitingLabel } from "./labels.ts";
 import { ShapeLabel } from "./ShapeLabel.tsx";
 import { isRenderPlaceholder, RenderPlaceholder } from "./renderPlaceholder.tsx";
 import { noteRender } from "../../fps/renders.ts";
@@ -65,23 +66,14 @@ const resizeMedia = <S extends MediaShape>(shape: S, info: TLResizeInfo<S>): TLS
   return { id: shape.id, type: shape.type, x: initialShape.x + offset.x, y: initialShape.y + offset.y, props: { w, h } } as TLShapePartial<S>;
 };
 
-const refOf = (shape: MediaShape): string | undefined => {
-  const ref = (shape.meta as { ref?: unknown }).ref;
-  return typeof ref === "string" ? ref : undefined;
-};
-
 /**
  * A medium's label: its `@id` once it is filled or named; an empty one that was never named
  * says what it is waiting for.
  */
 const MediaLabel = ({ shape, kind, filled }: { readonly shape: MediaShape; readonly kind: MediaKind; readonly filled: boolean }) => {
-  const ref = refOf(shape);
-  const shown = ref !== undefined && (filled || !isMintedRef(ref)) ? `@${ref}` : kind === "image" ? "Image" : "Video";
-  return (
-    <ShapeLabel shapeId={shape.id} kind={kind} name={ref}>
-      {shown}
-    </ShapeLabel>
-  );
+  const ref = readRef(shape);
+  const text = filled && ref !== undefined ? `@${ref}` : waitingLabel(shape, kind === "image" ? "Image" : "Video");
+  return <ShapeLabel shapeId={shape.id} kind={kind} name={ref} width={shape.props.w} text={text} />;
 };
 
 const useIsSelected = (shape: MediaShape) => {

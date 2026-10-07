@@ -243,7 +243,9 @@ test("Recipe reopens the composer on the recorded run; a selection change leaves
   await expect(composer(page).getByTestId("source-count")).toHaveText("recipe · 1 sources");
   await composer(page).locator("[data-prop]").filter({ hasText: "high" }).click();
   await page.getByRole("menu", { name: "Quality" }).getByRole("menuitemradio", { name: "medium" }).click();
-  await clickShape(page, "shape:starter-scene");
+  // The composer clears the result's label, so it covers the scene's middle: click its left end.
+  const scene = (await shapeOnScreen(page, "shape:starter-scene").boundingBox())!;
+  await page.mouse.click(scene.x + 30, scene.y + scene.height / 2);
   await expect(composer(page).getByTestId("source-count")).toHaveText("2 selected");
   await expect(instructionBox(page)).toHaveText("moody");
   await expect(composer(page).locator("[data-prop]")).toHaveText(["1K", "1:1", "medium"]);

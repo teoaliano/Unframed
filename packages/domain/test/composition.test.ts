@@ -365,8 +365,23 @@ describe("media named by @", () => {
     expect(composition.references).toEqual([]);
   });
 
-  it("counts named images against the reference cap", () => {
-    const capped = compose([prompt("p", "@hero", { y: 0 }), image("x", "3-x.png", { y: 100 }), hero], ["p", "x"], { referenceCap: 1 });
-    expect(capped.warnings).toEqual(["2 images are selected, but this model takes only one. Deselect the rest, or pick a model that takes more."]);
+  it("counts named images against the reference cap, and says how many are selected and how many named", () => {
+    const sea = { ...image("sea-shape", "4-sea.png", { x: 900, y: 1500 }), ref: "sea" };
+    const both = compose([prompt("p", "@hero and @sea", { y: 0 }), image("x", "3-x.png", { y: 100 }), hero, sea], ["p", "x"], { referenceCap: 2 });
+    expect(both.warnings).toEqual([
+      "3 images go with this run (1 selected, 2 named with @), but this model takes at most 2. Deselect some, take out an @ name, or pick a model that takes more.",
+    ]);
+    const namedOnly = compose([prompt("p", "@hero and @sea"), hero, sea], ["p"], { referenceCap: 1 });
+    expect(namedOnly.warnings).toEqual(["2 images are named with @, but this model takes only one. Take out an @ name, or pick a model that takes more."]);
+  });
+
+  it("says a named video goes to an image model too", () => {
+    expect(compose([prompt("p", "cut to @waves"), clip], ["p"]).warnings).toEqual([
+      "A video is named with @, but image models do not take video input. It will be sent and probably ignored.",
+    ]);
+    const mixed = compose([prompt("p", "cut to @waves", { y: 0 }), video("v", { file: "5-v.mp4" }, { y: 100 }), clip], ["p", "v"]);
+    expect(mixed.warnings).toEqual([
+      "2 videos go with this run (1 selected, 1 named with @), but image models do not take video input. They will be sent and probably ignored.",
+    ]);
   });
 });

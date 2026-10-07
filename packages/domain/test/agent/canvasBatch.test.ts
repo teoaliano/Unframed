@@ -234,6 +234,7 @@ describe("canvas_write batches", () => {
   it("refuses to rename a mark, which has no @id", () => {
     const geo: CanvasRecord = { id: "shape:d1", typeName: "shape", type: "geo", x: 0, y: 0, parentId: PAGE, index: "a1", props: { w: 10, h: 10 }, meta: {} };
     expect(error([{ type: "rename", id: "d1", name: "box" }], [geo])).toBe("rename: d1 has no @id to rename");
+    expect(error([{ type: "rename", id: "p1", name: "42" }], [prompt("p1", "100", "a fox")])).toBe("rename: A name needs a letter.");
   });
 
   it("keeps media's aspect on resize", () => {

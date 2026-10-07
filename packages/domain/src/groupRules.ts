@@ -7,8 +7,21 @@ import type { CanvasShape, ShapeKind } from "./canvasShapes.ts";
 import { isMintedRef, REF_TOKEN } from "./refs.ts";
 import { projectSlug } from "./slug.ts";
 
-/** A typed name as an `@id`: spec 01's slug rule. */
-export const slugName = (typed: string): string => projectSlug(typed);
+/**
+ * A typed name as an `@id`: spec 01's slug rule, after accented letters lose their accents,
+ * so "città" is `citta` and not `citt`. Only names do this: project and file names keep
+ * spec 01's rule unchanged, because an existing project folder is found by its slug.
+ */
+export const slugName = (typed: string): string => projectSlug(typed.normalize("NFD").replace(/\p{M}+/gu, ""));
+
+/** Why a name of digits only is refused: it would read as a number the canvas minted. */
+export const NAME_NEEDS_A_LETTER = "A name needs a letter.";
+
+/** Why `typed` cannot become a shape's name, or `undefined` when it can (or changes nothing). */
+export const nameRefusal = (typed: string, current: string): string | undefined => {
+  const slug = slugName(typed);
+  return slug !== "" && slug !== current && isMintedRef(slug) ? NAME_NEEDS_A_LETTER : undefined;
+};
 
 /** `wanted`, or `wanted-2`, `wanted-3` and so on, whichever is first free of `taken`. */
 export const uniqueName = (wanted: string, taken: Iterable<string>): string => {
@@ -61,7 +74,7 @@ export const planRename = (shapes: ReadonlyArray<CanvasShape>, id: string, typed
   const shape = shapes.find((candidate) => candidate.id === id);
   if (shape?.ref === undefined) return undefined;
   const slug = slugName(typed);
-  if (slug === "" || slug === shape.ref) return undefined;
+  if (slug === "" || slug === shape.ref || isMintedRef(slug)) return undefined;
   const taken = shapes.flatMap((other) => (other.id !== id && other.ref !== undefined ? [other.ref] : []));
   const to = uniqueName(slug, taken);
   return {

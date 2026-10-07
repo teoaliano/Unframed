@@ -43,17 +43,17 @@ describe("mentionCandidates", () => {
   ];
 
   it("lists every shape with a ref but this prompt and the marks, with a prompt's text, an artifact's title or the kind as the preview", () => {
-    expect(mentionCandidates(board, "101", "")).toEqual([
-      { ref: "100", preview: "lone red fox" },
-      { ref: "104", preview: "Image" },
-      { ref: "110", preview: "night" },
-      { ref: "Hero-shots" },
+    expect(mentionCandidates(board, "101", "").map(({ id: _id, ...row }) => row)).toEqual([
+      { ref: "Hero-shots", kind: "group" },
+      { ref: "100", kind: "prompt", preview: "lone red fox" },
+      { ref: "104", kind: "image", preview: "Image" },
+      { ref: "110", kind: "prompt", preview: "night" },
     ]);
-    expect(mentionCandidates([video("waves"), page("landing", "Landing page"), page("pricing"), motion("intro", "intro.html")], undefined, "")).toEqual([
-      { ref: "intro", preview: "intro" },
-      { ref: "landing", preview: "Landing page" },
-      { ref: "pricing", preview: "Page" },
-      { ref: "waves", preview: "Video" },
+    expect(mentionCandidates([video("waves"), page("landing", "Landing page"), page("pricing"), motion("intro", "intro.html")], undefined, "").map(({ id: _id, ...row }) => row)).toEqual([
+      { ref: "intro", kind: "motion", preview: "intro" },
+      { ref: "landing", kind: "page", preview: "Landing page" },
+      { ref: "pricing", kind: "page", preview: "Page" },
+      { ref: "waves", kind: "video", preview: "Video" },
     ]);
   });
 
@@ -66,17 +66,17 @@ describe("mentionCandidates", () => {
 
   it("collapses whitespace runs to one space and cuts the preview at 24 characters", () => {
     const [row] = mentionCandidates(board, "100", "101");
-    expect(row).toEqual({ ref: "101", preview: "A @100 on a windswept cl…" });
+    expect(row).toMatchObject({ ref: "101", preview: "A @100 on a windswept cl…" });
     expect(row!.preview!.replace("…", "")).toHaveLength(24);
   });
 
   it("trims the preview and keeps a text of exactly 24 characters whole", () => {
     const [row] = mentionCandidates([prompt("120", "  abcdefghijklmnopqrstuvwx  ")], "100", "");
-    expect(row).toEqual({ ref: "120", preview: "abcdefghijklmnopqrstuvwx" });
+    expect(row).toMatchObject({ ref: "120", preview: "abcdefghijklmnopqrstuvwx" });
   });
 
-  it("orders numbered refs by number, then names alphabetically", () => {
+  it("orders names alphabetically first, then numbered refs by number", () => {
     const refs = mentionCandidates([group("zeta"), prompt("1000", ""), group("alpha"), prompt("200", "")], undefined, "");
-    expect(refs.map((row) => row.ref)).toEqual(["200", "1000", "alpha", "zeta"]);
+    expect(refs.map((row) => row.ref)).toEqual(["alpha", "zeta", "200", "1000"]);
   });
 });

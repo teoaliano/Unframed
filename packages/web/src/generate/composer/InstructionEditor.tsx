@@ -133,6 +133,7 @@ export const InstructionEditor = ({ initial, placeholder, onChange, onMenuOpen, 
         anchor &&
         createPortal(
           <MentionList
+            editor={canvas}
             rows={rows}
             highlight={highlight}
             style={{ position: "fixed", left: anchor.left, top: anchor.top, zIndex: 1200 }}

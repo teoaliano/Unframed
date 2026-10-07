@@ -65,9 +65,14 @@ const GroupBox = ({ shape }: { readonly shape: TLFrameShape }) => {
       data-selected={selected ? "true" : undefined}
       style={{ width: shape.props.w, height: shape.props.h }}
     >
-      <ShapeLabel shapeId={shape.id} kind="group" name={shape.props.name} after={recipe && <RecipeChip shape={shape} recipe={recipe} />}>
-        @{shape.props.name}
-      </ShapeLabel>
+      <ShapeLabel
+        shapeId={shape.id}
+        kind="group"
+        name={shape.props.name}
+        width={shape.props.w}
+        text={`@${shape.props.name}`}
+        after={recipe && <RecipeChip shape={shape} recipe={recipe} />}
+      />
     </HTMLContainer>
   );
 };
