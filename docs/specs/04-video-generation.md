@@ -71,7 +71,7 @@ What is kept from the old app and what changes:
 31. As a person, I want a placeholder to appear on the canvas as soon as the job exists, so that I can see where the clip will land.
 32. As a person, I want the placeholder to say "Rendering… (N min)", so that I know it is still going and for how long.
 33. As a person, I want the finished clip to replace the placeholder in place, so that I do not have to find it.
-34. As a person, I want the result to carry its recipe, so that Regenerate, Vary and Recipe work on video as they do on images.
+34. As a person, I want the result to carry its recipe, so that Generate and Regenerate work on video as they do on images.
 35. As a person, I want the clip to land in its project even if I closed the tab, so that a paid render is never lost.
 36. As a person, I want the clip to land even if the engine restarted in between, so that a restart does not strand a render.
 37. As a person, I want a reloaded tab to pick up a render in flight and show its progress, so that I never lose track.
@@ -333,7 +333,7 @@ I/O half (engine):
 **Render placeholder (web).** The extended video shape (spec 02) renders these states from its `meta.unframed` fields (spec 03), so every tab and every reload agrees:
 
 - Pending (marker present): a box the size of the landing spot showing the status line `Rendering… (N min)`, where N is whole minutes since `startedAt`, floored, updated at least once a minute. Below it a small ghost button `Forget this job` with tooltip `Stops tracking this job here. It does not cancel the render upstream. If it finishes anyway, the clip is still saved in the project folder but will not appear on the canvas.` Clicking it calls `video.forget`.
-- Failed (`runError` set): the same box with an error status line holding `runError`. It keeps its recipe (the job record's), so spec 03's Regenerate and Recipe work on it. Deleting it is an ordinary delete.
+- Failed (`runError` set): the same box with an error status line holding `runError`. It keeps its recipe (the job record's), so spec 03's Regenerate works on it. It has no clip to send, so its bar leaves Generate out. Deleting it is an ordinary delete.
 - Done: an ordinary video result.
 
 Copying and deleting a placeholder follow spec 03's rules: a copy loses the marker, the run error and the unfilled result meta; a deleted placeholder is an ordinary undoable delete and is not recreated when the clip is collected (the clip and sidecar still land in the project folder); undo that restores it restores its marker, and the resume below picks it up. Forget is the explicit form of the same thing, which also tells the store.

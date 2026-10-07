@@ -73,7 +73,7 @@ test("a failed render says why on its placeholder", async ({ page, videoEngine: 
   expect(record.meta.unframed.run).toBeUndefined();
 });
 
-test("a failed render keeps its recipe: Regenerate starts the same render again beside it", async ({ page, videoEngine: video }) => {
+test("a failed render keeps its recipe: Regenerate, sent from the composer, starts the same render again beside it", async ({ page, videoEngine: video }) => {
   video.jobs.status((id) => ({ kind: "data", data: { id, status: "failed", error: { message: "Output flagged" } } }));
   await openCanvas(page, video.engine);
   await clickShape(page, "shape:starter-subject");
@@ -82,11 +82,15 @@ test("a failed render keeps its recipe: Regenerate starts the same render again 
   await sendRun(page);
   const failed = await waitForRoom(video.engine, "default", (records) => records.find((each) => each.meta?.unframed?.runError === "Output flagged"));
   await expect(shapeOnScreen(page, failed.id).getByRole("alert")).toHaveText("Output flagged");
-  // After a reload no tray has fetched the video catalogue: Regenerate sends the recipe exactly all the same.
+  // After a reload no tray has fetched the video catalogue: the recipe sends the same render all the same.
   await page.reload();
   await expect(shapeOnScreen(page, failed.id).getByRole("alert")).toHaveText("Output flagged");
   await clickShape(page, failed.id);
+  // A failed render has no clip to send, so its bar has no Generate.
+  await expect(toolbar(page).getByRole("button")).toHaveText(["Regenerate", "Agent"]);
   await toolbar(page).getByRole("button", { name: "Regenerate" }).click();
+  await expect(composer(page).getByTestId("source-count")).toHaveText(/^recipe · /);
+  await sendRun(page);
   await expect.poll(() => video.jobs.creates.length).toBe(2);
   expect(video.jobs.creates[1]!.body).toEqual(video.jobs.creates[0]!.body);
   const again = await waitForRoom(video.engine, "default", (records) => records.find((each) => each.id !== failed.id && each.type === "video" && each.meta?.unframed?.result));

@@ -33,7 +33,7 @@ After this spec, one button is one component with a handful of variants, one men
 15. As a person, I want placeholders and render progress in the new style, so that a running job looks like the rest of the app.
 16. As a person, I want empty and filled page and motion cards in the new style, with the filled frame's white page unchanged, so that artifacts look finished.
 17. As a person, I want the role badges and the tether line in the new palette, so that input roles stay readable.
-18. As a person, I want the selection toolbar's Generate, Agent, Open, Recipe and result buttons built from the kit's button variants, so that the bar's primary action stands out the same way a dialog's does.
+18. As a person, I want the selection toolbar's Generate, Regenerate, Agent, Open and Recipe buttons built from the kit's button variants, so that the bar's primary action stands out the same way a dialog's does.
 19. As a person, I want the composer to look like t3code's composer (its rounded shell, soft shadow and send button), so that typing an instruction feels like typing a chat message.
 20. As a person, I want the medium switch to be the kit's segmented toggle, so that image, video and text read as one choice.
 21. As a person, I want model, prop and Runs chips built on one chip style, so that the tray reads as one row.

@@ -12,7 +12,7 @@ A selection toolbar floats over every selection. When the selection has somethin
 
 A pure domain module composes the request from the selection: top-to-bottom order, prompts joined with blank lines, `@id` resolution, groups expanded in place, images numbered per kind, sketches composited onto the image they sit on or rendered as a standalone sketch image. While the composer is open, every selected shape shows the role it will play.
 
-The engine proxies OpenRouter's image catalogue and per-model pricing, runs the call, writes the image and its sidecar into the project folder, and lands the result on the canvas as an image shape near the selection. The result carries its **recipe**. Selecting a result offers Regenerate, Vary and Recipe, and draws a dashed provenance tether to its sources that carries nothing.
+The engine proxies OpenRouter's image catalogue and per-model pricing, runs the call, writes the image and its sidecar into the project folder, and lands the result on the canvas as an image shape near the selection. The result carries its **recipe**. Selecting a result offers Generate (the result as the input, as with any selection) and Regenerate (the composer reopened on its recipe), and draws a dashed provenance tether to its sources that carries nothing.
 
 This spec builds the composer shell shared with the Agent tray (specs 07 and 08) and leaves a slot for it. It builds the image medium only. Specs 04 and 05 register the video and text media, the Runs prop and Free mode into the same shell.
 
@@ -64,9 +64,9 @@ This spec builds the composer shell shared with the Agent tray (specs 07 and 08)
 44. As a person, I want my canvas image to stay clean and my marks editable after a run, so that sketching for a run does not flatten my work.
 45. As a person, I want each result to land as an ordinary image shape near my selection, so that I can select it into the next run with no conversion step.
 46. As a person, I want a placeholder where the result will land while it generates, so that I can see the run in flight.
-47. As a person, I want Regenerate on a result to repeat its recipe exactly, so that I get another take on the same thing.
-48. As a person, I want Vary on a result to repeat its recipe with the result itself as an extra reference, so that I get a variation of that picture.
-49. As a person, I want Recipe on a result to reopen the composer filled in, so that "same thing, bigger" is two clicks.
+47. As a person, I want Regenerate on a result to reopen the composer on its recipe, so that sending it unchanged gets another take on the same thing.
+48. As a person, I want Generate on a result to work as on any other selection, so that the result is the input of my next run.
+49. As a person, I want to change the recipe Regenerate opens before I send it, so that "same thing, bigger" is two clicks.
 50. As a person, I want a dashed tether from a selected result to its sources, drawn only while the result is selected, so that I can see where it came from without a wire.
 51. As a person, I want deleting a source to never break a result or its Regenerate, so that the canvas has no live dependencies.
 52. As a person, I want the result's model, size and cost under it when selected, so that I can compare versions.
@@ -185,17 +185,17 @@ Decided from the selection by a pure function in the web (tested at the domain s
 | Selection | Bar |
 | --- | --- |
 | nothing | no bar |
-| exactly one result (spec terms: a shape with a recipe) | Regenerate (primary), Vary, Recipe (ghost), Agent; the result's line shows under it |
+| exactly one result (spec terms: a shape with a recipe) | Generate (primary), Regenerate, Agent; the result's line shows under it. Generate is left out when the result has nothing to send (a failed render, spec 04) |
 | exactly one result still generating | the hint `Generating…`, Agent |
 | exactly one page or motion with a file | a six-dot drag handle, Open, Render for a motion (spec 09), Agent (spec 09 connects Open to its editor) |
 | usable | hint, Agent, Generate (primary, last) |
 | not usable | Agent only |
 
-The hint is `@<name>` when the selection is exactly one group, otherwise `N selected` where N counts the selected shapes as tldraw counts them (a group is one). When the selection is exactly the members of one batch (spec 05), the hint is `4 images · $0.6720`. Vary is hidden for a text result (spec 05). Regenerate and Vary are disabled while that result's own run marker is set.
+The hint is `@<name>` when the selection is exactly one group, otherwise `N selected` where N counts the selected shapes as tldraw counts them (a group is one). When the selection is exactly the members of one batch (spec 05), the hint is `4 images · $0.6720`.
 
 The bar and the composer stay above spec 02's bottom bar: the room below the selection ends at the bottom bar's top edge.
 
-Look (spec 12): the bar is a `surface-glass` card with the kit's border, `rounded-xl` radius and small shadow. Its buttons are the kit's Button at `sm` size: the primary one (Generate, Regenerate, Open) is `default`, Vary and Agent are `outline`, Recipe is `ghost`. Agent is never the primary action. The bar has no dividers between its actions. The drag handle (a ghost icon Button with the grip icon, label and tooltip "Drag to move") moves the selection with the pointer, since a filled page's or motion's frame takes the pointer; the whole move is one undo step. The hint and the result's line are `text-xs` in the muted foreground.
+Look (spec 12): the bar is a `surface-glass` card with the kit's border, `rounded-xl` radius and small shadow. Its buttons are the kit's Button at `sm` size: the primary one (Generate, Open) is `default`, Regenerate and Agent are `outline`, a recipe group's Recipe (spec 06) is `ghost`. Agent is never the primary action. The bar has no dividers between its actions. The drag handle (a ghost icon Button with the grip icon, label and tooltip "Drag to move") moves the selection with the pointer, since a filled page's or motion's frame takes the pointer; the whole move is one undo step. The hint and the result's line are `text-xs` in the muted foreground.
 
 Placement: centred above the selection's screen bounds, 12 px gap, clamped 8 px from the canvas's sides; flipped below the selection when there is no room above; when there is room neither above nor below, pinned inside the canvas at the top margin. The composer uses the same rule with its own size, so it grows upward on the same centre and bottom edge (downward when flipped). The morph animates size and position over 200 ms ease-out; under reduced motion it crossfades over 120 ms. The bar hides while a shape is dragged, while the canvas is dragged (not on wheel moves) and during a box selection. Pointer and click events on the bar and composer never reach the canvas. A wheel over them is forwarded to the canvas at the same pointer position, unless the element under the pointer scrolls itself (the instruction box once it overflows).
 
@@ -236,7 +236,7 @@ Defaults for image: `resolution: '1K'`, `quality: 'low'`, `aspect_ratio: '1:1'`,
 
 ### Last-used values (option A)
 
-The composer opens on the app's last-used values per medium: the model (only when the person picked one in the model dialog), and the tray's props with their values. Written when a run is sent from the composer, never by Regenerate or Vary. A stored model that is absent from the catalogue falls back to the default model; stored props go through the same `supported` check as any other value. Changing a medium's default model clears that medium's stored model, so the new default takes effect: this spec adds that step to spec 01's `settings.update`, after the change is applied, as a `null` write of `model` in that medium's `lastUsed.<medium>` preference. The values are stored in spec 01's preferences store, not in the browser, so they survive the packaged app's new origin on every launch. A recipe group (spec 06) or recipe mode, when present, takes precedence over last-used values.
+The composer opens on the app's last-used values per medium: the model (only when the person picked one in the model dialog), and the tray's props with their values. Written when a run is sent from the composer, recipe mode included, so a send after Regenerate writes them like any other. A stored model that is absent from the catalogue falls back to the default model; stored props go through the same `supported` check as any other value. Changing a medium's default model clears that medium's stored model, so the new default takes effect: this spec adds that step to spec 01's `settings.update`, after the change is applied, as a `null` write of `model` in that medium's `lastUsed.<medium>` preference. The values are stored in spec 01's preferences store, not in the browser, so they survive the packaged app's new origin on every launch. A recipe group (spec 06) or recipe mode, when present, takes precedence over last-used values.
 
 ### The model dialog
 
@@ -291,7 +291,7 @@ type ImageRunRequest = {
   outputs: { prompt: string; references: Ref[] }[]   // 1 to 10
   sources: string[]           // shape ids, for the recipe and tether
   anchor: { x: number; y: number; w: number; h: number }  // page coords
-  of?: { shapeId: string; action: 'regenerate' | 'vary' | 'recipe' }
+  of?: { shapeId: string; action: 'regenerate' | 'vary' | 'recipe' }   // the app sends 'recipe'
 }
 type Ref = RecipeRef                    // defined with the recipe schema below
 ```
@@ -400,7 +400,7 @@ type ResultRecipe = {               // what a result's sidecar holds: everything
   instruction: string               // the per-run instruction, '' when none. A result's recipe always includes it
   references: RecipeRef[]           // exactly what was sent, in order; composites and sketches as the files that were sent
   sources: string[]                 // the contributing shape ids
-  of?: { sidecar: string; action: 'regenerate' | 'vary' | 'recipe' }
+  of?: { sidecar: string; action: 'regenerate' | 'vary' | 'recipe' }  // 'recipe' now; files written before may hold the other two
   approximate?: true                // spec 11: imported from the old app, which never recorded references or the selection prompt
   sentPrompt?: string               // with approximate: the full prompt the old app sent
 }
@@ -418,17 +418,16 @@ type GroupRecipe = {                // a group's standing settings (spec 06), st
 
 A group's standing recipe holds no text and no sources: no instruction, no selection prompt, no references. Its sources are always the group's members as they are when it runs (spec 06).
 
-An **approximate** recipe (spec 11) has an empty `selectionPrompt` and `references`. Its Regenerate and Vary recompose the request from its `sources` as they are on the canvas now, by the selection to request rule, skipping any that are gone, with the recipe's model and params. Its Recipe mode shows `Imported from the old app. It sent:` and the `sentPrompt` above the box, and sends from the live sources.
+An **approximate** recipe (spec 11) has an empty `selectionPrompt` and `references`. Its recipe mode (opened by Regenerate) shows `Imported from the old app. It sent:` and the `sentPrompt` above the box, and sends a request recomposed from its `sources` as they are on the canvas now, by the selection to request rule, skipping any that are gone, with the recipe's model and params.
 
 Copies keep the result meta (the sidecar is in the same project). Cross-project paste copies the sidecar and every reference file its recipe names along with the image (spec 02 copies the image file; this spec adds the rest, through `recipe.copy`). A result whose recipe cannot come along pastes as an ordinary image, with the toast `Could not copy the result's recipe: <message>`.
 
 The result's line, shown under a selected result: `<model part> · <W>×<H> · $<cost>` with any missing part omitted. `W×H` are the file's pixel dimensions.
 
-Actions, all through `run.image` with a request built from `recipe.read`, anchored on the result's bounds:
+Actions:
 
-- **Regenerate**: the recipe exactly, one output: the recorded model, params, selection prompt, instruction and reference files (composites and sketches as recorded, not re-rendered).
-- **Vary**: the same, with the result's own file appended as the last image reference. Disabled, with the tooltip `This model takes at most <n> references, and this recipe already uses them.`, when that would exceed the cap.
-- **Recipe**: opens the composer in recipe mode over the result: the medium, model, props and instruction prefilled from the recipe, the source band reading `recipe · N sources` (N = recorded reference slots plus recorded prompt parts), and sending uses the recorded selection prompt and references with whatever the person changed in the tray and the box. Any change to the selection while in recipe mode leaves recipe mode: the source band switches to the live selection and the tray and box keep their values. Badges are not shown in recipe mode.
+- **Generate**: the same as on any usable selection: the composer opens on the selection, which is the result itself, with the last-used values and an empty box.
+- **Regenerate**: reads the recipe through `recipe.read` and opens the composer in recipe mode over the result: the medium, model, props and instruction prefilled from the recipe, the source band reading `recipe · N sources` (N = recorded reference slots plus recorded prompt parts), and sending uses the recorded selection prompt and reference files (composites and sketches as recorded, not re-rendered) with whatever the person changed in the tray and the box, anchored on the result's bounds. Sent unchanged, it repeats the run: the recorded model, params, selection prompt, instruction and references. The new recipe's `of.action` is `recipe`. There is no one-click repeat: every Regenerate goes through the composer. Any change to the selection while in recipe mode leaves recipe mode: the source band switches to the live selection and the tray and box keep their values. Badges are not shown in recipe mode.
 
 Deleting a source shape never breaks a result: its actions read only the sidecar and the project files. A recorded reference file deleted from the folder fails the action with `Reference file not found in this project: <file>`.
 
@@ -436,7 +435,7 @@ Tether: while exactly one result is selected, a dashed line (1.5 px, dash 4 gap 
 
 ### Result placement
 
-Anchor: the selection's page bounds (for Regenerate and Vary, the result's bounds). Outputs are laid in one row, in run order, left to right, 24 units apart, starting 40 units right of the anchor's right edge, top-aligned with the anchor. If the row's bounds intersect any existing shape's bounds, the row moves down in steps of 48 units until clear, up to 200 steps, after which the last position is used.
+Anchor: the selection's page bounds (in recipe mode, the result's bounds). Outputs are laid in one row, in run order, left to right, 24 units apart, starting 40 units right of the anchor's right edge, top-aligned with the anchor. If the row's bounds intersect any existing shape's bounds, the row moves down in steps of 48 units until clear, up to 200 steps, after which the last position is used.
 
 ### Persisted formats
 
@@ -465,7 +464,7 @@ A good test drives one of the three seams in 00-index and asserts only on what t
 
 - **Domain seam** for every rule with many cases: ordering and tie-breaks, group expansion in place, member dedup, artifacts ignored, `@id` resolution (recursive, cycle message, unknown left as typed, text results literal and not re-scanned, group text without media), per-kind numbering, roles and the dash, usable, sketch ownership (overlap, z order, topmost wins, owned marks unselected, loose marks, the sketch's slot), caps and warnings, the toolbar-state function, model params (enum, array, range cap, supported, exact size replacing resolution and ratio, ratio labels, defaults, reset), the estimate (each numbered rule above, plus multi-endpoint agreement and reference billables), the formatter, result placement, image dimensions. Table-driven Vitest cases, one row per case, named by the behaviour.
 - **Engine seam** for `models.list`, `models.imagePricing` (including the slug refusal), `run.image` against a stub image endpoint: placeholders appear in the room before the reply, files and sidecars are written with the right names and fields, collisions retry, every error branch produces its message, partial failure produces the `finished` event, a placeholder deleted mid-run is not recreated, a restored placeholder is resolved, boot clears stale markers, `recipe.read`. The stub can be told per request to succeed, fail with a status, return non-JSON, drop the body mid-read, or omit the image.
-- **Browser seam** for the toolbar states and placement, the composer opening, morphing, Cmd+Enter, Enter, Esc, click-to-add and click-away, the tray and its menus, model dialog search, sort, pick and Escape, badges appearing only while the composer is open, a composite being uploaded when marks sit on an image, results landing and their line, the tether, Regenerate, Vary and Recipe, and copy stripping a marker.
+- **Browser seam** for the toolbar states and placement, the composer opening, morphing, Cmd+Enter, Enter, Esc, click-to-add and click-away, the tray and its menus, model dialog search, sort, pick and Escape, badges appearing only while the composer is open, a composite being uploaded when marks sit on an image, results landing and their line, the tether, Generate and Regenerate on a result, recipe mode, and copy stripping a marker.
 - Component snapshots are not tests. Canvas state can be seeded by writing the project's canvas through the sync room before loading the page.
 
 ## Tasks
@@ -492,7 +491,7 @@ A good test drives one of the three seams in 00-index and asserts only on what t
 20. Image dimensions: PNG, JPEG, WebP, GIF and SVG headers. Seam: domain.
 21. `models.list` for image: mapping, default appended, sorted, fallback on upstream failure. Seam: engine.
 22. `models.imagePricing`: SKU lists per endpoint, slug refusal, empty on failure. Seam: engine.
-23. Last-used values are stored as the `lastUsed.<medium>` preferences on send, never on Regenerate or Vary, and a `settings.update` of a default model deletes that medium's stored `model`. Seam: engine.
+23. Last-used values are stored as the `lastUsed.<medium>` preferences on every send from the composer, recipe mode included, and a `settings.update` of a default model deletes that medium's stored `model`. Seam: engine.
 24. `run.image` validation: no key, empty prompts, output count, missing reference file, non-https link; nothing written. Seam: engine.
 25. `run.image` happy path: placeholders in the room before the reply, upstream payload shape (only set params, `auto` dropped, references inlined), file and sidecar written, placeholder filled with the file and result meta, `output` and `finished` events. Seam: engine.
 26. `run.image` file naming: stamp, slug rules, runIndex suffix only for batches, extension from `media_type`, exclusive write with retries to `-5`. Seam: engine.
@@ -520,9 +519,9 @@ A good test drives one of the three seams in 00-index and asserts only on what t
 48. Results land as image shapes to the right of the selection, placeholders first; the result's line shows model, size and cost. Seam: browser.
 49. Run report toast on partial and total failure, none on full success. Seam: browser.
 50. Tether: drawn to surviving sources only while one result is selected; not selectable; gone on deselect. Seam: browser.
-51. Regenerate: one new result beside the old from the recorded recipe, working after a source is deleted. Seam: browser.
-52. Vary: the result appended as the last reference; disabled at the cap with its tooltip. Seam: browser.
-53. Recipe: composer reopens in recipe mode prefilled; a selection change leaves recipe mode keeping tray and box. Seam: browser.
+51. Regenerate: the composer opens in recipe mode prefilled; sent unchanged, it lands one new result beside the old with the recorded run's request, working after a source is deleted. Seam: browser.
+52. Generate on a result: the bar reads Generate, Regenerate, Agent; Generate opens the composer on the result and sends it as a reference. Seam: browser.
+53. Recipe mode: a changed recipe sends the change; a selection change leaves recipe mode keeping tray and box. Seam: browser.
 54. Copy and paste of a generating placeholder yields an empty image shape with no marker; copying a result keeps its result meta. Seam: browser.
 
 ## Out of Scope
@@ -533,7 +532,7 @@ A good test drives one of the three seams in 00-index and asserts only on what t
 - The Agent tray, chats and everything the agent does (specs 07 and 08).
 - Opening an artifact in the editor (spec 09; this spec only shows the Open button).
 - Settings, the key flow and default models (spec 10).
-- Live source wiring: a result re-reading its sources as they are now was rejected (decision Q3, option C). Regenerate uses the recorded recipe.
+- Live source wiring: a result re-reading its sources as they are now was rejected (decision Q3, option C). Regenerate opens the recorded recipe.
 - A result strip, "Add to canvas" and "Clear": results land on the canvas directly now, so the old output node's strip has no home.
 - A seed control, and capability tags in the model dialog.
 

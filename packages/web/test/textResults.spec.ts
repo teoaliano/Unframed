@@ -83,33 +83,40 @@ test("editing a text result changes what it contributes, runs nothing, and stays
   expect(generation.requests[0]!.body.prompt).toBe("See tidied, about @100");
 });
 
-test("a text result's bar offers Regenerate and Recipe but no Vary, and Regenerate lands a second answer from its recipe", async ({ page, generation }) => {
+test("a text result's bar offers Generate, Regenerate and Agent, and Regenerate sends its recipe again from the composer", async ({ page, generation }) => {
   generation.answerText(() => ({ kind: "text", text: "first answer", cost: 0.001 }));
   await openCanvas(page, generation.engine);
   const first = await makeTextResult(page, generation);
 
   await page.mouse.click(10, 400);
   await clickShape(page, first.id);
-  await expect(toolbar(page).getByRole("button", { name: "Regenerate" })).toBeVisible();
-  await expect(toolbar(page).getByRole("button", { name: "Recipe" })).toBeVisible();
-  await expect(toolbar(page).getByRole("button", { name: "Vary" })).toHaveCount(0);
+  await expect(toolbar(page).getByRole("button")).toHaveText(["Generate", "Regenerate", "Agent"]);
 
-  generation.answerText(() => ({ kind: "text", text: "second answer", cost: 0.002 }));
+  // Generate opens the composer on the answer as on any selection.
+  await toolbar(page).getByRole("button", { name: "Generate", exact: true }).click();
+  await expect(composer(page).getByTestId("source-count")).toHaveText("1 selected");
+  await page.keyboard.press("Escape");
+
+  // Regenerate reopens the composer on the text medium over the recorded run; sent unchanged, it lands a second answer.
+  await clickShape(page, first.id);
   await toolbar(page).getByRole("button", { name: "Regenerate" }).click();
+  await expect(composer(page)).toBeVisible();
+  await expect(mediumOption(page, "text")).toHaveAttribute("aria-checked", "true");
+  await expect(composer(page).getByTestId("source-count")).toHaveText("recipe · 1 sources");
+  generation.answerText(() => ({ kind: "text", text: "second answer", cost: 0.002 }));
+  await sendText(page);
   await expect.poll(async () => (await textResults(generation)).filter((shape) => plainText(shape) === "second answer").length).toBe(1);
   expect(generation.chat).toHaveLength(2);
   expect(generation.chat[1]!.body).toEqual(generation.chat[0]!.body);
   const second = (await textResults(generation)).find((shape) => plainText(shape) === "second answer")!;
   expect(second.x).toBeGreaterThan(first.x!);
   const sidecar = JSON.parse((await generation.engine.request(`/api/file/default/${second.meta.unframed.result.sidecar}`)).text);
-  expect(sidecar.recipe).toMatchObject({ medium: "text", selectionPrompt: "lone red fox", of: { sidecar: first.meta.unframed.result.sidecar, action: "regenerate" } });
+  expect(sidecar.recipe).toMatchObject({ medium: "text", selectionPrompt: "lone red fox", of: { sidecar: first.meta.unframed.result.sidecar, action: "recipe" } });
 
-  // Recipe reopens the composer on the text medium over the recorded run.
+  // Changed in the box, the run sends the change.
   await page.mouse.click(10, 400);
   await clickShape(page, first.id);
-  await toolbar(page).getByRole("button", { name: "Recipe" }).click();
-  await expect(composer(page)).toBeVisible();
-  await expect(mediumOption(page, "text")).toHaveAttribute("aria-checked", "true");
+  await toolbar(page).getByRole("button", { name: "Regenerate" }).click();
   await expect(composer(page).getByTestId("source-count")).toHaveText("recipe · 1 sources");
   await instructionBox(page).click();
   await page.keyboard.type("shorter");
