@@ -5,7 +5,7 @@
  */
 import type { Box } from "../grouping.ts";
 import { boxesOverlap, clampGroupSize, mayBeGroupMember } from "../grouping.ts";
-import { planGroupRename } from "../groupRules.ts";
+import { planRename } from "../groupRules.ts";
 import { nextRef, plainText, readRef, rewriteRichTextTokens } from "../refs.ts";
 import { readingOrder, type CanvasShape, type ShapeKind } from "../canvasShapes.ts";
 import { slugName, uniqueName } from "../groupRules.ts";
@@ -177,10 +177,10 @@ export const canvasView = (input: CanvasViewInput): CanvasView => {
       w: round(local.w),
       h: round(local.h),
       ...(fact.parent === undefined ? {} : { parent: agentShapeId(fact.parent) }),
+      ...(fact.ref === undefined ? {} : { ref: fact.ref }),
     };
     switch (fact.kind) {
       case "prompt":
-        entry.ref = fact.ref;
         entry.text = fact.text ?? "";
         break;
       case "image":
@@ -198,7 +198,6 @@ export const canvasView = (input: CanvasViewInput): CanvasView => {
         break;
       }
       case "group": {
-        entry.ref = fact.ref;
         entry.members = shapes
           .filter((shape) => shape.parent === record.id)
           .sort(readingOrder)
@@ -594,13 +593,22 @@ const create = (batch: Batch, ctx: BatchContext, op: Record<string, unknown>): v
   batch.put(record);
 };
 
-const renameGroup = (batch: Batch, ctx: BatchContext, group: CanvasRecord, typed: unknown, op: string): void => {
-  if (group.type !== "frame") refuse(`${op}: ${agentShapeId(group.id)} is not a group`);
+/** Renames any shape with an `@id` exactly as the canvas does (spec 06). */
+const renameShape = (batch: Batch, ctx: BatchContext, shape: CanvasRecord, typed: unknown, op: string): void => {
+  if (readRef(shape) === undefined) refuse(`${op}: ${agentShapeId(shape.id)} has no @id to rename`);
   if (typeof typed !== "string") refuse(`${op}: name must be a string`);
   const records = batch.records();
-  const plan = planGroupRename(canvasShapesOf(records, ctx.boxes), group.id, typed as string);
+  const plan = planRename(canvasShapesOf(records, ctx.boxes), shape.id, typed as string);
   if (plan === undefined) return;
-  batch.put({ ...group, props: { ...obj(group.props), name: plan.to } });
+  batch.put(
+    shape.type === "frame"
+      ? { ...shape, props: { ...obj(shape.props), name: plan.to } }
+      : {
+          ...shape,
+          meta: { ...obj(shape.meta), ref: plan.to },
+          ...(plan.title === undefined ? {} : { props: { ...obj(shape.props), title: plan.title } }),
+        },
+  );
   for (const rewrite of plan.rewrites) {
     const prompt = batch.working.get(rewrite.id)!;
     const props = obj(prompt.props);
@@ -615,7 +623,7 @@ const update = (batch: Batch, ctx: BatchContext, op: Record<string, unknown>): v
   const kind = shapeKind(shape.type);
   if (kind === "group" && "name" in patch) {
     const { name, ...rest } = patch;
-    renameGroup(batch, ctx, shape, name, "update");
+    renameShape(batch, ctx, shape, name, "update");
     const renamed = batch.working.get(shape.id)!;
     return applyPatch(batch, renamed, { ...obj(renamed.props) }, rest);
   }
@@ -743,7 +751,7 @@ export const prepareBatch = (ops: unknown, ctx: BatchContext): PreparedBatch => 
           reparent(batch, ctx, op);
           break;
         case "rename":
-          renameGroup(batch, ctx, batch.shape("rename", op.id), op.name, "rename");
+          renameShape(batch, ctx, batch.shape("rename", op.id), op.name, "rename");
           break;
       }
     }

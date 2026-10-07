@@ -130,21 +130,16 @@ const imageWarnings = (videos: number, images: number, cap: number | undefined):
  * The composer, the role badges and the send path all call it, so a badge always says what
  * is sent. It never renders, never touches the network and never throws: a circular
  * reference comes back as `error`.
+ *
+ * Selected media and the sketch take their slots first, in list order, so naming a picture
+ * by `@` never renumbers the badges of what is selected. A picture named by `@` and not
+ * selected takes the next slot of its kind, and its token reads as that slot.
  */
 export const composeSelection = (input: CompositionInput): Composition => {
   const { shapes, medium } = input;
-  const resolver = createResolver(shapes);
   const owners = markOwners(shapes);
   const list = selectionOrder(shapes, input.selected);
   const inList = new Set(list.map((shape) => shape.id));
-
-  let error: string | undefined;
-  const resolve = (text: string, self?: string): string => {
-    const resolved = resolver.resolve(text, self);
-    if (resolved.ok) return resolved.text;
-    error ??= resolved.error;
-    return "";
-  };
 
   const promptParts: string[] = [];
   const references: Slot[] = [];
@@ -163,49 +158,43 @@ export const composeSelection = (input: CompositionInput): Composition => {
 
   let images = 0;
   let videos = 0;
-  let hadText = false;
+  const slots = new Map<string, Slot>();
+  /** What each slot's shape adds to the sources: an image brings the marks composited into it. */
+  const contributes = new Map<string, ReadonlyArray<string>>();
+  const take = (shape: CanvasShape, slot: Slot, from: ReadonlyArray<string>) => {
+    references.push(slot);
+    slots.set(shape.id, slot);
+    roles[slot.shapeId] = `${slot.kind} ${slot.number}`;
+    contributes.set(shape.id, from);
+    return slot;
+  };
+  /** The slot of a filled image or video, made on first use; an empty one has none. */
+  const mediaSlot = (shape: CanvasShape): Slot | undefined => {
+    const known = slots.get(shape.id);
+    if (known) return known;
+    if (shape.kind === "image" && shape.file !== undefined) {
+      const marks = ownedBy.get(shape.id) ?? [];
+      const crop = isCropped(shape.crop) ? shape.crop : null;
+      images++;
+      const source: SlotSource = marks.length > 0 || crop ? { type: "composite", image: shape.id, file: shape.file, marks, crop } : { type: "file", file: shape.file };
+      return take(shape, { kind: "image", number: images, shapeId: shape.id, source }, [shape.id, ...marks]);
+    }
+    if (shape.kind === "video") {
+      const source: SlotSource | undefined =
+        shape.file !== undefined ? { type: "file", file: shape.file } : shape.link !== undefined ? { type: "link", url: shape.link } : undefined;
+      if (!source) return undefined;
+      videos++;
+      return take(shape, { kind: "video", number: videos, shapeId: shape.id, source }, [shape.id]);
+    }
+    return undefined;
+  };
+
   for (const shape of list) {
     switch (shape.kind) {
-      case "prompt": {
-        const raw = shape.text ?? "";
-        if (raw.trim() !== "") hadText = true;
-        const part = (shape.textResult ? raw : resolve(raw, shape.ref)).trim();
-        if (part === "") break;
-        promptParts.push(part);
-        sources.push(shape.id);
+      case "image":
+      case "video":
+        if (!mediaSlot(shape)) roles[shape.id] = UNUSED_ROLE;
         break;
-      }
-      case "image": {
-        if (shape.file === undefined) {
-          roles[shape.id] = UNUSED_ROLE;
-          break;
-        }
-        const marks = ownedBy.get(shape.id) ?? [];
-        const crop = isCropped(shape.crop) ? shape.crop : null;
-        images++;
-        references.push({
-          kind: "image",
-          number: images,
-          shapeId: shape.id,
-          source: marks.length > 0 || crop ? { type: "composite", image: shape.id, file: shape.file, marks, crop } : { type: "file", file: shape.file },
-        });
-        roles[shape.id] = `image ${images}`;
-        sources.push(shape.id, ...marks);
-        break;
-      }
-      case "video": {
-        const source: SlotSource | undefined =
-          shape.file !== undefined ? { type: "file", file: shape.file } : shape.link !== undefined ? { type: "link", url: shape.link } : undefined;
-        if (!source) {
-          roles[shape.id] = UNUSED_ROLE;
-          break;
-        }
-        videos++;
-        references.push({ kind: "video", number: videos, shapeId: shape.id, source });
-        roles[shape.id] = `video ${videos}`;
-        sources.push(shape.id);
-        break;
-      }
       case "page":
       case "motion":
         roles[shape.id] = UNUSED_ROLE;
@@ -220,15 +209,48 @@ export const composeSelection = (input: CompositionInput): Composition => {
           source: { type: "sketch", marks: loose.map((mark) => mark.id), bounds: union(loose.map((mark) => mark.bounds)) },
         });
         roles[SKETCH_ROLE] = `image ${images}`;
-        sources.push(...loose.map((mark) => mark.id));
+        contributes.set(shape.id, loose.map((mark) => mark.id));
         break;
       }
+      case "prompt":
       case "group":
         break;
     }
   }
 
+  /** Pictures named by `@` that were not selected, in the order they were first named. */
+  const named: string[] = [];
+  const resolver = createResolver(shapes, (shape) => {
+    const selected = slots.has(shape.id);
+    const slot = mediaSlot(shape);
+    if (!slot) return undefined;
+    if (!selected) named.push(shape.id);
+    return `${slot.kind} ${slot.number}`;
+  });
+  let error: string | undefined;
+  const resolve = (text: string, self?: string): string => {
+    const resolved = resolver.resolve(text, self);
+    if (resolved.ok) return resolved.text;
+    error ??= resolved.error;
+    return "";
+  };
+
+  let hadText = false;
+  for (const shape of list) {
+    if (shape.kind !== "prompt") {
+      sources.push(...(contributes.get(shape.id) ?? []));
+      continue;
+    }
+    const raw = shape.text ?? "";
+    if (raw.trim() !== "") hadText = true;
+    const part = (shape.textResult ? raw : resolve(raw, shape.ref)).trim();
+    if (part === "") continue;
+    promptParts.push(part);
+    sources.push(shape.id);
+  }
+
   const instruction = resolve(input.instruction).trim();
+  for (const id of named) sources.push(...(contributes.get(id) ?? []));
   const prompt = joinPromptParts(...promptParts, instruction);
   return {
     promptParts,

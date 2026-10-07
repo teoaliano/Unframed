@@ -3,6 +3,7 @@
  * the shape's own `meta.unframed` fields, so every tab and every reload agrees.
  */
 import { runMarkerOf, unframedMetaOf } from "@unframed/contracts";
+import { readRef } from "@unframed/domain";
 import { useEffect, useState, type SyntheticEvent } from "react";
 import { HTMLContainer, useEditor, type TLVideoShape } from "tldraw";
 import { Button } from "~/components/ui/button";
@@ -74,7 +75,7 @@ export const RenderPlaceholder = ({ shape }: { readonly shape: TLVideoShape }) =
       data-render={marker ? "pending" : "failed"}
       style={{ width: shape.props.w, height: shape.props.h }}
     >
-      <ShapeLabel shapeId={shape.id} kind="video">
+      <ShapeLabel shapeId={shape.id} kind="video" name={readRef(shape)}>
         Video
       </ShapeLabel>
       <div className="box-border flex h-full flex-col items-center justify-center gap-2 p-3 text-center">

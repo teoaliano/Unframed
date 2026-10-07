@@ -4,7 +4,7 @@
  * tldraw's own copy of the selection and gets content back to put on the page.
  */
 import { mayBeGroupMember, wrapBox, type Box } from "./grouping.ts";
-import { uniqueName, slugName } from "./groupRules.ts";
+import { refOnPaste, slugName } from "./groupRules.ts";
 import { readGroupRecipe, type RecipeMedium } from "./recipeRules.ts";
 import { META_REF_TYPES, nextRef, rewriteRichTextTokens } from "./refs.ts";
 
@@ -72,7 +72,6 @@ export const PRESET_EMPTY_NAME_MESSAGE = "Give it a name.";
 const PROJECT_FILE = "project-file:";
 const PRESET_FILE = "preset-file:";
 const PAGE = "page:page";
-const NUMERIC = /^\d+$/;
 
 const record = (value: unknown): Record<string, unknown> | undefined =>
   typeof value === "object" && value !== null && !Array.isArray(value) ? (value as Record<string, unknown>) : undefined;
@@ -230,11 +229,10 @@ export interface Instantiated {
 }
 
 /**
- * Preset content made ready for a canvas: every prompt and medium gets a fresh `@id` from
- * `mint`; a group named by a name keeps it, suffixed while `taken` (every `@id` on the
- * canvas) holds it, and a group with a minted `@id` gets a fresh one. Every whole token
- * in the preset's prompts that names one of its own shapes follows it to the new `@id`;
- * any other token is left exactly as typed.
+ * Preset content made ready for a canvas: a shape whose `@id` is a name keeps it, suffixed
+ * while `taken` (every `@id` on the canvas) holds it, and a shape with a minted `@id` gets
+ * a fresh one from `mint`. Every whole token in the preset's prompts that names one of its
+ * own shapes follows it to the new `@id`; any other token is left exactly as typed.
  */
 export const instantiate = (content: PresetContent, taken: Iterable<string>, mint: () => string): Instantiated => {
   const used = new Set(taken);
@@ -242,15 +240,16 @@ export const instantiate = (content: PresetContent, taken: Iterable<string>, min
   const shapes = content.shapes.map((shape): ContentShape => {
     if (shape.type === "frame") {
       const name = typeof shape.props.name === "string" ? shape.props.name : "";
-      const next = name === "" || NUMERIC.test(name) ? mint() : uniqueName(name, used);
+      const next = refOnPaste(name, used, mint);
       used.add(next);
       if (name !== "") ids.set(name, next);
       return { ...shape, props: { ...shape.props, name: next } };
     }
     if (!META_REF_TYPES.has(shape.type)) return shape;
-    const next = mint();
+    const ref = typeof shape.meta.ref === "string" ? shape.meta.ref : undefined;
+    const next = refOnPaste(ref, used, mint);
     used.add(next);
-    if (typeof shape.meta.ref === "string") ids.set(shape.meta.ref, next);
+    if (ref !== undefined) ids.set(ref, next);
     return { ...shape, meta: { ...shape.meta, ref: next } };
   });
   const rewritten = shapes.map((shape) =>

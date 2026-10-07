@@ -78,6 +78,7 @@ This spec builds the composer shell shared with the Agent tray (specs 07 and 08)
 58. As a person, I want a run to finish and land even if I close the tab while it runs, so that I never pay for an image that never reaches the canvas.
 59. As the engine, I want placeholders left by a run that died with the process cleared at boot, so that nothing on the canvas claims to be generating forever.
 60. As a maintainer, I want the selection-to-request rule in one pure module used by the badges, the composer and the request, so that what a badge promises is what gets sent.
+61. As a person, I want an image's or video's `@id` in a prompt to send that picture as a reference, numbered like the badges, so that I can use a picture by name without selecting it.
 
 ## Implementation Decisions
 
@@ -135,10 +136,12 @@ Text:
 
 `@id` resolution:
 
-- A token is `@` followed by one or more word characters or hyphens. It resolves against every prompt, text result and group on the canvas, not only the selection.
+- A token is `@` followed by one or more word characters or hyphens. It resolves against every shape with an `@id` on the canvas (prompts, text results, groups, images, videos, pages and motions), not only the selection.
 - A prompt resolves to its own text with its tokens resolved recursively.
 - A text result resolves to its text, inserted literally, never re-scanned for tokens. This is also what makes a reference loop through a text result terminate.
-- A group resolves to the resolved text of its prompt and text-result members, top to bottom inside the box, each trimmed, empties dropped, joined with a blank line. It never attaches a member's media. Media travels only by selection.
+- A group resolves to the resolved text of its prompt and text-result members, top to bottom inside the box, each trimmed, empties dropped, joined with a blank line. It never attaches a member's media. Media travels only by selection, or by naming the picture itself.
+- An image or video is attached to the run, sent exactly as selecting it would send it (an image with marks on it or a crop as its composite), and the token reads as its slot: `image 2`, `video 1`. A picture that is also selected keeps its own slot. One that is not selected takes the next slot of its kind after every selected slot and the sketch, in the order the text names it, so naming a picture never renumbers the badges of what is selected. A picture named twice takes one slot. It shows its badge like a selected one, joins the sources after every selected shape, and counts against the reference cap and in the over-cap warning. This holds wherever text is resolved for a run: selected prompts, the prompts and groups they reference, and the instruction. Spec 05's Free list text is the one exception (spec 05).
+- An empty image or video, a page and a motion contribute nothing: their tokens are left exactly as typed, as a selected one contributes nothing.
 - An unknown token is left exactly as typed.
 - A cycle fails with the message `Circular reference: a -> b -> a` (the ids along the loop, joined with ` -> `, ending on the repeated id).
 
@@ -159,14 +162,14 @@ Sketches:
 
 Usable: a selection is usable when its composition has at least one non-empty prompt part or at least one reference slot. A selection whose only text fails on a circular reference is usable too, so the composer opens and shows the error.
 
-Roles (badges), shown only while the composer's Generate tray is open, on every selected shape that is media or an artifact, and on the sketch:
+Roles (badges), shown only while the composer's Generate tray is open, on every selected shape that is media or an artifact, on every picture a prompt names by `@` (above), and on the sketch:
 
 - a numbered slot shows `image N` or `video N`;
 - a selected image or video that sends nothing (empty) and a selected artifact show a single dash glyph (U+2014 EM DASH);
 - the sketch shows `image N` at the top-left of the loose marks' bounds;
 - prompts, text results and marks show no badge (prompts already show their `@id`, spec 02).
 
-Badges sit where spec 02 puts a bare media shape's one fact (top-left, outside the content). Each is the kit's Badge `label` variant (spec 12) in one hue, blue, for every role: the badges have always shared one colour. Video media (spec 04) may add `first` and `last` roles through the same map.
+Badges sit where spec 02 puts a shape's label (top-left, outside the content), and the shape's label is hidden while its badge shows, so the two never overlap. Each is the kit's Badge `label` variant (spec 12) in one hue, blue, for every role: the badges have always shared one colour. Video media (spec 04) may add `first` and `last` roles through the same map.
 
 ### Warnings and errors in the Generate tray (image medium)
 
@@ -463,7 +466,7 @@ Last-used values: the preferences `lastUsed.image`, `lastUsed.video` and `lastUs
 
 A good test drives one of the three seams in 00-index and asserts only on what that seam exposes: return values, RPC replies and events, room contents, files written, what is on screen. No test reaches into a module's internals or mocks one of our own modules.
 
-- **Domain seam** for every rule with many cases: ordering and tie-breaks, group expansion in place, member dedup, artifacts ignored, `@id` resolution (recursive, cycle message, unknown left as typed, text results literal and not re-scanned, group text without media), per-kind numbering, roles and the dash, usable, sketch ownership (overlap, z order, topmost wins, owned marks unselected, loose marks, the sketch's slot), caps and warnings, the toolbar-state function, model params (enum, array, range cap, supported, exact size replacing resolution and ratio, ratio labels, defaults, reset), the estimate (each numbered rule above, plus multi-endpoint agreement and reference billables), the formatter, result placement, image dimensions. Table-driven Vitest cases, one row per case, named by the behaviour.
+- **Domain seam** for every rule with many cases: ordering and tie-breaks, group expansion in place, member dedup, artifacts ignored, `@id` resolution (recursive, cycle message, unknown left as typed, text results literal and not re-scanned, group text without media, a named picture attached after the selected slots and read as its slot, empty media and artifacts left as typed), per-kind numbering, roles and the dash, usable, sketch ownership (overlap, z order, topmost wins, owned marks unselected, loose marks, the sketch's slot), caps and warnings, the toolbar-state function, model params (enum, array, range cap, supported, exact size replacing resolution and ratio, ratio labels, defaults, reset), the estimate (each numbered rule above, plus multi-endpoint agreement and reference billables), the formatter, result placement, image dimensions. Table-driven Vitest cases, one row per case, named by the behaviour.
 - **Engine seam** for `models.list`, `models.imagePricing` (including the slug refusal), `run.image` against a stub image endpoint: placeholders appear in the room before the reply, files and sidecars are written with the right names and fields, collisions retry, every error branch produces its message, partial failure produces the `finished` event, a placeholder deleted mid-run is not recreated, a restored placeholder is resolved, boot clears stale markers, `recipe.read`. The stub can be told per request to succeed, fail with a status, return non-JSON, drop the body mid-read, or omit the image.
 - **Browser seam** for the toolbar states and placement, the composer opening, morphing, Cmd+Enter, Enter, Esc, click-to-add and click-away, the tray and its menus, model dialog search, sort, pick and Escape, badges appearing only while the composer is open, a composite being uploaded when marks sit on an image, results landing and their line, the tether, Regenerate, Vary and Recipe, and copy stripping a marker.
 - Component snapshots are not tests. Canvas state can be seeded by writing the project's canvas through the sync room before loading the page.
@@ -524,6 +527,7 @@ A good test drives one of the three seams in 00-index and asserts only on what t
 52. Vary: the result appended as the last reference; disabled at the cap with its tooltip. Seam: browser.
 53. Recipe: composer reopens in recipe mode prefilled; a selection change leaves recipe mode keeping tray and box. Seam: browser.
 54. Copy and paste of a generating placeholder yields an empty image shape with no marker; copying a result keeps its result meta. Seam: browser.
+55. Selection to request: an image or video named by `@` in a prompt, a referenced prompt, a group's prompt or the instruction is attached as selecting it would, after the selected slots, once, with its badge, counting against the cap; its token reads as its slot; empty media, pages and motions are left as typed. Seam: domain; the request the stub receives, seam: browser.
 
 ## Out of Scope
 

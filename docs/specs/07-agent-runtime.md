@@ -201,10 +201,10 @@ Every id the agent reads or writes is tldraw's shape id without its `shape:` pre
 
 `canvas_read {}` returns:
 
-- `shapes`: every shape, in z-order, as `{id, kind, x, y, w, h, parent?}` plus per kind:
-  - prompt: `ref` (its `@id`), `text`
+- `shapes`: every shape, in z-order, as `{id, kind, x, y, w, h, parent?, ref?}` plus per kind. `ref` is the shape's `@id` on every shape that has one (every kind but a mark): a number the canvas minted, or the name a person gave it (spec 06).
+  - prompt: `text`
   - image, video: `file` (a project file name), `fileName` (the original name), `aspect`, `crop` when cropped; a linked clip gives `url` (its https link) instead of `file`
-  - group: `ref` (its name, which is its `@id`), `members` (ids, in their order inside the box), `recipe` when it carries standing settings (spec 06)
+  - group: `members` (ids, in their order inside the box), `recipe` when it carries standing settings (spec 06)
   - page, motion: `file`, `title`, `dials` when the shape has any saved dial values (spec 09 explains why the agent must see these)
   - result shapes also carry `recipe`, spec 03's result recipe read from the sidecar, and `running: true` while they carry spec 03's run marker
   - mark: `type` (the tldraw shape type), `text` when it has a label, `on` (the image it belongs to, by spec 03's mark rule) when it sits on one
@@ -222,7 +222,7 @@ A member's `x, y` is relative to its group, as the document holds it, and `paren
 | `resize` | `id`, `w`, `h` | media keeps its aspect lock (spec 02) |
 | `delete` | `id` | deleting a group deletes its members, as on the canvas |
 | `reparent` | `id`, `parent` | into a group, or `null` to take it out; spec 02's group membership rules apply |
-| `rename` | `id`, `name` | renames a group exactly as the canvas does (spec 06): slugified, collision-suffixed, and every `@` reference to it rewritten in the same batch |
+| `rename` | `id`, `name` | renames any shape with an `@id` (a prompt, image, video, page, motion or group) exactly as the canvas does (spec 06): slugified, collision-suffixed, a page or motion retitled with the name, and every `@` reference to it rewritten in the same batch. A mark is refused with "rename: <id> has no @id to rename" |
 
 Refused before the canvas sees the batch, with these messages:
 
@@ -634,7 +634,7 @@ The test-only variables this spec uses, `UNFRAMED_TEST_AGENT_SCRIPT`, `UNFRAMED_
 19. **`canvas_read`.** Over a seeded canvas (prompts, an image with a mark on it, a group with members, a page with dial values, a result with a recipe), the tool returns each shape's documented fields and the message's selection, and never a byte of media. Seam: engine.
 20. **Batch preparation.** Every refusal message, `new:` provisional id mapping across `id`, `parent` and members, prompt `@id`s from the canvas counter, run markers stripped. Seam: domain.
 21. **`canvas_write` applies one batch.** A scripted `canvas_write` of several ops lands in the room as one change, a connected sync client sees it, and the result maps every provisional id. A batch with one bad op changes nothing. Seam: engine.
-22. **`canvas_write` group ops.** `reparent` and `rename` follow spec 06's rules; a rename rewrites `@` references in the same write. Seam: engine.
+22. **`canvas_write` group ops.** `reparent` and `rename` follow spec 06's rules for every shape with an `@id`; a rename rewrites `@` references in the same write. Seam: engine (the rename of each kind: domain).
 23. **Tags from the first message.** A first message whose selection holds a page, an image and a motion tags the chat with the page and the motion only, as decided by the canvas, not by the message. Seam: engine.
 24. **Tags from writes.** A `canvas_write` that only moves a page, and one that resizes a motion tag the chat with that page and that motion, once each; one that only edits a prompt tags nothing; deleting the page afterwards leaves the tag. (Tags from the artifact tools are spec 09's task.) Seam: engine.
 25. **Change log origins.** Reading spec 02's change log, a sync client's edit classifies as `person`, a run's placeholder write (`run:<runId>`) as `person` too, a scripted write as `chat:<id>`, and system rows are excluded from counts. Seam: engine.

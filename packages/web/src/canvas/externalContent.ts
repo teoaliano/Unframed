@@ -1,5 +1,5 @@
 import { parseAssetMarker, projectFileMarker, UnframedError } from "@unframed/contracts";
-import { isArtifactKind, isVideoLink, META_REF_TYPES, pastedFileName, readRef, rewriteRichTextTokens, uniqueName, VIDEO_FILE_LIMIT, VIDEO_TOO_LARGE_MESSAGE } from "@unframed/domain";
+import { isArtifactKind, isVideoLink, META_REF_TYPES, pastedFileName, readRef, refOnPaste, rewriteRichTextTokens, VIDEO_FILE_LIMIT, VIDEO_TOO_LARGE_MESSAGE } from "@unframed/domain";
 import {
   AssetRecordType,
   createShapeId,
@@ -225,11 +225,9 @@ const handleText = async (editor: Editor, text: string, point: VecLike) => {
   editor.select(id);
 };
 
-const NUMERIC = /^\d+$/;
-
 /**
  * tldraw's own paste of shapes, fixed up before the shapes are committed: fresh refs in
- * order, references among the pasted prompts rewritten to them, a page or motion given
+ * order, names kept unless taken, references among the pasted prompts rewritten to them, a page or motion given
  * its own copy of its file, and every file copied in when the shapes came from another
  * project. A file that cannot be copied leaves its shape empty.
  */
@@ -280,18 +278,21 @@ const fixUpPastedShapes = async (editor: Editor, ctx: ContentContext, pasted: Un
   }
 
   const ids = new Map<string, string>();
-  // Refs are unique across the canvas, so a pasted group's name is taken by any of them.
+  // Refs are unique across the canvas, so a pasted name is taken by any of them. A name is
+  // kept, suffixed when taken (spec 06); a minted ref is minted again.
   const taken = new Set(editor.getCurrentPageShapes().flatMap((shape) => readRef(shape) ?? []));
+  const mint = () => ctx.minter.mint();
   for (const shape of content.shapes) {
     if (META_REF_TYPES.has(shape.type)) {
       const meta = shape.meta as { ref?: string };
-      const fresh = ctx.minter.mint();
-      if (typeof meta.ref === "string") ids.set(meta.ref, fresh);
+      const ref = typeof meta.ref === "string" ? meta.ref : undefined;
+      const fresh = refOnPaste(ref, taken, mint);
+      taken.add(fresh);
+      if (ref !== undefined) ids.set(ref, fresh);
       shape.meta = { ...shape.meta, ref: fresh };
     } else if (shape.type === "frame") {
       const props = shape.props as { name: string };
-      // A named group keeps its name, suffixed when taken (spec 06); a minted one is minted again.
-      const fresh = NUMERIC.test(props.name) || props.name === "" ? ctx.minter.mint() : uniqueName(props.name, taken);
+      const fresh = refOnPaste(props.name, taken, mint);
       taken.add(fresh);
       if (props.name !== "") ids.set(props.name, fresh);
       props.name = fresh;

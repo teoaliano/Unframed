@@ -5,6 +5,9 @@ const doc = (text: string) => ({ type: "doc", content: [{ type: "paragraph", con
 const prompt = (ref: string, text: string) => ({ typeName: "shape", type: "text", props: { richText: doc(text) }, meta: { ref } });
 const group = (name: string) => ({ typeName: "shape", type: "frame", props: { name }, meta: {} });
 const image = (ref: string) => ({ typeName: "shape", type: "image", props: {}, meta: { ref } });
+const video = (ref: string) => ({ typeName: "shape", type: "video", props: {}, meta: { ref } });
+const page = (ref: string, title = "") => ({ typeName: "shape", type: "page", props: { title, fileName: "" }, meta: { ref } });
+const motion = (ref: string, fileName = "") => ({ typeName: "shape", type: "motion", props: { title: "", fileName }, meta: { ref } });
 
 describe("mentionQuery", () => {
   it("is empty right after an @", () => {
@@ -39,16 +42,23 @@ describe("mentionCandidates", () => {
     { typeName: "shape", type: "geo", props: {}, meta: {} },
   ];
 
-  it("lists every prompt and group but this prompt, with a preview for prompts", () => {
+  it("lists every shape with a ref but this prompt and the marks, with a prompt's text, an artifact's title or the kind as the preview", () => {
     expect(mentionCandidates(board, "101", "")).toEqual([
       { ref: "100", preview: "lone red fox" },
+      { ref: "104", preview: "Image" },
       { ref: "110", preview: "night" },
       { ref: "Hero-shots" },
+    ]);
+    expect(mentionCandidates([video("waves"), page("landing", "Landing page"), page("pricing"), motion("intro", "intro.html")], undefined, "")).toEqual([
+      { ref: "intro", preview: "intro" },
+      { ref: "landing", preview: "Landing page" },
+      { ref: "pricing", preview: "Page" },
+      { ref: "waves", preview: "Video" },
     ]);
   });
 
   it("keeps the refs that start with the query, compared case-insensitively", () => {
-    expect(mentionCandidates(board, "100", "10").map((row) => row.ref)).toEqual(["101"]);
+    expect(mentionCandidates(board, "100", "10").map((row) => row.ref)).toEqual(["101", "104"]);
     expect(mentionCandidates(board, "100", "hero").map((row) => row.ref)).toEqual(["Hero-shots"]);
     expect(mentionCandidates(board, "100", "HERO-S").map((row) => row.ref)).toEqual(["Hero-shots"]);
     expect(mentionCandidates(board, "100", "2")).toEqual([]);

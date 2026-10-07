@@ -10,7 +10,7 @@ A person who builds the same thing over and over (a character, a product, a look
 
 Three pieces, each built on the one before.
 
-1. **Groups.** A group is tldraw's frame, extended. It is a box with a dashed border whose label is its `@id`. Its members are prompts, images, videos and marks. Selecting the box selects its contents for a run: the members take one slot in the top-to-bottom order, in their own order inside the box. Writing `@character` in a prompt pulls in the group's prompt text and never attaches its pictures. Cmd-G wraps a selection in a new group, Cmd-Shift-G takes the box away, renaming rewrites every reference in the same undo step, and deleting the box deletes its contents as one step.
+1. **Groups.** A group is tldraw's frame, extended. It is a box with a dashed border whose label is its `@id`. Its members are prompts, images, videos and marks. Selecting the box selects its contents for a run: the members take one slot in the top-to-bottom order, in their own order inside the box. Writing `@character` in a prompt pulls in the group's prompt text and never attaches its pictures. Cmd-G wraps a selection in a new group, Cmd-Shift-G takes the box away, renaming rewrites every reference in the same undo step, and deleting the box deletes its contents as one step. Renaming is not only for groups: any prompt, image, video, page or motion can be named the same way, and the name is its `@id`.
 2. **Recipe groups.** A group can also hold standing settings: the medium, the model, the parameters and the runs (including Free). Its label then shows a chip such as `gpt-image-2 · 1024² · ×3`, its toolbar Generate runs with those settings in one click, and the composer opens on them. The person saves, updates and clears the recipe from the composer.
 3. **The library.** A preset is a saved group: the box, its members and its recipe if it has one. The person saves a selection with "Add to library", browses presets in the Library dialog (search, sort, view, filters, pages), inserts one into any project with fresh ids and rewritten references, and deletes their own. Two system presets ship with the app. Presets live in one `presets.json` at the root of the output folder, under a write rule that can never erase a preset still on disk.
 
@@ -36,7 +36,7 @@ Groups
 16. As a person, I want a group's members to occupy one slot in the top-to-bottom order, in their order inside the box, so that "that box is image 2 and 3" reads off the canvas.
 17. As a person, I want the toolbar hint to read `@character` instead of a count when I select one group, so that the set I am about to use is named.
 18. As a person, I want `@character` in a prompt to become the group's prompt text, joined the way a run joins prompts, so that I can describe a character once and use it everywhere.
-19. As a person, I want `@character` never to attach the group's pictures, so that a mention cannot spend money on references I did not select.
+19. As a person, I want `@character` never to attach the group's pictures, so that mentioning a group cannot spend money on references I did not pick: a picture travels only when it is selected or named by its own `@id` (spec 03).
 20. As a person, I want a group to appear in the `@` mention menu and in "Copy @id", so that I can reference it like a prompt.
 21. As a person, I want Agent on a group to send everything inside it, so that the agent sees the same set a run would.
 22. As a person, I want pasting a group whose name is taken to arrive with a suffixed name, so that paste never steals an existing reference.
@@ -80,6 +80,13 @@ The library
 54. As a maintainer, I want every write to `presets.json` to re-read the file first and replace it whole, so that a stale copy can never erase presets still on disk.
 55. As a maintainer, I want entries in `presets.json` that this version does not understand to be kept on every write, so that spec 11 can read old presets from the same file later.
 
+Names
+
+56. As a person, I want to name any prompt, image, video, page or motion the way I name a group, by double-clicking its label, from the right-click menu's Rename or with F2, so that I can reference it with an `@` word I chose.
+57. As a person, I want a filled image or video to show its `@id` above it, so that I know what to type to use it in a prompt.
+58. As a person, I want renaming a page or motion to keep its name even when the agent later writes it with a title of its own, so that my name sticks.
+59. As a person, I want writing an image's or video's `@id` in a prompt to send that picture with the run, as selecting it would, so that I can use a picture by its name without selecting it.
+
 ## Implementation Decisions
 
 ### Vocabulary used here
@@ -88,16 +95,19 @@ The library
 
 ### Modules
 
-- **Group rules** (domain). Pure functions over plain shape descriptions (id, kind, `@id`, bounds, parent, text). Interface:
+- **Group rules** (domain). Pure functions over plain shape descriptions (id, kind, `@id`, bounds, parent, text). They name every kind, not only groups. Interface:
   - `slugName(typed)`: the rename slug.
   - `uniqueName(wanted, taken)`: the suffix rule.
   - `renamePlan(shapes, from, to)`: the list of prompt text rewrites a rename needs.
+  - `planRename(shapes, id, typed)`: what renaming any shape with an `@id` does: the new `@id`, the rewrites, and a page's or motion's new title.
+  - `refOnPaste(ref, taken, mint)`: the `@id` a pasted or inserted shape takes.
   Hides: the token pattern and the suffix loop. The wrap geometry (`wrapBox`) and the allowed-member rule are spec 02's; the expansion of a group in a run and what `@group` resolves to are spec 03's selection to request and reference resolver. This spec calls them and does not restate them.
 - **Recipe rules** (domain). `recipeChip(recipe)` (the label text), `recipeEquals(a, b)`, and `recipeFromTray(tray)` / `trayFromRecipe(recipe)` so the composer and the group speak one shape. The schema is spec 03's `GroupRecipe`. Hides: the chip's formatting rules.
 - **Preset rules** (domain, deep). `presetFromSelection(content, {name, summary})` derivation, `instantiate(preset, taken, mint)` (fresh ids, `@id` remap, whole-token text rewrite, name suffixing), `placeAt(bounds, centre)`, and `libraryView(presets, {query, type, source, sort, page})` (filter, sort, paginate, clamp). Hides: rank rules for undated presets, the page size, the order of filter then sort then slice.
 - **Preset store** (engine). Owns `presets.json`. Interface: three RPC methods (below). Hides: the read rule, the whole-array write, the serialised write queue, preservation of unknown entries.
 - **Preset media copier** (engine). One RPC method that copies files named by a preset into the target project. Hides: sidecar writing, missing-file handling.
-- **Group shape** (web). What this spec adds to spec 02's group: the rename field, the F2 binding and the recipe chip. An adapter over tldraw's frame behaviour, not a new shape type.
+- **Group shape** (web). What this spec adds to spec 02's group: the recipe chip. An adapter over tldraw's frame behaviour, not a new shape type.
+- **Naming** (web). The rename field in any shape's label, the label's double-click, the context menu's Rename and the F2 binding. Thin: the commit calls `planRename` and writes inside one history step.
 - **Group commands** (web). The context menu entries this spec adds, the toolbar variant for recipe groups, and the composer's recipe line. Thin: each calls the domain rules and writes to the editor inside one history step.
 - **Library UI** (web). The Library button, the Library dialog, the "Add to library" dialog, the delete confirmation, insertion.
 
@@ -105,15 +115,18 @@ The library
 
 Spec 02 owns the group shape: its look and label, membership and the child veto, Cmd-G and the context menu's Group, Cmd-Shift-G and Ungroup, the frame tool and the add menu's empty group, and delete taking the members with it as one undo step. This spec builds on that and adds rename, the naming rules for pasted groups, and recipes. A group holds its `@id` as its name, the way spec 02 stores it; the tldraw shape id is separate and never shown, so renaming never touches parent links.
 
-**Rename.** Double-clicking the label, or F2 while exactly one group is selected, opens an inline field in the label's place. The field shows a fixed `@` then the current name, fully selected, with accessible label "Group name". Enter or blur commits; Escape abandons the draft; every other key stays in the field (Backspace edits the name and never deletes the box). Commit:
+**Rename.** Every shape with an `@id` can be renamed: a group, a prompt (a text result too), an image, a video, a page and a motion. A mark has no `@id` and no name. Three gestures open an inline field in the shape's label: double-clicking the label, the context menu's "Rename" (spec 02's Reference section) on the right-clicked shape, and F2 while exactly one such shape is selected. A double-click anywhere else on a shape does what it did before: edits a prompt's text, crops an image, opens a page's or motion's editor (spec 09). The field shows a fixed `@` then the current `@id` (the number, until the shape has a name), fully selected, with accessible label "<Kind> name": "Group name", "Prompt name", "Image name", "Video name", "Page name" or "Motion name". Enter or blur commits; Escape abandons the draft; every other key stays in the field (Backspace edits the name and never deletes the shape). Commit:
 1. The typed text goes through spec 01's slug rule.
-2. If the slug is empty or equals the current name, nothing changes.
-3. If the slug is taken by any `@id` on the canvas (prompts, text results, groups), `-2`, `-3` and so on is appended until it is free.
-4. The group's `@id` changes, and every prompt shape whose text contains the whole token `@old` has it rewritten to `@new`. A token is `@` followed by the longest run of word characters and hyphens, so renaming `fox` never touches `@fox-2` or `@foxes`. Text results are not rewritten: their text is a model's answer, substituted literally and never scanned for tokens. A result's recipe is a record of a past run and is never rewritten.
-5. The rename and all of step 4's rewrites are one undo step.
+2. If the slug is empty or equals the current `@id`, nothing changes.
+3. If the slug is taken by any `@id` on the canvas (prompts, text results, media, artifacts, groups), `-2`, `-3` and so on is appended until it is free. These are the only names and the only collision rule: groups and every other kind share them.
+4. The shape's `@id` changes (a group's `props.name`, any other shape's `meta.ref`, spec 02), and every prompt shape whose text contains the whole token `@old` has it rewritten to `@new`. A token is `@` followed by the longest run of word characters and hyphens, so renaming `fox` never touches `@fox-2` or `@foxes`. Text results are not rewritten: their text is a model's answer, substituted literally and never scanned for tokens. A result's recipe is a record of a past run and is never rewritten.
+5. A page or motion also takes the new name as its `title`, so the editor's header, the chat's chips and the agent's lists show the name the person gave it. Its file is never renamed (spec 09: every edit is a new file, and a rename is not an edit of the file).
+6. The rename and all of step 4's rewrites are one undo step.
 F2 is used rather than Cmd-R because Cmd-R reloads the page.
 
-**Pasting a group** (extends spec 02's paste). A pasted group whose `@id` is a name keeps it, suffixed by the rule above if taken; a group whose `@id` is a minted one gets a fresh minted `@id`. References inside the pasted prompts to the pasted group are rewritten to its new `@id` by the whole-token rule.
+**Names.** A ref made of digits only is one the canvas minted (spec 02's `nextRef`); any other ref is a name a person gave the shape. A name is shown as the shape's label: `@<name>` above a prompt, a group, an image or a video (filled or empty), and above a page or motion in place of its title (spec 09). An unnamed empty image or video keeps its kind word, and an unnamed page or motion keeps its title.
+
+**Pasting a named shape** (extends spec 02's paste). A pasted shape whose `@id` is a name keeps it, suffixed by the rule above if taken; a shape whose `@id` is a minted one gets a fresh minted `@id`, as spec 02 says. This holds for every kind, groups included. References inside the pasted prompts to a pasted shape are rewritten to its new `@id` by the whole-token rule.
 
 ### Groups in a run
 
@@ -212,7 +225,7 @@ A failed read (for example a damaged file) keeps the system presets on screen an
 
 **Inserting ("Add").** Closes the dialog and inserts the preset into the current page as one undo step:
 1. tldraw inserts the content with fresh shape ids and applies its schema migrations.
-2. `@id`s are re-minted: a prompt's `@id` always gets a fresh minted one; a group whose `@id` is a name keeps it, suffixed by the rename rule if any `@id` on the canvas already uses it; a group whose `@id` is a minted one gets a fresh one.
+2. `@id`s are re-minted by the paste rule above: a shape whose `@id` is a name keeps it, suffixed by the rename rule if any `@id` on the canvas already uses it; a shape whose `@id` is a minted one gets a fresh one.
 3. Every whole `@old` token in the inserted prompts' text that names a shape in the preset is rewritten to that shape's new `@id`. Tokens that name nothing in the preset are left exactly as typed.
 4. The group's bounds are centred on the centre of the visible canvas. Members move with the box because their positions are relative to it.
 5. Every `preset-file:<project>/<file>` pointer is resolved by the media copier into the current project (an empty `<project>`, spec 11's form for old presets, means the current project itself). A copied file replaces the pointer with spec 02's `project-file:<file>` marker before anything reaches the room, which refuses `preset-file:`. A missing file leaves that image or video shape empty (asking for a file), and one toast says "<n> file(s) in “<name>” are no longer on disk, so their shapes arrived empty."
@@ -251,9 +264,9 @@ Both are recipe groups, built at startup by the preset rules. Their prompt text 
 
 A good test drives one interface and asserts on what comes out of it: the returned plan, the records the engine holds, the file on disk, what is on screen. No test reaches into a module's internals or asserts on tldraw's private state.
 
-- **Domain seam** (Vitest, direct calls) carries the rules with many cases: the slug rule, the suffix loop, the whole-token rename rewrite (`@fox` vs `@fox-2`, `@foxes`, several tokens in one text, text results untouched), the recipe chip for every medium and runs value, `recipeEquals`, preset derivation (kind, medium, the four selection cases), instantiate (fresh ids, name kept, name suffixed, minted re-minted, internal tokens rewritten, external tokens left), placement arithmetic, and the library view (filter by each axis, each sort including undated user presets, page cut after sort, clamp, reset).
+- **Domain seam** (Vitest, direct calls) carries the rules with many cases: the slug rule, the suffix loop, the whole-token rename rewrite (`@fox` vs `@fox-2`, `@foxes`, several tokens in one text, text results untouched), `planRename` for every kind (a page's or motion's title, a mark refused), `refOnPaste`, the recipe chip for every medium and runs value, `recipeEquals`, preset derivation (kind, medium, the four selection cases), instantiate (fresh ids, name kept, name suffixed, minted re-minted, internal tokens rewritten, external tokens left), placement arithmetic, and the library view (filter by each axis, each sort including undated user presets, page cut after sort, clamp, reset).
 - **Engine seam** (forked engine in a temp output folder) carries the preset store and the copier: missing file lists empty, bad JSON fails with the message and a following save fails and leaves the file byte-identical, save prepends and replaces the whole array, a save re-reads (write the file behind the engine's back between two saves; both entries survive), unknown entries survive a save and a delete byte-for-byte, delete of an unknown id fails, two concurrent saves both land, copy writes the file and sidecar, a missing file answers `missing`, a path with a slash is refused.
-- **Browser seam** (Playwright against a stubbed engine) carries every gesture this spec adds (spec 02 already covers wrap, ungroup, membership and delete): rename by double-click and F2, Escape, Backspace in the field, a collision suffix, a rename rewriting two prompts and undone in one Cmd-Z, the toolbar hint, a run on a group (assert the stub received members in the expected order), a recipe saved, shown as a chip, run from the toolbar (assert the stub received the recipe's model and params), a Free recipe stopping at the final prompt, Recipe opening the composer, Update and Clear, the Library dialog's controls, the view remembered across reloads, Add placing and selecting the group, a preset with a missing file, delete with confirmation.
+- **Browser seam** (Playwright against a stubbed engine) carries every gesture this spec adds (spec 02 already covers wrap, ungroup, membership and delete): rename by double-click and F2, Escape, Backspace in the field, a collision suffix, a rename rewriting two prompts and undone in one Cmd-Z, the same for an image, a prompt, a video, a page and a motion by label double-click, Rename in the context menu and F2, a double-click off the label still editing the prompt or opening the editor, the toolbar hint, a run on a group (assert the stub received members in the expected order), a recipe saved, shown as a chip, run from the toolbar (assert the stub received the recipe's model and params), a Free recipe stopping at the final prompt, Recipe opening the composer, Update and Clear, the Library dialog's controls, the view remembered across reloads, Add placing and selecting the group, a preset with a missing file, delete with confirmation.
 
 Prior art: the old app pinned exactly these rules (wrap, rename rewrite, fragment instantiation, the preset read rule) as small assert-based checks over pure functions and one forked-server test. Keep that shape: most cases at the domain seam, a handful of engine and browser tests that prove the wiring.
 
@@ -294,10 +307,12 @@ Prior art: the old app pinned exactly these rules (wrap, rename rewrite, fragmen
 33. Cards and list rows show name, summary, needs, chips, Add, and delete only on user presets. Seam: browser.
 34. Delete asks with the alert copy, removes the preset, and toasts on failure. Seam: browser.
 35. The dialog re-reads on every open and shows the read-failure line when the file is damaged. Seam: browser.
-36. `instantiate` mints fresh ids, keeps or suffixes group names, re-mints minted ones, rewrites internal tokens and leaves external ones. Seam: domain.
+36. `instantiate` mints fresh ids, keeps or suffixes names of every kind, re-mints minted ones, rewrites internal tokens and leaves external ones. Seam: domain.
 37. Add inserts centred on the view as one undo step, selects the group, closes the dialog. Seam: browser.
 38. Add copies files into the current project; a missing file leaves an empty shape and one toast. Seam: browser.
 39. System presets Layerize and Prose to JSON are listed with the System chip, built from the asset text, and insert as recipe groups using the current default text model. Seam: browser.
+40. `planRename` renames any shape with an `@id` by the group rules, gives a page or motion its name as its title, and refuses a mark; `refOnPaste` keeps names and re-mints numbers. Seam: domain.
+41. Label double-click, the context menu's Rename and F2 rename a prompt, an image, a video, a page and a motion; a filled image shows its `@id`; the rename and its rewrites undo in one step; a double-click off the label still edits, crops or opens the editor. Seam: browser.
 
 ## Out of Scope
 

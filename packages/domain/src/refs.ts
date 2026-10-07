@@ -21,7 +21,6 @@ export interface CanvasRecordLike {
   readonly meta?: unknown;
 }
 
-/** The shape kinds that carry their ref in `meta.ref`. A group's name is its ref. */
 /** The shape kinds that carry a ref in `meta.ref`. A group's ref is its name. */
 export const META_REF_TYPES: ReadonlySet<string> = new Set(["text", "image", "video", "page", "motion"]);
 
@@ -69,6 +68,9 @@ export const promptText = (shape: CanvasRecordLike): string | undefined =>
 
 const NUMERIC = /^\d+$/;
 const FLOOR = 99n;
+
+/** A ref the canvas's counter minted, as opposed to a name someone gave. */
+export const isMintedRef = (ref: string): boolean => NUMERIC.test(ref);
 
 /**
  * The ref for a new shape: one more than the largest number among every numeric ref on

@@ -85,7 +85,7 @@ test("a right-clicked prompt is selected alone and offers its reference and the 
   // A selection always gets the Library section, whose Add to library the canvas registers.
   expect(headings).toEqual(["Reference", "Edit", "Library"]);
   const edits = [`Cut ${shortcut("X")}`, `Copy ${shortcut("C")}`, `Group ${shortcut("G")}`];
-  expect(items.slice(0, 5)).toEqual(["Copy @100", ...edits, expect.not.stringMatching(/^(Paste|Ungroup)/)]);
+  expect(items.slice(0, 6)).toEqual(["Copy @100", "Rename F2", ...edits, expect.not.stringMatching(/^(Paste|Ungroup)/)]);
   // Each edit item once: tldraw's own cut, copy and group are gone.
   expect(items.filter(editRow)).toEqual(edits);
   await closeMenu(page);
@@ -106,8 +106,8 @@ test("a filled image offers reveal and copy as image; inside a selection of two 
   const { shortcut, reveal } = await platformOf(page);
   const one = await centre(shapeOnScreen(page, "shape:one"));
   const single = await rightClick(page, one);
-  expect(single.headings).toEqual(["Image", "Edit", "Library"]);
-  expect(single.items.slice(0, 5)).toEqual([reveal(), "Copy as image", `Cut ${shortcut("X")}`, `Copy ${shortcut("C")}`, `Group ${shortcut("G")}`]);
+  expect(single.headings).toEqual(["Image", "Reference", "Edit", "Library"]);
+  expect(single.items.slice(0, 7)).toEqual([reveal(), "Copy as image", "Copy @150", "Rename F2", `Cut ${shortcut("X")}`, `Copy ${shortcut("C")}`, `Group ${shortcut("G")}`]);
   await closeMenu(page);
 
   await page.mouse.click(one.x, one.y);
@@ -128,7 +128,7 @@ test("a right-clicked group offers its reference and Ungroup, not Group", async 
   const box = (await shapeOnScreen(page, "shape:group").boundingBox())!;
   const { headings, items } = await rightClick(page, { x: box.x + 10, y: box.y - 8 });
   expect(headings).toEqual(["Reference", "Edit", "Library"]);
-  expect(items.slice(0, 4)).toEqual(["Copy @160", `Cut ${shortcut("X")}`, `Copy ${shortcut("C")}`, `Ungroup ${shortcut("G", { shift: true })}`]);
+  expect(items.slice(0, 5)).toEqual(["Copy @160", "Rename F2", `Cut ${shortcut("X")}`, `Copy ${shortcut("C")}`, `Ungroup ${shortcut("G", { shift: true })}`]);
   expect(items).not.toContain(`Group ${shortcut("G")}`);
 });
 

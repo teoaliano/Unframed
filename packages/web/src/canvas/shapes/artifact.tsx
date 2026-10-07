@@ -1,7 +1,7 @@
 import type { ArtifactShapeProps } from "@unframed/contracts";
-import { artifactTitle, type ArtifactKind } from "@unframed/domain";
+import { artifactTitle, isMintedRef, readRef, type ArtifactKind } from "@unframed/domain";
 import { AppWindow, Clapperboard } from "lucide-react";
-import { BaseBoxShapeUtil, getPointerInfo, HTMLContainer, resizeBox, T, useEditor, useValue, type RecordProps, type TLResizeInfo, type TLShape } from "tldraw";
+import { BaseBoxShapeUtil, HTMLContainer, resizeBox, T, useEditor, useValue, type RecordProps, type TLResizeInfo, type TLShape } from "tldraw";
 import { ArtifactFrame } from "../../artifacts/ArtifactFrame.tsx";
 import { ProblemLine, RenderRow } from "../../artifacts/RenderRow.tsx";
 import { snapshotsOf, snapshotUrl, stillOf } from "../../artifacts/snapshots.ts";
@@ -27,6 +27,12 @@ const artifactProps: RecordProps<ArtifactShape> = {
   dials: T.dict(T.string, T.jsonValue).optional(),
 };
 
+/** A person's name for the artifact, as its `@id`; `undefined` while its `@id` is a minted number. */
+const nameOf = (shape: ArtifactShape): string | undefined => {
+  const ref = readRef(shape);
+  return ref !== undefined && !isMintedRef(ref) ? ref : undefined;
+};
+
 /** The row under a motion (Render) is this tall; the status line goes below it. */
 const RENDER_ROW_HEIGHT = 34;
 
@@ -38,8 +44,8 @@ const EmptyArtifact = ({ shape, kind }: { readonly shape: ArtifactShape; readonl
   return (
     <>
       <HTMLContainer id={shape.id} className={artifactCardClass} data-testid="artifact-card" data-artifact-kind={kind} style={{ width: props.w, height: props.h }}>
-        <ShapeLabel shapeId={shape.id} kind={kind}>
-          {kind === "page" ? "Page" : "Motion"}
+        <ShapeLabel shapeId={shape.id} kind={kind} name={readRef(shape)}>
+          {nameOf(shape) !== undefined ? `@${nameOf(shape)}` : kind === "page" ? "Page" : "Motion"}
         </ShapeLabel>
         <div className="flex h-full flex-col items-center justify-center gap-3 text-muted-foreground">
           <Icon className="size-7" strokeWidth={1.5} aria-label={kind === "page" ? "Page" : "Motion"} />
@@ -81,22 +87,13 @@ const FilledArtifact = ({ shape, kind }: { readonly shape: ArtifactShape; readon
   const interactive = useValue("artifact interactive", () => live && isInteractive(editor, shape.id), [editor, shape.id, live]);
   const port = useValue("preview port", () => previewPort.get(), []);
   const title = artifactTitle(props);
+  const name = nameOf(shape);
   return (
     <>
       <HTMLContainer id={shape.id} data-testid="artifact-card" data-artifact-kind={kind} data-live={live ? "true" : undefined} style={{ width: props.w, height: props.h }}>
-        {title !== "" && (
-          <ShapeLabel
-            shapeId={shape.id}
-            kind={kind}
-            onPointerDown={(event) => {
-              // The title is the handle: a selected frame takes every press inside the shape.
-              const current = editor.getShape(shape.id);
-              if (current) editor.dispatch({ type: "pointer", name: "pointer_down", target: "shape", shape: current, ...getPointerInfo(editor, event) });
-            }}
-          >
-            {title}
-          </ShapeLabel>
-        )}
+        <ShapeLabel shapeId={shape.id} kind={kind} name={readRef(shape)}>
+          {name !== undefined ? `@${name}` : title}
+        </ShapeLabel>
         {live && port !== undefined ? (
           <ArtifactFrame key={props.file} project={project} kind={kind} file={props.file} previewPort={port} dials={props.dials} interactive={interactive} lazy />
         ) : (
@@ -140,7 +137,8 @@ const makeArtifactUtil = (kind: ArtifactKind) =>
 
     /**
      * Double-click opens the editor; it never enters tldraw's editing state. It answers an
-     * empty change, because answering none makes tldraw put a new prompt where it landed.
+     * empty change, because answering none makes tldraw put a new prompt where it landed. A
+     * double-click on the label is a rename, which the label handles.
      */
     override onDoubleClick(shape: ArtifactShape) {
       currentSlots().openArtifact?.(this.editor, shape.id);

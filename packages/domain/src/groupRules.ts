@@ -1,12 +1,13 @@
 /**
- * Group naming (spec 06): the rename slug, the suffix rule and the prompt rewrites a rename
- * needs. Spec 07's canvas rename calls these too, so each stands on its own.
+ * Naming (spec 02 and 06): the rename slug, the suffix rule and the prompt rewrites a rename
+ * needs, for a group and for every other shape with an `@id`. Spec 07's canvas rename calls
+ * these too, so each stands on its own.
  */
-import type { CanvasShape } from "./canvasShapes.ts";
-import { REF_TOKEN } from "./refs.ts";
+import type { CanvasShape, ShapeKind } from "./canvasShapes.ts";
+import { isMintedRef, REF_TOKEN } from "./refs.ts";
 import { projectSlug } from "./slug.ts";
 
-/** A typed group name as an `@id`: spec 01's slug rule. */
+/** A typed name as an `@id`: spec 01's slug rule. */
 export const slugName = (typed: string): string => projectSlug(typed);
 
 /** `wanted`, or `wanted-2`, `wanted-3` and so on, whichever is first free of `taken`. */
@@ -39,25 +40,44 @@ export const renamePlan = (shapes: ReadonlyArray<CanvasShape>, from: string, to:
     return text === shape.text ? [] : [{ id: shape.id, text }];
   });
 
-export interface GroupRename {
-  readonly groupId: string;
+export interface Rename {
+  readonly id: string;
+  readonly kind: ShapeKind;
   readonly from: string;
   readonly to: string;
   readonly rewrites: ReadonlyArray<PromptRewrite>;
+  /** A page's or motion's new title: its name, so every place that lists it shows what the person typed. */
+  readonly title?: string;
 }
 
 /**
- * What renaming group `groupId` to `typed` does: the slug, suffixed while any ref on the
- * canvas holds it, and the prompt rewrites. `undefined` when nothing changes: an empty
- * slug, the current name, or no such group. Every ref counts as taken, not only the
- * referenceable ones, because refs are unique across the canvas.
+ * What renaming shape `id` to `typed` does: the slug, suffixed while any ref on the canvas
+ * holds it, and the prompt rewrites. Any shape with an `@id` can be renamed. `undefined`
+ * when nothing changes: an empty slug, the current name, or no such shape. Every ref
+ * counts as taken, not only the referenceable ones, because refs are unique across the
+ * canvas.
  */
-export const planGroupRename = (shapes: ReadonlyArray<CanvasShape>, groupId: string, typed: string): GroupRename | undefined => {
-  const group = shapes.find((shape) => shape.id === groupId);
-  if (group?.kind !== "group" || group.ref === undefined) return undefined;
+export const planRename = (shapes: ReadonlyArray<CanvasShape>, id: string, typed: string): Rename | undefined => {
+  const shape = shapes.find((candidate) => candidate.id === id);
+  if (shape?.ref === undefined) return undefined;
   const slug = slugName(typed);
-  if (slug === "" || slug === group.ref) return undefined;
-  const taken = shapes.flatMap((shape) => (shape.id !== groupId && shape.ref !== undefined ? [shape.ref] : []));
+  if (slug === "" || slug === shape.ref) return undefined;
+  const taken = shapes.flatMap((other) => (other.id !== id && other.ref !== undefined ? [other.ref] : []));
   const to = uniqueName(slug, taken);
-  return { groupId, from: group.ref, to, rewrites: renamePlan(shapes, group.ref, to) };
+  return {
+    id,
+    kind: shape.kind,
+    from: shape.ref,
+    to,
+    rewrites: renamePlan(shapes, shape.ref, to),
+    ...(shape.kind === "page" || shape.kind === "motion" ? { title: to } : {}),
+  };
 };
+
+/**
+ * The ref a pasted or inserted shape takes: a name is kept, suffixed while `taken` holds it;
+ * a minted ref, or none, is minted afresh, so a copy never captures a reference to the
+ * original.
+ */
+export const refOnPaste = (ref: string | undefined, taken: ReadonlySet<string>, mint: () => string): string =>
+  ref === undefined || ref === "" || isMintedRef(ref) ? mint() : uniqueName(ref, taken);

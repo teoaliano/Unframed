@@ -1,3 +1,4 @@
+import { artifactTitle } from "./artifacts/artifactRules.ts";
 import { promptText, readRef, type CanvasRecordLike } from "./refs.ts";
 
 const QUERY = /@([\w-]*)$/;
@@ -20,6 +21,18 @@ const preview = (text: string): string => {
 
 const NUMERIC = /^\d+$/;
 
+const KIND_WORDS: Readonly<Record<string, string>> = { image: "Image", video: "Video", page: "Page", motion: "Motion" };
+
+/** A prompt's text, an artifact's title, else the kind word; a group has none. */
+const previewOf = (shape: CanvasRecordLike): string | undefined => {
+  const text = promptText(shape);
+  if (text !== undefined) return preview(text);
+  const kind = shape.type === undefined ? undefined : KIND_WORDS[shape.type];
+  if (kind === undefined) return undefined;
+  const title = shape.type === "page" || shape.type === "motion" ? artifactTitle((shape.props ?? {}) as { title?: unknown; fileName?: unknown }) : "";
+  return title === "" ? kind : preview(title);
+};
+
 const byRef = (a: MentionCandidate, b: MentionCandidate): number => {
   const aNumber = NUMERIC.test(a.ref);
   const bNumber = NUMERIC.test(b.ref);
@@ -29,9 +42,9 @@ const byRef = (a: MentionCandidate, b: MentionCandidate): number => {
 };
 
 /**
- * Every referenceable shape (a prompt or a group) other than `selfRef` whose ref starts
- * with `query`, compared case-insensitively. Numbered refs come first in number order,
- * then names alphabetically.
+ * Every shape with an `@id` (a prompt, image, video, page, motion or group) other than
+ * `selfRef` whose ref starts with `query`, compared case-insensitively. Numbered refs come
+ * first in number order, then names alphabetically.
  */
 export const mentionCandidates = (
   shapes: Iterable<CanvasRecordLike>,
@@ -41,11 +54,10 @@ export const mentionCandidates = (
   const wanted = query.toLowerCase();
   const rows: MentionCandidate[] = [];
   for (const shape of shapes) {
-    if (shape.type !== "text" && shape.type !== "frame") continue;
     const ref = readRef(shape);
     if (ref === undefined || ref === selfRef || !ref.toLowerCase().startsWith(wanted)) continue;
-    const text = promptText(shape);
-    rows.push(text === undefined ? { ref } : { ref, preview: preview(text) });
+    const shown = previewOf(shape);
+    rows.push(shown === undefined ? { ref } : { ref, preview: shown });
   }
   return rows.sort(byRef);
 };

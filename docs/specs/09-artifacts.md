@@ -106,12 +106,12 @@ Two custom tldraw shapes, `page` and `motion`, both artifacts. They are the one 
 
 - Default size from the add menu: 480 by 320 for both kinds. Agent-created: page 480 by 320, motion 480 by 300.
 - Resize is free on both axes. No aspect lock.
-- **Title shown on canvas and in the editor**: `title`, else `fileName` without `.html`/`.htm`, else nothing on the canvas and the shape id in the editor.
+- **Title shown on canvas and in the editor**: `title`, else `fileName` without `.html`/`.htm`, else nothing on the canvas and the shape id in the editor. Once a person names the artifact (spec 06), its label on the canvas reads `@<name>` instead, and the rename sets `title` to the name, so the editor and every list show it too. The agent's titles never replace a person's name (`<kind>_write` below). A rename never renames a file: the name lives on the shape, and only a write makes a new file.
 - **Empty** (`file` is ""): the card (spec 12: `--card` fill, the kit border, 14 px radius) keeps its frame and name tab (the kind word, "Page" or "Motion") and shows its kind icon, centred, with no button. Selected, it shows Agent alone in the selection toolbar (spec 03), which opens the composer (spec 08) in its Agent tray with that shape as context.
 - **Filled**: no card, no tab, no border. The frame fills the shape. The title sits where spec 02 puts a shape's label, above the top-left corner, and follows spec 02's labels-by-zoom rule.
 - The frame: an iframe with `src` set to the artifact URL on the preview origin, `sandbox="allow-scripts allow-same-origin"`, `referrerpolicy="no-referrer"`, `allow=""`, `loading="lazy"`, white background (the `--artifact-page` token, white in both schemes), no border. It is keyed by `file`, so a new version is a fresh document. It exists only while the shape is live (see "Keeping artifacts off the canvas thread" below); otherwise the shape shows its snapshot.
 - The frame takes pointer events only when the shape is selected and not being dragged or resized. Otherwise every pointer event goes to tldraw.
-- Double-click on an artifact opens the editor. It never enters tldraw's text-edit state.
+- Double-click on an artifact opens the editor. It never enters tldraw's text-edit state. A double-click on its label is spec 06's rename instead, and a press on the label is a press on the shape, which is how a filled artifact, whose frame takes the pointer, is moved.
 - **Render** is the kit's small outline Button with the Clapperboard icon, in the selection toolbar after Open when one filled motion is selected (spec 03), and in the editor's header when a filled motion is open. It is disabled while that motion renders. While a render runs, a row under the shape (outside it, like the video transport) shows the kit's progress look (spec 12): a Spinner, a thin bar filling in `--highlight` over `--input`, and the text `{progress}%` or `{progress}% · {message}` in extra-small muted text. Every Render and the row read one render state per motion, so they agree.
 - Errors from an upload or render show in a status line under the shape (outside it, below the render row on a motion), in the error text colour, until the next upload or render starts.
 - Delete is tldraw's ordinary delete, with no confirmation. Files, sidecars and chats stay on disk. Undo brings the shape back and its chat tags match again. Nothing deletes superseded or orphaned artifact files.
@@ -270,7 +270,7 @@ Descriptions are model-facing and composed from assets: `page_write` is the text
 1. `html` not a non-empty string: `html must be a non-empty string`.
 2. Inject tags (bridge for page, runtime then bridge for motion). Over 2 MiB: `the {kind} is too large ({n} bytes; the limit is 2097152)`.
 3. `shapeId` given but no such shape: `no shape {shapeId}`. Wrong kind: `shape {shapeId} is a {its kind}, not a {kind}`.
-4. Title = (`title` if given, else the shape's current title, else "") trimmed.
+4. Title = (`title` if given, else the shape's current title, else "") trimmed. When a person has named the shape (its `@id` is not a number, spec 06), the person's name wins: the given `title` is ignored and the shape's current title, which is that name, is used for the file name, the sidecar, the activity and the answer.
 5. Ensure the bridge (page) or the library (motion), then write the new file with exclusive create and its agent sidecar.
 6. Update: set `file`, and `title` only if `title` was given and differs. Create: a new shape of that kind at the default agent size with `{ file, title, fileName: "" }`, placed to the right of the selection's bounding box (right edge + 60, top of the topmost selected shape), or at (80, 80) with nothing selected. Written through spec 02's `apply` with origin `chat:<chatId>` and recorded in spec 07's turn changes, so it is one change the turn's Revert undoes.
 7. A failed write: `the change could not be applied`, or the room's rejection reason.
@@ -330,7 +330,7 @@ The canvas side addresses hello and set to the preview origin and accepts `unfra
 
 ### The editor
 
-Opened by double-click on an artifact, by the selection toolbar's Open on one filled artifact (spec 03 and 08 call this entry point), and by the chat recap card's Open (spec 08). Opening: save the tldraw camera, select the artifact alone, close the composer, check providers if not yet checked, then show the editor.
+Opened by double-click on an artifact (not on its label, which renames it), by the selection toolbar's Open on one filled artifact (spec 03 and 08 call this entry point), and by the chat recap card's Open (spec 08). Opening: save the tldraw camera, select the artifact alone, close the composer, check providers if not yet checked, then show the editor.
 
 - **Full screen, replacing the canvas on screen.** The canvas's own artifact frames and players unload while it is open. The tldraw editor instance and its local undo history survive, so Cmd-Z after closing undoes a dial change. Canvas keyboard shortcuts are inactive while the editor is open.
 - **Layout**: a three-column grid, 360 px, flexible, 320 px, gap 12 px, padding 12 px, on the body background. Each column is a card on `--card` with the kit border and a 14 px radius (spec 12).
@@ -446,6 +446,8 @@ A good test drives one of the three seams from 00-index and asserts only on what
 60. A live frame more than one viewport width off screen unmounts and remounts on return. Seam: browser
 61. Snapshots render after a write, a file replacement, a saved dial change and a resize over 10 %, with the saved dials applied, into `.cache/snapshots/`, debounced per shape and one at a time; no Chrome means no snapshot and the hint card. Seam: engine
 62. Artifact performance budget: a board with ten pages each running the busy fixture from `assets/perf/` and five motions pans for 4 s in the hosted shape with the median frame gap at or under 16.7 ms, no more than 2 % of frames over 33 ms, and no long task on the canvas thread over 50 ms. The frame-gap and long-task thresholds are enforced by `pnpm test:perf` on real hardware, not on shared CI runners (spec 02's performance budget); the live frame caps are asserted everywhere. Seam: browser
+63. `page_write` and `motion_write` with a `title` on an artifact a person named keep the name as the shape's title and file name. Seam: engine
+64. A double-click on an artifact's label renames it (spec 06); a double-click on its body still opens the editor. Seam: browser
 
 ## Out of Scope
 
