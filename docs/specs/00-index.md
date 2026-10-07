@@ -111,6 +111,7 @@ These hold across every spec. A spec that needs to bend one must say so explicit
 | 11 | [Legacy import](11-legacy-import.md) | one-time import of old projects and presets |
 | 12 | [Design system](12-design-system.md) | t3code's tokens and UI kit on every surface, tldraw's UI themed to match, the lint that keeps it |
 | 13 | [Design-system catalogue](13-design-system-catalogue.md) | a dev-only page showing every token, kit component and recipe, its API from the source, and where the product uses it |
+| 14 | [External agents](14-external-agents.md) | agents outside the app (Claude Code, Codex, the Claude app, any MCP client) read and write the canvas over MCP: connection tokens made in Settings, a stdio shim that finds the engine through a discovery file, one outside chat per connection per project with turns and Revert |
 
 ## Reference material in this repo
 

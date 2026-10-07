@@ -39,6 +39,7 @@ Spec 12's run on `build`, with the dev server stopped: `pnpm typecheck` exit 0 (
 | 11 | legacy import | 9 | merged | c264c38 | 46/46 tasks; covers spec 03's imported-recipe Regenerate and Recipe |
 | 12 | design system | 10 | merged | 4935b8b to 834be6d (merges 2d7b5fa, 39a1d4a, f15d45f), review fixes 2d7627f to bde5664 | 25/25 tasks. Written after the first build, at the person's request. Decisions settled during the run are under "Decisions" |
 | 13 | design-system catalogue | 11 | merged | see git log | 4/4 tasks. Written after spec 12's live review, at the person's request: a dev-only page at `/design-system/` on the web dev server |
+| 14 | external agents | 12 | not built | | 0/25 tasks. Written for issue #93 at the person's request; its open questions are in the spec's Further Notes |
 
 ## Performance budgets
 
