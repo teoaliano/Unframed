@@ -365,7 +365,7 @@ const RecipeBar = ({ state, agent }: { state: Extract<ToolbarState, { kind: "rec
 
 const Bar = ({ state, onGenerate, agent }: { state: Exclude<ToolbarState, { kind: "none" }>; onGenerate: () => void; agent: ReactNode }) => {
   const editor = useEditor();
-  const { openArtifact, renderButton: Render } = useSlots();
+  const { openArtifact, renderButton: Render, parametersButton: ParametersToggle } = useSlots();
   switch (state.kind) {
     case "recipe":
       return <RecipeBar state={state} agent={agent} />;
@@ -386,6 +386,7 @@ const Bar = ({ state, onGenerate, agent }: { state: Exclude<ToolbarState, { kind
             Open
           </Button>
           {Render && editor.getShape(state.shapeId as TLShapeId)?.type === "motion" && <Render shapeId={state.shapeId as TLShapeId} />}
+          {ParametersToggle && <ParametersToggle shapeId={state.shapeId as TLShapeId} />}
           {agent}
         </div>
       );

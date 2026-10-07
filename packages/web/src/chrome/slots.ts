@@ -31,6 +31,8 @@ export interface ChromeSlots {
   openArtifact?: (editor: Editor, shapeId: TLShapeId) => void;
   /** Render for a selected motion, beside Open (spec 09 registers it). */
   renderButton?: ComponentType<{ shapeId: TLShapeId }>;
+  /** Parameters for a selected page or motion, after Render (spec 09 registers it). */
+  parametersButton?: ComponentType<{ shapeId: TLShapeId }>;
   /** Set while the chat rail (spec 08) holds the right edge: the top-right card steps aside. */
   leftCardDocked?: boolean;
 }

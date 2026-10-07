@@ -29,3 +29,16 @@ export const placeFloating = (target: ScreenBox, size: { readonly w: number; rea
   if (below + size.h <= canvas.h - MARGIN) return { left, top: below, side: "below" };
   return { left, top: MARGIN, side: "pinned" };
 };
+
+/**
+ * Where a panel beside the selection goes: 12 px right of it, else 12 px left of it, else
+ * against the canvas's right side; its top level with the selection's. It stays 8 px inside
+ * the canvas even when the selection has left it.
+ */
+export const placeBeside = (target: ScreenBox, size: { readonly w: number; readonly h: number }, canvas: { readonly w: number; readonly h: number }): { readonly left: number; readonly top: number } => {
+  const right = target.x + target.w + GAP;
+  const leftSide = target.x - GAP - size.w;
+  const wanted = right + size.w <= canvas.w - MARGIN ? right : leftSide >= MARGIN ? leftSide : canvas.w - MARGIN - size.w;
+  const inside = (value: number, room: number) => Math.min(Math.max(MARGIN, value), Math.max(MARGIN, room - MARGIN));
+  return { left: inside(wanted, canvas.w - size.w), top: inside(target.y, canvas.h - size.h) };
+};

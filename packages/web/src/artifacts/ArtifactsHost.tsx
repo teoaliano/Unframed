@@ -1,6 +1,6 @@
 /**
- * Artifacts on the canvas (spec 09): the editor's entry point (double-click, the toolbar's Open and the recap card's Open all call it), the frame
- * hold, the snapshot stream and the preview origin's port.
+ * Artifacts on the canvas (spec 09): the editor's entry point (double-click, the toolbar's Open and the recap card's Open all call it), the
+ * canvas Parameters panel, the frame hold, the snapshot stream and the preview origin's port.
  */
 import { isArtifactKind } from "@unframed/domain";
 import { lazy, Suspense, useCallback, useEffect } from "react";
@@ -9,12 +9,14 @@ import { useEditor, useValue, type Editor, type TLCamera, type TLShapeId } from 
 import { registerSlot } from "../chrome/slots.ts";
 import { useCanvasProject, useEngine, useSettings } from "../context.ts";
 import { closeComposer } from "../generate/state.ts";
+import { ParametersButton } from "./ParametersButton.tsx";
 import { RenderButton } from "./render.tsx";
-import { artifactsOf, installFrameHold, previewPort } from "./state.ts";
+import { artifactsOf, installFrameHold, installTuningWatch, previewPort } from "./state.ts";
 import { watchSnapshots } from "./snapshots.ts";
 
-// Loaded with the editor only: DialKit and its stylesheet never reach a board that is not being edited.
+// Loaded with the editor or the first Parameters panel only: DialKit and its stylesheet never reach a board where neither opens.
 const ArtifactEditor = lazy(() => import("./editor/ArtifactEditor.tsx").then((module) => ({ default: module.ArtifactEditor })));
+const ParametersPanel = lazy(() => import("./ParametersPanel.tsx").then((module) => ({ default: module.ParametersPanel })));
 
 /** What opening the editor saved, to put back on close. */
 interface Opened {
@@ -61,6 +63,8 @@ export const ArtifactsHost = () => {
       watchSnapshots(engine, project),
       registerSlot("openArtifact", openArtifactEditor),
       registerSlot("renderButton", RenderButton),
+      registerSlot("parametersButton", ParametersButton),
+      installTuningWatch(editor),
     ];
     return () => {
       for (const stop of stops) stop();
@@ -69,7 +73,17 @@ export const ArtifactsHost = () => {
   }, [editor, engine, project]);
 
   const editing = useValue("editing artifact", () => artifactsOf(editor).editing.get(), [editor]);
-  return editing === undefined ? null : <EditorOverlay editor={editor} shapeId={editing} />;
+  const tuning = useValue("tuning artifact", () => artifactsOf(editor).tuning.get(), [editor]);
+  return (
+    <>
+      {tuning !== undefined && (
+        <Suspense fallback={null}>
+          <ParametersPanel key={tuning} shapeId={tuning} />
+        </Suspense>
+      )}
+      {editing !== undefined && <EditorOverlay editor={editor} shapeId={editing} />}
+    </>
+  );
 };
 
 /**

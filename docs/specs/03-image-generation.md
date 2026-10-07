@@ -187,7 +187,7 @@ Decided from the selection by a pure function in the web (tested at the domain s
 | nothing | no bar |
 | exactly one result (spec terms: a shape with a recipe) | Regenerate (primary), Vary, Recipe (ghost), Agent; the result's line shows under it |
 | exactly one result still generating | the hint `Generating…`, Agent |
-| exactly one page or motion with a file | a six-dot drag handle, Open, Render for a motion (spec 09), Agent (spec 09 connects Open to its editor) |
+| exactly one page or motion with a file | a six-dot drag handle, Open, Render for a motion (spec 09), Parameters (spec 09), Agent (spec 09 connects Open to its editor and Parameters to its canvas panel) |
 | usable | hint, Agent, Generate (primary, last) |
 | not usable | Agent only |
 
@@ -195,7 +195,7 @@ The hint is `@<name>` when the selection is exactly one group, otherwise `N sele
 
 The bar and the composer stay above spec 02's bottom bar: the room below the selection ends at the bottom bar's top edge.
 
-Look (spec 12): the bar is a `surface-glass` card with the kit's border, `rounded-xl` radius and small shadow. Its buttons are the kit's Button at `sm` size: the primary one (Generate, Regenerate, Open) is `default`, Vary and Agent are `outline`, Recipe is `ghost`. Agent is never the primary action. The bar has no dividers between its actions. The drag handle (a ghost icon Button with the grip icon, label and tooltip "Drag to move") moves the selection with the pointer, since a filled page's or motion's frame takes the pointer; the whole move is one undo step. The hint and the result's line are `text-xs` in the muted foreground.
+Look (spec 12): the bar is a `surface-glass` card with the kit's border, `rounded-xl` radius and small shadow. Its buttons are the kit's Button at `sm` size: the primary one (Generate, Regenerate, Open) is `default`, Vary and Agent are `outline`, Recipe is `ghost`. Parameters is the kit's Toggle, `outline` at `sm`, since it stays pressed while its panel is open. Agent is never the primary action. The bar has no dividers between its actions. The drag handle (a ghost icon Button with the grip icon, label and tooltip "Drag to move") moves the selection with the pointer, since a filled page's or motion's frame takes the pointer; the whole move is one undo step. The hint and the result's line are `text-xs` in the muted foreground.
 
 Placement: centred above the selection's screen bounds, 12 px gap, clamped 8 px from the canvas's sides; flipped below the selection when there is no room above; when there is room neither above nor below, pinned inside the canvas at the top margin. The composer uses the same rule with its own size, so it grows upward on the same centre and bottom edge (downward when flipped). The morph animates size and position over 200 ms ease-out; under reduced motion it crossfades over 120 ms. The bar hides while a shape is dragged, while the canvas is dragged (not on wheel moves) and during a box selection. Pointer and click events on the bar and composer never reach the canvas. A wheel over them is forwarded to the canvas at the same pointer position, unless the element under the pointer scrolls itself (the instruction box once it overflows).
 

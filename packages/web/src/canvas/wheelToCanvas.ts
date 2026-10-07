@@ -2,7 +2,7 @@ import { useEffect } from "react";
 import type { Editor } from "tldraw";
 
 /** A wheel over a floating bar or the composer moves the canvas, unless it is over something that scrolls itself. */
-export const useWheelToCanvas = (editor: Editor, root: React.RefObject<HTMLDivElement | null>) => {
+export const useWheelToCanvas = (editor: Editor, root: React.RefObject<HTMLElement | null>) => {
   useEffect(() => {
     const element = root.current;
     if (!element) return;

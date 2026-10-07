@@ -192,3 +192,126 @@ test("the dials panel stays dark in both schemes, in the kit's dark tokens", asy
     expect(await styleOf(panel, "font-family")).toBe(await styleOf(page.locator("body"), "font-family"));
   });
 });
+
+/** Whether DialKit's own stylesheet is on the page (the app's theme only sets its variables): it comes with the first panel. */
+const dialKitLoaded = (page: Page) =>
+  page.evaluate(() =>
+    [...document.styleSheets].some((sheet) => {
+      try {
+        return [...sheet.cssRules].some((rule) => rule.cssText.includes(".dialkit-button-group"));
+      } catch {
+        return false;
+      }
+    }),
+  );
+
+const parametersToggle = (page: Page) => page.getByTestId("selection-toolbar").getByRole("button", { name: "Parameters" });
+const canvasPanel = (page: Page, title: string) => page.getByRole("region", { name: `Parameters for ${title}` });
+
+test("Parameters on a selected page opens its dials beside it on the canvas: they drive the live frame and save as one undo step", async ({ page, agent }) => {
+  await openCanvas(page, agent);
+  await writeBridge(agent);
+  await filledArtifact(agent, { id: "shape:tuned", kind: "page", ref: "150", at: { x: -520, y: -40 }, size: { w: 300, h: 200 }, title: "Tuned", html: dialsPage({ size: [10, 0, 100, 1] }) });
+  await expect(shapeOnScreen(page, "shape:tuned")).toBeVisible();
+
+  await clickShape(page, "shape:tuned");
+  await expect.poll(() => shown(insideFrame(page, "shape:tuned")), { timeout: 10_000 }).toEqual({ size: 10 });
+  // Neither the board nor a selected page loads DialKit: only opening the panel does.
+  expect(await dialKitLoaded(page)).toBe(false);
+  await expect(parametersToggle(page)).toHaveAttribute("aria-pressed", "false");
+  await parametersToggle(page).click();
+  const panel = canvasPanel(page, "Tuned");
+  await expect(panel).toBeVisible();
+  await expect(parametersToggle(page)).toHaveAttribute("aria-pressed", "true");
+  await expect(editor(page)).toHaveCount(0);
+  expect(await dialKitLoaded(page)).toBe(true);
+  // Beside the page, not over it.
+  const shapeBox = (await shapeOnScreen(page, "shape:tuned").boundingBox())!;
+  const panelBox = (await panel.boundingBox())!;
+  expect(panelBox.x).toBeGreaterThanOrEqual(shapeBox.x + shapeBox.width);
+
+  const slider = panel.getByRole("slider", { name: "Size" });
+  await expect(slider).toHaveAttribute("aria-valuenow", "10");
+  const before = (await roomRecords(agent, "default")).find((record) => record.id === "shape:tuned")!;
+  await slider.focus();
+  await page.keyboard.press("ArrowRight");
+  await page.keyboard.press("ArrowRight");
+  await page.keyboard.press("ArrowRight");
+  await expect.poll(() => shown(insideFrame(page, "shape:tuned"))).toEqual({ size: 13 });
+  await expect.poll(() => dialsOf(agent, "shape:tuned"), { timeout: 10_000 }).toEqual({ size: 13 });
+  // Keys in the panel are the panel's: the arrows did not nudge the page, and Backspace deletes nothing.
+  await page.keyboard.press("Backspace");
+  await page.waitForTimeout(300);
+  const after = (await roomRecords(agent, "default")).find((record) => record.id === "shape:tuned");
+  expect(after).toBeDefined();
+  expect({ x: after!.x, y: after!.y }).toEqual({ x: before.x, y: before.y });
+
+  // Escape closes the panel and leaves the page selected; Cmd-Z then takes the whole change back, in the frame too.
+  await page.keyboard.press("Escape");
+  await expect(panel).toHaveCount(0);
+  await expect(parametersToggle(page)).toHaveAttribute("aria-pressed", "false");
+  await page.keyboard.press("ControlOrMeta+z");
+  await expect.poll(async () => (await settledRecord(agent, "default", "shape:tuned"))?.props.dials).toBeUndefined();
+  await expect.poll(() => shown(insideFrame(page, "shape:tuned"))).toEqual({ size: 10 });
+});
+
+test("the canvas panel saves a change made just before it closes, shows one artifact at a time, and keeps its artifact live", async ({ page, agent }) => {
+  await openCanvas(page, agent);
+  await writeBridge(agent);
+  await filledArtifact(agent, { id: "shape:tuned", kind: "page", ref: "150", at: { x: -520, y: -40 }, size: { w: 300, h: 200 }, title: "Tuned", html: dialsPage({ size: [10, 0, 100, 1] }) });
+  await filledArtifact(agent, { id: "shape:intro", kind: "motion", ref: "151", at: { x: -520, y: 260 }, size: { w: 320, h: 180 }, title: "Intro", html: DIALS_MOTION });
+  await expect(shapeOnScreen(page, "shape:intro")).toBeVisible();
+
+  await clickShape(page, "shape:tuned");
+  await parametersToggle(page).click();
+  const tuned = canvasPanel(page, "Tuned");
+  const slider = tuned.getByRole("slider", { name: "Size" });
+  await expect(slider).toHaveAttribute("aria-valuenow", "10");
+  await slider.focus();
+  await page.keyboard.press("ArrowRight");
+  await page.keyboard.press("ArrowRight");
+  await tuned.getByRole("button", { name: "Close parameters" }).click();
+  await expect(tuned).toHaveCount(0);
+  await expect.poll(() => dialsOf(agent, "shape:tuned"), { timeout: 10_000 }).toEqual({ size: 12 });
+
+  // Open again on the saved values. Selecting the motion closes it; the motion has its own.
+  await parametersToggle(page).click();
+  await expect(tuned.getByRole("slider", { name: "Size" })).toHaveAttribute("aria-valuenow", "12");
+  await clickShape(page, "shape:intro");
+  await expect(tuned).toHaveCount(0);
+  await parametersToggle(page).click();
+  const intro = canvasPanel(page, "Intro");
+  const speed = intro.getByRole("slider", { name: "Speed" });
+  await expect(speed).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByRole("region", { name: /^Parameters for / })).toHaveCount(1);
+  await speed.focus();
+  await page.keyboard.press("Shift+ArrowRight");
+  await expect.poll(async () => (await shown(insideComposition(insideFrame(page, "shape:intro")))).speed, { timeout: 10_000 }).toBeGreaterThan(1);
+
+  // While its panel is open the motion stays live, however far the canvas pans.
+  const width = page.viewportSize()!.width;
+  await page.mouse.move(200, 600);
+  for (let step = 0; step < 30; step++) {
+    await page.mouse.wheel(width / 10, 0);
+    await page.waitForTimeout(16);
+  }
+  await expect(intro).toBeVisible();
+  await expect(shapeOnScreen(page, "shape:intro").locator("iframe[data-artifact-frame]")).toHaveCount(1);
+  for (let step = 0; step < 30; step++) {
+    await page.mouse.wheel(-width / 10, 0);
+    await page.waitForTimeout(16);
+  }
+
+  // Opening the editor closes the canvas panel; a click on empty canvas closes it too.
+  await page.getByTestId("selection-toolbar").getByRole("button", { name: "Open", exact: true }).click();
+  await expect(page.getByRole("region", { name: "Editing Intro" })).toBeVisible();
+  await expect(intro).toHaveCount(0);
+  await page.keyboard.press("Escape");
+  await expect(editor(page)).toHaveCount(0);
+  await expect(intro).toHaveCount(0);
+  await parametersToggle(page).click();
+  await expect(intro).toBeVisible();
+  const panelBox = (await intro.boundingBox())!;
+  await page.mouse.click(panelBox.x + panelBox.width + 120, panelBox.y + 40);
+  await expect(intro).toHaveCount(0);
+});
