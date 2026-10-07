@@ -197,6 +197,18 @@ describe("Claude event mapping", () => {
     });
   });
 
+  it("keeps the last real call's context when a turn ends on an API error's stand-in message", () => {
+    const zero = { input_tokens: 0, output_tokens: 0, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 };
+    const { events } = replay([
+      { type: "assistant", uuid: "u-a", parent_tool_use_id: null, message: { id: "a", model: "claude-opus-5-5", content: [{ type: "tool_use", id: "t", name: "Read", input: {} }], usage: { input_tokens: 10, cache_read_input_tokens: 150_000, cache_creation_input_tokens: 2_000, output_tokens: 300 } } },
+      { type: "assistant", uuid: "u-s", parent_tool_use_id: null, message: { id: "s", model: "<synthetic>", content: [{ type: "text", text: "API Error: 500" }], usage: zero } },
+      // A zero usage counts for nothing, whatever the model says.
+      { type: "assistant", uuid: "u-z", parent_tool_use_id: null, message: { id: "z", model: "claude-opus-5-5", content: [], usage: zero } },
+      { type: "result", subtype: "success", is_error: true, result: "API Error: 500", usage: { input_tokens: 10, output_tokens: 300, cache_read_input_tokens: 150_000, cache_creation_input_tokens: 2_000 }, modelUsage: { "claude-opus-5-5": { contextWindow: 1_000_000 } } },
+    ]);
+    expect(events.find((event) => event.type === "thread.token-usage.updated")?.payload).toMatchObject({ usage: { usedTokens: 152_310, totalProcessedTokens: 152_310 } });
+  });
+
   it("maps an error result to a failed turn with the SDK's subtype, and a success with API status 529 to a failure", () => {
     const failed = replay([{ type: "result", subtype: "error_max_turns", is_error: true, errors: [], usage: {}, total_cost_usd: 0 }]).events.at(-1);
     expect(failed).toMatchObject({ type: "turn.completed", payload: { state: "failed", errorSubtype: "error_max_turns" } });

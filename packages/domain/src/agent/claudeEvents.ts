@@ -181,7 +181,9 @@ export const mapClaudeMessage = (state: ClaudeMapState, message: unknown, contex
       const body = obj(m.message);
       const agentId = typeof m.parent_tool_use_id === "string" ? m.parent_tool_use_id : undefined;
       if (typeof m.uuid === "string" && agentId === undefined) next = { ...next, lastAssistantUuid: m.uuid };
-      if (agentId === undefined && Object.keys(obj(body.usage)).length > 0) next = { ...next, lastCallTokens: usageTotal(claudeUsage(body)) };
+      // A turn that ends on an API error gets a stand-in message, model "<synthetic>", with zero usage: no call was made.
+      const callTokens = usageTotal(claudeUsage(body));
+      if (agentId === undefined && body.model !== "<synthetic>" && callTokens > 0) next = { ...next, lastCallTokens: callTokens };
       const content: unknown[] = Array.isArray(body.content) ? body.content : [];
       for (const [index, raw] of content.entries()) {
         const block = obj(raw);
