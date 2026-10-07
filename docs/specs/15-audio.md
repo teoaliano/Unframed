@@ -12,7 +12,7 @@ The issue was written against the old app: an "Audio node" with an "Add to canva
 
 ## Solution
 
-The Generate tray gains the **audio** medium. With audio chosen, the selected prompts plus the per-run instruction are the text that gets spoken. The tray shows a voice chip, the model chip (defaulting to ElevenLabs' current flagship, Eleven v4), the delivery controls that shape the line (Stability, Style when the model takes it, Speed) and an **Advanced** chip holding the technical ones (Similarity, Speaker boost, Format, Seed, Language). Generate makes one ElevenLabs text-to-speech call. The answer lands on the canvas as an **audio** shape: a small card with a player. It carries spec 03's recipe, so Regenerate and Recipe work on it as on any result, and its line shows the ElevenLabs credits the call used, in credits, never dollars.
+The Generate tray gains the **audio** medium. With audio chosen, the selected prompts plus the per-run instruction are the text that gets spoken. The tray shows a voice chip, the model chip (defaulting to ElevenLabs' current flagship, Eleven v4), the delivery controls that shape the line (Stability, Style when the model takes it, Speed) and an **Advanced** chip holding the technical ones (Similarity, Speaker boost, Format, Seed, Language). Generate makes one ElevenLabs text-to-speech call. The answer lands on the canvas as an **audio** shape: a small card with a player. It carries spec 03's recipe, so Regenerate reopens the composer on it as on any result, and its line shows the ElevenLabs credits the call used, in credits, never dollars.
 
 The canvas gains the **audio** shape kind for any sound file: dropped, pasted, picked with "Choose file", or generated. An audio shape is not an input to any run in this spec: selected into an image, video or text run it sends nothing and shows the unused mark, as an artifact does.
 
@@ -58,9 +58,9 @@ What carries over from the issue and what changes:
 22. As a person, I want the result to land as an audio shape beside my selection, so that it sits with the material it came from.
 23. As a person, I want the result's line to show the model, the duration and the credits the generation used, so that I know what it spent in the unit ElevenLabs bills.
 24. As a person, I want credits shown as credits and never converted into dollars, so that I am never shown a price my plan does not charge.
-25. As a person, I want Regenerate on an audio result to repeat its recipe exactly, so that I get another take of the same line.
-26. As a person, I want Recipe on an audio result to reopen the composer with its voice, model, settings and instruction, so that "same line, slower" is two clicks.
-27. As a person, I want no Vary on an audio result, so that I am not offered an action that has nothing to vary from.
+25. As a person, I want Regenerate on an audio result to reopen the composer with its voice, model, settings and instruction, so that another take, or "same line, slower", is one change and Cmd+Enter away.
+26. As a person, I want no Generate on an audio result's bar, so that I am not offered a run that would take the result as input when audio is never an input.
+27. As a person, I want no Vary and no one-click repeat on an audio result, so that every paid take goes through the composer where I can see what it will send.
 28. As a person, I want a failed audio run to say why in a toast, in ElevenLabs' own words where it gave any, so that I can fix it.
 29. As a person, I want a message that names both causes when ElevenLabs refuses for lack of credits (the account's quota, or the key's own credit limit), so that I try the right fix.
 30. As a person, I want the audio file and its sidecar written into the project folder, never overwriting another file, so that the folder is a complete record of what I generated.
@@ -196,7 +196,7 @@ Registered into spec 03's medium registry with label `audio`, catalogue `audio`,
 - A cycle (blocker): the error line, as spec 03.
 - Media selected (warning): `An image is selected, but audio models only read text. It will not be sent.` or `<n> images and clips are selected, but audio models only read text. They will not be sent.` The singular form names `An image` or `A clip` by what it is.
 
-**Last-used values.** Spec 01's preference `lastUsed.audio`: spec 03's `{ model?, props }` plus `voice?: { id: string, name: string }`. Written on send from the composer, never by Regenerate. A stored voice is shown by its stored name and sent by id; if ElevenLabs no longer has it, the run fails with ElevenLabs' message and the person picks another. Changing the default audio model clears the stored model, as spec 03 does for the other media.
+**Last-used values.** Spec 01's preference `lastUsed.audio`: spec 03's `{ model?, props }` plus `voice?: { id: string, name: string }`. Written on send from the composer, as spec 03 writes it. A stored voice is shown by its stored name and sent by id; if ElevenLabs no longer has it, the run fails with ElevenLabs' message and the person picks another. Changing the default audio model clears the stored model, as spec 03 does for the other media.
 
 ### The voice dialog
 
@@ -243,7 +243,7 @@ type AudioRunRequest = {
   selectionPrompt: string; instruction: string; prompt: string
   sources: string[]
   anchor: { x: number; y: number; w: number; h: number }
-  of?: { shapeId: string; action: "regenerate" | "recipe" }
+  of?: { shapeId: string; action: "regenerate" }   // a send from the composer that Regenerate opened
 }
 type ElevenLabsStatus =
   | { hasKey: false }
@@ -297,9 +297,8 @@ The run registers in spec 03's run registry, so placeholder resolution at boot, 
 An audio result is an audio shape with spec 03's result meta (`medium: "audio"`, `cost: null`, `credits`). Its recipe is spec 03's `ResultRecipe` with `medium: "audio"`, `references: []`, and `params` holding `voice_id`, `voice_name`, and every param that was sent, keyed as in `AudioRunRequest`.
 
 - **Result line**, under a selected result: `<model> · <m:ss> · <n> credits` (`1 credit` singular), any unknown part omitted. The duration is read by the web from the loaded audio's metadata.
-- **Toolbar** (spec 03's states): Regenerate (primary), Recipe (ghost), Agent. No Vary.
-- **Regenerate**: `run.audio` from `recipe.read`, the recipe exactly, one output, landing beside the old result. A recorded seed is sent again, so ElevenLabs may return nearly the same take; that is what the recipe says.
-- **Recipe**: the composer in recipe mode with the audio medium, voice, model, props and instruction from the recipe (spec 03).
+- **Toolbar.** Every other result's bar is Generate (primary, opening the composer with the result as input), then Regenerate and Agent (the decision made for #101). An audio result's bar is **Regenerate** (primary, Button `default`) and **Agent** (Button `outline`), with no Generate: Generate on a result opens the composer with that result as the input, and an audio shape is never an input in this spec (it contributes nothing to a composition, so the composer would open on a selection with nothing to make from). When audio becomes an input (Out of Scope), the audio bar gains Generate like the others. There is no Vary, no separate Recipe button and no one-click exact repeat.
+- **Regenerate**: opens the composer in recipe mode over the result (spec 03's recipe mode, as #101 now defines Regenerate): the audio medium, the recorded voice, model, props (a recorded seed included) and instruction prefilled, the source band reading `recipe · N sources`, sending the recorded spoken text with whatever the person changed. The output lands beside the result. Sending the recipe unchanged with a recorded seed may give nearly the same take; that is what the recipe says.
 - **Tether** (spec 03): drawn to the prompts that are still on the canvas.
 
 **Recipe groups** (spec 06). `GroupRecipe.medium` gains `audio`; its `params` hold the voice as in a result's recipe. The recipe chip reads the model id then the voice name (`eleven_v4 · Rachel`). A recipe group's Generate runs `run.audio` at once, as spec 06 runs other media. The library's medium chip gains `Audio` (lucide `AudioLines`, yellow). A group never holds an audio shape (above); a recipe group with medium audio speaks its prompt members.
@@ -453,8 +452,8 @@ A good test drives one of the three seams in 00-index and asserts on what it exp
 34. Delivery and Advanced popovers: slider value shown, Reset, Remove and re-add through `+ add prop`, the Advanced count, each advanced control; a model change resets as the rule says; the stub receives exactly the set values. Seam: browser.
 35. Status lines and blockers: no ElevenLabs key, empty text, no voice, too long, media warning; badges show the unused mark on selected media in the audio medium. Seam: browser.
 36. Audio run end to end: Generate, the placeholder with `Generating…`, the audio result beside the selection, its line `<model> · <m:ss> · <n> credits`, and the run report toast on failure. Seam: browser.
-37. Audio result actions: Regenerate lands a second take from the recorded recipe; Recipe reopens the composer prefilled; no Vary. Seam: browser.
-38. Last-used audio values: voice, model and props come back on the next open and after an engine restart on a new port; Regenerate does not change them. Seam: browser.
+37. Audio result bar: Regenerate (primary) and Agent only, no Generate, Vary or Recipe; Regenerate opens the composer in recipe mode with voice, model, props and instruction prefilled, and sending lands a second take beside the result. Seam: browser.
+38. Last-used audio values: voice, model and props come back on the next open and after an engine restart on a new port. Seam: browser.
 39. Settings: the ElevenLabs block with paste, a bad key's error, the two-step remove, the usage line from the stub's subscription answer, revoked and usage-hidden lines, and the `Audio` default model select with its no-key hint. Seam: browser.
 40. Recipe groups with audio: Save as recipe on the audio medium, the chip `eleven_v4 · <voice>`, Generate from the toolbar runs `run.audio` with the recipe, and the library's `Audio` medium chip. Seam: browser.
 
@@ -495,8 +494,7 @@ These are marked rather than decided. Each has a default in the spec above so th
 5. **Audio without OpenRouter.** Spec 10 shows nothing below the OpenRouter key section until there is an OpenRouter key, so the ElevenLabs block appears only after OpenRouter is set up. Someone who wants only audio has to connect OpenRouter first. Should the ElevenLabs block show in the keyless dialog too?
 6. **WAV on Eleven v4.** The speech endpoint lists `wav_*` formats, while third-party listings of Eleven v4 name MP3, PCM, Opus, μ-law and A-law. The spec offers WAV and lets a refusal surface ElevenLabs' message. Drop WAV if a paid probe shows v4 refuses it.
 7. **An estimate.** The models list carries `model_rates.character_cost_multiplier`. If question 2 confirms one credit per character times that rate, the tray could show `est. ~<n> credits`. Not built until then.
-8. **Vary.** Hidden on audio results. A "same recipe, new seed" Vary is possible if wanted.
-9. **Recipe groups for audio** are included (task 40) because spec 06's recipe line appears for every medium. Drop them if the person prefers audio to stay out of groups entirely until audio shapes can be members.
+8. **Recipe groups for audio** are included (task 40) because spec 06's recipe line appears for every medium. Drop them if the person prefers audio to stay out of groups entirely until audio shapes can be members.
 
 ### Facts relied on, from ElevenLabs' docs, checked 2026-10-07
 
@@ -516,6 +514,8 @@ These are marked rather than decided. Each has a default in the spec above so th
 ### Coordination
 
 Spec 14 (external agents) is being written alongside this one. If it changes `canvas_read`, `canvas_write` or `assets/prompts/tool-descriptions.md`, the Kinds sentence above is applied on top of its text.
+
+The result toolbar follows the decision made for #101, built in its own pull request: on a result the bar is Generate, then Regenerate and Agent; Regenerate opens the composer in recipe mode; there is no Vary, no Recipe button and no one-click exact repeat. If spec 03's text has not caught up when this spec is built, #101's wording wins over spec 03's toolbar table.
 
 ### Assets this spec needs
 
