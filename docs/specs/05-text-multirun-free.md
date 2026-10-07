@@ -102,7 +102,7 @@ The landed shape, a **text result**:
 - It is editable like any prompt. Editing never re-runs. Its text is always substituted literally, never re-scanned (spec 03's resolver), before and after an edit.
 - Copies keep the result meta, so a copy is still a text result.
 - The context menu gains `Copy as prompt` on a text result: it places a plain prompt with the same text beside it (spec 03's result placement, anchored on the text result), with no result meta, so its `@` tokens resolve normally.
-- The result bar (spec 03's toolbar states) shows Generate (primary, Button `default`), Regenerate (Button `outline`), Agent, as on an image result.
+- The result bar (spec 03's toolbar states) shows Regenerate (Button `outline`), Agent, Generate (primary, Button `default`, last), as on an image result.
 
 In flight: a placeholder text result is written into the room at once, holding no text, with spec 03's run marker, showing a spinner and `Running…`. On success its text is set to the answer and its marker cleared. On failure it is deleted and the run report toast shows `0 of 1 succeeded. <message>`. Every run marker rule of spec 03 applies unchanged.
 

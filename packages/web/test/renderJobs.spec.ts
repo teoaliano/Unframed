@@ -5,6 +5,7 @@ import { completed } from "../../engine/test/videoStub.ts";
 import { openCanvas, roomRecords, shapeOnScreen, waitForRoom } from "./canvas.ts";
 import { clickShape, composer, openComposer, pressSend, sendButton, sendRun, toolbar } from "./generation.ts";
 import { watchRpcSockets } from "./fixtures.ts";
+import { expectToken } from "./kit.ts";
 import { putRecords, testIndex } from "./media.ts";
 import { chooseVideo, expect, SEEDANCE, startVideoGeneration, test, type VideoEngine } from "./videoGeneration.ts";
 
@@ -86,8 +87,9 @@ test("a failed render keeps its recipe: Regenerate, sent from the composer, star
   await page.reload();
   await expect(shapeOnScreen(page, failed.id).getByRole("alert")).toHaveText("Output flagged");
   await clickShape(page, failed.id);
-  // A failed render has no clip to send, so its bar has no Generate.
+  // A failed render has no clip to send, so its bar has no Generate, and Regenerate is the primary action.
   await expect(toolbar(page).getByRole("button")).toHaveText(["Regenerate", "Agent"]);
+  await expectToken(toolbar(page).getByRole("button", { name: "Regenerate" }), "background-color", "--primary");
   await toolbar(page).getByRole("button", { name: "Regenerate" }).click();
   await expect(composer(page).getByTestId("source-count")).toHaveText(/^recipe · /);
   await sendRun(page);

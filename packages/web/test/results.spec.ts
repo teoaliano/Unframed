@@ -1,7 +1,7 @@
 import type { Page } from "@playwright/test";
 import { gate } from "../../engine/test/openRouterStub.ts";
 import { openCanvas, roomRecords, roomShapes, shapeOnScreen, toast, type AnyRecord } from "./canvas.ts";
-import { clickShape, composer, expect, instructionBox, openComposer, pressSend, sendRun, test, toolbar, type GenerationEngine } from "./generation.ts";
+import { clickShape, composer, expect, instructionBox, openComposer, pressSend, sendRun, settled, test, toolbar, type GenerationEngine } from "./generation.ts";
 import { pngBytes } from "./images.ts";
 import { expectSlot, expectToken } from "./kit.ts";
 
@@ -49,7 +49,7 @@ test("results land to the right of the selection, placeholder first, and a selec
   await expect(shapeOnScreen(page, placeholder!.id).locator("img")).toBeVisible();
   await page.mouse.click(10, 400);
   await clickShape(page, placeholder!.id);
-  await expect(toolbar(page).getByRole("button")).toHaveText(["Generate", "Regenerate", "Agent"]);
+  await expect(toolbar(page).getByRole("button")).toHaveText(["Regenerate", "Agent", "Generate"]);
   await expect(toolbar(page).getByTestId("result-line")).toHaveText("gpt-image-2 · 96×64 · $0.1900");
   // Generate is the kit's primary Button, Regenerate its outline Button.
   await page.mouse.move(5, 500);
@@ -70,6 +70,18 @@ test("results land to the right of the selection, placeholder first, and a selec
   const refs = generation.requests[before]!.body.input_references;
   expect(refs).toHaveLength(1);
   expect(refs[0].image_url.url).toBe(`data:image/png;base64,${pngBytes(96, 64).toString("base64")}`);
+
+  // Its Regenerate shows the reference it sends; there is no recorded prompt, only the instruction.
+  await expect.poll(async () => (await results(generation)).filter((shape) => shape.props.assetId && !shape.meta.unframed.run).length).toBe(2);
+  const sketch = (await results(generation)).find((shape) => shape.id !== placeholder!.id)!;
+  await page.mouse.click(10, 400);
+  await page.keyboard.press("Shift+1");
+  await settled(shapeOnScreen(page, sketch.id));
+  await clickShape(page, sketch.id);
+  await toolbar(page).getByRole("button", { name: "Regenerate" }).click();
+  await expect(composer(page).getByTestId("recipe-references")).toHaveText("1 image");
+  await expect(composer(page).getByTestId("recipe-prompt")).toHaveCount(0);
+  await expect(instructionBox(page)).toHaveText("as a sketch");
 });
 
 test("a failed run says why in a toast, a partial run counts its successes, and a full success says nothing", async ({ page, generation }) => {
@@ -143,7 +155,13 @@ test("Regenerate sends the recorded run again from the composer, beside the old 
   const before = generation.requests.length;
   await clickShape(page, first.id);
   await toolbar(page).getByRole("button", { name: "Regenerate" }).click();
-  await expect(composer(page).getByTestId("source-count")).toHaveText("recipe · 1 sources");
+  await expect(composer(page).getByTestId("source-count")).toHaveText("recipe · 1 source");
+  // What it sends ahead of the box shows as recorded, though its source is gone.
+  const sent = composer(page).getByTestId("recipe-sent");
+  await expect(sent).toContainText("Sent ahead of your instruction:");
+  await expect(sent.getByTestId("recipe-prompt")).toHaveText("lone red fox");
+  await expect(sent.getByTestId("recipe-prompt")).toHaveAttribute("title", "lone red fox");
+  await expect(sent.getByTestId("recipe-references")).toHaveCount(0);
   await expect(instructionBox(page)).toHaveText("at dawn");
   await sendRun(page);
   await expect.poll(async () => (await results(generation)).filter((shape) => shape.props.assetId).length).toBe(2);
@@ -170,7 +188,7 @@ test("Regenerate reopens the composer on the recorded run to change it; a select
   await clickShape(page, result!.id);
   await toolbar(page).getByRole("button", { name: "Regenerate" }).click();
   await expect(composer(page)).toBeVisible();
-  await expect(composer(page).getByTestId("source-count")).toHaveText("recipe · 1 sources");
+  await expect(composer(page).getByTestId("source-count")).toHaveText("recipe · 1 source");
   await expect(instructionBox(page)).toHaveText("moody");
   await expect(composer(page).locator("[data-prop]")).toHaveText(["1K", "1:1", "high"]);
   await expect(page.locator("[data-role-for]")).toHaveCount(0);
@@ -202,10 +220,12 @@ test("Regenerate reopens the composer on the recorded run to change it; a select
   await page.mouse.click(10, 400);
   await clickShape(page, result!.id);
   await toolbar(page).getByRole("button", { name: "Regenerate" }).click();
-  await expect(composer(page).getByTestId("source-count")).toHaveText("recipe · 1 sources");
+  await expect(composer(page).getByTestId("source-count")).toHaveText("recipe · 1 source");
   await composer(page).locator("[data-prop]").filter({ hasText: "high" }).click();
   await page.getByRole("menu", { name: "Quality" }).getByRole("menuitemradio", { name: "medium" }).click();
-  await clickShape(page, "shape:starter-scene");
+  // The composer covers the prompt's centre; its left end is clear.
+  const scene = (await shapeOnScreen(page, "shape:starter-scene").boundingBox())!;
+  await page.mouse.click(scene.x + 8, scene.y + scene.height / 2);
   await expect(composer(page).getByTestId("source-count")).toHaveText("2 selected");
   await expect(instructionBox(page)).toHaveText("moody");
   await expect(composer(page).locator("[data-prop]")).toHaveText(["1K", "1:1", "medium"]);

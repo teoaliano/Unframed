@@ -83,14 +83,14 @@ test("editing a text result changes what it contributes, runs nothing, and stays
   expect(generation.requests[0]!.body.prompt).toBe("See tidied, about @100");
 });
 
-test("a text result's bar offers Generate, Regenerate and Agent, and Regenerate sends its recipe again from the composer", async ({ page, generation }) => {
+test("a text result's bar offers Regenerate, Agent and Generate, and Regenerate sends its recipe again from the composer", async ({ page, generation }) => {
   generation.answerText(() => ({ kind: "text", text: "first answer", cost: 0.001 }));
   await openCanvas(page, generation.engine);
   const first = await makeTextResult(page, generation);
 
   await page.mouse.click(10, 400);
   await clickShape(page, first.id);
-  await expect(toolbar(page).getByRole("button")).toHaveText(["Generate", "Regenerate", "Agent"]);
+  await expect(toolbar(page).getByRole("button")).toHaveText(["Regenerate", "Agent", "Generate"]);
 
   // Generate opens the composer on the answer as on any selection.
   await toolbar(page).getByRole("button", { name: "Generate", exact: true }).click();
@@ -107,7 +107,8 @@ test("a text result's bar offers Generate, Regenerate and Agent, and Regenerate 
   await toolbar(page).getByRole("button", { name: "Regenerate" }).click();
   await expect(composer(page)).toBeVisible();
   await expect(mediumOption(page, "text")).toHaveAttribute("aria-checked", "true");
-  await expect(composer(page).getByTestId("source-count")).toHaveText("recipe · 1 sources");
+  await expect(composer(page).getByTestId("source-count")).toHaveText("recipe · 1 source");
+  await expect(composer(page).getByTestId("recipe-prompt")).toHaveText("lone red fox");
   generation.answerText(() => ({ kind: "text", text: "second answer", cost: 0.002 }));
   await sendText(page);
   await expect.poll(async () => (await textResults(generation)).filter((shape) => plainText(shape) === "second answer").length).toBe(1);
@@ -122,7 +123,7 @@ test("a text result's bar offers Generate, Regenerate and Agent, and Regenerate 
   await page.mouse.click(10, 400);
   await clickShape(page, first.id);
   await toolbar(page).getByRole("button", { name: "Regenerate" }).click();
-  await expect(composer(page).getByTestId("source-count")).toHaveText("recipe · 1 sources");
+  await expect(composer(page).getByTestId("source-count")).toHaveText("recipe · 1 source");
   await instructionBox(page).click();
   await page.keyboard.type("shorter");
   generation.answerText(() => ({ kind: "text", text: "third answer" }));

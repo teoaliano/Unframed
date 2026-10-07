@@ -32,6 +32,8 @@ test("Regenerate on a Free output reopens with Runs at 1 and sends that run's ow
   await toolbar(page).getByRole("button", { name: "Regenerate" }).click();
   await expect(composer(page)).toBeVisible();
   await expect(composer(page).getByTestId("source-count")).toHaveText("recipe · 2 sources");
+  await expect(composer(page).getByTestId("recipe-prompt")).toHaveText("image 1 alone");
+  await expect(composer(page).getByTestId("recipe-references")).toHaveText("with 1 image");
   await expect(runsChip(page)).toHaveCount(0);
   await expect(sendButton(page)).toHaveText("Generate");
 

@@ -233,15 +233,16 @@ const ResultBar = ({ state, onGenerate, agent }: { state: Extract<ToolbarState, 
   return (
     <div className="flex flex-col gap-0.5 whitespace-nowrap p-1">
       <div className={rowClass}>
+        {/* Without Generate (a failed render), Regenerate is the primary action. */}
+        <Button variant={state.generate ? "outline" : "default"} size="sm" onClick={() => void regenerate()}>
+          Regenerate
+        </Button>
+        {agent}
         {state.generate && (
           <Button size="sm" onClick={onGenerate}>
             Generate
           </Button>
         )}
-        <Button variant="outline" size="sm" onClick={() => void regenerate()}>
-          Regenerate
-        </Button>
-        {agent}
       </div>
       {line !== undefined && (
         <div className="px-1.5 py-0.5 text-xs text-muted-foreground tabular-nums" data-testid="result-line">
