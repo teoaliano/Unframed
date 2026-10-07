@@ -95,9 +95,14 @@ test("a text result's bar offers Generate, Regenerate and Agent, and Regenerate 
   // Generate opens the composer on the answer as on any selection.
   await toolbar(page).getByRole("button", { name: "Generate", exact: true }).click();
   await expect(composer(page).getByTestId("source-count")).toHaveText("1 selected");
+  // The box takes the focus a frame after the composer opens; an Esc before then misses it.
+  await expect(instructionBox(page)).toBeFocused();
   await page.keyboard.press("Escape");
+  await expect(composer(page)).toHaveCount(0);
 
   // Regenerate reopens the composer on the text medium over the recorded run; sent unchanged, it lands a second answer.
+  // From nothing selected, so the click selects the answer rather than editing it.
+  await page.mouse.click(10, 400);
   await clickShape(page, first.id);
   await toolbar(page).getByRole("button", { name: "Regenerate" }).click();
   await expect(composer(page)).toBeVisible();
