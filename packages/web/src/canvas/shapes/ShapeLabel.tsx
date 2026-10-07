@@ -62,6 +62,18 @@ export const ShapeLabel = ({
       data-label-handle="true"
       style={open ? undefined : { maxWidth: width }}
       onPointerDown={onPointerDown}
+      // tldraw turns a right button's release on the canvas into a right-click there, which
+      // hits nothing at a label and would drop the selection the press just made. The label
+      // releases on its shape instead, then opens the menu as tldraw's canvas does.
+      onPointerUp={(event) => {
+        if (open || event.button !== 2 || editor.wasEventAlreadyHandled(event)) return;
+        const shape = editor.getShape(shapeId);
+        if (!shape) return;
+        editor.dispatch({ type: "pointer", name: "pointer_up", target: "shape", shape, ...getPointerInfo(editor, event) });
+        event.currentTarget.dispatchEvent(
+          new PointerEvent("contextmenu", { bubbles: true, clientX: event.clientX, clientY: event.clientY, button: 2, buttons: 0, pointerId: event.pointerId, pointerType: event.pointerType, isPrimary: event.isPrimary }),
+        );
+      }}
       // Measured under the pointer rather than on every render, so a label subscribes to nothing.
       onPointerMove={(event) => {
         const shown = event.currentTarget.querySelector<HTMLElement>("[data-label-text]");

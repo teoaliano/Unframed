@@ -6,7 +6,7 @@ import { centre, editorFocused, emptyCanvasPoint, openCanvas, plainText, roomRec
 import { expect, test } from "./fixtures.ts";
 import { clickShape, openComposer, sendRun, test as generationTest } from "./generation.ts";
 import { pngBytes } from "./images.ts";
-import { emptyMedia, filledMedia, promptRecord, putRecords } from "./media.ts";
+import { emptyMedia, filledMedia, groupRecord, promptRecord, putRecords } from "./media.ts";
 
 const field = (page: Page, kind: string) => page.getByRole("textbox", { name: `${kind} name` });
 
@@ -309,3 +309,35 @@ test("keys pressed right after F2, before the field has the keyboard, never reac
   expect((await roomRecords(engine, "default")).filter((record) => record.type === "image")).toHaveLength(before);
   await page.keyboard.press("Escape");
 });
+
+for (const kind of ["image", "group"] as const) {
+  test(`a right-click on an unselected ${kind}'s label selects it alone first, as a right-click on its body does`, async ({ page, engine }) => {
+    await openCanvas(page, engine);
+    const id = kind === "image" ? "shape:hero" : "shape:den";
+    if (kind === "image") await heroImage(engine);
+    else await putRecords(engine, [groupRecord("shape:den", "den", { x: 480, y: 120 })]);
+    await expect(label(page, id)).toBeVisible();
+    const menu = page.getByTestId("context-menu");
+    const rightClickLabel = async () => {
+      const tag = (await label(page, id).boundingBox())!;
+      await page.mouse.move(tag.x + 6, tag.y + tag.height / 2);
+      await page.waitForTimeout(100);
+      await page.mouse.click(tag.x + 6, tag.y + tag.height / 2, { button: "right" });
+      await expect(menu).toBeVisible();
+    };
+    // Nothing selected: the shape is selected, so tldraw's own items for a selection are there.
+    await rightClickLabel();
+    await expect(menu.getByRole("menuitem", { name: /^Duplicate/ })).toBeVisible();
+    await expect(menu.getByRole("menuitem", { name: /^Delete/ })).toBeVisible();
+    await expect(menu.getByRole("menuitem", { name: "Add to library" })).toBeVisible();
+    await page.keyboard.press("Escape");
+    await expect(menu).toBeHidden();
+
+    // Another shape selected: the label's shape replaces it, so Delete acts on the label's shape.
+    await clickShape(page, "shape:starter-subject");
+    await rightClickLabel();
+    await menu.getByRole("menuitem", { name: /^Delete/ }).click();
+    await expect.poll(async () => (await roomRecords(engine, "default")).map((record) => record.id)).not.toContain(id);
+    expect((await roomRecords(engine, "default")).map((record) => record.id)).toContain("shape:starter-subject");
+  });
+}
