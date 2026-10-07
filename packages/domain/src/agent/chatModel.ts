@@ -234,6 +234,8 @@ export type ThreadClientCommand = CommandBase &
     | { readonly type: "thread.session.stop" }
     /** Detach: the person unlinks artifacts from the chat. A later write to one tags it again. */
     | { readonly type: "thread.tags.remove"; readonly ids: ReadonlyArray<string> }
+    /** Undo of a Detach. The engine keeps only ids that are artifacts on the canvas, as for `thread.create`'s tags. */
+    | { readonly type: "thread.tags.add"; readonly ids: ReadonlyArray<string> }
   );
 
 export interface ActivityInput {

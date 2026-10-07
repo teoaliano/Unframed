@@ -1,11 +1,13 @@
-import { clearAllChats, visibleChats, nextActive } from "@unframed/domain";
+import { clearAllChats, clearedNotice, visibleChats, nextActive } from "@unframed/domain";
 import { BrushCleaning, Plus, Search, Sparkles, Trash2, X } from "lucide-react";
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { useMaybeEditor, useValue } from "tldraw";
 import { Alert, AlertDescription } from "~/components/ui/alert";
 import { Button } from "~/components/ui/button";
+import { Separator } from "~/components/ui/separator";
 import { Tip } from "../../chrome/ui.tsx";
 import { useEngine } from "../../context.ts";
+import { showNotice } from "../../toasts.tsx";
 import { AgentTray } from "../composer/AgentTray.tsx";
 import { noProviderReady } from "../providers.ts";
 import { ConfirmDialog } from "../ConfirmDialog.tsx";
@@ -170,6 +172,12 @@ export const AgentRail = ({ project, embedded, inSheet, filterTo, onLocate, onOp
         }
       }}
       onKeyUp={(event) => event.stopPropagation()}
+      onContextMenu={(event) => {
+        // The canvas's own menu never opens over the rail; a text field keeps the browser's.
+        event.stopPropagation();
+        const target = event.target as HTMLElement;
+        if (!target.closest("input, textarea, [contenteditable='true']")) event.preventDefault();
+      }}
     >
       {/* Docked, the top-left chrome card sits over this row as the rail's own top line. */}
       {!embedded && !inSheet && <ChromeRow />}
@@ -192,13 +200,15 @@ export const AgentRail = ({ project, embedded, inSheet, filterTo, onLocate, onOp
           </Button>
         </Tip>
         {!embedded && (
-          <Tip label="Clear all chats">
+          // aria-disabled, not disabled, so the tooltip can say why it does nothing.
+          <Tip label={clearAll.tooltip}>
             <Button
               variant="ghost"
               size="icon-sm"
               aria-label="Clear all chats"
-              disabled={clearAll.deleting === 0}
+              aria-disabled={clearAll.disabled || undefined}
               onClick={() => {
+                if (clearAll.disabled) return;
                 setClearCounts(clearAll);
                 setClearing(true);
               }}
@@ -207,6 +217,8 @@ export const AgentRail = ({ project, embedded, inSheet, filterTo, onLocate, onOp
             </Button>
           </Tip>
         )}
+        {/* Close stands apart, so reaching for it never lands on Clear all chats. */}
+        {!embedded && <Separator orientation="vertical" className="mx-1 h-4" />}
         {!embedded && (
           <Tip label="Close">
             <Button variant="ghost" size="icon-sm" aria-label="Close" onClick={onClose}>
@@ -263,7 +275,17 @@ export const AgentRail = ({ project, embedded, inSheet, filterTo, onLocate, onOp
             destructive: true,
             onClick: () => {
               if (activeSummary && activeSummary.status !== "running") client.setUi({ chosen: null, pinned: null });
-              client.dispatch({ type: "project.chats.clear" }).catch((error: unknown) => client.reportError(error));
+              const before = new Set(client.chats().map((chat) => chat.id));
+              client.dispatch({ type: "project.chats.clear" }).then(
+                // Counted from what the engine removed, which may differ from what the dialog counted.
+                async ({ sequence }) => {
+                  await client.shellReached(sequence);
+                  const left = client.chats().filter((chat) => before.has(chat.id));
+                  const notice = clearedNotice(before.size - left.length, left.filter((chat) => chat.status === "running").length);
+                  showNotice(notice.title, "info", notice.description);
+                },
+                (error: unknown) => client.reportError(error),
+              );
             },
           },
         ]}

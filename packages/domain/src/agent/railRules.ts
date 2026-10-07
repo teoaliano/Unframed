@@ -79,7 +79,15 @@ const counted = (count: number, one: string, many: string): string => `${count} 
  */
 export const clearAllChats = (
   chats: ReadonlyArray<Pick<RailChat, "status">>,
-): { readonly deleting: number; readonly keeping: number; readonly description: string; readonly action: string } => {
+): {
+  readonly deleting: number;
+  readonly keeping: number;
+  readonly description: string;
+  readonly action: string;
+  /** The header button's tooltip: what it does, or why it does nothing now. */
+  readonly tooltip: string;
+  readonly disabled: boolean;
+} => {
   const keeping = chats.filter((chat) => chat.status === "running").length;
   const deleting = chats.length - keeping;
   const kept =
@@ -89,8 +97,16 @@ export const clearAllChats = (
     keeping,
     description: `This deletes ${counted(deleting, "chat", "chats")} for good.${kept} What the agent changed on the canvas stays.`,
     action: `Delete ${counted(deleting, "chat", "chats")}`,
+    tooltip: chats.length === 0 ? "No chats to delete" : deleting === 0 ? "Every chat is still running" : "Clear all chats",
+    disabled: deleting === 0,
   };
 };
+
+/** The toast after Clear all chats, counted from what the engine removed, not from what the dialog said. */
+export const clearedNotice = (deleted: number, kept: number): { readonly title: string; readonly description?: string } => ({
+  title: `Deleted ${counted(deleted, "chat", "chats")}`,
+  ...(kept === 0 ? {} : { description: `${counted(kept, "running chat was", "running chats were")} kept.` }),
+});
 
 /** The artifacts a chat is linked to that are still on the canvas, in tag order, for Detach to offer. */
 export const linkedArtifacts = (

@@ -71,6 +71,15 @@ describe("tags from writes", () => {
       message: "This chat is not linked to that artifact.",
     });
 
+    // Undo puts the link back through the same tag command the agent's writes use, and only for an artifact on the canvas.
+    await agent.dispatch({ type: "thread.tags.add", threadId: chatId, ids: ["shape:pg1"] });
+    expect((await agent.watch(chatId)).chat().tags).toEqual(["shape:m1", "shape:pg1"]);
+    await expect(agent.dispatch({ type: "thread.tags.add", threadId: chatId, ids: ["shape:nothing"] })).rejects.toMatchObject({
+      code: "not_found",
+      message: "That artifact is no longer on the canvas.",
+    });
+    await agent.dispatch({ type: "thread.tags.remove", threadId: chatId, ids: ["shape:pg1"] });
+
     // Touching only the motion leaves the page detached; writing to the page links it again.
     await agent.send(chatId, "move the motion");
     expect((await agent.settled(chatId, 2)).tags).toEqual(["shape:m1"]);

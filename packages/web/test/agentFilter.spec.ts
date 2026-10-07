@@ -90,3 +90,52 @@ test("Detach unlinks one artifact from a chat, picked from a submenu when there 
   await clickShape(page, "shape:m1");
   await expect(tabs(page)).toHaveText(["About both"]);
 });
+
+test("Detach works from the keyboard, says what it did in a toast whose Undo links the artifact again, and a long title is cut to the menu's width", async ({ page, agent }) => {
+  const long = "A very long landing page title for the autumn campaign hero and gallery section";
+  await openCanvas(page, agent);
+  await putRecords(
+    agent,
+    artifactColumn([
+      { id: "shape:p1", title: "Alpha" },
+      { id: "shape:m1", kind: "motion", title: "Beta" },
+      { id: "shape:p2", title: long },
+    ]),
+  );
+  const both = await createChat(agent, { title: "About both", tags: ["shape:p1", "shape:m1"], createdAt: at(1) });
+  await createChat(agent, { title: "Long one", tags: ["shape:p2"], createdAt: at(2) });
+  await openCanvas(page, agent);
+  await openRail(page);
+  await expect(tabs(page)).toHaveText(["Long one", "About both"]);
+
+  // The menu keeps its width; the title is cut with an ellipsis and shown whole on hover.
+  await tabs(page).filter({ hasText: "Long one" }).click({ button: "right" });
+  const longMenu = page.getByRole("menu", { name: "Long one actions" });
+  const item = longMenu.getByRole("menuitem", { name: `Detach from ${long}` });
+  await expect(item).toBeVisible();
+  expect((await longMenu.boundingBox())!.width).toBeLessThanOrEqual(260);
+  await item.hover();
+  await expect(page.locator("[data-slot='tooltip-popup']")).toHaveText(long);
+  await page.keyboard.press("Escape");
+  await expect(longMenu).toHaveCount(0);
+
+  // Keyboard: ArrowRight on Detach from moves focus into the submenu, and Enter there detaches.
+  await tabs(page).filter({ hasText: "About both" }).click({ button: "right" });
+  const menu = page.getByRole("menu", { name: "About both actions" });
+  await expect(menu).toBeVisible();
+  await page.keyboard.press("ArrowDown");
+  await page.keyboard.press("ArrowDown");
+  await expect(menu.getByRole("menuitem", { name: "Detach from" })).toBeFocused();
+  await page.keyboard.press("ArrowRight");
+  const alpha = page.getByRole("menu", { name: "Detach from" }).getByRole("menuitem", { name: "Alpha" });
+  await expect(alpha).toBeFocused();
+  await page.keyboard.press("Enter");
+  await expect.poll(async () => (await engineChat(agent, both)).tags).toEqual(["shape:m1"]);
+
+  // The toast says what was detached; Undo puts the link back.
+  const toast = page.locator("[data-slot='toast-title']").filter({ hasText: "Detached from Alpha" });
+  await expect(toast).toBeVisible();
+  await page.locator("[data-slot='toast-action']").filter({ hasText: "Undo" }).click();
+  await expect.poll(async () => (await engineChat(agent, both)).tags).toEqual(["shape:m1", "shape:p1"]);
+  await expect(toast).toHaveCount(0);
+});

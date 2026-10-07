@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { clearAllChats, continuableChat, linkedArtifacts, nextActive, recapRows, revertSkipLine, tabLabel, tabTooltip, visibleChats, type ChatActivity, type RailChat } from "../../src/index.ts";
+import { clearAllChats, clearedNotice, continuableChat, linkedArtifacts, nextActive, recapRows, revertSkipLine, tabLabel, tabTooltip, visibleChats, type ChatActivity, type RailChat } from "../../src/index.ts";
 
 const chat = (id: string, createdAt: string, fields: Partial<RailChat> = {}): RailChat => ({
   id,
@@ -197,6 +197,8 @@ describe("clear all chats", () => {
       keeping: 1,
       description: "This deletes 2 chats for good. 1 running chat is kept and finishes its turn. What the agent changed on the canvas stays.",
       action: "Delete 2 chats",
+      tooltip: "Clear all chats",
+      disabled: false,
     });
   });
 
@@ -212,6 +214,17 @@ describe("clear all chats", () => {
       keeping: 2,
       description: "This deletes 0 chats for good. 2 running chats are kept and finish their turns. What the agent changed on the canvas stays.",
     });
+  });
+
+  it("says why the button does nothing when no chat can go", () => {
+    expect(clearAllChats([chat("a", "01", { status: "running" })])).toMatchObject({ disabled: true, tooltip: "Every chat is still running" });
+    expect(clearAllChats([])).toMatchObject({ disabled: true, tooltip: "No chats to delete" });
+  });
+
+  it("reports what was deleted and what was kept once the engine has answered", () => {
+    expect(clearedNotice(3, 0)).toEqual({ title: "Deleted 3 chats" });
+    expect(clearedNotice(1, 2)).toEqual({ title: "Deleted 1 chat", description: "2 running chats were kept." });
+    expect(clearedNotice(2, 1)).toEqual({ title: "Deleted 2 chats", description: "1 running chat was kept." });
   });
 });
 

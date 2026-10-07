@@ -445,8 +445,9 @@ A chat's summary, for the rail's tabs, is `{id, title, titledBy, preview (first 
 | `thread.checkpoint.revert` | `turnCount`, `restoreCanvas: boolean` | a turn is running; `turnCount` beyond the current count |
 | `thread.session.stop` | | |
 | `thread.tags.remove` | `ids` (Detach) | none of the ids is one of the chat's tags: "This chat is not linked to that artifact." |
+| `thread.tags.add` | `ids` (Detach's Undo; reactors dispatch it too, below) | from the web, the engine keeps only ids that are artifacts on the canvas, as for `thread.create`'s tags; none is: "That artifact is no longer on the canvas." |
 | `project.chats.clear` | none, and no `threadId`: it is about every chat of the project | the project has no chats: "This project has no chats to delete."; every chat is running: "Every chat is still running, so nothing was deleted." |
-| internal: `thread.session.set`, `thread.message.assistant.delta`, `thread.message.assistant.complete`, `thread.message.reasoning.delta`, `thread.message.reasoning.complete`, `thread.proposed-plan.upsert`, `thread.activity.append`, `thread.tags.add`, `thread.turn.files.complete`, `thread.turn.reverted.complete`, `thread.title.generate.complete`, `thread.turn.settle` | | |
+| internal: `thread.session.set`, `thread.message.assistant.delta`, `thread.message.assistant.complete`, `thread.message.reasoning.delta`, `thread.message.reasoning.complete`, `thread.proposed-plan.upsert`, `thread.activity.append`, `thread.tags.add` (the tag reactor), `thread.turn.files.complete`, `thread.turn.reverted.complete`, `thread.title.generate.complete`, `thread.turn.settle` | | |
 
 `project.chats.clear` emits one `thread.deleted` per chat that is not running, all in one commit. The decider picks those chats from the read model when the command reaches the queue, not from what the web showed, so a chat whose turn started after the person confirmed is kept. Its receipt names `project:<projectId>` where a chat command's names the chat.
 
@@ -527,7 +528,7 @@ A chat's `tags` are the shape ids of the artifacts (pages and motions) it has to
 
 Adding a tag the chat already has is a no-op and emits nothing.
 
-The person can remove a tag with Detach (spec 08), which dispatches `thread.tags.remove`. Nothing remembers the removal: when the agent later writes to or edits that artifact, rule 2 tags the chat again, at the end of its tags. A message sent with the artifact selected does not re-tag it unless it is the chat's first message.
+The person can remove a tag with Detach (spec 08), which dispatches `thread.tags.remove`, and take that back with its Undo, which dispatches `thread.tags.add` from the web. Both are recorded as the person's (`actor_kind` `client`), so the event log says who linked and unlinked what. Nothing remembers the removal: when the agent later writes to or edits that artifact, rule 2 tags the chat again, at the end of its tags. A message sent with the artifact selected does not re-tag it unless it is the chat's first message.
 
 Tags are pointers, never dependencies: deleting an artifact leaves the chat and its tags as they are, and a stale tag simply matches nothing. There is no confirmation when deleting an artifact a turn is working on; the next write fails and the agent says so.
 
@@ -684,7 +685,7 @@ The test-only variables this spec uses, `UNFRAMED_TEST_AGENT_SCRIPT`, `UNFRAMED_
 55. **Skills and slash commands.** Skill folders under the config dir and the project's `.claude/skills` parse from their frontmatter, the config dir winning a name clash and disabled skills left out; Codex's fixed commands are listed. Seam: domain.
 56. **Decider: clear all and detach.** `project.chats.clear` deletes every chat not running in one decision and keeps the running ones, with both rejection strings; `thread.tags.remove` drops only the named tags, refuses one the chat does not have, and a later `thread.tags.add` puts it back. Seam: domain.
 57. **Clear all chats.** One `project.chats.clear` removes the idle chats from the shell, revokes their sessions' tokens and leaves the canvas; a chat parked on a request stays and finishes its turn; the same `commandId` again answers the same sequence. Seam: engine.
-58. **Detach, then a write.** After `thread.tags.remove` drops a page, a turn that writes only to a motion leaves the page untagged, and a turn that moves the page tags it again. Seam: engine.
+58. **Detach, then a write.** After `thread.tags.remove` drops a page, the web's `thread.tags.add` puts it back and is refused for an id that is not an artifact on the canvas; after a second removal, a turn that writes only to a motion leaves the page untagged, and a turn that moves the page tags it again. Seam: engine.
 
 ## Out of Scope
 

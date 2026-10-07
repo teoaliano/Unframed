@@ -153,6 +153,18 @@ export class ChatClient {
     return [...all.values()].sort((a, b) => (a.createdAt < b.createdAt ? 1 : a.createdAt > b.createdAt ? -1 : 0));
   }
 
+  /** Resolves once the shell has delivered every change up to `sequence`, such as a command's answer. */
+  shellReached(sequence: number): Promise<void> {
+    if (this.shellSequence >= sequence) return Promise.resolve();
+    return new Promise((resolve) => {
+      const stop = this.subscribe("shell", () => {
+        if (this.shellSequence < sequence) return;
+        stop();
+        resolve();
+      });
+    });
+  }
+
   get shellSynchronized(): boolean {
     return this.synced;
   }
