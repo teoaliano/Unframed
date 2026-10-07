@@ -308,7 +308,7 @@ test("the canvas panel saves a change made just before it closes, shows one arti
   }
 
   // Opening the editor closes the canvas panel; a click on empty canvas closes it too.
-  await page.getByTestId("selection-toolbar").getByRole("button", { name: "Open", exact: true }).click();
+  await page.getByTestId("selection-toolbar").getByRole("button", { name: "Editor", exact: true }).click();
   await expect(page.getByRole("region", { name: "Editing Intro" })).toBeVisible();
   await expect(intro).toHaveCount(0);
   await page.keyboard.press("Escape");
