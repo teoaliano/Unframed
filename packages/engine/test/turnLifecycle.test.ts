@@ -283,3 +283,53 @@ describe("chat deletion", () => {
     await expect(agent.rpc.subscribe("orchestration.subscribeThread", { projectId: PROJECT, threadId: chatId }).next(0)).rejects.toMatchObject({ code: "not_found" });
   });
 });
+
+describe("clearing every chat", () => {
+  it("deletes the idle chats in one command, stops their sessions, and leaves a running chat to finish", async () => {
+    const agent = await startAgentEngine();
+    await seed(agent, [motionShape("m1", "100", "Intro"), motionShape("m2", "101", "Outro")]);
+    const done = await agent.createChat();
+    await agent.send(done, "make the titles red");
+    await agent.settled(done, 1);
+    const { url, token } = await scriptedSession(agent, done);
+    const untouched = await agent.createChat();
+    const running = await agent.createChat({ runtimeMode: "approval-required" });
+    await agent.send(running, "clean the build folder");
+    const parkedChat = await parked(agent, running);
+    const shell = agent.rpc.subscribe("orchestration.subscribeShell", { projectId: PROJECT });
+    await shell.next(1);
+
+    const clear = { type: "project.chats.clear", commandId: "clear-1", projectId: PROJECT } as const;
+    const cleared = await agent.rpc.call("orchestration.dispatchCommand", clear);
+    await until(() => !shellChats(shell.values).has(done) && !shellChats(shell.values).has(untouched), "the idle chats to leave the shell");
+    expect([...shellChats(shell.values).keys()]).toEqual([running]);
+    // One command, so one receipt: sending it again answers the same sequence and deletes nothing more.
+    expect(await agent.rpc.call("orchestration.dispatchCommand", clear)).toEqual(cleared);
+    await expect
+      .poll(async () => (await agent.engine.request(new URL(url).pathname, listTools(token))).status, { timeout: 5000 })
+      .toBe(401);
+    expect((await roomShape(agent, "m1")).props.title).toBe("Intro (red)");
+
+    // The running chat is untouched: its turn is still parked on its request and can finish.
+    const [request] = openRequests(parkedChat, "approval");
+    const requestId = (request!.payload as { requestId: string }).requestId;
+    await agent.dispatch({ type: "thread.approval.respond", threadId: running, requestId, decision: "accept" });
+    expect((await agent.settled(running, 1)).latestTurn?.state).toBe("completed");
+  });
+
+  it("refuses when every chat is running, and when there is no chat", async () => {
+    const agent = await startAgentEngine();
+    await expect(agent.dispatch({ type: "project.chats.clear" })).rejects.toMatchObject({
+      code: "not_found",
+      message: "This project has no chats to delete.",
+    });
+    const running = await agent.createChat({ runtimeMode: "approval-required" });
+    await agent.send(running, "clean the build folder");
+    await parked(agent, running);
+    await expect(agent.dispatch({ type: "project.chats.clear" })).rejects.toMatchObject({
+      code: "conflict",
+      message: "Every chat is still running, so nothing was deleted.",
+    });
+    expect((await agent.watch(running)).chat().deletedAt).toBeNull();
+  });
+});

@@ -1,5 +1,5 @@
-import { visibleChats, nextActive } from "@unframed/domain";
-import { Plus, Search, Sparkles, Trash2, X } from "lucide-react";
+import { clearAllChats, visibleChats, nextActive } from "@unframed/domain";
+import { BrushCleaning, Plus, Search, Sparkles, Trash2, X } from "lucide-react";
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { useMaybeEditor, useValue } from "tldraw";
 import { Alert, AlertDescription } from "~/components/ui/alert";
@@ -90,6 +90,9 @@ export const AgentRail = ({ project, embedded, inSheet, filterTo, onLocate, onOp
   const root = useRef<HTMLElement | null>(null);
   /** The chat the delete confirmation is about: the active one from the header, any from its tab menu. */
   const [deleting, setDeleting] = useState<string | null>(null);
+  const [clearing, setClearing] = useState(false);
+  /** Clear all's counts, taken when its confirmation opens and kept after, so the dialog's words hold still while it closes. */
+  const [clearCounts, setClearCounts] = useState(() => clearAllChats([]));
 
   useEffect(() => {
     void client.loadProviders();
@@ -126,6 +129,8 @@ export const AgentRail = ({ project, embedded, inSheet, filterTo, onLocate, onOp
   const errorLine = ui.error ?? (lastError !== null && lastError.trim() !== "" && !lastText.includes(lastError.trim()) ? lastError : undefined);
   const none = noProviderReady(statuses);
   const artifactsSelected = selectedArtifacts.length > 0;
+  // Every chat of the project, not only the visible ones: Clear all ignores the selection filter.
+  const clearAll = clearAllChats(chats);
 
   // Keys typed in the rail are the rail's: tldraw's canvas shortcuts never see them.
   useEffect(() => {
@@ -187,6 +192,22 @@ export const AgentRail = ({ project, embedded, inSheet, filterTo, onLocate, onOp
           </Button>
         </Tip>
         {!embedded && (
+          <Tip label="Clear all chats">
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              aria-label="Clear all chats"
+              disabled={clearAll.deleting === 0}
+              onClick={() => {
+                setClearCounts(clearAll);
+                setClearing(true);
+              }}
+            >
+              <BrushCleaning aria-hidden />
+            </Button>
+          </Tip>
+        )}
+        {!embedded && (
           <Tip label="Close">
             <Button variant="ghost" size="icon-sm" aria-label="Close" onClick={onClose}>
               <X aria-hidden />
@@ -227,6 +248,22 @@ export const AgentRail = ({ project, embedded, inSheet, filterTo, onLocate, onOp
               if (!deleting) return;
               if (deleting === active) client.setUi({ chosen: null, pinned: null });
               client.dispatch({ type: "thread.delete", threadId: deleting }).catch((error: unknown) => client.reportError(error));
+            },
+          },
+        ]}
+      />
+      <ConfirmDialog
+        open={clearing}
+        onOpenChange={setClearing}
+        title="Clear all chats?"
+        description={clearCounts.description}
+        actions={[
+          {
+            label: clearCounts.action,
+            destructive: true,
+            onClick: () => {
+              if (activeSummary && activeSummary.status !== "running") client.setUi({ chosen: null, pinned: null });
+              client.dispatch({ type: "project.chats.clear" }).catch((error: unknown) => client.reportError(error));
             },
           },
         ]}

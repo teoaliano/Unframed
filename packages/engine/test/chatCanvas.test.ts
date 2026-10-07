@@ -46,6 +46,37 @@ describe("tags from writes", () => {
     expect(await roomShape(agent, "pg1")).toBeUndefined();
     expect(chat.tags).toEqual(["shape:pg1", "shape:m1"]);
   });
+
+  it("drops a tag the person detaches, and adds it back when the agent writes to that artifact again", async () => {
+    const script = await scriptFolder({
+      detach: {
+        when: "^tidy",
+        turns: [
+          { text: "Moved both.", tools: writes([{ type: "move", id: "pg1", x: 40, y: 40 }, { type: "resize", id: "m1", w: 320, h: 180 }]) },
+          { text: "Only the motion.", tools: writes([{ type: "move", id: "m1", x: 10, y: 10 }]) },
+          { text: "The page again.", tools: writes([{ type: "move", id: "pg1", x: 80, y: 80 }]) },
+        ],
+      },
+    });
+    const agent = await startAgentEngine({ script });
+    await seed(agent, [pageShape("pg1", "100"), motionShape("m1", "101", "Intro")]);
+    const chatId = await agent.createChat();
+    await agent.send(chatId, "tidy the board");
+    expect((await agent.settled(chatId, 1)).tags).toEqual(["shape:pg1", "shape:m1"]);
+
+    await agent.dispatch({ type: "thread.tags.remove", threadId: chatId, ids: ["shape:pg1"] });
+    expect((await agent.watch(chatId)).chat().tags).toEqual(["shape:m1"]);
+    await expect(agent.dispatch({ type: "thread.tags.remove", threadId: chatId, ids: ["shape:pg1"] })).rejects.toMatchObject({
+      code: "not_found",
+      message: "This chat is not linked to that artifact.",
+    });
+
+    // Touching only the motion leaves the page detached; writing to the page links it again.
+    await agent.send(chatId, "move the motion");
+    expect((await agent.settled(chatId, 2)).tags).toEqual(["shape:m1"]);
+    await agent.send(chatId, "move the page");
+    expect((await agent.settled(chatId, 3)).tags).toEqual(["shape:m1", "shape:pg1"]);
+  });
 });
 
 describe("change log origins and the change note", () => {

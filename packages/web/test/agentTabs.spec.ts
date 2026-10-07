@@ -1,5 +1,7 @@
 import { openCanvas } from "./canvas.ts";
-import { createChat, engineChat, expect, openRail, sendThrough, tabs, test } from "./agent.ts";
+import { clickShape } from "./generation.ts";
+import { putRecords } from "./media.ts";
+import { artifactColumn, createChat, engineChat, engineChats, expect, openRail, sendThrough, tabs, test } from "./agent.ts";
 
 const at = (day: number) => `2026-09-${String(day).padStart(2, "0")}T10:00:00.000Z`;
 
@@ -102,4 +104,38 @@ test("a right-click on a tab, or a click on the active one, opens Rename and Del
   await confirm.getByRole("button", { name: "Delete chat" }).click();
   await expect(tabs(page)).toHaveText(["Second"]);
   expect((await engineChat(agent, second)).title).toBe("Second");
+});
+
+test("Clear all chats deletes every idle chat of the project, the hidden ones too, after a confirmation that counts them, and keeps a running one", async ({ page, agent }) => {
+  await openCanvas(page, agent);
+  await putRecords(agent, artifactColumn([{ id: "shape:p1", title: "Alpha" }]));
+  await createChat(agent, { title: "Older", createdAt: at(1) });
+  await createChat(agent, { title: "About alpha", tags: ["shape:p1"], createdAt: at(2) });
+  await createChat(agent, { title: "Loose", createdAt: at(3) });
+  const running = await createChat(agent, { title: "Cleaner", createdAt: at(4), runtimeMode: "approval-required" });
+  await sendThrough(agent, running, "clean the build please");
+  await openCanvas(page, agent);
+  const panel = await openRail(page);
+
+  // The selection hides two of the chats; Clear all still counts and deletes them.
+  await clickShape(page, "shape:p1");
+  await expect(tabs(page)).toHaveText(["About alpha"]);
+  await panel.getByRole("button", { name: "Clear all chats" }).click();
+  const confirm = page.getByRole("alertdialog", { name: "Clear all chats?" });
+  await expect(confirm).toContainText("This deletes 3 chats for good. 1 running chat is kept and finishes its turn. What the agent changed on the canvas stays.");
+  await confirm.getByRole("button", { name: "Cancel" }).click();
+  await expect(confirm).toHaveCount(0);
+  expect(await engineChats(agent)).toHaveLength(4);
+
+  await panel.getByRole("button", { name: "Clear all chats" }).click();
+  await confirm.getByRole("button", { name: "Delete 3 chats" }).click();
+  await expect(tabs(page)).toHaveCount(0);
+  // The dialog's backdrop fades out over the canvas: wait for it before clicking there.
+  await expect(page.locator("[data-slot='alert-dialog-backdrop']")).toHaveCount(0);
+  // Shift-click takes the artifact out of the selection: with nothing selected the running chat shows.
+  await clickShape(page, "shape:p1", ["Shift"]);
+  await expect(tabs(page)).toHaveText(["Cleaner"]);
+  await expect.poll(async () => (await engineChats(agent)).map((chat) => chat.id)).toEqual([running]);
+  // Only the running chat is left, so there is nothing idle to clear.
+  await expect(panel.getByRole("button", { name: "Clear all chats" })).toBeDisabled();
 });

@@ -136,7 +136,8 @@ export class ChatClient {
     } else if (item.kind === "synchronized") {
       this.synced = true;
     } else {
-      if (item.sequence <= this.shellSequence) return;
+      // One commit that changes several chats (Clear all chats) sends one item per chat, all with its sequence: only older items are stale.
+      if (item.sequence < this.shellSequence) return;
       this.shellSequence = item.sequence;
       if (item.kind === "chat-upserted") this.summaries.set(item.chat.id, item.chat);
       else this.summaries.delete(item.id);

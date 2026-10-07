@@ -101,7 +101,7 @@ test("the rail is t3code's chat panel on the kit: a shell on --background with a
     await expectToken(panel, "background-color", "--background");
     await expectToken(panel, "border-left-color", "--color-border");
     await expect(panel.getByRole("heading", { name: "Agent" })).toBeVisible();
-    for (const name of ["Search chats", "New chat", "Delete chat", "Close"]) await expectSlot(panel.getByRole("button", { name, exact: true }), "tooltip-trigger");
+    for (const name of ["Search chats", "New chat", "Delete chat", "Clear all chats", "Close"]) await expectSlot(panel.getByRole("button", { name, exact: true }), "tooltip-trigger");
 
     // Panel tabs: 24 px rows, the active one on the accent in the foreground, the rest muted.
     const [active, other] = [tabs(page).first(), tabs(page).nth(1)];

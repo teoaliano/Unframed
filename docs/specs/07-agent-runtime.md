@@ -115,6 +115,11 @@ Records and tests
 62. As a developer, I want a scripted agent that replaces the model and nothing else, so that a whole turn, with real tools, real canvas writes and real permission decisions, runs in milliseconds and the same way every time.
 63. As a developer, I want the scripted agent reachable only through a test environment variable, so that no request can turn it on.
 
+Clearing and detaching
+
+64. As a person, I want to delete every chat of a project in one go while the running ones finish, so that I can start over without stopping work in progress.
+65. As a person, I want to detach an artifact from a chat, so that a chat that only brushed past it stops showing when I select it; if the agent writes to it again, the link comes back.
+
 ## Implementation Decisions
 
 ### Modules
@@ -439,11 +444,15 @@ A chat's summary, for the rail's tabs, is `{id, title, titledBy, preview (first 
 | `thread.turn.revert` | `turnCount` | a turn of this chat is running: "Wait for the turn to finish before reverting."; already reverted: "That turn is already reverted." |
 | `thread.checkpoint.revert` | `turnCount`, `restoreCanvas: boolean` | a turn is running; `turnCount` beyond the current count |
 | `thread.session.stop` | | |
+| `thread.tags.remove` | `ids` (Detach) | none of the ids is one of the chat's tags: "This chat is not linked to that artifact." |
+| `project.chats.clear` | none, and no `threadId`: it is about every chat of the project | the project has no chats: "This project has no chats to delete."; every chat is running: "Every chat is still running, so nothing was deleted." |
 | internal: `thread.session.set`, `thread.message.assistant.delta`, `thread.message.assistant.complete`, `thread.message.reasoning.delta`, `thread.message.reasoning.complete`, `thread.proposed-plan.upsert`, `thread.activity.append`, `thread.tags.add`, `thread.turn.files.complete`, `thread.turn.reverted.complete`, `thread.title.generate.complete`, `thread.turn.settle` | | |
+
+`project.chats.clear` emits one `thread.deleted` per chat that is not running, all in one commit. The decider picks those chats from the read model when the command reaches the queue, not from what the web showed, so a chat whose turn started after the person confirmed is kept. Its receipt names `project:<projectId>` where a chat command's names the chat.
 
 `thread.turn.start` takes `runtimeMode` and `interactionMode` from the chat, never from the command. Model and traits in the command, when given, are applied to the chat first (same rule as `thread.meta.update`).
 
-**Events**: `thread.created`, `thread.deleted`, `thread.meta-updated`, `thread.runtime-mode-set`, `thread.interaction-mode-set`, `thread.message-sent` (user, assistant and reasoning, with `streaming`), `thread.turn-start-requested`, `thread.turn-interrupt-requested`, `thread.approval-response-requested`, `thread.user-input-response-requested`, `thread.checkpoint-revert-requested`, `thread.reverted`, `thread.turn-revert-requested`, `thread.session-stop-requested`, `thread.session-set`, `thread.proposed-plan-upserted`, `thread.activity-appended`, `thread.tagged`, `thread.turn-files-completed`, `thread.turn-reverted`, `thread.turn-settled`. Each carries t3code's base fields: `sequence`, `eventId`, `aggregateKind`, `aggregateId`, `occurredAt`, `commandId`, `causationEventId`, `correlationId`, `metadata`.
+**Events**: `thread.created`, `thread.deleted`, `thread.meta-updated`, `thread.runtime-mode-set`, `thread.interaction-mode-set`, `thread.message-sent` (user, assistant and reasoning, with `streaming`), `thread.turn-start-requested`, `thread.turn-interrupt-requested`, `thread.approval-response-requested`, `thread.user-input-response-requested`, `thread.checkpoint-revert-requested`, `thread.reverted`, `thread.turn-revert-requested`, `thread.session-stop-requested`, `thread.session-set`, `thread.proposed-plan-upserted`, `thread.activity-appended`, `thread.tagged`, `thread.untagged`, `thread.turn-files-completed`, `thread.turn-reverted`, `thread.turn-settled`. Each carries t3code's base fields: `sequence`, `eventId`, `aggregateKind`, `aggregateId`, `occurredAt`, `commandId`, `causationEventId`, `correlationId`, `metadata`.
 
 Projector rules worth stating:
 
@@ -453,6 +462,7 @@ Projector rules worth stating:
 - `thread.reverted {turnCount}` keeps the turns up to `turnCount` and their messages, activities and plans, and drops the rest. `thread.checkpoint.revert` emits it together with `thread.checkpoint-revert-requested` (which names the dropped turns), so a message sent right after the rewind is numbered after the kept turns; the reactor then reverts the canvas and rolls the provider back before any later turn of the chat is sent. With `restoreCanvas: true` it then appends a `checkpoint.reverted` activity with no turn (so it outlives the dropped turns), `{turnCount, restored: [shape ids], skipped: [{id, by: person | another chat | a later turn}]}`, which spec 08's rail reads to say which shapes were left alone.
 - `thread.turn-revert-requested` marks the turn, so a second `thread.turn.revert` is refused before the first lands.
 - `thread.tagged {ids}` appends ids the chat does not have yet, in order.
+- `thread.untagged {ids}` removes those ids and keeps the rest in order.
 
 **Reactors**:
 
@@ -460,7 +470,7 @@ Projector rules worth stating:
 - **Provider runtime ingestion**: turns the adapter's canonical runtime events into internal commands. Text deltas become `thread.message.assistant.delta` (message id `assistant:<itemId>`); reasoning deltas become reasoning messages; a plan becomes `thread.proposed-plan.upsert` (plan id `plan:<chatId>:turn:<n>`); lifecycle becomes `thread.session.set`; tool items, requests, questions, retries, rate limits and errors become `thread.activity.append`.
 - **Turn settle reactor**: when a turn leaves `running`, it stamps `lastClock`, writes the turn's file list (`thread.turn.files.complete`, from the turn changes), writes the sidecar, and on the chat's first completed turn asks for a title.
 - **Tag reactor**: tags from the first message and from every artifact write (see Tags).
-- **Deletion reactor**: on `thread.deleted`, stops the provider session and revokes its MCP token.
+- **Deletion reactor**: on `thread.deleted`, stops the provider session and revokes its MCP token. A `project.chats.clear` commit holds one such event per chat, and each stops its own session.
 
 **Titling.** After the chat's first turn settles, when `titledBy` is not `user`, one small request on the chat's own provider (Claude: a one-turn query with no tools, no setting sources, no MCP servers and the naming system prompt; Codex: a one-turn ephemeral thread with a read-only sandbox and approvals off) using the prompt in `assets/prompts/chat-title.md`, fed the first message and the first 400 characters of the answer. The first line of the reply, with surrounding quotes stripped, trimmed, at most 60 characters, becomes the title with `titledBy: "agent"`, unless the person named the chat in the meantime. A rename by the person sets `titledBy: "user"`; clearing the name sets `title: ""` and `titledBy: null`, so the agent may name it again. Any failure is silent. The title is announced by `thread.meta-updated`.
 
@@ -504,7 +514,7 @@ This spec adds one table to the project database, `turn_changes`, which only the
 - Equal: restore `before` (delete the shape when `before` is null, recreate it when `after` is null, otherwise put the whole record back).
 - Not equal: skip the shape. Someone changed it since: the person, another chat, or a later turn of this chat.
 
-All restores go to the room as one write with origin `revert:<chatId>:<turn>`. The revert is recorded on the chat as a `thread.turn-reverted` event carrying `{turn, restored: [ids], skipped: [{id, by}], at}`, where `by` is `person`, `another chat` or `a later turn`, read from the change log. A reverted turn stays reverted: its recap card shows it and offers no second revert. Revert is refused while the same chat has a turn running ("Wait for the turn to finish before reverting."). Files are never deleted by a revert; a page shape simply points back at its previous file. Tags are pointers and are not removed.
+All restores go to the room as one write with origin `revert:<chatId>:<turn>`. The revert is recorded on the chat as a `thread.turn-reverted` event carrying `{turn, restored: [ids], skipped: [{id, by}], at}`, where `by` is `person`, `another chat` or `a later turn`, read from the change log. A reverted turn stays reverted: its recap card shows it and offers no second revert. Revert is refused while the same chat has a turn running ("Wait for the turn to finish before reverting."). Files are never deleted by a revert; a page shape simply points back at its previous file. A revert never removes a tag; only the person's Detach does (see Tags).
 
 The person's own Cmd-Z is tldraw's local undo (spec 02) and walks only their edits in their tab. It never undoes an agent change; Revert is the only way to take one back.
 
@@ -515,7 +525,11 @@ A chat's `tags` are the shape ids of the artifacts (pages and motions) it has to
 1. The first message: the engine asks the canvas which of the message's selected ids are artifacts (it never trusts the web to say) and adds those.
 2. Every artifact a tool call writes to or edits: spec 09's `page_write` and `motion_write`, created or updated, and every `canvas_write` op whose target (or created shape) is a page or motion, including `move`, `resize`, `delete` and a deletion that cascades from a group. This closes the old gap where a plain canvas edit to an artifact did not tag the chat.
 
-Adding a tag the chat already has is a no-op and emits nothing. Tags are pointers, never dependencies: deleting an artifact leaves the chat and its tags as they are, and a stale tag simply matches nothing. There is no confirmation when deleting an artifact a turn is working on; the next write fails and the agent says so.
+Adding a tag the chat already has is a no-op and emits nothing.
+
+The person can remove a tag with Detach (spec 08), which dispatches `thread.tags.remove`. Nothing remembers the removal: when the agent later writes to or edits that artifact, rule 2 tags the chat again, at the end of its tags. A message sent with the artifact selected does not re-tag it unless it is the chat's first message.
+
+Tags are pointers, never dependencies: deleting an artifact leaves the chat and its tags as they are, and a stale tag simply matches nothing. There is no confirmation when deleting an artifact a turn is working on; the next write fails and the agent says so.
 
 ### What the model is told before each message
 
@@ -668,11 +682,14 @@ The test-only variables this spec uses, `UNFRAMED_TEST_AGENT_SCRIPT`, `UNFRAMED_
 53. **Codex event mapping.** Recorded app-server notifications and requests map to the documented canonical events and answers. Seam: domain.
 54. **Codex runs a chat.** Against a fake `codex app-server`, a chat on Codex initializes, starts a thread in the project folder with the mode's policies and the MCP `-c` arguments, streams a reply, raises a command approval the person answers, and resumes by thread id after an idle close. Seam: engine.
 55. **Skills and slash commands.** Skill folders under the config dir and the project's `.claude/skills` parse from their frontmatter, the config dir winning a name clash and disabled skills left out; Codex's fixed commands are listed. Seam: domain.
+56. **Decider: clear all and detach.** `project.chats.clear` deletes every chat not running in one decision and keeps the running ones, with both rejection strings; `thread.tags.remove` drops only the named tags, refuses one the chat does not have, and a later `thread.tags.add` puts it back. Seam: domain.
+57. **Clear all chats.** One `project.chats.clear` removes the idle chats from the shell, revokes their sessions' tokens and leaves the canvas; a chat parked on a request stays and finishes its turn; the same `commandId` again answers the same sequence. Seam: engine.
+58. **Detach, then a write.** After `thread.tags.remove` drops a page, a turn that writes only to a motion leaves the page untagged, and a turn that moves the page tags it again. Seam: engine.
 
 ## Out of Scope
 
 - Providers other than Claude and Codex (t3code's Cursor, OpenCode, Grok, Antigravity).
-- t3code's terminal, mobile app, remote access and pull request linking (decision Q16), and so its branch, worktree, archive, settle, snooze and pin commands.
+- t3code's terminal, mobile app, remote access and pull request linking (decision Q16), and so its branch, worktree, archive, settle, snooze and pin commands. Clear all chats (`project.chats.clear`) is a delete of several chats, not an archive.
 - Git checkpoints of the project folder: a turn's canvas changes and artifact files are the checkpoint.
 - Several accounts per provider beyond one `CLAUDE_CONFIG_DIR` (t3code's instances and shadow homes).
 - A usage dashboard; only the in-chat usage-limit notice exists.

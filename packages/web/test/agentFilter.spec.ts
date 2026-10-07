@@ -1,7 +1,7 @@
 import { emptyCanvasPoint, openCanvas } from "./canvas.ts";
 import { clickShape } from "./generation.ts";
 import { putRecords } from "./media.ts";
-import { artifactColumn, createChat, expect, openRail, tabs, test } from "./agent.ts";
+import { artifactColumn, createChat, engineChat, expect, openRail, tabs, test } from "./agent.ts";
 
 const at = (day: number) => `2026-09-${String(day).padStart(2, "0")}T10:00:00.000Z`;
 
@@ -50,4 +50,43 @@ test("selecting artifacts filters the tabs to the chats tagged with any of them,
   const empty = await emptyCanvasPoint(page);
   await page.mouse.click(empty.x - 300, empty.y);
   await expect(tabs(page)).toHaveText(["Loose", "About both", "About beta"]);
+});
+
+test("Detach unlinks one artifact from a chat, picked from a submenu when there are several, and the tab leaves the filter for it", async ({ page, agent }) => {
+  await openCanvas(page, agent);
+  await putRecords(
+    agent,
+    artifactColumn([
+      { id: "shape:p1", title: "Alpha" },
+      { id: "shape:m1", kind: "motion", title: "Beta" },
+    ]),
+  );
+  const alpha = await createChat(agent, { title: "About alpha", tags: ["shape:p1"], createdAt: at(1) });
+  const both = await createChat(agent, { title: "About both", tags: ["shape:p1", "shape:m1"], createdAt: at(2) });
+  await createChat(agent, { title: "Loose", createdAt: at(3) });
+  await openCanvas(page, agent);
+  await openRail(page);
+  await clickShape(page, "shape:p1");
+  await expect(tabs(page)).toHaveText(["About both", "About alpha"]);
+
+  // Linked to two artifacts: Detach from opens a submenu naming them.
+  await tabs(page).filter({ hasText: "About both" }).click({ button: "right" });
+  const menu = page.getByRole("menu", { name: "About both actions" });
+  await expect(menu.getByRole("menuitem")).toHaveText(["Rename", "Detach from", "Delete"]);
+  await menu.getByRole("menuitem", { name: "Detach from" }).click();
+  const pick = page.getByRole("menu", { name: "Detach from" });
+  await expect(pick.getByRole("menuitem")).toHaveText(["Alpha", "Beta"]);
+  await pick.getByRole("menuitem", { name: "Alpha" }).click();
+  await expect(tabs(page)).toHaveText(["About alpha"]);
+  await expect.poll(async () => (await engineChat(agent, both)).tags).toEqual(["shape:m1"]);
+
+  // Linked to one: a single item names it.
+  await tabs(page).filter({ hasText: "About alpha" }).click({ button: "right" });
+  await page.getByRole("menu", { name: "About alpha actions" }).getByRole("menuitem", { name: "Detach from Alpha" }).click();
+  await expect(tabs(page)).toHaveCount(0);
+  await expect.poll(async () => (await engineChat(agent, alpha)).tags).toEqual([]);
+
+  // Detach removes a link, not a chat: the motion still finds the chat it stays linked to.
+  await clickShape(page, "shape:m1");
+  await expect(tabs(page)).toHaveText(["About both"]);
 });

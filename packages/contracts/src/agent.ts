@@ -167,6 +167,8 @@ export const ClientChatCommand = Schema.Union([
   Schema.Struct({ type: Schema.Literal("thread.turn.revert"), ...Base, turnCount: Schema.Number }),
   Schema.Struct({ type: Schema.Literal("thread.checkpoint.revert"), ...Base, turnCount: Schema.Number, restoreCanvas: Schema.Boolean }),
   Schema.Struct({ type: Schema.Literal("thread.session.stop"), ...Base }),
+  Schema.Struct({ type: Schema.Literal("thread.tags.remove"), ...Base, ids: Schema.Array(Schema.String) }),
+  Schema.Struct({ type: Schema.Literal("project.chats.clear"), commandId: Schema.String, projectId: Schema.String }),
 ]);
 export type ClientChatCommand = typeof ClientChatCommand.Type;
 

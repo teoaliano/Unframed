@@ -1,11 +1,13 @@
 import type { ChatSummary } from "@unframed/contracts";
-import { tabLabel, tabTooltip } from "@unframed/domain";
-import { ChevronDown, Pencil, Trash2 } from "lucide-react";
-import { useRef, useState } from "react";
+import { linkedArtifacts, shapeKind, tabLabel, tabTooltip, type RecapShape } from "@unframed/domain";
+import { ChevronDown, Pencil, Trash2, Unlink } from "lucide-react";
+import { useMemo, useRef, useState } from "react";
+import { useMaybeEditor, useValue, type TLShapeId } from "tldraw";
 import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
-import { Menu, MenuItem, MenuPopup, MenuSeparator, MenuTrigger } from "~/components/ui/menu";
+import { Menu, MenuItem, MenuPopup, MenuSeparator, MenuSub, MenuSubPopup, MenuSubTrigger, MenuTrigger } from "~/components/ui/menu";
 import { Tip } from "../../chrome/ui.tsx";
+import { KIND_ICONS } from "../composer/chips.tsx";
 import type { ChatClient } from "../store.ts";
 
 const INLINE_TABS = 3;
@@ -25,13 +27,70 @@ export interface TabStripProps {
   readonly onDelete: (id: string) => void;
 }
 
+const text = (value: unknown): string | undefined => (typeof value === "string" ? value : undefined);
+
+/**
+ * Detach, in a tab's menu: unlinks one page or motion from the chat. One linked artifact is
+ * one item; several open a submenu to pick from. Only artifacts still on the canvas show.
+ */
+const DetachItems = ({ client, chat }: { readonly client: ChatClient; readonly chat: ChatSummary }) => {
+  const editor = useMaybeEditor();
+  const key = useValue(
+    "linked artifacts",
+    () =>
+      JSON.stringify(
+        chat.tags.flatMap((id): RecapShape[] => {
+          const shape = editor?.getShape(id as TLShapeId);
+          if (!shape) return [];
+          const props = shape.props as Record<string, unknown>;
+          const title = text(props.title);
+          const fileName = text(props.fileName);
+          return [{ id: shape.id, kind: shapeKind(shape.type), ...(title !== undefined ? { title } : {}), ...(fileName !== undefined ? { fileName } : {}) }];
+        }),
+      ),
+    [editor, chat.tags],
+  );
+  const linked = useMemo(() => linkedArtifacts(chat.tags, JSON.parse(key) as RecapShape[]), [chat.tags, key]);
+  const detach = (id: string) =>
+    client.dispatch({ type: "thread.tags.remove", threadId: chat.id, ids: [id] }).catch((error: unknown) => client.reportError(error));
+  if (linked.length === 0) return null;
+  if (linked.length === 1) {
+    const [only] = linked;
+    return (
+      <MenuItem onClick={() => detach(only!.id)}>
+        <Unlink aria-hidden />
+        <span className="min-w-0 truncate">Detach from {only!.label}</span>
+      </MenuItem>
+    );
+  }
+  return (
+    <MenuSub>
+      <MenuSubTrigger>
+        <Unlink aria-hidden />
+        Detach from
+      </MenuSubTrigger>
+      <MenuSubPopup className="max-w-[260px]" aria-label="Detach from">
+        {linked.map((artifact) => {
+          const Icon = KIND_ICONS[artifact.kind as keyof typeof KIND_ICONS];
+          return (
+            <MenuItem key={artifact.id} onClick={() => detach(artifact.id)}>
+              {Icon && <Icon aria-hidden />}
+              <span className="min-w-0 truncate">{artifact.label}</span>
+            </MenuItem>
+          );
+        })}
+      </MenuSubPopup>
+    </MenuSub>
+  );
+};
+
 const STRIP_CLASS = "flex h-9 shrink-0 items-center gap-1 border-b px-2";
 
 /**
  * One panel tab per visible chat (t3code's right panel tabs), newest first: three inline,
  * the rest under More, whose trigger names the active chat when it is one of them. A
  * running chat shows a live dot. The selected look is the kit Button's pressed state.
- * A right-click on a tab, or a click on the active one, opens its menu: Rename and Delete.
+ * A right-click on a tab, or a click on the active one, opens its menu: Rename, Detach and Delete.
  */
 export const TabStrip = ({ client, chats, active, selectedCount, onDelete }: TabStripProps) => {
   const choose = (id: string) => client.setUi({ chosen: id, pinned: client.ui.pinned === id ? id : null });
@@ -124,8 +183,11 @@ export const TabStrip = ({ client, chats, active, selectedCount, onDelete }: Tab
           </Tip>
         ),
       )}
-      {/* Not modal, so the second click of a double-click reaches the tab. */}
-      <Menu modal={false} open={menuChat !== undefined} onOpenChange={(open) => !open && setMenuFor(undefined)}>
+      {/*
+        Not modal, so the second click of a double-click reaches the tab. This menu has no
+        trigger of its own, and Base UI asks it to close as a "sibling" when Detach's submenu opens.
+      */}
+      <Menu modal={false} open={menuChat !== undefined} onOpenChange={(open, details) => !open && details.reason !== "sibling-open" && setMenuFor(undefined)}>
         {menuChat && menuFor && (
           // Rename puts a field where the tab was: focus goes there, not back to the tab.
           <MenuPopup anchor={menuFor.anchor} side="bottom" align="start" sideOffset={4} finalFocus={() => false} aria-label={`${tabLabel(menuChat)} actions`}>
@@ -133,6 +195,7 @@ export const TabStrip = ({ client, chats, active, selectedCount, onDelete }: Tab
               <Pencil aria-hidden />
               Rename
             </MenuItem>
+            <DetachItems client={client} chat={menuChat} />
             <MenuSeparator />
             <MenuItem variant="destructive" disabled={menuChat.status === "running"} onClick={() => onDelete(menuChat.id)}>
               <Trash2 aria-hidden />
