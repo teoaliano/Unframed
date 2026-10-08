@@ -32,12 +32,13 @@ import { copyAsPrompt } from "../generate/copyAsPrompt.ts";
 import { isTextResult } from "../generate/facts.ts";
 import { useActivation, useEngine } from "../context.ts";
 import { useActiveProject } from "../project/activation.ts";
-import { showError } from "../toasts.tsx";
+import { showError, showNotice } from "../toasts.tsx";
 import { addShape, kindOfAddAction } from "./addShapes.ts";
 import { imagePng } from "./externalContent.ts";
 import { groupRecipeOf, setGroupRecipe } from "./groupRecipes.ts";
 import { ungroup, wrapSelection } from "./groups.ts";
 import { platform } from "./platform.ts";
+import { labelJustRightClicked, startRename } from "./rename.ts";
 import { pinnedAtom, togglePin } from "../artifacts/state.ts";
 
 const messageOf = (error: unknown) => (error instanceof UnframedError || error instanceof Error ? error.message : String(error));
@@ -53,22 +54,31 @@ const menuShape = (editor: Editor, shape: TLShape): MenuShape => {
   const marker = shape.type === "image" || shape.type === "video" ? parseAssetMarker(assetSrc(editor, shape) ?? "") : undefined;
   const ref = readRef(shape);
   const parent = editor.getShape(shape.parentId as TLShapeId);
+  const artifactFile = isArtifactKind(shape.type) ? (shape.props as { file?: string }).file : undefined;
   return {
     id: shape.id,
     type: shape.type,
     ...(ref !== undefined ? { ref } : {}),
-    ...(marker?.kind === "project-file" ? { file: marker.file } : {}),
+    ...(marker?.kind === "project-file" ? { file: marker.file } : artifactFile ? { file: artifactFile } : {}),
     ...(marker?.kind === "link" ? { link: true } : {}),
     ...(isTextResult(shape) ? { textResult: true } : {}),
     ...(parent?.type === "frame" ? { parent: parent.id } : {}),
     ...(groupRecipeOf(shape) ? { recipe: true } : {}),
-    ...(isArtifactKind(shape.type) && (shape.props as { file?: string }).file ? { filledArtifact: true } : {}),
+    ...(artifactFile ? { filledArtifact: true } : {}),
   };
 };
 
-/** The shape under a right-click. A group counts only by its label or edge, as tldraw hits a frame. */
-const shapeUnder = (editor: Editor, point: VecLike): TLShape | undefined =>
-  editor.getShapeAtPoint(point, { margin: 4 / editor.getZoomLevel(), hitInside: true, hitLabels: true, renderingOnly: true });
+/**
+ * The shape under a right-click. A group counts only by its label or edge, as tldraw hits a
+ * frame; any other shape's label sits outside its bounds, so a press on it says which shape.
+ */
+const shapeUnder = (editor: Editor, point: VecLike): TLShape | undefined => {
+  const label = labelJustRightClicked(editor);
+  return (
+    (label === undefined ? undefined : editor.getShape(label)) ??
+    editor.getShapeAtPoint(point, { margin: 4 / editor.getZoomLevel(), hitInside: true, hitLabels: true, renderingOnly: true })
+  );
+};
 
 /**
  * Whether Paste would do something. A clipboard the page may not read without asking
@@ -131,6 +141,17 @@ const UnframedSections = () => {
         });
         return;
       }
+      case "copy-path":
+        engine.call("files.path", { project, fileName: item.file }).then(
+          // A path on the clipboard cannot be seen, so a toast says it got there.
+          ({ path }) =>
+            navigator.clipboard.writeText(path).then(
+              () => void showNotice("Path copied", "info"),
+              () => void showError("Could not copy that path to the clipboard."),
+            ),
+          (error: unknown) => showError(`Could not copy that path: ${messageOf(error)}`),
+        );
+        return;
       case "copy-as-image": {
         const png = opened.clicked ? imagePng(editor, project, opened.clicked) : undefined;
         const failed = () => showError("Could not copy that image to the clipboard.");
@@ -141,6 +162,9 @@ const UnframedSections = () => {
       }
       case "copy-ref":
         navigator.clipboard.writeText(`@${item.ref}`).catch(() => showError(`Could not copy @${item.ref} to the clipboard.`));
+        return;
+      case "rename":
+        if (opened.clicked) startRename(editor, opened.clicked.id);
         return;
       case "copy-as-prompt":
         if (opened.clicked) copyAsPrompt(editor, opened.clicked);

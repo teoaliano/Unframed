@@ -5,6 +5,9 @@ const doc = (text: string) => ({ type: "doc", content: [{ type: "paragraph", con
 const prompt = (ref: string, text: string) => ({ typeName: "shape", type: "text", props: { richText: doc(text) }, meta: { ref } });
 const group = (name: string) => ({ typeName: "shape", type: "frame", props: { name }, meta: {} });
 const image = (ref: string) => ({ typeName: "shape", type: "image", props: {}, meta: { ref } });
+const video = (ref: string) => ({ typeName: "shape", type: "video", props: {}, meta: { ref } });
+const page = (ref: string, title = "") => ({ typeName: "shape", type: "page", props: { title, fileName: "" }, meta: { ref } });
+const motion = (ref: string, fileName = "") => ({ typeName: "shape", type: "motion", props: { title: "", fileName }, meta: { ref } });
 
 describe("mentionQuery", () => {
   it("is empty right after an @", () => {
@@ -39,16 +42,23 @@ describe("mentionCandidates", () => {
     { typeName: "shape", type: "geo", props: {}, meta: {} },
   ];
 
-  it("lists every prompt and group but this prompt, with a preview for prompts", () => {
-    expect(mentionCandidates(board, "101", "")).toEqual([
-      { ref: "100", preview: "lone red fox" },
-      { ref: "110", preview: "night" },
-      { ref: "Hero-shots" },
+  it("lists every shape with a ref but this prompt and the marks, with a prompt's text, an artifact's title or the kind as the preview", () => {
+    expect(mentionCandidates(board, "101", "").map(({ id: _id, ...row }) => row)).toEqual([
+      { ref: "Hero-shots", kind: "group" },
+      { ref: "100", kind: "prompt", preview: "lone red fox" },
+      { ref: "104", kind: "image", preview: "Image" },
+      { ref: "110", kind: "prompt", preview: "night" },
+    ]);
+    expect(mentionCandidates([video("waves"), page("landing", "Landing page"), page("pricing"), motion("intro", "intro.html")], undefined, "").map(({ id: _id, ...row }) => row)).toEqual([
+      { ref: "intro", kind: "motion", preview: "intro" },
+      { ref: "landing", kind: "page", preview: "Landing page" },
+      { ref: "pricing", kind: "page", preview: "Page" },
+      { ref: "waves", kind: "video", preview: "Video" },
     ]);
   });
 
   it("keeps the refs that start with the query, compared case-insensitively", () => {
-    expect(mentionCandidates(board, "100", "10").map((row) => row.ref)).toEqual(["101"]);
+    expect(mentionCandidates(board, "100", "10").map((row) => row.ref)).toEqual(["101", "104"]);
     expect(mentionCandidates(board, "100", "hero").map((row) => row.ref)).toEqual(["Hero-shots"]);
     expect(mentionCandidates(board, "100", "HERO-S").map((row) => row.ref)).toEqual(["Hero-shots"]);
     expect(mentionCandidates(board, "100", "2")).toEqual([]);
@@ -56,17 +66,17 @@ describe("mentionCandidates", () => {
 
   it("collapses whitespace runs to one space and cuts the preview at 24 characters", () => {
     const [row] = mentionCandidates(board, "100", "101");
-    expect(row).toEqual({ ref: "101", preview: "A @100 on a windswept cl…" });
+    expect(row).toMatchObject({ ref: "101", preview: "A @100 on a windswept cl…" });
     expect(row!.preview!.replace("…", "")).toHaveLength(24);
   });
 
   it("trims the preview and keeps a text of exactly 24 characters whole", () => {
     const [row] = mentionCandidates([prompt("120", "  abcdefghijklmnopqrstuvwx  ")], "100", "");
-    expect(row).toEqual({ ref: "120", preview: "abcdefghijklmnopqrstuvwx" });
+    expect(row).toMatchObject({ ref: "120", preview: "abcdefghijklmnopqrstuvwx" });
   });
 
-  it("orders numbered refs by number, then names alphabetically", () => {
+  it("orders names alphabetically first, then numbered refs by number", () => {
     const refs = mentionCandidates([group("zeta"), prompt("1000", ""), group("alpha"), prompt("200", "")], undefined, "");
-    expect(refs.map((row) => row.ref)).toEqual(["200", "1000", "alpha", "zeta"]);
+    expect(refs.map((row) => row.ref)).toEqual(["alpha", "zeta", "200", "1000"]);
   });
 });

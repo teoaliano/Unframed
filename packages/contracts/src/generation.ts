@@ -15,6 +15,7 @@ export const RecipeRef = Schema.Union([
 ]);
 export type RecipeRef = typeof RecipeRef.Type;
 
+/** The app sends only `recipe` now; sidecars written before carry `regenerate` and `vary`, and must still parse. */
 export const RecipeAction = Schema.Literals(["regenerate", "vary", "recipe"]);
 export type RecipeAction = typeof RecipeAction.Type;
 

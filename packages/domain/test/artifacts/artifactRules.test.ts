@@ -180,6 +180,11 @@ describe("which artifacts run", () => {
     expect([...liveArtifacts({ selected: [], pinned: ["p", "q"], editing: "e", viewportCentre: centre })].sort()).toEqual(["e", "p", "q"]);
   });
 
+  it("adds the one whose parameters are open on the canvas, past the selection's limit", () => {
+    const selected = [at("a", 1), at("b", 2), at("c", 3), at("t", 900)];
+    expect([...liveArtifacts({ selected, pinned: [], tuning: "t", viewportCentre: centre })].sort()).toEqual(["a", "b", "c", "t"]);
+  });
+
   it("unmounts a frame only past one viewport width off screen", () => {
     const viewport = { x: 0, y: 0, w: 1000, h: 600 };
     expect(farOffscreen({ x: 1500, y: 0, w: 400, h: 300 }, viewport)).toBe(false);

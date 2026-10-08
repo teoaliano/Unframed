@@ -118,5 +118,5 @@ export const MentionMenu = () => {
   );
 
   if (!open || !position) return null;
-  return <MentionList rows={rows} highlight={highlight} style={{ left: position.x, top: position.y + 6 }} onPick={insert} onHighlight={setHighlight} />;
+  return <MentionList editor={editor} rows={rows} highlight={highlight} style={{ left: position.x, top: position.y + 6 }} onPick={insert} onHighlight={setHighlight} />;
 };

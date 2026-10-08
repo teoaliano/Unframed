@@ -79,7 +79,7 @@ Around the canvas sit Unframed's chrome (logo, project menu and Settings, the bo
 54. As a person, I want a right-click menu that offers only what would do something, so that it never shows greyed-out noise.
 55. As a person, I want "Reveal in Finder" (or the Windows or Linux equivalent) on files, so that I can find a picture on disk.
 56. As a person, I want "Copy as image" on an image, so that I can paste the picture elsewhere.
-57. As a person, I want "Copy @id" on a prompt or group, so that I can paste the reference into another prompt.
+57. As a person, I want "Copy @id" on any shape that has one, so that I can paste the reference into another prompt.
 58. As a person, I want an "Add to library" entry on a selection, so that I can save it (spec 06).
 59. As a person, I want the logo and project menu in the top-left corner, so that I can switch or add projects.
 60. As a person, I want Settings beside the project menu and Agent in the bottom bar, so that the top-right corner stays clear.
@@ -98,6 +98,7 @@ Around the canvas sit Unframed's chrome (logo, project menu and Settings, the bo
 73. As a person, I want dragging one shape on a board of hundreds to stay smooth, so that big boards stay usable.
 74. As a person, I want to create a project from the project menu with a name, so that I can start fresh.
 75. As a developer, I want `?fps=1` to show a per-gesture frame meter, so that I can measure a drag on a real board.
+76. As a person, I want every image, video, page and motion to carry an `@id` I can reference and see on its label, so that every kind can be used by name like a prompt.
 76. As the desktop shell, I want the chrome cards to carry the DOM hooks spec 01 defines, so that the shell can style them.
 77. As a person, I want a board of large photos to zoom smoothly, so that high-resolution references never make the canvas heavy.
 78. As a person, I want every model request to use my original pixels, so that previews made for the screen never cost me quality in a generation.
@@ -125,7 +126,7 @@ Engine:
 
 Domain (pure, no I/O):
 
-- **Refs.** `slug`, `nextRef(records)`, `readRef(shape)`, `rewriteTokensOnPaste(texts, idMap)`, and the token pattern (`@` followed by `[\w-]+`).
+- **Refs.** `slug`, `nextRef(records)`, `readRef(shape)`, `isMintedRef(ref)`, `rewriteTokensOnPaste(texts, idMap)`, and the token pattern (`@` followed by `[\w-]+`).
 - **Mentions.** `mentionQuery(textBeforeCaret)` and `mentionCandidates(shapes, selfRef, query)`.
 - **Media naming.** File name and extension rules, sidecar shape, video link detection.
 - **Grouping geometry.** `wrapBox(memberBounds)` and the allowed-member rule.
@@ -167,8 +168,8 @@ Custom shape props and every later change to them use tldraw's shape migrations,
 
 ### Refs (`@id`)
 
-- Every prompt, image, video, page and motion has a `meta.ref`; every group has a `props.name`. Refs are unique across the canvas. Only prompts and groups are referenceable by `@` (spec 05 adds text results, which are prompts).
-- **A new ref is numeric.** `nextRef` returns the decimal string of one more than the largest number among: every numeric ref on the canvas, every numeric `@` token in any prompt's text, and 99. So the first ref on an empty canvas is `100`. Counting the tokens is what stops a new shape from capturing a reference to a shape that was deleted. A named group (spec 06) is not numeric and does not affect the counter.
+- Every prompt, image, video, page and motion has a `meta.ref`; every group has a `props.name`. Refs are unique across the canvas. Every one is referenceable by `@` (spec 03 says what each kind brings to a run; spec 05 adds text results, which are prompts). A mark has none.
+- **A new ref is numeric.** `nextRef` returns the decimal string of one more than the largest number among: every numeric ref on the canvas, every numeric `@` token in any prompt's text, and 99. So the first ref on an empty canvas is `100`. Counting the tokens is what stops a new shape from capturing a reference to a shape that was deleted. A ref of digits only is a minted one (`isMintedRef`); any other is a name a person gave the shape (spec 06), and a name does not affect the counter.
 - The ref is read from the live store at mint time, which includes every other tab's synced shapes.
 - **Collision repair.** Two tabs can mint the same number while one is offline. When a change lands in the room that gives a shape a ref already held by a different shape, the room keeps the shape that held it first and gives the later one `nextRef`, as an `apply` with origin `system`. Prompt texts are not rewritten.
 - `slug(s)` is spec 01's slug rule, the one definition (this spec re-exports it from domain). Used for project names, file names, and (spec 06) group names.
@@ -210,20 +211,20 @@ Custom shape props and every later change to them use tldraw's shape migrations,
 ### Prompt behaviour
 
 - **Look.** Bare text on the canvas: no fill, no border, no shadow. Default style: tldraw's sans font, size `s`, left aligned; tldraw's style panel may change these.
-- **Label.** `@<ref>` sits above the top-left corner in a 22 px band: the kit's `text-2xs` (11 px), in the case it is written (kind words in sentence case: Image, Video, Page, Motion), the muted foreground, no dot, never ellipsised. It is part of the shape and scales with the canvas.
+- **Label.** `@<ref>` sits above the top-left corner in a 22 px band: the kit's `text-2xs` (11 px), in the case it is written (kind words in sentence case: Image, Video, Page, Motion), the muted foreground, no dot. It is cut with an ellipsis at its shape's width, and a cut label shows its whole text as the browser's tooltip on hover (a label is measured only under the pointer, so it subscribes to nothing). It is part of the shape and scales with the canvas.
 - **Hug.** While `meta.sized` is false the prompt is measured from its own text on creation and on every change to the text: it grows sideways until its content is 320 canvas px wide, then wraps and grows downward. An empty prompt is measured from its hint so the hint is fully readable. Measurement is in canvas units, independent of zoom, and widths round up so the last word never wraps into a line the box has no room for. Minimum box 40 × 28.
 - **Pin.** The first pointer move of a resize drag (at least 2 px) sets `meta.sized` to true. From then the box keeps whatever size it is dragged to, and text wraps inside it. A press with no movement does not pin.
 - **Re-hug.** Double-clicking a prompt's resize edge sets `meta.sized` to false and refits immediately.
 - **Editing.** tldraw's two-step editing: one click selects (and a drag moves), double-click or `Enter` starts editing with all text selected, `Escape` leaves editing and keeps the prompt selected. A prompt that is not being edited never takes a caret.
 - **Empty hint.** "Add text…", shown whenever the text is empty. Unlike tldraw's plain text, an empty prompt is not deleted when editing ends.
 - **Text.** Stored as tldraw rich text. The plain-text rendering (paragraphs joined by `\n`) is the prompt's text for every other purpose: `@` tokens, composition, the agent.
-- **Mention menu.** While editing, when the text before the caret ends in `@` followed by zero or more `[\w-]` characters, a menu opens below the prompt listing every referenceable shape other than this prompt whose ref starts with the typed characters, compared case-insensitively. Each row shows `@<ref>` in the accent text colour and a preview: the shape's text with whitespace runs collapsed to one space, first 24 characters, secondary colour, ellipsised (a group has no preview). `↓` and `↑` move the highlight and wrap around; `Enter` or `Tab` inserts; a mouse press on a row inserts; `Escape` closes the menu (a second `Escape` leaves editing). Inserting replaces the typed `@query` with `@<ref> ` (trailing space) and puts the caret after it. The menu is 168 px tall at most and scrolls; rows are 12 px text; the highlighted and hovered row get the hover overlay colour; the surface is the popover colour at 88 % with the chrome blur.
+- **Mention menu.** While editing, when the text before the caret ends in `@` followed by zero or more `[\w-]` characters, a menu opens below the prompt listing every shape with an `@id` other than this prompt whose ref starts with the typed characters, compared case-insensitively. Rows list the names a person gave first, alphabetically, then the numbered refs in number order. Each row starts with a 20 px picture where the shape has one: a filled image's small preview, a filled clip's first frame, else the kind icon for an image, video, page or motion (a prompt and a group have none). Then `@<ref>` in the accent text colour and a preview in the secondary colour: a prompt's text with whitespace runs collapsed to one space, first 24 characters, ellipsised; a page's or motion's title the same way; otherwise the kind word (Image, Video, Page, Motion). A group has no preview. `↓` and `↑` move the highlight and wrap around; `Enter` or `Tab` inserts; a mouse press on a row inserts; `Escape` closes the menu (a second `Escape` leaves editing). Inserting replaces the typed `@query` with `@<ref> ` (trailing space) and puts the caret after it. The menu is 168 px tall at most and scrolls; rows are 12 px text; the highlighted and hovered row get the hover overlay colour; the surface is the popover colour at 88 % with the chrome blur.
 - `Enter` never inserts a newline while the menu is open.
 
 ### Media behaviour
 
-- **Empty state.** An image or video with no asset keeps a card frame (spec 12: `--card` fill, the kit border, 10 px radius) with its kind label above it ("IMAGE" or "VIDEO", same type as the prompt label) and asks for a file: a "Choose file" button (the kit's small outline Button) that opens the OS picker (`image/*` or `video/*`). A video's empty state also has a text field (the kit's small Input) with placeholder "or paste an https:// link" and, once the field holds text matching `https://` followed by anything, a "Use link" button. Default empty size: image 240 × 140, video 240 × 180.
-- **Bare once filled.** A filled image or video is the picture or clip only: no frame, no fill, no border, square corners.
+- **Empty state.** An image or video with no asset keeps a card frame (spec 12: `--card` fill, the kit border, 10 px radius) with its kind label above it ("Image" or "Video", same type as the prompt label; `@<name>` once a person has named it, spec 06) and asks for a file: a "Choose file" button (the kit's small outline Button) that opens the OS picker (`image/*` or `video/*`). A video's empty state also has a text field (the kit's small Input) with placeholder "or paste an https:// link" and, once the field holds text matching `https://` followed by anything, a "Use link" button. Default empty size: image 240 × 140, video 240 × 180.
+- **Bare once filled.** A filled image or video is the picture or clip only: no frame, no fill, no border, square corners. Its label, `@<ref>`, sits above its top-left corner like a prompt's.
 - **Size on fill.** Width is kept (240 for a new shape) and height follows the asset's aspect ratio. Replacing the media keeps the width and takes the new aspect.
 - **Resize.** Aspect-locked from every edge and corner. Width 140 to 900, height at least 100.
 - **Crop.** tldraw's image crop is kept unchanged. Video has no crop.
@@ -242,6 +243,7 @@ Custom shape props and every later change to them use tldraw's shape migrations,
 - **Sidecar.** Same base name with `.json`: `{ "source": "upload" | "copy", "fileName": "<original name>", "mime": "<type>", "bytes": <n>, "at": "<ISO time>", "of": "<source file>" }`, where `of` is present only for a copy. Pretty-printed with two-space indent.
 - **Copy (RPC).** `files.copy { project, file, from? }` returns `{ file }`. `file` must be a bare basename in the source project (`from`, default `project`), else "That is not a file in this project.". Missing file: not found, message "Could not copy the file: <message>". The copy's `fileName` is the source name with its leading `<digits>-` removed; its `mime` comes from the source sidecar, else `application/octet-stream`; its sidecar has `source: "copy"` and `of: <source file>`.
 - **Reveal.** The context menu's reveal item calls spec 01's `files.reveal { project, fileNames }`, which this spec does not redefine. Its failure message goes to the toast.
+- **Path (RPC).** `files.path { project, fileName }` returns `{ path }`, the file's absolute path, built by the engine so it has the platform's separators. The name is reduced to its basename. A project with no folder: not found, "No files for this project yet."; a file not on disk: not found, "No file <fileName> in this project.". The context menu's Copy path item puts the answer on the clipboard as text.
 
 ### Clipboard
 
@@ -272,22 +274,25 @@ Custom shape props and every later change to them use tldraw's shape migrations,
 - **Frame tool (`F`)** draws an empty group named with `nextRef`. Minimum 180 × 96, maximum 4000 × 4000. Default size from the add menu: 420 × 280.
 - **`Cmd-Shift-G`** removes the selected group (or the right-clicked one) and leaves its members at the same place on screen, selected.
 - **Delete** of a group deletes its members too, as one undo step (tldraw's frame rule).
-- Renaming a group is spec 06. In this spec the label cannot be edited.
+- Renaming a group, like naming any shape, is spec 06. In this spec no label can be edited.
 - This section is the one definition of a group's look, membership, wrap, ungroup and delete. Spec 06 builds on it and does not restate it.
 
 ### Empty pages and motions
 
-- Custom shapes with free resize, 180 × 96 to 900 × 900, default 480 × 320. A card frame with the kind icon centred when `file` is empty, and the title as the label above the top-left when set. Spec 09 adds the empty state's Agent button (which opens spec 08's Agent tray), renders the content and opens the editor on double-click.
+- Custom shapes with free resize, 180 × 96 to 900 × 900, default 480 × 320. A card frame with the kind icon centred and the kind word ("Page" or "Motion") as the label when `file` is empty, and the title as the label above the top-left when set (spec 06: `@<name>` once a person has named it). Spec 09 adds the empty state's Agent button (which opens spec 08's Agent tray), renders the content and opens the editor on double-click.
 
 ### Context menu
 
-Sections appear in this order, each only when it has at least one item. An item that would do nothing is left out, never greyed. After the Unframed sections come tldraw's own context menu groups, minus tldraw's group, ungroup, cut, copy and paste items, which Unframed's Edit section replaces.
+Sections appear in this order, each only when it has at least one item. The Image section is headed "Video" when the right-clicked shape is a video. A checkbox row (spec 09's Keep playing) starts its label where the plain rows do, with its check at the end of the row. An item that would do nothing is left out, never greyed. After the Unframed sections come tldraw's own context menu groups, minus tldraw's group, ungroup, cut, copy and paste items, which Unframed's Edit section replaces.
 
 | Section | Item | Shown when |
 | --- | --- | --- |
 | Image | "Reveal in Finder" on macOS, "Show in Explorer" on Windows, "Show in file manager" elsewhere, with " (<n>)" appended when more than one file | the right-clicked shape is a filled image or video with a project file; the files are every selected filled image and video, else the right-clicked one |
+| Image | "Copy path" | the right-clicked shape is a filled image or video with a project file; copies that file's absolute path and says "Path copied" in a toast, since a path on the clipboard cannot be seen |
 | Image | "Copy as image" | the right-clicked shape is a filled image |
-| Reference | "Copy @<ref>" | the right-clicked shape is a prompt or group |
+| Page, Motion | spec 09's "Keep playing", reveal and "Copy path" | the right-clicked shape is a filled page or motion (spec 09) |
+| Reference | "Copy @<ref>" | the right-clicked shape has an `@id` (every kind but a mark) |
+| Reference | "Rename F2" | the right-clicked shape has an `@id`; it opens spec 06's name field in the shape's label |
 | Edit | "Cut ⌘X", "Copy ⌘C" | something is selected or right-clicked |
 | Edit | "Paste ⌘V" | the clipboard holds tldraw content, a picture, a clip or text |
 | Edit | "Group ⌘G" | the selection holds at least one shape that may be a member |
@@ -297,7 +302,7 @@ Sections appear in this order, each only when it has at least one item. An item 
 
 On Windows and Linux the shortcut hints read `Ctrl+X`, `Ctrl+C`, `Ctrl+V`, `Ctrl+G`, `Ctrl+⇧G`. Right-clicking an unselected shape selects it alone first; right-clicking inside the selection keeps it. Section headings use the kit's menu label look (spec 12: extra-small medium muted text), rows highlight with the kit's accent, and a disabled row (spec 06's Add to library) has the kit's disabled look, its own text at 64 %. Menu width 188 px.
 
-Failures: "Could not show that file: <message>" or "Could not show those <n> files: <message>"; "Could not copy @<ref> to the clipboard."; "Could not copy that image to the clipboard.".
+Failures: "Could not show that file: <message>" or "Could not show those <n> files: <message>"; "Could not copy that path: <message>" or "Could not copy that path to the clipboard."; "Could not copy @<ref> to the clipboard."; "Could not copy that image to the clipboard.".
 
 ### Chrome
 
@@ -311,7 +316,9 @@ Failures: "Could not show that file: <message>" or "Could not show those <n> fil
 
 ### Labels by zoom
 
-`labelLevel(zoom)`: below 0.5 `off`; from 0.5 to below 0.75 `hover`; 0.75 and up `on`. At `off` every shape label (prompt `@id`, group label, media kind label, artifact title, and spec 03's role badges) is hidden. At `hover` a label shows only while the pointer is over its shape or the shape is selected. At `on` labels always show. The level is set once on the canvas container as an attribute and applied by CSS, so no shape re-renders on a zoom change.
+`labelLevel(zoom)`: below 0.5 `off`; from 0.5 to below 0.75 `hover`; 0.75 and up `on`. At `off` every shape label (prompt `@id`, group label, media label, artifact title, and spec 03's role badges) is hidden. At `hover` a label shows only while the pointer is over its shape or the shape is selected. At `on` labels always show. The level is set once on the canvas container as an attribute and applied by CSS, so no shape re-renders on a zoom change.
+
+A shown label takes the pointer: a press on it is a press on its shape (it selects and drags the shape, which is how a filled artifact, whose frame takes every press, is moved), and a right-click on it opens the shape's context menu. Spec 06 makes a double-click on it a rename.
 
 ### Dot grid
 

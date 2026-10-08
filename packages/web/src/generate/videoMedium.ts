@@ -19,10 +19,10 @@ import {
   type VideoSettings,
 } from "@unframed/domain";
 import type { Editor, TLShapeId } from "tldraw";
-import type { EngineConnection, Payload } from "../rpc/engine.ts";
+import type { Payload } from "../rpc/engine.ts";
 import { knownCatalogue } from "./catalogue.ts";
 import { VideoStatus } from "./composer/VideoStatus.tsx";
-import { anchorOf, answeredShape, mediaSource, pageBox } from "./facts.ts";
+import { anchorOf, answeredShape, pageBox } from "./facts.ts";
 import { NOTHING_TO_MAKE } from "./imageMedium.ts";
 import { saveLastUsed } from "./lastUsed.ts";
 import { registerMedium, type MediumDefinition, type PropValue, type RunSource, type SendInput, type TrayProps } from "./mediumRegistry.ts";
@@ -67,7 +67,7 @@ const urlOfRef = (ref: RecipeRef) => ("url" in ref ? ref.url : projectFileMarker
  * the sketch only when they are sent), the request built from those files, the landing spot
  * and the recipe.
  */
-export const videoStartRequest = async (input: {
+const videoStartRequest = async (input: {
   readonly editor: Editor;
   readonly project: string;
   readonly model: string | undefined;
@@ -76,8 +76,6 @@ export const videoStartRequest = async (input: {
   readonly entry: ModelEntry | undefined;
   readonly anchor: { x: number; y: number; w: number; h: number };
   readonly of?: ResultRecipe["of"] | undefined;
-  /** Sent as they are, in place of the tray's values checked against the model (Regenerate and Vary). */
-  readonly settings?: VideoSettings | undefined;
 }): Promise<Payload<"video.start">> => {
   const { editor, project, props, source, entry } = input;
   const arranged = videoPlan(source, props, entry);
@@ -87,8 +85,7 @@ export const videoStartRequest = async (input: {
       : arranged.sent.map((slot) => source.recipe.recipe.references[recipeSlotIndex(slot.shapeId)]!);
   const bySlot = new Map<Slot, RecipeRef>(arranged.sent.map((slot, index) => [slot, sentRefs[index]!]));
   const plan = videoPlan(source, props, entry, (slot) => urlOfRef(bySlot.get(slot)!));
-  const { prompt, input_references, frame_images, ...checked } = plan.request;
-  const settings = input.settings ?? checked;
+  const { prompt, input_references, frame_images, ...settings } = plan.request;
   const consent = shareConsent(props.shareLocalVideos);
   const model = input.model ?? knownCatalogue("video")?.default ?? "";
   const text =
@@ -118,7 +115,7 @@ export const videoStartRequest = async (input: {
   };
 };
 
-export const entryFor = (model: string | undefined) => knownCatalogue("video")?.models.find((entry) => entry.id === model);
+const entryFor = (model: string | undefined) => knownCatalogue("video")?.models.find((entry) => entry.id === model);
 
 const send = async ({ editor, engine, project, values, source, remember }: SendInput) => {
   const anchor = anchorOf(editor, source);
@@ -152,47 +149,6 @@ export const fromRecipe = (recipe: ResultRecipe): TrayProps => {
   const props: Record<string, PropValue> = { ...recipe.params };
   if (typeof props.duration === "number") props.duration = String(props.duration);
   return props;
-};
-
-/** A recipe's recorded params as a request sends them: exactly as recorded, whatever the catalogue says now. */
-export const recordedSettings = (params: ResultRecipe["params"]): VideoSettings => ({
-  ...(typeof params.duration === "number" ? { duration: params.duration } : {}),
-  ...(typeof params.resolution === "string" ? { resolution: params.resolution } : {}),
-  ...(typeof params.aspect_ratio === "string" ? { aspect_ratio: params.aspect_ratio } : {}),
-  ...(typeof params.size === "string" ? { size: params.size } : {}),
-  ...(typeof params.generate_audio === "boolean" ? { generate_audio: params.generate_audio } : {}),
-});
-
-/**
- * Regenerate and Vary on a video result: the recorded recipe exactly, through `video.start`,
- * beside the result. Vary adds the result's own clip as the last video reference; the one
- * video rule then decides whether it is sent, so in a frame mode it is not.
- */
-export const repeatVideo = async (
-  editor: Editor,
-  engine: EngineConnection,
-  project: string,
-  shapeId: TLShapeId,
-  action: "regenerate" | "vary",
-  recorded: ResultRecipe,
-): Promise<void> => {
-  const shape = editor.getShape(shapeId);
-  const clip = shape ? mediaSource(editor, shape).file : undefined;
-  if (action === "vary" && clip === undefined) throw new Error("This result has no clip to vary.");
-  const recipe: ResultRecipe = action === "vary" ? { ...recorded, references: [...recorded.references, { kind: "video", file: clip! }] } : recorded;
-  const sidecar = shape ? resultMetaOf(shape)?.sidecar : undefined;
-  const request = await videoStartRequest({
-    editor,
-    project,
-    model: recorded.model,
-    props: fromRecipe(recorded),
-    source: { kind: "recipe", recipe: { shapeId, recipe, selection: [] }, instruction: recorded.instruction },
-    entry: entryFor(recorded.model),
-    anchor: pageBox(editor, shapeId) ?? { x: 0, y: 0, w: 0, h: 0 },
-    settings: recordedSettings(recorded.params),
-    ...(typeof sidecar === "string" ? { of: { sidecar, action } } : {}),
-  });
-  await engine.call("video.start", request);
 };
 
 export const videoMedium: MediumDefinition = {

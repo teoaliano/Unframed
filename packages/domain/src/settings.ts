@@ -60,5 +60,23 @@ export const readPort = (
   return port <= 65535 ? { ok: true, port } : { ok: false, value };
 };
 
+/**
+ * The preview origin's port when `UNFRAMED_PREVIEW_PORT` is unset: fixed, so a link to an
+ * artifact opened in the person's own browser survives a restart. When something else holds
+ * it, the engine falls back to an OS-assigned port for that run.
+ */
+export const PREVIEW_PORT_DEFAULT = 18787;
+
+/**
+ * The preview origin's port, from `UNFRAMED_PREVIEW_PORT` in the process environment only
+ * (never `.env`): an integer from 0 to 65535, `0` meaning OS-assigned, 18787 when unset.
+ */
+export const readPreviewPort = (processEnv: EnvVars): { readonly ok: true; readonly port: number } | { readonly ok: false; readonly value: string } => {
+  const value = processEnv.UNFRAMED_PREVIEW_PORT?.trim();
+  if (value === undefined || value === "") return { ok: true, port: PREVIEW_PORT_DEFAULT };
+  const port = /^\d{1,5}$/.test(value) ? Number(value) : Number.NaN;
+  return port <= 65535 ? { ok: true, port } : { ok: false, value };
+};
+
 /** The last four characters of the key, or `''`. The only part of the key the web learns. */
 export const keyHint = (key: string): string => (key.length === 0 ? "" : key.slice(-4));

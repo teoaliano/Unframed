@@ -181,8 +181,22 @@ interface CommandBase {
   readonly threadId: string;
 }
 
+/**
+ * A command about every chat of a project at once. Its events still belong to each chat it
+ * touches, and its receipt names the project.
+ */
+export interface ProjectCommand {
+  readonly commandId: string;
+  readonly projectId: string;
+  /** Deletes every chat that is not running when the command runs; running chats finish and stay. */
+  readonly type: "project.chats.clear";
+}
+
 /** Commands the web dispatches. */
-export type ClientCommand = CommandBase &
+export type ClientCommand = ThreadClientCommand | ProjectCommand;
+
+/** The web's commands about one chat. */
+export type ThreadClientCommand = CommandBase &
   (
     | {
         readonly type: "thread.create";
@@ -218,6 +232,10 @@ export type ClientCommand = CommandBase &
     | { readonly type: "thread.turn.revert"; readonly turnCount: number }
     | { readonly type: "thread.checkpoint.revert"; readonly turnCount: number; readonly restoreCanvas: boolean }
     | { readonly type: "thread.session.stop" }
+    /** Detach: the person unlinks artifacts from the chat. A later write to one tags it again. */
+    | { readonly type: "thread.tags.remove"; readonly ids: ReadonlyArray<string> }
+    /** Undo of a Detach. The engine keeps only ids that are artifacts on the canvas, as for `thread.create`'s tags. */
+    | { readonly type: "thread.tags.add"; readonly ids: ReadonlyArray<string> }
   );
 
 export interface ActivityInput {
@@ -280,6 +298,7 @@ export type ChatEventType =
   | "thread.proposed-plan-upserted"
   | "thread.activity-appended"
   | "thread.tagged"
+  | "thread.untagged"
   | "thread.turn-files-completed"
   | "thread.turn-revert-requested"
   | "thread.turn-reverted"

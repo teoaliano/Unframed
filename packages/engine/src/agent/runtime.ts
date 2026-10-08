@@ -299,6 +299,10 @@ export class AgentRuntime {
       resolved = { ...command, message: { ...command.message, attachments } };
     } else if (command.type === "thread.create" && command.tags !== undefined) {
       resolved = { ...command, tags: await this.artifactsAmong(agent.slug, command.tags) };
+    } else if (command.type === "thread.tags.add") {
+      const ids = await this.artifactsAmong(agent.slug, command.ids);
+      if (ids.length === 0) throw new DispatchError("not_found", "That artifact is no longer on the canvas.");
+      resolved = { ...command, ids };
     }
     try {
       const answer = await agent.engine.dispatch(resolved, { actor: "client" });

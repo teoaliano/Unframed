@@ -14,6 +14,7 @@ import {
   DIALS_CONTRACT,
   DIALS_TIMELINE,
   injectTags,
+  isMintedRef,
   MOTION_READ_SHAPE_ID,
   MOTION_READ_TEXT,
   MOTION_WRITE_ARGUMENTS,
@@ -26,6 +27,7 @@ import {
   placeBesideSelection,
   PLAN_NO_WRITES_MESSAGE,
   projectSlug,
+  readRef,
   roomShapeId,
   shapeKind,
   type ActivityInput,
@@ -98,8 +100,11 @@ export class ArtifactTools {
       if ("error" in found) return refuse(found.error);
       target = found.shape;
     }
-    const given = typeof args.title === "string" ? args.title.slice(0, ARTIFACT_TITLE_MAX) : undefined;
-    const title = (given ?? (typeof target?.props.title === "string" ? target.props.title : "")).trim();
+    const current = typeof target?.props.title === "string" ? target.props.title : "";
+    // A page or motion the person named keeps their name: its title is that name (spec 09).
+    const named = target !== undefined && !isMintedRef(readRef(target) ?? "0");
+    const given = typeof args.title === "string" && !named ? args.title.slice(0, ARTIFACT_TITLE_MAX) : undefined;
+    const title = (given ?? current).trim();
 
     const folder = await context.folder(binding.project);
     let written: { file: string; bytes: number };

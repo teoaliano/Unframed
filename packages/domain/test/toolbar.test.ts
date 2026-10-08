@@ -14,13 +14,9 @@ const result = (id: string, batchId = `b-${id}`, cost: number | null = 0.1, extr
 describe("the toolbar's state", () => {
   it.each<[string, ReadonlyArray<ToolbarShape>, boolean, unknown]>([
     ["nothing selected: no bar", [], false, { kind: "none" }],
-    ["exactly one result: its actions", [result("r")], true, { kind: "result", shapeId: "r", vary: true }],
-    [
-      "exactly one text result: no Vary",
-      [result("t", "b-t", 0.01, { kind: "prompt", textResult: true })],
-      true,
-      { kind: "result", shapeId: "t", vary: false },
-    ],
+    ["exactly one result: Generate from it, Regenerate", [result("r")], true, { kind: "result", shapeId: "r", generate: true }],
+    ["exactly one text result: the same actions", [result("t", "b-t", 0.01, { kind: "prompt" })], true, { kind: "result", shapeId: "t", generate: true }],
+    ["exactly one result with nothing to send (a failed render): Regenerate without Generate", [result("v", "b-v", null, { kind: "video" })], false, { kind: "result", shapeId: "v", generate: false }],
     ["exactly one result still generating", [result("r", "b-r", null, { generating: true })], true, { kind: "generating", shapeId: "r" }],
     ["exactly one page with a file: Open", [{ id: "a", kind: "page", file: "a.html" }], false, { kind: "open", shapeId: "a" }],
     ["exactly one motion with a file: Open", [{ id: "m", kind: "motion", file: "m.html" }], false, { kind: "open", shapeId: "m" }],

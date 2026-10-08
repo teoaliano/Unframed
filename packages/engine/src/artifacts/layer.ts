@@ -21,6 +21,7 @@ import { ensureLibrary, writeUploadedArtifact } from "./artifactStore.ts";
 import { findChrome } from "./chrome.ts";
 import { producerBackend, Renderer, RenderRefused, stubBackend } from "./renderer.ts";
 import { HeadlessChrome } from "./headlessChrome.ts";
+import { LivePointers } from "./livePointers.ts";
 import { chromeSnapshotRenderer, Snapshots, stubSnapshotRenderer, type SnapshotRenderer } from "./snapshots.ts";
 import { SettingsStore } from "../settingsStore.ts";
 import { Shutdown } from "../shutdown.ts";
@@ -41,6 +42,8 @@ export class Artifacts extends Context.Service<
     }) => Effect.Effect<{ id: string; status: "queued"; placeholder: string }, UnframedError>;
     readonly renderStatus: (project: string, id: string) => Effect.Effect<RenderStatus, UnframedError>;
     readonly snapshots: (project: string) => Stream.Stream<ArtifactSnapshot, UnframedError>;
+    /** "Open in a new tab": the shape's live viewer pointer, kept current from then on. */
+    readonly openLive: (project: string, shapeId: string) => Effect.Effect<{}, UnframedError>;
     /** The Chromium this machine has, for the agent's previews and snapshots. */
     readonly findChrome: () => Promise<string | undefined>;
     /** The engine-owned headless Chrome that snapshots and the agent's previews share. */
@@ -87,6 +90,21 @@ export const artifactsLayer = Layer.effect(
     });
     yield* rooms.afterCommit((project, change) => snapshots.committed(project, [...change.records.values()]));
 
+    const pointers = new LivePointers((project) => media.folder(project));
+    yield* rooms.afterOpen((project, room) => pointers.opened(project, room.read()));
+    yield* rooms.afterCommit((project, change) => pointers.committed(project, change.records.values(), change.removed));
+
+    const openLive = (project: string, shapeId: string) =>
+      Effect.gen(function* () {
+        const records = yield* rooms.read(project);
+        const opened = yield* Effect.tryPromise({
+          try: () => pointers.open(projectSlug(project), records.find((record) => record.id === shapeId)),
+          catch: (error) => unframedError("internal", `Could not open the live viewer: ${errorText(error)}`),
+        });
+        if (opened === false) return yield* unframedError("not_found", `There is no page or motion ${shapeId} on this canvas.`);
+        return {};
+      });
+
     const renderer = new Renderer({
       backend,
       folder: (project) => media.folder(project),
@@ -132,6 +150,7 @@ export const artifactsLayer = Layer.effect(
             );
           }),
         ),
+      openLive,
       findChrome: chrome,
       chrome: headless,
     });

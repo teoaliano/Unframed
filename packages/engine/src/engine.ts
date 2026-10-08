@@ -1,6 +1,6 @@
 import type http from "node:http";
 import { UnframedRpcs, type EngineIpcMessage, type Settings } from "@unframed/contracts";
-import { readPort } from "@unframed/domain";
+import { readPort, readPreviewPort } from "@unframed/domain";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as ManagedRuntime from "effect/ManagedRuntime";
@@ -92,13 +92,18 @@ export const startEngine = async (host: EngineHost): Promise<RunningEngine> => {
   }
   const port = readPort(fileVars, host.env);
   if (!port.ok) throw new Error(`PORT has to be a whole number from 0 to 65535, not "${port.value}".`);
+  const wantedPreviewPort = readPreviewPort(host.env);
+  if (!wantedPreviewPort.ok) throw new Error(`UNFRAMED_PREVIEW_PORT has to be a whole number from 0 to 65535, not "${wantedPreviewPort.value}".`);
 
   // Bound before the services exist, so it reads the output folder once they do.
   let outputDir: (() => Promise<string>) | undefined;
-  const preview = await startPreviewOrigin(() => (outputDir === undefined ? Promise.reject(new Error("starting")) : outputDir())).catch((error: unknown) => {
-    throw new Error(`could not start the preview origin on ${LOOPBACK_HOST}: ${errorText(error)}`);
-  });
+  const preview = await startPreviewOrigin(() => (outputDir === undefined ? Promise.reject(new Error("starting")) : outputDir()), wantedPreviewPort.port).catch(
+    (error: unknown) => {
+      throw new Error(`could not start the preview origin on ${LOOPBACK_HOST}: ${errorText(error)}`);
+    },
+  );
   const previewPort = preview.port;
+  if (preview.taken !== undefined) logInfo(`preview port ${preview.taken} is taken, so this run uses ${previewPort}.`);
 
   const services = Layer.mergeAll(RpcServer.layer(UnframedRpcs, { disableTracing: true })).pipe(
     Layer.provideMerge(rpcHandlersLayer),

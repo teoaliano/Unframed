@@ -25,7 +25,7 @@ The **Runs** prop for the image medium. A number from 1 to 10 fires that many pa
 7. As a person, I want a referenced answer substituted literally and never re-scanned for `@` tokens, so that model output can never pull in other prompts or loop.
 8. As a person, I want the answer's cost and `@id` on its line, so that I know what it cost and what to type.
 9. As a person, I want to edit a text result without it re-running, so that I can tidy the answer.
-10. As a person, I want Regenerate and Recipe on a text result, so that I can get another answer or tweak the run.
+10. As a person, I want Generate and Regenerate on a text result, so that I can build on the answer, get another one, or tweak the run.
 11. As a person, I want to copy a text result out as a plain prompt, so that I can edit it into a prompt whose own `@` tokens resolve.
 12. As a person, I want a placeholder that says the text run is in flight, so that I can see it working.
 13. As a person, I want a failed text run to tell me why, so that I can fix it.
@@ -102,11 +102,11 @@ The landed shape, a **text result**:
 - It is editable like any prompt. Editing never re-runs. Its text is always substituted literally, never re-scanned (spec 03's resolver), before and after an edit.
 - Copies keep the result meta, so a copy is still a text result.
 - The context menu gains `Copy as prompt` on a text result: it places a plain prompt with the same text beside it (spec 03's result placement, anchored on the text result), with no result meta, so its `@` tokens resolve normally.
-- The result bar (spec 03's toolbar states) shows Regenerate (primary, Button `default`), Recipe (Button `ghost`), Agent. There is no Vary.
+- The result bar (spec 03's toolbar states) shows Regenerate (Button `outline`), Agent, Generate (primary, Button `default`, last), as on an image result.
 
 In flight: a placeholder text result is written into the room at once, holding no text, with spec 03's run marker, showing a spinner and `Running…`. On success its text is set to the answer and its marker cleared. On failure it is deleted and the run report toast shows `0 of 1 succeeded. <message>`. Every run marker rule of spec 03 applies unchanged.
 
-Regenerate runs the recipe exactly (recorded model, selection prompt, instruction, reference files) and lands a new text result beside the old one. Recipe opens the composer in recipe mode with the text medium.
+Generate opens the composer on the text result as on any selection. Regenerate opens the composer in recipe mode with the text medium; sent unchanged, it runs the recipe exactly (recorded model, selection prompt, instruction, reference files) and lands a new text result beside the old one.
 
 ### RPC methods
 
@@ -146,7 +146,7 @@ Spec 03's result meta field `batchExtraCost` is set on every member of a Free ba
 
 Free is a value of Runs, image medium only.
 
-Source: walk the composition's flattened order (spec 03: top to bottom, groups expanded in place). The source is the first text result; if there is none, the first prompt. A group is never itself the source, but its members take part in the walk. The list text is a text result's text verbatim, or a prompt's text with its `@id` references resolved, where a reference to the source itself fails as a cycle.
+Source: walk the composition's flattened order (spec 03: top to bottom, groups expanded in place). The source is the first text result; if there is none, the first prompt. A group is never itself the source, but its members take part in the walk. The list text is a text result's text verbatim, or a prompt's text with its `@id` references resolved, where a reference to the source itself fails as a cycle. In the list text an image's or video's `@id` (spec 03) is left as typed and attaches nothing: an item uses the pictures it picks from the selection, so a picture an item should use is selected, not named.
 
 Tray messages in Free:
 
@@ -188,7 +188,7 @@ Notes, joined with ` · `, repair notes first:
 - `skipped <n> section with no prompt text` or `skipped <n> sections with no prompt text`.
 - `no image 5 selected` or `no images 2, 5 selected`: the distinct dropped numbers across all runs, ascending.
 
-Recipes for Free outputs: each output's recipe records its own run exactly, so Regenerate repeats that one run. Its `selectionPrompt` is `shared` and the section joined, its `instruction` the instruction, its `references` that run's references. Recipe mode for a Free output sets Runs to 1. The image sidecar adds `free: { picks: number[] | null, dropped: number[] }`.
+Recipes for Free outputs: each output's recipe records its own run exactly, so Regenerate, sent unchanged, repeats that one run. Its `selectionPrompt` is `shared` and the section joined, its `instruction` the instruction, its `references` that run's references. Recipe mode for a Free output sets Runs to 1. The image sidecar adds `free: { picks: number[] | null, dropped: number[] }`.
 
 ### The final prompt dialog
 
@@ -217,7 +217,7 @@ type TextSidecar = {
   prompt: string; model: string; result: string
   referenceCount: number; references: { images: number; videos: number }
   batchId: string | null; cost: number | null; createdAt: string
-  recipe?: ResultRecipe      // spec 03's recipe schema: medium 'text', params {}, of.action never 'vary'
+  recipe?: ResultRecipe      // spec 03's recipe schema: medium 'text', params {}
 }
 ```
 
@@ -257,7 +257,7 @@ A good test drives one of the three seams and asserts only on what it exposes. P
 22. Text run end to end: a text result lands beside the selection with the answer, its `@id` and `$cost · @id` line. Seam: browser.
 23. A prompt referencing a text result by `@id` sends the answer literally, including an answer that contains `@` tokens. Seam: browser.
 24. Editing a text result changes what it contributes, does not re-run, and stays literal. Seam: browser.
-25. Text result bar: Regenerate and Recipe, no Vary; Regenerate lands a second answer from the recorded recipe. Seam: browser.
+25. Text result bar: Generate, Regenerate, Agent; Regenerate sent unchanged lands a second answer from the recorded recipe. Seam: browser.
 26. `Copy as prompt` places a plain prompt whose `@` tokens resolve. Seam: browser.
 27. Runs prop: `+ add prop` lists `Runs 1`; the chip shows `4×`; Remove resets to 1; model change leaves it. Seam: browser.
 28. Runs field: digits only, clamped on input, typed draft kept until blur; focusing it leaves Free. Seam: browser.
@@ -271,7 +271,7 @@ A good test drives one of the three seams and asserts only on what it exposes. P
 36. Final prompt dialog: opens after the repair without any image call; shared text, instruction, sections, rows, warnings, notes. Seam: browser.
 37. Final prompt dialog: editing updates rows live; confirm sends the edited batch with the staged batch id and no second text call; edits not written back. Seam: browser.
 38. Final prompt dialog: Cancel and Esc send nothing; a cycle typed into the text disables Generate with the message. Seam: browser.
-39. Recipe on a Free output: recipe mode with Runs set to 1 and that run's prompt and references. Seam: browser.
+39. Regenerate on a Free output: recipe mode with Runs set to 1 and that run's prompt and references. Seam: browser.
 40. Last-used values keep Runs, Free and View final prompt for image and the model for text. Seam: browser.
 
 ## Out of Scope

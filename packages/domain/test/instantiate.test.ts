@@ -37,6 +37,18 @@ describe("instantiate", () => {
     expect(byId(instantiate(preset("character"), ["character", "character-2"], counter(300)), "shape:g").props.name).toBe("character-3");
   });
 
+  it("keeps a named prompt's or medium's name like a group's, suffixed when the canvas uses it", () => {
+    const named = content([
+      groupShape("shape:g", "set"),
+      promptShape("shape:a", "scene", "@hero in the snow", { x: 28, y: 56 }, "shape:g"),
+      imageShape("shape:i", "hero", null, { x: 28, y: 200 }, "shape:g"),
+    ]);
+    const made = instantiate(named, ["hero"], counter(300));
+    expect(byId(made, "shape:a").meta.ref).toBe("scene");
+    expect(byId(made, "shape:i").meta.ref).toBe("hero-2");
+    expect(textOf(byId(made, "shape:a"))).toBe("@hero-2 in the snow");
+  });
+
   it("re-mints a group whose @id was a minted one", () => {
     const made = instantiate(preset("150"), [], counter(300));
     expect(byId(made, "shape:g").props.name).toBe("300");

@@ -157,7 +157,7 @@ describe("Claude event mapping", () => {
       {
         type: "thread.token-usage.updated",
         turnId: "turn:1",
-        payload: { usage: { usedTokens: 1125, maxTokens: 200000, inputTokens: 100, outputTokens: 20, cachedInputTokens: 1000, cacheCreationInputTokens: 5 } },
+        payload: { usage: { usedTokens: 1125, maxTokens: 200000, totalProcessedTokens: 1125, inputTokens: 100, outputTokens: 20, cachedInputTokens: 1000, cacheCreationInputTokens: 5 } },
       },
       {
         type: "turn.completed",
@@ -165,6 +165,48 @@ describe("Claude event mapping", () => {
         payload: { state: "completed", stopReason: "end_turn", usage: { inputTokens: 100, outputTokens: 20, cachedInputTokens: 1000, cacheCreationInputTokens: 5 }, totalCostUsd: 0.0123 },
       },
     ]);
+  });
+
+  it("counts the context from the last top-level API call and reports the turn's sum as total processed", () => {
+    const call = (id: string, usage: Record<string, number>, content: unknown[], parent: string | null = null) => ({
+      type: "assistant",
+      uuid: `u-${id}`,
+      parent_tool_use_id: parent,
+      message: { id, role: "assistant", content, usage },
+    });
+    const { events } = replay([
+      call("msg_1", { input_tokens: 10, cache_read_input_tokens: 50_000, cache_creation_input_tokens: 2_000, output_tokens: 300 }, [{ type: "tool_use", id: "t1", name: "Task", input: {} }]),
+      call("msg_s", { input_tokens: 5, cache_read_input_tokens: 900_000, cache_creation_input_tokens: 0, output_tokens: 40 }, [{ type: "text", text: "sub" }], "t1"),
+      { type: "user", message: { content: [{ type: "tool_result", tool_use_id: "t1", content: "ok" }] } },
+      call("msg_2", { input_tokens: 20, cache_read_input_tokens: 52_000, cache_creation_input_tokens: 400, output_tokens: 150 }, [{ type: "text", text: "Done." }]),
+      {
+        type: "result",
+        subtype: "success",
+        is_error: false,
+        result: "Done.",
+        usage: { input_tokens: 30, output_tokens: 450, cache_read_input_tokens: 102_000, cache_creation_input_tokens: 2_400 },
+        modelUsage: { "claude-opus-5-5": { contextWindow: 1_000_000 } },
+      },
+    ]);
+    expect(events.find((event) => event.type === "thread.token-usage.updated")).toEqual({
+      type: "thread.token-usage.updated",
+      turnId: "turn:1",
+      payload: {
+        usage: { usedTokens: 52_570, maxTokens: 1_000_000, totalProcessedTokens: 104_880, inputTokens: 30, outputTokens: 450, cachedInputTokens: 102_000, cacheCreationInputTokens: 2_400 },
+      },
+    });
+  });
+
+  it("keeps the last real call's context when a turn ends on an API error's stand-in message", () => {
+    const zero = { input_tokens: 0, output_tokens: 0, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 };
+    const { events } = replay([
+      { type: "assistant", uuid: "u-a", parent_tool_use_id: null, message: { id: "a", model: "claude-opus-5-5", content: [{ type: "tool_use", id: "t", name: "Read", input: {} }], usage: { input_tokens: 10, cache_read_input_tokens: 150_000, cache_creation_input_tokens: 2_000, output_tokens: 300 } } },
+      { type: "assistant", uuid: "u-s", parent_tool_use_id: null, message: { id: "s", model: "<synthetic>", content: [{ type: "text", text: "API Error: 500" }], usage: zero } },
+      // A zero usage counts for nothing, whatever the model says.
+      { type: "assistant", uuid: "u-z", parent_tool_use_id: null, message: { id: "z", model: "claude-opus-5-5", content: [], usage: zero } },
+      { type: "result", subtype: "success", is_error: true, result: "API Error: 500", usage: { input_tokens: 10, output_tokens: 300, cache_read_input_tokens: 150_000, cache_creation_input_tokens: 2_000 }, modelUsage: { "claude-opus-5-5": { contextWindow: 1_000_000 } } },
+    ]);
+    expect(events.find((event) => event.type === "thread.token-usage.updated")?.payload).toMatchObject({ usage: { usedTokens: 152_310, totalProcessedTokens: 152_310 } });
   });
 
   it("maps an error result to a failed turn with the SDK's subtype, and a success with API status 529 to a failure", () => {
