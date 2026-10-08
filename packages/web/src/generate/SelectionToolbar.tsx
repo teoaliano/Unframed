@@ -13,7 +13,7 @@ import { showError } from "../toasts.tsx";
 import { useKnownCatalogue, usePricing } from "./catalogue.ts";
 import { Composer } from "./composer/Composer.tsx";
 import { assetOf, canvasShapes, resultShapes, toolbarShape } from "./facts.ts";
-import { placeFloating, type ScreenBox } from "./floating.ts";
+import { canvasRoom, placeFloating, type ScreenBox } from "./floating.ts";
 import { mediumDefinition, type RunSource } from "./mediumRegistry.ts";
 import { openOnRecipe, recipeProps, recipeRunProgress, runGroupRecipe } from "./recipeRuns.ts";
 import { closeComposer, composerState, leaveRecipeMode, openComposer } from "./state.ts";
@@ -87,16 +87,7 @@ const Floating = ({ target, hidden, expanded, framed, children }: { target: Scre
     return () => observer.disconnect();
   }, []);
 
-  const canvas = useValue(
-    "canvas size",
-    () => {
-      const bounds = editor.getViewportScreenBounds();
-      // The bottom bar sits above the bar and composer in tldraw's layer: they stay clear of it.
-      const bar = editor.getContainer().querySelector<HTMLElement>("[data-unframed-toolbar]")?.getBoundingClientRect();
-      return { w: bounds.w, h: bar ? Math.min(bounds.h, bar.top - bounds.y) : bounds.h };
-    },
-    [editor],
-  );
+  const canvas = useValue("canvas room", () => canvasRoom(editor), [editor]);
   const place = size && target ? placeFloating(target, size, canvas) : undefined;
 
   return (
@@ -317,7 +308,7 @@ const RecipeBar = ({ state, agent }: { state: Extract<ToolbarState, { kind: "rec
 
 const Bar = ({ state, onGenerate, agent }: { state: Exclude<ToolbarState, { kind: "none" }>; onGenerate: () => void; agent: ReactNode }) => {
   const editor = useEditor();
-  const { openArtifact, renderButton: Render } = useSlots();
+  const { openArtifact, renderButton: Render, parametersButton: ParametersToggle } = useSlots();
   switch (state.kind) {
     case "recipe":
       return <RecipeBar state={state} agent={agent} />;
@@ -338,6 +329,7 @@ const Bar = ({ state, onGenerate, agent }: { state: Exclude<ToolbarState, { kind
             Editor
           </Button>
           {Render && editor.getShape(state.shapeId as TLShapeId)?.type === "motion" && <Render shapeId={state.shapeId as TLShapeId} />}
+          {ParametersToggle && <ParametersToggle shapeId={state.shapeId as TLShapeId} />}
           {agent}
         </div>
       );

@@ -57,43 +57,36 @@
  * theme.css, and the code surface tokens.
  */
 
-/* DialKit: its variables from the kit's dark tokens. */
+/* DialKit: its variables from the kit's tokens. */
 
 /*
- * DialKit stays dark in both schemes (spec 09), so these are the values theme.css gives the
- * tokens in its dark block, written out, not var(--card) and the rest, which follow the
- * scheme. Edit them with that block: artifactDials.spec.ts fails when the two differ. The
- * attribute outranks DialKit's
- * own .dialkit-root rule, which loads after this file with the editor.
+ * DialKit follows the app's scheme (spec 09): the controls set its data-theme from
+ * data-unframed-theme, and these variables read the tokens, which change with the scheme, so
+ * its panel is the card it sits on. :root outranks DialKit's own .dialkit-root and
+ * [data-theme="light"] rules, which load after this file with the first panel.
  */
-.dialkit-root[data-theme="dark"] {
-  /* --card and --popover */
-  --dial-glass-bg: color-mix(in srgb, var(--color-neutral-950) 97%, var(--color-white));
-  --dial-dropdown-bg: color-mix(in srgb, var(--color-neutral-950) 97%, var(--color-white));
-  /* --accent, --input, then the foreground mixes the kit uses for selected rows */
-  --dial-surface: --alpha(var(--color-white) / 4%);
-  --dial-surface-hover: --alpha(var(--color-white) / 8%);
-  --dial-surface-active: color-mix(in srgb, var(--color-neutral-100) 12%, transparent);
-  /* --border */
-  --dial-surface-subtle: --alpha(var(--color-white) / 6%);
-  --dial-border: --alpha(var(--color-white) / 6%);
-  --dial-border-hover: color-mix(in srgb, var(--color-neutral-100) 20%, transparent);
-  /* --foreground */
-  --dial-text-root: var(--color-neutral-100);
-  --dial-text-focus: var(--color-neutral-100);
-  --dial-text-primary: var(--color-neutral-100);
-  /* --muted-foreground */
-  --dial-text-section: color-mix(in srgb, var(--color-neutral-500) 90%, var(--color-white));
-  --dial-text-label: color-mix(in srgb, var(--color-neutral-500) 90%, var(--color-white));
-  --dial-text-secondary: color-mix(in srgb, var(--color-neutral-500) 90%, var(--color-white));
-  --dial-text-tertiary: color-mix(in srgb, var(--color-neutral-500) 90%, var(--color-white));
-  /* --ring */
-  --dial-focus-ring: var(--color-sky-300);
+:root .dialkit-root[data-theme] {
+  --dial-glass-bg: var(--card);
+  --dial-dropdown-bg: var(--popover);
+  --dial-surface: var(--accent);
+  --dial-surface-hover: color-mix(in srgb, var(--foreground) 8%, transparent);
+  --dial-surface-active: color-mix(in srgb, var(--foreground) 12%, transparent);
+  --dial-surface-subtle: var(--border);
+  --dial-border: var(--border);
+  --dial-border-hover: color-mix(in srgb, var(--foreground) 20%, transparent);
+  --dial-text-root: var(--foreground);
+  --dial-text-focus: var(--foreground);
+  --dial-text-primary: var(--foreground);
+  --dial-text-section: var(--muted-foreground);
+  --dial-text-label: var(--muted-foreground);
+  --dial-text-secondary: var(--muted-foreground);
+  --dial-text-tertiary: var(--muted-foreground);
+  --dial-focus-ring: var(--ring);
   --dial-radius: var(--control-radius);
   font-family: var(--font-sans);
 }
 
 /* The editor's Parameters column insets its header and its prompt box 10 px: DialKit's panel matches. */
-.dialkit-root[data-theme="dark"] .dialkit-panel-inline {
+:root .dialkit-root[data-theme] .dialkit-panel-inline {
   padding: 10px;
 }

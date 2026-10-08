@@ -1,4 +1,4 @@
-import { artifactUrl, type ArtifactKind, type DialsAnnouncement } from "@unframed/domain";
+import { artifactUrl, defaultDialValues, normaliseDials, type ArtifactKind, type DialsAnnouncement } from "@unframed/domain";
 import { useEffect, useRef } from "react";
 
 export interface ArtifactFrameProps {
@@ -109,6 +109,7 @@ export const ArtifactFrame = ({ project, kind, file, previewPort, dials, interac
   saved.current = dials;
   const announce = useRef(onAnnounce);
   announce.current = onAnnounce;
+  const heard = useRef<DialsAnnouncement | undefined>(undefined);
 
   const post = (message: unknown) => {
     try {
@@ -130,6 +131,7 @@ export const ArtifactFrame = ({ project, kind, file, previewPort, dials, interac
       if (isMenu(event.data)) return openShapeMenu(frame.current, event.data);
       const data = event.data as DialsAnnouncement | null;
       if (typeof data !== "object" || data === null || data.type !== "unframed:dials") return;
+      heard.current = data;
       if (nonEmpty(saved.current)) set(saved.current);
       announce.current?.(data);
     };
@@ -145,7 +147,13 @@ export const ArtifactFrame = ({ project, kind, file, previewPort, dials, interac
       first.current = false;
       return;
     }
-    if (nonEmpty(dials)) set(dials);
+    if (nonEmpty(dials)) {
+      set(dials);
+      return;
+    }
+    // Cleared, by an undo of the first change: back to the defaults the artifact declared.
+    const declared = heard.current === undefined ? undefined : normaliseDials(heard.current.config);
+    if (declared?.ok) set(defaultDialValues(declared.schema));
   }, [serialised]);
 
   return (

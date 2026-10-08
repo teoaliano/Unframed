@@ -79,7 +79,8 @@ export const RenderButton = ({ shapeId }: { readonly shapeId: TLShapeId }) => {
   return (
     <Button variant="outline" size="sm" disabled={rendering} onClick={() => void startRender(editor, engine, project, shapeId)}>
       <Clapperboard aria-hidden />
-      Render
+      {/* In a narrow editor header the icon stays and the word leaves the screen, not the button's name. */}
+      <span className="@max-[520px]/editor-header:sr-only">Render</span>
     </Button>
   );
 };

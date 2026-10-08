@@ -284,3 +284,166 @@ test("the editor's columns, header actions and parameter box are the kit's, in b
     await expectToken(editor(page), "background-color", "--background");
   });
 });
+
+/** A page that shows its own viewport, and a number drawn once per load, so a reload shows. */
+const VIEWPORT_PAGE = `<!doctype html><html><body><h1 id="vp"></h1><p id="boot"></p><script>
+document.getElementById("boot").textContent = String(Math.random());
+const show = () => (document.getElementById("vp").textContent = innerWidth + "x" + innerHeight);
+show();
+addEventListener("resize", show);
+</script></body></html>`;
+
+test("the editor sizes its preview to Fill, Desktop, Tablet, Mobile or a typed size, shrinks it to fit, and remembers it per artifact for the session", async ({ page, agent }) => {
+  await openCanvas(page, agent);
+  await filledArtifact(agent, { id: "shape:landing", kind: "page", ref: "150", at: { x: -520, y: -40 }, size: { w: 400, h: 260 }, title: "Landing", html: VIEWPORT_PAGE });
+  await filledArtifact(agent, { id: "shape:other", kind: "page", ref: "151", at: { x: -520, y: 300 }, size: { w: 300, h: 180 }, title: "Other", html: VIEWPORT_PAGE });
+  await expect(shapeOnScreen(page, "shape:other")).toBeVisible();
+  const open = async (id: string, title: string) => {
+    await page.mouse.click(640, 600);
+    const at = await centre(shapeOnScreen(page, id));
+    await page.mouse.dblclick(at.x, at.y);
+    await expect(page.getByRole("region", { name: `Editing ${title}` })).toBeVisible();
+  };
+  const trigger = () => editor(page).getByRole("button", { name: "Preview size" });
+  const popup = () => page.getByRole("dialog", { name: "Preview size" });
+  const choose = async (label: string) => {
+    await trigger().click();
+    await popup().getByRole("radio", { name: label }).click();
+  };
+
+  await open("shape:landing", "Landing");
+  const region = page.getByRole("region", { name: "Editing Landing" });
+  const inside = region.frameLocator("iframe[data-artifact-frame]");
+  const frame = region.locator("iframe[data-artifact-frame]");
+  await expect(trigger()).toContainText("Fill");
+  await expect(inside.locator("#vp")).toHaveText(/^\d+x\d+$/);
+  const boot = await inside.locator("#boot").textContent();
+  const body = (await column(page, "centre").boundingBox())!;
+
+  for (const [label, viewport] of [
+    ["Desktop 1440", [1440, 900]],
+    ["Tablet 768", [768, 1024]],
+    ["Mobile 390", [390, 844]],
+  ] as const) {
+    await choose(label);
+    // A named size closes the popover; reopened, the choice carries the check.
+    await expect(popup()).toHaveCount(0);
+    await expect(trigger()).toContainText(label);
+    await expect(inside.locator("#vp")).toHaveText(`${viewport[0]}x${viewport[1]}`);
+    // Shrunk to fit inside the column, its shape kept.
+    const box = (await frame.boundingBox())!;
+    expect(box.width).toBeLessThan(viewport[0]);
+    expect(box.x).toBeGreaterThanOrEqual(body.x);
+    expect(box.x + box.width).toBeLessThanOrEqual(body.x + body.width);
+    expect(box.y + box.height).toBeLessThanOrEqual(body.y + body.height);
+    expect(Math.abs(box.width / box.height - viewport[0] / viewport[1])).toBeLessThan(0.02);
+    const scale = Number((await region.getByTestId("artifact-preview-scale").textContent())!.replace("%", ""));
+    expect(Math.abs(scale - (box.width / viewport[0]) * 100)).toBeLessThanOrEqual(1);
+  }
+  await trigger().click();
+  await expect(popup().getByRole("radio", { name: "Mobile 390" })).toHaveAttribute("aria-checked", "true");
+  await expect(popup().getByRole("radio", { name: "Mobile 390" }).locator("svg")).toHaveCount(1);
+  await expect(popup().getByRole("radio", { name: "Fill" }).locator("svg")).toHaveCount(0);
+
+  // A typed size, in the popover: Custom keeps it open; a size that fits shows unscaled.
+  await popup().getByRole("radio", { name: "Custom" }).click();
+  await expect(popup()).toBeVisible();
+  await expect(popup().getByLabel("Preview width")).toBeFocused();
+  await popup().getByLabel("Preview width").fill("400");
+  await popup().getByLabel("Preview width").press("Enter");
+  await popup().getByLabel("Preview height").fill("300");
+  await popup().getByLabel("Preview height").press("Enter");
+  await expect(inside.locator("#vp")).toHaveText("400x300");
+  await expect(trigger()).toContainText("400 × 300");
+  await expect.poll(async () => {
+    const box = (await frame.boundingBox())!;
+    return [Math.round(box.width), Math.round(box.height)];
+  }).toEqual([400, 300]);
+  await expect(region.getByTestId("artifact-preview-scale")).toHaveCount(0);
+
+  // An emptied side shows the size in use again; a side under 100 px is held at 100.
+  await popup().getByLabel("Preview width").fill("");
+  await popup().getByLabel("Preview width").press("Enter");
+  await expect(popup().getByLabel("Preview width")).toHaveValue("400");
+  await expect(inside.locator("#vp")).toHaveText("400x300");
+  await popup().getByLabel("Preview height").fill("5");
+  await popup().getByLabel("Preview height").press("Enter");
+  await expect(popup().getByLabel("Preview height")).toHaveValue("100");
+  await expect(inside.locator("#vp")).toHaveText("400x100");
+  await popup().getByLabel("Preview height").fill("300");
+  await popup().getByLabel("Preview height").press("Enter");
+  await expect(inside.locator("#vp")).toHaveText("400x300");
+  // Every change resized the same document; none reloaded it.
+  await expect(inside.locator("#boot")).toHaveText(boot!);
+
+  // Esc closes the popover and leaves the editor open; the next one closes the editor.
+  await page.keyboard.press("Escape");
+  await expect(popup()).toHaveCount(0);
+  await expect(region).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(region).toHaveCount(0);
+
+  // Remembered for this artifact; another one opens on Fill; nothing is written to the shape.
+  await open("shape:landing", "Landing");
+  await expect(trigger()).toContainText("400 × 300");
+  await expect(inside.locator("#vp")).toHaveText("400x300");
+  await page.keyboard.press("Escape");
+  await open("shape:other", "Other");
+  await expect(trigger()).toContainText("Fill");
+  await page.keyboard.press("Escape");
+  const record = (await roomRecords(agent, "default")).find((item) => item.id === "shape:landing")!;
+  expect(Object.keys(record.props).sort()).toEqual(["fileName", "file", "h", "title", "w"].sort());
+
+  // Session memory only: a reload starts on Fill.
+  await page.reload();
+  await expect(page.locator("[data-canvas-project] .tl-canvas")).toBeVisible({ timeout: 20_000 });
+  await expect(shapeOnScreen(page, "shape:landing")).toBeVisible();
+  await open("shape:landing", "Landing");
+  await expect(trigger()).toContainText("Fill");
+
+  // Back to Fill from a size: the frame takes the column again.
+  await choose("Mobile 390");
+  await expect(inside.locator("#vp")).toHaveText("390x844");
+  await choose("Fill");
+  await expect.poll(async () => (await frame.boundingBox())!.width).toBeGreaterThan((await column(page, "centre").boundingBox())!.width - 4);
+});
+
+const MOTION = `<!doctype html><html><head><style>#root{position:relative;width:640px;height:360px;background:#000}</style></head><body>
+<div id="root" data-composition-id="main" data-start="0" data-duration="2" data-width="640" data-height="360"></div>
+<script src="gsap.js"></script><script>window.__timelines = { main: gsap.timeline({ paused: true }) };</script></body></html>`;
+
+test("in a narrow window the editor's header never overflows: the title stays, and every action stays whole", async ({ page, agent }) => {
+  await page.setViewportSize({ width: 1024, height: 700 });
+  await openCanvas(page, agent);
+  await filledArtifact(agent, { id: "shape:intro", kind: "motion", ref: "150", at: { x: -520, y: -40 }, size: { w: 320, h: 180 }, title: "A motion with a long title", html: MOTION });
+  await expect(shapeOnScreen(page, "shape:intro")).toBeVisible();
+  // The narrow window shows only part of the motion: double-click the middle of what shows.
+  const shown = (await shapeOnScreen(page, "shape:intro").boundingBox())!;
+  const left = Math.max(shown.x, 0);
+  await page.mouse.dblclick((left + Math.min(shown.x + shown.width, 1024)) / 2, shown.y + shown.height / 2);
+  const region = page.getByRole("region", { name: "Editing A motion with a long title" });
+  await expect(region).toBeVisible();
+  const header = region.locator("header").first();
+
+  const whole = async () => {
+    expect(await header.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true);
+    const bounds = (await header.boundingBox())!;
+    const title = (await region.getByTestId("artifact-editor-title").boundingBox())!;
+    expect(title.width).toBeGreaterThanOrEqual(40);
+    for (const name of ["Back to canvas", "Preview size", "Render", "Open in a new tab"]) {
+      const box = (await region.getByRole("button", { name, exact: true }).boundingBox())!;
+      expect(box.x).toBeGreaterThanOrEqual(bounds.x);
+      expect(box.x + box.width).toBeLessThanOrEqual(bounds.x + bounds.width);
+    }
+  };
+  await whole();
+  // Fill reads as proportions, not as "go full screen", in the icon-only header too.
+  await expect(region.getByRole("button", { name: "Preview size" }).locator("svg.lucide-proportions")).toHaveCount(1);
+  await region.getByRole("button", { name: "Preview size" }).click();
+  await page.getByRole("dialog", { name: "Preview size" }).getByRole("radio", { name: "Custom" }).click();
+  await page.getByRole("dialog", { name: "Preview size" }).getByLabel("Preview width").fill("1800");
+  await page.getByRole("dialog", { name: "Preview size" }).getByLabel("Preview width").press("Enter");
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("dialog", { name: "Preview size" })).toHaveCount(0);
+  await whole();
+});
