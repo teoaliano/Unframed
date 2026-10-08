@@ -9,10 +9,12 @@ const stubWindow = (options: { origin?: string; framed?: boolean; variables?: un
   const errors: unknown[][] = [];
   const listeners: Listener[] = [];
   const wheels: Array<(event: unknown) => void> = [];
+  const menus: Array<(event: unknown) => void> = [];
   const parent = { postMessage: (message: unknown, targetOrigin: string) => posted.push({ message, targetOrigin }) };
   const win: any = {
     location: { origin: options.origin ?? "http://127.0.0.1:5001" },
-    addEventListener: (type: string, listener: Listener) => (type === "wheel" ? wheels.push(listener as (event: unknown) => void) : listeners.push(listener)),
+    addEventListener: (type: string, listener: Listener) =>
+      type === "wheel" ? wheels.push(listener as (event: unknown) => void) : type === "contextmenu" ? menus.push(listener as (event: unknown) => void) : listeners.push(listener),
     console: { error: (...args: unknown[]) => errors.push(args) },
     ...(options.variables === undefined ? {} : { __hfVariables: options.variables }),
   };
@@ -29,7 +31,14 @@ const stubWindow = (options: { origin?: string; framed?: boolean; variables?: un
     for (const listener of wheels) listener(event);
     return prevented;
   };
-  return { win, parent, posted, errors, send, wheel };
+  /** A right-click in the document; answers whether the bridge kept it from the browser. */
+  const rightClick = () => {
+    let prevented = false;
+    const event = { clientX: 40, clientY: 30, preventDefault: () => (prevented = true) };
+    for (const listener of menus) listener(event);
+    return prevented;
+  };
+  return { win, parent, posted, errors, send, wheel, rightClick };
 };
 
 describe("the built bridge", () => {
@@ -129,6 +138,21 @@ describe("the built bridge", () => {
       { accent: "#000000", scene: { speed: 3, label: "x" } },
     ]);
     expect(applied.filter((item) => item === "old")).toHaveLength(1);
+  });
+
+  it("hands a right-click to a canvas that asked for menus, and leaves it to the page otherwise", () => {
+    const { posted, send, rightClick } = stubWindow();
+    // No canvas has asked: the page keeps its own menu.
+    expect(rightClick()).toBe(false);
+    // The editor's frame says hello without asking: still the page's.
+    send({ type: "unframed:dials:hello" });
+    expect(rightClick()).toBe(false);
+    send({ type: "unframed:dials:hello", menus: true });
+    expect(rightClick()).toBe(true);
+    expect(posted.filter((entry) => entry.message.type === "unframed:contextmenu")).toEqual([
+      { message: { type: "unframed:contextmenu", clientX: 40, clientY: 30 }, targetOrigin: "http://localhost:8787" },
+    ]);
+    expect(stubWindow({ framed: false }).rightClick()).toBe(false);
   });
 
   it("keeps a pinch from zooming the app and hands it to the canvas that said hello; a plain scroll passes", () => {
