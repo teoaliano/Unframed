@@ -6,7 +6,7 @@ Read this file before any spec. It holds what every spec shares: the product in 
 
 Unframed is a local, pay-per-generation image, video and text generator on an infinite canvas. You put material on the canvas (text, images, clips, drawings), select some of it, and either **Generate** (one paid model call through OpenRouter) or hand it to the **Agent** (a local coding agent, Claude or Codex, running on your own subscription). Results land back on the canvas as ordinary shapes you can select into the next run. Every run writes its output file and a JSON sidecar into the project folder. Nothing is hosted: the engine runs on your machine, binds loopback only, and holds your OpenRouter key.
 
-The canvas is tldraw. There are no wires and no output nodes: **the selection is the input set**. A named group is a selection you keep, and it can carry standing generation settings (a recipe). The agent can also write HTML pages and HyperFrames motion compositions onto the canvas, tuned with DialKit parameters in a full-screen editor.
+The canvas is tldraw. There are no wires and no output nodes: **the selection is the input set**. A named group is a selection you keep, and it can carry standing generation settings (a recipe). The agent can also write HTML pages and HyperFrames motion compositions onto the canvas, tuned with DialKit parameters in a panel beside them or in a full-screen editor.
 
 This is a rewrite of an existing app. Every capability the old app had is kept. The specs describe behaviour and file formats. They never describe the old code, and the old code is not available to you. Do not look for it.
 

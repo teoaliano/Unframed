@@ -20,7 +20,6 @@ export interface ToolbarShape {
   readonly result?: ResultFacts | undefined;
   /** The shape carries a run marker. */
   readonly generating?: boolean | undefined;
-  readonly textResult?: boolean | undefined;
   /** Present on a group with a standing recipe (spec 06): how many outputs it makes. */
   readonly recipe?: { readonly runs: RunsValue } | undefined;
 }
@@ -36,8 +35,11 @@ export interface ToolbarInput {
 
 export type ToolbarState =
   | { readonly kind: "none" }
-  /** Regenerate (primary), Vary, Recipe. A result whose own run marker is set is `generating` instead. */
-  | { readonly kind: "result"; readonly shapeId: string; readonly vary: boolean }
+  /**
+   * Generate from the result (primary, only when it has something to send), Regenerate (its
+   * recipe in the composer), Agent. A result whose own run marker is set is `generating` instead.
+   */
+  | { readonly kind: "result"; readonly shapeId: string; readonly generate: boolean }
   | { readonly kind: "generating"; readonly shapeId: string }
   | { readonly kind: "open"; readonly shapeId: string }
   | { readonly kind: "generate"; readonly hint: string }
@@ -89,7 +91,7 @@ export const toolbarState = (input: ToolbarInput): ToolbarState => {
   if (selected.length === 1 && only) {
     if (only.result) {
       if (only.generating) return { kind: "generating", shapeId: only.id };
-      return { kind: "result", shapeId: only.id, vary: !only.textResult };
+      return { kind: "result", shapeId: only.id, generate: input.usable };
     }
     if ((only.kind === "page" || only.kind === "motion") && only.file) return { kind: "open", shapeId: only.id };
   }

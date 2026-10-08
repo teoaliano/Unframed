@@ -47,7 +47,7 @@ test("the bar is glass with the kit border and radius; Generate is the kit's pri
   });
 });
 
-test("a selection with nothing to generate from shows Agent only; a filled page offers Open and Agent", async ({ page, generation }) => {
+test("a selection with nothing to generate from shows Agent only; a filled page offers Editor, Parameters and Agent", async ({ page, generation }) => {
   const { engine } = generation;
   await openCanvas(page, engine);
   await putRecords(engine, [emptyMedia("shape:empty", "image", "300", { x: 400, y: 60 }), artifactRecord("shape:page", "page", "301", { x: 400, y: 300 }, "hello.html", "hello.html")]);
@@ -61,7 +61,7 @@ test("a selection with nothing to generate from shows Agent only; a filled page 
   // A filled page's frame takes the pointer, so its bar leads with the drag handle, an icon button.
   await clickShape(page, "shape:page");
   const buttons = toolbar(page).getByRole("button");
-  await expect(buttons).toHaveText(["", "Open", "Agent"]);
+  await expect(buttons).toHaveText(["", "Editor", "Parameters", "Agent"]);
   await expect(buttons.first()).toHaveAccessibleName("Drag to move");
 });
 
@@ -85,9 +85,13 @@ test("the bar sits centred above the selection, flips below it at the top edge a
   const moved = (await subject.boundingBox())!;
   await expect.poll(async () => (await bar.boundingBox())!.y).toBeCloseTo(moved.y + moved.height + 12, 0);
 
-  // Scroll it past the left edge: the bar stays 8 px inside.
+  // Scroll it past the left edge: the bar stays inside, and beside the top-left card, never under it.
   for (let step = 0; step < 60 && ((await subject.boundingBox())!.x > -100); step++) await page.mouse.wheel(40, 0);
   const canvas = (await page.locator(".tl-container").boundingBox())!;
+  const card = (await page.locator(".unframed-chrome-left").boundingBox())!;
+  await expect.poll(async () => (await bar.boundingBox())!.x).toBeCloseTo(card.x + card.width + 8, 0);
+  // Lower down, clear of the card's band, it keeps 8 px from the canvas's edge.
+  for (let step = 0; step < 20 && ((await subject.boundingBox())!.y < 200); step++) await page.mouse.wheel(0, -40);
   await expect.poll(async () => (await bar.boundingBox())!.x).toBeCloseTo(canvas.x + 8, 0);
 });
 

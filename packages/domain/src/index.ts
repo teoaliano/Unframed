@@ -13,6 +13,7 @@ export * from "./mentions.ts";
 export * from "./media.ts";
 export * from "./grouping.ts";
 export * from "./chromeLevels.ts";
+export * from "./clockTime.ts";
 export * from "./menuRules.ts";
 export * from "./canvasShapes.ts";
 export * from "./references.ts";

@@ -116,6 +116,20 @@
   cursor: not-allowed;
 }
 
+/*
+ * A checkbox row in the right-click menu (Keep playing) lines its label up with the plain
+ * rows around it: its check goes to the end of the row, where a shortcut sits, instead of a
+ * gutter in front of the label.
+ */
+.tlui-menu[data-testid="context-menu"] .tlui-button__checkbox {
+  padding-left: 12px;
+}
+
+.tlui-menu[data-testid="context-menu"] .tlui-button__checkbox > .tlui-icon:first-child {
+  order: 1;
+  margin-inline-start: auto;
+}
+
 /* The right-click menu keeps spec 02's 188 px. */
 .tlui-menu[data-testid="context-menu"] {
   width: 188px;

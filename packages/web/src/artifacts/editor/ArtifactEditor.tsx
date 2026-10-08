@@ -3,11 +3,12 @@
  * left filtered to it, the artifact live in the centre, its parameters on the right.
  */
 import type { ArtifactShapeProps } from "@unframed/contracts";
-import { artifactTitle, isArtifactKind, type ArtifactKind, type DialsAnnouncement } from "@unframed/domain";
+import { artifactTitle, editorPreviewViewport, isArtifactKind, previewScale, type ArtifactKind, type DialsAnnouncement } from "@unframed/domain";
 import { AppWindow, ArrowLeft, Clapperboard, ExternalLink } from "lucide-react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useEditor, useValue, type TLShapeId } from "tldraw";
 import { Button } from "~/components/ui/button";
+import { cn } from "~/lib/utils";
 import { AgentRail } from "../../agent/rail/AgentRail.tsx";
 import { Tip } from "../../chrome/ui.tsx";
 import { useCanvasProject, useEngine } from "../../context.ts";
@@ -15,6 +16,7 @@ import { ArtifactFrame, outsideUrlOf } from "../ArtifactFrame.tsx";
 import { previewPort } from "../state.ts";
 import { RenderButton } from "../render.tsx";
 import { COLUMN, ColumnHeader, Parameters } from "./Parameters.tsx";
+import { PreviewSizeControl, usePreviewSize } from "./PreviewSize.tsx";
 
 export interface ArtifactEditorProps {
   readonly shapeId: TLShapeId;
@@ -87,6 +89,22 @@ export const ArtifactEditor = ({ shapeId, onClose, onOpen }: ArtifactEditorProps
     post.current = send;
   }, []);
 
+  const [size, setSize] = usePreviewSize(project, shapeId);
+  const body = useRef<HTMLDivElement>(null);
+  const [area, setArea] = useState({ w: 0, h: 0 });
+  useLayoutEffect(() => {
+    const element = body.current;
+    if (!element) return;
+    // A sized preview sits 12 px inside the column, in a 1 px border.
+    const measure = () => setArea({ w: element.clientWidth - 26, h: element.clientHeight - 26 });
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [facts === undefined]);
+  const viewport = editorPreviewViewport(size);
+  const scale = viewport === undefined ? 1 : previewScale(viewport, area);
+
   if (!facts) return null;
   const displayTitle = artifactTitle(facts);
   const title = displayTitle === "" ? shapeId.replace(/^shape:/, "") : displayTitle;
@@ -100,29 +118,33 @@ export const ArtifactEditor = ({ shapeId, onClose, onOpen }: ArtifactEditorProps
       {...KEEP_FROM_CANVAS}
     >
       <section data-editor-column="rail" className={COLUMN}>
-        <AgentRail project={project} embedded filterTo={[shapeId]} onOpenEditor={onOpen} />
+        <AgentRail project={project} embedded filterTo={[shapeId]} onOpenEditor={onOpen} onClose={onClose} />
       </section>
       <section data-editor-column="centre" className={COLUMN} aria-label={`Editing ${title}`}>
-        <ColumnHeader>
+        {/* A container, so a narrow column folds its labels into icons rather than overflow. */}
+        <ColumnHeader className="@container/editor-header">
           <Tip label="Back to canvas (Esc)">
-            <Button variant="ghost" size="icon" aria-label="Back to canvas" onClick={onClose}>
+            <Button variant="ghost" size="icon" className="shrink-0" aria-label="Back to canvas" onClick={onClose}>
               <ArrowLeft aria-hidden />
             </Button>
           </Tip>
           <Icon aria-hidden className="size-4 shrink-0 text-muted-foreground" />
-          <span data-testid="artifact-editor-title" className="truncate text-sm font-semibold">
-            {title}
+          <span className="flex min-w-12 flex-1 items-baseline gap-2">
+            <span data-testid="artifact-editor-title" className="truncate text-sm font-semibold">
+              {title}
+            </span>
+            <span data-testid="artifact-editor-kind" className="shrink-0 text-sm text-muted-foreground @max-[520px]/editor-header:hidden">
+              {facts.kind}
+            </span>
           </span>
-          <span data-testid="artifact-editor-kind" className="text-sm text-muted-foreground">
-            {facts.kind}
-          </span>
-          <span className="flex-1" />
+          {facts.file !== "" && <PreviewSizeControl size={size} onChange={setSize} scale={scale} />}
           {facts.kind === "motion" && facts.file !== "" && <RenderButton shapeId={shapeId} />}
           {facts.file !== "" && port !== undefined && (
             <Tip label="Open in a new tab">
               <Button
                 variant="ghost"
                 size="icon"
+                className="shrink-0"
                 aria-label="Open in a new tab"
                 onClick={() => {
                   // Opened first, while the click still counts as the person's: the tab waits for
@@ -136,22 +158,34 @@ export const ArtifactEditor = ({ shapeId, onClose, onOpen }: ArtifactEditorProps
             </Tip>
           )}
         </ColumnHeader>
-        <div className="relative flex min-h-0 flex-1">
+        <div ref={body} className={cn("relative flex min-h-0 flex-1", viewport !== undefined && "items-center justify-center overflow-hidden")}>
           {facts.file === "" ? (
             <p className="m-auto p-6 text-center text-sm text-muted-foreground">{`This ${facts.kind} has no file yet. Ask the agent to write one.`}</p>
           ) : port === undefined ? null : (
-            <ArtifactFrame
-              key={facts.file}
-              project={project}
-              kind={facts.kind}
-              file={facts.file}
-              previewPort={port}
-              dials={facts.dials}
-              interactive
-              lazy={false}
-              onAnnounce={setAnnouncement}
-              onReady={onReady}
-            />
+            // The same two boxes hold the frame at every size, so changing the size never reloads the document.
+            <div
+              data-testid="artifact-preview"
+              className={cn(viewport === undefined ? "size-full" : "box-content shrink-0 overflow-hidden border")}
+              style={viewport === undefined ? undefined : { width: viewport.width * scale, height: viewport.height * scale }}
+            >
+              <div
+                className={cn(viewport === undefined && "size-full")}
+                style={viewport === undefined ? undefined : { width: viewport.width, height: viewport.height, transform: `scale(${scale})`, transformOrigin: "0 0" }}
+              >
+                <ArtifactFrame
+                  key={facts.file}
+                  project={project}
+                  kind={facts.kind}
+                  file={facts.file}
+                  previewPort={port}
+                  dials={facts.dials}
+                  interactive
+                  lazy={false}
+                  onAnnounce={setAnnouncement}
+                  onReady={onReady}
+                />
+              </div>
+            </div>
           )}
         </div>
       </section>

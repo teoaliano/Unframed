@@ -33,7 +33,7 @@ After this spec, one button is one component with a handful of variants, one men
 15. As a person, I want placeholders and render progress in the new style, so that a running job looks like the rest of the app.
 16. As a person, I want empty and filled page and motion cards in the new style, with the filled frame's white page unchanged, so that artifacts look finished.
 17. As a person, I want the role badges and the tether line in the new palette, so that input roles stay readable.
-18. As a person, I want the selection toolbar's Generate, Agent, Open, Recipe and result buttons built from the kit's button variants, so that the bar's primary action stands out the same way a dialog's does.
+18. As a person, I want the selection toolbar's Generate, Regenerate, Agent, Editor and Recipe buttons built from the kit's button variants, so that the bar's primary action stands out the same way a dialog's does.
 19. As a person, I want the composer to look like t3code's composer (its rounded shell, soft shadow and send button), so that typing an instruction feels like typing a chat message.
 20. As a person, I want the medium switch to be the kit's segmented toggle, so that image, video and text read as one choice.
 21. As a person, I want model, prop and Runs chips built on one chip style, so that the tray reads as one row.
@@ -51,7 +51,7 @@ After this spec, one button is one component with a handful of variants, one men
 33. As a person, I want the context meter ring, plan toggle and runtime select in the kit style, so that the composer footer is tidy.
 34. As a person, I want the diff panel to look like t3code's diff panel, with the same diff colours, so that reviewing changes feels familiar.
 35. As a person, I want the artifact editor's columns, header buttons, render row and "Add a parameter" box in the kit style, so that editing an artifact matches the rest of the app.
-36. As a person, I want the dials panel's colours to match the app's dark tokens while it stays dark, so that the editor's right column does not clash.
+36. As a person, I want the dials panel's colours to follow the app's scheme in its tokens, so that the editor's right column and the canvas panel read as one card.
 37. As a person, I want the settings dialog's key section, model selects, output folder field, Browse button, local agents section and banners in the kit style, so that settings read clearly.
 38. As a person, I want the OpenRouter callback page in the browser tab to use the app's dark tokens, so that returning from OpenRouter looks like Unframed.
 39. As a person, I want the legacy import screens and the import report dialog in the kit style, so that a first import looks deliberate.
@@ -79,7 +79,7 @@ After this spec, one button is one component with a handful of variants, one men
 - It keeps layout and behaviour: where each surface sits, its width and height where a spec states one (the composer's 420 px, the rail's 380 px, the context menu's 188 px, the model dialog's 680 px, the final prompt dialog's 640 px, the settings dialog's 480 px, the editor's 360 / flexible / 320 grid), what it contains, its keyboard behaviour, and its motion timings. Where this spec names a replacement (the rail tabs), the replacement is the rule.
 - Canvas content keeps tldraw's shape fonts. A prompt's text, a note, a geo label are document content: changing their font would reflow every existing board. Only tldraw's UI chrome takes the kit's font.
 - The white page of a filled page artifact stays white in both schemes (spec 09).
-- DialKit stays dark in both schemes (spec 09); its colours come from the dark tokens.
+- DialKit follows the app's scheme (spec 09); its colours come from the tokens.
 
 ### Modules
 
@@ -130,7 +130,7 @@ Copy rules:
 **Third-party adapters.** Each lives in the theme module's stylesheet, beside the tldraw adapter:
 
 - `@pierre/diffs`: t3code's diff colours (`--diff-addition`, `--diff-deletion`) and its injected diff CSS, copied.
-- DialKit: its CSS variables set from the kit's dark tokens.
+- DialKit: its CSS variables set from the kit's tokens, its theme following the scheme.
 - Tiptap editors (the instruction box, the agent prompt): t3code's composer editor classes.
 - react-markdown: t3code's `.chat-markdown` rules.
 - lucide icons: sized by the kit (Button and menu items size their `svg` children), not by a `size` prop in app code.
@@ -144,7 +144,7 @@ Every surface moves onto the kit. The mapping, by surface:
 - **Toasts:** the kit Toast (Base UI Toast) with t3code's look. Position stays bottom-left as spec 02 has it.
 - **Connection notice:** a sticky kit Toast, as today.
 - **Canvas shapes and overlays:** shape labels in `text-2xs` with the muted foreground, not uppercase; the prompt hint, empty media, Remove button (Button `icon-micro` on `--popover`), video transport, render placeholder and progress, group frame and name field (Input `unstyled` inside the frame), recipe chip (Badge), artifact cards, role badges (Badge `label`), tether (`--border` stroke), mention menu (the kit menu popup and row look). Canvas shape internals may keep a small canvas stylesheet for rules that target tldraw-rendered DOM (the label-level rules), using tokens only.
-- **Selection toolbar and recipe bar:** a `surface-glass` bar; Generate and Agent are Button `default`, the other actions `ghost` or `outline`; the hint uses `text-muted-foreground`.
+- **Selection toolbar and recipe bar:** a `surface-glass` bar; the primary action (Generate, Editor, or Regenerate on a result bar without Generate) is Button `default`, Agent is `outline`, the other actions `ghost` or `outline`; the hint uses `text-muted-foreground`.
 - **Generate composer:** t3code's composer shell look (rounded shell, `shadow-composer`, glass surface) at the existing 420 px; the medium switch is ToggleGroup `segmented`; the send button uses t3code's message-action button in its labelled pill form, since the Generate send carries its label (the Agent tray uses the round form); status lines are Alert or muted text; the recipe line is InlineButton.
 - **Prop tray, Runs chip, share consent:** model and prop chips are one chip recipe built from Button `outline` at `compact` size; value menus are Menu with radio items; the Runs popup is Popover with NumberField and Checkbox; the share consent is Checkbox with Label.
 - **Model dialog:** Dialog with the kit Table, Select for sort, Input for search, provider tokens as Badge `label`.
@@ -231,7 +231,7 @@ Each task updates the spec passages for the surface it restyles, in the same com
 17. Agent tray: the shared composer shell, prompt editor, chips, attachment shelf, slash and mention menus, stash menu, pickers, plan toggle and context meter on the kit. Seam: browser.
 18. Approval and question panels in t3code's pending approval and question looks. Seam: browser.
 19. Diff panel in t3code's diff panel shell and diff colours. Seam: browser.
-20. Artifact editor columns, header actions, render row, the "Add a parameter" box, the empty-state Agent button, and DialKit's colours from the dark tokens. Seam: browser.
+20. Artifact editor columns, header actions, render row, the "Add a parameter" box, the empty-state Agent button, and DialKit's colours from the tokens in both schemes. Seam: browser.
 21. Settings dialog on the kit: key section, model comboboxes, output folder field and Browse, local agents, banners and the current project mark. Seam: browser.
 22. OpenRouter callback page in the kit's dark tokens and system font for every outcome. Seam: engine.
 23. Legacy import screens, the import report dialog and the agent confirm dialogs on the kit. Seam: browser.

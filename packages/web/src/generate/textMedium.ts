@@ -17,7 +17,7 @@ export const NOTHING_TO_RUN = "Nothing to run. Select a prompt, or type an instr
 const NO_PARAMS: ModelParams = { props: [], referenceCap: undefined, supported: () => false };
 
 /** The request of a text run, from the live selection or a result's recorded recipe. */
-export const textRunRequest = async ({ editor, project, values, source }: Omit<SendInput, "engine">): Promise<Payload<"run.text">> => {
+const textRunRequest = async ({ editor, project, values, source }: Omit<SendInput, "engine">): Promise<Payload<"run.text">> => {
   const plan = planOf(source);
   const common = {
     project,

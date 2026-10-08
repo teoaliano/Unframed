@@ -1,11 +1,12 @@
 import type { ArtifactShapeProps } from "@unframed/contracts";
-import { artifactTitle, type ArtifactKind } from "@unframed/domain";
+import { artifactTitle, type ArtifactKind, type DialsAnnouncement } from "@unframed/domain";
 import { AppWindow, Clapperboard } from "lucide-react";
+import { useCallback, useEffect } from "react";
 import { BaseBoxShapeUtil, getPointerInfo, HTMLContainer, resizeBox, T, useEditor, useValue, type RecordProps, type TLResizeInfo, type TLShape } from "tldraw";
-import { ArtifactFrame } from "../../artifacts/ArtifactFrame.tsx";
+import { ArtifactFrame, type ArtifactFrameProps } from "../../artifacts/ArtifactFrame.tsx";
 import { ProblemLine, RenderRow } from "../../artifacts/RenderRow.tsx";
 import { snapshotsOf, snapshotUrl, stillOf } from "../../artifacts/snapshots.ts";
-import { isInteractive, isLive, previewPort } from "../../artifacts/state.ts";
+import { forgetFrame, hearFrame, isInteractive, isLive, previewPort, reachFrame } from "../../artifacts/state.ts";
 import { currentSlots } from "../../chrome/slots.ts";
 import { useCanvasProject } from "../../context.ts";
 import { artifactCardClass } from "./looks.ts";
@@ -71,6 +72,15 @@ const Still = ({ shape, title }: { readonly shape: ArtifactShape; readonly title
   );
 };
 
+/** A canvas frame tells the canvas what it announces and how to reach it, so the Parameters panel can drive it. */
+const CanvasFrame = ({ shapeId, ...props }: Omit<ArtifactFrameProps, "onAnnounce" | "onReady"> & { readonly shapeId: string }) => {
+  const editor = useEditor();
+  useEffect(() => () => forgetFrame(editor, shapeId), [editor, shapeId]);
+  const onAnnounce = useCallback((announcement: DialsAnnouncement) => hearFrame(editor, shapeId, announcement), [editor, shapeId]);
+  const onReady = useCallback((post: (values: unknown) => void) => reachFrame(editor, shapeId, post), [editor, shapeId]);
+  return <ArtifactFrame {...props} onAnnounce={onAnnounce} onReady={onReady} />;
+};
+
 /** A filled artifact: no card, the title above its corner, and its frame while live, else its still. */
 const FilledArtifact = ({ shape, kind }: { readonly shape: ArtifactShape; readonly kind: ArtifactKind }) => {
   noteRender(shape.id);
@@ -98,7 +108,7 @@ const FilledArtifact = ({ shape, kind }: { readonly shape: ArtifactShape; readon
           </ShapeLabel>
         )}
         {live && port !== undefined ? (
-          <ArtifactFrame key={props.file} project={project} kind={kind} file={props.file} previewPort={port} dials={props.dials} interactive={interactive} lazy />
+          <CanvasFrame key={props.file} shapeId={shape.id} project={project} kind={kind} file={props.file} previewPort={port} dials={props.dials} interactive={interactive} lazy />
         ) : (
           <Still shape={shape} title={title} />
         )}

@@ -32,7 +32,7 @@ import { copyAsPrompt } from "../generate/copyAsPrompt.ts";
 import { isTextResult } from "../generate/facts.ts";
 import { useActivation, useEngine } from "../context.ts";
 import { useActiveProject } from "../project/activation.ts";
-import { showError } from "../toasts.tsx";
+import { showError, showNotice } from "../toasts.tsx";
 import { addShape, kindOfAddAction } from "./addShapes.ts";
 import { imagePng } from "./externalContent.ts";
 import { groupRecipeOf, setGroupRecipe } from "./groupRecipes.ts";
@@ -53,16 +53,17 @@ const menuShape = (editor: Editor, shape: TLShape): MenuShape => {
   const marker = shape.type === "image" || shape.type === "video" ? parseAssetMarker(assetSrc(editor, shape) ?? "") : undefined;
   const ref = readRef(shape);
   const parent = editor.getShape(shape.parentId as TLShapeId);
+  const artifactFile = isArtifactKind(shape.type) ? (shape.props as { file?: string }).file : undefined;
   return {
     id: shape.id,
     type: shape.type,
     ...(ref !== undefined ? { ref } : {}),
-    ...(marker?.kind === "project-file" ? { file: marker.file } : {}),
+    ...(marker?.kind === "project-file" ? { file: marker.file } : artifactFile ? { file: artifactFile } : {}),
     ...(marker?.kind === "link" ? { link: true } : {}),
     ...(isTextResult(shape) ? { textResult: true } : {}),
     ...(parent?.type === "frame" ? { parent: parent.id } : {}),
     ...(groupRecipeOf(shape) ? { recipe: true } : {}),
-    ...(isArtifactKind(shape.type) && (shape.props as { file?: string }).file ? { filledArtifact: true } : {}),
+    ...(artifactFile ? { filledArtifact: true } : {}),
   };
 };
 
@@ -131,6 +132,17 @@ const UnframedSections = () => {
         });
         return;
       }
+      case "copy-path":
+        engine.call("files.path", { project, fileName: item.file }).then(
+          // A path on the clipboard cannot be seen, so a toast says it got there.
+          ({ path }) =>
+            navigator.clipboard.writeText(path).then(
+              () => void showNotice("Path copied", "info"),
+              () => void showError("Could not copy that path to the clipboard."),
+            ),
+          (error: unknown) => showError(`Could not copy that path: ${messageOf(error)}`),
+        );
+        return;
       case "copy-as-image": {
         const png = opened.clicked ? imagePng(editor, project, opened.clicked) : undefined;
         const failed = () => showError("Could not copy that image to the clipboard.");

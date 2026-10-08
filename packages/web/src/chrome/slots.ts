@@ -14,7 +14,7 @@ export interface AgentTrayProps {
  * Named places in the chrome that later specs fill: the Agent button (spec 08), the
  * Settings button (spec 10), the Library button and the Add to library handler (spec 06),
  * the artifact empty state (spec 09), the composer's Agent tray (spec 08) and the
- * toolbar's Open action (spec 09). Empty until a spec registers into them.
+ * toolbar's Editor action (spec 09). Empty until a spec registers into them.
  */
 export interface ChromeSlots {
   agentButton?: ComponentType;
@@ -27,12 +27,16 @@ export interface ChromeSlots {
   agentTray?: ComponentType<AgentTrayProps>;
   /** The toolbar's Agent button itself, when the Agent tray's spec draws it (spec 08). */
   agentToolbarButton?: ComponentType<{ readonly onOpen: () => void }>;
-  /** What Open on a filled page or motion does. */
+  /** What Editor on a filled page or motion does. */
   openArtifact?: (editor: Editor, shapeId: TLShapeId) => void;
-  /** Render for a selected motion, beside Open (spec 09 registers it). */
+  /** Render for a selected motion, beside Editor (spec 09 registers it). */
   renderButton?: ComponentType<{ shapeId: TLShapeId }>;
+  /** Parameters for a selected page or motion, after Render (spec 09 registers it). */
+  parametersButton?: ComponentType<{ shapeId: TLShapeId }>;
   /** Set while the chat rail (spec 08) holds the right edge: the top-right card steps aside. */
   leftCardDocked?: boolean;
+  /** Set while the full-screen artifact editor (spec 09) is open: the top-left card stays under it, docked or not. */
+  artifactEditorOpen?: boolean;
 }
 
 let slots: ChromeSlots = {};

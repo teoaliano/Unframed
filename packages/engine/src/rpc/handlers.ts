@@ -11,7 +11,7 @@ import { Runs } from "../runs/runs.ts";
 import { RenderJobs } from "../video/renderJobs.ts";
 import { PreferencesStore } from "../preferencesStore.ts";
 import { Projects } from "../projects.ts";
-import { revealFiles } from "../reveal.ts";
+import { filePath, revealFiles } from "../reveal.ts";
 import { Config } from "../services.ts";
 import { SettingsStore } from "../settingsStore.ts";
 import { guardHandlers } from "./guardHandlers.ts";
@@ -75,6 +75,7 @@ export const rpcHandlersLayer = UnframedRpcs.toLayer(
       "projects.list": () => Effect.map(projects.list, (list) => ({ projects: [...list] })),
       "projects.create": ({ name }) => Effect.map(projects.create(name), (slug) => ({ name: slug })),
       "files.reveal": (input) => revealFiles(input).pipe(Effect.provideContext(context)),
+      "files.path": (input) => filePath(input).pipe(Effect.provideContext(context)),
       "files.copy": (input) => Effect.map(media.copy(input.project, input.file, input.from), (file) => ({ file })),
       "preferences.get": ({ keys }) => Effect.map(preferences.get(keys), (values) => ({ values })),
       "preferences.set": ({ key, value }) => Effect.as(preferences.set(key, value), {}),

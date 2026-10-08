@@ -1,13 +1,14 @@
 /**
  * What the canvas knows about its artifacts beyond their records (spec 09): which are pinned
- * with "Keep playing", which one is open in the editor, which ones run a live frame, the
- * preview origin's port and each shape's status line. Every fact a shape component reads is
+ * with "Keep playing", which one is open in the editor, which one has its Parameters panel
+ * open, which ones run a live frame and what each live frame announced, the preview origin's
+ * port and each shape's status line. Every fact a shape component reads is
  * a computed value keyed to that shape and answers in primitives, so panning re-renders no
  * shape.
  */
-import { farOffscreen, isArtifactKind, liveArtifacts, LIVE_SELECTED_LIMIT, PIN_LIMIT } from "@unframed/domain";
+import { farOffscreen, isArtifactKind, liveArtifacts, LIVE_SELECTED_LIMIT, PIN_LIMIT, type DialsAnnouncement } from "@unframed/domain";
 import type { RenderStatus } from "@unframed/contracts";
-import { atom, computed, type Atom, type Computed, type Editor, type TLShapeId } from "tldraw";
+import { atom, computed, react, type Atom, type Computed, type Editor, type TLShapeId } from "tldraw";
 
 /** The preview origin's port, from the engine's settings. Unknown until they arrive. */
 export const previewPort: Atom<number | undefined> = atom("preview port", undefined);
@@ -42,6 +43,11 @@ interface CanvasArtifacts {
   readonly project: Atom<string>;
   /** The artifact open in the editor. */
   readonly editing: Atom<TLShapeId | undefined>;
+  /** The artifact whose Parameters panel is open on the canvas. */
+  readonly tuning: Atom<TLShapeId | undefined>;
+  /** What each live canvas frame last announced, by shape, and how to post `unframed:dials:set` to it. */
+  readonly heard: Atom<ReadonlyMap<string, DialsAnnouncement>>;
+  readonly posts: Map<string, (values: unknown) => void>;
   /**
    * Set from a press on the canvas until the double-click window after it has passed, so a
    * frame never takes the second click of a double-click that selected it.
@@ -65,6 +71,7 @@ export const artifactsOf = (editor: Editor): CanvasArtifacts => {
   let found = canvases.get(editor);
   if (!found) {
     const editing = atom<TLShapeId | undefined>("editing artifact", undefined);
+    const tuning = atom<TLShapeId | undefined>("tuning artifact", undefined);
     const project = atom("artifact project", "");
     const live = computed<ReadonlySet<string>>("live artifacts", () => {
       // The editor unloads the canvas's frames: at most one artifact document runs while editing.
@@ -74,18 +81,34 @@ export const artifactsOf = (editor: Editor): CanvasArtifacts => {
       return liveArtifacts({
         selected: selected.map((id) => ({ id, centre: selected.length > LIVE_SELECTED_LIMIT ? centreOf(id) : { x: 0, y: 0 } })),
         pinned: pinnedAtom(project.get()).get().filter((id) => hasFile(editor, id as TLShapeId)),
+        tuning: tuning.get(),
         viewportCentre: selected.length > LIVE_SELECTED_LIMIT ? editor.getViewportPageBounds().center : { x: 0, y: 0 },
       });
     });
-    found = { project, editing, hold: atom("frame hold", false), live, problems: atom("artifact problems", new Map()), renders: atom("motion renders", new Map()) };
+    found = {
+      project,
+      editing,
+      tuning,
+      heard: atom("artifact announcements", new Map()),
+      posts: new Map(),
+      hold: atom("frame hold", false),
+      live,
+      problems: atom("artifact problems", new Map()),
+      renders: atom("motion renders", new Map()),
+    };
     canvases.set(editor, found);
   }
   return found;
 };
 
-/** Whether this artifact runs a live frame: it is live and not more than a viewport width off screen. */
+/**
+ * Whether this artifact runs a live frame: it is live and not more than a viewport width off
+ * screen, unless its Parameters panel is open, which needs the frame wherever it is.
+ */
 export const isLive = (editor: Editor, id: TLShapeId): boolean => {
-  if (!artifactsOf(editor).live.get().has(id)) return false;
+  const state = artifactsOf(editor);
+  if (!state.live.get().has(id)) return false;
+  if (state.tuning.get() === id) return true;
   const bounds = editor.getShapePageBounds(id);
   const viewport = editor.getViewportPageBounds();
   return !!bounds && !farOffscreen({ x: bounds.x, y: bounds.y, w: bounds.w, h: bounds.h }, { x: viewport.x, y: viewport.y, w: viewport.w, h: viewport.h });
@@ -127,5 +150,48 @@ export const installFrameHold = (editor: Editor): (() => void) => {
   return () => {
     clearTimeout(timer);
     editor.off("event", onEvent);
+  };
+};
+
+/** A live canvas frame announced its parameters. */
+export const hearFrame = (editor: Editor, id: string, announcement: DialsAnnouncement): void => {
+  artifactsOf(editor).heard.update((current) => new Map(current).set(id, announcement));
+};
+
+/** A live canvas frame mounted: the Parameters panel posts to it through this. */
+export const reachFrame = (editor: Editor, id: string, post: (values: unknown) => void): void => {
+  artifactsOf(editor).posts.set(id, post);
+};
+
+/** A canvas frame unmounted or loads a new file: what it announced no longer holds. */
+export const forgetFrame = (editor: Editor, id: string): void => {
+  const state = artifactsOf(editor);
+  state.posts.delete(id);
+  if (!state.heard.get().has(id)) return;
+  state.heard.update((current) => {
+    const next = new Map(current);
+    next.delete(id);
+    return next;
+  });
+};
+
+/** Opens the canvas Parameters panel on one artifact, or closes it when it is already open there. */
+export const toggleTuning = (editor: Editor, id: TLShapeId): void => {
+  const { tuning } = artifactsOf(editor);
+  tuning.set(tuning.get() === id ? undefined : id);
+};
+
+/** The panel belongs to its artifact selected alone: another selection, a deletion or the editor closes it. */
+export const installTuningWatch = (editor: Editor): (() => void) => {
+  const { tuning, editing } = artifactsOf(editor);
+  const stop = react("tuning follows the selection", () => {
+    const id = tuning.get();
+    if (id === undefined) return;
+    const selected = editor.getSelectedShapeIds();
+    if (editing.get() !== undefined || selected.length !== 1 || selected[0] !== id || !hasFile(editor, id)) tuning.set(undefined);
+  });
+  return () => {
+    stop();
+    tuning.set(undefined);
   };
 };

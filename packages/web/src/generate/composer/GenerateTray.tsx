@@ -32,7 +32,17 @@ export const INSTRUCTION_PLACEHOLDER = "What should this make?";
 const recipeSources = (recipe: RecipeMode): number =>
   recipe.recipe.references.length + recipe.recipe.selectionPrompt.split(/\n\n+/).filter((part) => part.trim() !== "").length;
 
-const recipeLineClass = "flex items-center gap-3 px-2.5 pb-1 text-xs";
+const counted = (count: number, noun: string) => `${count} ${noun}${count === 1 ? "" : "s"}`;
+
+/** The references a recipe sends, as `1 image and 2 videos`; undefined when it sends none. */
+const recordedReferences = (recipe: RecipeMode): string | undefined => {
+  const images = recipe.recipe.references.filter((ref) => ref.kind === "image").length;
+  const videos = recipe.recipe.references.length - images;
+  const parts = [...(images > 0 ? [counted(images, "image")] : []), ...(videos > 0 ? [counted(videos, "video")] : [])];
+  return parts.length === 0 ? undefined : parts.join(" and ");
+};
+
+const recipeLineClass ="flex items-center gap-3 px-2.5 pb-1 text-xs";
 
 /**
  * The line under the tray while the selection is exactly one group: Save as recipe for a
@@ -243,7 +253,9 @@ export const GenerateTray = ({ project, recipe, onSent, onMenuOpen, handle }: Ge
   useImperativeHandle(handle, () => ({ send: () => void send() }));
 
   const media = registeredMedia();
-  const sources = recipe ? `recipe · ${live ? live.selected.length : recipeSources(recipe)} sources` : hint;
+  const sources = recipe ? `recipe · ${counted(live ? live.selected.length : recipeSources(recipe), "source")}` : hint;
+  const recordedPrompt = recipe && !live ? recipe.recipe.selectionPrompt.trim() : "";
+  const references = recipe && !live ? recordedReferences(recipe) : undefined;
   return (
     <div className="flex flex-col gap-2">
       <div className="flex items-center justify-between gap-2 px-0.5">
@@ -277,6 +289,21 @@ export const GenerateTray = ({ project, recipe, onSent, onMenuOpen, handle }: Ge
         <div className="flex flex-col gap-0.5 px-0.5 text-xs text-muted-foreground" data-testid="recipe-sent">
           <p className="m-0">{IMPORTED_RECIPE_NOTE}</p>
           <p className="m-0 max-h-24 overflow-y-auto whitespace-pre-wrap text-foreground">{recipe.recipe.sentPrompt}</p>
+        </div>
+      )}
+      {(recordedPrompt !== "" || references !== undefined) && (
+        <div className="flex flex-col gap-0.5 px-0.5 text-xs text-muted-foreground" data-testid="recipe-sent">
+          <p className="m-0">Sent ahead of your instruction:</p>
+          {recordedPrompt !== "" && (
+            <p className="m-0 line-clamp-3 whitespace-pre-wrap text-foreground" title={recordedPrompt} data-testid="recipe-prompt">
+              {recordedPrompt}
+            </p>
+          )}
+          {references !== undefined && (
+            <p className="m-0" data-testid="recipe-references">
+              {recordedPrompt === "" ? references : `with ${references}`}
+            </p>
+          )}
         </div>
       )}
       {/* The box: the kit's field frame and focus ring around the editor, with send at its bottom right. */}
