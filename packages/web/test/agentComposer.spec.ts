@@ -3,10 +3,11 @@ import { openCanvas, shapeOnScreen, toast } from "./canvas.ts";
 import { clickShape, composer, toolbar } from "./generation.ts";
 import { pngBytes } from "./images.ts";
 import { filledMedia, putRecords } from "./media.ts";
-import { artifactColumn, chosenControl, enablePlanMode, expect, onlyChat, openRail, promptBox, rail, rpcOf, scriptFolder, startAgentEngine, test } from "./agent.ts";
+import { artifactColumn, chosenControl, createChat, enablePlanMode, expect, onlyChat, openRail, promptBox, rail, rpcOf, scriptFolder, startAgentEngine, test } from "./agent.ts";
 import type { TestEngine } from "../../engine/test/engineProcess.ts";
 import { expectSlot, expectToken, inBothSchemes, resolvedColor, styleOf } from "./kit.ts";
 import { platformOf } from "./platform.ts";
+import { writeProjectFile } from "./artifacts.ts";
 
 /** A toast's second line, by its text. */
 const toastDescription = (page: Page, text: string) => page.locator("[data-slot='toast-description']").filter({ hasText: text });
@@ -344,4 +345,92 @@ test("the Agent tray is t3code's composer on the kit: the rounded shell, kit chi
     await page.keyboard.press("Backspace");
     await expect(mentions).toHaveCount(0);
   });
+});
+
+test("a chat's unsent draft follows it between the canvas rail and the editor's rail, both ways; another chat keeps its own", async ({ page, agent }) => {
+  await openCanvas(page, agent);
+  await writeProjectFile(agent, "alpha.html", "<h1>Alpha</h1>");
+  await putRecords(agent, artifactColumn([{ id: "shape:p1", title: "Alpha", file: "alpha.html" }]));
+  await openCanvas(page, agent);
+  await createChat(agent, { title: "Brief", tags: ["shape:p1"] });
+  await createChat(agent, { title: "Other", tags: ["shape:p1"] });
+  const panel = await openRail(page);
+  await panel.getByRole("tab", { name: "Brief" }).click();
+  await promptBox(panel).click();
+  await promptBox(panel).pressSequentially("Make the title bigger");
+
+  // Another chat starts empty, and coming back brings the draft back.
+  await panel.getByRole("tab", { name: "Other" }).click();
+  await expect(promptBox(panel)).toHaveText("");
+  await panel.getByRole("tab", { name: "Brief" }).click();
+  await expect(promptBox(panel)).toHaveText("Make the title bigger");
+
+  const editor = page.getByTestId("artifact-editor");
+  const editorRail = editor.locator("[data-editor-column='rail']");
+  const at = (await shapeOnScreen(page, "shape:p1").boundingBox())!;
+  await page.mouse.dblclick(at.x + at.width / 2, at.y + at.height / 2);
+  await expect(editor).toBeVisible();
+  await editorRail.getByRole("tab", { name: "Brief" }).click();
+  await expect(promptBox(editorRail)).toHaveText("Make the title bigger");
+
+  await promptBox(editorRail).click();
+  await page.keyboard.press("End");
+  await page.keyboard.type(" and red");
+  await editor.getByRole("button", { name: "Back to canvas" }).click();
+  await expect(editor).toHaveCount(0);
+  await expect(promptBox(panel)).toHaveText("Make the title bigger and red");
+
+  // Closed and opened again, the rail still has it.
+  await panel.getByRole("button", { name: "Close" }).click();
+  await expect(panel).toHaveCount(0);
+  await openRail(page);
+  await expect(promptBox(panel)).toHaveText("Make the title bigger and red");
+
+  // A new chat's draft goes once it is sent: the next new chat starts empty.
+  await panel.getByRole("button", { name: "New chat" }).click();
+  await expect(promptBox(panel)).toHaveText("");
+  await promptBox(panel).click();
+  await promptBox(panel).pressSequentially("Start something new");
+  await promptBox(panel).press("Enter");
+  await expect(panel.getByRole("tab")).toHaveCount(3);
+  await panel.getByRole("button", { name: "New chat" }).click();
+  await expect(promptBox(panel)).toHaveText("");
+});
+
+test("a context chip from a draft's @ mention follows the draft between chats; the canvas selection's chips stay", async ({ page, agent }) => {
+  await openCanvas(page, agent);
+  await putRecords(agent, artifactColumn([{ id: "shape:p1", title: "Alpha" }]));
+  await openCanvas(page, agent);
+  await createChat(agent, { title: "Brief" });
+  await createChat(agent, { title: "Other" });
+  const panel = await openRail(page);
+  const context = panel.getByRole("list", { name: "Context" }).getByRole("listitem");
+  await panel.getByRole("tab", { name: "Brief" }).click();
+  await promptBox(panel).click();
+  await promptBox(panel).pressSequentially("@alp");
+  await page.keyboard.press("Tab");
+  await expect(context).toHaveText(["Alpha"]);
+
+  await panel.getByRole("tab", { name: "Other" }).click();
+  await expect(promptBox(panel)).toHaveText("");
+  await expect(context).toHaveCount(0);
+  await panel.getByRole("tab", { name: "Brief" }).click();
+  await expect(promptBox(panel).locator("[data-agent-chip]")).toHaveText(["Alpha"]);
+  await expect(context).toHaveText(["Alpha"]);
+});
+
+test("a draft shown again after a tab switch is not an undo step", async ({ page, agent }) => {
+  await openCanvas(page, agent);
+  await createChat(agent, { title: "Brief" });
+  await createChat(agent, { title: "Other" });
+  const panel = await openRail(page);
+  await panel.getByRole("tab", { name: "Brief" }).click();
+  await promptBox(panel).click();
+  await promptBox(panel).pressSequentially("Make the title bigger");
+  await panel.getByRole("tab", { name: "Other" }).click();
+  await panel.getByRole("tab", { name: "Brief" }).click();
+  await expect(promptBox(panel)).toHaveText("Make the title bigger");
+  await promptBox(panel).click();
+  await page.keyboard.press("ControlOrMeta+z");
+  await expect(promptBox(panel)).not.toHaveText("");
 });

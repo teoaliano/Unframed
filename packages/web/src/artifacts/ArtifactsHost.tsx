@@ -1,5 +1,5 @@
 /**
- * Artifacts on the canvas (spec 09): the editor's entry point (double-click, the toolbar's Open and the recap card's Open all call it), the frame
+ * Artifacts on the canvas (spec 09): the editor's entry point (double-click, the toolbar's Editor and the recap card's Editor all call it), the frame
  * hold, the snapshot stream and the preview origin's port.
  */
 import { isArtifactKind } from "@unframed/domain";
@@ -82,6 +82,7 @@ const EditorOverlay = ({ editor, shapeId }: { readonly editor: Editor; readonly 
 
   useEffect(() => {
     host?.setAttribute("data-artifact-editor", "");
+    const stopCard = registerSlot("artifactEditorOpen", true);
     editor.blur();
     // Keep the canvas out of the keyboard's way for as long as the editor is open.
     const stop = editor.store.listen(() => {
@@ -89,6 +90,7 @@ const EditorOverlay = ({ editor, shapeId }: { readonly editor: Editor; readonly 
     });
     return () => {
       stop();
+      stopCard();
       host?.removeAttribute("data-artifact-editor");
       // Back on the canvas, the keyboard is the canvas's again: Cmd-Z undoes a dial change.
       if (!editor.isDisposed) editor.focus();

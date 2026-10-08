@@ -1,6 +1,6 @@
 import { clearAllChats, clearedNotice, visibleChats, nextActive } from "@unframed/domain";
 import { BrushCleaning, Plus, Search, Sparkles, Trash2, X } from "lucide-react";
-import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
+import { lazy, Suspense, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useMaybeEditor, useValue } from "tldraw";
 import { Alert, AlertDescription } from "~/components/ui/alert";
 import { Button } from "~/components/ui/button";
@@ -30,12 +30,25 @@ export interface AgentRailProps {
   readonly filterTo?: ReadonlyArray<string>;
   readonly onLocate?: (shapeId: string) => void;
   readonly onOpenEditor?: (shapeId: string) => void;
+  /** Close, and in the editor (`embedded`) what Escape does when no field or popup has the key. */
   readonly onClose?: () => void;
   /** The canvas rail's slide: its element and whether it is arriving or leaving. */
   readonly motion?: { readonly ref: (element: HTMLElement | null) => void; readonly state: "open" | "closed" };
 }
 
 const ARTIFACT_TYPES = new Set(["page", "motion"]);
+
+/** A key typed in a text field or a menu, dialog or list belongs there, not to the editor around the rail. */
+const keyIsTaken = (target: EventTarget | null): boolean => {
+  const element = target instanceof HTMLElement ? target : null;
+  if (!element) return false;
+  return (
+    element.isContentEditable ||
+    element.tagName === "INPUT" ||
+    element.tagName === "TEXTAREA" ||
+    element.closest("[contenteditable='true'], [role='menu'], [role='dialog'], [role='alertdialog'], [role='listbox']") !== null
+  );
+};
 
 /*
  * 380 px, docked left over the canvas where the editor's chat column sits, on solid
@@ -49,32 +62,61 @@ const RAIL_CLASS =
 /** The editor's left column, or the Sheet: the same rail in place, with no surface or motion of its own. */
 const EMBEDDED_CLASS = "relative box-border flex size-full min-h-0 flex-col font-sans text-foreground";
 
+/** Where theme.css puts the top-left card when no shell has moved it. */
+const CARD_HOME = 8;
+
 /**
- * The room at the top of the docked rail for the top-left chrome card (spec 02), which sits
- * over it: as tall as the card reaches, plus its margin, so a shell that moves the card
- * (spec 01) moves the row with it.
+ * The top-left chrome card's box (spec 02), measured again whenever it could move: its size
+ * changes, the window resizes, or a stylesheet or the card's own attributes change, which is
+ * how a shell's injected CSS (spec 01) moves it.
  */
-const ChromeRow = () => {
-  const [height, setHeight] = useState(60);
-  const row = useRef<HTMLDivElement>(null);
-  useEffect(() => {
+const useCardBox = (): DOMRect | undefined => {
+  const [box, setBox] = useState<DOMRect>();
+  useLayoutEffect(() => {
     const card = document.querySelector<HTMLElement>(".unframed-chrome-left");
-    const element = row.current;
-    if (!card || !element) return;
+    if (!card) return;
     const measure = () => {
-      const top = element.parentElement?.getBoundingClientRect().top ?? 0;
-      setHeight(Math.max(0, Math.round(card.getBoundingClientRect().bottom - top + 12)));
+      const next = card.getBoundingClientRect();
+      setBox((current) => (current && current.left === next.left && current.top === next.top && current.width === next.width && current.height === next.height ? current : next));
     };
     measure();
-    const observer = new ResizeObserver(measure);
-    observer.observe(card);
+    const resize = new ResizeObserver(measure);
+    resize.observe(card);
+    const styles = new MutationObserver(measure);
+    styles.observe(document.head, { childList: true, subtree: true, characterData: true });
+    styles.observe(card, { attributes: true });
     window.addEventListener("resize", measure);
     return () => {
-      observer.disconnect();
+      resize.disconnect();
+      styles.disconnect();
       window.removeEventListener("resize", measure);
     };
   }, []);
-  return <div ref={row} className="shrink-0 border-b" style={{ height }} data-testid="rail-chrome-row" />;
+  return box;
+};
+
+/**
+ * The room at the top of the docked rail for the top-left chrome card, which sits over it:
+ * as tall as the card reaches, plus its margin, so a shell that moves the card moves the
+ * row with it.
+ */
+const ChromeRow = () => {
+  const box = useCardBox();
+  // The docked rail starts at the top of the window, so the card's bottom edge is the row's height.
+  const height = box === undefined ? 60 : Math.max(0, Math.round(box.bottom + 12));
+  return <div className="shrink-0 border-b" style={{ height }} data-testid="rail-chrome-row" />;
+};
+
+/**
+ * In the editor the card stays under the editor (spec 09), but a shell that moved it from
+ * its home made that room for its window buttons, which would sit on this rail's header.
+ * The header moves by the same offsets: right by as much as the card moved right, so the
+ * buttons sit inline beside it, and down only by as much as the card moved down.
+ */
+const useShellOffset = (): { readonly left: number; readonly top: number } => {
+  const box = useCardBox();
+  if (!box) return { left: 0, top: 0 };
+  return { left: Math.max(0, Math.round(box.left - CARD_HOME)), top: Math.max(0, Math.round(box.top - CARD_HOME)) };
 };
 
 /**
@@ -148,6 +190,8 @@ export const AgentRail = ({ project, embedded, inSheet, filterTo, onLocate, onOp
   }, [editor]);
 
   const newChat = () => client.setUi({ chosen: NEW_CHAT, pinned: null });
+  const shell = useShellOffset();
+  const offset = embedded ? shell : { left: 0, top: 0 };
 
   return (
     <aside
@@ -165,6 +209,11 @@ export const AgentRail = ({ project, embedded, inSheet, filterTo, onLocate, onOp
         event.stopPropagation();
         // So the Sheet never hears Escape: the rail closes it, unless a menu of its own took the key.
         if (inSheet && event.key === "Escape" && !event.defaultPrevented && root.current?.contains(event.target as Node)) onClose?.();
+        // The editor's own Escape listener never hears keys the rail stops, so the rail closes the editor itself.
+        if (embedded && event.key === "Escape" && !event.defaultPrevented && !keyIsTaken(event.target)) {
+          event.preventDefault();
+          onClose?.();
+        }
         const command = platform() === "darwin" ? event.metaKey : event.ctrlKey;
         if (command && !event.shiftKey && event.key.toLowerCase() === "k") {
           event.preventDefault();
@@ -181,7 +230,8 @@ export const AgentRail = ({ project, embedded, inSheet, filterTo, onLocate, onOp
     >
       {/* Docked, the top-left chrome card sits over this row as the rail's own top line. */}
       {!embedded && !inSheet && <ChromeRow />}
-      <header className="flex h-12 shrink-0 items-center gap-1 pr-2 pl-3.5">
+      {offset.top > 0 && <div className="shrink-0" style={{ height: offset.top }} data-testid="rail-shell-space" />}
+      <header className="flex h-12 shrink-0 items-center gap-1 pr-2 pl-3.5" style={offset.left > 0 ? { paddingLeft: 14 + offset.left } : undefined}>
         <Sparkles aria-hidden className="size-4 shrink-0 text-foreground" />
         <h2 className="m-0 ml-1 flex-1 text-sm font-medium">Agent</h2>
         <Tip label="Search chats">
