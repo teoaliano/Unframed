@@ -16,7 +16,7 @@ The Generate tray gains the **audio** medium. With audio chosen, the selected pr
 
 The canvas gains the **audio** shape kind for any sound file: dropped, pasted, picked with "Choose file", or generated. An audio shape is not an input to any run in this spec: selected into an image, video or text run it sends nothing and shows the unused mark, as an artifact does.
 
-Settings gains an **ElevenLabs** block beside OpenRouter: paste a key, remove it with a confirm, see the account's credit usage for the current billing period, and pick the default audio model. ElevenLabs offers no OAuth flow for third-party apps, so there is no Connect button: the key is pasted, and stored in `.env` exactly like the OpenRouter key.
+Settings gains an **ElevenLabs** block beside OpenRouter: paste a key, remove it with a confirm, see the account's credit usage for the current billing period, and pick the default audio model. The block shows even without an OpenRouter key, so someone who only wants audio can set up ElevenLabs alone; image, video and text generation still need OpenRouter. ElevenLabs offers no OAuth flow for third-party apps, so there is no Connect button: the key is pasted, and stored in `.env` exactly like the OpenRouter key.
 
 What carries over from the issue and what changes:
 
@@ -29,7 +29,7 @@ What carries over from the issue and what changes:
 | Generate, inline player | Generate in the composer; the player is the audio shape itself |
 | "Add to canvas" makes an Audio input node | gone: the result is already a shape on the canvas. Using it as an input is a later spec |
 | Bracketed performance tags | passed through as typed, with a one-line hint under the box |
-| Cost per generation; credits used for the connected key | credits on the result's line and in its sidecar; the account's credits for the billing period in Settings (per-key usage is an open question, see Further Notes) |
+| Cost per generation; credits used for the connected key | credits on the result's line and in its sidecar; the account's credits for the billing period in Settings, labelled as the account's (ElevenLabs gives a personal key no per-key read) |
 | Pronunciation dictionaries, sound effects, music | out of scope, as the issue says |
 
 ## User Stories
@@ -79,13 +79,15 @@ What carries over from the issue and what changes:
 43. As a person, I want Settings to show how many credits my ElevenLabs account has used this billing period, of how many, and when it resets, so that I know when generation will stop.
 44. As a person whose ElevenLabs key was revoked, I want Settings to say it no longer works, so that a mystery failure becomes an obvious fix.
 45. As a person, I want to pick the default audio model in Settings, alongside image, text and video, so that new audio runs start on the model I prefer.
-46. As a person, I want the ElevenLabs key never to reach the browser, with the app knowing only whether there is one and its last four characters, so that the same promise covers both keys.
-47. As a person, I want the composer to open on the voice, model and settings I last used for audio, so that a second line in the same voice takes no setup.
-48. As a person, I want to save audio settings as a group's recipe, so that a group of lines always speaks in one voice.
-49. As the agent, I want `canvas_read` to report audio shapes with their file, and `canvas_write` to place one from an existing project file, so that I can see and arrange sound on the board.
-50. As a maintainer, I want the audio sidecar to carry credits in their own field and no `cost` field, so that a dollar spend summed over `cost` is never corrupted by credits.
-51. As a test author, I want every ElevenLabs call pointed at an in-test stub through one loopback-only variable, so that the audio path is tested without spending credits.
-52. As the desktop shell, I want nothing I depend on to change, so that installed apps keep working when this lands.
+46. As a person who only wants audio, I want to add an ElevenLabs key without connecting OpenRouter, so that I can generate speech without an account I do not need.
+47. As a person with only an ElevenLabs key, I want image, video and text to tell me they need an OpenRouter key, and the settings dialog to stop opening on its own, so that the app works for audio and says plainly what else it needs.
+48. As a person, I want the ElevenLabs key never to reach the browser, with the app knowing only whether there is one and its last four characters, so that the same promise covers both keys.
+49. As a person, I want the composer to open on the voice, model and settings I last used for audio, so that a second line in the same voice takes no setup.
+50. As a person, I want to save audio settings as a group's recipe, so that a group of lines always speaks in one voice.
+51. As the agent, I want `canvas_read` to report audio shapes with their file, and `canvas_write` to place one from an existing project file, so that I can see and arrange sound on the board.
+52. As a maintainer, I want the audio sidecar to carry credits in their own field and no `cost` field, so that a dollar spend summed over `cost` is never corrupted by credits.
+53. As a test author, I want every ElevenLabs call pointed at an in-test stub through one loopback-only variable, so that the audio path is tested without spending credits.
+54. As the desktop shell, I want nothing I depend on to change, so that installed apps keep working when this lands.
 
 ## Implementation Decisions
 
@@ -127,16 +129,17 @@ What carries over from the issue and what changes:
 
 - **Schema.** tldraw has no audio shape or audio asset, so `audio` is a custom shape like page and motion (spec 02): `meta.ref: string`; `props: { w, h, file: string, fileName: string }`. `file` is a bare project file name, `''` when empty; `fileName` is the original name of a dropped or picked file, `''` otherwise. Its result meta, run marker and run error live under `meta.unframed` as spec 03 defines them. Defined in contracts with its first shape migration, shared by the room and the web.
 - **Size.** Default 320 × 64. Width 200 to 640, height fixed at 64 (resize changes width only). Empty default 240 × 64.
-- **Empty state.** A card frame (spec 12: `--card` fill, the kit border, 10 px radius), the kind label "AUDIO" above it in spec 02's label type, and a "Choose file" button (the kit's small outline Button) opening the OS picker for `audio/*`.
+- **Empty state.** A card frame (spec 12: `--card` fill, the kit border, 10 px radius), the label "Audio" above it in spec 02's label type (`@<name>` once named, below), and a "Choose file" button (the kit's small outline Button) opening the OS picker for `audio/*`.
 - **Filled.** The same card, holding one row: a Play or Pause button (the kit's ghost icon Button, labels "Play" and "Pause"), then a column with the title in `text-xs` (a result's spoken text with whitespace collapsed, first 40 characters, ellipsised; otherwise `fileName`, else `file`) above a position slider (the native range input in the highlight colour, label "Position", step 0.01 s) and the readout `m:ss / m:ss` in tabular numerals, muted. The audio element preloads metadata only and never autoplays.
 - **Controls are controls.** A press on the button or the slider never starts a shape drag or a selection; a press anywhere else on the card drags the shape. This is spec 02's rule for the video transport.
 - **One at a time.** Starting playback on one audio shape pauses every other audio shape playing in the tab.
 - **Remove.** A selected filled audio shape shows spec 02's remove button at its top-right corner (label "Remove <file name>"). It clears `file` and `fileName`; the file stays on disk.
 - **Placeholder.** While it carries a run marker: the filled card's frame with spec 12's spinner and `Generating…` in place of the controls.
-- **Labels by zoom.** The kind label follows spec 02's `labelLevel` like every other label.
+- **Label.** Filled or empty, the label above the card reads "Audio" until the shape is named, then `@<name>` (spec 06). It follows spec 02's `labelLevel` like every other label.
 - **Not groupable.** An audio shape is not a member a group may hold: spec 02's allowed-member rule refuses it, as it refuses pages and motions. A selected audio shape is left out of `Cmd-G`'s wrap and stays on the page when dragged over a group. Groups and presets that hold audio are a later spec (Out of Scope).
 - **Copy and paste.** tldraw's copy, then spec 02's fix-ups: a fresh ref. Within a project the copy names the same file, as an image does. Across projects the file is copied with `files.copy` and `from`, and a result's recipe comes along through spec 03's `recipe.copy`. A failed copy pastes the shape empty with spec 02's toast.
-- **Context menu.** The Image section's reveal item (spec 02) applies to a filled audio shape too; the files it reveals are every selected filled image, video and audio shape.
+- **Context menu.** The Image section's reveal item and "Copy path" (spec 02) apply to a filled audio shape too; the files reveal shows are every selected filled image, video and audio shape. The Reference section's "Copy @<ref>" and "Rename F2" apply as on every shape with an `@id`.
+- **Name.** Like every kind but a mark, an audio shape can be named (spec 06): a double-click on its label, Rename, or F2. Its label reads "Audio" until it is named, then `@name`. A `@name` of an audio shape in a prompt or instruction is left as typed, as a page's is (below: audio contributes nothing to a composition).
 - **Add menu.** Inputs gains "Audio" after Video, icon lucide `AudioLines`. No single-key shortcut.
 
 ### Bringing sound files in
@@ -159,7 +162,7 @@ Registered into spec 03's medium registry with label `audio`, catalogue `audio`,
 
 **Tray, left to right.** The voice chip, the model chip, one chip per delivery prop in the tray, the `Advanced` chip, then `+ add prop` when a delivery prop is missing. Every chip is spec 03's chip recipe.
 
-- **Voice chip.** Shows the picked voice's name, or `Pick a voice` (Button `outline`, muted text) when none. Opens the voice dialog.
+- **Voice chip.** Shows the picked voice's name, or `Pick a voice` (Button `outline`, muted text) when none. Opens the voice dialog. There is no default voice: the first audio run asks for one, and the last-used values remember it from then on.
 - **Model chip.** Spec 03's model chip, showing the model id (`eleven_v4`). Opens the model dialog.
 - **Delivery props**, present in the tray by default when the model declares them, removable and re-addable through `+ add prop`:
 
@@ -167,7 +170,9 @@ Registered into spec 03's medium registry with label `audio`, catalogue `audio`,
 | --- | --- | --- | --- | --- | --- |
 | Stability | `stability` | always | 0 to 1, step 0.05 | 0.5 | `Stability 0.50` |
 | Style | `style` | the model's `can_use_style` is true | 0 to 1, step 0.05 | 0 | `Style 0.00` |
-| Speed | `speed` | always (see Further Notes) | 0.7 to 1.2, step 0.05 | 1.0 | `Speed 1.00×` |
+| Speed | `speed` | the model id is not `eleven_v4` or `eleven_v4_turbo` | 0.7 to 1.2, step 0.05 | 1.0 | `Speed 1.00×` |
+
+  ElevenLabs says Eleven v4 has no Speed setting, but its models list carries no flag for speed, so Speed is hidden on the two v4 model ids by name and offered on every other model, an unknown (`params: null`) row included. A later model id that also lacks speed needs adding to this rule.
 
   A delivery chip opens a Popover (the kit's, 240 px) holding a labelled range input (the native range in the highlight colour, as spec 02's player), the value as a number in tabular numerals, then a separator, `Reset` (Button `ghost`, sets the default) and `Remove` (Button `ghost`, takes the prop out of the tray). A prop not in the tray is not sent.
 
@@ -181,11 +186,11 @@ Registered into spec 03's medium registry with label `audio`, catalogue `audio`,
 | Seed | `seed` | always | the kit's NumberField, whole numbers 0 to 4294967295 | unset |
 | Language | `language_code` | the model declares at least one language | the kit's Combobox of the model's languages, `name (language_id)` | unset |
 
-  Formats offered: `mp3_44100_128`, `mp3_44100_192`, `mp3_44100_96`, `mp3_44100_64`, `mp3_22050_32`, `wav_44100`, `wav_48000`, `wav_24000`, `wav_16000`. ElevenLabs also offers PCM, Opus, μ-law and A-law, which make files a browser cannot play from disk without a container, so they are not offered. Some formats need a higher ElevenLabs plan; a refusal arrives as an upstream error with ElevenLabs' message.
+  Formats offered: `mp3_44100_128`, `mp3_44100_192`, `mp3_44100_96`, `mp3_44100_64`, `mp3_22050_32`, `wav_44100`, `wav_48000`, `wav_24000`, `wav_16000`. ElevenLabs also offers PCM, Opus, μ-law and A-law, which make files a browser cannot play from disk without a container, so they are not offered. Some formats need a higher ElevenLabs plan; a refusal arrives as an upstream error with ElevenLabs' message. WAV stays offered on every model, Eleven v4 included, until a paid probe shows v4 refuses it: third-party listings of v4 name MP3, PCM, Opus, μ-law and A-law, while the speech endpoint lists `wav_*`. Meanwhile a refusal reaches the person as ElevenLabs' own message.
 
-- **Model change.** Resets every model-driven prop: `style` and `use_speaker_boost` are removed when the new model does not declare them, `language_code` is unset when the new model does not list it, and the delivery props return to their defaults. The voice, `output_format` and `seed` are not model traits and are kept.
+- **Model change.** Resets every model-driven prop: `style` and `use_speaker_boost` are removed when the new model does not declare them, `speed` is removed when the new model is `eleven_v4` or `eleven_v4_turbo`, `language_code` is unset when the new model does not list it, and the delivery props return to their defaults. The voice, `output_format` and `seed` are not model traits and are kept.
 - **Send label** `Generate`, spinner while acknowledging, Cmd+Enter as spec 03.
-- **No estimate.** The price slot stays empty: ElevenLabs bills per character in credits at a rate that depends on the model, and the catalogue's rate field is not documented well enough to compute an exact number (spec 03: no guess dressed as a number). See Further Notes.
+- **No estimate.** The price slot stays empty: ElevenLabs bills per character in credits at a rate that depends on the model, and the catalogue's rate field is not documented well enough to compute an exact number (spec 03: no guess dressed as a number). A credit estimate is a follow-up (Out of Scope).
 
 **Status lines** (spec 03's band; a blocker disables send):
 
@@ -195,6 +200,8 @@ Registered into spec 03's medium registry with label `audio`, catalogue `audio`,
 - Too long (blocker), when the spoken text's length in characters is above the model's `maximum_text_length_per_request`: `This text is <n> characters, but <model> takes at most <max> in one request. Shorten it, or pick a model that takes more.` Not shown when the model gives no maximum.
 - A cycle (blocker): the error line, as spec 03.
 - Media selected (warning): `An image is selected, but audio models only read text. It will not be sent.` or `<n> images and clips are selected, but audio models only read text. They will not be sent.` The singular form names `An image` or `A clip` by what it is.
+
+**With only an ElevenLabs key.** The audio medium works in full. Image, video and text keep spec 03's no-key blocker, unchanged, and their catalogues answer only their default rows (specs 03 to 05). When the composer would open on a medium that needs OpenRouter while only the ElevenLabs key exists, it opens on audio instead. The agent is unaffected: it runs on the person's own subscription (spec 07).
 
 **Last-used values.** Spec 01's preference `lastUsed.audio`: spec 03's `{ model?, props }` plus `voice?: { id: string, name: string }`. Written on send from the composer, as spec 03 writes it. A stored voice is shown by its stored name and sent by id; if ElevenLabs no longer has it, the run fails with ElevenLabs' message and the person picks another. Changing the default audio model clears the stored model, as spec 03 does for the other media.
 
@@ -260,7 +267,7 @@ Every call goes to `https://api.elevenlabs.io` (the origin replaced by `UNFRAMED
 
 - **Models.** `GET /v1/models`. Keep entries whose `can_do_text_to_speech` is true; map `model_id` to `id`, `name` (else the id), `can_use_style`, `can_use_speaker_boost` (false when absent), `languages[]` as `{ id: language_id, name }`, `maximum_text_length_per_request` (else null). Keep ElevenLabs' order. Append the default audio model as `{ id, name: id, params: null }` when missing. Without a key, or on any failure, answer only the default row. A row with `params: null` means "unknown": the tray then offers only the props offered always, and never removes a stored Style or Speaker boost (spec 04's healing rule).
 - **Voices.** `GET /v2/voices?page_size=100` plus `search` and `next_page_token` when given. Map each voice's `voice_id`, `name`, `category`, `labels` (string values only), `preview_url`. `nextPageToken` is `next_page_token` when `has_more` is true, else null.
-- **Speech.** `POST /v1/text-to-speech/<voice id>?output_format=<format>` with `Content-Type: application/json` and the body `{ text, model_id, voice_settings?, seed?, language_code? }`. `voice_settings` holds exactly the delivery and similarity keys the request sets, and is absent when it sets none, so the voice's own saved settings apply. `seed` and `language_code` are sent only when set. `output_format` defaults to `mp3_44100_128`. The answer body is the audio bytes. The credits are the `character-cost` response header read as a finite number at or above zero, else null. The `request-id` header, when present, is kept for the sidecar.
+- **Speech.** `POST /v1/text-to-speech/<voice id>?output_format=<format>` with `Content-Type: application/json` and the body `{ text, model_id, voice_settings?, seed?, language_code? }`. `voice_settings` holds exactly the delivery and similarity keys the request sets, and is absent when it sets none, so the voice's own saved settings apply. `seed` and `language_code` are sent only when set. `output_format` defaults to `mp3_44100_128`. The answer body is the audio bytes. The credits are the `character-cost` response header read as a finite number at or above zero, else null. The header is treated as credits (after the model's rate), not raw characters; that is unconfirmed until the person's paid Flash call (Further Notes). The `request-id` header, when present, is kept for the sidecar.
 - **Subscription.** `GET /v1/user/subscription`, for Settings only: `tier`, `character_count`, `character_limit`, `next_character_count_reset_unix`.
 
 The upstream message is `detail.message` when `detail` is an object holding a string `message`, else `detail` when it is a string, else the first 300 characters of the body.
@@ -297,8 +304,8 @@ The run registers in spec 03's run registry, so placeholder resolution at boot, 
 An audio result is an audio shape with spec 03's result meta (`medium: "audio"`, `cost: null`, `credits`). Its recipe is spec 03's `ResultRecipe` with `medium: "audio"`, `references: []`, and `params` holding `voice_id`, `voice_name`, and every param that was sent, keyed as in `AudioRunRequest`.
 
 - **Result line**, under a selected result: `<model> · <m:ss> · <n> credits` (`1 credit` singular), any unknown part omitted. The duration is read by the web from the loaded audio's metadata.
-- **Toolbar.** Every other result's bar is Generate (primary, opening the composer with the result as input), then Regenerate and Agent (the decision made for #101). An audio result's bar is **Regenerate** (primary, Button `default`) and **Agent** (Button `outline`), with no Generate: Generate on a result opens the composer with that result as the input, and an audio shape is never an input in this spec (it contributes nothing to a composition, so the composer would open on a selection with nothing to make from). When audio becomes an input (Out of Scope), the audio bar gains Generate like the others. There is no Vary, no separate Recipe button and no one-click exact repeat.
-- **Regenerate**: opens the composer in recipe mode over the result (spec 03's recipe mode, as #101 now defines Regenerate): the audio medium, the recorded voice, model, props (a recorded seed included) and instruction prefilled, the source band reading `recipe · N sources`, sending the recorded spoken text with whatever the person changed. The output lands beside the result. Sending the recipe unchanged with a recorded seed may give nearly the same take; that is what the recipe says.
+- **Toolbar.** Every other result's bar is Regenerate, Agent, then Generate (primary, last, opening the composer with the result as input), as spec 03 builds it for #101. An audio result's bar is **Regenerate** (primary, Button `default`) and **Agent** (Button `outline`), with no Generate: Generate on a result opens the composer with that result as the input, and an audio shape is never an input in this spec (it contributes nothing to a composition, so the composer would open on a selection with nothing to make from). When audio becomes an input (Out of Scope), the audio bar gains Generate like the others. There is no Vary, no separate Recipe button and no one-click exact repeat.
+- **Regenerate**: opens the composer in recipe mode over the result (spec 03's recipe mode, as #101 now defines Regenerate): the audio medium, the recorded voice, model, props (a recorded seed included) and instruction prefilled, the source band reading `recipe · 1 source` or `recipe · N sources`, sending the recorded spoken text with whatever the person changed. The output lands beside the result. Sending the recipe unchanged with a recorded seed may give nearly the same take; that is what the recipe says.
 - **Tether** (spec 03): drawn to the prompts that are still on the canvas.
 
 **Recipe groups** (spec 06). `GroupRecipe.medium` gains `audio`; its `params` hold the voice as in a result's recipe. The recipe chip reads the model id then the voice name (`eleven_v4 · Rachel`). A recipe group's Generate runs `run.audio` at once, as spec 06 runs other media. The library's medium chip gains `Audio` (lucide `AudioLines`, yellow). A group never holds an audio shape (above); a recipe group with medium audio speaks its prompt members.
@@ -363,22 +370,32 @@ ElevenLabs status copy (domain), numbers grouped by the locale:
 | not fetched or failed, key saved | `A key is already saved (…<hint>). Entering a new one replaces it.` |
 | no key | `Make a key at elevenlabs.io (Developers, API keys) and paste it here. Audio generation is billed to that account in credits.` |
 
-The usage line is the account's, not the key's, and says so. See Further Notes for per-key usage.
+The usage line is the account's, not the key's, and says so. Settings makes no per-key read: ElevenLabs documents per-key `character_count` only on the service-account keys endpoint, which needs a workspace admin, and on the deprecated character-stats endpoint, whose `api_keys` breakdown does not say how keys are named.
 
 ### The settings dialog
 
-Spec 10's dialog gains, after the OpenRouter key section and before Default models, shown when there is an OpenRouter key (spec 10 hides everything below the key section without one):
+Spec 10's dialog gains an ElevenLabs block after the OpenRouter key section and before Default models. It shows whether or not there is an OpenRouter key, so someone who only wants audio can set ElevenLabs up alone:
 
 - Heading `ElevenLabs`. A password field (the kit Input), accessible label `ElevenLabs API key`, placeholder `sk_…`. Beside it, with a key, a ghost button `Remove key` with spec 10's two-step confirm (`Yes, remove it`, field warning `This deletes the ElevenLabs key from .env. Audio generation is disabled until you add one.`, then `ElevenLabs key removed.`). Under it, the status copy.
-- Save (spec 10) sends `elevenLabsKey` when the trimmed field is non-empty, and clears the field and the shown status on success, then refetches the status.
+- Without an OpenRouter key, the block sits under spec 10's keyless intro, Connect button and paste reveal, with the supporting line `Only want audio? Paste an ElevenLabs key here. Images, video and text still need OpenRouter.` in `text-xs` muted text. Its key field is always shown (there is no reveal step).
+- Save (spec 10) sends `elevenLabsKey` when the trimmed field is non-empty, and clears the field and the shown status on success, then refetches the status. Save is shown when there is either key, the OpenRouter paste field is revealed, or the ElevenLabs field holds text.
+- Saving a first ElevenLabs key while there is no OpenRouter key closes the dialog with the toast `ElevenLabs key saved. Audio is ready to generate.`
 
-Default models gains a fourth searchable select, `Audio`, listing the audio catalogue's model ids. Without an ElevenLabs key it lists only the default and shows the hint `Add an ElevenLabs key to see every model.` in `text-xs` muted text.
+Spec 10's keyless rules change from "no OpenRouter key" to "neither key":
+
+- The dialog opens on its own at first load only when there is no key of either kind.
+- The title is `Connect OpenRouter to start` only when there is no key of either kind, else `Settings`.
+- The settings button is the primary `Add your API key` only when there is no key of either kind; otherwise it is spec 10's gear, its tooltip naming the keys that exist (spec 10's `Settings: key …<hint>, default models, output folder` with an OpenRouter key; `Settings: ElevenLabs key …<hint>, default models, output folder` with only an ElevenLabs key).
+- With only an ElevenLabs key, the dialog shows the OpenRouter keyless intro and Connect (so OpenRouter is one click away), the ElevenLabs block, Default models holding only `Audio`, Output folder and Local agents.
+
+
+Default models shows when there is either key. It holds spec 10's `Image`, `Text` and `Video` selects with an OpenRouter key, and a fourth searchable select, `Audio`, listing the audio catalogue's model ids, with an ElevenLabs key. Output folder and Local agents show when there is either key.
 
 ### The agent
 
 - `canvas_read` reports an audio shape as `{ id, kind: "audio", x, y, w, h, parent?, file, fileName }` (`file` omitted when empty), plus `recipe` and `running` for a result as spec 07 does for any result.
 - `canvas_write`'s `create` accepts `kind: "audio"` with `props.file` naming an existing project file; spec 07's refusals for a missing file and for bytes in props apply. `props.url` is refused for audio: `create: audio takes props.file, a file in the project folder`.
-- The `canvas_write` description in `assets/prompts/tool-descriptions.md` changes its Kinds sentence to: `Kinds: prompt (props.text), image and video (props.file names an existing project file, or props.url for a clip link), audio (props.file names an existing project file), group (props.name), mark (props.type is geo, note, arrow or line, plus that tldraw type's own props).` The `canvas_read` description is unchanged.
+- The `canvas_write` description in `assets/prompts/tool-descriptions.md` changes its Kinds sentence to: `Kinds: prompt (props.text), image and video (props.file names an existing project file, or props.url for a clip link), audio (props.file names an existing project file), group (props.name), mark (props.type is geo, note, arrow or line, plus that tldraw type's own props).` Its `rename` op reads `renames a prompt, image, video, audio, page, motion or group`, and the system prompt's sentence on refs (`assets/prompts/agent-system.md`) lists audio among the shapes that have one. The `canvas_read` description is unchanged.
 - The selection preamble (spec 07) names an audio shape as `audio <id> ("<label>")` with spec 07's label rule. Nothing else changes for the agent.
 
 ### Test hooks
@@ -399,7 +416,7 @@ It is read from the process environment only, never from `.env`, and is inert wh
 2. **Index contract 2**, "The OpenRouter key never leaves the engine", is extended, not loosened: the ElevenLabs key never leaves the engine either, and the web learns only `hasElevenLabsKey` and its last four characters.
 3. **Index contract 4**, "Every paid run leaves a sidecar with its cost". An audio run leaves a sidecar with its credits: `billing: "elevenlabs-credits"`, `credits`, and no `cost` field. Why: credits are not dollars, and their price depends on the person's ElevenLabs plan, which Unframed cannot see.
 4. **Index, Test seams**: "every OpenRouter call … through spec 01's single loopback-only `UNFRAMED_TEST_OPENROUTER_ORIGIN`". A second stub origin, `UNFRAMED_TEST_ELEVENLABS_ORIGIN`, carries every ElevenLabs call under the same loopback rule. Why: a second provider has a second origin, and pointing ElevenLabs' paths at the OpenRouter stub would make one stub answer two APIs' paths and hide a wrong base URL. Test-only, so contract 6 and the shell contract are untouched.
-5. **Spec 01's `.env.example`** "contains exactly" six lines; it gains two. **Spec 02's allowed-member rule** and **spec 03's `Medium`** (`["image", "video", "text"]`) each gain a case. **Spec 04's Out of Scope** "Audio references" stays out of scope: audio shapes are never inputs in this spec.
+5. **Spec 01's `.env.example`** "contains exactly" six lines; it gains two. **Spec 02's allowed-member rule** and **spec 03's `Medium`** (`["image", "video", "text"]`) each gain a case. **Spec 04's Out of Scope** "Audio references" stays out of scope: audio shapes are never inputs in this spec. **Spec 10's keyless dialog** (opening on its own, its title, the settings button, the sections below the key) keys off "neither key" instead of "no OpenRouter key", so audio can be set up without OpenRouter.
 
 The build updates these documents in the same pull request, so the specs keep describing the app: 00-index (the product line, contract 2, contract 4, the engine seam's two stub origins, the audio shape in the vocabulary), spec 01's settings and test-only tables and `.env.example`, spec 02's member rule, add menu and drop rules, spec 03's `Medium`, spec 06's chips, spec 07's `canvas_read` and `canvas_write` kinds, spec 10's dialog sections, and the Kinds sentence in `assets/prompts/tool-descriptions.md`.
 
@@ -416,8 +433,8 @@ A good test drives one of the three seams in 00-index and asserts on what it exp
 
 ## Tasks
 
-1. Audio params: Stability and Speed always, Style only with `can_use_style`, Speaker boost only with `can_use_speaker_boost`, Language from the model's languages, Format and Seed always; defaults; a `params: null` entry keeps stored Style and Speaker boost. Seam: domain.
-2. Audio params: reset on model change removes undeclared props and unsets an unlisted language, keeps voice, format and seed; range checks for every param. Seam: domain.
+1. Audio params: Stability always, Speed on every model id but `eleven_v4` and `eleven_v4_turbo` (an unknown row included), Style only with `can_use_style`, Speaker boost only with `can_use_speaker_boost`, Language from the model's languages, Format and Seed always; defaults; a `params: null` entry keeps stored Style and Speaker boost. Seam: domain.
+2. Audio params: reset on model change removes undeclared props, removes Speed when the new model is a v4 id, and unsets an unlisted language, keeps voice, format and seed; range checks for every param. Seam: domain.
 3. Audio request: spoken text is the composition prompt; `voice_settings` holds exactly the set delivery and similarity keys and is absent when none; seed, language and format only when set, format defaulting to `mp3_44100_128`; every media slot gets the unused role. Seam: domain.
 4. Audio status: no key, empty text, no voice, too long with both numbers, a cycle, and the media warning in singular and plural, with exact strings. Seam: domain.
 5. ElevenLabs answers: `creditsFrom`, `elevenLabsMessage` for an object `detail`, a string `detail`, and a raw body; `audioExtension`; `audioLine` with `1 credit`, `n credits` and missing parts. Seam: domain.
@@ -444,9 +461,9 @@ A good test drives one of the three seams in 00-index and asserts on what it exp
 26. Audio shape: the add menu's Audio, the empty state, Choose file, the filled card with title and readout, width-only resize within limits. Seam: browser.
 27. Audio player: Play and Pause, the position slider and readout, the controls never dragging the shape and the card dragging it, starting one audio pausing another, Remove keeping the file. Seam: browser.
 28. Drop and paste: sound files by type and by name become audio shapes with the multi-drop offset; a drop onto an audio shape replaces its file; a pasted sound file lands at the pointer or fills selected audio shapes. Seam: browser.
-29. Context menu Reveal on audio, and copy and paste of audio shapes within a project (same file) and across projects (copied file, recipe brought along). Seam: browser.
+29. Context menu Reveal and Copy path on audio, and copy and paste of audio shapes within a project (same file) and across projects (copied file, recipe brought along). Seam: browser.
 30. Audio in other media: a selected audio shape shows the unused mark in the image, video and text tray and is not sent; a selection of only audio offers Agent only; `Cmd-G` leaves audio shapes out. Seam: browser.
-31. Audio medium in the composer: `audio` in the medium switch, the voice chip reading `Pick a voice`, the model chip on the default, the delivery chips the model declares (no Style for a model without `can_use_style`), the Advanced chip, the tag hint, no price. Seam: browser.
+31. Audio medium in the composer: `audio` in the medium switch, the voice chip reading `Pick a voice`, the model chip on the default, the delivery chips the model declares (no Style for a model without `can_use_style`; no Speed on `eleven_v4`, Speed back on `eleven_multilingual_v2`), the Advanced chip, the tag hint, no price. Seam: browser.
 32. Voice dialog: list, labels, category, search after typing, `Load more`, preview plays and stops, pick and close, current voice marked, empty and failure messages, Escape closes only the dialog. Seam: browser.
 33. Model dialog for audio: Model and Languages columns, no Provider or Released, browse link, pick. Seam: browser.
 34. Delivery and Advanced popovers: slider value shown, Reset, Remove and re-add through `+ add prop`, the Advanced count, each advanced control; a model change resets as the rule says; the stub receives exactly the set values. Seam: browser.
@@ -454,8 +471,11 @@ A good test drives one of the three seams in 00-index and asserts on what it exp
 36. Audio run end to end: Generate, the placeholder with `Generating…`, the audio result beside the selection, its line `<model> · <m:ss> · <n> credits`, and the run report toast on failure. Seam: browser.
 37. Audio result bar: Regenerate (primary) and Agent only, no Generate, Vary or Recipe; Regenerate opens the composer in recipe mode with voice, model, props and instruction prefilled, and sending lands a second take beside the result. Seam: browser.
 38. Last-used audio values: voice, model and props come back on the next open and after an engine restart on a new port. Seam: browser.
-39. Settings: the ElevenLabs block with paste, a bad key's error, the two-step remove, the usage line from the stub's subscription answer, revoked and usage-hidden lines, and the `Audio` default model select with its no-key hint. Seam: browser.
-40. Recipe groups with audio: Save as recipe on the audio medium, the chip `eleven_v4 · <voice>`, Generate from the toolbar runs `run.audio` with the recipe, and the library's `Audio` medium chip. Seam: browser.
+39. Settings with an OpenRouter key: the ElevenLabs block with paste, a bad key's error, the two-step remove, the usage line from the stub's subscription answer, revoked and usage-hidden lines, and the `Audio` default model select shown only with an ElevenLabs key. Seam: browser.
+40. Settings with only an ElevenLabs key: on a fresh install the keyless dialog shows the ElevenLabs block with its line; saving an ElevenLabs key alone closes the dialog with its toast; after a reload the dialog does not open on its own, the title is `Settings`, the button is the gear, and the dialog shows the OpenRouter intro and Connect, Default models with only `Audio`, Output folder and Local agents. Seam: browser.
+41. Composer with only an ElevenLabs key: an audio run lands; image, video and text show spec 03's no-key blocker; the composer opens on audio when it would open on a medium that needs OpenRouter. Seam: browser.
+42. Naming audio: the label reads "Audio" until named; a double-click on the label, the context menu's Rename and F2 open the "Audio name" field; Copy @<ref> copies the name; a prompt's `@name` of an audio shape is left as typed in every medium; `canvas_write`'s `rename` op renames an audio shape. Seam: browser.
+43. Recipe groups with audio: Save as recipe on the audio medium, the chip `eleven_v4 · <voice>`, Generate from the toolbar runs `run.audio` with the recipe, and the library's `Audio` medium chip. Seam: browser.
 
 ## Out of Scope
 
@@ -466,7 +486,8 @@ A good test drives one of the three seams in 00-index and asserts on what it exp
 - Multi-speaker dialogue in one request (ElevenLabs' text-to-dialogue endpoint).
 - Streaming playback while a line generates, and timestamps or captions.
 - Runs above 1, batches and Free for audio.
-- A price estimate in credits before sending (see Further Notes).
+- A price estimate in credits before sending. A follow-up: the models list's `model_rates.character_cost_multiplier` could give `est. ~<n> credits` once the `character-cost` header is confirmed as credits.
+- Per-key credit usage in Settings: a personal key has no documented read for it.
 - Converting credits into dollars anywhere.
 - A waveform drawing on the audio card.
 - An ElevenLabs OAuth or "Connect" flow: ElevenLabs does not offer one for third-party apps.
@@ -483,18 +504,10 @@ ElevenLabs' authentication docs describe API keys sent in the `xi-api-key` heade
 
 The issue's split is kept: the settings that change how a line sounds (Stability, Style, Speed) are visible chips; the ones that change fidelity or the file (Similarity, Speaker boost, Format, Seed, Language) wait behind Advanced. ElevenLabs' models list declares `can_use_style` and `can_use_speaker_boost`, so those two follow the model the way spec 03's props do.
 
-### Open questions for the person
+### To confirm with a paid call
 
-These are marked rather than decided. Each has a default in the spec above so the build can go ahead, and each is cheap to change.
-
-1. **Per-key credit usage.** The issue asks for credits used by the connected key. ElevenLabs documents per-key `character_count` and `character_limit` only on the service-account API keys endpoint, which needs a workspace admin, and the character-stats endpoint's `api_keys` breakdown does not document how its keys are named and is deprecated. The non-deprecated read a personal key can make is `GET /v1/user/subscription`, which is per account. The spec shows the account's usage and labels it as the account's. Should Settings try the per-key read too, or is the account line enough?
-2. **What `character-cost` counts.** ElevenLabs' docs call the header the generation's "character costs" and show it in their SDK examples, but do not say whether it is credits after the model's rate (Flash bills half) or raw characters. The spec treats it as credits. One paid call with a Flash model and a known text would settle it.
-3. **Speed on Eleven v4.** ElevenLabs' help centre says Style and Speed sliders are not available on Eleven v4, but the models list has no flag for speed, so the spec offers Speed on every model. Choices: keep it (upstream may ignore it), hide it on models whose `can_use_style` is false, or hide it on `eleven_v4` and `eleven_v4_turbo` by name.
-4. **No default voice.** The spec makes the first audio run wait for a pick (`Pick a voice for this line.`), then remembers it. The alternative is to default to the first premade voice in the account's list.
-5. **Audio without OpenRouter.** Spec 10 shows nothing below the OpenRouter key section until there is an OpenRouter key, so the ElevenLabs block appears only after OpenRouter is set up. Someone who wants only audio has to connect OpenRouter first. Should the ElevenLabs block show in the keyless dialog too?
-6. **WAV on Eleven v4.** The speech endpoint lists `wav_*` formats, while third-party listings of Eleven v4 name MP3, PCM, Opus, μ-law and A-law. The spec offers WAV and lets a refusal surface ElevenLabs' message. Drop WAV if a paid probe shows v4 refuses it.
-7. **An estimate.** The models list carries `model_rates.character_cost_multiplier`. If question 2 confirms one credit per character times that rate, the tray could show `est. ~<n> credits`. Not built until then.
-8. **Recipe groups for audio** are included (task 40) because spec 06's recipe line appears for every medium. Drop them if the person prefers audio to stay out of groups entirely until audio shapes can be members.
+- The `character-cost` header is treated as credits after the model's rate. ElevenLabs' docs call it the generation's "character costs" without saying which; the person's paid call with a Flash model (which bills half) and a known text confirms it. If it turns out to be raw characters, the result line and sidecar multiply by the model's rate instead.
+- WAV on Eleven v4: kept until the person's paid probe shows v4 refuses it.
 
 ### Facts relied on, from ElevenLabs' docs, checked 2026-10-07
 
@@ -515,8 +528,9 @@ These are marked rather than decided. Each has a default in the spec above so th
 
 Spec 14 (external agents) is being written alongside this one. If it changes `canvas_read`, `canvas_write` or `assets/prompts/tool-descriptions.md`, the Kinds sentence above is applied on top of its text.
 
-The result toolbar follows the decision made for #101, built in its own pull request: on a result the bar is Generate, then Regenerate and Agent; Regenerate opens the composer in recipe mode; there is no Vary, no Recipe button and no one-click exact repeat. If spec 03's text has not caught up when this spec is built, #101's wording wins over spec 03's toolbar table.
+The result toolbar follows the decision made for #101, built in its own pull request: on a result the bar is Regenerate, Agent, then Generate (primary, last); Regenerate opens the composer in recipe mode; there is no Vary, no Recipe button and no one-click exact repeat. If spec 03's text has not caught up when this spec is built, #101's wording wins over spec 03's toolbar table.
 
 ### Assets this spec needs
 
-- `assets/prompts/tool-descriptions.md`: the `canvas_write` Kinds sentence above, replacing the current one. No other model-facing text.
+- `assets/prompts/tool-descriptions.md`: the `canvas_write` Kinds sentence and `rename` op above, replacing the current ones.
+- `assets/prompts/agent-system.md`: audio in the sentence on refs. No other model-facing text.
