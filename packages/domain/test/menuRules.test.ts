@@ -50,15 +50,16 @@ describe("shortcutHint", () => {
 });
 
 describe("contextMenu", () => {
-  it("offers Copy as prompt after Copy @id on a text result, and only there", () => {
+  it("offers Copy as prompt after Copy @id and Rename on a text result, and only there", () => {
     const answer: MenuShape = { id: "t", type: "text", ref: "107", textResult: true };
-    expect(outline(shape(answer))[0]).toEqual(["reference", ["Copy @107", "Copy as prompt"]]);
-    expect(outline(shape(prompt))[0]).toEqual(["reference", ["Copy @100"]]);
+    expect(outline(shape(answer))[0]).toEqual(["reference", ["Copy @107", "Rename F2", "Copy as prompt"]]);
+    expect(outline(shape(prompt))[0]).toEqual(["reference", ["Copy @100", "Rename F2"]]);
   });
 
-  it("offers reveal, copy path and copy as image on a filled image, then the edit items", () => {
+  it("offers reveal, copy path and copy as image on a filled image, then its reference and the edit items", () => {
     expect(outline(shape(image))).toEqual([
       ["image", ["Reveal in Finder", "Copy path", "Copy as image"]],
+      ["reference", ["Copy @101", "Rename F2"]],
       ["edit", ["Cut ⌘X", "Copy ⌘C", "Group ⌘G"]],
     ]);
   });
@@ -87,23 +88,33 @@ describe("contextMenu", () => {
   });
 
   it("drops the image section on an empty image and a linked clip, and copy as image on a video", () => {
-    expect(outline(shape(emptyImage))[0]![0]).toBe("edit");
-    expect(outline(shape(linkedVideo))[0]![0]).toBe("edit");
+    expect(outline(shape(emptyImage))[0]![0]).toBe("reference");
+    expect(outline(shape(linkedVideo))[0]![0]).toBe("reference");
     expect(outline(shape(video))[0]).toEqual(["image", ["Reveal in Finder", "Copy path"]]);
   });
 
-  it("offers Copy @id on a prompt and a group", () => {
-    expect(outline(shape(prompt))[0]).toEqual(["reference", ["Copy @100"]]);
-    expect(shape(group)[0]!.items[0]).toMatchObject({ action: "copy-ref", ref: "105", label: "Copy @105" });
+  it("offers Copy @id and Rename on every shape with a ref, and neither on a mark", () => {
+    expect(outline(shape(prompt))[0]).toEqual(["reference", ["Copy @100", "Rename F2"]]);
+    expect(shape(group)[0]!.items).toEqual([
+      { action: "copy-ref", ref: "105", label: "Copy @105" },
+      { action: "rename", label: "Rename", shortcut: "F2" },
+    ]);
+    for (const target of [image, emptyImage, video, linkedVideo, page, { id: "mo", type: "motion", ref: "intro" }]) {
+      expect(shape(target).find((section) => section.section === "reference")?.items.map((item) => item.label)).toEqual([`Copy @${target.ref}`, "Rename"]);
+    }
+    expect(shape(mark).some((section) => section.section === "reference")).toBe(false);
   });
 
   it("offers Ungroup on a right-clicked or selected group, and Group only when something may be a member", () => {
     expect(outline(shape(group))).toEqual([
-      ["reference", ["Copy @105"]],
+      ["reference", ["Copy @105", "Rename F2"]],
       ["edit", ["Cut ⌘X", "Copy ⌘C", "Ungroup ⇧⌘G"]],
     ]);
     expect(outline(shape(prompt, [prompt, group]))[1]).toEqual(["edit", ["Cut ⌘X", "Copy ⌘C", "Group ⌘G", "Ungroup ⇧⌘G"]]);
-    expect(outline(shape(page))).toEqual([["edit", ["Cut ⌘X", "Copy ⌘C"]]]);
+    expect(outline(shape(page))).toEqual([
+      ["reference", ["Copy @106", "Rename F2"]],
+      ["edit", ["Cut ⌘X", "Copy ⌘C"]],
+    ]);
   });
 
   it("offers Paste only when the clipboard holds something", () => {
@@ -133,7 +144,7 @@ describe("contextMenu", () => {
   it("offers Clear recipe in the Edit section of a right-clicked recipe group", () => {
     const recipeGroup: MenuShape = { ...group, recipe: true };
     expect(outline(shape(recipeGroup))).toEqual([
-      ["reference", ["Copy @105"]],
+      ["reference", ["Copy @105", "Rename F2"]],
       ["edit", ["Cut ⌘X", "Copy ⌘C", "Ungroup ⇧⌘G", "Clear recipe"]],
     ]);
     expect(outline(shape(group)).flatMap(([, items]) => items)).not.toContain("Clear recipe");
@@ -176,6 +187,8 @@ describe("contextMenu", () => {
         { action: "copy-path", label: "Copy path", file: "1-brief.html" },
       ],
     });
+    // The file section comes first, as an image's does, then the reference.
+    expect(shape(filled).map((section) => section.section).slice(0, 3)).toEqual(["artifact", "reference", "edit"]);
     // Every selected filled artifact is revealed; the path is the right-clicked one's.
     expect(shape(motion, [filled, motion, image], { platform: "win32" })[0]?.items.slice(1)).toEqual([
       { action: "reveal", label: "Show in Explorer (2)", files: ["1-brief.html", "2-intro.html"] },
@@ -186,6 +199,7 @@ describe("contextMenu", () => {
   it("uses Ctrl hints and the platform's reveal label off macOS", () => {
     expect(outline(shape(image, [image], { platform: "win32" }))).toEqual([
       ["image", ["Show in Explorer", "Copy path", "Copy as image"]],
+      ["reference", ["Copy @101", "Rename F2"]],
       ["edit", ["Cut Ctrl+X", "Copy Ctrl+C", "Group Ctrl+G"]],
     ]);
   });

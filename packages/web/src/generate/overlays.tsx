@@ -45,8 +45,14 @@ const badgesOf = (editor: Editor): ReadonlyArray<Badge> => {
 export const RoleBadges = () => {
   const editor = useEditor();
   const badges = useValue("role badges", () => badgesOf(editor), [editor]);
+  // A badge sits where its shape's label is, so the label steps aside while the badge shows.
+  const covered = badges
+    .filter((badge) => badge.key !== SKETCH_ROLE)
+    .map((badge) => `.tl-shape[data-shape-id=${JSON.stringify(badge.key)}] [data-shape-label] { visibility: hidden; }`)
+    .join("\n");
   return (
     <>
+      {covered !== "" && <style data-testid="badged-labels">{covered}</style>}
       {badges.map((badge) => (
         <div
           key={badge.key}

@@ -138,9 +138,7 @@ const PromptShape = ({ shape, util }: { readonly shape: TLTextShape; readonly ut
   const hintStyle = { fontFamily: dv.fontFamily, fontSize: dv.fontSize, lineHeight: dv.lineHeight, width, height };
   return (
     <div className="relative" data-testid="prompt" style={{ width, height, transform: `scale(${shape.props.scale})`, transformOrigin: "top left" }}>
-      <ShapeLabel shapeId={shape.id} kind="prompt">
-        {cost}@{ref}
-      </ShapeLabel>
+      <ShapeLabel shapeId={shape.id} kind="prompt" name={ref} width={width} text={`${cost}@${ref ?? ""}`} />
       {running ? (
         <div className="pointer-events-none absolute top-0 left-0 flex items-center gap-1.5 whitespace-nowrap text-muted-foreground" data-testid="prompt-hint" role="status" style={hintStyle}>
           <Spinner size="sm" aria-hidden />

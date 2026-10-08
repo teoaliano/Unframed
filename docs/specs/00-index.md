@@ -51,7 +51,7 @@ Use these words, and only these, for these things.
   - **page**: an HTML artifact shown in a sandboxed frame.
   - **motion**: a HyperFrames composition shown in a player.
   - **mark**: every other tldraw drawing shape (draw, geo, arrow, line, highlight, note, and so on).
-- **`@id`**: the reference token (`@` followed by word characters and hyphens) that pulls one prompt, text result or group into another prompt's text.
+- **`@id`**: the reference token (`@` followed by word characters and hyphens) that pulls one prompt, text result or group into another prompt's text, or attaches one image or video to a run. Every shape but a mark has one: a number the canvas mints, or a name a person gives it (spec 06).
 - **Selection**: the shapes currently selected. It is the input set of a run.
 - **Run**: one Generate action. It may make several outputs (a **batch**).
 - **Recipe**: everything needed to repeat a run: the sources, the model, the parameters, the per-run instruction. Every result carries one. A group can also carry one as standing settings (medium, model, parameters, runs), which holds no instruction and no sources: its sources are its members. Spec 03 defines both.

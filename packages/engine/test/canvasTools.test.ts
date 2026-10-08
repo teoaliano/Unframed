@@ -44,12 +44,12 @@ describe("canvas_read", () => {
     const shapes = new Map((read!.result.shapes as any[]).map((shape) => [shape.id, shape]));
     expect(read!.result.selection).toEqual(["pg1"]);
     expect(shapes.get("p1")).toMatchObject({ kind: "prompt", ref: "100", text: "a lone red fox", x: 0, y: 0 });
-    expect(shapes.get("i3")).toMatchObject({ kind: "image", file: "1700000000000-hero.png", fileName: "hero.png", aspect: 2, w: 400, h: 200 });
+    expect(shapes.get("i3")).toMatchObject({ kind: "image", ref: "101", file: "1700000000000-hero.png", fileName: "hero.png", aspect: 2, w: 400, h: 200 });
     expect(shapes.get("i3")).not.toHaveProperty("crop");
     expect(shapes.get("d1")).toMatchObject({ kind: "mark", type: "geo", text: "sky", on: "i3" });
     expect(shapes.get("g1")).toMatchObject({ kind: "group", ref: "hero", members: ["p3", "p2"] });
     expect(shapes.get("p2")).toMatchObject({ parent: "g1", x: 30, y: 160 });
-    expect(shapes.get("pg1")).toMatchObject({ kind: "page", file: "landing.html", title: "Landing", dials: { accent: "#ff0000" } });
+    expect(shapes.get("pg1")).toMatchObject({ kind: "page", ref: "104", file: "landing.html", title: "Landing", dials: { accent: "#ff0000" } });
     expect(shapes.get("r1")).toMatchObject({ kind: "image", recipe: RECIPE });
     expect(shapes.get("r2")).toMatchObject({ running: true });
     expect(shapes.get("p1")).not.toHaveProperty("running");

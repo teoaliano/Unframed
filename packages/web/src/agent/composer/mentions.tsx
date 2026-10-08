@@ -1,4 +1,4 @@
-import { agentShapeId, plainText, readRef, shapeKind, shapeLabel } from "@unframed/domain";
+import { agentShapeId, isMintedRef, plainText, readRef, shapeKind, shapeLabel } from "@unframed/domain";
 import { File } from "lucide-react";
 import type { Editor, TLAssetId, TLShape } from "tldraw";
 import { KIND_ICONS } from "./chips.tsx";
@@ -26,7 +26,9 @@ const projectFileOf = (editor: Editor, shape: TLShape): string => {
 
 const labelOf = (editor: Editor, shape: TLShape, kind: string): string => {
   const props = shape.props as Record<string, unknown>;
-  if (kind === "prompt" || kind === "group") return `@${readRef(shape) ?? agentShapeId(shape.id)}`;
+  const ref = readRef(shape);
+  // A shape a person named goes by its name, which is its @id.
+  if (kind === "prompt" || kind === "group" || (ref !== undefined && !isMintedRef(ref))) return `@${ref ?? agentShapeId(shape.id)}`;
   const named = shapeLabel(props);
   if (named !== undefined) return named;
   const assetId = props.assetId;

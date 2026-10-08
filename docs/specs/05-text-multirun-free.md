@@ -146,7 +146,7 @@ Spec 03's result meta field `batchExtraCost` is set on every member of a Free ba
 
 Free is a value of Runs, image medium only.
 
-Source: walk the composition's flattened order (spec 03: top to bottom, groups expanded in place). The source is the first text result; if there is none, the first prompt. A group is never itself the source, but its members take part in the walk. The list text is a text result's text verbatim, or a prompt's text with its `@id` references resolved, where a reference to the source itself fails as a cycle.
+Source: walk the composition's flattened order (spec 03: top to bottom, groups expanded in place). The source is the first text result; if there is none, the first prompt. A group is never itself the source, but its members take part in the walk. The list text is a text result's text verbatim, or a prompt's text with its `@id` references resolved, where a reference to the source itself fails as a cycle. In the list text an image's or video's `@id` (spec 03) is left as typed and attaches nothing: an item uses the pictures it picks from the selection, so a picture an item should use is selected, not named.
 
 Tray messages in Free:
 

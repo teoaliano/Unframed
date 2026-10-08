@@ -44,6 +44,8 @@ export type MenuItem =
   | { readonly action: "copy-path"; readonly label: string; readonly file: string }
   | { readonly action: "copy-as-image"; readonly label: string }
   | { readonly action: "copy-ref"; readonly label: string; readonly ref: string }
+  /** Opens the name field in the right-clicked shape's label; F2 does the same for the one selected shape. */
+  | { readonly action: "rename"; readonly label: string; readonly shortcut: string }
   /** Spec 05: a plain prompt with a text result's text, beside it, so its `@` tokens resolve. */
   | { readonly action: "copy-as-prompt"; readonly label: string }
   | { readonly action: EditAction; readonly label: string; readonly shortcut: string }
@@ -134,13 +136,6 @@ export const contextMenu = (input: MenuInput): MenuSection[] => {
   }
   add("image", clicked?.type === "video" ? "Video" : "Image", imageItems);
 
-  const referenceItems: MenuItem[] = [];
-  if (clicked && (clicked.type === "text" || clicked.type === "frame") && clicked.ref !== undefined) {
-    referenceItems.push({ action: "copy-ref", label: `Copy @${clicked.ref}`, ref: clicked.ref });
-  }
-  if (clicked?.type === "text" && clicked.textResult) referenceItems.push({ action: "copy-as-prompt", label: "Copy as prompt" });
-  add("reference", "Reference", referenceItems);
-
   const pinned = input.pinned ?? [];
   if (clicked?.filledArtifact) {
     const checked = pinned.includes(clicked.id);
@@ -151,6 +146,13 @@ export const contextMenu = (input: MenuInput): MenuSection[] => {
       ...(isFilledArtifact(clicked) ? fileItems(clicked, selection, isFilledArtifact, platform) : []),
     ]);
   }
+
+  const referenceItems: MenuItem[] = [];
+  if (clicked?.ref !== undefined) {
+    referenceItems.push({ action: "copy-ref", label: `Copy @${clicked.ref}`, ref: clicked.ref }, { action: "rename", label: "Rename", shortcut: "F2" });
+  }
+  if (clicked?.type === "text" && clicked.textResult) referenceItems.push({ action: "copy-as-prompt", label: "Copy as prompt" });
+  add("reference", "Reference", referenceItems);
 
   const edit = (action: EditAction): MenuItem => ({ action, label: EDIT_LABELS[action], shortcut: shortcutHint(action, platform) });
   const editItems: MenuItem[] = [];

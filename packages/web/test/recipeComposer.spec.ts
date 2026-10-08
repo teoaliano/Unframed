@@ -1,6 +1,6 @@
 import type { Page } from "@playwright/test";
 import { openCanvas, roomRecords, shapeOnScreen } from "./canvas.ts";
-import { composer, openComposer, selectGroup, toolbar } from "./generation.ts";
+import { closeComposer, composer, openComposer, selectGroup, toolbar } from "./generation.ts";
 import { expectSlot } from "./kit.ts";
 import { groupRecord, inGroup, promptRecord, putRecords } from "./media.ts";
 import { expect, mediumOption, runsChip, setRuns, test, tray } from "./texting.ts";
@@ -71,7 +71,7 @@ test("the composer opens on the recipe when one recipe group is selected, and on
   await expect(tray(page).getByTestId("model-chip")).toHaveText("gpt-image-2");
   await expect(runsChip(page)).toHaveCount(0);
   await expect(recipeLine(page)).toHaveCount(0);
-  await page.keyboard.press("Escape");
+  await closeComposer(page);
 
   await selectGroup(page, "shape:character");
   await toolbar(page).getByRole("button", { name: "Recipe" }).click();
@@ -79,7 +79,7 @@ test("the composer opens on the recipe when one recipe group is selected, and on
   await expect(mediumOption(page, "image")).toHaveAttribute("aria-checked", "true");
   await expect(tray(page).getByTestId("model-chip")).toHaveText("gemini-3-pro-image");
   await expect(tray(page).locator("[data-prop]")).toHaveText(["16:9", "2×"]);
-  await page.keyboard.press("Escape");
+  await closeComposer(page);
 
   // A text recipe opens the composer on the text medium.
   await selectGroup(page, "shape:notes");

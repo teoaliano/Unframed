@@ -299,3 +299,89 @@ describe("usable, sources and warnings", () => {
     expect(compose(shapes, ["a", "b", "v"], { referenceCap: 1, medium: "text" }).warnings).toEqual([]);
   });
 });
+
+describe("media named by @", () => {
+  const hero = { ...image("hero-shape", "1-hero.png", { x: 900, y: 900 }), ref: "hero" };
+  const clip = { ...video("clip-shape", { file: "2-waves.mp4" }, { x: 900, y: 1200 }), ref: "waves" };
+
+  it("attaches an image a prompt names, after the selected slots, and says which slot it is", () => {
+    const shapes = [prompt("p", "put @hero in a forest", { y: 0 }), image("x", "3-x.png", { y: 100 }), hero];
+    const composition = compose(shapes, ["p", "x"]);
+    expect(composition.prompt).toBe("put image 2 in a forest");
+    expect(composition.references.map((slot) => [slot.kind, slot.number, slot.shapeId, slot.source])).toEqual([
+      ["image", 1, "x", { type: "file", file: "3-x.png" }],
+      ["image", 2, "hero-shape", { type: "file", file: "1-hero.png" }],
+    ]);
+    expect(composition.roles).toEqual({ x: "image 1", "hero-shape": "image 2" });
+    expect(composition.sources).toEqual(["p", "x", "hero-shape"]);
+  });
+
+  it("uses a selected image's own slot when a prompt also names it, and one slot however often it is named", () => {
+    const shapes = [prompt("p", "@hero, then @hero again", { y: 0 }), { ...hero, bounds: { x: 0, y: 100, w: 100, h: 100 } }];
+    const composition = compose(shapes, ["p", "hero-shape"]);
+    expect(composition.prompt).toBe("image 1, then image 1 again");
+    expect(composition.references).toHaveLength(1);
+    expect(composition.sources).toEqual(["p", "hero-shape"]);
+  });
+
+  it("attaches a named clip as a video slot", () => {
+    const composition = compose([prompt("p", "cut to @waves"), clip], ["p"], { medium: "video" });
+    expect(composition.prompt).toBe("cut to video 1");
+    expect(composition.references.map((slot) => [slot.kind, slot.number, slot.source])).toEqual([["video", 1, { type: "file", file: "2-waves.mp4" }]]);
+  });
+
+  it("sends a named image with the marks on it, as selecting it would", () => {
+    const framed = { ...hero, bounds: { x: 900, y: 900, w: 100, h: 100 }, z: 1 };
+    const composition = compose([prompt("p", "@hero", { y: 0 }), framed, mark("scribble", { x: 910, y: 910, z: 2 })], ["p"]);
+    expect(composition.references[0]!.source).toEqual({ type: "composite", image: "hero-shape", file: "1-hero.png", marks: ["scribble"], crop: null });
+    expect(composition.sources).toEqual(["p", "hero-shape", "scribble"]);
+  });
+
+  it("attaches what the instruction names, and what a referenced prompt or a group's prompt names", () => {
+    const shapes = [
+      prompt("p", "scene: @scene", { y: 0 }),
+      prompt("scene", "@hero on a cliff", { y: 3000 }),
+      group("g", { x: 2000 }),
+      prompt("inside", "and @waves", { x: 2010, parent: "g" }),
+      hero,
+      clip,
+    ];
+    const composition = compose(shapes, ["p"], { instruction: "use @g", medium: "text" });
+    expect(composition.prompt).toBe("scene: image 1 on a cliff\n\nuse and video 1");
+    expect(composition.references.map((slot) => slot.shapeId)).toEqual(["hero-shape", "clip-shape"]);
+  });
+
+  it("leaves a token as typed for empty media, a page and a motion, and never reads one inside a text result", () => {
+    const shapes = [
+      prompt("p", "@blank @landing @intro @answer"),
+      { ...image("blank-shape", undefined), ref: "blank" },
+      { ...artifact("landing-shape", "page"), ref: "landing" },
+      { ...artifact("intro-shape", "motion"), ref: "intro" },
+      textResult("answer", "the model said @hero"),
+      hero,
+    ];
+    const composition = compose(shapes, ["p"]);
+    expect(composition.prompt).toBe("@blank @landing @intro the model said @hero");
+    expect(composition.references).toEqual([]);
+  });
+
+  it("counts named images against the reference cap, and says how many are selected and how many named", () => {
+    const sea = { ...image("sea-shape", "4-sea.png", { x: 900, y: 1500 }), ref: "sea" };
+    const both = compose([prompt("p", "@hero and @sea", { y: 0 }), image("x", "3-x.png", { y: 100 }), hero, sea], ["p", "x"], { referenceCap: 2 });
+    expect(both.warnings).toEqual([
+      "3 images go with this run (1 selected, 2 named with @), but this model takes at most 2. Deselect some, take out an @ name, or pick a model that takes more.",
+    ]);
+    const namedOnly = compose([prompt("p", "@hero and @sea"), hero, sea], ["p"], { referenceCap: 1 });
+    expect(namedOnly.warnings).toEqual(["2 images are named with @, but this model takes only one. Take out an @ name, or pick a model that takes more."]);
+  });
+
+  it("says a named video goes to an image model too", () => {
+    expect(compose([prompt("p", "cut to @waves"), clip], ["p"]).warnings).toEqual([
+      "A video is named with @, but image models do not take video input. It will be sent and probably ignored.",
+    ]);
+    const mixed = compose([prompt("p", "cut to @waves", { y: 0 }), video("v", { file: "5-v.mp4" }, { y: 100 }), clip], ["p", "v"]);
+    expect(mixed.warnings).toEqual([
+      "2 videos go with this run (1 selected, 1 named with @), but image models do not take video input. They will be sent and probably ignored.",
+    ]);
+  });
+});

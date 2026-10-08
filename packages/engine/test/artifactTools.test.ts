@@ -98,6 +98,26 @@ describe("page_write", () => {
     expect((await roomShape(agent, "pg2")).props.title).toBe("x".repeat(120));
   });
 
+  it("keeps the name a person gave a page or motion when the agent writes it with a title", async () => {
+    const agent = await startAgentEngine({
+      script: await script([
+        {
+          tools: [
+            { name: "page_write", input: { shapeId: "pg1", html: "<p>a</p>", title: "Pricing" } },
+            { name: "motion_write", input: { shapeId: "m1", html: "<div id=root></div>", title: "Outro" } },
+          ],
+        },
+      ]),
+    });
+    await seed(agent, [pageShape("pg1", "landing", { title: "landing" }), motionShape("m1", "intro", "intro", {}, { y: 500 })]);
+    const { chat } = await run(agent);
+    const page = await roomShape(agent, "pg1");
+    expect(page).toMatchObject({ meta: { ref: "landing" }, props: { title: "landing" } });
+    expect(page.props.file).toMatch(/^\d+-landing\.html$/);
+    expect(toolResults(chat, "page_write")[0]?.result).toMatchObject({ ok: true, title: "landing" });
+    expect(await roomShape(agent, "m1")).toMatchObject({ meta: { ref: "intro" }, props: { title: "intro" } });
+  });
+
   it("refuses empty html, a page over 2 MiB once tagged, an unknown shape and the wrong kind, and writes nothing", async () => {
     // The bridge tag and its newline take the page from exactly the limit to over it.
     const nearly = `<p>${"a".repeat(2_097_152 - 7)}</p>`;
