@@ -4,7 +4,7 @@
  * the shape.
  */
 import { customPreviewSide, DEFAULT_EDITOR_PREVIEW_SIZE, EDITOR_PREVIEW_SIZES, type EditorPreviewChoice, type EditorPreviewSize } from "@unframed/domain";
-import { ChevronDown, Expand, Monitor, Ruler, Smartphone, Tablet, type LucideIcon } from "lucide-react";
+import { ChevronDown, Monitor, Proportions, Ruler, Smartphone, Tablet, type LucideIcon } from "lucide-react";
 import { useReducer, useRef, useState } from "react";
 import { Button } from "~/components/ui/button";
 import { NumberField, NumberFieldGroup, NumberFieldInput } from "~/components/ui/number-field";
@@ -24,7 +24,7 @@ export const usePreviewSize = (project: string, shapeId: string): readonly [Edit
   return [remembered.get(key) ?? DEFAULT_EDITOR_PREVIEW_SIZE, set] as const;
 };
 
-const ICONS: Readonly<Record<EditorPreviewChoice, LucideIcon>> = { fill: Expand, desktop: Monitor, tablet: Tablet, mobile: Smartphone, custom: Ruler };
+const ICONS: Readonly<Record<EditorPreviewChoice, LucideIcon>> = { fill: Proportions, desktop: Monitor, tablet: Tablet, mobile: Smartphone, custom: Ruler };
 
 /** One side of the typed size: applied when the field is left or Enter is pressed; an empty or refused entry shows the side in use again. */
 const Side = ({ label, value, onCommit }: { readonly label: string; readonly value: number; readonly onCommit: (value: number) => void }) => {

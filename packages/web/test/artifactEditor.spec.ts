@@ -323,6 +323,8 @@ test("in a narrow window the editor's header never overflows: the title stays, a
     }
   };
   await whole();
+  // Fill reads as proportions, not as "go full screen", in the icon-only header too.
+  await expect(region.getByRole("button", { name: "Preview size" }).locator("svg.lucide-proportions")).toHaveCount(1);
   await region.getByRole("button", { name: "Preview size" }).click();
   await page.getByRole("dialog", { name: "Preview size" }).getByRole("radio", { name: "Custom" }).click();
   await page.getByRole("dialog", { name: "Preview size" }).getByLabel("Preview width").fill("1800");
