@@ -70,6 +70,7 @@ export * from "./artifacts/dials.ts";
 export * from "./artifacts/artifactRules.ts";
 export * from "./artifacts/chromeCandidates.ts";
 export * from "./artifacts/viewer.ts";
+export * from "./artifacts/live.ts";
 export * from "./artifacts/preview.ts";
 export type { LegacyEdge, LegacyGraph, LegacyNode } from "./legacy/graph.ts";
 export * from "./legacy/report.ts";

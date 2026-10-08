@@ -205,7 +205,7 @@ test("Escape typed in the composer or the parameter box stays in the editor, and
   await expect(page.getByRole("button", { name: "Select — V" })).toHaveAttribute("aria-pressed", "true");
 });
 
-test("an artifact with no file says so and offers no new tab; Open in a new tab opens the artifact's URL", async ({ page, agent }) => {
+test("an artifact with no file says so and offers no new tab; Open in a new tab opens the artifact's live viewer", async ({ page, agent }) => {
   await onBoard(page, agent);
   const empty = await centre(shapeOnScreen(page, "shape:draft"));
   await page.mouse.dblclick(empty.x, empty.y - 30);
@@ -225,8 +225,10 @@ test("an artifact with no file says so and offers no new tab; Open in a new tab 
   const tab = await opened;
   await tab.waitForLoadState();
   // The app is on localhost, so the artifact is on the other loopback name.
-  expect(tab.url()).toBe(`http://127.0.0.1:${agent.previewPort}/p/default/${file}`);
-  await expect(tab.getByRole("heading", { name: "Welcome" })).toBeVisible();
+  expect(tab.url()).toBe(`http://127.0.0.1:${agent.previewPort}/p/default/unframed-live.html?s=landing`);
+  await expect(tab.frameLocator("iframe").getByRole("heading", { name: "Welcome" })).toBeVisible({ timeout: 10_000 });
+  await expect(tab.locator("iframe")).toHaveAttribute("src", file);
+  await expect(tab).toHaveTitle("Landing");
   await tab.close();
 });
 

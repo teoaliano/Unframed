@@ -11,8 +11,8 @@ import { Button } from "~/components/ui/button";
 import { cn } from "~/lib/utils";
 import { AgentRail } from "../../agent/rail/AgentRail.tsx";
 import { Tip } from "../../chrome/ui.tsx";
-import { useCanvasProject } from "../../context.ts";
-import { ArtifactFrame, urlOf } from "../ArtifactFrame.tsx";
+import { useCanvasProject, useEngine } from "../../context.ts";
+import { ArtifactFrame, outsideUrlOf } from "../ArtifactFrame.tsx";
 import { previewPort } from "../state.ts";
 import { RenderButton } from "../render.tsx";
 import { COLUMN, ColumnHeader, Parameters } from "./Parameters.tsx";
@@ -52,6 +52,7 @@ const KEEP_FROM_CANVAS = {
 export const ArtifactEditor = ({ shapeId, onClose, onOpen }: ArtifactEditorProps) => {
   const editor = useEditor();
   const project = useCanvasProject();
+  const engine = useEngine();
   const facts = useValue(
     "edited artifact",
     () => {
@@ -145,7 +146,12 @@ export const ArtifactEditor = ({ shapeId, onClose, onOpen }: ArtifactEditorProps
                 size="icon"
                 className="shrink-0"
                 aria-label="Open in a new tab"
-                onClick={() => window.open(urlOf(project, facts.kind, facts.file, port), "_blank", "noopener,noreferrer")}
+                onClick={() => {
+                  // Opened first, while the click still counts as the person's: the tab waits for
+                  // the pointer the engine writes next.
+                  window.open(outsideUrlOf(project, shapeId, facts.kind, facts.file, port), "_blank", "noopener,noreferrer");
+                  engine.call("artifact.openLive", { project, shapeId }).catch(() => undefined);
+                }}
               >
                 <ExternalLink aria-hidden />
               </Button>
