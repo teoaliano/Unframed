@@ -33,6 +33,6 @@ export const loadLastUsed = async (engine: EngineConnection, medium: Medium): Pr
   }
 };
 
-/** Written when a run is sent from the composer, never by Regenerate or Vary. */
+/** Written when a run is sent from the composer. */
 export const saveLastUsed = (engine: EngineConnection, medium: Medium, value: LastUsed): Promise<unknown> =>
   engine.call("preferences.set", { key: keyOf(medium), value }).catch(() => undefined);

@@ -76,6 +76,15 @@ const answered = (value: unknown): boolean =>
 
 /** Decides one command against a project's chats. */
 export const decide = (command: ChatCommand, model: ProjectChats, now: string): Decision => {
+  if (command.type === "project.chats.clear") {
+    // Decided here, in the queue, not from the web's view: a chat that started a turn since the person asked is kept.
+    const chats = Object.values(model.chats).filter((chat) => chat.deletedAt === null);
+    if (chats.length === 0) return reject("not_found", "This project has no chats to delete.");
+    const idle = chats.filter((chat) => !isRunning(chat));
+    if (idle.length === 0) return reject("conflict", "Every chat is still running, so nothing was deleted.");
+    return accept(...idle.map((chat) => event("thread.deleted", chat.id, { deletedAt: now })));
+  }
+
   const id = command.threadId;
   const existing = model.chats[id];
   const live = existing !== undefined && existing.deletedAt === null ? existing : undefined;
@@ -317,6 +326,12 @@ export const decide = (command: ChatCommand, model: ProjectChats, now: string): 
       const fresh = [...new Set(command.ids)].filter((tag) => !chat.tags.includes(tag));
       if (fresh.length === 0) return reject("bad_request", NO_EVENTS);
       return accept(event("thread.tagged", id, { ids: fresh }));
+    }
+
+    case "thread.tags.remove": {
+      const gone = [...new Set(command.ids)].filter((tag) => chat.tags.includes(tag));
+      if (gone.length === 0) return reject("not_found", "This chat is not linked to that artifact.");
+      return accept(event("thread.untagged", id, { ids: gone }));
     }
 
     case "thread.turn.files.complete":

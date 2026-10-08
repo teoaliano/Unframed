@@ -46,6 +46,37 @@ describe("thread.delete", () => {
   });
 });
 
+describe("project.chats.clear", () => {
+  const second = (model = created()) =>
+    run(model, { type: "thread.create", threadId: "chat-2", modelSelection: CLAUDE, runtimeMode: "full-access", interactionMode: "default", createdAt: NOW });
+
+  it("deletes every chat of the project that is not running, in one decision", () => {
+    const model = run(second(), { type: "project.chats.clear" });
+    expect(chatOf(model).deletedAt).toBe(NOW);
+    expect(chatOf(model, "chat-2").deletedAt).toBe(NOW);
+  });
+
+  it("leaves a running chat alone, deciding on the chats as they are when the command runs", () => {
+    const busy = started(second());
+    const decision = decideOn(busy, { type: "project.chats.clear" });
+    expect(decision.ok && decision.events.map((event) => [event.type, event.aggregateId])).toEqual([["thread.deleted", "chat-2"]]);
+    const model = run(busy, { type: "project.chats.clear" });
+    expect(chatOf(model).deletedAt).toBeNull();
+    expect(chatOf(model, "chat-2").deletedAt).toBe(NOW);
+  });
+
+  it("refuses when every chat is running, and when there are none", () => {
+    expect(rejection(decideOn(started(), { type: "project.chats.clear" }))).toEqual({
+      code: "conflict",
+      message: "Every chat is still running, so nothing was deleted.",
+    });
+    expect(rejection(decideOn(run(created(), { type: "thread.delete" }), { type: "project.chats.clear" }))).toEqual({
+      code: "not_found",
+      message: "This project has no chats to delete.",
+    });
+  });
+});
+
 describe("thread.meta.update", () => {
   it("names the chat as the person's, trimmed and cut to 60 characters", () => {
     const chat = chatOf(run(created(), { type: "thread.meta.update", title: `  ${"a".repeat(70)}  ` }));
@@ -251,5 +282,24 @@ describe("tags", () => {
     const tagged = run(created(), { type: "thread.tags.add", ids: ["shape:p1", "shape:p1", "shape:m1"] });
     expect(chatOf(tagged).tags).toEqual(["shape:p1", "shape:m1"]);
     expect(rejection(decideOn(tagged, { type: "thread.tags.add", ids: ["shape:m1"] }))?.message).toBe("Command produced no events.");
+  });
+
+  it("removes the ids the person detaches, keeping the rest in order, while a turn runs too", () => {
+    const tagged = run(started(), { type: "thread.tags.add", ids: ["shape:p1", "shape:m1", "shape:p2"] });
+    const detached = run(tagged, { type: "thread.tags.remove", ids: ["shape:m1", "shape:m1", "shape:nothing"] });
+    expect(chatOf(detached).tags).toEqual(["shape:p1", "shape:p2"]);
+  });
+
+  it("refuses to detach an artifact the chat is not linked to", () => {
+    expect(rejection(decideOn(created(), { type: "thread.tags.remove", ids: ["shape:p1"] }))).toEqual({
+      code: "not_found",
+      message: "This chat is not linked to that artifact.",
+    });
+  });
+
+  it("links a detached artifact again when the chat touches it again", () => {
+    const tagged = run(created(), { type: "thread.tags.add", ids: ["shape:p1", "shape:m1"] });
+    const detached = run(tagged, { type: "thread.tags.remove", ids: ["shape:p1"] });
+    expect(chatOf(run(detached, { type: "thread.tags.add", ids: ["shape:p1"] })).tags).toEqual(["shape:m1", "shape:p1"]);
   });
 });

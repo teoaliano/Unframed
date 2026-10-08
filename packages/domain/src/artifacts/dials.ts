@@ -167,6 +167,13 @@ export interface BridgeWheel {
   preventDefault(): void;
 }
 
+/** The parts of a right-click the bridge reads and forwards. */
+export interface BridgeMenuEvent {
+  readonly clientX: number;
+  readonly clientY: number;
+  preventDefault(): void;
+}
+
 /** The window the bridge runs against: a browser's, or a test's stub. */
 export interface BridgeWindow {
   /** The framer; the window itself when nothing frames it. */
@@ -174,6 +181,7 @@ export interface BridgeWindow {
   location: { readonly origin: string };
   addEventListener(type: "message", listener: (event: { source: unknown; origin: string; data: unknown }) => void): void;
   addEventListener(type: "wheel", listener: (event: BridgeWheel) => void, options: { passive: boolean }): void;
+  addEventListener(type: "contextmenu", listener: (event: BridgeMenuEvent) => void): void;
   __hfVariables?: { unframedDials?: unknown };
   unframed?: unknown;
   console: { error(...args: unknown[]): void };
@@ -190,6 +198,8 @@ export function installDialsBridge(win: BridgeWindow, dials: DialRules): void {
   let state: State | undefined;
   // The canvas that said hello: later declarations are announced to it too.
   let asker: string | undefined;
+  // The canvas that asked for right-clicks, so a selected frame's shape menu still opens.
+  let menuAsker: string | undefined;
 
   const run = (current: State) => {
     try {
@@ -251,6 +261,7 @@ export function installDialsBridge(win: BridgeWindow, dials: DialRules): void {
     if (typeof data !== "object" || data === null) return;
     if (data.type === "unframed:dials:hello") {
       if (event.origin !== win.location.origin) asker = event.origin;
+      menuAsker = (data as { menus?: unknown }).menus === true ? event.origin : undefined;
       announce(event.origin);
     } else if (data.type === "unframed:dials:set") {
       set(data.values);
@@ -275,6 +286,19 @@ export function installDialsBridge(win: BridgeWindow, dials: DialRules): void {
       },
       { passive: false },
     );
+  }
+
+  // A right-click in a selected frame on the canvas opens the shape's menu, not the page's.
+  if (framed) {
+    win.addEventListener("contextmenu", (event) => {
+      if (menuAsker === undefined) return;
+      event.preventDefault();
+      try {
+        win.parent.postMessage({ type: "unframed:contextmenu", clientX: event.clientX, clientY: event.clientY }, menuAsker);
+      } catch (error) {
+        win.console.error("[unframed] could not hand the right-click to the canvas", error);
+      }
+    });
   }
 
   const existing = typeof win.unframed === "object" && win.unframed !== null ? (win.unframed as Record<string, unknown>) : {};

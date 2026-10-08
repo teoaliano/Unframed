@@ -47,7 +47,7 @@ test("the bar is glass with the kit border and radius; Generate is the kit's pri
   });
 });
 
-test("a selection with nothing to generate from shows Agent only; a filled page offers Open, Parameters and Agent", async ({ page, generation }) => {
+test("a selection with nothing to generate from shows Agent only; a filled page offers Editor, Parameters and Agent", async ({ page, generation }) => {
   const { engine } = generation;
   await openCanvas(page, engine);
   await putRecords(engine, [emptyMedia("shape:empty", "image", "300", { x: 400, y: 60 }), artifactRecord("shape:page", "page", "301", { x: 400, y: 300 }, "hello.html", "hello.html")]);
@@ -61,7 +61,7 @@ test("a selection with nothing to generate from shows Agent only; a filled page 
   // A filled page's frame takes the pointer, so its bar leads with the drag handle, an icon button.
   await clickShape(page, "shape:page");
   const buttons = toolbar(page).getByRole("button");
-  await expect(buttons).toHaveText(["", "Open", "Parameters", "Agent"]);
+  await expect(buttons).toHaveText(["", "Editor", "Parameters", "Agent"]);
   await expect(buttons.first()).toHaveAccessibleName("Drag to move");
 });
 

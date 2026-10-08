@@ -26,33 +26,24 @@ const zoomOnto = async (page: Page, id: string) => {
   await page.waitForTimeout(600);
 };
 
-test("Recipe on an imported result shows what the old app sent, and Regenerate runs from its sources as they are now", async ({ page }) => {
+test("Regenerate on an imported result shows what the old app sent, and sends from its sources as they are now", async ({ page }) => {
   const app = await startLegacyApp();
   try {
     const records = await openEverything(page, app);
     const result = byRef(records, "141");
     expect(result.meta.unframed.result.recipe).toMatchObject({ approximate: true });
     await zoomOnto(page, result.id);
-    await expect(toolbar(page).getByRole("button", { name: "Regenerate" })).toBeVisible();
 
-    await toolbar(page).getByRole("button", { name: "Recipe" }).click();
+    await toolbar(page).getByRole("button", { name: "Regenerate" }).click();
     await expect(composer(page)).toBeVisible();
     const sent = composer(page).getByTestId("recipe-sent");
     await expect(sent).toContainText("Imported from the old app. It sent:");
     await expect(sent).toContainText("A red fox standing on a windswept cliff at golden hour, 35mm");
     await expect(composer(page).getByTestId("source-count")).toHaveText("recipe · 2 sources");
-    // Sending from Recipe mode runs from the live sources too, and lands beside the result.
+    // Sending runs from the live sources, with the recipe's model and params, and lands beside the result.
     await sendRun(page);
     await expect.poll(() => app.requests.length).toBe(1);
-    expect(app.requests[0]!.body).toMatchObject({ model: "openai/gpt-image-2", prompt: "A lone red fox standing on a windswept cliff at golden hour, 35mm", quality: "low" });
-    const fromRecipe = await waitForRoom(app.engine, "everything", (all) => all.find((record) => record.typeName === "shape" && record.meta?.unframed?.result?.sidecar && !records.some((old) => old.id === record.id)));
-    expect(fromRecipe.x).toBeGreaterThan(result.x! + result.props.w);
-    const known = [...records, fromRecipe];
-
-    await clickShape(page, result.id);
-    await toolbar(page).getByRole("button", { name: "Regenerate" }).click();
-    await expect.poll(() => app.requests.length).toBe(2);
-    const request = app.requests[1];
+    const request = app.requests[0];
     // Prompt @100 now reads through @101, which the journal changed to "lone red fox".
     expect(request!.body).toMatchObject({
       model: "openai/gpt-image-2",
@@ -63,7 +54,8 @@ test("Recipe on an imported result shows what the old app sent, and Regenerate r
       output_format: "png",
     });
     expect(request!.body.input_references).toHaveLength(1);
-    const landed = await waitForRoom(app.engine, "everything", (all) => all.find((record) => record.typeName === "shape" && record.meta?.unframed?.result?.sidecar && !known.some((old) => old.id === record.id)));
+    const landed = await waitForRoom(app.engine, "everything", (all) => all.find((record) => record.typeName === "shape" && record.meta?.unframed?.result?.sidecar && !records.some((old) => old.id === record.id)));
+    expect(landed.x).toBeGreaterThan(result.x! + result.props.w);
     expect(landed.meta.unframed.result).toMatchObject({ medium: "image", model: "openai/gpt-image-2" });
     expect(landed.meta.unframed.result.recipe).toBeUndefined();
   } finally {

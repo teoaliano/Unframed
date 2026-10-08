@@ -51,6 +51,22 @@ export const Composer = ({ mode, project, recipe, onCollapse }: ComposerProps) =
     return () => window.removeEventListener("keydown", onKeyDown, { capture: true });
   }, []);
 
+  // Esc also closes the composer while the focus is nowhere. The box takes the focus a frame
+  // after it mounts, or after a chip's remove button goes away, and an Esc in that frame lands
+  // on the body, where the composer's own handler never hears it.
+  const collapse = useRef(onCollapse);
+  collapse.current = onCollapse;
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape" || event.target !== document.body || menus.current.size > 0) return;
+      event.preventDefault();
+      event.stopPropagation();
+      collapse.current();
+    };
+    window.addEventListener("keydown", onKeyDown, { capture: true });
+    return () => window.removeEventListener("keydown", onKeyDown, { capture: true });
+  }, []);
+
   // The send key works while the composer is open wherever focus is, unless another text field has it.
   // The Agent tray reads its own keys (Enter sends there, Cmd+Enter flips queue and steer).
   useEffect(() => {

@@ -44,16 +44,13 @@ const isWheel = (data: unknown): data is FrameWheel => typeof data === "object" 
  * under the frame, and the pinch does nothing.
  */
 const zoomCanvas = (frame: HTMLIFrameElement, wheel: FrameWheel) => {
-  const canvas = frame.closest(".tl-container")?.querySelector(".tl-canvas");
+  const canvas = canvasUnder(frame);
   if (!canvas) return;
-  const rect = frame.getBoundingClientRect();
-  const scale = frame.offsetWidth > 0 ? rect.width / frame.offsetWidth : 1;
   canvas.dispatchEvent(
     new WheelEvent("wheel", {
       bubbles: true,
       cancelable: true,
-      clientX: rect.left + wheel.clientX * scale,
-      clientY: rect.top + wheel.clientY * scale,
+      ...onScreen(frame, wheel.clientX, wheel.clientY),
       deltaX: wheel.deltaX,
       deltaY: wheel.deltaY,
       deltaZ: wheel.deltaZ,
@@ -64,6 +61,39 @@ const zoomCanvas = (frame: HTMLIFrameElement, wheel: FrameWheel) => {
       altKey: wheel.altKey,
     }),
   );
+};
+
+interface FrameMenu {
+  readonly type: "unframed:contextmenu";
+  readonly clientX: number;
+  readonly clientY: number;
+}
+
+const isMenu = (data: unknown): data is FrameMenu =>
+  typeof data === "object" && data !== null && (data as { type?: unknown }).type === "unframed:contextmenu" && typeof (data as FrameMenu).clientX === "number" && typeof (data as FrameMenu).clientY === "number";
+
+/** The canvas under a frame, when the frame is on the canvas rather than in the editor. */
+const canvasUnder = (frame: HTMLIFrameElement): Element | null | undefined => frame.closest(".tl-container")?.querySelector(".tl-canvas");
+
+/** A point in the frame's document, on the app's screen. */
+const onScreen = (frame: HTMLIFrameElement, x: number, y: number) => {
+  const rect = frame.getBoundingClientRect();
+  const scale = frame.offsetWidth > 0 ? rect.width / frame.offsetWidth : 1;
+  return { clientX: rect.left + x * scale, clientY: rect.top + y * scale };
+};
+
+/**
+ * A right-click the frame's bridge kept from the page (a selected frame takes the pointer):
+ * replayed on the canvas as the press and release a right-click makes there, so the shape's
+ * menu opens at the same point.
+ */
+const openShapeMenu = (frame: HTMLIFrameElement, menu: FrameMenu) => {
+  const canvas = canvasUnder(frame);
+  if (!canvas) return;
+  const at = onScreen(frame, menu.clientX, menu.clientY);
+  const init = { bubbles: true, cancelable: true, ...at, button: 2, pointerId: 1, pointerType: "mouse", isPrimary: true };
+  canvas.dispatchEvent(new PointerEvent("pointerdown", { ...init, buttons: 2 }));
+  canvas.dispatchEvent(new PointerEvent("pointerup", { ...init, buttons: 0 }));
 };
 
 /**
@@ -88,7 +118,8 @@ export const ArtifactFrame = ({ project, kind, file, previewPort, dials, interac
       // A frame mid-navigation has no window to post to.
     }
   };
-  const hello = () => post({ type: "unframed:dials:hello" });
+  // On the canvas the frame also asks for right-clicks, so a selected frame still opens its shape's menu.
+  const hello = () => post({ type: "unframed:dials:hello", ...(frame.current && canvasUnder(frame.current) ? { menus: true } : {}) });
   const set = (values: unknown) => post({ type: "unframed:dials:set", values });
 
   useEffect(() => {
@@ -97,6 +128,7 @@ export const ArtifactFrame = ({ project, kind, file, previewPort, dials, interac
     const onMessage = (event: MessageEvent) => {
       if (!frame.current || event.source !== frame.current.contentWindow) return;
       if (isWheel(event.data)) return zoomCanvas(frame.current, event.data);
+      if (isMenu(event.data)) return openShapeMenu(frame.current, event.data);
       const data = event.data as DialsAnnouncement | null;
       if (typeof data !== "object" || data === null || data.type !== "unframed:dials") return;
       heard.current = data;
