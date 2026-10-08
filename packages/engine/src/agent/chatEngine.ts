@@ -34,6 +34,9 @@ export type CommitListener = (events: ReadonlyArray<ChatEvent>, before: ProjectC
 
 const PROJECTORS = ["threads", "messages", "activities", "sessions", "turns", "pending_approvals", "proposed_plans"] as const;
 
+/** What a receipt is about: one chat, or `project:<id>` for a command over all of a project's chats. */
+const receiptAggregate = (command: ChatCommand): string => ("threadId" in command ? command.threadId : `project:${command.projectId}`);
+
 const json = (value: unknown): string | null => (value === undefined ? null : JSON.stringify(value));
 
 const readEvent = (row: Record<string, unknown>): ChatEvent => ({
@@ -181,7 +184,7 @@ export class ChatEngine {
     if (this.closed) throw new CommandRejected({ code: "bad_request", message: "This project was closed." });
     const receipt = this.statements.receipt!.get(command.commandId) as Record<string, unknown> | undefined;
     if (receipt) {
-      if (String(receipt.aggregate_id) !== command.threadId) {
+      if (String(receipt.aggregate_id) !== receiptAggregate(command)) {
         throw new CommandRejected({ code: "conflict", message: "That command id was already used for another chat." });
       }
       if (receipt.status === "accepted") return { sequence: Number(receipt.result_sequence) };
@@ -197,7 +200,7 @@ export class ChatEngine {
         : undefined;
     if (rejection !== undefined || !decision.ok) {
       const refused = rejection ?? { code: "bad_request", message: NO_EVENTS };
-      this.statements.insertReceipt!.run(command.commandId, command.threadId, now, null, "rejected", JSON.stringify(refused));
+      this.statements.insertReceipt!.run(command.commandId, receiptAggregate(command), now, null, "rejected", JSON.stringify(refused));
       throw new CommandRejected(refused);
     }
     return this.commit(command, decision.events, now, options);
@@ -244,7 +247,7 @@ export class ChatEngine {
       }
       this.writeProjections(events, before, after);
       this.writeCursors(sequence);
-      this.statements.insertReceipt!.run(command.commandId, command.threadId, now, sequence, "accepted", null);
+      this.statements.insertReceipt!.run(command.commandId, receiptAggregate(command), now, sequence, "accepted", null);
       this.db.exec("COMMIT");
     } catch (error) {
       this.db.exec("ROLLBACK");

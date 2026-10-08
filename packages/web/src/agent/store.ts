@@ -148,7 +148,8 @@ export class ChatClient {
     } else if (item.kind === "synchronized") {
       this.synced = true;
     } else {
-      if (item.sequence <= this.shellSequence) return;
+      // One commit that changes several chats (Clear all chats) sends one item per chat, all with its sequence: only older items are stale.
+      if (item.sequence < this.shellSequence) return;
       this.shellSequence = item.sequence;
       if (item.kind === "chat-upserted") this.summaries.set(item.chat.id, item.chat);
       else this.summaries.delete(item.id);
@@ -162,6 +163,18 @@ export class ChatClient {
     const all = new Map(this.pendingChats);
     for (const [id, chat] of this.summaries) all.set(id, chat);
     return [...all.values()].sort((a, b) => (a.createdAt < b.createdAt ? 1 : a.createdAt > b.createdAt ? -1 : 0));
+  }
+
+  /** Resolves once the shell has delivered every change up to `sequence`, such as a command's answer. */
+  shellReached(sequence: number): Promise<void> {
+    if (this.shellSequence >= sequence) return Promise.resolve();
+    return new Promise((resolve) => {
+      const stop = this.subscribe("shell", () => {
+        if (this.shellSequence < sequence) return;
+        stop();
+        resolve();
+      });
+    });
   }
 
   get shellSynchronized(): boolean {
