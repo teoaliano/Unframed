@@ -1,6 +1,7 @@
 export { envUpsert } from "./envUpsert.ts";
 export * from "./httpMessages.ts";
 export * from "./loopbackGuard.ts";
+export * from "./devShare.ts";
 export * from "./nativePlans.ts";
 export * from "./preferences.ts";
 export { connectionFailure, reconnectDelay, type ConnectionFailure } from "./reconnect.ts";
