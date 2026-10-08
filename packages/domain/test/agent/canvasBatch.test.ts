@@ -212,6 +212,31 @@ describe("canvas_write batches", () => {
     expect(result.put.find((record) => record.id === "shape:p3")).toBeUndefined();
   });
 
+  it("renames a prompt, an image or a motion the same way, and gives a motion its name as its title", () => {
+    const image: CanvasRecord = { id: "shape:i1", typeName: "shape", type: "image", x: 0, y: 0, parentId: PAGE, index: "a4", props: { w: 200, h: 100 }, meta: { ref: "120" } };
+    const records = [prompt("p1", "100", "@120 beside @150, after @101"), prompt("p2", "101", "a fox"), image, motion("m1", "Intro")];
+    const result = prepareBatch(
+      [
+        { type: "rename", id: "i1", name: "Hero" },
+        { type: "rename", id: "m1", name: "Opening titles" },
+        { type: "rename", id: "p2", name: "fox" },
+      ],
+      context(records),
+    );
+    if (!result.ok) throw new Error(result.error);
+    const put = (id: string) => result.put.find((record) => record.id === `shape:${id}`)!;
+    expect(readRef(put("i1"))).toBe("hero");
+    expect(put("m1")).toMatchObject({ meta: { ref: "opening-titles" }, props: { title: "opening-titles", file: "intro.html" } });
+    expect(readRef(put("p2"))).toBe("fox");
+    expect(plainText(put("p1").props!.richText)).toBe("@hero beside @opening-titles, after @fox");
+  });
+
+  it("refuses to rename a mark, which has no @id", () => {
+    const geo: CanvasRecord = { id: "shape:d1", typeName: "shape", type: "geo", x: 0, y: 0, parentId: PAGE, index: "a1", props: { w: 10, h: 10 }, meta: {} };
+    expect(error([{ type: "rename", id: "d1", name: "box" }], [geo])).toBe("rename: d1 has no @id to rename");
+    expect(error([{ type: "rename", id: "p1", name: "42" }], [prompt("p1", "100", "a fox")])).toBe("rename: A name needs a letter.");
+  });
+
   it("keeps media's aspect on resize", () => {
     const image: CanvasRecord = { id: "shape:i1", typeName: "shape", type: "image", x: 0, y: 0, parentId: PAGE, index: "a1", props: { w: 200, h: 100 }, meta: { ref: "100" } };
     const result = prepareBatch([{ type: "resize", id: "i1", w: 400, h: 400 }], context([image]));

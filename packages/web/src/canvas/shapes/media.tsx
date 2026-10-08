@@ -1,4 +1,4 @@
-import { isHttpsLink, linkedVideoName, VIDEO_LINK_MESSAGE } from "@unframed/domain";
+import { isHttpsLink, linkedVideoName, readRef, VIDEO_LINK_MESSAGE } from "@unframed/domain";
 import { Pause, Play, X } from "lucide-react";
 import { useEffect, useRef, useState, type SyntheticEvent } from "react";
 import {
@@ -33,6 +33,7 @@ import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
 import { Spinner } from "~/components/ui/spinner";
 import { mediaCardClass } from "./looks.ts";
+import { waitingLabel } from "./labels.ts";
 import { ShapeLabel } from "./ShapeLabel.tsx";
 import { isRenderPlaceholder, RenderPlaceholder } from "./renderPlaceholder.tsx";
 import { noteRender } from "../../fps/renders.ts";
@@ -63,6 +64,16 @@ const resizeMedia = <S extends MediaShape>(shape: S, info: TLResizeInfo<S>): TLS
   const dy = handle.includes("top") ? initialShape.props.h - h : handle === "left" || handle === "right" ? (initialShape.props.h - h) / 2 : 0;
   const offset = Vec.Rot({ x: dx, y: dy }, initialShape.rotation);
   return { id: shape.id, type: shape.type, x: initialShape.x + offset.x, y: initialShape.y + offset.y, props: { w, h } } as TLShapePartial<S>;
+};
+
+/**
+ * A medium's label: its `@id` once it is filled or named; an empty one that was never named
+ * says what it is waiting for.
+ */
+const MediaLabel = ({ shape, kind, filled }: { readonly shape: MediaShape; readonly kind: MediaKind; readonly filled: boolean }) => {
+  const ref = readRef(shape);
+  const text = filled && ref !== undefined ? `@${ref}` : waitingLabel(shape, kind === "image" ? "Image" : "Video");
+  return <ShapeLabel shapeId={shape.id} kind={kind} name={ref} width={shape.props.w} text={text} />;
 };
 
 const useIsSelected = (shape: MediaShape) => {
@@ -106,9 +117,7 @@ const EmptyMedia = ({ shape, kind }: { readonly shape: MediaShape; readonly kind
 
   return (
     <HTMLContainer id={shape.id} className={mediaCardClass} data-testid="media-empty" style={{ width: shape.props.w, height: shape.props.h }}>
-      <ShapeLabel shapeId={shape.id} kind={kind}>
-        {kind === "image" ? "Image" : "Video"}
-      </ShapeLabel>
+      <MediaLabel shape={shape} kind={kind} filled={false} />
       <div className="box-border flex h-full flex-col items-center justify-center gap-2 p-2.5">
         <Button variant="outline" size="sm" className="pointer-events-auto" disabled={busy} onClick={() => input.current?.click()} {...events}>
           Choose file
@@ -164,9 +173,7 @@ const Generating = ({ shape, kind }: { readonly shape: MediaShape; readonly kind
   noteRender(shape.id);
   return (
     <HTMLContainer id={shape.id} className={mediaCardClass} data-testid="media-empty" data-placeholder="" style={{ width: shape.props.w, height: shape.props.h }}>
-      <ShapeLabel shapeId={shape.id} kind={kind}>
-        {kind === "image" ? "Image" : "Video"}
-      </ShapeLabel>
+      <MediaLabel shape={shape} kind={kind} filled={false} />
       <div className="box-border flex h-full items-center justify-center gap-2 p-2.5 text-sm text-muted-foreground" role="status">
         <Spinner size="md" aria-hidden />
         <span>Generating…</span>
@@ -222,6 +229,7 @@ export class ImageMediaUtil extends ImageShapeUtil {
     if (!shape.props.assetId) return runMarkerOf(shape) ? <Generating shape={shape} kind="image" /> : <EmptyMedia shape={shape} kind="image" />;
     return (
       <>
+        <MediaLabel shape={shape} kind="image" filled />
         {super.component(shape)}
         <RemoveButton shape={shape} name={assetName(this.editor, shape)} />
       </>
@@ -360,6 +368,7 @@ export class VideoMediaUtil extends VideoShapeUtil {
     }
     return (
       <>
+        <MediaLabel shape={shape} kind="video" filled />
         <VideoClip shape={shape} />
         <RemoveButton shape={shape} name={assetName(this.editor, shape)} />
       </>

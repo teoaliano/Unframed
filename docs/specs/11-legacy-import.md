@@ -30,7 +30,7 @@ A one-time, automatic import, built last.
 12. As a person, I want an output wired from one group to put its settings on that group, so that the group itself becomes the recipe.
 13. As a person, I want a text output's answer to become a text result with the text output's `@id`, so that prompts that referenced its answer still get it.
 14. As a person, I want a text output's instructions to become a prompt inside its recipe group, so that the instructions still go with every run.
-15. As a person, I want every generated image and clip to become a result carrying its recipe, so that Regenerate, Vary and Recipe work on my old results.
+15. As a person, I want every generated image and clip to become a result carrying its recipe, so that Generate and Regenerate work on my old results.
 16. As a person, I want results listed on an output but never added to the canvas to arrive as result shapes beside it, so that nothing I paid for is left in a strip I can no longer see.
 17. As a person, I want a result I had already added to the canvas to arrive once, not twice, so that the canvas is not cluttered with duplicates.
 18. As a person, I want a render that was still in flight to keep being tracked and land when it finishes, so that a paid render is never stranded by the upgrade.
@@ -246,7 +246,7 @@ A **text output's instructions** (`data.text`, when not empty after trimming) be
 - A `textOutput`'s non-empty `result` becomes a text result shape (spec 05) holding the answer, with the text output's id as its `@id`, so prompts that referenced the answer still resolve to it literally. An empty `result` gives no shape; tokens that referenced it stay as typed (report).
 - New result shapes are placed at the output's position, left to right with a gap of 24, in `runIndex` order, 240 wide. When rule 3 put a recipe group at the output's position, the row starts 24 below that group.
 
-**Result recipes.** Each result shape gets a result recipe in spec 03's form: medium, model and parameters from the file's sidecar when there is one, else from the output's data; the sources are the shapes that were wired into the output at import time; the instruction is empty; the selection prompt and references are empty; and it is marked `approximate: true` with `sentPrompt` set to the sidecar's `prompt` (the full text the old app sent), exactly spec 03's recipe schema. The importer never rewrites a sidecar, so the recipe is stored on the shape as spec 03's result meta `recipe` (the one case spec 03 allows), with `sidecar` naming the old sidecar or null. The old app did not record which shapes fed a run, only how many, so spec 03's rule for an approximate recipe applies: Regenerate uses its sources as they are now, and Recipe shows "Imported from the old app. It sent:" followed by `sentPrompt` in the composer.
+**Result recipes.** Each result shape gets a result recipe in spec 03's form: medium, model and parameters from the file's sidecar when there is one, else from the output's data; the sources are the shapes that were wired into the output at import time; the instruction is empty; the selection prompt and references are empty; and it is marked `approximate: true` with `sentPrompt` set to the sidecar's `prompt` (the full text the old app sent), exactly spec 03's recipe schema. The importer never rewrites a sidecar, so the recipe is stored on the shape as spec 03's result meta `recipe` (the one case spec 03 allows), with `sidecar` naming the old sidecar or null. The old app did not record which shapes fed a run, only how many, so spec 03's rule for an approximate recipe applies: Regenerate opens the composer showing "Imported from the old app. It sent:" followed by `sentPrompt`, and sending uses its sources as they are now.
 
 **In-flight runs**
 
@@ -419,7 +419,7 @@ Prior art: the old app tested its graph ops by round-tripping each op through it
 27. Video result from `data.result`, deduped the same way. Seam: domain.
 28. Result recipes from image, video and text sidecars, marked legacy with `sentPrompt`, sources as wired at import. Seam: domain.
 29. A media shape whose file has a generation sidecar becomes a result even when no output lists it; upload, render and agent sidecars do not. Seam: domain.
-30. Recipe on an imported result shows "Imported from the old app. It sent:" with the sent prompt, and Regenerate runs from current sources. Seam: browser.
+30. Regenerate on an imported result shows "Imported from the old app. It sent:" with the sent prompt, and sending runs from current sources. Seam: browser.
 31. In-flight: `running` dropped and reported; `job` done, pending, failed and not found each handled as specified. Seam: domain.
 32. A pending imported render lands in its result shape when the stubbed sweep finishes it. Seam: engine.
 33. An unreadable `jobs.json` does not fail the import. Seam: engine.

@@ -84,7 +84,6 @@ export const toolbarShape = (editor: Editor, shape: TLShape): ToolbarShape => {
     ...(typeof file === "string" && file !== "" ? { file } : {}),
     ...(result ? { result: { batchId: result.batchId, cost: result.cost, ...(result.batchExtraCost === undefined ? {} : { batchExtraCost: result.batchExtraCost }) } } : {}),
     ...(runMarkerOf(shape) ? { generating: true } : {}),
-    ...(isTextResult(shape) ? { textResult: true } : {}),
   };
 };
 

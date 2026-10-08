@@ -1,5 +1,7 @@
 import { openCanvas } from "./canvas.ts";
-import { createChat, engineChat, expect, openRail, sendThrough, tabs, test } from "./agent.ts";
+import { clickShape } from "./generation.ts";
+import { putRecords } from "./media.ts";
+import { artifactColumn, createChat, engineChat, engineChats, expect, openRail, sendThrough, tabs, test } from "./agent.ts";
 
 const at = (day: number) => `2026-09-${String(day).padStart(2, "0")}T10:00:00.000Z`;
 
@@ -102,4 +104,90 @@ test("a right-click on a tab, or a click on the active one, opens Rename and Del
   await confirm.getByRole("button", { name: "Delete chat" }).click();
   await expect(tabs(page)).toHaveText(["Second"]);
   expect((await engineChat(agent, second)).title).toBe("Second");
+});
+
+test("Clear all chats deletes every idle chat of the project, the hidden ones too, after a confirmation that counts them, and keeps a running one", async ({ page, agent }) => {
+  await openCanvas(page, agent);
+  await putRecords(agent, artifactColumn([{ id: "shape:p1", title: "Alpha" }]));
+  await createChat(agent, { title: "Older", createdAt: at(1) });
+  await createChat(agent, { title: "About alpha", tags: ["shape:p1"], createdAt: at(2) });
+  await createChat(agent, { title: "Loose", createdAt: at(3) });
+  const running = await createChat(agent, { title: "Cleaner", createdAt: at(4), runtimeMode: "approval-required" });
+  await sendThrough(agent, running, "clean the build please");
+  await openCanvas(page, agent);
+  const panel = await openRail(page);
+
+  // The selection hides two of the chats; Clear all still counts and deletes them.
+  await clickShape(page, "shape:p1");
+  await expect(tabs(page)).toHaveText(["About alpha"]);
+  await panel.getByRole("button", { name: "Clear all chats" }).click();
+  const confirm = page.getByRole("alertdialog", { name: "Clear all chats?" });
+  await expect(confirm).toContainText("This deletes 3 chats for good. 1 running chat is kept and finishes its turn. What the agent changed on the canvas stays.");
+  await confirm.getByRole("button", { name: "Cancel" }).click();
+  await expect(confirm).toHaveCount(0);
+  expect(await engineChats(agent)).toHaveLength(4);
+
+  await panel.getByRole("button", { name: "Clear all chats" }).click();
+  await confirm.getByRole("button", { name: "Delete 3 chats" }).click();
+  await expect(tabs(page)).toHaveCount(0);
+  await expect(page.locator("[data-slot='toast-title']").filter({ hasText: "Deleted 3 chats" })).toBeVisible();
+  await expect(page.locator("[data-slot='toast-description']").filter({ hasText: "1 running chat was kept." })).toBeVisible();
+  // The dialog's backdrop fades out over the canvas: wait for it before clicking there.
+  await expect(page.locator("[data-slot='alert-dialog-backdrop']")).toHaveCount(0);
+  // Shift-click takes the artifact out of the selection: with nothing selected the running chat shows.
+  await clickShape(page, "shape:p1", ["Shift"]);
+  await expect(tabs(page)).toHaveText(["Cleaner"]);
+  await expect.poll(async () => (await engineChats(agent)).map((chat) => chat.id)).toEqual([running]);
+  // Only the running chat is left, so there is nothing idle to clear.
+  const clear = panel.getByRole("button", { name: "Clear all chats" });
+  await expect(clear).toBeDisabled();
+  // Disabled, it still says why on hover, and a click does nothing.
+  await clear.hover();
+  await expect(page.locator("[data-slot='tooltip-popup']")).toHaveText("Every chat is still running");
+  await clear.click({ force: true });
+  await expect(confirm).toHaveCount(0);
+});
+
+test("chats under More have the same menu: right-click a row, or click the active one; right-clicks in the rail never open the canvas menu", async ({ page, agent }) => {
+  await openCanvas(page, agent);
+  await putRecords(agent, artifactColumn([{ id: "shape:p1", title: "Alpha" }]));
+  const oldest = await createChat(agent, { title: "First", tags: ["shape:p1"], createdAt: at(1) });
+  for (const [index, title] of ["Second", "Third", "Fourth", "Fifth"].entries()) await createChat(agent, { title, createdAt: at(index + 2) });
+  await openCanvas(page, agent);
+  const panel = await openRail(page);
+  await expect(tabs(page)).toHaveText(["Fifth", "Fourth", "Third"]);
+  const canvasMenu = page.getByRole("menuitem", { name: /Select all/ });
+
+  // A right-click on a row under More chooses it and opens its menu, named for it.
+  await panel.getByRole("button", { name: "More chats" }).click();
+  await page.getByRole("menu").getByRole("menuitem", { name: "First" }).click({ button: "right" });
+  const menu = page.getByRole("menu", { name: "First actions" });
+  await expect(menu.getByRole("menuitem")).toHaveText(["Rename", "Detach from Alpha", "Delete"]);
+  await expect(panel.getByRole("button", { name: "More chats: First" })).toBeVisible();
+  await expect(canvasMenu).toHaveCount(0);
+
+  // Rename puts the field where the More trigger was.
+  await menu.getByRole("menuitem", { name: "Rename" }).click();
+  const rename = panel.getByRole("textbox", { name: "Rename chat" });
+  await expect(rename).toBeFocused();
+  await rename.fill("Oldest");
+  await rename.press("Enter");
+  await expect.poll(async () => (await engineChat(agent, oldest)).title).toBe("Oldest");
+  await expect(panel.getByRole("button", { name: "More chats: Oldest" })).toBeVisible();
+
+  // The active row shows that it has actions; a click on it opens them, as on the active tab.
+  await panel.getByRole("button", { name: "More chats: Oldest" }).click();
+  const row = page.getByRole("menu").getByRole("menuitem", { name: "Oldest" });
+  await expect(row.getByTestId("chat-actions-hint")).toBeVisible();
+  await row.click();
+  await expect(page.getByRole("menu", { name: "Oldest actions" })).toBeVisible();
+  await page.keyboard.press("Escape");
+
+  // A right-click on the More trigger opens the active chat's menu, and anywhere else in the rail opens nothing.
+  await panel.getByRole("button", { name: "More chats: Oldest" }).click({ button: "right" });
+  await expect(page.getByRole("menu", { name: "Oldest actions" })).toBeVisible();
+  await page.keyboard.press("Escape");
+  await panel.getByTestId("transcript").click({ button: "right" });
+  await panel.getByRole("heading", { name: "Agent" }).click({ button: "right" });
+  await expect(canvasMenu).toHaveCount(0);
 });

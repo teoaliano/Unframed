@@ -31,7 +31,7 @@ test("double-clicking the label opens the name field with a fixed @ and the name
   await expect(field).toHaveValue("fox");
   expect(await field.evaluate((input: HTMLInputElement) => [input.selectionStart, input.selectionEnd])).toEqual([0, 3]);
   // The @ is fixed in front of the field, not part of what is typed.
-  await expect(shapeOnScreen(page, "shape:fox").getByTestId("group-rename-prefix")).toHaveText("@");
+  await expect(shapeOnScreen(page, "shape:fox").getByTestId("rename-prefix")).toHaveText("@");
 
   await page.keyboard.type("Red Fox");
   await page.keyboard.press("Enter");

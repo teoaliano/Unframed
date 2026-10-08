@@ -6,7 +6,7 @@ Read this file before any spec. It holds what every spec shares: the product in 
 
 Unframed is a local, pay-per-generation image, video and text generator on an infinite canvas. You put material on the canvas (text, images, clips, drawings), select some of it, and either **Generate** (one paid model call through OpenRouter) or hand it to the **Agent** (a local coding agent, Claude or Codex, running on your own subscription). Results land back on the canvas as ordinary shapes you can select into the next run. Every run writes its output file and a JSON sidecar into the project folder. Nothing is hosted: the engine runs on your machine, binds loopback only, and holds your OpenRouter key.
 
-The canvas is tldraw. There are no wires and no output nodes: **the selection is the input set**. A named group is a selection you keep, and it can carry standing generation settings (a recipe). The agent can also write HTML pages and HyperFrames motion compositions onto the canvas, tuned with DialKit parameters in a full-screen editor.
+The canvas is tldraw. There are no wires and no output nodes: **the selection is the input set**. A named group is a selection you keep, and it can carry standing generation settings (a recipe). The agent can also write HTML pages and HyperFrames motion compositions onto the canvas, tuned with DialKit parameters in a panel beside them or in a full-screen editor.
 
 This is a rewrite of an existing app. Every capability the old app had is kept. The specs describe behaviour and file formats. They never describe the old code, and the old code is not available to you. Do not look for it.
 
@@ -51,7 +51,7 @@ Use these words, and only these, for these things.
   - **page**: an HTML artifact shown in a sandboxed frame.
   - **motion**: a HyperFrames composition shown in a player.
   - **mark**: every other tldraw drawing shape (draw, geo, arrow, line, highlight, note, and so on).
-- **`@id`**: the reference token (`@` followed by word characters and hyphens) that pulls one prompt, text result or group into another prompt's text.
+- **`@id`**: the reference token (`@` followed by word characters and hyphens) that pulls one prompt, text result or group into another prompt's text, or attaches one image or video to a run. Every shape but a mark has one: a number the canvas mints, or a name a person gives it (spec 06).
 - **Selection**: the shapes currently selected. It is the input set of a run.
 - **Run**: one Generate action. It may make several outputs (a **batch**).
 - **Recipe**: everything needed to repeat a run: the sources, the model, the parameters, the per-run instruction. Every result carries one. A group can also carry one as standing settings (medium, model, parameters, runs), which holds no instruction and no sources: its sources are its members. Spec 03 defines both.
@@ -62,7 +62,8 @@ Use these words, and only these, for these things.
 - **Artifact**: a page or a motion.
 - **Editor**: the full-screen view of one artifact: chat on the left, the artifact in the centre, **dials** (DialKit parameters) on the right.
 - **Render job**: a durable record of a paid video generation that outlives the browser tab.
-- **Preview origin**: the second loopback HTTP server that serves artifact files and nothing else.
+- **Preview origin**: the second loopback HTTP server that serves artifact files and nothing else, on a fixed port (18787) unless something else holds it.
+- **Live viewer**: the small page "Open in a new tab" opens. It shows a page or motion's newest version with its current dials, and follows both while the app is open (spec 09).
 - **Share link**: a temporary public URL that serves one local file so a video model can fetch it.
 - **Sketch**: marks rendered to an image at run time, either composited onto the image they sit on or, when loose, as a standalone reference image.
 - **Placeholder**: the shape the engine puts on the canvas where a result will land, before the work that makes it is answered, carrying a run marker until the engine fills it (spec 03 defines it; specs 04, 05 and 09 use it).
@@ -74,7 +75,7 @@ Use these words, and only these, for these things.
 
 There are exactly three. Every task in every spec names one of them.
 
-1. **Engine seam.** The real engine process, forked by the test into a temporary data folder, on an OS-assigned port (`PORT=0`), with every OpenRouter call (image, text, video, catalogue, pricing, key and auth endpoints) pointed at an in-test stub server through spec 01's single loopback-only `UNFRAMED_TEST_OPENROUTER_ORIGIN`, every other test hook set from spec 01's one table of test-only variables, and with the agent provider replaced by a scripted agent (a JSON script of turns, tool calls and failures, chosen by matching the first message). Tests drive it through its public interface only: the RPC socket, the sync socket, the plain HTTP routes, the IPC messages it sends its parent, and the files it writes. Nothing that spends money runs here.
+1. **Engine seam.** The real engine process, forked by the test into a temporary data folder, on an OS-assigned port (`PORT=0`) with an OS-assigned preview port too (`UNFRAMED_PREVIEW_PORT=0`, so engines running side by side never compete for the fixed one), with every OpenRouter call (image, text, video, catalogue, pricing, key and auth endpoints) pointed at an in-test stub server through spec 01's single loopback-only `UNFRAMED_TEST_OPENROUTER_ORIGIN`, every other test hook set from spec 01's one table of test-only variables, and with the agent provider replaced by a scripted agent (a JSON script of turns, tool calls and failures, chosen by matching the first message). Tests drive it through its public interface only: the RPC socket, the sync socket, the plain HTTP routes, the IPC messages it sends its parent, and the files it writes. Nothing that spends money runs here.
 2. **Domain seam.** The pure modules in `domain`, called directly. Use it for rules with many cases: request composition from a selection, `@id` resolution, numbering and roles, Free-mode splitting, pricing estimates, dial shorthand, job-store pruning, `.env` editing, permission decisions.
 3. **Browser seam.** Playwright driving the built web client served by an engine running at the engine seam (stubbed upstreams, scripted agent). Use it for anything a person does on the canvas or in a dialog. Assert on what is on screen and on what the engine then holds.
 
@@ -111,6 +112,7 @@ These hold across every spec. A spec that needs to bend one must say so explicit
 | 11 | [Legacy import](11-legacy-import.md) | one-time import of old projects and presets |
 | 12 | [Design system](12-design-system.md) | t3code's tokens and UI kit on every surface, tldraw's UI themed to match, the lint that keeps it |
 | 13 | [Design-system catalogue](13-design-system-catalogue.md) | a dev-only page showing every token, kit component and recipe, its API from the source, and where the product uses it |
+| 14 | [External agents](14-external-agents.md) | agents outside the app (Claude Code, Codex, the Claude app, any MCP client) read and write the canvas over MCP: connection tokens made in Settings, a stdio shim that finds the engine through a discovery file, one outside chat per session per project with turns and Revert |
 | 15 | [Audio](15-audio.md) | the audio medium (ElevenLabs text to speech) in the Generate composer, the ElevenLabs key and credits in Settings, the audio shape with its player, audio file drop and upload |
 
 ## Reference material in this repo

@@ -25,7 +25,8 @@ test("an empty image asks for a file, fills from the picker, and is then bare, k
   });
   expect(filled.props).toMatchObject({ w: 240, h: 120 });
   await expect(shape.locator("[data-testid='media-empty']")).toHaveCount(0);
-  await expect(shape.locator("[data-shape-label]")).toHaveCount(0);
+  // Filled, it shows its @id instead of its kind (spec 06).
+  await expect(shape.locator("[data-shape-label]")).toHaveText("@150");
   const image = shape.locator("img").first();
   await expect.poll(() => image.evaluate((element: HTMLImageElement) => element.complete && element.naturalWidth > 0)).toBe(true);
   const container = shape.locator(".tl-html-container").first();

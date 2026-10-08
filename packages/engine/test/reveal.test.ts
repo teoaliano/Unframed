@@ -78,3 +78,27 @@ describe("files.reveal without a folder", () => {
     expect(await engine.nativeLog()).toEqual([]);
   });
 });
+
+describe("files.path", () => {
+  it("answers a project file's absolute path, from its basename", async () => {
+    const engine = await startEngine();
+    const folder = await seedProject(engine);
+    const rpc = await engine.rpc();
+    expect(await rpc.call("files.path", { project: "Board", fileName: "a.png" })).toEqual({ path: join(folder, "a.png") });
+    expect(await rpc.call("files.path", { project: "board", fileName: "../../b.png" })).toEqual({ path: join(folder, "b.png") });
+    expect(await engine.nativeLog()).toEqual([]);
+  });
+
+  it("answers not_found for a file that is not on disk and for a project with no folder", async () => {
+    const engine = await startEngine();
+    await seedProject(engine);
+    const rpc = await engine.rpc();
+    for (const fileName of ["gone.png", ".."]) {
+      await expect(rpc.call("files.path", { project: "board", fileName })).rejects.toMatchObject({ code: "not_found", message: `No file ${fileName} in this project.` });
+    }
+    await expect(rpc.call("files.path", { project: "never-made", fileName: "a.png" })).rejects.toMatchObject({
+      code: "not_found",
+      message: "No files for this project yet.",
+    });
+  });
+});

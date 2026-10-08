@@ -209,7 +209,7 @@ export const declaredTraits = (model: ProviderModel | undefined, traits: Traits)
 });
 
 /** A choice in the traits popover: a kit ghost Button in the radio role, pressed while chosen, with its hint and the default marked. */
-const RadioRow = ({ checked, label, hint, badge, onSelect }: { readonly checked: boolean; readonly label: string; readonly hint?: string; readonly badge?: string; readonly onSelect: () => void }) => (
+export const RadioRow = ({ checked, label, hint, badge, onSelect }: { readonly checked: boolean; readonly label: string; readonly hint?: string; readonly badge?: string; readonly onSelect: () => void }) => (
   <Button variant="ghost" size="sm" role="radio" aria-checked={checked} data-pressed={checked ? "" : undefined} className="w-full justify-start" onClick={onSelect}>
     <span className="flex size-3.5 shrink-0 items-center justify-center">{checked && <Check aria-hidden className="size-3.5" />}</span>
     <span className="shrink-0">{label}</span>

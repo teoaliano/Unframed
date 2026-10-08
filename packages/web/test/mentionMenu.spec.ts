@@ -51,7 +51,8 @@ test.describe("the mention menu", () => {
     await newPrompt(page, engine);
     await page.keyboard.type("A photo of @");
     await expect(menu(page)).toBeVisible();
-    await expect(rows(page)).toHaveText(["@100lone red fox", "@101A @100 on a windswept cl…", "@Hero-shots"]);
+    // Names first, then the numbered refs.
+    await expect(rows(page)).toHaveText(["@Hero-shots", "@100lone red fox", "@101A @100 on a windswept cl…"]);
 
     const box = (await menu(page).boundingBox())!;
     const prompt = (await page.locator(".tl-shape[data-shape-type='text']").filter({ hasText: "A photo of" }).boundingBox())!;

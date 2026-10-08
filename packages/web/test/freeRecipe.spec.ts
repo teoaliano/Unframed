@@ -4,7 +4,7 @@ import { pngBytes } from "./images.ts";
 import { filledMedia, promptRecord, putRecords } from "./media.ts";
 import { expect, imageResults, runsChip, setFree, test } from "./texting.ts";
 
-test("Recipe on a Free output reopens with Runs at 1 and sends that run's own prompt and references", async ({ page, generation }) => {
+test("Regenerate on a Free output reopens with Runs at 1 and sends that run's own prompt and references", async ({ page, generation }) => {
   const { engine } = generation;
   await openCanvas(page, engine);
   for (const [id, ref, y, seed] of [["shape:style", "300", 40, 1], ["shape:subject", "301", 240, 2]] as const) {
@@ -29,9 +29,11 @@ test("Recipe on a Free output reopens with Runs at 1 and sends that run's own pr
   await page.keyboard.press("-");
   await settled(shapeOnScreen(page, first.id));
   await clickShape(page, first.id);
-  await toolbar(page).getByRole("button", { name: "Recipe" }).click();
+  await toolbar(page).getByRole("button", { name: "Regenerate" }).click();
   await expect(composer(page)).toBeVisible();
   await expect(composer(page).getByTestId("source-count")).toHaveText("recipe · 2 sources");
+  await expect(composer(page).getByTestId("recipe-prompt")).toHaveText("image 1 alone");
+  await expect(composer(page).getByTestId("recipe-references")).toHaveText("with 1 image");
   await expect(runsChip(page)).toHaveCount(0);
   await expect(sendButton(page)).toHaveText("Generate");
 
