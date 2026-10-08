@@ -335,7 +335,7 @@ const Bar = ({ state, onGenerate, agent }: { state: Exclude<ToolbarState, { kind
         <div className={barClass}>
           <DragHandle />
           <Button size="sm" onClick={() => openArtifact?.(editor, state.shapeId as TLShapeId)}>
-            Open
+            Editor
           </Button>
           {Render && editor.getShape(state.shapeId as TLShapeId)?.type === "motion" && <Render shapeId={state.shapeId as TLShapeId} />}
           {agent}

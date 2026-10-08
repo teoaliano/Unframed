@@ -70,6 +70,56 @@ export const continuableChat = <C extends RailChat>(chats: ReadonlyArray<C>, art
     (chat) => chat.status !== "running" && (artifactIds.length === 0 ? chat.tags.length === 0 : artifactIds.every((id) => chat.tags.includes(id))),
   );
 
+const counted = (count: number, one: string, many: string): string => `${count} ${count === 1 ? one : many}`;
+
+/**
+ * What Clear all chats says before it deletes: every chat not running goes, and running
+ * ones are kept to finish. The engine decides again when the command runs, so a chat that
+ * starts a turn in between is kept even though the dialog counted it.
+ */
+export const clearAllChats = (
+  chats: ReadonlyArray<Pick<RailChat, "status">>,
+): {
+  readonly deleting: number;
+  readonly keeping: number;
+  readonly description: string;
+  readonly action: string;
+  /** The header button's tooltip: what it does, or why it does nothing now. */
+  readonly tooltip: string;
+  readonly disabled: boolean;
+} => {
+  const keeping = chats.filter((chat) => chat.status === "running").length;
+  const deleting = chats.length - keeping;
+  const kept =
+    keeping === 0 ? "" : keeping === 1 ? " 1 running chat is kept and finishes its turn." : ` ${keeping} running chats are kept and finish their turns.`;
+  return {
+    deleting,
+    keeping,
+    description: `This deletes ${counted(deleting, "chat", "chats")} for good.${kept} What the agent changed on the canvas stays.`,
+    action: `Delete ${counted(deleting, "chat", "chats")}`,
+    tooltip: chats.length === 0 ? "No chats to delete" : deleting === 0 ? "Every chat is still running" : "Clear all chats",
+    disabled: deleting === 0,
+  };
+};
+
+/** The toast after Clear all chats, counted from what the engine removed, not from what the dialog said. */
+export const clearedNotice = (deleted: number, kept: number): { readonly title: string; readonly description?: string } => ({
+  title: `Deleted ${counted(deleted, "chat", "chats")}`,
+  ...(kept === 0 ? {} : { description: `${counted(kept, "running chat was", "running chats were")} kept.` }),
+});
+
+/** The artifacts a chat is linked to that are still on the canvas, in tag order, for Detach to offer. */
+export const linkedArtifacts = (
+  tags: ReadonlyArray<string>,
+  shapes: ReadonlyArray<RecapShape>,
+): Array<{ readonly id: string; readonly kind: string; readonly label: string }> => {
+  const byId = new Map(shapes.map((shape) => [shape.id, shape]));
+  return tags.flatMap((id) => {
+    const shape = byId.get(id);
+    return shape ? [{ id, kind: shape.kind, label: shapeLabel(shape) ?? agentShapeId(id) }] : [];
+  });
+};
+
 // ---------------------------------------------------------------------------------------
 // The recap card.
 

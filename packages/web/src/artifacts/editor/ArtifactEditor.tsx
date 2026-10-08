@@ -99,7 +99,7 @@ export const ArtifactEditor = ({ shapeId, onClose, onOpen }: ArtifactEditorProps
       {...KEEP_FROM_CANVAS}
     >
       <section data-editor-column="rail" className={COLUMN}>
-        <AgentRail project={project} embedded filterTo={[shapeId]} onOpenEditor={onOpen} />
+        <AgentRail project={project} embedded filterTo={[shapeId]} onOpenEditor={onOpen} onClose={onClose} />
       </section>
       <section data-editor-column="centre" className={COLUMN} aria-label={`Editing ${title}`}>
         <ColumnHeader>

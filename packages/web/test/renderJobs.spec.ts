@@ -208,7 +208,8 @@ test("Generate reads Starting… and stays disabled until video.start answers; a
   expect(video.jobs.creates[0]!.body).toMatchObject({ model: SEEDANCE, prompt: "lone red fox", duration: 5, generate_audio: false });
 
   video.jobs.create(() => ({ kind: "status", status: 402, body: { error: { message: "Insufficient credits" } } }));
-  await clickShape(page, "shape:starter-subject");
+  // The subject is still selected. Clicking it again would start editing it, and tldraw focuses
+  // a prompt's text 100 ms after editing starts, which can take the caret from the composer.
   await openComposer(page);
   await expect(composer(page).getByRole("radio", { name: "video" })).toHaveAttribute("aria-checked", "true");
   await pressSend(page);

@@ -24,7 +24,7 @@ This spec builds the composer shell shared with the Agent tray (specs 07 and 08)
 4. As a person, I want a selection with nothing usable in it (an empty image alone) to show only Agent, so that I am not offered a Generate that cannot work.
 5. As a person, I want the toolbar to say "3 selected" for a loose selection, so that I know how many shapes go in.
 6. As a person, I want the toolbar to say "@character" when I select a group named character, so that a named set reads by its name.
-7. As a person, I want a single filled page or motion to offer Open, so that the old artifact behaviour is kept.
+7. As a person, I want a single filled page or motion to offer Editor, so that the old artifact behaviour is kept.
 8. As a person, I want the toolbar to hide while I drag shapes, drag the canvas or box-select, so that it does not fight the gesture.
 9. As a person, I want the wheel over the toolbar to still pan and zoom the canvas, so that the toolbar never freezes the board.
 10. As a person, I want the toolbar centred above my selection, flipped below when there is no room, and kept inside the window, so that it is always reachable.
@@ -187,7 +187,7 @@ Decided from the selection by a pure function in the web (tested at the domain s
 | nothing | no bar |
 | exactly one result (spec terms: a shape with a recipe) | Regenerate, Agent, Generate (primary, last), as on any usable selection; the result's line shows under it. Generate is left out when the result has nothing to send (a failed render, spec 04), and Regenerate is then the primary |
 | exactly one result still generating | the hint `Generating…`, Agent |
-| exactly one page or motion with a file | a six-dot drag handle, Open, Render for a motion (spec 09), Agent (spec 09 connects Open to its editor) |
+| exactly one page or motion with a file | a six-dot drag handle, Editor, Render for a motion (spec 09), Agent (spec 09 connects Editor to its editor) |
 | usable | hint, Agent, Generate (primary, last) |
 | not usable | Agent only |
 
@@ -195,7 +195,7 @@ The hint is `@<name>` when the selection is exactly one group, otherwise `N sele
 
 The bar and the composer stay above spec 02's bottom bar: the room below the selection ends at the bottom bar's top edge.
 
-Look (spec 12): the bar is a `surface-glass` card with the kit's border, `rounded-xl` radius and small shadow. Its buttons are the kit's Button at `sm` size: the primary one (Generate, Open, and Regenerate on a result bar without Generate) is `default`, Regenerate (beside Generate) and Agent are `outline`, a recipe group's Recipe (spec 06) is `ghost`. Agent is never the primary action. The bar has no dividers between its actions. The drag handle (a ghost icon Button with the grip icon, label and tooltip "Drag to move") moves the selection with the pointer, since a filled page's or motion's frame takes the pointer; the whole move is one undo step. The hint and the result's line are `text-xs` in the muted foreground.
+Look (spec 12): the bar is a `surface-glass` card with the kit's border, `rounded-xl` radius and small shadow. Its buttons are the kit's Button at `sm` size: the primary one (Generate, Editor, and Regenerate on a result bar without Generate) is `default`, Regenerate (beside Generate) and Agent are `outline`, a recipe group's Recipe (spec 06) is `ghost`. Agent is never the primary action. The bar has no dividers between its actions. The drag handle (a ghost icon Button with the grip icon, label and tooltip "Drag to move") moves the selection with the pointer, since a filled page's or motion's frame takes the pointer; the whole move is one undo step. The hint and the result's line are `text-xs` in the muted foreground.
 
 Placement: centred above the selection's screen bounds, 12 px gap, clamped 8 px from the canvas's sides; flipped below the selection when there is no room above; when there is room neither above nor below, pinned inside the canvas at the top margin. The composer uses the same rule with its own size, so it grows upward on the same centre and bottom edge (downward when flipped). The morph animates size and position over 200 ms ease-out; under reduced motion it crossfades over 120 ms. The bar hides while a shape is dragged, while the canvas is dragged (not on wheel moves) and during a box selection. Pointer and click events on the bar and composer never reach the canvas. A wheel over them is forwarded to the canvas at the same pointer position, unless the element under the pointer scrolls itself (the instruction box once it overflows).
 
@@ -216,7 +216,7 @@ Tray band, below the box's border: the model chip first, then one chip per prop 
 
 On open, the tray holds the last-used values for the medium (see below), else the defaults. The instruction starts empty every time, except in recipe mode. The draft survives selection changes while the composer stays open and is dropped on close.
 
-Selection binding: clicking a shape while the composer is open adds it to the selection instead of replacing it. Clicking empty canvas closes the composer. Esc closes the composer from anywhere inside it, including the editor, unless a menu or the model dialog inside it is open, which closes first. The composition is recomputed on every change to the selection or to any shape the composition read.
+Selection binding: clicking a shape while the composer is open adds it to the selection instead of replacing it. Clicking empty canvas closes the composer. Esc closes the composer from anywhere inside it, including the editor, and while the focus is nowhere (the frame before its box takes the focus, after it opens or after a chip's remove button goes away), unless a menu or the model dialog inside it is open, which closes first. The composition is recomputed on every change to the selection or to any shape the composition read.
 
 On send: the web renders composites and the sketch, uploads them, builds the outputs, calls `run.image`, records last-used values, and on acknowledgement collapses the composer back to the bar. A failure before acknowledgement stays in the composer as an error line.
 
@@ -502,7 +502,7 @@ A good test drives one of the three seams in 00-index and asserts only on what t
 31. Run markers: a restored placeholder is filled when its output succeeded, deleted when it failed or the run is unknown. Seam: engine.
 32. Run markers: stale markers resolved at boot and on first room open. Seam: engine.
 33. `recipe.read`, and its message when the sidecar is gone. Seam: engine.
-34. Selection toolbar: appears over a selection with Generate, hint and Agent slot; Agent-only for an unusable selection; `@name` for a group; Open for a filled artifact. Seam: browser.
+34. Selection toolbar: appears over a selection with Generate, hint and Agent slot; Agent-only for an unusable selection; `@name` for a group; Editor for a filled artifact. Seam: browser.
 35. Selection toolbar: placement above, flip below, clamp; hidden during drag, canvas drag and box select; wheel forwarded to the canvas. Seam: browser.
 36. Composer shell: grows from the bar on the same centre and bottom edge; Esc and click-away close it; clicking a shape adds it to the selection; the Agent tray slot renders when opened from Agent. Seam: browser.
 37. Generate tray top band: medium switch with only registered media, source count and `@name`. Seam: browser.
@@ -530,7 +530,7 @@ A good test drives one of the three seams in 00-index and asserts only on what t
 - The text medium, the Runs prop, batches of more than one output, Free mode and its preview (spec 05).
 - Recipe groups and the library (spec 06).
 - The Agent tray, chats and everything the agent does (specs 07 and 08).
-- Opening an artifact in the editor (spec 09; this spec only shows the Open button).
+- Opening an artifact in the editor (spec 09; this spec only shows the Editor button).
 - Settings, the key flow and default models (spec 10).
 - Live source wiring: a result re-reading its sources as they are now was rejected (decision Q3, option C). Regenerate opens the recorded recipe.
 - A result strip, "Add to canvas" and "Clear": results land on the canvas directly now, so the old output node's strip has no home.
