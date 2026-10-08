@@ -1,10 +1,36 @@
 import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
 import { fileURLToPath } from "node:url";
-import { defineConfig } from "vite";
+import { defineConfig, type ProxyOptions } from "vite";
+import { devShareHeaders, devShareOrigin } from "@unframed/domain";
 
 const clientPort = process.env.UNFRAMED_CLIENT_PORT;
 const serverPort = process.env.UNFRAMED_SERVER_PORT ?? "8787";
+const port = clientPort === undefined ? 5173 : Number(clientPort);
+
+const shareValue = process.env.UNFRAMED_DEV_SHARE_ORIGIN;
+const shareOrigin = devShareOrigin(shareValue);
+if (shareValue !== undefined && shareValue.trim() !== "" && shareOrigin === undefined) {
+  throw new Error(`UNFRAMED_DEV_SHARE_ORIGIN must be a bare https origin, got ${JSON.stringify(shareValue)}`);
+}
+
+// The dev share relay (spec 01). Without a share origin the proxy forwards headers untouched.
+const relay: ProxyOptions["configure"] = (proxy) => {
+  if (shareOrigin === undefined) return;
+  const readdress = (proxyReq: { setHeader(name: string, value: string): void }, req: { headers: Record<string, string | string[] | undefined> }) => {
+    const { origin, host } = req.headers;
+    const replaced = devShareHeaders({
+      shareOrigin,
+      loopbackHost: `localhost:${port}`,
+      origin: typeof origin === "string" ? origin : undefined,
+      host: typeof host === "string" ? host : undefined,
+    });
+    if (replaced.origin !== undefined) proxyReq.setHeader("origin", replaced.origin);
+    if (replaced.host !== undefined) proxyReq.setHeader("host", replaced.host);
+  };
+  proxy.on("proxyReq", readdress);
+  proxy.on("proxyReqWs", readdress);
+};
 
 export default defineConfig({
   plugins: [react(), tailwindcss()],
@@ -27,14 +53,15 @@ export default defineConfig({
   },
   server: {
     host: "localhost",
-    port: clientPort === undefined ? 5173 : Number(clientPort),
-    strictPort: clientPort !== undefined,
+    port,
+    strictPort: clientPort !== undefined || shareOrigin !== undefined,
+    allowedHosts: shareOrigin === undefined ? [] : [new URL(shareOrigin).hostname],
     // The origin is not changed, so the forwarded Host stays this server's loopback
     // name and the browser's Origin is loopback: both pass the engine's guards.
     proxy: {
-      "/api": { target: `http://localhost:${serverPort}`, changeOrigin: false },
-      "/ws": { target: `ws://localhost:${serverPort}`, ws: true, changeOrigin: false },
-      "/sync": { target: `ws://localhost:${serverPort}`, ws: true, changeOrigin: false },
+      "/api": { target: `http://localhost:${serverPort}`, changeOrigin: false, configure: relay },
+      "/ws": { target: `ws://localhost:${serverPort}`, ws: true, changeOrigin: false, configure: relay },
+      "/sync": { target: `ws://localhost:${serverPort}`, ws: true, changeOrigin: false, configure: relay },
     },
   },
 });

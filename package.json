@@ -8,6 +8,7 @@
   },
   "scripts": {
     "dev": "node scripts/dev.ts",
+    "dev:share": "node scripts/dev.ts --share",
     "engine": "node packages/engine/src/main.ts",
     "web": "pnpm --filter @unframed/web dev",
     "typecheck": "tsc --noEmit -p tsconfig.json && pnpm -r --no-bail typecheck",

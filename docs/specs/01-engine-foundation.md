@@ -83,6 +83,7 @@ Root scripts:
 | Script | Does |
 | --- | --- |
 | `pnpm dev` | runs the engine from source with restart on change (default port 8787) and the Vite dev server (default port 5173) together |
+| `pnpm dev:share` | `pnpm dev`, plus the Vite port served on this machine's tailnet with `tailscale serve` (see Dev share relay); removes the mapping on exit |
 | `pnpm engine` | engine only |
 | `pnpm web` | Vite dev server only |
 | `pnpm typecheck` | `tsc --noEmit` across all packages |
@@ -130,7 +131,7 @@ Hosting variables (read from the process environment only, never written to `.en
 
 Why hosting variables stay out of `.env.example`: `.env` overrides the environment, so a line left present but empty there would shadow the value the shell sets.
 
-Client dev variables: `UNFRAMED_CLIENT_PORT` (Vite port, default 5173; when set the port is strict) and `UNFRAMED_SERVER_PORT` (the engine port the Vite proxy targets, default 8787).
+Client dev variables: `UNFRAMED_CLIENT_PORT` (Vite port, default 5173; when set the port is strict), `UNFRAMED_SERVER_PORT` (the engine port the Vite proxy targets, default 8787) and `UNFRAMED_DEV_SHARE_ORIGIN` (the dev share relay's https origin; `pnpm dev:share` sets it). None of them is part of the hosting contract.
 
 `.env.example` at the repo root contains exactly: `OPENROUTER_API_KEY=` (empty), `OPENROUTER_IMAGE_MODEL=openai/gpt-image-2`, `OPENROUTER_TEXT_MODEL=google/gemini-3.5-flash-lite`, `OPENROUTER_VIDEO_MODEL=bytedance/seedance-2.0`, `OUTPUT_DIR=./output`, `PORT=8787`, each on its own line, with a one-line comment header saying the app writes this file itself and copying it is optional.
 
@@ -344,6 +345,8 @@ When `UNFRAMED_CLIENT_DIST` is set, the engine serves that directory at `/`: `in
 
 Vite dev server: proxies `/ws` (WebSocket) and `/api` to `http://localhost:<UNFRAMED_SERVER_PORT or 8787>` without changing the origin, so the forwarded `Host` stays `localhost:5173` and the browser's `Origin` is loopback; both pass the guards.
 
+Dev share relay: when `UNFRAMED_DEV_SHARE_ORIGIN` holds a bare https origin (no path, query, fragment or credentials; anything else stops the dev server with an error), the Vite dev server also answers requests through that origin. `pnpm dev:share` sets it to `https://<tailnet name>:<Vite port>` and points `tailscale serve` at the Vite port, which makes the port strict. Vite stays bound to `localhost` and adds only the share hostname to its allowed hosts. On each proxied `/api`, `/ws` and `/sync` request, the proxy replaces an `Origin` equal to the share origin with `http://localhost:<Vite port>` and a `Host` equal to the share host with `localhost:<Vite port>`, both case-insensitive. Any other `Origin` or `Host` is forwarded unchanged, so the engine's guard refuses it as before. The rule is a pure function in domain. The engine, its guard, its bind address and the published bundle do not change. Artifact previews do not load through the relay: the preview origin stays loopback (spec 09).
+
 ### Reveal in file manager
 
 `files.reveal { project?, fileNames }`: the folder is the project folder, or the output folder when `project` is omitted. A missing folder answers `not_found`. Each name is reduced to its basename; names that do not exist on disk are dropped.
@@ -481,6 +484,7 @@ A good test drives the system through one of the three seams in 00-index and ass
 52. Project database: `projects.create` leaves `unframed.sqlite` in the new folder with the migration list applied once; a second engine start applies nothing; no other SQLite file appears in the folder. Seam: engine.
 53. Open-project registry: after `projects.create` opened a project's database, SIGTERM closes it through `closeAll()` within the shutdown budget, leaving no `unframed.sqlite-wal` file behind. Later specs test their own closers through the operations that call `close(project)` (spec 10). Seam: engine.
 54. Preferences store: `preferences.set` then `preferences.get` round-trips a value; `null` deletes it; a bad key and an oversized value are refused with their messages; a second socket's `preferences.subscribe` sees the change; an unparsable `preferences.json` reads as `{}` and the next set replaces it; a value survives an engine restart on a new port. Seam: engine.
+55. Dev share relay decision table: share origins accepted and refused (http, path, query, fragment, credentials, empty); a request through the share origin is readdressed to loopback, case-insensitively, including a navigation with no `Origin`; a foreign `Origin` or `Host` (another site, another port, a suffix of the share host, `null`) is forwarded unchanged and the loopback guard refuses it; loopback requests are left alone. Seam: domain.
 
 ## Out of Scope
 
@@ -489,7 +493,7 @@ A good test drives the system through one of the three seams in 00-index and ass
 - The render job store and its sweep, share links and the tunnel (spec 04).
 - The preview origin's route and its headers (spec 09).
 - The settings dialog, the OAuth key flow, key removal, output folder moves of render jobs, project rename and delete (spec 10).
-- Remote access, pairing tokens, LAN or tunnel access to the engine: not built. The engine is loopback only with no opt-in.
+- Remote access, pairing tokens, LAN or tunnel access to the engine: not built. The engine is loopback only with no opt-in. The dev share relay is a dev server feature that ends at the loopback engine, never part of the engine or the bundle.
 - t3code's terminal, mobile app, remote access and pull-request linking: not built.
 - Any Electron code. The engine never imports Electron or any shell API; the shell lives in a separate private repository and nothing here references it.
 
@@ -499,6 +503,7 @@ A good test drives the system through one of the three seams in 00-index and ass
 - Why nothing is echoed cross-origin, not even to loopback: an allowlist of loopback origins hands a readable API to any page on any other loopback port (another dev server, or an XSS in some local tool). Spec 10's `oauth.start` answer carries the PKCE challenge, and anything that can read it can install a key from its own account.
 - Why the Host check exists alongside the Origin check: a DNS-rebound page is same-origin with the engine and sends no `Origin`; its `Host` is the name it dialled, which is not loopback.
 - Why bind loopback when the header checks exist: a non-browser client writes its own headers, so only refusing the connection holds against it.
+- Why the dev share relay keeps these guarantees for everyone outside the tailnet: `tailscale serve` answers only devices on the person's own tailnet, the relay readdresses exactly one origin, and Vite's host check refuses a DNS-rebound name. A device on the tailnet can drive the engine while `pnpm dev:share` runs; that is the point of the command, and it is why sharing is a separate script rather than a default.
 - Old DOM hook names, for the shell's migration only: the chrome cards were `.toolbar-card-left` and `.toolbar-card-right`, the theme attribute was `data-astryx-theme` (the shell fell back to `documentElement`), and the variable was `--color-text-secondary`. The shell updates to the new names with its Electron 44 move.
 - The old engine used four separate test URL overrides (auth keys, key info, chat completions, video status). They are replaced by the single origin override above.
 - Old UI and log copy that contained em dashes has been rewritten with periods, commas or colons (the banner's missing-key line, the 413 message). The phrase `Unframed server` and the arrow after it are unchanged.
