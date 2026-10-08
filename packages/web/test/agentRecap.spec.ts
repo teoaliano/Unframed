@@ -30,7 +30,7 @@ const twoMotions = async (engine: TestEngine) => {
 
 const titleOf = async (engine: TestEngine, id: string) => (await roomShapes(engine, "default", "motion")).find((shape) => shape.id === id)?.props.title;
 
-test("after a turn the recap card lists what it touched with Open and Locate, folds with Hide and Show, and strikes a deleted shape through", async ({ page, agent }) => {
+test("after a turn the recap card lists what it touched with Editor and Locate, folds with Hide and Show, and strikes a deleted shape through", async ({ page, agent }) => {
   await openCanvas(page, agent);
   await twoMotions(agent);
   const panel = await openRail(page);
@@ -43,7 +43,7 @@ test("after a turn the recap card lists what it touched with Open and Locate, fo
   const rows = card.getByTestId("recap-row");
   await expect(rows.getByTestId("recap-label")).toHaveText(["Intro (red)", "Outro (red)"]);
   await expect(rows.nth(1).getByRole("button", { name: "Locate on canvas" })).toBeVisible();
-  await expect(rows.getByRole("button", { name: "Open" })).toHaveCount(2);
+  await expect(rows.getByRole("button", { name: "Editor" })).toHaveCount(2);
   await expect(card.getByRole("button", { name: "View diff" })).toHaveCount(0);
 
   await expect(shapeOnScreen(page, "shape:m2")).not.toBeInViewport();
@@ -62,8 +62,8 @@ test("after a turn the recap card lists what it touched with Open and Locate, fo
   await expect(rows.nth(1).getByRole("button")).toHaveCount(0);
   await expect(rows.nth(1).getByTestId("recap-label")).toHaveCSS("text-decoration-line", "line-through");
 
-  // Open goes into the editor (spec 09).
-  await rows.nth(0).getByRole("button", { name: "Open" }).click();
+  // Editor goes into the editor (spec 09).
+  await rows.nth(0).getByRole("button", { name: "Editor" }).click();
   const region = page.getByRole("region", { name: "Editing Intro (red)" });
   await expect(region).toBeVisible();
   await region.getByRole("button", { name: "Back to canvas" }).click();

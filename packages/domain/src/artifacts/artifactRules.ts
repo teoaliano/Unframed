@@ -149,12 +149,14 @@ export const PIN_LIMIT_MESSAGE = "Three are already playing. Stop one first.";
 
 /**
  * Which artifacts run a live frame: the selected ones (the three nearest the viewport
- * centre when more are selected), the pinned ones and the one open in the editor.
+ * centre when more are selected), the pinned ones, the one open in the editor and the one
+ * whose parameters panel is open on the canvas.
  */
 export const liveArtifacts = (input: {
   readonly selected: ReadonlyArray<{ readonly id: string; readonly centre: { readonly x: number; readonly y: number } }>;
   readonly pinned: ReadonlyArray<string>;
   readonly editing?: string | undefined;
+  readonly tuning?: string | undefined;
   readonly viewportCentre: { readonly x: number; readonly y: number };
 }): Set<string> => {
   const distance = (point: { readonly x: number; readonly y: number }) => Math.hypot(point.x - input.viewportCentre.x, point.y - input.viewportCentre.y);
@@ -162,6 +164,7 @@ export const liveArtifacts = (input: {
   const live = new Set(nearest.map((shape) => shape.id));
   for (const id of input.pinned) live.add(id);
   if (input.editing !== undefined) live.add(input.editing);
+  if (input.tuning !== undefined) live.add(input.tuning);
   return live;
 };
 

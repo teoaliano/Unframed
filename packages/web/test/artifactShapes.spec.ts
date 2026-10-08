@@ -111,7 +111,7 @@ test("a selected page or motion moves by the six-dot handle in its toolbar, and 
     await expect(shapeOnScreen(page, id)).toHaveAttribute("data-label-active", "true");
     const handle = toolbar(page).getByRole("button", { name: "Drag to move" });
     await expect(handle).toBeVisible();
-    await expect(toolbar(page).getByRole("button")).toHaveText(id === "shape:intro" ? ["", "Open", "Render", "Agent"] : ["", "Open", "Agent"]);
+    await expect(toolbar(page).getByRole("button")).toHaveText(id === "shape:intro" ? ["", "Editor", "Render", "Parameters", "Agent"] : ["", "Editor", "Parameters", "Agent"]);
     const grip = (await handle.boundingBox())!;
     await page.mouse.move(grip.x + grip.width / 2, grip.y + grip.height / 2);
     await page.mouse.down();

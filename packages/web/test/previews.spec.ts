@@ -39,15 +39,18 @@ test("an upload makes 512 and 2048 WebP previews off the main thread, and the vi
   expect((await readdir(join(engine.dataDir, "output", "default"))).filter((name) => name.endsWith(".webp"))).toEqual([]);
 
   const shape = await waitForRoom(engine, "default", (records) => records.find((record) => record.typeName === "shape" && record.type === "image"));
-  const image = shapeOnScreen(page, shape.id).locator("img").first();
+  const onScreen = shapeOnScreen(page, shape.id);
+  const image = onScreen.locator("img").first();
   // The smallest preview whose longest side covers the image's width on screen, else the original.
+  // Measured on the shape, which the uncropped image fills: tldraw swaps in a new <img> when the
+  // source changes, so the one `image` found can leave the page before its box is read.
   const expected = async () => {
-    const width = (await image.boundingBox())!.width;
+    const { width } = (await onScreen.boundingBox())!;
     return width <= 512 ? "?preview=512" : width <= 2048 ? "?preview=2048" : "";
   };
   // The shape reaches the room before its <img> renders; on a slow runner the gap is long enough to read no box at all.
   await expect(image).toBeVisible();
-  const box = (await image.boundingBox())!;
+  const box = (await onScreen.boundingBox())!;
   await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
   // Zoom to selection does nothing until the click has selected the image; the toolbar is the sign it has.
   await expect(page.getByTestId("selection-toolbar")).toBeVisible();

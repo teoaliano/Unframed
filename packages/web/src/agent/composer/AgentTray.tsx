@@ -18,7 +18,7 @@ import type { AgentTrayProps as SlotProps } from "../../chrome/slots.ts";
 import { useEngine } from "../../context.ts";
 import { effectiveModel, noProviderReady, providerName, readyProviders } from "../providers.ts";
 import { createChat, sendMessage } from "../send.ts";
-import { useChatClient, useChats, useFollowUp, useHandoffVersion, usePlanMode, useProviders, useRailUi, useWatchedThread, type ChatClient } from "../store.ts";
+import { EMPTY_DRAFT, NEW_CHAT, sameDraft, useChatClient, useChats, useDraftVersion, useFollowUp, useHandoffVersion, usePlanMode, useProviders, useRailUi, useWatchedThread, type ChatClient } from "../store.ts";
 import { latestCompletedTool, returnQueued, sendQueued } from "../queue.tsx";
 import { Alert, AlertDescription } from "~/components/ui/alert";
 import { Button } from "~/components/ui/button";
@@ -101,8 +101,41 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
   const ready = readyProviders(statuses);
   const canvas = useMaybeEditor();
   const box = useRef<PromptEditorHandle>(null);
-  const [text, setText] = useState("");
+  // A rail's draft lives on the client, one per chat, so the editor's rail and the canvas
+  // rail show the same text whichever is mounted. The toolbar's tray keeps its own.
+  const draftKey = variant === "rail" ? (chatId ?? NEW_CHAT) : undefined;
+  const [initialDraft] = useState(() => (draftKey === undefined ? EMPTY_DRAFT : client.draft(draftKey)));
+  const [text, setText] = useState(initialDraft.text);
+  const draftKeyRef = useRef(draftKey);
+  const draftVersion = useDraftVersion(client, draftKey ?? "");
   const chips = useSelectionChips(canvas, text.trim() === "");
+  /** The context chips this draft's @ mentions added: they belong to the draft, not to the canvas selection. */
+  const mentionIds = useRef<ReadonlyArray<string>>([]);
+  const saveDraft = (value: string) => {
+    if (draftKeyRef.current !== undefined) client.setDraft(draftKeyRef.current, { text: value, mentions: mentionIds.current });
+  };
+  const onDraftChange = (value: string) => {
+    setText(value);
+    saveDraft(value);
+  };
+  /** After a send or a stash the chips go back to the selection, and no mention is the draft's any more. */
+  const forgetMentions = () => {
+    mentionIds.current = [];
+  };
+  // Declared before the handoff effect: on a chat switch the chat's draft lands first, then any handoff joins it.
+  useEffect(() => {
+    draftKeyRef.current = draftKey;
+    if (draftKey === undefined) return;
+    const stored = client.draft(draftKey);
+    const shown = { text: box.current?.text() ?? "", mentions: mentionIds.current };
+    if (sameDraft(shown, stored)) return;
+    const kept = chips.shapes.map((shape) => shape.id).filter((id) => !mentionIds.current.includes(id));
+    // Set first: the text below fires a change, which saves the draft with these mentions.
+    mentionIds.current = stored.mentions;
+    chips.set([...kept, ...stored.mentions.filter((id) => !kept.includes(id))]);
+    if (shown.text !== stored.text) box.current?.setText(stored.text, { focus: false, undoable: false });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [client, draftKey, draftVersion]);
   const [trigger, setTrigger] = useState<Trigger>();
   const [sending, setSending] = useState(false);
   const [draftModel, setDraftModel] = useState<ModelSelection | undefined>();
@@ -239,7 +272,11 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
           const chosen = items.find((known) => known.key === item.key);
           if (!chosen) return;
           box.current?.replaceTrigger(trigger, chosen.chip);
-          if (chosen.shapeId !== undefined) chips.add([chosen.shapeId]);
+          if (chosen.shapeId !== undefined) {
+            chips.add([chosen.shapeId]);
+            if (!mentionIds.current.includes(chosen.shapeId)) mentionIds.current = [...mentionIds.current, chosen.shapeId];
+            saveDraft(box.current?.text() ?? "");
+          }
         },
       };
     }
@@ -437,6 +474,7 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
     const draft = box.current?.text() ?? "";
     if (draft.trim() !== "" || attachments.staged.length > 0) {
       stash.push({ text: draft, selection: chips.shapes.map((shape) => shape.id), attachments: attachments.staged.flatMap((item) => (item.attachment ? [item.attachment] : [])) });
+      forgetMentions();
       box.current?.clear();
       attachments.clear();
       chips.set(canvas?.getSelectedShapeIds() ?? []);
@@ -450,6 +488,7 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
   const send = async (invert = false) => {
     if (answering) return questions.answer();
     const message = box.current?.text() ?? "";
+    const sentFrom = draftKeyRef.current;
     if (planFollowUp && message.trim() === "") return implementPlan(false);
     if (noProvider || (message.trim() === "" && attachments.staged.length === 0) || sending) return;
     setSending(true);
@@ -462,7 +501,10 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
       beforeSend?.(target);
       const context = contextSelection(canvas, chips.shapes);
       const uploaded = await attachments.settle();
+      forgetMentions();
       box.current?.clear();
+      // A new chat's send switches this tray to the chat it made, so the draft it came from is cleared by key.
+      if (sentFrom !== undefined) client.setDraft(sentFrom, EMPTY_DRAFT);
       attachments.clear();
       chips.set(canvas?.getSelectedShapeIds() ?? []);
       const outgoing = { text: message, selection: context, attachments: uploaded };
@@ -529,6 +571,10 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
           shapes={chips.shapes}
           onRemove={(ids) => {
             chips.remove(ids);
+            if (mentionIds.current.some((id) => ids.includes(id))) {
+              mentionIds.current = mentionIds.current.filter((id) => !ids.includes(id));
+              saveDraft(box.current?.text() ?? "");
+            }
             box.current?.focus();
           }}
         />
@@ -536,7 +582,8 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
         <PromptEditor
           placeholder={placeholder}
           label={PROMPT_LABEL}
-          onChange={setText}
+          onChange={onDraftChange}
+          initialText={initialDraft.text}
           onTrigger={setTrigger}
           onKey={onKey}
           onSubmit={(event) => void send(platform() === "darwin" ? event.metaKey : event.ctrlKey)}

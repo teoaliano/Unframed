@@ -37,7 +37,7 @@ export const NEW_CHAT = "new-chat";
 
 const INITIAL_UI: RailUi = { open: false, chosen: null, pinned: null, searchOpen: false, diff: undefined, error: undefined };
 
-type Key = "shell" | "providers" | "ui" | "queues" | "handoff" | `thread:${string}` | `queue:${string}`;
+type Key = "shell" | "providers" | "ui" | "queues" | "handoff" | `thread:${string}` | `queue:${string}` | `draft:${string}`;
 
 /** A message waiting for the running turn: sent after its next tool call, or when it ends. */
 export interface QueuedMessage {
@@ -49,6 +49,17 @@ export interface QueuedMessage {
 }
 
 /** A draft put back into a chat's composer. */
+/** A chat's unsent text, and the shapes its @ mentions put among the context chips. */
+export interface ChatDraft {
+  readonly text: string;
+  readonly mentions: ReadonlyArray<string>;
+}
+
+export const EMPTY_DRAFT: ChatDraft = { text: "", mentions: [] };
+
+export const sameDraft = (a: ChatDraft, b: ChatDraft): boolean =>
+  a.text === b.text && a.mentions.length === b.mentions.length && a.mentions.every((id, index) => b.mentions[index] === id);
+
 export interface Handoff {
   readonly text: string;
   readonly selection: ReadonlyArray<string>;
@@ -84,6 +95,7 @@ export class ChatClient {
   private uiState: RailUi = INITIAL_UI;
   private readonly queues = new Map<string, ReadonlyArray<QueuedMessage>>();
   private readonly handoffs = new Map<string, Handoff[]>();
+  private readonly drafts = new Map<string, ChatDraft>();
   private followUpValue: "queue" | "steer" = "queue";
   private followUpWatch: (() => void) | undefined;
   private planModeValue = false;
@@ -136,7 +148,8 @@ export class ChatClient {
     } else if (item.kind === "synchronized") {
       this.synced = true;
     } else {
-      if (item.sequence <= this.shellSequence) return;
+      // One commit that changes several chats (Clear all chats) sends one item per chat, all with its sequence: only older items are stale.
+      if (item.sequence < this.shellSequence) return;
       this.shellSequence = item.sequence;
       if (item.kind === "chat-upserted") this.summaries.set(item.chat.id, item.chat);
       else this.summaries.delete(item.id);
@@ -150,6 +163,18 @@ export class ChatClient {
     const all = new Map(this.pendingChats);
     for (const [id, chat] of this.summaries) all.set(id, chat);
     return [...all.values()].sort((a, b) => (a.createdAt < b.createdAt ? 1 : a.createdAt > b.createdAt ? -1 : 0));
+  }
+
+  /** Resolves once the shell has delivered every change up to `sequence`, such as a command's answer. */
+  shellReached(sequence: number): Promise<void> {
+    if (this.shellSequence >= sequence) return Promise.resolve();
+    return new Promise((resolve) => {
+      const stop = this.subscribe("shell", () => {
+        if (this.shellSequence < sequence) return;
+        stop();
+        resolve();
+      });
+    });
   }
 
   get shellSynchronized(): boolean {
@@ -352,6 +377,21 @@ export class ChatClient {
   }
 
   // -------------------------------------------------------------------------------------
+  // Each chat's unsent text (or `NEW_CHAT`'s), so the canvas rail and the editor's rail show
+  // the same draft and closing the editor loses nothing. In memory only: a reload drops it.
+
+  draft(key: string): ChatDraft {
+    return this.drafts.get(key) ?? EMPTY_DRAFT;
+  }
+
+  setDraft(key: string, draft: ChatDraft): void {
+    if (sameDraft(this.draft(key), draft)) return;
+    if (draft.text === "" && draft.mentions.length === 0) this.drafts.delete(key);
+    else this.drafts.set(key, draft);
+    this.changed(`draft:${key}`);
+  }
+
+  // -------------------------------------------------------------------------------------
   // The Follow-up behavior preference (spec 10 shows its control): Queue unless set.
 
   get followUp(): "queue" | "steer" {
@@ -479,6 +519,9 @@ export const useQueuedThreads = (client: ChatClient): string[] => {
   useKey(client, "queues");
   return client.queuedThreads();
 };
+
+/** Changes whenever the chat's draft changes. */
+export const useDraftVersion = (client: ChatClient, key: string): number => useKey(client, `draft:${key}`);
 
 /** Changes whenever a draft is handed to a composer. */
 export const useHandoffVersion = (client: ChatClient): number => useKey(client, "handoff");

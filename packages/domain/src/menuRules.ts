@@ -16,7 +16,7 @@ export interface MenuShape {
   readonly parent?: string;
   /** A group with a standing recipe (spec 06). */
   readonly recipe?: boolean;
-  /** A page or motion that has a file (spec 09). */
+  /** A page or motion that has a file (spec 09). Its `file` is that file. */
   readonly filledArtifact?: boolean;
 }
 
@@ -40,6 +40,8 @@ export type AddAction = "add-prompt" | "add-image" | "add-video" | "add-group" |
 
 export type MenuItem =
   | { readonly action: "reveal"; readonly label: string; readonly files: ReadonlyArray<string> }
+  /** The file's absolute path, which the engine answers, as text on the clipboard. */
+  | { readonly action: "copy-path"; readonly label: string; readonly file: string }
   | { readonly action: "copy-as-image"; readonly label: string }
   | { readonly action: "copy-ref"; readonly label: string; readonly ref: string }
   /** Opens the name field in the right-clicked shape's label; F2 does the same for the one selected shape. */
@@ -103,6 +105,18 @@ const libraryItem = (selection: ReadonlyArray<MenuShape>): MenuItem => {
 const isFilledMedia = (shape: MenuShape): boolean =>
   (shape.type === "image" || shape.type === "video") && shape.file !== undefined;
 
+const isFilledArtifact = (shape: MenuShape): boolean => shape.filledArtifact === true && shape.file !== undefined;
+
+/** Reveal for every selected shape of the clicked one's kind, else the clicked one alone; then the clicked one's path. */
+const fileItems = (clicked: MenuShape, selection: ReadonlyArray<MenuShape>, sameKind: (shape: MenuShape) => boolean, platform: string): MenuItem[] => {
+  const selectedFiles = selection.filter(sameKind).map((shape) => shape.file!);
+  const files = selectedFiles.length > 0 ? selectedFiles : [clicked.file!];
+  return [
+    { action: "reveal", label: revealLabel(platform, files.length), files },
+    { action: "copy-path", label: "Copy path", file: clicked.file! },
+  ];
+};
+
 /**
  * The Unframed sections of the right-click menu, in order, each only when it has an
  * item. An item that would do nothing is left out, never greyed.
@@ -116,15 +130,11 @@ export const contextMenu = (input: MenuInput): MenuSection[] => {
   };
 
   const imageItems: MenuItem[] = [];
-  if (clicked && isFilledMedia(clicked)) {
-    const selectedFiles = selection.filter(isFilledMedia).map((shape) => shape.file!);
-    const files = selectedFiles.length > 0 ? selectedFiles : [clicked.file!];
-    imageItems.push({ action: "reveal", label: revealLabel(platform, files.length), files });
-  }
+  if (clicked && isFilledMedia(clicked)) imageItems.push(...fileItems(clicked, selection, isFilledMedia, platform));
   if (clicked && clicked.type === "image" && clicked.file !== undefined) {
     imageItems.push({ action: "copy-as-image", label: "Copy as image" });
   }
-  add("image", "Image", imageItems);
+  add("image", clicked?.type === "video" ? "Video" : "Image", imageItems);
 
   const referenceItems: MenuItem[] = [];
   if (clicked?.ref !== undefined) {
@@ -140,6 +150,7 @@ export const contextMenu = (input: MenuInput): MenuSection[] => {
       checked || pinned.length < PIN_LIMIT
         ? { action: "keep-playing", label: "Keep playing", checked }
         : { action: "keep-playing", label: "Keep playing", checked, disabled: true, tooltip: PIN_LIMIT_MESSAGE },
+      ...(isFilledArtifact(clicked) ? fileItems(clicked, selection, isFilledArtifact, platform) : []),
     ]);
   }
 

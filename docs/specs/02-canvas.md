@@ -243,6 +243,7 @@ Custom shape props and every later change to them use tldraw's shape migrations,
 - **Sidecar.** Same base name with `.json`: `{ "source": "upload" | "copy", "fileName": "<original name>", "mime": "<type>", "bytes": <n>, "at": "<ISO time>", "of": "<source file>" }`, where `of` is present only for a copy. Pretty-printed with two-space indent.
 - **Copy (RPC).** `files.copy { project, file, from? }` returns `{ file }`. `file` must be a bare basename in the source project (`from`, default `project`), else "That is not a file in this project.". Missing file: not found, message "Could not copy the file: <message>". The copy's `fileName` is the source name with its leading `<digits>-` removed; its `mime` comes from the source sidecar, else `application/octet-stream`; its sidecar has `source: "copy"` and `of: <source file>`.
 - **Reveal.** The context menu's reveal item calls spec 01's `files.reveal { project, fileNames }`, which this spec does not redefine. Its failure message goes to the toast.
+- **Path (RPC).** `files.path { project, fileName }` returns `{ path }`, the file's absolute path, built by the engine so it has the platform's separators. The name is reduced to its basename. A project with no folder: not found, "No files for this project yet."; a file not on disk: not found, "No file <fileName> in this project.". The context menu's Copy path item puts the answer on the clipboard as text.
 
 ### Clipboard
 
@@ -282,11 +283,12 @@ Custom shape props and every later change to them use tldraw's shape migrations,
 
 ### Context menu
 
-Sections appear in this order, each only when it has at least one item. An item that would do nothing is left out, never greyed. After the Unframed sections come tldraw's own context menu groups, minus tldraw's group, ungroup, cut, copy and paste items, which Unframed's Edit section replaces.
+Sections appear in this order, each only when it has at least one item. The Image section is headed "Video" when the right-clicked shape is a video. A checkbox row (spec 09's Keep playing) starts its label where the plain rows do, with its check at the end of the row. An item that would do nothing is left out, never greyed. After the Unframed sections come tldraw's own context menu groups, minus tldraw's group, ungroup, cut, copy and paste items, which Unframed's Edit section replaces.
 
 | Section | Item | Shown when |
 | --- | --- | --- |
 | Image | "Reveal in Finder" on macOS, "Show in Explorer" on Windows, "Show in file manager" elsewhere, with " (<n>)" appended when more than one file | the right-clicked shape is a filled image or video with a project file; the files are every selected filled image and video, else the right-clicked one |
+| Image | "Copy path" | the right-clicked shape is a filled image or video with a project file; copies that file's absolute path and says "Path copied" in a toast, since a path on the clipboard cannot be seen |
 | Image | "Copy as image" | the right-clicked shape is a filled image |
 | Reference | "Copy @<ref>" | the right-clicked shape has an `@id` (every kind but a mark) |
 | Reference | "Rename F2" | the right-clicked shape has an `@id`; it opens spec 06's name field in the shape's label |
@@ -299,7 +301,7 @@ Sections appear in this order, each only when it has at least one item. An item 
 
 On Windows and Linux the shortcut hints read `Ctrl+X`, `Ctrl+C`, `Ctrl+V`, `Ctrl+G`, `Ctrl+⇧G`. Right-clicking an unselected shape selects it alone first; right-clicking inside the selection keeps it. Section headings use the kit's menu label look (spec 12: extra-small medium muted text), rows highlight with the kit's accent, and a disabled row (spec 06's Add to library) has the kit's disabled look, its own text at 64 %. Menu width 188 px.
 
-Failures: "Could not show that file: <message>" or "Could not show those <n> files: <message>"; "Could not copy @<ref> to the clipboard."; "Could not copy that image to the clipboard.".
+Failures: "Could not show that file: <message>" or "Could not show those <n> files: <message>"; "Could not copy that path: <message>" or "Could not copy that path to the clipboard."; "Could not copy @<ref> to the clipboard."; "Could not copy that image to the clipboard.".
 
 ### Chrome
 
