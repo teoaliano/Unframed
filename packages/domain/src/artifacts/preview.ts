@@ -73,6 +73,50 @@ export const previewViewport = (input: Readonly<Record<string, unknown>>): { vie
   }
 };
 
+/** What the editor's centre preview can be sized to (spec 09): the column itself, three named sizes, or one typed in. */
+export type EditorPreviewChoice = "fill" | "desktop" | "tablet" | "mobile" | "custom";
+
+export interface EditorPreviewSize {
+  readonly choice: EditorPreviewChoice;
+  /** The typed size, kept while another choice is shown. */
+  readonly custom: { readonly width: number; readonly height: number };
+}
+
+export const EDITOR_PREVIEW_SIZES: ReadonlyArray<{ readonly choice: EditorPreviewChoice; readonly label: string }> = [
+  { choice: "fill", label: "Fill" },
+  { choice: "desktop", label: "Desktop 1440" },
+  { choice: "tablet", label: "Tablet 768" },
+  { choice: "mobile", label: "Mobile 390" },
+  { choice: "custom", label: "Custom" },
+];
+
+export const DEFAULT_EDITOR_PREVIEW_SIZE: EditorPreviewSize = { choice: "fill", custom: FILL_VIEWPORT };
+
+/** The named sizes are requests the agent's `preview_resize` takes, so both mean the same viewport. */
+const NAMED_REQUESTS: Readonly<Record<Exclude<EditorPreviewChoice, "fill" | "custom">, Readonly<Record<string, unknown>>>> = {
+  desktop: { mode: "freeform", width: 1440, height: 900 },
+  tablet: { mode: "preset", preset: "ipad-mini" },
+  mobile: { mode: "preset", preset: "iphone-12-pro" },
+};
+
+/** The viewport the editor's preview shows, or `undefined` for Fill, where the frame takes the column. */
+export const editorPreviewViewport = (size: EditorPreviewSize): { readonly width: number; readonly height: number } | undefined => {
+  if (size.choice === "fill") return undefined;
+  const asked = previewViewport(size.choice === "custom" ? { mode: "freeform", ...size.custom } : NAMED_REQUESTS[size.choice]);
+  return "viewport" in asked ? { width: asked.viewport.width, height: asked.viewport.height } : undefined;
+};
+
+/** The smallest custom side: below it a preview shows nothing a person can judge. */
+export const MIN_CUSTOM_SIDE = 100;
+
+/** A typed custom side: whole CSS pixels from 100 to 4096; an empty or unreadable entry keeps the previous side. */
+export const customPreviewSide = (typed: number | null, previous: number): number =>
+  typed === null || !Number.isFinite(typed) ? previous : Math.min(MAX_SIDE, Math.max(MIN_CUSTOM_SIDE, Math.round(typed)));
+
+/** How far the preview shrinks to fit the column on both sides. It never grows past its size. */
+export const previewScale = (viewport: { readonly width: number; readonly height: number }, area: { readonly w: number; readonly h: number }): number =>
+  area.w <= 0 || area.h <= 0 ? 1 : Math.min(1, area.w / viewport.width, area.h / viewport.height);
+
 const unquote = (value: string): string => {
   const trimmed = value.trim();
   const quoted = /^(["'])([\s\S]*)\1$/.exec(trimmed);

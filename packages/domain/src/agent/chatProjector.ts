@@ -158,6 +158,10 @@ const applyToChat = (chat: Chat, event: ChatEvent): Chat => {
       for (const id of (p.ids as string[]) ?? []) if (!tags.includes(id)) tags.push(id);
       return { ...chat, tags, updatedAt: at };
     }
+    case "thread.untagged": {
+      const gone = new Set((p.ids as string[]) ?? []);
+      return { ...chat, tags: chat.tags.filter((tag) => !gone.has(tag)), updatedAt: at };
+    }
     case "thread.turn-files-completed":
       return withTurns(
         { ...chat, updatedAt: at },

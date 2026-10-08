@@ -1,5 +1,6 @@
-import { resultMetaOf, UnframedError, type ResultRecipe } from "@unframed/contracts";
-import { composeSelection, resultLine, toolbarState, type ToolbarState } from "@unframed/domain";
+import { resultMetaOf, UnframedError } from "@unframed/contracts";
+import { composeSelection, labelLevel, readRef, resultLine, toolbarState, type ToolbarState } from "@unframed/domain";
+import { renamingShape } from "../canvas/rename.ts";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useEditor, useValue, type Editor, type TLShapeId } from "tldraw";
 import { GripVertical } from "lucide-react";
@@ -10,13 +11,12 @@ import { Tip } from "../chrome/ui.tsx";
 import { useSlots } from "../chrome/slots.ts";
 import { useCanvasProject, useEngine, useSettings } from "../context.ts";
 import { showError } from "../toasts.tsx";
-import { loadCatalogue, useKnownCatalogue, usePricing } from "./catalogue.ts";
+import { useKnownCatalogue, usePricing } from "./catalogue.ts";
 import { Composer } from "./composer/Composer.tsx";
 import { assetOf, canvasShapes, resultShapes, toolbarShape } from "./facts.ts";
-import { placeFloating, type ScreenBox } from "./floating.ts";
+import { canvasRoom, placeFloating, type ScreenBox } from "./floating.ts";
 import { mediumDefinition, type RunSource } from "./mediumRegistry.ts";
 import { openOnRecipe, recipeProps, recipeRunProgress, runGroupRecipe } from "./recipeRuns.ts";
-import { repeatResult, varyBlocked, varyCapMessage } from "./results.ts";
 import { closeComposer, composerState, leaveRecipeMode, openComposer } from "./state.ts";
 import { composerGlassClass } from "../chrome/composerSurface.ts";
 import { useWheelToCanvas } from "../canvas/wheelToCanvas.ts";
@@ -39,11 +39,20 @@ const GESTURES = [
 const hiddenByGesture = (editor: Editor): boolean =>
   editor.isInAny(...GESTURES) || (editor.inputs.getIsPanning() && editor.inputs.getIsPointing());
 
-/** The selection's bounds on screen, relative to the canvas. */
+/** The band a shape's label takes above its top edge, in canvas units (spec 02). */
+const LABEL_BAND = 22;
+
+/**
+ * The selection's bounds on screen, relative to the canvas, with the band of its labels on
+ * top while a selected shape has a shown label, so the bar never covers the label of what it
+ * is about.
+ */
 const selectionOnScreen = (editor: Editor): ScreenBox | undefined => {
   const bounds = editor.getSelectionPageBounds();
   if (!bounds) return undefined;
-  const topLeft = editor.pageToViewport({ x: bounds.minX, y: bounds.minY });
+  const labelled = labelLevel(editor.getZoomLevel()) !== "off" && editor.getSelectedShapes().some((shape) => readRef(shape) !== undefined);
+  const band = labelled ? LABEL_BAND : 0;
+  const topLeft = editor.pageToViewport({ x: bounds.minX, y: bounds.minY - band });
   const bottomRight = editor.pageToViewport({ x: bounds.maxX, y: bounds.maxY });
   return { x: topLeft.x, y: topLeft.y, w: bottomRight.x - topLeft.x, h: bottomRight.y - topLeft.y };
 };
@@ -88,16 +97,7 @@ const Floating = ({ target, hidden, expanded, framed, children }: { target: Scre
     return () => observer.disconnect();
   }, []);
 
-  const canvas = useValue(
-    "canvas size",
-    () => {
-      const bounds = editor.getViewportScreenBounds();
-      // The bottom bar sits above the bar and composer in tldraw's layer: they stay clear of it.
-      const bar = editor.getContainer().querySelector<HTMLElement>("[data-unframed-toolbar]")?.getBoundingClientRect();
-      return { w: bounds.w, h: bar ? Math.min(bounds.h, bar.top - bounds.y) : bounds.h };
-    },
-    [editor],
-  );
+  const canvas = useValue("canvas room", () => canvasRoom(editor), [editor]);
   const place = size && target ? placeFloating(target, size, canvas) : undefined;
 
   return (
@@ -139,28 +139,6 @@ const Floating = ({ target, hidden, expanded, framed, children }: { target: Scre
 const rowClass = "flex items-center gap-1.5";
 const barClass = `${rowClass} whitespace-nowrap p-1`;
 const hintClass = "px-1 text-xs text-muted-foreground";
-
-/** The recipe of the one selected result, read when it is selected, for Vary's cap. */
-const useSelectedRecipe = (shapeId: string | undefined, sidecar: string | null | undefined) => {
-  const engine = useEngine();
-  const project = useCanvasProject();
-  const [recipe, setRecipe] = useState<{ shapeId: string; recipe: ResultRecipe }>();
-  useEffect(() => {
-    if (shapeId === undefined || !sidecar) return;
-    let live = true;
-    void loadCatalogue(engine, "image").catch(() => undefined);
-    engine.call("recipe.read", { project, shapeId }).then(
-      (answer) => {
-        if (live) setRecipe({ shapeId, recipe: answer });
-      },
-      () => undefined,
-    );
-    return () => {
-      live = false;
-    };
-  }, [engine, project, shapeId, sidecar]);
-  return recipe !== undefined && recipe.shapeId === shapeId ? recipe.recipe : undefined;
-};
 
 /**
  * The six-dot handle on a filled page or motion: its frame takes the pointer, so the shape
@@ -223,45 +201,31 @@ const AgentButton = ({ onOpen }: { onOpen: () => void }) => {
   );
 };
 
-const ResultBar = ({ shapeId, agent }: { shapeId: TLShapeId; agent: ReactNode }) => {
+/**
+ * The bar of one result: Generate takes the result as the input like any selection, and
+ * Regenerate opens the composer in recipe mode on the run that made it.
+ */
+const ResultBar = ({ state, onGenerate, agent }: { state: Extract<ToolbarState, { kind: "result" }>; onGenerate: () => void; agent: ReactNode }) => {
   const editor = useEditor();
   const engine = useEngine();
   const project = useCanvasProject();
-  const [busy, setBusy] = useState(false);
-  const facts = useValue(
-    "result facts",
+  const shapeId = state.shapeId as TLShapeId;
+  const line = useValue(
+    "result line",
     () => {
       const shape = editor.getShape(shapeId);
       const result = shape ? resultMetaOf(shape) : undefined;
       if (!shape || !result) return undefined;
       const asset = assetOf(editor, shape)?.props as { w?: number; h?: number } | undefined;
-      return {
-        line: resultLine({ model: result.model, width: asset?.w, height: asset?.h, cost: result.cost }),
-        sidecar: result.sidecar,
-        text: shape.type === "text",
-      };
+      return resultLine({ model: result.model, width: asset?.w, height: asset?.h, cost: result.cost });
     },
     [editor, shapeId],
   );
-  const recipe = useSelectedRecipe(shapeId, facts?.sidecar);
-  const cap = recipe ? varyBlocked(recipe) : undefined;
 
-  const act = async (action: "regenerate" | "vary") => {
-    if (busy) return;
-    setBusy(true);
+  const regenerate = async () => {
     try {
-      await repeatResult(editor, engine, project, shapeId, action, recipe);
-    } catch (error) {
-      showError(messageOf(error));
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const openRecipe = async () => {
-    try {
-      const recorded = recipe ?? (await engine.call("recipe.read", { project, shapeId }));
-      openComposer(editor, "generate", { shapeId, recipe: recorded, selection: editor.getSelectedShapeIds() });
+      const recipe = await engine.call("recipe.read", { project, shapeId });
+      openComposer(editor, "generate", { shapeId, recipe, selection: editor.getSelectedShapeIds() });
     } catch (error) {
       showError(messageOf(error));
     }
@@ -270,31 +234,20 @@ const ResultBar = ({ shapeId, agent }: { shapeId: TLShapeId; agent: ReactNode })
   return (
     <div className="flex flex-col gap-0.5 whitespace-nowrap p-1">
       <div className={rowClass}>
-        <Button size="sm" disabled={busy} onClick={() => void act("regenerate")}>
+        {/* Without Generate (a failed render), Regenerate is the primary action. */}
+        <Button variant={state.generate ? "outline" : "default"} size="sm" onClick={() => void regenerate()}>
           Regenerate
         </Button>
-        {!facts?.text &&
-          (cap !== undefined ? (
-            <Tip label={varyCapMessage(cap)} side="top">
-              <span className="inline-flex" tabIndex={0}>
-                <Button variant="outline" size="sm" disabled>
-                  Vary
-                </Button>
-              </span>
-            </Tip>
-          ) : (
-            <Button variant="outline" size="sm" disabled={busy} onClick={() => void act("vary")}>
-              Vary
-            </Button>
-          ))}
-        <Button variant="ghost" size="sm" onClick={() => void openRecipe()}>
-          Recipe
-        </Button>
         {agent}
+        {state.generate && (
+          <Button size="sm" onClick={onGenerate}>
+            Generate
+          </Button>
+        )}
       </div>
-      {facts && (
+      {line !== undefined && (
         <div className="px-1.5 py-0.5 text-xs text-muted-foreground tabular-nums" data-testid="result-line">
-          {facts.line}
+          {line}
         </div>
       )}
     </div>
@@ -365,12 +318,12 @@ const RecipeBar = ({ state, agent }: { state: Extract<ToolbarState, { kind: "rec
 
 const Bar = ({ state, onGenerate, agent }: { state: Exclude<ToolbarState, { kind: "none" }>; onGenerate: () => void; agent: ReactNode }) => {
   const editor = useEditor();
-  const { openArtifact, renderButton: Render } = useSlots();
+  const { openArtifact, renderButton: Render, parametersButton: ParametersToggle } = useSlots();
   switch (state.kind) {
     case "recipe":
       return <RecipeBar state={state} agent={agent} />;
     case "result":
-      return <ResultBar shapeId={state.shapeId as TLShapeId} agent={agent} />;
+      return <ResultBar state={state} onGenerate={onGenerate} agent={agent} />;
     case "generating":
       return (
         <div className={barClass}>
@@ -383,9 +336,10 @@ const Bar = ({ state, onGenerate, agent }: { state: Exclude<ToolbarState, { kind
         <div className={barClass}>
           <DragHandle />
           <Button size="sm" onClick={() => openArtifact?.(editor, state.shapeId as TLShapeId)}>
-            Open
+            Editor
           </Button>
           {Render && editor.getShape(state.shapeId as TLShapeId)?.type === "motion" && <Render shapeId={state.shapeId as TLShapeId} />}
+          {ParametersToggle && <ParametersToggle shapeId={state.shapeId as TLShapeId} />}
           {agent}
         </div>
       );
@@ -415,7 +369,8 @@ export const SelectionToolbar = () => {
   const project = useCanvasProject();
   const { agentTray } = useSlots();
   const composer = useValue("composer", () => composerState(editor).get(), [editor]);
-  const hidden = useValue("toolbar hidden", () => hiddenByGesture(editor), [editor]);
+  // A name field sits in a label, right under the bar: the bar steps aside while it is open.
+  const hidden = useValue("toolbar hidden", () => hiddenByGesture(editor) || renamingShape(editor).get() !== undefined, [editor]);
   const selectionKey = useValue("selection", () => editor.getSelectedShapeIds().join(" "), [editor]);
   const expanded = composer.mode !== "bar";
 

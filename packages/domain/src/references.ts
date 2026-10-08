@@ -14,16 +14,22 @@ export interface ReferenceResolver {
 }
 
 /**
- * `@id` resolution against every prompt, text result and group on the canvas. A prompt
- * resolves to its own text, recursively; a text result to its text, literally and never
- * re-scanned; a group to its prompt and text-result members' text in box order, never
- * their media. An unknown token stays as typed. A loop fails with the ids along it.
+ * What an image or video named by `@` stands for in the text when it is attached to the
+ * run (spec 03: `image 2`); `undefined` leaves the token as typed.
  */
-export const createResolver = (shapes: ReadonlyArray<CanvasShape>): ReferenceResolver => {
+export type AttachMedia = (shape: CanvasShape) => string | undefined;
+
+/**
+ * `@id` resolution against every shape on the canvas. A prompt resolves to its own text,
+ * recursively; a text result to its text, literally and never re-scanned; a group to its
+ * prompt and text-result members' text in box order, never their media. An image or video
+ * becomes whatever `attach` says; with no `attach`, or for a page or motion, the token
+ * stays as typed, as an unknown one does. A loop fails with the ids along it.
+ */
+export const createResolver = (shapes: ReadonlyArray<CanvasShape>, attach?: AttachMedia): ReferenceResolver => {
   const byRef = new Map<string, CanvasShape>();
   for (const shape of shapes) {
     if (shape.ref === undefined) continue;
-    if (shape.kind !== "prompt" && shape.kind !== "group") continue;
     if (!byRef.has(shape.ref)) byRef.set(shape.ref, shape);
   }
 
@@ -31,6 +37,8 @@ export const createResolver = (shapes: ReadonlyArray<CanvasShape>): ReferenceRes
     text.replace(REF_TOKEN, (token, id: string) => {
       const target = byRef.get(id);
       if (target === undefined) return token;
+      if (target.kind === "image" || target.kind === "video") return attach?.(target) ?? token;
+      if (target.kind !== "prompt" && target.kind !== "group") return token;
       if (target.kind === "prompt" && target.textResult) return target.text ?? "";
       if (stack.includes(id)) throw new Cycle([...stack.slice(stack.indexOf(id)), id].join(" -> "));
       if (target.kind === "prompt") return expand(target.text ?? "", [...stack, id]);

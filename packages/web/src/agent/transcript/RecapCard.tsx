@@ -107,7 +107,7 @@ export const RecapCard = ({ editor, turn, activities, running, newest, labelOf, 
                     {artifact && onOpenEditor && (
                       <Button variant="ghost" size="xs" onClick={() => onOpenEditor(row.shapeId)}>
                         <ExternalLink aria-hidden />
-                        Open
+                        Editor
                       </Button>
                     )}
                     {onLocate && (

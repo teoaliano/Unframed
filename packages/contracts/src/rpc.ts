@@ -21,7 +21,7 @@ import {
   TurnDiff,
   TurnDiffInput,
 } from "./agent.ts";
-import { ArtifactSnapshots, MotionRenderStart, MotionRenderStatus, MotionUpload } from "./artifacts.ts";
+import { ArtifactOpenLive, ArtifactSnapshots, MotionRenderStart, MotionRenderStatus, MotionUpload } from "./artifacts.ts";
 import { LegacyImportMarkSeen, LegacyImportReport, LegacyImportRetry, LegacyImportStatus } from "./legacy.ts";
 
 const Empty = Schema.Struct({});
@@ -75,6 +75,13 @@ export const FilesReveal = Rpc.make("files.reveal", {
   success: Schema.Struct({
     revealed: Schema.Union([Schema.Number, Schema.Literal("folder")]),
   }),
+  error: UnframedError,
+});
+
+/** A project file's absolute path, built by the engine so it has the platform's separators. */
+export const FilesPath = Rpc.make("files.path", {
+  payload: Schema.Struct({ project: Schema.String, fileName: Schema.String }),
+  success: Schema.Struct({ path: Schema.String }),
   error: UnframedError,
 });
 
@@ -273,6 +280,7 @@ export const UnframedRpcs = RpcGroup.make(
   ProjectsRename,
   ProjectsDelete,
   FilesReveal,
+  FilesPath,
   PreferencesGet,
   PreferencesSet,
   PreferencesSubscribe,
@@ -307,6 +315,7 @@ export const UnframedRpcs = RpcGroup.make(
   MotionRenderStart,
   MotionRenderStatus,
   ArtifactSnapshots,
+  ArtifactOpenLive,
   LegacyImportStatus,
   LegacyImportReport,
   LegacyImportMarkSeen,

@@ -33,6 +33,20 @@ test("Generate grows the bar into the composer on the same centre and bottom edg
   await expect(bar.getByRole("button", { name: "Generate" })).toBeVisible();
 });
 
+test("Esc closes the composer before its box has the focus, as in the frame after a click on a button that goes away", async ({ page, generation }) => {
+  await openCanvas(page, generation.engine);
+  await clickShape(page, "shape:starter-subject");
+  for (const tray of ["Generate", "Agent"]) {
+    await toolbar(page).getByRole("button", { name: tray }).click();
+    await expect(composer(page)).toBeVisible();
+    // The box focuses a frame later; until then the focus is nowhere, on the body.
+    await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+    await page.keyboard.press("Escape");
+    await expect(composer(page)).toHaveCount(0);
+    await expect(toolbar(page).getByRole("button", { name: tray })).toBeVisible();
+  }
+});
+
 /** What a box-shadow value computes to on this page. */
 const shadowOf = (page: Page, expression: string) =>
   page.evaluate((value) => {

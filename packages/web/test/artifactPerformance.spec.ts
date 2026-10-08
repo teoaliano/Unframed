@@ -1,13 +1,14 @@
 import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import type { Page } from "@playwright/test";
+import { BRIDGE_TAG } from "@unframed/domain";
 import type { TestEngine } from "../../engine/test/engineProcess.ts";
 import { expectFrameBudget, expectNoLongTasks, frameStats, gestureCount, lastGesture } from "./board.ts";
 import { centre, shapeOnScreen } from "./canvas.ts";
 import { expect, test } from "./fixtures.ts";
 import { clickShape } from "./generation.ts";
 import { putRecords } from "./media.ts";
-import { artifactShape, writeProjectFile } from "./artifacts.ts";
+import { artifactShape, writeBridge, writeProjectFile } from "./artifacts.ts";
 
 test.describe.configure({ mode: "serial", timeout: 240_000 });
 
@@ -41,10 +42,19 @@ const busyBoard = async (engine: TestEngine) => {
 /**
  * Opens the board in the hosted shape (the production web served by the engine, on
  * 127.0.0.1, as the desktop shell opens it), runs `pinned` busy pages with Keep playing and
- * `selected` more by selecting them, then pans for 4 s over a still.
+ * `selected` more by selecting them, then pans for 4 s over a still. With `tune`, the one
+ * selected page declares parameters and its Parameters panel is open through the pan.
  */
-const panBusyBoard = async (page: Page, engine: TestEngine, running: { pinned: number; selected: number }) => {
+const panBusyBoard = async (page: Page, engine: TestEngine, running: { pinned: number; selected: number; tune?: boolean }) => {
   await busyBoard(engine);
+  if (running.tune) {
+    const busy = await readFile(busyPage, "utf8");
+    const declared = busy
+      .replace("</head>", `${BRIDGE_TAG}</head>`)
+      .replace("</body>", `<script>unframed.dials("Busy", { speed: [1, 0, 5], tint: "#ff0000", glow: true }, function () {});</script></body>`);
+    await writeBridge(engine);
+    await writeProjectFile(engine, "busy-5.html", declared);
+  }
   await page.addInitScript(() => {
     (window as any).__longTasks = [];
     new PerformanceObserver((list) => {
@@ -69,6 +79,10 @@ const panBusyBoard = async (page: Page, engine: TestEngine, running: { pinned: n
   const frames = page.locator(".tl-shape iframe[data-artifact-frame]");
   await expect(frames).toHaveCount(running.pinned + running.selected);
   for (const src of await frames.evaluateAll((items) => items.map((item) => (item as HTMLIFrameElement).src))) expect(new URL(src).hostname).toBe("localhost");
+  if (running.tune) {
+    await page.getByTestId("selection-toolbar").getByRole("button", { name: "Parameters" }).click();
+    await expect(page.getByRole("region", { name: "Parameters for Busy 5" }).getByRole("slider", { name: "Speed" })).toBeVisible({ timeout: 15_000 });
+  }
   // Let the frames load and start their loops, and the meter learn the display's frame time.
   await page.waitForTimeout(3000);
   await expect.poll(() => page.evaluate(() => (window as any).__fps?.frameTime() ?? 0)).toBeGreaterThan(0);
@@ -88,7 +102,7 @@ const panBusyBoard = async (page: Page, engine: TestEngine, running: { pinned: n
   const longTasks = (await page.evaluate(() => (window as any).__longTasks as number[])).filter((ms) => ms > 50);
   const stats = frameStats(pan);
   console.log(
-    `artifact pan with ${running.pinned} pinned and ${running.selected} selected busy pages running: median ${stats.median.toFixed(2)} ms, over 33 ms ${(stats.over33 * 100).toFixed(2)} % of ${stats.frames} frames, long tasks over 50 ms ${longTasks.length}, display frame ${pan.frameTime.toFixed(2)} ms`,
+    `artifact pan with ${running.pinned} pinned and ${running.selected} selected busy pages running${running.tune ? ", its Parameters panel open" : ""}: median ${stats.median.toFixed(2)} ms, over 33 ms ${(stats.over33 * 100).toFixed(2)} % of ${stats.frames} frames, long tasks over 50 ms ${longTasks.length}, display frame ${pan.frameTime.toFixed(2)} ms`,
   );
   expect(pan.kind).toBe("wheel");
   return { stats, longTasks };
@@ -106,4 +120,11 @@ test("with the most that may run at once, three pinned and three selected, the c
   const { stats, longTasks } = await panBusyBoard(page, engine, { pinned: 3, selected: 3 });
   expectFrameBudget(stats, "artifact pan, six running", { median: 16.7 });
   expectNoLongTasks(longTasks, "artifact pan, six running");
+});
+
+test("with the Parameters panel open on a selected busy page, three running, the pan keeps the frame budget", async ({ page, engine }) => {
+  // The panel follows the page across the pan without rendering DialKit again.
+  const { stats, longTasks } = await panBusyBoard(page, engine, { pinned: 2, selected: 1, tune: true });
+  expectFrameBudget(stats, "artifact pan, parameters open", { median: 16.7, over33: 0.02 });
+  expectNoLongTasks(longTasks, "artifact pan, parameters open");
 });

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { readPort } from "../src/index.ts";
+import { PREVIEW_PORT_DEFAULT, readPort, readPreviewPort } from "../src/index.ts";
 
 describe("PORT", () => {
   it("defaults to 8787 when unset or empty", () => {
@@ -24,5 +24,25 @@ describe("PORT", () => {
   it("lets .env beat the process environment", () => {
     expect(readPort({ PORT: "9000" }, { PORT: "0" })).toEqual({ ok: true, port: 9000 });
     expect(readPort({ PORT: "" }, { PORT: "0" })).toEqual({ ok: true, port: 0 });
+  });
+});
+
+describe("UNFRAMED_PREVIEW_PORT", () => {
+  it("defaults to the fixed 18787 when unset or empty", () => {
+    expect(PREVIEW_PORT_DEFAULT).toBe(18787);
+    expect(readPreviewPort({})).toEqual({ ok: true, port: 18787 });
+    expect(readPreviewPort({ UNFRAMED_PREVIEW_PORT: "  " })).toEqual({ ok: true, port: 18787 });
+  });
+
+  it.each([
+    ["0", 0],
+    ["18788", 18788],
+    [" 5000 ", 5000],
+  ])("accepts %j as %d", (value, port) => {
+    expect(readPreviewPort({ UNFRAMED_PREVIEW_PORT: value })).toEqual({ ok: true, port });
+  });
+
+  it.each(["65536", "-1", "abc", "8.5"])("refuses %j", (value) => {
+    expect(readPreviewPort({ UNFRAMED_PREVIEW_PORT: value })).toEqual({ ok: false, value });
   });
 });

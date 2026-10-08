@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { continuableChat, nextActive, recapRows, revertSkipLine, tabLabel, tabTooltip, visibleChats, type ChatActivity, type RailChat } from "../../src/index.ts";
+import { clearAllChats, clearedNotice, continuableChat, linkedArtifacts, nextActive, recapRows, revertSkipLine, tabLabel, tabTooltip, visibleChats, type ChatActivity, type RailChat } from "../../src/index.ts";
 
 const chat = (id: string, createdAt: string, fields: Partial<RailChat> = {}): RailChat => ({
   id,
@@ -186,5 +186,67 @@ describe("a revert that left shapes alone", () => {
   it("says there was nothing to revert when every shape was skipped, and nothing when none was", () => {
     expect(revertSkipLine([{ label: "Intro", by: "a later turn" }], 0)).toBe("Nothing to revert: everything this turn changed has changed since.");
     expect(revertSkipLine([], 3)).toBeUndefined();
+  });
+});
+
+describe("clear all chats", () => {
+  it("counts every chat not running as deleted and the running ones as kept, and says both", () => {
+    const chats = [chat("a", "01"), chat("b", "02", { status: "failed" }), chat("c", "03", { status: "running" })];
+    expect(clearAllChats(chats)).toEqual({
+      deleting: 2,
+      keeping: 1,
+      description: "This deletes 2 chats for good. 1 running chat is kept and finishes its turn. What the agent changed on the canvas stays.",
+      action: "Delete 2 chats",
+      tooltip: "Clear all chats",
+      disabled: false,
+    });
+  });
+
+  it("says nothing about running chats when there are none, and counts one chat in the singular", () => {
+    expect(clearAllChats([chat("a", "01")])).toMatchObject({
+      deleting: 1,
+      keeping: 0,
+      description: "This deletes 1 chat for good. What the agent changed on the canvas stays.",
+      action: "Delete 1 chat",
+    });
+    expect(clearAllChats([chat("a", "01", { status: "running" }), chat("b", "02", { status: "running" })])).toMatchObject({
+      deleting: 0,
+      keeping: 2,
+      description: "This deletes 0 chats for good. 2 running chats are kept and finish their turns. What the agent changed on the canvas stays.",
+    });
+  });
+
+  it("says why the button does nothing when no chat can go", () => {
+    expect(clearAllChats([chat("a", "01", { status: "running" })])).toMatchObject({ disabled: true, tooltip: "Every chat is still running" });
+    expect(clearAllChats([])).toMatchObject({ disabled: true, tooltip: "No chats to delete" });
+  });
+
+  it("reports what was deleted and what was kept once the engine has answered", () => {
+    expect(clearedNotice(3, 0)).toEqual({ title: "Deleted 3 chats" });
+    expect(clearedNotice(1, 2)).toEqual({ title: "Deleted 1 chat", description: "2 running chats were kept." });
+    expect(clearedNotice(2, 1)).toEqual({ title: "Deleted 2 chats", description: "1 running chat was kept." });
+  });
+});
+
+describe("linked artifacts", () => {
+  it("lists the chat's tags that are still on the canvas, in tag order, by label", () => {
+    const shapes = [
+      { id: "shape:m1", kind: "motion", title: "Intro" },
+      { id: "shape:p1", kind: "page", fileName: "landing.html" },
+      { id: "shape:p2", kind: "page" },
+    ];
+    expect(linkedArtifacts(["shape:p1", "shape:gone", "shape:m1", "shape:p2"], shapes)).toEqual([
+      { id: "shape:p1", kind: "page", label: "landing" },
+      { id: "shape:m1", kind: "motion", label: "Intro" },
+      { id: "shape:p2", kind: "page", label: "p2" },
+    ]);
+  });
+
+  it("drops the chat from the filter once the person detaches the only selected artifact", () => {
+    const before = [chat("a", "01", { tags: ["shape:p1", "shape:m1"] })];
+    const after = [chat("a", "01", { tags: ["shape:m1"] })];
+    expect(visibleChats(before, ["shape:p1"]).map((each) => each.id)).toEqual(["a"]);
+    expect(visibleChats(after, ["shape:p1"])).toEqual([]);
+    expect(continuableChat(after, ["shape:p1"])).toBeUndefined();
   });
 });

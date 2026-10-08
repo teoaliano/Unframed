@@ -123,6 +123,7 @@ Hosting variables (read from the process environment only, never written to `.en
 | `UNFRAMED_DATA_DIR` | moves `.env` and the default output folder there |
 | `UNFRAMED_CLIENT_DIST` | serves that directory's built web client on the engine's origin; also the marker that the engine is hosted, which gates the IPC reveal |
 | `PORT=0` | OS-assigned port, reported over IPC |
+| `UNFRAMED_PREVIEW_PORT` | the preview origin's port in place of the fixed default 18787, an integer 0 to 65535, `0` meaning OS-assigned. The shell does not set it: unset is the normal case. The test harness sets `0` so engines running side by side never compete for 18787 |
 | `UNFRAMED_OAUTH_BOUNCE` | the public page the OpenRouter consent screen redirects through (spec 10); unset means direct loopback |
 | `UNFRAMED_CHROME_PATH` | the first Chromium binary motion rendering tries (spec 09) |
 | `UNFRAMED_AGENT_DEBUG` | any non-empty value logs every stderr line of a local agent session as `  [agent <chat id>] <line>` (spec 07) |
@@ -160,7 +161,7 @@ Anything that redirects network traffic follows the loopback-only rule of the or
 Boot order:
 
 1. Resolve the data folder, read `.env` from it, merge settings over the process environment.
-2. Start the preview origin listener on `127.0.0.1` with an OS-assigned port. In this spec it applies the same Host check as the API (below) and answers 404 to every path; spec 09 adds its one route and a second listener on `[::1]` at the same port.
+2. Start the preview origin listener on `127.0.0.1` at the preview port: 18787, or `UNFRAMED_PREVIEW_PORT` when set. The port is fixed so a link to an artifact opened in the person's own browser still works after a restart (spec 09). When another program holds it (on `127.0.0.1`, or on `[::1]` where spec 09's second listener goes), the engine takes an OS-assigned port for this run instead, prints `  preview port <port> is taken, so this run uses <port>.`, and boots normally: a taken preview port never stops the boot. In this spec it applies the same Host check as the API (below) and answers 404 to every path; spec 09 adds its one route and a second listener on `[::1]` at the same port. An `UNFRAMED_PREVIEW_PORT` that is not a whole number from 0 to 65535 stops the boot like a bad `PORT`, with `  UNFRAMED_PREVIEW_PORT has to be a whole number from 0 to 65535, not "<value>".`
 3. Start the API listener on `127.0.0.1:<PORT>`. Never `0.0.0.0`, never `::1`. There is no option to widen the bind.
 4. Print the banner, then send the ready message.
 
@@ -419,8 +420,8 @@ The bundle's Node floor is the Node inside the Electron release the shell ships.
 
 A good test drives the system through one of the three seams in 00-index and asserts on what comes out: RPC answers, HTTP responses, IPC messages, stdout, files on disk, and what a person sees. It never imports engine internals or reads engine state directly.
 
-- **Domain seam** for the pure rules with many cases: the slug rule, the loopback guard decision, `.env` upsert, the validators and clearable-field normalising, the reveal and folder-picker command plans.
-- **Engine seam** for everything the process does. This spec builds the harness every later spec reuses: fork the engine (from source in `pnpm test`, from the built bundle in the bundle smoke test) with a fresh temp data folder, `PORT=0`, an IPC channel, `UNFRAMED_TEST_OPENROUTER_ORIGIN` pointed at an in-test stub HTTP server, and `UNFRAMED_TEST_NATIVE_LOG` pointed at a temp file; wait for the ready message; expose an RPC client, an HTTP client, the captured stdout and IPC messages, and the data folder; kill and clean up. Tests that need a variant (no IPC channel, hosted marker, a pre-written `.env`) take options.
+- **Domain seam** for the pure rules with many cases: the slug rule, reading `PORT` and `UNFRAMED_PREVIEW_PORT`, the loopback guard decision, `.env` upsert, the validators and clearable-field normalising, the reveal and folder-picker command plans.
+- **Engine seam** for everything the process does. This spec builds the harness every later spec reuses: fork the engine (from source in `pnpm test`, from the built bundle in the bundle smoke test) with a fresh temp data folder, `PORT=0`, `UNFRAMED_PREVIEW_PORT=0`, an IPC channel, `UNFRAMED_TEST_OPENROUTER_ORIGIN` pointed at an in-test stub HTTP server, and `UNFRAMED_TEST_NATIVE_LOG` pointed at a temp file; wait for the ready message; expose an RPC client, an HTTP client, the captured stdout and IPC messages, and the data folder; kill and clean up. Tests that need a variant (no IPC channel, hosted marker, a pre-written `.env`) take options.
 - **Browser seam** for the web frame: Playwright against the built web served by an engine at the engine seam with `UNFRAMED_CLIENT_DIST` set.
 - Nothing that spends money runs in any seam. There is no prior art in this repo (it starts empty); follow t3code's server tests for driving Effect RPC over a real socket.
 
@@ -428,10 +429,10 @@ A good test drives the system through one of the three seams in 00-index and ass
 
 1. Monorepo skeleton: pnpm workspace with engine, web, contracts and domain packages, strict TypeScript, Vitest wired to `pnpm test`, and the slug rule in domain with its cases (runs of symbols, leading and trailing dashes, 40-character cut, empty result). Seam: domain.
 2. Engine-seam harness plus an engine that boots and prints the banner; the test forks it into a temp data folder and finds `Unframed server  →  http://localhost:<port>` and the six following lines on stdout. Seam: engine.
-3. `PORT=0` with an IPC channel sends exactly one `{type: "ready", port, previewPort}` after both listeners are bound; both ports accept connections on `127.0.0.1`. Seam: engine.
+3. `PORT=0` with an IPC channel sends exactly one `{type: "ready", port, previewPort}` after both listeners are bound; both ports accept connections on `127.0.0.1`. The preview port is the one `UNFRAMED_PREVIEW_PORT` names (18787 when unset, unless something holds it), reported the same in the ready message, `server.health` and the banner; with that port held by another program on `127.0.0.1` or `[::1]`, the engine takes an OS-assigned one, says so, and boots. The harness forks every other test with `UNFRAMED_PREVIEW_PORT=0`. Seam: engine.
 4. Forked without an IPC channel, the engine boots and answers the same, and sends nothing. Seam: engine.
 5. The preview origin listener answers 404 to every path and applies the Host check. Seam: engine.
-6. Listen failure: with `PORT` set to a port the test already holds, the engine prints the error and exits with code 1. Seam: engine.
+6. Listen failure: with `PORT` set to a port the test already holds, the engine prints the error and exits with code 1. A held preview port is not a listen failure (task 3). A `PORT` or `UNFRAMED_PREVIEW_PORT` that is not a port stops the boot with its sentence and exit code 1. Seam: engine.
 7. Loopback guard decision table: loopback origins with and without ports, `LOCALHOST`, `[::1]`, absent Origin, `localhost.evil.example`, `127.0.0.2`, non-digit ports, absent Host. Seam: domain.
 8. HTTP guard: a non-loopback `Origin` gets 403 with the same-machine message; a non-loopback `Host` gets 403 with the localhost message; no response carries any CORS allow header, even for a loopback `Origin`; `OPTIONS` answers 204 with no allow headers. Seam: engine.
 9. RPC socket at `/ws` with `server.health` returning `ok: true` and the settings snapshot. Seam: engine.

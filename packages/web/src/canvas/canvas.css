@@ -14,13 +14,13 @@
   visibility: hidden;
 }
 
-/* A filled artifact's title is its handle: a selected frame takes every press inside the shape. */
+/* Every shown label is a handle: a press on it presses its shape, and a double-click renames it. */
 .tl-container [data-shape-label][data-label-handle] {
   pointer-events: all;
   cursor: grab;
 }
 
-/* A group's name field shows at every zoom and takes the pointer; the name is typed as it is, not in capitals. */
+/* A name field shows at every zoom and takes the pointer; the name is typed as it is. */
 .tl-container .tl-shape [data-shape-label][data-label-open][data-label-kind] {
   display: flex;
   visibility: visible;

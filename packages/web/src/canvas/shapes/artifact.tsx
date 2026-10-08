@@ -1,14 +1,16 @@
 import type { ArtifactShapeProps } from "@unframed/contracts";
-import { artifactTitle, type ArtifactKind } from "@unframed/domain";
+import { artifactTitle, readRef, type ArtifactKind, type DialsAnnouncement } from "@unframed/domain";
 import { AppWindow, Clapperboard } from "lucide-react";
-import { BaseBoxShapeUtil, getPointerInfo, HTMLContainer, resizeBox, T, useEditor, useValue, type RecordProps, type TLResizeInfo, type TLShape } from "tldraw";
-import { ArtifactFrame } from "../../artifacts/ArtifactFrame.tsx";
+import { useCallback, useEffect } from "react";
+import { BaseBoxShapeUtil, HTMLContainer, resizeBox, T, useEditor, useValue, type RecordProps, type TLResizeInfo, type TLShape } from "tldraw";
+import { ArtifactFrame, type ArtifactFrameProps } from "../../artifacts/ArtifactFrame.tsx";
 import { ProblemLine, RenderRow } from "../../artifacts/RenderRow.tsx";
 import { snapshotsOf, snapshotUrl, stillOf } from "../../artifacts/snapshots.ts";
-import { isInteractive, isLive, previewPort } from "../../artifacts/state.ts";
+import { forgetFrame, hearFrame, isInteractive, isLive, previewPort, reachFrame } from "../../artifacts/state.ts";
 import { currentSlots } from "../../chrome/slots.ts";
 import { useCanvasProject } from "../../context.ts";
 import { artifactCardClass } from "./looks.ts";
+import { nameOf, waitingLabel } from "./labels.ts";
 import { ShapeLabel } from "./ShapeLabel.tsx";
 import { noteRender } from "../../fps/renders.ts";
 
@@ -38,9 +40,7 @@ const EmptyArtifact = ({ shape, kind }: { readonly shape: ArtifactShape; readonl
   return (
     <>
       <HTMLContainer id={shape.id} className={artifactCardClass} data-testid="artifact-card" data-artifact-kind={kind} style={{ width: props.w, height: props.h }}>
-        <ShapeLabel shapeId={shape.id} kind={kind}>
-          {kind === "page" ? "Page" : "Motion"}
-        </ShapeLabel>
+        <ShapeLabel shapeId={shape.id} kind={kind} name={readRef(shape)} width={props.w} text={waitingLabel(shape, kind === "page" ? "Page" : "Motion")} />
         <div className="flex h-full flex-col items-center justify-center gap-3 text-muted-foreground">
           <Icon className="size-7" strokeWidth={1.5} aria-label={kind === "page" ? "Page" : "Motion"} />
         </div>
@@ -71,6 +71,15 @@ const Still = ({ shape, title }: { readonly shape: ArtifactShape; readonly title
   );
 };
 
+/** A canvas frame tells the canvas what it announces and how to reach it, so the Parameters panel can drive it. */
+const CanvasFrame = ({ shapeId, ...props }: Omit<ArtifactFrameProps, "onAnnounce" | "onReady"> & { readonly shapeId: string }) => {
+  const editor = useEditor();
+  useEffect(() => () => forgetFrame(editor, shapeId), [editor, shapeId]);
+  const onAnnounce = useCallback((announcement: DialsAnnouncement) => hearFrame(editor, shapeId, announcement), [editor, shapeId]);
+  const onReady = useCallback((post: (values: unknown) => void) => reachFrame(editor, shapeId, post), [editor, shapeId]);
+  return <ArtifactFrame {...props} onAnnounce={onAnnounce} onReady={onReady} />;
+};
+
 /** A filled artifact: no card, the title above its corner, and its frame while live, else its still. */
 const FilledArtifact = ({ shape, kind }: { readonly shape: ArtifactShape; readonly kind: ArtifactKind }) => {
   noteRender(shape.id);
@@ -81,24 +90,13 @@ const FilledArtifact = ({ shape, kind }: { readonly shape: ArtifactShape; readon
   const interactive = useValue("artifact interactive", () => live && isInteractive(editor, shape.id), [editor, shape.id, live]);
   const port = useValue("preview port", () => previewPort.get(), []);
   const title = artifactTitle(props);
+  const name = nameOf(shape);
   return (
     <>
       <HTMLContainer id={shape.id} data-testid="artifact-card" data-artifact-kind={kind} data-live={live ? "true" : undefined} style={{ width: props.w, height: props.h }}>
-        {title !== "" && (
-          <ShapeLabel
-            shapeId={shape.id}
-            kind={kind}
-            onPointerDown={(event) => {
-              // The title is the handle: a selected frame takes every press inside the shape.
-              const current = editor.getShape(shape.id);
-              if (current) editor.dispatch({ type: "pointer", name: "pointer_down", target: "shape", shape: current, ...getPointerInfo(editor, event) });
-            }}
-          >
-            {title}
-          </ShapeLabel>
-        )}
+        <ShapeLabel shapeId={shape.id} kind={kind} name={readRef(shape)} width={props.w} text={name !== undefined ? `@${name}` : title} />
         {live && port !== undefined ? (
-          <ArtifactFrame key={props.file} project={project} kind={kind} file={props.file} previewPort={port} dials={props.dials} interactive={interactive} lazy />
+          <CanvasFrame key={props.file} shapeId={shape.id} project={project} kind={kind} file={props.file} previewPort={port} dials={props.dials} interactive={interactive} lazy />
         ) : (
           <Still shape={shape} title={title} />
         )}
@@ -140,7 +138,8 @@ const makeArtifactUtil = (kind: ArtifactKind) =>
 
     /**
      * Double-click opens the editor; it never enters tldraw's editing state. It answers an
-     * empty change, because answering none makes tldraw put a new prompt where it landed.
+     * empty change, because answering none makes tldraw put a new prompt where it landed. A
+     * double-click on the label is a rename, which the label handles.
      */
     override onDoubleClick(shape: ArtifactShape) {
       currentSlots().openArtifact?.(this.editor, shape.id);

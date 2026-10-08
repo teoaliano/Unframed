@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { resolveReferences } from "../src/index.ts";
-import { group, image, prompt, textResult } from "./shapes.ts";
+import { createResolver, resolveReferences } from "../src/index.ts";
+import { group, image, prompt, textResult, video } from "./shapes.ts";
 
 describe("resolving @id references", () => {
   const board = [
@@ -23,6 +23,17 @@ describe("resolving @id references", () => {
 
   it("resolves against every prompt on the canvas, not only a selection", () => {
     expect(resolveReferences("@101", board, "999")).toEqual({ ok: true, text: "A lone red fox on a cliff" });
+  });
+
+  it("asks the attach rule what an image or video stands for, and leaves it as typed when the rule has no answer", () => {
+    const shapes = [...board, video("104", { file: "waves.mp4" }), image("105", undefined)];
+    const asked: string[] = [];
+    const resolver = createResolver(shapes, (shape) => {
+      asked.push(shape.id);
+      return shape.file === undefined ? undefined : `${shape.kind} ${asked.length}`;
+    });
+    expect(resolver.resolve("@103, @104 and @105")).toEqual({ ok: true, text: "image 1, video 2 and @105" });
+    expect(asked).toEqual(["103", "104", "105"]);
   });
 });
 

@@ -192,6 +192,17 @@ export const selectGroup = async (page: Page, id: string): Promise<void> => {
   await page.mouse.click(box.x + 10, box.y - 8);
 };
 
+/**
+ * Closes the composer with Escape and waits until it has shrunk back into the bar. While it
+ * shrinks it still covers the canvas around the selection and takes the clicks there, so a
+ * click right after Escape can land on it instead of on a shape.
+ */
+export const closeComposer = async (page: Page): Promise<void> => {
+  await page.keyboard.press("Escape");
+  await expect(composer(page)).toHaveCount(0);
+  await expect(toolbar(page)).not.toHaveAttribute("data-morphing", "true");
+};
+
 /** Waits until an element stops moving (a camera animation has finished). */
 export const settled = async (locator: Locator): Promise<void> => {
   let last = "";

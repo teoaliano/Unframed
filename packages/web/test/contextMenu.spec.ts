@@ -1,8 +1,10 @@
 import type { Page } from "@playwright/test";
-import { centre, emptyCanvasPoint, openCanvas, shapeOnScreen } from "./canvas.ts";
+import { BRIDGE_TAG } from "@unframed/domain";
+import { centre, emptyCanvasPoint, openCanvas, shapeOnScreen, toast } from "./canvas.ts";
 import { expect, test } from "./fixtures.ts";
 import { pngBytes } from "./images.ts";
 import { inBothSchemes, styleOf, tokenColor } from "./kit.ts";
+import { filledArtifact, projectPath } from "./artifacts.ts";
 import { filledMedia, groupRecord, putRecords } from "./media.ts";
 import { platformOf } from "./platform.ts";
 
@@ -49,6 +51,17 @@ const withEmptyClipboard = (page: Page) =>
     Object.defineProperty(navigator.clipboard, "read", { configurable: true, value: async () => [] });
   });
 
+/** Keeps every text the page puts on the clipboard, which other workers share, so a test reads its own copy. */
+const recordCopies = (page: Page) =>
+  page.addInitScript(() => {
+    const copies: string[] = [];
+    (window as { copies?: string[] }).copies = copies;
+    const writeText = navigator.clipboard.writeText.bind(navigator.clipboard);
+    Object.defineProperty(navigator.clipboard, "writeText", { configurable: true, value: (text: string) => (copies.push(text), writeText(text)) });
+  });
+
+const lastCopy = (page: Page) => page.evaluate(() => (window as { copies?: string[] }).copies?.at(-1));
+
 const photo = { type: "image" as const, bytes: pngBytes(300, 150), name: "photo.png", mime: "image/png", natural: { w: 300, h: 150 } };
 
 test("on empty canvas the menu offers the add items, then tldraw's own groups; nothing that would do nothing", async ({ page, engine }) => {
@@ -85,7 +98,7 @@ test("a right-clicked prompt is selected alone and offers its reference and the 
   // A selection always gets the Library section, whose Add to library the canvas registers.
   expect(headings).toEqual(["Reference", "Edit", "Library"]);
   const edits = [`Cut ${shortcut("X")}`, `Copy ${shortcut("C")}`, `Group ${shortcut("G")}`];
-  expect(items.slice(0, 5)).toEqual(["Copy @100", ...edits, expect.not.stringMatching(/^(Paste|Ungroup)/)]);
+  expect(items.slice(0, 6)).toEqual(["Copy @100", "Rename F2", ...edits, expect.not.stringMatching(/^(Paste|Ungroup)/)]);
   // Each edit item once: tldraw's own cut, copy and group are gone.
   expect(items.filter(editRow)).toEqual(edits);
   await closeMenu(page);
@@ -96,19 +109,21 @@ test("a right-clicked prompt is selected alone and offers its reference and the 
   await expect(scene).toHaveCount(1);
 });
 
-test("a filled image offers reveal and copy as image; inside a selection of two it reveals both", async ({ page, engine }) => {
+test("a filled image offers reveal, copy path and copy as image; inside a selection of two it reveals both", async ({ page, engine }) => {
   await withEmptyClipboard(page);
+  await recordCopies(page);
   await openCanvas(page, engine);
-  await filledMedia(engine, { ...photo, id: "shape:one", ref: "150", at: { x: 440, y: 60 } });
+  const { file } = await filledMedia(engine, { ...photo, id: "shape:one", ref: "150", at: { x: 440, y: 60 } });
   await filledMedia(engine, { ...photo, id: "shape:two", ref: "151", at: { x: 440, y: 260 } });
   await expect(shapeOnScreen(page, "shape:two").locator("img")).toBeVisible();
 
   const { shortcut, reveal } = await platformOf(page);
   const one = await centre(shapeOnScreen(page, "shape:one"));
   const single = await rightClick(page, one);
-  expect(single.headings).toEqual(["Image", "Edit", "Library"]);
-  expect(single.items.slice(0, 5)).toEqual([reveal(), "Copy as image", `Cut ${shortcut("X")}`, `Copy ${shortcut("C")}`, `Group ${shortcut("G")}`]);
-  await closeMenu(page);
+  expect(single.headings).toEqual(["Image", "Reference", "Edit", "Library"]);
+  expect(single.items.slice(0, 8)).toEqual([reveal(), "Copy path", "Copy as image", "Copy @150", "Rename F2", `Cut ${shortcut("X")}`, `Copy ${shortcut("C")}`, `Group ${shortcut("G")}`]);
+  await menu(page).getByRole("menuitem", { name: "Copy path" }).click();
+  await expect.poll(() => lastCopy(page)).toBe(projectPath(engine, file));
 
   await page.mouse.click(one.x, one.y);
   await page.keyboard.down("Shift");
@@ -120,6 +135,64 @@ test("a filled image offers reveal and copy as image; inside a selection of two 
   await closeMenu(page);
 });
 
+test("a filled page offers Keep playing, reveal and copy path, lined up; Copy path copies the engine's absolute path and says so", async ({ page, engine }) => {
+  await withEmptyClipboard(page);
+  await recordCopies(page);
+  await openCanvas(page, engine);
+  const { file } = await filledArtifact(engine, { id: "shape:brief", kind: "page", ref: "170", at: { x: 440, y: 60 }, title: "Brief", html: "<h1>Brief</h1>" });
+  await expect(shapeOnScreen(page, "shape:brief")).toHaveCount(1);
+
+  const { reveal } = await platformOf(page);
+  const at = await centre(shapeOnScreen(page, "shape:brief"));
+  const { headings, items } = await rightClick(page, at);
+  expect(headings).toEqual(["Page", "Reference", "Edit", "Library"]);
+  const keep = menu(page).getByRole("menuitemcheckbox", { name: "Keep playing" });
+  await expect(keep).toBeVisible();
+  expect(items.slice(0, 2)).toEqual([reveal(), "Copy path"]);
+  // Every row of the section starts its label at the same place.
+  const labelX = async (row: ReturnType<typeof menu>) => (await row.locator(".tlui-button__label").boundingBox())!.x;
+  expect(await labelX(keep)).toBe(await labelX(menu(page).getByRole("menuitem", { name: "Copy path" })));
+  await menu(page).getByRole("menuitem", { name: "Copy path" }).click();
+  await expect.poll(() => lastCopy(page)).toBe(projectPath(engine, file));
+  await expect(toast(page, "Path copied")).toBeVisible();
+
+  const empty = await emptyCanvasPoint(page);
+  await page.mouse.click(empty.x, empty.y);
+  await rightClick(page, at);
+  await menu(page).getByRole("menuitem", { name: reveal() }).click();
+  expect(await engine.waitForMessage((message) => message.type === "reveal")).toEqual({ type: "reveal", files: [projectPath(engine, file)] });
+});
+
+test("right-clicking inside a selected, live page opens its shape menu, and with two selected reveals both", async ({ page, engine }) => {
+  await withEmptyClipboard(page);
+  await openCanvas(page, engine);
+  const html = (title: string) => `<!doctype html><html><head>${BRIDGE_TAG}</head><body style="margin:0;height:100vh"><h1>${title}</h1></body></html>`;
+  await filledArtifact(engine, { id: "shape:one", kind: "page", ref: "171", at: { x: 440, y: 60 }, size: { w: 300, h: 200 }, title: "One", html: html("One") });
+  await filledArtifact(engine, { id: "shape:two", kind: "page", ref: "172", at: { x: 440, y: 320 }, size: { w: 300, h: 200 }, title: "Two", html: html("Two") });
+  const { reveal } = await platformOf(page);
+  const one = shapeOnScreen(page, "shape:one");
+  await expect(one).toBeVisible();
+  const oneBox = (await one.boundingBox())!;
+  await page.mouse.click(oneBox.x + 20, oneBox.y - 8);
+  await expect(page.frameLocator("[data-shape-id='shape:one'] iframe[data-artifact-frame]").getByText("One")).toBeVisible();
+  // Live and taking the pointer: the right-click lands in the page's own document.
+  await expect(one.locator("iframe[data-artifact-frame]")).toHaveAttribute("data-interactive", "true");
+  const inside = await rightClick(page, await centre(one));
+  expect(inside.headings).toEqual(["Page", "Reference", "Edit", "Library"]);
+  expect(inside.items[0]).toBe(reveal());
+  await closeMenu(page);
+
+  const twoBox = (await shapeOnScreen(page, "shape:two").boundingBox())!;
+  await page.keyboard.down("Shift");
+  await page.mouse.click(twoBox.x + 20, twoBox.y - 8);
+  await page.keyboard.up("Shift");
+  const frameTwo = shapeOnScreen(page, "shape:two").locator("iframe[data-artifact-frame]");
+  await expect(frameTwo).toHaveAttribute("data-interactive", "true");
+  await expect(page.frameLocator("[data-shape-id='shape:two'] iframe[data-artifact-frame]").getByText("Two")).toBeVisible();
+  const both = await rightClick(page, await centre(shapeOnScreen(page, "shape:two")));
+  expect(both.items[0]).toBe(reveal(2));
+});
+
 test("a right-clicked group offers its reference and Ungroup, not Group", async ({ page, engine }) => {
   await withEmptyClipboard(page);
   await openCanvas(page, engine);
@@ -128,7 +201,7 @@ test("a right-clicked group offers its reference and Ungroup, not Group", async 
   const box = (await shapeOnScreen(page, "shape:group").boundingBox())!;
   const { headings, items } = await rightClick(page, { x: box.x + 10, y: box.y - 8 });
   expect(headings).toEqual(["Reference", "Edit", "Library"]);
-  expect(items.slice(0, 4)).toEqual(["Copy @160", `Cut ${shortcut("X")}`, `Copy ${shortcut("C")}`, `Ungroup ${shortcut("G", { shift: true })}`]);
+  expect(items.slice(0, 5)).toEqual(["Copy @160", "Rename F2", `Cut ${shortcut("X")}`, `Copy ${shortcut("C")}`, `Ungroup ${shortcut("G", { shift: true })}`]);
   expect(items).not.toContain(`Group ${shortcut("G")}`);
 });
 
