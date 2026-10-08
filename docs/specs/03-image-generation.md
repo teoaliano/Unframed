@@ -216,7 +216,7 @@ Tray band, below the box's border: the model chip first, then one chip per prop 
 
 On open, the tray holds the last-used values for the medium (see below), else the defaults. The instruction starts empty every time, except in recipe mode. The draft survives selection changes while the composer stays open and is dropped on close.
 
-Selection binding: clicking a shape while the composer is open adds it to the selection instead of replacing it. Clicking empty canvas closes the composer. Esc closes the composer from anywhere inside it, including the editor, unless a menu or the model dialog inside it is open, which closes first. The composition is recomputed on every change to the selection or to any shape the composition read.
+Selection binding: clicking a shape while the composer is open adds it to the selection instead of replacing it. Clicking empty canvas closes the composer. Esc closes the composer from anywhere inside it, including the editor, and while the focus is nowhere (the frame before its box takes the focus, after it opens or after a chip's remove button goes away), unless a menu or the model dialog inside it is open, which closes first. The composition is recomputed on every change to the selection or to any shape the composition read.
 
 On send: the web renders composites and the sketch, uploads them, builds the outputs, calls `run.image`, records last-used values, and on acknowledgement collapses the composer back to the bar. A failure before acknowledgement stays in the composer as an error line.
 
