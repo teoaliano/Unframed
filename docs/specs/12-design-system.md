@@ -33,7 +33,7 @@ After this spec, one button is one component with a handful of variants, one men
 15. As a person, I want placeholders and render progress in the new style, so that a running job looks like the rest of the app.
 16. As a person, I want empty and filled page and motion cards in the new style, with the filled frame's white page unchanged, so that artifacts look finished.
 17. As a person, I want the role badges and the tether line in the new palette, so that input roles stay readable.
-18. As a person, I want the selection toolbar's Generate, Agent, Editor, Recipe and result buttons built from the kit's button variants, so that the bar's primary action stands out the same way a dialog's does.
+18. As a person, I want the selection toolbar's Generate, Regenerate, Agent, Editor and Recipe buttons built from the kit's button variants, so that the bar's primary action stands out the same way a dialog's does.
 19. As a person, I want the composer to look like t3code's composer (its rounded shell, soft shadow and send button), so that typing an instruction feels like typing a chat message.
 20. As a person, I want the medium switch to be the kit's segmented toggle, so that image, video and text read as one choice.
 21. As a person, I want model, prop and Runs chips built on one chip style, so that the tray reads as one row.
@@ -144,7 +144,7 @@ Every surface moves onto the kit. The mapping, by surface:
 - **Toasts:** the kit Toast (Base UI Toast) with t3code's look. Position stays bottom-left as spec 02 has it.
 - **Connection notice:** a sticky kit Toast, as today.
 - **Canvas shapes and overlays:** shape labels in `text-2xs` with the muted foreground, not uppercase; the prompt hint, empty media, Remove button (Button `icon-micro` on `--popover`), video transport, render placeholder and progress, group frame and name field (Input `unstyled` inside the frame), recipe chip (Badge), artifact cards, role badges (Badge `label`), tether (`--border` stroke), mention menu (the kit menu popup and row look). Canvas shape internals may keep a small canvas stylesheet for rules that target tldraw-rendered DOM (the label-level rules), using tokens only.
-- **Selection toolbar and recipe bar:** a `surface-glass` bar; Generate and Agent are Button `default`, the other actions `ghost` or `outline`; the hint uses `text-muted-foreground`.
+- **Selection toolbar and recipe bar:** a `surface-glass` bar; the primary action (Generate, Editor, or Regenerate on a result bar without Generate) is Button `default`, Agent is `outline`, the other actions `ghost` or `outline`; the hint uses `text-muted-foreground`.
 - **Generate composer:** t3code's composer shell look (rounded shell, `shadow-composer`, glass surface) at the existing 420 px; the medium switch is ToggleGroup `segmented`; the send button uses t3code's message-action button in its labelled pill form, since the Generate send carries its label (the Agent tray uses the round form); status lines are Alert or muted text; the recipe line is InlineButton.
 - **Prop tray, Runs chip, share consent:** model and prop chips are one chip recipe built from Button `outline` at `compact` size; value menus are Menu with radio items; the Runs popup is Popover with NumberField and Checkbox; the share consent is Checkbox with Label.
 - **Model dialog:** Dialog with the kit Table, Select for sort, Input for search, provider tokens as Badge `label`.
