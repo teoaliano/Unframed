@@ -3,4 +3,4 @@
  * as a constant: importing the manifest would inline its workspace dependencies into the
  * published bundle.
  */
-export const ENGINE_VERSION = "0.6.3";
+export const ENGINE_VERSION = "0.7.0";
