@@ -1,0 +1,256 @@
+name: Desktop
+
+# Tags are the release trigger, not merges to main -- building a signed Mac app on
+# every push is the only way to make this pipeline expensive. workflow_dispatch is
+# here so the pipeline can be exercised without inventing a version number.
+on:
+  push:
+    tags: ['v*']
+  # Every PR builds both platforms. Without this a PR gates nothing -- there is no
+  # second reviewer here, so the build IS the review.
+  pull_request:
+  workflow_dispatch:
+
+# The shell lives in apps/desktop and is not a pnpm workspace member, so every run
+# step below starts there. The engine's own CI (ci.yml, engine-release.yml) is
+# unaffected: it never reads this directory.
+defaults:
+  run:
+    working-directory: apps/desktop
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Pinned, not `macos-latest`. v0.0.8 signed and notarized on the macOS
+          # 26.5.2 image; the very next tag build got 26.6.2 and died inside
+          # electron-builder's own keychain setup:
+          #
+          #   security set-key-partition-list -S apple-tool:,apple: -s -k *** <tmp>.keychain
+          #   security: SecKeychainUnlock: The user name or passphrase you entered is not correct.
+          #
+          # That password is one electron-builder generates for a throwaway keychain
+          # moments earlier -- CSC_KEY_PASSWORD is never passed to that command. So it
+          # reads like a wrong signing secret and is not one: the secrets were last
+          # touched 2026-08-15, electron-builder and app-builder-lib are byte-identical
+          # between the two builds, and the same certificate signed the earlier one.
+          # The only variable that moved was the image.
+          #
+          # macos-15 is the previous major and still arm64, which the build needs.
+          # This is the unblock, not the cure -- the cure is electron-builder 26.x,
+          # whose keychain handling is current. Worth doing on its own, away from a
+          # release: a signing change can only really be tested by cutting one.
+          - os: macos-15
+            name: mac
+          - os: windows-latest
+            name: win
+    runs-on: ${{ matrix.os }}
+    # Notarization is the reason this is not 30. The first submission from a new key
+    # took 52 minutes of Apple queue on 2026-08-15 -- a 30-minute cap would have
+    # killed the job mid-submission and reported it as a random failure. Later
+    # submissions are usually minutes, so this ceiling should almost never be
+    # approached; it exists so a slow queue does not look like a broken build.
+    timeout-minutes: 90
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: apps/desktop/package-lock.json
+
+      # npm rewrites GitHub dependencies to git+ssh:// in the lockfile no matter
+      # what package.json says. That resolves on a machine with an SSH key and
+      # fails on a runner without one, even though the engine repo is public.
+      - name: Let git fetch the engine over HTTPS
+        run: git config --global url."https://github.com/".insteadOf ssh://git@github.com/
+
+      - run: npm ci
+
+      # Fail loudly if the pin did not resolve to what package.json claims, since
+      # that failure is otherwise silent -- npm honours a stale lockfile happily.
+      - name: Report the engine version actually installed
+        shell: bash
+        run: |
+          node -p "'engine ' + require('./node_modules/unframed/package.json').version"
+
+      # APPLE_API_KEY wants a PATH to the .p8, while the secret holds its base64
+      # CONTENT -- the near-identical names make this easy to get backwards, and
+      # doing so reports "Env vars ... need to be set", which reads as a missing
+      # secret rather than a misshapen one. Written outside the workspace so no
+      # glob or commit can pick it up.
+      - name: Decode the notarization key
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          echo "${{ secrets.APPLE_API_KEY_P8 }}" | base64 --decode > "$RUNNER_TEMP/api-key.p8"
+          echo "APPLE_API_KEY=$RUNNER_TEMP/api-key.p8" >> "$GITHUB_ENV"
+
+      # Publishing only on a tag. A PR or dispatch build still packages and verifies,
+      # it just has nothing to attach to. GH_TOKEN is the cross-repo token because
+      # the Release lands on the PUBLIC repo -- the updater downloads without
+      # credentials, and a token cannot ship inside an app.
+      #
+      # The mac job never publishes from here. electron-builder uploads each artifact
+      # the moment it is built, and the DMG's notarize-and-staple hook runs after that,
+      # so the Release got the unstapled DMG and a feed hashed from it. Mac uploads
+      # happen in a later step, once the feed is re-hashed. Windows is unchanged.
+      - name: Package
+        run: npx electron-builder --publish ${{ runner.os != 'macOS' && startsWith(github.ref, 'refs/tags/v') && 'always' || 'never' }}
+        env:
+          GH_TOKEN: ${{ secrets.RELEASES_TOKEN }}
+          # electron-builder reads these two by default, which is why no config
+          # mentions them. Empty on Windows, which is what leaves that build
+          # unsigned on purpose rather than by accident.
+          CSC_LINK: ${{ runner.os == 'macOS' && secrets.CSC_LINK || '' }}
+          CSC_KEY_PASSWORD: ${{ runner.os == 'macOS' && secrets.CSC_KEY_PASSWORD || '' }}
+          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+
+      # Short-lived on a throwaway runner, but leaving key material lying around for
+      # later steps is careless. always() so a failed package step still cleans up.
+      - name: Remove the notarization key
+        if: always() && runner.os == 'macOS'
+        shell: bash
+        run: rm -f "$RUNNER_TEMP/api-key.p8"
+
+      # Stapling changed the DMG's bytes after electron-builder hashed them into the
+      # feed. Re-hash the feed from the file being uploaded, not the one it was built as.
+      - name: Re-hash the update feed from the stapled DMG
+        if: runner.os == 'macOS'
+        shell: bash
+        run: node build/rehash-feed.js dist/latest-mac.yml dist/*.dmg
+
+      # The check that would have caught 0.0.2, which signed, notarized, published
+      # and then died on launch with ERR_MODULE_NOT_FOUND: Cannot find package
+      # 'express'. Every step above proves something about the BUNDLE; none of them
+      # ever ran the thing. npm hoists the engine's dependencies to the top-level
+      # node_modules, so unpacking only node_modules/unframed left them inside
+      # app.asar -- where a forked Node process cannot see them, and where ESM
+      # cannot look at all, since Electron patches require() for asar but not the
+      # ESM loader. So: start the packaged engine the way main.js forks it, and
+      # require its banner. asarUnpack is shared config, so proving it on mac
+      # proves the packing for Windows too. Runs on PRs -- that is the point.
+      - name: Prove the packaged engine actually starts
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          APP="$PWD/dist/mac-arm64/Unframed.app"
+          ENGINE="$APP/Contents/Resources/app.asar.unpacked/node_modules/unframed/server/index.js"
+          ELECTRON_RUN_AS_NODE=1 \
+          UNFRAMED_DATA_DIR="$RUNNER_TEMP/engine-data" \
+          UNFRAMED_CLIENT_DIST="$APP/Contents/Resources/app.asar.unpacked/node_modules/unframed/client/dist" \
+          OUTPUT_DIR="$RUNNER_TEMP/engine-out" \
+          PORT=0 \
+          "$APP/Contents/MacOS/Unframed" "$ENGINE" > "$RUNNER_TEMP/engine.log" 2>&1 &
+          ENGINE_PID=$!
+          for i in $(seq 1 30); do
+            if grep -q 'Unframed server' "$RUNNER_TEMP/engine.log" 2>/dev/null; then break; fi
+            sleep 1
+          done
+          kill "$ENGINE_PID" 2>/dev/null || true
+          cat "$RUNNER_TEMP/engine.log"
+          grep -q 'Unframed server' "$RUNNER_TEMP/engine.log"
+
+      # Not on pull requests: electron-builder refuses to code sign a PR build --
+      # deliberately, since a PR from a fork could otherwise exfiltrate the
+      # certificate. Asserting signatures there would fail on work that is correct.
+      # Signing is therefore only ever proven on a tag or dispatch build.
+      - name: Prove the mac build is actually signed and notarized
+        if: runner.os == 'macOS' && github.event_name != 'pull_request'
+        shell: bash
+        run: |
+          codesign -dv --verbose=2 dist/mac-arm64/Unframed.app 2>&1 | grep -E "Authority|TeamIdentifier|flags"
+          xcrun stapler validate dist/mac-arm64/Unframed.app
+          spctl -a -vvv -t exec dist/mac-arm64/Unframed.app
+          # The DMG is what gets uploaded and downloaded, so it has to carry its own
+          # ticket. Without one, a download needs an online check to verify. spctl is
+          # not run on the DMG: electron-builder does not sign it, so it reports "no
+          # usable signature" even when stapled, and the ticket is what this proves.
+          xcrun stapler validate dist/*.dmg
+
+      # The check that would have caught shipping a dmg-only mac build. Squirrel.Mac
+      # updates by swapping an app out of a ZIP, so electron-updater looks for a zip
+      # in the feed and explicitly refuses pkg and dmg -- with no zip it throws
+      # ERR_UPDATER_ZIP_FILE_NOT_FOUND on every check. main.js logs update errors and
+      # carries on by design, so nothing surfaces: the app simply never updates.
+      # Unlike signing, this runs on PRs too -- the feed is written whether or not
+      # the build publishes.
+      # The Agent SDK ships a ~200MB native `claude` per platform as an optional
+      # dependency, and the engine never runs it -- every query() names the CLI the
+      # user already installed. Shipping it anyway put ~180MB of unreachable binary
+      # in the bundle. The exclusion lives in a `files` glob, which fails silently if
+      # the package layout moves, so assert the absence rather than trust the pattern.
+      - name: Prove the dead weight stayed out of the bundle
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          UNPACKED="dist/mac-arm64/Unframed.app/Contents/Resources/app.asar.unpacked"
+          test -f "$UNPACKED/node_modules/@anthropic-ai/claude-agent-sdk/sdk.mjs"
+          if find "$UNPACKED" -path "*@anthropic-ai/claude-agent-sdk-*" -name claude | grep .; then
+            echo "The bundled CLI is back in the bundle; the files exclusion stopped matching." >&2
+            exit 1
+          fi
+          # Sourcemaps and type declarations are read by debuggers and compilers, not
+          # by a packaged app -- 78MB of them shipped until they were excluded.
+          if find "$UNPACKED" \( -name '*.js.map' -o -name '*.d.ts' \) | head -5 | grep .; then
+            echo "Build artifacts are back in the bundle; the files exclusions stopped matching." >&2
+            exit 1
+          fi
+
+      - name: Prove the update feed points at a zip, not just the DMG
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          cat dist/latest-mac.yml
+          grep -q '\.zip' dist/latest-mac.yml
+          # The feed must describe the DMG byte for byte: a stale hash makes the
+          # download fail its own check, and this runs on PRs too.
+          DMG=$(ls dist/*.dmg)
+          SHA=$(openssl dgst -sha512 -binary "$DMG" | base64 | tr -d '\n')
+          SIZE=$(stat -f %z "$DMG")
+          grep -qF "sha512: $SHA" dist/latest-mac.yml
+          grep -qF "size: $SIZE" dist/latest-mac.yml
+
+      - name: List what was produced
+        shell: bash
+        run: ls -lh dist/*.dmg dist/*.zip dist/*.exe 2>/dev/null || ls -lh dist
+
+      # The mac uploads, after every check above has passed. Same shape electron-builder
+      # gives a Release: published rather than draft, on the PUBLIC repo, where the
+      # updater looks. A Windows job may create the Release first, so a failed create
+      # is tolerated when the Release then exists.
+      - name: Publish the mac installers to the public Release
+        if: runner.os == 'macOS' && startsWith(github.ref, 'refs/tags/v')
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.RELEASES_TOKEN }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          gh release view "$TAG" --repo teoaliano/Unframed >/dev/null 2>&1 \
+            || gh release create "$TAG" --repo teoaliano/Unframed --title "$TAG" --notes "" \
+            || gh release view "$TAG" --repo teoaliano/Unframed >/dev/null
+          gh release upload "$TAG" --repo teoaliano/Unframed --clobber \
+            dist/*.dmg dist/*.dmg.blockmap dist/*.zip dist/*.zip.blockmap dist/latest-mac.yml
+
+      # Pre-release testing only, and deliberately short-lived: Actions storage is
+      # 500MB and one installer is ~100MB. Real releases attach to the PUBLIC repo's
+      # Releases instead, which does not count against this quota and is where the
+      # updater looks. Skipped on PRs, where the build passing is the whole point and
+      # nobody downloads the result. Skipped on tags too: the Release is the real
+      # output there, and an upload that hits the storage quota fails a build that
+      # has already published.
+      - if: github.event_name == 'workflow_dispatch'
+        uses: actions/upload-artifact@v4
+        with:
+          name: unframed-${{ matrix.name }}
+          path: |
+            apps/desktop/dist/*.dmg
+            apps/desktop/dist/*.exe
+          retention-days: 1
+          if-no-files-found: error

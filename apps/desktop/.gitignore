@@ -1,0 +1,14 @@
+node_modules/
+dist/
+out/
+*.log
+.DS_Store
+
+# Signing material must never be committed. It belongs in CI secrets.
+*.p12
+*.p8
+*.cer
+*.certSigningRequest
+
+# Working notes, not for the repo -- same convention as the public repo.
+status.md
