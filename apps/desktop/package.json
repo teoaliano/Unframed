@@ -1,0 +1,88 @@
+{
+  "name": "unframed-app",
+  "private": true,
+  "version": "0.0.17",
+  "description": "Desktop shell for Unframed.",
+  "author": "teoaliano",
+  "type": "commonjs",
+  "main": "src/main.js",
+  "scripts": {
+    "start": "electron .",
+    "spike": "electron spike/run-engine.js",
+    "pack": "electron-builder --publish never"
+  },
+  "dependencies": {
+    "electron-updater": "^6.8.9",
+    "unframed": "github:teoaliano/Unframed#engine-v0.7.0-dist"
+  },
+  "devDependencies": {
+    "electron": "^44.4.5",
+    "electron-builder": "^25.1.8"
+  },
+  "puppeteer": {
+    "skipDownload": true
+  },
+  "build": {
+    "appId": "com.teoaliano.unframed",
+    "productName": "Unframed",
+    "artifactName": "${productName}-${arch}.${ext}",
+    "files": [
+      "src/**",
+      "!node_modules/**/@anthropic-ai/claude-agent-sdk-{darwin,linux,win32}-*/**",
+      "!node_modules/**/*.js.map",
+      "!node_modules/**/*.mjs.map",
+      "!node_modules/**/*.cjs.map",
+      "!node_modules/**/*.css.map",
+      "!node_modules/**/*.d.ts",
+      "!node_modules/**/*.d.ts.map",
+      "!node_modules/**/*.d.mts",
+      "!node_modules/**/*.d.cts"
+    ],
+    "asar": true,
+    "asarUnpack": [
+      "node_modules/**"
+    ],
+    "mac": {
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "arm64"
+          ]
+        },
+        {
+          "target": "zip",
+          "arch": [
+            "arm64"
+          ]
+        }
+      ],
+      "category": "public.app-category.graphics-design",
+      "identity": "Matteo Antonio Aliano (N2X3SV5FDD)",
+      "hardenedRuntime": true,
+      "notarize": true
+    },
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
+    },
+    "directories": {
+      "output": "dist"
+    },
+    "afterAllArtifactBuild": "build/notarize-dmg.js",
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "teoaliano",
+        "repo": "Unframed",
+        "releaseType": "release"
+      }
+    ]
+  }
+}
