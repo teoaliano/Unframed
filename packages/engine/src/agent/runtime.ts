@@ -45,6 +45,8 @@ import { scriptedAdapter } from "./adapters/scripted.ts";
 import { AttachmentStore } from "./attachmentStore.ts";
 import { CanvasTools } from "./canvasTools.ts";
 import { OutsideChats } from "./outsideChats.ts";
+import { outsideSelectionTools } from "./selectionTools.ts";
+import type { LiveSelection } from "../selection/liveSelection.ts";
 import { OUTSIDE_TURN_IDLE_MS } from "@unframed/domain";
 import { ChatEngine, CommandRejected } from "./chatEngine.ts";
 import type { RunEnvironment } from "./detection.ts";
@@ -57,6 +59,8 @@ import { artifactDiff } from "./turnDiff.ts";
 
 export interface AgentRuntimeDeps {
   readonly dataDir: string;
+  /** The windows' live selection, read and set by outside calls (spec 14). */
+  readonly selection: LiveSelection;
   /** The outside turn's idle time; two minutes unless a test shortens it (spec 14). */
   readonly outsideTurnIdleMs?: number;
   readonly testAgentScript: string | undefined;
@@ -137,6 +141,8 @@ export class AgentRuntime {
   readonly registry = new McpToolRegistry();
   /** The outside calls: an outside session's chat and turn in each project (spec 14). */
   readonly outside: OutsideChats;
+  /** The tools only an outside connection has, after the registry's (spec 14). */
+  readonly outsideTools: McpTool[];
   readonly attachments: AttachmentStore;
   readonly providers: ProviderService;
   private readonly projects = new Map<string, Promise<ProjectAgent>>();
@@ -157,6 +163,8 @@ export class AgentRuntime {
       folder: async (project) => (await this.project(project)).folder,
       turnChanges: async (project) => (await this.project(project)).turnChanges,
       chatTurn: (project, chatId) => this.chatTurn(project, chatId),
+      isOutside: (project, chatId) => this.settledAgents.get(projectSlug(project))?.engine.chat(chatId)?.outside !== undefined,
+      liveSelection: (project) => deps.selection.current(projectSlug(project)),
       tag: (project, chatId, ids) => void this.tag(project, chatId, ids),
       activity: (project, chatId, activity) =>
         void this.project(project).then(
@@ -165,6 +173,8 @@ export class AgentRuntime {
         ),
     };
     for (const tool of new CanvasTools(context).tools()) this.registry.register(tool);
+    // Outside calls only: `canvas_select` never reaches an in-app agent (spec 07, spec 14).
+    this.outsideTools = outsideSelectionTools({ hub: deps.selection, read: (project) => deps.rooms.read(project) });
     this.outside = new OutsideChats(
       {
         agent: (slug) => this.project(slug),

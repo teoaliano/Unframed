@@ -7,6 +7,7 @@ import * as ManagedRuntime from "effect/ManagedRuntime";
 import * as RpcServer from "effect/unstable/rpc/RpcServer";
 import { CanvasRooms, canvasRoomsLayer } from "./canvas/rooms.ts";
 import { agentConnectionsLayer } from "./agentConnections/layer.ts";
+import { selectionHubLayer } from "./selection/liveSelection.ts";
 import { removeDiscovery, writeDiscovery } from "./agentConnections/discovery.ts";
 import { loadConfig } from "./config.ts";
 import { MediaStore, mediaStoreLayer } from "./media/mediaStore.ts";
@@ -120,7 +121,7 @@ export const startEngine = async (host: EngineHost): Promise<RunningEngine> => {
     Layer.provideMerge(mediaStoreLayer),
     Layer.provideMerge(canvasRoomsLayer),
     Layer.provideMerge(nativeLayer),
-    Layer.provideMerge(Layer.mergeAll(preferencesStoreLayer, agentConnectionsLayer)),
+    Layer.provideMerge(Layer.mergeAll(preferencesStoreLayer, agentConnectionsLayer, selectionHubLayer)),
     Layer.provideMerge(projectsLayer),
     Layer.provideMerge(projectDatabaseLayer),
     Layer.provideMerge(openProjectsLayer),

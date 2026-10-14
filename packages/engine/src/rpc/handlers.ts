@@ -1,6 +1,11 @@
 import { UnframedError, UnframedRpcs, unframedError, type ResultRecipe } from "@unframed/contracts";
 import { connectionSetup } from "@unframed/domain";
 import { AgentConnections } from "../agentConnections/layer.ts";
+import { SelectionHub } from "../selection/liveSelection.ts";
+import { projectSlug } from "@unframed/domain";
+import type { SelectionApply } from "@unframed/contracts";
+import * as Queue from "effect/Queue";
+import * as Stream from "effect/Stream";
 import { errorText } from "../log.ts";
 import type { TLRecord } from "@tldraw/tlschema";
 import * as Effect from "effect/Effect";
@@ -50,6 +55,7 @@ export const rpcHandlersLayer = UnframedRpcs.toLayer(
     const oauth = yield* OAuth;
     const artifacts = yield* Artifacts;
     const connections = yield* AgentConnections;
+    const selectionHub = yield* SelectionHub;
     const legacy = legacyImportMethods(yield* ProjectDatabase, projects);
     const context = yield* Effect.context<SettingsStore | Projects | Native>();
 
@@ -83,6 +89,18 @@ export const rpcHandlersLayer = UnframedRpcs.toLayer(
       "files.reveal": (input) => revealFiles(input).pipe(Effect.provideContext(context)),
       "files.path": (input) => filePath(input).pipe(Effect.provideContext(context)),
       "files.copy": (input) => Effect.map(media.copy(input.project, input.file, input.from), (file) => ({ file })),
+      "selection.report": ({ project, windowId, shapeIds }) =>
+        Effect.as(
+          Effect.sync(() => selectionHub.report(projectSlug(project), windowId, shapeIds)),
+          {},
+        ),
+      "selection.subscribe": ({ project, windowId }) =>
+        Stream.callback<SelectionApply, UnframedError>((queue) =>
+          Effect.gen(function* () {
+            const detach = selectionHub.attach(projectSlug(project), windowId, (item) => Queue.offerUnsafe(queue, item));
+            yield* Effect.addFinalizer(() => Effect.sync(detach));
+          }),
+        ),
       "agentConnections.list": () => Effect.sync(() => ({ connections: connections.book.list() })),
       "agentConnections.create": ({ name, client }) =>
         Effect.tryPromise({ try: () => connections.book.create({ name, client }), catch: asUnframed }).pipe(

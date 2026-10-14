@@ -97,6 +97,11 @@ export const describeTool = (input: { readonly toolName: string; readonly itemTy
     switch (own) {
       case "canvas_read":
         return { label: "Read the canvas", action: "tool" };
+      case "canvas_select": {
+        // A selection is not part of the canvas, so the row says Revert leaves it alone (spec 14).
+        const count = Array.isArray(toolInput.shapeIds) ? toolInput.shapeIds.length : 0;
+        return { label: count === 0 ? "Cleared the selection. Revert does not undo a selection." : `Selected ${plural(count, "shape")}. Revert does not undo a selection.`, action: "tool" };
+      }
       case "canvas_write": {
         const ops = Array.isArray(toolInput.ops) ? toolInput.ops.length : 0;
         return { label: `Changed the canvas (${plural(ops, "change")})`, action: "canvas" };

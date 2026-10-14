@@ -24,6 +24,7 @@ import {
 import { ArtifactOpenLive, ArtifactSnapshots, MotionRenderStart, MotionRenderStatus, MotionUpload } from "./artifacts.ts";
 import { LegacyImportMarkSeen, LegacyImportReport, LegacyImportRetry, LegacyImportStatus } from "./legacy.ts";
 import { AgentConnectionsCreate, AgentConnectionsCreateAnswer, AgentConnectionsListAnswer, AgentConnectionsRevoke } from "./agentConnections.ts";
+import { SelectionApply, SelectionReport, SelectionSubscribe } from "./selection.ts";
 
 const Empty = Schema.Struct({});
 
@@ -44,6 +45,20 @@ export const AgentConnectionsRevokeRpc = Rpc.make("agentConnections.revoke", {
   payload: AgentConnectionsRevoke,
   success: Empty,
   error: UnframedError,
+});
+
+/** Spec 14: a window reports its selection, and the engine asks it to select shapes. */
+export const SelectionReportRpc = Rpc.make("selection.report", {
+  payload: SelectionReport,
+  success: Empty,
+  error: UnframedError,
+});
+
+export const SelectionSubscribeRpc = Rpc.make("selection.subscribe", {
+  payload: SelectionSubscribe,
+  success: SelectionApply,
+  error: UnframedError,
+  stream: true,
 });
 
 export const ServerHealth = Rpc.make("server.health", {
@@ -343,5 +358,7 @@ export const UnframedRpcs = RpcGroup.make(
   AgentConnectionsList,
   AgentConnectionsCreateRpc,
   AgentConnectionsRevokeRpc,
+  SelectionReportRpc,
+  SelectionSubscribeRpc,
 );
 export type UnframedRpcs = typeof UnframedRpcs;
