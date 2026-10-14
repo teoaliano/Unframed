@@ -64,16 +64,21 @@
  * data-unframed-theme, and these variables read the tokens, which change with the scheme, so
  * its panel is the card it sits on. :root outranks DialKit's own .dialkit-root and
  * [data-theme="light"] rules, which load after this file with the first panel.
+ *
+ * The controls are the kit's fields and buttons: a fill of --background with a --input border
+ * (the kit's Input), --accent for the hover and pressed states, the kit's control radius, and
+ * the kit's ring for focus. Its numbers and colour values use the app's mono font, as the kit's
+ * Input does with font="mono".
  */
 :root .dialkit-root[data-theme] {
   --dial-glass-bg: var(--card);
   --dial-dropdown-bg: var(--popover);
-  --dial-surface: var(--accent);
-  --dial-surface-hover: color-mix(in srgb, var(--foreground) 8%, transparent);
-  --dial-surface-active: color-mix(in srgb, var(--foreground) 12%, transparent);
+  --dial-surface: var(--background);
+  --dial-surface-hover: var(--accent);
+  --dial-surface-active: var(--accent);
   --dial-surface-subtle: var(--border);
-  --dial-border: var(--border);
-  --dial-border-hover: color-mix(in srgb, var(--foreground) 20%, transparent);
+  --dial-border: var(--input);
+  --dial-border-hover: var(--muted-foreground);
   --dial-text-root: var(--foreground);
   --dial-text-focus: var(--foreground);
   --dial-text-primary: var(--foreground);
@@ -83,10 +88,89 @@
   --dial-text-tertiary: var(--muted-foreground);
   --dial-focus-ring: var(--ring);
   --dial-radius: var(--control-radius);
+  --dial-row-height: 2rem;
+  --dial-row-gap: 0.375rem;
+  --dial-shadow-dropdown: 0 4px 16px rgb(0 0 0 / 8%);
   font-family: var(--font-sans);
 }
 
 /* The editor's Parameters column insets its header and its prompt box 10 px: DialKit's panel matches. */
 :root .dialkit-root[data-theme] .dialkit-panel-inline {
   padding: 10px;
+}
+
+/* The kit's type: 14 px labels and values, not DialKit's 13 px. */
+:root .dialkit-root[data-theme]
+  :is(
+    .dialkit-folder-title,
+    .dialkit-slider-label,
+    .dialkit-slider-value,
+    .dialkit-slider-input,
+    .dialkit-segmented-button,
+    .dialkit-toggle-label,
+    .dialkit-button,
+    .dialkit-action-button,
+    .dialkit-labeled-control-label,
+    .dialkit-text-label,
+    .dialkit-text-input,
+    .dialkit-select-label,
+    .dialkit-select-trigger,
+    .dialkit-select-value,
+    .dialkit-select-option,
+    .dialkit-color-label,
+    .dialkit-color-value,
+    .dialkit-image-control,
+    .dialkit-preset-trigger,
+    .dialkit-preset-label
+  ) {
+  font-size: 0.875rem;
+  font-family: var(--font-sans);
+}
+
+/* Numbers, colour values and pad values read as the kit's mono fields. */
+:root .dialkit-root[data-theme]
+  :is(.dialkit-slider-value, .dialkit-slider-input, .dialkit-color-value, .dialkit-pad-value) {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+/* The kit's focus ring, on every control DialKit focuses. */
+:root .dialkit-root[data-theme] :where(button, [role="slider"], [role="button"], .dialkit-color-plane, .dialkit-pad-surface):focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 1px;
+}
+
+/* A control's own edge, as the kit's Input draws it. */
+:root .dialkit-root[data-theme] :is(.dialkit-slider, .dialkit-text-control, .dialkit-select-trigger, .dialkit-preset-trigger, .dialkit-color-control, .dialkit-labeled-control, .dialkit-image-control, .dialkit-toggle) {
+  border: 1px solid var(--input);
+  box-shadow: 0 1px 2px rgb(0 0 0 / 4%);
+}
+
+/* A row is the kit's row height, so a toggle's segments fit inside it rather than setting it. */
+:root .dialkit-root[data-theme] .dialkit-toggle {
+  height: var(--dial-row-height);
+  padding: 0 12px;
+}
+
+:root .dialkit-root[data-theme] .dialkit-toggle .dialkit-segmented {
+  flex: none;
+  padding: 2px;
+}
+
+:root .dialkit-root[data-theme] .dialkit-segmented-button {
+  height: 1.25rem;
+  padding: 0 8px;
+  line-height: 1.25rem;
+}
+
+/* A slider's label and value sit centred on the row: the flex box centres the glyphs, where a translate
+   offset them by the font's own metrics. */
+:root .dialkit-root[data-theme] :is(.dialkit-slider-label, .dialkit-slider-value) {
+  top: 0;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  transform: none;
+  padding-bottom: 0;
+  border-bottom: 0;
 }

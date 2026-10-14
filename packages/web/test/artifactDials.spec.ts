@@ -178,10 +178,16 @@ test("DialKit follows the app's scheme in the kit's tokens, as one card with its
       // The same fill as the card around it: one surface, not a dark block on a light card.
       await expectToken(panel, "background-color", "--card");
       await expectToken(card, "background-color", "--card");
-      await expectToken(dials.locator(".dialkit-slider"), "background-color", "--accent");
+      // A control is the kit's field: the --background fill, under the --input border.
+      await expectToken(dials.locator(".dialkit-slider"), "background-color", "--background");
+      await expectToken(dials.locator(".dialkit-slider"), "border-top-color", "--input");
       await expectToken(dials.locator(".dialkit-folder-title-root"), "color", "--foreground");
       await expectToken(dials.locator(".dialkit-slider-label"), "color", "--muted-foreground");
       expect(await styleOf(panel, "font-family")).toBe(await styleOf(page.locator("body"), "font-family"));
+      // The kit's type: the app's sans for labels, 14 px as the kit's text-sm, and the mono for numbers.
+      expect(await styleOf(dials.locator(".dialkit-slider-label"), "font-size")).toBe("14px");
+      expect(await styleOf(dials.locator(".dialkit-slider-label"), "font-family")).toBe(await styleOf(page.locator("body"), "font-family"));
+      expect(await styleOf(dials.locator(".dialkit-slider-value"), "font-family")).toMatch(/mono/i);
     });
   };
 
