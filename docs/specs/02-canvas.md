@@ -279,7 +279,7 @@ Custom shape props and every later change to them use tldraw's shape migrations,
 
 ### Empty pages and motions
 
-- Custom shapes with free resize, 180 × 96 to 900 × 900, default 480 × 320. A card frame with the kind icon centred and the kind word ("Page" or "Motion") as the label when `file` is empty, and the title as the label above the top-left when set (spec 06: `@<name>` once a person has named it). Spec 09 adds the empty state's Agent button (which opens spec 08's Agent tray), renders the content and opens the editor on double-click.
+- Custom shapes with free resize, at least 180 × 96 with no upper limit, default 480 × 320. The frame is the page's or motion's layout size, so content lays out at the width the frame has. A card frame with the kind icon centred and the kind word ("Page" or "Motion") as the label when `file` is empty, and the title as the label above the top-left when set (spec 06: `@<name>` once a person has named it). Spec 09 adds the empty state's Agent button (which opens spec 08's Agent tray), renders the content and opens the editor on double-click.
 
 ### Context menu
 
@@ -384,7 +384,7 @@ The kit's toasts (spec 12, Base UI underneath) at the bottom start corner, above
 | prompt minimum box | 40 × 28 |
 | media width | 140 to 900; height at least 100 |
 | group size | 180 × 96 to 4000 × 4000 |
-| artifact size | 180 × 96 to 900 × 900 |
+| artifact size | at least 180 × 96; no maximum |
 | video file | 25 MB |
 | upload body | 500 MB |
 | mention preview | 24 characters |
