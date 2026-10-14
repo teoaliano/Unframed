@@ -69,6 +69,8 @@ export class ProviderService {
     const stale = this.sessions.get(chat.id);
     if (stale) this.forget(stale);
     const provider = chat.modelSelection.provider;
+    // An outside chat runs no agent of Unframed's, so no session may start for it.
+    if (provider === "outside") throw new Error("An outside chat has no agent of Unframed's to run.");
     const adapter = this.options.adapterFor(provider);
     const token = this.options.tokens.issue({ project, chatId: chat.id });
     const runtime = engine.sessionRuntime(chat.id);

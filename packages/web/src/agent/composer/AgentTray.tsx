@@ -1,6 +1,7 @@
 import type { ChatAttachment, ModelSelection } from "@unframed/contracts";
 import {
   actionablePlan,
+  agentSelectionOf,
   continuableChat,
   DEFAULT_RUNTIME_MODE,
   implementPlanText,
@@ -147,7 +148,7 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
 
   /** The model a message runs on: the chat's, or for a new chat the one picked here, else the first ready provider's default. */
   const selection: ModelSelection = useMemo(
-    () => chat?.modelSelection ?? draftModel ?? { provider: ready[0] ?? "claude", model: "", traits: {} },
+    () => (chat ? agentSelectionOf(chat.modelSelection) : undefined) ?? draftModel ?? { provider: ready[0] ?? "claude", model: "", traits: {} },
     [chat?.modelSelection, draftModel, ready],
   );
   const runtimeMode = chat?.runtimeMode ?? draftRuntime;
@@ -440,13 +441,16 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
     if (!chat || !planFollowUp || sending) return;
     const message = { text: implementPlanText(planFollowUp.planMarkdown), selection: [], attachments: [] };
     const source = { sourceProposedPlan: { threadId: chat.id, planId: planFollowUp.id } };
+    // A plan belongs to an in-app chat; an outside chat has no plan to implement.
+    const planSelection = agentSelectionOf(chat.modelSelection);
+    if (planSelection === undefined) return;
     setSending(true);
     client.setUi({ error: undefined });
     try {
       if (inNewChat) {
         const target = await createChat(
           client,
-          { modelSelection: chat.modelSelection, runtimeMode: chat.runtimeMode, interactionMode: "default", tags: chat.tags, title: implementPlanTitle(planFollowUp.planMarkdown) },
+          { modelSelection: planSelection, runtimeMode: chat.runtimeMode, interactionMode: "default", tags: chat.tags, title: implementPlanTitle(planFollowUp.planMarkdown) },
           message.text,
         );
         await sendMessage(client, target, message, source);

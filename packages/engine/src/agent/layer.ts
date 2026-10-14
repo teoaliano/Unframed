@@ -17,7 +17,7 @@ import { SettingsStore } from "../settingsStore.ts";
 import { AttachmentRefused } from "./attachmentStore.ts";
 import { realAdapter } from "./adapters/real.ts";
 import { ProviderDetection } from "./detection.ts";
-import { mcpRoute, type OutsideProject } from "./mcp.ts";
+import { mcpRoute, refusal, type OutsideProject } from "./mcp.ts";
 import { AgentConnections } from "../agentConnections/layer.ts";
 import { PreferencesStore } from "../preferencesStore.ts";
 import { Projects } from "../projects.ts";
@@ -99,6 +99,7 @@ export const agentsLayer = Layer.effect(
       dataDir: config.dataDir,
       testAgentScript: config.testAgentScript,
       idleMs: config.testAgentIdleMs,
+      outsideTurnIdleMs: config.outsideTurnIdleMs,
       uploadUrlTtlMs: config.testUploadUrlTtlMs,
       agentDebug: config.agentDebug,
       projectFolder: async (project) => {
@@ -188,6 +189,13 @@ export const agentsLayer = Layer.effect(
         mcpRoute(runtime.tokens, runtime.registry, undefined, {
           book: connections.book,
           listProjects: () => outsideProjects(),
+          tools: () => runtime.registry.list(),
+          projectSlug: async (name) => {
+            const slug = projectSlug(name);
+            const names = await projects.list.pipe(Effect.runPromise);
+            return names.includes(slug) ? slug : undefined;
+          },
+          call: (call) => runtime.outside.call(call),
         }),
         runtime.attachments.route(),
       ],

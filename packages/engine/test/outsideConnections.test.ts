@@ -115,7 +115,7 @@ describe("the MCP endpoint with a connection token", () => {
     expect(first.headers["mcp-session-id"]).not.toBe(second.headers["mcp-session-id"]);
   });
 
-  it("lists projects_list alone for now, and answers each project with its folder and the active one", async () => {
+  it("lists projects_list and every Unframed tool, and answers each project with its folder and the active one", async () => {
     const engine = await startEngine();
     const { token } = await connect(engine);
     const rpc = await engine.rpc();
@@ -125,7 +125,7 @@ describe("the MCP endpoint with a connection token", () => {
     const session = await openSession(engine, token);
 
     const listed = await engine.request("/mcp", mcpPost(token, rpcBody(2, "tools/list"), { "mcp-session-id": session }));
-    expect(listed.json().result.tools.map((tool: { name: string }) => tool.name)).toEqual(["projects_list"]);
+    expect(listed.json().result.tools.map((tool: { name: string }) => tool.name)[0]).toBe("projects_list");
 
     const called = await engine.request("/mcp", mcpPost(token, rpcBody(3, "tools/call", { name: "projects_list", arguments: {} }), { "mcp-session-id": session }));
     const payload = JSON.parse(called.json().result.content[0].text);
@@ -135,11 +135,11 @@ describe("the MCP endpoint with a connection token", () => {
     expect(payload.projects[1]).toMatchObject({ active: false });
   });
 
-  it("refuses a tool the outside list does not carry yet", async () => {
+  it("refuses a tool name the outside list does not carry", async () => {
     const engine = await startEngine();
     const { token } = await connect(engine);
     const session = await openSession(engine, token);
-    const answer = await engine.request("/mcp", mcpPost(token, rpcBody(2, "tools/call", { name: "canvas_read", arguments: {} }), { "mcp-session-id": session }));
+    const answer = await engine.request("/mcp", mcpPost(token, rpcBody(2, "tools/call", { name: "not_a_tool", arguments: {} }), { "mcp-session-id": session }));
     expect(answer.json().error).toMatchObject({ code: -32602 });
   });
 
@@ -183,11 +183,22 @@ describe("the MCP endpoint with a connection token", () => {
 const listWith = (running: TestEngine, token: string, session: string) =>
   running.request("/mcp", mcpPost(token, rpcBody(9, "tools/list"), { "mcp-session-id": session }));
 
+/** The discovery file is written before the ready message, so it exists once the engine is ready. */
+const discoveryOf = async (dataDir: string): Promise<{ port: number; pid: number; version: string; startedAt: string }> => {
+  const path = join(dataDir, "mcp-endpoint.json");
+  for (let attempt = 0; attempt < 100; attempt++) {
+    const text = await readFile(path, "utf8").catch(() => undefined);
+    if (text !== undefined) return JSON.parse(text);
+    await new Promise((resolve) => setTimeout(resolve, 20));
+  }
+  throw new Error("the discovery file was never written");
+};
+
 describe("the discovery file", () => {
   it("names the API port, the pid and the version, is owner-only, and is removed on SIGTERM", async () => {
     const engine = await startEngine();
     const path = join(engine.dataDir, "mcp-endpoint.json");
-    const found = JSON.parse(await readFile(path, "utf8"));
+    const found = await discoveryOf(engine.dataDir);
     expect(found).toMatchObject({ port: engine.port, pid: engine.pid });
     expect(typeof found.version).toBe("string");
     expect(typeof found.startedAt).toBe("string");
@@ -201,7 +212,7 @@ describe("the discovery file", () => {
     const first = await startEngine({ dataDir });
     await first.stop("SIGTERM");
     const second = await startEngine({ dataDir });
-    expect(JSON.parse(await readFile(join(dataDir, "mcp-endpoint.json"), "utf8")).port).toBe(second.port);
+    expect((await discoveryOf(dataDir)).port).toBe(second.port);
   });
 });
 

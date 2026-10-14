@@ -6,7 +6,7 @@ import { readJsonBody } from "../http/body.ts";
 import { sendJson } from "../http/respond.ts";
 import { ENGINE_VERSION } from "./version.ts";
 import { errorText } from "../log.ts";
-import type { ConnectionBook } from "../agentConnections/book.ts";
+import type { ConnectionBook, ConnectionRecord } from "../agentConnections/book.ts";
 
 /** The one tool an outside connection has before the canvas tools join the list (spec 14). */
 export const PROJECTS_LIST = "projects_list";
@@ -105,11 +105,17 @@ const toolText = (answer: ToolAnswer) => ({
   ...(answer.isError ? { isError: true } : {}),
 });
 
-/** What an outside connection reaches besides the tools this file registers: the projects and the book of connections. */
+/** What an outside connection reaches: the projects, the Unframed tools (each taking a `project`), and the book of connections. */
 export interface OutsideRoute {
   readonly book: ConnectionBook;
   /** Every project in the output folder, sorted by name, with its folder and whether it is the active one. */
   readonly listProjects: () => Promise<ReadonlyArray<OutsideProject>>;
+  /** The Unframed tools an outside session calls. Their schemas gain a required `project`. */
+  readonly tools: () => ReadonlyArray<McpTool>;
+  /** The slug of the project a name names, or `undefined` when no project has that name. */
+  readonly projectSlug: (name: string) => Promise<string | undefined>;
+  /** One call from an outside session into one project's chat. */
+  readonly call: (call: { connection: ConnectionRecord; sessionId: string; slug: string; tool: McpTool; args: Record<string, unknown> }) => Promise<ToolAnswer>;
 }
 
 export interface OutsideProject {
@@ -143,7 +149,7 @@ export const mcpRoute =
         sendJson(res, 401, { error: "A valid session token is required." }, { "www-authenticate": "Bearer" });
         return true;
       }
-      return outsideRequest(req, res, connection.id, outside);
+      return outsideRequest(req, res, connection, outside);
     }
     if (req.method === "DELETE") {
       req.resume();
@@ -173,8 +179,8 @@ export const mcpRoute =
   };
 
 /** One request from an outside connection: `initialize` opens a session, every other request must name one. */
-const outsideRequest = async (req: http.IncomingMessage, res: http.ServerResponse, connectionId: string, outside: OutsideRoute): Promise<boolean> => {
-  outside.book.touch(connectionId);
+const outsideRequest = async (req: http.IncomingMessage, res: http.ServerResponse, connection: ConnectionRecord, outside: OutsideRoute): Promise<boolean> => {
+  outside.book.touch(connection.id);
   const sessionHeader = req.headers[SESSION_HEADER];
   const sentSession = typeof sessionHeader === "string" && UUID.test(sessionHeader) ? sessionHeader : undefined;
   if (req.method === "DELETE") {
@@ -203,7 +209,7 @@ const outsideRequest = async (req: http.IncomingMessage, res: http.ServerRespons
   const headers = opensSession ? { [SESSION_HEADER]: sessionId } : {};
   const answers: unknown[] = [];
   for (const message of batch) {
-    const answer = await handleOutside(message, outside);
+    const answer = await handleOutside(message, outside, { connection, sessionId });
     if (answer !== undefined) answers.push(answer);
   }
   if (answers.length === 0) {
@@ -215,8 +221,24 @@ const outsideRequest = async (req: http.IncomingMessage, res: http.ServerRespons
   return true;
 };
 
-/** The outside tool list. Spec 14 grows it: `projects_list` first, then every tool with a required `project`. */
-const handleOutside = async (message: JsonRpcRequest, outside: OutsideRoute): Promise<unknown> => {
+/** A tool's schema with the required `project` every outside call names (spec 14, "The outside tool list"). */
+const withProject = (tool: McpTool) => {
+  const schema = tool.inputSchema as { properties?: Record<string, unknown>; required?: string[] };
+  return {
+    name: tool.name,
+    description: tool.description,
+    inputSchema: {
+      ...schema,
+      properties: { ...(schema.properties ?? {}), project: { type: "string", description: "The project's name, as projects_list reports it." } },
+      required: [...(schema.required ?? []), "project"],
+    },
+  };
+};
+
+const PROJECTS_LIST_TOOL = { name: PROJECTS_LIST, description: OUTSIDE_PROJECTS_LIST_DESCRIPTION, inputSchema: { type: "object", properties: {}, additionalProperties: false } };
+
+/** The outside tool list: `projects_list` first, then every Unframed tool with a required `project`. */
+const handleOutside = async (message: JsonRpcRequest, outside: OutsideRoute, session: { connection: ConnectionRecord; sessionId: string }): Promise<unknown> => {
   if (typeof message !== "object" || message === null || typeof message.method !== "string") return rpcError(null, -32600, "Invalid request");
   const isNotification = message.id === undefined || message.id === null;
   switch (message.method) {
@@ -232,15 +254,27 @@ const handleOutside = async (message: JsonRpcRequest, outside: OutsideRoute): Pr
     case "ping":
       return rpcResult(message.id, {});
     case "tools/list":
-      return rpcResult(message.id, {
-        tools: [{ name: PROJECTS_LIST, description: OUTSIDE_PROJECTS_LIST_DESCRIPTION, inputSchema: { type: "object", properties: {}, additionalProperties: false } }],
-      });
+      return rpcResult(message.id, { tools: [PROJECTS_LIST_TOOL, ...outside.tools().map(withProject)] });
     case "tools/call": {
-      const params = (message.params ?? {}) as { name?: unknown };
-      if (params.name !== PROJECTS_LIST) return rpcError(message.id, -32602, `Unknown tool: ${String(params.name)}`);
+      const params = (message.params ?? {}) as { name?: unknown; arguments?: unknown };
+      const args = typeof params.arguments === "object" && params.arguments !== null ? (params.arguments as Record<string, unknown>) : {};
+      if (params.name === PROJECTS_LIST) {
+        try {
+          const projects = await outside.listProjects();
+          return rpcResult(message.id, toolText({ value: { projects } }));
+        } catch (error) {
+          return rpcResult(message.id, toolText({ value: { error: errorText(error) }, isError: true }));
+        }
+      }
+      const tool = outside.tools().find((candidate) => candidate.name === params.name);
+      if (!tool) return rpcError(message.id, -32602, `Unknown tool: ${String(params.name)}`);
+      const { project, ...rest } = args;
+      const name = typeof project === "string" ? project : "";
       try {
-        const projects = await outside.listProjects();
-        return rpcResult(message.id, toolText({ value: { projects } }));
+        const slug = name === "" ? undefined : await outside.projectSlug(name);
+        if (slug === undefined) return rpcResult(message.id, toolText(refusal(`no project named "${name}"; call projects_list for the names`)));
+        const answer = await outside.call({ connection: session.connection, sessionId: session.sessionId, slug, tool, args: rest });
+        return rpcResult(message.id, toolText(answer));
       } catch (error) {
         return rpcResult(message.id, toolText({ value: { error: errorText(error) }, isError: true }));
       }

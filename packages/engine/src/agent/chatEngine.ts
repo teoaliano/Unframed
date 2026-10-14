@@ -149,6 +149,11 @@ export class ChatEngine {
     return this.current.chats[id];
   }
 
+  /** Every chat of the project, deleted ones included. */
+  chats(): Chat[] {
+    return Object.values(this.current.chats);
+  }
+
   /** Every committed event past `after`, of one chat when `chatId` is given. */
   eventsAfter(after: number, chatId?: string): ChatEvent[] {
     const rows =

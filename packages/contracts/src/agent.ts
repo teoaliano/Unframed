@@ -4,9 +4,14 @@
  * `thread.*` spelling; everything a person reads says "chat".
  */
 import * as Schema from "effect/Schema";
+import { ConnectionClient } from "./agentConnections.ts";
 
 export const AgentProvider = Schema.Literals(["claude", "codex"]);
 export type AgentProvider = typeof AgentProvider.Type;
+
+/** A chat's provider: an in-app agent, or `outside` for a chat an outside agent made (spec 14). */
+export const ChatProvider = Schema.Literals(["claude", "codex", "outside"]);
+export type ChatProvider = typeof ChatProvider.Type;
 
 export const RuntimeMode = Schema.Literals(["approval-required", "auto-accept-edits", "auto", "full-access"]);
 export type RuntimeMode = typeof RuntimeMode.Type;
@@ -28,6 +33,14 @@ export const ModelSelection = Schema.Struct({
   traits: Traits,
 });
 export type ModelSelection = typeof ModelSelection.Type;
+
+/** A chat's stored selection: an outside chat's is `outside`, with no model (spec 14). Commands never carry it. */
+export const ChatModelSelection = Schema.Struct({
+  provider: ChatProvider,
+  model: Schema.String,
+  traits: Traits,
+});
+export type ChatModelSelection = typeof ChatModelSelection.Type;
 
 // ---------------------------------------------------------------------------------------
 // Provider statuses.
@@ -259,6 +272,14 @@ export const ChatSession = Schema.Struct({
   lastError: Schema.NullOr(Schema.String),
 });
 
+/** The connection and session an outside chat shows calls from (spec 14). */
+export const OutsideChatRef = Schema.Struct({
+  connectionId: Schema.String,
+  sessionId: Schema.String,
+  client: ConnectionClient,
+});
+export type OutsideChatRef = typeof OutsideChatRef.Type;
+
 export const Chat = Schema.Struct({
   id: Schema.String,
   projectId: Schema.String,
@@ -266,9 +287,10 @@ export const Chat = Schema.Struct({
   updatedAt: Schema.String,
   deletedAt: Schema.NullOr(Schema.String),
   title: Schema.String,
+  outside: Schema.optionalKey(OutsideChatRef),
   titledBy: Schema.NullOr(Schema.Literals(["user", "agent"])),
   tags: Schema.Array(Schema.String),
-  modelSelection: ModelSelection,
+  modelSelection: ChatModelSelection,
   runtimeMode: RuntimeMode,
   interactionMode: InteractionMode,
   lastClock: Schema.NullOr(Schema.Number),
@@ -287,7 +309,8 @@ export const ChatSummary = Schema.Struct({
   titledBy: Schema.NullOr(Schema.Literals(["user", "agent"])),
   preview: Schema.String,
   tags: Schema.Array(Schema.String),
-  provider: AgentProvider,
+  provider: ChatProvider,
+  outside: Schema.optionalKey(OutsideChatRef),
   model: Schema.String,
   status: Schema.Literals(["running", "failed", "idle"]),
   hasPendingApproval: Schema.Boolean,
