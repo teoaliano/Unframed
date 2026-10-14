@@ -23,8 +23,28 @@ import {
 } from "./agent.ts";
 import { ArtifactOpenLive, ArtifactSnapshots, MotionRenderStart, MotionRenderStatus, MotionUpload } from "./artifacts.ts";
 import { LegacyImportMarkSeen, LegacyImportReport, LegacyImportRetry, LegacyImportStatus } from "./legacy.ts";
+import { AgentConnectionsCreate, AgentConnectionsCreateAnswer, AgentConnectionsListAnswer, AgentConnectionsRevoke } from "./agentConnections.ts";
 
 const Empty = Schema.Struct({});
+
+/** Spec 14: the Settings block lists, makes and revokes the connections an outside agent uses. */
+export const AgentConnectionsList = Rpc.make("agentConnections.list", {
+  success: AgentConnectionsListAnswer,
+  error: UnframedError,
+});
+
+/** The token is in this answer once, and the engine keeps only its hash. */
+export const AgentConnectionsCreateRpc = Rpc.make("agentConnections.create", {
+  payload: AgentConnectionsCreate,
+  success: AgentConnectionsCreateAnswer,
+  error: UnframedError,
+});
+
+export const AgentConnectionsRevokeRpc = Rpc.make("agentConnections.revoke", {
+  payload: AgentConnectionsRevoke,
+  success: Empty,
+  error: UnframedError,
+});
 
 export const ServerHealth = Rpc.make("server.health", {
   success: Health,
@@ -320,5 +340,8 @@ export const UnframedRpcs = RpcGroup.make(
   LegacyImportReport,
   LegacyImportMarkSeen,
   LegacyImportRetry,
+  AgentConnectionsList,
+  AgentConnectionsCreateRpc,
+  AgentConnectionsRevokeRpc,
 );
 export type UnframedRpcs = typeof UnframedRpcs;

@@ -1,6 +1,12 @@
-import { resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { acceptTestOrigin } from "@unframed/domain";
-import { envFilePath, preferencesFilePath, resolveDataDir } from "./paths.ts";
+import { agentConnectionsFilePath, discoveryFilePath, envFilePath, preferencesFilePath, resolveDataDir } from "./paths.ts";
+
+const shimEntryPath = (): string => {
+  const here = fileURLToPath(import.meta.url);
+  return here.endsWith(".js") ? join(dirname(here), "mcp.js") : join(dirname(here), "mcpShim.ts");
+};
 
 /** `UNFRAMED_TEST_RENDERER` (spec 01's table): stands in for the motion renderer and the Chrome search. */
 export type TestRenderer = "ok" | "fail" | "no-chrome";
@@ -16,6 +22,12 @@ export interface EngineConfig {
   readonly dataDir: string;
   readonly envPath: string;
   readonly preferencesPath: string;
+  readonly agentConnectionsPath: string;
+  readonly discoveryPath: string;
+  /** The stdio shim the outside setups run: beside `main.ts` in a clone, beside the bundle's `index.js` when published. */
+  readonly shimPath: string;
+  /** Whether Electron runs the engine as Node, so the shim needs `ELECTRON_RUN_AS_NODE` too (spec 14). */
+  readonly runAsNode: boolean;
   /** `UNFRAMED_CLIENT_DIST`, resolved. Also the marker that the engine is hosted. */
   readonly clientDist: string | undefined;
   /** Every OpenRouter URL the engine builds starts with this. */
@@ -81,6 +93,10 @@ export const loadConfig = (
       dataDir,
       envPath: envFilePath(dataDir),
       preferencesPath: preferencesFilePath(dataDir),
+      agentConnectionsPath: agentConnectionsFilePath(dataDir),
+      discoveryPath: discoveryFilePath(dataDir),
+      shimPath: shimEntryPath(),
+      runAsNode: env.ELECTRON_RUN_AS_NODE === "1",
       clientDist: clientDist === undefined ? undefined : resolve(clientDist),
       openRouterOrigin,
       oauthBounce: nonEmpty(env.UNFRAMED_OAUTH_BOUNCE),

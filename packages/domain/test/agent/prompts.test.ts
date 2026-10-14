@@ -72,3 +72,11 @@ describe("the agent's model-facing text is the assets' text", () => {
     expect(CLAUDE_CATALOGUE).toEqual(catalogue.models);
   });
 });
+
+describe("the outside agent's text is the asset's text", () => {
+  it("holds the projects_list description and the instructions to their blocks", async () => {
+    const { OUTSIDE_AGENT_INSTRUCTIONS, OUTSIDE_PROJECTS_LIST_DESCRIPTION } = await import("../../src/index.ts");
+    expect(OUTSIDE_PROJECTS_LIST_DESCRIPTION).toBe(blocks("outside-agent.md")[0]);
+    expect(OUTSIDE_AGENT_INSTRUCTIONS).toBe(blocks("outside-agent.md")[1]);
+  });
+});

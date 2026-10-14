@@ -6,6 +6,8 @@ import * as Layer from "effect/Layer";
 import * as ManagedRuntime from "effect/ManagedRuntime";
 import * as RpcServer from "effect/unstable/rpc/RpcServer";
 import { CanvasRooms, canvasRoomsLayer } from "./canvas/rooms.ts";
+import { agentConnectionsLayer } from "./agentConnections/layer.ts";
+import { removeDiscovery, writeDiscovery } from "./agentConnections/discovery.ts";
 import { loadConfig } from "./config.ts";
 import { MediaStore, mediaStoreLayer } from "./media/mediaStore.ts";
 import { catalogueLayer } from "./openRouter/catalogue.ts";
@@ -118,7 +120,7 @@ export const startEngine = async (host: EngineHost): Promise<RunningEngine> => {
     Layer.provideMerge(mediaStoreLayer),
     Layer.provideMerge(canvasRoomsLayer),
     Layer.provideMerge(nativeLayer),
-    Layer.provideMerge(preferencesStoreLayer),
+    Layer.provideMerge(Layer.mergeAll(preferencesStoreLayer, agentConnectionsLayer)),
     Layer.provideMerge(projectsLayer),
     Layer.provideMerge(projectDatabaseLayer),
     Layer.provideMerge(openProjectsLayer),
@@ -177,6 +179,7 @@ export const startEngine = async (host: EngineHost): Promise<RunningEngine> => {
 
   agents.runtime.setApiPort(apiPort);
   oauth.setApiPort(apiPort);
+  await writeDiscovery(config.discoveryPath, apiPort, new Date());
   process.stdout.write(banner(apiPort, settings));
   host.send?.({ type: "ready", port: apiPort, previewPort });
 
@@ -184,6 +187,7 @@ export const startEngine = async (host: EngineHost): Promise<RunningEngine> => {
     const startedAt = Date.now();
     stopListening(api);
     preview.stopListening();
+    await removeDiscovery(config.discoveryPath);
     await Promise.all([sockets.closeAll(1001), rooms.closeSockets(1001)]);
     await runtime.runPromise(shutdown.runHooks(startedAt));
     api.closeAllConnections();

@@ -17,7 +17,10 @@ import { SettingsStore } from "../settingsStore.ts";
 import { AttachmentRefused } from "./attachmentStore.ts";
 import { realAdapter } from "./adapters/real.ts";
 import { ProviderDetection } from "./detection.ts";
-import { mcpRoute } from "./mcp.ts";
+import { mcpRoute, type OutsideProject } from "./mcp.ts";
+import { AgentConnections } from "../agentConnections/layer.ts";
+import { PreferencesStore } from "../preferencesStore.ts";
+import { Projects } from "../projects.ts";
 import { AgentRuntime, DispatchError } from "./runtime.ts";
 import { ArtifactTools } from "../artifacts/artifactTools.ts";
 import { Artifacts } from "../artifacts/layer.ts";
@@ -59,11 +62,30 @@ export const agentsLayer = Layer.effect(
     const detection = yield* ProviderDetection;
     const { previewPort } = yield* settings.view;
     const artifacts = yield* Artifacts;
+    const connections = yield* AgentConnections;
+    const projects = yield* Projects;
+    const preferences = yield* PreferencesStore;
     const context = yield* Effect.context<never>();
     const run = <A, E>(effect: Effect.Effect<A, E>): Promise<A> =>
       Effect.runPromiseWith(context)(effect).catch((error: unknown) => {
         throw error instanceof UnframedError ? new Error(error.message) : error;
       });
+
+    /** Every project in the output folder, sorted by name, with its folder and the active one (spec 14). */
+    const outsideProjects = (): Promise<ReadonlyArray<OutsideProject>> =>
+      run(
+        Effect.gen(function* () {
+          const names = yield* projects.list;
+          const prefs = yield* preferences.get(["project.active"]);
+          const active = typeof prefs["project.active"] === "string" ? prefs["project.active"] : undefined;
+          const entries: OutsideProject[] = [];
+          for (const name of [...names].sort()) {
+            const folder = yield* projects.folder(name);
+            if (folder !== undefined) entries.push({ name, folder, active: name === active });
+          }
+          return entries;
+        }),
+      );
 
     const preview = new PreviewTools({
       read: (project) => run(rooms.read(project)),
@@ -162,7 +184,13 @@ export const agentsLayer = Layer.effect(
           try: () => runtime.attachments.createUploadUrl(input),
           catch: (error) => (error instanceof AttachmentRefused ? unframedError("bad_request", error.message) : toUnframed(error)),
         }),
-      routes: [mcpRoute(runtime.tokens, runtime.registry), runtime.attachments.route()],
+      routes: [
+        mcpRoute(runtime.tokens, runtime.registry, undefined, {
+          book: connections.book,
+          listProjects: () => outsideProjects(),
+        }),
+        runtime.attachments.route(),
+      ],
     });
   }),
 );

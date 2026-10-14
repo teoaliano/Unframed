@@ -1,11 +1,15 @@
-import { randomBytes } from "node:crypto";
+import { randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
 import http from "node:http";
-import { timingSafeEqual } from "node:crypto";
+import { OUTSIDE_AGENT_INSTRUCTIONS, OUTSIDE_PROJECTS_LIST_DESCRIPTION } from "@unframed/domain";
 import type { Route } from "../http/api.ts";
 import { readJsonBody } from "../http/body.ts";
 import { sendJson } from "../http/respond.ts";
 import { ENGINE_VERSION } from "./version.ts";
 import { errorText } from "../log.ts";
+import type { ConnectionBook } from "../agentConnections/book.ts";
+
+/** The one tool an outside connection has before the canvas tools join the list (spec 14). */
+export const PROJECTS_LIST = "projects_list";
 
 export const MCP_PATH = "/mcp";
 export const MCP_SERVER_NAME = "unframed";
@@ -101,22 +105,45 @@ const toolText = (answer: ToolAnswer) => ({
   ...(answer.isError ? { isError: true } : {}),
 });
 
+/** What an outside connection reaches besides the tools this file registers: the projects and the book of connections. */
+export interface OutsideRoute {
+  readonly book: ConnectionBook;
+  /** Every project in the output folder, sorted by name, with its folder and whether it is the active one. */
+  readonly listProjects: () => Promise<ReadonlyArray<OutsideProject>>;
+}
+
+export interface OutsideProject {
+  readonly name: string;
+  readonly folder: string;
+  readonly active: boolean;
+}
+
+/** Spec 14: a session's id is the MCP session header `initialize` answers with a fresh UUID. */
+const SESSION_HEADER = "mcp-session-id";
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+export const SESSION_ID_SENTENCE = "Send the Mcp-Session-Id that initialize answered.";
+
 /**
  * The Unframed MCP endpoint, streamable HTTP answered as plain JSON, on the engine's origin
- * behind the loopback guard. A request without a live session token is refused with 401
- * before any tool runs.
+ * behind the loopback guard. A request without a live session token or a live connection
+ * token is refused with 401 before any tool runs. A connection token (spec 14) reaches only
+ * the outside tool list, under the session its `initialize` opened.
  */
 export const mcpRoute =
-  (tokens: McpTokens, registry: McpToolRegistry, onCall?: (binding: McpBinding) => void): Route =>
+  (tokens: McpTokens, registry: McpToolRegistry, onCall?: (binding: McpBinding) => void, outside?: OutsideRoute): Route =>
   async (req, res, url) => {
     if (url.pathname !== MCP_PATH) return false;
     const header = req.headers.authorization ?? "";
     const token = header.startsWith("Bearer ") ? header.slice("Bearer ".length).trim() : "";
     const binding = tokens.resolve(token);
     if (!binding) {
-      req.resume();
-      sendJson(res, 401, { error: "A valid session token is required." }, { "www-authenticate": "Bearer" });
-      return true;
+      const connection = outside?.book.resolve(token);
+      if (!outside || !connection) {
+        req.resume();
+        sendJson(res, 401, { error: "A valid session token is required." }, { "www-authenticate": "Bearer" });
+        return true;
+      }
+      return outsideRequest(req, res, connection.id, outside);
     }
     if (req.method === "DELETE") {
       req.resume();
@@ -144,6 +171,85 @@ export const mcpRoute =
     sendJson(res, 200, Array.isArray(body) ? answers : answers[0]);
     return true;
   };
+
+/** One request from an outside connection: `initialize` opens a session, every other request must name one. */
+const outsideRequest = async (req: http.IncomingMessage, res: http.ServerResponse, connectionId: string, outside: OutsideRoute): Promise<boolean> => {
+  outside.book.touch(connectionId);
+  const sessionHeader = req.headers[SESSION_HEADER];
+  const sentSession = typeof sessionHeader === "string" && UUID.test(sessionHeader) ? sessionHeader : undefined;
+  if (req.method === "DELETE") {
+    req.resume();
+    if (sentSession === undefined) {
+      sendJson(res, 400, { error: SESSION_ID_SENTENCE });
+      return true;
+    }
+    res.writeHead(200);
+    res.end();
+    return true;
+  }
+  if (req.method !== "POST") {
+    req.resume();
+    sendJson(res, 405, { error: "The Unframed MCP server answers POST only." }, { allow: "POST, DELETE" });
+    return true;
+  }
+  const body = (await readJsonBody(req)) as JsonRpcRequest | JsonRpcRequest[];
+  const batch = Array.isArray(body) ? body : [body];
+  const opensSession = batch.some((message) => message?.method === "initialize");
+  if (!opensSession && sentSession === undefined) {
+    sendJson(res, 400, { error: SESSION_ID_SENTENCE });
+    return true;
+  }
+  const sessionId = opensSession ? randomUUID() : sentSession!;
+  const headers = opensSession ? { [SESSION_HEADER]: sessionId } : {};
+  const answers: unknown[] = [];
+  for (const message of batch) {
+    const answer = await handleOutside(message, outside);
+    if (answer !== undefined) answers.push(answer);
+  }
+  if (answers.length === 0) {
+    res.writeHead(202, headers);
+    res.end();
+    return true;
+  }
+  sendJson(res, 200, Array.isArray(body) ? answers : answers[0], headers);
+  return true;
+};
+
+/** The outside tool list. Spec 14 grows it: `projects_list` first, then every tool with a required `project`. */
+const handleOutside = async (message: JsonRpcRequest, outside: OutsideRoute): Promise<unknown> => {
+  if (typeof message !== "object" || message === null || typeof message.method !== "string") return rpcError(null, -32600, "Invalid request");
+  const isNotification = message.id === undefined || message.id === null;
+  switch (message.method) {
+    case "initialize": {
+      const asked = (message.params as { protocolVersion?: unknown } | undefined)?.protocolVersion;
+      return rpcResult(message.id, {
+        protocolVersion: typeof asked === "string" ? asked : PROTOCOL_VERSION,
+        capabilities: { tools: { listChanged: false } },
+        serverInfo: { name: MCP_SERVER_NAME, version: ENGINE_VERSION },
+        instructions: OUTSIDE_AGENT_INSTRUCTIONS,
+      });
+    }
+    case "ping":
+      return rpcResult(message.id, {});
+    case "tools/list":
+      return rpcResult(message.id, {
+        tools: [{ name: PROJECTS_LIST, description: OUTSIDE_PROJECTS_LIST_DESCRIPTION, inputSchema: { type: "object", properties: {}, additionalProperties: false } }],
+      });
+    case "tools/call": {
+      const params = (message.params ?? {}) as { name?: unknown };
+      if (params.name !== PROJECTS_LIST) return rpcError(message.id, -32602, `Unknown tool: ${String(params.name)}`);
+      try {
+        const projects = await outside.listProjects();
+        return rpcResult(message.id, toolText({ value: { projects } }));
+      } catch (error) {
+        return rpcResult(message.id, toolText({ value: { error: errorText(error) }, isError: true }));
+      }
+    }
+    default:
+      if (isNotification) return undefined;
+      return rpcError(message.id, -32601, `Method not found: ${message.method}`);
+  }
+};
 
 const handle = async (
   message: JsonRpcRequest,
