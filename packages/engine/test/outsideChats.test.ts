@@ -1,53 +1,6 @@
 import { describe, expect, it } from "vitest";
-import type { ChatSummary } from "@unframed/contracts";
-import { PROJECT, shellChats, startAgentEngine, UNFRAMED_TOOLS, type AgentEngine } from "./agent.ts";
-
-const rpcBody = (id: number, method: string, params: unknown = {}) => ({ jsonrpc: "2.0", id, method, params });
-
-/** An outside connection and one client session of it, opened with `initialize`. */
-const outside = async (agent: AgentEngine, name = "Work laptop Claude Code") => {
-  const made = await agent.rpc.call("agentConnections.create", { name, client: "claude-code" });
-  const token = made.token as string;
-  const open = async () => {
-    const answer = await agent.engine.request("/mcp", {
-      method: "POST",
-      headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
-      body: JSON.stringify(rpcBody(1, "initialize", { protocolVersion: "2025-06-18", capabilities: {} })),
-    });
-    return answer.headers["mcp-session-id"] as string;
-  };
-  return {
-    token,
-    open,
-    /** One tool call in a session: its JSON answer and whether it was an error. */
-    async call(session: string, name: string, args: Record<string, unknown>) {
-      const answer = await agent.engine.request("/mcp", {
-        method: "POST",
-        headers: { "content-type": "application/json", authorization: `Bearer ${token}`, "mcp-session-id": session },
-        body: JSON.stringify(rpcBody(2, "tools/call", { name, arguments: args })),
-      });
-      const result = answer.json().result as { content: Array<{ text: string }>; isError?: boolean };
-      return { value: JSON.parse(result.content[0]!.text) as Record<string, any>, isError: result.isError === true };
-    },
-    async list(session: string) {
-      const answer = await agent.engine.request("/mcp", {
-        method: "POST",
-        headers: { "content-type": "application/json", authorization: `Bearer ${token}`, "mcp-session-id": session },
-        body: JSON.stringify(rpcBody(3, "tools/list")),
-      });
-      return answer.json().result.tools as Array<{ name: string; inputSchema: { required: string[] } }>;
-    },
-  };
-};
-
-/** The project's chats, from a fresh snapshot of its shell. */
-const chatsIn = async (agent: AgentEngine, project = PROJECT): Promise<ChatSummary[]> => {
-  const shell = agent.rpc.subscribe("orchestration.subscribeShell", { projectId: project });
-  await shell.next(0);
-  const found = [...shellChats(shell.values).values()];
-  await shell.close();
-  return found;
-};
+import { PROJECT, startAgentEngine, UNFRAMED_TOOLS } from "./agent.ts";
+import { chatsIn, outsideLink as outside } from "./outsideCalls.ts";
 
 describe("outside chats and turns", () => {
   it("lists projects_list first, then every Unframed tool, each with a required project", async () => {

@@ -14,6 +14,7 @@ import {
   type RuntimeEventDraft,
   type RuntimeMode,
 } from "@unframed/domain";
+import { inAppCodexOutsideOffArgs } from "@unframed/domain";
 import type { AdapterContext, ProviderAdapter, SessionStart, TitleInput, TurnInput } from "../adapter.ts";
 import { CodexRpc, CodexRpcError, initializeCodex } from "../codexRpc.ts";
 import { MCP_SERVER_NAME } from "../mcp.ts";
@@ -136,7 +137,7 @@ export const codexAdapter = (context: AdapterContext): ProviderAdapter => {
       let session: CodexSession | undefined;
       const rpc = new CodexRpc({
         executable: input.environment.executable,
-        args: ["app-server", ...codexMcpArgs(input.mcp.url)],
+        args: ["app-server", ...codexMcpArgs(input.mcp.url), ...inAppCodexOutsideOffArgs()],
         env,
         cwd: input.projectDir,
         onNotification: onNotification(input.chatId),

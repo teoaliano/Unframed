@@ -171,6 +171,7 @@ export class AgentRuntime {
         command: (agent, chatId, command) => this.internal(agent as ProjectAgent, chatId, command).then(() => undefined),
         activity: (agent, chatId, activity) => this.activity(agent as ProjectAgent, chatId, activity).then(() => undefined),
         clock: (slug) => deps.rooms.clock(slug).catch(() => null),
+        changeLog: (slug, since) => deps.rooms.changeLog(slug, since),
       },
       deps.outsideTurnIdleMs ?? OUTSIDE_TURN_IDLE_MS,
     );
@@ -254,6 +255,8 @@ export class AgentRuntime {
   }
 
   private async closeProject(agent: ProjectAgent): Promise<void> {
+    // Rename, delete, a folder move and shutdown all close the project: its open outside turns settle first (spec 14).
+    await this.outside.settleOpen(agent).catch((error: unknown) => logError(`outside turns of ${agent.slug}: ${errorText(error)}`));
     agent.closed = true;
     if (this.settledAgents.get(agent.slug) === agent) {
       this.settledAgents.delete(agent.slug);
@@ -271,6 +274,14 @@ export class AgentRuntime {
       if (chat.deletedAt !== null) continue;
       const running = chat.latestTurn?.state === "running" || chat.session?.status === "starting" || chat.session?.status === "running";
       if (!running || this.providers.has(chat.id)) continue;
+      if (chat.outside !== undefined) {
+        // An outside turn was not cut off by Unframed: the agent just stopped being heard, so it settles as completed (spec 14).
+        await this.outside.settle(agent, chat.id);
+        if (agent.engine.chat(chat.id)?.session?.status === "running") {
+          await this.internal(agent, chat.id, { type: "thread.session.set", session: { status: "ready", activeTurnId: null, lastError: null } });
+        }
+        continue;
+      }
       await this.clearRequests(agent, chat);
       if (chat.latestTurn?.state === "running") {
         await this.settle(agent, chat.id, { state: "failed", errorMessage: QUIT_MID_TURN });
@@ -307,9 +318,23 @@ export class AgentRuntime {
   }
 
 
+  /** A session of an outside client ended: its open turns settle, and its chats say so (spec 14). */
+  endOutsideSession(sessionId: string): Promise<void> {
+    return this.outside.endSession(sessionId, [...this.settledAgents.values()]);
+  }
+
+  /** A connection was revoked: its chats' open turns settle, and each says it is disconnected (spec 14). */
+  disconnectOutside(connectionId: string): Promise<void> {
+    return this.outside.disconnect(connectionId, [...this.settledAgents.values()]);
+  }
+
   /** Dispatches a command the web sent: attachments and tags are resolved against the files and the canvas first. */
   async dispatch(command: ClientCommand): Promise<{ sequence: number }> {
     const agent = await this.project(command.projectId);
+    // Reverting an open outside turn settles it first, then reverts it (spec 14). The web cannot stop an outside agent.
+    if (command.type === "thread.turn.revert" && agent.engine.chat(command.threadId)?.outside !== undefined) {
+      await this.outside.settle(agent, command.threadId);
+    }
     let resolved: ChatCommand = command;
     if (command.type === "thread.turn.start") {
       const attachments: Array<MessageAttachment | { id: string; name: string }> = [];

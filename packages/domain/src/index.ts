@@ -84,3 +84,4 @@ export { legacyIndexKey, legacyRecords, type RecordIds } from "./legacy/records.
 export { parseDataUrl, type DataUrl } from "./legacy/media.ts";
 export { convertPreset, legacyPresetLine, presetNotes, type ConvertedPreset } from "./legacy/presets.ts";
 export * from "./outside/index.ts";
+export * from "./agent/outsideServer.ts";

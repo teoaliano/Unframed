@@ -309,6 +309,7 @@ Every event carries `{eventId, provider, threadId (the chat), createdAt, turnId?
 | `systemPrompt` | `{type: "preset", preset: "claude_code", append: <Unframed instructions>}` using the text in `assets/prompts/agent-system.md` |
 | `tools` | the Claude Code preset (no restriction) |
 | `allowedTools` | every `mcp__unframed__*` name the server registers (the two canvas tools, and from spec 09 the artifact and preview tools): auto-allowed, not a restriction |
+| `disallowedTools` | `mcp__unframed-app` (spec 14): the outside connection's server never serves an in-app session |
 | `settingSources` | `["user", "project", "local"]` |
 | `mcpServers` | `{unframed: {type: "http", url, headers: {Authorization: "Bearer <token>"}}}` |
 | `permissionMode` | from the runtime mode (table below) |
@@ -571,6 +572,8 @@ A turn that fails keeps whatever the agent already said, and the failure sentenc
 Codex failures map onto the same sentences where they have an equivalent (a turn that ran out of steps is `error_max_turns`); any other Codex error is `The agent failed: <message>.`
 
 A provider retry becomes a `retry` activity `{attempt, maxRetries, delayMs, status}`; spec 08 renders it. A rate-limit notice becomes a `rate-limit` activity `{status: allowed | allowed_warning | rejected, resetsAt?}`, where `resetsAt` is an ISO 8601 time. Only `rejected` and `allowed_warning` are ever shown; `allowed` clears a shown notice.
+
+**Outside turns (spec 14).** A chat an outside agent made is settled at boot as completed, not failed: the agent stopped being heard, and nothing failed. Its turn stays revertable.
 
 **A chat quit mid-turn.** Sessions live in the engine process and cannot outlive it. At boot, and on every read, a chat whose projection says a turn is running while no live session exists for it reads as failed with the quit-mid-turn sentence, and any pending approval or question on it is cleared (nobody is left to answer it). The next message continues the same chat and resumes the provider conversation.
 

@@ -1,8 +1,9 @@
 import { randomUUID } from "node:crypto";
-import { outsideChatTitle, outsideTurn, type ActivityInput, type Chat, type ChatCommand } from "@unframed/domain";
+import { changeNote, outsideChatTitle, outsideTurn, type ActivityInput, type Chat, type ChatCommand } from "@unframed/domain";
 import type { ConnectionRecord } from "../agentConnections/book.ts";
 import { errorText } from "../log.ts";
 import type { ChatEngine } from "./chatEngine.ts";
+import type { ChangeLogRow } from "../canvas/rooms.ts";
 import type { TurnChanges } from "./turnChanges.ts";
 import type { McpBinding, McpTool, ToolAnswer } from "./mcp.ts";
 
@@ -21,6 +22,8 @@ export interface OutsideHost {
   readonly command: (agent: OutsideAgent, chatId: string, command: Bare<ChatCommand>) => Promise<void>;
   readonly activity: (agent: OutsideAgent, chatId: string, activity: ActivityInput) => Promise<void>;
   readonly clock: (slug: string) => Promise<number | null>;
+  /** The canvas changes since a clock, for the change note. */
+  readonly changeLog: (slug: string, since: number) => Promise<ReadonlyArray<ChangeLogRow>>;
 }
 
 export interface OutsideCall {
@@ -46,6 +49,8 @@ export class OutsideChats {
   private readonly lastCallAt = new Map<string, number>();
   private readonly timers = new Map<string, NodeJS.Timeout>();
   private readonly agents = new Map<string, OutsideAgent>();
+  /** The room clock at the end of each chat's last call: the change note counts from here. */
+  private readonly clockAtLastCall = new Map<string, number>();
 
   private readonly host: OutsideHost;
   private readonly idleMs: number;
@@ -65,6 +70,7 @@ export class OutsideChats {
     const callId = randomUUID();
     const title = `mcp__unframed__${input.tool.name}`;
     const at = () => new Date(this.now()).toISOString();
+    const note = await this.changeNoteFor(agent, chatId);
     await this.host.activity(agent, chatId, {
       id: `${callId}:started`,
       tone: "tool",
@@ -96,7 +102,47 @@ export class OutsideChats {
       createdAt: at(),
     });
     this.quietFrom(agent, chatId);
-    return answer;
+    const clock = await this.host.clock(agent.slug).catch(() => null);
+    if (clock !== null) this.clockAtLastCall.set(chatId, clock);
+    return note === undefined ? answer : { ...answer, notes: [note] };
+  }
+
+  /** The change note an outside call's result starts with, when the canvas changed since the chat's last call (spec 14). */
+  private async changeNoteFor(agent: OutsideAgent, chatId: string): Promise<string | undefined> {
+    const since = this.clockAtLastCall.get(chatId) ?? agent.engine.chat(chatId)?.lastClock ?? null;
+    if (since === null) return undefined;
+    return changeNote(await this.host.changeLog(agent.slug, since).catch(() => []), chatId);
+  }
+
+  /** Settles the open outside turns of one session in every project it touched, and tells each chat it ended. */
+  async endSession(sessionId: string, agents: ReadonlyArray<OutsideAgent>): Promise<void> {
+    for (const agent of agents) {
+      for (const chat of agent.engine.chats()) {
+        if (chat.deletedAt !== null || chat.outside?.sessionId !== sessionId) continue;
+        await this.settle(agent, chat.id);
+        await this.note(agent, chat.id, "outside.session-ended", "This session ended.");
+      }
+    }
+  }
+
+  /** Tells each chat of a revoked connection that it is disconnected, and settles its open turns. */
+  async disconnect(connectionId: string, agents: ReadonlyArray<OutsideAgent>): Promise<void> {
+    for (const agent of agents) {
+      for (const chat of agent.engine.chats()) {
+        if (chat.deletedAt !== null || chat.outside?.connectionId !== connectionId) continue;
+        await this.settle(agent, chat.id);
+        await this.note(agent, chat.id, "outside.disconnected", "Disconnected. This connection was revoked in Settings.");
+      }
+    }
+  }
+
+  /** A project is closing: its open outside turns settle first, so a rename, delete or shutdown leaves none open. */
+  async settleOpen(agent: OutsideAgent): Promise<void> {
+    for (const chat of agent.engine.chats()) if (chat.outside !== undefined) await this.settle(agent, chat.id);
+  }
+
+  private async note(agent: OutsideAgent, chatId: string, kind: string, summary: string): Promise<void> {
+    await this.host.activity(agent, chatId, { id: randomUUID(), tone: "info", kind, summary, payload: {}, turnId: null, createdAt: new Date(this.now()).toISOString() });
   }
 
   /** The chat for this call, with its turn open: the idle rule decides whether this call joins the open turn. */
@@ -151,7 +197,10 @@ export class OutsideChats {
   async settle(agent: OutsideAgent, chatId: string): Promise<void> {
     clearTimeout(this.timers.get(chatId));
     this.timers.delete(chatId);
-    const turn = agent.engine.chat(chatId)?.latestTurn ?? null;
+    const chat = agent.engine.chat(chatId);
+    // Only an outside chat settles here: an in-app chat's turn belongs to its own agent.
+    if (chat?.outside === undefined) return;
+    const turn = chat.latestTurn ?? null;
     if (turn === null || turn.state !== "running") return;
     const clock = await this.host.clock(agent.slug).catch(() => null);
     await this.host.command(agent, chatId, { type: "thread.turn.settle", turnCount: turn.turnCount, clock });

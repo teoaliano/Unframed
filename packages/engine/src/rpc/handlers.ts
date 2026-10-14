@@ -100,7 +100,14 @@ export const rpcHandlersLayer = UnframedRpcs.toLayer(
             }).steps,
           })),
         ),
-      "agentConnections.revoke": ({ id }) => Effect.as(Effect.tryPromise({ try: () => connections.book.revoke(id), catch: asUnframed }), {}),
+      "agentConnections.revoke": ({ id }) =>
+        Effect.tryPromise({
+          try: async () => {
+            await connections.book.revoke(id);
+            await agents.runtime.disconnectOutside(id);
+          },
+          catch: asUnframed,
+        }).pipe(Effect.as({})),
       "preferences.get": ({ keys }) => Effect.map(preferences.get(keys), (values) => ({ values })),
       "preferences.set": ({ key, value }) => Effect.as(preferences.set(key, value), {}),
       "preferences.subscribe": ({ keys }) => preferences.subscribe(keys),
