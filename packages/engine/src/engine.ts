@@ -179,8 +179,13 @@ export const startEngine = async (host: EngineHost): Promise<RunningEngine> => {
 
   agents.runtime.setApiPort(apiPort);
   oauth.setApiPort(apiPort);
-  await writeDiscovery(config.discoveryPath, apiPort, new Date());
   process.stdout.write(banner(apiPort, settings));
+  // Before the ready message, as spec 14's Implementation Decisions say: the shim finds the port once ready is sent.
+  try {
+    writeDiscovery(config.discoveryPath, apiPort, new Date());
+  } catch (error) {
+    logError(`could not write mcp-endpoint.json: ${errorText(error)}`);
+  }
   host.send?.({ type: "ready", port: apiPort, previewPort });
 
   const stop = async () => {
