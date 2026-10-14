@@ -7,7 +7,8 @@ import {
   formatVideoEstimate,
   keepVideoProps,
   NO_KEY_MESSAGE,
-  placeResults,
+  recipeParams,
+  renderLanding,
   resetVideoProps,
   shareConsent,
   videoDefaults,
@@ -29,36 +30,14 @@ import { registerMedium, type MediumDefinition, type PropValue, type RunSource, 
 import { referencesFor } from "./render.ts";
 import { recipeSlotIndex, videoPlan } from "./videoPlan.ts";
 
-/** A render placeholder's width, as spec 03's placeholders. */
-export const RENDER_WIDTH = 320;
+/** Where a render lands: spec 03's result placement from `anchor`, clear of every shape on the page. */
+export const landingFor = (editor: Editor, anchor: { x: number; y: number; w: number; h: number }, settings: VideoSettings) =>
+  renderLanding(anchor, editor.getCurrentPageShapes().flatMap((shape) => pageBox(editor, shape.id) ?? []), settings);
 
 const asVideo = (params: unknown) => params as VideoParams;
 
 /** The circular reference that stops a run, from the selection or the recipe mode's instruction. */
 const errorOf = (source: RunSource) => (source.kind === "selection" ? source.composition.error : source.error);
-
-/** The placeholder's height at its width: from the chosen ratio or exact size, else 16:9. */
-export const renderHeight = (settings: VideoSettings): number => {
-  const ratio = settings.size !== undefined ? /^(\d+)x(\d+)$/.exec(settings.size) : settings.aspect_ratio !== undefined ? /^(\d+(?:\.\d+)?):(\d+(?:\.\d+)?)$/.exec(settings.aspect_ratio) : null;
-  const w = ratio ? Number(ratio[1]) : 16;
-  const h = ratio ? Number(ratio[2]) : 9;
-  return w > 0 && h > 0 ? (RENDER_WIDTH * h) / w : (RENDER_WIDTH * 9) / 16;
-};
-
-/** Where a render lands: spec 03's result placement from `anchor`, clear of every shape on the page. */
-export const landingFor = (editor: Editor, anchor: { x: number; y: number; w: number; h: number }, settings: VideoSettings) => {
-  const h = renderHeight(settings);
-  const obstacles = editor.getCurrentPageShapes().flatMap((shape) => pageBox(editor, shape.id) ?? []);
-  const [at] = placeResults(anchor, [{ w: RENDER_WIDTH, h }], obstacles);
-  return { x: at!.x, y: at!.y, w: RENDER_WIDTH, h };
-};
-
-/** The recipe's params: the props that were sent, as the tray names them, plus the share consent. */
-export const recipeParams = (mode: string, settings: VideoSettings, consent: boolean): Record<string, string | number | boolean> => ({
-  inputMode: mode,
-  ...settings,
-  shareLocalVideos: consent,
-});
 
 const urlOfRef = (ref: RecipeRef) => ("url" in ref ? ref.url : projectFileMarker(ref.file));
 

@@ -49,14 +49,19 @@ import { outsideSelectionTools } from "./selectionTools.ts";
 import { AgentGeneration } from "./agentGeneration.ts";
 import { generateArguments, generateTool } from "./generateTool.ts";
 import type { ConnectionBook } from "../agentConnections/book.ts";
-import type { ImagePricingAnswer, ImageRunRequest, RunEvent, TextRunRequest } from "@unframed/contracts";
+import type { ImagePricingAnswer, ImageRunRequest, ModelEntry, RunEvent, TextRunRequest, VideoStartRequest } from "@unframed/contracts";
 
 /** What an agent's generation reaches: the run services, pricing, the default model, run events and the ledger. */
 export interface GenerationRuns {
   readonly runImage: (request: ImageRunRequest) => Promise<{ runId: string; batchId: string; placeholders: string[] }>;
   readonly runText: (request: TextRunRequest) => Promise<{ runId: string; batchId: string; placeholders: string[] }>;
   readonly pricing: (model: string) => Promise<ImagePricingAnswer>;
-  readonly defaultImageModel: () => Promise<string>;
+  /** The models of a kind, and the default one: the settings' image or video model. */
+  readonly models: (kind: "image" | "video") => Promise<ReadonlyArray<ModelEntry>>;
+  readonly defaultModel: (kind: "image" | "video") => Promise<string>;
+  /** A render job (spec 04) and how it ends (spec 14: an agent's video). */
+  readonly startVideo: (request: VideoStartRequest) => Promise<{ jobId: string; status: string; shapeId: string }>;
+  readonly onVideoFinished: (jobId: string, handler: (outcome: { ok: boolean; cost: number | null }) => void) => () => void;
   readonly track: (project: string, handler: (event: RunEvent) => void) => () => void;
   readonly book: ConnectionBook;
 }
@@ -200,7 +205,10 @@ export class AgentRuntime {
       runImage: (request) => deps.generationRuns.runImage(request),
       runText: (request) => deps.generationRuns.runText(request),
       pricing: (model) => deps.generationRuns.pricing(model),
-      defaultImageModel: () => deps.generationRuns.defaultImageModel(),
+      models: (kind) => deps.generationRuns.models(kind),
+      defaultModel: (kind) => deps.generationRuns.defaultModel(kind),
+      startVideo: (request) => deps.generationRuns.startVideo(request),
+      onVideoFinished: (jobId, handler) => deps.generationRuns.onVideoFinished(jobId, handler),
       track: (project, handler) => deps.generationRuns.track(project, handler),
       book: deps.generationRuns.book,
       recordTurn: async (project, chatId, turn, before, after) => {

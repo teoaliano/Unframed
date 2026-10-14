@@ -4,15 +4,17 @@ import { describe, expect, it } from "vitest";
 import { SKETCH_REFUSAL } from "@unframed/domain";
 import { startGenerating, finished, until, type Generating } from "./generation.ts";
 import { chatsIn, outsideLink } from "./outsideCalls.ts";
-import { gate, imagePricing } from "./openRouterStub.ts";
+import { gate, imageCatalogue, imagePricing } from "./openRouterStub.ts";
 import { PROJECT } from "./agent.ts";
 
 const MODEL = "openai/image-test";
+/** The catalogue lists the test model, so an explicit model is one the catalogue knows. */
+const CATALOGUE = imageCatalogue({ data: [{ id: MODEL, name: "Image test", supported_parameters: { resolution: ["1K", "2K"] } }] });
 const PRICING = imagePricing({ [MODEL]: { data: { endpoints: [{ pricing: [{ unit: "image", billable: "output_image", cost_usd: 0.04 }] }] } } });
 const prompt = (id: string, text: string) => ({ type: "create", id, kind: "prompt", x: 0, y: 0, props: { text } });
 
 /** An engine with a key, a priced image model, and a project named board. */
-const start = (env: Record<string, string> = {}) => startGenerating({ extra: [PRICING], env });
+const start = (env: Record<string, string> = {}) => startGenerating({ extra: [PRICING, CATALOGUE], env });
 
 const shapes = async (generating: Generating) =>
   ((await generating.rpc.call("testCanvas.read", { project: PROJECT })).records as any[]).filter((record) => record.typeName === "shape");
@@ -161,6 +163,32 @@ describe("an agent's generate", () => {
         return first.snapshot.thread.latestTurn?.state === "completed" ? true : undefined;
       }, "the turn to settle");
       expect(settled).toBe(true);
+    } finally {
+      await generating.engine.dispose();
+    }
+  });
+it("refuses a parameter the model does not take, and a text run with params, before anything is sent", async () => {
+    const generating = await start();
+    try {
+      const link = await outsideLink(generating as never);
+      const session = await link.open();
+      const made = await link.call(session, "canvas_write", { project: PROJECT, ops: [prompt("new:fox", "a red fox")] });
+      const source = made.value.ids["new:fox"];
+      expect(await link.call(session, "generate", { project: PROJECT, medium: "image", sources: [source], model: MODEL, params: { resolution: "8K" }, dryRun: true })).toMatchObject({
+        isError: true,
+        value: { error: `Model "${MODEL}" does not take resolution "8K". Leave it out for the model's default.` },
+      });
+      expect(await link.call(session, "generate", { project: PROJECT, medium: "image", sources: [source], model: MODEL, params: { tint: "red" }, dryRun: true })).toMatchObject({
+        isError: true,
+        value: { error: `Model "${MODEL}" does not take tint "red". Leave it out for the model's default.` },
+      });
+      expect(await link.call(session, "generate", { project: PROJECT, medium: "text", sources: [source], params: { resolution: "2K" }, dryRun: true })).toMatchObject({
+        isError: true,
+        value: { error: "A text run takes no params. Leave params out." },
+      });
+      const taken = await link.call(session, "generate", { project: PROJECT, medium: "image", sources: [source], model: MODEL, params: { resolution: "2K" }, dryRun: true });
+      expect(taken.isError).toBe(false);
+      expect(generating.requests).toEqual([]);
     } finally {
       await generating.engine.dispose();
     }

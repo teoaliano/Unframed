@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { planAgentRun, SKETCH_REFUSAL, type CanvasShape } from "../../src/index.ts";
+import { planAgentRun, SKETCH_REFUSAL, unsupportedParam, type CanvasShape } from "../../src/index.ts";
 
 const box = (x: number, y: number, w = 100, h = 100) => ({ x, y, w, h });
 const prompt = (id: string, text: string, y = 0): CanvasShape => ({ id, kind: "prompt", bounds: box(0, y, 200, 40), z: 0, text });
@@ -50,5 +50,19 @@ describe("an agent's run plan", () => {
       ok: false,
       message: "Nothing says what to make. Select a prompt, or type an instruction.",
     });
+  });
+});
+
+describe("unsupportedParam", () => {
+  const supported = (key: string, value: unknown) => key === "resolution" && value === "2K";
+
+  it("answers nothing when every parameter is taken", () => {
+    expect(unsupportedParam("m/one", { resolution: "2K" }, supported)).toBeUndefined();
+    expect(unsupportedParam("m/one", {}, supported)).toBeUndefined();
+  });
+
+  it("names the first parameter the model does not take, in the agent's words", () => {
+    expect(unsupportedParam("m/one", { resolution: "8K" }, supported)).toBe('Model "m/one" does not take resolution "8K". Leave it out for the model\'s default.');
+    expect(unsupportedParam("m/one", { tint: true }, supported)).toBe('Model "m/one" does not take tint "true". Leave it out for the model\'s default.');
   });
 });

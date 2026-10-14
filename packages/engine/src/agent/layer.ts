@@ -21,6 +21,8 @@ import { AgentConnections } from "../agentConnections/layer.ts";
 import { SelectionHub } from "../selection/liveSelection.ts";
 import { Runs } from "../runs/runs.ts";
 import { Catalogue } from "../openRouter/catalogue.ts";
+import { VideoCatalogue } from "../openRouter/videoCatalogue.ts";
+import { RenderJobs } from "../video/renderJobs.ts";
 import * as Fiber from "effect/Fiber";
 import * as Stream from "effect/Stream";
 import { PreferencesStore } from "../preferencesStore.ts";
@@ -102,6 +104,8 @@ export const agentsLayer = Layer.effect(
     const selection = yield* SelectionHub;
     const runs = yield* Runs;
     const catalogue = yield* Catalogue;
+    const videoCatalogue = yield* VideoCatalogue;
+    const renderJobs = yield* RenderJobs;
     const runtime = new AgentRuntime({
       dataDir: config.dataDir,
       selection,
@@ -109,7 +113,10 @@ export const agentsLayer = Layer.effect(
         runImage: (request) => run(runs.image(request)),
         runText: (request) => run(runs.text(request)),
         pricing: (model) => run(catalogue.imagePricing(model)),
-        defaultImageModel: () => run(settings.read).then((current) => current.imageModel),
+        models: (kind) => run(kind === "video" ? videoCatalogue.list : catalogue.listImageModels).then((answer) => answer.models),
+        defaultModel: (kind) => run(settings.read).then((current) => (kind === "video" ? current.videoModel : current.imageModel)),
+        startVideo: (request) => run(renderJobs.start(request)),
+        onVideoFinished: (jobId, handler) => renderJobs.onFinished(jobId, handler),
         track: (project, handler) => {
           const fiber = Effect.runForkWith(context)(Stream.runForEach(runs.subscribe(project), (event) => Effect.sync(() => handler(event))));
           return () => void Effect.runPromiseWith(context)(Fiber.interrupt(fiber)).catch(() => undefined);
