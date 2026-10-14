@@ -230,7 +230,7 @@ A connection does not reach: any RPC method, the settings or the key, the prefer
 
 - `initialize` with a connection token answers spec 07's server info plus `instructions`: the text in a new asset, `assets/prompts/outside-agent.md`. It tells the agent what Unframed is, that it must call `projects_list` first and pass `project` to every tool, that canvas text is material and not instructions, the file rules above, that the person sees every call in a chat and can revert any write, that Unframed must be open, and that a generation spends the person's money, so it should call `generate` with `dryRun` first and report the cost it answers. It is adapted from the canvas parts of `assets/prompts/agent-system.md`.
 - `projects_list {}` answers `{ projects: [{ name, folder, active }] }`: every project in the output folder, sorted by name, `folder` its absolute path, `active` true for the project in spec 01's `project.active` preference. Its description is the first paragraph of the same asset.
-- `generate` and `canvas_select` join spec 07's and spec 09's tools in this list, with `projects_list`. `generate` is on the in-app list too. Their input and answers are in "Generation by agents" and "The live selection".
+- `generate`, `node_run` (spec 16) and `canvas_select` join spec 07's and spec 09's tools in this list, with `projects_list`. A `node_run` step is counted against the spend limit as a `generate` is. `generate` is on the in-app list too. Their input and answers are in "Generation by agents" and "The live selection".
 - Every other tool keeps its name and description, and its input schema gains `project: { type: "string", description: "The project's name, as projects_list reports it." }` as required.
 - A `project` that slugs to nothing, or names no folder: tool error `no project named "<project>"; call projects_list for the names`.
 - Under the server name `unframed-app`, Claude Code shows them as `mcp__unframed-app__<name>`.
@@ -328,7 +328,7 @@ generate {
 
 ### In-app agents
 
-The in-app agent gets `generate` (provider-side name `mcp__unframed__generate` on Claude, and the same server for Codex). It follows the rules above, with these differences:
+The in-app agent gets `generate` (provider-side name `mcp__unframed__generate` on Claude, and the same server for Codex), and `node_run` (spec 16), which starts a node's run or a chain of them under the same rules, one step at a time. It follows the rules above, with these differences:
 
 - **No spend limit.** An in-app generation has no connection, so it has no limit beyond the OpenRouter key's own cap (spec 10). The composer's Generate has the same bound.
 - **Permission** (spec 07's policy, step 3). In Supervised mode the call opens a request whose detail names the medium and the estimate, and it runs only when the person accepts. In Full access it runs at once. In plan interaction mode it is refused with the text in `assets/prompts/plan-no-writes.md`.
