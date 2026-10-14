@@ -13,3 +13,4 @@ export * from "./artifacts.ts";
 export * from "./legacy.ts";
 export * from "./agentConnections.ts";
 export * from "./selection.ts";
+export * from "./spend.ts";

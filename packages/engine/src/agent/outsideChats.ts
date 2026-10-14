@@ -51,6 +51,10 @@ export class OutsideChats {
   private readonly agents = new Map<string, OutsideAgent>();
   /** The room clock at the end of each chat's last call: the change note counts from here. */
   private readonly clockAtLastCall = new Map<string, number>();
+  /** Paid runs each chat's agent started that have not landed or failed yet (spec 14, "Outside turns"). */
+  private readonly inFlight = new Map<string, number>();
+  /** Chats whose settle was asked for while a run was in flight: they settle when the last run ends. */
+  private readonly deferred = new Set<string>();
 
   private readonly host: OutsideHost;
   private readonly idleMs: number;
@@ -66,7 +70,7 @@ export class OutsideChats {
     const agent = await this.host.agent(input.slug);
     const chatId = await this.bind(input.connection, input.sessionId, agent);
     const turnId = agent.engine.chat(chatId)?.latestTurn?.turnId ?? null;
-    const binding: McpBinding = { project: input.slug, chatId };
+    const binding: McpBinding = { project: input.slug, chatId, connectionId: input.connection.id };
     const callId = randomUUID();
     const title = `mcp__unframed__${input.tool.name}`;
     const at = () => new Date(this.now()).toISOString();
@@ -167,7 +171,7 @@ export class OutsideChats {
       lastCallAt: this.lastCallAt.get(chatId),
       now,
       idleMs: this.idleMs,
-      runsInFlight: 0,
+      runsInFlight: this.inFlight.get(chatId) ?? 0,
     });
     if (action === "settle-then-open") await this.settle(agent, chatId);
     if (action !== "continue") {
@@ -193,6 +197,26 @@ export class OutsideChats {
     void this.settle(agent, chatId);
   }
 
+  /** A paid run an agent started in this chat's open turn has been accepted. */
+  runStarted(chatId: string): void {
+    this.inFlight.set(chatId, (this.inFlight.get(chatId) ?? 0) + 1);
+  }
+
+  /** A paid run of the chat landed or failed. The turn settles now if it was asked to, or if it has gone quiet. */
+  runEnded(chatId: string): void {
+    const remaining = (this.inFlight.get(chatId) ?? 1) - 1;
+    if (remaining > 0) this.inFlight.set(chatId, remaining);
+    else this.inFlight.delete(chatId);
+    if (remaining > 0) return;
+    const agent = this.agents.get(chatId);
+    const last = this.lastCallAt.get(chatId);
+    if (agent === undefined) return;
+    if (this.deferred.has(chatId) || (last !== undefined && this.now() - last >= this.idleMs)) {
+      this.deferred.delete(chatId);
+      void this.settle(agent, chatId);
+    }
+  }
+
   /** Settles the chat's running outside turn: its clock, its files, then the session leaves running. */
   async settle(agent: OutsideAgent, chatId: string): Promise<void> {
     clearTimeout(this.timers.get(chatId));
@@ -200,6 +224,11 @@ export class OutsideChats {
     const chat = agent.engine.chat(chatId);
     // Only an outside chat settles here: an in-app chat's turn belongs to its own agent.
     if (chat?.outside === undefined) return;
+    // A paid run is never cut off: the turn settles once the last of its runs has landed (spec 14).
+    if ((this.inFlight.get(chatId) ?? 0) > 0) {
+      this.deferred.add(chatId);
+      return;
+    }
     const turn = chat.latestTurn ?? null;
     if (turn === null || turn.state !== "running") return;
     const clock = await this.host.clock(agent.slug).catch(() => null);

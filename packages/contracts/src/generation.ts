@@ -170,6 +170,10 @@ export const PageBox = Schema.Struct({ x: Schema.Number, y: Schema.Number, w: Sc
 export const FreePicks = Schema.Struct({ picks: Schema.NullOr(Schema.Array(Schema.Number)), dropped: Schema.Array(Schema.Number) });
 export type FreePicks = typeof FreePicks.Type;
 
+/** The chat and its turn an agent's run belongs to (spec 14). Set only on a run an agent starts. */
+export const RunChat = Schema.Struct({ id: Schema.String, turn: Schema.Number });
+export type RunChat = typeof RunChat.Type;
+
 export const ImageRunRequest = Schema.Struct({
   project: Schema.String,
   /** `b-<epochMs>`; minted by the engine when absent. */
@@ -195,6 +199,7 @@ export const ImageRunRequest = Schema.Struct({
   of: Schema.optionalKey(Schema.Struct({ shapeId: Schema.String, action: RecipeAction })),
   /** Spec 05: a Free batch's repair call cost, set on every member's result meta. */
   batchExtraCost: Schema.optionalKey(Schema.Number),
+  chat: Schema.optionalKey(RunChat),
 });
 export type ImageRunRequest = typeof ImageRunRequest.Type;
 
@@ -225,6 +230,8 @@ export type RunEvent = typeof RunEvent.Type;
 
 /** The image sidecar, beside each generated image. The first block is the old app's, field for field. */
 export interface ImageSidecar {
+  /** The chat and turn that started the run, for a run an agent started (spec 14). */
+  readonly chat?: RunChat;
   readonly prompt: string;
   readonly model: string;
   readonly resolution?: string;

@@ -19,6 +19,8 @@ const PROTOCOL_VERSION = "2025-06-18";
 export interface McpBinding {
   readonly project: string;
   readonly chatId: string;
+  /** The outside connection the call came through, when it came through one (spec 14). */
+  readonly connectionId?: string;
 }
 
 /**

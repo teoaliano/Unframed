@@ -2,7 +2,7 @@
  * An outside client's side of spec 14, as the tests drive it: an outside connection, one client
  * session of it (opened with `initialize`), and the chats the project's shell lists.
  */
-import type { ChatSummary } from "@unframed/contracts";
+import type { ChatSummary, SpendLimit } from "@unframed/contracts";
 import { PROJECT, shellChats, type AgentEngine } from "./agent.ts";
 
 const rpcBody = (id: number, method: string, params: unknown = {}) => ({ jsonrpc: "2.0", id, method, params });
@@ -17,8 +17,8 @@ export interface OutsideLink {
 }
 
 /** A connection made over RPC and its client, which can open sessions and make calls. */
-export const outsideLink = async (agent: AgentEngine, name = "Work laptop Claude Code"): Promise<OutsideLink> => {
-  const made = await agent.rpc.call("agentConnections.create", { name, client: "claude-code" });
+export const outsideLink = async (agent: AgentEngine, name = "Work laptop Claude Code", spendLimit?: SpendLimit): Promise<OutsideLink> => {
+  const made = await agent.rpc.call("agentConnections.create", { name, client: "claude-code", ...(spendLimit === undefined ? {} : { spendLimit }) });
   const token = made.token as string;
   const raw = (session: string | undefined, body: unknown) =>
     agent.engine.request("/mcp", {

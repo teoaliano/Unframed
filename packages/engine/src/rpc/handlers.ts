@@ -102,8 +102,8 @@ export const rpcHandlersLayer = UnframedRpcs.toLayer(
           }),
         ),
       "agentConnections.list": () => Effect.sync(() => ({ connections: connections.book.list() })),
-      "agentConnections.create": ({ name, client }) =>
-        Effect.tryPromise({ try: () => connections.book.create({ name, client }), catch: asUnframed }).pipe(
+      "agentConnections.create": ({ name, client, spendLimit }) =>
+        Effect.tryPromise({ try: () => connections.book.create({ name, client, ...(spendLimit === undefined ? {} : { spendLimit }) }), catch: asUnframed }).pipe(
           Effect.map(({ connection, token }) => ({
             connection,
             token,
@@ -118,6 +118,8 @@ export const rpcHandlersLayer = UnframedRpcs.toLayer(
             }).steps,
           })),
         ),
+      "agentConnections.setSpendLimit": ({ id, spendLimit }) =>
+        Effect.tryPromise({ try: () => connections.book.setSpendLimit(id, spendLimit), catch: asUnframed }).pipe(Effect.as({})),
       "agentConnections.revoke": ({ id }) =>
         Effect.tryPromise({
           try: async () => {

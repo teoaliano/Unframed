@@ -3,6 +3,7 @@ import { ArtifactTools } from "../artifacts/artifactTools.ts";
 import { PreviewTools } from "../artifacts/previewTools.ts";
 import { CanvasTools } from "./canvasTools.ts";
 import { outsideSelectionTools } from "./selectionTools.ts";
+import { generateTool } from "./generateTool.ts";
 
 /**
  * The Unframed tool list, as the tool definitions give it: name, description and input schema.
@@ -25,6 +26,7 @@ export const unframedToolCatalogue = (): Array<Pick<McpTool, "name" | "descripti
     ...new ArtifactTools(inert, () => 0).tools(),
     ...new PreviewTools(inert).tools(),
     ...outsideSelectionTools({ hub: inert, read: inert.read }),
+    generateTool(inert),
   ];
   return tools.map(({ name, description, inputSchema }) => ({ name, description, inputSchema }));
 };

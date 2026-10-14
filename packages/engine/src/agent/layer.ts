@@ -6,7 +6,6 @@ import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Queue from "effect/Queue";
-import * as Stream from "effect/Stream";
 import { CanvasRooms } from "../canvas/rooms.ts";
 import type { Route } from "../http/api.ts";
 import { errorText } from "../log.ts";
@@ -20,6 +19,10 @@ import { ProviderDetection } from "./detection.ts";
 import { mcpRoute, refusal, type OutsideProject } from "./mcp.ts";
 import { AgentConnections } from "../agentConnections/layer.ts";
 import { SelectionHub } from "../selection/liveSelection.ts";
+import { Runs } from "../runs/runs.ts";
+import { Catalogue } from "../openRouter/catalogue.ts";
+import * as Fiber from "effect/Fiber";
+import * as Stream from "effect/Stream";
 import { PreferencesStore } from "../preferencesStore.ts";
 import { Projects } from "../projects.ts";
 import { AgentRuntime, DispatchError } from "./runtime.ts";
@@ -97,9 +100,22 @@ export const agentsLayer = Layer.effect(
     });
 
     const selection = yield* SelectionHub;
+    const runs = yield* Runs;
+    const catalogue = yield* Catalogue;
     const runtime = new AgentRuntime({
       dataDir: config.dataDir,
       selection,
+      generationRuns: {
+        runImage: (request) => run(runs.image(request)),
+        runText: (request) => run(runs.text(request)),
+        pricing: (model) => run(catalogue.imagePricing(model)),
+        defaultImageModel: () => run(settings.read).then((current) => current.imageModel),
+        track: (project, handler) => {
+          const fiber = Effect.runForkWith(context)(Stream.runForEach(runs.subscribe(project), (event) => Effect.sync(() => handler(event))));
+          return () => void Effect.runPromiseWith(context)(Fiber.interrupt(fiber)).catch(() => undefined);
+        },
+        book: connections.book,
+      },
       testAgentScript: config.testAgentScript,
       idleMs: config.testAgentIdleMs,
       outsideTurnIdleMs: config.outsideTurnIdleMs,

@@ -326,6 +326,7 @@ export const runsLayer = Layer.effect(
               ...(of === undefined ? {} : { of }),
             },
             ...(output.free === undefined ? {} : { free: output.free }),
+            ...(request.chat === undefined ? {} : { chat: request.chat }),
           };
           await writeSidecar(folder, base, sidecar).catch((error: unknown) => logError(`could not write the sidecar of ${file}: ${errorText(error)}`));
           logInfo(`generated → ${join(folder, file)}${cost === null ? "" : `  ($${cost.toFixed(4)})`}`);
