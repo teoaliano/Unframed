@@ -13,6 +13,11 @@ const LONG_PAGE = `<!doctype html><html><head><style>body{margin:0;font:14px san
 /**
  * Drags a shape's bottom-right corner until the shape is `to` canvas pixels, at the zoom it
  * is shown at. Clicks the shape first so it is selected and its frame is live.
+ *
+ * The corner's screen position comes from a transformed bounding box, which carries float32
+ * noise of about 1e-4 screen pixels. At zoom 0.1 that noise is multiplied tenfold, so a drag
+ * can store 5999.9997 for a 6000 target. Sizes are compared to a tenth of a canvas pixel,
+ * which no eye can tell from the target.
  */
 const resizeTo = async (page: Page, engine: TestEngine, id: string, to: { w: number; h: number }) => {
   const card = shapeOnScreen(page, id);
@@ -24,7 +29,11 @@ const resizeTo = async (page: Page, engine: TestEngine, id: string, to: { w: num
   await page.mouse.down();
   await page.mouse.move(box.x + to.w * zoom, box.y + to.h * zoom, { steps: 10 });
   await page.mouse.up();
-  await expect.poll(async () => (await settledRecord(engine, "default", id))?.props).toMatchObject({ w: to.w, h: to.h });
+  const tenth = (value: number) => Math.round(value * 10) / 10;
+  await expect.poll(async () => {
+    const props = (await settledRecord(engine, "default", id))?.props;
+    return props === undefined ? undefined : { w: tenth(props.w), h: tenth(props.h) };
+  }).toMatchObject({ w: to.w, h: to.h });
 };
 
 test("a page resized past 900 wide lays out at its frame's width, so a wide breakpoint applies", async ({ page, engine }) => {
