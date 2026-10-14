@@ -23,6 +23,8 @@ Running:
 
 Chaining works because a node's current result is an input to the nodes wired from it: an image node's result can be wired into a video node as its first frame.
 
+A node can also write a **page**. Its medium is `page`: a text model writes one HTML document, which lands as a page version that the node previews and that can be dragged out as a page shape (spec 09). A page can feed a node as its HTML source, as a captured picture of it, or as both, chosen on the wire.
+
 Agents read and write nodes and wires through the canvas tools (spec 07), and start runs with `node_run`, which in-app and outside agents both have (spec 14). Their paid steps follow the same rules as `generate`, including the outside spend limit.
 
 What this spec does not change: Generate on a selection, the composer popover and its Agent tray, groups and their recipes, the library's existing presets, and every run's file, sidecar and recipe format. A node contributes nothing to a selection-based run, as a page does.
@@ -56,7 +58,7 @@ What this spec does not change: Generate on a selection, the composer popover an
 25. As a person, I want to remove a version from the node without losing its file, so that the node stays tidy and the folder stays complete.
 26. As a person, I want to drag a result out of a node onto the board as an ordinary image, video or prompt shape, so that I can use it anywhere a shape goes.
 27. As a person, I want a dragged-out result to be an ordinary result with its recipe, so that Regenerate works on it as on any result.
-28. As a person, I want Run to run only that node, and Run downstream to run it and the nodes after it, so that I choose how much I spend.
+28. As a person, I want Run to run only that node, and Run downstream to run it and the nodes after it, either all of them or only those that failed, are waiting, are out of date or never ran, so that I choose how much I spend.
 29. As a person, I want a node that is out of date flagged with the reason ("an input changed since this ran"), so that I know it no longer matches its inputs.
 30. As a person, I want nothing to run on its own when an input changes, so that no money is spent without my action.
 31. As a person, I want a node that has never run to say "Not run yet", so that a fresh node is not mistaken for a stale one.
@@ -87,13 +89,18 @@ What this spec does not change: Generate on a selection, the composer popover an
 56. As an outside agent, I want `node_run` to respect the connection's spend limit for every step, so that a chain cannot pass a limit one step at a time.
 57. As a person watching an agent's turn, I want a node the agent made or ran to be a change of that turn, so that Revert this turn removes the node and the wires the turn made.
 58. As a test author, I want every node run to go through the same engine seams as Generate, so that the stubs and the fixtures serve both.
+59. As a person, I want a node to write a page from its prompt, so that a code prototype can be made and remade on the board.
+60. As a person, I want a page a node writes to preview inside the node and to drag out as a page shape, so that it behaves like a page I made.
+61. As a person, I want to choose what a page sends to a node (its HTML, a picture of it, or both), so that the input suits the model I picked.
+62. As a person, I want a page that links other project files to send either the page alone or the linked files too, so that a multi-file prototype works.
+63. As a person, I want a run refused, with a reason, when the picture cannot be taken because Chrome is missing, so that a run never quietly sends less than I chose.
 
 ## Implementation Decisions
 
 ### Terms this spec adds
 
 - **node** (shape kind): a persistent composer card on the canvas.
-- **wire** (shape kind): a line from one shape to one node input, carrying a role. Its form is open (Open decisions, 1). This spec describes the recommended form, a dedicated shape with two ends that name their shapes, and states every rule so that the other form changes only how the line is drawn.
+- **wire** (shape kind): a dedicated connection shape with two ends that name their shapes, from one shape to one node input, carrying a role. Its look is a known gap until the person's reference image arrives (Further notes); this spec fixes its behaviour.
 - **role** (of a wire): what the source does in the node's run. One of `prompt`, `reference`, `first`, `last`.
 - **version**: one result of a node run, kept on the node.
 - **current version**: the version a node shows and its wires carry downstream.
@@ -115,11 +122,14 @@ What this spec does not change: Generate on a selection, the composer popover an
 | Node run service | engine | `node.run` and `chain.run`: validation, versions, the chain runner, the boot resolution of versions | new, built from specs 03, 04 and 05's run services |
 | Node shape and wire shape | contracts | the `node` and `wire` props and meta, with their first migration | new |
 | Node shape util, wire shape util, node composer | web | the card, the connector, the tray reused from spec 03 | new |
+| Page answer | domain | `pageAnswer(text)` returns the HTML document or a refusal sentence; `pageTitle(html)` returns the document's title | new |
+| Page inputs | domain | `pageSend({ wire, model })` returns what a page wire sends (HTML, picture or both, entry or linked files) from the wire's choice or the model's default in `pageSendDefaults`; `linkedFiles(html, projectFiles)` returns the project files a page links, with the caps | new |
+| Page capture | engine | `captureFor(pageFile, files)` returns the capture to send, reusing a capture whose page hash matches, else taking one with spec 09's Chrome finder | new |
 | Run chain button | web | the selection toolbar's chain state | extended (spec 03) |
 
 ### The node
 
-- **Schema.** A custom shape like page and motion (spec 02): `meta.ref` (minted or named, spec 06); `props: { w, h, medium, model, params, runs?, instruction, versions, currentVersionId, run?, error? }`. `medium` is one of the media the composer registers. `params` are the keys the tray holds for that medium (specs 03 to 05). `runs` is 1 to 10 for image, absent otherwise. `versions` is newest first. `run` is set while a run is going: `{ runId, chainId, startedAt }`.
+- **Schema.** A custom shape like page and motion (spec 02): `meta.ref` (minted or named, spec 06); `props: { w, h, medium, model, params, runs?, instruction, versions, currentVersionId, run?, error? }`. `medium` is one of the media the composer registers, or `page` (a text model whose answer is a page, see Page output). `params` are the keys the tray holds for that medium (specs 03 to 05). `runs` is 1 to 10 for image, absent otherwise. `versions` is newest first. `run` is set while a run is going: `{ runId, chainId, startedAt }`.
 - **Size.** Default 380 by 360. Width 320 to 640, height at least 240. The card scrolls inside when its content is taller.
 - **Label.** Spec 02's label rule: `@<name>` once named, else `Node`, above the top-left.
 - **Creation.** From the add menu's Inputs section (spec 02). A new node starts on image, with the last-used values for that medium (spec 03) and the default model (spec 10), and then keeps its own values.
@@ -140,7 +150,7 @@ What this spec does not change: Generate on a selection, the composer popover an
   - Second frame role: `@<name> already has a <role> wire. Change that wire first.`
   - Role not taken by the medium: `<Medium> nodes take no <role>.`
   - Group in a frame role: `A group cannot fill a frame. Wire one picture instead.` (The role menu never offers it, so this is the refusal for a wire built by an agent.)
-- **Roles offered.** By the node's medium and the source. A clip is offered `reference` only (spec 04: clips take no frame), and a group is offered `prompt` and `reference` only. By medium: image, `prompt` and `reference`; text, `prompt` and `reference`; video, `prompt`, `reference`, `first` and `last`; audio, `prompt` only. On a video node, `first` and `last` are offered only when the model declares frame images (spec 04's `supported_frame_images`). A wire kept in a frame role that the model no longer takes gets the unused mark (spec 04) and one warning line, and is not sent.
+- **Roles offered.** By the node's medium and the source. A clip is offered `reference` only (spec 04: clips take no frame), and a group is offered `prompt` and `reference` only. By medium: image, `prompt` and `reference`; text and page, `prompt` and `reference`; video, `prompt`, `reference`, `first` and `last`; audio, `prompt` only. On a page wire the roles are HTML (`prompt`), Picture (`reference`) and Both (`both`), and nothing else (Page inputs). On a video node, `first` and `last` are offered only when the model declares frame images (spec 04's `supported_frame_images`). A wire kept in a frame role that the model no longer takes gets the unused mark (spec 04) and one warning line, and is not sent.
 - **Role by source.** The source decides what a role sends:
 
 | Source | `prompt` | `reference` | `first`, `last` |
@@ -148,15 +158,15 @@ What this spec does not change: Generate on a selection, the composer popover an
 | prompt | its text, resolved as spec 03 resolves it | not offered | not offered |
 | image | not offered | the picture, numbered `image N` | the picture (video nodes) |
 | video (a clip) | not offered | the clip as a video reference, numbered `video N` | not offered (spec 04: clips take no frame) |
-| page | its HTML source, read from its file at the request | not offered (no picture for a page in this version, Open decisions, 6) | not offered |
+| page | its HTML, read from its file at the request, when the wire sends HTML or both | its captured picture, when the wire sends a picture or both (Page inputs) | not offered |
 | motion | not offered | its newest render: the MP4 whose sidecar's `of` is the motion's file; none means waiting | not offered |
 | group | the text of its prompt members, in order | each media member in its order, as spec 03 numbers them | not offered |
 | mark | not offered | a loose sketch, as spec 03 draws a loose mark. A mark on a wired image is composited onto it as spec 03 does | not offered |
-| node | its current version when text | its current version when an image or video | the current version when an image (video nodes) |
+| node | its current version when text or a page | its current version when an image or video | the current version when an image (video nodes) |
 
 - **Order.** Reference wires are numbered in the order of the node's input list. The list shows the wires top to bottom; new wires go to the bottom; a drag changes the order. The role replaces top-to-bottom order for wired inputs. Selection's order (spec 03) is unchanged.
 - **Persisting.** Wires are shapes, synced like any other. Moving a source keeps its wire attached. Deleting a source deletes its wires, as tldraw deletes bindings. Deleting a wire or a node is one undo step.
-- **Drawing.** A wire is drawn as a curve in the kit's border colour, with its role as a small chip at its midpoint (spec 12's badge style). The chip shows the role, and for references the number (`image 2`). A click on the chip opens the role menu.
+- **Drawing.** A wire is drawn as a curve in the kit's border colour, with its role as a small chip at its midpoint (spec 12's badge style). The chip shows the role, and for references the number (`image 2`). A click on the chip opens the role menu. The look of the connection shape waits on the person's reference image (Further notes); until then the curve, colour and chip above are provisional.
 
 ### The node request
 
@@ -165,7 +175,7 @@ What this spec does not change: Generate on a selection, the composer popover an
 - The prompt text is the text of the `prompt` wires, expanded and resolved as spec 03 resolves a selection's text, in wire order, joined with a blank line.
 - The media are the `reference` wires in input-list order, with their kinds and numbering as spec 03 and 04 number them. The `first` and `last` wires are the frames.
 - The instruction is the node's instruction, resolved as spec 03 resolves an instruction. A picture a prompt or the instruction names with `@` is attached after the wired references, as spec 03 attaches a named picture.
-- The sources are the ids of every wired shape, with a group's members expanded, so the recipe records what fed the run. Shapes selected with the node do not join the run (Open decisions, 2).
+- The sources are the ids of every wired shape, with a group's members expanded, so the recipe records what fed the run. Shapes selected with the node do not join the run (decided).
 - Validation is spec 03's, 04's and 05's, with the node's own messages below.
 
 A domain test asserts that every wire's role appears in the request where the role table says it does, and that a role the model does not take appears in neither array.
@@ -179,6 +189,17 @@ A domain test asserts that every wire's role appears in the request where the ro
 - **Undo.** Undo reverts the person's edits to the node's props and wires. It never removes a version that landed, because the file and the charge are already made. Engine writes to `versions` and `run` carry origin `run:<runId>`, outside the person's undo history.
 - **Dragging out.** A version is dragged onto the board. An image or video version creates an image or video shape that names the same project file, gets a minted `@id`, and carries its sidecar as its result meta, so it is an ordinary result with its recipe. A text version creates a prompt shape with its text, as spec 05 does for a text result. The node is unchanged.
 - **Files.** Every file is named and written as spec 03, 04 or 05 names and writes it. Its sidecar gains `node: { shapeId, versionId }` and, for a chain step, `chain: { chainId, step }`. Both are additive. A paid sidecar still carries its cost (contract 4).
+
+### Page output
+
+- **Medium.** `page` is a node medium. It runs a text model, with the text medium's catalogue, tray and roles. Its instruction and wired inputs compose as a text node's do (spec 05).
+- **Answer.** `pageAnswer` returns the answer when it holds one HTML document (an `<html` element or a doctype), with a Markdown code fence stripped. Otherwise the run fails with `The model did not return an HTML page. The call was made and may have been charged. Run again to retry.` The raw answer is written as `<stamp>-page-rejected.txt` in the project folder, with a sidecar holding the cost (contract 4), so a paid answer is kept and its name is in the message.
+- **File.** A page answer is written as `<stamp>-page-<slug>.html` in the project folder, exclusively, with spec 03's retry names, through spec 09's page writer (the same new-file rule `page_write` uses). Its sidecar is `{ kind: "page", source: "node", title, prompt, model, cost, recipe, node: {shapeId, versionId}, chain?, batchId, runIndex, runCount, createdAt, file }`.
+- **Version.** The page file is the version's `file`. Status and current-version rules are unchanged.
+- **Preview.** The node shows the version as a snapshot (spec 09's snapshot rule, in `.cache/snapshots/`), not a live frame. When the node is selected, spec 09's live rules apply.
+- **Drag out.** A page version dragged onto the board creates a page shape naming the file, titled with `pageTitle` (the document's `<title>`, else the node's name, else `Page`), at spec 09's default size, with a minted `@id`. The node is unchanged.
+- **As an input.** A page version is an input like any page, with the same choices (Page inputs).
+- **What this adds to spec 09.** A second writer of page files, the node run, through the same new-file rule and sidecar. A snapshot for node versions. Nothing in `page_write`, the dials or the live rules changes.
 
 ### Status
 
@@ -195,6 +216,7 @@ Status never runs anything. A node's `failed` state persists across tab reloads 
 
 ### Running one node
 
+- **Own inputs only.** A node's Run uses only the shapes wired into it. Shapes selected with it do not join its run (decided). Running several nodes together is a chain, from a selection or a group.
 - **Run** is spec 03's send, for the node's medium. It validates first, and a refusal writes no version and makes no call. The node's messages:
   - No input prompt and no instruction: `Prompt is empty. Wire a prompt, or type an instruction.`
   - An input that has no result: `<@name> has no result yet. Run it first, or use Run downstream from it.`
@@ -213,7 +235,7 @@ Status never runs anything. A node's `failed` state persists across tab reloads 
 - **Order.** A node runs after every chain node it takes input from. Ties go by canvas order: top edge, then left edge, then z. Steps run one after another; two steps never run at once, so a chain's spend is always in step order.
 - **Inputs from outside the chain.** An input from a node that is not in the chain uses that node's current version, and the node must have one. Otherwise the chain is refused before any step runs.
 - **Pre-validation.** Every step is validated before the first call. A refusal in any step writes nothing and names the step: `Step <n> (<@name>): <message>`.
-- **Confirmation.** A chain with two or more paid steps asks once before its first step, in a dialog that lists each step's node, model and estimate, with Run and Cancel. A single Run keeps its single click (Open decisions, 4).
+- **Confirmation.** A chain with two or more paid steps asks once before its first step, in a dialog that lists each step's node, model and estimate, with Run and Cancel. A single Run keeps its single click (decided).
 - **Spend.** The chain button's price is the sum of the steps' estimates when every paid step has an exact estimate (spec 03), else the sum with the missing steps named. The chain's spend is counted against an outside connection's limit before the first step (spec 14, Spend limit).
 - **Step.** A step is a run of its node, as above. A video step's render is durable (spec 04): the chain waits for its version to be filled by the render's landing before the next step starts.
 - **Failure.** When a step fails, its node shows its failure. The chain stops. Every node after it in the chain shows `Waiting for @<name>, which failed.` and never runs. Nothing else in the chain calls or spends. Versions that landed before the failure stay.
@@ -224,11 +246,16 @@ Status never runs anything. A node's `failed` state persists across tab reloads 
 
 ### Run downstream
 
-`Run downstream` on a node is a chain of that node and the nodes that depend on it, directly or through others, in dependency order. Which downstream nodes it includes is open (Open decisions, 3). This spec's default: the downstream nodes that are out of date or have no current version. A downstream node that is up to date is skipped, and the menu item reads `Run downstream (<n> to run)`.
+`Run downstream` on a node is a chain of that node and the nodes that depend on it, directly or through others, in dependency order (Chains). The node's menu offers two choices, and the person picks one:
+
+- **Run downstream: failed, waiting or never run** (`Run downstream: failed, waiting or never run (<n>)`). The node itself always runs. A downstream node joins the chain when its status is `failed`, `waiting`, `out_of_date` or `not_run`. A step stopped by a restart counts as failed.
+- **Run downstream: all** (`Run downstream: all (<n>)`). Every downstream node runs, whatever its status.
+
+The count on each item is the number of nodes that will run. Both choices end at the same chain runner, with the same confirmation and rules.
 
 ### Selection and the toolbar
 
-- **Selection with nodes.** The selection toolbar (spec 03) gains a chain state. A selection holding one node shows `Run` (the node's own Run) and `Run downstream` in its menu. A selection holding several nodes, or a group that holds nodes, shows `Run chain · <n> nodes` (with ` · ~$<x>` when every paid step has an exact estimate). The hint reads `<n> nodes` (spec 03's hint style).
+- **Selection with nodes.** The selection toolbar (spec 03) gains a chain state. A selection holding one node shows `Run` (the node's own Run) and the two Run downstream choices in its menu. A selection holding several nodes, or a group that holds nodes, shows `Run chain · <n> nodes` (with ` · ~$<x>` when every paid step has an exact estimate). The hint reads `<n> nodes` (spec 03's hint style).
 - **Mixed selections.** When the selection also holds usable media, Generate stays the primary button and the chain button sits beside it. The Generate composer is unchanged.
 - **Only nodes.** A selection holding only nodes offers the chain button and Agent. It never offers Generate, because nodes contribute nothing to a selection run.
 - **Nodes in selection runs.** A node contributes nothing to a selection-based composition, loose or inside a group, as a page or a motion does (spec 03). Its result is never sent by a selection run.
@@ -238,6 +265,16 @@ Status never runs anything. A node's `failed` state persists across tab reloads 
 - A group may hold a node (spec 02's member rule changes: a node is allowed, as a prompt is).
 - A selected group with nodes in it shows the chain button as above, and its recipe rules (spec 06) do not change.
 - A group's selection run (spec 03) ignores node members, as it ignores pages and motions.
+
+### Page inputs
+
+A wire from a page sends its HTML source (as `prompt` text), a picture of it (as a `reference`), or both. The role chip's menu offers **HTML** (`prompt`), **Picture** (`reference`) and **Both** (`both`). The wire keeps that choice.
+
+- **Choice.** The wire's choice wins. A page wire with no choice takes the model's default from `pageSendDefaults` in domain. That table is empty until the evaluation (Tasks, 31) fills it. So a page wire with no choice refuses the run with `Choose what this page sends: its HTML, a picture of it, or both.` Nothing is sent on a default nobody chose.
+- **Files.** A page wire also chooses `files`: `entry` (the wired file alone) or `linked` (the wired file and the project files it links to, one level deep). A page links a file when an `href` or `src` in it names a file in the project folder by its relative name. The default for `files` is set by the evaluation like the send default. A page wire with no `files` choice refuses the run with `Choose whether this page sends its linked files too.`
+- **Caps.** `linked` sends at most 8 linked files and 1 MB of their text in total. Beyond that the run refuses with `This page links <n> files, <m> KB in all. Linked pages send up to 8 files and 1 MB. Send the page alone, or trim its links.` A link to a file that is not in the project folder refuses the run: `This page links <file>, which is not in the project folder.`
+- **Picture.** A capture opens the wired file in headless Chrome (spec 09's finder) at a 1280 by 800 viewport, 1x, and waits for the load event plus 500 ms, as spec 09 waits for a snapshot. The capture shows the entry file, with linked files loaded as the page loads them. It is written into the project folder, not the cache (contract 8, and the index's cache rule), as `<stamp>-capture-<slug>.png` through the exclusive-write rule, with the sidecar `{ kind: "capture", source: "capture", of: <page file>, pageHash, files, viewport: { w: 1280, h: 800 }, createdAt }`. `pageHash` hashes the page file and, for `linked`, its linked files. A run reuses the newest capture whose `of`, `pageHash`, `files` and viewport match, and takes a new one otherwise. Capture is local compute with no cost.
+- **No Chrome.** A picture with no Chrome found refuses the run with spec 09's sentence: `Rendering needs a Chromium browser on this computer: Google Chrome, Chromium, Edge or Brave. Install one, or point UNFRAMED_CHROME_PATH at its binary, and render again.` A run never falls back to sending less than the choice.
 
 ### The library and flows
 
@@ -252,7 +289,7 @@ Status never runs anything. A node's `failed` state persists across tab reloads 
 ```ts
 type NodeProps = {
   w: number; h: number
-  medium: "image" | "video" | "text" | "audio"
+  medium: "image" | "video" | "text" | "audio" | "page"
   model: string
   params: Record<string, string | number | boolean>
   runs?: number                       // image only, 1 to 10
@@ -275,7 +312,8 @@ type Version = {
 type WireProps = {
   from: string                        // shape id of the source
   to: string                          // shape id of the node
-  role: "prompt" | "reference" | "first" | "last"
+  role: "prompt" | "reference" | "first" | "last" | "both"   // "both" only on a page wire
+  files?: "entry" | "linked"       // page wires only; see Page inputs
 }
 ```
 
@@ -323,10 +361,11 @@ Validation runs for the whole chain before the first call. `chain.run` and `node
 7. **Spec 07**: the canvas tools gain the node and wire kinds, and `node_run` joins the server's tools. Spec 07's `rename` op covers a node, as it covers every shape with an `@id`.
 8. **Spec 14**: `node_run` joins the outside list and the in-app list. Its spend limit applies to every step.
 9. **Spec 15**: its statement that the rewrite has no nodes and no wires is updated. Audio is still never an input (this spec keeps that rule).
+10. **Spec 09**: a node's page run is a second writer of page files, and a page capture is a new project file kind. Spec 09's Artifact files section gains a paragraph for both.
 
 This pull request updates each passage named above, so the specs keep describing the app.
 
-Not bent: contract 4 (every paid run leaves a sidecar with its cost), contract 9 (the canvas thread: a node's editor mounts only while it is live), contract 2 (the OpenRouter key stays in the engine), and the hosting contract (spec 01). Spec 11 (legacy import) is not changed; see Open decisions, 7.
+Not bent: contract 4 (every paid run leaves a sidecar with its cost), contract 9 (the canvas thread: a node's editor mounts only while it is live), contract 2 (the OpenRouter key stays in the engine), and the hosting contract (spec 01). Spec 11 (legacy import) is not changed (Open decisions, 7, decided).
 
 ## Testing Decisions
 
@@ -335,6 +374,10 @@ A good test drives one of the three seams in 00-index and asserts on what it exp
 - **Domain seam** for every rule with many cases: `wireRefusal` for each refusal, in both orders of wires; `rolesFor` for each medium and each model that takes frames or does not; `nodeRequest` placing every role as the role table says, for every role and media mix (a role the model takes is in the array at its position; a role it does not take is in neither array); `inputFingerprint` stable under reordering of unrelated shapes and changing with each input it names; `nodeStatus` for each state and its priority; `planChain` for dependency order, canvas-order ties, group expansion, a node outside the chain with and without a result, and a loop; `flowFrom` and `flowInsert` for dropped wires and rewired ids. Table-driven Vitest, one row per case.
 - **Engine seam** with the real engine and the stub OpenRouter (and the stub ElevenLabs, for audio nodes). Covers `node.run` from validation to a filled version, every node message, the version lifecycle (running, done, removed on failure, durable failure kept), the chain runner (order, pre-validation refusal naming a step, a failure that stops the chain, nothing spent after it, a restart that stops a chain, a durable video step that holds the next step), the boot resolution of running versions, `flow.save` and insert, the agent tools (`canvas_read` and `canvas_write` for nodes and wires, the refusals, `node_run` dry and accepted, the outside spend limit for every step, the in-app approval).
 - **Browser seam** for the node card (live when selected, summary when not), the composer on a node (the tray, the instruction and its persistence), drawing a wire and each refusal sentence, the role chip and its menu, reordering references, the status lines, Run and Run downstream, the chain button on a selection and in a group, the mixed selection with Generate, the versions strip (use, remove, drag out), undo keeping a landed version, saving and inserting a flow.
+- **Domain seam** for page rules: `pageAnswer` (one full document, a fragment, an empty answer, a fenced document); `pageTitle`; `pageSend` (an explicit choice, the table's default, a page wire with neither refused with its sentence); `linkedFiles` (`href` and `src` to project files, a missing link refused, the 8-file and 1 MB caps and their sentences).
+- **Engine seam** for a page version (the page file and sidecar written through spec 09's writer, a rejected answer kept as `<stamp>-page-rejected.txt` with its cost, the run failing with its message) and for a capture (written as a project file with its sidecar, reused while the page hash matches, retaken when it changes, refused with spec 09's no-Chrome sentence). The capture test skips, saying so, where no Chrome is found, as spec 09's does.
+- **Browser seam** for the page medium's preview, the drag out as a page shape, and the send choice and Files choice on a page wire.
+- **The evaluation** (Tasks, 31) is not a test. It spends money, so the person runs it, and it stays out of CI.
 - Prior art: spec 15's tests for an alternate medium's run and status, spec 05's batch tests, spec 04's roles and request tests, spec 06's preset tests, spec 14's `generate` tests for spend and dry run.
 
 ## Tasks
@@ -350,7 +393,7 @@ A good test drives one of the three seams in 00-index and asserts on what it exp
 9. Boot resolution of versions: a running non-durable version with no live run is removed at boot; a durable one is left to the job store. Seam: engine.
 10. Chain runner: order, one step at a time, pre-validation of every step, a failure that stops the chain with the downstream nodes waiting and nothing spent after, a restart that stops unstarted steps, a durable video step holding the next. Seam: engine.
 11. Spend in chains: the outside limit summed before the first step, a reservation per step at its start, a refusal that names the step and writes nothing; the in-app approval once per chain. Seam: engine.
-12. Run downstream: the set of downstream nodes by the default rule, and the menu count. Seam: engine.
+12. Run downstream: both choices, the statuses the first one includes, the node itself always running, and the menu counts. Seam: engine.
 13. Version operations: use, remove (the file stays, current moves to the newest remaining), and the refusal on a running version. Seam: engine.
 14. Agent tools: `canvas_read` for nodes and wires; `canvas_write` create, update, delete and the refusal of run-written fields; `node_run` dry run and accepted answers; the spend limit and attribution on each step. Seam: engine.
 15. Flow RPC: `flow.save` with `droppedWires`, `flow.insert` with fresh ids and no versions. Seam: engine.
@@ -363,40 +406,49 @@ A good test drives one of the three seams in 00-index and asserts on what it exp
 22. Chains on the canvas: the chain button for one node, several nodes and a group; the mixed selection with Generate; the only-nodes selection with Agent; the chain's progress and its failure on the nodes. Seam: browser.
 23. Undo: an edit to a node undone, a landed version kept after Cmd-Z. Seam: browser.
 24. Library: saving a flow with its wire count note, inserting it into another project with empty inputs and no versions, the `Flow` chip. Seam: browser.
+25. Page output, domain: `pageAnswer` for a full document, a fragment, an empty answer and a fenced document; `pageTitle`. Seam: domain.
+26. Page output, engine: a version's page file and sidecar written through spec 09's writer; a rejected answer kept as `<stamp>-page-rejected.txt` with its cost; the run failing with the message. Seam: engine.
+27. Page output, browser: the page medium's preview inside the node; the drag out as a page shape with its title. Seam: browser.
+28. Page inputs, domain: `pageSend` (explicit choice, the table's default, neither refused with its sentence); `linkedFiles` (`href` and `src` to project files, a missing link refused, the caps and their sentences). Seam: domain.
+29. Page inputs, engine: a capture written as a project file with its sidecar; reused while the page hash matches and retaken when it changes; refused with spec 09's no-Chrome sentence where no Chrome is found (skipped with a note where there is none, as spec 09 does). Seam: engine.
+30. Page inputs, browser: the role menu on a page wire offers HTML, Picture and Both; the Files choice appears on a page wire. Seam: browser.
+31. Evaluation, not a test (it spends money, so the person runs the paid calls). Before tasks 28 and 29 set their defaults: a set of five pages (a single-file prototype, a motion composition's page, a multi-file prototype with linked CSS and a second page, a text-heavy layout, an SVG or canvas drawing); each sent to the image and video models the composer offers, as HTML, as a picture, and as both, and with linked files alone and with them; each answer scored against its page by a written rubric; results in `docs/research/page-inputs.md`; then `pageSendDefaults` and the default `files` set from them. The agent may prepare the page set and the harness when the build starts; the person runs the paid calls.
 
 ## Out of Scope
 
-- Pages and motions as node outputs. A node's output is an image, a video or text in this version. Open decisions, 5, asks whether a page output belongs in the first build.
-- A picture of a page as an input. A snapshot lives in the cache folder, and the index forbids the cache from reaching a model. Capturing a page as a picture file with a sidecar is a later spec.
-- Audio as a wire source or a node's output. Audio is never an input (spec 15).
-- Free mode on a node (spec 05), and batches of a list over a node's inputs (a list node, a sweep, a CSV).
-- Value nodes that drive a setting through a wire (a number node, a seed node). Settings are the tray's dropdowns and toggles, as the research recommends for OpenRouter's settings.
+- Motions as node outputs. A node writes pages in this version. A motion is a HyperFrames composition and a render, which spec 09's motion tools own.
+- Linked page files beyond the caps in Page inputs (8 files, 1 MB of text).
+- Captures of more than the viewport (no full-page capture), and captures of motions. A motion's MP4 render is already an input (Wires).
+- Audio as a wire source or a node's output (spec 15).
+- Free mode on a node (spec 05), and batches of a list over a node's inputs.
+- Value nodes that drive a setting through a wire. Settings are the tray's dropdowns and toggles.
 - Parameter sweeps and cartesian batches over a node's settings.
-- Caching a node's result to skip a run whose inputs did not change. Staleness is flagged; a run only happens when the person or an agent asks for one.
-- Parallel steps within a chain. Steps run one after another in this version.
+- Caching a node's result to skip a run. Staleness is flagged; a run only happens when asked.
+- Parallel steps within a chain.
 - Continuing a chain after an engine restart.
-- Pulling a node's result into a selection-based Generate. A node's result reaches a run through a wire.
-- Tldraw's arrow as a wire (Open decisions, 1 covers the form).
-- Nodes in a library preset that is not a flow (presets keep their current contents).
-- Legacy output nodes becoming nodes on import (spec 11 is unchanged; Open decisions, 7).
+- Pulling a node's result into a selection-based Generate.
+- Nodes in a library preset that is not a flow.
+- Changing legacy import: old output nodes stay recipe groups (spec 11, decided).
 
 ## Open decisions
 
-Each item states the options, what each one changes, and this spec's recommendation. The body of this spec follows the recommendation until the Pivot answers.
+None open. The seven questions were answered and are in the spec:
 
-1. **Wire form.** A. tldraw's arrow, bound at its end to a node, counts as an input, and every other arrow stays a mark. Cheap, but a mark gains meaning from where its end lands, and arrows have no ports. B. A dedicated connection shape with two bindings that name their shapes, as tldraw's workflow kit does. Clear, room for the role chip and refusals, and more code, built on tldraw's binding system. **Recommendation: B.** The issue's own triage proposal (#103, question 1) is B.
-2. **Selected shapes and a node's run.** A. A node's run uses its wires only. Selecting other shapes does not add them. B. Shapes selected together with a node also join its run as extra sources, after the wired ones. **Recommendation: A.** A node is a repeatable setup: its run must reproduce from its wires, as an agent's `generate` reproduces from its named sources (spec 14). B would make a run depend on what happens to be selected at the moment of the click. The issue's wording ("not instead of being selected") is about the popover staying and selection staying, which A keeps.
-3. **Run downstream: which nodes.** A. Every downstream node, whether or not it is out of date. B. Only the downstream nodes that are out of date or have no current version. **Recommendation: B.** It spends only where an input changed or where nothing has been made yet, and the status line already shows which those are. A runs and pays for nodes that are up to date, which is the case "Run downstream" is least likely to mean.
-4. **A confirmation before a chain.** A. A chain runs when Run chain is clicked, as Generate does now, with the price on the button. B. A chain with two or more paid steps asks once in a small dialog listing each step, its model and its estimate, with Run and Cancel. **Recommendation: B.** A chain multiplies one click's spend by its steps, and a dialog is cheap next to that. Single Runs keep their current single click.
-5. **Pages and motions as node outputs in the first build.** A. Out of scope in this spec (the default). B. A text node may write a page, a node's text answer becomes a page file with a sidecar and a page shape placed beside it. **Recommendation: A.** The page write path, its preview and its dials are spec 09's, and a second path into them would be a new spec. The issue lists code prototypes as a use, so the Pivot may prefer B to be in the first build. Input pages (HTML as text) and motions (their render) are in this spec either way.
-6. **Pages as picture inputs.** A. A page's HTML source is its only input, as this spec has it. B. A page is also captured as a picture file (a sidecar'd image in the project, not the cache), so a page can feed an image or video node as a reference. **Recommendation: A for this build.** B needs a capture step (the headless Chrome spec 09 already has) and a new file kind, which is cheap to add later once the input is wanted.
-7. **Legacy output nodes on import (spec 11).** A. Keep spec 11 as it is: every old output becomes a recipe group, and every old wire disappears. B. An old output node with its wires comes back as a node with wires, and a recipe group only where the old output had no node form. **Recommendation: A.** It changes no import behaviour and spec 11 stays correct. B is what issue #103 asks for, for old projects too, and it is a larger change to the importer's report and its counts (spec 11's wiresRemoved).
+1. Wire form: a dedicated connection shape (Terms, Wires). Its look waits on the person's reference image (Further notes).
+2. Selected shapes never join a node's run (Running one node).
+3. Run downstream offers two choices: failed, waiting, out of date or never run; or all (Run downstream).
+4. A chain with two or more paid steps asks once before it starts (Chains, Confirmation).
+5. A node can write a page in the first build (Page output).
+6. A page can feed a node as HTML, as a picture, or as both, with a linked-files choice (Page inputs). The per-model defaults wait on the evaluation (Tasks, 31).
+7. Spec 11 stays as it is: old output nodes import as recipe groups.
 
 ## Further Notes
 
-- **How the issue's answers map to this spec.** The user answered the six design questions in #103: results land inside the node as versions, each a normal file (Solution, The node; Versions); each node has its own Run and Run downstream, and a chain runs from a selection or a group (Run one node, Chains); wires show roles and replace top-to-bottom order (Wires, Order); a failed step stops what follows (Chains, Failure); a saved flow is a preset with its nodes and wires (The library and flows); agents read, write and run nodes (The agent).
-- **Reading of "after".** The user wrote that everything after a failed step waits and nothing after it runs. This spec reads "after" as every later step of the chain, so a branch that does not depend on the failed node also waits. That spends less and matches the words. If the Pivot wants independent branches to finish, that is a change to Chains, Failure, and needs its own answer.
+- **How the answers map to this spec.** The user answered the six design questions in #103: results as versions, each a normal file (Solution, The node; Versions); each node's own Run and Run downstream, and a chain from a selection or a group (Running one node, Chains, Run downstream); wires with roles that replace top-to-bottom order (Wires); a failed step stops what follows (Chains, Failure); a saved flow as a preset with its nodes and wires (The library and flows); agents read, write and run nodes (The agent). The seven review questions are settled in Open decisions.
+- **Known gaps.** (1) The connection shape's look: the user will send a reference image, and until then the look in Wires is provisional. (2) Page input defaults: set by the evaluation (Tasks, 31). A page wire refuses its run until its send and Files choices are set, so nothing is sent on a default nobody chose.
+- **Reading of "after".** This spec reads "after" as every later step of the chain, so a branch that does not depend on the failed node also waits. That spends less and matches the words. If the Pivot wants independent branches to finish, that changes Chains, Failure.
 - **Groups.** The user wrote that a chain runs "if they're all in a group". A group's members are the chain's nodes (Chains, What a chain is). A node inside a group is still one node: its wires are its wires.
 - **Research.** `docs/research/node-parameters.md` (PR #112) recommended option B: a card with prompt, model and settings, inputs by wires, one run that is spec 03's run with the wired shapes as the input set. This spec follows B and adds the chain rules the user asked for. The research's cache-by-input idea (ComfyUI, Krea) is reduced to a staleness flag, because the index's pay-per-run rule forbids a run that repeats or skips silently. Its performance note (contract 9) is followed: a node's editor mounts only while the node is live.
-- **Why no value wires.** The research shows OpenRouter's settings are mostly lists, so wiring a number or a seed into a setting buys little yet (Out of Scope). A seed control, as spec 03 already leaves open, is the first place a value wire would pay.
-- **Assets this spec needs.** A new wording of `node_run`'s description, and the node and wire sentences in `assets/prompts/tool-descriptions.md` and `assets/prompts/agent-system.md`, both written at build time.
+- **Why no value wires.** The research shows OpenRouter's settings are mostly lists, so wiring a number or a seed into a setting buys little yet. A seed control, as spec 03 already leaves open, is the first place a value wire would pay.
+- **Pages.** Page output adds one moderate piece to spec 09: a second writer of page files and a snapshot for node versions, both on spec 09's existing rules. Page inputs add the capture step, which uses spec 09's headless Chrome finder. The evaluation decides what each model reads well: text models read HTML as text, while image and video models may read HTML poorly, in which case a picture is what they need. Multi-page HTML is handled as a page file that links other project files, sent alone or with its linked files within the caps; the default follows the evaluation.
+- **Assets this spec needs.** A new wording of `node_run`'s description, and the node and wire sentences in `assets/prompts/tool-descriptions.md` and `assets/prompts/agent-system.md`, both written at build time. No model-facing text is needed for captures.
