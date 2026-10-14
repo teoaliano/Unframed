@@ -295,9 +295,12 @@ type ImageRunRequest = {
   sources: string[]           // shape ids, for the recipe and tether
   anchor: { x: number; y: number; w: number; h: number }  // page coords
   of?: { shapeId: string; action: 'regenerate' | 'vary' | 'recipe' }   // the app sends 'recipe'
+  chat?: { id: string; turn: number }   // set by a run an agent starts (spec 14); written to the sidecar
 }
 type Ref = RecipeRef                    // defined with the recipe schema below
 ```
+
+A run an agent starts (spec 14's `generate`, from an in-app chat or an outside chat) is this same run. The engine composes its request the same way and sends it with `chat` set. Its placeholders and their fill are turn changes of that chat's open turn, the way a chat's writes are, though the placeholder's origin stays `run:<runId>`. A run started from an outside chat holds its outside turn open until every output has landed or failed.
 
 - `recipe.copy({ project, from, sidecar, file })` returns `{ sidecar }`. A result pasted from project `from` brings its recipe: every file the recipe names (its references and their `original`) is copied into `project` through spec 02's copy, and the result's sidecar, its references renamed to the copies and its `file` set to `file` (the image's copy), is written beside `file` in place of that copy's own sidecar. A sidecar that is gone answers `not_found` with the `recipe.read` message below.
 - `recipe.read({ project, shapeId })` returns the result's recipe from its sidecar, or, for a durable placeholder whose sidecar is not written yet (spec 04), from its render job record; otherwise the error (`not_found`) `This result's recipe is no longer in the project folder.`
@@ -454,6 +457,7 @@ type ImageSidecar = {
   cost: number | null; createdAt: string; file: string
   recipe: ResultRecipe              // medium 'image'
   free?: { picks: number[] | null; dropped: number[] }   // spec 05
+  chat?: { id: string; turn: number }                    // spec 14: the chat and turn that started the run
 }
 ```
 

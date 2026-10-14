@@ -10,11 +10,11 @@ Spec 07 already serves the canvas tools over MCP, but only to sessions Unframed 
 
 ## Solution
 
-A person opens Settings, presses **Connect an agent**, picks the client (Claude Code, Codex, the Claude desktop app, or another MCP client) and gets a ready setup: one command to paste in a terminal, or one config block to paste into a file. The setup carries a **connection token**, shown once. From then on, while Unframed is open, that client lists the projects, reads a project's canvas (shapes, prompts, names, parameters, page and motion files and their code), and creates and edits pages, motions and canvas shapes with the same tools the in-app agent uses.
+A person opens Settings, presses **Connect an agent**, picks the client (Claude Code, Codex, the Claude desktop app, or another MCP client) and gets a ready setup: one command to paste in a terminal, or one config block to paste into a file. The setup carries a **connection token**, shown once. From then on, while Unframed is open, that client lists the projects, reads a project's canvas (shapes, prompts, names, parameters, page and motion files and their code), and creates and edits pages, motions and canvas shapes with the same tools the in-app agent uses. It also starts a paid generation (an image, a video or a text run) from shapes it names, through the same run the composer's Generate starts, and it reads and sets the shapes the person has selected in the app. The in-app agent can start generations too. A dry run shows what a generation would send and cost before anything is paid.
 
 The setup runs a small **stdio shim** that ships with the engine. The shim reads a **discovery file** the engine writes into its data folder at every launch, and relays the client's MCP messages to the engine's existing `/mcp` endpoint on loopback, with the token. When Unframed is closed, the shim stays up and answers every tool call with "Unframed is not open". When Unframed opens again on a new port, the same shim finds it with no restart of the client.
 
-Every outside call shows up in the app. Each session of the outside client (every `claude` run in a terminal, for example) gets its own chat in each project it works in, named after the connection and the time the chat started. The session's first call into a project creates that chat. Its tool calls appear in the chat's work log, its writes are grouped into turns with a recap card each, and **Revert this turn** works the way it does for the in-app agent. The person can revoke a connection in Settings, and its next call is refused.
+Every outside call shows up in the app. Each session of the outside client (every `claude` run in a terminal, for example) gets its own chat in each project it works in, named after the connection and the time the chat started. The session's first call into a project creates that chat. Its tool calls appear in the chat's work log, its writes are grouped into turns with a recap card each, and **Revert this turn** works the way it does for the in-app agent. A generation shows in the outside chat with its estimate when it starts and its cost when it lands. The person can revoke a connection in Settings, and its next call is refused. A revoke does not cancel a generation already started; it lands and is kept.
 
 The engine still binds loopback only. Nothing here opens it to the network.
 
@@ -71,10 +71,27 @@ Revoking and safety
 35. As a person, I want to revoke a connection after a confirmation, so that a token I leaked stops working at once.
 36. As a person, I want a revoked connection's chats and changes to stay, so that revoking never removes work.
 37. As a person, I want the engine still to answer only my own machine, so that a connection never opens Unframed to the network.
-38. As a person, I want a connection unable to read my OpenRouter key, change settings, read other chats, or create, rename or delete projects, so that a token reaches the canvas and nothing more.
+38. As a person, I want a connection unable to read my OpenRouter key, change settings, read other chats, or create, rename or delete projects, so that a token reaches the canvas, its generations and its selection (stories 42 to 51), and nothing more.
 39. As a person, I want Unframed's own in-app agents never to pick up the outside connection from my user config, so that in-app work stays attributed to the in-app chat.
 40. As a maintainer, I want the token stored only as a hash on disk, so that a copy of the data folder does not hand out access.
 41. As the desktop shell, I want nothing I rely on to change, so that installed apps keep working with this engine.
+
+Generating and selection
+
+42. As an outside agent, I want to start an image, video or text generation from shapes I name on the canvas, so that I can make a result from my terminal the way the composer's Generate makes one.
+43. As an outside agent, I want a dry run that returns the final prompt, the references and the estimate without sending or spending anything, so that I can check a request before it is paid.
+44. As an outside agent, I want each started generation to answer its estimate at once and its cost once it lands, so that I can report what it cost.
+45. As a person, I want every generation an outside agent starts to show in its outside chat with its cost, so that I see what my agent spent and where. (The limit is set per connection in Settings.)
+46. As a person, I want a generation an outside agent starts to finish even when the agent goes quiet, its session ends or I revoke its connection, so that a paid run is never stranded.
+47. As an outside agent, I want `canvas_read` to answer the shapes the person has selected in the app, so that "make the selected ones red" works from a terminal.
+48. As a person, I want the selection an outside agent reads to be the one I have in the window I used last on that project, so that the agent acts on what I am looking at.
+49. As an outside agent, I want to be told why the selection is empty when no Unframed window has the project open, so that I do not guess.
+50. As an outside agent, I want to set the person's selection with `canvas_select`, so that I can point at the shapes I mean.
+51. As a person, I want a selection an outside agent sets to show as a row in its chat, and to know that Revert does not undo it, so that I can see what it pointed at.
+52. As a person, I want my in-app agent to start generations from the shapes its message names, so that it can make a result in the chat I am reading.
+53. As a person, I want each in-app generation to show in my chat with its cost, while the agent's own turn stays on my subscription, so that I see what a generation cost apart from the agent.
+54. As a person, I want to set a spend limit on an outside connection when I make it, and change it later, so that the agent cannot spend more than I allow.
+55. As an outside agent, I want to be told when my connection's spend limit is used up and how the person can raise it, so that I stop instead of retrying.
 
 ## Implementation Decisions
 
@@ -85,6 +102,9 @@ Revoking and safety
 - **Outside session**: one run of an outside client's MCP server, from its `initialize` until the client closes it. Every `claude` run in a terminal is one session.
 - **Outside chat**: the chat one outside session's calls into one project show in. One per session per project.
 - **Outside turn**: a run of one outside chat's tool calls, grouped by the idle rule below.
+- **Agent generation**: a paid run (image, video or text) an agent starts through the `generate` tool, from an in-app chat or an outside chat. It goes through the same run service as the composer's Generate, and it is attributed to that chat and turn.
+- **Spend limit**: the amount an outside connection may spend on agent generations in a period, set in Settings (see "Spend limit (outside connections)").
+- **Live selection**: the shapes the person has selected in one Unframed window on a project's canvas, as that window last reported them.
 
 In protocol names the word is `outside`. In UI copy it is "outside Unframed".
 
@@ -97,6 +117,9 @@ In protocol names the word is `outside`. In UI copy it is "outside Unframed".
 | Discovery file | engine | written at boot, removed at shutdown | small |
 | Outside binding | engine, in front of spec 07's MCP route | turns a connection token, a session id and a `project` argument into spec 07's `{project, chatId}` binding, opening the outside turn | deep: session ids, the chat lookup, the idle rule, change notes, activities |
 | Outside turn rule | domain | `outsideTurn({openTurn, lastCallAt, now, idleMs}) -> continue \| settle-then-open \| open` | pure |
+| Agent generation | engine, in front of specs 03, 04 and 05's run services | `generate(binding, input) -> {dryRun answer} \| {runId, batchId, placeholders, estimate}`: builds the same composition and run request the composer sends, from the shapes named, and adds the chat and turn | deep: the composition, the estimate, the attribution, the in-flight turn hold, the spend limit |
+| Live selection | engine store, fed by the web | `report(project, window, shapeIds)`, `clear(window)`, `current(project) -> {shapeIds, note?}`, `apply(project, shapeIds) -> {applied, missing, note?}` | small: the last-changed rule, the drop on disconnect and the set |
+| Spend ledger | engine, in the connection store; its period and refusal rules in domain | `reserve(connection, runId, usd)`, `settle(runId, usd)`, `release(runId)`, `spent(connection, period, now) -> usd` | small: period boundaries, the 35-day prune |
 | Stdio shim | engine package, its own entry | a process: stdin and stdout MCP, env `UNFRAMED_MCP_TOKEN`, arg `--data-dir`; one process is one outside session | deep: discovery, the session id, relay, offline answers |
 | Settings section and outside chat UI | web | spec 10's dialog section, spec 08's rail | small |
 
@@ -138,12 +161,15 @@ The pid check matters for security. Without it, a stale file left by a crash cou
 
 ```
 { "connections": [ { "id": "<uuid>", "name": string, "client": "claude-code" | "codex" | "claude-desktop" | "other",
-                     "tokenSha256": "<hex>", "createdAt": ISO, "lastUsedAt": ISO | null } ] }
+                     "tokenSha256": "<hex>", "createdAt": ISO, "lastUsedAt": ISO | null,
+                     "spendLimit": { "usd": number, "period": "day" | "week" | "month" | "lifetime" } | null,
+                     "spentUsd": number, "spendLog": [ { "runId": string, "at": ISO, "usd": number, "state": "reserved" | "landed" } ] } ] }
 ```
 
 - The plaintext token exists only in `create`'s answer and in the person's client config. The engine keeps the SHA-256 hash and compares hashes in constant time. A copy of the data folder carries no usable token.
 - A missing file is no connections. An unparsable file reads as no connections, so every token is refused, and the engine logs `  agent connections: could not read agent-connections.json, so every outside connection is refused until one is made again.` Refusing is the safe failure; the next `create` rewrites the file.
 - `lastUsedAt` is written at most once a minute per connection.
+- The spend fields count what the connection's generations were priced at (see "Spend limit (outside connections)"). `spendLog` keeps 35 days, and `spentUsd` keeps the total that a lifetime limit reads.
 - **Name**: trimmed, 1 to 40 characters, else `bad_request`: `Name the connection.` or `Keep the name to 40 characters.` Names need not be unique.
 - **Revoke** removes the entry. From that moment the token is refused with 401. A call already running finishes. Every open outside turn of every session of that connection settles (below), their preview tabs close, and each of its outside chats whose session has not ended gets an info activity `outside.disconnected`.
 - The connection store is engine-wide, per-person state in the data folder, like the preferences store. It holds no project state.
@@ -152,8 +178,9 @@ RPC methods (spec 01's group, spec 01's error shape):
 
 | Method | Input | Success | Failures |
 | --- | --- | --- | --- |
-| `agentConnections.list` | none | `{ connections: [{id, name, client, createdAt, lastUsedAt}] }`, newest first | none |
-| `agentConnections.create` | `{ name, client }` | `{ connection, token, setup }`: `setup` is the connection setup module's steps for this platform | `bad_request` for the name; `internal`: `Could not save the connection: <reason>` |
+| `agentConnections.list` | none | `{ connections: [{id, name, client, createdAt, lastUsedAt, spendLimit, spent}] }`, newest first; `spent` is the spend in the limit's period, or the total when there is no limit | none |
+| `agentConnections.create` | `{ name, client, spendLimit? }`, `spendLimit` as `{ usd, period }` or absent for no limit | `{ connection, token, setup }`: `setup` is the connection setup module's steps for this platform | `bad_request` for the name; `internal`: `Could not save the connection: <reason>` |
+| `agentConnections.setSpendLimit` | `{ id, spendLimit }`, `spendLimit` as `{ usd, period }` or `null` | `{}` | `not_found`: `That connection no longer exists.`; `bad_request`: `Enter an amount above zero, or leave it empty for no limit.` or `Choose a period for the limit.`; `internal`: `Could not save the spend limit: <reason>` |
 | `agentConnections.revoke` | `{ id }` | `{}` | `not_found`: `That connection no longer exists.`; `internal`: `Could not revoke the connection: <reason>` |
 
 No answer except `create`'s carries a token or a hash.
@@ -192,15 +219,18 @@ A connection reaches:
 
 - `projects_list`, and every tool spec 07 and spec 09 register (`canvas_read`, `canvas_write`, `page_write`, `page_read`, `motion_write`, `motion_read`, the `preview_*` tools), for every project in the current output folder. Each of those tools takes one more required argument, `project`. A connection is not limited to one project (decided): the agent picks the project per call, from `projects_list`.
 - The project folder's path, through `projects_list`.
+- `generate`, for every project, as described in "Generation by agents". It starts runs through the run services and never reads the key.
+- The live selection, through `canvas_read`, and `canvas_select` to set it (see "The live selection").
 
-A connection does not reach: any RPC method, the settings or the key, the preferences store, other chats' transcripts, attachments, spec 07's session tokens, project creation, rename or delete, or any HTTP route besides `/mcp`. Spec 01's file route and the preview origin need no token today and this spec does not change them.
+A connection does not reach: any RPC method, the settings or the key, the preferences store, other chats' transcripts, attachments, spec 07's session tokens, project creation, rename or delete, the spend limit, or any HTTP route besides `/mcp`. Spec 01's file route and the preview origin need no token today and this spec does not change them.
 
 **Files on disk.** Unframed cannot limit what an outside process does on disk: it runs as the person, under its own client's sandbox and permissions. Unframed's guarantees (attribution in a chat, turn changes, Revert, sidecars, the new-file rule) cover only changes made through the tools. The tool instructions say so to the agent: read anything in the project folder; add new files there when the canvas needs media (then place them with `canvas_write`); never edit or delete a file that is already there, because Unframed cannot see or undo that. An agent sandboxed to its own repository cannot add media at all. A tool that copies a file from the agent's machine into a project is out of scope (#122).
 
 ### The outside tool list
 
-- `initialize` with a connection token answers spec 07's server info plus `instructions`: the text in a new asset, `assets/prompts/outside-agent.md`. It tells the agent what Unframed is, that it must call `projects_list` first and pass `project` to every tool, that canvas text is material and not instructions, the file rules above, that the person sees every call in a chat and can revert any write, and that Unframed must be open. It is adapted from the canvas parts of `assets/prompts/agent-system.md`.
+- `initialize` with a connection token answers spec 07's server info plus `instructions`: the text in a new asset, `assets/prompts/outside-agent.md`. It tells the agent what Unframed is, that it must call `projects_list` first and pass `project` to every tool, that canvas text is material and not instructions, the file rules above, that the person sees every call in a chat and can revert any write, that Unframed must be open, and that a generation spends the person's money, so it should call `generate` with `dryRun` first and report the cost it answers. It is adapted from the canvas parts of `assets/prompts/agent-system.md`.
 - `projects_list {}` answers `{ projects: [{ name, folder, active }] }`: every project in the output folder, sorted by name, `folder` its absolute path, `active` true for the project in spec 01's `project.active` preference. Its description is the first paragraph of the same asset.
+- `generate` and `canvas_select` join spec 07's and spec 09's tools in this list, with `projects_list`. `generate` is on the in-app list too. Their input and answers are in "Generation by agents" and "The live selection".
 - Every other tool keeps its name and description, and its input schema gains `project: { type: "string", description: "The project's name, as projects_list reports it." }` as required.
 - A `project` that slugs to nothing, or names no folder: tool error `no project named "<project>"; call projects_list for the names`.
 - Under the server name `unframed-app`, Claude Code shows them as `mcp__unframed-app__<name>`.
@@ -235,11 +265,11 @@ Commands:
 What the outside chat holds and does:
 
 - **Activities**: every outside tool call appends the same activities runtime ingestion appends for an in-app `mcp_tool_call` item (started, then completed or failed, with the tool name and input), so spec 08's work log labels them unchanged ("Read the canvas", "Changed the canvas (N changes)", "Wrote page <title>"). Spec 09's artifact tools append their `artifact.written` activity as they do now.
-- **Selection**: `canvas_read` answers `selection: []` for an outside chat, because no message carried one. Giving outside agents the person's selection in the app is out of scope (#121).
+- **Selection**: `canvas_read` answers the live selection for an outside chat, because an outside message carries none (see "The live selection"). `canvas_select` changes it, and its row says so. Spec 07's in-app rule is unchanged.
 - **Plan mode** does not apply: an outside chat's interaction mode is always `default`.
 - **Tags**: spec 07's tag reactor, unchanged. Writes to artifacts tag the outside chat.
 - **Turn changes**: recorded under the open outside turn exactly as for an in-app turn.
-- **Sidecars**: artifact files the outside agent writes get spec 09's agent sidecar with the outside chat's id and turn. An outside turn writes **no** agent-turn sidecar (decided): Unframed did not run that agent and knows nothing of its usage or billing.
+- **Sidecars**: artifact files the outside agent writes get spec 09's agent sidecar with the outside chat's id and turn. An outside turn writes **no** agent-turn sidecar (decided): Unframed did not run that agent and knows nothing of its usage or billing. A generation the turn starts is different: it is a paid run, so its output's sidecar carries its cost, and it names the outside chat and turn (spec 03's `chat` field).
 - **No messages** from either side: the transcript is work log rows, recap cards and notes. A summary message from the outside agent comes later (#123).
 
 ### Outside turns
@@ -249,7 +279,8 @@ An outside chat has no prompt boundary Unframed can see. MCP clients do not tell
 - A tool call into an outside chat with no open outside turn opens one (`thread.outside.turn.begin`).
 - A call into the same chat within **2 minutes** of its previous call joins the open turn.
 - The open turn settles 2 minutes after its last call ends. `UNFRAMED_TEST_OUTSIDE_TURN_IDLE_MS` (a new row in spec 01's test-only table) replaces the 2 minutes.
-- It also settles when its session ends, when the connection is revoked, when the project closes through spec 01's open-project registry (rename, delete, output folder change, shutdown), and when the person reverts it.
+- It also settles when its session ends, when the connection is revoked, when the project closes through spec 01's open-project registry (rename, delete, output folder change, shutdown), and when the person reverts it. Each of these settles it only after its generations in flight have landed or failed (below).
+- A turn with a generation in flight stays open until every generation it started has landed or failed, even when the agent is quiet for longer than the idle time. A video render that takes minutes is one turn, and its result is revertable with that turn. No close, revoke or rename cancels a paid run; it lands in the project folder, and its turn settles after it.
 - A call that arrives after the turn settled opens the next turn in the same chat.
 
 Two minutes of quiet is the decided unit of one Revert. Shorter would split one long piece of work (an agent can spend over a minute writing one large page) into several turns. Longer would merge the work of two prompts into one turn, so one Revert would undo both.
@@ -266,19 +297,86 @@ An outside agent gets no preamble. Instead, when the canvas changed since this o
 
 In-app chats need no change: an outside write has origin `chat:<outside chat id>`, so spec 07's change note already counts it as "another chat".
 
+### Generation by agents
+
+The `generate` tool starts one paid run through the same run services the composer's Generate uses (specs 03, 04 and 05). It is the agent's counterpart of Send. It adds no second way to pay. It is on the in-app agent's tool list and on every outside connection's list.
+
+Input. On an outside call `project` is required, as on every tool of that list. An in-app call takes no `project`: it uses the chat's project, as `canvas_write` does.
+
+```ts
+generate {
+  project: string            // outside calls only; in-app calls take no project
+  medium: 'image' | 'video' | 'text'
+  sources: string[]          // shape ids as canvas_read names them; required, at least one
+  instruction?: string       // the per-run instruction, as the composer's box
+  model?: string             // default: the medium's default model (spec 10)
+  params?: Record<string, string | number | boolean>   // as the composer's tray takes them
+  runs?: number              // image only, 1 to 10, one batch; video and text run once
+  dryRun?: boolean           // default false
+}
+```
+
+- **Sources are explicit.** The agent names the shapes, and spec 03's selection to request rule composes the request from them exactly as it does from a selection: order, `@id` resolution, numbering, sketches and composites. The live selection is never the default, so a run is reproducible from the call that made it, and the recipe records the ids.
+- **Validation** is the composer's: the same refusals, with the same sentences, for a missing key, an empty prompt, too many outputs, an unknown model, a parameter the model does not take, a missing reference file and a non-https link. A refusal writes nothing and sends nothing.
+- **Not reachable from agents in this version**: Free mode (it needs a list from the composer's selection) and Regenerate (it needs the composer's recipe mode). Both stay in-app, and in the composer.
+- **Dry run** (`dryRun: true`) validates, composes and prices the request, and answers `{dryRun: true, prompt, references, estimate, spendLimit}`. `prompt` is the final prompt the run would send, and `references` lists each reference by shape id and kind. `spendLimit` is `{usd, period, spent}` for an outside connection with a limit, and `null` otherwise. It creates no placeholder, writes no file, calls no upstream endpoint, and is never refused by the limit. This is spec 05's View final prompt, as a tool.
+- **Accepted** (`dryRun` false) answers once the placeholders are in the room, as the composer's Send does: `{runId, batchId, placeholders: [shapeId], estimate, status: "running"}`. `estimate` is the composer's text when it is exact (`est. ~$0.042 each`) and `null` when no exact price exists. A video takes minutes, so the agent follows it with `canvas_read`.
+- **Landing.** When the output lands, the placeholder is filled as spec 03 says, and `canvas_read` shows the result with `running: false`, its file, its recipe and its `cost` (a number, USD, when the sidecar has one). The landing is a canvas change of the agent's turn, so it appears in the work log and the recap card. A landing after an in-app turn has settled is appended to that turn, and its recap updates.
+- **Attribution.** Every agent call sets `chat: {id, turn}` on the run request (spec 03): the in-app chat and its turn, or the outside chat and its turn. The sidecar records the same `chat`, so the folder says which chat and turn made the file. The placeholders and the fill are turn changes of that turn, as a chat's writes are, so Revert this turn removes the result. The placeholder's origin stays `run:<runId>`, as spec 03 has it. A revert never deletes a file, as spec 07 has it.
+- **Cost shown.** The same way in in-app and outside chats. The work log has a row when a generation starts (`Started an image generation`), and an engine activity when it lands (`Generated an image ($0.0420)`, or `Generated an image` when no cost is known). The recap card of a turn that started paid generations adds a line `Spent $<total> on <n> generations`, counting the landed costs and naming the ones still running in `<n>`. The result's own line shows its cost (spec 03).
+- **Tags.** A generation's results are images, videos or text, and tag nothing. Spec 07's tag rule for canvas writes applies to any other write the turn makes.
+
+### In-app agents
+
+The in-app agent gets `generate` (provider-side name `mcp__unframed__generate` on Claude, and the same server for Codex). It follows the rules above, with these differences:
+
+- **No spend limit.** An in-app generation has no connection, so it has no limit beyond the OpenRouter key's own cap (spec 10). The composer's Generate has the same bound.
+- **Permission** (spec 07's policy, step 3). In Supervised mode the call opens a request whose detail names the medium and the estimate, and it runs only when the person accepts. In Full access it runs at once. In plan interaction mode it is refused with the text in `assets/prompts/plan-no-writes.md`.
+- **Billing.** The in-app turn stays subscription-billed. Its agent turn sidecar has no `cost`, as index contract 4 requires. Each generation's output sidecar has its own `cost` and its `chat`. Those are paid runs, billed as the composer's runs are.
+- **The turn does not wait for the landing.** The call answers at acceptance, and the agent may follow it with `canvas_read` when it wants the result. Revert of an in-app turn with a generation in flight is refused until it lands: `Wait for the generation to land before reverting.`
+- **Selection.** In-app agents see the message's selection and never change it (spec 07). `canvas_select` is on the outside list only.
+
+### Spend limit (outside connections)
+
+- **Set when the connection is made**, in the Connect an agent dialog, and **changed later** from the connection's row (`Limit`). Two fields: **amount**, in US dollars, a number with at most two decimals, empty for no limit; and **period**, one of `Per day`, `Per week`, `Per month` or `For its whole life`. Neither field is filled in by default: an empty amount is no limit, and the period must be picked once an amount is typed. Nothing in the product sets an amount or a period for the person.
+- **Period boundaries** use the engine's local time: a calendar day, a week starting on Monday, a calendar month, and, for the whole life, the time since the connection was made.
+- **Counting.** An accepted paid call reserves its estimate in the connection's spend log. When its output lands, the reservation becomes the landed cost (the estimate stays when no cost comes back). A run that fails releases its reservation. The spend in a period is the sum of the log's lines in that period. The log keeps 35 days, and the whole-life limit reads the running total.
+- **Refusal.** Before any placeholder is written, a paid call from an outside connection is refused in two cases:
+  - the connection has an amount and the run has no exact estimate, so the limit cannot be checked: `This generation has no exact price, so this connection's spend limit cannot be checked. Remove the limit in Unframed's Settings, or make it in the app.`
+  - the spend so far, plus the reservations, plus this estimate, would pass the amount: `This connection has spent $<spent> of its $<limit> limit <period>, and this run would pass it. Raise the limit in Unframed's Settings, or wait until the period starts again. A dry run still works.` Here `<period>` reads `per day`, `per week`, `per month` or `for its whole life`.
+- **Changing the limit** applies at once. Lowering it below what is spent refuses the next paid call. A generation already started is not cancelled.
+- **Consequence.** With an amount set, a text run and a video run with no exact price are refused, because their cost cannot be bounded in advance. The person sees that in the refusal and can remove the limit.
+- **No approval for outside calls.** An outside call is not asked about. The limit is the guard.
+
+### The live selection
+
+`canvas_read` answers the person's selection in the app for an outside chat, so "make the selected ones red" works from a terminal. `canvas_select` sets it. Both act on one window: the one that changed its selection most recently on the project named in the call.
+
+- **Windows.** A window is one web client's RPC socket (spec 01) with a canvas open. On change, debounced at 150 ms, the web reports the selection of its open project over that socket: `selection.report {project, shapeIds}`. The web does nothing else for this, and the connection token never reaches it.
+- **Which one counts.** The engine keeps the latest report per window. A read and a set use the window that changed its selection most recently. A window that reports `[]` is a valid answer.
+- **Dropping.** A window's report is dropped when its socket closes: the tab closes, the app quits, or the project closes through spec 01's open-project registry. If another window still has the project open, its most recent report answers.
+- **Reading.** `canvas_read`'s `selection` is the chosen window's ids, without `shape:`, in the order the window reported, filtered to shapes that still exist at the call. It is a snapshot. A change made after the call shows in the next call.
+- **No window.** `selection: []` and `selectionNote: "Unframed has no window open on this project, so there is no selection to read."`. When Unframed is closed, the shim's own answer applies (see "Discovery: a stdio shim over a discovery file" above).
+- **Setting.** `canvas_select {project, shapeIds}` sets the chosen window's selection to these shapes, and `[]` clears it. The engine sends `selection.apply {requestId, shapeIds}` to that window's socket as a server push, the way spec 03's `run.subscribe` pushes events. The web applies it with the canvas's own selection, and reports the result through `selection.report` like any change. The tool answers `{selection, missing, selectionNote?}` once that report arrives, or after 2 seconds with the last report it holds. `selection` is what the window now has selected. `missing` lists the ids not on the canvas, which are dropped from the set. With no window open on the project, it answers `{selection: [], selectionNote}` and changes nothing. The composer's chips follow the change as spec 08 says, and a composer in recipe mode leaves recipe mode, as any selection change does (spec 03).
+- **In the outside chat.** `canvas_select` appends an activity, `Selected <n> shapes` or `Cleared the selection`, under the turn it joins. It is not a canvas change: it writes no turn change, so the recap card has no row for it.
+- **Revertable: no.** Revert undoes what a turn did to the canvas. A selection is where the person's pointer is, not document content, and a revert would have to restore a selection the person has since moved past. The row says so: `Selected 3 shapes. Revert does not undo a selection.`
+- **Approval.** `canvas_select` is not asked about, like the other outside tools, since it saves nothing. The row in the chat shows it.
+- **In-app chats** are unchanged. Their `canvas_read` answers the message's selection (spec 07), and the in-app agent has no `canvas_select`.
+
 ### Settings
 
 A new block in spec 10's settings dialog, directly after Local agents, inside the part shown only with a key. Spec 10 hides sections 5 to 7 until an OpenRouter key exists, and this block stays hidden with them (decided). It holds:
 
 - Heading `Agents outside Unframed`, then the line `Let Claude Code, Codex or another MCP client on this computer read and change your canvas while Unframed is open.`
-- One row per connection: the name, the client's label (`Claude Code`, `Codex`, `Claude app`, `MCP client`), and `Last used <relative time>` or `Never used`, then a ghost `Revoke` button.
+- One row per connection: the name, the client's label (`Claude Code`, `Codex`, `Claude app`, `MCP client`), and `Last used <relative time>` or `Never used`, then `Spent $<spent> of $<limit> <period>` (or `Spent $<spent>, no limit`), a ghost `Limit` button that opens the spend limit fields, and a ghost `Revoke` button.
 - An outline `Connect an agent` button with a plug icon.
 
 **Connect an agent** opens the kit Dialog (spec 12), 520 px:
 
 1. The client as a kit radio group: `Claude Code`, `Codex`, `Claude desktop app`, `Another MCP client`. Default Claude Code.
 2. A name field labelled `Name`, filled with the client's label until the person types.
-3. Footer: ghost `Cancel`, primary `Create connection` (Spinner while saving).
+3. The spend limit: a number field `Spend limit (USD)`, empty for no limit, and a select `Period` (`Per day`, `Per week`, `Per month`, `For its whole life`). The period starts empty and is required once an amount is typed. See "Spend limit (outside connections)".
+4. Footer: ghost `Cancel`, primary `Create connection` (Spinner while saving).
 
 After creating, the same dialog shows the setup: each step's text, and its code in t3code's code block frame with `Copy` (turning `Copied` for 1.2 s), as spec 08's code blocks do. Under the steps, the kit's warning Alert: `This setup holds a key to your canvas. Unframed shows it once. Keep it out of files you share or commit.` Footer: primary `Done`. Closing the dialog drops the token from the web's memory. The token is never shown again (decided), because the engine keeps only its hash.
 
@@ -319,19 +417,26 @@ Each bend is deliberate. The task that builds it updates the bent passage in the
 7. **Spec 07, the chat record**: a chat's provider can be `outside`, it carries an optional `outside` field naming its connection and session, and a turn can exist with no user message.
 8. **Spec 07, revert**: an outside chat's open turn can be reverted (it settles first). In-app chats keep "Wait for the turn to finish before reverting."
 9. **Spec 07, restart reconciliation**: an outside turn found open at boot settles `completed`, not failed with the quit-mid-turn sentence.
-10. **Spec 07, the agent turn sidecar**: "Every settled turn, failed or not, writes `<epochMs>-agent[-n].json`". Outside turns write none. Index contract 4 still holds: no outside turn is a paid run and none carries a `cost`.
+10. **Spec 07, the agent turn sidecar**: "Every settled turn, failed or not, writes `<epochMs>-agent[-n].json`". Outside turns write none. Index contract 4 still holds: the agent turn sidecar of an outside turn carries no `cost`. A generation an agent starts, from an outside or an in-app chat, is a paid run, so its output's sidecar carries `cost`, as spec 03 says for every paid run.
 11. **Spec 07, provider adapters**: in-app Claude sessions add `mcp__unframed-app` to `disallowedTools`; in-app Codex sessions add `-c mcp_servers.unframed-app.enabled=false`.
 12. **Spec 08**: the continuable chat rule excludes outside chats; the rail's composer, tab tooltip, activity line and Revert visibility differ for an outside chat.
 13. **Spec 10, the settings dialog**: a new block after Local agents.
+14. **Specs 03, 04 and 05, the run requests and sidecars**: an optional `chat: {id, turn}` on `run.image`, `run.video` and `run.text`, set by every run an agent starts through `generate` (in-app or outside), and written to the sidecar as `chat`. The composer's Generate is unchanged. A run started from an outside chat holds its outside turn until it lands (outside turns, above); an in-app turn does not wait. Video runs keep spec 04's durable render job.
+15. **Spec 07, the tool lists and permissions**: `generate` joins the in-app list (`mcp__unframed__generate`) and the outside list; `canvas_select` joins the outside list only. The required-tool check grows with `generate`. Step 3 of the permission policy gives `generate` the Supervised ask and the plan-mode refusal; the other Unframed tools stay allowed in every mode.
+16. **Spec 07, `canvas_read`**: for an outside chat, `selection` is the live selection, and a result shape gains `cost` when its sidecar has one. For an in-app chat, the answer is spec 07's, with the same `cost` field. A `selectionNote` appears only when no window has the project open.
+17. **Spec 08, the work log and recap**: the labels of `generate` and `canvas_select` rows, and a spend line on any turn's recap card that started a generation.
+18. **Spec 10, the settings connection row and dialog**: the spend limit fields on Connect an agent, a Limit action on each row, and the `Spent` figure.
 
 ## Testing Decisions
 
 A good test drives an outside agent the way a client does (MCP messages to `/mcp` with a connection token, or through the shim as a child process over stdio) and the person the way the web does (RPC and the rail), then asserts on what the engine holds: the chat's projection, the canvas, the files in the project folder, the store files in the data folder. It never reaches into the connection store's memory, the binding cache or a reactor.
 
-- **Domain seam** for the pure rules with many cases: the connection setup per client and platform (quoting, the server name, the optional `ELECTRON_RUN_AS_NODE`, user scope), the outside turn rule, the decider's refusals for outside chats and the projector's turn without a message, the continuable chat rule excluding outside chats, and the Claude option mapping that disallows `mcp__unframed-app`.
+- **Domain seam** for the pure rules with many cases: the connection setup per client and platform (quoting, the server name, the optional `ELECTRON_RUN_AS_NODE`, user scope), the outside turn rule, the decider's refusals for outside chats and the projector's turn without a message, the continuable chat rule excluding outside chats, the Claude option mapping that disallows `mcp__unframed-app`, the `generate` input rule (sources, medium and runs, the dry-run answer, the estimate's text), the live selection rule (the most recent window, the drop on disconnect, the empty answer with its note), the rule that holds an outside turn open while a run is in flight, the spend limit's period boundaries, reservations and refusal sentences, and the permission policy for `generate` (Supervised asks, Full access runs, plan mode refuses).
 - **Engine seam** for everything else on the engine side: the engine forked as spec 01's harness does, with `UNFRAMED_TEST_OUTSIDE_TURN_IDLE_MS` short. Tests read `mcp-endpoint.json` from the temp data folder, create a connection over RPC, and drive `/mcp` with spec 07's `McpClient` carrying the connection token and the `Mcp-Session-Id` its `initialize` answered (two clients are two sessions). The shim runs as a real child process (`node <shim> --data-dir <temp data folder>`) with the token in its environment, and the test talks to it over stdin and stdout. Canvas state is seeded and checked with a sync client, as spec 07's tests do. The Codex launch argument is checked against spec 07's fake `codex app-server`, which records its arguments.
+
+Generation and selection on the engine seam use the stub for upstream calls (a stub that can hold its answer for a set time, so a run can outlive the idle time) and a test web client that sends `selection.report` and answers `selection.apply` the way the web does.
 - **Browser seam** for the Settings block and the rail: Playwright against the built web served by an engine at the engine seam, while the test drives `/mcp` with the token the dialog showed.
-- **Manual, and said so**: a real Claude Code, a real Codex and the real Claude desktop app each connected through the generated setup, once per change to the setup text; and the shim run through the packaged desktop app's Electron binary.
+- **Manual, and said so**: a real Claude Code, a real Codex and the real Claude desktop app each connected through the generated setup, once per change to the setup text; and the shim run through the packaged desktop app's Electron binary. The end-to-end check for generation and selection is a real Claude Code through the generated setup: list the projects, read a canvas with a selection, write a page, start one cheap image generation (a dry run first), and revert the turn. The step that spends real money is run by the person, not by the build.
 
 Prior art: spec 07's MCP auth test (task 17) and scripted-agent canvas tests, spec 09's artifact tool tests, spec 01's bundle smoke test for running a bundled entry, spec 10's settings dialog tests.
 
@@ -346,7 +451,7 @@ Prior art: spec 07's MCP auth test (task 17) and scripted-agent canvas tests, sp
 7. **The token on `/mcp`.** With a connection token, `initialize` answers the outside instructions and an `Mcp-Session-Id`, a second `initialize` answers a different one, and `tools/list` answers `projects_list` plus every registered tool with a required `project`; a request after `initialize` without the session id gets 400 with its sentence; no token, a wrong token and a revoked token get 401; a non-loopback `Origin` gets 403. A connection persists across an engine restart; an unparsable store refuses every token and logs its line. Seam: engine.
 8. **`projects_list`.** Every project with its absolute folder, sorted, and `active` on the one in `project.active`. Seam: engine.
 9. **One chat per session per project.** A session's first `canvas_read` naming a project creates one outside chat there, titled `<connection name> · <h:mm am/pm>`, with tool activities for the call; the session's second call reuses it; the same session naming a second project gets a second chat there; a second session of the same connection gets its own chat in the first project; another connection's session gets its own; an unknown project answers its refusal and creates nothing; a deleted outside chat is replaced on the session's next call. Seam: engine.
-10. **`canvas_read` and `canvas_write` from outside.** The read matches the in-app view with `selection: []`. A write lands as one room change with origin `chat:<outside chat id>`, a sync client sees it, and it is recorded under the open outside turn; writing to a page tags the outside chat. Seam: engine.
+10. **`canvas_read` and `canvas_write` from outside.** The read matches the in-app view, with the live selection (task 34) as its `selection`. A write lands as one room change with origin `chat:<outside chat id>`, a sync client sees it, and it is recorded under the open outside turn; writing to a page tags the outside chat. Seam: engine.
 11. **Artifact tools from outside.** `page_write` and `motion_write` create and update artifacts with their files, library and agent sidecars naming the outside chat and turn; `page_read` returns the HTML. Seam: engine.
 12. **Turns by idle time.** Calls within the test idle time form one turn; after it the turn settles (`lastClock`, its files) with no agent-turn sidecar in the project folder, and the next call opens turn 2. Seam: engine.
 13. **Revert outside work.** `thread.turn.revert` on a settled outside turn restores the canvas and skips a shape a sync client edited since; on the open turn it settles the turn first, then reverts it. Seam: engine.
@@ -364,16 +469,37 @@ Prior art: spec 07's MCP auth test (task 17) and scripted-agent canvas tests, sp
 25. **Connect an agent.** In Settings, the block lists no connections, Connect an agent opens the dialog, choosing Codex and a name shows Codex's steps with Copy and the warning, Done closes it, and the row shows `Never used`; after the test drives `/mcp` with the shown token, reopening shows `Last used`. Seam: browser.
 26. **Revoke in Settings.** Revoke asks first, then the row is gone, the next `/mcp` call gets 401, and the outside chat in the rail shows the disconnected line. Seam: browser.
 27. **The outside chat in the rail.** Driving `/mcp` from the test as two sessions of one connection, the rail shows two outside chat tabs titled with the connection's name and their times, the live dot on the one whose turn is open, work log rows with spec 08's labels, the activity line, and a recap card whose Revert this turn restores the canvas; the composer shows the outside line and New chat; the toolbar's Agent button with the touched artifact selected says "new chat". Seam: browser.
+28. **Generation input.** `generate` with explicit sources composes the request by spec 03's selection to request rule; each medium's runs rule (image 1 to 10, video and text once); the refusals with the composer's sentences; the dry-run answer's prompt and references; the estimate's text, or `null` when none is exact. Seam: domain.
+29. **Dry run from outside.** `generate` with `dryRun: true` answers the final prompt, its references and the estimate, creates no placeholder, writes no file and reaches no upstream endpoint (the stub's request count stays at zero). Seam: engine.
+30. **Image from outside.** `generate` with two runs answers `runId`, `batchId` and two placeholders that are in the room before the answer, with `estimate` and `status: "running"`; when they land, the files and sidecars carry `cost`, `batchId` and `chat`; `canvas_read` shows the results with `running: false` and `cost`; the outside turn's recap shows `Spent $<total> on 2 generations`. Seam: engine.
+31. **Video and text from outside.** A video from outside is a durable render job (spec 04) that outlives the call and whose sidecar names the outside chat; a text run lands a text result with its cost and the same `chat`. Seam: engine.
+32. **Spend limit.** Created with a limit, `agentConnections.setSpendLimit` changes it, and a dry run answers its `spendLimit`. A paid outside call over the limit is refused with the limit sentence before any placeholder, and a text or video call with an amount set and no exact price is refused with the no-price sentence. A landing replaces the reservation with the cost; a failed run releases it; the period resets at its boundary. Seam: domain (period boundaries, reservation and refusal rules) and engine (the calls, the refusals, the list's `spent`). The row and dialog fields are checked at the browser seam in task 44.
+33. **Turns wait for runs.** A stub run held longer than the test idle time keeps its outside turn open until it lands; a revoke, a session end and a project rename during the run each settle the turn only after the file lands, and none cancels the run. Seam: engine.
+34. **The live selection.** `selection.report` per window; `canvas_read` answers the most recently changed window's shapes for the named project, drops ids of shapes that no longer exist, answers `[]` with `selectionNote` when no window has the project open, and falls back to the most recent remaining report when the window that changed last closes. Seam: domain (the last-changed and drop rules) and engine (the RPC and `canvas_read`).
+35. **Selection in the app.** In the browser, selecting shapes reports them, so an outside `canvas_read` answers them; a second window on the same project takes over when it changes its selection; closing it returns the first window's selection. Seam: browser.
+36. **Outside labels and instructions.** The outside instructions say that a generation spends money and that a dry run comes first; the work log rows read `Started an image generation` and `Generated an image`; the recap line reads as task 30 says. Seam: engine (instructions, through `initialize`) and browser (the rows and the recap line).
+37. **Manual end-to-end check.** A real Claude Code through the generated setup lists the projects, reads a canvas with a selection, writes a page, starts one cheap image generation after a dry run, and reverts the turn. The step that spends money is run by the person. Seam: manual, said so.
+38. **Generation input.** The `generate` input rule for an in-app call and an outside call, the refusal sentences, and the dry-run answer's `spendLimit`. Seam: domain.
+39. **Dry run and accepted run from an outside chat.** A dry run answers the prompt, references, estimate and `spendLimit` and writes nothing (the stub's request count stays at zero). An accepted run with two outputs answers `runId`, `batchId` and placeholders that are in the room before the answer; the files and sidecars carry `cost`, `batchId` and `chat`; `canvas_read` shows the results with `running: false` and `cost`; the turn's recap shows `Spent $<total> on 2 generations`. Seam: engine.
+40. **Video and text from an agent.** A video is a durable render job whose sidecar names its chat and that outlives the call; a text run lands with its cost and the same `chat`. Seam: engine.
+41. **In-app generation.** The in-app Claude and Codex tool lists include `generate`, and the required-tool check counts it. A scripted turn's `generate` puts its placeholder under the in-app turn; the output sidecar has `cost` and `chat`; the turn's agent sidecar still has no `cost`. Seam: engine.
+42. **Permission for generate.** Supervised mode asks with the estimate in the request detail and runs on accept; Full access runs at once; plan mode refuses with the plan-no-writes sentence. Seam: domain (the policy) and engine (the scripted turn).
+43. **In-app landing after the turn settles.** A generation that lands after its in-app turn settled is appended to that turn: its activity, its turn change and the recap. Revert of that turn while the generation is in flight is refused with the wait sentence until it lands. Seam: engine.
+44. **Spend in the browser.** The Connect an agent dialog has the amount and period fields with no default; a period is required once an amount is typed; the row shows `Spent $<spent> of $<limit> <period>`, or `Spent $<spent>, no limit`; `Limit` changes it. The rail's recap shows the spend line and the work log its `Started` and `Generated` rows, for an in-app chat and an outside chat. Seam: browser.
+45. **canvas_select.** A set from an outside chat reaches the last-changed window: the window's selection changes, its `selection.report` answers the tool, unknown ids come back in `missing`, `[]` clears, and with no window open the answer is `[]` with the note and nothing changes. The chat gets a `Selected <n> shapes` row, no turn change, and no Revert for it. Seam: engine (through the test's RPC socket as the window).
+46. **Selection set in the app.** In the browser, an outside `canvas_select` changes the visible selection, and a selection the person makes afterwards is what the next `canvas_read` answers. Seam: browser.
 
 ## Out of Scope
 
 - Remote, LAN or tunnel access to the engine, and any outside client on another machine.
-- A headless engine, or any way to reach the canvas while Unframed is closed (decision 3).
+- A headless engine, or any way to reach the canvas while Unframed is closed.
 - Streamable HTTP setups that point a client straight at `/mcp`. The endpoint would accept them, but the port changes every launch, so no setup offers one.
 - Outside agents creating, renaming or deleting projects, changing settings, reading the key, reading or sending messages in other chats, or uploading attachments.
 - Sending messages to an outside agent from Unframed.
 - Outside agents posting a summary message into their chat: later (#123).
-- Giving outside agents the person's selection in the app, so "make the selected ones red" works from a terminal: not now (#121). `canvas_read` answers `selection: []` for them.
+- Reverting a selection change made with `canvas_select` (see "The live selection"): not offered.
+- A spend limit on in-app generations: the in-app agent has no connection, so the OpenRouter key's own cap applies.
+- Free mode and Regenerate from agents, in this version (see "Generation by agents").
 - A tool that copies a file from the outside agent's machine into a project, for agents sandboxed to their own repository: not now (#122).
 - Per-project connection tokens or read-only connections.
 - One chat per connection kept across sessions.
@@ -387,7 +513,9 @@ Prior art: spec 07's MCP auth test (task 17) and scripted-agent canvas tests, sp
 
 ### Notes
 
-- Decided by the person after the first draft: Revert takes back 2 minutes of quiet; a new outside chat per session, not one per connection forever; a connection reaches every project; the token shows once and the engine keeps its hash; the Settings block stays hidden without an OpenRouter key; moving the app breaks setups; outside turns write no sidecar. Selection (#121), copying media in (#122) and a summary message (#123) wait for their issues.
+- Decided by the person after the first draft: Revert takes back 2 minutes of quiet; a new outside chat per session, not one per connection forever; a connection reaches every project; the token shows once and the engine keeps its hash; the Settings block stays hidden without an OpenRouter key; moving the app breaks setups; outside turns write no agent-turn sidecar. Agent generation and the live selection (#93, #121) were added by the Pivot's amendment. The person then decided four questions: the spend limit is set per connection in Settings, with no default amount or period; in-app agents get `generate`; outside agents can set the selection, which Revert does not undo; and the window that changed most recently on the named project counts. Copying media in (#122) and a summary message (#123) wait for their issues.
+- Why generation goes through the run services and not a new path: the composer's Generate is the one place that composes, prices, pays and records a run. A second path would be a second copy of the rules that decide what a paid run sends.
+- Why sources are explicit and not the live selection: a call's answer must not depend on what the person pointed at a moment before. The recipe of the result records the ids the agent named.
 - Why the same `/mcp` path and not a second route: the tools, their refusals and their handlers are spec 07's and spec 09's, unchanged. The token decides who is calling, and the outside binding adds `project` and the chat. A second route would be a second copy of the MCP server to keep in step.
 - Why reads create the outside chat: a person should see that something outside the app read their canvas, even when it changed nothing.
 - The residual risk in discovery: after a crash, if a reused pid belongs to a process listening on the stale port, the shim sends the token there. That needs a crash, a pid reuse and a port match at once, and revoking the connection ends it. A challenge-response before the token is sent would close it, at the cost of a second request per message; this spec does not build it.
@@ -398,11 +526,14 @@ Prior art: spec 07's MCP auth test (task 17) and scripted-agent canvas tests, sp
 
 Each task updates the passages it bends, in the same commit, so the specs describe the app as built:
 
-- 00 index: contract 1 names connection tokens beside session tokens; contract 8 adds the connection store and discovery file; the vocabulary gains **outside agent**, **connection**, **outside session** and **outside chat**.
+- 00 index: contract 1 names connection tokens beside session tokens; contract 8 adds the connection store and discovery file; the vocabulary gains **outside agent**, **connection**, **outside session** and **outside chat**, and, with the amendment, **agent generation** and **live selection**; the build-order row for 14 names the selection and the generation.
 - 01: Out of Scope (pairing tokens; the terminal line), the published bundle (`server/mcp.js`), the test-only table (`UNFRAMED_TEST_OUTSIDE_TURN_IDLE_MS`, used by 14).
-- 07: the MCP server section (the second token kind, its `Mcp-Session-Id` and `DELETE /mcp`), the chat record (provider `outside`, the `outside` field with its session, a turn with no message), revert, restart reconciliation, the turn sidecar, the Claude option table and Codex launch arguments, Out of Scope (Q16).
-- 08: the continuable chat rule, the rail's composer and tab for an outside chat.
-- 10: the settings dialog's new block.
+- 03: the run request and the image sidecar gain the optional `chat` field (every agent-started run); "The run, in the engine" says an outside run's placeholders are turn changes of its chat's open turn.
+- 04: the video run's request and its render job gain the same `chat` field; a render job started from an outside chat keeps its turn open until it lands.
+- 05: the text run's request and its sidecar gain the same `chat` field.
+- 07: the MCP server section (the second token kind, its `Mcp-Session-Id` and `DELETE /mcp`), the chat record (provider `outside`, the `outside` field with its session, a turn with no message), revert, restart reconciliation, the turn sidecar, the Claude option table and Codex launch arguments, `canvas_read`'s `selection` and `cost`, `generate` and `canvas_select` in the tool lists, the permission policy's step 3, Out of Scope (Q16).
+- 08: the continuable chat rule, the rail's composer and tab for an outside chat, the labels of `generate` and `canvas_select` rows, and the spend line on a turn's recap card.
+- 10: the settings dialog's new block; the spend limit fields and the row's spend figure.
 
 ### Assets this spec needs
 

@@ -176,6 +176,8 @@ The tray presents these through spec 03's prop tray ("+ add prop"): Seconds is a
 - The configured default video model (`OPENROUTER_VIDEO_MODEL`, spec 01) is appended as `{ id, name: id }` when the catalogue lacks it. The list is sorted by id. On upstream failure the answer is only that one row. The answer is `{ models, default }`.
 - The model dialog (spec 03) links `Browse on OpenRouter` to `https://openrouter.ai/models?output_modalities=video` for this medium.
 
+**Agent starts** (spec 14). A `generate` with medium `video`, from an in-app or an outside chat, starts this same job through `video.start`, with `chat` set. The job records the chat and turn, and its sidecar names them. An outside chat's turn stays open until the render lands or fails; an in-app turn does not wait. Its placeholder is a turn change of that turn, as spec 03 says.
+
 **Render job starter (engine).** RPC `video.start`. Input:
 
 ```ts
