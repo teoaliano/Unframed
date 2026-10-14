@@ -50,7 +50,7 @@ describe("outside turns: revert, change notes, session end, revoke, restart and 
     const after = await agent.settled(chat!.id, 1);
     expect(after.latestTurn).toMatchObject({ turnCount: 1, state: "completed" });
     expect(after.turns[0]!.reverted).toBeDefined();
-    expect((await shapeIds(agent)).length).toBe(before - 1);
+    await waitForCount(agent, before - 1);
   });
 
   it("starts each outside call's result with the change note when someone else changed the canvas", async () => {
