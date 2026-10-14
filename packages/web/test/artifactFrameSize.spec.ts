@@ -24,7 +24,13 @@ const resizeTo = async (page: Page, engine: TestEngine, id: string, to: { w: num
   await page.mouse.down();
   await page.mouse.move(box.x + to.w * zoom, box.y + to.h * zoom, { steps: 10 });
   await page.mouse.up();
-  await expect.poll(async () => (await settledRecord(engine, "default", id))?.props).toMatchObject({ w: to.w, h: to.h });
+  // The drag lands on a zoomed pixel grid, so a size can be a fraction of a pixel off the target (5999.9997 for 6000).
+  await expect
+    .poll(async () => {
+      const props = (await settledRecord(engine, "default", id))?.props;
+      return props === undefined ? undefined : Math.abs(props.w - to.w) < 1 && Math.abs(props.h - to.h) < 1;
+    })
+    .toBe(true);
 };
 
 test("a page resized past 900 wide lays out at its frame's width, so a wide breakpoint applies", async ({ page, engine }) => {
