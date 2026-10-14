@@ -3,6 +3,7 @@
  *
  *   package.json            name "unframed", the engine version, no dev tooling
  *   server/index.js         the fork entry, every workspace and inlinable package inside
+ *   server/mcp.js           the stdio shim an outside client runs (spec 14), the same bundling
  *   client/dist/            the built web
  *   client/package.json     a shim so an older shell's `npm ci && npm run build` in
  *   client/package-lock.json  client/ succeeds and leaves client/dist alone
@@ -105,22 +106,28 @@ export const buildBundle = async (out: string, env: Record<string, string | unde
 
   await buildWeb(join(out, "client", "dist"), env);
 
-  await build({
-    entryPoints: [join(repoRoot, "packages/engine/src/main.ts")],
-    outfile: join(out, "server", "index.js"),
-    bundle: true,
-    platform: "node",
-    format: "esm",
-    target: "node24",
-    sourcemap: false,
-    legalComments: "none",
-    logLevel: "warning",
-    define: { __UNFRAMED_BUNDLE__: "true" },
-    // `ws` tries these optional speed-ups inside a try and works without them.
-    external: [...RUNTIME_DEPENDENCIES, "bufferutil", "utf-8-validate"],
-    // Inlined CommonJS packages still call require() for Node's own modules.
-    banner: { js: 'import { createRequire as __unframedCreateRequire } from "node:module";\nconst require = __unframedCreateRequire(import.meta.url);' },
-  });
+  for (const [entry, outfile] of [
+    [join(repoRoot, "packages/engine/src/main.ts"), join(out, "server", "index.js")],
+    // The stdio shim is a second entry: the outside setups run it through the Electron binary (spec 14).
+    [join(repoRoot, "packages/engine/src/mcpShim.ts"), join(out, "server", "mcp.js")],
+  ] as const) {
+    await build({
+      entryPoints: [entry],
+      outfile,
+      bundle: true,
+      platform: "node",
+      format: "esm",
+      target: "node24",
+      sourcemap: false,
+      legalComments: "none",
+      logLevel: "warning",
+      define: { __UNFRAMED_BUNDLE__: "true" },
+      // `ws` tries these optional speed-ups inside a try and works without them.
+      external: [...RUNTIME_DEPENDENCIES, "bufferutil", "utf-8-validate"],
+      // Inlined CommonJS packages still call require() for Node's own modules.
+      banner: { js: 'import { createRequire as __unframedCreateRequire } from "node:module";\nconst require = __unframedCreateRequire(import.meta.url);' },
+    });
+  }
 
   const dependencies: Record<string, string> = {};
   for (const name of RUNTIME_DEPENDENCIES) dependencies[name] = engineManifest.dependencies[name];

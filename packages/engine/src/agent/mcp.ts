@@ -228,7 +228,7 @@ const outsideRequest = async (req: http.IncomingMessage, res: http.ServerRespons
 };
 
 /** A tool's schema with the required `project` every outside call names (spec 14, "The outside tool list"). */
-const withProject = (tool: McpTool) => {
+export const withProject = (tool: Pick<McpTool, "name" | "description" | "inputSchema">) => {
   const schema = tool.inputSchema as { properties?: Record<string, unknown>; required?: string[] };
   return {
     name: tool.name,
@@ -243,24 +243,28 @@ const withProject = (tool: McpTool) => {
 
 const PROJECTS_LIST_TOOL = { name: PROJECTS_LIST, description: OUTSIDE_PROJECTS_LIST_DESCRIPTION, inputSchema: { type: "object", properties: {}, additionalProperties: false } };
 
+/** The outside tool list: `projects_list` first, then each Unframed tool with a required `project`. The shim answers from this too. */
+export const outsideToolList = (tools: ReadonlyArray<Pick<McpTool, "name" | "description" | "inputSchema">>) => [PROJECTS_LIST_TOOL, ...tools.map(withProject)];
+
+/** The `initialize` answer an outside connection gets (spec 14). */
+export const outsideInitializeResult = (protocolVersion: unknown) => ({
+  protocolVersion: typeof protocolVersion === "string" ? protocolVersion : PROTOCOL_VERSION,
+  capabilities: { tools: { listChanged: false } },
+  serverInfo: { name: MCP_SERVER_NAME, version: ENGINE_VERSION },
+  instructions: OUTSIDE_AGENT_INSTRUCTIONS,
+});
+
 /** The outside tool list: `projects_list` first, then every Unframed tool with a required `project`. */
 const handleOutside = async (message: JsonRpcRequest, outside: OutsideRoute, session: { connection: ConnectionRecord; sessionId: string }): Promise<unknown> => {
   if (typeof message !== "object" || message === null || typeof message.method !== "string") return rpcError(null, -32600, "Invalid request");
   const isNotification = message.id === undefined || message.id === null;
   switch (message.method) {
-    case "initialize": {
-      const asked = (message.params as { protocolVersion?: unknown } | undefined)?.protocolVersion;
-      return rpcResult(message.id, {
-        protocolVersion: typeof asked === "string" ? asked : PROTOCOL_VERSION,
-        capabilities: { tools: { listChanged: false } },
-        serverInfo: { name: MCP_SERVER_NAME, version: ENGINE_VERSION },
-        instructions: OUTSIDE_AGENT_INSTRUCTIONS,
-      });
-    }
+    case "initialize":
+      return rpcResult(message.id, outsideInitializeResult((message.params as { protocolVersion?: unknown } | undefined)?.protocolVersion));
     case "ping":
       return rpcResult(message.id, {});
     case "tools/list":
-      return rpcResult(message.id, { tools: [PROJECTS_LIST_TOOL, ...outside.tools().map(withProject)] });
+      return rpcResult(message.id, { tools: outsideToolList(outside.tools()) });
     case "tools/call": {
       const params = (message.params ?? {}) as { name?: unknown; arguments?: unknown };
       const args = typeof params.arguments === "object" && params.arguments !== null ? (params.arguments as Record<string, unknown>) : {};
