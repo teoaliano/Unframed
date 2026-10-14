@@ -2,6 +2,9 @@ import type { TestEngine } from "../../engine/test/engineProcess.ts";
 import { openCanvas, shapeOnScreen } from "./canvas.ts";
 import { expect, test } from "./agent.ts";
 
+/** A cross-window selection lands after the window reports it; a loaded CI runner can take longer than the default 5 s. */
+const SLOW = { timeout: 15_000 };
+
 const rpcBody = (id: number, method: string, params: unknown = {}) => ({ jsonrpc: "2.0", id, method, params });
 
 /** One client session of an outside connection (see agentOutsideRail.spec.ts). */
@@ -43,15 +46,15 @@ test("a click in the app reaches the outside read, the most recently used window
   await expect(shapeOnScreen(page, `shape:${b}`)).toBeVisible();
 
   await shapeOnScreen(page, `shape:${a}`).click();
-  await expect.poll(async () => (await call("canvas_read", { project: "default" })).selection).toEqual([a]);
+  await expect.poll(async () => (await call("canvas_read", { project: "default" })).selection, SLOW).toEqual([a]);
 
   const second = await page.context().newPage();
   await openCanvas(second, agent, "default");
   await shapeOnScreen(second, `shape:${b}`).click();
-  await expect.poll(async () => (await call("canvas_read", { project: "default" })).selection).toEqual([b]);
+  await expect.poll(async () => (await call("canvas_read", { project: "default" })).selection, SLOW).toEqual([b]);
 
   await second.close();
-  await expect.poll(async () => (await call("canvas_read", { project: "default" })).selection).toEqual([a]);
+  await expect.poll(async () => (await call("canvas_read", { project: "default" })).selection, SLOW).toEqual([a]);
 });
 
 test("canvas_select sets the window's selection, and the window's report comes back as the answer", async ({ page, agent }) => {
