@@ -145,3 +145,32 @@
   border: 1px solid var(--input);
   box-shadow: 0 1px 2px rgb(0 0 0 / 4%);
 }
+
+/* A row is the kit's row height, so a toggle's segments fit inside it rather than setting it. */
+:root .dialkit-root[data-theme] .dialkit-toggle {
+  height: var(--dial-row-height);
+  padding: 0 12px;
+}
+
+:root .dialkit-root[data-theme] .dialkit-toggle .dialkit-segmented {
+  flex: none;
+  padding: 2px;
+}
+
+:root .dialkit-root[data-theme] .dialkit-segmented-button {
+  height: 1.25rem;
+  padding: 0 8px;
+  line-height: 1.25rem;
+}
+
+/* A slider's label and value sit centred on the row: the flex box centres the glyphs, where a translate
+   offset them by the font's own metrics. */
+:root .dialkit-root[data-theme] :is(.dialkit-slider-label, .dialkit-slider-value) {
+  top: 0;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  transform: none;
+  padding-bottom: 0;
+  border-bottom: 0;
+}
