@@ -5,6 +5,7 @@
  * different questions and must not be merged.
  */
 import type { ChatActivity, OutsideChatRef, TurnFile } from "./chatModel.ts";
+import { connectionClientLabel } from "../outside/connectionSetup.ts";
 import { shapeLabel } from "./shapeLabel.ts";
 import { agentShapeId, roomShapeId as shapeId } from "./turnText.ts";
 
@@ -56,8 +57,13 @@ export const tabLabel = (chat: Pick<RailChat, "title" | "preview">): string => {
 };
 
 /** A tab's tooltip: its label, then " · " and the opening words when they differ from it. */
-export const tabTooltip = (chat: Pick<RailChat, "title" | "preview">): string => {
+export const tabTooltip = (chat: Pick<RailChat, "title" | "preview"> & Partial<Pick<RailChat, "outside" | "createdAt">>): string => {
   const label = tabLabel(chat);
+  // An outside chat says which client it is, and that its agent is outside Unframed (spec 14).
+  if (chat.outside !== undefined) {
+    const when = chat.createdAt === undefined ? "" : `, ${new Date(chat.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}`;
+    return `${label} · ${connectionClientLabel(chat.outside.client)}, outside Unframed${when}`;
+  }
   const words = openingWords(chat);
   return words === "" || words === label ? label : `${label} · ${words}`;
 };
