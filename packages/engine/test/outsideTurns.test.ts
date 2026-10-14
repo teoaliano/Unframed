@@ -5,6 +5,15 @@ import { chatsIn, outsideLink as outside } from "./outsideCalls.ts";
 
 const prompt = (id: string, text: string) => ({ type: "create", id, kind: "prompt", x: 0, y: 0, props: { text } });
 
+/** Reads the canvas until it holds `count` shapes, for a change a reactor applies after its command answers. */
+const waitForCount = async (agent: Awaited<ReturnType<typeof startAgentEngine>>, count: number) => {
+  for (let attempt = 0; attempt < 200; attempt++) {
+    if ((await shapeIds(agent)).length === count) return;
+    await new Promise((resolve) => setTimeout(resolve, 25));
+  }
+  expect((await shapeIds(agent)).length).toBe(count);
+};
+
 /** The canvas's shape ids right now, from the test-only read. */
 const shapeIds = async (agent: Awaited<ReturnType<typeof startAgentEngine>>) => {
   const canvas = (await agent.rpc.call("testCanvas.read", { project: PROJECT })) as unknown as { records: Array<{ id: string; typeName: string }> };
@@ -24,7 +33,8 @@ describe("outside turns: revert, change notes, session end, revoke, restart and 
     await agent.settled(chat!.id, 1);
 
     await agent.dispatch({ type: "thread.turn.revert", threadId: chat!.id, turnCount: 1 });
-    expect((await shapeIds(agent)).length).toBe(created - 1);
+    // The revert is applied by a reactor after the command answers, so the canvas is read until it lands.
+    await waitForCount(agent, created - 1);
     expect(written.isError).toBe(false);
   });
 
