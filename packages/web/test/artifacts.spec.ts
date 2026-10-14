@@ -33,7 +33,7 @@ test("a dropped .html file becomes a page whose title labels the card", async ({
   await expect(shapeOnScreen(page, made.id).locator("[data-shape-label]")).toHaveText("Landing Page");
 });
 
-test("a page resizes freely between 180 by 96 and 900 by 900", async ({ page, engine }) => {
+test("a page resizes freely from 180 by 96, with no upper limit", async ({ page, engine }) => {
   await openCanvas(page, engine);
   await putRecords(engine, [artifactRecord("shape:page", "page", "150", { x: 440, y: 60 })]);
   const card = shapeOnScreen(page, "shape:page");
@@ -55,8 +55,15 @@ test("a page resizes freely between 180 by 96 and 900 by 900", async ({ page, en
     return box;
   };
 
-  const start = await dragCorner({ x: 1200, y: 700 });
-  await expect.poll(async () => (await settledRecord(engine, "default", "shape:page"))?.props).toMatchObject({ w: 900, h: 900 });
-  await dragCorner({ x: start.x + 4, y: start.y + 4 });
+  await dragCorner({ x: 1200, y: 700 });
+  await expect.poll(async () => {
+    const props = (await settledRecord(engine, "default", "shape:page"))?.props;
+    return props !== undefined && props.w > 900 && props.h > 900;
+  }).toBe(true);
+  // Fit the grown page on screen, so its corner is reachable, then shrink it back past the minimum.
+  await page.keyboard.press("Shift+1");
+  await page.waitForTimeout(400);
+  const fitted = (await card.boundingBox())!;
+  await dragCorner({ x: fitted.x + 4, y: fitted.y + 4 });
   await expect.poll(async () => (await settledRecord(engine, "default", "shape:page"))?.props).toMatchObject({ w: 180, h: 96 });
 });

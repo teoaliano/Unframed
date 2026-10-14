@@ -16,7 +16,6 @@ import { noteRender } from "../../fps/renders.ts";
 
 export const ARTIFACT_DEFAULT_SIZE = { w: 480, h: 320 };
 export const ARTIFACT_MIN = { w: 180, h: 96 };
-export const ARTIFACT_MAX = { w: 900, h: 900 };
 
 type ArtifactShape = TLShape<"page"> | TLShape<"motion">;
 
@@ -133,7 +132,7 @@ const makeArtifactUtil = (kind: ArtifactKind) =>
     }
 
     override onResize(shape: ArtifactShape, info: TLResizeInfo<ArtifactShape>) {
-      return resizeBox(shape, info, { minWidth: ARTIFACT_MIN.w, minHeight: ARTIFACT_MIN.h, maxWidth: ARTIFACT_MAX.w, maxHeight: ARTIFACT_MAX.h });
+      return resizeBox(shape, info, { minWidth: ARTIFACT_MIN.w, minHeight: ARTIFACT_MIN.h });
     }
 
     /**
