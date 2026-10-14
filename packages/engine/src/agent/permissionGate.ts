@@ -24,6 +24,8 @@ export interface GateCall {
   readonly runtimeMode: RuntimeMode;
   readonly interactionMode: InteractionMode;
   readonly toolUseId?: string;
+  /** What the request says, when the call names it (spec 14's generate); else the tool's target. */
+  readonly detail?: string;
   readonly suggestions?: ReadonlyArray<PermissionUpdate>;
   readonly signal?: AbortSignal;
 }
@@ -92,7 +94,7 @@ export class PermissionGate {
         const decision = await this.request(
           {
             requestType: answer.requestType,
-            detail: requestTarget(call.toolName, call.input),
+            detail: call.detail ?? requestTarget(call.toolName, call.input),
             args: { toolName: call.toolName, input: call.input, ...(call.toolUseId ? { toolUseId: call.toolUseId } : {}) },
           },
           call.turnId,

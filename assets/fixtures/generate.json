@@ -1,0 +1,20 @@
+{
+  "when": "make the poster in-app",
+  "turns": [
+    {
+      "title": "The poster",
+      "text": "Checked the poster's prompt.",
+      "tools": [
+        {
+          "name": "generate",
+          "input": {
+            "medium": "image",
+            "sources": ["p1"],
+            "instruction": "in snow",
+            "dryRun": true
+          }
+        }
+      ]
+    }
+  ]
+}

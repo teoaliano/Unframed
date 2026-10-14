@@ -11,7 +11,7 @@ import { classifyRequest, type RequestType } from "./runtimeEvents.ts";
 export const UNFRAMED_TOOL_PREFIX = "mcp__unframed__";
 
 /** The Unframed tools that change something, refused in plan mode. The last two are spec 09's. */
-export const UNFRAMED_WRITE_TOOLS: ReadonlySet<string> = new Set(["canvas_write", "page_write", "motion_write"]);
+export const UNFRAMED_WRITE_TOOLS: ReadonlySet<string> = new Set(["canvas_write", "page_write", "motion_write", "generate"]);
 
 export type PolicyAnswer =
   /** `AskUserQuestion`: open a question and wait; allow with the answers. */
@@ -43,6 +43,8 @@ export const decidePermission = ({ runtimeMode, interactionMode, tool, input }: 
   if (tool.startsWith(UNFRAMED_TOOL_PREFIX)) {
     const name = tool.slice(UNFRAMED_TOOL_PREFIX.length);
     if (interactionMode === "plan" && UNFRAMED_WRITE_TOOLS.has(name)) return { kind: "deny", message: PLAN_NO_WRITES_MESSAGE };
+    // A paid generation asks in Supervised mode, with its estimate as the request's detail (spec 14, "In-app agents").
+    if (name === "generate" && runtimeMode !== "full-access") return { kind: "ask", requestType: "dynamic_tool_call" };
     return { kind: "allow" };
   }
   if (runtimeMode === "full-access") return { kind: "allow" };

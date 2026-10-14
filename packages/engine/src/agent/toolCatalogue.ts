@@ -25,8 +25,8 @@ export const unframedToolCatalogue = (): Array<Pick<McpTool, "name" | "descripti
     ...new CanvasTools(inert).tools(),
     ...new ArtifactTools(inert, () => 0).tools(),
     ...new PreviewTools(inert).tools(),
-    ...outsideSelectionTools({ hub: inert, read: inert.read }),
     generateTool(inert),
+    ...outsideSelectionTools({ hub: inert, read: inert.read }),
   ];
   return tools.map(({ name, description, inputSchema }) => ({ name, description, inputSchema }));
 };

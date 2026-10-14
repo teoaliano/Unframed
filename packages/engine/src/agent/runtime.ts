@@ -110,6 +110,9 @@ export interface AgentRuntimeDeps {
 }
 
 /** A dispatch refusal the RPC layer answers as spec 01's error. */
+/** A turn's paid runs are counted by chat and turn, so a revert can wait for the ones still landing (spec 14). */
+const runKey = (chatId: string, turn: number): string => `${chatId}:${turn}`;
+
 export class DispatchError extends Error {
   readonly code: RejectionCode;
   constructor(code: RejectionCode, message: string) {
@@ -170,6 +173,8 @@ export class AgentRuntime {
   private readonly projects = new Map<string, Promise<ProjectAgent>>();
   private readonly chatProjects = new Map<string, string>();
   private readonly activeTurns = new Map<string, ActiveTurn>();
+  /** The paid runs each in-app or outside turn still has landing, by chat and turn (spec 14). */
+  private readonly paidRuns = new Map<string, number>();
   private readonly adapters = new Map<AgentProvider, ProviderAdapter>();
   /** The project agents that finished opening. */
   private readonly settledAgents = new Map<string, ProjectAgent>();
@@ -215,12 +220,32 @@ export class AgentRuntime {
         const agent = await this.project(project);
         agent.turnChanges.record(chatId, turn, before, after, await deps.rooms.clock(project));
       },
-      holds: { runStarted: (chatId) => this.outside.runStarted(chatId), runEnded: (chatId) => this.outside.runEnded(chatId) },
+      holds: {
+        runStarted: (chatId, turn) => {
+          this.paidRuns.set(runKey(chatId, turn), (this.paidRuns.get(runKey(chatId, turn)) ?? 0) + 1);
+          this.outside.runStarted(chatId);
+        },
+        runEnded: (chatId, turn) => {
+          const remaining = (this.paidRuns.get(runKey(chatId, turn)) ?? 1) - 1;
+          if (remaining > 0) this.paidRuns.set(runKey(chatId, turn), remaining);
+          else this.paidRuns.delete(runKey(chatId, turn));
+          this.outside.runEnded(chatId);
+        },
+      },
+      activity: async (project, chatId, draft) => {
+        const agent = await this.project(project);
+        await this.activity(agent, chatId, {
+          id: `${draft.kind}:${randomUUID()}`,
+          tone: "info",
+          kind: draft.kind,
+          summary: draft.summary,
+          payload: draft.payload,
+          turnId: draft.turnId,
+          createdAt: new Date().toISOString(),
+        });
+      },
     });
-    this.outsideTools = [
-      ...outsideSelectionTools({ hub: deps.selection, read: (project) => deps.rooms.read(project) }),
-      generateTool((binding, args) => this.generateFor(binding, args)),
-    ];
+    this.outsideTools = [...outsideSelectionTools({ hub: deps.selection, read: (project) => deps.rooms.read(project) })];
     this.outside = new OutsideChats(
       {
         agent: (slug) => this.project(slug),
@@ -232,6 +257,8 @@ export class AgentRuntime {
       deps.outsideTurnIdleMs ?? OUTSIDE_TURN_IDLE_MS,
     );
     for (const tool of deps.extraTools?.(context) ?? []) this.registry.register(tool);
+    // In-app and outside agents both have `generate`; an outside call's own check (its connection's limit) is the only difference (spec 14).
+    this.registry.register(generateTool((binding, args) => this.generateFor(binding, args)));
     this.providers = new ProviderService({
       adapterFor: (provider) => this.adapterFor(provider),
       tokens: this.tokens,
@@ -253,6 +280,7 @@ export class AgentRuntime {
       emit: (chatId, draft) => this.onRuntimeEvent(chatId, draft),
       runtimeMode: (chatId) => this.runtimeModeOf(chatId),
       registeredTools: () => this.registry.names(),
+      generationDetail: (chatId, input) => this.generationDetail(chatId, input),
       log: (chatId, line) => {
         if (this.deps.agentDebug) logInfo(`[agent ${chatId}] ${line}`);
       },
@@ -387,6 +415,10 @@ export class AgentRuntime {
   /** Dispatches a command the web sent: attachments and tags are resolved against the files and the canvas first. */
   async dispatch(command: ClientCommand): Promise<{ sequence: number }> {
     const agent = await this.project(command.projectId);
+    // An in-app turn cannot be reverted while one of its paid generations is still landing (spec 14).
+    if (command.type === "thread.turn.revert" && agent.engine.chat(command.threadId)?.outside === undefined && (this.paidRuns.get(runKey(command.threadId, command.turnCount)) ?? 0) > 0) {
+      throw new DispatchError("conflict", "Wait for the generation to land before reverting.");
+    }
     // Reverting an open outside turn settles it first, then reverts it (spec 14). The web cannot stop an outside agent.
     if (command.type === "thread.turn.revert" && agent.engine.chat(command.threadId)?.outside !== undefined) {
       await this.outside.settle(agent, command.threadId);
@@ -452,7 +484,21 @@ export class AgentRuntime {
     if (!checked.ok) return { value: { error: checked.message }, isError: true };
     const turn = this.chatTurn(binding.project, binding.chatId).turnCount;
     if (turn === undefined) return { value: { error: "Unframed could not open a turn for this call. Try again." }, isError: true };
-    return this.generation.generate({ project: binding.project, chatId: binding.chatId, turn, connectionId: binding.connectionId, ...checked });
+    const turnId = this.chatTurn(binding.project, binding.chatId).turnId ?? null;
+    return this.generation.generate({ project: binding.project, chatId: binding.chatId, turn, turnId, connectionId: binding.connectionId, ...checked });
+  }
+
+  /** What an in-app `generate`'s approval says: the medium, the shapes and the estimate, from a dry run (spec 14). */
+  private async generationDetail(chatId: string, input: Readonly<Record<string, unknown>>): Promise<string | undefined> {
+    const project = this.chatProjects.get(chatId);
+    const checked = generateArguments(input);
+    if (project === undefined || !checked.ok) return undefined;
+    const answer = await this.generation.generate({ project, chatId, turn: 0, turnId: null, ...checked, dryRun: true });
+    const value = answer.value as { dryRun?: boolean; estimate?: string | null };
+    if (answer.isError || value.dryRun !== true) return undefined;
+    const what = checked.medium === "video" ? "a video" : checked.medium === "text" ? "a text answer" : checked.runs === 1 ? "an image" : `${checked.runs} images`;
+    const shapes = checked.sources.length === 1 ? "1 shape" : `${checked.sources.length} shapes`;
+    return `Generate ${what} from ${shapes}, ${value.estimate ?? "with no exact estimate"}.`;
   }
 
   private chatTurn(project: string, chatId: string) {

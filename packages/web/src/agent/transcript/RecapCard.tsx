@@ -1,4 +1,4 @@
-import { recapRows, revertSkipLine, roomShapeId, shapeKind, type ChatActivity, type ChatTurn, type RecapRow, type RecapShape } from "@unframed/domain";
+import { recapRows, revertSkipLine, roomShapeId, shapeKind, type ChatActivity, type ChatTurn, type RecapRow, type RecapShape, generationRecapLine, generationSpendOf } from "@unframed/domain";
 import { Crosshair, ExternalLink, FileDiff, Undo2 } from "lucide-react";
 import { useMemo, useRef, useState } from "react";
 import { useValue, type Editor, type TLShapeId } from "tldraw";
@@ -61,6 +61,8 @@ export const RecapCard = ({ editor, turn, activities, running, newest, labelOf, 
   const rows = useRecapRows(editor, activities, turn.files);
   const [open, setOpen] = useState(true);
   if (rows.length === 0) return null;
+  // What the turn's paid generations cost, counted from their activities (spec 14, "Cost shown").
+  const spendLine = generationRecapLine(generationSpendOf(activities, turn.turnId));
   const changed = (turn.files?.length ?? 0) > 0;
   const reverted = turn.reverted;
   const skipLine = reverted ? revertSkipLine(reverted.skipped.map((shape) => ({ label: labelOf(shape.id), by: shape.by })), reverted.restored.length) : undefined;
@@ -83,6 +85,11 @@ export const RecapCard = ({ editor, turn, activities, running, newest, labelOf, 
           </Button>
         )}
       </header>
+      {spendLine !== undefined && (
+        <p className="m-0 ps-1 text-xs text-muted-foreground" data-testid="recap-spend">
+          {spendLine}
+        </p>
+      )}
       {open && (
         <ul className="m-0 flex list-none flex-col p-0">
           {rows.map((row) => {

@@ -23,7 +23,7 @@ test("Connect an agent sets a spend limit, the row shows it, and Limit changes i
 
     const row = dialog.getByTestId("outside-connection");
     await expect(row.getByTestId("outside-spend")).toHaveText("Spent $0.00 of $5.00 per day");
-    const connections = async () => (await (await engine.rpc()).call("agentConnections.list")).connections as Array<{ spendLimit: unknown }>;
+    const connections = async () => (await (await engine.rpc()).call("agentConnections.list")).connections as ReadonlyArray<{ spendLimit: unknown }>;
     await expect.poll(async () => (await connections())[0]!.spendLimit).toEqual({ usd: 5, period: "day" });
 
     // Limit changes the amount and the period, and the row says so at once.

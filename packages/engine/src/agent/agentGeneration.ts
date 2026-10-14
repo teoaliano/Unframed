@@ -4,6 +4,10 @@ import type { ImagePricingAnswer, ImageRunRequest, ModelEntry, RecipeRef, Result
 import {
   canvasShapesOf,
   composeVideoRequest,
+  ACTIVITY_FAILED,
+  ACTIVITY_LANDED,
+  ACTIVITY_STARTED,
+  landedSummary,
   estimateImageRun,
   estimateVideo,
   formatEstimate,
@@ -68,7 +72,9 @@ export interface GenerationHost {
   /** Records a turn change of the chat: `before` empty for a created shape. */
   readonly recordTurn: (project: string, chatId: string, turn: number, before: Map<string, TLRecord | undefined>, after: Map<string, TLRecord | undefined>) => Promise<void>;
   /** The chat's outside turn holds: a paid run in flight keeps it open. */
-  readonly holds: { runStarted(chatId: string): void; runEnded(chatId: string): void };
+  readonly holds: { runStarted(chatId: string, turn: number): void; runEnded(chatId: string, turn: number): void };
+  /** A generation's activity in its chat's turn: its start, its landing or its failure (spec 14, "Cost shown"). */
+  readonly activity: (project: string, chatId: string, draft: { kind: string; summary: string; turnId: string | null; payload: Record<string, unknown> }) => Promise<void>;
 }
 
 export interface GenerateCall {
@@ -76,6 +82,8 @@ export interface GenerateCall {
   readonly chatId: string;
   /** The open turn the run belongs to. */
   readonly turn: number;
+  /** The turn's id, for its activities; `null` when the turn has none yet. */
+  readonly turnId: string | null;
   /** The outside connection whose spend limit applies. An in-app call has none. */
   readonly connectionId?: string | undefined;
   readonly medium: "image" | "video" | "text";
@@ -91,6 +99,10 @@ export interface GenerateCall {
 }
 
 const refusal = (message: string): ToolAnswer => ({ value: { error: message }, isError: true });
+
+/** What a run's start is called in its chat's activity line. */
+const startedSummary = (medium: "image" | "video" | "text", runs: number): string =>
+  `Started ${medium === "video" ? "a video" : medium === "text" ? "a text answer" : runs === 1 ? "an image" : `${runs} images`}`;
 
 /** The union of the boxes: the anchor a run's results land beside (spec 03). */
 const union = (boxes: ReadonlyArray<Box>): Box => {
@@ -195,7 +207,13 @@ export class AgentGeneration {
       return refusal(errorText(error));
     }
     runId = started.runId;
-    this.host.holds.runStarted(call.chatId);
+    this.host.holds.runStarted(call.chatId, call.turn);
+    void this.host.activity(call.project, call.chatId, {
+      kind: ACTIVITY_STARTED,
+      summary: startedSummary(call.medium, call.runs),
+      turnId: call.turnId,
+      payload: { count: call.medium === "image" ? call.runs : 1 },
+    });
     const placed = await this.host.recordsOf(call.project, started.placeholders.map((id) => roomShapeId(id)));
     for (const [id, record] of placed) this.placeholders.set(id, record);
     await this.host.recordTurn(call.project, call.chatId, call.turn, new Map(), placed);
@@ -290,12 +308,16 @@ export class AgentGeneration {
       if (ledgerKey !== undefined && call.connectionId !== undefined) await this.host.book.release(call.connectionId, ledgerKey);
       return refusal(errorText(error));
     }
-    this.host.holds.runStarted(call.chatId);
+    this.host.holds.runStarted(call.chatId, call.turn);
+    void this.host.activity(call.project, call.chatId, { kind: ACTIVITY_STARTED, summary: startedSummary("video", 1), turnId: call.turnId, payload: { count: 1 } });
     const placed = await this.host.recordsOf(call.project, [started.shapeId]);
     for (const [id, record] of placed) this.placeholders.set(id, record);
     await this.host.recordTurn(call.project, call.chatId, call.turn, new Map(), placed);
     this.host.onVideoFinished(started.jobId, (outcome) => {
       const each = estimate?.each ?? null;
+      void this.host.activity(call.project, call.chatId, outcome.ok
+        ? { kind: ACTIVITY_LANDED, summary: landedSummary("video", outcome.cost), turnId: call.turnId, payload: { cost: outcome.cost } }
+        : { kind: ACTIVITY_FAILED, summary: "A video did not land", turnId: call.turnId, payload: { count: 1 } });
       if (ledgerKey !== undefined && call.connectionId !== undefined) {
         if (!outcome.ok) void this.host.book.release(call.connectionId, ledgerKey);
         // A cost the upstream did not report counts at the estimate, so the ledger never reads low.
@@ -305,7 +327,7 @@ export class AgentGeneration {
       void this.host
         .recordsOf(call.project, [started.shapeId])
         .then((after) => this.host.recordTurn(call.project, call.chatId, call.turn, before, after))
-        .finally(() => this.host.holds.runEnded(call.chatId));
+        .finally(() => this.host.holds.runEnded(call.chatId, call.turn));
     });
     return {
       value: {
@@ -352,6 +374,12 @@ export class AgentGeneration {
       this.costs.set(event.runId, [...(this.costs.get(event.runId) ?? []), event.cost]);
       const before = new Map([[event.shapeId, this.placeholders.get(event.shapeId)]]);
       void this.host.recordsOf(call.project, [event.shapeId]).then((after) => this.host.recordTurn(call.project, call.chatId, call.turn, before, after));
+      void this.host.activity(call.project, call.chatId, {
+        kind: ACTIVITY_LANDED,
+        summary: landedSummary(call.medium, event.cost),
+        turnId: call.turnId,
+        payload: { cost: event.cost },
+      });
       return;
     }
     if (event.type !== "finished") return;
@@ -366,6 +394,11 @@ export class AgentGeneration {
         void this.host.book.settle(call.connectionId, ledgerKey, landed);
       }
     }
-    this.host.holds.runEnded(call.chatId);
+    // Outputs the run asked for that did not land: the failure the recap counts.
+    const expected = call.medium === "image" ? call.runs : 1;
+    if (expected > costs.length) {
+      void this.host.activity(call.project, call.chatId, { kind: ACTIVITY_FAILED, summary: "A generation did not land", turnId: call.turnId, payload: { count: expected - costs.length } });
+    }
+    this.host.holds.runEnded(call.chatId, call.turn);
   }
 }
