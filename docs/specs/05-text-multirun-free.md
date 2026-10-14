@@ -111,6 +111,7 @@ Generate opens the composer on the text result as on any selection. Regenerate o
 ### RPC methods
 
 - `run.text(request)` returns `{ runId, batchId, placeholders: [shapeId] }` once the placeholder is in the room. Request: `{ project, model?, selectionPrompt, instruction, prompt, references: Ref[], sources, anchor, of? }` with spec 03's `Ref` and `anchor`. Events on spec 03's `run.subscribe`, with `count: 1`.
+- An outside agent's `generate` with medium `text` (spec 14) calls `run.text` with `chat: {id, turn}` set. Its sidecar names the chat and turn, and its turn holds until the answer lands or fails. Outside text has no Free and no multi-run.
 - `text.complete({ project, prompt, system?, model?, references?, batchId? })` returns `{ text, cost }` and writes a sidecar. It lands nothing. Only Free's repair calls it with `system`; every other caller omits it.
 
 Validation, failing the call with its message (spec 01's `UnframedError`, coded as spec 03 codes the same refusals) and writing nothing: no key (spec 03's message); an empty prompt after trimming: `Prompt is empty. Select a prompt, or type an instruction.`; a missing reference file and a non-https link as spec 03.
