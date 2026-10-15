@@ -11,3 +11,4 @@ export * from "./agent.ts";
 export * from "./openRouterKey.ts";
 export * from "./artifacts.ts";
 export * from "./legacy.ts";
+export * from "./agentConnections.ts";

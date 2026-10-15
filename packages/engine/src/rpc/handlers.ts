@@ -1,4 +1,7 @@
-import { UnframedRpcs, unframedError, type ResultRecipe, type UnframedError } from "@unframed/contracts";
+import { UnframedError, UnframedRpcs, unframedError, type ResultRecipe } from "@unframed/contracts";
+import { connectionSetup } from "@unframed/domain";
+import { AgentConnections } from "../agentConnections/layer.ts";
+import { errorText } from "../log.ts";
 import type { TLRecord } from "@tldraw/tlschema";
 import * as Effect from "effect/Effect";
 import { CanvasRooms } from "../canvas/rooms.ts";
@@ -25,6 +28,8 @@ import { Artifacts } from "../artifacts/layer.ts";
 import { legacyImportMethods } from "../legacy/methods.ts";
 import { ProjectDatabase } from "../projectDatabase.ts";
 
+const asUnframed = (error: unknown): UnframedError => (error instanceof UnframedError ? error : unframedError("internal", errorText(error)));
+
 export const rpcHandlersLayer = UnframedRpcs.toLayer(
   Effect.gen(function* () {
     const settings = yield* SettingsStore;
@@ -44,6 +49,7 @@ export const rpcHandlersLayer = UnframedRpcs.toLayer(
     const lifecycle = yield* Lifecycle;
     const oauth = yield* OAuth;
     const artifacts = yield* Artifacts;
+    const connections = yield* AgentConnections;
     const legacy = legacyImportMethods(yield* ProjectDatabase, projects);
     const context = yield* Effect.context<SettingsStore | Projects | Native>();
 
@@ -77,6 +83,24 @@ export const rpcHandlersLayer = UnframedRpcs.toLayer(
       "files.reveal": (input) => revealFiles(input).pipe(Effect.provideContext(context)),
       "files.path": (input) => filePath(input).pipe(Effect.provideContext(context)),
       "files.copy": (input) => Effect.map(media.copy(input.project, input.file, input.from), (file) => ({ file })),
+      "agentConnections.list": () => Effect.sync(() => ({ connections: connections.book.list() })),
+      "agentConnections.create": ({ name, client }) =>
+        Effect.tryPromise({ try: () => connections.book.create({ name, client }), catch: asUnframed }).pipe(
+          Effect.map(({ connection, token }) => ({
+            connection,
+            token,
+            setup: connectionSetup({
+              client,
+              platform: process.platform,
+              execPath: process.execPath,
+              shimPath: config.shimPath,
+              dataDir: config.dataDir,
+              token,
+              runAsNode: config.runAsNode,
+            }).steps,
+          })),
+        ),
+      "agentConnections.revoke": ({ id }) => Effect.as(Effect.tryPromise({ try: () => connections.book.revoke(id), catch: asUnframed }), {}),
       "preferences.get": ({ keys }) => Effect.map(preferences.get(keys), (values) => ({ values })),
       "preferences.set": ({ key, value }) => Effect.as(preferences.set(key, value), {}),
       "preferences.subscribe": ({ keys }) => preferences.subscribe(keys),
