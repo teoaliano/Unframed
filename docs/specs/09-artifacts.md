@@ -159,6 +159,8 @@ with each segment URL-encoded.
 
 **Upload and copy sidecars** are spec 02's (`source: "upload"` for a dropped `.html` or an uploaded composition, `source: "copy"` with `of` for a pasted artifact). This spec adds none.
 
+**Writers beyond the agent (spec 16).** A node whose medium is `page` writes a page file through this section's new-file rule, with the sidecar kind `kind: "page"`, `source: "node"`, and the fields spec 16 lists. Such a file is a page in every other respect: it is previewed as an artifact and can be dragged out as a page shape. A page capture (spec 16, Page inputs) is a project file whose sidecar has `source: "capture"`, written with this spec's Chrome finder. Neither writer changes `page_write`, the dials or the live rules.
+
 ### Dropping and pasting
 
 - Dropping `.html` files on empty canvas is spec 02's drop rule (a page at the drop point with `file`, `fileName` and `title`, offset 24 px per extra file, the same failure toast). A dropped page gets no injected tags.
