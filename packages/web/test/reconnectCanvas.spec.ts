@@ -20,18 +20,25 @@ test("the canvas reconnects by itself after an engine restart, with backoff, and
   const first = await startHostedEngine({ dataDir });
   try {
     const attempts: number[] = [];
+    // The moment the page saw the sync socket drop. The notice and the backoff both count from it,
+    // so the test clocks from it too, not from when stop() returned.
+    let droppedAt: number | undefined;
     page.on("websocket", (socket) => {
-      if (new URL(socket.url()).pathname.startsWith("/sync/")) attempts.push(Date.now());
+      if (!new URL(socket.url()).pathname.startsWith("/sync/")) return;
+      attempts.push(Date.now());
+      socket.on("close", () => (droppedAt ??= Date.now()));
     });
     await openCanvas(page, first);
     const port = first.port;
     const before = (await roomRecords(first, "default")).find((record) => record.id === "shape:starter-scene")!;
     await first.stop();
-    const downAt = Date.now();
+    await expect.poll(() => droppedAt !== undefined).toBe(true);
+    const downAt = droppedAt!;
 
     await dragBy(page, "shape:starter-scene", 90, 0);
     const movedOnScreen = await centre(shapeOnScreen(page, "shape:starter-scene"));
-    await page.waitForTimeout(1500);
+    // The notice shows two seconds after the drop: check it has not yet, whatever the drag took.
+    await page.waitForTimeout(Math.max(0, downAt + 1500 - Date.now()));
     await expect(toast(page, LOST)).toHaveCount(0);
     await expect(toast(page, LOST)).toBeVisible({ timeout: 3000 });
     expect(Date.now() - downAt).toBeGreaterThanOrEqual(1900);
@@ -42,7 +49,8 @@ test("the canvas reconnects by itself after an engine restart, with backoff, and
       await expect
         .poll(async () => (await roomRecords(second, "default")).find((record) => record.id === "shape:starter-scene")!.x, { timeout: 20_000 })
         .toBeGreaterThan(before.x! + 20);
-      await expect(toast(page, LOST)).toHaveCount(0, { timeout: 5000 });
+      // The page's next retry can come as late as the longest backoff gap checked below (10.9 s).
+      await expect(toast(page, LOST)).toHaveCount(0, { timeout: 12_000 });
       expect(Math.round((await centre(shapeOnScreen(page, "shape:starter-scene"))).x)).toBe(Math.round(movedOnScreen.x));
 
       const retries = attempts.filter((at) => at > downAt);
