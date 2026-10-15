@@ -10,7 +10,7 @@ The app is fast because it keeps one live canvas. A naive version of tabs keeps 
 
 ## Solution
 
-The project picker leaves the top-left card, and Settings moves to the top-right corner. In their place is a **tab strip**: an opaque grey strip to the right of the logo, holding one rounded **project tab** per open project, in the order they were opened, and inset in it the same rounded shape as the Settings button. Clicking a tab switches to that project. An **All projects** button at the end of the strip holds what the picker held: the list of every project, Rename and Delete per row, and Add project.
+The project picker leaves the top-left card, and Settings moves to the end of the top bar that is opposite the window controls: the top-right on macOS, where the traffic lights are on the left, and the far left on Windows, where the caption buttons are on the right. In the middle sits a **tab strip**: an opaque grey strip holding one rounded **project tab** per open project, in the order they were opened, and inset in it the same rounded shape as the Settings button. Clicking a tab switches to that project. An **All projects** button at the end of the strip holds what the picker held: the list of every project, Rename and Delete per row, and Add project.
 
 Only the **active tab** has a live canvas. It is the same canvas, rail and sockets the app has today. A **background tab** holds a small descriptor: its project name, the camera it was last at, and the chat drafts typed in it. It holds no editor, no socket, no artifact frame, no timer and no listener. Switching tears the active canvas down and builds the new one, as the picker does today. Nothing else is kept warm.
 
@@ -58,21 +58,21 @@ Spec 08's chat tabs keep their name. Where this spec says "project tab", it mean
 
 ### The top bar
 
-- **Top-left card** (`.unframed-chrome-left`, spec 02): the logo only. The project menu and the Settings button both leave it. The macOS left inset (92 px, the shell's repair, spec 01) stays, so the traffic lights keep their place. While the rail is docked the card still becomes the rail's top row (spec 08), now holding the logo alone.
-- **Settings** (top-right, `.unframed-chrome-right`, spec 01): the Settings slot moves into the top-right card, which spec 01 already keeps as the hook the shell repairs. The card is the same grey strip as the tab strip, 44 px tall, holding one Settings button in the reference shape below. Settings keeps its dialog, its tooltip and its label "Settings". Its icon is the kit's settings (gear) icon, not the reference's chevron, because the reference is a shape, not a meaning. It sits 8 px from the window's right edge, so it stays reachable while the rail is docked, which the rail's top row no longer covers.
-- **Tab strip** (`.unframed-tabs`, new): one opaque strip in the same row as the top-left card, 44 px tall, centred on the same line. Its left edge is 8 px right of the top-left card. While the rail is docked, its left edge is 8 px right of the rail instead, because the rail covers the space under the card. Its right edge is 8 px left of the top-right card. On Windows the shell moves the caption buttons into that corner, so the strip's right edge there also depends on the shell's inset (see "The hosting contract with the desktop shell").
+- **Top-left card** (`.unframed-chrome-left`, spec 02): the logo. On macOS the logo alone sits after the traffic lights, which keep the 92 px inset (the shell's repair, spec 01). On Windows the card holds Settings first, then the logo, because Settings is at the far left there. The project menu leaves the card on both platforms. While the rail is docked the card still becomes the rail's top row (spec 08).
+- **Settings**: a 44 px grey holder with one Settings button in the reference shape below. Its place follows the window controls. On macOS it is the top-right card (`.unframed-chrome-right`, spec 01), at the far right, 8 px from the window's edge. On Windows it is the first item in the top-left card, at the far left, before the logo. The web chooses the side with the platform helper (`canvas/platform.ts`), so no shell CSS moves Settings; the shell's repair of `.unframed-chrome-right` (below the caption buttons on Windows) stays and leaves that card empty there. Settings keeps its dialog, its tooltip and its label "Settings". Its icon is the kit's settings (gear) icon, not the reference's chevron, because the reference is a shape, not a meaning. On macOS it stays reachable while the rail is docked, because the rail's top row does not cover the right edge.
+- **Tab strip** (`.unframed-tabs`, new): one opaque strip in the same row as the top bar's cards, 44 px tall, centred on the same line. Its left edge is 8 px right of the left card. While the rail is docked, its left edge is 8 px right of the rail instead, because the rail covers the space under the card. Its right edge is 8 px left of the top-right card on macOS. On Windows the shell moves the caption buttons into the top-right corner, so the strip's right edge there is set by the shell's caption inset (see "The hosting contract with the desktop shell").
 - **Look (interpreting the user's reference).** The user's words: the Settings button "could appear somewhat like this reference button next to a tab", with the reference showing a grey strip, a white squircle-like button holding a chevron, and a white rounded tab beside it, all inset in the strip. This spec reads "they" as covering the tabs as well as the button, so the tabs match the reference too. The reading is recorded here so the user can correct it. Concretely: the strip is a solid `--color-muted` surface with the kit's large corner radius (`--radius-3xl`) and 4 px padding, and no glass. Every tab and the Settings button is a 36 px tall rounded square (`--radius-xl`, about 40% of its height, which is the reference's squircle proportion) with 4 px gaps between them. The active tab is raised to `--color-card` with the kit border and foreground text, and inactive tabs are transparent with a `--color-accent` tint on hover. Dark mode follows the same tokens, which the theme flips with `data-unframed-theme`, so the pairing (muted strip, card tab) holds in both schemes. Text on a card tab must meet WCAG AA contrast (4.5:1) in both schemes, checked in the browser test. The strip drops glass for two reasons: the reference is opaque, and glass over the canvas is what spec 08 measured as crossing the pan budget.
 - **Tabs**: each is a 36 px rounded tab with a status slot, the project name cut with an ellipsis, and a close button. The name's full text is the tooltip, which also says the status in words. The active tab has the raised look, not colour alone. The strip is a tab list (`role="tablist"`, each tab `role="tab"` with `aria-selected`), and the close button has the label "Close <project>".
 - **Width.** Each tab is `tabWidth(available, count)` wide, from 120 px to 200 px. Below 120 px the strip scrolls.
-- **Overflow.** The strip scrolls sideways with a trackpad or with Shift and the wheel. Edge fades show when there is more to each side. Opening or switching to a tab scrolls it into view. No chevron buttons. There is no cap on open tabs (see the open decision on the cap).
+- **Overflow.** The strip scrolls sideways with a trackpad or with Shift and the wheel. Edge fades show when there is more to each side. Opening or switching to a tab scrolls it into view. No chevron buttons. There is no cap on open tabs.
 - **All projects.** A ghost icon button at the end of the strip, tooltip "All projects", opens the kit Menu of spec 10's project menu: one row per project, a status dot on the open ones, the active one checked, Rename and Delete on each row as spec 10 says, then "Add project" (spec 02's dialog). Choosing a row that is not open opens it in a new tab at the end and activates it. Choosing an open row activates its tab.
-- **Empty strip.** With no tab open the strip shows only the All projects button and the canvas area shows an empty card, "No project is open.", with a button "Open project" that opens All projects. The app does not create a default project for this case; spec 02's create-on-empty-list rule still applies at boot.
+- **Empty strip.** With no tab open the strip shows only the All projects button and the canvas area shows the start state, an empty card, "No project is open.", with a button "Open project" that opens All projects. The window stays open. The app does not create a default project for this case; spec 02's create-on-empty-list rule still applies at boot.
 - **Drag region.** The strip's empty area and its card are a window drag region, and each tab, its close button, the All projects button and the Settings button are not (`-webkit-app-region` in the page's CSS, harmless in a browser).
 
 ### Opening, closing, reordering and reopening
 
 - **Open.** From All projects, from "Add project" (which creates the project, then opens its tab) or from Cmd+T. An already open project activates its tab. A new tab goes at the end. Opening a project fits its view to its shapes, as spec 02 says, unless the tab store has a camera for it (below).
-- **Close.** The tab's close button, Cmd+W, or a middle click on the tab. Closing the active tab first settles its canvas (spec 02's two-second settle), then activates the neighbour from `closeTab`. Closing a background tab touches no canvas. The project and everything in it stay; closing deletes nothing and stops no work. The closed project goes onto the closed-tab stack.
+- **Close.** The tab's close button, Cmd+W, or a middle click on the tab. Closing asks nothing: no confirmation, even with a paid run or a running turn in that project. Closing the active tab first settles its canvas (spec 02's two-second settle), then activates the neighbour from `closeTab`. Closing a background tab touches no canvas. The project and everything in it stay; closing deletes nothing and stops no work. The closed project goes onto the closed-tab stack.
 - **Reorder.** Drag a tab sideways past a 4 px threshold; the others move to make room. Alt+ArrowLeft and Alt+ArrowRight move the focused tab one place. The new order is saved when the drop or key press lands.
 - **Reopen.** Cmd+Shift+T pops the closed-tab stack and opens that project in a new tab, at its old place when that place still exists, and activates it. A project that no longer exists is skipped silently. The stack is in memory and empties on reload.
 - **Rename.** An open project keeps its tab. Spec 10's rename closes the old name's canvas and activates the new name, so the tab takes the new name at the same place.
@@ -154,15 +154,16 @@ A project touched once and then left in the background keeps one database handle
 
 ### Keyboard
 
-On Windows and Linux, `Cmd` means `Ctrl`. The table is the proposed set; the open decision on shortcuts settles it.
+On Windows and Linux, `Cmd` means `Ctrl`. The set follows Figma's desktop app, as the Pivot's decision on the keyboard set.
 
 | Shortcut | Action |
 | --- | --- |
-| `Cmd+T` | open All projects |
-| `Cmd+W` | close the active tab |
-| `Cmd+Shift+T` | reopen the last closed tab |
+| `Cmd+T` | new tab: opens the project list (All projects) |
+| `Cmd+W` | close the active tab. The shell leaves `Cmd+W` to the page. Closing the last tab shows the start state, never closes the window |
+| `Ctrl+Tab`, `Ctrl+Shift+Tab` | next and previous tab, on every platform |
 | `Cmd+1` to `Cmd+8` | activate that tab |
 | `Cmd+9` | activate the last tab |
+| `Cmd+Shift+T` | reopen the last closed tab |
 | `Alt+ArrowLeft`, `Alt+ArrowRight` | move the focused tab |
 
 These do not fire while a text field, the prompt editor or a dialog has focus, the same rule as spec 02's shortcuts. The keyboard tests check that none of them shadows a tldraw default or a shortcut from spec 02, spec 08 or spec 09.
@@ -171,7 +172,7 @@ These do not fire while a text field, the prompt editor or a dialog has focus, t
 
 - **Agent chats.** Each project keeps its own chats. The rail shows the active project's chats and nothing from another project. Its open state and width are global. Its drafts are per chat and held in the tab store, so a switch keeps them, as they are kept today while the rail stays open. The Agent tray's draft is held per tab the same way.
 - **Chat search, filter and stash** (spec 08) are per project and work on the active tab only.
-- **Outside agents** (spec 14). A window is one web client's socket with an active canvas, so a background tab is not a window. The rules of spec 14 otherwise hold: the window that changed its selection most recently counts, and a window's report is dropped when its socket closes, which is what a tab switch does. See the open decision on which tab counts.
+- **Outside agents** (spec 14). A window is one web client's socket with an active canvas, so a background tab is not a window. Only the active tab counts. The rules of spec 14 otherwise hold: the window that changed its selection most recently counts, and a window's report is dropped when its socket closes, which is what a tab switch does. See the open decision on which tab counts.
 - **Writes from outside agents and from runs** to a background project go through the room as any engine-side write does. Nothing switches the view.
 - **Spec 10 settings and OpenRouter** are global and unaffected. The output folder change closes every tab, as above.
 - **Toasts** (spec 02) stay global. A toast about a background project names the project in its message.
@@ -203,20 +204,21 @@ Under no circumstances does a background tab keep a canvas, a socket or a timer 
 
 Each is edited in the PR that builds the change, so the spec of the built app stays true.
 
-- **Spec 01**: the DOM hook table gains `.unframed-tabs`, and its `.unframed-chrome-right` row changes from "holds nothing" to "holds the Settings button" (the name and the shell's repair are unchanged); the preference `project.active` is replaced by `project.tabs` (with its migration); the method group gains `projects.activity`; the test-only variable table gains `UNFRAMED_TEST_ROOM_IDLE_MS` (see Testing Decisions).
-- **Spec 02**: "Chrome" (the top-left card holds the logo only, Settings moves to the top-right card, the strip is opaque), "Project activation" and "Keyboard shortcuts" change as described here; "Opening a project fits the view" gains the camera exception.
+- **Spec 01**: the DOM hook table gains `.unframed-tabs`, and its `.unframed-chrome-right` row changes from "holds nothing" to "holds the Settings button on macOS, and stays empty on Windows" (the name and the shell's repair are unchanged); the preference `project.active` is replaced by `project.tabs` (with its migration); the method group gains `projects.activity`; the test-only variable table gains `UNFRAMED_TEST_ROOM_IDLE_MS` (see Testing Decisions).
+- **Spec 02**: "Chrome" (the top-left card holds the logo, plus Settings first on Windows; Settings moves to the top-right card on macOS; the strip is opaque), "Project activation" and "Keyboard shortcuts" change as described here; "Opening a project fits the view" gains the camera exception.
 - **Spec 08**: the rail's drafts are held by the tab store; the rail's top row keeps its rule, holds the logo alone, and gains the docked strip offset.
-- **Spec 10**: "The project menu" moves from the top-left card to All projects; Rename and Delete keep their rules. The Settings button moves from the top-left card to the top-right card, and its dialog is unchanged.
+- **Spec 10**: "The project menu" moves from the top-left card to All projects; Rename and Delete keep their rules. The Settings button moves from the top-left card to the end of the bar opposite the window controls (top-right on macOS, far left on Windows), and its dialog is unchanged.
 - **Spec 14**: "Windows" and "No window" name the active canvas, and the note reads "Unframed has no canvas showing this project, so there is no selection to read.".
 
 ### The hosting contract with the desktop shell
 
 - The new hook `.unframed-tabs` is additive. Nothing the shell already uses changes name or meaning. The top-left card keeps `.unframed-chrome-left` and its inset, and it no longer contains the project menu.
-- Settings in the top-right card rides on the shell's existing repair of `.unframed-chrome-right`, which moves that card below the Windows caption buttons. On Windows the Settings button therefore sits under the caption band, and the strip, which shares the top row with the caption buttons, still needs its own inset.
-- Windows: the shell's caption buttons sit in the top-right corner over the strip's right end. The shell's injected CSS needs a right inset on `.unframed-tabs` equal to the caption buttons' width. This is a change in the private shell repo. It is listed under the open decision on shipping order.
+- Settings placement is the web's: the platform helper picks the side, so the shell needs no change for it. On Windows the shell's existing repair still moves `.unframed-chrome-right` below the caption buttons, and that card is empty there.
+- Windows: the shell's caption buttons sit in the top-right corner over the strip's right end. The shell's injected CSS needs a right inset on `.unframed-tabs` equal to the caption buttons' width. This is a change in the private shell repo, released together with the engine.
 - Windows drag: the strip's empty area is set as a drag region in the page's CSS, so the window can be moved from it without the shell's help.
 - macOS: the 92 px inset on the top-left card is unchanged, and the strip starts after it.
-- The keyboard set uses `Cmd+W`. A desktop menu that binds `Cmd+W` to close the window would take the shortcut before the page sees it. The shell's menu must leave `Cmd+W` to the page. This is confirmed in the shell repo, not assumed.
+- The keyboard set uses `Cmd+W` for closing a tab. The shell's menu must leave `Cmd+W` to the page, so a desktop menu item that closes the window does not take the shortcut first. This is a shell change, released with the engine, and is checked in the shell repo before the PR that adds the shortcut merges.
+- Shipping: the engine and the shell are released together. Nothing in the build ships on an engine alone.
 
 ### Rules this spec bends
 
@@ -230,8 +232,8 @@ A good test drives one of the three seams in 00-index and asserts what it expose
 
 - **Domain seam** for the tab rules: open (including the already-open case), close with each neighbour case, move, restore against a list with gaps and an empty result, width at each count and width, status precedence, and the closed-stack limit of ten.
 - **Engine seam**: `project.tabs` round-trips through the preference store and survives a restart on a new port; a store with only `project.active` migrates to one tab; `projects.activity` answers the current state first, then one message per change, debounced; a run started in project A with no client connected lands in A's folder and room; the room opened for that call closes 60 seconds later (with `UNFRAMED_TEST_ROOM_IDLE_MS` set short); `canvas_read` for a project with no active canvas answers `[]` with the note.
-- **Browser seam** for the look and Settings: Settings sits in the top-right card and opens the Settings dialog from there, with the rail open and closed; the strip is opaque in both schemes, its tabs and Settings are rounded and 36 px tall, and the card tab's text meets 4.5:1 contrast in light and dark, measured against the rendered colours.
-- **Browser seam** for the strip and the flows: open from All projects, Add project and Cmd+T; open an already open project and land on its tab; close the active tab and land on the neighbour; close the last tab and see the empty card; reopen with Cmd+Shift+T; reorder by drag and by Alt+arrow; overflow scrolls and the active tab scrolls into view; each status mark appears and clears; rename and delete keep the tab right; output folder change closes all tabs and restores the ones that exist; restart restores order and active; a run started in one tab lands while another tab is active; the strip's tabs, close buttons and All projects are keyboard reachable with their names.
+- **Browser seam** for the look and Settings: Settings sits at the end opposite the window controls, top-right in the macOS shape and far left in the Windows shape (the test sets the platform helper to each value), and opens the Settings dialog from there, with the rail open and closed; the strip is opaque in both schemes, its tabs and Settings are rounded and 36 px tall, and the card tab's text meets 4.5:1 contrast in light and dark, measured against the rendered colours.
+- **Browser seam** for the strip and the flows: Ctrl+Tab and Ctrl+Shift+Tab cycle; Cmd+W on the last tab shows the start state and closes nothing; open from All projects, Add project and Cmd+T; open an already open project and land on its tab; close the active tab and land on the neighbour; close the last tab and see the empty card; reopen with Cmd+Shift+T; reorder by drag and by Alt+arrow; overflow scrolls and the active tab scrolls into view; each status mark appears and clears; rename and delete keep the tab right; output folder change closes all tabs and restores the ones that exist; restart restores order and active; a run started in one tab lands while another tab is active; the strip's tabs, close buttons and All projects are keyboard reachable with their names.
 - **Browser seam, the budget suite** in `pnpm test:perf` (PR 4 adds spec 17 to the spec list in `CLAUDE.md`): ten projects, one tab each, opened in turn; each budget row above asserted, with the single-tab numbers taken from the same test run with one tab. The suite runs on real hardware with the timing rows enforced, and under `CI` with them skipped.
 
 ## Tasks
@@ -249,7 +251,7 @@ The build is one `/implement` run per PR, in this order. Each PR updates the spe
 **PR 2: the strip and All projects (the picker is replaced, switching still rebuilds)**
 
 6. The tab strip: tabs from the tab store, the width rule, the status slot from the activity stream, overflow scrolling and edge fades. Seam: browser.
-7. The top-left card loses the project menu; All projects holds the list, Rename, Delete and Add project, and opens projects into tabs. Settings moves to the top-right card in the reference shape. Seam: browser.
+7. The top-left card loses the project menu; All projects holds the list, Rename, Delete and Add project, and opens projects into tabs. Settings moves to the end opposite the window controls, top-right on macOS and far left on Windows. Seam: browser.
 7a. The look: the opaque strip, the rounded tabs and the Settings button in the muted and card tokens for both schemes, with the contrast check. Seam: browser.
 8. Open, close, activate and the neighbour rule, the close button and the middle click, the empty strip and the empty card. Seam: browser.
 9. The keyboard set and its shadowing check. Seam: browser.
@@ -270,7 +272,7 @@ The build is one `/implement` run per PR, in this order. Each PR updates the spe
 
 19. The budget suite in `pnpm test:perf`: the single-tab baseline on main, then ten tabs, every row of the budget table. Seam: browser (hosted shape).
 20. The switch timing and the idle CPU check, enforced on real hardware and skipped under `CI` with an annotation. Seam: browser.
-21. The spec amendments listed under "Specs this amends", the index row and the vocabulary, and the screenshots in the PR bodies: the strip with ten tabs, the overflow, the All projects menu, a background tab with each status.
+21. The spec amendments listed under "Specs this amends", the index row and the vocabulary, and the screenshots in the PR bodies, one set per platform: the strip with ten tabs, the overflow, the All projects menu, a background tab with each status, and the Settings placement on macOS and Windows.
 
 ## Out of Scope
 
@@ -284,15 +286,17 @@ The build is one `/implement` run per PR, in this order. Each PR updates the spe
 - Any change to the engine's room idle time beyond the test variable.
 - Remote, LAN or tunnel access, which spec 01 leaves unbuilt.
 
-## Open decisions
+## Decisions
 
-1. **One tab per project, or the same project in two tabs?** Recommended: one tab per project; opening an open project activates its tab. Two tabs on one project would mean two canvases on one room, with separate undo and separate selections, and twice the memory for that project. The alternative is allowed, at the cost of the budget table's doubling for that project.
-2. **Is there a cap on open tabs?** Recommended: no cap. The strip scrolls, and the budget is measured at ten, with twenty as a check. A cap of, say, twelve would give a hard edge, with "Close a tab first" when a thirteenth is opened.
-3. **What does a background tab keep?** Recommended: camera and chat drafts, in memory. Alternatives: camera only, which drops drafts on each switch, or nothing, which refits every project on every switch and clears drafts. Each step costs a few bytes per tab; the difference is what a person loses when switching.
-4. **Does closing a tab that has a paid run or a running turn ask first?** Recommended: no. Nothing stops in either case, the results land in the project, and the tab's dot shows the work. The alternative is one confirmation when a paid run is live, which costs a click and protects nothing.
-5. **Which tab counts for outside agents?** Recommended: only the active tab on screen. `canvas_read` on a background project answers an empty selection with the note in spec 14, and `canvas_select` on it changes nothing and does not switch tabs. Alternatives: `canvas_select` switches the window to the project, which steals the view from the person; or a background tab keeps its last report, which can be stale by hours.
-6. **Keyboard set.** Recommended: the set in "Keyboard", with `Cmd+W` closing the tab. The shell must leave `Cmd+W` to the page. Alternative: `Cmd+W` closes the window as desktop apps usually do, and tab close moves to `Cmd+Shift+W`.
-7. **Shipping order with the shell.** The strip needs a Windows caption inset, which is a change in the private shell, and the new `.unframed-tabs` hook is additive. Recommended: release the engine and the shell together. If the engine ships first, on Windows the strip's right end sits under the caption buttons until the shell's update lands. macOS is unaffected either way.
+There are no open decisions. The user answered the seven questions raised by this spec; each answer is applied in the sections above.
+
+1. **One tab per project.** Opening an already-open project jumps to its tab. (Applied under "Opening, closing, reordering and reopening" and "The top bar".)
+2. **No cap on open tabs.** The strip scrolls. (Applied under "Overflow".)
+3. **A background tab keeps its camera position and its unsent chat drafts.** (Applied under "What a background tab holds".)
+4. **Closing a tab asks nothing,** even with a paid run or a running turn. (Applied under "Close".)
+5. **Only the active tab counts for outside agents.** (Applied under "Interactions" and spec 14's amendment.)
+6. **Keyboard set, taken from Figma's desktop app** (the user left this to the author): `Cmd+T` opens the project list, `Cmd+W` closes the tab and leaves `Cmd+W` to the page, closing the last tab shows the start state and never closes the window, `Ctrl+Tab` and `Ctrl+Shift+Tab` cycle, `Cmd+1` to `Cmd+8` jump to that tab, `Cmd+9` to the last, and `Cmd+Shift+T` reopens the last closed tab. (Applied under "Keyboard".)
+7. **Engine and shell are released together.** Settings sits at the end of the bar opposite the window controls: far right on macOS, where the traffic lights are on the left, and far left on Windows, where the caption buttons are on the right. (Applied under "The top bar" and "The hosting contract with the desktop shell".)
 
 ## Further Notes
 
