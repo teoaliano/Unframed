@@ -53,6 +53,7 @@ Use these words, and only these, for these things.
   - **mark**: every other tldraw drawing shape (draw, geo, arrow, line, highlight, note, and so on).
   - **node**: a persistent composer card that runs its wired inputs (spec 16).
   - **wire**: a line from one shape to one node input, carrying a role (spec 16).
+- **Project tab**: one open project's place in the top bar (spec 17). One tab per project. The **active tab** is the one whose canvas is live; every other is a **background tab**, which holds a descriptor and nothing live. Chat tabs (spec 08) are the rail's chats, a different thing.
 - **`@id`**: the reference token (`@` followed by word characters and hyphens) that pulls one prompt, text result or group into another prompt's text, or attaches one image or video to a run. Every shape but a mark has one: a number the canvas mints, or a name a person gives it (spec 06).
 - **Selection**: the shapes currently selected. It is the input set of a selection run. A node's inputs are its wires, not its selection (spec 16).
 - **Run**: one Generate action. It may make several outputs (a **batch**).
@@ -117,6 +118,7 @@ These hold across every spec. A spec that needs to bend one must say so explicit
 | 14 | [External agents](14-external-agents.md) | agents outside the app (Claude Code, Codex, the Claude app, any MCP client) read and write the canvas over MCP: connection tokens made in Settings, a stdio shim that finds the engine through a discovery file, one outside chat per session per project with turns and Revert, the person's live selection read by `canvas_read`, and paid generations started through the composer's run services |
 | 15 | [Audio](15-audio.md) | the audio medium (ElevenLabs text to speech) in the Generate composer, the ElevenLabs key and credits in Settings, the audio shape with its player, audio file drop and upload |
 | 16 | [Nodes](16-nodes.md) | nodes (persistent composers with versions), wires with roles, each node's Run and Run downstream, chains from a selection or a group, out-of-date flags, saved flows in the library, and the agent's canvas tools and `node_run` |
+| 17 | [Project tabs](17-project-tabs.md) | a tab strip in the top bar in place of the project picker, one live canvas at a time with background tabs held as descriptors, background work and its status on each tab, the activity stream, restart restore, and the ten-tab budget suite |
 
 ## Reference material in this repo
 
