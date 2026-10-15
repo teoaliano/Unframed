@@ -24,7 +24,7 @@ const parkedChat = async (page: Page, agent: TestEngine): Promise<{ panel: Locat
   const chatId = await createChat(agent, { runtimeMode: "approval-required", title: "Parked" });
   await sendThrough(agent, chatId, "park here");
   const panel = await openRail(page);
-  await expect(panel.getByTestId("live-dot")).toBeVisible();
+  await expect(panel.getByTestId("chat-status")).toHaveAttribute("data-status", "running");
   await expect(panel.getByRole("button", { name: "Stop generation" })).toBeVisible();
   return { panel, chatId };
 };

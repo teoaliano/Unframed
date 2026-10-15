@@ -168,7 +168,7 @@ test("the model and traits are locked while a turn runs", async ({ page }) => {
     const chatId = await createChat(agent, { runtimeMode: "approval-required" });
     await sendThrough(agent, chatId, "clean the build now");
     const panel = await openRail(page);
-    await expect(tabs(page).first().getByTestId("live-dot")).toBeVisible();
+    await expect(tabs(page).first().getByTestId("chat-status")).toHaveAttribute("data-status", "running");
     await expect(panel.getByTestId("model-picker")).toBeDisabled();
     await expect(panel.getByTestId("traits-picker")).toHaveCount(0);
   } finally {
@@ -238,7 +238,7 @@ test("the access mode in More composer controls: four modes with what each does,
     await say(panel, "clean the build please");
     const chat = await onlyChat(agent, (current) => current.latestTurn?.state === "running");
     expect(chat.runtimeMode).toBe("approval-required");
-    await expect(tabs(page).first().getByTestId("live-dot")).toBeVisible();
+    await expect(tabs(page).first().getByTestId("chat-status")).toHaveAttribute("data-status", "running");
 
     // Mid-turn the mode still changes: Cmd+Shift+A from the box opens the menu.
     await promptBox(panel).click();

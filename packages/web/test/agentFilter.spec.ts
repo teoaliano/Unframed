@@ -23,7 +23,8 @@ test("selecting artifacts filters the tabs to the chats tagged with any of them,
   // Opened again, the view fits the new shapes too.
   await openCanvas(page, agent);
   const panel = await openRail(page);
-  await expect(tabs(page)).toHaveText(["Loose", "About both", "About beta"]);
+  // All four labels fit the docked rail, so none waits under More.
+  await expect(tabs(page)).toHaveText(["Loose", "About both", "About beta", "About alpha"]);
 
   // Choose a chat, then select an artifact it is not about: the active tab moves to one that is shown.
   await tabs(page).filter({ hasText: "About beta" }).click();
@@ -49,7 +50,7 @@ test("selecting artifacts filters the tabs to the chats tagged with any of them,
   // Nothing selected shows every chat again.
   const empty = await emptyCanvasPoint(page);
   await page.mouse.click(empty.x - 300, empty.y);
-  await expect(tabs(page)).toHaveText(["Loose", "About both", "About beta"]);
+  await expect(tabs(page)).toHaveText(["Loose", "About both", "About beta", "About alpha"]);
 });
 
 test("Detach unlinks one artifact from a chat, picked from a submenu when there are several, and the tab leaves the filter for it", async ({ page, agent }) => {
