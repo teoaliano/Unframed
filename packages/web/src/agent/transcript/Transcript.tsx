@@ -188,7 +188,7 @@ export const Transcript = ({ client, chatId, embedded, onLocate, onOpenEditor }:
   };
 
   if (!chat) return <div className={SCROLLER_CLASS} data-testid="transcript" />;
-  const author = providerName(chat.modelSelection.provider);
+  const author = chat.modelSelection.provider === "outside" ? "Outside Unframed" : providerName(chat.modelSelection.provider);
   const timeline = buildTimeline(chat);
   const latest = chat.latestTurn;
   const streaming = chat.messages.some((message) => message.streaming && message.role === "assistant" && message.turnId === latest?.turnId);

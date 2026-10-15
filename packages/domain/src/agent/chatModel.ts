@@ -16,8 +16,22 @@ export interface Traits {
   readonly fastMode?: boolean;
 }
 
-export interface ModelSelection {
+/** An outside chat's provider is `outside`: no Unframed adapter runs it (spec 14). */
+export type ChatProvider = AgentProvider | "outside";
+
+/** An in-app agent's selection, which is what a command may carry. */
+export interface AgentSelection {
   readonly provider: AgentProvider;
+  readonly model: string;
+  readonly traits: Traits;
+}
+
+/** The in-app selection of a chat's stored selection: `undefined` for an outside chat, which has none. */
+export const agentSelectionOf = (selection: ModelSelection): AgentSelection | undefined =>
+  selection.provider === "outside" ? undefined : { provider: selection.provider, model: selection.model, traits: selection.traits };
+
+export interface ModelSelection {
+  readonly provider: ChatProvider;
   readonly model: string;
   readonly traits: Traits;
 }
@@ -95,6 +109,13 @@ export interface TurnRevert {
   readonly at: string;
 }
 
+/** Which outside client a chat belongs to, and the session that made it (spec 14). */
+export interface OutsideChatRef {
+  readonly connectionId: string;
+  readonly sessionId: string;
+  readonly client: "claude-code" | "codex" | "claude-desktop" | "other";
+}
+
 export interface ChatTurn {
   readonly turnId: string;
   readonly turnCount: number;
@@ -137,6 +158,8 @@ export interface Chat {
   readonly createdAt: string;
   readonly updatedAt: string;
   readonly deletedAt: string | null;
+  /** Set on an outside chat: the connection and session it shows calls from (spec 14). */
+  readonly outside?: OutsideChatRef;
   /** "" until someone names it; at most 60 characters. */
   readonly title: string;
   readonly titledBy: TitledBy | null;
@@ -252,6 +275,15 @@ export interface ActivityInput {
 export type InternalCommand = CommandBase &
   (
     | { readonly type: "thread.session.set"; readonly session: ChatSession }
+    /** An outside session's first call into a project: makes its chat (spec 14). The engine mints `threadId`. */
+    | {
+        readonly type: "thread.outside.create";
+        readonly title: string;
+        readonly outside: OutsideChatRef;
+        readonly createdAt: string;
+      }
+    /** Opens the running turn an outside chat's calls belong to. It has no message. */
+    | { readonly type: "thread.outside.turn.begin"; readonly turnId: string; readonly createdAt: string }
     | { readonly type: "thread.message.assistant.delta"; readonly messageId: string; readonly turnId: string | null; readonly delta: string }
     | { readonly type: "thread.message.assistant.complete"; readonly messageId: string; readonly turnId: string | null; readonly text?: string }
     | { readonly type: "thread.message.reasoning.delta"; readonly messageId: string; readonly turnId: string | null; readonly delta: string }
@@ -302,7 +334,8 @@ export type ChatEventType =
   | "thread.turn-files-completed"
   | "thread.turn-revert-requested"
   | "thread.turn-reverted"
-  | "thread.turn-settled";
+  | "thread.turn-settled"
+  | "thread.outside-turn-began";
 
 /** A committed event, with t3code's base fields. */
 export interface ChatEvent extends PendingEvent {

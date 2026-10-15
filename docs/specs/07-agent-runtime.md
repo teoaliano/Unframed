@@ -408,7 +408,8 @@ Chat = {
   title: string,                          // "" until someone names it; at most 60 characters
   titledBy: "user" | "agent" | null,
   tags: ShapeId[],                        // artifacts it touched, first-touch order
-  modelSelection: { provider: "claude" | "codex", model: string, traits: Traits },
+  modelSelection: { provider: "claude" | "codex" | "outside", model: string, traits: Traits },
+  // An outside chat (spec 14) has `outside: { connectionId, sessionId, client }` and provider `outside`; its turns may have no message.
   runtimeMode: "approval-required" | "auto-accept-edits" | "auto" | "full-access",
   interactionMode: "default" | "plan",
   lastClock: number | null,               // room clock when its last turn settled

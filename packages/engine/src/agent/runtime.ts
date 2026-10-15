@@ -34,6 +34,7 @@ import {
   type SkippedBy,
   type ThreadSearchMatch,
   type TurnOutcome,
+  type ChatProvider,
 } from "@unframed/domain";
 import type { ArtifactDiffFile } from "@unframed/contracts";
 import type { TLRecord } from "@tldraw/tlschema";
@@ -43,6 +44,8 @@ import type { AdapterContext, ProviderAdapter, TurnAttachment } from "./adapter.
 import { scriptedAdapter } from "./adapters/scripted.ts";
 import { AttachmentStore } from "./attachmentStore.ts";
 import { CanvasTools } from "./canvasTools.ts";
+import { OutsideChats } from "./outsideChats.ts";
+import { OUTSIDE_TURN_IDLE_MS } from "@unframed/domain";
 import { ChatEngine, CommandRejected } from "./chatEngine.ts";
 import type { RunEnvironment } from "./detection.ts";
 import { McpTokens, McpToolRegistry, MCP_PATH, type McpTool } from "./mcp.ts";
@@ -54,6 +57,8 @@ import { artifactDiff } from "./turnDiff.ts";
 
 export interface AgentRuntimeDeps {
   readonly dataDir: string;
+  /** The outside turn's idle time; two minutes unless a test shortens it (spec 14). */
+  readonly outsideTurnIdleMs?: number;
   readonly testAgentScript: string | undefined;
   readonly idleMs: number | undefined;
   readonly uploadUrlTtlMs: number | undefined;
@@ -130,6 +135,8 @@ const record = (value: unknown): Record<string, any> => (typeof value === "objec
 export class AgentRuntime {
   readonly tokens = new McpTokens();
   readonly registry = new McpToolRegistry();
+  /** The outside calls: an outside session's chat and turn in each project (spec 14). */
+  readonly outside: OutsideChats;
   readonly attachments: AttachmentStore;
   readonly providers: ProviderService;
   private readonly projects = new Map<string, Promise<ProjectAgent>>();
@@ -158,6 +165,15 @@ export class AgentRuntime {
         ),
     };
     for (const tool of new CanvasTools(context).tools()) this.registry.register(tool);
+    this.outside = new OutsideChats(
+      {
+        agent: (slug) => this.project(slug),
+        command: (agent, chatId, command) => this.internal(agent as ProjectAgent, chatId, command).then(() => undefined),
+        activity: (agent, chatId, activity) => this.activity(agent as ProjectAgent, chatId, activity).then(() => undefined),
+        clock: (slug) => deps.rooms.clock(slug).catch(() => null),
+      },
+      deps.outsideTurnIdleMs ?? OUTSIDE_TURN_IDLE_MS,
+    );
     for (const tool of deps.extraTools?.(context) ?? []) this.registry.register(tool);
     this.providers = new ProviderService({
       adapterFor: (provider) => this.adapterFor(provider),
@@ -185,6 +201,11 @@ export class AgentRuntime {
       },
       dataDir: this.deps.dataDir,
     };
+  }
+
+  /** The provider a runtime event names. An outside chat has no adapter, so its events name Claude as they always did. */
+  private eventProvider(provider: ChatProvider | undefined): ProviderAdapter["provider"] {
+    return this.adapterFor(provider === undefined || provider === "outside" ? "claude" : provider).provider;
   }
 
   private adapterFor(provider: AgentProvider): ProviderAdapter {
@@ -465,7 +486,7 @@ export class AgentRuntime {
 
   /** A selection with an empty model resolved to the provider's first non-legacy one. */
   private async resolveModel(selection: ModelSelection): Promise<ModelSelection> {
-    if (selection.model !== "") return selection;
+    if (selection.model !== "" || selection.provider === "outside") return selection;
     const model = await this.deps.defaultModel(selection.provider).catch(() => undefined);
     return model === undefined ? selection : { ...selection, model };
   }
@@ -533,7 +554,7 @@ export class AgentRuntime {
     const event: RuntimeEvent = {
       ...draft,
       eventId: randomUUID(),
-      provider: this.adapterFor(agent.engine.chat(chatId)?.modelSelection.provider ?? "claude").provider,
+      provider: this.eventProvider(agent.engine.chat(chatId)?.modelSelection.provider),
       threadId: chatId,
       createdAt: new Date().toISOString(),
     };
@@ -729,6 +750,8 @@ export class AgentRuntime {
 
   /** Titling: one small request on the chat's own provider; any failure is silent. */
   private async title(agent: ProjectAgent, chat: Chat): Promise<void> {
+    // An outside chat has no provider of Unframed's to title it, so it keeps the name it has.
+    if (chat.modelSelection.provider === "outside") return;
     try {
       const first = chat.messages.find((message) => message.role === "user")?.text ?? "";
       const answer = chat.messages.find((message) => message.role === "assistant" && message.turnId === chat.latestTurn?.turnId)?.text ?? "";
