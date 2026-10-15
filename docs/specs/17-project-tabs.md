@@ -300,7 +300,7 @@ There are no open decisions. The user answered the seven questions raised by thi
 
 ## Further Notes
 
-- **Build after the open PRs.** Spec 14's open PRs and the chat-tab overflow fix both touch the rail. PR 2 onward builds on main after they merge, as the Pivot asked.
+- **Build after the open PRs.** Spec 14's open PRs and the chat-tab overflow fix both touch the rail. PR 2 onward builds on main after they merge.
 - **Measure before changing.** PR 4's baseline runs on main. The switch budget and the memory ratios are relative to it, so the numbers come from this Mac and this build, not from this spec.
 - **Vocabulary.** The index gains "Project tab", "Active tab" and "Background tab", defined above, and the vocabulary's "Chat" entry keeps its own tabs.
 - **Why the chat tabs' live dot.** Spec 08 gives chat tabs a live dot for a running or waiting chat. Project tabs use that same dot, so the two read as one system, and add one mark, the check, for work that finished unseen.
