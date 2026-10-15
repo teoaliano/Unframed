@@ -154,7 +154,7 @@ A project touched once and then left in the background keeps one database handle
 
 ### Keyboard
 
-On Windows and Linux, `Cmd` means `Ctrl`. The set follows Figma's desktop app, as the Pivot's decision on the keyboard set.
+On Windows and Linux, `Cmd` means `Ctrl`. The set follows Figma's desktop app. The user left this choice to the author.
 
 | Shortcut | Action |
 | --- | --- |
