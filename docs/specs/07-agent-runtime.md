@@ -192,7 +192,7 @@ One MCP server, hosted by the engine over streamable HTTP on loopback, is how bo
 
 Claude sessions get it as an `http` MCP server named `unframed` with an `Authorization: Bearer <token>` header. Codex sessions get it through `-c` config overrides naming the URL and a `bearer_token_env_var` whose variable the engine sets in the app-server's environment.
 
-This spec builds the server with two tools, `canvas_read` and `canvas_write` (provider-side names `mcp__unframed__<name>` on Claude). Spec 14 adds `generate` to the in-app list and the outside list, and `canvas_select` and `projects_list` to the outside list only. It does not build the artifact tools: spec 09 adds `page_write`, `page_read`, `motion_write` and `motion_read`, and the preview tools, to this same server. Their descriptions are model-facing text: use the `canvas_read` and `canvas_write` text in `assets/prompts/tool-descriptions.md`; the artifact and preview tools' text is spec 09's.
+This spec builds the server with two tools, `canvas_read` and `canvas_write` (provider-side names `mcp__unframed__<name>` on Claude). Spec 14 adds `generate` to the in-app list and the outside list, and `canvas_select` and `projects_list` to the outside list only. Spec 16 adds `node_run` to the server, on both lists. It does not build the artifact tools: spec 09 adds `page_write`, `page_read`, `motion_write` and `motion_read`, and the preview tools, to this same server. Their descriptions are model-facing text: use the `canvas_read` and `canvas_write` text in `assets/prompts/tool-descriptions.md`; the artifact and preview tools' text is spec 09's.
 
 **The init handshake is load-bearing.** A Claude session's initialization lists its tools. The required list is every tool the Unframed server registers, so it is the two canvas tools in this spec and grows to include the artifact and preview tools when spec 09 registers them. If any required `mcp__unframed__*` name is missing, the turn fails before the model speaks with: "The agent session started without the canvas tools (<missing names>). This is a bug in Unframed, not your setup." A Codex session checks the MCP server's startup status the same way. Tools from the person's own MCP servers are allowed and reported on the session event as `foreign`, never refused.
 
@@ -212,6 +212,8 @@ Every id the agent reads or writes is tldraw's shape id without its `shape:` pre
   - group: `members` (ids, in their order inside the box), `recipe` when it carries standing settings (spec 06)
   - page, motion: `file`, `title`, `dials` when the shape has any saved dial values (spec 09 explains why the agent must see these)
   - result shapes also carry `recipe`, spec 03's result recipe read from the sidecar, and `running: true` while they carry spec 03's run marker
+  - node (spec 16): `medium`, `model`, `params`, `instruction`, `status` (its state and any blocker), `versions` (a count), `current` (the current version's file or text) and `error` when its last run failed
+  - wire (spec 16): `from`, `to` and `role`
   - mark: `type` (the tldraw shape type), `text` when it has a label, `on` (the image it belongs to, by spec 03's mark rule) when it sits on one
 - `selection`: the ids the person had selected when they sent the latest message, filtered to shapes that still exist. For an outside chat (spec 14) it is the live selection instead, with `selectionNote` when no window has the project open.
 - A result shape whose sidecar carries a `cost` also gives `cost` (USD). Outside chats (spec 14) see it on the results of their generations.
@@ -222,13 +224,13 @@ A member's `x, y` is relative to its group, as the document holds it, and `paren
 
 | Op | Fields | Does |
 | --- | --- | --- |
-| `create` | `id`, `kind`, `x`, `y`, `w?`, `h?`, `parent?`, `props` | adds a shape. `kind` is `prompt` (`props.text`), `image` or `video` (`props.file`, or `props.url` for a clip link), `group` (`props.name`), or `mark` (`props.type` one of `geo`, `note`, `arrow`, `line`, plus that tldraw type's own props) |
-| `update` | `id`, `props` | a shallow patch onto the shape's props; `null` deletes an optional key |
+| `create` | `id`, `kind`, `x`, `y`, `w?`, `h?`, `parent?`, `props` | adds a shape. `kind` is `prompt` (`props.text`), `image` or `video` (`props.file`, or `props.url` for a clip link), `group` (`props.name`), `mark` (`props.type` one of `geo`, `note`, `arrow`, `line`, plus that tldraw type's own props), `node` (`props.medium` and spec 16's optional settings) or `wire` (`props.from`, `props.to`, `props.role`, spec 16) |
+| `update` | `id`, `props` | a shallow patch onto the shape's props; `null` deletes an optional key. A node's `versions`, `currentVersionId`, `run`, `status` and `error` are written by runs and refused (spec 16) |
 | `move` | `id`, `x`, `y` | |
 | `resize` | `id`, `w`, `h` | media keeps its aspect lock (spec 02) |
-| `delete` | `id` | deleting a group deletes its members, as on the canvas |
+| `delete` | `id` | deleting a group deletes its members, as on the canvas; deleting a node deletes its wires and leaves its files (spec 16) |
 | `reparent` | `id`, `parent` | into a group, or `null` to take it out; spec 02's group membership rules apply |
-| `rename` | `id`, `name` | renames any shape with an `@id` (a prompt, image, video, page, motion or group) exactly as the canvas does (spec 06): slugified, collision-suffixed, a page or motion retitled with the name, and every `@` reference to it rewritten in the same batch. A mark is refused with "rename: <id> has no @id to rename", and a name of digits only with "rename: A name needs a letter." |
+| `rename` | `id`, `name` | renames any shape with an `@id` (a prompt, image, video, page, motion, group or node) exactly as the canvas does (spec 06): slugified, collision-suffixed, a page or motion retitled with the name, and every `@` reference to it rewritten in the same batch. A mark is refused with "rename: <id> has no @id to rename", and a name of digits only with "rename: A name needs a letter." |
 
 Refused before the canvas sees the batch, with these messages:
 
