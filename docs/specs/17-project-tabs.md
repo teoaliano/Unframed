@@ -202,7 +202,9 @@ Measured baselines, this Mac, headless Chrome, hosted shape, 100-shape boards (m
 
 - Switch on main, from the picker, between two projects: median 205 ms over ten switches (range 194 to 313 ms). The menu opens for each switch.
 - Switch on this branch, from a tab: median 159 ms over ten switches (range 114 to 279 ms). The budget is 1.5 times main's median.
-- Idle main-thread CPU over 10 s with one project on main: about 443 ms of task time. With ten tabs open on this branch: about 129 to 135 ms. Main's figure is higher than the branch's; the cause on main is not traced.
+- Idle main-thread CPU over 10 s, interleaved in one session (four rounds of five windows per mode, medians): main with one project 283.5 ms; this branch with one tab 304 ms; this branch with ten tabs 334.5 ms. Ten tabs is 1.10 times one tab, inside the budget of 1.05 times plus 20 ms (339 ms).
+
+**Known gap, accepted:** one tab against main is +20.5 ms (+7%). The budget test allows one tab 1.05 times main plus 20 ms (`MAIN_IDLE_MS` in `projectTabsPerformance.spec.ts`). Ruled out: script at idle (sampling profile), per-tab timers (ten tabs has the same five live timers as one), the activity stream (it ticks on the engine), paint, layout, raster and garbage collection at idle (Chrome traces; the traced renderer work for main and one tab is equal, 474 and 477 ms), and the strip's CSS (hiding its parts changes the total within the noise). The remaining cost is untraced native time. Accepted by the user; no further profiling.
 - Heap, one tab against ten warmed tabs: 22.0 MB against 23.6 MB (1.07 times).
 - Product DOM outside the strip, one tab against ten: 1300 against 1300 nodes (elements and text). Listeners: 740 against 770 (1.04 times).
 
