@@ -6,6 +6,9 @@ import * as Layer from "effect/Layer";
 import * as ManagedRuntime from "effect/ManagedRuntime";
 import * as RpcServer from "effect/unstable/rpc/RpcServer";
 import { CanvasRooms, canvasRoomsLayer } from "./canvas/rooms.ts";
+import { agentConnectionsLayer } from "./agentConnections/layer.ts";
+import { selectionHubLayer } from "./selection/liveSelection.ts";
+import { removeDiscovery, writeDiscovery } from "./agentConnections/discovery.ts";
 import { loadConfig } from "./config.ts";
 import { MediaStore, mediaStoreLayer } from "./media/mediaStore.ts";
 import { catalogueLayer } from "./openRouter/catalogue.ts";
@@ -118,7 +121,7 @@ export const startEngine = async (host: EngineHost): Promise<RunningEngine> => {
     Layer.provideMerge(mediaStoreLayer),
     Layer.provideMerge(canvasRoomsLayer),
     Layer.provideMerge(nativeLayer),
-    Layer.provideMerge(preferencesStoreLayer),
+    Layer.provideMerge(Layer.mergeAll(preferencesStoreLayer, agentConnectionsLayer, selectionHubLayer)),
     Layer.provideMerge(projectsLayer),
     Layer.provideMerge(projectDatabaseLayer),
     Layer.provideMerge(openProjectsLayer),
@@ -178,12 +181,19 @@ export const startEngine = async (host: EngineHost): Promise<RunningEngine> => {
   agents.runtime.setApiPort(apiPort);
   oauth.setApiPort(apiPort);
   process.stdout.write(banner(apiPort, settings));
+  // Before the ready message, as spec 14's Implementation Decisions say: the shim finds the port once ready is sent.
+  try {
+    writeDiscovery(config.discoveryPath, apiPort, new Date());
+  } catch (error) {
+    logError(`could not write mcp-endpoint.json: ${errorText(error)}`);
+  }
   host.send?.({ type: "ready", port: apiPort, previewPort });
 
   const stop = async () => {
     const startedAt = Date.now();
     stopListening(api);
     preview.stopListening();
+    await removeDiscovery(config.discoveryPath);
     await Promise.all([sockets.closeAll(1001), rooms.closeSockets(1001)]);
     await runtime.runPromise(shutdown.runHooks(startedAt));
     api.closeAllConnections();

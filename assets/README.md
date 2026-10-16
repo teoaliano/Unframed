@@ -5,7 +5,8 @@ Reference material the specs in `docs/specs/` point at. One line per file: what 
 ## brand/
 
 - `brand/favicon.svg`: the app's favicon. Specs 01 and 02.
-- `brand/logo.svg`: the app's logo. Spec 02.
+- `brand/logo.svg`: the app's logo, the mark alone in `currentColor`, cut from `app-icon.svg`. Spec 02.
+- `brand/app-icon.svg` and `brand/app-icon.png` (1024 × 1024): the full app icon tile, the source for `apps/desktop/build/icon.png`. Spec 02.
 - `brand/provider-logos/claude.svg`: the Claude mark for the model picker, painted in `currentColor` (from t3code, MIT). Spec 08.
 - `brand/provider-logos/codex.svg`: the OpenAI mark for Codex in the model picker, painted in `currentColor` (from t3code, MIT). Spec 08.
 

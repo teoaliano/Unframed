@@ -152,6 +152,7 @@ This is the one table of every test-only variable in the build. A spec that uses
 | `UNFRAMED_TEST_SHARE_TTL_MS` | 04 | the share link TTL in milliseconds, in place of 30 min; the expiry check then runs at the smaller of 60 s and this value |
 | `UNFRAMED_TEST_AGENT_SCRIPT` | 07, 08, 09 | a JSON script file or a folder of them. Every chat's provider adapter becomes the scripted adapter spec 07 defines |
 | `UNFRAMED_TEST_AGENT_IDLE_MS` | 07 | the agent session idle close in milliseconds, in place of 10 min |
+| `UNFRAMED_TEST_OUTSIDE_TURN_IDLE_MS` | 14 | the idle time after which an outside turn settles, in milliseconds, in place of 2 min (spec 14) |
 | `UNFRAMED_TEST_UPLOAD_URL_TTL_MS` | 07 | an attachment upload URL's lifetime in milliseconds, in place of 10 min |
 | `UNFRAMED_TEST_RENDERER` | 09 | replaces the motion renderer and the Chrome search: `ok`, `fail` or `no-chrome`, each behaving as spec 09 states |
 
@@ -406,6 +407,7 @@ The web build reads `TLDRAW_LICENSE_KEY` from the build environment and embeds i
 Built by `pnpm build`, published by CI. Layout at the bundle root:
 
 - `package.json`: `name` exactly `unframed` (the shell's dependency key depends on it), `version` equal to the engine package version, `"type": "module"`, `main` `server/index.js`, `dependencies` limited to runtime packages that cannot be inlined (packages that locate their own files on disk at runtime or spawn binaries, such as the Claude Agent SDK, the HyperFrames packages and GSAP), no `devDependencies`, no `workspaces`, no lifecycle scripts. It also carries `"puppeteer": { "skipDownload": true }`: puppeteer comes in under the HyperFrames producer and downloads a browser on install unless told not to, and renders use the browser already on the machine (spec 09). Puppeteer reads that key from the nearest manifest above its own folder, so it covers an install run inside the bundle; an app that installs the bundle as its own dependency carries the same key in its manifest, or installs with `PUPPETEER_SKIP_DOWNLOAD=1`.
+- `server/mcp.js` (spec 14): plain ESM JavaScript, the stdio shim an outside client runs through the Electron binary with `ELECTRON_RUN_AS_NODE=1`. It is a second entry beside `index.js`, bundled the same way, and the shell never runs it.
 - `server/index.js`: plain ESM JavaScript, the fork entry. All workspace code and every inlinable dependency are bundled into it (plus sibling chunk files under `server/` if the bundler splits). No TypeScript, no workspace references, no source maps, no test files.
 - `client/dist/`: the built web.
 - `client/package.json` and `client/package-lock.json`: a compatibility shim for a shell that still runs `npm --prefix <engine>/client ci && npm --prefix <engine>/client run build`. The manifest has no dependencies and a `build` script that does nothing and exits 0, and the lockfile matches it, so that command succeeds and leaves `client/dist` untouched. It can be removed once the shell stops building the client.

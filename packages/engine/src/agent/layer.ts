@@ -6,7 +6,6 @@ import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Queue from "effect/Queue";
-import * as Stream from "effect/Stream";
 import { CanvasRooms } from "../canvas/rooms.ts";
 import type { Route } from "../http/api.ts";
 import { errorText } from "../log.ts";
@@ -17,7 +16,17 @@ import { SettingsStore } from "../settingsStore.ts";
 import { AttachmentRefused } from "./attachmentStore.ts";
 import { realAdapter } from "./adapters/real.ts";
 import { ProviderDetection } from "./detection.ts";
-import { mcpRoute } from "./mcp.ts";
+import { mcpRoute, refusal, type OutsideProject } from "./mcp.ts";
+import { AgentConnections } from "../agentConnections/layer.ts";
+import { SelectionHub } from "../selection/liveSelection.ts";
+import { Runs } from "../runs/runs.ts";
+import { Catalogue } from "../openRouter/catalogue.ts";
+import { VideoCatalogue } from "../openRouter/videoCatalogue.ts";
+import { RenderJobs } from "../video/renderJobs.ts";
+import * as Fiber from "effect/Fiber";
+import * as Stream from "effect/Stream";
+import { PreferencesStore } from "../preferencesStore.ts";
+import { Projects } from "../projects.ts";
 import { AgentRuntime, DispatchError } from "./runtime.ts";
 import { ArtifactTools } from "../artifacts/artifactTools.ts";
 import { Artifacts } from "../artifacts/layer.ts";
@@ -59,11 +68,30 @@ export const agentsLayer = Layer.effect(
     const detection = yield* ProviderDetection;
     const { previewPort } = yield* settings.view;
     const artifacts = yield* Artifacts;
+    const connections = yield* AgentConnections;
+    const projects = yield* Projects;
+    const preferences = yield* PreferencesStore;
     const context = yield* Effect.context<never>();
     const run = <A, E>(effect: Effect.Effect<A, E>): Promise<A> =>
       Effect.runPromiseWith(context)(effect).catch((error: unknown) => {
         throw error instanceof UnframedError ? new Error(error.message) : error;
       });
+
+    /** Every project in the output folder, sorted by name, with its folder and the active one (spec 14). */
+    const outsideProjects = (): Promise<ReadonlyArray<OutsideProject>> =>
+      run(
+        Effect.gen(function* () {
+          const names = yield* projects.list;
+          const prefs = yield* preferences.get(["project.active"]);
+          const active = typeof prefs["project.active"] === "string" ? prefs["project.active"] : undefined;
+          const entries: OutsideProject[] = [];
+          for (const name of [...names].sort()) {
+            const folder = yield* projects.folder(name);
+            if (folder !== undefined) entries.push({ name, folder, active: name === active });
+          }
+          return entries;
+        }),
+      );
 
     const preview = new PreviewTools({
       read: (project) => run(rooms.read(project)),
@@ -73,10 +101,31 @@ export const agentsLayer = Layer.effect(
       registerCloser: (project, close) => void run(openProjects.register(project, "preview tabs", Effect.promise(close))),
     });
 
+    const selection = yield* SelectionHub;
+    const runs = yield* Runs;
+    const catalogue = yield* Catalogue;
+    const videoCatalogue = yield* VideoCatalogue;
+    const renderJobs = yield* RenderJobs;
     const runtime = new AgentRuntime({
       dataDir: config.dataDir,
+      selection,
+      generationRuns: {
+        runImage: (request) => run(runs.image(request)),
+        runText: (request) => run(runs.text(request)),
+        pricing: (model) => run(catalogue.imagePricing(model)),
+        models: (kind) => run(kind === "video" ? videoCatalogue.list : catalogue.listImageModels).then((answer) => answer.models),
+        defaultModel: (kind) => run(settings.read).then((current) => (kind === "video" ? current.videoModel : current.imageModel)),
+        startVideo: (request) => run(renderJobs.start(request)),
+        onVideoFinished: (jobId, handler) => renderJobs.onFinished(jobId, handler),
+        track: (project, handler) => {
+          const fiber = Effect.runForkWith(context)(Stream.runForEach(runs.subscribe(project), (event) => Effect.sync(() => handler(event))));
+          return () => void Effect.runPromiseWith(context)(Fiber.interrupt(fiber)).catch(() => undefined);
+        },
+        book: connections.book,
+      },
       testAgentScript: config.testAgentScript,
       idleMs: config.testAgentIdleMs,
+      outsideTurnIdleMs: config.outsideTurnIdleMs,
       uploadUrlTtlMs: config.testUploadUrlTtlMs,
       agentDebug: config.agentDebug,
       projectFolder: async (project) => {
@@ -162,7 +211,21 @@ export const agentsLayer = Layer.effect(
           try: () => runtime.attachments.createUploadUrl(input),
           catch: (error) => (error instanceof AttachmentRefused ? unframedError("bad_request", error.message) : toUnframed(error)),
         }),
-      routes: [mcpRoute(runtime.tokens, runtime.registry), runtime.attachments.route()],
+      routes: [
+        mcpRoute(runtime.tokens, runtime.registry, undefined, {
+          book: connections.book,
+          listProjects: () => outsideProjects(),
+          tools: () => [...runtime.registry.list(), ...runtime.outsideTools],
+          projectSlug: async (name) => {
+            const slug = projectSlug(name);
+            const names = await projects.list.pipe(Effect.runPromise);
+            return names.includes(slug) ? slug : undefined;
+          },
+          call: (call) => runtime.outside.call(call),
+          endSession: (sessionId) => runtime.endOutsideSession(sessionId),
+        }),
+        runtime.attachments.route(),
+      ],
     });
   }),
 );

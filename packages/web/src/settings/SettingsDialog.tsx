@@ -16,6 +16,7 @@ import { loadCatalogue } from "../generate/catalogue.ts";
 import { showNotice } from "../toasts.tsx";
 import { Copy, linkClass, ModelSelect, SectionHeading } from "./fields.tsx";
 import { FOLLOW_UP_KEY, LocalAgents, PLAN_MODE_KEY, type FollowUp } from "./LocalAgents.tsx";
+import { OutsideAgents } from "./OutsideAgents.tsx";
 import { useSettingsUi, type SettingsUi } from "./settingsUi.ts";
 
 export const KEY_SAVED_MESSAGE = "Key saved. Unframed is ready to generate.";
@@ -370,6 +371,7 @@ export const SettingsDialog = ({ ui }: { readonly ui: SettingsUi }) => {
                 planMode={planMode}
                 onPlanMode={setPlanModePreference}
               />
+              <OutsideAgents />
             </>
           )}
         </DialogPanel>

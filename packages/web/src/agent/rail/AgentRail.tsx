@@ -349,7 +349,16 @@ export const AgentRail = ({ project, embedded, inSheet, filterTo, onLocate, onOp
         </Suspense>
       )}
       <div className="shrink-0 px-2.5 pb-2.5">
-        <AgentTray client={client} variant="rail" chatId={active} newChatTags={selectedArtifacts} dropTarget={root} />
+        {activeChat?.outside === undefined ? (
+          <AgentTray client={client} variant="rail" chatId={active} newChatTags={selectedArtifacts} dropTarget={root} />
+        ) : (
+          <div className="flex items-center gap-2 rounded-lg border bg-card px-3 py-2 text-sm" data-testid="outside-line">
+            <span className="min-w-0 flex-1 text-muted-foreground">{`${activeChat.title} works from outside Unframed. Talk to it where it runs.`}</span>
+            <Button variant="outline" size="sm" onClick={newChat}>
+              New chat
+            </Button>
+          </div>
+        )}
       </div>
     </aside>
   );

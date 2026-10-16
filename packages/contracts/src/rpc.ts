@@ -23,8 +23,50 @@ import {
 } from "./agent.ts";
 import { ArtifactOpenLive, ArtifactSnapshots, MotionRenderStart, MotionRenderStatus, MotionUpload } from "./artifacts.ts";
 import { LegacyImportMarkSeen, LegacyImportReport, LegacyImportRetry, LegacyImportStatus } from "./legacy.ts";
+import { AgentConnectionsCreate, AgentConnectionsCreateAnswer, AgentConnectionsListAnswer, AgentConnectionsRevoke, AgentConnectionsSetSpendLimit } from "./agentConnections.ts";
+import { SelectionApply, SelectionReport, SelectionSubscribe } from "./selection.ts";
 
 const Empty = Schema.Struct({});
+
+/** Spec 14: the Settings block lists, makes and revokes the connections an outside agent uses. */
+export const AgentConnectionsList = Rpc.make("agentConnections.list", {
+  success: AgentConnectionsListAnswer,
+  error: UnframedError,
+});
+
+/** The token is in this answer once, and the engine keeps only its hash. */
+export const AgentConnectionsCreateRpc = Rpc.make("agentConnections.create", {
+  payload: AgentConnectionsCreate,
+  success: AgentConnectionsCreateAnswer,
+  error: UnframedError,
+});
+
+/** Spec 14: the person sets, changes or removes an outside connection's spend limit. */
+export const AgentConnectionsSetSpendLimitRpc = Rpc.make("agentConnections.setSpendLimit", {
+  payload: AgentConnectionsSetSpendLimit,
+  success: Empty,
+  error: UnframedError,
+});
+
+export const AgentConnectionsRevokeRpc = Rpc.make("agentConnections.revoke", {
+  payload: AgentConnectionsRevoke,
+  success: Empty,
+  error: UnframedError,
+});
+
+/** Spec 14: a window reports its selection, and the engine asks it to select shapes. */
+export const SelectionReportRpc = Rpc.make("selection.report", {
+  payload: SelectionReport,
+  success: Empty,
+  error: UnframedError,
+});
+
+export const SelectionSubscribeRpc = Rpc.make("selection.subscribe", {
+  payload: SelectionSubscribe,
+  success: SelectionApply,
+  error: UnframedError,
+  stream: true,
+});
 
 export const ServerHealth = Rpc.make("server.health", {
   success: Health,
@@ -320,5 +362,11 @@ export const UnframedRpcs = RpcGroup.make(
   LegacyImportReport,
   LegacyImportMarkSeen,
   LegacyImportRetry,
+  AgentConnectionsList,
+  AgentConnectionsCreateRpc,
+  AgentConnectionsRevokeRpc,
+  AgentConnectionsSetSpendLimitRpc,
+  SelectionReportRpc,
+  SelectionSubscribeRpc,
 );
 export type UnframedRpcs = typeof UnframedRpcs;

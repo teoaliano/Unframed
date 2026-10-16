@@ -101,6 +101,22 @@ const applyToChat = (chat: Chat, event: ChatEvent): Chat => {
       }
       return next;
     }
+    case "thread.outside-turn-began": {
+      // An outside turn has no message: it opens the next number, running, and the session runs with it.
+      const turnId = str(p.turnId);
+      const turnCount = chat.turns.reduce((highest, turn) => Math.max(highest, turn.turnCount), 0) + 1;
+      const turn: ChatTurn = {
+        turnId,
+        turnCount,
+        state: "running",
+        requestedAt: at,
+        startedAt: at,
+        completedAt: null,
+        pendingMessageId: null,
+        assistantMessageId: null,
+      };
+      return withTurns({ ...chat, updatedAt: at, session: { status: "running", activeTurnId: turnId, lastError: null } }, [...chat.turns, turn]);
+    }
     case "thread.turn-start-requested": {
       if (p.steer === true) return { ...chat, updatedAt: at };
       const turn: ChatTurn = {
@@ -214,11 +230,12 @@ export const projectChats = (model: ProjectChats, event: ChatEvent): ProjectChat
     const chat: Chat = {
       id,
       projectId: model.projectId,
+      ...(p.outside === undefined ? {} : { outside: p.outside as NonNullable<Chat["outside"]> }),
       createdAt: created,
       updatedAt: created,
       deletedAt: null,
-      title: "",
-      titledBy: null,
+      title: str(p.title),
+      titledBy: (p.titledBy ?? null) as Chat["titledBy"],
       tags: (p.tags as string[]) ?? [],
       modelSelection: p.modelSelection,
       runtimeMode: p.runtimeMode,
@@ -299,6 +316,7 @@ export const chatSummary = (chat: Chat): ChatSummaryView => {
     preview: (chat.messages.find((message) => message.role === "user")?.text ?? "").slice(0, 80),
     tags: chat.tags,
     provider: chat.modelSelection.provider,
+    ...(chat.outside === undefined ? {} : { outside: chat.outside }),
     model: chat.modelSelection.model,
     status: latest?.state === "running" ? "running" : latest?.state === "error" ? "failed" : "idle",
     hasPendingApproval: openRequests(chat, "approval").length > 0,

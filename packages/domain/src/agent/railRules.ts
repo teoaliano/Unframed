@@ -4,13 +4,16 @@
  * rows. The strip's filter is any-of and the continue rule is all-of: they answer
  * different questions and must not be merged.
  */
-import type { ChatActivity, TurnFile } from "./chatModel.ts";
+import type { ChatActivity, OutsideChatRef, TurnFile } from "./chatModel.ts";
+import { connectionClientLabel } from "../outside/connectionSetup.ts";
 import { shapeLabel } from "./shapeLabel.ts";
 import { agentShapeId, roomShapeId as shapeId } from "./turnText.ts";
 
 /** What the rules read of a chat: its summary. */
 export interface RailChat {
   readonly id: string;
+  /** An outside chat (spec 14) is never continuable: its agent does not read Unframed's messages. */
+  readonly outside?: OutsideChatRef;
   readonly title: string;
   /** The first message, at most 80 characters. */
   readonly preview: string;
@@ -90,8 +93,13 @@ export const tabLabel = (chat: Pick<RailChat, "title" | "preview">): string => {
 };
 
 /** A tab's tooltip: its label, then " · " and the opening words when they differ from it. */
-export const tabTooltip = (chat: Pick<RailChat, "title" | "preview">): string => {
+export const tabTooltip = (chat: Pick<RailChat, "title" | "preview"> & Partial<Pick<RailChat, "outside" | "createdAt">>): string => {
   const label = tabLabel(chat);
+  // An outside chat says which client it is, and that its agent is outside Unframed (spec 14).
+  if (chat.outside !== undefined) {
+    const when = chat.createdAt === undefined ? "" : `, ${new Date(chat.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}`;
+    return `${label} · ${connectionClientLabel(chat.outside.client)}, outside Unframed${when}`;
+  }
   const words = openingWords(chat);
   return words === "" || words === label ? label : `${label} · ${words}`;
 };
@@ -103,7 +111,7 @@ export const tabTooltip = (chat: Pick<RailChat, "title" | "preview">): string =>
  */
 export const continuableChat = <C extends RailChat>(chats: ReadonlyArray<C>, artifactIds: ReadonlyArray<string>): C | undefined =>
   newestFirst(chats).find(
-    (chat) => chat.status !== "running" && (artifactIds.length === 0 ? chat.tags.length === 0 : artifactIds.every((id) => chat.tags.includes(id))),
+    (chat) => chat.status !== "running" && chat.outside === undefined && (artifactIds.length === 0 ? chat.tags.length === 0 : artifactIds.every((id) => chat.tags.includes(id))),
   );
 
 const counted = (count: number, one: string, many: string): string => `${count} ${count === 1 ? one : many}`;

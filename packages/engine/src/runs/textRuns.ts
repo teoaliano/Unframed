@@ -17,6 +17,7 @@ import {
   type TextRunRequest,
   type TextSidecar,
   UnframedError,
+  type RunChat,
 } from "@unframed/contracts";
 import { NO_KEY_MESSAGE, nextRef, placeResults, projectSlug, type Box } from "@unframed/domain";
 import type { TLRecord } from "@tldraw/tlschema";
@@ -103,8 +104,9 @@ export const makeTextRuns = (deps: TextRunDeps) => {
     }
   };
 
-  const sidecarOf = (prompt: string, model: string, text: string, references: ReadonlyArray<RecipeRef>, batchId: string | null, cost: number | null): TextSidecar => ({
+  const sidecarOf = (prompt: string, model: string, text: string, references: ReadonlyArray<RecipeRef>, batchId: string | null, cost: number | null, chatOf: RunChat | undefined): TextSidecar => ({
     kind: "text",
+    ...(chatOf === undefined ? {} : { chat: chatOf }),
     prompt,
     model,
     result: text,
@@ -125,7 +127,7 @@ export const makeTextRuns = (deps: TextRunDeps) => {
       const startedAt = Date.now();
       const outcome = yield* Effect.promise(() => chatOnce(folder, current.key, model, request.prompt, references, request.system));
       if (!outcome.ok) return yield* unframedError("upstream", outcome.error);
-      yield* Effect.promise(() => writeSidecar(folder, startedAt, sidecarOf(request.prompt, model, outcome.text, references, request.batchId ?? null, outcome.cost)));
+      yield* Effect.promise(() => writeSidecar(folder, startedAt, sidecarOf(request.prompt, model, outcome.text, references, request.batchId ?? null, outcome.cost, undefined)));
       return { text: outcome.text, cost: outcome.cost };
     });
 
@@ -181,7 +183,7 @@ export const makeTextRuns = (deps: TextRunDeps) => {
             sources: [...request.sources],
             ...(of === undefined ? {} : { of }),
           };
-          const sidecar = await writeSidecar(folder, startedAt, { ...sidecarOf(request.prompt, model, outcome.text, request.references, batchId, outcome.cost), recipe });
+          const sidecar = await writeSidecar(folder, startedAt, { ...sidecarOf(request.prompt, model, outcome.text, request.references, batchId, outcome.cost, request.chat), recipe });
           landed = { kind: "text", text: outcome.text.replace(/\r\n/g, "\n").trim(), sidecar, cost: outcome.cost };
           run.settle({ ok: true, landed });
         } else {

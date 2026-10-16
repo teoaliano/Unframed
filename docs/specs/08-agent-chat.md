@@ -157,7 +157,7 @@ The selection toolbar (spec 03) ends with a filled **Agent** button (sparkles ic
 
 - The selection enters as context chips (below).
 - Under the chips, which chat this joins: "continues *<chat label>*" or "new chat", and a ghost button to switch: "New chat instead" or "Continue the earlier chat" (the latter only when a continuable chat exists).
-- **Continuable chat**: the newest chat that is not running whose tags include **every** selected artifact. With no artifact selected, the newest non-running chat with no tags at all. This is all-of on purpose, unlike the strip's any-of: a chat that never saw B must not answer a message about A and B. The web computes this label itself from the chat list it already holds; the engine applies the same rule when the message arrives.
+- **Continuable chat**: the newest chat that is not running, is not an outside chat (spec 14: an outside agent reads no message from Unframed), and whose tags include **every** selected artifact. With no artifact selected, the newest non-running chat with no tags at all. This is all-of on purpose, unlike the strip's any-of: a chat that never saw B must not answer a message about A and B. The web computes this label itself from the chat list it already holds; the engine applies the same rule when the message arrives.
 - While it is open, clicking another shape adds it to the message's context (idempotent, and the shape stays selected); clicking empty canvas closes the composer; Escape and Back ("Back to tools (Esc)") do the same.
 - **Send** opens the rail on the target chat first, then sends, so the reply streams where the person is already looking. A new chat is created tagged with the selected artifacts.
 - The composer's footer reads "<provider name> · not metered" beside Send.

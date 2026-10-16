@@ -5,7 +5,7 @@
 import * as Schema from "effect/Schema";
 import * as Rpc from "effect/unstable/rpc/Rpc";
 import { UnframedError } from "./errors.ts";
-import { PageBox, RecipeAction, RecipeRef, RunStarted, type ResultRecipe } from "./generation.ts";
+import { PageBox, RecipeAction, RecipeRef, RunChat, RunStarted, type ResultRecipe } from "./generation.ts";
 
 export const TextRunRequest = Schema.Struct({
   project: Schema.String,
@@ -21,6 +21,8 @@ export const TextRunRequest = Schema.Struct({
   /** Page coordinates: the result lands to its right. */
   anchor: PageBox,
   of: Schema.optionalKey(Schema.Struct({ shapeId: Schema.String, action: RecipeAction })),
+  /** The chat and turn that started the run, for a run an agent started (spec 14). */
+  chat: Schema.optionalKey(RunChat),
 });
 export type TextRunRequest = typeof TextRunRequest.Type;
 
@@ -59,6 +61,8 @@ export const TextComplete = Rpc.make("text.complete", {
  */
 export interface TextSidecar {
   readonly kind: "text";
+  /** The chat and turn that started the run, for a run an agent started (spec 14). */
+  readonly chat?: RunChat;
   readonly prompt: string;
   readonly model: string;
   readonly result: string;

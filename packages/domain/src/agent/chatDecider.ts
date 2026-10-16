@@ -52,6 +52,17 @@ const sameSelection = (a: ModelSelection, b: ModelSelection): boolean =>
 
 const isRunning = (chat: Chat): boolean => chat.latestTurn?.state === "running";
 
+/** The sentence a web command on an outside chat gets (spec 14, "Chat record changes"). */
+export const OUTSIDE_CHAT_REFUSAL = "This chat belongs to an agent outside Unframed. Talk to it where it runs.";
+
+/** The web commands an outside chat refuses: it has no Unframed agent and no model to change. */
+const outsideRefused = (command: ChatCommand): boolean =>
+  command.type === "thread.turn.start" ||
+  command.type === "thread.runtime-mode.set" ||
+  command.type === "thread.interaction-mode.set" ||
+  command.type === "thread.checkpoint.revert" ||
+  (command.type === "thread.meta.update" && command.modelSelection !== undefined);
+
 /** Checks a model change; `undefined` when it may be applied. */
 const modelChangeRefusal = (chat: Chat, selection: ModelSelection): Decision | undefined => {
   if (selection.provider !== chat.modelSelection.provider) return reject("conflict", "A chat stays on the provider it started on.");
@@ -91,6 +102,7 @@ export const decide = (command: ChatCommand, model: ProjectChats, now: string): 
 
   if (command.type === "thread.create") {
     if (existing) return reject("conflict", `Thread '${id}' already exists and cannot be created twice.`);
+    if (command.modelSelection.provider === "outside") return reject("bad_request", "Only an outside agent's first call makes an outside chat.");
     return accept(
       event("thread.created", id, {
         projectId: command.projectId,
@@ -103,8 +115,34 @@ export const decide = (command: ChatCommand, model: ProjectChats, now: string): 
     );
   }
 
+  if (command.type === "thread.outside.create") {
+    if (existing) return reject("conflict", `Thread '${id}' already exists and cannot be created twice.`);
+    return accept(
+      event("thread.created", id, {
+        projectId: command.projectId,
+        modelSelection: { provider: "outside", model: "", traits: {} },
+        runtimeMode: "full-access",
+        interactionMode: "default",
+        tags: [],
+        createdAt: command.createdAt,
+        title: command.title,
+        titledBy: "user",
+        outside: command.outside,
+      }),
+    );
+  }
+
   if (!live) return reject("not_found", `Thread '${id}' does not exist.`);
   const chat = live;
+
+  if (chat.outside !== undefined && outsideRefused(command)) return reject("conflict", OUTSIDE_CHAT_REFUSAL);
+  if (chat.outside !== undefined && command.type === "thread.delete" && isRunning(chat)) {
+    return reject("conflict", "A turn from outside Unframed is still open. Delete the chat once it settles.");
+  }
+  if (command.type === "thread.outside.turn.begin") {
+    if (isRunning(chat)) return reject("conflict", "A turn is already open in this chat.");
+    return accept(event("thread.outside-turn-began", id, { turnId: command.turnId, createdAt: command.createdAt }));
+  }
 
   switch (command.type) {
     case "thread.delete":

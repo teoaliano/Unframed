@@ -36,5 +36,11 @@ export const fileNameOf = (name: string): string | undefined => {
 
 export const preferencesFilePath = (dataDir: string): string => join(dataDir, "preferences.json");
 
+/** The outside connections (spec 14): one file of token hashes, never project state. */
+export const agentConnectionsFilePath = (dataDir: string): string => join(dataDir, "agent-connections.json");
+
+/** Where the engine says which port it listens on, for the stdio shim (spec 14). */
+export const discoveryFilePath = (dataDir: string): string => join(dataDir, "mcp-endpoint.json");
+
 /** A project's one SQLite file, in its folder (spec 01). */
 export const DATABASE_FILE = "unframed.sqlite";
