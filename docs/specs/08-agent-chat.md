@@ -22,7 +22,7 @@ The rail
 
 1. As a person, I want an Agent button in the bottom bar that opens a chat rail on the left, so that the conversation sits beside the canvas instead of over it.
 2. As a person, I want the rail to slide in and out, and only fade when I have asked for reduced motion, so that it reads as one surface arriving and leaving without making anyone queasy.
-3. As a person, I want the top-left chrome to become the rail's top row while the rail is open, so that the logo, project and Settings stay in reach and one corner never holds two sets of controls.
+3. As a person, I want the top-left chrome to become the rail's top row while the rail is open, so that the logo stays in reach and one corner never holds two sets of controls. Settings is in the top bar's far end (spec 17), so it stays in reach too.
 4. As a person, I want closing the rail mid-turn to change nothing, so that the turn finishes and is there when I reopen it.
 5. As a person, I want to start a new chat, delete the current one after a confirmation, and close the rail from its header, so that the rail's own controls are always in one place.
 6. As a person, I want deleting a chat to leave its canvas changes in place, so that removing a conversation never removes work.

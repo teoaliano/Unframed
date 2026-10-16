@@ -1,12 +1,11 @@
 import type { ProjectActivity } from "@unframed/contracts";
 import { statusOf, tabWidth, type TabActivity, type TabStatus } from "@unframed/domain";
 import { X } from "lucide-react";
-import { useEffect, useRef, useState, type KeyboardEvent, type MouseEvent } from "react";
+import { useEffect, useRef, useState, type DragEvent, type KeyboardEvent, type MouseEvent } from "react";
 import { useEngine, useActivation } from "../context.ts";
 import { useTabState } from "../project/activation.ts";
 import { ProjectMenu } from "./ProjectMenu.tsx";
 import { Button } from "~/components/ui/button";
-import { Tip } from "./ui.tsx";
 
 /** Room the strip keeps for the All projects button and its gap, so tabs share the rest. */
 const MENU_SPACE = 44;
@@ -123,11 +122,49 @@ export const TabStrip = ({ left, right }: { readonly left: number; readonly righ
   // Drag a tab onto another to take its place (spec 17); Alt+arrow does the same from the keyboard.
   const [dragging, setDragging] = useState<string>();
 
-  const onTabKey = (event: KeyboardEvent<HTMLDivElement>, name: string) => {
-    if (event.key === "Enter" || event.key === " ") {
+  /** The tab an event landed on, by its project name, and whether it landed on that tab's close button. */
+  const tabOf = (target: EventTarget): { readonly name: string; readonly close: boolean } | undefined => {
+    if (!(target instanceof Element)) return undefined;
+    const tabElement = target.closest<HTMLElement>("[data-project]");
+    const name = tabElement?.dataset.project;
+    if (name === undefined) return undefined;
+    return { name, close: target.closest("[data-close]") !== null };
+  };
+
+  // Every tab handler sits on the tab list, not on each tab: a handler per tab adds listeners the budget counts (spec 17).
+  const onListClick = (event: MouseEvent<HTMLDivElement>) => {
+    const hit = tabOf(event.target);
+    if (hit === undefined) return;
+    if (hit.close) void activation.closeTab(hit.name);
+    else void activation.activate(hit.name);
+  };
+  const onListAux = (event: MouseEvent<HTMLDivElement>) => {
+    const hit = tabOf(event.target);
+    if (hit !== undefined && event.button === 1) void activation.closeTab(hit.name);
+  };
+  const onListKey = (event: KeyboardEvent<HTMLDivElement>) => {
+    const hit = tabOf(event.target);
+    if (hit !== undefined && (event.key === "Enter" || event.key === " ")) {
       event.preventDefault();
-      void activation.activate(name);
+      void activation.activate(hit.name);
     }
+  };
+  const onListDragStart = (event: DragEvent<HTMLDivElement>) => {
+    const hit = tabOf(event.target);
+    if (hit === undefined) return;
+    event.dataTransfer.setData("text/plain", hit.name);
+    event.dataTransfer.effectAllowed = "move";
+    setDragging(hit.name);
+  };
+  const onListDragOver = (event: DragEvent<HTMLDivElement>) => {
+    const hit = tabOf(event.target);
+    if (hit !== undefined && dragging !== undefined && dragging !== hit.name) event.preventDefault();
+  };
+  const onListDrop = (event: DragEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    const hit = tabOf(event.target);
+    if (hit !== undefined && dragging !== undefined && dragging !== hit.name) activation.moveTab(dragging, order.indexOf(hit.name));
+    setDragging(undefined);
   };
 
   return (
@@ -140,6 +177,13 @@ export const TabStrip = ({ left, right }: { readonly left: number; readonly righ
         ref={scroller}
         role="tablist"
         aria-label="Open projects"
+        onClick={onListClick}
+        onAuxClick={onListAux}
+        onKeyDown={onListKey}
+        onDragStart={onListDragStart}
+        onDragOver={onListDragOver}
+        onDrop={onListDrop}
+        onDragEnd={() => setDragging(undefined)}
         className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
       >
         {order.map((name) => {
@@ -158,25 +202,6 @@ export const TabStrip = ({ left, right }: { readonly left: number; readonly righ
               title={[name, STATUS_LABEL[status]].filter(Boolean).join(" · ")}
               style={{ width }}
               draggable
-              onDragStart={(event) => {
-                event.dataTransfer.setData("text/plain", name);
-                event.dataTransfer.effectAllowed = "move";
-                setDragging(name);
-              }}
-              onDragOver={(event) => {
-                if (dragging !== undefined && dragging !== name) event.preventDefault();
-              }}
-              onDrop={(event) => {
-                event.preventDefault();
-                if (dragging !== undefined && dragging !== name) activation.moveTab(dragging, order.indexOf(name));
-                setDragging(undefined);
-              }}
-              onDragEnd={() => setDragging(undefined)}
-              onClick={() => void activation.activate(name)}
-              onKeyDown={(event) => onTabKey(event, name)}
-              onAuxClick={(event: MouseEvent) => {
-                if (event.button === 1) void activation.closeTab(name);
-              }}
               className={`flex h-9 shrink-0 cursor-default items-center gap-2 rounded-xl border px-2.5 text-sm ${
                 isActive
                   ? "border-border bg-card text-foreground shadow-xs"
@@ -185,19 +210,10 @@ export const TabStrip = ({ left, right }: { readonly left: number; readonly righ
             >
               <StatusSlot status={status} />
               <span className="min-w-0 flex-1 truncate font-medium">{name}</span>
-              <Tip label={`Close ${name}`} side="bottom">
-                <Button
-                  variant="ghost-muted"
-                  size="icon-micro"
-                  aria-label={`Close ${name}`}
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    void activation.closeTab(name);
-                  }}
-                >
-                  <X aria-hidden />
-                </Button>
-              </Tip>
+              {/* Each tab's close is a plain kit button: a kit tooltip per tab would add listeners to every background tab (spec 17's budget). */}
+              <Button variant="ghost-muted" size="icon-micro" aria-label={`Close ${name}`} title={`Close ${name}`} data-close="">
+                <X aria-hidden />
+              </Button>
             </div>
           );
         })}

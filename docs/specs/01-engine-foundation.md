@@ -233,6 +233,7 @@ Methods this spec delivers:
 | `settings.subscribe` | none | stream of `Settings`: the current value first, then one per change from any source | none |
 | `settings.pickFolder` | none | `{ path: string }`, `''` when cancelled | `unavailable`: `No folder picker available here. Type the path instead.` |
 | `projects.list` | none | `{ projects: string[] }` | `internal`: `Could not list the output folder: <reason>` |
+| `projects.activity` | none | stream of `{ project, running, needsYou }`: the live work of each project with any, then one message per change (spec 17) | none |
 | `projects.create` | `{ name: string }` | `{ name: string }` (the slug) | `bad_request`: `Enter a project name.`; `conflict`: `A project named "<slug>" already exists.`; `internal`: `Could not create the project: <reason>` |
 | `files.reveal` | `{ project?: string, fileNames: string[] }` | `{ revealed: number \| "folder" }` | `not_found`: `No files for this project yet.` |
 
@@ -326,7 +327,8 @@ Keys in use, each owned by the spec named:
 
 | Key | Owner | Value |
 | --- | --- | --- |
-| `project.active` | 02 | the active project's name |
+| `project.active` | 02 | the active project's name, kept for the outside-agent view (spec 14) |
+| `project.tabs` | 17 | `{ order: string[], active: string \| null }`: the open project tabs and the active one, read at boot (spec 17) |
 | `lastUsed.image`, `lastUsed.video`, `lastUsed.text` | 03 (04 and 05 add fields) | the composer's last-used values for that medium |
 | `library.view` | 06 | `"card"` or `"list"` |
 | `agent.followUp` | 08 (control in spec 10's dialog) | `"queue"` or `"steer"` |
@@ -388,7 +390,8 @@ A contract with the desktop shell. Renaming any of these is a breaking change th
 | Hook | Contract |
 | --- | --- |
 | `.unframed-chrome-left` | exactly one element: the top-left floating chrome card (logo and project menu, filled by spec 02). Its position comes from ordinary CSS properties with no `!important`, so the shell's injected CSS can move it |
-| `.unframed-chrome-right` | exactly one element: the top-right chrome card. Since the chrome moved (Agent to the bottom bar, Settings to the top-left card) it holds nothing and draws nothing, and stays in the page so the shell's CSS still finds it. Same rule |
+| `.unframed-chrome-right` | exactly one element: the top-right chrome card. It holds the Settings button on macOS and Linux and stays empty on Windows, where Settings sits at the far left of the top-left card (spec 17). The shell's CSS still finds it. Same rule |
+| `.unframed-tabs` | the project tab strip (spec 17), one element between the two cards. Added by spec 17; the shell's Windows caption inset applies to it |
 | `data-unframed-theme` on `<html>` | `"light"` or `"dark"`: the theme currently shown, updated live when it changes |
 | `--unframed-text-secondary` on `<html>` | the secondary text colour of the current theme, readable with `getComputedStyle(document.documentElement)` |
 | `<body>` background | an explicit, opaque `background-color` equal to the canvas background of the current theme |
