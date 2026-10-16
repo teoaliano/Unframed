@@ -1,3 +1,4 @@
+import { rememberDrafts, takeDrafts } from "../project/tabMemory.ts";
 import { UnframedError, type ChatAttachment, type ChatSummary, type ClientChatCommand, type ProviderStatuses, type ShellStreamItem, type ThreadStreamItem } from "@unframed/contracts";
 import { projectChat, type Chat, type ChatEvent, type ChatMessage } from "@unframed/domain";
 import { useEffect, useMemo, useSyncExternalStore } from "react";
@@ -95,7 +96,7 @@ export class ChatClient {
   private uiState: RailUi = INITIAL_UI;
   private readonly queues = new Map<string, ReadonlyArray<QueuedMessage>>();
   private readonly handoffs = new Map<string, Handoff[]>();
-  private readonly drafts = new Map<string, ChatDraft>();
+  private readonly drafts_ = new Map<string, ChatDraft>();
   private followUpValue: "queue" | "steer" = "queue";
   private followUpWatch: (() => void) | undefined;
   private planModeValue = false;
@@ -106,6 +107,15 @@ export class ChatClient {
     this.engine = engine;
     this.project = project;
     this.stopShell = engine.subscribe("orchestration.subscribeShell", { projectId: project }, (item) => this.onShell(item));
+  }
+
+  /** The unsent drafts, for a project tab that goes to the background (spec 17). */
+  drafts(): ReadonlyArray<readonly [string, ChatDraft]> {
+    return [...this.drafts_];
+  }
+
+  restoreDrafts(entries: ReadonlyArray<readonly [string, ChatDraft]>): void {
+    for (const [key, draft] of entries) this.drafts_.set(key, draft);
   }
 
   dispose(): void {
@@ -381,13 +391,13 @@ export class ChatClient {
   // the same draft and closing the editor loses nothing. In memory only: a reload drops it.
 
   draft(key: string): ChatDraft {
-    return this.drafts.get(key) ?? EMPTY_DRAFT;
+    return this.drafts_.get(key) ?? EMPTY_DRAFT;
   }
 
   setDraft(key: string, draft: ChatDraft): void {
     if (sameDraft(this.draft(key), draft)) return;
-    if (draft.text === "" && draft.mentions.length === 0) this.drafts.delete(key);
-    else this.drafts.set(key, draft);
+    if (draft.text === "" && draft.mentions.length === 0) this.drafts_.delete(key);
+    else this.drafts_.set(key, draft);
     this.changed(`draft:${key}`);
   }
 
@@ -449,6 +459,8 @@ const disposeIfIdle = (project: string, entry: ClientEntry) =>
   setTimeout(() => {
     if (entry.holders > 0 || clients.get(project) !== entry) return;
     clients.delete(project);
+    // The drafts outlive the client, so a tab that comes back shows what the person typed (spec 17).
+    rememberDrafts(project, entry.client.drafts());
     entry.client.dispose();
   }, 1000);
 
@@ -459,7 +471,9 @@ const entryFor = (engine: EngineConnection, project: string): ClientEntry => {
     entry = undefined;
   }
   if (!entry) {
-    entry = { engine, client: new ChatClient(engine, project), holders: 0 };
+    const client = new ChatClient(engine, project);
+    client.restoreDrafts(takeDrafts(project));
+    entry = { engine, client, holders: 0 };
     clients.set(project, entry);
     disposeIfIdle(project, entry);
   }
