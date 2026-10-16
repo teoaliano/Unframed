@@ -36,7 +36,7 @@ describe("Codex runs a chat", () => {
 
     const log = await fakeCodexMessages(messages);
     const start = log.find((entry) => entry.start === true);
-    expect(start.argv).toEqual(["app-server", "-c", `mcp_servers.unframed.url=http://127.0.0.1:${agent.engine.port}/mcp`, "-c", 'mcp_servers.unframed.bearer_token_env_var="UNFRAMED_MCP_TOKEN"']);
+    expect(start.argv).toEqual(["app-server", "-c", `mcp_servers.unframed.url=http://127.0.0.1:${agent.engine.port}/mcp`, "-c", 'mcp_servers.unframed.bearer_token_env_var="UNFRAMED_MCP_TOKEN"', "-c", "mcp_servers.unframed-app.enabled=false"]);
     expect(start.token).toMatch(/^[0-9a-f]{64}$/);
     expect(start.cwd).toBe(realpathSync(agent.folder));
     const sent = log.flatMap((entry) => (entry.message ? [entry.message] : []));

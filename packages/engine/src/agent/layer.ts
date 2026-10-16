@@ -196,6 +196,7 @@ export const agentsLayer = Layer.effect(
             return names.includes(slug) ? slug : undefined;
           },
           call: (call) => runtime.outside.call(call),
+          endSession: (sessionId) => runtime.endOutsideSession(sessionId),
         }),
         runtime.attachments.route(),
       ],

@@ -57,6 +57,8 @@ export class McpTokens {
 export interface ToolAnswer {
   readonly value: unknown;
   readonly isError?: boolean;
+  /** Plain text notes that come before the JSON, such as an outside chat's change note (spec 14). */
+  readonly notes?: ReadonlyArray<string>;
   /** Pictures that follow the JSON as MCP image content. */
   readonly images?: ReadonlyArray<{ readonly data: string; readonly mimeType: string }>;
 }
@@ -99,6 +101,7 @@ const rpcError = (id: JsonRpcRequest["id"], code: number, message: string) => ({
 
 const toolText = (answer: ToolAnswer) => ({
   content: [
+    ...(answer.notes ?? []).map((text) => ({ type: "text", text })),
     { type: "text", text: JSON.stringify(answer.value) },
     ...(answer.images ?? []).map((image) => ({ type: "image", data: image.data, mimeType: image.mimeType })),
   ],
@@ -114,6 +117,8 @@ export interface OutsideRoute {
   readonly tools: () => ReadonlyArray<McpTool>;
   /** The slug of the project a name names, or `undefined` when no project has that name. */
   readonly projectSlug: (name: string) => Promise<string | undefined>;
+  /** The session ends: its open turns settle and its chats say so. */
+  readonly endSession: (sessionId: string) => Promise<void>;
   /** One call from an outside session into one project's chat. */
   readonly call: (call: { connection: ConnectionRecord; sessionId: string; slug: string; tool: McpTool; args: Record<string, unknown> }) => Promise<ToolAnswer>;
 }
@@ -189,6 +194,7 @@ const outsideRequest = async (req: http.IncomingMessage, res: http.ServerRespons
       sendJson(res, 400, { error: SESSION_ID_SENTENCE });
       return true;
     }
+    await outside.endSession(sentSession);
     res.writeHead(200);
     res.end();
     return true;
