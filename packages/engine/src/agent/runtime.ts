@@ -46,11 +46,30 @@ import { AttachmentStore } from "./attachmentStore.ts";
 import { CanvasTools } from "./canvasTools.ts";
 import { OutsideChats } from "./outsideChats.ts";
 import { outsideSelectionTools } from "./selectionTools.ts";
+import { AgentGeneration } from "./agentGeneration.ts";
+import { generateArguments, generateTool } from "./generateTool.ts";
+import type { ConnectionBook } from "../agentConnections/book.ts";
+import type { ImagePricingAnswer, ImageRunRequest, ModelEntry, RunEvent, TextRunRequest, VideoStartRequest } from "@unframed/contracts";
+
+/** What an agent's generation reaches: the run services, pricing, the default model, run events and the ledger. */
+export interface GenerationRuns {
+  readonly runImage: (request: ImageRunRequest) => Promise<{ runId: string; batchId: string; placeholders: string[] }>;
+  readonly runText: (request: TextRunRequest) => Promise<{ runId: string; batchId: string; placeholders: string[] }>;
+  readonly pricing: (model: string) => Promise<ImagePricingAnswer>;
+  /** The models of a kind, and the default one: the settings' image or video model. */
+  readonly models: (kind: "image" | "video") => Promise<ReadonlyArray<ModelEntry>>;
+  readonly defaultModel: (kind: "image" | "video") => Promise<string>;
+  /** A render job (spec 04) and how it ends (spec 14: an agent's video). */
+  readonly startVideo: (request: VideoStartRequest) => Promise<{ jobId: string; status: string; shapeId: string }>;
+  readonly onVideoFinished: (jobId: string, handler: (outcome: { ok: boolean; cost: number | null }) => void) => () => void;
+  readonly track: (project: string, handler: (event: RunEvent) => void) => () => void;
+  readonly book: ConnectionBook;
+}
 import type { LiveSelection } from "../selection/liveSelection.ts";
 import { OUTSIDE_TURN_IDLE_MS } from "@unframed/domain";
 import { ChatEngine, CommandRejected } from "./chatEngine.ts";
 import type { RunEnvironment } from "./detection.ts";
-import { McpTokens, McpToolRegistry, MCP_PATH, type McpTool } from "./mcp.ts";
+import { McpTokens, McpToolRegistry, MCP_PATH, type McpBinding, type McpTool, type ToolAnswer } from "./mcp.ts";
 import type { AgentToolContext } from "../artifacts/artifactTools.ts";
 import { ProviderService, SESSION_IDLE_MS } from "./providerService.ts";
 import { writeTurnSidecar } from "./sidecar.ts";
@@ -61,6 +80,8 @@ export interface AgentRuntimeDeps {
   readonly dataDir: string;
   /** The windows' live selection, read and set by outside calls (spec 14). */
   readonly selection: LiveSelection;
+  /** The run services and the connection store, for an agent's `generate` (spec 14). */
+  readonly generationRuns: GenerationRuns;
   /** The outside turn's idle time; two minutes unless a test shortens it (spec 14). */
   readonly outsideTurnIdleMs?: number;
   readonly testAgentScript: string | undefined;
@@ -143,6 +164,7 @@ export class AgentRuntime {
   readonly outside: OutsideChats;
   /** The tools only an outside connection has, after the registry's (spec 14). */
   readonly outsideTools: McpTool[];
+  private readonly generation: AgentGeneration;
   readonly attachments: AttachmentStore;
   readonly providers: ProviderService;
   private readonly projects = new Map<string, Promise<ProjectAgent>>();
@@ -174,7 +196,31 @@ export class AgentRuntime {
     };
     for (const tool of new CanvasTools(context).tools()) this.registry.register(tool);
     // Outside calls only: `canvas_select` never reaches an in-app agent (spec 07, spec 14).
-    this.outsideTools = outsideSelectionTools({ hub: deps.selection, read: (project) => deps.rooms.read(project) });
+    this.generation = new AgentGeneration({
+      records: (project) => deps.rooms.read(project),
+      recordsOf: async (project, ids) => {
+        const byId = new Map((await deps.rooms.read(project)).map((record) => [record.id as string, record]));
+        return new Map(ids.map((id) => [id, byId.get(id)]));
+      },
+      runImage: (request) => deps.generationRuns.runImage(request),
+      runText: (request) => deps.generationRuns.runText(request),
+      pricing: (model) => deps.generationRuns.pricing(model),
+      models: (kind) => deps.generationRuns.models(kind),
+      defaultModel: (kind) => deps.generationRuns.defaultModel(kind),
+      startVideo: (request) => deps.generationRuns.startVideo(request),
+      onVideoFinished: (jobId, handler) => deps.generationRuns.onVideoFinished(jobId, handler),
+      track: (project, handler) => deps.generationRuns.track(project, handler),
+      book: deps.generationRuns.book,
+      recordTurn: async (project, chatId, turn, before, after) => {
+        const agent = await this.project(project);
+        agent.turnChanges.record(chatId, turn, before, after, await deps.rooms.clock(project));
+      },
+      holds: { runStarted: (chatId) => this.outside.runStarted(chatId), runEnded: (chatId) => this.outside.runEnded(chatId) },
+    });
+    this.outsideTools = [
+      ...outsideSelectionTools({ hub: deps.selection, read: (project) => deps.rooms.read(project) }),
+      generateTool((binding, args) => this.generateFor(binding, args)),
+    ];
     this.outside = new OutsideChats(
       {
         agent: (slug) => this.project(slug),
@@ -398,6 +444,15 @@ export class AgentRuntime {
     const chat = agent.engine.chat(chatId);
     const fresh = ids.filter((id) => !chat?.tags.includes(id));
     if (fresh.length > 0) await this.internal(agent, chatId, { type: "thread.tags.add", ids: fresh });
+  }
+
+  /** An outside call of `generate`: its open turn, and the checked arguments (spec 14). */
+  private async generateFor(binding: McpBinding, args: Record<string, unknown>): Promise<ToolAnswer> {
+    const checked = generateArguments(args);
+    if (!checked.ok) return { value: { error: checked.message }, isError: true };
+    const turn = this.chatTurn(binding.project, binding.chatId).turnCount;
+    if (turn === undefined) return { value: { error: "Unframed could not open a turn for this call. Try again." }, isError: true };
+    return this.generation.generate({ project: binding.project, chatId: binding.chatId, turn, connectionId: binding.connectionId, ...checked });
   }
 
   private chatTurn(project: string, chatId: string) {

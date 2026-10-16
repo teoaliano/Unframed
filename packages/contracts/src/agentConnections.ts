@@ -1,4 +1,5 @@
 import * as Schema from "effect/Schema";
+import { SpendLimit } from "./spend.ts";
 
 /** The client a connection was made for. Spec 14, "Connections and tokens". */
 export const ConnectionClient = Schema.Literals(["claude-code", "codex", "claude-desktop", "other"]);
@@ -11,6 +12,10 @@ export const AgentConnection = Schema.Struct({
   client: ConnectionClient,
   createdAt: Schema.String,
   lastUsedAt: Schema.NullOr(Schema.String),
+  /** The limit on paid generations, or `null` for none (spec 14). */
+  spendLimit: Schema.NullOr(SpendLimit),
+  /** Spent in the limit's period, or in total when there is no limit. */
+  spent: Schema.Number,
 });
 export type AgentConnection = typeof AgentConnection.Type;
 
@@ -27,7 +32,10 @@ export const AgentConnectionsListAnswer = Schema.Struct({ connections: Schema.Ar
 export const AgentConnectionsCreate = Schema.Struct({
   name: Schema.String,
   client: ConnectionClient,
+  spendLimit: Schema.optionalKey(SpendLimit),
 });
+
+export const AgentConnectionsSetSpendLimit = Schema.Struct({ id: Schema.String, spendLimit: Schema.NullOr(SpendLimit) });
 
 export const AgentConnectionsCreateAnswer = Schema.Struct({
   connection: AgentConnection,

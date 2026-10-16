@@ -6,7 +6,6 @@ import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Queue from "effect/Queue";
-import * as Stream from "effect/Stream";
 import { CanvasRooms } from "../canvas/rooms.ts";
 import type { Route } from "../http/api.ts";
 import { errorText } from "../log.ts";
@@ -20,6 +19,12 @@ import { ProviderDetection } from "./detection.ts";
 import { mcpRoute, refusal, type OutsideProject } from "./mcp.ts";
 import { AgentConnections } from "../agentConnections/layer.ts";
 import { SelectionHub } from "../selection/liveSelection.ts";
+import { Runs } from "../runs/runs.ts";
+import { Catalogue } from "../openRouter/catalogue.ts";
+import { VideoCatalogue } from "../openRouter/videoCatalogue.ts";
+import { RenderJobs } from "../video/renderJobs.ts";
+import * as Fiber from "effect/Fiber";
+import * as Stream from "effect/Stream";
 import { PreferencesStore } from "../preferencesStore.ts";
 import { Projects } from "../projects.ts";
 import { AgentRuntime, DispatchError } from "./runtime.ts";
@@ -97,9 +102,27 @@ export const agentsLayer = Layer.effect(
     });
 
     const selection = yield* SelectionHub;
+    const runs = yield* Runs;
+    const catalogue = yield* Catalogue;
+    const videoCatalogue = yield* VideoCatalogue;
+    const renderJobs = yield* RenderJobs;
     const runtime = new AgentRuntime({
       dataDir: config.dataDir,
       selection,
+      generationRuns: {
+        runImage: (request) => run(runs.image(request)),
+        runText: (request) => run(runs.text(request)),
+        pricing: (model) => run(catalogue.imagePricing(model)),
+        models: (kind) => run(kind === "video" ? videoCatalogue.list : catalogue.listImageModels).then((answer) => answer.models),
+        defaultModel: (kind) => run(settings.read).then((current) => (kind === "video" ? current.videoModel : current.imageModel)),
+        startVideo: (request) => run(renderJobs.start(request)),
+        onVideoFinished: (jobId, handler) => renderJobs.onFinished(jobId, handler),
+        track: (project, handler) => {
+          const fiber = Effect.runForkWith(context)(Stream.runForEach(runs.subscribe(project), (event) => Effect.sync(() => handler(event))));
+          return () => void Effect.runPromiseWith(context)(Fiber.interrupt(fiber)).catch(() => undefined);
+        },
+        book: connections.book,
+      },
       testAgentScript: config.testAgentScript,
       idleMs: config.testAgentIdleMs,
       outsideTurnIdleMs: config.outsideTurnIdleMs,

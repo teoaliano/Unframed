@@ -206,7 +206,7 @@ describe("the published bundle", () => {
     const listed = await ask({ jsonrpc: "2.0", id: 2, method: "tools/list" });
     const names = listed.result.tools.map((tool: { name: string }) => tool.name);
     expect(names[0]).toBe("projects_list");
-    expect(names.slice(1)).toEqual([...UNFRAMED_TOOLS, "canvas_select"]);
+    expect(names.slice(1)).toEqual([...UNFRAMED_TOOLS, "canvas_select", "generate"]);
     const exited = new Promise((resolve) => shim.once("exit", resolve));
     shim.stdin.end();
     await exited;

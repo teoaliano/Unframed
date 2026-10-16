@@ -23,7 +23,7 @@ import {
 } from "./agent.ts";
 import { ArtifactOpenLive, ArtifactSnapshots, MotionRenderStart, MotionRenderStatus, MotionUpload } from "./artifacts.ts";
 import { LegacyImportMarkSeen, LegacyImportReport, LegacyImportRetry, LegacyImportStatus } from "./legacy.ts";
-import { AgentConnectionsCreate, AgentConnectionsCreateAnswer, AgentConnectionsListAnswer, AgentConnectionsRevoke } from "./agentConnections.ts";
+import { AgentConnectionsCreate, AgentConnectionsCreateAnswer, AgentConnectionsListAnswer, AgentConnectionsRevoke, AgentConnectionsSetSpendLimit } from "./agentConnections.ts";
 import { SelectionApply, SelectionReport, SelectionSubscribe } from "./selection.ts";
 
 const Empty = Schema.Struct({});
@@ -38,6 +38,13 @@ export const AgentConnectionsList = Rpc.make("agentConnections.list", {
 export const AgentConnectionsCreateRpc = Rpc.make("agentConnections.create", {
   payload: AgentConnectionsCreate,
   success: AgentConnectionsCreateAnswer,
+  error: UnframedError,
+});
+
+/** Spec 14: the person sets, changes or removes an outside connection's spend limit. */
+export const AgentConnectionsSetSpendLimitRpc = Rpc.make("agentConnections.setSpendLimit", {
+  payload: AgentConnectionsSetSpendLimit,
+  success: Empty,
   error: UnframedError,
 });
 
@@ -358,6 +365,7 @@ export const UnframedRpcs = RpcGroup.make(
   AgentConnectionsList,
   AgentConnectionsCreateRpc,
   AgentConnectionsRevokeRpc,
+  AgentConnectionsSetSpendLimitRpc,
   SelectionReportRpc,
   SelectionSubscribeRpc,
 );

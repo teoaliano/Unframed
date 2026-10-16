@@ -85,3 +85,5 @@ export { parseDataUrl, type DataUrl } from "./legacy/media.ts";
 export { convertPreset, legacyPresetLine, presetNotes, type ConvertedPreset } from "./legacy/presets.ts";
 export * from "./outside/index.ts";
 export * from "./agent/outsideServer.ts";
+export * from "./agent/agentRun.ts";
+export * from "./outside/spendRules.ts";
