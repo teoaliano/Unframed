@@ -8,7 +8,7 @@ import { openSettings, startSettingsEngine } from "./settings.ts";
 import type { Page } from "@playwright/test";
 
 const menu = async (page: Page) => {
-  await page.getByRole("button", { name: "Project", exact: true }).click();
+  await page.getByRole("button", { name: "All projects" }).click();
   await expect(page.getByRole("menu")).toBeVisible();
 };
 
@@ -40,7 +40,7 @@ test("each project row has a check on the current one and Rename and Delete butt
   const rename = page.getByRole("dialog", { name: "Rename project" });
   await expect(rename).toBeVisible();
   await rename.getByRole("button", { name: "Cancel" }).click();
-  await expect(page.getByRole("button", { name: "Project", exact: true })).toHaveText("default");
+  await expect(page.locator("[role=tab][data-active='true']")).toHaveText("default");
 
   await menu(page);
   await page.getByRole("button", { name: "Delete beta" }).click();
@@ -48,7 +48,7 @@ test("each project row has a check on the current one and Rename and Delete butt
   await expect(confirm).toBeVisible();
   await confirm.getByRole("button", { name: "Cancel" }).click();
   await expect(confirm).toBeHidden();
-  await expect(page.getByRole("button", { name: "Project", exact: true })).toHaveText("default");
+  await expect(page.locator("[role=tab][data-active='true']")).toHaveText("default");
   await expect(activeCanvas(page, "default")).toBeVisible();
   expect((await (await engine.rpc()).call("projects.list")).projects).toEqual(["beta", "default"]);
 });
@@ -75,7 +75,7 @@ test("renaming the active project renames it everywhere and keeps its canvas; an
   await field.fill("Product Shots");
   await field.press("Enter");
   await expect(dialog).toBeHidden();
-  await expect(page.getByRole("button", { name: "Project", exact: true })).toHaveText("product-shots");
+  await expect(page.locator("[role=tab][data-active='true']")).toHaveText("product-shots");
   await expect(activeCanvas(page, "product-shots")).toBeVisible();
   expect((await rpc.call("projects.list")).projects).toEqual(["beta", "product-shots"]);
   await expect.poll(async () => (await rpc.call("preferences.get", { keys: ["project.active"] })).values["project.active"]).toBe("product-shots");
@@ -114,7 +114,7 @@ test("deleting asks first, asks again when renders are in progress, and opens th
   await expect.poll(async () => (await rpc.call("projects.list")).projects).toEqual(["default"]);
   const jobs = JSON.parse(await readFile(join(engine.dataDir, "output", "jobs.json"), "utf8"));
   expect(jobs.map((job: any) => job.status)).toEqual(["failed", "failed"]);
-  await expect(page.getByRole("button", { name: "Project", exact: true })).toHaveText("default");
+  await expect(page.locator("[role=tab][data-active='true']")).toHaveText("default");
   await menu(page);
   await expect(page.locator("[role=menuitem], [role=menuitemradio]")).toHaveText(["default", "Add project"]);
   await page.keyboard.press("Escape");
@@ -124,13 +124,18 @@ test("deleting asks first, asks again when renders are in progress, and opens th
   await menu(page);
   await page.getByRole("button", { name: "Delete default" }).click();
   await page.getByRole("alertdialog", { name: "Delete project?" }).getByRole("button", { name: "Delete project" }).click();
-  await expect(page.getByRole("button", { name: "Project", exact: true })).toHaveText("gamma");
+  // Spec 17: a deleted tab gives way to its neighbour; with none open, the start state shows and the list opens the rest.
+  await expect(page.getByText("No project is open.")).toBeVisible();
+  await menu(page);
+  await page.getByRole("menuitemradio", { name: "gamma" }).click();
+  await expect(page.locator("[role=tab][data-active='true']")).toHaveText("gamma");
   await expect(activeCanvas(page, "gamma")).toBeVisible();
 
   await menu(page);
   await page.getByRole("button", { name: "Delete gamma" }).click();
   await page.getByRole("alertdialog", { name: "Delete project?" }).getByRole("button", { name: "Delete project" }).click();
-  await expect(page.getByRole("button", { name: "Project", exact: true })).toHaveText("default");
+  // The last project in the folder is gone: a new default opens with the starter content.
+  await expect(page.locator("[role=tab][data-active='true']")).toHaveText("default");
   await expect(activeCanvas(page, "default")).toBeVisible();
   expect((await rpc.call("projects.list")).projects).toEqual(["default"]);
   await waitForRoom(engine, "default", (records) => records.filter((record) => record.type === "text").length === 2);
@@ -149,7 +154,7 @@ test("after saving a new output folder, the menu lists its projects and the canv
     await dialog.getByRole("button", { name: "Save" }).click();
     await expect(dialog.getByRole("status")).toContainText("Saved to .env");
     await dialog.getByRole("button", { name: "Close", exact: true }).click();
-    await expect(page.getByRole("button", { name: "Project", exact: true })).toHaveText("alpha");
+    await expect(page.locator("[role=tab][data-active='true']")).toHaveText("alpha");
     await expect(activeCanvas(page, "alpha")).toBeVisible();
     await menu(page);
     await expect(page.locator("[role=menuitem], [role=menuitemradio]")).toHaveText(["alpha", "zeta", "Add project"]);
@@ -161,7 +166,7 @@ test("after saving a new output folder, the menu lists its projects and the canv
     await dialog.getByRole("button", { name: "Save" }).click();
     await expect(dialog.getByRole("status")).toContainText("Saved to .env");
     await dialog.getByRole("button", { name: "Close", exact: true }).click();
-    await expect(page.getByRole("button", { name: "Project", exact: true })).toHaveText("default");
+    await expect(page.locator("[role=tab][data-active='true']")).toHaveText("default");
     await expect(activeCanvas(page, "default")).toBeVisible();
     expect(existsSync(join(empty, "default"))).toBe(true);
     await expect.poll(async () => (await roomShapes(engine, "default", "text")).length).toBe(2);

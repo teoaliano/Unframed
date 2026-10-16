@@ -4,17 +4,13 @@ import { expectSlot, expectToken, inBothSchemes, resolvedColor, styleOf } from "
 
 const MENU_GLASS = "color-mix(in srgb, var(--popover) 18%, color-mix(in srgb, var(--popover) var(--glass-opacity), transparent))";
 
-test("the top-left card holds the logo and the project menu, which lists every project, checks the active one and switches", async ({ page, engine }) => {
+test("All projects lists every project, checks the active one and opens a row in a tab", async ({ page, engine }) => {
   await openCanvas(page, engine, "default");
   await (await engine.rpc()).call("projects.create", { name: "beta" });
 
-  const card = page.locator(".unframed-chrome-left");
-  await expect(card).toHaveCount(1);
-  const logo = card.getByRole("img", { name: "Unframed" });
-  await expect(logo).toBeVisible();
-  expect(await logo.boundingBox()).toMatchObject({ width: 24, height: 24 });
-  const trigger = card.getByRole("button", { name: "Project", exact: true });
-  await expect(trigger).toHaveText("default");
+  const trigger = page.getByRole("button", { name: "All projects" });
+  await expect(trigger).toBeVisible();
+  await expect(page.locator("[role=tab]")).toHaveText(["default"]);
 
   await trigger.click();
   const items = page.locator("[role=menuitem], [role=menuitemradio]");
@@ -25,7 +21,9 @@ test("the top-left card holds the logo and the project menu, which lists every p
 
   await page.getByRole("menuitemradio", { name: "beta" }).click();
   await expect(page.locator("[data-canvas-project='beta'] .tl-canvas")).toBeVisible();
-  await expect(trigger).toHaveText("beta");
+  // Opening a project from the list keeps the one already open as a tab, beside the new one.
+  await expect(page.locator("[role=tab]")).toHaveText(["default", "beta"]);
+  await expect(page.locator("[role=tab][data-active='true']")).toHaveText("beta");
 });
 
 test("New project refuses an empty or taken name, and creates, opens and seeds a new one", async ({ page, engine }) => {
@@ -33,7 +31,7 @@ test("New project refuses an empty or taken name, and creates, opens and seeds a
   await (await engine.rpc()).call("projects.create", { name: "beta" });
 
   const openDialog = async () => {
-    await page.getByRole("button", { name: "Project", exact: true }).click();
+    await page.getByRole("button", { name: "All projects" }).click();
     await page.getByRole("menuitem", { name: "Add project" }).click();
     const dialog = page.getByRole("dialog", { name: "New project" });
     await expect(dialog).toBeVisible();
@@ -64,7 +62,7 @@ test("New project refuses an empty or taken name, and creates, opens and seeds a
   await again.getByLabel("Project name").press("Enter");
   await expect(again).toBeHidden();
   await expect(page.locator("[data-canvas-project='product-shots'] .tl-canvas")).toBeVisible();
-  await expect(page.getByRole("button", { name: "Project", exact: true })).toHaveText("product-shots");
+  await expect(page.locator("[role=tab][data-active='true']")).toHaveText("product-shots");
   const prompts = await waitForRoom(engine, "product-shots", (records) => {
     const texts = records.filter((record) => record.type === "text");
     return texts.length === 2 ? texts : undefined;
@@ -74,7 +72,7 @@ test("New project refuses an empty or taken name, and creates, opens and seeds a
 
 test("the project menu, the name dialog and the delete confirm are the kit's menu, dialog and alert dialog", async ({ page, engine }) => {
   await openCanvas(page, engine, "default");
-  const trigger = page.locator(".unframed-chrome-left").getByRole("button", { name: "Project", exact: true });
+  const trigger = page.getByRole("button", { name: "All projects" });
   await expectSlot(trigger, "menu-trigger");
   await inBothSchemes(page, async () => {
     await trigger.click();

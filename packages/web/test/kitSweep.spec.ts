@@ -30,7 +30,7 @@ test("the chrome, canvas menus and dialogs render every control through the kit"
   await openCanvas(page, engine);
   await sweep(page, false);
 
-  await page.locator(".unframed-chrome-left").getByRole("button", { name: "Project", exact: true }).click();
+  await page.getByRole("button", { name: "All projects" }).click();
   await sweep(page, false);
   await page.getByRole("menuitem", { name: "Add project" }).click();
   await expect(page.getByRole("dialog", { name: "New project" })).toBeVisible();
@@ -40,11 +40,11 @@ test("the chrome, canvas menus and dialogs render every control through the kit"
   await expect(page.getByRole("menu")).toBeVisible();
   await sweep(page);
 
-  await page.locator(".unframed-chrome-left").getByRole("button", { name: "Settings" }).click();
+  await page.getByRole("button", { name: "Settings" }).click();
   await expect(page.getByTestId("settings-dialog")).toBeVisible();
   await sweep(page);
 
-  await page.locator(".unframed-chrome-left").getByRole("button", { name: "Project", exact: true }).click();
+  await page.getByRole("button", { name: "All projects" }).click();
   await page.getByRole("button", { name: "Delete default" }).click();
   await expect(page.getByRole("alertdialog", { name: "Delete project?" })).toBeVisible();
   await sweep(page);

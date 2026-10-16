@@ -17,6 +17,7 @@ import { Input } from "~/components/ui/input";
 import { Menu, MenuItem, MenuPopup, MenuRadioGroup, MenuRadioItem, MenuRadioItemIndicator, MenuTrigger } from "~/components/ui/menu";
 import { useActivation, useEngine } from "../context.ts";
 import { reportState, useReportState } from "../legacy/reportState.ts";
+import { OPEN_PROJECT_LIST } from "./tabEvents.ts";
 import { useActiveProject } from "../project/activation.ts";
 import { showError } from "../toasts.tsx";
 import { Tip } from "./ui.tsx";
@@ -179,6 +180,13 @@ export const ProjectMenu = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [active]);
 
+  // Cmd+T and the start state's button open this list (spec 17).
+  useEffect(() => {
+    const open = () => setMenuOpen(true);
+    window.addEventListener(OPEN_PROJECT_LIST, open);
+    return () => window.removeEventListener(OPEN_PROJECT_LIST, open);
+  }, []);
+
   const create: SubmitName = async (name, slug, close) => {
     try {
       const { projects: listed } = await engine.call("projects.list");
@@ -207,6 +215,7 @@ export const ProjectMenu = () => {
       const renamed = await engine.call("projects.rename", { name: from, to: name });
       close();
       setProjects((current) => [...current.map((project) => (project === from ? renamed.name : project))].sort());
+      activation.renameTab(from, renamed.name);
       if (from === active) await activation.activate(renamed.name);
     } catch (error) {
       return messageOf(error);
@@ -221,8 +230,15 @@ export const ProjectMenu = () => {
   const deleted = async (project: string) => {
     setDeleting(undefined);
     setProjects((current) => current.filter((each) => each !== project));
-    if (project === active) await activation.reopen();
-    else await refresh();
+    // The deleted project's tab leaves the strip; an active one gives way to its neighbour (spec 17).
+    if (project === active) await activation.closeTab(project);
+    else activation.forgetTab(project);
+    const left = await refresh();
+    // The last project in the folder is gone: a new default replaces it, as spec 10 says.
+    if (left !== undefined && left.length === 0 && activation.tabState().order.length === 0) {
+      const created = await engine.call("projects.create", { name: "default" }).catch(() => undefined);
+      if (created !== undefined) await activation.activate(created.name);
+    }
   };
 
   const remove = async (confirmRenders: boolean) => {
@@ -263,11 +279,10 @@ export const ProjectMenu = () => {
           if (open) void refresh();
         }}
       >
-        <MenuTrigger aria-label="Project" render={<Button variant="ghost" size="default" />}>
-          <span data-testid="active-project">{active ?? ""}</span>
+        <MenuTrigger aria-label="All projects" render={<Button variant="outline" size="icon" />}>
           <ChevronDown aria-hidden />
         </MenuTrigger>
-        <MenuPopup sideOffset={8} align="start" className="min-w-[220px]">
+        <MenuPopup sideOffset={8} align="end" className="min-w-[220px]">
           {/* The current project is the kit's checked radio item: its check and its tint. */}
           <MenuRadioGroup value={active ?? ""}>
             {projects.map((project) => (
