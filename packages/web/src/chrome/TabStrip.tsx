@@ -6,7 +6,6 @@ import { useEngine, useActivation } from "../context.ts";
 import { useTabState } from "../project/activation.ts";
 import { ProjectMenu } from "./ProjectMenu.tsx";
 import { Button } from "~/components/ui/button";
-import { Tip } from "./ui.tsx";
 
 /** Room the strip keeps for the All projects button and its gap, so tabs share the rest. */
 const MENU_SPACE = 44;
@@ -185,19 +184,19 @@ export const TabStrip = ({ left, right }: { readonly left: number; readonly righ
             >
               <StatusSlot status={status} />
               <span className="min-w-0 flex-1 truncate font-medium">{name}</span>
-              <Tip label={`Close ${name}`} side="bottom">
-                <Button
-                  variant="ghost-muted"
-                  size="icon-micro"
-                  aria-label={`Close ${name}`}
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    void activation.closeTab(name);
-                  }}
-                >
-                  <X aria-hidden />
-                </Button>
-              </Tip>
+              {/* Each tab's close is a plain kit button: a kit tooltip per tab would add listeners to every background tab (spec 17's budget). */}
+              <Button
+                variant="ghost-muted"
+                size="icon-micro"
+                aria-label={`Close ${name}`}
+                title={`Close ${name}`}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  void activation.closeTab(name);
+                }}
+              >
+                <X aria-hidden />
+              </Button>
             </div>
           );
         })}

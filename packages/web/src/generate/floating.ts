@@ -69,10 +69,18 @@ export const canvasRoom = (editor: Editor): CanvasRoom => {
   const container = editor.getContainer();
   // The bottom bar sits above floating UI in tldraw's layer: it stays clear of it.
   const bar = container.querySelector<HTMLElement>("[data-unframed-toolbar]")?.getBoundingClientRect();
-  const card = container.ownerDocument.querySelector<HTMLElement>(".unframed-chrome-left")?.getBoundingClientRect();
+  // The top band is occupied by the chrome cards and the project tab strip (spec 17): one box over all of them.
+  const doc = container.ownerDocument;
+  const band = [".unframed-chrome-left", ".unframed-tabs", ".unframed-chrome-right"]
+    .map((selector) => doc.querySelector<HTMLElement>(selector)?.getBoundingClientRect())
+    .filter((rect): rect is DOMRect => rect !== undefined && rect.width > 0);
+  const left = Math.min(...band.map((rect) => rect.left));
+  const right = Math.max(...band.map((rect) => rect.right));
+  const top = Math.min(...band.map((rect) => rect.top));
+  const bottom = Math.max(...band.map((rect) => rect.bottom));
   return {
     w: bounds.w,
     h: bar ? Math.min(bounds.h, bar.top - bounds.y) : bounds.h,
-    card: card && card.width > 0 ? { x: card.left - bounds.x, y: card.top - bounds.y, w: card.width, h: card.height } : undefined,
+    card: band.length > 0 ? { x: left - bounds.x, y: top - bounds.y, w: right - left, h: bottom - top } : undefined,
   };
 };
