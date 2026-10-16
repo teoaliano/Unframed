@@ -3227,7 +3227,7 @@ var VIDEO_ASPECT = 16 / 9;
 var OUTSIDE_TURN_IDLE_MS = 2 * 60 * 1e3;
 
 // packages/engine/src/agent/version.ts
-var ENGINE_VERSION = "0.8.0";
+var ENGINE_VERSION = "0.8.1";
 
 // packages/engine/src/log.ts
 var errorText = (error2) => error2 instanceof Error ? error2.message : String(error2);

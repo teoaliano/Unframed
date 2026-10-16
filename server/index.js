@@ -40292,7 +40292,7 @@ import { closeSync, fsyncSync, openSync, renameSync, writeSync } from "node:fs";
 import { readFile as readFile4, rm as rm4 } from "node:fs/promises";
 
 // packages/engine/src/agent/version.ts
-var ENGINE_VERSION = "0.8.0";
+var ENGINE_VERSION = "0.8.1";
 
 // packages/engine/src/agentConnections/discovery.ts
 var writeDiscovery = (path, port, startedAt) => {
@@ -46166,15 +46166,27 @@ var OutsideChats = class {
   quietFrom(agent, chatId) {
     this.lastCallAt.set(chatId, this.now());
     this.agents.set(chatId, agent);
+    this.arm(chatId, this.idleMs);
+  }
+  arm(chatId, ms) {
     clearTimeout(this.timers.get(chatId));
-    const timer = setTimeout(() => void this.settleIfQuiet(chatId), this.idleMs);
+    const timer = setTimeout(() => void this.settleIfQuiet(chatId), ms);
     timer.unref();
     this.timers.set(chatId, timer);
   }
+  /**
+   * A timer can fire a little early by the wall clock (Node's loop time lags Date.now()), so a
+   * chat that is not yet quiet re-arms for the time left instead of waiting for another call.
+   */
   settleIfQuiet(chatId) {
     const last2 = this.lastCallAt.get(chatId);
     const agent = this.agents.get(chatId);
-    if (last2 === void 0 || agent === void 0 || this.now() - last2 < this.idleMs) return;
+    if (last2 === void 0 || agent === void 0) return;
+    const left = this.idleMs - (this.now() - last2);
+    if (left > 0) {
+      this.arm(chatId, left);
+      return;
+    }
     void this.settle(agent, chatId);
   }
   /** A paid run an agent started in this chat's open turn has been accepted. */
