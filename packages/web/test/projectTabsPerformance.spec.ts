@@ -64,7 +64,6 @@ const measure = async (page: Page, cdp: CDPSession, sockets: Set<WebSocket>): Pr
     cdpNodes: value("Nodes"),
     stripNodes: dom.strip,
     listeners: value("JSEventListeners"),
-    listeners: value("JSEventListeners"),
     editors: await page.locator(".tl-container").count(),
     sockets: sockets.size,
     iframes: await page.locator("iframe").count(),
