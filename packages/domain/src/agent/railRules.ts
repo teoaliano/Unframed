@@ -43,6 +43,42 @@ export const nextActive = (activeId: string | null | undefined, visible: Readonl
   return visible[0]?.id ?? null;
 };
 
+/**
+ * The tabs the strip shows inline, as indexes into `widths` (its chats, newest first): the
+ * most that fit in `room` px next to the More trigger, always including the active chat. The
+ * rest sit under More. At least the active chat shows, even when it does not fit.
+ */
+export const inlineTabs = ({
+  widths,
+  active,
+  room,
+  moreWidth,
+  gap,
+}: {
+  readonly widths: ReadonlyArray<number>;
+  /** The active chat's index, or -1 when none is. */
+  readonly active: number;
+  readonly room: number;
+  readonly moreWidth: number;
+  readonly gap: number;
+}): number[] => {
+  const count = widths.length;
+  if (count === 0) return [];
+  // The first `shown` chats, with the active one standing in for the last slot when it is not among them.
+  const seated = (shown: number): number[] => {
+    const set = Array.from({ length: shown }, (_, index) => index);
+    if (active >= shown) set[shown - 1] = active;
+    return set;
+  };
+  for (let shown = count; shown >= 1; shown--) {
+    const set = seated(shown);
+    const tabs = set.reduce((sum, index) => sum + (widths[index] ?? 0), 0) + gap * (set.length - 1);
+    const more = shown < count ? gap + moreWidth : 0;
+    if (tabs + more <= room) return set.sort((a, b) => a - b);
+  }
+  return seated(1);
+};
+
 const LABEL_PREVIEW = 32;
 
 const openingWords = (chat: Pick<RailChat, "preview">): string => chat.preview.replace(/\s+/g, " ").trim();

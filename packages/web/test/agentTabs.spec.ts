@@ -1,42 +1,103 @@
+import type { Page } from "@playwright/test";
 import { openCanvas } from "./canvas.ts";
 import { clickShape } from "./generation.ts";
 import { putRecords } from "./media.ts";
-import { artifactColumn, createChat, engineChat, engineChats, expect, openRail, sendThrough, tabs, test } from "./agent.ts";
+import { agentChromeButton, artifactColumn, createChat, engineChat, engineChats, expect, openRail, rail, sendThrough, tabs, test } from "./agent.ts";
 
 const at = (day: number) => `2026-09-${String(day).padStart(2, "0")}T10:00:00.000Z`;
 
-test("three tabs inline and the rest under More, whose trigger names the active chat; a live dot on a running chat; the tooltip", async ({ page, agent }) => {
+/** Every tab and the More trigger sit inside the rail's right edge: nothing spills onto the canvas. */
+const expectInsideRail = async (page: Page) => {
+  const edges = await rail(page).evaluate((element) => {
+    const strip = element.querySelector("[data-testid='chat-tabs']")!;
+    return { rail: element.getBoundingClientRect().right, items: [...strip.children].map((child) => child.getBoundingClientRect().right) };
+  });
+  expect(edges.items.length).toBeGreaterThan(0);
+  for (const right of edges.items) expect(right).toBeLessThanOrEqual(edges.rail + 0.5);
+};
+
+const TITLES = ["Video to loading animation", "Brand palette", "Hero copy", "Pricing page", "Checkout flow", "Footer links", "Onboarding email", "Release notes"];
+
+test("as many tabs as fit show, the rest wait under More with their count, and a chat chosen from More becomes a tab", async ({ page, agent }) => {
   await openCanvas(page, agent);
-  for (const [index, title] of ["First", "Second", "Third", "Fourth"].entries()) await createChat(agent, { title, createdAt: at(index + 1) });
-  // The newest chat is parked on an approval, so its turn keeps running.
-  const running = await createChat(agent, { title: "Cleaner", createdAt: at(9), runtimeMode: "approval-required" });
-  await sendThrough(agent, running, "clean the build please");
+  for (const [index, title] of TITLES.entries()) await createChat(agent, { title, createdAt: at(index + 2) });
+  // The oldest chat is parked on an approval, so it keeps running, and it sits under More.
+  const oldest = await createChat(agent, { title: "Oldest running", createdAt: at(1), runtimeMode: "approval-required" });
+  await sendThrough(agent, oldest, "clean the build please");
 
   const panel = await openRail(page);
-  await expect(tabs(page)).toHaveText(["Cleaner", "Fourth", "Third"]);
-  await expect(tabs(page).first()).toHaveAttribute("aria-selected", "true");
-  await expect(tabs(page).first().getByTestId("live-dot")).toBeVisible();
-  await expect(tabs(page).nth(1).getByTestId("live-dot")).toHaveCount(0);
+  const more = panel.getByRole("button", { name: "More chats" });
+  const shown = await tabs(page).count();
+  expect(shown).toBeGreaterThan(0);
+  expect(shown).toBeLessThan(TITLES.length + 1);
+  await expect(more).toHaveText(`More (${TITLES.length + 1 - shown})`);
+  await expectInsideRail(page);
+  // The newest chat is the active one, and it is always a tab.
+  await expect(tabs(page).filter({ hasText: "Release notes" })).toHaveAttribute("aria-selected", "true");
 
-  await tabs(page).first().hover();
-  await expect(page.getByText("Cleaner · clean the build please", { exact: true })).toBeVisible();
-
-  await panel.getByRole("button", { name: "More chats" }).click();
+  await more.click();
   const menu = page.getByRole("menu");
-  await expect(menu.getByRole("menuitem")).toHaveText(["Second", "First"]);
-  await menu.getByRole("menuitem", { name: "First" }).click();
-  await expect(panel.getByRole("button", { name: "More chats: First" })).toHaveText("First");
-  await expect(tabs(page).and(page.locator("[aria-selected='true']"))).toHaveCount(0);
+  await expect(menu.getByRole("menuitem")).toHaveCount(TITLES.length + 1 - shown);
+  await expect(menu.getByRole("menuitem", { name: "Oldest running" }).getByTestId("chat-status")).toHaveAttribute("data-status", "running");
+  await menu.getByRole("menuitem", { name: "Brand palette" }).click();
+  await expect(tabs(page).filter({ hasText: "Brand palette" })).toHaveAttribute("aria-selected", "true");
+  await expect(more).toHaveText(`More (${TITLES.length + 1 - (await tabs(page).count())})`);
+  await expectInsideRail(page);
+});
 
-  // A chat under More cannot be renamed there: its row is a menu item, not a tab.
-  await panel.getByRole("button", { name: "More chats" }).click();
-  await page.getByRole("menu").getByRole("menuitem", { name: "Second" }).dblclick();
-  await expect(panel.getByRole("textbox", { name: "Rename chat" })).toHaveCount(0);
+test.describe("on a narrow window", () => {
+  test.use({ viewport: { width: 360, height: 720 } });
 
-  // An inline tab chosen again leaves the More trigger reading More.
-  await tabs(page).nth(1).click();
-  await expect(tabs(page).nth(1)).toHaveAttribute("aria-selected", "true");
-  await expect(panel.getByRole("button", { name: "More chats" })).toHaveText("More");
+  test("the tabs stay inside the Sheet, and they are measured again when the Sheet widens", async ({ page, agent }) => {
+    await openCanvas(page, agent);
+    for (const [index, title] of TITLES.entries()) await createChat(agent, { title, createdAt: at(index + 2) });
+    await agentChromeButton(page).click();
+    const sheet = page.locator("[data-slot='sheet-popup']");
+    await expect(sheet).toBeVisible();
+    // Once it has slid in, it meets the left edge.
+    await expect.poll(async () => Math.round((await sheet.boundingBox())!.x)).toBe(0);
+    const panel = rail(page);
+    const narrow = await tabs(page).count();
+    expect(narrow).toBeLessThan(TITLES.length);
+    await expectInsideRail(page);
+
+    // At 600 px the Sheet is its 384 px maximum wide: more tabs fit.
+    await page.setViewportSize({ width: 600, height: 720 });
+    await expect.poll(async () => tabs(page).count()).toBeGreaterThan(narrow);
+    await expectInsideRail(page);
+    await expect(panel.getByRole("button", { name: "More chats" })).toHaveText(`More (${TITLES.length - (await tabs(page).count())})`);
+
+    // Choosing a chat from More changes which tabs show, and the new set still fits.
+    await panel.getByRole("button", { name: "More chats" }).click();
+    await page.getByRole("menu").getByRole("menuitem").first().click();
+    await expectInsideRail(page);
+  });
+});
+
+test("a tab's status: a spinner while its turn runs, a checkmark once it finished unseen, a warning when it failed, nothing when idle or once viewed", async ({ page, agent }) => {
+  await openCanvas(page, agent);
+  await createChat(agent, { title: "Idle one", createdAt: at(1) });
+  const done = await createChat(agent, { title: "Done one", createdAt: at(2) });
+  const failed = await createChat(agent, { title: "Failed one", createdAt: at(3) });
+  // The newest chat is parked on an approval, so its turn keeps running, and it is the active tab.
+  const running = await createChat(agent, { title: "Running one", createdAt: at(4), runtimeMode: "approval-required" });
+  await sendThrough(agent, running, "clean the build please");
+
+  await openRail(page);
+  const tab = (name: string) => tabs(page).filter({ hasText: name });
+  await expect(tab("Running one").getByTestId("chat-status")).toHaveAttribute("data-status", "running");
+  await expect(tab("Idle one").getByTestId("chat-status")).toHaveCount(0);
+
+  // The active chat is viewed, so a turn that finishes in it leaves no checkmark; the others keep one until viewed.
+  await sendThrough(agent, done, "show me the formatting");
+  await expect(tab("Done one").getByTestId("chat-status")).toHaveAttribute("data-status", "finished");
+  await sendThrough(agent, failed, "break it");
+  await expect(tab("Failed one").getByTestId("chat-status")).toHaveAttribute("data-status", "failed");
+
+  await tab("Done one").click();
+  await expect(tab("Done one")).toHaveAttribute("aria-selected", "true");
+  await expect(tab("Done one").getByTestId("chat-status")).toHaveCount(0);
+  await expect(tab("Failed one").getByTestId("chat-status")).toHaveAttribute("data-status", "failed");
 });
 
 test("double-click renames a tab in place: Enter and blur commit, Escape abandons, an empty name falls back to the default", async ({ page, agent }) => {
@@ -152,41 +213,32 @@ test("chats under More have the same menu: right-click a row, or click the activ
   await openCanvas(page, agent);
   await putRecords(agent, artifactColumn([{ id: "shape:p1", title: "Alpha" }]));
   const oldest = await createChat(agent, { title: "First", tags: ["shape:p1"], createdAt: at(1) });
-  for (const [index, title] of ["Second", "Third", "Fourth", "Fifth"].entries()) await createChat(agent, { title, createdAt: at(index + 2) });
+  for (const [index, title] of ["Second", "Third", "Fourth", "Fifth", "Sixth", "Seventh", "Eighth", "Ninth"].entries()) await createChat(agent, { title, createdAt: at(index + 2) });
   await openCanvas(page, agent);
   const panel = await openRail(page);
-  await expect(tabs(page)).toHaveText(["Fifth", "Fourth", "Third"]);
+  // The oldest chat is the one that does not fit, so it waits under More.
+  await expect(tabs(page).first()).toHaveText("Ninth");
+  await expect(tabs(page).filter({ hasText: "First" })).toHaveCount(0);
   const canvasMenu = page.getByRole("menuitem", { name: /Select all/ });
 
-  // A right-click on a row under More chooses it and opens its menu, named for it.
+  // A right-click on a row under More chooses it, so it becomes a tab, and opens its menu, named for it.
   await panel.getByRole("button", { name: "More chats" }).click();
   await page.getByRole("menu").getByRole("menuitem", { name: "First" }).click({ button: "right" });
   const menu = page.getByRole("menu", { name: "First actions" });
   await expect(menu.getByRole("menuitem")).toHaveText(["Rename", "Detach from Alpha", "Delete"]);
-  await expect(panel.getByRole("button", { name: "More chats: First" })).toBeVisible();
+  await expect(tabs(page).filter({ hasText: "First" })).toHaveAttribute("aria-selected", "true");
   await expect(canvasMenu).toHaveCount(0);
 
-  // Rename puts the field where the More trigger was.
+  // Rename puts the field on the tab it has become.
   await menu.getByRole("menuitem", { name: "Rename" }).click();
   const rename = panel.getByRole("textbox", { name: "Rename chat" });
   await expect(rename).toBeFocused();
   await rename.fill("Oldest");
   await rename.press("Enter");
   await expect.poll(async () => (await engineChat(agent, oldest)).title).toBe("Oldest");
-  await expect(panel.getByRole("button", { name: "More chats: Oldest" })).toBeVisible();
+  await expect(tabs(page).filter({ hasText: "Oldest" })).toHaveAttribute("aria-selected", "true");
 
-  // The active row shows that it has actions; a click on it opens them, as on the active tab.
-  await panel.getByRole("button", { name: "More chats: Oldest" }).click();
-  const row = page.getByRole("menu").getByRole("menuitem", { name: "Oldest" });
-  await expect(row.getByTestId("chat-actions-hint")).toBeVisible();
-  await row.click();
-  await expect(page.getByRole("menu", { name: "Oldest actions" })).toBeVisible();
-  await page.keyboard.press("Escape");
-
-  // A right-click on the More trigger opens the active chat's menu, and anywhere else in the rail opens nothing.
-  await panel.getByRole("button", { name: "More chats: Oldest" }).click({ button: "right" });
-  await expect(page.getByRole("menu", { name: "Oldest actions" })).toBeVisible();
-  await page.keyboard.press("Escape");
+  // Anywhere else in the rail opens nothing.
   await panel.getByTestId("transcript").click({ button: "right" });
   await panel.getByRole("heading", { name: "Agent" }).click({ button: "right" });
   await expect(canvasMenu).toHaveCount(0);

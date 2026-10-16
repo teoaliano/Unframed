@@ -92,9 +92,9 @@ test("with reduced motion the rail only fades, and still leaves the page on Clos
 
 test("the rail is t3code's chat panel on the kit: a shell on --background with a left border, kit header buttons, panel tabs, a kit More menu and search field", async ({ page, agent }) => {
   await openCanvas(page, agent);
-  for (const [index, title] of ["First", "Second", "Third", "Fourth"].entries()) await createChat(agent, { title, createdAt: `2026-09-0${index + 1}T10:00:00.000Z` });
+  for (const [index, title] of ["First", "Second", "Third", "Fourth", "Fifth", "Sixth", "Seventh", "Eighth"].entries()) await createChat(agent, { title, createdAt: `2026-09-0${index + 1}T10:00:00.000Z` });
   const panel = await openRail(page);
-  await expect(tabs(page)).toHaveText(["Fourth", "Third", "Second"]);
+  await expect(tabs(page).first()).toHaveText("Eighth");
   await inBothSchemes(page, async () => {
     await page.mouse.move(10, 400);
     // Solid --background, not glass: spec 12's budget decides, and the glass rail crossed spec 02's pan budget.

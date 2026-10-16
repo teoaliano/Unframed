@@ -281,7 +281,7 @@ export const AgentRail = ({ project, embedded, inSheet, filterTo, onLocate, onOp
         )}
       </header>
       <div className="relative shrink-0">
-        <TabStrip client={client} chats={visible} active={active} selectedCount={selectedArtifacts.length} onDelete={setDeleting} />
+        <TabStrip client={client} chats={visible} observed={chats} active={active} selectedCount={selectedArtifacts.length} onDelete={setDeleting} />
         {ui.searchOpen && <ThreadSearch client={client} chats={chats} onClose={() => client.setUi({ searchOpen: false })} />}
       </div>
       <div className="relative flex min-h-0 flex-1 flex-col">

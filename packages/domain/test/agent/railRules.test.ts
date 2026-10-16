@@ -1,5 +1,37 @@
 import { describe, expect, it } from "vitest";
-import { clearAllChats, clearedNotice, continuableChat, linkedArtifacts, nextActive, recapRows, revertSkipLine, tabLabel, tabTooltip, visibleChats, type ChatActivity, type RailChat } from "../../src/index.ts";
+import { clearAllChats, clearedNotice, continuableChat, inlineTabs, linkedArtifacts, nextActive, recapRows, revertSkipLine, tabLabel, tabTooltip, visibleChats, type ChatActivity, type RailChat } from "../../src/index.ts";
+
+describe("inline tabs", () => {
+  const widths = [100, 80, 60, 120];
+  const inline = (fields: { active?: number; room: number; moreWidth?: number; gap?: number }) =>
+    inlineTabs({ widths, active: fields.active ?? -1, room: fields.room, moreWidth: fields.moreWidth ?? 50, gap: fields.gap ?? 4 });
+
+  it("shows every chat when they all fit, with no More", () => {
+    expect(inline({ room: 100 + 80 + 60 + 120 + 3 * 4 })).toEqual([0, 1, 2, 3]);
+  });
+
+  it("shows the newest that fit beside More, and the rest wait under it", () => {
+    // 100 + 80 + gap 4 + More (50 + gap 4) = 238; a third tab would need 302.
+    expect(inline({ room: 238 })).toEqual([0, 1]);
+    expect(inline({ room: 237 })).toEqual([0]);
+  });
+
+  it("keeps the active chat inline, in its place, when it is not among the newest that fit", () => {
+    // Chat 3 beside chat 0: 100 + 120 + gap 4 + More 54 = 278.
+    expect(inline({ active: 3, room: 278 })).toEqual([0, 3]);
+    expect(inline({ active: 3, room: 277 })).toEqual([3]);
+    expect(inline({ active: 2, room: 238 })).toEqual([0, 2]);
+  });
+
+  it("always shows at least one tab, the active one when there is one, even when nothing fits", () => {
+    expect(inline({ room: 0 })).toEqual([0]);
+    expect(inline({ active: 2, room: 0 })).toEqual([2]);
+  });
+
+  it("shows nothing for no chats", () => {
+    expect(inlineTabs({ widths: [], active: -1, room: 500, moreWidth: 50, gap: 4 })).toEqual([]);
+  });
+});
 
 const chat = (id: string, createdAt: string, fields: Partial<RailChat> = {}): RailChat => ({
   id,

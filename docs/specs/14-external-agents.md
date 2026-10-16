@@ -55,7 +55,7 @@ Seeing and undoing outside work
 22. As a person, I want the outside chat named after the connection and the time it started, so that I know which agent and which run it was.
 23. As a person who quits and reopens Unframed while an outside agent runs, I want that run's later calls to land in the same chat, so that one run stays one chat.
 24. As a person, I want the outside agent's tool calls in that chat's work log, reads included, so that I can see when something outside the app looks at my canvas.
-25. As a person, I want a live dot on the outside chat while it is working, so that I know a change may land.
+25. As a person, I want a spinner on the outside chat while it is working, so that I know a change may land.
 26. As a person, I want the outside agent's writes grouped into turns with a recap card each, so that I can see what each burst of work touched.
 27. As a person, I want Revert this turn on outside work, with the same skip rule for shapes I edited since, so that outside changes are as safe as in-app ones.
 28. As a person, I want to revert outside work even while the agent is still active, so that I can stop a bad change without waiting.
@@ -393,7 +393,7 @@ After creating, the same dialog shows the setup: each step's text, and its code 
 
 ### The outside chat in the rail
 
-- **Tab**: the chat's title, a live dot while its outside turn is open, tooltip `<title> · <client label>, outside Unframed, <date>`. Each session's chat is its own tab, newest first, as spec 08 orders every chat.
+- **Tab**: the chat's title, a spinner while its outside turn is open, tooltip `<title> · <client label>, outside Unframed, <date>`. Each session's chat is its own tab, newest first, as spec 08 orders every chat.
 - **Transcript**: work log rows and spec 08's recap card per turn, with Editor, Locate, View diff and Revert this turn. Revert shows on the open turn too (above). While a turn is open the activity line reads `Working from outside Unframed…` with spec 08's elapsed clock.
 - **Notes**: an empty outside chat never exists (its first call makes a row). When its session ends, an info line at the foot: `This session ended.` After revoke: `Disconnected. This connection was revoked in Settings.`
 - **Composer**: with an outside chat active, the Agent tray is replaced by a line, `<title> works from outside Unframed. Talk to it where it runs.`, and an outline `New chat` button that starts an in-app chat. No Send, no pickers, no Edit from here.
@@ -477,7 +477,7 @@ Prior art: spec 07's MCP auth test (task 17) and scripted-agent canvas tests, sp
 24. **Bundle.** `pnpm build` writes `server/mcp.js`; the bundle smoke test starts the bundled engine, then the bundled shim, and lists the tools through it. Seam: engine.
 25. **Connect an agent.** In Settings, the block lists no connections, Connect an agent opens the dialog, choosing Codex and a name shows Codex's steps with Copy and the warning, Done closes it, and the row shows `Never used`; after the test drives `/mcp` with the shown token, reopening shows `Last used`. Seam: browser.
 26. **Revoke in Settings.** Revoke asks first, then the row is gone, the next `/mcp` call gets 401, and the outside chat in the rail shows the disconnected line. Seam: browser.
-27. **The outside chat in the rail.** Driving `/mcp` from the test as two sessions of one connection, the rail shows two outside chat tabs titled with the connection's name and their times, the live dot on the one whose turn is open, work log rows with spec 08's labels, the activity line, and a recap card whose Revert this turn restores the canvas; the composer shows the outside line and New chat; the toolbar's Agent button with the touched artifact selected says "new chat". Seam: browser.
+27. **The outside chat in the rail.** Driving `/mcp` from the test as two sessions of one connection, the rail shows two outside chat tabs titled with the connection's name and their times, the spinner on the one whose turn is open, work log rows with spec 08's labels, the activity line, and a recap card whose Revert this turn restores the canvas; the composer shows the outside line and New chat; the toolbar's Agent button with the touched artifact selected says "new chat". Seam: browser.
 28. **Generation input.** `generate` with explicit sources composes the request by spec 03's selection to request rule; each medium's runs rule (image 1 to 10, video and text once); the refusals with the composer's sentences; the dry-run answer's prompt and references; the estimate's text, or `null` when none is exact. Seam: domain.
 29. **Dry run from outside.** `generate` with `dryRun: true` answers the final prompt, its references and the estimate, creates no placeholder, writes no file and reaches no upstream endpoint (the stub's request count stays at zero). Seam: engine.
 30. **Image from outside.** `generate` with two runs answers `runId`, `batchId` and two placeholders that are in the room before the answer, with `estimate` and `status: "running"`; when they land, the files and sidecars carry `cost`, `batchId` and `chat`; `canvas_read` shows the results with `running: false` and `cost`; the outside turn's recap shows `Spent $<total> on 2 generations`. Seam: engine.
