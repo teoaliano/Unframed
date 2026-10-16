@@ -24,7 +24,7 @@ This codebase replaced an older Unframed (a React Flow canvas with output nodes)
 ## Commands
 
 - `pnpm typecheck`, `pnpm test` (engine and domain seams), `pnpm test:browser` (browser seam; CI runs it on Linux with Playwright's Chromium, a local Mac run uses the installed Chrome).
-- `pnpm test:perf` runs the frame-budget specs (specs 02, 09 and 12) with the budgets enforced. Run it on real hardware: under `CI` the same specs run and assert everything except the timing thresholds, because a shared runner cannot hold them.
+- `pnpm test:perf` runs the frame-budget specs (specs 02, 09, 12 and 17) with the budgets enforced. Run it on real hardware: under `CI` the same specs run and assert everything except the timing thresholds, because a shared runner cannot hold them.
 
 ## Rules that are expensive to break
 

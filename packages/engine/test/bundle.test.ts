@@ -2,7 +2,8 @@
  * The published bundle, built by `pnpm build`. CI's smoke step points
  * `UNFRAMED_BUNDLE_DIR` at the bundle it just built; otherwise these tests build one.
  */
-import { execFile } from "node:child_process";
+import { execFile, spawn } from "node:child_process";
+import readline from "node:readline";
 import { createHash } from "node:crypto";
 
 import { existsSync, realpathSync } from "node:fs";
@@ -12,6 +13,7 @@ import { promisify } from "node:util";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { buildBundle, RUNTIME_DEPENDENCIES } from "../../../scripts/build.ts";
 import { makeTempDir, repoRoot, startEngine } from "./harness.ts";
+import { UNFRAMED_TOOLS } from "./agent.ts";
 
 const execFileAsync = promisify(execFile);
 
@@ -96,6 +98,7 @@ describe("the published bundle", () => {
     expect(Object.values(manifest.dependencies).every((version) => typeof version === "string" && /^\d/.test(version))).toBe(true);
     const server = await listFiles(join(bundle, "server"));
     expect(server).toContain("index.js");
+    expect(server).toContain("mcp.js");
     expect(server.every((file) => file.endsWith(".js"))).toBe(true);
     const code = await readFile(join(bundle, "server", "index.js"), "utf8");
     expect(code).not.toMatch(/sourceMappingURL/);
@@ -182,6 +185,32 @@ describe("the published bundle", () => {
     await npm(["--prefix", join(copy, "client"), "ci", "--no-audit", "--no-fund"], { env: npmEnv() });
     await npm(["--prefix", join(copy, "client"), "run", "build"], { env: npmEnv() });
     expect(await hashTree(join(copy, "client", "dist"))).toEqual(before);
+  });
+
+  it("runs the bundled shim: it lists the Unframed tools through the bundled engine it finds in the discovery file", async () => {
+    const engine = await startEngine({ entry: join(bundle, "server", "index.js"), clientDist: join(bundle, "client", "dist") });
+    const rpc = await engine.rpc();
+    const made = await rpc.call("agentConnections.create", { name: "Bundle", client: "claude-code" });
+    const shim = spawn(process.execPath, [join(bundle, "server", "mcp.js"), "--data-dir", engine.dataDir], {
+      env: { ...process.env, ELECTRON_RUN_AS_NODE: undefined, UNFRAMED_MCP_TOKEN: made.token as string },
+      stdio: ["pipe", "pipe", "pipe"],
+    });
+    const answers = readline.createInterface({ input: shim.stdout })[Symbol.asyncIterator]();
+    const ask = async (message: unknown) => {
+      shim.stdin.write(`${JSON.stringify(message)}\n`);
+      return JSON.parse(String((await answers.next()).value));
+    };
+    const init = await ask({ jsonrpc: "2.0", id: 1, method: "initialize", params: { protocolVersion: "2025-06-18", capabilities: {} } });
+    expect(init.result.serverInfo.name).toBe("unframed");
+    shim.stdin.write(`${JSON.stringify({ jsonrpc: "2.0", method: "notifications/initialized" })}\n`);
+    const listed = await ask({ jsonrpc: "2.0", id: 2, method: "tools/list" });
+    const names = listed.result.tools.map((tool: { name: string }) => tool.name);
+    expect(names[0]).toBe("projects_list");
+    expect(names.slice(1)).toEqual([...UNFRAMED_TOOLS, "canvas_select"]);
+    const exited = new Promise((resolve) => shim.once("exit", resolve));
+    shim.stdin.end();
+    await exited;
+    await engine.stop("SIGTERM");
   });
 });
 

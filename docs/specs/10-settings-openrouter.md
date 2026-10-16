@@ -291,7 +291,7 @@ Remove key: the first click turns the button into a destructive `Yes, remove it`
 
 ### The project menu
 
-In the top-left chrome card, beside the logo: a small secondary dropdown button labelled with the current project's name.
+At the end of the project tab strip (spec 17): an icon button with a chevron, accessible name "All projects". It opens the list below. The button no longer shows the project's name; the active tab does.
 
 - One row per project. The current project has a check icon in the row's leading slot and a tint (the kit's checked radio item, spec 12), so it is told apart by more than colour. Clicking a row switches to that project (spec 02's open-project behaviour).
 - At each row's end, two small ghost icon buttons: a pencil, tooltip `Rename`, accessible label `Rename <project>`; a trash can, tooltip `Delete`, accessible label `Delete <project>`. Clicking either does not switch projects.

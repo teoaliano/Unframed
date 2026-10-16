@@ -34,6 +34,7 @@ import {
   type SkippedBy,
   type ThreadSearchMatch,
   type TurnOutcome,
+  type ChatProvider,
 } from "@unframed/domain";
 import type { ArtifactDiffFile } from "@unframed/contracts";
 import type { TLRecord } from "@tldraw/tlschema";
@@ -43,9 +44,32 @@ import type { AdapterContext, ProviderAdapter, TurnAttachment } from "./adapter.
 import { scriptedAdapter } from "./adapters/scripted.ts";
 import { AttachmentStore } from "./attachmentStore.ts";
 import { CanvasTools } from "./canvasTools.ts";
+import { OutsideChats } from "./outsideChats.ts";
+import { outsideSelectionTools } from "./selectionTools.ts";
+import { AgentGeneration } from "./agentGeneration.ts";
+import { generateArguments, generateTool } from "./generateTool.ts";
+import type { ConnectionBook } from "../agentConnections/book.ts";
+import type { ImagePricingAnswer, ImageRunRequest, ModelEntry, RunEvent, TextRunRequest, VideoStartRequest } from "@unframed/contracts";
+
+/** What an agent's generation reaches: the run services, pricing, the default model, run events and the ledger. */
+export interface GenerationRuns {
+  readonly runImage: (request: ImageRunRequest) => Promise<{ runId: string; batchId: string; placeholders: string[] }>;
+  readonly runText: (request: TextRunRequest) => Promise<{ runId: string; batchId: string; placeholders: string[] }>;
+  readonly pricing: (model: string) => Promise<ImagePricingAnswer>;
+  /** The models of a kind, and the default one: the settings' image or video model. */
+  readonly models: (kind: "image" | "video") => Promise<ReadonlyArray<ModelEntry>>;
+  readonly defaultModel: (kind: "image" | "video") => Promise<string>;
+  /** A render job (spec 04) and how it ends (spec 14: an agent's video). */
+  readonly startVideo: (request: VideoStartRequest) => Promise<{ jobId: string; status: string; shapeId: string }>;
+  readonly onVideoFinished: (jobId: string, handler: (outcome: { ok: boolean; cost: number | null }) => void) => () => void;
+  readonly track: (project: string, handler: (event: RunEvent) => void) => () => void;
+  readonly book: ConnectionBook;
+}
+import type { LiveSelection } from "../selection/liveSelection.ts";
+import { OUTSIDE_TURN_IDLE_MS } from "@unframed/domain";
 import { ChatEngine, CommandRejected } from "./chatEngine.ts";
 import type { RunEnvironment } from "./detection.ts";
-import { McpTokens, McpToolRegistry, MCP_PATH, type McpTool } from "./mcp.ts";
+import { McpTokens, McpToolRegistry, MCP_PATH, type McpBinding, type McpTool, type ToolAnswer } from "./mcp.ts";
 import type { AgentToolContext } from "../artifacts/artifactTools.ts";
 import { ProviderService, SESSION_IDLE_MS } from "./providerService.ts";
 import { writeTurnSidecar } from "./sidecar.ts";
@@ -54,6 +78,12 @@ import { artifactDiff } from "./turnDiff.ts";
 
 export interface AgentRuntimeDeps {
   readonly dataDir: string;
+  /** The windows' live selection, read and set by outside calls (spec 14). */
+  readonly selection: LiveSelection;
+  /** The run services and the connection store, for an agent's `generate` (spec 14). */
+  readonly generationRuns: GenerationRuns;
+  /** The outside turn's idle time; two minutes unless a test shortens it (spec 14). */
+  readonly outsideTurnIdleMs?: number;
   readonly testAgentScript: string | undefined;
   readonly idleMs: number | undefined;
   readonly uploadUrlTtlMs: number | undefined;
@@ -80,6 +110,9 @@ export interface AgentRuntimeDeps {
 }
 
 /** A dispatch refusal the RPC layer answers as spec 01's error. */
+/** A turn's paid runs are counted by chat and turn, so a revert can wait for the ones still landing (spec 14). */
+const runKey = (chatId: string, turn: number): string => `${chatId}:${turn}`;
+
 export class DispatchError extends Error {
   readonly code: RejectionCode;
   constructor(code: RejectionCode, message: string) {
@@ -130,11 +163,18 @@ const record = (value: unknown): Record<string, any> => (typeof value === "objec
 export class AgentRuntime {
   readonly tokens = new McpTokens();
   readonly registry = new McpToolRegistry();
+  /** The outside calls: an outside session's chat and turn in each project (spec 14). */
+  readonly outside: OutsideChats;
+  /** The tools only an outside connection has, after the registry's (spec 14). */
+  readonly outsideTools: McpTool[];
+  private readonly generation: AgentGeneration;
   readonly attachments: AttachmentStore;
   readonly providers: ProviderService;
   private readonly projects = new Map<string, Promise<ProjectAgent>>();
   private readonly chatProjects = new Map<string, string>();
   private readonly activeTurns = new Map<string, ActiveTurn>();
+  /** The paid runs each in-app or outside turn still has landing, by chat and turn (spec 14). */
+  private readonly paidRuns = new Map<string, number>();
   private readonly adapters = new Map<AgentProvider, ProviderAdapter>();
   /** The project agents that finished opening. */
   private readonly settledAgents = new Map<string, ProjectAgent>();
@@ -150,6 +190,8 @@ export class AgentRuntime {
       folder: async (project) => (await this.project(project)).folder,
       turnChanges: async (project) => (await this.project(project)).turnChanges,
       chatTurn: (project, chatId) => this.chatTurn(project, chatId),
+      isOutside: (project, chatId) => this.settledAgents.get(projectSlug(project))?.engine.chat(chatId)?.outside !== undefined,
+      liveSelection: (project) => deps.selection.current(projectSlug(project)),
       tag: (project, chatId, ids) => void this.tag(project, chatId, ids),
       activity: (project, chatId, activity) =>
         void this.project(project).then(
@@ -158,7 +200,65 @@ export class AgentRuntime {
         ),
     };
     for (const tool of new CanvasTools(context).tools()) this.registry.register(tool);
+    // Outside calls only: `canvas_select` never reaches an in-app agent (spec 07, spec 14).
+    this.generation = new AgentGeneration({
+      records: (project) => deps.rooms.read(project),
+      recordsOf: async (project, ids) => {
+        const byId = new Map((await deps.rooms.read(project)).map((record) => [record.id as string, record]));
+        return new Map(ids.map((id) => [id, byId.get(id)]));
+      },
+      runImage: (request) => deps.generationRuns.runImage(request),
+      runText: (request) => deps.generationRuns.runText(request),
+      pricing: (model) => deps.generationRuns.pricing(model),
+      models: (kind) => deps.generationRuns.models(kind),
+      defaultModel: (kind) => deps.generationRuns.defaultModel(kind),
+      startVideo: (request) => deps.generationRuns.startVideo(request),
+      onVideoFinished: (jobId, handler) => deps.generationRuns.onVideoFinished(jobId, handler),
+      track: (project, handler) => deps.generationRuns.track(project, handler),
+      book: deps.generationRuns.book,
+      recordTurn: async (project, chatId, turn, before, after) => {
+        const agent = await this.project(project);
+        agent.turnChanges.record(chatId, turn, before, after, await deps.rooms.clock(project));
+      },
+      holds: {
+        runStarted: (chatId, turn) => {
+          this.paidRuns.set(runKey(chatId, turn), (this.paidRuns.get(runKey(chatId, turn)) ?? 0) + 1);
+          this.outside.runStarted(chatId);
+        },
+        runEnded: (chatId, turn) => {
+          const remaining = (this.paidRuns.get(runKey(chatId, turn)) ?? 1) - 1;
+          if (remaining > 0) this.paidRuns.set(runKey(chatId, turn), remaining);
+          else this.paidRuns.delete(runKey(chatId, turn));
+          this.outside.runEnded(chatId);
+        },
+      },
+      activity: async (project, chatId, draft) => {
+        const agent = await this.project(project);
+        await this.activity(agent, chatId, {
+          id: `${draft.kind}:${randomUUID()}`,
+          tone: "info",
+          kind: draft.kind,
+          summary: draft.summary,
+          payload: draft.payload,
+          turnId: draft.turnId,
+          createdAt: new Date().toISOString(),
+        });
+      },
+    });
+    this.outsideTools = [...outsideSelectionTools({ hub: deps.selection, read: (project) => deps.rooms.read(project) })];
+    this.outside = new OutsideChats(
+      {
+        agent: (slug) => this.project(slug),
+        command: (agent, chatId, command) => this.internal(agent as ProjectAgent, chatId, command).then(() => undefined),
+        activity: (agent, chatId, activity) => this.activity(agent as ProjectAgent, chatId, activity).then(() => undefined),
+        clock: (slug) => deps.rooms.clock(slug).catch(() => null),
+        changeLog: (slug, since) => deps.rooms.changeLog(slug, since),
+      },
+      deps.outsideTurnIdleMs ?? OUTSIDE_TURN_IDLE_MS,
+    );
     for (const tool of deps.extraTools?.(context) ?? []) this.registry.register(tool);
+    // In-app and outside agents both have `generate`; an outside call's own check (its connection's limit) is the only difference (spec 14).
+    this.registry.register(generateTool((binding, args) => this.generateFor(binding, args)));
     this.providers = new ProviderService({
       adapterFor: (provider) => this.adapterFor(provider),
       tokens: this.tokens,
@@ -180,11 +280,17 @@ export class AgentRuntime {
       emit: (chatId, draft) => this.onRuntimeEvent(chatId, draft),
       runtimeMode: (chatId) => this.runtimeModeOf(chatId),
       registeredTools: () => this.registry.names(),
+      generationDetail: (chatId, input) => this.generationDetail(chatId, input),
       log: (chatId, line) => {
         if (this.deps.agentDebug) logInfo(`[agent ${chatId}] ${line}`);
       },
       dataDir: this.deps.dataDir,
     };
+  }
+
+  /** The provider a runtime event names. An outside chat has no adapter, so its events name Claude as they always did. */
+  private eventProvider(provider: ChatProvider | undefined): ProviderAdapter["provider"] {
+    return this.adapterFor(provider === undefined || provider === "outside" ? "claude" : provider).provider;
   }
 
   private adapterFor(provider: AgentProvider): ProviderAdapter {
@@ -206,6 +312,24 @@ export class AgentRuntime {
     return agent?.engine.chat(chatId)?.runtimeMode ?? DEFAULT_RUNTIME_MODE;
   }
 
+
+  /**
+   * What a project's chats are doing now (spec 17): chats with a turn running, and chats waiting on
+   * the person. Reads only a chat store that is already open, so a closed project costs nothing.
+   */
+  liveActivity(name: string): { readonly running: number; readonly needsYou: number } {
+    const agent = this.settledAgents.get(projectSlug(name));
+    if (agent === undefined) return { running: 0, needsYou: 0 };
+    let running = 0;
+    let needsYou = 0;
+    for (const chat of Object.values(agent.engine.model.chats)) {
+      if (chat.deletedAt !== null) continue;
+      const summary = chatSummary(chat);
+      if (summary.status === "running") running++;
+      if (summary.hasPendingApproval || summary.hasPendingUserInput || summary.hasActionableProposedPlan) needsYou++;
+    }
+    return { running, needsYou };
+  }
 
   /** Opens a project's chat store on first use, reconciling chats a quit left running. */
   project(name: string): Promise<ProjectAgent> {
@@ -233,6 +357,8 @@ export class AgentRuntime {
   }
 
   private async closeProject(agent: ProjectAgent): Promise<void> {
+    // Rename, delete, a folder move and shutdown all close the project: its open outside turns settle first (spec 14).
+    await this.outside.settleOpen(agent).catch((error: unknown) => logError(`outside turns of ${agent.slug}: ${errorText(error)}`));
     agent.closed = true;
     if (this.settledAgents.get(agent.slug) === agent) {
       this.settledAgents.delete(agent.slug);
@@ -250,6 +376,14 @@ export class AgentRuntime {
       if (chat.deletedAt !== null) continue;
       const running = chat.latestTurn?.state === "running" || chat.session?.status === "starting" || chat.session?.status === "running";
       if (!running || this.providers.has(chat.id)) continue;
+      if (chat.outside !== undefined) {
+        // An outside turn was not cut off by Unframed: the agent just stopped being heard, so it settles as completed (spec 14).
+        await this.outside.settle(agent, chat.id);
+        if (agent.engine.chat(chat.id)?.session?.status === "running") {
+          await this.internal(agent, chat.id, { type: "thread.session.set", session: { status: "ready", activeTurnId: null, lastError: null } });
+        }
+        continue;
+      }
       await this.clearRequests(agent, chat);
       if (chat.latestTurn?.state === "running") {
         await this.settle(agent, chat.id, { state: "failed", errorMessage: QUIT_MID_TURN });
@@ -286,9 +420,27 @@ export class AgentRuntime {
   }
 
 
+  /** A session of an outside client ended: its open turns settle, and its chats say so (spec 14). */
+  endOutsideSession(sessionId: string): Promise<void> {
+    return this.outside.endSession(sessionId, [...this.settledAgents.values()]);
+  }
+
+  /** A connection was revoked: its chats' open turns settle, and each says it is disconnected (spec 14). */
+  disconnectOutside(connectionId: string): Promise<void> {
+    return this.outside.disconnect(connectionId, [...this.settledAgents.values()]);
+  }
+
   /** Dispatches a command the web sent: attachments and tags are resolved against the files and the canvas first. */
   async dispatch(command: ClientCommand): Promise<{ sequence: number }> {
     const agent = await this.project(command.projectId);
+    // An in-app turn cannot be reverted while one of its paid generations is still landing (spec 14).
+    if (command.type === "thread.turn.revert" && agent.engine.chat(command.threadId)?.outside === undefined && (this.paidRuns.get(runKey(command.threadId, command.turnCount)) ?? 0) > 0) {
+      throw new DispatchError("conflict", "Wait for the generation to land before reverting.");
+    }
+    // Reverting an open outside turn settles it first, then reverts it (spec 14). The web cannot stop an outside agent.
+    if (command.type === "thread.turn.revert" && agent.engine.chat(command.threadId)?.outside !== undefined) {
+      await this.outside.settle(agent, command.threadId);
+    }
     let resolved: ChatCommand = command;
     if (command.type === "thread.turn.start") {
       const attachments: Array<MessageAttachment | { id: string; name: string }> = [];
@@ -342,6 +494,29 @@ export class AgentRuntime {
     const chat = agent.engine.chat(chatId);
     const fresh = ids.filter((id) => !chat?.tags.includes(id));
     if (fresh.length > 0) await this.internal(agent, chatId, { type: "thread.tags.add", ids: fresh });
+  }
+
+  /** An outside call of `generate`: its open turn, and the checked arguments (spec 14). */
+  private async generateFor(binding: McpBinding, args: Record<string, unknown>): Promise<ToolAnswer> {
+    const checked = generateArguments(args);
+    if (!checked.ok) return { value: { error: checked.message }, isError: true };
+    const turn = this.chatTurn(binding.project, binding.chatId).turnCount;
+    if (turn === undefined) return { value: { error: "Unframed could not open a turn for this call. Try again." }, isError: true };
+    const turnId = this.chatTurn(binding.project, binding.chatId).turnId ?? null;
+    return this.generation.generate({ project: binding.project, chatId: binding.chatId, turn, turnId, connectionId: binding.connectionId, ...checked });
+  }
+
+  /** What an in-app `generate`'s approval says: the medium, the shapes and the estimate, from a dry run (spec 14). */
+  private async generationDetail(chatId: string, input: Readonly<Record<string, unknown>>): Promise<string | undefined> {
+    const project = this.chatProjects.get(chatId);
+    const checked = generateArguments(input);
+    if (project === undefined || !checked.ok) return undefined;
+    const answer = await this.generation.generate({ project, chatId, turn: 0, turnId: null, ...checked, dryRun: true });
+    const value = answer.value as { dryRun?: boolean; estimate?: string | null };
+    if (answer.isError || value.dryRun !== true) return undefined;
+    const what = checked.medium === "video" ? "a video" : checked.medium === "text" ? "a text answer" : checked.runs === 1 ? "an image" : `${checked.runs} images`;
+    const shapes = checked.sources.length === 1 ? "1 shape" : `${checked.sources.length} shapes`;
+    return `Generate ${what} from ${shapes}, ${value.estimate ?? "with no exact estimate"}.`;
   }
 
   private chatTurn(project: string, chatId: string) {
@@ -465,7 +640,7 @@ export class AgentRuntime {
 
   /** A selection with an empty model resolved to the provider's first non-legacy one. */
   private async resolveModel(selection: ModelSelection): Promise<ModelSelection> {
-    if (selection.model !== "") return selection;
+    if (selection.model !== "" || selection.provider === "outside") return selection;
     const model = await this.deps.defaultModel(selection.provider).catch(() => undefined);
     return model === undefined ? selection : { ...selection, model };
   }
@@ -533,7 +708,7 @@ export class AgentRuntime {
     const event: RuntimeEvent = {
       ...draft,
       eventId: randomUUID(),
-      provider: this.adapterFor(agent.engine.chat(chatId)?.modelSelection.provider ?? "claude").provider,
+      provider: this.eventProvider(agent.engine.chat(chatId)?.modelSelection.provider),
       threadId: chatId,
       createdAt: new Date().toISOString(),
     };
@@ -729,6 +904,8 @@ export class AgentRuntime {
 
   /** Titling: one small request on the chat's own provider; any failure is silent. */
   private async title(agent: ProjectAgent, chat: Chat): Promise<void> {
+    // An outside chat has no provider of Unframed's to title it, so it keeps the name it has.
+    if (chat.modelSelection.provider === "outside") return;
     try {
       const first = chat.messages.find((message) => message.role === "user")?.text ?? "";
       const answer = chat.messages.find((message) => message.role === "assistant" && message.turnId === chat.latestTurn?.turnId)?.text ?? "";

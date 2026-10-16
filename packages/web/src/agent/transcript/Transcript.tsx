@@ -126,6 +126,14 @@ export interface TranscriptProps {
   readonly onOpenEditor?: (shapeId: string) => void;
 }
 
+/** The line at the foot of an outside chat once its session ends or its connection is revoked (spec 14). */
+const OutsideNote = ({ activities }: { readonly activities: Chat["activities"] }) => {
+  const last = [...activities].reverse().find((activity) => activity.kind === "outside.disconnected" || activity.kind === "outside.session-ended");
+  if (!last) return null;
+  const text = last.kind === "outside.disconnected" ? "Disconnected. This connection was revoked in Settings." : "This session ended.";
+  return <p className="m-0 text-xs text-muted-foreground" data-testid="outside-note">{text}</p>;
+};
+
 /** One chat's messages, work log, recap cards and activity line (t3code's timeline). */
 export const Transcript = ({ client, chatId, embedded, onLocate, onOpenEditor }: TranscriptProps) => {
   const chat = useWatchedThread(client, chatId);
@@ -188,7 +196,7 @@ export const Transcript = ({ client, chatId, embedded, onLocate, onOpenEditor }:
   };
 
   if (!chat) return <div className={SCROLLER_CLASS} data-testid="transcript" />;
-  const author = providerName(chat.modelSelection.provider);
+  const author = chat.modelSelection.provider === "outside" ? "Outside Unframed" : providerName(chat.modelSelection.provider);
   const timeline = buildTimeline(chat);
   const latest = chat.latestTurn;
   const streaming = chat.messages.some((message) => message.streaming && message.role === "assistant" && message.turnId === latest?.turnId);
@@ -254,7 +262,10 @@ export const Transcript = ({ client, chatId, embedded, onLocate, onOpenEditor }:
         })}
         <LimitLine chat={chat} />
         <QueuedMessages client={client} chatId={chatId} />
-        {running && !streaming && latest && <ActivityLine label={activityLabel(chat.activities, latest.turnId)} since={latest.startedAt ?? latest.requestedAt} />}
+        {running && !streaming && latest && (
+          <ActivityLine label={chat.outside === undefined ? activityLabel(chat.activities, latest.turnId) : "Working from outside Unframed…"} since={latest.startedAt ?? latest.requestedAt} />
+        )}
+        {chat.outside !== undefined && <OutsideNote activities={chat.activities} />}
         {chat.messages.length === 0 && <p className="m-0 mt-auto text-xs text-muted-foreground">{EMPTY_CHAT}</p>}
       </div>
       {pill && (

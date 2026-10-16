@@ -8,6 +8,12 @@ import { defineConfig } from "@playwright/test";
  */
 const CLIPBOARD = /\/(agentCopyText|agentMarkdown|artifactPaste|agentPlanCopy|contextMenu|copyImage|copyPaste|groupPaste|groupRefs|menuActions|pasteAcross|resultCopies|systemPaste|textCopies)\.spec\.ts$/;
 
+/**
+ * The ten-tab budget (spec 17) reads heap, DOM and listener counts and idle CPU that other work in the same run
+ * moves. It is its own project, run by its own command after the others (`pnpm test:browser`), with one worker.
+ */
+const ISOLATED = /\/projectTabsPerformance\.spec\.ts$/;
+
 /** A local run on a Mac starts the installed Chrome through this script: it says why. */
 const macChrome = process.env.CI || process.platform !== "darwin" ? undefined : fileURLToPath(new URL("packages/web/test/chrome.sh", import.meta.url));
 
@@ -35,7 +41,8 @@ export default defineConfig({
     headless: true,
   },
   projects: [
-    { name: "canvas", testIgnore: CLIPBOARD },
+    { name: "canvas", testIgnore: [CLIPBOARD, ISOLATED] },
     { name: "clipboard", testMatch: CLIPBOARD, workers: 1 },
+    { name: "isolated", testMatch: ISOLATED, workers: 1 },
   ],
 });

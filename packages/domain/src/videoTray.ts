@@ -1,6 +1,7 @@
 /** The video tray's estimate and status lines (spec 04). */
+import { placeResults } from "./placement.ts";
 import type { VideoEntry } from "./videoProps.ts";
-import type { VideoCounts } from "./videoRequest.ts";
+import type { VideoCounts, VideoSettings } from "./videoRequest.ts";
 
 const numberOf = (value: unknown): number | undefined => {
   const parsed = typeof value === "number" ? value : typeof value === "string" && value.trim() !== "" ? Number(value) : Number.NaN;
@@ -36,6 +37,31 @@ export const formatVideoEstimate = (value: number): string => `est. ~$${value.to
 
 /** The share consent: on unless explicitly off. */
 export const shareConsent = (value: unknown): boolean => value !== false;
+
+/** A render placeholder's width, as spec 03's placeholders (spec 04). */
+export const RENDER_WIDTH = 320;
+
+/** The placeholder's height at its width: from the chosen ratio or exact size, else 16:9. */
+export const renderHeight = (settings: VideoSettings): number => {
+  const ratio = settings.size !== undefined ? /^(\d+)x(\d+)$/.exec(settings.size) : settings.aspect_ratio !== undefined ? /^(\d+(?:\.\d+)?):(\d+(?:\.\d+)?)$/.exec(settings.aspect_ratio) : null;
+  const w = ratio ? Number(ratio[1]) : 16;
+  const h = ratio ? Number(ratio[2]) : 9;
+  return w > 0 && h > 0 ? (RENDER_WIDTH * h) / w : (RENDER_WIDTH * 9) / 16;
+};
+
+/** Where a render lands: spec 03's result placement from `anchor`, clear of every obstacle on the page. */
+export const renderLanding = (anchor: { x: number; y: number; w: number; h: number }, obstacles: ReadonlyArray<{ x: number; y: number; w: number; h: number }>, settings: VideoSettings) => {
+  const h = renderHeight(settings);
+  const [at] = placeResults(anchor, [{ w: RENDER_WIDTH, h }], obstacles);
+  return { x: at!.x, y: at!.y, w: RENDER_WIDTH, h };
+};
+
+/** The recipe's params: the props that were sent, as the tray names them, plus the share consent. */
+export const recipeParams = (mode: string, settings: VideoSettings, consent: boolean): Record<string, string | number | boolean> => ({
+  inputMode: mode,
+  ...settings,
+  shareLocalVideos: consent,
+});
 
 export type VideoStatusLine =
   | { readonly kind: "warning"; readonly text: string }

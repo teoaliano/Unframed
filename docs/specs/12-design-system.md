@@ -42,7 +42,7 @@ After this spec, one button is one component with a handful of variants, one men
 24. As a person, I want the final prompt dialog's sections and warnings in the kit style, so that Free batches are easy to review.
 25. As a person, I want the library's search, sort select, view toggles, cards, rows, chips and pagination in the kit style, with each kind keeping its hue, so that the library is scannable.
 26. As a person, I want the chat rail to look like t3code's chat panel: its header, tabs, thread search and empty states, so that the agent surface matches the tool it is modelled on.
-27. As a person, I want rail tabs styled as t3code's panel tabs, keeping their live dot, rename and More menu, so that the tab strip matches the kit.
+27. As a person, I want rail tabs styled as t3code's panel tabs, keeping their running spinner, rename and More menu, so that the tab strip matches the kit.
 28. As a person, I want my messages as t3code's message bubbles and the agent's replies in t3code's markdown typography, so that reading a chat is comfortable.
 29. As a person, I want the work log, tool rows, reasoning, "Worked for", retry and limit lines styled as t3code's timeline rows, so that the agent's work reads the same way it does in t3code.
 30. As a person, I want queued messages, the "Scroll to end" pill, plan cards and recap cards in the kit style, so that the transcript has one look.
@@ -226,7 +226,7 @@ Each task updates the spec passages for the surface it restyles, in the same com
 12. Prop tray, value menus, Runs popup and video share consent on the kit chip recipe, Menu, Popover, NumberField and Checkbox; the Escape and Runs tests pass. Seam: browser.
 13. Model dialog and final prompt dialog on kit Dialog, Table, Select, Input, Textarea, Alert and Badge `label` provider tokens, at 680 and 640 px. Seam: browser.
 14. Library dialog and Add to library dialog on the kit, with kind chips as Badge `label` in their hues and preset delete as AlertDialog. Seam: browser.
-15. Chat rail: the rail shell, header actions, t3code panel tabs (live dot, rename, More menu kept), thread search and the no-provider state on the kit, at 380 px with the same slide. Seam: browser.
+15. Chat rail: the rail shell, header actions, t3code panel tabs (running spinner, rename, More menu kept), thread search and the no-provider state on the kit, at 380 px with the same slide. Seam: browser.
 16. Transcript: message bubbles, `.chat-markdown`, t3code timeline rows for the work log and tool rows, reasoning, retry and limit lines, the queued bubble, "Scroll to end", plan and recap cards. Seam: browser.
 17. Agent tray: the shared composer shell, prompt editor, chips, attachment shelf, slash and mention menus, stash menu, pickers, plan toggle and context meter on the kit. Seam: browser.
 18. Approval and question panels in t3code's pending approval and question looks. Seam: browser.

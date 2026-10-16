@@ -1,4 +1,12 @@
-import { UnframedRpcs, unframedError, type ResultRecipe, type UnframedError } from "@unframed/contracts";
+import { UnframedError, UnframedRpcs, unframedError, type ResultRecipe } from "@unframed/contracts";
+import { connectionSetup } from "@unframed/domain";
+import { AgentConnections } from "../agentConnections/layer.ts";
+import { SelectionHub } from "../selection/liveSelection.ts";
+import { projectSlug } from "@unframed/domain";
+import type { SelectionApply } from "@unframed/contracts";
+import * as Queue from "effect/Queue";
+import * as Stream from "effect/Stream";
+import { errorText } from "../log.ts";
 import type { TLRecord } from "@tldraw/tlschema";
 import * as Effect from "effect/Effect";
 import { CanvasRooms } from "../canvas/rooms.ts";
@@ -24,6 +32,9 @@ import { OAuth } from "../oauth/oauth.ts";
 import { Artifacts } from "../artifacts/layer.ts";
 import { legacyImportMethods } from "../legacy/methods.ts";
 import { ProjectDatabase } from "../projectDatabase.ts";
+import { projectActivityStream } from "../projectActivity.ts";
+
+const asUnframed = (error: unknown): UnframedError => (error instanceof UnframedError ? error : unframedError("internal", errorText(error)));
 
 export const rpcHandlersLayer = UnframedRpcs.toLayer(
   Effect.gen(function* () {
@@ -44,6 +55,8 @@ export const rpcHandlersLayer = UnframedRpcs.toLayer(
     const lifecycle = yield* Lifecycle;
     const oauth = yield* OAuth;
     const artifacts = yield* Artifacts;
+    const connections = yield* AgentConnections;
+    const selectionHub = yield* SelectionHub;
     const legacy = legacyImportMethods(yield* ProjectDatabase, projects);
     const context = yield* Effect.context<SettingsStore | Projects | Native>();
 
@@ -73,10 +86,58 @@ export const rpcHandlersLayer = UnframedRpcs.toLayer(
       "settings.pickFolder": () =>
         Effect.map(Effect.flatMap(settings.outputDir, native.pickFolder), (path) => ({ path })),
       "projects.list": () => Effect.map(projects.list, (list) => ({ projects: [...list] })),
+      "projects.activity": () =>
+        projectActivityStream({
+          list: projects.list,
+          live: (project) =>
+            Effect.map(runs.liveRuns(project), (liveRuns) => {
+              const chats = agents.runtime.liveActivity(project);
+              return { running: liveRuns + chats.running, needsYou: chats.needsYou };
+            }),
+        }).pipe(Stream.mapError(asUnframed)),
       "projects.create": ({ name }) => Effect.map(projects.create(name), (slug) => ({ name: slug })),
       "files.reveal": (input) => revealFiles(input).pipe(Effect.provideContext(context)),
       "files.path": (input) => filePath(input).pipe(Effect.provideContext(context)),
       "files.copy": (input) => Effect.map(media.copy(input.project, input.file, input.from), (file) => ({ file })),
+      "selection.report": ({ project, windowId, shapeIds }) =>
+        Effect.as(
+          Effect.sync(() => selectionHub.report(projectSlug(project), windowId, shapeIds)),
+          {},
+        ),
+      "selection.subscribe": ({ project, windowId }) =>
+        Stream.callback<SelectionApply, UnframedError>((queue) =>
+          Effect.gen(function* () {
+            const detach = selectionHub.attach(projectSlug(project), windowId, (item) => Queue.offerUnsafe(queue, item));
+            yield* Effect.addFinalizer(() => Effect.sync(detach));
+          }),
+        ),
+      "agentConnections.list": () => Effect.sync(() => ({ connections: connections.book.list() })),
+      "agentConnections.create": ({ name, client, spendLimit }) =>
+        Effect.tryPromise({ try: () => connections.book.create({ name, client, ...(spendLimit === undefined ? {} : { spendLimit }) }), catch: asUnframed }).pipe(
+          Effect.map(({ connection, token }) => ({
+            connection,
+            token,
+            setup: connectionSetup({
+              client,
+              platform: process.platform,
+              execPath: process.execPath,
+              shimPath: config.shimPath,
+              dataDir: config.dataDir,
+              token,
+              runAsNode: config.runAsNode,
+            }).steps,
+          })),
+        ),
+      "agentConnections.setSpendLimit": ({ id, spendLimit }) =>
+        Effect.tryPromise({ try: () => connections.book.setSpendLimit(id, spendLimit), catch: asUnframed }).pipe(Effect.as({})),
+      "agentConnections.revoke": ({ id }) =>
+        Effect.tryPromise({
+          try: async () => {
+            await connections.book.revoke(id);
+            await agents.runtime.disconnectOutside(id);
+          },
+          catch: asUnframed,
+        }).pipe(Effect.as({})),
       "preferences.get": ({ keys }) => Effect.map(preferences.get(keys), (values) => ({ values })),
       "preferences.set": ({ key, value }) => Effect.as(preferences.set(key, value), {}),
       "preferences.subscribe": ({ keys }) => preferences.subscribe(keys),

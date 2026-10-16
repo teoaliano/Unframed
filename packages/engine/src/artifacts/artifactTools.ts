@@ -58,6 +58,10 @@ export interface AgentToolContext {
   /** Tags the chat with artifacts a write touched (the tag reactor). */
   readonly tag: (project: string, chatId: string, ids: ReadonlyArray<string>) => void;
   readonly activity: (project: string, chatId: string, activity: ActivityInput) => void;
+  /** Whether the chat is an outside one (spec 14). */
+  readonly isOutside: (project: string, chatId: string) => boolean;
+  /** The live selection of a project's windows, for an outside read (spec 14). */
+  readonly liveSelection: (project: string) => { shapeIds: string[]; note?: string };
 }
 
 type Shape = TLRecord & { type: string; props: Record<string, unknown>; meta: Record<string, unknown> };

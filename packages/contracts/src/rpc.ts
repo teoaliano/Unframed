@@ -23,8 +23,50 @@ import {
 } from "./agent.ts";
 import { ArtifactOpenLive, ArtifactSnapshots, MotionRenderStart, MotionRenderStatus, MotionUpload } from "./artifacts.ts";
 import { LegacyImportMarkSeen, LegacyImportReport, LegacyImportRetry, LegacyImportStatus } from "./legacy.ts";
+import { AgentConnectionsCreate, AgentConnectionsCreateAnswer, AgentConnectionsListAnswer, AgentConnectionsRevoke, AgentConnectionsSetSpendLimit } from "./agentConnections.ts";
+import { SelectionApply, SelectionReport, SelectionSubscribe } from "./selection.ts";
 
 const Empty = Schema.Struct({});
+
+/** Spec 14: the Settings block lists, makes and revokes the connections an outside agent uses. */
+export const AgentConnectionsList = Rpc.make("agentConnections.list", {
+  success: AgentConnectionsListAnswer,
+  error: UnframedError,
+});
+
+/** The token is in this answer once, and the engine keeps only its hash. */
+export const AgentConnectionsCreateRpc = Rpc.make("agentConnections.create", {
+  payload: AgentConnectionsCreate,
+  success: AgentConnectionsCreateAnswer,
+  error: UnframedError,
+});
+
+/** Spec 14: the person sets, changes or removes an outside connection's spend limit. */
+export const AgentConnectionsSetSpendLimitRpc = Rpc.make("agentConnections.setSpendLimit", {
+  payload: AgentConnectionsSetSpendLimit,
+  success: Empty,
+  error: UnframedError,
+});
+
+export const AgentConnectionsRevokeRpc = Rpc.make("agentConnections.revoke", {
+  payload: AgentConnectionsRevoke,
+  success: Empty,
+  error: UnframedError,
+});
+
+/** Spec 14: a window reports its selection, and the engine asks it to select shapes. */
+export const SelectionReportRpc = Rpc.make("selection.report", {
+  payload: SelectionReport,
+  success: Empty,
+  error: UnframedError,
+});
+
+export const SelectionSubscribeRpc = Rpc.make("selection.subscribe", {
+  payload: SelectionSubscribe,
+  success: SelectionApply,
+  error: UnframedError,
+  stream: true,
+});
 
 export const ServerHealth = Rpc.make("server.health", {
   success: Health,
@@ -65,6 +107,21 @@ export const ProjectsCreate = Rpc.make("projects.create", {
   payload: Schema.Struct({ name: Schema.String }),
   success: Schema.Struct({ name: Schema.String }),
   error: UnframedError,
+});
+
+/** One project's live work and the work waiting on the person (spec 17). Only projects with either above zero are sent, and a project that falls to zero is sent once more with zeros. */
+export const ProjectActivity = Schema.Struct({
+  project: Schema.String,
+  running: Schema.Number,
+  needsYou: Schema.Number,
+});
+export type ProjectActivity = typeof ProjectActivity.Type;
+
+/** The activity of every project with live work, then one message per change (spec 17). */
+export const ProjectsActivity = Rpc.make("projects.activity", {
+  success: ProjectActivity,
+  error: UnframedError,
+  stream: true,
 });
 
 export const FilesReveal = Rpc.make("files.reveal", {
@@ -284,6 +341,7 @@ export const UnframedRpcs = RpcGroup.make(
   PreferencesGet,
   PreferencesSet,
   PreferencesSubscribe,
+  ProjectsActivity,
   FilesCopy,
   TestCanvasRead,
   TestCanvasApply,
@@ -320,5 +378,11 @@ export const UnframedRpcs = RpcGroup.make(
   LegacyImportReport,
   LegacyImportMarkSeen,
   LegacyImportRetry,
+  AgentConnectionsList,
+  AgentConnectionsCreateRpc,
+  AgentConnectionsRevokeRpc,
+  AgentConnectionsSetSpendLimitRpc,
+  SelectionReportRpc,
+  SelectionSubscribeRpc,
 );
 export type UnframedRpcs = typeof UnframedRpcs;

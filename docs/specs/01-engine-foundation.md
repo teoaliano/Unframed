@@ -152,6 +152,7 @@ This is the one table of every test-only variable in the build. A spec that uses
 | `UNFRAMED_TEST_SHARE_TTL_MS` | 04 | the share link TTL in milliseconds, in place of 30 min; the expiry check then runs at the smaller of 60 s and this value |
 | `UNFRAMED_TEST_AGENT_SCRIPT` | 07, 08, 09 | a JSON script file or a folder of them. Every chat's provider adapter becomes the scripted adapter spec 07 defines |
 | `UNFRAMED_TEST_AGENT_IDLE_MS` | 07 | the agent session idle close in milliseconds, in place of 10 min |
+| `UNFRAMED_TEST_OUTSIDE_TURN_IDLE_MS` | 14 | the idle time after which an outside turn settles, in milliseconds, in place of 2 min (spec 14) |
 | `UNFRAMED_TEST_UPLOAD_URL_TTL_MS` | 07 | an attachment upload URL's lifetime in milliseconds, in place of 10 min |
 | `UNFRAMED_TEST_RENDERER` | 09 | replaces the motion renderer and the Chrome search: `ok`, `fail` or `no-chrome`, each behaving as spec 09 states |
 
@@ -232,6 +233,7 @@ Methods this spec delivers:
 | `settings.subscribe` | none | stream of `Settings`: the current value first, then one per change from any source | none |
 | `settings.pickFolder` | none | `{ path: string }`, `''` when cancelled | `unavailable`: `No folder picker available here. Type the path instead.` |
 | `projects.list` | none | `{ projects: string[] }` | `internal`: `Could not list the output folder: <reason>` |
+| `projects.activity` | none | stream of `{ project, running, needsYou }`: the live work of each project with any, then one message per change (spec 17) | none |
 | `projects.create` | `{ name: string }` | `{ name: string }` (the slug) | `bad_request`: `Enter a project name.`; `conflict`: `A project named "<slug>" already exists.`; `internal`: `Could not create the project: <reason>` |
 | `files.reveal` | `{ project?: string, fileNames: string[] }` | `{ revealed: number \| "folder" }` | `not_found`: `No files for this project yet.` |
 
@@ -325,7 +327,8 @@ Keys in use, each owned by the spec named:
 
 | Key | Owner | Value |
 | --- | --- | --- |
-| `project.active` | 02 | the active project's name |
+| `project.active` | 02 | the active project's name, kept for the outside-agent view (spec 14) |
+| `project.tabs` | 17 | `{ order: string[], active: string \| null }`: the open project tabs and the active one, read at boot (spec 17) |
 | `lastUsed.image`, `lastUsed.video`, `lastUsed.text` | 03 (04 and 05 add fields) | the composer's last-used values for that medium |
 | `library.view` | 06 | `"card"` or `"list"` |
 | `agent.followUp` | 08 (control in spec 10's dialog) | `"queue"` or `"steer"` |
@@ -387,7 +390,8 @@ A contract with the desktop shell. Renaming any of these is a breaking change th
 | Hook | Contract |
 | --- | --- |
 | `.unframed-chrome-left` | exactly one element: the top-left floating chrome card (logo and project menu, filled by spec 02). Its position comes from ordinary CSS properties with no `!important`, so the shell's injected CSS can move it |
-| `.unframed-chrome-right` | exactly one element: the top-right chrome card. Since the chrome moved (Agent to the bottom bar, Settings to the top-left card) it holds nothing and draws nothing, and stays in the page so the shell's CSS still finds it. Same rule |
+| `.unframed-chrome-right` | exactly one element: the top-right chrome card. It holds the Settings button on macOS and Linux and stays empty on Windows, where Settings sits at the far left of the top-left card (spec 17). The shell's CSS still finds it. Same rule |
+| `.unframed-tabs` | the project tab strip (spec 17), one element between the two cards. Added by spec 17; the shell's Windows caption inset applies to it |
 | `data-unframed-theme` on `<html>` | `"light"` or `"dark"`: the theme currently shown, updated live when it changes |
 | `--unframed-text-secondary` on `<html>` | the secondary text colour of the current theme, readable with `getComputedStyle(document.documentElement)` |
 | `<body>` background | an explicit, opaque `background-color` equal to the canvas background of the current theme |
@@ -406,6 +410,7 @@ The web build reads `TLDRAW_LICENSE_KEY` from the build environment and embeds i
 Built by `pnpm build`, published by CI. Layout at the bundle root:
 
 - `package.json`: `name` exactly `unframed` (the shell's dependency key depends on it), `version` equal to the engine package version, `"type": "module"`, `main` `server/index.js`, `dependencies` limited to runtime packages that cannot be inlined (packages that locate their own files on disk at runtime or spawn binaries, such as the Claude Agent SDK, the HyperFrames packages and GSAP), no `devDependencies`, no `workspaces`, no lifecycle scripts. It also carries `"puppeteer": { "skipDownload": true }`: puppeteer comes in under the HyperFrames producer and downloads a browser on install unless told not to, and renders use the browser already on the machine (spec 09). Puppeteer reads that key from the nearest manifest above its own folder, so it covers an install run inside the bundle; an app that installs the bundle as its own dependency carries the same key in its manifest, or installs with `PUPPETEER_SKIP_DOWNLOAD=1`.
+- `server/mcp.js` (spec 14): plain ESM JavaScript, the stdio shim an outside client runs through the Electron binary with `ELECTRON_RUN_AS_NODE=1`. It is a second entry beside `index.js`, bundled the same way, and the shell never runs it.
 - `server/index.js`: plain ESM JavaScript, the fork entry. All workspace code and every inlinable dependency are bundled into it (plus sibling chunk files under `server/` if the bundler splits). No TypeScript, no workspace references, no source maps, no test files.
 - `client/dist/`: the built web.
 - `client/package.json` and `client/package-lock.json`: a compatibility shim for a shell that still runs `npm --prefix <engine>/client ci && npm --prefix <engine>/client run build`. The manifest has no dependencies and a `build` script that does nothing and exits 0, and the lockfile matches it, so that command succeeds and leaves `client/dist` untouched. It can be removed once the shell stops building the client.

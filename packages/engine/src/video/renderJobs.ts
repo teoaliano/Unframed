@@ -74,6 +74,12 @@ export type StartReason = "no_key" | "invalid" | "local_clip" | "share_failed" |
 /** A failure of a video RPC: spec 01's error shape, told apart by `details.reason`. */
 const refusal = (reason: StartReason, code: ErrorCode, message: string) => unframedError(code, message, { reason });
 
+export interface FinishOutcome {
+  readonly ok: boolean;
+  readonly cost: number | null;
+}
+export type FinishHandler = (outcome: FinishOutcome) => void;
+
 export class RenderJobs extends Context.Service<
   RenderJobs,
   {
@@ -88,6 +94,11 @@ export class RenderJobs extends Context.Service<
      * links and its placeholder says why, as every other failure path does. Answers how many.
      */
     readonly failPending: (options: FailPendingOptions) => Effect.Effect<number, JobStoreError>;
+    /**
+     * Calls the handler once, when the job lands (ok, with its cost) or ends without a clip (not ok),
+     * after its placeholder is filled. Returns a function that stops waiting. Agents' generations use it (spec 14).
+     */
+    readonly onFinished: (jobId: string, handler: FinishHandler) => () => void;
   }
 >()("unframed/engine/RenderJobs") {}
 
@@ -223,6 +234,14 @@ export const renderJobsLayer = Layer.effect(
     const sharesByJob = new Map<string, string[]>();
     /** What each job this process started sent, for a job the store never learned about. */
     const refsByJob = new Map<string, RenderJob["refs"]>();
+    /** Whoever waits for a job's outcome (an agent's generation), by job id. Each handler is called once. */
+    const finishHandlers = new Map<string, Set<FinishHandler>>();
+    const notifyFinished = (jobId: string, outcome: FinishOutcome) => {
+      const handlers = finishHandlers.get(jobId);
+      if (handlers === undefined) return;
+      finishHandlers.delete(jobId);
+      for (const handler of handlers) handler(outcome);
+    };
     /** Jobs being downloaded right now, by the poll or the sweep: never twice. */
     const collecting = new Set<string>();
 
@@ -251,7 +270,7 @@ export const renderJobsLayer = Layer.effect(
       if (shape) await applyRoom(project, failChange(shape, error), job.id);
     };
 
-    const failJob = async (record: RenderJob, error: string) => {
+    const failJobRecord = async (record: RenderJob, error: string) => {
       await revokeShares(record.id);
       const dir = await outputDir();
       const failed = await persistJob(dir, record.id, {
@@ -265,8 +284,7 @@ export const renderJobsLayer = Layer.effect(
       return failed;
     };
 
-    /** The only path from a completed job to files, a record and a canvas result. */
-    const collect = async (record: RenderJob, data: unknown, key: string): Promise<RenderJob> => {
+    const collectClip = async (record: RenderJob, data: unknown, key: string): Promise<RenderJob> => {
       const url = clipUrlOf(data);
       if (url === undefined) throw new Error("Job completed without a video URL.");
       const bytes = await downloadClip(url, key);
@@ -346,6 +364,20 @@ export const renderJobsLayer = Layer.effect(
           await applyRoom(project, filled, record.id);
         } else logInfo(`${record.id}: output 1 landed after its placeholder was deleted → ${join(folder, file)}`);
       }
+      return done;
+    };
+
+    /** The failure path: a job that will not land tells whoever waits for it (see onFinished). */
+    const failJob = async (record: RenderJob, error: string) => {
+      const failed = await failJobRecord(record, error);
+      notifyFinished(record.id, { ok: false, cost: null });
+      return failed;
+    };
+
+    /** The path from a completed job to files and a canvas result; a waiter hears how it ended. */
+    const collect = async (record: RenderJob, data: unknown, key: string): Promise<RenderJob> => {
+      const done = await collectClip(record, data, key);
+      notifyFinished(record.id, done.status === "done" ? { ok: true, cost: done.cost ?? null } : { ok: false, cost: null });
       return done;
     };
 
@@ -535,6 +567,7 @@ export const renderJobsLayer = Layer.effect(
       const project = projectSlug(projectName);
       const dir = await outputDir();
       if ((await readJobsLenient(dir)).some((job) => job.id === jobId)) await persistJob(dir, jobId, { forgotten: true });
+      notifyFinished(jobId, { ok: false, cost: null });
       const records = await readRoom(project);
       const shape = records && markedBy(records, jobId);
       if (shape) await applyRoom(project, { put: [], remove: [shape.id] }, jobId);
@@ -671,6 +704,16 @@ export const renderJobsLayer = Layer.effect(
       start: (request) => attempt(() => start(request)),
       poll: (request) => attempt(() => poll(request)),
       forget: (project, jobId) => attempt(() => forget(project, jobId)),
+      onFinished: (jobId, handler) => {
+        const set = finishHandlers.get(jobId) ?? new Set<FinishHandler>();
+        set.add(handler);
+        finishHandlers.set(jobId, set);
+        return () => {
+          const current = finishHandlers.get(jobId);
+          current?.delete(handler);
+          if (current?.size === 0) finishHandlers.delete(jobId);
+        };
+      },
       placeholderRecipe: (project, shapeId) => attempt(() => placeholderRecipe(project, shapeId)),
       failPending: (options) => Effect.tryPromise({ try: () => failPending(options), catch: (error) => new JobStoreError({ reason: errorText(error) }) }),
     });

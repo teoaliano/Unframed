@@ -22,7 +22,7 @@ test("a copied text result is still a text result, in this project and pasted in
   expect(plainText(copy)).toBe("an answer about @100");
   await expect(shapeOnScreen(page, copy.id).locator("[data-shape-label]")).toHaveText(`$0.0012 · @${copy.meta.ref}`);
 
-  await page.getByRole("button", { name: "Project", exact: true }).click();
+  await page.getByRole("button", { name: "All projects" }).click();
   await page.getByRole("menuitemradio", { name: "beta" }).click();
   await expect(page.locator("[data-canvas-project='beta'] .tl-canvas")).toBeVisible();
   await page.keyboard.press("ControlOrMeta+v");
