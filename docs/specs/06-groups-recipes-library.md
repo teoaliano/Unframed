@@ -12,7 +12,7 @@ Three pieces, each built on the one before.
 
 1. **Groups.** A group is tldraw's frame, extended. It is a box with a dashed border whose label is its `@id`. Its members are prompts, images, videos and marks. Selecting the box selects its contents for a run: the members take one slot in the top-to-bottom order, in their own order inside the box. Writing `@character` in a prompt pulls in the group's prompt text and never attaches its pictures. Cmd-G wraps a selection in a new group, Cmd-Shift-G takes the box away, renaming rewrites every reference in the same undo step, and deleting the box deletes its contents as one step. Renaming is not only for groups: any prompt, image, video, page or motion can be named the same way, and the name is its `@id`.
 2. **Recipe groups.** A group can also hold standing settings: the medium, the model, the parameters and the runs (including Free). Its label then shows a chip such as `gpt-image-2 · 1024² · ×3`, its toolbar Generate runs with those settings in one click, and the composer opens on them. The person saves, updates and clears the recipe from the composer.
-3. **The library.** A preset is a saved group: the box, its members and its recipe if it has one. The person saves a selection with "Add to library", browses presets in the Library dialog (search, sort, view, filters, pages), inserts one into any project with fresh ids and rewritten references, and deletes their own. Two system presets ship with the app. Presets live in one `presets.json` at the root of the output folder, under a write rule that can never erase a preset still on disk.
+3. **The library.** A preset is a saved group: the box, its members and its recipe if it has one. A flow (spec 16) is a preset that holds nodes and the wires between them. The person saves a selection with "Add to library", browses presets in the Library dialog (search, sort, view, filters, pages), inserts one into any project with fresh ids and rewritten references, and deletes their own. Two system presets ship with the app. Presets live in one `presets.json` at the root of the output folder, under a write rule that can never erase a preset still on disk.
 
 ## User Stories
 
@@ -91,7 +91,7 @@ Names
 
 ### Vocabulary used here
 
-"Member" means a shape whose parent is a group. "Groupable" means a shape that may be a member: a prompt (including a text result), an image, a video or a mark. A page, a motion and a group are not groupable.
+"Member" means a shape whose parent is a group. "Groupable" means a shape that may be a member: a prompt (including a text result), an image, a video, a mark or a node (spec 16). A page, a motion and a group are not groupable.
 
 ### Modules
 
@@ -130,7 +130,7 @@ F2 is used rather than Cmd-R because Cmd-R reloads the page.
 
 ### Groups in a run
 
-Spec 03's selection to request already expands a selected group in place (one slot at the box's top edge, members in their own order inside it, a member selected with its group counted once) and resolves `@group` to its prompt members' text without media. Every rule specs 03 to 05 apply to selected shapes applies to members the same way. Selecting only a member (clicking inside a box selects the child) treats it as a loose shape.
+Spec 03's selection to request already expands a selected group in place (one slot at the box's top edge, members in their own order inside it, a member selected with its group counted once) and resolves `@group` to its prompt members' text without media. Every rule specs 03 to 05 apply to selected shapes applies to members the same way. Selecting only a member (clicking inside a box selects the child) treats it as a loose shape. A node member contributes nothing to a group's run; a selected group with nodes in it offers Run chain (spec 16).
 
 **Hint.** When the selection is exactly one group, the toolbar hint reads `@<name>` instead of "N selected" (spec 03's toolbar states). In the composer's sources band the group shows as one chip (the kit's Badge `outline`) reading `@<name>`, and its members keep their role badges on the canvas while the composer is open.
 

@@ -27,6 +27,8 @@ What is kept from the old app and what changes:
 | Input modes References / First frame / First and last frame, gated by the model's supported frame images, self-healing | kept |
 | Roles by Y order, per-kind numbering, the unused mark for inputs a mode has no room for | kept, now drawn over the selection while the composer is open instead of on wired input nodes |
 | Red edges for ignored inputs | changed: there are no edges; the unused badge and one tray warning replace them |
+| Roles on a video node's wired inputs | changed: a node's inputs are its wires, so each wire's role is its role, and Y order stays for selections only (spec 16) |
+| Render job record | gains an optional `target` for a node's job, naming the node version it fills (spec 16); a job without one fills a placeholder, as now |
 | Seconds, Audio, Size, Ratio; exact sizes replace tier plus ratio | kept |
 | Estimate from per-second pricing SKUs | kept |
 | Video-into-video phrasing warning, "not known to accept video" warning, "will not be sent" warning | kept, wording changed from "wired" to "selected" |
