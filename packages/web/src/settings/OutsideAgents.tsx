@@ -2,7 +2,7 @@
  * The settings dialog's "Agents outside Unframed" block (spec 14): the connections, Revoke with a
  * confirmation, and Connect an agent, whose setup is shown once and never again.
  */
-import { connectionClientLabel, type ConnectionClient } from "@unframed/domain";
+import { connectionClientLabel, money, periodWords, type ConnectionClient, type SpendPeriod } from "@unframed/domain";
 import type { AgentConnection, SetupStep } from "@unframed/contracts";
 import { CircleAlert, Plug } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
@@ -13,6 +13,7 @@ import { Input } from "~/components/ui/input";
 import { Radio, RadioGroup } from "~/components/ui/radio-group";
 import { Spinner } from "~/components/ui/spinner";
 import { ConfirmDialog } from "../agent/ConfirmDialog.tsx";
+import { parseSpendLimit, SpendFields } from "./SpendFields.tsx";
 import { useEngine } from "../context.ts";
 import { SectionHeading } from "./fields.tsx";
 
@@ -70,13 +71,17 @@ const ConnectDialog = ({ open, onClose, onMade }: { readonly open: boolean; read
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | undefined>(undefined);
   const [made, setMade] = useState<{ readonly steps: ReadonlyArray<SetupStep> } | undefined>(undefined);
+  const [amount, setAmount] = useState("");
+  const [period, setPeriod] = useState<SpendPeriod | undefined>(undefined);
   const name = typed ?? connectionClientLabel(client);
+  const limit = parseSpendLimit(amount, period);
 
   const create = async () => {
+    if (!limit.ok) return;
     setBusy(true);
     setError(undefined);
     try {
-      const answer = await engine.call("agentConnections.create", { name, client });
+      const answer = await engine.call("agentConnections.create", { name, client, ...(limit.limit === null ? {} : { spendLimit: limit.limit }) });
       setMade({ steps: answer.setup });
       onMade();
     } catch (failure) {
@@ -90,6 +95,8 @@ const ConnectDialog = ({ open, onClose, onMade }: { readonly open: boolean; read
   const close = () => {
     setMade(undefined);
     setTyped(undefined);
+    setAmount("");
+    setPeriod(undefined);
     setError(undefined);
     onClose();
   };
@@ -116,6 +123,13 @@ const ConnectDialog = ({ open, onClose, onMade }: { readonly open: boolean; read
                 <span className="text-muted-foreground">Name</span>
                 <Input aria-label="Name" value={name} onChange={(event) => setTyped(event.target.value)} />
               </label>
+              <SpendFields amount={amount} period={period} onAmount={setAmount} onPeriod={setPeriod} />
+              {!limit.ok && (
+                <Alert variant="error">
+                  <CircleAlert />
+                  <AlertDescription>{limit.message}</AlertDescription>
+                </Alert>
+              )}
               {error !== undefined && (
                 <Alert variant="error">
                   <CircleAlert />
@@ -141,7 +155,7 @@ const ConnectDialog = ({ open, onClose, onMade }: { readonly open: boolean; read
               <Button variant="ghost" onClick={close}>
                 Cancel
               </Button>
-              <Button onClick={() => void create()} disabled={busy || name.trim() === ""}>
+              <Button onClick={() => void create()} disabled={busy || name.trim() === "" || !limit.ok}>
                 {busy && <Spinner />}
                 Create connection
               </Button>
@@ -155,11 +169,87 @@ const ConnectDialog = ({ open, onClose, onMade }: { readonly open: boolean; read
   );
 };
 
+/** The spend line of a row: what the connection has spent, against its limit when it has one (spec 14). */
+export const spendText = (connection: AgentConnection): string =>
+  connection.spendLimit === null
+    ? `Spent ${money(connection.spent)}, no limit`
+    : `Spent ${money(connection.spent)} of ${money(connection.spendLimit.usd)} ${periodWords(connection.spendLimit.period)}`;
+
+/** The Limit action's dialog: changes one connection's limit, or removes it when the amount is empty (spec 14). */
+const LimitDialog = ({ connection, onClose, onSaved }: { readonly connection: AgentConnection | undefined; readonly onClose: () => void; readonly onSaved: () => void }) => {
+  const engine = useEngine();
+  const [amount, setAmount] = useState("");
+  const [period, setPeriod] = useState<SpendPeriod | undefined>(undefined);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | undefined>(undefined);
+  const limit = parseSpendLimit(amount, period);
+
+  // Each time the dialog opens for a connection, it starts from that connection's limit.
+  useEffect(() => {
+    setAmount(connection?.spendLimit === null || connection?.spendLimit === undefined ? "" : String(connection.spendLimit.usd));
+    setPeriod(connection?.spendLimit?.period);
+    setError(undefined);
+  }, [connection?.id]);
+
+  const save = async () => {
+    if (connection === undefined || !limit.ok) return;
+    setBusy(true);
+    setError(undefined);
+    try {
+      await engine.call("agentConnections.setSpendLimit", { id: connection.id, spendLimit: limit.limit });
+      onSaved();
+      onClose();
+    } catch (failure) {
+      setError(messageOf(failure));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Dialog open={connection !== undefined} onOpenChange={(next) => !next && onClose()}>
+      <DialogPopup className="max-w-[420px]">
+        <DialogHeader>
+          <DialogTitle>{`Limit for ${connection?.name ?? ""}`}</DialogTitle>
+        </DialogHeader>
+        <DialogPanel>
+          <div className="flex flex-col gap-4">
+            <SpendFields amount={amount} period={period} onAmount={setAmount} onPeriod={setPeriod} />
+            <p className="text-sm text-muted-foreground">Leave the amount empty for no limit. A change applies to the next paid run.</p>
+            {!limit.ok && (
+              <Alert variant="error">
+                <CircleAlert />
+                <AlertDescription>{limit.message}</AlertDescription>
+              </Alert>
+            )}
+            {error !== undefined && (
+              <Alert variant="error">
+                <CircleAlert />
+                <AlertDescription>{error}</AlertDescription>
+              </Alert>
+            )}
+          </div>
+        </DialogPanel>
+        <DialogFooter>
+          <Button variant="ghost" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button onClick={() => void save()} disabled={busy || !limit.ok}>
+            {busy && <Spinner />}
+            Save limit
+          </Button>
+        </DialogFooter>
+      </DialogPopup>
+    </Dialog>
+  );
+};
+
 export const OutsideAgents = () => {
   const engine = useEngine();
   const [connections, setConnections] = useState<ReadonlyArray<AgentConnection> | undefined>(undefined);
   const [connecting, setConnecting] = useState(false);
   const [revoking, setRevoking] = useState<AgentConnection | undefined>(undefined);
+  const [limiting, setLimiting] = useState<AgentConnection | undefined>(undefined);
   const [now, setNow] = useState(() => Date.now());
 
   const refresh = () => {
@@ -185,6 +275,12 @@ export const OutsideAgents = () => {
           <span className="font-medium text-foreground">{connection.name}</span>
           <span className="text-muted-foreground">{connectionClientLabel(connection.client)}</span>
           <span className="min-w-0 flex-1 text-muted-foreground">{lastUsedText(connection.lastUsedAt, now)}</span>
+          <span className="text-muted-foreground" data-testid="outside-spend">
+            {spendText(connection)}
+          </span>
+          <Button variant="ghost" size="sm" onClick={() => setLimiting(connection)}>
+            Limit
+          </Button>
           <Button variant="ghost" size="sm" onClick={() => setRevoking(connection)}>
             Revoke
           </Button>
@@ -197,6 +293,7 @@ export const OutsideAgents = () => {
         </Button>
       </div>
       <ConnectDialog open={connecting} onClose={() => setConnecting(false)} onMade={refresh} />
+      <LimitDialog connection={limiting} onClose={() => setLimiting(undefined)} onSaved={refresh} />
       <ConfirmDialog
         open={revoking !== undefined}
         onOpenChange={(open) => !open && setRevoking(undefined)}
