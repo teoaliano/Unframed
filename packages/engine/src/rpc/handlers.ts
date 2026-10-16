@@ -32,6 +32,7 @@ import { OAuth } from "../oauth/oauth.ts";
 import { Artifacts } from "../artifacts/layer.ts";
 import { legacyImportMethods } from "../legacy/methods.ts";
 import { ProjectDatabase } from "../projectDatabase.ts";
+import { projectActivityStream } from "../projectActivity.ts";
 
 const asUnframed = (error: unknown): UnframedError => (error instanceof UnframedError ? error : unframedError("internal", errorText(error)));
 
@@ -85,6 +86,15 @@ export const rpcHandlersLayer = UnframedRpcs.toLayer(
       "settings.pickFolder": () =>
         Effect.map(Effect.flatMap(settings.outputDir, native.pickFolder), (path) => ({ path })),
       "projects.list": () => Effect.map(projects.list, (list) => ({ projects: [...list] })),
+      "projects.activity": () =>
+        projectActivityStream({
+          list: projects.list,
+          live: (project) =>
+            Effect.map(runs.liveRuns(project), (liveRuns) => {
+              const chats = agents.runtime.liveActivity(project);
+              return { running: liveRuns + chats.running, needsYou: chats.needsYou };
+            }),
+        }).pipe(Stream.mapError(asUnframed)),
       "projects.create": ({ name }) => Effect.map(projects.create(name), (slug) => ({ name: slug })),
       "files.reveal": (input) => revealFiles(input).pipe(Effect.provideContext(context)),
       "files.path": (input) => filePath(input).pipe(Effect.provideContext(context)),

@@ -313,6 +313,24 @@ export class AgentRuntime {
   }
 
 
+  /**
+   * What a project's chats are doing now (spec 17): chats with a turn running, and chats waiting on
+   * the person. Reads only a chat store that is already open, so a closed project costs nothing.
+   */
+  liveActivity(name: string): { readonly running: number; readonly needsYou: number } {
+    const agent = this.settledAgents.get(projectSlug(name));
+    if (agent === undefined) return { running: 0, needsYou: 0 };
+    let running = 0;
+    let needsYou = 0;
+    for (const chat of Object.values(agent.engine.model.chats)) {
+      if (chat.deletedAt !== null) continue;
+      const summary = chatSummary(chat);
+      if (summary.status === "running") running++;
+      if (summary.hasPendingApproval || summary.hasPendingUserInput || summary.hasActionableProposedPlan) needsYou++;
+    }
+    return { running, needsYou };
+  }
+
   /** Opens a project's chat store on first use, reconciling chats a quit left running. */
   project(name: string): Promise<ProjectAgent> {
     const slug = projectSlug(name);
