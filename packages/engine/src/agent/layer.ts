@@ -19,6 +19,7 @@ import { realAdapter } from "./adapters/real.ts";
 import { ProviderDetection } from "./detection.ts";
 import { mcpRoute, refusal, type OutsideProject } from "./mcp.ts";
 import { AgentConnections } from "../agentConnections/layer.ts";
+import { SelectionHub } from "../selection/liveSelection.ts";
 import { PreferencesStore } from "../preferencesStore.ts";
 import { Projects } from "../projects.ts";
 import { AgentRuntime, DispatchError } from "./runtime.ts";
@@ -95,8 +96,10 @@ export const agentsLayer = Layer.effect(
       registerCloser: (project, close) => void run(openProjects.register(project, "preview tabs", Effect.promise(close))),
     });
 
+    const selection = yield* SelectionHub;
     const runtime = new AgentRuntime({
       dataDir: config.dataDir,
+      selection,
       testAgentScript: config.testAgentScript,
       idleMs: config.testAgentIdleMs,
       outsideTurnIdleMs: config.outsideTurnIdleMs,
@@ -189,7 +192,7 @@ export const agentsLayer = Layer.effect(
         mcpRoute(runtime.tokens, runtime.registry, undefined, {
           book: connections.book,
           listProjects: () => outsideProjects(),
-          tools: () => runtime.registry.list(),
+          tools: () => [...runtime.registry.list(), ...runtime.outsideTools],
           projectSlug: async (name) => {
             const slug = projectSlug(name);
             const names = await projects.list.pipe(Effect.runPromise);

@@ -8,7 +8,7 @@ describe("outside chats and turns", () => {
     const link = await outside(agent);
     const session = await link.open();
     const tools = await link.list(session);
-    expect(tools.map((tool) => tool.name)).toEqual(["projects_list", ...UNFRAMED_TOOLS]);
+    expect(tools.map((tool) => tool.name)).toEqual(["projects_list", ...UNFRAMED_TOOLS, "canvas_select"]);
     for (const tool of tools.slice(1)) expect(tool.inputSchema.required).toContain("project");
   });
 

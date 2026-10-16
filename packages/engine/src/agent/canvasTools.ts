@@ -32,6 +32,10 @@ export interface CanvasToolDeps {
   readonly turnChanges: (project: string) => Promise<TurnChanges>;
   /** The chat's running turn and the selection its latest message was sent with. */
   readonly chatTurn: (project: string, chatId: string) => { turnCount: number | undefined; interactionMode: InteractionMode; selection: ReadonlyArray<string> };
+  /** Whether the chat is an outside one, whose read answers the live selection (spec 14). */
+  readonly isOutside: (project: string, chatId: string) => boolean;
+  /** The live selection of a project's windows, for an outside read. */
+  readonly liveSelection: (project: string) => { shapeIds: string[]; note?: string };
   /** Tags the chat with artifacts a write touched (the tag reactor). */
   readonly tag: (project: string, chatId: string, ids: ReadonlyArray<string>) => void;
 }
@@ -99,14 +103,16 @@ export class CanvasTools {
       const sidecar = await readResultSidecar(folder, result.sidecar);
       if (sidecar) recipes.set(record.id, sidecar.recipe);
     }
-    const { selection } = this.deps.chatTurn(binding.project, binding.chatId);
+    const outside = this.deps.isOutside(binding.project, binding.chatId);
+    const live = outside ? this.deps.liveSelection(binding.project) : undefined;
+    const selection = live ? live.shapeIds : this.deps.chatTurn(binding.project, binding.chatId).selection;
     const view = canvasView({
       records: records as unknown as CanvasRecord[],
       boxes: shapeBoxes(records),
       recipes,
       selection,
     });
-    return { value: view };
+    return { value: live?.note === undefined ? view : { ...view, selectionNote: live.note } };
   }
 
   async write(binding: McpBinding, args: Record<string, unknown>): Promise<ToolAnswer> {
