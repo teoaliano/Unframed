@@ -13,7 +13,7 @@ test.describe("project activation", () => {
       await rpc.call("projects.create", { name: "beta" });
       await rpc.call("preferences.set", { key: "project.active", value: "beta" });
       expect(await openCanvas(page, first)).toBe("beta");
-      await expect(page.getByTestId("active-project")).toHaveText("beta");
+      await expect(page.locator("[role=tab][data-active='true']")).toHaveText("beta");
       await first.stop();
 
       const second = await startHostedEngine({ dataDir });
@@ -76,7 +76,7 @@ test.describe("project activation", () => {
     await page.goto(engine.origin);
     await expect.poll(() => firstList).toBeDefined();
 
-    await page.getByRole("button", { name: "Project", exact: true }).click();
+    await page.getByRole("button", { name: "All projects" }).click();
     await page.getByRole("menuitemradio", { name: "beta" }).click();
     await expect(page.locator("[data-canvas-project='beta'] .tl-canvas")).toBeVisible();
 

@@ -762,4 +762,11 @@ code {
     right: 8px;
   }
 
+  /* The project tab strip (spec 17) sits in the chrome row; its edges come from the corners. */
+  .unframed-tabs {
+    position: fixed;
+    top: 8px;
+    z-index: 400;
+  }
+
 }

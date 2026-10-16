@@ -2,40 +2,44 @@ import { centre, openCanvas, shapeOnScreen } from "./canvas.ts";
 import { expect, test } from "./fixtures.ts";
 import { emptyMedia, putRecords } from "./media.ts";
 import { expectSlot, inBothSchemes, resolvedColor, styleOf, tokenColor } from "./kit.ts";
+import { platformOf } from "./platform.ts";
 
-test("the top-left card holds the logo, the project menu and Settings; the right hook stays in the page, empty; there is no Help", async ({ page, engine }) => {
+test("the top-left card holds the logo; Settings sits at the end opposite the window controls; the right hook stays in the page; there is no Help", async ({ page, engine }) => {
   await openCanvas(page, engine);
+  const os = await platformOf(page);
   const left = page.locator(".unframed-chrome-left");
   await expect(left.getByRole("img", { name: "Unframed" })).toBeVisible();
-  await expect(left.getByRole("button", { name: /^(Settings|Add your API key)$/ })).toBeVisible();
-  // Spec 01: the shell's CSS expects exactly one right card; it holds nothing now.
+  const settings = page.getByRole("button", { name: /^(Settings|Add your API key)$/ });
+  await expect(settings).toHaveCount(1);
+  // Spec 17: macOS and Linux keep Settings at the far right, Windows at the far left, before the logo.
+  expect(await page.locator(os.name === "win32" ? ".unframed-chrome-left" : ".unframed-chrome-right").getByRole("button", { name: /^(Settings|Add your API key)$/ }).count()).toBe(1);
+  // Spec 01: the shell's CSS expects exactly one right card.
   await expect(page.locator(".unframed-chrome-right")).toHaveCount(1);
-  await expect(page.locator(".unframed-chrome-right").locator("*")).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Help" })).toHaveCount(0);
 });
 
-test("the top-left card sits at 8, 8, is 44 tall with 5 of padding and 8 between items, and centres every item at y 30", async ({ page, engine }) => {
+test("the top-left card sits at 8, 8 and is 44 tall; the tab strip and Settings share its row at y 30", async ({ page, engine }) => {
   await openCanvas(page, engine);
   const card = page.locator(".unframed-chrome-left");
   const box = (await card.boundingBox())!;
   expect([box.x, box.y, box.height]).toEqual([8, 8, 44]);
-  expect(await styleOf(card, "padding")).toBe("5px");
-  expect(await styleOf(card, "column-gap")).toBe("8px");
   const logo = (await card.getByRole("img", { name: "Unframed" }).boundingBox())!;
   expect([logo.width, logo.height]).toEqual([24, 24]);
+  // The 92 px traffic-light inset is the shell's repair, so the page alone puts the logo at the card's padding.
   expect(logo.x).toBe(8 + 1 + 5);
-  const project = (await card.getByRole("button", { name: "Project", exact: true }).boundingBox())!;
-  const settings = (await card.getByRole("button", { name: /^(Settings|Add your API key)$/ }).boundingBox())!;
-  expect([project.height, settings.width, settings.height]).toEqual([32, 32, 32]);
-  for (const item of [logo, project, settings]) expect(item.y + item.height / 2).toBe(30);
+  const strip = (await page.getByTestId("tab-strip").boundingBox())!;
+  expect(strip.height).toBe(44);
+  expect(strip.y + strip.height / 2).toBe(30);
+  const settings = (await page.getByRole("button", { name: /^(Settings|Add your API key)$/ }).boundingBox())!;
+  expect(settings.y + settings.height / 2).toBe(30);
   const right = await page.locator(".unframed-chrome-right").evaluate((element) => ({ top: getComputedStyle(element).top, right: getComputedStyle(element).right }));
   expect(right).toEqual({ top: "8px", right: "8px" });
 });
 
-test("the top-left card is glass with the kit's border and radius, and Settings is a kit ghost button with a kit tooltip", async ({ page, engine }) => {
+test("the top-left card is glass with the kit's border and radius; Settings is a kit ghost button in a muted holder with a kit tooltip", async ({ page, engine }) => {
   await openCanvas(page, engine);
   const card = page.locator(".unframed-chrome-left");
-  const settings = card.getByRole("button", { name: /^(Settings|Add your API key)$/ });
+  const settings = page.getByRole("button", { name: /^(Settings|Add your API key)$/ });
   await expectSlot(settings, "tooltip-trigger");
   await inBothSchemes(page, async () => {
     const glass = await resolvedColor(page, "color-mix(in srgb, var(--background) var(--glass-opacity), transparent)");
@@ -43,8 +47,6 @@ test("the top-left card is glass with the kit's border and radius, and Settings 
     expect(await styleOf(card, "border-top-color")).toBe(await tokenColor(page, "--color-border"));
     expect(await styleOf(card, "border-top-left-radius")).toBe("14px");
     expect(await styleOf(card, "backdrop-filter")).toMatch(/^blur\(/);
-    await page.mouse.move(5, 500);
-    await expect.poll(() => styleOf(settings, "background-color")).toBe("rgba(0, 0, 0, 0)");
   });
 });
 

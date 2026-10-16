@@ -92,7 +92,7 @@ withRenderer("a render goes to the project it started in, whatever the tab shows
   const placeholder = await waitForRoom(engine, "default", (records) => placeholderOf(records));
 
   // Switch project in the tab while it renders.
-  await page.locator(".unframed-chrome-left").getByRole("button", { name: "Project", exact: true }).click();
+  await page.getByRole("button", { name: "All projects" }).click();
   await page.getByRole("menuitemradio", { name: "other" }).click();
   await expect(page.locator('[data-canvas-project="other"] .tl-canvas')).toBeVisible();
   await waitForRoom(engine, "default", (records) => typeof records.find((record) => record.id === placeholder.id)?.props.assetId === "string", 15_000);

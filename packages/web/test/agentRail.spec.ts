@@ -60,7 +60,7 @@ test("the Agent button slides the rail in from the left, the top-left card becom
   const row = (await panel.getByTestId("rail-chrome-row").boundingBox())!;
   expect(cardBox.y + cardBox.height).toBeLessThanOrEqual(row.y + row.height);
   expect((await panel.getByRole("heading", { name: "Agent" }).boundingBox())!.y).toBeGreaterThanOrEqual(row.y + row.height);
-  await expect(card.getByRole("button", { name: /^(Settings|Add your API key)$/ })).toBeVisible();
+  await expect(page.getByRole("button", { name: /^(Settings|Add your API key)$/ })).toBeVisible();
 
   // Close runs the faster exit, then the rail leaves the page.
   await panel.getByRole("button", { name: "Close" }).click();
