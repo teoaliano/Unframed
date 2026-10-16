@@ -33,6 +33,7 @@ import { GroupShapeUtil } from "./shapes/group.tsx";
 import { ImageMediaUtil, VideoMediaUtil } from "./shapes/media.tsx";
 import { PromptShapeUtil } from "./shapes/prompt.tsx";
 import { SyncSocket } from "./syncSocket.ts";
+import { recalledCamera, rememberCamera } from "../project/tabMemory.ts";
 import { TLDRAW_ASSET_URLS, TLDRAW_CHROME, TLDRAW_OPTIONS } from "./tldrawChrome.tsx";
 
 /** How long a project switch waits for the room to acknowledge this tab's pending edits. */
@@ -121,8 +122,12 @@ export const CanvasHost = ({ project, activation }: { readonly project: string; 
     const stopSelection = installSelectionReporter(editor, engine, project);
     content.current = { project, engine, minter };
     installExternalContent(editor, content.current);
-    fitToShapes(editor);
+    // A tab that comes back to the front keeps the view it had (spec 17); a first open fits.
+    const camera = recalledCamera(project);
+    if (camera) editor.setCamera(camera, { animation: { duration: 0 } });
+    else fitToShapes(editor);
     return () => {
+      rememberCamera(project, editor.getCamera());
       stopMinting();
       stopLabelLevel();
       stopLabelActivity();
