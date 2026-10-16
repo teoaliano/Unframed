@@ -126,7 +126,7 @@ Ordering:
 
 - Every selected shape is placed in one list sorted by the top edge of its page bounds, smallest first. Ties break by left edge, then by z rank. This single order decides prompt order and image numbers.
 - A selected group takes one slot at its own top edge. Its members fill that slot in their own top-to-bottom order inside it (same tie rules). A member is never counted twice: if a member and its group are both selected, it counts in the group's slot only. Membership rules are spec 02's.
-- Artifacts (page, motion) contribute nothing, loose or inside a group.
+- Artifacts (page, motion) contribute nothing, loose or inside a group. Nodes (spec 16) contribute nothing either: a node's inputs are its wires, not the selection.
 
 Text:
 
@@ -346,7 +346,7 @@ Durability: the run lives in the engine, not the tab. Closing or reloading the t
 
 ### Placeholders and run markers
 
-This is the one mechanism for a result that is still being made, and this section is its only definition. Spec 04 (render jobs), spec 05 (text runs and batches) and spec 09 (motion renders) use it with the field names and lifecycle below and add nothing but what is marked as theirs.
+This is the one mechanism for a result that is still being made, and this section is its only definition. Spec 04 (render jobs), spec 05 (text runs and batches), spec 09 (motion renders) and spec 16 (node versions) use it with the field names and lifecycle below and add nothing but what is marked as theirs.
 
 - **Placeholder.** A shape the engine writes into the project's sync room through spec 02's `apply` with origin `run:<runId>`, before the call that started the work is answered. It is an ordinary shape of the kind the result will be (an image here, a text result in spec 05, a video in specs 04 and 09) holding no file or text yet. A placeholder for a paid run also carries its result meta (below) with `sidecar: null` until it is filled; a motion render's placeholder (spec 09) is not a paid result and carries none.
 - **Run marker**, `meta.unframed.run`:
@@ -541,7 +541,7 @@ A good test drives one of the three seams in 00-index and asserts only on what t
 - Opening an artifact in the editor (spec 09; this spec only shows the Editor button).
 - Settings, the key flow and default models (spec 10).
 - Live source wiring: a result re-reading its sources as they are now was rejected (decision Q3, option C). Regenerate opens the recorded recipe.
-- A result strip, "Add to canvas" and "Clear": results land on the canvas directly now, so the old output node's strip has no home.
+- A result strip, "Add to canvas" and "Clear": results land on the canvas directly now, so the old output node's strip has no home. A node's versions (spec 16) are a strip inside the node, not this composer's.
 - A seed control, and capability tags in the model dialog.
 
 ## Further Notes
