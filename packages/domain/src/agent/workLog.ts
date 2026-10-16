@@ -106,6 +106,11 @@ export const describeTool = (input: { readonly toolName: string; readonly itemTy
         const ops = Array.isArray(toolInput.ops) ? toolInput.ops.length : 0;
         return { label: `Changed the canvas (${plural(ops, "change")})`, action: "canvas" };
       }
+      case "generate": {
+        // The row is the start of a paid generation; its landing is an activity of the turn (spec 14, "Cost shown").
+        const medium = toolInput.medium === "video" ? "a video generation" : toolInput.medium === "text" ? "a text generation" : "an image generation";
+        return { label: `Started ${medium}`, action: "tool" };
+      }
       case "page_write":
         return { label: `Wrote page ${artifactTitle(toolInput, result, "page")}`, action: "canvas" };
       case "page_read":

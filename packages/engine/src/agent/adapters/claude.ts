@@ -182,9 +182,11 @@ export const claudeAdapter = (context: AdapterContext): ProviderAdapter => {
       let session: ClaudeSession | undefined;
       const gate = new PermissionGate((draft) => emit(input.chatId, draft));
       const canUseTool: CanUseTool = async (toolName, toolInput, options) => {
+        const detail = toolName === "mcp__unframed__generate" ? await context.generationDetail?.(input.chatId, toolInput) : undefined;
         const answer = await gate.decide({
           toolName,
           input: toolInput,
+          ...(detail === undefined ? {} : { detail }),
           turnId: session?.turnId,
           runtimeMode: context.runtimeMode(input.chatId),
           interactionMode: session?.interactionMode ?? "default",
