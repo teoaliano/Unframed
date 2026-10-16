@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="132 152 752 752">
+  <style>
+    path, rect, circle { fill: #111; }
+    @media (prefers-color-scheme: dark) { path, rect, circle { fill: #fff; } }
+  </style>
+  <path d="M179 303.8C179 274.639 202.639 251 231.8 251H427.2C456.361 251 480 274.639 480 303.8V405H179V303.8Z"/>
+  <rect x="568" y="224" width="288" height="240" rx="52.8"/>
+  <circle cx="312" cy="680" r="152"/>
+  <rect x="544" y="619" width="300" height="154" rx="52.8"/>
+</svg>
