@@ -28,6 +28,7 @@ const seed = async (engine: TestEngine, name: string) => {
 interface Measure {
   readonly heap: number;
   readonly nodes: number;
+  readonly cdpNodes: number;
   readonly stripNodes: number;
   readonly listeners: number;
   readonly editors: number;
@@ -42,19 +43,26 @@ const measure = async (page: Page, cdp: CDPSession, sockets: Set<WebSocket>): Pr
   await cdp.send("HeapProfiler.collectGarbage");
   const metrics = await cdp.send("Performance.getMetrics");
   const value = (name: string) => metrics.metrics.find((metric) => metric.name === name)?.value ?? 0;
-  // The strip's own nodes (text included), so the canvas-side count can be read apart from the tabs.
-  const strip = await page.evaluate(() => {
+  // Product DOM: every element and text node in the document, counted from the page. CDP's `Nodes` also
+  // counts attribute wrappers that a test's own locators create, so it is logged, not budgeted.
+  const dom = await page.evaluate(() => {
+    let text = 0;
+    const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+    while (walker.nextNode()) text++;
     const root = document.querySelector("[data-testid='tab-strip']");
-    if (!root) return 0;
-    const walker = document.createTreeWalker(root, NodeFilter.SHOW_ALL);
-    let count = 1;
-    while (walker.nextNode()) count++;
-    return count;
+    let strip = 0;
+    if (root) {
+      const inside = document.createTreeWalker(root, NodeFilter.SHOW_ALL);
+      strip = 1;
+      while (inside.nextNode()) strip++;
+    }
+    return { nodes: document.querySelectorAll("*").length + text, strip };
   });
   return {
     heap: value("JSHeapUsedSize"),
-    nodes: value("Nodes") - strip,
-    stripNodes: strip,
+    nodes: dom.nodes - dom.strip,
+    cdpNodes: value("Nodes"),
+    stripNodes: dom.strip,
     listeners: value("JSEventListeners"),
     listeners: value("JSEventListeners"),
     editors: await page.locator(".tl-container").count(),
@@ -67,7 +75,7 @@ const measure = async (page: Page, cdp: CDPSession, sockets: Set<WebSocket>): Pr
 /** Idle CPU over a window: the main thread's task time while nothing happens. */
 const idleCpu = async (page: Page, cdp: CDPSession): Promise<number> => {
   const before = (await cdp.send("Performance.getMetrics")).metrics.find((metric) => metric.name === "TaskDuration")?.value ?? 0;
-  await page.waitForTimeout(5000);
+  await page.waitForTimeout(10_000);
   const after = (await cdp.send("Performance.getMetrics")).metrics.find((metric) => metric.name === "TaskDuration")?.value ?? 0;
   return (after - before) * 1000;
 };
