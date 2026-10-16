@@ -85,10 +85,11 @@ export const canvasRoom = (editor: Editor): CanvasRoom => {
   const container = editor.getContainer();
   // The bottom bar sits above floating UI in tldraw's layer: it stays clear of it.
   const bar = container.querySelector<HTMLElement>("[data-unframed-toolbar]")?.getBoundingClientRect();
-  // The top band is occupied by the chrome cards and the project tab strip (spec 17): one box over both, so
-  // floating UI clears them. tldraw's style panel is not in it: a composer that grows over it stays on top.
+  // The top band is the chrome cards and the project tab strip (spec 17): floating UI clears them all. The strip
+  // is above floating UI in the page, so a bar left under it would be covered: a selection under the strip gets
+  // its bar below the strip.
   const doc = container.ownerDocument;
-  const band = [".unframed-chrome-left", ".unframed-tabs", ".unframed-chrome-right"]
+  const band = [".unframed-chrome-left", ".unframed-tabs"]
     .map((selector) => doc.querySelector<HTMLElement>(selector)?.getBoundingClientRect())
     .filter((rect): rect is DOMRect => rect !== undefined && rect.width > 0);
   const panelRect = doc.querySelector<HTMLElement>(".tlui-style-panel__wrapper")?.getBoundingClientRect();

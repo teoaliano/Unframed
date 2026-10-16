@@ -82,14 +82,15 @@ test("the bar sits centred above the selection, flips below it at the top edge a
   await page.mouse.move(start.x, start.y);
   for (let step = 0; step < 40 && ((await subject.boundingBox())!.y > 10); step++) await page.mouse.wheel(0, 40);
   await expect(bar).toHaveAttribute("data-side", "below");
-  const moved = (await subject.boundingBox())!;
-  await expect.poll(async () => (await bar.boundingBox())!.y).toBeCloseTo(moved.y + moved.height + 12, 0);
+  // The prompt is now under the tab strip, which the bar must not sit under: the bar clears the strip (its
+  // bottom edge at 52 px, the spec 17 band, plus the 8 px margin).
+  await expect.poll(async () => (await bar.boundingBox())!.y).toBeCloseTo(60, 0);
 
-  // Scroll it past the left edge: the bar stays inside, and beside the top-left card, never under it.
+  // Scroll it past the left edge: the bar stays inside, and clear of the top band, never under it.
   for (let step = 0; step < 60 && ((await subject.boundingBox())!.x > -100); step++) await page.mouse.wheel(40, 0);
   const canvas = (await page.locator(".tl-container").boundingBox())!;
-  const card = (await page.locator(".unframed-chrome-left").boundingBox())!;
-  await expect.poll(async () => (await bar.boundingBox())!.x).toBeCloseTo(card.x + card.width + 8, 0);
+  // The top band (the card and the tab strip) is never under the bar: at the top edge the bar sits below the strip.
+  await expect.poll(async () => (await bar.boundingBox())!.y).toBeCloseTo(60, 0);
   // Lower down, clear of the card's band, it keeps 8 px from the canvas's edge.
   for (let step = 0; step < 20 && ((await subject.boundingBox())!.y < 200); step++) await page.mouse.wheel(0, -40);
   await expect.poll(async () => (await bar.boundingBox())!.x).toBeCloseTo(canvas.x + 8, 0);
