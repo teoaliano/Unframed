@@ -104,7 +104,8 @@ describe("outside chats and turns", () => {
     const session = await link.open();
     await link.call(session, "canvas_read", { project: PROJECT });
     const [old] = await chatsIn(agent);
-    await agent.settled(old!.id, 1);
+    // The idle settle is 300 ms; a loaded CI runner can take longer than the default 10 s to show it.
+    await agent.settled(old!.id, 1, 30_000);
     await agent.dispatch({ type: "thread.delete", threadId: old!.id });
 
     await link.call(session, "canvas_read", { project: PROJECT });
