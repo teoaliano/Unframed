@@ -8,7 +8,7 @@ Unframed makes images, video and text from a selection, but not sound. A person 
 
 OpenRouter, which runs every other medium, has no text-to-speech model good enough for this (issue #63). ElevenLabs does, but it is a second provider with its own key, its own catalogue of models and voices, its own delivery settings, and its own unit of spend: credits, whose price depends on the person's plan. None of the app's rules assume a second provider. The key rules, the cost field every sidecar carries, the single stub origin the tests use, and the canvas's shape kinds all have to make room for it without breaking what they promise.
 
-The issue was written against the old app: an "Audio node" with an "Add to canvas" button. The rewrite has no nodes, no wires and no "Add to canvas" (specs 02 and 03, Out of Scope): results land on the canvas directly.
+The issue was written against the old app: an "Audio node" with an "Add to canvas" button. The rewrite has no output nodes and no "Add to canvas" (specs 03 and 16): results land on the canvas directly, and a node (spec 16) keeps its results as versions. Audio is never a wire's source.
 
 ## Solution
 
