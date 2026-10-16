@@ -198,6 +198,14 @@ The budgets are measured in the hosted shape (spec 02's rule): the production bu
 
 Timing thresholds (switch time, frame gaps, CPU) run on real hardware in `pnpm test:perf` and are skipped under `CI` with an annotation, as spec 02 says. Counts and ratios that do not depend on timing run everywhere. Heap is measured with CDP `HeapProfiler.collectGarbage` before each reading.
 
+Measured baselines, this Mac, headless Chrome, hosted shape, 100-shape boards (main at 4d84223, and this branch):
+
+- Switch on main, from the picker, between two projects: median 205 ms over ten switches (range 194 to 313 ms). The menu opens for each switch.
+- Switch on this branch, from a tab: median 159 ms over ten switches (range 114 to 279 ms). The budget is 1.5 times main's median.
+- Idle main-thread CPU over 10 s with one project on main: about 443 ms of task time. With ten tabs open on this branch: about 129 to 135 ms. Main's figure is higher than the branch's; the cause on main is not traced.
+- Heap, one tab against ten warmed tabs: 22.0 MB against 23.6 MB (1.07 times).
+- Product DOM outside the strip, one tab against ten: 1300 against 1300 nodes (elements and text). Listeners: 740 against 770 (1.04 times).
+
 Under no circumstances does a background tab keep a canvas, a socket or a timer alive "to make switching faster". A faster switch is a later decision that must change this table first.
 
 ### Specs this amends
