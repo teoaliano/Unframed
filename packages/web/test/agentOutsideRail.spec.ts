@@ -25,9 +25,9 @@ const session = async (engine: TestEngine, token: string) => {
   return { call, end };
 };
 
-/** A tab's live dot, read from inside the tab. */
-const DOT = "[data-testid='live-dot']";
-/** The rail's tab of the chat that has no live dot: its turn has settled. */
+/** A tab's running spinner, read from inside the tab. */
+const DOT = "[data-testid='chat-status'][data-status='running']";
+/** The rail's tab of the chat that has no spinner: its turn has settled. */
 const settledTab = (page: Page): Locator => tabs(page).filter({ hasNot: page.locator(DOT) });
 /** The tab of the chat whose turn is still open. */
 const liveTab = (page: Page): Locator => tabs(page).filter({ has: page.locator(DOT) });
@@ -43,7 +43,7 @@ test("two sessions of one connection: a live tab, a settled tab with its recap a
 
   const panel = await openRail(page);
   await expect(tabs(page)).toHaveCount(2);
-  await expect(panel.getByTestId("live-dot")).toHaveCount(2);
+  await expect(panel.getByTestId("chat-status")).toHaveCount(2);
   await expect(tabs(page).first()).toContainText("Laptop Claude · ");
 
   await two.end();
@@ -68,7 +68,7 @@ test("a revoked connection's open chat says it is disconnected", async ({ page, 
   const link = await session(agent, made.token as string);
   await link.call("canvas_read", { project: "default" });
   const panel = await openRail(page);
-  await expect(panel.getByTestId("live-dot")).toHaveCount(1);
+  await expect(panel.getByTestId("chat-status")).toHaveCount(1);
 
   const connections = (await rpc.call("agentConnections.list")).connections;
   await rpc.call("agentConnections.revoke", { id: connections[0]!.id });
