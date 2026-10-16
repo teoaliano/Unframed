@@ -12,6 +12,11 @@ import { promptRecord, putRecords } from "./media.ts";
 test.describe.configure({ mode: "serial", timeout: 300_000 });
 
 const CI = Boolean(process.env.CI);
+/**
+ * Main's idle CPU over 10 s with one project: the median of 20 interleaved windows on this Mac (spec 17, "Measured
+ * baselines"). One tab may cost this much more than main; the gap is accepted and recorded in spec 17 as a known gap.
+ */
+const MAIN_IDLE_MS = 283.5;
 const SHAPES = 100;
 const TABS = 10;
 
@@ -154,5 +159,7 @@ test("ten project tabs cost about one: heap, nodes, listeners, editors, sockets 
   else {
     expect(median).toBeLessThanOrEqual(1500);
     expect(tenIdle).toBeLessThanOrEqual(singleIdle * 1.05 + 20);
+    // The accepted one-tab tolerance against main (spec 17, known gap): 1.05 times main plus 20 ms.
+    expect(singleIdle).toBeLessThanOrEqual(MAIN_IDLE_MS * 1.05 + 20);
   }
 });
