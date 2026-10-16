@@ -184,16 +184,29 @@ export class OutsideChats {
   private quietFrom(agent: OutsideAgent, chatId: string): void {
     this.lastCallAt.set(chatId, this.now());
     this.agents.set(chatId, agent);
+    this.arm(chatId, this.idleMs);
+  }
+
+  private arm(chatId: string, ms: number): void {
     clearTimeout(this.timers.get(chatId));
-    const timer = setTimeout(() => void this.settleIfQuiet(chatId), this.idleMs);
+    const timer = setTimeout(() => void this.settleIfQuiet(chatId), ms);
     timer.unref();
     this.timers.set(chatId, timer);
   }
 
+  /**
+   * A timer can fire a little early by the wall clock (Node's loop time lags Date.now()), so a
+   * chat that is not yet quiet re-arms for the time left instead of waiting for another call.
+   */
   private settleIfQuiet(chatId: string): void {
     const last = this.lastCallAt.get(chatId);
     const agent = this.agents.get(chatId);
-    if (last === undefined || agent === undefined || this.now() - last < this.idleMs) return;
+    if (last === undefined || agent === undefined) return;
+    const left = this.idleMs - (this.now() - last);
+    if (left > 0) {
+      this.arm(chatId, left);
+      return;
+    }
     void this.settle(agent, chatId);
   }
 
