@@ -6,7 +6,7 @@ Read this file before any spec. It holds what every spec shares: the product in 
 
 Unframed is a local, pay-per-generation image, video and text generator on an infinite canvas. You put material on the canvas (text, images, clips, drawings), select some of it, and either **Generate** (one paid model call through OpenRouter) or hand it to the **Agent** (a local coding agent, Claude or Codex, running on your own subscription). Results land back on the canvas as ordinary shapes you can select into the next run. Every run writes its output file and a JSON sidecar into the project folder. Nothing is hosted: the engine runs on your machine, binds loopback only, and holds your OpenRouter key.
 
-The canvas is tldraw. There are no wires and no output nodes: **the selection is the input set**. A named group is a selection you keep, and it can carry standing generation settings (a recipe). The agent can also write HTML pages and HyperFrames motion compositions onto the canvas, tuned with DialKit parameters in a panel beside them or in a full-screen editor.
+The canvas is tldraw. **The selection is the input set** of a run. A named group is a selection you keep, and it can carry standing generation settings (a recipe). Nodes and wires (spec 16) add a second, persistent input set: a node is a card on the canvas with its own tray and instruction, its inputs are the shapes wired into it, and its results stay in it as versions. The agent can also write HTML pages and HyperFrames motion compositions onto the canvas, tuned with DialKit parameters in a panel beside them or in a full-screen editor.
 
 This is a rewrite of an existing app. Every capability the old app had is kept. The specs describe behaviour and file formats. They never describe the old code, and the old code is not available to you. Do not look for it.
 
@@ -51,11 +51,13 @@ Use these words, and only these, for these things.
   - **page**: an HTML artifact shown in a sandboxed frame.
   - **motion**: a HyperFrames composition shown in a player.
   - **mark**: every other tldraw drawing shape (draw, geo, arrow, line, highlight, note, and so on).
+  - **node**: a persistent composer card that runs its wired inputs (spec 16).
+  - **wire**: a line from one shape to one node input, carrying a role (spec 16).
 - **`@id`**: the reference token (`@` followed by word characters and hyphens) that pulls one prompt, text result or group into another prompt's text, or attaches one image or video to a run. Every shape but a mark has one: a number the canvas mints, or a name a person gives it (spec 06).
-- **Selection**: the shapes currently selected. It is the input set of a run.
+- **Selection**: the shapes currently selected. It is the input set of a selection run. A node's inputs are its wires, not its selection (spec 16).
 - **Run**: one Generate action. It may make several outputs (a **batch**).
 - **Recipe**: everything needed to repeat a run: the sources, the model, the parameters, the per-run instruction. Every result carries one. A group can also carry one as standing settings (medium, model, parameters, runs), which holds no instruction and no sources: its sources are its members. Spec 03 defines both.
-- **Result**: a shape a run produced. It is an ordinary image, video or prompt shape plus its recipe.
+- **Result**: a shape a run produced. It is an ordinary image, video or prompt shape plus its recipe. A node's output is a version of that node, a result too, until it is dragged out as a shape (spec 16).
 - **Sidecar**: the `.json` file written next to every generated, uploaded, rendered or agent-written file.
 - **Composer**: the one input component. It has a **Generate tray** and an **Agent tray**.
 - **Chat**: one conversation with the agent. It is made of **turns**. A chat has **tags**: the artifacts it has touched.
@@ -66,7 +68,7 @@ Use these words, and only these, for these things.
 - **Live viewer**: the small page "Open in a new tab" opens. It shows a page or motion's newest version with its current dials, and follows both while the app is open (spec 09).
 - **Share link**: a temporary public URL that serves one local file so a video model can fetch it.
 - **Sketch**: marks rendered to an image at run time, either composited onto the image they sit on or, when loose, as a standalone reference image.
-- **Placeholder**: the shape the engine puts on the canvas where a result will land, before the work that makes it is answered, carrying a run marker until the engine fills it (spec 03 defines it; specs 04, 05 and 09 use it).
+- **Placeholder**: the shape the engine puts on the canvas where a result will land, before the work that makes it is answered, carrying a run marker until the engine fills it (spec 03 defines it; specs 04, 05 and 09 use it, and spec 16 uses the same lifecycle for a node's versions).
 - **Project database**: the one SQLite file in each project folder, `unframed.sqlite`, opened only by spec 01's project database module. Every spec that stores per-project records adds its tables to it.
 - **Cache folder**: `.cache/` inside a project folder, holding regenerable files only (image previews, artifact snapshots). Deleting it loses nothing; nothing in it gets a sidecar or goes to a model.
 - **Preferences store**: the engine-side store of per-person UI preferences, `preferences.json` in the data folder (spec 01). What the app "remembers" lives here, because the packaged app's origin changes on every launch and `localStorage` does not survive it.
@@ -114,6 +116,7 @@ These hold across every spec. A spec that needs to bend one must say so explicit
 | 13 | [Design-system catalogue](13-design-system-catalogue.md) | a dev-only page showing every token, kit component and recipe, its API from the source, and where the product uses it |
 | 14 | [External agents](14-external-agents.md) | agents outside the app (Claude Code, Codex, the Claude app, any MCP client) read and write the canvas over MCP: connection tokens made in Settings, a stdio shim that finds the engine through a discovery file, one outside chat per session per project with turns and Revert, the person's live selection read by `canvas_read`, and paid generations started through the composer's run services |
 | 15 | [Audio](15-audio.md) | the audio medium (ElevenLabs text to speech) in the Generate composer, the ElevenLabs key and credits in Settings, the audio shape with its player, audio file drop and upload |
+| 16 | [Nodes](16-nodes.md) | nodes (persistent composers with versions), wires with roles, each node's Run and Run downstream, chains from a selection or a group, out-of-date flags, saved flows in the library, and the agent's canvas tools and `node_run` |
 
 ## Reference material in this repo
 
