@@ -1,6 +1,25 @@
+import type { Page } from "@playwright/test";
 import { openCanvas, plainText, waitForRoom } from "./canvas.ts";
 import { expect, test } from "./fixtures.ts";
 import { expectSlot, expectToken, inBothSchemes, resolvedColor, styleOf } from "./kit.ts";
+
+/** A tab's right-click menu item for `project`: Rename project, Delete project, Close, Close all tabs. */
+const tabMenuItem = async (page: Page, project: string, item: string) => {
+  // An open list would take the click; close it first, as a person would.
+  if ((await page.getByRole("menu").count()) > 0) {
+    await page.keyboard.press("Escape");
+    await expect(page.getByRole("menu")).toHaveCount(0);
+  }
+  const tab = page.locator(`[role=tab][data-project='${project}']`);
+  // A project made through the engine alone has no tab yet: open it from the list first.
+  if ((await tab.count()) === 0) {
+    await page.getByRole("button", { name: "All projects" }).click();
+    await page.getByRole("menuitemradio", { name: project }).click();
+    await expect(tab).toHaveCount(1);
+  }
+  await tab.click({ button: "right" });
+  await page.getByRole("menuitem", { name: item }).click();
+};
 
 const MENU_GLASS = "color-mix(in srgb, var(--popover) 18%, color-mix(in srgb, var(--popover) var(--glass-opacity), transparent))";
 
@@ -88,7 +107,6 @@ test("the project menu, the name dialog and the delete confirm are the kit's men
     // Highlight moved elsewhere, the current project keeps the checked tint.
     await page.getByRole("menuitem", { name: "Add project" }).hover();
     expect(await styleOf(page.getByRole("menuitemradio", { name: "default" }), "background-color")).toBe(await resolvedColor(page, "color-mix(in oklab, var(--color-foreground) 8%, transparent)"));
-    await expectSlot(page.getByRole("button", { name: "Rename default" }), "tooltip-trigger");
 
     await page.getByRole("menuitem", { name: "Add project" }).click();
     const dialog = page.getByRole("dialog", { name: "New project" });
@@ -107,7 +125,7 @@ test("the project menu, the name dialog and the delete confirm are the kit's men
     await expect(dialog).toHaveCount(0);
 
     await trigger.click();
-    await page.getByRole("button", { name: "Delete default" }).click();
+    await tabMenuItem(page, "default", "Delete project");
     const confirm = page.getByRole("alertdialog", { name: "Delete project?" });
     await expectSlot(confirm, "alert-dialog-popup");
     await expectToken(confirm.getByRole("button", { name: "Delete project" }), "background-color", "--destructive");
