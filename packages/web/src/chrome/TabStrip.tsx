@@ -1,11 +1,12 @@
 import type { ProjectActivity } from "@unframed/contracts";
 import { statusOf, tabWidth, type TabActivity, type TabStatus } from "@unframed/domain";
+import { useEffect, useRef, useState, type ComponentProps, type DragEvent, type MouseEvent } from "react";
 import { X } from "lucide-react";
-import { useEffect, useRef, useState, type DragEvent, type KeyboardEvent, type MouseEvent } from "react";
+import { Button } from "~/components/ui/button";
+import { Tabs, TabsList, TabsTab } from "~/components/ui/tabs";
 import { useEngine, useActivation } from "../context.ts";
 import { useTabState } from "../project/activation.ts";
 import { ProjectMenu } from "./ProjectMenu.tsx";
-import { Button } from "~/components/ui/button";
 
 /** Room the strip keeps for the All projects button and its gap, so tabs share the rest. */
 const MENU_SPACE = 44;
@@ -67,33 +68,22 @@ const STATUS_LABEL: Record<TabStatus, string> = {
   none: "",
 };
 
-/** The status slot: a dot for waiting or working (the chat tabs' live dot, spec 08), a check for finished unseen. */
-const StatusSlot = ({ status }: { readonly status: TabStatus }) => {
-  if (status === "none") return <span className="size-3.5 shrink-0" aria-hidden />;
-  if (status === "finished")
-    return (
-      <span data-testid="tab-finished" aria-label={STATUS_LABEL[status]} className="flex size-3.5 shrink-0 items-center justify-center text-muted-foreground">
-        <svg viewBox="0 0 12 12" className="size-3" aria-hidden>
-          <path d="M2 6.5 4.5 9 10 3" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
-        </svg>
-      </span>
-    );
-  return (
-    <span
-      data-testid={status === "needs-you" ? "tab-needs-you" : "tab-running"}
-      aria-label={STATUS_LABEL[status]}
-      className={
-        status === "needs-you"
-          ? "size-2 shrink-0 rounded-full bg-highlight ring-2 ring-highlight/30"
-          : "size-1.5 shrink-0 rounded-full bg-highlight"
-      }
-    />
-  );
+type KitTabStatus = ComponentProps<typeof TabsTab>["status"];
+
+/**
+ * The kit's status slot (underline look, spec 13): a spinner while working, a check when finished unseen, and a dot
+ * for a chat waiting on the person. The kit has no "waiting" icon of its own, so the dot stands in for it.
+ */
+const kitStatus = (status: TabStatus): KitTabStatus => {
+  if (status === "running") return "running";
+  if (status === "finished") return "finished";
+  if (status === "needs-you") return "dot";
+  return undefined;
 };
 
 /**
- * The project tab strip (spec 17): an opaque muted strip with one rounded tab per open project,
- * and All projects at its end. It reads the tab state and the activity; it never touches the canvas.
+ * The project tab strip (spec 17), on the kit Tabs component in its underline look. One tab per open project and
+ * All projects at its end. It reads the tab state and the activity; it never touches the canvas.
  */
 export const TabStrip = ({ left, right }: { readonly left: number; readonly right: number }) => {
   const activation = useActivation();
@@ -122,102 +112,83 @@ export const TabStrip = ({ left, right }: { readonly left: number; readonly righ
   // Drag a tab onto another to take its place (spec 17); Alt+arrow does the same from the keyboard.
   const [dragging, setDragging] = useState<string>();
 
-  /** The tab an event landed on, by its project name, and whether it landed on that tab's close button. */
-  const tabOf = (target: EventTarget): { readonly name: string; readonly close: boolean } | undefined => {
+  /** The tab an event landed on, by its project name. */
+  const tabOf = (target: EventTarget): string | undefined => {
     if (!(target instanceof Element)) return undefined;
-    const tabElement = target.closest<HTMLElement>("[data-project]");
-    const name = tabElement?.dataset.project;
-    if (name === undefined) return undefined;
-    return { name, close: target.closest("[data-close]") !== null };
+    return target.closest<HTMLElement>("[data-project]")?.dataset.project;
   };
 
-  // Every tab handler sits on the tab list, not on each tab: a handler per tab adds listeners the budget counts (spec 17).
+  // Close, drag and middle-click sit on the list, not on each tab: a handler per tab adds listeners the budget counts (spec 17).
   const onListClick = (event: MouseEvent<HTMLDivElement>) => {
-    const hit = tabOf(event.target);
-    if (hit === undefined) return;
-    if (hit.close) void activation.closeTab(hit.name);
-    else void activation.activate(hit.name);
+    if (!(event.target instanceof Element) || event.target.closest("[data-close]") === null) return;
+    const name = tabOf(event.target);
+    if (name !== undefined) void activation.closeTab(name);
   };
   const onListAux = (event: MouseEvent<HTMLDivElement>) => {
-    const hit = tabOf(event.target);
-    if (hit !== undefined && event.button === 1) void activation.closeTab(hit.name);
-  };
-  const onListKey = (event: KeyboardEvent<HTMLDivElement>) => {
-    const hit = tabOf(event.target);
-    if (hit !== undefined && (event.key === "Enter" || event.key === " ")) {
-      event.preventDefault();
-      void activation.activate(hit.name);
-    }
+    const name = tabOf(event.target);
+    if (name !== undefined && event.button === 1) void activation.closeTab(name);
   };
   const onListDragStart = (event: DragEvent<HTMLDivElement>) => {
-    const hit = tabOf(event.target);
-    if (hit === undefined) return;
-    event.dataTransfer.setData("text/plain", hit.name);
+    const name = tabOf(event.target);
+    if (name === undefined) return;
+    event.dataTransfer.setData("text/plain", name);
     event.dataTransfer.effectAllowed = "move";
-    setDragging(hit.name);
+    setDragging(name);
   };
   const onListDragOver = (event: DragEvent<HTMLDivElement>) => {
-    const hit = tabOf(event.target);
-    if (hit !== undefined && dragging !== undefined && dragging !== hit.name) event.preventDefault();
+    const name = tabOf(event.target);
+    if (name !== undefined && dragging !== undefined && dragging !== name) event.preventDefault();
   };
   const onListDrop = (event: DragEvent<HTMLDivElement>) => {
     event.preventDefault();
-    const hit = tabOf(event.target);
-    if (hit !== undefined && dragging !== undefined && dragging !== hit.name) activation.moveTab(dragging, order.indexOf(hit.name));
+    const name = tabOf(event.target);
+    if (name !== undefined && dragging !== undefined && dragging !== name) activation.moveTab(dragging, order.indexOf(name));
     setDragging(undefined);
   };
 
   return (
-    <div
-      className="unframed-tabs box-border flex h-11 min-w-0 items-center gap-1 rounded-3xl bg-muted p-1"
-      style={{ left, right }}
-      data-testid="tab-strip"
-    >
-      <div
-        ref={scroller}
-        role="tablist"
-        aria-label="Open projects"
-        onClick={onListClick}
-        onAuxClick={onListAux}
-        onKeyDown={onListKey}
-        onDragStart={onListDragStart}
-        onDragOver={onListDragOver}
-        onDrop={onListDrop}
-        onDragEnd={() => setDragging(undefined)}
-        className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
-      >
-        {order.map((name) => {
-          const isActive = name === active;
-          const status = statusOf(activity.get(name), marks.has(name));
-          return (
-            <div
-              key={name}
-              role="tab"
-              data-slot="project-tab"
-              tabIndex={isActive ? 0 : -1}
-              aria-selected={isActive}
-              data-project={name}
-              data-active={isActive ? "true" : undefined}
-              data-status={status}
-              title={[name, STATUS_LABEL[status]].filter(Boolean).join(" · ")}
-              style={{ width }}
-              draggable
-              className={`flex h-9 shrink-0 cursor-default items-center gap-2 rounded-xl border px-2.5 text-sm ${
-                isActive
-                  ? "border-border bg-card text-foreground shadow-xs"
-                  : "border-transparent text-muted-foreground hover:bg-background/40 hover:text-foreground"
-              }`}
-            >
-              <StatusSlot status={status} />
-              <span className="min-w-0 flex-1 truncate font-medium">{name}</span>
-              {/* Each tab's close is a plain kit button: a kit tooltip per tab would add listeners to every background tab (spec 17's budget). */}
-              <Button variant="ghost-muted" size="icon-micro" aria-label={`Close ${name}`} title={`Close ${name}`} data-close="">
-                <X aria-hidden />
-              </Button>
-            </div>
-          );
-        })}
-      </div>
+    <div className="unframed-tabs box-border flex h-11 min-w-0 items-center gap-2 bg-background px-1" style={{ left, right }} data-testid="tab-strip">
+      <Tabs className="min-w-0 flex-1" value={active ?? null} onValueChange={(name) => void activation.activate(String(name))}>
+        <TabsList
+          ref={scroller}
+          aria-label="Open projects"
+          variant="underline"
+          overflow="scroll"
+          className="h-full min-w-0 flex-1"
+          onClick={onListClick}
+          onAuxClick={onListAux}
+          onDragStart={onListDragStart}
+          onDragOver={onListDragOver}
+          onDrop={onListDrop}
+          onDragEnd={() => setDragging(undefined)}
+        >
+          {order.map((name) => {
+            const isActive = name === active;
+            const status = statusOf(activity.get(name), marks.has(name));
+            const kit = kitStatus(status);
+            return (
+              <span key={name} data-project={name} className="relative inline-flex shrink-0">
+                <TabsTab
+                  value={name}
+                  data-project={name}
+                  data-active={isActive ? "true" : undefined}
+                  data-status={status}
+                  title={[name, STATUS_LABEL[status]].filter(Boolean).join(" · ")}
+                  style={{ width }}
+                  draggable
+                  {...(kit === undefined ? {} : { status: kit })}
+                >
+                  <span className="min-w-0 flex-1 truncate">{name}</span>
+                </TabsTab>
+                {/* The close sits beside the tab, as the kit lays out a closable tab. One delegated click on the list handles it. */}
+                <Button variant="ghost-muted" size="icon-micro" aria-label={`Close ${name}`} title={`Close ${name}`} data-close="" className="absolute end-1 top-1/2 -translate-y-1/2">
+                  <X aria-hidden />
+                </Button>
+              </span>
+            );
+          })}
+        </TabsList>
+      </Tabs>
       <div className="flex shrink-0 items-center" data-testid="all-projects">
         <ProjectMenu />
       </div>

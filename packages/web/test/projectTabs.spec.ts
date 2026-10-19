@@ -73,15 +73,17 @@ test("Settings sits at the far right on macOS and Linux and at the far left on W
   else expect(box.x).toBeGreaterThan(viewport.width / 2);
 });
 
-test("the strip is an opaque muted surface with rounded tabs, and the active tab is the raised card tab", async ({ page, engine }) => {
+test("the strip is the kit's underline tabs: the active tab carries the indicator and the foreground colour", async ({ page, engine }) => {
   await openCanvas(page, engine, "default");
-  const strip = page.getByTestId("tab-strip");
-  const stripColour = await strip.evaluate((element) => getComputedStyle(element).backgroundColor);
+  await openInTab(page, engine, "beta");
+  const list = page.locator("[data-slot=tabs-list][data-variant=underline]");
+  await expect(list).toHaveCount(1);
+  await expect(page.locator("[data-slot=tabs-indicator]")).toHaveCount(1);
   const tab = active(page);
-  const tabStyle = await tab.evaluate((element) => ({ radius: getComputedStyle(element).borderTopLeftRadius, height: element.getBoundingClientRect().height }));
-  expect(tabStyle.height).toBe(36);
-  expect(tabStyle.radius).toBe("14px");
-  expect(stripColour).not.toMatch(/^color-mix|rgba\(.*,\s*0\.\d/);
+  await expect(tab).toHaveAttribute("data-slot", "tabs-tab");
+  const colour = await tab.evaluate((element) => getComputedStyle(element).color);
+  const idle = await page.locator("[role=tab]:not([data-active='true'])").first().evaluate((element) => getComputedStyle(element).color);
+  expect(colour).not.toBe(idle);
 });
 
 test("the open tabs and their order come back after a reload, with the same one active", async ({ page, engine }) => {
@@ -91,6 +93,8 @@ test("the open tabs and their order come back after a reload, with the same one 
   await page.getByRole("button", { name: "All projects" }).click();
   await page.getByRole("menuitemradio", { name: "beta" }).click();
   await expect(active(page)).toHaveText("beta");
+  // The tab order is saved in the background; wait until the engine holds it before the page reloads.
+  await expect.poll(async () => (await (await engine.rpc()).call("preferences.get", { keys: ["project.tabs"] })).values["project.tabs"]).toEqual(expect.objectContaining({ order: ["default", "beta", "gamma"], active: "beta" }));
   await page.reload();
   await expect(page.locator("[data-canvas-project='beta'] .tl-canvas")).toBeVisible({ timeout: 20_000 });
   await expect(tabs(page)).toHaveText(["default", "beta", "gamma"]);

@@ -44,7 +44,7 @@ test("a run in a background tab keeps going, shows its dot, lands in its project
 
   release();
   await expect(tab(page, "beta")).toHaveAttribute("data-status", "finished", { timeout: 20_000 });
-  await expect(tab(page, "beta").getByTestId("tab-finished")).toBeVisible();
+  await expect(tab(page, "beta").locator("[data-slot=tabs-status][data-status=finished]")).toBeVisible();
   // The result landed in beta's room, not in the project on screen.
   await expect.poll(async () => (await generation.engine.rpc()).call("projects.list").then(() => true)).toBe(true);
 
@@ -61,6 +61,8 @@ base("dragging a tab onto another moves it there, and the order survives a reloa
   await expect(tabs(page)).toHaveText(["default", "beta"]);
   await tab(page, "beta").dragTo(tab(page, "default"));
   await expect(tabs(page)).toHaveText(["beta", "default"]);
+  // The order is saved in the background; wait until the engine holds it before the page reloads.
+  await expect.poll(async () => (await (await engine.rpc()).call("preferences.get", { keys: ["project.tabs"] })).values["project.tabs"]).toEqual(expect.objectContaining({ order: ["beta", "default"] }));
   await page.reload();
   await expect(page.locator("[data-canvas-project='beta'] .tl-canvas")).toBeVisible({ timeout: 20_000 });
   await expect(tabs(page)).toHaveText(["beta", "default"]);
