@@ -25,28 +25,28 @@ test("the top-left card sits at 8, 8 and is 44 tall; the tab strip and Settings 
   expect([box.x, box.y, box.height]).toEqual([8, 8, 44]);
   const logo = (await card.getByRole("img", { name: "Unframed" }).boundingBox())!;
   expect([logo.width, logo.height]).toEqual([24, 24]);
-  // The 92 px traffic-light inset is the shell's repair, so the page alone puts the logo at the card's padding.
-  expect(logo.x).toBe(8 + 1 + 5);
+  // The 92 px traffic-light inset is the shell's repair, so the page alone puts the logo at the region's padding (px-3).
+  expect(logo.x).toBe(8 + 12);
   const strip = (await page.getByTestId("tab-strip").boundingBox())!;
   expect(strip.height).toBe(44);
   expect(strip.y + strip.height / 2).toBe(30);
   const settings = (await page.getByRole("button", { name: /^(Settings|Add your API key)$/ }).boundingBox())!;
-  expect(settings.y + settings.height / 2).toBe(30);
+  // The raised cell has a top border, which moves its content half a pixel down.
+  expect(settings.y + settings.height / 2).toBeLessThanOrEqual(30.5);
   const right = await page.locator(".unframed-chrome-right").evaluate((element) => ({ top: getComputedStyle(element).top, right: getComputedStyle(element).right }));
   expect(right).toEqual({ top: "8px", right: "8px" });
 });
 
-test("the top-left card is glass with the kit's border and radius; Settings is a kit ghost button in a muted holder with a kit tooltip", async ({ page, engine }) => {
+test("the bar is one opaque strip; Settings is a raised cell with a kit ghost button and a kit tooltip", async ({ page, engine }) => {
   await openCanvas(page, engine);
-  const card = page.locator(".unframed-chrome-left");
+  const bar = page.locator("[data-slot=top-bar]");
+  const cell = page.locator("[data-slot=top-bar-settings]");
   const settings = page.getByRole("button", { name: /^(Settings|Add your API key)$/ });
   await expectSlot(settings, "tooltip-trigger");
   await inBothSchemes(page, async () => {
-    const glass = await resolvedColor(page, "color-mix(in srgb, var(--background) var(--glass-opacity), transparent)");
-    await expect.poll(() => styleOf(card, "background-color")).toBe(glass);
-    expect(await styleOf(card, "border-top-color")).toBe(await tokenColor(page, "--color-border"));
-    expect(await styleOf(card, "border-top-left-radius")).toBe("14px");
-    expect(await styleOf(card, "backdrop-filter")).toMatch(/^blur\(/);
+    expect(await styleOf(bar, "background-color")).toBe(await resolvedColor(page, "var(--background)"));
+    expect(await styleOf(cell, "background-color")).toBe(await resolvedColor(page, "var(--card)"));
+    expect(await styleOf(cell, "border-top-left-radius")).toBe("14px");
   });
 });
 

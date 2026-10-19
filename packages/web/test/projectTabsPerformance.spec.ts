@@ -9,7 +9,7 @@ import { promptRecord, putRecords } from "./media.ts";
  * board. Counts and ratios run everywhere; timing thresholds run on real hardware only (CI skips
  * them with an annotation, as spec 02 says). Heap is read after two forced collections.
  */
-test.describe.configure({ mode: "serial", timeout: 300_000 });
+test.describe.configure({ mode: "serial", timeout: 600_000 });
 
 const CI = Boolean(process.env.CI);
 /**
@@ -76,12 +76,21 @@ const measure = async (page: Page, cdp: CDPSession, sockets: Set<WebSocket>): Pr
   };
 };
 
-/** Idle CPU over a window: the main thread's task time while nothing happens. */
-const idleCpu = async (page: Page, cdp: CDPSession): Promise<number> => {
+/**
+ * Idle CPU: the main thread's task time while nothing happens. One 10 s window is too noisy (the same build
+ * ranges from 220 to 300 ms on this Mac), so the figure is the median of five windows, as main's baseline is.
+ */
+const IDLE_WINDOWS = 5;
+const idleWindow = async (page: Page, cdp: CDPSession): Promise<number> => {
   const before = (await cdp.send("Performance.getMetrics")).metrics.find((metric) => metric.name === "TaskDuration")?.value ?? 0;
   await page.waitForTimeout(10_000);
   const after = (await cdp.send("Performance.getMetrics")).metrics.find((metric) => metric.name === "TaskDuration")?.value ?? 0;
   return (after - before) * 1000;
+};
+const idleCpu = async (page: Page, cdp: CDPSession): Promise<number> => {
+  const windows: number[] = [];
+  for (let round = 0; round < IDLE_WINDOWS; round++) windows.push(await idleWindow(page, cdp));
+  return [...windows].sort((a, b) => a - b)[Math.floor(windows.length / 2)]!;
 };
 
 /** Opens `name` from the list and waits for its canvas. */
