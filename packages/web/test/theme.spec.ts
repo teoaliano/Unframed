@@ -10,7 +10,7 @@ const looks = (page: Page) =>
     return {
       body: css("body", "background-color"),
       grid: css("[data-testid='dot-grid']", "background-color"),
-      card: css("[data-slot='top-bar-body']", "background-color"),
+      card: css("[data-slot='top-bar-body'] path", "fill"),
       group: css("[data-testid='group-frame']", "border-top-color"),
       tldraw: document.querySelector(".tl-container")!.classList.contains("tl-theme__dark") ? "dark" : "light",
       theme: document.documentElement.getAttribute("data-unframed-theme"),

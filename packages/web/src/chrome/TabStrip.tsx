@@ -85,7 +85,7 @@ export const TabStrip = ({
   regions,
 }: {
   readonly platform: "macos" | "windows";
-  readonly controls?: "stand-ins" | "none" | undefined;
+  readonly controls?: "stand-ins" | "space" | "none" | undefined;
   readonly logo: ReactNode;
   readonly settings: ReactNode;
   readonly regions: { readonly frame?: TopBarRegion; readonly start?: TopBarRegion; readonly tabs?: TopBarRegion; readonly end?: TopBarRegion };
