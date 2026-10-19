@@ -39,8 +39,8 @@ const tabsTabVariants = cva(
     variants: {
       overflow: {
         scroll: "shrink-0",
-        // Fits its content from 96 px to 160 px, and shrinks (names truncate) only when the space runs out.
-        truncate: "min-w-24 max-w-40 shrink",
+        // Fits its content from 96 px to 160 px and never goes below 96 px: the name truncates inside the tab, and the list clips at its edge.
+        truncate: "min-w-24 max-w-40 shrink-0",
       },
       size: {
         sm: "h-6 gap-1 rounded-md px-2 text-xs",
@@ -180,7 +180,7 @@ function TabsTab({ className, children, status, closable = false, onClose, close
   if (!closable) return tab;
   // The close button sits beside the tab, not inside it: a button cannot contain a button.
   return (
-    <span data-slot="tabs-tab-group" className={cn("relative inline-flex", overflow === "truncate" ? "min-w-0 shrink" : "shrink-0")}>
+    <span data-slot="tabs-tab-group" className="relative inline-flex shrink-0">
       {tab}
       <Button
         variant="ghost-muted"
