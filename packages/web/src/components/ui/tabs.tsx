@@ -39,13 +39,15 @@ const tabsTabVariants = cva(
     variants: {
       overflow: {
         scroll: "shrink-0",
-        // Fits its content up to 160 px, and shrinks (names truncate) only when the space runs out.
-        truncate: "min-w-20 max-w-40 shrink",
+        // Fits its content from 96 px to 160 px, and shrinks (names truncate) only when the space runs out.
+        truncate: "min-w-24 max-w-40 shrink",
       },
       size: {
         sm: "h-6 gap-1 rounded-md px-2 text-xs",
         default: "h-7 gap-1.5 rounded-md px-2.5 text-sm",
         lg: "h-9 gap-2 rounded-md px-3 text-base",
+        // A tab in a crowded strip: the default height with less side padding, so a name gets the room.
+        compact: "h-7 gap-1.5 rounded-md px-2 text-sm",
       },
       variant: {
         underline: "rounded-none",
@@ -58,7 +60,7 @@ const tabsTabVariants = cva(
 
 type TabsListVariants = VariantProps<typeof tabsListVariants>;
 type TabsVariant = "underline" | "pill" | "panel";
-type TabsSize = "sm" | "default" | "lg";
+type TabsSize = "sm" | "default" | "lg" | "compact";
 type TabsOverflow = "scroll" | "truncate";
 
 /** What a list passes to its tabs, so a tab takes its look from the list it sits in. */
@@ -144,7 +146,7 @@ interface TabsTabProps extends TabsPrimitive.Tab.Props {
   readonly closable?: boolean;
   readonly onClose?: () => void;
   readonly closeLabel?: string;
-  /** A thin divider after the tab, as a browser's tab strip has. */
+  /** A thin divider after the tab, the full height of the tab, as a browser's tab strip has. */
   readonly divider?: boolean;
 }
 
@@ -158,7 +160,7 @@ function TabsTab({ className, children, status, closable = false, onClose, close
         tabsTabVariants({ overflow, size, variant }),
         "peer",
         closable && "pe-7",
-        divider && "after:pointer-events-none after:absolute after:inset-y-2 after:end-0 after:w-px after:bg-border",
+        divider && "after:pointer-events-none after:absolute after:inset-y-0 after:end-0 after:w-px after:bg-border",
         className,
       )}
       data-slot="tabs-tab"
