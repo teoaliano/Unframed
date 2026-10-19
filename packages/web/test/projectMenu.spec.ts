@@ -125,7 +125,6 @@ test("the project menu, the name dialog and the delete confirm are the kit's men
     await dialog.getByRole("button", { name: "Cancel" }).click();
     await expect(dialog).toHaveCount(0);
 
-    await trigger.click();
     await tabMenuItem(page, "default", "Delete project");
     const confirm = page.getByRole("alertdialog", { name: "Delete project?" });
     await expectSlot(confirm, "alert-dialog-popup");
