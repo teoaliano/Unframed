@@ -1,12 +1,14 @@
 import type { ProjectActivity } from "@unframed/contracts";
-import { statusOf, tabWidth, type TabActivity, type TabStatus } from "@unframed/domain";
+import { statusOf, type TabActivity, type TabStatus } from "@unframed/domain";
 import { useEffect, useRef, useState, type ComponentProps, type DragEvent, type MouseEvent } from "react";
 import { X } from "lucide-react";
 import { Button } from "~/components/ui/button";
+import { Menu, MenuItem, MenuPopup, MenuSeparator } from "~/components/ui/menu";
 import { Tabs, TabsList, TabsTab } from "~/components/ui/tabs";
 import { useEngine, useActivation } from "../context.ts";
 import { useTabState } from "../project/activation.ts";
 import { ProjectMenu } from "./ProjectMenu.tsx";
+import { PROJECT_ACTION, type ProjectActionDetail } from "./tabEvents.ts";
 
 /** Room the strip keeps for the All projects button and its gap, so tabs share the rest. */
 const MENU_SPACE = 44;
@@ -91,34 +93,27 @@ export const TabStrip = ({ left, right }: { readonly left: number; readonly righ
   const activity = useProjectActivity();
   const marks = useFinishedMarks(activity, active);
   const scroller = useRef<HTMLDivElement>(null);
-  const [available, setAvailable] = useState(0);
-
-  useEffect(() => {
-    const element = scroller.current;
-    if (element === null) return;
-    const measure = () => setAvailable(element.clientWidth);
-    measure();
-    const observer = new ResizeObserver(measure);
-    observer.observe(element);
-    return () => observer.disconnect();
-  }, []);
 
   useEffect(() => {
     if (active === undefined) return;
     scroller.current?.querySelector<HTMLElement>(`[data-project="${CSS.escape(active)}"]`)?.scrollIntoView({ block: "nearest", inline: "nearest" });
   }, [active]);
 
-  const width = tabWidth(available - MENU_SPACE, order.length);
   // Drag a tab onto another to take its place (spec 17); Alt+arrow does the same from the keyboard.
   const [dragging, setDragging] = useState<string>();
+  // The right-click menu: the project it is for, and the pointer's place.
+  const [menu, setMenu] = useState<{ readonly name: string; readonly x: number; readonly y: number }>();
 
-  /** The tab an event landed on, by its project name. */
+  /** The tab an event landed on, by its project name. A tab's close button sits beside the tab, in the same group. */
   const tabOf = (target: EventTarget): string | undefined => {
     if (!(target instanceof Element)) return undefined;
-    return target.closest<HTMLElement>("[data-project]")?.dataset.project;
+    const group = target.closest("[data-slot='tabs-tab-group']");
+    const tab = group === null ? target.closest<HTMLElement>("[data-project]") : group.querySelector<HTMLElement>("[data-project]");
+    return tab?.dataset.project;
   };
 
-  // Close, drag and middle-click sit on the list, not on each tab: a handler per tab adds listeners the budget counts (spec 17).
+  // Close, drag, middle-click and the right-click menu sit on the list, not on each tab: a handler per tab adds
+  // listeners the budget counts (spec 17).
   const onListClick = (event: MouseEvent<HTMLDivElement>) => {
     if (!(event.target instanceof Element) || event.target.closest("[data-close]") === null) return;
     const name = tabOf(event.target);
@@ -127,6 +122,12 @@ export const TabStrip = ({ left, right }: { readonly left: number; readonly righ
   const onListAux = (event: MouseEvent<HTMLDivElement>) => {
     const name = tabOf(event.target);
     if (name !== undefined && event.button === 1) void activation.closeTab(name);
+  };
+  const onListContext = (event: MouseEvent<HTMLDivElement>) => {
+    const name = tabOf(event.target);
+    if (name === undefined) return;
+    event.preventDefault();
+    setMenu({ name, x: event.clientX, y: event.clientY });
   };
   const onListDragStart = (event: DragEvent<HTMLDivElement>) => {
     const name = tabOf(event.target);
@@ -146,17 +147,22 @@ export const TabStrip = ({ left, right }: { readonly left: number; readonly righ
     setDragging(undefined);
   };
 
+  const project = (action: ProjectActionDetail["action"], name: string) => {
+    window.dispatchEvent(new CustomEvent<ProjectActionDetail>(PROJECT_ACTION, { detail: { action, name } }));
+  };
+
   return (
-    <div className="unframed-tabs box-border flex h-11 min-w-0 items-center gap-2 bg-background px-1" style={{ left, right }} data-testid="tab-strip">
-      <Tabs className="min-w-0 flex-1" value={active ?? null} onValueChange={(name) => void activation.activate(String(name))}>
+    <div className="unframed-tabs box-border flex h-11 min-w-0 items-center gap-1 bg-background px-1" style={{ left, right }} data-testid="tab-strip">
+      <Tabs className="min-w-0 shrink" value={active ?? null} onValueChange={(name) => void activation.activate(String(name))}>
         <TabsList
           ref={scroller}
           aria-label="Open projects"
           variant="underline"
-          overflow="scroll"
-          className="h-full min-w-0 flex-1"
+          overflow="truncate"
+          className="h-full min-w-0 max-w-full"
           onClick={onListClick}
           onAuxClick={onListAux}
+          onContextMenu={onListContext}
           onDragStart={onListDragStart}
           onDragOver={onListDragOver}
           onDrop={onListDrop}
@@ -167,24 +173,21 @@ export const TabStrip = ({ left, right }: { readonly left: number; readonly righ
             const status = statusOf(activity.get(name), marks.has(name));
             const kit = kitStatus(status);
             return (
-              <span key={name} data-project={name} className="relative inline-flex shrink-0">
-                <TabsTab
-                  value={name}
-                  data-project={name}
-                  data-active={isActive ? "true" : undefined}
-                  data-status={status}
-                  title={[name, STATUS_LABEL[status]].filter(Boolean).join(" · ")}
-                  style={{ width }}
-                  draggable
-                  {...(kit === undefined ? {} : { status: kit })}
-                >
-                  <span className="min-w-0 flex-1 truncate">{name}</span>
-                </TabsTab>
-                {/* The close sits beside the tab, as the kit lays out a closable tab. One delegated click on the list handles it. */}
-                <Button variant="ghost-muted" size="icon-micro" aria-label={`Close ${name}`} title={`Close ${name}`} data-close="" className="absolute end-1 top-1/2 -translate-y-1/2">
-                  <X aria-hidden />
-                </Button>
-              </span>
+              <TabsTab
+                key={name}
+                value={name}
+                data-project={name}
+                data-active={isActive ? "true" : undefined}
+                data-status={status}
+                title={[name, STATUS_LABEL[status]].filter(Boolean).join(" · ")}
+                draggable
+                divider
+                closable
+                closeLabel={`Close ${name}`}
+                {...(kit === undefined ? {} : { status: kit })}
+              >
+                <span className="truncate">{name}</span>
+              </TabsTab>
             );
           })}
         </TabsList>
@@ -192,6 +195,22 @@ export const TabStrip = ({ left, right }: { readonly left: number; readonly righ
       <div className="flex shrink-0 items-center" data-testid="all-projects">
         <ProjectMenu />
       </div>
+      <Menu open={menu !== undefined} onOpenChange={(open) => !open && setMenu(undefined)}>
+        <MenuPopup
+          anchor={menu === undefined ? undefined : { getBoundingClientRect: () => new DOMRect(menu.x, menu.y, 0, 0) }}
+          align="start"
+          side="bottom"
+          sideOffset={4}
+          className="min-w-[180px]"
+          data-testid="tab-menu"
+        >
+          <MenuItem onClick={() => menu && void activation.closeTab(menu.name)}>Close</MenuItem>
+          <MenuItem onClick={() => void activation.closeAllTabs()}>Close all tabs</MenuItem>
+          <MenuSeparator />
+          <MenuItem onClick={() => menu && project("rename", menu.name)}>Rename project</MenuItem>
+          <MenuItem variant="destructive" onClick={() => menu && project("delete", menu.name)}>Delete project</MenuItem>
+        </MenuPopup>
+      </Menu>
     </div>
   );
 };

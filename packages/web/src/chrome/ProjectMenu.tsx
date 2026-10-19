@@ -1,6 +1,6 @@
 import { UnframedError } from "@unframed/contracts";
 import { projectSlug } from "@unframed/domain";
-import { Check, ChevronDown, FileText, Pencil, Plus, Trash2 } from "lucide-react";
+import { Check, FileText, Plus } from "lucide-react";
 import { useEffect, useState, type FormEvent, type MouseEvent } from "react";
 import {
   AlertDialog,
@@ -17,10 +17,9 @@ import { Input } from "~/components/ui/input";
 import { Menu, MenuItem, MenuPopup, MenuRadioGroup, MenuRadioItem, MenuRadioItemIndicator, MenuTrigger } from "~/components/ui/menu";
 import { useActivation, useEngine } from "../context.ts";
 import { reportState, useReportState } from "../legacy/reportState.ts";
-import { OPEN_PROJECT_LIST } from "./tabEvents.ts";
+import { OPEN_PROJECT_LIST, PROJECT_ACTION, type ProjectActionDetail } from "./tabEvents.ts";
 import { useActiveProject } from "../project/activation.ts";
 import { showError } from "../toasts.tsx";
-import { Tip } from "./ui.tsx";
 
 const messageOf = (error: unknown) => (error instanceof UnframedError || error instanceof Error ? error.message : String(error));
 
@@ -184,7 +183,17 @@ export const ProjectMenu = () => {
   useEffect(() => {
     const open = () => setMenuOpen(true);
     window.addEventListener(OPEN_PROJECT_LIST, open);
-    return () => window.removeEventListener(OPEN_PROJECT_LIST, open);
+    // A tab's right-click menu asks for Rename or Delete here, so the dialogs live in one place.
+    const action = (event: Event) => {
+      const { action: kind, name } = (event as CustomEvent<ProjectActionDetail>).detail;
+      if (kind === "rename") setRenaming(name);
+      else setDeleting({ project: name });
+    };
+    window.addEventListener(PROJECT_ACTION, action);
+    return () => {
+      window.removeEventListener(OPEN_PROJECT_LIST, open);
+      window.removeEventListener(PROJECT_ACTION, action);
+    };
   }, []);
 
   const create: SubmitName = async (name, slug, close) => {
@@ -260,13 +269,6 @@ export const ProjectMenu = () => {
     }
   };
 
-  /** A row's own buttons act on that project without switching to it. */
-  const rowAction = (event: MouseEvent, run: () => void) => {
-    event.preventDefault();
-    event.stopPropagation();
-    setMenuOpen(false);
-    run();
-  };
 
   const renders = deleting?.pendingRenders ?? 0;
 
@@ -279,8 +281,8 @@ export const ProjectMenu = () => {
           if (open) void refresh();
         }}
       >
-        <MenuTrigger aria-label="All projects" render={<Button variant="outline" size="icon" />}>
-          <ChevronDown aria-hidden />
+        <MenuTrigger aria-label="All projects" render={<Button variant="ghost" size="icon" />}>
+          <Plus aria-hidden />
         </MenuTrigger>
         <MenuPopup sideOffset={8} align="end" className="min-w-[220px]">
           {/* The current project is the kit's checked radio item: its check and its tint. */}
@@ -294,18 +296,6 @@ export const ProjectMenu = () => {
                     </MenuRadioItemIndicator>
                   </span>
                   <span className="min-w-0 flex-1 truncate">{project}</span>
-                  <span className="ml-3 flex items-center gap-0.5">
-                    <Tip label="Rename" side="top">
-                      <Button variant="ghost-muted" size="icon-micro" aria-label={`Rename ${project}`} onClick={(event) => rowAction(event, () => setRenaming(project))}>
-                        <Pencil aria-hidden />
-                      </Button>
-                    </Tip>
-                    <Tip label="Delete" side="top">
-                      <Button variant="ghost-destructive" size="icon-micro" aria-label={`Delete ${project}`} onClick={(event) => rowAction(event, () => setDeleting({ project }))}>
-                        <Trash2 aria-hidden />
-                      </Button>
-                    </Tip>
-                  </span>
                 </span>
               </MenuRadioItem>
             ))}
