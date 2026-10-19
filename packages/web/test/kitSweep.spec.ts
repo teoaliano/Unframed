@@ -63,7 +63,6 @@ test("the chrome, canvas menus and dialogs render every control through the kit"
   await expect(page.getByTestId("settings-dialog")).toBeVisible();
   await sweep(page);
 
-  await page.getByRole("button", { name: "All projects" }).click();
   await tabMenuItem(page, "default", "Delete project");
   await expect(page.getByRole("alertdialog", { name: "Delete project?" })).toBeVisible();
   await sweep(page);
