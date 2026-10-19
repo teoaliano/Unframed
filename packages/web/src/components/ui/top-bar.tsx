@@ -204,7 +204,7 @@ export const TopBar = ({
                 closeLabel={`Close ${tab.name}`}
                 {...(tab.status === undefined ? {} : { status: tab.status })}
               >
-                <span className="truncate">{tab.name}</span>
+                <span className="min-w-0 truncate">{tab.name}</span>
               </TabsTab>
             ))}
           </TabsList>
