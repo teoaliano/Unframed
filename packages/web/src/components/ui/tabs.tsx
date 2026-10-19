@@ -39,7 +39,8 @@ const tabsTabVariants = cva(
     variants: {
       overflow: {
         scroll: "shrink-0",
-        truncate: "min-w-0 max-w-40 shrink",
+        // Fits its content up to 160 px, and shrinks (names truncate) only when the space runs out.
+        truncate: "min-w-20 max-w-40 shrink",
       },
       size: {
         sm: "h-6 gap-1 rounded-md px-2 text-xs",
@@ -76,8 +77,17 @@ const STATUS_LABELS = {
 
 type TabsStatus = keyof typeof STATUS_LABELS;
 
-function Tabs({ className, ...props }: TabsPrimitive.Root.Props) {
-  return <TabsPrimitive.Root className={cn("flex w-full flex-col gap-3", className)} data-slot="tabs" {...props} />;
+type TabsChange = NonNullable<TabsPrimitive.Root.Props["onValueChange"]>;
+
+// The root's change handler. The list calls it when a tab is clicked, so a tab needs no click listener of its own.
+const TabsChangeContext = React.createContext<TabsChange | undefined>(undefined);
+
+function Tabs({ className, onValueChange, ...props }: TabsPrimitive.Root.Props) {
+  return (
+    <TabsChangeContext value={onValueChange}>
+      <TabsPrimitive.Root className={cn("flex w-full flex-col gap-3", className)} data-slot="tabs" onValueChange={onValueChange} {...props} />
+    </TabsChangeContext>
+  );
 }
 
 function TabsList({
@@ -89,8 +99,16 @@ function TabsList({
   ...props
 }: TabsPrimitive.List.Props & { readonly variant?: TabsVariant; readonly size?: TabsSize; readonly overflow?: TabsOverflow }) {
   const context = React.useMemo(() => ({ overflow, size, variant }), [overflow, size, variant]);
+  const change = React.use(TabsChangeContext);
+  const { onClick, ...rest } = props;
+  // One click handler for every tab in the list: a tab itself has none (see TabsTab).
+  const handleClick = (event: React.MouseEvent<HTMLDivElement>) => {
+    onClick?.(event as never);
+    const tab = event.target instanceof Element ? event.target.closest<HTMLElement>("[data-tab-value]") : null;
+    if (tab !== null && change !== undefined && !tab.hasAttribute("data-disabled")) change(tab.dataset.tabValue as never, undefined as never);
+  };
   return (
-    <TabsPrimitive.List className={cn(tabsListVariants({ overflow, variant }), className)} data-slot="tabs-list" data-variant={variant} data-overflow={overflow} {...props}>
+    <TabsPrimitive.List className={cn(tabsListVariants({ overflow, variant }), className)} data-slot="tabs-list" data-variant={variant} data-overflow={overflow} onClick={handleClick} {...rest}>
       <TabsContext value={context}>{children}</TabsContext>
       {variant === "underline" && <TabsIndicator />}
     </TabsPrimitive.List>
@@ -122,18 +140,35 @@ const TabStatusIcon = ({ status }: { readonly status: TabsStatus | undefined }) 
 interface TabsTabProps extends TabsPrimitive.Tab.Props {
   /** A status icon after the label: a dot for unread, a spinner while running, a check or a warning when done. */
   readonly status?: TabsStatus;
-  /** Shows a close button; `onClose` runs when it is pressed. */
+  /** Shows a close button, on the active tab only. `onClose` runs when it is pressed. */
   readonly closable?: boolean;
   readonly onClose?: () => void;
   readonly closeLabel?: string;
+  /** A thin divider after the tab, as a browser's tab strip has. */
+  readonly divider?: boolean;
 }
 
-function TabsTab({ className, children, status, closable = false, onClose, closeLabel = "Close tab", ...props }: TabsTabProps) {
+function TabsTab({ className, children, status, closable = false, onClose, closeLabel = "Close tab", divider = false, ...props }: TabsTabProps) {
   const { overflow, size, variant } = React.use(TabsContext);
+  // The tab renders its own button without Base UI's onClick: React gives every element with an onClick prop a
+  // click listener, and the list handles the click instead (see TabsList).
   const tab = (
     <TabsPrimitive.Tab
-      className={cn(tabsTabVariants({ overflow, size, variant }), closable && "pe-7", className)}
+      className={cn(
+        tabsTabVariants({ overflow, size, variant }),
+        "peer",
+        closable && "pe-7",
+        divider && "after:pointer-events-none after:absolute after:inset-y-2 after:end-0 after:w-px after:bg-border",
+        className,
+      )}
       data-slot="tabs-tab"
+      data-tab-value={typeof props.value === "string" ? props.value : undefined}
+      render={(renderProps) => {
+        const { onClick: _onClick, ...tabProps } = renderProps;
+        // The custom render drops the caller's data attributes, so they go on the button here.
+        const dataProps = Object.fromEntries(Object.entries(props).filter(([key]) => key.startsWith("data-")));
+        return <button type="button" {...tabProps} {...dataProps} />;
+      }}
       {...props}
     >
       {children}
@@ -148,8 +183,9 @@ function TabsTab({ className, children, status, closable = false, onClose, close
       <Button
         variant="ghost-muted"
         size="icon-micro"
-        className="absolute end-1 top-1/2 -translate-y-1/2"
+        className="absolute end-1 top-1/2 -translate-y-1/2 opacity-0 peer-not-data-active:pointer-events-none peer-data-active:opacity-100"
         aria-label={closeLabel}
+        data-close=""
         onClick={onClose}
         disabled={props.disabled}
       >
