@@ -107,6 +107,7 @@ export const TabStrip = ({
   return (
     <TopBar
       platform={platform}
+      layout="fixed"
       controls={controls}
       tabs={tabs}
       active={active}

@@ -39,7 +39,7 @@ test("the top-left card sits at 8, 8 and is 44 tall; the tab strip and Settings 
 
 test("the bar is one opaque strip; Settings is a raised cell with a kit ghost button and a kit tooltip", async ({ page, engine }) => {
   await openCanvas(page, engine);
-  const bar = page.locator("[data-slot=top-bar]");
+  const bar = page.locator("[data-slot=top-bar-body]");
   const cell = page.locator("[data-slot=top-bar-settings]");
   const settings = page.getByRole("button", { name: /^(Settings|Add your API key)$/ });
   await expectSlot(settings, "tooltip-trigger");
