@@ -1,6 +1,6 @@
 "use client";
 
-import type { ComponentPropsWithRef, DragEvent, MouseEvent, ReactNode, RefObject } from "react";
+import type { ComponentPropsWithRef, DragEvent, MouseEvent, ReactNode } from "react";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 
 import { Menu, MenuItem, MenuPopup, MenuSeparator } from "~/components/ui/menu";
@@ -62,21 +62,22 @@ export interface TopBarProps {
 
 const BAR_HEIGHT = 44;
 const FLARE_WIDTH = 40;
+/** The space between the flare and the Settings square. */
+const FLARE_GAP = 8;
 
 /**
  * The bar's end, drawn as a path: the bottom edge runs out, bends up with a convex corner, and bends right again into the
  * top edge with a concave one, as a Chrome tab flares into its toolbar. The fill is the bar's own background and the stroke
  * its border, so the flare joins the bar. On Windows the flare is mirrored, with Settings on the other side.
  */
-const Flare = ({ side, flareRef }: { readonly side: "start" | "end"; readonly flareRef: RefObject<SVGSVGElement | null> }) => (
+const Flare = ({ side }: { readonly side: "start" | "end" }) => (
   <svg
-    ref={flareRef}
     data-slot="top-bar-flare"
     aria-hidden
     width={FLARE_WIDTH}
     height={BAR_HEIGHT}
     viewBox={`0 0 ${FLARE_WIDTH} ${BAR_HEIGHT}`}
-    className={cn("block shrink-0", side === "start" && "-scale-x-100")}
+    className={cn("absolute top-0", side === "end" ? "-right-10" : "-left-10 -scale-x-100")}
   >
     <path d="M0 43.5H13C20 43.5 21 39 21 30C21 12 25 .5 40 .5H0Z" className="fill-background" />
     <path d="M0 43.5H13C20 43.5 21 39 21 30C21 12 25 .5 40 .5M0 .5H40" className="fill-none stroke-border" />
@@ -117,7 +118,6 @@ export const TopBar = ({
   const scroller = useRef<HTMLDivElement>(null);
   const rootRef = useRef<HTMLDivElement>(null);
   const bodyRef = useRef<HTMLDivElement>(null);
-  const flareRef = useRef<SVGSVGElement>(null);
   const [dragging, setDragging] = useState<string>();
   const [menu, setMenu] = useState<{ readonly name: string; readonly x: number; readonly y: number }>();
   const names = tabs.map((tab) => tab.name);
@@ -171,27 +171,28 @@ export const TopBar = ({
     setDragging(undefined);
   };
 
-  // The body is the bar's fill and borders. It runs from the start flare to the end flare, so the flare is the bar's edge
-  // on the side Settings sits: its fill and stroke meet the body's, and nothing of the bar shows past it.
+  // The body is the bar's fill and borders, and its flare is drawn at the edge it stops at. That edge sits beside the
+  // Settings square: the flare sits FLARE_GAP from the square and is FLARE_WIDTH wide, and the body stops where the flare
+  // starts (on macOS, the flare's left edge; on Windows, the flare's right edge). The body is below the canvas's floating layer, as the tab strip is, so the flare is too.
   useLayoutEffect(() => {
     const root = rootRef.current;
     const body = bodyRef.current;
-    const flare = flareRef.current;
-    if (root === null || body === null || flare === null || flare.parentElement === null) return;
+    const settings = root?.querySelector<HTMLElement>("[data-slot=top-bar-settings]");
+    if (root === null || root === undefined || body === null || settings === null || settings === undefined || settings.parentElement === null) return;
     const measure = () => {
       const bar = root.getBoundingClientRect();
-      const edge = flare.getBoundingClientRect();
+      const square = settings.getBoundingClientRect();
       if (windows) {
-        body.style.left = `${edge.right - bar.left}px`;
+        body.style.left = `${square.right + FLARE_GAP + FLARE_WIDTH - bar.left}px`;
         body.style.right = "0px";
       } else {
         body.style.left = "0px";
-        body.style.right = `${bar.right - edge.left}px`;
+        body.style.right = `${bar.right - (square.left - FLARE_GAP - FLARE_WIDTH)}px`;
       }
     };
     measure();
     const observer = new ResizeObserver(measure);
-    for (const element of [root, flare, flare.parentElement]) observer.observe(element);
+    for (const element of [root, settings, settings.parentElement]) observer.observe(element);
     return () => observer.disconnect();
   }, [windows]);
 
@@ -211,15 +212,12 @@ export const TopBar = ({
 
   return (
     <div data-slot="top-bar" data-platform={platform} ref={rootRef} {...region("relative box-border flex h-11 w-full min-w-0 items-stretch", regions.frame)}>
-      <div data-slot="top-bar-body" ref={bodyRef} aria-hidden className="absolute inset-y-0 left-0 right-0 box-border border-y bg-background" />
+      <div data-slot="top-bar-body" ref={bodyRef} aria-hidden className="absolute inset-y-0 left-0 right-0 box-border border-y bg-background">
+        <Flare side={windows ? "start" : "end"} />
+      </div>
       <div data-slot="top-bar-start" {...region(`${positioned}flex h-11 shrink-0 items-center gap-2 border-e px-3`, regions.start)}>
         {!windows && controlsSpace("w-23")}
-        {windows && (
-          <>
-            {settingsNode}
-            <Flare side="start" flareRef={flareRef} />
-          </>
-        )}
+        {windows && settingsNode}
         <span className="flex shrink-0 items-center">{logo}</span>
       </div>
       <div data-slot="top-bar-tabs" {...region(`${positioned}flex h-11 min-w-0 shrink items-stretch`, regions.tabs)}>
@@ -264,12 +262,7 @@ export const TopBar = ({
       </div>
       <div data-slot="top-bar-drag" className={`${positioned}h-11 min-w-8 flex-1`} />
       <div data-slot="top-bar-end" {...region(`${positioned}flex h-11 shrink-0 items-center`, regions.end)}>
-        {!windows && (
-          <>
-            <Flare side="end" flareRef={flareRef} />
-            <span className="flex h-11 items-center pe-2 ps-1.5">{settingsNode}</span>
-          </>
-        )}
+        {!windows && <span className="flex h-11 items-center pe-2 ps-1.5">{settingsNode}</span>}
         {windows && controlsSpace("w-36")}
       </div>
       <Menu open={menu !== undefined} onOpenChange={(open) => !open && setMenu(undefined)}>
