@@ -41,11 +41,11 @@ export interface TopBarProps {
   readonly regions?: {
     /** The bar behind the three regions. */
     readonly frame?: TopBarRegion;
-    /** The start region: the window controls' inset, Settings on Windows, and the logo. */
+    /** The start region: the window controls' space, Settings on Windows, and the logo. */
     readonly start?: TopBarRegion;
     /** The tabs and the plus. */
     readonly tabs?: TopBarRegion;
-    /** The end region: Settings on macOS, the window controls' inset on Windows. */
+    /** The end region: Settings on macOS, the window controls' space on Windows. */
     readonly end?: TopBarRegion;
   };
   /**
@@ -54,38 +54,35 @@ export interface TopBarProps {
    */
   readonly layout?: "flow" | "fixed" | undefined;
   /**
-   * The window controls' space. "stand-ins" reserves it and draws placeholders (the catalogue). "none" leaves it
-   * out: the app's controls belong to the window, and the shell insets the regions for them (spec 01).
+   * The window controls' space. "stand-ins" reserves it and draws placeholders (the catalogue). "space" reserves it and
+   * draws nothing: the app's controls are the window's own, drawn over that space. "none" leaves it out.
    */
-  readonly controls?: "stand-ins" | "none" | undefined;
+  readonly controls?: "stand-ins" | "space" | "none" | undefined;
 }
 
-const BAR_HEIGHT = 44;
-const FLARE_WIDTH = 40;
-/** The space between the flare and the Settings square. */
-const FLARE_GAP = 8;
+// The measured geometry of the reference (the user's prototype, `component-mac-topbar.html`): a 48 px bar whose two ends
+// each curve out at the top and round off at the bottom with a 20 px radius, Settings 12 px past the bar's end, and the
+// window controls 14 px in from the window edge.
+const BAR_HEIGHT = 48;
+const CURVE = 20;
+/** Window edge to the bar on macOS: 14 px in, the three 12 px lights with 8 px between, then 12 px to the bar. */
+const LIGHTS_ZONE = 78;
+/** The bar's end to the Settings button (the flare overlaps the button's first 8 px). */
+const SETTINGS_GAP = 12;
+/** The Windows caption buttons (144 px) and the 12 px to the bar. */
+const CAPTION_ZONE = 156;
 
 /**
- * The bar's end, drawn as a path: the bottom edge runs out, bends up with a convex corner, and bends right again into the
- * top edge with a concave one, as a Chrome tab flares into its toolbar. The fill is the bar's own background and the stroke
- * its border, so the flare joins the bar. On Windows the flare is mirrored, with Settings on the other side.
+ * The bar's outline as one path, in the bar's own coordinates. Each end is a 20 px concave flare at the top, outside the
+ * bar, and a 20 px convex corner at the bottom, inside it. The top stays open against the window edge. The fill closes the
+ * top; the stroke does not, so the border is the outline and nothing more.
  */
-const Flare = ({ side }: { readonly side: "start" | "end" }) => (
-  <svg
-    data-slot="top-bar-flare"
-    aria-hidden
-    width={FLARE_WIDTH}
-    height={BAR_HEIGHT}
-    viewBox={`0 0 ${FLARE_WIDTH} ${BAR_HEIGHT}`}
-    className={cn("absolute top-0", side === "end" ? "-right-10" : "-left-10 -scale-x-100")}
-  >
-    <path d="M0 43.5H13C20 43.5 21 39 21 30C21 12 25 .5 40 .5H0Z" className="fill-background" />
-    <path d="M0 43.5H13C20 43.5 21 39 21 30C21 12 25 .5 40 .5M0 .5H40" className="fill-none stroke-border" />
-  </svg>
-);
+const barFill = (width: number) =>
+  `M${-CURVE} 0A${CURVE} ${CURVE} 0 0 1 0 ${CURVE}V${BAR_HEIGHT - CURVE}A${CURVE} ${CURVE} 0 0 0 ${CURVE} ${BAR_HEIGHT}H${width - CURVE}A${CURVE} ${CURVE} 0 0 0 ${width} ${BAR_HEIGHT - CURVE}V${CURVE}A${CURVE} ${CURVE} 0 0 1 ${width + CURVE} 0Z`;
+const barStroke = (width: number) => barFill(width).replace(/Z$/, "");
 
 const WindowDots = () => (
-  <span className="flex h-full items-center gap-2 ps-4">
+  <span className="flex h-full items-center gap-2 ps-3.5">
     <span className="size-3 rounded-full bg-muted-foreground/40" />
     <span className="size-3 rounded-full bg-muted-foreground/40" />
     <span className="size-3 rounded-full bg-muted-foreground/40" />
@@ -93,10 +90,9 @@ const WindowDots = () => (
 );
 
 /**
- * The project tab bar (spec 17): one full-width bar with the window controls, the logo, the tabs,
- * the plus and Settings. Dividers run the full height of the bar between the logo and the tabs and
- * between the tabs. The tabs are the kit's underline Tabs; a right-click on a tab opens Close, Close
- * all tabs, Rename and Delete.
+ * The project tab bar (spec 17), drawn to the reference: a 48 px bar with a 20 px flare and corner at each end, its border on
+ * the outline, the window controls and Settings beside it. The tabs are the kit's underline Tabs, the buttons the kit's
+ * buttons; a right-click on a tab opens Close, Close all tabs, Rename and Delete.
  */
 export const TopBar = ({
   platform,
@@ -120,6 +116,7 @@ export const TopBar = ({
   const bodyRef = useRef<HTMLDivElement>(null);
   const [dragging, setDragging] = useState<string>();
   const [menu, setMenu] = useState<{ readonly name: string; readonly x: number; readonly y: number }>();
+  const [bodyWidth, setBodyWidth] = useState(0);
   const names = tabs.map((tab) => tab.name);
   const windows = platform === "windows";
 
@@ -171,57 +168,61 @@ export const TopBar = ({
     setDragging(undefined);
   };
 
-  // The body is the bar's fill and borders, and its flare is drawn at the edge it stops at. That edge sits beside the
-  // Settings square: the flare sits FLARE_GAP from the square and is FLARE_WIDTH wide, and the body stops where the flare
-  // starts (on macOS, the flare's left edge; on Windows, the flare's right edge). The body is below the canvas's floating layer, as the tab strip is, so the flare is too.
+  // The bar's body is its fill and outline. On macOS it starts at the lights' zone and stops 12 px before Settings; on
+  // Windows it starts 12 px after Settings and stops before the caption buttons. Settings is the edge that moves, so the
+  // body is measured from it, and its width is kept for the outline's path.
   useLayoutEffect(() => {
     const root = rootRef.current;
     const body = bodyRef.current;
-    const settings = root?.querySelector<HTMLElement>("[data-slot=top-bar-settings]");
-    if (root === null || root === undefined || body === null || settings === null || settings === undefined || settings.parentElement === null) return;
+    const settingsNode = root?.querySelector<HTMLElement>("[data-slot=top-bar-settings]");
+    if (root === null || root === undefined || body === null || settingsNode === null || settingsNode === undefined) return;
     const measure = () => {
       const bar = root.getBoundingClientRect();
-      const square = settings.getBoundingClientRect();
+      const square = settingsNode.getBoundingClientRect();
       if (windows) {
-        body.style.left = `${square.right + FLARE_GAP + FLARE_WIDTH - bar.left}px`;
-        body.style.right = "0px";
+        body.style.left = `${square.right + SETTINGS_GAP - bar.left}px`;
+        body.style.right = `${CAPTION_ZONE}px`;
       } else {
-        body.style.left = "0px";
-        body.style.right = `${bar.right - (square.left - FLARE_GAP - FLARE_WIDTH)}px`;
+        body.style.left = `${LIGHTS_ZONE}px`;
+        body.style.right = `${bar.right - (square.left - SETTINGS_GAP)}px`;
       }
+      setBodyWidth(Math.round(body.getBoundingClientRect().width));
     };
     measure();
     const observer = new ResizeObserver(measure);
-    for (const element of [root, settings, settings.parentElement]) observer.observe(element);
+    for (const element of [root, settingsNode]) observer.observe(element);
     return () => observer.disconnect();
   }, [windows]);
 
   const positioned = layout === "flow" ? "relative " : "";
   const settingsNode = (
-    <div data-slot="top-bar-settings" className="flex size-9 shrink-0 items-center justify-center rounded-xl border border-border bg-card">
+    <div data-slot="top-bar-settings" className="flex size-8 shrink-0 items-center justify-center overflow-hidden rounded-full">
       {settings}
     </div>
   );
   const region = (base: string, custom: TopBarRegion | undefined): TopBarRegion => ({ ...custom, className: cn(base, custom?.className) });
   const controlsSpace = (width: string) =>
     controls === "none" ? null : (
-      <div data-slot="top-bar-controls" aria-hidden className={cn("h-11 shrink-0", width)}>
-        <WindowDots />
+      <div data-slot="top-bar-controls" aria-hidden className={cn("h-12 shrink-0", width)}>
+        {controls === "stand-ins" && <WindowDots />}
       </div>
     );
 
   return (
-    <div data-slot="top-bar" data-platform={platform} ref={rootRef} {...region("relative box-border flex h-11 w-full min-w-0 items-stretch", regions.frame)}>
-      <div data-slot="top-bar-body" ref={bodyRef} aria-hidden className="absolute inset-y-0 left-0 right-0 box-border border-y bg-background">
-        <Flare side={windows ? "start" : "end"} />
+    <div data-slot="top-bar" data-platform={platform} ref={rootRef} {...region("relative box-border flex h-12 w-full min-w-0 items-stretch", regions.frame)}>
+      <div data-slot="top-bar-body" ref={bodyRef} aria-hidden className="absolute inset-y-0 left-0 right-0">
+        <svg className="pointer-events-none absolute inset-0 overflow-visible" width={bodyWidth} height={BAR_HEIGHT}>
+          <path d={barFill(bodyWidth)} className="fill-background stroke-none" />
+          <path d={barStroke(bodyWidth)} className="fill-none stroke-border" />
+        </svg>
       </div>
-      <div data-slot="top-bar-start" {...region(`${positioned}flex h-11 shrink-0 items-center gap-2 border-e px-3`, regions.start)}>
-        {!windows && controlsSpace("w-23")}
-        {windows && settingsNode}
-        <span className="flex shrink-0 items-center">{logo}</span>
+      <div data-slot="top-bar-start" {...region(`${positioned}flex h-12 shrink-0 items-center`, regions.start)}>
+        {!windows && controlsSpace("w-[78px]")}
+        {windows && <span className="flex shrink-0 items-center ps-3.5">{settingsNode}</span>}
+        <span className={cn("flex shrink-0 items-center", windows ? "ms-3 ps-5 pe-2.5" : "ps-5 pe-2.5")}>{logo}</span>
       </div>
-      <div data-slot="top-bar-tabs" {...region(`${positioned}flex h-11 min-w-0 shrink items-stretch`, regions.tabs)}>
-        <Tabs className="h-11 w-fit min-w-0 shrink" value={active ?? null} onValueChange={(name) => onActivate(String(name))}>
+      <div data-slot="top-bar-tabs" {...region(`${positioned}flex h-12 min-w-0 shrink items-stretch`, regions.tabs)}>
+        <Tabs className="h-12 w-fit min-w-0 shrink" value={active ?? null} onValueChange={(name) => onActivate(String(name))}>
           <TabsList
             ref={scroller}
             aria-label="Open projects"
@@ -256,14 +257,14 @@ export const TopBar = ({
             ))}
           </TabsList>
         </Tabs>
-        <div data-slot="top-bar-new" className="flex h-11 shrink-0 items-center px-1">
+        <div data-slot="top-bar-new" className="flex h-12 shrink-0 items-center ps-1">
           {newProject}
         </div>
       </div>
-      <div data-slot="top-bar-drag" className={`${positioned}h-11 min-w-8 flex-1`} />
-      <div data-slot="top-bar-end" {...region(`${positioned}flex h-11 shrink-0 items-center`, regions.end)}>
-        {!windows && <span className="flex h-11 items-center pe-2 ps-1.5">{settingsNode}</span>}
-        {windows && controlsSpace("w-36")}
+      <div data-slot="top-bar-drag" className={`${positioned}h-12 min-w-8 flex-1`} />
+      <div data-slot="top-bar-end" {...region(`${positioned}flex h-12 shrink-0 items-center`, regions.end)}>
+        {!windows && <span className="flex h-12 items-center pe-3.5">{settingsNode}</span>}
+        {windows && controlsSpace("w-39")}
       </div>
       <Menu open={menu !== undefined} onOpenChange={(open) => !open && setMenu(undefined)}>
         <MenuPopup

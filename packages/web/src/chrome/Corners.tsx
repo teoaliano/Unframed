@@ -36,7 +36,7 @@ export const TopCorners = () => {
   useTabShortcuts(activation);
   const left = useRef<HTMLDivElement>(null);
   const right = useRef<HTMLDivElement>(null);
-  const [edges, setEdges] = useState({ left: 8 + 44 + GAP, right: 8 + 44 + GAP });
+  const [edges, setEdges] = useState({ left: 0, right: 0 });
   const os = platform();
   const settingsOnLeft = os === "win32";
   const docked = leftCardDocked && !artifactEditorOpen;
@@ -46,8 +46,8 @@ export const TopCorners = () => {
       const leftRight = left.current?.getBoundingClientRect().right ?? 0;
       const rightWidth = right.current?.getBoundingClientRect().width ?? 0;
       setEdges({
-        left: Math.max(leftRight, 0) + GAP,
-        right: (settingsOnLeft ? CAPTION_WIDTH : rightWidth + 8) + GAP,
+        left: Math.max(leftRight, 0),
+        right: settingsOnLeft ? CAPTION_WIDTH + 20 : rightWidth + 20,
       });
     };
     measure();
@@ -62,7 +62,7 @@ export const TopCorners = () => {
     <TooltipProvider delay={400}>
       <TabStrip
         platform={settingsOnLeft ? "windows" : "macos"}
-        controls="none"
+        controls="space"
         logo={<LogoMark />}
         settings={SettingsButton && <SettingsButton />}
         regions={{
