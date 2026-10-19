@@ -118,7 +118,7 @@ test("ten project tabs cost about one: heap, nodes, listeners, editors, sockets 
     await switchTo(page, "default");
     await switchTo(page, "warm");
   }
-  await page.locator("[role=tab][data-project='warm'] button[aria-label='Close warm']").click();
+  await page.getByRole("button", { name: "Close warm" }).click();
   await expect(page.locator("[role=tab]")).toHaveCount(1);
   await page.waitForTimeout(1500);
   const single = await measure(page, cdp, sockets);
