@@ -1,8 +1,7 @@
 "use client";
 
-import { cva } from "class-variance-authority";
-import type { ComponentPropsWithRef, DragEvent, MouseEvent, ReactNode } from "react";
-import { useEffect, useRef, useState } from "react";
+import type { ComponentPropsWithRef, DragEvent, MouseEvent, ReactNode, RefObject } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 
 import { Menu, MenuItem, MenuPopup, MenuSeparator } from "~/components/ui/menu";
 import { Tabs, TabsList, TabsTab } from "~/components/ui/tabs";
@@ -50,23 +49,38 @@ export interface TopBarProps {
     readonly end?: TopBarRegion;
   };
   /**
+   * "flow" lays the regions out in a row (the catalogue). "fixed" leaves them to their own fixed positions, which the app's
+   * DOM hooks give them (spec 01), so the regions are not made relative.
+   */
+  readonly layout?: "flow" | "fixed" | undefined;
+  /**
    * The window controls' space. "stand-ins" reserves it and draws placeholders (the catalogue). "none" leaves it
    * out: the app's controls belong to the window, and the shell insets the regions for them (spec 01).
    */
   readonly controls?: "stand-ins" | "none" | undefined;
 }
 
-// Settings in its own raised cell: the bottom edge sweeps up into it on the side that faces the tabs, as a browser's active tab does.
-const settingsCell = cva(
-  "relative flex h-11 shrink-0 items-center rounded-t-xl border-x border-t border-border bg-card px-1.5 before:absolute before:bottom-0 before:size-3 after:absolute after:bottom-0 after:size-3",
-  {
-    variants: {
-      side: {
-        start: "after:-end-3 after:bg-[radial-gradient(circle_at_100%_0,transparent_0.75rem,var(--color-background)_0.75rem)]",
-        end: "before:-start-3 before:bg-[radial-gradient(circle_at_0_0,transparent_0.75rem,var(--color-background)_0.75rem)]",
-      },
-    },
-  },
+const BAR_HEIGHT = 44;
+const FLARE_WIDTH = 40;
+
+/**
+ * The bar's end, drawn as a path: the bottom edge runs out, bends up with a convex corner, and bends right again into the
+ * top edge with a concave one, as a Chrome tab flares into its toolbar. The fill is the bar's own background and the stroke
+ * its border, so the flare joins the bar. On Windows the flare is mirrored, with Settings on the other side.
+ */
+const Flare = ({ side, flareRef }: { readonly side: "start" | "end"; readonly flareRef: RefObject<SVGSVGElement | null> }) => (
+  <svg
+    ref={flareRef}
+    data-slot="top-bar-flare"
+    aria-hidden
+    width={FLARE_WIDTH}
+    height={BAR_HEIGHT}
+    viewBox={`0 0 ${FLARE_WIDTH} ${BAR_HEIGHT}`}
+    className={cn("block shrink-0", side === "start" && "-scale-x-100")}
+  >
+    <path d="M0 43.5H13C20 43.5 21 39 21 30C21 12 25 .5 40 .5H0Z" className="fill-background" />
+    <path d="M0 43.5H13C20 43.5 21 39 21 30C21 12 25 .5 40 .5M0 .5H40" className="fill-none stroke-border" />
+  </svg>
 );
 
 const WindowDots = () => (
@@ -97,9 +111,13 @@ export const TopBar = ({
   onDelete,
   onMove,
   regions = {},
+  layout = "flow",
   controls = "stand-ins",
 }: TopBarProps) => {
   const scroller = useRef<HTMLDivElement>(null);
+  const rootRef = useRef<HTMLDivElement>(null);
+  const bodyRef = useRef<HTMLDivElement>(null);
+  const flareRef = useRef<SVGSVGElement>(null);
   const [dragging, setDragging] = useState<string>();
   const [menu, setMenu] = useState<{ readonly name: string; readonly x: number; readonly y: number }>();
   const names = tabs.map((tab) => tab.name);
@@ -153,8 +171,33 @@ export const TopBar = ({
     setDragging(undefined);
   };
 
-  const settingsCellNode = (
-    <div data-slot="top-bar-settings" className={settingsCell({ side: windows ? "start" : "end" })}>
+  // The body is the bar's fill and borders. It runs from the start flare to the end flare, so the flare is the bar's edge
+  // on the side Settings sits: its fill and stroke meet the body's, and nothing of the bar shows past it.
+  useLayoutEffect(() => {
+    const root = rootRef.current;
+    const body = bodyRef.current;
+    const flare = flareRef.current;
+    if (root === null || body === null || flare === null || flare.parentElement === null) return;
+    const measure = () => {
+      const bar = root.getBoundingClientRect();
+      const edge = flare.getBoundingClientRect();
+      if (windows) {
+        body.style.left = `${edge.right - bar.left}px`;
+        body.style.right = "0px";
+      } else {
+        body.style.left = "0px";
+        body.style.right = `${bar.right - edge.left}px`;
+      }
+    };
+    measure();
+    const observer = new ResizeObserver(measure);
+    for (const element of [root, flare, flare.parentElement]) observer.observe(element);
+    return () => observer.disconnect();
+  }, [windows]);
+
+  const positioned = layout === "flow" ? "relative " : "";
+  const settingsNode = (
+    <div data-slot="top-bar-settings" className="flex size-9 shrink-0 items-center justify-center rounded-xl border border-border bg-card">
       {settings}
     </div>
   );
@@ -167,13 +210,19 @@ export const TopBar = ({
     );
 
   return (
-    <div data-slot="top-bar" data-platform={platform} {...region("box-border flex h-11 w-full min-w-0 items-stretch border-y bg-background", regions.frame)}>
-      <div data-slot="top-bar-start" {...region("flex h-11 shrink-0 items-center gap-2 border-e px-3", regions.start)}>
+    <div data-slot="top-bar" data-platform={platform} ref={rootRef} {...region("relative box-border flex h-11 w-full min-w-0 items-stretch", regions.frame)}>
+      <div data-slot="top-bar-body" ref={bodyRef} aria-hidden className="absolute inset-y-0 left-0 right-0 box-border border-y bg-background" />
+      <div data-slot="top-bar-start" {...region(`${positioned}flex h-11 shrink-0 items-center gap-2 border-e px-3`, regions.start)}>
         {!windows && controlsSpace("w-23")}
-        {windows && settingsCellNode}
+        {windows && (
+          <>
+            {settingsNode}
+            <Flare side="start" flareRef={flareRef} />
+          </>
+        )}
         <span className="flex shrink-0 items-center">{logo}</span>
       </div>
-      <div data-slot="top-bar-tabs" {...region("flex h-11 min-w-0 shrink items-stretch", regions.tabs)}>
+      <div data-slot="top-bar-tabs" {...region(`${positioned}flex h-11 min-w-0 shrink items-stretch`, regions.tabs)}>
         <Tabs className="h-11 w-fit min-w-0 shrink" value={active ?? null} onValueChange={(name) => onActivate(String(name))}>
           <TabsList
             ref={scroller}
@@ -213,9 +262,14 @@ export const TopBar = ({
           {newProject}
         </div>
       </div>
-      <div data-slot="top-bar-drag" className="h-11 min-w-8 flex-1" />
-      <div data-slot="top-bar-end" {...region("flex h-11 shrink-0 items-center gap-2 px-2", regions.end)}>
-        {!windows && settingsCellNode}
+      <div data-slot="top-bar-drag" className={`${positioned}h-11 min-w-8 flex-1`} />
+      <div data-slot="top-bar-end" {...region(`${positioned}flex h-11 shrink-0 items-center`, regions.end)}>
+        {!windows && (
+          <>
+            <Flare side="end" flareRef={flareRef} />
+            <span className="flex h-11 items-center pe-2 ps-1.5">{settingsNode}</span>
+          </>
+        )}
         {windows && controlsSpace("w-36")}
       </div>
       <Menu open={menu !== undefined} onOpenChange={(open) => !open && setMenu(undefined)}>
