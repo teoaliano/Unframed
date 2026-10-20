@@ -18,25 +18,25 @@ test("the top-left card holds the logo; Settings sits at the end opposite the wi
   await expect(page.getByRole("button", { name: "Help" })).toHaveCount(0);
 });
 
-test("the bar's start sits at the window edge, 48 tall; the lights' zone is 78 px, the logo 20 px into the bar", async ({ page, engine }) => {
+test("the bar sits at the window's top edge, 48 tall; the lights' zone is 78 px, the logo 20 px into the bar", async ({ page, engine }) => {
   await openCanvas(page, engine);
   const card = page.locator(".unframed-chrome-left");
   const box = (await card.boundingBox())!;
   // The reference (the user's prototype): the bar is 48 px tall, its start is 14 px in from the window edge and the
   // three lights are 52 px wide with 12 px to the bar, so the start region is 78 px before the logo's 20 px padding.
-  expect([box.x, box.y, box.height]).toEqual([0, 8, 48]);
+  expect([box.x, box.y, box.height]).toEqual([0, 0, 48]);
   const logo = (await card.getByRole("img", { name: "Unframed" }).boundingBox())!;
   expect([logo.width, logo.height]).toEqual([24, 24]);
   expect(logo.x).toBe(78 + 20);
   const strip = (await page.getByTestId("tab-strip").boundingBox())!;
   expect(strip.height).toBe(48);
-  expect(strip.y + strip.height / 2).toBe(32);
+  expect(strip.y + strip.height / 2).toBe(24);
   const settings = (await page.getByRole("button", { name: /^(Settings|Add your API key)$/ }).boundingBox())!;
   // The reference's Settings is a 32 px circle, 12 px past the bar's end and 14 px from the window edge.
   expect([settings.width, settings.height]).toEqual([32, 32]);
-  expect(settings.y + settings.height / 2).toBe(32);
+  expect(settings.y + settings.height / 2).toBe(24);
   const right = await page.locator(".unframed-chrome-right").evaluate((element) => ({ top: getComputedStyle(element).top, right: getComputedStyle(element).right }));
-  expect(right).toEqual({ top: "8px", right: "0px" });
+  expect(right).toEqual({ top: "0px", right: "0px" });
 });
 
 test("the bar's outline is the reference's flares and corners; Settings is a circle with a kit ghost button and a kit tooltip", async ({ page, engine }) => {
