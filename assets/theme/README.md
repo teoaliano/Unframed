@@ -1,4 +1,4 @@
-Spec 12 replaced these values with t3code's default tokens. They stay here as history and are no longer the visual reference.
+The app now uses t3code's default tokens in place of these values. They stay here as history and are no longer the visual reference.
 
 # Theme values
 

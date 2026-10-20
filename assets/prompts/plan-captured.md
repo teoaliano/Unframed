@@ -1,6 +1,6 @@
 # Plan captured
 
-Used by spec 07's permission policy. When Claude calls `ExitPlanMode`, the engine captures `input.plan` as the turn's proposed plan and denies the call with this message, so the agent stops and waits. No placeholders.
+Held by `PLAN_CAPTURED_MESSAGE` in `packages/domain/src/agent/prompts.ts`, for the permission policy. When Claude calls `ExitPlanMode`, the engine captures `input.plan` as the turn's proposed plan and denies the call with this message, so the agent stops and waits. No placeholders.
 
 Source: t3code (github.com/pingdotgg/t3code, MIT licence), `apps/server/src/provider/Layers/ClaudeAdapter.ts`, the `ExitPlanMode` deny message. Verbatim.
 

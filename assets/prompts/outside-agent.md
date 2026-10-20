@@ -1,4 +1,4 @@
-# Outside agent prompts (spec 14)
+# Outside agent prompts
 
 Model-facing text for an agent outside Unframed (Claude Code, Codex, the Claude app, any MCP client). The first fenced block is the description of `projects_list`. The second is the `instructions` the server sends on `initialize`. Adapted from the canvas parts of `agent-system.md`, the edit tools sentence included.
 

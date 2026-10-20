@@ -1,6 +1,6 @@
 # Chat title request
 
-Used by spec 07's titling. After a chat's first turn settles, the engine sends one tool-less request on the chat's own provider with this system prompt and this prompt. The first line of the reply becomes the title.
+Held by `CHAT_TITLE_SYSTEM_PROMPT` and `CHAT_TITLE_PROMPT` in `packages/domain/src/agent/prompts.ts`. After a chat's first turn settles, the engine sends one tool-less request on the chat's own provider with this system prompt and this prompt. The first line of the reply becomes the title.
 
 Placeholders in the prompt: `<first message>` is the chat's first user message. `<answer>` is the first 400 characters of the agent's answer. The two are separated by one newline.
 

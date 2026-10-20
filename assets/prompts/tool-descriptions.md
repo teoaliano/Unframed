@@ -1,8 +1,8 @@
 # Canvas tool descriptions
 
-Used by spec 07's Unframed MCP server. These are the model-facing descriptions of the canvas tools. This file holds `canvas_read` and `canvas_write`. The four artifact tools each have one home in spec 09's files, listed at the end; spec 07 uses those same files. Spec 09's preview tools are in `preview-tool-descriptions.md`.
+Held by `CANVAS_READ_DESCRIPTION` and `CANVAS_WRITE_DESCRIPTION` in `packages/domain/src/agent/prompts.ts`, for the Unframed MCP server. These are the model-facing descriptions of the canvas tools. This file holds `canvas_read` and `canvas_write`. The four artifact tools each have one home in their own files, listed at the end. The preview tools are in `preview-tool-descriptions.md`.
 
-Source: the old app's `canvasTools` in `server/agentTools.js`. `canvas_read` and `canvas_write` are rewritten for tldraw shapes and spec 07's op vocabulary: no nodes, no edges, no output nodes. Each op names itself in a `type` field, as the old ops did. The `ops` argument description is verbatim.
+Source: the old app's `canvasTools` in `server/agentTools.js`. `canvas_read` and `canvas_write` are rewritten for tldraw shapes and the new op vocabulary: no nodes, no edges, no output nodes. Each op names itself in a `type` field, as the old ops did. The `ops` argument description is verbatim.
 
 ## canvas_read
 

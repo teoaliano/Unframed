@@ -1,6 +1,6 @@
 # Plan mode instructions for Codex
 
-Used by spec 07. In plan interaction mode the Codex adapter sends this text as `collaborationMode.settings.developer_instructions` on `turn/start` (`collaborationMode {mode: "plan", settings: {model, reasoning_effort, developer_instructions}}`). No placeholders.
+Held by `CODEX_PLAN_MODE_INSTRUCTIONS` in `packages/domain/src/agent/prompts.ts`. In plan interaction mode the Codex adapter sends this text as `collaborationMode.settings.developer_instructions` on `turn/start` (`collaborationMode {mode: "plan", settings: {model, reasoning_effort, developer_instructions}}`). No placeholders.
 
 Source: t3code (github.com/pingdotgg/t3code, MIT licence), `apps/server/src/provider/CodexDeveloperInstructions.ts`, the plan-mode block. Verbatim, with one omission: t3code inserts its own browser and device tool blocks just before the closing tag, and those name t3code's MCP server, so Unframed leaves that slot empty. Unframed's tools are described by their own descriptions (`tool-descriptions.md`, `preview-tool-descriptions.md`).
 

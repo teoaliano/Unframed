@@ -1,6 +1,6 @@
 # Declined request
 
-Used by spec 07. The permission policy denies a tool call with this message when the person answers a request with Decline. It is written to the agent, so it tries another way instead of stalling. No placeholders.
+Held by `DECLINED_MESSAGE` in `packages/domain/src/agent/prompts.ts`. The permission policy denies a tool call with this message when the person answers a request with Decline. It is written to the agent, so it tries another way instead of stalling. No placeholders.
 
 Source: the old app's `DECLINED` in `server/agent.js`, verbatim.
 
