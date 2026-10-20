@@ -1,5 +1,5 @@
 /**
- * Where a Chromium browser may be on this machine (spec 09), in the order they are tried:
+ * Where a Chromium browser may be on this machine, in the order they are tried:
  * `UNFRAMED_CHROME_PATH`, the installed browsers of the platform, then the headless shells
  * puppeteer and HyperFrames cache, newest version first. The first that exists wins; the
  * engine checks existence, this only lists.

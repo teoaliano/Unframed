@@ -1,5 +1,5 @@
 /**
- * The motion viewer (spec 09), `hyperframes-viewer.html`: a page on the preview origin that
+ * The motion viewer, `hyperframes-viewer.html`: a page on the preview origin that
  * plays one composition in HyperFrames' player and relays dial messages between the canvas
  * above it and the composition inside it. Opened outside Unframed it relays nothing.
  */

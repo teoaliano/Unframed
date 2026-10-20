@@ -1,6 +1,6 @@
 import { projectSlug } from "./slug.ts";
 
-/** Spec 01's slug rule, the one definition: project names, file names and group names. */
+/** The slug rule, the one definition: project names, file names and group names. */
 export const slug = projectSlug;
 
 /** An `@id` reference: `@` followed by word characters and hyphens. */

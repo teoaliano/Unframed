@@ -1,5 +1,5 @@
 /**
- * The chat projector (spec 07, t3code's shape): folds committed events into the read model.
+ * The chat projector (t3code's shape): folds committed events into the read model.
  * Pure: the engine uses it for its in-memory model and the web for a reconnecting rail.
  */
 import type {

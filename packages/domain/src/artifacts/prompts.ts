@@ -1,5 +1,5 @@
 /**
- * Model-facing text for the artifact and preview tools (spec 09), verbatim from
+ * Model-facing text for the artifact and preview tools, verbatim from
  * `assets/prompts/`. A test holds every constant here to its asset, so edit the asset
  * and this file together.
  */

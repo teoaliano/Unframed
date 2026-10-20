@@ -1,7 +1,7 @@
 import type { ChatDraft } from "../agent/store.ts";
 
 /**
- * What a project tab keeps in memory while it is in the background (spec 17): the camera the
+ * What a project tab keeps in memory while it is in the background: the camera the
  * canvas was at, and the unsent chat drafts. Lost on reload, like the rest of the tab store.
  */
 const cameras = new Map<string, { readonly x: number; readonly y: number; readonly z: number }>();

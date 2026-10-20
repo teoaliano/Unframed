@@ -1,5 +1,5 @@
 /**
- * Artifacts on the canvas (spec 09): the editor's entry point (double-click, the toolbar's Editor and the recap card's Editor all call it), the
+ * Artifacts on the canvas: the editor's entry point (double-click, the toolbar's Editor and the recap card's Editor all call it), the
  * canvas Parameters panel, the frame hold, the snapshot stream and the preview origin's port.
  */
 import { isArtifactKind } from "@unframed/domain";

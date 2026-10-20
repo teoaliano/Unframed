@@ -9,7 +9,7 @@ describe("slugName", () => {
     ["a name that is already a slug is kept", "character", "character"],
     ["nothing a prompt can reference is left: empty", "!!!", ""],
     ["an @ typed in front is not part of the name", "@fox", "fox"],
-    ["spec 01's 40-character cap", "a".repeat(50), "a".repeat(40)],
+    ["the 40-character cap", "a".repeat(50), "a".repeat(40)],
     ["accented letters lose their accents rather than disappear", "Café #1 / Été", "cafe-1-ete"],
     ["an accent at the end is kept as its letter", "città", "citta"],
   ])("%s", (_case, typed, slug) => {

@@ -28,7 +28,7 @@ import { SelectionApply, SelectionReport, SelectionSubscribe } from "./selection
 
 const Empty = Schema.Struct({});
 
-/** Spec 14: the Settings block lists, makes and revokes the connections an outside agent uses. */
+/** The Settings block lists, makes and revokes the connections an outside agent uses. */
 export const AgentConnectionsList = Rpc.make("agentConnections.list", {
   success: AgentConnectionsListAnswer,
   error: UnframedError,
@@ -41,7 +41,7 @@ export const AgentConnectionsCreateRpc = Rpc.make("agentConnections.create", {
   error: UnframedError,
 });
 
-/** Spec 14: the person sets, changes or removes an outside connection's spend limit. */
+/** The person sets, changes or removes an outside connection's spend limit. */
 export const AgentConnectionsSetSpendLimitRpc = Rpc.make("agentConnections.setSpendLimit", {
   payload: AgentConnectionsSetSpendLimit,
   success: Empty,
@@ -54,7 +54,7 @@ export const AgentConnectionsRevokeRpc = Rpc.make("agentConnections.revoke", {
   error: UnframedError,
 });
 
-/** Spec 14: a window reports its selection, and the engine asks it to select shapes. */
+/** A window reports its selection, and the engine asks it to select shapes. */
 export const SelectionReportRpc = Rpc.make("selection.report", {
   payload: SelectionReport,
   success: Empty,
@@ -109,7 +109,7 @@ export const ProjectsCreate = Rpc.make("projects.create", {
   error: UnframedError,
 });
 
-/** One project's live work and the work waiting on the person (spec 17). Only projects with either above zero are sent, and a project that falls to zero is sent once more with zeros. */
+/** One project's live work and the work waiting on the person. Only projects with either above zero are sent, and a project that falls to zero is sent once more with zeros. */
 export const ProjectActivity = Schema.Struct({
   project: Schema.String,
   running: Schema.Number,
@@ -117,7 +117,7 @@ export const ProjectActivity = Schema.Struct({
 });
 export type ProjectActivity = typeof ProjectActivity.Type;
 
-/** The activity of every project with live work, then one message per change (spec 17). */
+/** The activity of every project with live work, then one message per change. */
 export const ProjectsActivity = Rpc.make("projects.activity", {
   success: ProjectActivity,
   error: UnframedError,
@@ -192,8 +192,8 @@ export const CanvasChangePayload = Schema.Struct({
 
 const CanvasOrigin = Schema.Struct({ kind: Schema.Literals(["server", "system"]), id: Schema.String });
 
-// Test-only: answered only when the engine runs with UNFRAMED_TEST_CANVAS=1 (spec 01's
-// table of test-only variables), so the engine seam can reach the room's engine-side
+// Test-only: answered only when the engine runs with UNFRAMED_TEST_CANVAS=1 (a
+// test-only variable), so the engine seam can reach the room's engine-side
 // interface. Otherwise every one answers `unavailable`.
 
 export const TestCanvasRead = Rpc.make("testCanvas.read", {
@@ -300,14 +300,14 @@ export const AttachmentsCreateUploadUrl = Rpc.make("attachments.createUploadUrl"
   error: UnframedError,
 });
 
-/** Chats whose messages or final replies match the query, one row per chat (spec 08). */
+/** Chats whose messages or final replies match the query, one row per chat. */
 export const OrchestrationSearchThreads = Rpc.make("orchestration.searchThreads", {
   payload: SearchThreadsInput,
   success: SearchThreadsAnswer,
   error: UnframedError,
 });
 
-/** The pages and motions written in turns `fromTurnCount + 1` to `toTurnCount`, as unified diffs (spec 08). */
+/** The pages and motions written in turns `fromTurnCount + 1` to `toTurnCount`, as unified diffs. */
 export const OrchestrationGetTurnDiff = Rpc.make("orchestration.getTurnDiff", {
   payload: TurnDiffInput,
   success: TurnDiff,

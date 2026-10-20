@@ -1,5 +1,5 @@
 /**
- * The canvas tools' pure half (spec 07): what `canvas_read` shows the agent, and how a
+ * The canvas tools' pure half: what `canvas_read` shows the agent, and how a
  * `canvas_write` batch becomes one room change: every refusal, provisional ids, the
  * canvas's own `@id` counter, run markers stripped, group rules and rename.
  */
@@ -137,7 +137,7 @@ export const canvasShapesOf = (records: ReadonlyArray<CanvasRecord>, boxes: Read
   });
 };
 
-/** The image each mark sits on: the topmost image with a file that it overlaps and sits above (spec 03's rule). */
+/** The image each mark sits on: the topmost image with a file that it overlaps and sits above. */
 export const markOwner = (shapes: ReadonlyArray<CanvasShape>): Map<string, string> => {
   const images = shapes.filter((shape) => shape.kind === "image" && shape.file !== undefined);
   const owners = new Map<string, string>();
@@ -593,7 +593,7 @@ const create = (batch: Batch, ctx: BatchContext, op: Record<string, unknown>): v
   batch.put(record);
 };
 
-/** Renames any shape with an `@id` exactly as the canvas does (spec 06). */
+/** Renames any shape with an `@id` exactly as the canvas does. */
 const renameShape = (batch: Batch, ctx: BatchContext, shape: CanvasRecord, typed: unknown, op: string): void => {
   if (readRef(shape) === undefined) refuse(`${op}: ${agentShapeId(shape.id)} has no @id to rename`);
   if (typeof typed !== "string") refuse(`${op}: name must be a string`);

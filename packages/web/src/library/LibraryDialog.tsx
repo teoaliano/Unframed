@@ -71,7 +71,7 @@ const Chips = ({ preset }: { readonly preset: Preset }) => (
   </span>
 );
 
-/** Under a converted old preset's summary (spec 11): where it came from and what it lost. */
+/** Under a converted old preset's summary: where it came from and what it lost. */
 const LegacyLine = ({ preset }: { readonly preset: Preset }) =>
   preset.legacy ? (
     <span className="text-xs text-muted-foreground" data-testid="preset-legacy">

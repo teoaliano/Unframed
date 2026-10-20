@@ -1,5 +1,5 @@
 /**
- * Model-facing text for the agent runtime (spec 07), verbatim from `assets/prompts/`. A
+ * Model-facing text for the agent runtime, verbatim from `assets/prompts/`. A
  * test holds every constant here to its asset, so edit the asset and this file together.
  */
 

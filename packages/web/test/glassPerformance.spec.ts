@@ -6,12 +6,12 @@ import { expect, test } from "./fixtures.ts";
 test.describe.configure({ mode: "serial", timeout: 240_000 });
 
 /*
- * Spec 12's glass rule: a surface over the canvas may blur what is under it only while
- * spec 02's frame budget holds. The corner cards are always there; these pan the 300-shape
+ * The glass rule: a surface over the canvas may blur what is under it only while
+ * the pan frame budget holds. The corner cards are always there; these pan the 300-shape
  * board under the other surfaces over a moving canvas: the glass selection toolbar with
  * the rail open (solid now, since on glass it crossed the budget), and the glass composer.
  */
-test("panning with the rail open under the glass selection toolbar keeps spec 02's frame budget", async ({ page }) => {
+test("panning with the rail open under the glass selection toolbar keeps the frame budget", async ({ page }) => {
   const engine = await startAgentEngine();
   try {
     await page.goto(engine.origin);
@@ -42,7 +42,7 @@ test("panning with the rail open under the glass selection toolbar keeps spec 02
   }
 });
 
-test("panning under the glass Generate composer keeps spec 02's frame budget", async ({ page, engine }) => {
+test("panning under the glass Generate composer keeps the frame budget", async ({ page, engine }) => {
   await page.goto(engine.origin);
   await busyBoard(engine);
   await openMetered(page, engine, 302);

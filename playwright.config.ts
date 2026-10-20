@@ -9,7 +9,7 @@ import { defineConfig } from "@playwright/test";
 const CLIPBOARD = /\/(agentCopyText|agentMarkdown|artifactPaste|agentPlanCopy|contextMenu|copyImage|copyPaste|groupPaste|groupRefs|menuActions|pasteAcross|resultCopies|systemPaste|textCopies)\.spec\.ts$/;
 
 /**
- * The ten-tab budget (spec 17) reads heap, DOM and listener counts and idle CPU that other work in the same run
+ * The ten-tab budget reads heap, DOM and listener counts and idle CPU that other work in the same run
  * moves. It is its own project, run by its own command after the others (`pnpm test:browser`), with one worker.
  */
 const ISOLATED = /\/projectTabsPerformance\.spec\.ts$/;
@@ -35,8 +35,8 @@ export default defineConfig({
   globalSetup: "./packages/web/test/globalSetup.ts",
   use: {
     channel: process.env.CI ? undefined : "chrome",
-    // Chrome and Electron put each site in a process of its own, and artifact frames rely on it
-    // (spec 09). Playwright's headless Chromium does not unless asked; the flag is a no-op for Chrome.
+    // Chrome and Electron put each site in a process of its own, and artifact frames rely on it.
+    // Playwright's headless Chromium does not unless asked; the flag is a no-op for Chrome.
     launchOptions: { args: ["--site-per-process"], ...(macChrome === undefined ? {} : { executablePath: macChrome }) },
     headless: true,
   },

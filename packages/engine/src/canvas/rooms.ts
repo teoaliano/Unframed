@@ -55,7 +55,7 @@ export class CanvasRooms extends Context.Service<
     readonly apply: (project: string, change: CanvasChange, origin: ChangeOrigin) => Effect.Effect<Applied, UnframedError>;
     /** The ids among `recordIds` a tab changed after `clock`. */
     readonly changedSince: (project: string, recordIds: ReadonlyArray<string>, clock: number) => Effect.Effect<ReadonlyArray<string>, UnframedError>;
-    /** Every change log row after `clock`, with its origin (spec 07 reads the log through this). */
+    /** Every change log row after `clock`, with its origin (the agent runtime reads the log through this). */
     readonly changeLog: (project: string, clock: number) => Effect.Effect<ReadonlyArray<ChangeLogRow>, UnframedError>;
     readonly close: (project: string) => Effect.Effect<void>;
     /** Closes every tab's socket with `code`, for shutdown. */

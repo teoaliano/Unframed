@@ -363,7 +363,7 @@ export class VideoMediaUtil extends VideoShapeUtil {
     noteRender(shape.id);
     if (!shape.props.assetId) {
       if (isRenderPlaceholder(shape)) return <RenderPlaceholder shape={shape} />;
-      // A motion render (spec 09) lands in an ordinary placeholder, as an image run does.
+      // A motion render lands in an ordinary placeholder, as an image run does.
       return runMarkerOf(shape) ? <Generating shape={shape} kind="video" /> : <EmptyMedia shape={shape} kind="video" />;
     }
     return (

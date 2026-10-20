@@ -1,5 +1,5 @@
 /**
- * The setup an outside client gets (spec 14, "The setup each client gets"). Pure: the
+ * The setup an outside client gets. Pure: the
  * quoting and every client's format live here, so the Settings dialog only shows the steps.
  */
 
@@ -24,7 +24,7 @@ export interface SetupInput {
   readonly runAsNode: boolean;
 }
 
-/** The server name every setup uses. Spec 07's in-app sessions use `unframed`, so this one must differ. */
+/** The server name every setup uses. In-app sessions use `unframed`, so this one must differ. */
 export const OUTSIDE_SERVER_NAME = "unframed-app";
 
 const posixQuote = (value: string): string => `'${value.replace(/'/g, `'\\''`)}'`;

@@ -1,10 +1,10 @@
 /**
- * The preset store (spec 06): `presets.json` at the root of the output folder, one JSON
+ * The preset store: `presets.json` at the root of the output folder, one JSON
  * array. Every call runs on one queue per output folder and re-reads the file first; every
  * write replaces the whole array through a temp file renamed over it. Only a missing file
  * reads as empty: reading a damaged file as empty is what would let the next save erase it.
  * Entries this version does not understand are kept in place, byte for byte. Old entries
- * (spec 11) are listed converted, and the converted form is never written.
+ * are listed converted, and the converted form is never written.
  */
 import { mkdir, readFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
@@ -42,7 +42,7 @@ export interface SaveInput {
 export class PresetStore extends Context.Service<
   PresetStore,
   {
-    /** The entries with `format: 2` that read as presets, in file order, then every old entry converted (spec 11). */
+    /** The entries with `format: 2` that read as presets, in file order, then every old entry converted. */
     readonly list: Effect.Effect<{ presets: Preset[] }, UnframedError>;
     readonly save: (input: SaveInput) => Effect.Effect<{ preset: Preset }, UnframedError>;
     readonly remove: (id: string) => Effect.Effect<{ ok: true }, UnframedError>;
@@ -95,7 +95,7 @@ const onQueue = <T>(outputDir: string, task: () => Promise<T>): Promise<T> => {
   return run;
 };
 
-/** An old entry (spec 11) as the preset it lists as, stamped with the canvas schema its records are written in. */
+/** An old entry as the preset it lists as, stamped with the canvas schema its records are written in. */
 const converted = (value: unknown, defaults: LegacyDefaults): Preset | undefined => {
   const old = convertPreset(value, { defaults });
   if (!old) return undefined;
@@ -164,7 +164,7 @@ export const presetStoreLayer = Layer.effect(
       Effect.flatMap(defaults, (models) =>
         queued(async (path) => {
           const entries = await readEntries(path);
-          // A converted preset (spec 11) is deleted by removing the old entry it came from.
+          // A converted preset is deleted by removing the old entry it came from.
           const index = entries.findIndex((entry) => idOf(entry.value) === id && (listed(entry.value) || converted(entry.value, models) !== undefined));
           if (index < 0) throw unframedError("not_found", PRESET_UNKNOWN_MESSAGE);
           await writeEntries(path, entries.filter((_entry, at) => at !== index));

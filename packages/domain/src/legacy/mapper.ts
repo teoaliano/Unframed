@@ -1,5 +1,5 @@
 /**
- * The legacy mapper (spec 11): an old graph, after the reader and the normaliser, as the
+ * The legacy mapper: an old graph, after the reader and the normaliser, as the
  * new canvas. Prompts, media, groups, pages and motions keep their `@id`s, positions and
  * sizes; each output becomes a recipe group (on its one group, around its sources, or
  * where it stood) and its results become result shapes with approximate recipes; wires

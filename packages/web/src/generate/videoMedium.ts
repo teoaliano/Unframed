@@ -1,4 +1,4 @@
-/** The video medium (spec 04), registered into spec 03's Generate tray. */
+/** The video medium, registered into the Generate tray. */
 import { projectFileMarker, resultMetaOf, type ModelEntry, type RecipeRef, type ResultRecipe } from "@unframed/contracts";
 import {
   addableVideoValue,
@@ -30,7 +30,7 @@ import { registerMedium, type MediumDefinition, type PropValue, type RunSource, 
 import { referencesFor } from "./render.ts";
 import { recipeSlotIndex, videoPlan } from "./videoPlan.ts";
 
-/** Where a render lands: spec 03's result placement from `anchor`, clear of every shape on the page. */
+/** Where a render lands: the result placement from `anchor`, clear of every shape on the page. */
 export const landingFor = (editor: Editor, anchor: { x: number; y: number; w: number; h: number }, settings: VideoSettings) =>
   renderLanding(anchor, editor.getCurrentPageShapes().flatMap((shape) => pageBox(editor, shape.id) ?? []), settings);
 

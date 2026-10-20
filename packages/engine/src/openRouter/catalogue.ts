@@ -10,7 +10,7 @@ export class Catalogue extends Context.Service<
   Catalogue,
   {
     readonly listImageModels: Effect.Effect<ModelsListAnswer>;
-    /** Spec 05: the text models that read images, so a text run's pictures are seen. */
+    /** The text models that read images, so a text run's pictures are seen. */
     readonly listTextModels: Effect.Effect<ModelsListAnswer>;
     readonly imagePricing: (id: string) => Effect.Effect<ImagePricingAnswer, UnframedError>;
   }

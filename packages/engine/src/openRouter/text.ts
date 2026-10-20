@@ -1,7 +1,7 @@
 import { errorText } from "../log.ts";
 import { readOpenRouterAnswer } from "./images.ts";
 
-/** A reference part of a chat message, as spec 03 inlines them. */
+/** A reference part of a chat message, as a run inlines them. */
 export type ReferencePart = { readonly type: "image_url"; readonly image_url: { readonly url: string } } | { readonly type: "video_url"; readonly video_url: { readonly url: string } };
 
 /** What one chat call answered: the text and its cost, or the sentence the person sees. */

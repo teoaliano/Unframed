@@ -1,15 +1,15 @@
 /**
- * What an agent's `generate` sends (spec 14, "Generation by agents"): the composer's own
+ * What an agent's `generate` sends: the composer's own
  * selection-to-request rule, run over the shapes the agent named. Pure: the engine reads the
  * canvas and prices the run.
  */
 import type { CanvasShape } from "../canvasShapes.ts";
 import { composeSelection, type Composition, type Medium } from "../composition.ts";
 
-/** The composer's sentence for a selection with nothing to make (spec 03). */
+/** The composer's sentence for a selection with nothing to make. */
 export const NOTHING_TO_MAKE = "Nothing says what to make. Select a prompt, or type an instruction.";
 
-/** The sentence an agent gets for a selection that needs a sketch or a composite (decided: spec 14). */
+/** The sentence an agent gets for a selection that needs a sketch or a composite. */
 export const SKETCH_REFUSAL = "This needs a sketch or a marked picture, and an agent cannot draw those. Generate it in Unframed instead, from the selection in the app.";
 
 export const unknownSource = (id: string): string => `There is no shape "${id}" on this canvas. Call canvas_read for the ids.`;
@@ -17,10 +17,10 @@ export const unknownSource = (id: string): string => `There is no shape "${id}" 
 /** A video run makes one clip: the agent is told to leave `runs` out. */
 export const VIDEO_RUNS_REFUSAL = "A video run makes one clip. Leave runs out, or set it to 1.";
 
-/** A reference video on this computer needs a temporary public link, which an agent cannot consent to (spec 14). */
+/** A reference video on this computer needs a temporary public link, which an agent cannot consent to. */
 export const LOCAL_CLIP_REFUSAL = "A reference video on this computer needs a temporary public link, and an agent cannot give that consent. Generate it in Unframed instead, from the selection in the app.";
 
-/** A text run has no parameters, so an agent that sends some is told to leave them out (spec 14). */
+/** A text run has no parameters, so an agent that sends some is told to leave them out. */
 export const TEXT_PARAMS_REFUSAL = "A text run takes no params. Leave params out.";
 
 /** A parameter the model does not take: the agent is told to leave it out for the default. */

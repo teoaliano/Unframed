@@ -24,7 +24,7 @@ export interface GateCall {
   readonly runtimeMode: RuntimeMode;
   readonly interactionMode: InteractionMode;
   readonly toolUseId?: string;
-  /** What the request says, when the call names it (spec 14's generate); else the tool's target. */
+  /** What the request says, when the call names it (as `generate` does); else the tool's target. */
   readonly detail?: string;
   readonly suggestions?: ReadonlyArray<PermissionUpdate>;
   readonly signal?: AbortSignal;
@@ -49,7 +49,7 @@ export const questionsOf = (input: Readonly<Record<string, unknown>>): UserQuest
 };
 
 /**
- * One chat session's permission decisions (spec 07): runs the pure policy for each tool
+ * One chat session's permission decisions: runs the pure policy for each tool
  * call, opens a request or a question when it says so and waits for the person, and turns
  * the answer into what the provider is told. A pending request is chat state: it is sent
  * out as a runtime event, so it survives a reload.

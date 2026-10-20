@@ -1,5 +1,5 @@
 /**
- * The kit's looks for Unframed's own shape parts (spec 12). tldraw draws the shapes, so
+ * The kit's looks for Unframed's own shape parts. tldraw draws the shapes, so
  * these are class recipes on plain elements rather than kit components.
  */
 

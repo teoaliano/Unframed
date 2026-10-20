@@ -20,7 +20,7 @@ const hexOf = (token: string): string => {
 /**
  * Sets `data-unframed-theme` on `<html>` to the theme currently shown and keeps it live
  * with the system preference. The desktop shell reads the attribute, and in the same frame
- * two colours in the formats it has always parsed (spec 01): `--unframed-text-secondary`
+ * two colours in the formats it has always parsed: `--unframed-text-secondary`
  * on `<html>` as hex, and the opaque body background, which computes to `rgb()`. The kit's
  * tokens are oklch and color-mix, which the shell's native colour calls may not accept.
  * Answers a stop function.

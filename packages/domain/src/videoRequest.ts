@@ -1,5 +1,5 @@
 /**
- * Video request composition (spec 04): from a selection's composition, the input mode, the
+ * Video request composition: from a selection's composition, the input mode, the
  * model and the tray's values, what each source will do and exactly what is sent. Badges,
  * warnings and the request all read this, so they can never disagree.
  */

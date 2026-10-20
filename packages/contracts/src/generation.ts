@@ -1,7 +1,7 @@
 /**
  * Generation's shared records: the recipe schema, result meta, run markers, and the RPC
- * payloads of the catalogue and of runs. Specs 04, 05, 06 and 11 use these and do not
- * redefine them.
+ * payloads of the catalogue and of runs. Video, text, the library and the import use these
+ * and do not redefine them.
  */
 import * as Schema from "effect/Schema";
 
@@ -36,13 +36,13 @@ export const ResultRecipe = Schema.Struct({
   /** The contributing shape ids. */
   sources: Schema.Array(Schema.String),
   of: Schema.optionalKey(Schema.Struct({ sidecar: Schema.String, action: RecipeAction })),
-  /** Spec 11: imported from the old app, which never recorded references or the selection prompt. */
+  /** Imported from the old app, which never recorded references or the selection prompt. */
   approximate: Schema.optionalKey(Schema.Literal(true)),
   sentPrompt: Schema.optionalKey(Schema.String),
 });
 export type ResultRecipe = typeof ResultRecipe.Type;
 
-/** A group's standing settings (spec 06), stored as `meta.unframed.recipe` on the group. */
+/** A group's standing settings, stored as `meta.unframed.recipe` on the group. */
 export const GroupRecipe = Schema.Struct({
   medium: Medium,
   model: Schema.String,
@@ -58,7 +58,7 @@ export const RunMarker = Schema.Struct({
   runIndex: Schema.Number,
   /** Epoch ms. */
   startedAt: Schema.Number,
-  /** Spec 04: the work is a render job that outlives the process. */
+  /** The work is a render job that outlives the process. */
   durable: Schema.optionalKey(
     Schema.Struct({
       params: Schema.Struct({
@@ -85,9 +85,9 @@ export const ResultMeta = Schema.Struct({
   cost: Schema.NullOr(Schema.Number),
   /** Shape ids, for the tether only. */
   sources: Schema.Array(Schema.String),
-  /** Spec 05: a Free batch's repair call, on every member. */
+  /** A Free batch's repair call, on every member. */
   batchExtraCost: Schema.optionalKey(Schema.Number),
-  /** Spec 11 only: an imported result's approximate recipe. */
+  /** Only on an imported result: its approximate recipe. */
   recipe: Schema.optionalKey(ResultRecipe),
 });
 export type ResultMeta = typeof ResultMeta.Type;
@@ -130,9 +130,9 @@ export const ModelEntry = Schema.Struct({
   name: Schema.String,
   created: Schema.optionalKey(Schema.NullOr(Schema.Number)),
   params: Schema.optionalKey(Schema.NullOr(Schema.Record(Schema.String, Schema.Unknown))),
-  /** Spec 04: a video model's `pricing_skus`. */
+  /** A video model's `pricing_skus`. */
   pricing: Schema.optionalKey(Schema.NullOr(Schema.Record(Schema.String, Schema.Unknown))),
-  /** Spec 04: whether a video model takes video input; `null` when that is unknown. */
+  /** Whether a video model takes video input; `null` when that is unknown. */
   acceptsVideo: Schema.optionalKey(Schema.NullOr(Schema.Boolean)),
 });
 export type ModelEntry = typeof ModelEntry.Type;
@@ -170,7 +170,7 @@ export const PageBox = Schema.Struct({ x: Schema.Number, y: Schema.Number, w: Sc
 export const FreePicks = Schema.Struct({ picks: Schema.NullOr(Schema.Array(Schema.Number)), dropped: Schema.Array(Schema.Number) });
 export type FreePicks = typeof FreePicks.Type;
 
-/** The chat and its turn an agent's run belongs to (spec 14). Set only on a run an agent starts. */
+/** The chat and its turn an agent's run belongs to. Set only on a run an agent starts. */
 export const RunChat = Schema.Struct({ id: Schema.String, turn: Schema.Number });
 export type RunChat = typeof RunChat.Type;
 
@@ -187,9 +187,9 @@ export const ImageRunRequest = Schema.Struct({
     Schema.Struct({
       prompt: Schema.String,
       references: Schema.Array(RecipeRef),
-      /** Spec 05, a Free output: its own recorded selection prompt, the shared context and its section. */
+      /** A Free output: its own recorded selection prompt, the shared context and its section. */
       selectionPrompt: Schema.optionalKey(Schema.String),
-      /** Spec 05, a Free output: the image numbers its section picked (`null` for all) and the ones that named no image. */
+      /** A Free output: the image numbers its section picked (`null` for all) and the ones that named no image. */
       free: Schema.optionalKey(FreePicks),
     }),
   ),
@@ -197,7 +197,7 @@ export const ImageRunRequest = Schema.Struct({
   /** Page coordinates: results land to its right. */
   anchor: PageBox,
   of: Schema.optionalKey(Schema.Struct({ shapeId: Schema.String, action: RecipeAction })),
-  /** Spec 05: a Free batch's repair call cost, set on every member's result meta. */
+  /** A Free batch's repair call cost, set on every member's result meta. */
   batchExtraCost: Schema.optionalKey(Schema.Number),
   chat: Schema.optionalKey(RunChat),
 });
@@ -230,7 +230,7 @@ export type RunEvent = typeof RunEvent.Type;
 
 /** The image sidecar, beside each generated image. The first block is the old app's, field for field. */
 export interface ImageSidecar {
-  /** The chat and turn that started the run, for a run an agent started (spec 14). */
+  /** The chat and turn that started the run, for a run an agent started. */
   readonly chat?: RunChat;
   readonly prompt: string;
   readonly model: string;
@@ -249,6 +249,6 @@ export interface ImageSidecar {
   readonly createdAt: string;
   readonly file: string;
   readonly recipe: ResultRecipe;
-  /** Spec 05: a Free output's picks. */
+  /** A Free output's picks. */
   readonly free?: FreePicks;
 }

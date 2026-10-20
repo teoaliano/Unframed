@@ -1,5 +1,5 @@
 /**
- * The one bar at the bottom of the canvas (spec 02): tldraw's quick actions and action menu,
+ * The one bar at the bottom of the canvas: tldraw's quick actions and action menu,
  * tldraw's tools, then whatever Unframed registers at its end (the Library and Add). It
  * replaces tldraw's toolbar, which stacks its quick actions in a second small bar above.
  */

@@ -1,4 +1,4 @@
-/** Artifacts (spec 09): motion uploads, motion renders and artifact snapshots. */
+/** Artifacts: motion uploads, motion renders and artifact snapshots. */
 import * as Schema from "effect/Schema";
 import * as Rpc from "effect/unstable/rpc/Rpc";
 import { UnframedError } from "./errors.ts";

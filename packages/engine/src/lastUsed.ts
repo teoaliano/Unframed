@@ -6,7 +6,7 @@ import type { PreferencesStore } from "./preferencesStore.ts";
 const MEDIUM_OF_FIELD = { imageModel: "image", textModel: "text", videoModel: "video" } as const;
 
 /**
- * The step spec 03 adds to `settings.update`, after the change is applied: a new default
+ * The step the last-used model adds to `settings.update`, after the change is applied: a new default
  * model for a medium clears that medium's stored last-used model, so the new default
  * takes effect. The props stay.
  */

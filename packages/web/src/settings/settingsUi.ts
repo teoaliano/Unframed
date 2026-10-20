@@ -1,5 +1,5 @@
 /**
- * The settings dialog's app-level state (spec 10): whether it is open, the live settings,
+ * The settings dialog's app-level state: whether it is open, the live settings,
  * the key status, and the one pending OpenRouter connection with its poll. It lives outside
  * the dialog so that closing the dialog never abandons a connection.
  */

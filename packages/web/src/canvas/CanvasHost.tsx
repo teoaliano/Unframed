@@ -122,7 +122,7 @@ export const CanvasHost = ({ project, activation }: { readonly project: string; 
     const stopSelection = installSelectionReporter(editor, engine, project);
     content.current = { project, engine, minter };
     installExternalContent(editor, content.current);
-    // A tab that comes back to the front keeps the view it had (spec 17); a first open fits.
+    // A tab that comes back to the front keeps the view it had; a first open fits.
     const camera = recalledCamera(project);
     if (camera) editor.setCamera(camera, { animation: { duration: 0 } });
     else fitToShapes(editor);

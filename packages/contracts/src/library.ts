@@ -1,5 +1,5 @@
 /**
- * Spec 06's library: presets, the saved groups that live in `presets.json` at the root of
+ * The library: presets, the saved groups that live in `presets.json` at the root of
  * the output folder, and the copier that brings a preset's files into a project.
  */
 import * as Schema from "effect/Schema";
@@ -37,9 +37,9 @@ export const Preset = Schema.Struct({
   /** The recipe's medium; absent for a plain group. */
   medium: Schema.optionalKey(Medium),
   content: PresetContent,
-  /** Spec 11: an old entry the library converted when it read the file. It is never written back. */
+  /** An old entry the library converted when it read the file. It is never written back. */
   legacy: Schema.optionalKey(Schema.Literal(true)),
-  /** Spec 11: what the conversion could not keep. */
+  /** What the conversion could not keep. */
   notes: Schema.optionalKey(Schema.Array(Schema.String)),
 });
 export type Preset = typeof Preset.Type;
@@ -71,7 +71,7 @@ export const LibraryDelete = Rpc.make("library.delete", {
 
 /**
  * A file a preset points at: `project` is the one it was saved from, `''` for the target
- * project. A converted old preset (spec 11) may instead carry the bytes as a `data:` URL.
+ * project. A converted old preset may instead carry the bytes as a `data:` URL.
  */
 export const PresetFileRef = Schema.Union([Schema.Struct({ project: Schema.String, file: Schema.String }), Schema.Struct({ dataUrl: Schema.String })]);
 export type PresetFileRef = typeof PresetFileRef.Type;

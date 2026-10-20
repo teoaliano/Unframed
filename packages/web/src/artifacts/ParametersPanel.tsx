@@ -1,5 +1,5 @@
 /**
- * The canvas's Parameters panel (spec 09): one artifact's dials beside it, driving its live
+ * The canvas's Parameters panel: one artifact's dials beside it, driving its live
  * frame on the canvas. Loaded the first time a panel opens, with DialKit.
  */
 import type { ArtifactShapeProps } from "@unframed/contracts";

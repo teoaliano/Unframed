@@ -1,6 +1,6 @@
 /**
- * The changes that could strand paid work (spec 10): a settings update (spec 01's rules
- * with spec 10's steps inserted), removing the key, and renaming or deleting a project.
+ * The changes that could strand paid work: a settings update (the update rules
+ * with these steps inserted), removing the key, and renaming or deleting a project.
  * Each reads the job store strictly, touches the job records first and takes the
  * destructive step last, compensating when a later step fails. They run one at a time.
  */
@@ -124,7 +124,7 @@ export const lifecycleLayer = Layer.effect(
      * The strip is the commit point and comes last, so no failing step loses a record: the
      * worst a failure leaves is a duplicate in a store nothing reads. A render created
      * between the copy's read and the `.env` commit stays behind in the old store; a tab
-     * watching it still collects it through spec 04's poll fallback.
+     * watching it still collects it through the render jobs' poll fallback.
      */
     const moveOutputDir = (changes: Readonly<Record<string, string | null>>, move: FolderMove) =>
       Effect.gen(function* () {

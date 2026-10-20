@@ -1,6 +1,6 @@
 /**
- * Naming (spec 02 and 06): the rename slug, the suffix rule and the prompt rewrites a rename
- * needs, for a group and for every other shape with an `@id`. Spec 07's canvas rename calls
+ * Naming: the rename slug, the suffix rule and the prompt rewrites a rename
+ * needs, for a group and for every other shape with an `@id`. The agent's canvas rename calls
  * these too, so each stands on its own.
  */
 import type { CanvasShape, ShapeKind } from "./canvasShapes.ts";
@@ -8,9 +8,9 @@ import { isMintedRef, REF_TOKEN } from "./refs.ts";
 import { projectSlug } from "./slug.ts";
 
 /**
- * A typed name as an `@id`: spec 01's slug rule, after accented letters lose their accents,
+ * A typed name as an `@id`: the project slug rule, after accented letters lose their accents,
  * so "città" is `citta` and not `citt`. Only names do this: project and file names keep
- * spec 01's rule unchanged, because an existing project folder is found by its slug.
+ * the slug rule unchanged, because an existing project folder is found by its slug.
  */
 export const slugName = (typed: string): string => projectSlug(typed.normalize("NFD").replace(/\p{M}+/gu, ""));
 

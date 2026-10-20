@@ -1,5 +1,5 @@
 /**
- * The engine seam for spec 11: an engine whose output folder is a copy of the old-format
+ * The engine seam for the legacy import: an engine whose output folder is a copy of the old-format
  * samples in `assets/legacy-samples/`. Tests change the copy, never the samples.
  */
 import { createHash } from "node:crypto";

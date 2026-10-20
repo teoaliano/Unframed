@@ -34,7 +34,7 @@ import { PreviewTools } from "../artifacts/previewTools.ts";
 import { openShell, openThread } from "./subscriptions.ts";
 
 /**
- * The agent runtime at the Effect boundary (spec 07): the RPC methods and the two plain HTTP
+ * The agent runtime at the Effect boundary: the RPC methods and the two plain HTTP
  * routes (the MCP endpoint and the signed attachment upload path).
  */
 export class Agents extends Context.Service<
@@ -77,7 +77,7 @@ export const agentsLayer = Layer.effect(
         throw error instanceof UnframedError ? new Error(error.message) : error;
       });
 
-    /** Every project in the output folder, sorted by name, with its folder and the active one (spec 14). */
+    /** Every project in the output folder, sorted by name, with its folder and the active one. */
     const outsideProjects = (): Promise<ReadonlyArray<OutsideProject>> =>
       run(
         Effect.gen(function* () {

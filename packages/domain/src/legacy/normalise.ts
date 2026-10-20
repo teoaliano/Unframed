@@ -1,5 +1,5 @@
 /**
- * The legacy normaliser (spec 11): the rebuilt graph with legacy types migrated, stale
+ * The legacy normaliser: the rebuilt graph with legacy types migrated, stale
  * keys dropped, membership repaired and ids made usable as `@id`s, and a note for each
  * repair the person should hear about.
  */

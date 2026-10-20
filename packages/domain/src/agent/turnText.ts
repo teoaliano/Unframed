@@ -1,5 +1,5 @@
 /**
- * The sentences a turn is framed with (spec 07): the canvas tools check, the failure
+ * The sentences a turn is framed with: the canvas tools check, the failure
  * sentence, the change note and the preamble the model reads before each message.
  */
 import { UNFRAMED_TOOL_PREFIX } from "./permissionPolicy.ts";

@@ -126,7 +126,7 @@ export interface TranscriptProps {
   readonly onOpenEditor?: (shapeId: string) => void;
 }
 
-/** The line at the foot of an outside chat once its session ends or its connection is revoked (spec 14). */
+/** The line at the foot of an outside chat once its session ends or its connection is revoked. */
 const OutsideNote = ({ activities }: { readonly activities: Chat["activities"] }) => {
   const last = [...activities].reverse().find((activity) => activity.kind === "outside.disconnected" || activity.kind === "outside.session-ended");
   if (!last) return null;

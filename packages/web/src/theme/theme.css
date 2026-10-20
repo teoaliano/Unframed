@@ -8,7 +8,7 @@
  * marked "Unframed:".
  */
 
-/* Unframed: spec 01's data-unframed-theme on <html> is the dark switch, not a .dark class. */
+/* Unframed: the shell's data-unframed-theme on <html> is the dark switch, not a .dark class. */
 @custom-variant dark (&:is([data-unframed-theme="dark"], [data-unframed-theme="dark"] *));
 @custom-variant light (&:not([data-unframed-theme="dark"], [data-unframed-theme="dark"] *));
 
@@ -309,7 +309,7 @@
   ):focus-visible {
     @apply outline-none ring-0;
   }
-  /* Unframed: spec 01 needs an opaque body equal to the canvas, so the body is
+  /* Unframed: the desktop shell needs an opaque body equal to the canvas, so the body is
      --background rather than t3code's --app-chrome-background. */
   html,
   body {
@@ -477,15 +477,15 @@
   );
 }
 
-/* Unframed-only tokens (spec 12): canvas values t3code has no token for, built from its tokens. */
+/* Unframed-only tokens: canvas values t3code has no token for, built from its tokens. */
 :root {
   --canvas-dot: color-mix(in srgb, var(--foreground) 16%, var(--background));
   --selection-stroke: var(--highlight);
   --selection-grip: var(--card);
   --group-fill: color-mix(in srgb, var(--highlight) 4%, var(--background));
-  /* A filled page's frame is white in both schemes (spec 09). */
+  /* A filled page's frame is white in both schemes. */
   --artifact-page: var(--color-white);
-  /* Unframed: bottom-left toasts sit above tldraw's zoom controls (spec 02). */
+  /* Unframed: bottom-left toasts sit above tldraw's zoom controls. */
   --toast-footer-offset: 2rem;
 
   @variant dark {
@@ -743,7 +743,7 @@ code {
 }
 
 /*
- * The shell moves these cards with injected CSS (spec 01). Their position is ordinary,
+ * The shell moves these cards with injected CSS. Their position is ordinary,
  * layered CSS with no !important, so unlayered shell styles win.
  */
 @layer components {
@@ -763,7 +763,7 @@ code {
   }
 
   /*
-   * The project tab strip (spec 17) sits in the chrome row. Its layer is below the canvas's in-front layer (250 is
+   * The project tab strip sits in the chrome row. Its layer is below the canvas's in-front layer (250 is
    * above 200), so the selection bar and the composer, which live there, stay on top of it. The chrome cards are 400.
    */
   .unframed-tabs {

@@ -148,7 +148,7 @@ export const rpcHandlersLayer = UnframedRpcs.toLayer(
       "run.text": (request) => runs.text(request),
       "text.complete": (request) => runs.complete(request),
       "run.subscribe": ({ project }) => runs.subscribe(project),
-      // A render placeholder has no sidecar until its clip lands: its recipe is in the job record (spec 04).
+      // A render placeholder has no sidecar until its clip lands: its recipe is in the job record.
       "recipe.read": ({ project, shapeId }) =>
         runs.recipe(project, shapeId).pipe(
           Effect.catchIf(

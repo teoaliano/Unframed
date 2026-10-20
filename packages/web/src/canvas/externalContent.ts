@@ -101,7 +101,7 @@ const addFile = async (editor: Editor, ctx: ContentContext, file: File, kind: Dr
 };
 
 /**
- * An `.html` dropped onto a page or a motion (spec 09) replaces its file: a page takes it as a
+ * An `.html` dropped onto a page or a motion replaces its file: a page takes it as a
  * plain upload, a motion through the motion upload, which adds the runtime and the bridge.
  * The title keeps its value when it has one. One person edit, one undo step.
  */
@@ -279,7 +279,7 @@ const fixUpPastedShapes = async (editor: Editor, ctx: ContentContext, pasted: Un
 
   const ids = new Map<string, string>();
   // Refs are unique across the canvas, so a pasted name is taken by any of them. A name is
-  // kept, suffixed when taken (spec 06); a minted ref is minted again.
+  // kept, suffixed when taken; a minted ref is minted again.
   const taken = new Set(editor.getCurrentPageShapes().flatMap((shape) => readRef(shape) ?? []));
   const mint = () => ctx.minter.mint();
   for (const shape of content.shapes) {
@@ -307,7 +307,7 @@ const fixUpPastedShapes = async (editor: Editor, ctx: ContentContext, pasted: Un
 };
 
 /**
- * A result pasted from another project brings its recipe along (spec 03): its sidecar and
+ * A result pasted from another project brings its recipe along: its sidecar and
  * every file the recipe names are copied in beside the image's copy. A result whose recipe
  * cannot come along pastes as an ordinary image.
  */
@@ -320,7 +320,7 @@ const copyRecipes = async (ctx: ContentContext, source: string, content: TLConte
     const assetId = (shape.props as { assetId?: string | null }).assetId;
     const marker = parseAssetMarker(String((assetId ? byId.get(assetId)?.props as { src?: string | null } | undefined : undefined)?.src ?? ""));
     try {
-      // A text result (spec 05) has no picture: its sidecar is its one file.
+      // A text result has no picture: its sidecar is its one file.
       const file = shape.type === "text" ? result.sidecar : marker?.kind === "project-file" ? marker.file : undefined;
       if (file === undefined) throw new Error("the result has no picture here");
       const copied = await ctx.engine.call("recipe.copy", { project: ctx.project, from: source, sidecar: result.sidecar, file });

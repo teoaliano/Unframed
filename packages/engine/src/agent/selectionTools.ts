@@ -3,7 +3,7 @@ import { agentShapeId, roomShapeId } from "@unframed/domain";
 import type { LiveSelection } from "../selection/liveSelection.ts";
 import type { McpTool, ToolAnswer } from "./mcp.ts";
 
-/** The description of `canvas_select`, for an outside agent (spec 14). */
+/** The description of `canvas_select`, for an outside agent. */
 export const CANVAS_SELECT_DESCRIPTION =
   "Set the shapes the person has selected in the Unframed window they last used on this project. An empty list clears the selection. The selection is where the person's pointer is, not part of the canvas: Revert does not undo it. The person sees the change at once.";
 
@@ -13,8 +13,8 @@ export interface SelectionToolDeps {
 }
 
 /**
- * The outside-only selection tool (spec 14). It is never on the in-app list: in-app agents never
- * change what is selected (spec 07).
+ * The outside-only selection tool. It is never on the in-app list: in-app agents never
+ * change what is selected.
  */
 export const outsideSelectionTools = (deps: SelectionToolDeps): McpTool[] => [
   {

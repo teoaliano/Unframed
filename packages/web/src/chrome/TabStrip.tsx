@@ -8,7 +8,7 @@ import { ProjectMenu } from "./ProjectMenu.tsx";
 import { PROJECT_ACTION, type ProjectActionDetail } from "./tabEvents.ts";
 
 /**
- * Every project's live work, from `projects.activity` (spec 17). Projects with no work are
+ * Every project's live work, from `projects.activity`. Projects with no work are
  * absent, which reads as zero. The stream is one per page.
  */
 export const useProjectActivity = (): ReadonlyMap<string, TabActivity> => {
@@ -31,7 +31,7 @@ export const useProjectActivity = (): ReadonlyMap<string, TabActivity> => {
 
 /**
  * The project tabs that were running and have since finished, while they were in the
- * background (spec 17). Looking at a tab clears its mark. Kept in memory only.
+ * background. Looking at a tab clears its mark. Kept in memory only.
  */
 export const useFinishedMarks = (activity: ReadonlyMap<string, TabActivity>, active: string | undefined): ReadonlySet<string> => {
   const [marks, setMarks] = useState<ReadonlySet<string>>(() => new Set());
@@ -64,7 +64,7 @@ const STATUS_LABEL: Record<TabStatus, string> = {
   none: "",
 };
 
-/** The kit's status mark for a tab (spec 17): a spinner while working, a check when finished unseen, a dot for a chat waiting on the person. */
+/** The kit's status mark for a tab: a spinner while working, a check when finished unseen, a dot for a chat waiting on the person. */
 const kitStatus = (status: TabStatus): TopBarStatus | undefined => {
   if (status === "running") return "running";
   if (status === "finished") return "finished";
@@ -73,7 +73,7 @@ const kitStatus = (status: TabStatus): TopBarStatus | undefined => {
 };
 
 /**
- * The project tab bar, wired to the activation and the activity stream (spec 17). It reads the tab
+ * The project tab bar, wired to the activation and the activity stream. It reads the tab
  * state and the activity; it never touches the canvas. The app passes the logo, Settings and its
  * hook regions; the bar itself is `components/ui/top-bar`.
  */

@@ -1,7 +1,7 @@
 import type { CSSProperties } from "react";
 
 /**
- * The palette hues Unframed's categories take (spec 12): provider tokens, library kind
+ * The palette hues Unframed's categories take: provider tokens, library kind
  * chips, role badges. Each colour is written out whole, because Tailwind emits a palette
  * variable only when it finds its name in the source.
  */

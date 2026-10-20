@@ -30,7 +30,7 @@ const stable = (value: unknown): string =>
 export const sameRecord = (a: TLRecord | null | undefined, b: TLRecord | null | undefined): boolean => stable(a ?? null) === stable(b ?? null);
 
 /**
- * Turn changes (spec 07): per turn, every shape its tool calls touched, with the record
+ * Turn changes: per turn, every shape its tool calls touched, with the record
  * before the turn first touched it and after it last did. Several writes in one turn to
  * one shape collapse into one row. Only the engine writes `turn_changes`.
  */

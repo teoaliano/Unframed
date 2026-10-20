@@ -82,7 +82,7 @@ test("the composer is t3code's composer shell, with the kit's segmented medium s
   });
 });
 
-test("Agent opens the composer on its Agent tray, the slot spec 08 fills; Esc closes it back to the bar", async ({ page, generation }) => {
+test("Agent opens the composer on its Agent tray; Esc closes it back to the bar", async ({ page, generation }) => {
   await openCanvas(page, generation.engine);
   await clickShape(page, "shape:starter-subject");
   await toolbar(page).getByRole("button", { name: "Agent" }).click();
@@ -226,7 +226,7 @@ test("without a key, send is disabled and the tray says where to add one", async
   const generation = await startGeneration({ key: false });
   try {
     await openCanvas(page, generation.engine);
-    // A keyless first load opens the settings dialog (spec 10).
+    // A keyless first load opens the settings dialog.
     await closeSettings(page);
     await clickShape(page, "shape:starter-subject");
     await openComposer(page);

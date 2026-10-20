@@ -5,7 +5,7 @@ import { connectionNameProblem, periodStart, spendLimitProblem, spentSince, trim
 import { writeFileAtomic } from "../atomicFile.ts";
 import { errorText, logError } from "../log.ts";
 
-/** Spec 14: a token is `ufx_` and 64 hex characters, 256 random bits. */
+/** A token is `ufx_` and 64 hex characters, 256 random bits. */
 export const CONNECTION_TOKEN_PREFIX = "ufx_";
 
 /** How often `lastUsedAt` is written, per connection. */
@@ -69,7 +69,7 @@ const readStore = (path: string): { connections: StoredConnection[]; refusing: b
 };
 
 /**
- * The outside connections of one data folder (spec 14, "Connections and tokens"). Holds only token
+ * The outside connections of one data folder. Holds only token
  * hashes; the plaintext token exists in `create`'s answer and nowhere else. It also keeps each
  * connection's spend limit and its paid runs' spend.
  */
@@ -115,7 +115,7 @@ export class ConnectionBook {
     void this.persist().catch((error: unknown) => logError(`could not record a call on connection ${id}: ${errorText(error)}`));
   }
 
-  /** The limit and what the period has spent, for a paid call's check (spec 14). */
+  /** The limit and what the period has spent, for a paid call's check. */
   spendOf(id: string, now: Date = new Date()): { limit: SpendLimit | null; spent: number } {
     const connection = this.find(id);
     return { limit: connection.spendLimit, spent: this.spentIn(connection, now) };

@@ -77,7 +77,7 @@ const Bar = ({ platform, initial, initialActive }: { readonly platform: Platform
 const MANY = ["spring-campaign-hero-shots", "product-packaging-explorations", "moodboard-warm-autumn", "client-review-round-two", "video-loops-experiment", "retail-window-mockups", "instagram-carousel-drafts", "press-kit-visuals", "brand-logo-variations", "newsletter-header-set", "tagline-options", "pricing-page-copy"];
 
 /**
- * The project tab bar (spec 17), one full-width bar. Switch between macOS and Windows: macOS has the
+ * The project tab bar, one full-width bar. Switch between macOS and Windows: macOS has the
  * window controls at the start and Settings at the end, Windows mirrors them. Right-click a tab for
  * Close, Close all tabs, Rename project and Delete project. The bars are interactive; nothing is saved.
  */

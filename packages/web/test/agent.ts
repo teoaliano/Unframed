@@ -1,5 +1,5 @@
 /**
- * Browser-seam helpers for the chat rail and the Agent tray (spec 08): an engine running
+ * Browser-seam helpers for the chat rail and the Agent tray: an engine running
  * the scripted agent over the fixture scripts, the rail and its composer on screen, and
  * the chats the engine holds.
  */
@@ -26,7 +26,7 @@ export const startAgentEngine = (options: EngineOptions & { script?: string } = 
  * An engine that detects providers for real, against fakes: its login shell adds nothing
  * to PATH and `CLAUDE_PATH` and `CODEX_PATH` name files in `dir`, which the test may or may
  * not have written. No real CLI ever runs. Its `.env` carries the fixture key, because a
- * keyless app opens the settings dialog over the canvas (spec 10).
+ * keyless app opens the settings dialog over the canvas.
  */
 export const startDetectingEngine = async (dir: string, options: EngineOptions = {}): Promise<TestEngine> => {
   const shell = await fakeShell(join(dir, "shell"));
@@ -125,7 +125,7 @@ export const artifactColumn = (items: ReadonlyArray<{ id: string; kind?: "page" 
     meta: { ref: String(700 + index) },
   }));
 
-/** Turns on plan mode, which is off unless set, as in t3code (spec 08). Call before opening the canvas. */
+/** Turns on plan mode, which is off unless set, as in t3code. Call before opening the canvas. */
 export const enablePlanMode = async (engine: TestEngine): Promise<void> => {
   await (await rpcOf(engine)).call("preferences.set", { key: "agent.planMode", value: true });
 };

@@ -1,5 +1,5 @@
 /**
- * The artifact store (spec 09): the only code that writes artifact files. Every edit is a
+ * The artifact store: the only code that writes artifact files. Every edit is a
  * new file, opened with exclusive create, so no artifact file is ever overwritten or
  * deleted; a shape changes version only by its `file` prop changing. It also keeps the
  * motion library (the viewer, the bridge, the player, the runtime and GSAP) beside the
@@ -158,7 +158,7 @@ export const writeAgentArtifact = async (
   return { file, bytes: bytes.length };
 };
 
-/** An uploaded composition, saved as an upload with spec 02's sidecar. */
+/** An uploaded composition, saved as an upload with its sidecar. */
 export const writeUploadedArtifact = async (folder: string, input: { readonly html: string; readonly fileName: string }): Promise<{ file: string; bytes: number }> => {
   const bytes = Buffer.from(input.html, "utf8");
   const title = input.fileName.replace(/\.[^.]*$/, "");

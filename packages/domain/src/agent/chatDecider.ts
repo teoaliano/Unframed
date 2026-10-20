@@ -1,5 +1,5 @@
 /**
- * The chat decider (spec 07, t3code's shape): `decide(command, model, now)` answers the
+ * The chat decider (t3code's shape): `decide(command, model, now)` answers the
  * events a command becomes, or the sentence it is refused with. It never does I/O; the
  * engine resolves attachments and tags against the stored files and the canvas first.
  */
@@ -52,7 +52,7 @@ const sameSelection = (a: ModelSelection, b: ModelSelection): boolean =>
 
 const isRunning = (chat: Chat): boolean => chat.latestTurn?.state === "running";
 
-/** The sentence a web command on an outside chat gets (spec 14, "Chat record changes"). */
+/** The sentence a web command on an outside chat gets. */
 export const OUTSIDE_CHAT_REFUSAL = "This chat belongs to an agent outside Unframed. Talk to it where it runs.";
 
 /** The web commands an outside chat refuses: it has no Unframed agent and no model to change. */

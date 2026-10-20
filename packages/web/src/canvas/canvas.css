@@ -1,5 +1,5 @@
 /*
- * The canvas label rules (spec 12): rules for Unframed parts inside tldraw-rendered shapes
+ * The canvas label rules: rules for Unframed parts inside tldraw-rendered shapes
  * that depend on tldraw's own DOM or on the canvas's label level. Everything else about a
  * shape's look is on its elements, from the kit's tokens.
  */

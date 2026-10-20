@@ -2,7 +2,7 @@ import type { Locator, Page } from "@playwright/test";
 import { expect } from "./fixtures.ts";
 
 /**
- * Spec 12's design contract at the browser seam: which kit component rendered a control
+ * The design contract at the browser seam: which kit component rendered a control
  * (its `data-slot`), and what a token resolves to in the scheme on screen.
  */
 
@@ -65,7 +65,7 @@ export const inBothSchemes = async (page: Page, check: (scheme: "light" | "dark"
 /**
  * The controls on screen that no kit component rendered: every visible button, menu item,
  * field and dialog must carry a kit `data-slot`. tldraw's own UI is themed, not rebuilt,
- * so it is left out, and so are spec 12's native exceptions (the hidden file picker and
+ * so it is left out, and so are the native exceptions (the hidden file picker and
  * the video scrubber). Answers a short description of each offender.
  */
 export const unkittedControls = (page: Page): Promise<string[]> =>
@@ -84,7 +84,7 @@ export const unkittedControls = (page: Page): Promise<string[]> =>
       if (element.isContentEditable) continue;
       // Base UI's toast root carries no slot of its own; the kit's toast viewport around it does.
       if (element.closest("[data-slot='toast-viewport'], [data-slot='toast-viewport-anchored']") && !element.matches("button")) continue;
-      // The diff panel is t3code's diff panel shell (spec 12), a feature surface with a dialog role, not the kit Dialog.
+      // The diff panel is t3code's diff panel shell, a feature surface with a dialog role, not the kit Dialog.
       if (element.matches("[data-testid='diff-panel']")) continue;
       if (element.hasAttribute("data-slot")) continue;
       const name = element.getAttribute("aria-label") ?? element.textContent?.trim().slice(0, 40) ?? "";

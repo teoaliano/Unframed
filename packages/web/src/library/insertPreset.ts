@@ -1,5 +1,5 @@
 /**
- * Inserting a preset (spec 06): its files copied into this project, its content migrated
+ * Inserting a preset: its files copied into this project, its content migrated
  * to the canvas's schema, fresh `@id`s with its own references following them, its group
  * centred on the view, then put on the page as one undo step with the group selected.
  * Nothing that reaches the room holds a `preset-file:` pointer, which the room refuses.

@@ -14,7 +14,7 @@ const shimEntryPath = (): string => {
   return here.endsWith(".js") ? join(dirname(here), "mcp.js") : join(dirname(here), "mcpShim.ts");
 };
 
-/** `UNFRAMED_TEST_RENDERER` (spec 01's table): stands in for the motion renderer and the Chrome search. */
+/** `UNFRAMED_TEST_RENDERER` (a test-only variable): stands in for the motion renderer and the Chrome search. */
 export type TestRenderer = "ok" | "fail" | "no-chrome";
 
 export const OPENROUTER_ORIGIN = "https://openrouter.ai";
@@ -30,11 +30,11 @@ export interface EngineConfig {
   readonly preferencesPath: string;
   readonly agentConnectionsPath: string;
   readonly discoveryPath: string;
-  /** How long an outside turn stays open after its last call: two minutes, or `UNFRAMED_TEST_OUTSIDE_TURN_IDLE_MS` (spec 14). */
+  /** How long an outside turn stays open after its last call: two minutes, or `UNFRAMED_TEST_OUTSIDE_TURN_IDLE_MS`. */
   readonly outsideTurnIdleMs: number;
   /** The stdio shim the outside setups run: beside `main.ts` in a clone, beside the bundle's `index.js` when published. */
   readonly shimPath: string;
-  /** Whether Electron runs the engine as Node, so the shim needs `ELECTRON_RUN_AS_NODE` too (spec 14). */
+  /** Whether Electron runs the engine as Node, so the shim needs `ELECTRON_RUN_AS_NODE` too. */
   readonly runAsNode: boolean;
   /** `UNFRAMED_CLIENT_DIST`, resolved. Also the marker that the engine is hosted. */
   readonly clientDist: string | undefined;

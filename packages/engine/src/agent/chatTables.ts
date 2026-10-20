@@ -1,7 +1,7 @@
 import type { DatabaseSync } from "node:sqlite";
 
 /**
- * The chat store's tables in the project database (spec 07): t3code's orchestration tables,
+ * The chat store's tables in the project database: t3code's orchestration tables,
  * trimmed, plus `turn_changes`. Persisted events must stay decodable forever, so a later
  * change adds optional columns and never renames.
  */

@@ -19,7 +19,7 @@ const parseJson = (text: string | null): { ok: true; value: unknown } | { ok: fa
 };
 
 /**
- * A composite or sketch rendered at send time (spec 03) names itself with `source`, and
+ * A composite or sketch rendered at send time names itself with `source`, and
  * its sidecar keeps `of` (the image it was rendered from), `marks` and `crop`.
  */
 const renderedSidecar = (params: URLSearchParams): RenderedSidecar | undefined | "refused" => {

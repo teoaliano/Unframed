@@ -13,7 +13,7 @@ const SKETCH_PADDING = 16;
 const SKETCH_LONGEST = 1024;
 const SKETCH_CAP = 2048;
 
-/** Uploads a rendered picture through spec 02's upload path, with its composite or sketch sidecar. */
+/** Uploads a rendered picture through the canvas upload path, with its composite or sketch sidecar. */
 const uploadRendered = (project: string, blob: Blob, name: string, sidecar: RenderedSidecar): Promise<Uploaded> =>
   uploadFile(project, new Blob([blob], { type: "image/png" }), name, undefined, {
     source: sidecar.source,

@@ -1,5 +1,5 @@
 /**
- * Recipe groups (spec 06): a group's standing recipe lives in `meta.unframed.recipe` and
+ * Recipe groups: a group's standing recipe lives in `meta.unframed.recipe` and
  * syncs like any shape property. Saving, updating and clearing it are each one undo step,
  * and a group losing its recipe keeps its members and name.
  */

@@ -1,6 +1,6 @@
 /**
- * The six artifact tools (spec 09): `page_write`, `page_edit`, `page_read`, `motion_write`,
- * `motion_edit` and `motion_read`, on spec 07's Unframed MCP server. Both kinds are built from
+ * The six artifact tools: `page_write`, `page_edit`, `page_read`, `motion_write`,
+ * `motion_edit` and `motion_read`, on the Unframed MCP server. Both kinds are built from
  * one definition, and an edit ends in the same commit as a write, so the new-file rule,
  * document checks, placement, result and event cannot drift between them.
  */
@@ -64,9 +64,9 @@ export interface AgentToolContext {
   /** Tags the chat with artifacts a write touched (the tag reactor). */
   readonly tag: (project: string, chatId: string, ids: ReadonlyArray<string>) => void;
   readonly activity: (project: string, chatId: string, activity: ActivityInput) => void;
-  /** Whether the chat is an outside one (spec 14). */
+  /** Whether the chat is an outside one. */
   readonly isOutside: (project: string, chatId: string) => boolean;
-  /** The live selection of a project's windows, for an outside read (spec 14). */
+  /** The live selection of a project's windows, for an outside read. */
   readonly liveSelection: (project: string) => { shapeIds: string[]; note?: string };
 }
 
@@ -137,7 +137,7 @@ export class ArtifactTools {
     return this.commit(kind, binding, { turn, records, target: found.shape, html: document.html, title: args.title });
   }
 
-  /** Writes a checked, tagged document as a new file and puts it on the canvas: steps 4 to 9 of spec 09's write. */
+  /** Writes a checked, tagged document as a new file and puts it on the canvas: the shared end of a write and an edit. */
   private async commit(
     kind: ArtifactKind,
     binding: McpBinding,
@@ -146,7 +146,7 @@ export class ArtifactTools {
     const { context } = this;
     const { turn, records, target, html } = input;
     const current = typeof target?.props.title === "string" ? target.props.title : "";
-    // A page or motion the person named keeps their name: its title is that name (spec 09).
+    // A page or motion the person named keeps their name: its title is that name.
     const named = target !== undefined && !isMintedRef(readRef(target) ?? "0");
     const given = typeof input.title === "string" && !named ? input.title.slice(0, ARTIFACT_TITLE_MAX) : undefined;
     const title = (given ?? current).trim();

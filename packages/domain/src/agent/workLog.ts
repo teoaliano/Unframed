@@ -1,5 +1,5 @@
 /**
- * The work log (spec 08, after t3code's `deriveWorkLogEntries`): a turn's tool calls, merged
+ * The work log (after t3code's `deriveWorkLogEntries`): a turn's tool calls, merged
  * by tool call id into rows with a label, a tone and a lifecycle state, consecutive rows
  * folded into a group whose summary counts what was done, sub-agents folded into one row
  * per spawn, and errors standing alone. Also the activity line's words for what the agent
@@ -98,7 +98,7 @@ export const describeTool = (input: { readonly toolName: string; readonly itemTy
       case "canvas_read":
         return { label: "Read the canvas", action: "tool" };
       case "canvas_select": {
-        // A selection is not part of the canvas, so the row says Revert leaves it alone (spec 14).
+        // A selection is not part of the canvas, so the row says Revert leaves it alone.
         const count = Array.isArray(toolInput.shapeIds) ? toolInput.shapeIds.length : 0;
         return { label: count === 0 ? "Cleared the selection. Revert does not undo a selection." : `Selected ${plural(count, "shape")}. Revert does not undo a selection.`, action: "tool" };
       }
@@ -107,7 +107,7 @@ export const describeTool = (input: { readonly toolName: string; readonly itemTy
         return { label: `Changed the canvas (${plural(ops, "change")})`, action: "canvas" };
       }
       case "generate": {
-        // The row is the start of a paid generation; its landing is an activity of the turn (spec 14, "Cost shown").
+        // The row is the start of a paid generation; its landing is an activity of the turn.
         const medium = toolInput.medium === "video" ? "a video generation" : toolInput.medium === "text" ? "a text generation" : "an image generation";
         return { label: `Started ${medium}`, action: "tool" };
       }

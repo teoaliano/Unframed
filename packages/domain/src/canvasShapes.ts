@@ -1,6 +1,6 @@
 import type { Box } from "./grouping.ts";
 
-/** What a shape is, for generation: spec 02's kinds. Every tldraw shape without one is a mark. */
+/** What a shape is, for generation. Every tldraw shape without one is a mark. */
 export type ShapeKind = "prompt" | "image" | "video" | "group" | "page" | "motion" | "mark";
 
 /** tldraw's image crop: the visible region as fractions of the picture. */
@@ -27,7 +27,7 @@ export interface CanvasShape {
   readonly ref?: string | undefined;
   /** A prompt's plain text. */
   readonly text?: string | undefined;
-  /** A prompt that is a text result (spec 05): its text is used literally. */
+  /** A prompt that is a text result: its text is used literally. */
   readonly textResult?: boolean | undefined;
   /** The project file an image, video, page or motion names. */
   readonly file?: string | undefined;

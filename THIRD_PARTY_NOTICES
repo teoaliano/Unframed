@@ -2,7 +2,7 @@ Third-party notices
 
 Unframed follows t3code (https://github.com/pingdotgg/t3code) for its agent runtime, chat
 composer, event store and RPC transport, and carries some of its files (provider marks,
-the Claude model catalogue, some model-facing prompt text). Since spec 12 it also carries
+the Claude model catalogue, some model-facing prompt text). It also carries
 t3code's design system: the UI kit in packages/web/src/components/ui with its cn helper
 and visible-animation helper, the default light and dark tokens, utilities, base rules and
 chat markdown rules in packages/web/src/theme, and the class recipes of its composer,
@@ -36,7 +36,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 --------------------------------------------------------------------------------
-coss ui and shadcn/ui (sources of t3code's UI kit, spec 12)
+coss ui and shadcn/ui (sources of t3code's UI kit)
 --------------------------------------------------------------------------------
 
 t3code's UI kit files come from coss ui (https://github.com/cosscom/coss, the apps/ui
@@ -46,7 +46,7 @@ License, the same terms as t3code's above. The Collapsible follows shadcn/ui
 UI (@base-ui/react), which is listed with the rest of the bundle's packages.
 
 --------------------------------------------------------------------------------
-HyperFrames, GSAP and DialKit (pages and motions, spec 09)
+HyperFrames, GSAP and DialKit (pages and motions)
 --------------------------------------------------------------------------------
 
 Motions are HyperFrames compositions. HyperFrames (@hyperframes/core, @hyperframes/player,

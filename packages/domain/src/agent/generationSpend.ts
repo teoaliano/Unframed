@@ -1,5 +1,5 @@
 /**
- * The paid generations of a turn (spec 14, "Cost shown"): the activities a generation leaves
+ * The paid generations of a turn: the activities a generation leaves
  * when it starts, lands or fails, and the recap line that says what they cost. Pure.
  */
 import type { ChatActivity } from "./chatModel.ts";

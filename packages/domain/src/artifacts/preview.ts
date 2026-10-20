@@ -1,5 +1,5 @@
 /**
- * The agent's preview tools' pure half (spec 09, after t3code's preview toolkit): the named
+ * The agent's preview tools' pure half (after t3code's preview toolkit): the named
  * device sizes, the viewport a resize asks for, and how a Playwright-style locator becomes a
  * selector the engine's browser understands.
  */
@@ -73,7 +73,7 @@ export const previewViewport = (input: Readonly<Record<string, unknown>>): { vie
   }
 };
 
-/** What the editor's centre preview can be sized to (spec 09): the column itself, three named sizes, or one typed in. */
+/** What the editor's centre preview can be sized to: the column itself, three named sizes, or one typed in. */
 export type EditorPreviewChoice = "fill" | "desktop" | "tablet" | "mobile" | "custom";
 
 export interface EditorPreviewSize {

@@ -108,7 +108,7 @@ export const fillChange = (shape: Shape, landed: Landed): CanvasChange => {
 /** How one output of a run ended: what landed, or the sentence the person sees. */
 export type RunOutcome<L> = { readonly ok: true; readonly landed: L } | { readonly ok: false; readonly error: string };
 
-/** What landed for a text run (spec 05): the answer and its sidecar, `null` when none could be written. */
+/** What landed for a text run: the answer and its sidecar, `null` when none could be written. */
 export interface LandedText {
   readonly kind: "text";
   readonly text: string;
@@ -116,7 +116,7 @@ export interface LandedText {
   readonly cost: number | null;
 }
 
-/** A text result's placeholder: an empty prompt (spec 02's text shape) carrying its marker and unfilled result meta. */
+/** A text result's placeholder: an empty prompt (the text shape) carrying its marker and unfilled result meta. */
 export const textPlaceholder = (input: {
   readonly at: { readonly x: number; readonly y: number };
   readonly index: string;
@@ -152,7 +152,7 @@ const textFillChange = (shape: Shape, landed: LandedText): CanvasChange => {
   return { put: [filled], remove: [] };
 };
 
-/** What landed for a motion render (spec 09): the MP4 in the project folder and its pixel size. */
+/** What landed for a motion render: the MP4 in the project folder and its pixel size. */
 export interface LandedClip {
   readonly kind: "clip";
   readonly file: string;

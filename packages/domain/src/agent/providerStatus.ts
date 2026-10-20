@@ -1,5 +1,5 @@
 /**
- * Provider detection, the pure half (spec 07): the five statuses and their sentences, the
+ * Provider detection, the pure half: the five statuses and their sentences, the
  * version found in `--version` output, the Claude probe's account reading, `codex login
  * status` parsing, and the Claude model rows. The engine spawns and probes; these decide.
  */
@@ -48,7 +48,7 @@ export interface Classified {
 export const parseVersion = (output: string): string | null => /\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?/.exec(output)?.[0] ?? null;
 
 /**
- * The status for one provider, in the spec's order: the version run first (not found,
+ * The status for one provider, in this order: the version run first (not found,
  * timed out, any other failure), then the probe. `probe` is only consulted once the
  * binary ran and exited 0.
  */

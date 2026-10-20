@@ -40,7 +40,7 @@ export const createSyncStorageTables = (db: DatabaseSync): void => {
 
 /**
  * The one canvas change log: every change the room commits, with who asked for it.
- * Spec 07 reads it and adds none of its own. It is never truncated.
+ * The agent runtime reads it and adds none of its own. It is never truncated.
  */
 export const createCanvasChangesTable = (db: DatabaseSync): void => {
   db.exec(`

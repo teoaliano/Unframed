@@ -1,5 +1,5 @@
 /**
- * Artifacts at the Effect boundary (spec 09): the motion upload, render start and status RPCs
+ * Artifacts at the Effect boundary: the motion upload, render start and status RPCs
  * and the snapshot stream, over the artifact store, the renderer and the snapshot service.
  */
 import { join } from "node:path";

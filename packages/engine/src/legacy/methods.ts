@@ -1,4 +1,4 @@
-/** The `legacyImport.*` RPC methods (spec 11), over the project database's opener. */
+/** The `legacyImport.*` RPC methods, over the project database's opener. */
 import { stat } from "node:fs/promises";
 import { unframedError, type UnframedError } from "@unframed/contracts";
 import { projectSlug, type ImportReport } from "@unframed/domain";

@@ -45,7 +45,7 @@ test("labels, the dot grid, empty media, the remove control, the transport and a
 
     await expectToken(pageCard, "background-color", "--card");
     expect(await styleOf(pageCard, "border-top-left-radius")).toBe("14px");
-    // A live filled page's frame stays white in both schemes (spec 09).
+    // A live filled page's frame stays white in both schemes.
     const landing = shapeOnScreen(page, "shape:landing");
     await page.mouse.click(...(Object.values(await centre(landing)) as [number, number]));
     await expect(landing.locator("iframe[data-artifact-frame]")).toBeVisible();

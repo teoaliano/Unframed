@@ -1,7 +1,7 @@
 import type { DatabaseSync } from "node:sqlite";
 import type { ImportReport } from "@unframed/domain";
 
-/** Spec 11's one row: the report of the import that made this database. A project never imported has none. */
+/** The one row: the report of the import that made this database. A project never imported has none. */
 export const createLegacyImportReportTable = (db: DatabaseSync): void => {
   db.exec(`
     CREATE TABLE legacy_import_report (

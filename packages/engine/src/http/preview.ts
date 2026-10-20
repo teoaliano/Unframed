@@ -9,7 +9,7 @@ import { NOT_FOUND } from "./respond.ts";
 import { guardUpgrade, refuseUpgrade } from "./guard.ts";
 
 /**
- * The preview origin (spec 09): a second loopback listener that serves artifact files and
+ * The preview origin: a second loopback listener that serves artifact files and
  * nothing else. It answers exactly one path shape, `/p/<project>/<file>`, and must never
  * gain a second route: a page served anywhere else would be the app to the browser.
  */

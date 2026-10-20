@@ -1,4 +1,4 @@
-/** OpenRouter's key endpoints (spec 10): the PKCE code exchange and the key status. */
+/** OpenRouter's key endpoints: the PKCE code exchange and the key status. */
 import type { KeyStatus } from "@unframed/contracts";
 import { errorText } from "../log.ts";
 

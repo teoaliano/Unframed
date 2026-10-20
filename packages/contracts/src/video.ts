@@ -1,6 +1,6 @@
 /**
- * Video generation's shared records (spec 04): the render job RPC payloads and the video
- * sidecar. The recipe, result meta and run marker are spec 03's.
+ * Video generation's shared records: the render job RPC payloads and the video
+ * sidecar. The recipe, result meta and run marker come from generation.ts.
  */
 import * as Schema from "effect/Schema";
 import * as Rpc from "effect/unstable/rpc/Rpc";

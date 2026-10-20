@@ -1,5 +1,5 @@
 /**
- * The agent runtime's wire shapes (spec 07): provider statuses, the chat commands the web
+ * The agent runtime's wire shapes: provider statuses, the chat commands the web
  * dispatches, the chat read model and the two subscriptions. Protocol names keep t3code's
  * `thread.*` spelling; everything a person reads says "chat".
  */
@@ -9,7 +9,7 @@ import { ConnectionClient } from "./agentConnections.ts";
 export const AgentProvider = Schema.Literals(["claude", "codex"]);
 export type AgentProvider = typeof AgentProvider.Type;
 
-/** A chat's provider: an in-app agent, or `outside` for a chat an outside agent made (spec 14). */
+/** A chat's provider: an in-app agent, or `outside` for a chat an outside agent made. */
 export const ChatProvider = Schema.Literals(["claude", "codex", "outside"]);
 export type ChatProvider = typeof ChatProvider.Type;
 
@@ -34,7 +34,7 @@ export const ModelSelection = Schema.Struct({
 });
 export type ModelSelection = typeof ModelSelection.Type;
 
-/** A chat's stored selection: an outside chat's is `outside`, with no model (spec 14). Commands never carry it. */
+/** A chat's stored selection: an outside chat's is `outside`, with no model. Commands never carry it. */
 export const ChatModelSelection = Schema.Struct({
   provider: ChatProvider,
   model: Schema.String,
@@ -59,7 +59,7 @@ export const ProviderModel = Schema.Struct({
 });
 export type ProviderModel = typeof ProviderModel.Type;
 
-/** A slash command or a skill the composer offers (spec 08). */
+/** A slash command or a skill the composer offers. */
 export const ProviderCommand = Schema.Struct({
   name: Schema.String,
   description: Schema.String,
@@ -272,7 +272,7 @@ export const ChatSession = Schema.Struct({
   lastError: Schema.NullOr(Schema.String),
 });
 
-/** The connection and session an outside chat shows calls from (spec 14). */
+/** The connection and session an outside chat shows calls from. */
 export const OutsideChatRef = Schema.Struct({
   connectionId: Schema.String,
   sessionId: Schema.String,
@@ -353,7 +353,7 @@ export const ThreadStreamItem = Schema.Union([
 export type ThreadStreamItem = typeof ThreadStreamItem.Type;
 
 // ---------------------------------------------------------------------------------------
-// Thread search and artifact diffs (spec 08).
+// Thread search and artifact diffs.
 
 export const SearchThreadsInput = Schema.Struct({
   projectId: Schema.String,

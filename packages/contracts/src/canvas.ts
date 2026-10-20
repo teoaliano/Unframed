@@ -72,7 +72,7 @@ const assetSource = (allowLinks: boolean) =>
 // ---------------------------------------------------------------------------------------
 // Shape meta and props.
 
-/** Where later specs keep their fields (result, run, runError, recipe), and nowhere else in meta. */
+/** Where the other features keep their fields (result, run, runError, recipe), and nowhere else in meta. */
 const unframedMeta = { unframed: T.jsonValue.optional() };
 
 export interface PromptMeta {

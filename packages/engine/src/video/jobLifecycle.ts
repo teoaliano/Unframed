@@ -1,7 +1,7 @@
 /**
- * Spec 10's job lifecycle on spec 04's store: every operation runs on the store's one
+ * The job lifecycle on the render job store: every operation runs on the store's one
  * queue with the strict read, so a damaged store fails the change instead of reading as
- * "nothing in flight", and every write prunes as spec 04 does. Failures reject with the
+ * "nothing in flight", and every write prunes as the store does. Failures reject with the
  * strict read's message or the write's error.
  */
 import {

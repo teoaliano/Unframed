@@ -39,7 +39,7 @@ const GESTURES = [
 const hiddenByGesture = (editor: Editor): boolean =>
   editor.isInAny(...GESTURES) || (editor.inputs.getIsPanning() && editor.inputs.getIsPointing());
 
-/** The band a shape's label takes above its top edge, in canvas units (spec 02). */
+/** The band a shape's label takes above its top edge, in canvas units. */
 const LABEL_BAND = 22;
 
 /**

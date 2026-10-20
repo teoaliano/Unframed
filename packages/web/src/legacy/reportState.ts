@@ -1,5 +1,5 @@
 /**
- * The import report of the active project (spec 11), shared by the canvas's import gate,
+ * The import report of the active project, shared by the canvas's import gate,
  * which learns it, and the project menu, whose "Import report" opens it again.
  */
 import type { ImportReport } from "@unframed/contracts";

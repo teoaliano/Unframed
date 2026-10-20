@@ -1,5 +1,5 @@
 /**
- * Free (spec 05): the Runs value that takes its count from a list in the selection. The
+ * Free: the Runs value that takes its count from a list in the selection. The
  * pipeline mints the batch id, splits the list, repairs it with one text call when it is
  * not already a list, builds the batch with the domain's Free batch, and either sends it or
  * stages it for the final prompt dialog. Everything after the list text is in hand is the

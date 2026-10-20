@@ -1,9 +1,9 @@
 /**
- * The share link service (spec 04): a local clip served publicly for the life of one render
+ * The share link service: a local clip served publicly for the life of one render
  * job, so OpenRouter's video endpoint can fetch it. Behind five calls sit a dedicated share
  * server, temp copies, the expiry timer, the tunnel and the outside reachability probe.
  *
- * The share server bends contract 1 on purpose: it applies no Host or Origin check, because
+ * The share server bends the loopback-only rule on purpose: it applies no Host or Origin check, because
  * the tunnel forwards a public hostname to it. That is safe only because nothing but the
  * share route exists on it. Never mount anything else on this server.
  */

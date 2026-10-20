@@ -1,5 +1,5 @@
 /**
- * Dials (spec 09): the parameters an artifact declares with `unframed.dials(name, config,
+ * Dials: the parameters an artifact declares with `unframed.dials(name, config,
  * apply)`, in the shorthand the agent writes. Normalising, default values and the merge
  * rule live here, and so does the bridge that ships as `unframed-dials.js`: the engine
  * writes that file from `dialsBridgeSource()`, which embeds these very functions, so the

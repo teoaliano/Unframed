@@ -1,5 +1,5 @@
 /**
- * The text medium (spec 05): the composed selection through a vision text model, every
+ * The text medium: the composed selection through a vision text model, every
  * image and video slot attached, the answer landing as a text result. No props, no Runs,
  * no estimate: the tray shows the model and nothing else.
  */

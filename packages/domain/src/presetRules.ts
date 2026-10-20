@@ -1,5 +1,5 @@
 /**
- * Presets (spec 06): a saved group as tldraw content, how a selection becomes one, how one
+ * Presets: a saved group as tldraw content, how a selection becomes one, how one
  * goes back onto a canvas, and how the Library dialog lists them. Pure: the web hands in
  * tldraw's own copy of the selection and gets content back to put on the page.
  */
@@ -51,7 +51,7 @@ export interface Preset {
   readonly format: 2;
   readonly id: string;
   readonly source: PresetSource;
-  /** Set by the engine at save. System presets, and presets spec 11 converts, have none. */
+  /** Set by the engine at save. System presets, and converted legacy presets, have none. */
   readonly savedAt?: string;
   readonly name: string;
   readonly summary: string;
@@ -59,9 +59,9 @@ export interface Preset {
   readonly kind: PresetKind;
   readonly medium?: RecipeMedium;
   readonly content: PresetContent;
-  /** Spec 11: converted from an old entry on read, never written back. */
+  /** Converted from an old entry on read, never written back. */
   readonly legacy?: true;
-  /** Spec 11: what the conversion could not keep. */
+  /** What the conversion could not keep. */
   readonly notes?: ReadonlyArray<string>;
 }
 
@@ -101,7 +101,7 @@ export const presetCase = (selection: ReadonlyArray<{ readonly id: string; reado
   return { kind: "empty" };
 };
 
-/** What a copy never carries (spec 03's copy rule): a run marker, a run error, an unfilled placeholder's result meta. */
+/** What a copy never carries (the copy rule): a run marker, a run error, an unfilled placeholder's result meta. */
 const stripRunMeta = (meta: Readonly<Record<string, unknown>>): Record<string, unknown> => {
   const unframed = record(meta.unframed);
   if (!unframed) return { ...meta };
@@ -270,7 +270,7 @@ export type PresetFile =
       readonly project: string;
       readonly file: string;
     }
-  /** Bytes a converted old preset (spec 11) carries inline, written into the project on insert. */
+  /** Bytes a converted old preset carries inline, written into the project on insert. */
   | { readonly dataUrl: string };
 
 const pointerOf = (src: unknown): PresetFile | undefined => {
@@ -284,7 +284,7 @@ const pointerOf = (src: unknown): PresetFile | undefined => {
 
 const pointerKey = (file: PresetFile) => ("dataUrl" in file ? file.dataUrl : `${file.project}/${file.file}`);
 
-/** Every distinct file a preset's assets point at, and every `data:` URL one carries (spec 11), in order: what the media copier copies in. */
+/** Every distinct file a preset's assets point at, and every `data:` URL one carries, in order: what the media copier copies in. */
 export const presetFiles = (content: PresetContent): PresetFile[] => {
   const seen = new Map<string, PresetFile>();
   for (const asset of content.assets) {

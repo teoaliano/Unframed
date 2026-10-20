@@ -1,5 +1,5 @@
 /*
- * Third-party adapters (spec 12): each library's look set from the kit's tokens. The
+ * Third-party adapters: each library's look set from the kit's tokens. The
  * tldraw adapter lives beside this file; t3code's .chat-markdown rules for react-markdown
  * are in theme.css.
  */
@@ -60,7 +60,7 @@
 /* DialKit: its variables from the kit's tokens. */
 
 /*
- * DialKit follows the app's scheme (spec 09): the controls set its data-theme from
+ * DialKit follows the app's scheme: the controls set its data-theme from
  * data-unframed-theme, and these variables read the tokens, which change with the scheme, so
  * its panel is the card it sits on. :root outranks DialKit's own .dialkit-root and
  * [data-theme="light"] rules, which load after this file with the first panel.
