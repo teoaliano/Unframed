@@ -66,7 +66,7 @@ export const TopCorners = () => {
         logo={<LogoMark />}
         settings={SettingsButton && <SettingsButton />}
         regions={{
-          frame: { className: "absolute inset-x-0 top-2" },
+          frame: { className: "absolute inset-x-0 top-0" },
           start: {
             ref: left,
             className: "unframed-chrome-left data-docked:z-[700] data-docked:border-transparent data-docked:bg-transparent",

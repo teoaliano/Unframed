@@ -750,7 +750,7 @@ code {
   .unframed-chrome-left,
   .unframed-chrome-right {
     position: fixed;
-    top: 8px;
+    top: 0;
     z-index: 400;
   }
 
@@ -768,7 +768,7 @@ code {
    */
   .unframed-tabs {
     position: fixed;
-    top: 8px;
+    top: 0;
     z-index: 200;
   }
 
