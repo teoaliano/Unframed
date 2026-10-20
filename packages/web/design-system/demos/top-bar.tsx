@@ -93,17 +93,17 @@ export default function TopBarDemo() {
           Windows
         </Button>
       </div>
-      <Section title="One tab">
+      <Section title="One tab" flushTop>
         <Bar platform={platform} initial={[{ name: "default" }]} initialActive="default" />
       </Section>
-      <Section title="Several tabs, with status">
+      <Section title="Several tabs, with status" flushTop>
         <Bar
           platform={platform}
           initial={[{ name: "default" }, { name: "beta", status: "running" }, { name: "gamma", status: "finished" }, { name: "delta", status: "dot" }]}
           initialActive="gamma"
         />
       </Section>
-      <Section title="Many tabs that truncate">
+      <Section title="Many tabs that truncate" flushTop>
         <Bar platform={platform} initial={MANY.map((name) => ({ name }))} initialActive="video-loops-experiment" />
       </Section>
     </Demos>
