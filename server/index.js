@@ -12902,6 +12902,7 @@ var makeDieReason = (defect) => new Die(defect);
 var makeInterruptReason2 = makeInterruptReason;
 var map5 = causeMap;
 var squash = causeSquash;
+var findError2 = findError;
 var hasDies2 = hasDies;
 var findDefect2 = findDefect;
 var hasInterrupts2 = hasInterrupts;
@@ -18012,6 +18013,8 @@ var catchCauseFilter2 = /* @__PURE__ */ dual(3, (self2, filter8, f) => catchCaus
   const result2 = filter8(cause);
   return isFailure2(result2) ? failCause6(result2.failure) : f(result2.success, cause);
 }));
+var catch_3 = /* @__PURE__ */ dual(2, (self2, f) => catchCauseFilter2(self2, findError2, (e) => f(e)));
+var mapError4 = /* @__PURE__ */ dual(2, (self2, f) => catch_3(self2, (err) => fail6(f(err))));
 var mergeAll3 = /* @__PURE__ */ dual(2, (channels, {
   bufferSize = 16,
   concurrency,
@@ -18126,6 +18129,7 @@ var flatten4 = /* @__PURE__ */ dual((args2) => isStream(args2[0]), (self2, optio
 var concat = /* @__PURE__ */ dual(2, (self2, that) => flatten4(fromArray2([self2, that])));
 var filter7 = /* @__PURE__ */ dual(2, (self2, predicate) => fromChannel2(filterArray(toChannel(self2), predicate)));
 var catchDefect4 = /* @__PURE__ */ dual(2, (self2, f) => self2.channel.pipe(catchDefect3((defect) => f(defect).channel), fromChannel2));
+var mapError5 = /* @__PURE__ */ dual(2, (self2, f) => fromChannel2(mapError4(self2.channel, f)));
 var provideContext4 = /* @__PURE__ */ dual(2, (self2, context3) => fromChannel2(provideContext3(self2.channel, context3)));
 var runForEach2 = /* @__PURE__ */ dual(2, (self2, f) => runForEach(self2.channel, (arr) => {
   let i = 0;
@@ -19374,6 +19378,16 @@ var ProjectsCreate = make17("projects.create", {
   success: Struct({ name: String4 }),
   error: UnframedError
 });
+var ProjectActivity = Struct({
+  project: String4,
+  running: Number5,
+  needsYou: Number5
+});
+var ProjectsActivity = make17("projects.activity", {
+  success: ProjectActivity,
+  error: UnframedError,
+  stream: true
+});
 var FilesReveal = make17("files.reveal", {
   payload: Struct({
     project: optionalKey2(String4),
@@ -19531,6 +19545,7 @@ var UnframedRpcs = make18(
   PreferencesGet,
   PreferencesSet,
   PreferencesSubscribe,
+  ProjectsActivity,
   FilesCopy,
   TestCanvasRead,
   TestCanvasApply,
@@ -40292,7 +40307,7 @@ import { closeSync, fsyncSync, openSync, renameSync, writeSync } from "node:fs";
 import { readFile as readFile4, rm as rm4 } from "node:fs/promises";
 
 // packages/engine/src/agent/version.ts
-var ENGINE_VERSION = "0.8.1";
+var ENGINE_VERSION = "0.8.2";
 
 // packages/engine/src/agentConnections/discovery.ts
 var writeDiscovery = (path, port, startedAt) => {
@@ -47924,6 +47939,23 @@ var AgentRuntime = class {
     const agent = project === void 0 ? void 0 : this.settledAgents.get(project);
     return agent?.engine.chat(chatId)?.runtimeMode ?? DEFAULT_RUNTIME_MODE;
   }
+  /**
+   * What a project's chats are doing now (spec 17): chats with a turn running, and chats waiting on
+   * the person. Reads only a chat store that is already open, so a closed project costs nothing.
+   */
+  liveActivity(name) {
+    const agent = this.settledAgents.get(projectSlug(name));
+    if (agent === void 0) return { running: 0, needsYou: 0 };
+    let running = 0;
+    let needsYou = 0;
+    for (const chat of Object.values(agent.engine.model.chats)) {
+      if (chat.deletedAt !== null) continue;
+      const summary = chatSummary(chat);
+      if (summary.status === "running") running++;
+      if (summary.hasPendingApproval || summary.hasPendingUserInput || summary.hasActionableProposedPlan) needsYou++;
+    }
+    return { running, needsYou };
+  }
   /** Opens a project's chat store on first use, reconciling chats a quit left running. */
   project(name) {
     const slug = projectSlug(name);
@@ -49701,6 +49733,51 @@ var legacyImportMethods = (database, projects) => {
   };
 };
 
+// packages/engine/src/projectActivity.ts
+var ACTIVITY_TICK_MS = 250;
+var activityChanges = async (source, last2) => {
+  const names = await runPromise2(source.list);
+  const now2 = /* @__PURE__ */ new Map();
+  for (const project of names) {
+    const counts2 = await runPromise2(source.live(project));
+    if (counts2.running > 0 || counts2.needsYou > 0) now2.set(project, { project, ...counts2 });
+  }
+  const out = [];
+  for (const [project, item] of now2) {
+    const key = `${item.running}/${item.needsYou}`;
+    if (last2.get(project) !== key) out.push(item);
+    last2.set(project, key);
+  }
+  for (const project of [...last2.keys()]) {
+    if (!now2.has(project)) {
+      last2.delete(project);
+      out.push({ project, running: 0, needsYou: 0 });
+    }
+  }
+  return out;
+};
+var projectActivityStream = (source) => callback2(
+  (queue2) => sync3(() => {
+    const last2 = /* @__PURE__ */ new Map();
+    let reading = false;
+    const timer = setInterval(() => {
+      if (reading) return;
+      reading = true;
+      activityChanges(source, last2).then(
+        (items) => {
+          reading = false;
+          for (const item of items) offerUnsafe(queue2, item);
+        },
+        () => {
+          clearInterval(timer);
+          endUnsafe(queue2);
+        }
+      );
+    }, ACTIVITY_TICK_MS);
+    return () => clearInterval(timer);
+  })
+);
+
 // packages/engine/src/rpc/handlers.ts
 var asUnframed = (error2) => error2 instanceof UnframedError ? error2 : unframedError("internal", errorText(error2));
 var rpcHandlersLayer = UnframedRpcs.toLayer(
@@ -49750,6 +49827,13 @@ var rpcHandlersLayer = UnframedRpcs.toLayer(
       "projects.delete": ({ name, confirmRenders }) => lifecycle.deleteProject(name, confirmRenders === true),
       "settings.pickFolder": () => map6(flatMap2(settings.outputDir, native.pickFolder), (path) => ({ path })),
       "projects.list": () => map6(projects.list, (list) => ({ projects: [...list] })),
+      "projects.activity": () => projectActivityStream({
+        list: projects.list,
+        live: (project) => map6(runs.liveRuns(project), (liveRuns) => {
+          const chats = agents.runtime.liveActivity(project);
+          return { running: liveRuns + chats.running, needsYou: chats.needsYou };
+        })
+      }).pipe(mapError5(asUnframed)),
       "projects.create": ({ name }) => map6(projects.create(name), (slug) => ({ name: slug })),
       "files.reveal": (input) => revealFiles(input).pipe(provideContext2(context3)),
       "files.path": (input) => filePath(input).pipe(provideContext2(context3)),

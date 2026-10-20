@@ -3227,7 +3227,7 @@ var VIDEO_ASPECT = 16 / 9;
 var OUTSIDE_TURN_IDLE_MS = 2 * 60 * 1e3;
 
 // packages/engine/src/agent/version.ts
-var ENGINE_VERSION = "0.8.1";
+var ENGINE_VERSION = "0.8.2";
 
 // packages/engine/src/log.ts
 var errorText = (error2) => error2 instanceof Error ? error2.message : String(error2);
@@ -10736,6 +10736,16 @@ var ProjectsCreate = make7("projects.create", {
   success: Struct({ name: String4 }),
   error: UnframedError
 });
+var ProjectActivity = Struct({
+  project: String4,
+  running: Number5,
+  needsYou: Number5
+});
+var ProjectsActivity = make7("projects.activity", {
+  success: ProjectActivity,
+  error: UnframedError,
+  stream: true
+});
 var FilesReveal = make7("files.reveal", {
   payload: Struct({
     project: optionalKey2(String4),
@@ -10893,6 +10903,7 @@ var UnframedRpcs = make8(
   PreferencesGet,
   PreferencesSet,
   PreferencesSubscribe,
+  ProjectsActivity,
   FilesCopy,
   TestCanvasRead,
   TestCanvasApply,
