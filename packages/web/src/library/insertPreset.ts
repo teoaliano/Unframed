@@ -21,6 +21,7 @@ import { AssetRecordType, type Editor, type TLContent, type TLRecord } from "tld
 import { RefMinter } from "../canvas/refs.ts";
 import type { EngineConnection } from "../rpc/engine.ts";
 import { showError } from "../toasts.tsx";
+import { styleMarkdown } from "./systemPresets.ts";
 
 /** The content with tldraw's migrations applied, written in the canvas's own schema. */
 const migrated = (editor: Editor, content: PresetContent): PresetContent => {
@@ -43,6 +44,14 @@ const migrated = (editor: Editor, content: PresetContent): PresetContent => {
 
 export const missingFilesMessage = (count: number, name: string) => `${count} file(s) in “${name}” are no longer on disk, so their shapes arrived empty.`;
 
+/** A shipped style, its document written into the project as a new file, ready to insert like any other preset. */
+const withStyleFile = async (engine: EngineConnection, project: string, preset: Preset): Promise<Preset> => {
+  const markdown = await styleMarkdown(preset.id);
+  const saved = await engine.call("style.write", { project, markdown, title: preset.name, preset: preset.id });
+  const card = { file: saved.file, swatches: [...saved.swatches], excerpt: saved.excerpt };
+  return { ...preset, content: { ...preset.content, shapes: preset.content.shapes.map((shape) => (shape.type === "style" ? { ...shape, props: { ...shape.props, ...card } } : shape)) } };
+};
+
 export const insertPreset = async (input: {
   readonly editor: Editor;
   readonly engine: EngineConnection;
@@ -52,7 +61,8 @@ export const insertPreset = async (input: {
   readonly textModel: string | undefined;
 }): Promise<void> => {
   const { editor, engine, project } = input;
-  const preset = input.preset.source === "system" && input.textModel ? presetWithTextModel(input.preset, input.textModel) : input.preset;
+  let preset = input.preset.source === "system" && input.textModel ? presetWithTextModel(input.preset, input.textModel) : input.preset;
+  if (preset.source === "system" && preset.kind === "style") preset = await withStyleFile(engine, project, preset);
   const files = presetFiles(preset.content);
   const copied = files.length === 0 ? [] : await engine.call("library.copyFiles", { project, files });
   const resolved = resolvePresetFiles(preset.content, copied, () => AssetRecordType.createId());
@@ -61,6 +71,7 @@ export const insertPreset = async (input: {
   const minter = new RefMinter(editor);
   const taken = editor.getCurrentPageShapes().flatMap((shape) => readRef(shape) ?? []);
   const made = instantiate(content, taken, () => minter.mint());
+  // The root is the preset's one group, or its one style.
   const group = made.content.shapes.find((shape) => shape.id === made.rootId);
   if (!group) throw new Error(PRESET_NOT_ONE_GROUP_MESSAGE);
   const at = placeAt({ x: group.x, y: group.y, w: Number(group.props.w), h: Number(group.props.h) }, editor.getViewportPageBounds().center);

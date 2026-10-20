@@ -1,6 +1,6 @@
 import { UnframedError } from "@unframed/contracts";
 import { changeLibrary, legacyPresetLine, libraryRange, libraryView, type LibraryControls, type LibrarySort, type Preset } from "@unframed/domain";
-import { ChevronLeft, ChevronRight, Group, Image, LayoutGrid, List, Package, Search, SquarePlay, Trash2, Type, UserRound, Workflow, type LucideIcon } from "lucide-react";
+import { ChevronLeft, ChevronRight, Group, Image, LayoutGrid, List, Package, Palette, Search, SquarePlay, Trash2, Type, UserRound, Workflow, type LucideIcon } from "lucide-react";
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { Alert } from "~/components/ui/alert";
 import {
@@ -43,6 +43,7 @@ const SORTS: ReadonlyArray<{ readonly value: LibrarySort; readonly label: string
 const CHIPS: Record<string, { readonly label: string; readonly Icon: LucideIcon; readonly hue: Hue }> = {
   recipe: { label: "Recipe", Icon: Workflow, hue: "purple" },
   group: { label: "Group", Icon: Group, hue: "blue" },
+  style: { label: "Style", Icon: Palette, hue: "yellow" },
   image: { label: "Image", Icon: Image, hue: "teal" },
   video: { label: "Video", Icon: SquarePlay, hue: "orange" },
   text: { label: "Text", Icon: Type, hue: "cyan" },
@@ -280,6 +281,7 @@ export const LibraryDialog = ({ onClose, onAdd }: { readonly onClose: () => void
                   { value: "all", label: "All" },
                   { value: "recipe", label: "Recipes" },
                   { value: "group", label: "Groups" },
+                  { value: "style", label: "Styles" },
                 ]}
               />
               <Toggles<LibraryControls["source"]>

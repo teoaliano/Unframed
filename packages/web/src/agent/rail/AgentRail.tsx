@@ -16,6 +16,7 @@ const DiffPanel = lazy(() => import("../diff/DiffPanel.tsx").then((module) => ({
 import { NEW_CHAT, useChatClient, useChats, useProviders, useRailUi, useWatchedThread } from "../store.ts";
 import { EMPTY_CHAT, Transcript } from "../transcript/Transcript.tsx";
 import { NoProvider } from "./NoProvider.tsx";
+import { StyleChip } from "./StyleChip.tsx";
 import { TabStrip } from "./TabStrip.tsx";
 import { ThreadSearch } from "./ThreadSearch.tsx";
 import { platform } from "../../canvas/platform.ts";
@@ -284,6 +285,7 @@ export const AgentRail = ({ project, embedded, inSheet, filterTo, onLocate, onOp
         <TabStrip client={client} chats={visible} observed={chats} active={active} selectedCount={selectedArtifacts.length} onDelete={setDeleting} />
         {ui.searchOpen && <ThreadSearch client={client} chats={chats} onClose={() => client.setUi({ searchOpen: false })} />}
       </div>
+      {active && <StyleChip client={client} chat={activeChat} />}
       <div className="relative flex min-h-0 flex-1 flex-col">
         {none && statuses ? (
           <NoProvider client={client} />

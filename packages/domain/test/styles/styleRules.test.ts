@@ -144,3 +144,14 @@ describe("the style tools' model-facing text is the asset's text", () => {
     expect(STYLE_LINE_TEMPLATE).toBe(line!.text);
   });
 });
+
+describe("front matter", () => {
+  it("splits off exactly, so the body can be edited and the two joined again byte for byte", async () => {
+    const { splitFrontMatter } = await import("../../src/index.ts");
+    const doc = "---\nname: x\ncolors:\n  a: \"#fff\"\n---\n\n## Overview\nText\n";
+    const split = splitFrontMatter(doc);
+    expect(split).toEqual({ frontMatter: "---\nname: x\ncolors:\n  a: \"#fff\"\n---\n", body: "\n## Overview\nText\n" });
+    expect(split.frontMatter + split.body).toBe(doc);
+    expect(splitFrontMatter("# Title\n---\nnot front matter")).toEqual({ frontMatter: "", body: "# Title\n---\nnot front matter" });
+  });
+});

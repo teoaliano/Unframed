@@ -66,6 +66,16 @@ const bodyLines = (markdown: string): string[] => {
   return lines;
 };
 
+/**
+ * A document's YAML front matter (with its `---` lines and the newline after them) and the
+ * markdown after it. The markdown window edits only the body and keeps the front matter
+ * byte for byte, because a rich-text editor has no place for it.
+ */
+export const splitFrontMatter = (markdown: string): { readonly frontMatter: string; readonly body: string } => {
+  const match = /^---\r?\n[\s\S]*?\r?\n---[ \t]*(?:\r?\n|$)/.exec(markdown);
+  return match ? { frontMatter: match[0], body: markdown.slice(match[0].length) } : { frontMatter: "", body: markdown };
+};
+
 /** The document's first level-one heading, as plain words; `undefined` when it has none. */
 export const styleHeading = (markdown: string): string | undefined => {
   for (const line of bodyLines(markdown)) {

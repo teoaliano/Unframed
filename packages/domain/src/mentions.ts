@@ -61,6 +61,8 @@ export const mentionCandidates = (
   for (const shape of shapes) {
     const ref = readRef(shape);
     if (ref === undefined || ref === selfRef || !ref.toLowerCase().startsWith(wanted)) continue;
+    // A style has an @id, but prompts do not name styles: selecting one is how it reaches the agent.
+    if (shape.type === "style") continue;
     const shown = previewOf(shape);
     const row = { id: shape.id ?? "", ref, kind: KINDS[shape.type ?? ""] ?? "mark" } as const;
     rows.push(shown === undefined ? row : { ...row, preview: shown });

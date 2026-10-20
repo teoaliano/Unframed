@@ -338,18 +338,20 @@ const Bar = ({ state, onGenerate, agent }: { state: Exclude<ToolbarState, { kind
           {agent}
         </div>
       );
-    case "open":
+    case "open": {
+      const style = editor.getShape(state.shapeId as TLShapeId)?.type === "style";
       return (
         <div className={barClass}>
           <DragHandle />
           <Button size="sm" onClick={() => openArtifact?.(editor, state.shapeId as TLShapeId)}>
-            Editor
+            {style ? "Open" : "Editor"}
           </Button>
           {Render && editor.getShape(state.shapeId as TLShapeId)?.type === "motion" && <Render shapeId={state.shapeId as TLShapeId} />}
-          {ParametersToggle && <ParametersToggle shapeId={state.shapeId as TLShapeId} />}
+          {ParametersToggle && !style && <ParametersToggle shapeId={state.shapeId as TLShapeId} />}
           {agent}
         </div>
       );
+    }
     case "generate":
       return (
         <div className={barClass}>
