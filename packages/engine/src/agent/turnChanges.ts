@@ -14,7 +14,7 @@ export interface TurnChangeRow {
 }
 
 const fileOf = (record: TLRecord | null | undefined): string | null => {
-  if (!record || record.typeName !== "shape" || (record.type !== "page" && record.type !== "motion")) return null;
+  if (!record || record.typeName !== "shape" || (record.type !== "page" && record.type !== "motion" && record.type !== "style")) return null;
   const file = (record.props as { file?: unknown }).file;
   return typeof file === "string" && file !== "" ? file : null;
 };

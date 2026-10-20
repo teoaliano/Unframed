@@ -1,6 +1,7 @@
 import type { McpTool } from "./mcp.ts";
 import { ArtifactTools } from "../artifacts/artifactTools.ts";
 import { PreviewTools } from "../artifacts/previewTools.ts";
+import { StyleTools } from "../styles/styleTools.ts";
 import { CanvasTools } from "./canvasTools.ts";
 import { outsideSelectionTools } from "./selectionTools.ts";
 import { generateTool } from "./generateTool.ts";
@@ -24,6 +25,7 @@ export const unframedToolCatalogue = (): Array<Pick<McpTool, "name" | "descripti
   const tools: McpTool[] = [
     ...new CanvasTools(inert).tools(),
     ...new ArtifactTools(inert, () => 0).tools(),
+    ...new StyleTools(inert).tools(),
     ...new PreviewTools(inert).tools(),
     generateTool(inert),
     ...outsideSelectionTools({ hub: inert, read: inert.read }),

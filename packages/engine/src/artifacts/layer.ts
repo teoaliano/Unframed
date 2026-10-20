@@ -4,8 +4,8 @@
  */
 import { join } from "node:path";
 import type { ArtifactSnapshot, RenderStatus } from "@unframed/contracts";
-import { UnframedError, unframedError } from "@unframed/contracts";
-import { injectTags, projectSlug } from "@unframed/domain";
+import { isBareFileName, UnframedError, unframedError } from "@unframed/contracts";
+import { agentShapeId, injectTags, projectSlug, styleCard, styleDocument } from "@unframed/domain";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -17,7 +17,7 @@ import { MediaStore } from "../media/mediaStore.ts";
 import { OpenProjects } from "../openProjects.ts";
 import { Runs } from "../runs/runs.ts";
 import { Config } from "../services.ts";
-import { ensureLibrary, writeUploadedArtifact } from "./artifactStore.ts";
+import { ensureLibrary, writeStyleFile, writeUploadedArtifact } from "./artifactStore.ts";
 import { findChrome } from "./chrome.ts";
 import { producerBackend, Renderer, RenderRefused, stubBackend } from "./renderer.ts";
 import { HeadlessChrome } from "./headlessChrome.ts";
@@ -33,6 +33,14 @@ export class Artifacts extends Context.Service<
   Artifacts,
   {
     readonly upload: (input: { project: string; fileName: string; html: string }) => Effect.Effect<{ file: string; fileName: string; bytes: number; mime: "text/html" }, UnframedError>;
+    readonly writeStyle: (input: {
+      project: string;
+      markdown: string;
+      title: string;
+      shapeId?: string | undefined;
+      of?: string | undefined;
+      preset?: string | undefined;
+    }) => Effect.Effect<{ file: string; bytes: number; swatches: string[]; excerpt: string }, UnframedError>;
     readonly renderStart: (input: {
       project: string;
       file: string;
@@ -115,6 +123,29 @@ export const artifactsLayer = Layer.effect(
       registerCloser: (project, close) => run(openProjects.register(project, "render tracking", Effect.promise(close))),
     });
 
+    const writeStyle: Artifacts["Service"]["writeStyle"] = (input) =>
+      Effect.gen(function* () {
+        const document = styleDocument(input.markdown);
+        if ("error" in document) return yield* unframedError("bad_request", document.error);
+        if (input.of !== undefined && !isBareFileName(input.of)) return yield* unframedError("bad_request", "That is not a file in this project.");
+        const folder = yield* Effect.promise(() => media.folder(input.project));
+        if (folder === undefined) return yield* unframedError("not_found", `There is no project named "${projectSlug(input.project)}".`);
+        const title = input.title.trim().slice(0, 120);
+        const saved = yield* Effect.tryPromise({
+          try: () =>
+            writeStyleFile(folder, {
+              markdown: document.markdown,
+              title,
+              source: input.preset === undefined ? "person" : "preset",
+              shapeId: input.shapeId === undefined ? null : agentShapeId(input.shapeId),
+              ...(input.of === undefined ? {} : { of: input.of }),
+              ...(input.preset === undefined ? {} : { preset: input.preset }),
+            }),
+          catch: (error) => unframedError("internal", `Could not save the style: ${errorText(error)}`),
+        });
+        return { file: saved.file, bytes: saved.bytes, ...styleCard(document.markdown) };
+      });
+
     const upload = (input: { project: string; fileName: string; html: string }) =>
       Effect.gen(function* () {
         if (input.html.trim() === "") return yield* unframedError("bad_request", "No composition in the request body.");
@@ -135,6 +166,7 @@ export const artifactsLayer = Layer.effect(
 
     return Artifacts.of({
       upload,
+      writeStyle,
       renderStart: (input) => Effect.tryPromise({ try: () => renderer.start(input), catch: refused }),
       renderStatus: (project, id) => Effect.try({ try: () => renderer.status(project, id), catch: refused }),
       snapshots: (project) =>

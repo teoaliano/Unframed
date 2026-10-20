@@ -14,7 +14,7 @@ import type { Subscription, TestRpcClient } from "./rpcClient.ts";
 export const FIXTURES = join(repoRoot, "assets", "fixtures");
 export const PROJECT = "board";
 
-/** Every tool the Unframed MCP server registers, in order: the two canvas tools, the artifact and preview tools, then generate. */
+/** Every tool the Unframed MCP server registers, in order: the two canvas tools, the artifact, style and preview tools, then generate. */
 export const UNFRAMED_TOOLS = [
   "canvas_read",
   "canvas_write",
@@ -24,6 +24,9 @@ export const UNFRAMED_TOOLS = [
   "motion_write",
   "motion_edit",
   "motion_read",
+  "style_read",
+  "style_write",
+  "style_edit",
   "preview_status",
   "preview_open",
   "preview_navigate",

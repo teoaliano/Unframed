@@ -4,6 +4,7 @@ import type { DatabaseSync } from "node:sqlite";
 import {
   agentShapeId,
   buildPreamble,
+  canvasShapesOf,
   changeNote,
   chatSummary,
   DEFAULT_RUNTIME_MODE,
@@ -17,8 +18,11 @@ import {
   searchChats,
   selectionLabel,
   shapeKind,
+  styleLine,
+  styleOfSelection,
   type ActivityInput,
   type AgentProvider,
+  type CanvasRecord,
   type Chat,
   type ChatCommand,
   type ChatEvent,
@@ -75,6 +79,7 @@ import { ProviderService, SESSION_IDLE_MS } from "./providerService.ts";
 import { writeTurnSidecar } from "./sidecar.ts";
 import { planRevert, TurnChanges } from "./turnChanges.ts";
 import { artifactDiff } from "./turnDiff.ts";
+import { shapeBoxes } from "../runs/shapeBounds.ts";
 
 export interface AgentRuntimeDeps {
   readonly dataDir: string;
@@ -448,7 +453,10 @@ export class AgentRuntime {
         const stored = await this.attachments.resolve(ref);
         attachments.push(stored ?? { id: ref.id, name: ref.name });
       }
-      resolved = { ...command, message: { ...command.message, attachments } };
+      const style = await this.styleSelected(agent, command.threadId, command.message.context?.selection ?? []);
+      resolved = { ...command, message: { ...command.message, attachments, ...(style === undefined ? {} : { style }) } };
+    } else if (command.type === "thread.style.set") {
+      if ((await this.styleRecord(agent.slug, command.styleId)) === undefined) throw new DispatchError("not_found", "That style is no longer on the canvas.");
     } else if (command.type === "thread.create" && command.tags !== undefined) {
       resolved = { ...command, tags: await this.artifactsAmong(agent.slug, command.tags) };
     } else if (command.type === "thread.tags.add") {
@@ -486,6 +494,26 @@ export class AgentRuntime {
     const records = await this.deps.rooms.read(project);
     const artifacts = new Set(records.filter((item) => item.typeName === "shape" && (item.type === "page" || item.type === "motion")).map((item) => item.id as string));
     return ids.filter((id) => artifacts.has(id));
+  }
+
+  /** A style shape on the canvas, by its room id. */
+  private async styleRecord(project: string, id: string): Promise<TLRecord | undefined> {
+    const found = (await this.deps.rooms.read(project)).find((item) => item.id === id);
+    return found?.typeName === "shape" && found.type === "style" ? found : undefined;
+  }
+
+  /** The style a message's selection attaches, with the chat's current style's title for the work log. */
+  private async styleSelected(agent: ProjectAgent, chatId: string, selection: ReadonlyArray<string>): Promise<{ id: string; title: string; previousTitle?: string } | undefined> {
+    if (selection.length === 0) return undefined;
+    const records = await this.deps.rooms.read(agent.slug);
+    const found = styleOfSelection(canvasShapesOf(records as unknown as ReadonlyArray<CanvasRecord>, shapeBoxes(records)), selection);
+    if (found === undefined) return undefined;
+    const titleOf = (id: string) => {
+      const props = record(record(records.find((item) => item.id === id)).props);
+      return selectionLabel({ ...(typeof props.title === "string" ? { title: props.title } : {}) }) ?? "Style";
+    };
+    const current = agent.engine.chat(chatId)?.style ?? null;
+    return { id: found.id, title: titleOf(found.id), ...(current === null ? {} : { previousTitle: titleOf(current) }) };
   }
 
   /** The tag reactor: adds the ids the chat does not have yet. Adding one it has is a no-op. */
@@ -528,6 +556,7 @@ export class AgentRuntime {
       turnId: chat?.latestTurn?.state === "running" ? chat.latestTurn.turnId : active?.turnId,
       interactionMode: active?.interactionMode ?? chat?.interactionMode ?? "default",
       selection: latestUser?.context?.selection ?? [],
+      style: chat?.style ?? null,
     };
   }
 
@@ -670,12 +699,20 @@ export class AgentRuntime {
         }),
       });
     }
+    // Read at send time, so a style the person edited since is named by its new file.
+    const style = chat.style === null ? undefined : byId.get(chat.style);
+    const styleProps = record(record(style).props);
+    const line =
+      style?.typeName === "shape" && style.type === "style" && typeof styleProps.file === "string" && styleProps.file !== ""
+        ? styleLine({ id: agentShapeId(style.id), title: typeof styleProps.title === "string" && styleProps.title.trim() !== "" ? styleProps.title.trim() : "Style", file: styleProps.file })
+        : undefined;
     let note: string | undefined;
     if (chat.lastClock !== null) {
       note = changeNote(await this.deps.rooms.changeLog(agent.slug, chat.lastClock), chat.id);
     }
     return buildPreamble({
       selected,
+      style: line,
       changeNote: note,
       attachments: attachments.flatMap((attachment) => {
         const path = this.attachments.path(attachment.id);

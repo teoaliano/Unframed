@@ -29,6 +29,7 @@ import { PreferencesStore } from "../preferencesStore.ts";
 import { Projects } from "../projects.ts";
 import { AgentRuntime, DispatchError } from "./runtime.ts";
 import { ArtifactTools } from "../artifacts/artifactTools.ts";
+import { StyleTools } from "../styles/styleTools.ts";
 import { Artifacts } from "../artifacts/layer.ts";
 import { PreviewTools } from "../artifacts/previewTools.ts";
 import { openShell, openThread } from "./subscriptions.ts";
@@ -143,7 +144,7 @@ export const agentsLayer = Layer.effect(
       runEnvironment: (provider) => run(detection.runEnvironment(provider)),
       defaultModel: async (provider) => defaultModel((await run(detection.statuses({})))[provider].models ?? []),
       realAdapter,
-      extraTools: (tools) => [...new ArtifactTools(tools, () => previewPort).tools(), ...preview.tools()],
+      extraTools: (tools) => [...new ArtifactTools(tools, () => previewPort).tools(), ...new StyleTools(tools).tools(), ...preview.tools()],
       onSessionClosed: (_project, chatId) => void preview.closeChat(chatId),
     });
 

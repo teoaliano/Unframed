@@ -56,11 +56,11 @@ export interface AgentToolContext {
   readonly apply: (project: string, change: CanvasChange, origin: ChangeOrigin) => Promise<Applied>;
   readonly folder: (project: string) => Promise<string>;
   readonly turnChanges: (project: string) => Promise<TurnChanges>;
-  /** The chat's running turn and the selection its latest message was sent with. */
+  /** The chat's running turn, the selection its latest message was sent with, and the style it follows (a room id). */
   readonly chatTurn: (
     project: string,
     chatId: string,
-  ) => { turnCount: number | undefined; turnId: string | undefined; interactionMode: InteractionMode; selection: ReadonlyArray<string> };
+  ) => { turnCount: number | undefined; turnId: string | undefined; interactionMode: InteractionMode; selection: ReadonlyArray<string>; style: string | null };
   /** Tags the chat with artifacts a write touched (the tag reactor). */
   readonly tag: (project: string, chatId: string, ids: ReadonlyArray<string>) => void;
   readonly activity: (project: string, chatId: string, activity: ActivityInput) => void;
@@ -151,6 +151,9 @@ export class ArtifactTools {
     const given = typeof input.title === "string" && !named ? input.title.slice(0, ARTIFACT_TITLE_MAX) : undefined;
     const title = (given ?? current).trim();
 
+    // A page or motion written in a chat that follows a style records which one, and its file then.
+    const styleShape = turn.style === null ? undefined : records.find((record) => record.id === turn.style && isShape(record) && record.type === "style");
+    const styleFile = isShape(styleShape) && typeof styleShape.props.file === "string" ? styleShape.props.file : undefined;
     const folder = await context.folder(binding.project);
     let written: { file: string; bytes: number };
     try {
@@ -162,6 +165,7 @@ export class ArtifactTools {
         chatId: binding.chatId,
         turn: turn.turnCount ?? 0,
         shapeId: target === undefined ? null : agentShapeId(target.id),
+        ...(styleShape === undefined || styleFile === undefined ? {} : { style: { shapeId: agentShapeId(styleShape.id), file: styleFile } }),
       });
     } catch (error) {
       return refuse(`the ${kind} could not be written: ${error instanceof Error ? error.message : String(error)}`);
@@ -169,8 +173,9 @@ export class ArtifactTools {
 
     const pageId = records.find((record) => record.typeName === "page")?.id ?? PAGE_ID;
     let next: Shape;
+    const style = styleShape === undefined ? {} : { style: styleShape.id };
     if (target !== undefined) {
-      next = { ...target, props: { ...target.props, file: written.file, ...(given !== undefined && title !== target.props.title ? { title } : {}) } } as Shape;
+      next = { ...target, props: { ...target.props, file: written.file, ...style, ...(given !== undefined && title !== target.props.title ? { title } : {}) } } as Shape;
     } else {
       const boxes = shapeBoxes(records);
       const selected = turn.selection.flatMap((id) => {
@@ -189,7 +194,7 @@ export class ArtifactTools {
         parentId: pageId,
         isLocked: false,
         opacity: 1,
-        props: { ...AGENT_ARTIFACT_SIZE[kind], file: written.file, title, fileName: "" },
+        props: { ...AGENT_ARTIFACT_SIZE[kind], file: written.file, title, fileName: "", ...style },
         meta: { ref: nextRef(records as ReadonlyArray<{ typeName: string; type?: string; meta?: unknown }>) },
       } as unknown as Shape;
     }
