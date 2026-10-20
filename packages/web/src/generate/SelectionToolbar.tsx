@@ -97,7 +97,14 @@ const Floating = ({ target, hidden, expanded, framed, children }: { target: Scre
     return () => observer.disconnect();
   }, []);
 
-  const canvas = useValue("canvas room", () => canvasRoom(editor), [editor]);
+  // The room reads the DOM (the chrome cards, tldraw's style panel), which mounts a frame after the selection
+  // changes; reading it again once that frame is painted keeps the toolbar clear of a panel it could not see.
+  const [roomTick, setRoomTick] = useState(0);
+  useEffect(() => {
+    const frame = requestAnimationFrame(() => requestAnimationFrame(() => setRoomTick((tick) => tick + 1)));
+    return () => cancelAnimationFrame(frame);
+  }, [target, editor]);
+  const canvas = useValue("canvas room", () => canvasRoom(editor), [editor, roomTick]);
   const place = size && target ? placeFloating(target, size, canvas) : undefined;
 
   return (

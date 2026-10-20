@@ -1,9 +1,12 @@
 import { UnframedError } from "@unframed/contracts";
+import { closeTab as closeTabRule, moveTab, openTab, popClosed, pushClosed, restoreTabs } from "@unframed/domain";
 import { useSyncExternalStore } from "react";
 import { isConnectionFailure, type EngineConnection } from "../rpc/engine.ts";
 import { showError } from "../toasts.tsx";
 
 export const ACTIVE_PROJECT_KEY = "project.active";
+/** The saved tabs (spec 17): the order and the active tab. It replaces `project.active` as the place a restart reads from. */
+export const TABS_KEY = "project.tabs";
 const LIST_RETRY_MS = 1000;
 export const DEFAULT_PROJECT = "default";
 
@@ -13,12 +16,25 @@ const messageOf = (error: unknown): string =>
 /** Something that must settle before the active project changes (the open canvas's pending edits). */
 export type BeforeSwitch = () => Promise<void>;
 
+/** The tab state the strip and the canvas read. A new object on every change, so a subscriber can compare by identity. */
+export interface TabState {
+  /** The project whose canvas is mounted, or undefined when no tab is open (the start state). */
+  readonly active: string | undefined;
+  /** Every open tab, in the order the strip shows them. */
+  readonly order: ReadonlyArray<string>;
+  /** Projects closed from the strip, newest first, for Cmd+Shift+T. In memory only. */
+  readonly closed: ReadonlyArray<string>;
+  /** False until the first load has settled, so the start state is not shown while the app is still opening. */
+  readonly loaded: boolean;
+}
+
 /**
- * The active project. It lives in two places only, this state and the `project.active`
- * preference, and `activate` is the only function that writes either.
+ * The active project and the open tabs. They live in this state, and the preferences store
+ * keeps copies (`project.active` for the engine's outside-agent view, `project.tabs` for a
+ * restart). `activate` is the only function that changes the active project.
  */
 export class ProjectActivation {
-  private active: string | undefined;
+  private state: TabState = { active: undefined, order: [], closed: [], loaded: false };
   private readonly listeners = new Set<() => void>();
   private beforeSwitch: BeforeSwitch | undefined;
   /** Counts activations, so an initial load that finishes after a switch does not override it. */
@@ -29,7 +45,9 @@ export class ProjectActivation {
     this.engine = engine;
   }
 
-  activeProject = (): string | undefined => this.active;
+  activeProject = (): string | undefined => this.state.active;
+
+  tabState = (): TabState => this.state;
 
   subscribe = (listener: () => void): (() => void) => {
     this.listeners.add(listener);
@@ -41,15 +59,81 @@ export class ProjectActivation {
     this.beforeSwitch = hook;
   }
 
+  private update(next: Partial<Omit<TabState, "loaded">> & { loaded?: boolean }): void {
+    this.state = { ...this.state, ...next };
+    for (const listener of this.listeners) listener();
+  }
+
+  private persistTabs(): void {
+    const { order, active } = this.state;
+    this.engine.call("preferences.set", { key: TABS_KEY, value: { order: [...order], active: active ?? null } }).catch((error: unknown) => {
+      showError(`Could not save the open tabs: ${messageOf(error)}`);
+    });
+  }
+
   async activate(name: string): Promise<void> {
     this.generation++;
-    if (name === this.active) return;
+    const order = openTab(this.state.order, name);
+    if (name === this.state.active) {
+      if (order.length !== this.state.order.length) this.update({ order });
+      this.persistTabs();
+      return;
+    }
     await this.beforeSwitch?.();
-    this.active = name;
-    for (const listener of this.listeners) listener();
+    // Opening a project already open keeps its tab; a new one joins the end (spec 17).
+    this.update({ active: name, order });
+    this.persistTabs();
     await this.engine.call("preferences.set", { key: ACTIVE_PROJECT_KEY, value: name }).catch((error: unknown) => {
       showError(`Could not open “${name}”: ${messageOf(error)}`);
     });
+  }
+
+  /**
+   * Closes a tab (spec 17). Closing the active one settles its canvas first, then activates
+   * the neighbour; a background tab only leaves the strip. Closing deletes nothing.
+   */
+  async closeTab(name: string): Promise<void> {
+    if (!this.state.order.includes(name)) return;
+    const wasActive = name === this.state.active;
+    if (wasActive) {
+      this.generation++;
+      await this.beforeSwitch?.();
+    }
+    const next = closeTabRule(this.state.order, this.state.active, name);
+    const closed = pushClosed(this.state.closed, name);
+    this.update({ order: next.order, active: next.active, closed });
+    this.persistTabs();
+    if (wasActive) {
+      await this.engine.call("preferences.set", { key: ACTIVE_PROJECT_KEY, value: next.active ?? null }).catch(() => undefined);
+    }
+  }
+
+  /** Moves a tab to position `to` in the strip. Saved so the order survives a restart. */
+  moveTab(name: string, to: number): void {
+    this.update({ order: moveTab(this.state.order, name, to) });
+    this.persistTabs();
+  }
+
+  /** Cmd+Shift+T: opens the most recently closed project in a new tab at the end. */
+  async reopenClosed(): Promise<void> {
+    const { name, stack } = popClosed(this.state.closed);
+    if (name === undefined) return;
+    this.update({ closed: stack });
+    await this.activate(name);
+  }
+
+  /** A rename keeps the tab's place: the old name becomes the new one everywhere the tabs are kept. */
+  renameTab(from: string, to: string): void {
+    // The active one is switched by `activate(to)`, which settles the canvas first; only the places change here.
+    const swap = (names: ReadonlyArray<string>) => names.map((name) => (name === from ? to : name));
+    this.update({ order: swap(this.state.order), closed: swap(this.state.closed) });
+    this.persistTabs();
+  }
+
+  /** A deleted background project leaves the strip without touching the canvas. */
+  forgetTab(name: string): void {
+    this.update({ order: this.state.order.filter((each) => each !== name), closed: this.state.closed.filter((each) => each !== name) });
+    this.persistTabs();
   }
 
   /** Lets the open canvas's pending edits reach the engine, before a change that closes its room. */
@@ -58,27 +142,28 @@ export class ProjectActivation {
   }
 
   /**
-   * After an output folder change (spec 10): the remembered project if the new folder has
-   * it, else the first, else a new `default`. The canvas unmounts first, because the same
-   * name is another project in the new folder.
+   * After an output folder change (spec 10): the canvas unmounts first, because the same name
+   * is another project in the new folder. The saved tabs are read again against the new folder.
    */
   async reopen(): Promise<void> {
-    this.active = undefined;
-    for (const listener of this.listeners) listener();
+    this.update({ active: undefined, order: [], closed: [], loaded: false });
     await this.initialLoad();
   }
 
   /**
-   * Waits for the engine, reads the remembered project and the project list, and opens
-   * one: the remembered one, else the first, else a new `default`. A list that fails is
-   * tried once more after a second; a second failure opens nothing.
+   * Waits for the engine, reads the saved tabs and the project list, and opens them: the saved
+   * tabs that still exist, in their order, with the saved active one. With no saved tab, the
+   * remembered project (`project.active`, from before tabs), else the first, else a new `default`.
+   * A list that fails is tried once more after a second; a second failure opens nothing.
    */
   async initialLoad(): Promise<void> {
     const started = this.generation;
-    const remembered = await this.engine
-      .call("preferences.get", { keys: [ACTIVE_PROJECT_KEY] })
-      .then((answer) => answer.values[ACTIVE_PROJECT_KEY])
-      .catch(() => undefined);
+    const prefs = await this.engine
+      .call("preferences.get", { keys: [TABS_KEY, ACTIVE_PROJECT_KEY] })
+      .then((answer) => answer.values)
+      .catch(() => ({}) as Record<string, unknown>);
+    const remembered = prefs[ACTIVE_PROJECT_KEY];
+    const saved = prefs[TABS_KEY] as { order?: unknown; active?: unknown } | undefined;
     let projects: ReadonlyArray<string> | undefined;
     let failure: unknown;
     for (let attempt = 0; projects === undefined; ) {
@@ -97,6 +182,15 @@ export class ProjectActivation {
       return;
     }
     if (this.generation !== started) return;
+
+    const savedOrder = Array.isArray(saved?.order) ? saved.order.filter((name): name is string => typeof name === "string") : [];
+    const restored = restoreTabs({ order: savedOrder, active: typeof saved?.active === "string" ? saved.active : null }, projects);
+    if (restored.active !== undefined) {
+      this.update({ order: restored.order, closed: [], loaded: true });
+      await this.activate(restored.active);
+      return;
+    }
+
     let target: string;
     if (typeof remembered === "string" && projects.includes(remembered)) target = remembered;
     else if (projects[0] !== undefined) target = projects[0];
@@ -109,9 +203,13 @@ export class ProjectActivation {
       }
     }
     if (this.generation !== started) return;
+    this.update({ loaded: true });
     await this.activate(target);
   }
 }
 
 export const useActiveProject = (activation: ProjectActivation): string | undefined =>
   useSyncExternalStore(activation.subscribe, activation.activeProject);
+
+/** The whole tab state, for the strip (spec 17). */
+export const useTabState = (activation: ProjectActivation): TabState => useSyncExternalStore(activation.subscribe, activation.tabState);
