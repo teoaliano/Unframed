@@ -64,6 +64,7 @@ Model-facing text. Each file says where it is used and what its placeholders are
 
 - `prompts/add-parameter-instruction.md`: the message the editor's "Add a parameter" box sends to the artifact's chat. Spec 09.
 - `prompts/agent-system.md`: the Unframed instructions appended to Claude Code's system prompt and sent to Codex as developer instructions. Spec 07.
+- `prompts/artifact-edit-tools.md`: the `page_edit` and `motion_edit` descriptions and their arguments. Specs 07 and 09.
 - `prompts/artifact-read-tools.md`: the `page_read` and `motion_read` descriptions. Specs 07 and 09.
 - `prompts/change-note.md`: the preamble sentence that says the canvas changed since the chat's last turn. Spec 07.
 - `prompts/chat-title.md`: the system prompt and prompt that name a chat after its first turn. Spec 07.

@@ -185,7 +185,7 @@ export interface RecapRow {
   readonly rewritten: boolean;
 }
 
-const ARTIFACT_TOOLS = new Set(["page_write", "page_read", "motion_write", "motion_read"]);
+const ARTIFACT_TOOLS = new Set(["page_write", "page_edit", "page_read", "motion_write", "motion_edit", "motion_read"]);
 
 const record = (value: unknown): Record<string, unknown> => (typeof value === "object" && value !== null ? (value as Record<string, unknown>) : {});
 

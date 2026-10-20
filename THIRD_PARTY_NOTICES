@@ -62,3 +62,14 @@ DialKit (dialkit) is used under the MIT License. It is bundled with the web clie
 is never copied into a project folder.
 
 The full licence texts of these packages are listed with the rest of the bundle's packages.
+
+--------------------------------------------------------------------------------
+fx0 (artifact edit tools and agent prompt lines, spec 09)
+--------------------------------------------------------------------------------
+
+The page_edit and motion_edit tools follow the edit_design tool of fx0
+(https://github.com/vercel-labs/fx0), which applies exact string replacements to an HTML
+document, and three lines of assets/prompts/agent-system.md (thinking in proportion to the
+change, no invented facts, the pixel density of attached screenshots) are adapted from
+fx0's design prompt. fx0 is used under the Apache License 2.0
+(https://www.apache.org/licenses/LICENSE-2.0). No fx0 code is carried.

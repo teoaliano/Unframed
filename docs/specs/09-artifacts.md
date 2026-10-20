@@ -22,7 +22,7 @@ A motion's player, runtime, GSAP and a small viewer page are plain files copied 
 
 **Dials** are parameters an artifact declares with one call (`unframed.dials(name, config, apply)`) in a shorthand the agent writes. The values live on the shape, not in the file. They are tuned on the canvas, in a Parameters panel beside the selected artifact, or in the **editor**, the full-screen view of one artifact: chat on the left, the artifact in the centre at the column's size or a chosen device size, DialKit controls on the right, with a box that asks the agent to add a parameter.
 
-This spec also owns the agent's artifact tools (`page_write`, `page_read`, `motion_write`, `motion_read`), which join spec 07's MCP server here, and, built last because they need the preview origin and the Chrome finder, t3code's preview tools, which let the agent open what it made in a headless browser and check it.
+This spec also owns the agent's artifact tools (`page_write`, `page_edit`, `page_read`, `motion_write`, `motion_edit`, `motion_read`), which join spec 07's MCP server here, and, built last because they need the preview origin and the Chrome finder, t3code's preview tools, which let the agent open what it made in a headless browser and check it.
 
 ## User Stories
 
@@ -105,6 +105,9 @@ This spec also owns the agent's artifact tools (`page_write`, `page_read`, `moti
 77. As a person, I want the editor to remember the size I chose for each artifact until I quit, so that reopening it shows the same view, without that choice being saved into the project.
 78. As a person, I want a page or motion I opened in my own browser to swap to the agent's newest version within a few seconds without my refreshing it, so that I can keep it open beside the app while the agent works.
 79. As a person, I want that tab's link to keep working after I quit and reopen the app, so that a bookmark or a tab left open does not go dead.
+80. As a person, I want the agent to change a few words or a colour in a page without rewriting the whole document, so that a small request is quick and leaves the rest of the page exactly as it was.
+81. As a person, I want an agent edit that does not fit the current text to change nothing, so that a half-applied edit never leaves a broken version on the canvas.
+82. As a person, I want the agent told at once when what it wrote cannot work in Unframed (a CDN script, a web font, a remote image, a fragment instead of a document), so that it fixes the file before I ever see a blank or unstyled artifact.
 
 ## Implementation Decisions
 
@@ -148,6 +151,15 @@ with each segment URL-encoded.
 **Names**: `<epochMs>-<slug>[-<n>].html`, where slug is spec 01's slug rule applied to the title, or to `page`/`motion` when the title is empty. If the slug is empty, the base is `upload`. `n` starts at 1 on collision.
 
 **Size limit**: 2 MiB (2,097,152 bytes) after the runtime and bridge tags are injected.
+
+**Document checks**, a pure domain rule every agent write and edit passes before anything is written (uploads, pastes and node writers are not checked). Each check is cheap and unambiguous; a pattern the rule is unsure of is let through, because a wrong refusal costs the person a turn. A document is refused when:
+- it has neither `<!doctype html` nor an `<html>` element (case-insensitive): the tools take a whole document;
+- an element fetches from an `http:`, `https:` or protocol-relative (`//`) URL: `<script src>`, `<link href>` whose `rel` is `stylesheet`, `icon`, `preload`, `modulepreload`, `prefetch`, `manifest` or `apple-touch-icon`, `<img src|srcset>`, `<source src|srcset>`, `<video src|poster>`, `<audio src>`, `<track src>`, `<iframe src>`, `<embed src>`, `<object data>`, `<input src>`, SVG `<image href|xlink:href>`;
+- CSS in a `<style>` block or a `style` attribute names such a URL in `url(...)` or `@import "..."`;
+- a script (no `type`, `module`, or a JavaScript type) imports such a URL, statically (`import x from "https://..."`, `import "https://..."`) or with `import("https://...")`;
+- a motion's `<script src>` is a local file other than `gsap.js`, `hyperframes-runtime.js`, `hyperframe.runtime.iife.js` or `unframed-dials.js` (a leading `./` and any query are ignored; `data:` and `blob:` sources pass).
+
+HTML comments are ignored. Plain links (`<a href>`), form actions, `rel="preconnect"`, `rel="canonical"`, `data-*` attributes, `data:` URLs and URLs in visible text pass. The refusal is `the {kind} cannot work in Unframed, so nothing was written: ` followed by up to five problems, each with its fix, joined by `; ` (then `and {n} more` when there are more), ending in a full stop. The fixes: a script is inlined; a stylesheet is inlined, with a system font stack in place of a web font; media uses a project file by the exact name canvas_read reports, an inline SVG or a `data:` URL; a module import is inlined; a motion loads only `<script src="gsap.js"></script>`. For an edit the rule compares the edited document with the file it started from and refuses only for problems that file did not already have, so an uploaded or imported file that already breaks a rule can still be edited. The checks run on the document as the agent sent it (or as the edits left it), then the tags are injected, then the size limit applies.
 
 **Agent sidecar**, next to the file with `.json` in place of `.html`:
 
@@ -295,14 +307,14 @@ RPC `motion.renderStart { project, file, title?, dials?, shapeId }` (`shapeId` i
 
 ### Agent tools for artifacts
 
-This spec owns the four artifact tools, `page_write`, `page_read`, `motion_write` and `motion_read`, and adds them to spec 07's Unframed MCP server. Spec 07 builds only the two canvas tools; its required-tool check covers every tool the server registers, so from this spec on it covers these four (and the preview tools below) too. Both kinds are built from one definition so the new-file rule, placement, result and event cannot drift.
+This spec owns the six artifact tools, `page_write`, `page_edit`, `page_read`, `motion_write`, `motion_edit` and `motion_read`, and adds them to spec 07's Unframed MCP server (and so to spec 14's outside list and the stdio shim's catalogue, which list every tool the server registers). Spec 07 builds only the two canvas tools; its required-tool check covers every tool the server registers, so from this spec on it covers these six (and the preview tools below) too. Both kinds are built from one definition, and an edit ends in the same commit as a write that updates a shape, so the new-file rule, document checks, placement, result and event cannot drift.
 
-Descriptions are model-facing and composed from assets: `page_write` is the text in `assets/prompts/page-write-tool.md`, one space, then `assets/prompts/dials-contract.md`; `motion_write` is `assets/prompts/motion-write-tool.md`, then `dials-contract.md`, then `assets/prompts/dials-timeline.md`; `page_read` and `motion_read` are in `assets/prompts/artifact-read-tools.md`. Each file states how it is joined.
+Descriptions are model-facing and composed from assets: `page_write` is the text in `assets/prompts/page-write-tool.md`, one space, then `assets/prompts/dials-contract.md`; `motion_write` is `assets/prompts/motion-write-tool.md`, then `dials-contract.md`, then `assets/prompts/dials-timeline.md`; `page_edit` and `motion_edit` are each their own section of `assets/prompts/artifact-edit-tools.md`, used alone (the dials contract already reaches the model through the write tools); `page_read` and `motion_read` are in `assets/prompts/artifact-read-tools.md`. Each file states how it is joined.
 
 `<kind>_write { html: string, shapeId?: string, title?: string (max 120) }`:
 1. `html` not a non-empty string: `html must be a non-empty string`.
-2. Inject tags (bridge for page, runtime then bridge for motion). Over 2 MiB: `the {kind} is too large ({n} bytes; the limit is 2097152)`.
-3. `shapeId` given but no such shape: `no shape {shapeId}`. Wrong kind: `shape {shapeId} is a {its kind}, not a {kind}`.
+2. `shapeId` given but no such shape: `no shape {shapeId}`. Wrong kind: `shape {shapeId} is a {its kind}, not a {kind}`.
+3. The document checks ("Artifact files"), then inject tags (bridge for page, runtime then bridge for motion). Over 2 MiB: `the {kind} is too large ({n} bytes; the limit is 2097152)`.
 4. Title = (`title` if given, else the shape's current title, else "") trimmed. When a person has named the shape (its `@id` is not a number, spec 06), the person's name wins: the given `title` is ignored and the shape's current title, which is that name, is used for the file name, the sidecar, the activity and the answer.
 5. Ensure the bridge (page) or the library (motion), then write the new file with exclusive create and its agent sidecar.
 6. Update: set `file`, and `title` only if `title` was given and differs. Create: a new shape of that kind at the default agent size with `{ file, title, fileName: "" }`, placed to the right of the selection's bounding box (right edge + 60, top of the topmost selected shape), or at (80, 80) with nothing selected. Written through spec 02's `apply` with origin `chat:<chatId>` and recorded in spec 07's turn changes, so it is one change the turn's Revert undoes.
@@ -310,9 +322,17 @@ Descriptions are model-facing and composed from assets: `page_write` is the text
 8. Tags the chat with the artifact (create or update) through spec 07's tag reactor, and records a tool activity with summary `Created {kind}` or `Updated {kind}`, followed by ` · {title}` when there is a title, and an artifact field `{ shapeId, file, title, kind, created }`.
 9. Returns `{ ok: true, shapeId, file, title, previewUrl, clock }`, `previewUrl` being the artifact URL above and `clock` the room clock after the write, as spec 07's `canvas_write` reports it.
 
+`<kind>_edit { shapeId: string, edits: Array<{ old_string: string, new_string: string }> (1 to 20), title?: string (max 120) }` changes part of an existing artifact without the agent sending the whole document:
+1. `shapeId` missing or empty: `shapeId must name the {kind} to edit`. No such shape: `no shape {shapeId}`. Wrong kind: `shape {shapeId} is a {its kind}, not a {kind}`. No file: `{kind} {shapeId} has no file yet; write it with {kind}_write`. Unreadable: `the file {file} could not be read`.
+2. The edits apply in order to an in-memory copy of the shape's current file, each to the text the edits before it left (a pure domain rule). `edits` not a list, or empty: `edits must be a list of 1 to 20 { old_string, new_string } changes. Nothing was written.` More than 20: `{n} edits is too many; one call takes 1 to 20. Nothing was written.` An edit whose strings are not both strings: `edit {i}: old_string and new_string must both be strings. Nothing was written.` An empty `old_string`: `edit {i}: old_string is empty; it must quote text that is in the {kind} now. Nothing was written.` An `old_string` that does not occur exactly once (overlapping occurrences counted): `edit {i}: old_string matched {n} times; it must match exactly once. Nothing was written.`, followed by ` Read the current text with {kind}_read and quote it exactly.` for no match or ` Include more of the surrounding text so it is unique.` for several. `new_string` goes in literally. Any refusal refuses the whole call.
+3. The document checks against the file it started from (refusing only problems the edits brought in), tag injection (idempotent, so a file that already carries its tags gains none) and the size limit, as a write's step 3.
+4. Then steps 4 to 9 of the write, as an update of that shape: a new file with exclusive create, the agent sidecar naming the chat, the turn and the shape, the shape's `file` changed (and its title as a write's `title` would), so undo and the turn's Revert restore the previous version; the tag, the snapshot, the live viewer's pointer and the `Updated {kind}` activity follow from the same commit.
+
+An edit may change the `unframed.dials` call; the person's saved values stay on the shape and still apply.
+
 `<kind>_read { shapeId }` returns the file's HTML. Refusals: `no shape {shapeId}`, `shape {shapeId} is a {its kind}, not a {kind}`, `{kind} {shapeId} has no file yet`, `the file {file} could not be read`. The file name is reduced to its basename before reading.
 
-Refusals are tool errors carrying `{ "error": <message> }`, as spec 07's other tools report them. In plan interaction mode the two write tools are refused by spec 07's permission policy.
+Refusals are tool errors carrying `{ "error": <message> }`, as spec 07's other tools report them. In plan interaction mode the two write tools and the two edit tools are refused by spec 07's permission policy, and each tool refuses again itself with the same message.
 
 ### Dials
 
@@ -418,7 +438,7 @@ Tool descriptions are model-facing: use the text in `assets/prompts/preview-tool
 - **Live pointers** (engine): `artifact.openLive` writes a shape's first pointer; after each commit and when a room opens, rewrites the existing pointers whose shape changed or went.
 - **Live viewer** (domain): the key rule, the pointer text and reading it back, the check, the viewer URL and the viewer page, whose script is built from the same module.
 - **Renderer** (engine): start and status, with the producer behind a seam the test hook replaces.
-- **Artifact rules** (domain): file names, tag injection, Chrome candidate list, placement beside selection, the add-a-parameter instruction builder. (A render's placeholder is placed by spec 03's result placement.)
+- **Artifact rules** (domain): file names, tag injection, the edit list, the document checks, Chrome candidate list, placement beside selection, the add-a-parameter instruction builder. (A render's placeholder is placed by spec 03's result placement.)
 - **Dials** (domain): normalise, default values, merge, and the bridge built from them.
 - **Preview sizes** (domain): the editor's size choices, the viewport each means (through the preview tools' own viewport rule), the custom-side rule and the fit scale.
 - **Artifact shapes, frame, editor, parameters column, canvas Parameters panel** (web).
@@ -427,8 +447,8 @@ Tool descriptions are model-facing: use the text in `assets/prompts/preview-tool
 
 A good test drives one of the three seams from 00-index and asserts only on what that seam exposes: HTTP responses, RPC replies, files written, what is on screen. Prior art in the old app: the preview origin tested by resolving requests and asserting status, headers and body; the dial rules tested case by case; the shipped bridge tested by evaluating its actual source against a stub `window` and driving it with messages; renders tested with the producer replaced.
 
-- **Domain**: naming, tag injection, dial normalisation, defaults and merge, Chrome candidates per platform, placement, the instruction builder. Also the built bridge file, evaluated against a stub window (parent, origin, `postMessage`, `__hfVariables`), because it is a domain artefact, and the built live viewer the same way.
-- **Engine**: the preview origin over real HTTP (fetch with a crafted `Host` header), the four artifact tools and the preview tools through the scripted agent (fixtures `dials`, `revise`, `stitch` exist in `assets/fixtures/`), motion upload and render RPCs with `UNFRAMED_TEST_RENDERER`, and the files each leaves in the project folder.
+- **Domain**: naming, tag injection, the edit list and its refusals, the document checks, dial normalisation, defaults and merge, Chrome candidates per platform, placement, the instruction builder. Also the built bridge file, evaluated against a stub window (parent, origin, `postMessage`, `__hfVariables`), because it is a domain artefact, and the built live viewer the same way.
+- **Engine**: the preview origin over real HTTP (fetch with a crafted `Host` header), the six artifact tools and the preview tools through the scripted agent (fixtures `dials`, `revise`, `stitch` exist in `assets/fixtures/`), motion upload and render RPCs with `UNFRAMED_TEST_RENDERER`, and the files each leaves in the project folder.
 - **Browser**: shapes, drop, paste, delete, the frame's live state, the sandbox probe, render from the button, the editor, dials end to end, the add-a-parameter box. A real render (Chrome plus ffmpeg) is a manual check, not a test.
 
 ## Tasks
@@ -510,6 +530,11 @@ A good test drives one of the three seams from 00-index and asserts only on what
 74. A page opened with "Open in a new tab" shows its saved dials; a new version swaps in within a few seconds without the tab reloading; a dial change on the shape reaches it; only that shape has a pointer; deleting it shows the deleted line and putting it back shows it again; stopping the engine keeps the frame and shows the not-running line. A link to a shape Unframed does not have says so; with nothing on screen, a stopped engine shows the not-running note. A motion's live viewer shows its saved dials through the motion viewer and follows a dial change and a new version. Seam: browser
 75. `page_write` and `motion_write` with a `title` on an artifact a person named keep the name as the shape's title and file name. Seam: engine
 76. A double-click on an artifact's label renames it (spec 06); a double-click on its body still opens the editor. Seam: browser
+77. The edit list: one edit, several in order, an edit that matches what an earlier one wrote, `new_string` taken literally, no match, several matches (overlapping counted), an empty `old_string`, strings that are not strings, more than 20 edits, none, and not a list. Seam: domain
+78. The document checks: a self-contained page and a motion loading only `gsap.js` pass; a fragment, each fetching element and attribute, CSS `url()` and `@import`, a module import and a motion's other local script are refused with their keys and fixes; links, preconnects, `data-*`, `data:`, comments, non-script types and prose pass; at most five problems are listed; an edit is refused only for problems it brought in; the size limit after injection. Seam: domain
+79. `page_edit` writes the edited text as a new file beside the untouched old one, moves the shape, keeps the sidecar, tag, activity and turn changes of a write, and the turn's Revert points it back; `motion_edit` keeps a motion's runtime and bridge once. Seam: engine
+80. A failed edit (no match, several matches, a CDN brought in, no edits) writes no file and leaves the shape alone; an unknown shape, the wrong kind, a missing `shapeId` and a shape with no file are refused; both edit tools are refused in plan mode; both are on the server's tool list and in the required-tool check. Seam: engine
+81. A `page_write` or `motion_write` refused by the document checks (a CDN script, a fragment, a motion's other script) writes no file and no shape. Seam: engine
 
 ## Out of Scope
 
@@ -532,6 +557,7 @@ A good test drives one of the three seams from 00-index and asserts only on what
 - HyperFrames (`@hyperframes/core`, `@hyperframes/player`, `@hyperframes/producer`, `@hyperframes/engine`): Apache-2.0. The player and runtime builds are copied into project folders.
 - GSAP (`gsap`): the GSAP standard no-charge licence (Webflow), free for commercial use since 3.13. Not MIT or Apache. `gsap.min.js` is copied into project folders, the same standing as any installed dependency.
 - DialKit (`dialkit`): MIT. Bundled with the web only, never copied into a project folder.
+- fx0 (vercel-labs/fx0): Apache-2.0. The edit tools follow its `edit_design` tool, and three lines of the agent system prompt (spec 07) are adapted from its design prompt. No code is carried.
 
 ### Assets this spec needs
 
@@ -540,6 +566,7 @@ A good test drives one of the three seams from 00-index and asserts only on what
 - `assets/prompts/preview-tool-descriptions.md`: t3code `apps/server/src/mcp/toolkits/preview/tools.ts` tool descriptions (MIT), rewritten to take `shapeId` instead of URLs and tab ids.
 - `assets/prompts/page-write-tool.md`: `page_write` description (followed by the dials contract) and its three argument descriptions (`html`, `shapeId`, `title`). The full description is this file, one space, then `dials-contract.md`. Source: `server/agentTools.js` `ARTIFACTS.page.describeWrite` and the argument describes in `artifactTools`, the old `nodeId` renamed `shapeId`.
 - `assets/prompts/motion-write-tool.md`: `motion_write` description, composition contract included (followed by the dials contract, then the timeline paragraph), and argument descriptions. Source: `server/agentTools.js` `ARTIFACTS.motion.describeWrite`.
+- `assets/prompts/artifact-edit-tools.md`: `page_edit` and `motion_edit` descriptions and their argument descriptions (`shapeId`, `edits`, `old_string`, `new_string`, `title`). Each description is its section alone. Source: new, after the `edit_design` tool of vercel-labs/fx0 (Apache-2.0).
 - `assets/prompts/artifact-read-tools.md`: `page_read` and `motion_read` descriptions and the `shapeId` argument description (the old `nodeId`). Source: `server/agentTools.js` `ARTIFACTS.*.describeRead`.
 - `assets/prompts/add-parameter-instruction.md`: the premade add-a-parameter instruction, with placeholders for wanted text, singular or plural, kind and title. Source: `client/src/editor/Dials.jsx` `ASK`.
 - A small MP4 fixture for the `ok` stub renderer: `assets/fixtures/render-stub.mp4` (any 1 s clip; none exists in the old repo, the coordinator makes one).

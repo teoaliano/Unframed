@@ -217,7 +217,7 @@ The token is accepted on spec 07's `/mcp` route and nowhere else. The route keep
 
 A connection reaches:
 
-- `projects_list`, and every tool spec 07 and spec 09 register (`canvas_read`, `canvas_write`, `page_write`, `page_read`, `motion_write`, `motion_read`, the `preview_*` tools), for every project in the current output folder. Each of those tools takes one more required argument, `project`. A connection is not limited to one project (decided): the agent picks the project per call, from `projects_list`.
+- `projects_list`, and every tool spec 07 and spec 09 register (`canvas_read`, `canvas_write`, `page_write`, `page_edit`, `page_read`, `motion_write`, `motion_edit`, `motion_read`, the `preview_*` tools), for every project in the current output folder. Each of those tools takes one more required argument, `project`. A connection is not limited to one project (decided): the agent picks the project per call, from `projects_list`.
 - The project folder's path, through `projects_list`.
 - `generate`, for every project, as described in "Generation by agents". It starts runs through the run services and never reads the key.
 - The live selection, through `canvas_read`, and `canvas_select` to set it (see "The live selection").
@@ -461,7 +461,7 @@ Prior art: spec 07's MCP auth test (task 17) and scripted-agent canvas tests, sp
 8. **`projects_list`.** Every project with its absolute folder, sorted, and `active` on the one in `project.active`. Seam: engine.
 9. **One chat per session per project.** A session's first `canvas_read` naming a project creates one outside chat there, titled `<connection name> · <h:mm am/pm>`, with tool activities for the call; the session's second call reuses it; the same session naming a second project gets a second chat there; a second session of the same connection gets its own chat in the first project; another connection's session gets its own; an unknown project answers its refusal and creates nothing; a deleted outside chat is replaced on the session's next call. Seam: engine.
 10. **`canvas_read` and `canvas_write` from outside.** The read matches the in-app view, with the live selection (task 34) as its `selection`. A write lands as one room change with origin `chat:<outside chat id>`, a sync client sees it, and it is recorded under the open outside turn; writing to a page tags the outside chat. Seam: engine.
-11. **Artifact tools from outside.** `page_write` and `motion_write` create and update artifacts with their files, library and agent sidecars naming the outside chat and turn; `page_read` returns the HTML. Seam: engine.
+11. **Artifact tools from outside.** `page_write` and `motion_write` create and update artifacts with their files, library and agent sidecars naming the outside chat and turn; `page_edit` and `motion_edit` update them the same way; `page_read` returns the HTML. Seam: engine.
 12. **Turns by idle time.** Calls within the test idle time form one turn; after it the turn settles (`lastClock`, its files) with no agent-turn sidecar in the project folder, and the next call opens turn 2. Seam: engine.
 13. **Revert outside work.** `thread.turn.revert` on a settled outside turn restores the canvas and skips a shape a sync client edited since; on the open turn it settles the turn first, then reverts it. Seam: engine.
 14. **Change notes both ways.** After a sync client edits the canvas, the outside agent's next tool result starts with the change note; after a revert of its turn, the note names the revert. An in-app chat's next preamble counts the outside write as another chat (spec 07's bulk-edit fixture pattern with `expectPreamble`). Seam: engine.
@@ -546,4 +546,4 @@ Each task updates the passages it bends, in the same commit, so the specs descri
 
 ### Assets this spec needs
 
-- `assets/prompts/outside-agent.md`: new. The `initialize` instructions for a connection and, as its first paragraph, the `projects_list` description. Adapted from the canvas parts of `assets/prompts/agent-system.md`, plus the project argument, the file rules and the not-open behaviour.
+- `assets/prompts/outside-agent.md`: new. The `initialize` instructions for a connection and, as its first paragraph, the `projects_list` description. Adapted from the canvas parts of `assets/prompts/agent-system.md` (its tools sentence names the edit tools, as spec 09 has it), plus the project argument, the file rules and the not-open behaviour.
