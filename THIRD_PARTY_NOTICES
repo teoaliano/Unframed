@@ -64,7 +64,7 @@ is never copied into a project folder.
 The full licence texts of these packages are listed with the rest of the bundle's packages.
 
 --------------------------------------------------------------------------------
-fx0 (artifact edit tools and agent prompt lines, spec 09)
+fx0 (artifact edit tools and agent prompt lines)
 --------------------------------------------------------------------------------
 
 The page_edit and motion_edit tools follow the edit_design tool of fx0

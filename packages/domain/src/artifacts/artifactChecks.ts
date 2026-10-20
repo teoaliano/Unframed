@@ -1,5 +1,5 @@
 /**
- * What an agent's page or motion must be before it is written (spec 09, "Document checks"):
+ * What an agent's page or motion must be before it is written:
  * a whole HTML document that loads nothing from the internet, and a motion that loads no
  * script but the files beside it. Each check is cheap and unambiguous on purpose; anything
  * these patterns are unsure of is let through, because a wrong refusal costs the person a turn.

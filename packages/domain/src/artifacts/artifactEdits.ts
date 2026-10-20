@@ -1,5 +1,5 @@
 /**
- * `page_edit` and `motion_edit` (spec 09): an ordered list of exact string replacements
+ * `page_edit` and `motion_edit`: an ordered list of exact string replacements
  * applied to an in-memory copy of an artifact's current file. Any edit that does not match
  * exactly once refuses the whole list, so a failed call writes nothing.
  */

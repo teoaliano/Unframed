@@ -1,6 +1,6 @@
 # page_edit and motion_edit
 
-Used by spec 07's Unframed MCP server and spec 09. The model-facing descriptions of the two edit tools and their arguments. Each description is the text of its section alone: the dials contract and the performance paragraph already reach the model through `page_write` and `motion_write`. No placeholders.
+Held by `packages/domain/src/artifacts/prompts.ts` for the edit tools in `packages/engine/src/artifacts/artifactTools.ts`. The model-facing descriptions of the two edit tools and their arguments. Each description is the text of its section alone: the dials contract and the performance paragraph already reach the model through `page_write` and `motion_write`. No placeholders.
 
 Source: new in Unframed, after the `edit_design` tool of vercel-labs/fx0 (Apache-2.0), which applies exact string replacements to its HTML instead of rewriting the document. Adapted, not verbatim.
 
