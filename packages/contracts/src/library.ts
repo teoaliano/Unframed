@@ -33,7 +33,8 @@ export const Preset = Schema.Struct({
   summary: Schema.String,
   /** What to do after inserting it, shown on the card. */
   needs: Schema.optionalKey(Schema.String),
-  kind: Schema.Literals(["recipe", "group"]),
+  /** A group (with a recipe or without), or one style document. */
+  kind: Schema.Literals(["recipe", "group", "style"]),
   /** The recipe's medium; absent for a plain group. */
   medium: Schema.optionalKey(Medium),
   content: PresetContent,

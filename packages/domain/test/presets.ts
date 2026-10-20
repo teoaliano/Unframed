@@ -73,3 +73,9 @@ export const textOf = (shape: ContentShape | undefined): string =>
   ((shape?.props.richText as { content: Array<{ content?: Array<{ text: string }> }> } | undefined)?.content ?? [])
     .map((paragraph) => (paragraph.content ?? []).map((node) => node.text).join(""))
     .join("\n");
+
+export const styleShape = (id: string, ref: string, file: string, at = { x: 0, y: 0 }, parentId = "page:page"): ContentShape => ({
+  ...base(id, "style", at, parentId),
+  props: { w: 320, h: 240, file, title: "Linear", fileName: "", swatches: ["#5e6ad2"], excerpt: "Calm." },
+  meta: { ref },
+});

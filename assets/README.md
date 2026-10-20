@@ -26,6 +26,13 @@ The design canvas for selection-based generation. Open the `.dc.html` files in a
 - `design/OptionB.dc.html`: the recipe option where a group holds standing settings.
 - `design/OptionC.dc.html`: the recipe option where a result stays wired to its sources.
 
+## design-md/
+
+The library's system style presets: ten DESIGN.md files, verbatim, from VoltAgent/awesome-design-md (MIT) at commit `3b605329240ce735b510037cca322f1831fdd7f8`. `packages/domain/src/styles/stylePresets.ts` lists them with their one-line descriptions, and `packages/web/src/library/systemPresets.ts` loads the markdown when one is inserted.
+
+- `design-md/LICENSE`: the repository's MIT licence.
+- `design-md/<name>/DESIGN.md`: one style each, for `apple`, `claude`, `vercel`, `notion`, `airbnb`, `linear.app`, `stripe`, `figma`, `bmw-m` and `coinbase`.
+
 ## fixtures/
 
 Scripted-agent scripts in the format `packages/engine/src/agent/adapters/scripted.ts` reads. The engine and browser tests load them through `UNFRAMED_TEST_AGENT_SCRIPT`; `fixtures/README.md` holds the conventions.
@@ -60,7 +67,7 @@ Scripted-agent scripts in the format `packages/engine/src/agent/adapters/scripte
 
 ## prompts/
 
-Model-facing text, used verbatim. Each file says which code holds it and what its placeholders are; tests hold the constants in `packages/domain/src/agent/prompts.ts`, `packages/domain/src/artifacts/prompts.ts`, `packages/domain/src/freeRepair.ts`, `packages/web/src/library/systemPresets.ts` and `packages/engine/src/canvas/starter.ts` to the fenced `text` blocks.
+Model-facing text, used verbatim. Each file says which code holds it and what its placeholders are; tests hold the constants in `packages/domain/src/agent/prompts.ts`, `packages/domain/src/artifacts/prompts.ts`, `packages/domain/src/styles/prompts.ts`, `packages/domain/src/freeRepair.ts`, `packages/web/src/library/systemPresets.ts` and `packages/engine/src/canvas/starter.ts` to the fenced `text` blocks.
 
 - `prompts/add-parameter-instruction.md`: the message the editor's "Add a parameter" box sends to the artifact's chat.
 - `prompts/agent-system.md`: the Unframed instructions appended to Claude Code's system prompt and sent to Codex as developer instructions.
@@ -84,6 +91,7 @@ Model-facing text, used verbatim. Each file says which code holds it and what it
 - `prompts/preset-prose-to-json.md`: the Prose to JSON preset's instructions.
 - `prompts/preview-tool-descriptions.md`: the twelve preview tool descriptions and their arguments (from t3code, MIT).
 - `prompts/starter-canvas.md`: the scene and subject prompts a new canvas starts with.
+- `prompts/style-tools.md`: the `style_read`, `style_write` and `style_edit` descriptions and arguments, and the preamble's style line.
 - `prompts/tool-descriptions.md`: the `canvas_read` and `canvas_write` descriptions, and where the artifact tool descriptions live.
 
 ## screenshots/

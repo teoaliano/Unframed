@@ -73,3 +73,18 @@ document, and three lines of assets/prompts/agent-system.md (thinking in proport
 change, no invented facts, the pixel density of attached screenshots) are adapted from
 fx0's design prompt. fx0 is used under the Apache License 2.0
 (https://www.apache.org/licenses/LICENSE-2.0). No fx0 code is carried.
+
+The style documents (style_read, style_write, style_edit and the preamble's style line)
+follow fx0's chats, which start with a DESIGN.md in their system prompt; the two style lines
+of assets/prompts/agent-system.md are new text after that idea.
+
+--------------------------------------------------------------------------------
+awesome-design-md (the library's style presets)
+--------------------------------------------------------------------------------
+
+The ten DESIGN.md files in assets/design-md (apple, claude, vercel, notion, airbnb,
+linear.app, stripe, figma, bmw-m, coinbase) come verbatim from VoltAgent/awesome-design-md
+(https://github.com/VoltAgent/awesome-design-md, commit
+3b605329240ce735b510037cca322f1831fdd7f8). They describe the visual language of those
+brands and are not affiliated with or endorsed by them. awesome-design-md is used under the
+MIT License; its text is in assets/design-md/LICENSE.
