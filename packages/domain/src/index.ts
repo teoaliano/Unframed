@@ -88,3 +88,4 @@ export * from "./agent/outsideServer.ts";
 export * from "./agent/agentRun.ts";
 export * from "./outside/spendRules.ts";
 export * from "./agent/generationSpend.ts";
+export * from "./tabs.ts";

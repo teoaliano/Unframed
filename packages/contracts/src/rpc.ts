@@ -109,6 +109,21 @@ export const ProjectsCreate = Rpc.make("projects.create", {
   error: UnframedError,
 });
 
+/** One project's live work and the work waiting on the person (spec 17). Only projects with either above zero are sent, and a project that falls to zero is sent once more with zeros. */
+export const ProjectActivity = Schema.Struct({
+  project: Schema.String,
+  running: Schema.Number,
+  needsYou: Schema.Number,
+});
+export type ProjectActivity = typeof ProjectActivity.Type;
+
+/** The activity of every project with live work, then one message per change (spec 17). */
+export const ProjectsActivity = Rpc.make("projects.activity", {
+  success: ProjectActivity,
+  error: UnframedError,
+  stream: true,
+});
+
 export const FilesReveal = Rpc.make("files.reveal", {
   payload: Schema.Struct({
     project: Schema.optionalKey(Schema.String),
@@ -326,6 +341,7 @@ export const UnframedRpcs = RpcGroup.make(
   PreferencesGet,
   PreferencesSet,
   PreferencesSubscribe,
+  ProjectsActivity,
   FilesCopy,
   TestCanvasRead,
   TestCanvasApply,
