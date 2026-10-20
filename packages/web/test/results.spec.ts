@@ -62,6 +62,7 @@ test("results land to the right of the selection, placeholder first, and a selec
   await toolbar(page).getByRole("button", { name: "Generate", exact: true }).click();
   await expect(composer(page).getByTestId("source-count")).toHaveText("1 selected");
   await expect(instructionBox(page)).toHaveText("");
+  await expect(instructionBox(page)).toBeFocused();
   await page.keyboard.type("as a sketch");
   const before = generation.requests.length;
   await sendRun(page);

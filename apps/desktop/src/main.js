@@ -473,7 +473,7 @@ const CANVAS_COLOURS = `new Promise((resolve) => requestAnimationFrame(() => req
 const windowChrome = () => {
   const theme = palette();
   return mac
-    ? { titleBarStyle: 'hidden', trafficLightPosition: { x: 20, y: 23 } }
+    ? { titleBarStyle: 'hidden', trafficLightPosition: { x: 20, y: 17 } }
     : {
         titleBarStyle: 'hidden',
         // These three properties are the whole of it -- Chromium hard-codes the
@@ -487,19 +487,19 @@ const windowChrome = () => {
         // measured. Chromium silently discards a height at or below
         // SM_CYCAPTION and uses the system caption instead, and SM_CYCAPTION is
         // not readable from here -- so on a system where it exceeds 40, the band
-        // grows and the card below it (top: 48) stops clearing the buttons.
+        // grows and the card below it (top: 40) stops clearing the buttons.
         // Typical values are well under 40; this is where to look if they ever
         // are not.
         titleBarOverlay: { color: theme.background, symbolColor: theme.symbol, height: 40 },
       };
 };
 
-// Every number here is derived from the card, which from engine 0.6.3 is at
-// top/left 8, 44 tall including its 1px border, so its row centres on y 30.
+// Every number here is derived from the top bar, which sits flush with the window's top edge and is 48 tall, so its row
+// centres on y 24.
 //
 // The lights measure ~13 across, 23 centre to centre, ~60 for the group, and
 // trafficLightPosition.y lands about 6.75 above their centre -- measured from a
-// 2x screenshot, not taken from Apple's docs. So y 23 centres them on y 30, and
+// 2x screenshot, not taken from Apple's docs. So y 17 centres them on y 24, and
 // x 20 sets them 12 inside the card's left edge.
 //
 // 92 of left inset was picked by eye in the running app, not derived: it makes
@@ -517,20 +517,19 @@ const PLATFORM_CSS = mac
   // buttons to the corner -- unlike macOS, where trafficLightPosition put the
   // lights wherever the card wanted them -- so the only question is which
   // direction the card yields in, and down is the one that costs it nothing: it
-  // keeps its 8px offset, its radius, and its corner. Sideways cost it the
-  // corner and left the buttons' width of dead canvas outboard of it.
+  // keeps its radius and its corner. Sideways cost it the corner and left the
+  // buttons' width of dead canvas outboard of it.
   //
-  // 48 is the 40px band plus the 8px margin the cards already use, so the gap
-  // under the buttons matches the gap beside everything else. It needs no
-  // measurement of the buttons themselves: only their height is ours to set, and
-  // we set it.
+  // 40 is the band the buttons fill, so the card starts directly under them. It
+  // needs no measurement of the buttons themselves: only their height is ours to
+  // set, and we set it.
   //
   // The strip itself sits at z-index 5, under the chrome cards at 400, so their
   // buttons still take their own clicks. Everything else in that band is empty
   // canvas -- which is exactly what a title bar is. It hangs off <body> because
   // the engine's hook contract names no app root element, and the web never
   // reorders <body>'s children.
-  : `.unframed-chrome-right { top: 48px !important; }
+  : `.unframed-chrome-right { top: 40px !important; }
      body::before {
        content: ''; display: block; position: fixed; top: 0; left: 0; right: 0;
        height: 40px; z-index: 5; -webkit-app-region: drag;

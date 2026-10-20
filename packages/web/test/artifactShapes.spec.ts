@@ -48,8 +48,8 @@ test("a filled artifact drops its card, shows its title above the corner, and re
   await page.keyboard.press("Shift+1");
   await page.waitForTimeout(400);
   const box = (await card.boundingBox())!;
-  // The title is the handle that selects it.
-  await page.mouse.click(box.x + 20, box.y - 8);
+  // The title is the handle that selects it. The top bar covers the title's upper part, so the click lands in its lower strip.
+  await page.mouse.click(box.x + 20, box.y - 3);
   // A selected frame takes the pointer inside the shape: the corner handle is grabbed by its outer half.
   await page.mouse.move(box.x + box.width + 3, box.y + box.height + 3);
   await page.mouse.down();

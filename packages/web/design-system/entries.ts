@@ -22,6 +22,7 @@ const RECIPES: ReadonlyArray<Omit<Entry, "group">> = [
   { id: "composer-surface", title: "Composer surface", module: "/src/chrome/composerSurface.ts", summary: "The glass fill the Generate and Agent composers share." },
   { id: "hue", title: "Label hues", module: "/src/chrome/hue.ts", summary: "The tints for provider tokens, library chips and role badges." },
   { id: "shape-looks", title: "Shape looks", module: "/src/canvas/shapes/looks.ts", summary: "Shape labels, media cards and artifact cards on the canvas." },
+  { id: "chat-tabs", title: "Chat tabs", module: "/src/agent/rail/TabStrip.tsx", summary: "The agent rail's chat tabs: t3code's panel tab look, status marks, More menu. Shown at the rail's 380 px." },
 ];
 
 const title = (file: string) =>

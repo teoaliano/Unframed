@@ -13,6 +13,25 @@ import { unkittedControls } from "./kit.ts";
 import { openLibrary } from "./library.ts";
 import { dropFiles, groupRecord, inGroup, promptRecord, putRecords } from "./media.ts";
 
+/** A tab's right-click menu item for `project`: Rename project, Delete project, Close, Close all tabs. */
+const tabMenuItem = async (page: Page, project: string, item: string) => {
+  // An open menu or dialog would take the click (its inert layer covers the strip); close it first, as a person would.
+  const open = page.locator("[role=menu], [role=dialog], [role=alertdialog]");
+  if ((await open.count()) > 0) {
+    await page.keyboard.press("Escape");
+    await expect(open).toHaveCount(0);
+  }
+  const tab = page.locator(`[role=tab][data-project='${project}']`);
+  // A project made through the engine alone has no tab yet: open it from the list first.
+  if ((await tab.count()) === 0) {
+    await page.getByRole("button", { name: "All projects" }).click();
+    await page.getByRole("menuitemradio", { name: project }).click();
+    await expect(tab).toHaveCount(1);
+  }
+  await tab.click({ button: "right" });
+  await page.getByRole("menuitem", { name: item }).click();
+};
+
 /*
  * Spec 12's sweep: every surface in turn, and on each no button, menu item, field or dialog
  * that a kit component did not render.
@@ -44,8 +63,7 @@ test("the chrome, canvas menus and dialogs render every control through the kit"
   await expect(page.getByTestId("settings-dialog")).toBeVisible();
   await sweep(page);
 
-  await page.getByRole("button", { name: "All projects" }).click();
-  await page.getByRole("button", { name: "Delete default" }).click();
+  await tabMenuItem(page, "default", "Delete project");
   await expect(page.getByRole("alertdialog", { name: "Delete project?" })).toBeVisible();
   await sweep(page);
 

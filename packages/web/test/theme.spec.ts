@@ -10,7 +10,7 @@ const looks = (page: Page) =>
     return {
       body: css("body", "background-color"),
       grid: css("[data-testid='dot-grid']", "background-color"),
-      card: css(".unframed-chrome-left", "background-color"),
+      card: css("[data-slot='top-bar-body'] path", "fill"),
       group: css("[data-testid='group-frame']", "border-top-color"),
       tldraw: document.querySelector(".tl-container")!.classList.contains("tl-theme__dark") ? "dark" : "light",
       theme: document.documentElement.getAttribute("data-unframed-theme"),
@@ -19,12 +19,12 @@ const looks = (page: Page) =>
 
 /**
  * What spec 12 says each surface is: the body and grid on --background (the body in sRGB,
- * the format the shell reads), the corner card in glass over it.
+ * the format the shell reads), the top bar opaque on the same background.
  */
 const expected = async (page: Page, theme: "light" | "dark") => ({
   body: await tokenRgb(page, "--background"),
   grid: await tokenColor(page, "--background"),
-  card: await resolvedColor(page, "color-mix(in srgb, var(--background) var(--glass-opacity), transparent)"),
+  card: await resolvedColor(page, "var(--background)"),
   group: expect.any(String),
   tldraw: theme,
   theme,

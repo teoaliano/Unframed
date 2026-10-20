@@ -18,35 +18,37 @@ test("the top-left card holds the logo; Settings sits at the end opposite the wi
   await expect(page.getByRole("button", { name: "Help" })).toHaveCount(0);
 });
 
-test("the top-left card sits at 8, 8 and is 44 tall; the tab strip and Settings share its row at y 30", async ({ page, engine }) => {
+test("the bar's start sits at the window edge, 48 tall; the lights' zone is 78 px, the logo 20 px into the bar", async ({ page, engine }) => {
   await openCanvas(page, engine);
   const card = page.locator(".unframed-chrome-left");
   const box = (await card.boundingBox())!;
-  expect([box.x, box.y, box.height]).toEqual([8, 8, 44]);
+  // The reference (the user's prototype): the bar is 48 px tall, its start is 14 px in from the window edge and the
+  // three lights are 52 px wide with 12 px to the bar, so the start region is 78 px before the logo's 20 px padding.
+  expect([box.x, box.y, box.height]).toEqual([0, 0, 48]);
   const logo = (await card.getByRole("img", { name: "Unframed" }).boundingBox())!;
   expect([logo.width, logo.height]).toEqual([24, 24]);
-  // The 92 px traffic-light inset is the shell's repair, so the page alone puts the logo at the card's padding.
-  expect(logo.x).toBe(8 + 1 + 5);
+  expect(logo.x).toBe(78 + 20);
   const strip = (await page.getByTestId("tab-strip").boundingBox())!;
-  expect(strip.height).toBe(44);
-  expect(strip.y + strip.height / 2).toBe(30);
+  expect(strip.height).toBe(48);
+  expect(strip.y + strip.height / 2).toBe(24);
   const settings = (await page.getByRole("button", { name: /^(Settings|Add your API key)$/ }).boundingBox())!;
-  expect(settings.y + settings.height / 2).toBe(30);
+  // The reference's Settings is a 32 px circle, 12 px past the bar's end and 14 px from the window edge.
+  expect([settings.width, settings.height]).toEqual([32, 32]);
+  expect(settings.y + settings.height / 2).toBe(24);
   const right = await page.locator(".unframed-chrome-right").evaluate((element) => ({ top: getComputedStyle(element).top, right: getComputedStyle(element).right }));
-  expect(right).toEqual({ top: "8px", right: "8px" });
+  expect(right).toEqual({ top: "0px", right: "0px" });
 });
 
-test("the top-left card is glass with the kit's border and radius; Settings is a kit ghost button in a muted holder with a kit tooltip", async ({ page, engine }) => {
+test("the bar's outline is the reference's flares and corners; Settings is a circle with a kit ghost button and a kit tooltip", async ({ page, engine }) => {
   await openCanvas(page, engine);
-  const card = page.locator(".unframed-chrome-left");
+  const bar = page.locator("[data-slot=top-bar-body] path").first();
+  const cell = page.locator("[data-slot=top-bar-settings]");
   const settings = page.getByRole("button", { name: /^(Settings|Add your API key)$/ });
   await expectSlot(settings, "tooltip-trigger");
   await inBothSchemes(page, async () => {
-    const glass = await resolvedColor(page, "color-mix(in srgb, var(--background) var(--glass-opacity), transparent)");
-    await expect.poll(() => styleOf(card, "background-color")).toBe(glass);
-    expect(await styleOf(card, "border-top-color")).toBe(await tokenColor(page, "--color-border"));
-    expect(await styleOf(card, "border-top-left-radius")).toBe("14px");
-    expect(await styleOf(card, "backdrop-filter")).toMatch(/^blur\(/);
+    expect(await styleOf(bar, "fill")).toBe(await resolvedColor(page, "var(--background)"));
+    // A circle: the radius reaches half the 32 px diameter (the browser reports a fully rounded corner as a huge value).
+    expect(parseFloat(await styleOf(cell, "border-top-left-radius"))).toBeGreaterThanOrEqual(16);
   });
 });
 

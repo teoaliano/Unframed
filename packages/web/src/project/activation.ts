@@ -108,6 +108,17 @@ export class ProjectActivation {
     }
   }
 
+  /** Closes every tab (the right-click menu's Close all tabs). The projects stay; the canvas settles first. */
+  async closeAllTabs(): Promise<void> {
+    if (this.state.order.length === 0) return;
+    this.generation++;
+    await this.beforeSwitch?.();
+    const closed = [...this.state.order].reverse().reduce((stack, name) => pushClosed(stack, name), this.state.closed);
+    this.update({ order: [], active: undefined, closed });
+    this.persistTabs();
+    await this.engine.call("preferences.set", { key: ACTIVE_PROJECT_KEY, value: null }).catch(() => undefined);
+  }
+
   /** Moves a tab to position `to` in the strip. Saved so the order survives a restart. */
   moveTab(name: string, to: number): void {
     this.update({ order: moveTab(this.state.order, name, to) });

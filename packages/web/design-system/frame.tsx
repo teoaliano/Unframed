@@ -1,10 +1,11 @@
 /** The pieces a demo is laid out with: a titled section of rows, each row a label and its examples. */
 import type { ReactNode } from "react";
 
-export const Section = ({ title, children }: { readonly title: string; readonly children: ReactNode }) => (
+/** `flushTop` drops the card's top padding, so a demo that is a window's top edge (the top bar) sits against the card's top. */
+export const Section = ({ title, children, flushTop = false }: { readonly title: string; readonly children: ReactNode; readonly flushTop?: boolean }) => (
   <section className="flex flex-col gap-3">
     <h3 className="m-0 font-medium text-muted-foreground text-xs uppercase tracking-wide">{title}</h3>
-    <div className="flex flex-col gap-3 rounded-xl border bg-card p-4">{children}</div>
+    <div className={`flex flex-col gap-3 rounded-xl border bg-card p-4 ${flushTop ? "pt-0" : ""}`}>{children}</div>
   </section>
 );
 

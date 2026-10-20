@@ -7,6 +7,25 @@ import { expect, test } from "./fixtures.ts";
 import { openSettings, startSettingsEngine } from "./settings.ts";
 import type { Page } from "@playwright/test";
 
+/** A tab's right-click menu item for `project`: Rename project, Delete project, Close, Close all tabs. */
+const tabMenuItem = async (page: Page, project: string, item: string) => {
+  // An open menu or dialog would take the click (its inert layer covers the strip); close it first, as a person would.
+  const open = page.locator("[role=menu], [role=dialog], [role=alertdialog]");
+  if ((await open.count()) > 0) {
+    await page.keyboard.press("Escape");
+    await expect(open).toHaveCount(0);
+  }
+  const tab = page.locator(`[role=tab][data-project='${project}']`);
+  // A project made through the engine alone has no tab yet: open it from the list first.
+  if ((await tab.count()) === 0) {
+    await page.getByRole("button", { name: "All projects" }).click();
+    await page.getByRole("menuitemradio", { name: project }).click();
+    await expect(tab).toHaveCount(1);
+  }
+  await tab.click({ button: "right" });
+  await page.getByRole("menuitem", { name: item }).click();
+};
+
 const menu = async (page: Page) => {
   await page.getByRole("button", { name: "All projects" }).click();
   await expect(page.getByRole("menu")).toBeVisible();
@@ -22,34 +41,30 @@ const pending = (id: string, project: string) => ({
   status: "pending",
 });
 
-test("each project row has a check on the current one and Rename and Delete buttons that do not switch projects", async ({ page, engine }) => {
+test("each project row has a check on the current one; Rename and Delete sit in a tab's right-click menu", async ({ page, engine }) => {
   await openCanvas(page, engine, "default");
   await (await engine.rpc()).call("projects.create", { name: "beta" });
   await menu(page);
   await expect(page.locator("[role=menuitem], [role=menuitemradio]")).toHaveText(["beta", "default", "Add project"]);
   await expect(page.getByRole("menuitemradio", { name: "default" }).getByLabel("Active")).toBeVisible();
   await expect(page.getByRole("menuitemradio", { name: "beta" }).getByLabel("Active")).toHaveCount(0);
-  for (const project of ["beta", "default"]) {
-    await expect(page.getByRole("button", { name: `Rename ${project}` })).toBeVisible();
-    await expect(page.getByRole("button", { name: `Delete ${project}` })).toBeVisible();
-  }
-  await page.getByRole("button", { name: "Rename beta" }).hover();
-  await expect(page.getByText("Rename", { exact: true })).toBeVisible();
+  // beta has no tab until it is opened from the list; opening it makes it the active project.
+  await page.getByRole("menuitemradio", { name: "beta" }).click();
+  await expect(page.locator("[role=tab][data-active='true']")).toHaveText("beta");
 
-  await page.getByRole("button", { name: "Rename beta" }).click();
+  await tabMenuItem(page, "beta", "Rename project");
   const rename = page.getByRole("dialog", { name: "Rename project" });
   await expect(rename).toBeVisible();
   await rename.getByRole("button", { name: "Cancel" }).click();
-  await expect(page.locator("[role=tab][data-active='true']")).toHaveText("default");
+  await expect(page.locator("[role=tab][data-active='true']")).toHaveText("beta");
 
-  await menu(page);
-  await page.getByRole("button", { name: "Delete beta" }).click();
+  await tabMenuItem(page, "beta", "Delete project");
   const confirm = page.getByRole("alertdialog", { name: "Delete project?" });
   await expect(confirm).toBeVisible();
   await confirm.getByRole("button", { name: "Cancel" }).click();
   await expect(confirm).toBeHidden();
-  await expect(page.locator("[role=tab][data-active='true']")).toHaveText("default");
-  await expect(activeCanvas(page, "default")).toBeVisible();
+  await expect(page.locator("[role=tab][data-active='true']")).toHaveText("beta");
+  await expect(activeCanvas(page, "beta")).toBeVisible();
   expect((await (await engine.rpc()).call("projects.list")).projects).toEqual(["beta", "default"]);
 });
 
@@ -59,7 +74,7 @@ test("renaming the active project renames it everywhere and keeps its canvas; an
   await rpc.call("projects.create", { name: "beta" });
 
   await menu(page);
-  await page.getByRole("button", { name: "Rename default" }).click();
+  await tabMenuItem(page, "default", "Rename project");
   const dialog = page.getByRole("dialog", { name: "Rename project" });
   const field = dialog.getByLabel("Project name");
   await expect(field).toHaveValue("default");
@@ -88,7 +103,7 @@ test("renaming the active project renames it everywhere and keeps its canvas; an
   await expect(page.locator("[role=menuitem], [role=menuitemradio]")).toHaveText(["beta", "product-shots", "Add project"]);
 
   // The same slug closes the dialog without a call.
-  await page.getByRole("button", { name: "Rename beta" }).click();
+  await tabMenuItem(page, "beta", "Rename project");
   await dialog.getByLabel("Project name").fill("BETA");
   await dialog.getByLabel("Project name").press("Enter");
   await expect(dialog).toBeHidden();
@@ -102,7 +117,7 @@ test("deleting asks first, asks again when renders are in progress, and opens th
   await writeFile(join(engine.dataDir, "output", "jobs.json"), JSON.stringify([pending("job-1", "beta"), pending("job-2", "beta")]));
 
   await menu(page);
-  await page.getByRole("button", { name: "Delete beta" }).click();
+  await tabMenuItem(page, "beta", "Delete project");
   const first = page.getByRole("alertdialog", { name: "Delete project?" });
   await expect(first.getByText(`This permanently removes "beta" and its generated images. This can't be undone.`)).toBeVisible();
   await first.getByRole("button", { name: "Delete project" }).click();
@@ -122,7 +137,7 @@ test("deleting asks first, asks again when renders are in progress, and opens th
   // The active and last project: a new default replaces it, with the starter content.
   await rpc.call("projects.create", { name: "gamma" });
   await menu(page);
-  await page.getByRole("button", { name: "Delete default" }).click();
+  await tabMenuItem(page, "default", "Delete project");
   await page.getByRole("alertdialog", { name: "Delete project?" }).getByRole("button", { name: "Delete project" }).click();
   // Spec 17: a deleted tab gives way to its neighbour; with none open, the start state shows and the list opens the rest.
   await expect(page.getByText("No project is open.")).toBeVisible();
@@ -132,7 +147,7 @@ test("deleting asks first, asks again when renders are in progress, and opens th
   await expect(activeCanvas(page, "gamma")).toBeVisible();
 
   await menu(page);
-  await page.getByRole("button", { name: "Delete gamma" }).click();
+  await tabMenuItem(page, "gamma", "Delete project");
   await page.getByRole("alertdialog", { name: "Delete project?" }).getByRole("button", { name: "Delete project" }).click();
   // The last project in the folder is gone: a new default opens with the starter content.
   await expect(page.locator("[role=tab][data-active='true']")).toHaveText("default");

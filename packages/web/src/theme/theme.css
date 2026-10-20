@@ -750,16 +750,16 @@ code {
   .unframed-chrome-left,
   .unframed-chrome-right {
     position: fixed;
-    top: 8px;
+    top: 0;
     z-index: 400;
   }
 
   .unframed-chrome-left {
-    left: 8px;
+    left: 0;
   }
 
   .unframed-chrome-right {
-    right: 8px;
+    right: 0;
   }
 
   /*
@@ -768,7 +768,7 @@ code {
    */
   .unframed-tabs {
     position: fixed;
-    top: 8px;
+    top: 0;
     z-index: 200;
   }
 

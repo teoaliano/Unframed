@@ -114,7 +114,7 @@ Copy rules:
 - Copy the files as they are. Change only what an Unframed contract forces, and mark each change with a one-line comment naming the contract, so a later t3code update is a mechanical merge.
 - Unframed runs `@base-ui/react` 1.8.0; t3code pins 1.5.0. Where a copied component uses an API that changed between them, adapt it to 1.8.0 and note it in the same one-line way.
 - Add `class-variance-authority` and `tailwind-merge` at t3code's versions.
-- Components t3code does not have (a slider, tabs) are not invented as kit components. The rail tabs follow t3code's panel tab look (its right panel tabs), built from kit parts in the rail's own module. The artifact editor's dials stay DialKit.
+- Components t3code does not have (a slider) are not invented as kit components. Tabs is the one exception: `tabs.tsx` wraps Base UI's Tabs in the kit's conventions, with `underline`, `pill` and `panel` variants, three sizes, a status slot, an optional close button and `scroll` or `truncate` overflow. It is a first draft for design review, so its looks are settled in review, not here. The rail tabs follow t3code's panel tab look (its right panel tabs), built from kit parts in the rail's own module, and do not use the kit Tabs. The artifact editor's dials stay DialKit.
 - t3code's feature-level looks (the composer surface, message bubbles, timeline rows, approval and question panels, the diff panel shell) are copied as the class recipes of the matching Unframed surfaces, not as new kit components, because they are feature modules in t3code too.
 
 **tldraw theme adapter.** A stylesheet that maps tldraw's theme variables onto the kit's tokens, for both `.tl-theme__light` and `.tl-theme__dark`:
@@ -244,7 +244,7 @@ Each task updates the spec passages for the surface it restyles, in the same com
 - Replacing tldraw's toolbar, style panel or menus with kit components. They are themed, not rebuilt.
 - Changing tldraw's shape content fonts, or any shape's geometry.
 - Layout changes: moving, resizing or reordering surfaces, and new motion. Where a surface's size is in a spec, it stays.
-- New components t3code does not have (a slider, generic tabs, an avatar, an accordion).
+- New components t3code does not have (a slider, an avatar, an accordion). Tabs is the exception named in Implementation Decisions.
 - The film-grain overlay that `assets/theme/README.md` describes, which was never built.
 - Pixel screenshot baselines.
 - The desktop shell. Its hooks keep working; nothing in the shell repo changes for this spec.
