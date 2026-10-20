@@ -25,7 +25,7 @@ interface PendingUpload {
 export class AttachmentRefused extends Error {}
 
 /**
- * Chat attachments (spec 07, t3code's flow): stored under the data folder, never in a
+ * Chat attachments (t3code's flow): stored under the data folder, never in a
  * project, each named by the hash of its bytes so the same bytes twice are one file.
  * Uploads go through a signed one-use path.
  */

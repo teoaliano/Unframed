@@ -3,7 +3,7 @@ import type { SelectionApply } from "@unframed/contracts";
 import * as Context from "effect/Context";
 import * as Layer from "effect/Layer";
 
-/** The note an outside call gets when no window has the project open (spec 14, "The live selection"). */
+/** The note an outside call gets when no window has the project open. */
 export const NO_WINDOW_NOTE = "Unframed has no window open on this project, so there is no selection to read.";
 
 /** How long a `canvas_select` waits for the window to report the selection it was asked for. */

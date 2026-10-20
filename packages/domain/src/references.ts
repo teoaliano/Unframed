@@ -15,7 +15,7 @@ export interface ReferenceResolver {
 
 /**
  * What an image or video named by `@` stands for in the text when it is attached to the
- * run (spec 03: `image 2`); `undefined` leaves the token as typed.
+ * run (`image 2`); `undefined` leaves the token as typed.
  */
 export type AttachMedia = (shape: CanvasShape) => string | undefined;
 

@@ -1,5 +1,5 @@
 /**
- * The settings dialog (spec 10): the OpenRouter block (connect, paste, remove, key status),
+ * The settings dialog: the OpenRouter block (connect, paste, remove, key status),
  * default models, the output folder and the local agents. Save sends only what changed.
  */
 import { UnframedError, type ProviderStatuses, type Settings, type SettingsPatch } from "@unframed/contracts";

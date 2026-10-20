@@ -1,5 +1,5 @@
 /**
- * The snapshots the engine keeps of a project's artifacts (spec 09): the newest one of each
+ * The snapshots the engine keeps of a project's artifacts: the newest one of each
  * artifact file, from the engine's `artifact.snapshots` stream. A snapshot is a still that
  * runs nothing, which is what an artifact that is not live shows.
  */

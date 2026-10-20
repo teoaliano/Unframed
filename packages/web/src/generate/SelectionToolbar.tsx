@@ -39,7 +39,7 @@ const GESTURES = [
 const hiddenByGesture = (editor: Editor): boolean =>
   editor.isInAny(...GESTURES) || (editor.inputs.getIsPanning() && editor.inputs.getIsPointing());
 
-/** The band a shape's label takes above its top edge, in canvas units (spec 02). */
+/** The band a shape's label takes above its top edge, in canvas units. */
 const LABEL_BAND = 22;
 
 /**
@@ -338,18 +338,20 @@ const Bar = ({ state, onGenerate, agent }: { state: Exclude<ToolbarState, { kind
           {agent}
         </div>
       );
-    case "open":
+    case "open": {
+      const style = editor.getShape(state.shapeId as TLShapeId)?.type === "style";
       return (
         <div className={barClass}>
           <DragHandle />
           <Button size="sm" onClick={() => openArtifact?.(editor, state.shapeId as TLShapeId)}>
-            Editor
+            {style ? "Open" : "Editor"}
           </Button>
           {Render && editor.getShape(state.shapeId as TLShapeId)?.type === "motion" && <Render shapeId={state.shapeId as TLShapeId} />}
-          {ParametersToggle && <ParametersToggle shapeId={state.shapeId as TLShapeId} />}
+          {ParametersToggle && !style && <ParametersToggle shapeId={state.shapeId as TLShapeId} />}
           {agent}
         </div>
       );
+    }
     case "generate":
       return (
         <div className={barClass}>

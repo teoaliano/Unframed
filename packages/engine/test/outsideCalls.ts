@@ -1,5 +1,5 @@
 /**
- * An outside client's side of spec 14, as the tests drive it: an outside connection, one client
+ * An outside client's side of outside connections, as the tests drive it: an outside connection, one client
  * session of it (opened with `initialize`), and the chats the project's shell lists.
  */
 import type { ChatSummary, SpendLimit } from "@unframed/contracts";

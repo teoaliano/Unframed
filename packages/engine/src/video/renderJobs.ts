@@ -1,5 +1,5 @@
 /**
- * Render jobs (spec 04): starting a paid video render, asking about it, collecting its clip
+ * Render jobs: starting a paid video render, asking about it, collecting its clip
  * into the project folder and onto the canvas, failing it, forgetting it, and the sweep that
  * lands renders with no tab open. The job store is the durable record; a render
  * placeholder's run marker is the second copy.
@@ -65,13 +65,13 @@ export const TUNNEL_MESSAGE = "Could not share the clip: the temporary link did 
 const SWEEP_MS = 30_000;
 const TUNNEL_ATTEMPTS = 3;
 const TUNNEL_PROBE_MS = 30_000;
-/** A render placeholder or result the engine makes itself: as wide as spec 03's placeholders, 16:9. */
+/** A render placeholder or result the engine makes itself: as wide as run placeholders, 16:9. */
 const RESULT_SIZE = { w: 320, h: 180 };
 const RESULT_GAP = 40;
 
 export type StartReason = "no_key" | "invalid" | "local_clip" | "share_failed" | CreateFailureReason;
 
-/** A failure of a video RPC: spec 01's error shape, told apart by `details.reason`. */
+/** A failure of a video RPC: the RPC error shape, told apart by `details.reason`. */
 const refusal = (reason: StartReason, code: ErrorCode, message: string) => unframedError(code, message, { reason });
 
 export interface FinishOutcome {
@@ -89,14 +89,14 @@ export class RenderJobs extends Context.Service<
     /** The job record's recipe for a render placeholder whose sidecar is not written yet. */
     readonly placeholderRecipe: (project: string, shapeId: string) => Effect.Effect<ResultRecipe | undefined, UnframedError>;
     /**
-     * Spec 10: fails the pending jobs of one project (a slug), or with these ids, or all, in
+     * Fails the pending jobs of one project (a slug), or with these ids, or all, in
      * the current output folder's store, read strictly. Each failed job loses its share
      * links and its placeholder says why, as every other failure path does. Answers how many.
      */
     readonly failPending: (options: FailPendingOptions) => Effect.Effect<number, JobStoreError>;
     /**
      * Calls the handler once, when the job lands (ok, with its cost) or ends without a clip (not ok),
-     * after its placeholder is filled. Returns a function that stops waiting. Agents' generations use it (spec 14).
+     * after its placeholder is filled. Returns a function that stops waiting. Agents' generations use it.
      */
     readonly onFinished: (jobId: string, handler: FinishHandler) => () => void;
   }
@@ -154,7 +154,7 @@ const clipAsset = (landed: LandedClip): TLRecord =>
     meta: {},
   }) as unknown as TLRecord;
 
-/** Fills a render placeholder by spec 03's lifecycle: the clip, the sidecar and cost in its result meta, no marker. Position and size are kept. */
+/** Fills a render placeholder by the run lifecycle: the clip, the sidecar and cost in its result meta, no marker. Position and size are kept. */
 const fillChange = (shape: Shape, landed: LandedClip): CanvasChange => {
   const asset = clipAsset(landed);
   const { run: _run, runError: _error, ...unframed } = unframedMetaOf(shape);
@@ -172,7 +172,7 @@ const fillChange = (shape: Shape, landed: LandedClip): CanvasChange => {
   };
 };
 
-/** Spec 03's failure step for a durable placeholder: it stays, says why, and loses its marker. */
+/** The run failure step for a durable placeholder: it stays, says why, and loses its marker. */
 const failChange = (shape: Shape, error: string): CanvasChange => {
   const { run: _run, ...unframed } = unframedMetaOf(shape);
   return { put: [{ ...shape, meta: { ...shape.meta, unframed: { ...unframed, runError: error } } } as unknown as TLRecord], remove: [] };
@@ -289,9 +289,9 @@ export const renderJobsLayer = Layer.effect(
       if (url === undefined) throw new Error("Job completed without a video URL.");
       const bytes = await downloadClip(url, key);
       const dir = await outputDir();
-      // A rename may have landed during the download (spec 10 repoints pending records).
+      // A rename may have landed during the download (the lifecycle repoints pending records).
       const stored = (await readJobsLenient(dir)).find((job) => job.id === record.id);
-      // Resolved during the download (spec 10 fails the records of a deleted project): its outcome stands.
+      // Resolved during the download (the lifecycle fails the records of a deleted project): its outcome stands.
       if (stored !== undefined && stored.status !== "pending") return stored;
       const current = stored ?? record;
       const project = current.project ?? "";
@@ -347,7 +347,7 @@ export const renderJobsLayer = Layer.effect(
       const records = hadFolder ? await readRoom(project) : undefined;
       if (records) {
         const shape = markedBy(records, record.id);
-        // Opening the room can import an old project (spec 11) that finds this job done and puts the clip on the canvas itself.
+        // Opening the room can import an old project that finds this job done and puts the clip on the canvas itself.
         const shown = records.some((each) => each.typeName === "asset" && (each.props as { src?: unknown }).src === projectFileMarker(file));
         if (shape) await applyRoom(project, fillChange(shape, landed), record.id);
         else if (shown) return done;

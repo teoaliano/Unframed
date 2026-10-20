@@ -40,7 +40,7 @@ export interface InstructionEditorProps {
 }
 
 /**
- * The composer's box: a Tiptap editor, one paragraph per line, with spec 02's `@` mention
+ * The composer's box: a Tiptap editor, one paragraph per line, with the `@` mention
  * menu. Attachments and chips are off in the Generate tray. Plain Enter and Shift+Enter insert
  * a line; the composer shell takes Cmd+Enter.
  */

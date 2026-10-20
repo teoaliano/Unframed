@@ -1,5 +1,5 @@
 /**
- * The stdio shim (spec 14): one process is one outside session. It reads the client's MCP messages
+ * The stdio shim: one process is one outside session. It reads the client's MCP messages
  * from stdin and writes one JSON-RPC answer per line to stdout, and relays each to the engine's
  * `/mcp` endpoint, found through the discovery file. While Unframed is closed it answers
  * `initialize` and `tools/list` itself, and every call with a sentence. Logs go to stderr only.
@@ -25,7 +25,7 @@ const argument = (name: string): string | undefined => {
 
 const dataDir = argument("--data-dir") ?? "";
 const token = process.env.UNFRAMED_MCP_TOKEN ?? "";
-/** The offline copy of the outside list: the same functions the engine answers with (spec 14). */
+/** The offline copy of the outside list: the same functions the engine answers with. */
 const offlineTools = () => outsideToolList(unframedToolCatalogue());
 
 /** The engine's port, when the discovery file names a live process. */

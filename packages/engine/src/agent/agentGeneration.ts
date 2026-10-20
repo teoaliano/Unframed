@@ -58,9 +58,9 @@ export interface GenerationHost {
   readonly recordsOf: (project: string, ids: ReadonlyArray<string>) => Promise<Map<string, TLRecord | undefined>>;
   readonly runImage: (request: ImageRunRequest) => Promise<RunStarted>;
   readonly runText: (request: TextRunRequest) => Promise<RunStarted>;
-  /** Starts a render job (spec 04): its placeholder is in the room when this answers. */
+  /** Starts a render job: its placeholder is in the room when this answers. */
   readonly startVideo: (request: VideoStartRequest) => Promise<{ jobId: string; status: string; shapeId: string }>;
-  /** Calls the handler once when the render job lands or ends without a clip (spec 04). */
+  /** Calls the handler once when the render job lands or ends without a clip. */
   readonly onVideoFinished: (jobId: string, handler: FinishHandler) => () => void;
   /** The models of a kind, as the catalogue lists them. */
   readonly models: (kind: Kind) => Promise<ReadonlyArray<ModelEntry>>;
@@ -73,7 +73,7 @@ export interface GenerationHost {
   readonly recordTurn: (project: string, chatId: string, turn: number, before: Map<string, TLRecord | undefined>, after: Map<string, TLRecord | undefined>) => Promise<void>;
   /** The chat's outside turn holds: a paid run in flight keeps it open. */
   readonly holds: { runStarted(chatId: string, turn: number): void; runEnded(chatId: string, turn: number): void };
-  /** A generation's activity in its chat's turn: its start, its landing or its failure (spec 14, "Cost shown"). */
+  /** A generation's activity in its chat's turn: its start, its landing or its failure. */
   readonly activity: (project: string, chatId: string, draft: { kind: string; summary: string; turnId: string | null; payload: Record<string, unknown> }) => Promise<void>;
 }
 
@@ -104,7 +104,7 @@ const refusal = (message: string): ToolAnswer => ({ value: { error: message }, i
 const startedSummary = (medium: "image" | "video" | "text", runs: number): string =>
   `Started ${medium === "video" ? "a video" : medium === "text" ? "a text answer" : runs === 1 ? "an image" : `${runs} images`}`;
 
-/** The union of the boxes: the anchor a run's results land beside (spec 03). */
+/** The union of the boxes: the anchor a run's results land beside. */
 const union = (boxes: ReadonlyArray<Box>): Box => {
   if (boxes.length === 0) return { x: 0, y: 0, w: 0, h: 0 };
   const left = Math.min(...boxes.map((box) => box.x));
@@ -121,7 +121,7 @@ const chosenOf = (params: Readonly<Record<string, Param>>): { quality?: string; 
 });
 
 /**
- * `generate` (spec 14, "Generation by agents"): one paid run through the composer's own run
+ * `generate`: one paid run through the composer's own run
  * services. The refusals are the composer's sentences, plus the sketch, parameter, clip and
  * spend limit's.
  */

@@ -1,5 +1,5 @@
 /**
- * The artifact editor (spec 09): the full-screen view of one artifact. The chat rail on the
+ * The artifact editor: the full-screen view of one artifact. The chat rail on the
  * left filtered to it, the artifact live in the centre, its parameters on the right.
  */
 import type { ArtifactShapeProps } from "@unframed/contracts";

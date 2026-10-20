@@ -1,6 +1,6 @@
 # Change note
 
-Used by spec 07, as the second part of the preamble the model reads before each message. The engine writes this sentence only when the canvas changed since this chat's last turn ended (its `lastClock`). With no changes it writes nothing.
+Held in `packages/domain/src/agent/prompts.ts`, as the second part of the preamble the model reads before each message. The engine writes this sentence only when the canvas changed since this chat's last turn ended (its `lastClock`). With no changes it writes nothing.
 
 Source: the old app's `changeSentence` in `server/agentTools.js`. The old clause about undos of this chat's changes is replaced by a clause about reverts of this chat's turns, since Revert is now the only way to take an agent change back. The rest is the old text.
 

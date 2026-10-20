@@ -1,5 +1,5 @@
 /**
- * Naming a shape (spec 02 and 06): the one shape whose label is a name field right now, the
+ * Naming a shape: the one shape whose label is a name field right now, the
  * F2 binding and the double-click on a label that open it, and the commit, which renames
  * the shape and rewrites every prompt that references it in one undo step. Any shape with
  * an `@id` can be named. The naming rules are the domain's.

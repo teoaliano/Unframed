@@ -1,5 +1,5 @@
 /**
- * The share registry's rules (spec 04): the token shape, the route a token is read from,
+ * The share registry's rules: the token shape, the route a token is read from,
  * expiry, and when the tunnel is needed. The engine's share link service holds the files
  * and the tunnel; these rules hold no I/O.
  */

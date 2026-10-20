@@ -2,7 +2,7 @@ Third-party notices
 
 Unframed follows t3code (https://github.com/pingdotgg/t3code) for its agent runtime, chat
 composer, event store and RPC transport, and carries some of its files (provider marks,
-the Claude model catalogue, some model-facing prompt text). Since spec 12 it also carries
+the Claude model catalogue, some model-facing prompt text). It also carries
 t3code's design system: the UI kit in packages/web/src/components/ui with its cn helper
 and visible-animation helper, the default light and dark tokens, utilities, base rules and
 chat markdown rules in packages/web/src/theme, and the class recipes of its composer,
@@ -36,7 +36,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 --------------------------------------------------------------------------------
-coss ui and shadcn/ui (sources of t3code's UI kit, spec 12)
+coss ui and shadcn/ui (sources of t3code's UI kit)
 --------------------------------------------------------------------------------
 
 t3code's UI kit files come from coss ui (https://github.com/cosscom/coss, the apps/ui
@@ -46,7 +46,7 @@ License, the same terms as t3code's above. The Collapsible follows shadcn/ui
 UI (@base-ui/react), which is listed with the rest of the bundle's packages.
 
 --------------------------------------------------------------------------------
-HyperFrames, GSAP and DialKit (pages and motions, spec 09)
+HyperFrames, GSAP and DialKit (pages and motions)
 --------------------------------------------------------------------------------
 
 Motions are HyperFrames compositions. HyperFrames (@hyperframes/core, @hyperframes/player,
@@ -62,3 +62,29 @@ DialKit (dialkit) is used under the MIT License. It is bundled with the web clie
 is never copied into a project folder.
 
 The full licence texts of these packages are listed with the rest of the bundle's packages.
+
+--------------------------------------------------------------------------------
+fx0 (artifact edit tools and agent prompt lines)
+--------------------------------------------------------------------------------
+
+The page_edit and motion_edit tools follow the edit_design tool of fx0
+(https://github.com/vercel-labs/fx0), which applies exact string replacements to an HTML
+document, and three lines of assets/prompts/agent-system.md (thinking in proportion to the
+change, no invented facts, the pixel density of attached screenshots) are adapted from
+fx0's design prompt. fx0 is used under the Apache License 2.0
+(https://www.apache.org/licenses/LICENSE-2.0). No fx0 code is carried.
+
+The style documents (style_read, style_write, style_edit and the preamble's style line)
+follow fx0's chats, which start with a DESIGN.md in their system prompt; the two style lines
+of assets/prompts/agent-system.md are new text after that idea.
+
+--------------------------------------------------------------------------------
+awesome-design-md (the library's style presets)
+--------------------------------------------------------------------------------
+
+The ten DESIGN.md files in assets/design-md (apple, claude, vercel, notion, airbnb,
+linear.app, stripe, figma, bmw-m, coinbase) come verbatim from VoltAgent/awesome-design-md
+(https://github.com/VoltAgent/awesome-design-md, commit
+3b605329240ce735b510037cca322f1831fdd7f8). They describe the visual language of those
+brands and are not affiliated with or endorsed by them. awesome-design-md is used under the
+MIT License; its text is in assets/design-md/LICENSE.

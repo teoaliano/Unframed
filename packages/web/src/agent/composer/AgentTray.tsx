@@ -89,7 +89,7 @@ interface OpenMenu {
 }
 
 /**
- * The composer's Agent tray (spec 08), built on t3code's composer: a Tiptap box, the
+ * The composer's Agent tray, built on t3code's composer: a Tiptap box, the
  * footer's pickers, Stop and Send. The rail's composer and the toolbar's are this one
  * component; only where a message goes differs.
  */

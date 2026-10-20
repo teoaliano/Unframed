@@ -36,7 +36,7 @@ const RecipeChip = ({ shape, recipe }: { readonly shape: TLFrameShape; readonly 
       <Badge
         variant="outline"
         className="pointer-events-auto"
-        // oxlint-disable-next-line react/forbid-elements -- the kit Badge rendered as a button: spec 12 makes the recipe chip a Badge
+        // oxlint-disable-next-line react/forbid-elements -- the kit Badge rendered as a button: the recipe chip is a Badge
         render={<button type="button" />}
         data-testid="recipe-chip"
         {...fieldEvents(editor)}

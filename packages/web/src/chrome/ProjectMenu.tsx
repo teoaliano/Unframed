@@ -27,7 +27,7 @@ const messageOf = (error: unknown) => (error instanceof UnframedError || error i
 type SubmitName = (name: string, slug: string, close: () => void) => Promise<string | undefined>;
 
 /**
- * The one project name dialog: "New project" (spec 02) and "Rename project" (spec 10), so
+ * The one project name dialog: "New project" and "Rename project", so
  * the two never disagree about what a valid name is. The name is slugged; an empty slug is refused here.
  */
 const ProjectNameDialog = ({
@@ -179,7 +179,7 @@ export const ProjectMenu = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [active]);
 
-  // Cmd+T and the start state's button open this list (spec 17).
+  // Cmd+T and the start state's button open this list.
   useEffect(() => {
     const open = () => setMenuOpen(true);
     window.addEventListener(OPEN_PROJECT_LIST, open);
@@ -239,11 +239,11 @@ export const ProjectMenu = () => {
   const deleted = async (project: string) => {
     setDeleting(undefined);
     setProjects((current) => current.filter((each) => each !== project));
-    // The deleted project's tab leaves the strip; an active one gives way to its neighbour (spec 17).
+    // The deleted project's tab leaves the strip; an active one gives way to its neighbour.
     if (project === active) await activation.closeTab(project);
     else activation.forgetTab(project);
     const left = await refresh();
-    // The last project in the folder is gone: a new default replaces it, as spec 10 says.
+    // The last project in the folder is gone: a new default replaces it.
     if (left !== undefined && left.length === 0 && activation.tabState().order.length === 0) {
       const created = await engine.call("projects.create", { name: "default" }).catch(() => undefined);
       if (created !== undefined) await activation.activate(created.name);

@@ -1,5 +1,5 @@
 /**
- * Artifact rules (spec 09): file names, tag injection, where an agent-made artifact goes,
+ * Artifact rules: file names, tag injection, where an agent-made artifact goes,
  * the artifact URLs, the add-a-parameter instruction and the few facts read from a file.
  */
 import { projectSlug } from "../slug.ts";
@@ -97,7 +97,7 @@ export const placeBesideSelection = (selected: ReadonlyArray<PlacementBox>): { x
 
 /**
  * The loopback name artifact documents load under: the one the app is NOT using, so the
- * browser runs them in a process of their own (index contract 9).
+ * browser runs them in a process of their own, off the canvas thread.
  */
 export const previewHostFor = (appHostname: string): string => {
   const host = appHostname.toLowerCase();

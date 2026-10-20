@@ -139,7 +139,7 @@ test("deleting asks first, asks again when renders are in progress, and opens th
   await menu(page);
   await tabMenuItem(page, "default", "Delete project");
   await page.getByRole("alertdialog", { name: "Delete project?" }).getByRole("button", { name: "Delete project" }).click();
-  // Spec 17: a deleted tab gives way to its neighbour; with none open, the start state shows and the list opens the rest.
+  // A deleted tab gives way to its neighbour; with none open, the start state shows and the list opens the rest.
   await expect(page.getByText("No project is open.")).toBeVisible();
   await menu(page);
   await page.getByRole("menuitemradio", { name: "gamma" }).click();

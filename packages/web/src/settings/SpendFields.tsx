@@ -1,5 +1,5 @@
 /**
- * The spend limit fields of an outside connection (spec 14, "Spend limit"): an amount in US
+ * The spend limit fields of an outside connection: an amount in US
  * dollars and a period, neither filled in by default. An empty amount is no limit.
  */
 import { spendLimitProblem, SPEND_PERIODS, type SpendPeriod } from "@unframed/domain";

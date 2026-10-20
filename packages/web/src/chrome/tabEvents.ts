@@ -1,4 +1,4 @@
-/** Dispatched on `window` to open the All projects list (spec 17): Cmd+T, and the start state's button. */
+/** Dispatched on `window` to open the All projects list: Cmd+T, and the start state's button. */
 export const OPEN_PROJECT_LIST = "unframed:open-project-list";
 
 /** Dispatched on `window` by a tab's right-click menu: Rename or Delete for the named project (the project menu runs them). */

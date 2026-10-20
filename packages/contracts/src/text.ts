@@ -1,5 +1,5 @@
 /**
- * Spec 05's text calls: a text run, which lands its answer on the canvas as a text result,
+ * The text calls: a text run, which lands its answer on the canvas as a text result,
  * and a text completion, which lands nothing (Free's repair call).
  */
 import * as Schema from "effect/Schema";
@@ -21,7 +21,7 @@ export const TextRunRequest = Schema.Struct({
   /** Page coordinates: the result lands to its right. */
   anchor: PageBox,
   of: Schema.optionalKey(Schema.Struct({ shapeId: Schema.String, action: RecipeAction })),
-  /** The chat and turn that started the run, for a run an agent started (spec 14). */
+  /** The chat and turn that started the run, for a run an agent started. */
   chat: Schema.optionalKey(RunChat),
 });
 export type TextRunRequest = typeof TextRunRequest.Type;
@@ -61,7 +61,7 @@ export const TextComplete = Rpc.make("text.complete", {
  */
 export interface TextSidecar {
   readonly kind: "text";
-  /** The chat and turn that started the run, for a run an agent started (spec 14). */
+  /** The chat and turn that started the run, for a run an agent started. */
   readonly chat?: RunChat;
   readonly prompt: string;
   readonly model: string;

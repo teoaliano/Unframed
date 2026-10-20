@@ -1,5 +1,5 @@
 /**
- * Artifacts on the canvas (spec 09): the editor's entry point (double-click, the toolbar's Editor and the recap card's Editor all call it), the
+ * Artifacts on the canvas: the editor's entry point (double-click, the toolbar's Editor and the recap card's Editor all call it), the
  * canvas Parameters panel, the frame hold, the snapshot stream and the preview origin's port.
  */
 import { isArtifactKind } from "@unframed/domain";
@@ -13,6 +13,7 @@ import { ParametersButton } from "./ParametersButton.tsx";
 import { RenderButton } from "./render.tsx";
 import { artifactsOf, installFrameHold, installTuningWatch, previewPort } from "./state.ts";
 import { watchSnapshots } from "./snapshots.ts";
+import { openStyleWindow } from "../styles/state.ts";
 
 // Loaded with the editor or the first Parameters panel only: DialKit and its stylesheet never reach a board where neither opens.
 const ArtifactEditor = lazy(() => import("./editor/ArtifactEditor.tsx").then((module) => ({ default: module.ArtifactEditor })));
@@ -25,9 +26,16 @@ interface Opened {
 
 const saved = new WeakMap<Editor, Opened>();
 
-/** Opens the editor on one artifact: saves the camera, selects it alone, closes the composer, then shows the editor. */
+/**
+ * Opens the editor on one artifact: saves the camera, selects it alone, closes the composer,
+ * then shows the editor. A style opens in the markdown window instead.
+ */
 export const openArtifactEditor = (editor: Editor, shapeId: TLShapeId): void => {
   const shape = editor.getShape(shapeId);
+  if (shape?.type === "style") {
+    closeComposer(editor);
+    return openStyleWindow(editor, shapeId);
+  }
   if (!shape || !isArtifactKind(shape.type)) return;
   const state = artifactsOf(editor);
   if (state.editing.get() === undefined) saved.set(editor, { camera: editor.getCamera() });

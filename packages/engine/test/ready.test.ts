@@ -32,7 +32,7 @@ describe("ready message", () => {
     expect(await connects("127.0.0.1", engine.previewPort)).toBe(true);
     // The API is loopback IPv4 only: never ::1, never every interface.
     expect(await connects("::1", engine.port)).toBe(false);
-    // The preview origin also answers on ::1 where the machine has it (spec 09), so localhost reaches it.
+    // The preview origin also answers on ::1 where the machine has it, so localhost reaches it.
     expect(await connects("::1", engine.previewPort)).toBe(await hasIpv6Loopback());
 
     await engine.request("/");

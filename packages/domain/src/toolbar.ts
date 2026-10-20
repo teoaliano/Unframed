@@ -20,7 +20,7 @@ export interface ToolbarShape {
   readonly result?: ResultFacts | undefined;
   /** The shape carries a run marker. */
   readonly generating?: boolean | undefined;
-  /** Present on a group with a standing recipe (spec 06): how many outputs it makes. */
+  /** Present on a group with a standing recipe: how many outputs it makes. */
   readonly recipe?: { readonly runs: RunsValue } | undefined;
 }
 
@@ -43,7 +43,7 @@ export type ToolbarState =
   | { readonly kind: "generating"; readonly shapeId: string }
   | { readonly kind: "open"; readonly shapeId: string }
   | { readonly kind: "generate"; readonly hint: string }
-  /** Spec 06: exactly one recipe group among the selection. Its Generate runs the recipe at once. */
+  /** Exactly one recipe group among the selection. Its Generate runs the recipe at once. */
   | { readonly kind: "recipe"; readonly groupId: string; readonly name: string; readonly runs: RunsValue }
   | { readonly kind: "agent" };
 
@@ -93,11 +93,12 @@ export const toolbarState = (input: ToolbarInput): ToolbarState => {
       if (only.generating) return { kind: "generating", shapeId: only.id };
       return { kind: "result", shapeId: only.id, generate: input.usable };
     }
-    if ((only.kind === "page" || only.kind === "motion") && only.file) return { kind: "open", shapeId: only.id };
+    if ((only.kind === "page" || only.kind === "motion" || only.kind === "style") && only.file) return { kind: "open", shapeId: only.id };
   }
   const recipeGroup = recipeGroupOf(selected);
   if (recipeGroup?.recipe) return { kind: "recipe", groupId: recipeGroup.id, name: recipeGroup.ref ?? "", runs: recipeGroup.recipe.runs };
-  if (input.usable) return { kind: "generate", hint: selectionHint(selected, input.results) };
+  // Generate sends nothing of a style, so the count leaves styles out.
+  if (input.usable) return { kind: "generate", hint: selectionHint(selected.filter((shape) => shape.kind !== "style"), input.results) };
   return { kind: "agent" };
 };
 

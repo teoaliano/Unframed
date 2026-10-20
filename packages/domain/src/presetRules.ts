@@ -1,5 +1,5 @@
 /**
- * Presets (spec 06): a saved group as tldraw content, how a selection becomes one, how one
+ * Presets: a saved group as tldraw content, how a selection becomes one, how one
  * goes back onto a canvas, and how the Library dialog lists them. Pure: the web hands in
  * tldraw's own copy of the selection and gets content back to put on the page.
  */
@@ -43,7 +43,7 @@ export interface PresetContent {
   readonly [key: string]: unknown;
 }
 
-export type PresetKind = "recipe" | "group";
+export type PresetKind = "recipe" | "group" | "style";
 export type PresetSource = "user" | "system";
 
 /** One entry of `presets.json` (or a system preset, which is never stored). */
@@ -51,7 +51,7 @@ export interface Preset {
   readonly format: 2;
   readonly id: string;
   readonly source: PresetSource;
-  /** Set by the engine at save. System presets, and presets spec 11 converts, have none. */
+  /** Set by the engine at save. System presets, and converted legacy presets, have none. */
   readonly savedAt?: string;
   readonly name: string;
   readonly summary: string;
@@ -59,9 +59,9 @@ export interface Preset {
   readonly kind: PresetKind;
   readonly medium?: RecipeMedium;
   readonly content: PresetContent;
-  /** Spec 11: converted from an old entry on read, never written back. */
+  /** Converted from an old entry on read, never written back. */
   readonly legacy?: true;
-  /** Spec 11: what the conversion could not keep. */
+  /** What the conversion could not keep. */
   readonly notes?: ReadonlyArray<string>;
 }
 
@@ -87,11 +87,15 @@ export type PresetCase =
   | { readonly kind: "wrap"; readonly ids: ReadonlyArray<string> }
   /** Two or more groups, or a group and loose groupable shapes. */
   | { readonly kind: "split" }
+  /** One style document and nothing else: the preset is that style. */
+  | { readonly kind: "style"; readonly styleId: string }
   /** Nothing that may be in a group. */
   | { readonly kind: "empty" };
 
 /** Which of the four cases a selection is. A shape inside a selected group is that group's, not loose. */
 export const presetCase = (selection: ReadonlyArray<{ readonly id: string; readonly type: string; readonly parent?: string | undefined }>): PresetCase => {
+  const [only] = selection;
+  if (selection.length === 1 && only?.type === "style") return { kind: "style", styleId: only.id };
   const groups = selection.filter((shape) => shape.type === "frame");
   const chosen = new Set(groups.map((shape) => shape.id));
   const loose = selection.filter((shape) => shape.type !== "frame" && mayBeGroupMember(shape.type) && !(shape.parent !== undefined && chosen.has(shape.parent)));
@@ -101,7 +105,7 @@ export const presetCase = (selection: ReadonlyArray<{ readonly id: string; reado
   return { kind: "empty" };
 };
 
-/** What a copy never carries (spec 03's copy rule): a run marker, a run error, an unfilled placeholder's result meta. */
+/** What a copy never carries (the copy rule): a run marker, a run error, an unfilled placeholder's result meta. */
 const stripRunMeta = (meta: Readonly<Record<string, unknown>>): Record<string, unknown> => {
   const unframed = record(meta.unframed);
   if (!unframed) return { ...meta };
@@ -114,6 +118,12 @@ const stripRunMeta = (meta: Readonly<Record<string, unknown>>): Record<string, u
 
 const presetPointer = (project: string, src: unknown): unknown =>
   typeof src === "string" && src.startsWith(PROJECT_FILE) ? `${PRESET_FILE}${project}/${src.slice(PROJECT_FILE.length)}` : src;
+
+/** A style's markdown file travels like an asset's: its `file` prop becomes a preset pointer until it is inserted. */
+const styleFilePointer = (project: string, shape: ContentShape): ContentShape =>
+  shape.type === "style" && typeof shape.props.file === "string" && shape.props.file !== ""
+    ? { ...shape, props: { ...shape.props, file: `${PRESET_FILE}${project}/${shape.props.file}` } }
+    : shape;
 
 const descendants = (shapes: ReadonlyArray<ContentShape>, rootIds: ReadonlyArray<string>): Set<string> => {
   const kept = new Set(rootIds);
@@ -158,6 +168,12 @@ export const presetFromSelection = (
   if (found.kind === "split") return { ok: false, error: PRESET_SPLIT_MESSAGE };
   if (found.kind === "empty") return { ok: false, error: PRESET_NOT_ONE_GROUP_MESSAGE };
 
+  if (found.kind === "style") {
+    const style = byId.get(found.styleId)!;
+    const made: PresetContent = { ...content, shapes: [styleFilePointer(captured.project, { ...style, parentId: PAGE, meta: stripRunMeta(style.meta) })], rootShapeIds: [style.id], assets: [], bindings: [] };
+    return { ok: true, content: made, kind: "style", members: 1 };
+  }
+
   let groupId: string;
   let shapes: ContentShape[];
   if (found.kind === "group") {
@@ -191,7 +207,7 @@ export const presetFromSelection = (
     ];
   }
 
-  shapes = shapes.map((shape) => ({ ...shape, meta: stripRunMeta(shape.meta) }));
+  shapes = shapes.map((shape) => styleFilePointer(captured.project, { ...shape, meta: stripRunMeta(shape.meta) }));
   const shapeIds = new Set(shapes.map((shape) => shape.id));
   const assetIds = new Set(shapes.map((shape) => shape.props.assetId).filter((id): id is string => typeof id === "string"));
   const assets = content.assets.filter((asset) => assetIds.has(asset.id)).map((asset) => ({ ...asset, props: { ...asset.props, src: presetPointer(captured.project, asset.props.src) } }));
@@ -208,12 +224,13 @@ export const presetFromSelection = (
 
 export type DescribedPreset = { readonly ok: true; readonly kind: PresetKind; readonly medium?: RecipeMedium } | { readonly ok: false };
 
-/** The kind and medium of preset content, read from its one root group; not ok unless there is exactly one. */
+/** The kind and medium of preset content, read from its one root group or style; not ok unless there is exactly one. */
 export const describePresetContent = (content: unknown): DescribedPreset => {
   const value = record(content);
   if (!value || !Array.isArray(value.shapes) || !Array.isArray(value.rootShapeIds) || value.rootShapeIds.length !== 1) return { ok: false };
   const [rootId] = value.rootShapeIds as unknown[];
   const root = (value.shapes as unknown[]).map(record).find((shape) => shape?.id === rootId);
+  if (root?.type === "style") return { ok: true, kind: "style" };
   if (root?.type !== "frame") return { ok: false };
   const recipe = readGroupRecipe(record(record(root.meta)?.unframed)?.recipe);
   return recipe ? { ok: true, kind: "recipe", medium: recipe.medium } : { ok: true, kind: "group" };
@@ -270,7 +287,7 @@ export type PresetFile =
       readonly project: string;
       readonly file: string;
     }
-  /** Bytes a converted old preset (spec 11) carries inline, written into the project on insert. */
+  /** Bytes a converted old preset carries inline, written into the project on insert. */
   | { readonly dataUrl: string };
 
 const pointerOf = (src: unknown): PresetFile | undefined => {
@@ -284,11 +301,12 @@ const pointerOf = (src: unknown): PresetFile | undefined => {
 
 const pointerKey = (file: PresetFile) => ("dataUrl" in file ? file.dataUrl : `${file.project}/${file.file}`);
 
-/** Every distinct file a preset's assets point at, and every `data:` URL one carries (spec 11), in order: what the media copier copies in. */
+/** Every distinct file a preset's assets and styles point at, and every `data:` URL one carries, in order: what the media copier copies in. */
 export const presetFiles = (content: PresetContent): PresetFile[] => {
   const seen = new Map<string, PresetFile>();
-  for (const asset of content.assets) {
-    const pointer = pointerOf(asset.props.src);
+  const sources = [...content.assets.map((asset) => asset.props.src), ...content.shapes.filter((shape) => shape.type === "style").map((shape) => shape.props.file)];
+  for (const src of sources) {
+    const pointer = pointerOf(src);
     if (pointer && !seen.has(pointerKey(pointer))) seen.set(pointerKey(pointer), pointer);
   }
   return [...seen.values()];
@@ -322,6 +340,12 @@ export const resolvePresetFiles = (
     assets.push({ ...asset, id, props: { ...asset.props, src: answer && "file" in answer ? `${PROJECT_FILE}${answer.file}` : asset.props.src } });
   }
   const shapes = content.shapes.map((shape) => {
+    if (shape.type === "style") {
+      const pointer = pointerOf(shape.props.file);
+      if (!pointer) return shape;
+      const answer = answers.get(pointerKey(pointer));
+      return { ...shape, props: { ...shape.props, file: answer && "file" in answer ? answer.file : "" } };
+    }
     const assetId = shape.props.assetId;
     if (typeof assetId !== "string" || !renamed.has(assetId)) return shape;
     return { ...shape, props: { ...shape.props, assetId: renamed.get(assetId) ?? null } };

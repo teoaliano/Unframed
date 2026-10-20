@@ -1,8 +1,8 @@
 /**
- * A recipe group's one-click run (spec 06): the recipe's medium, model, params and runs,
+ * A recipe group's one-click run: the recipe's medium, model, params and runs,
  * the expanded selection as sources, no instruction. It is an ordinary run through the same
  * medium send as the composer, except that it leaves the last-used values alone. Its bar
- * counts what has settled from spec 03's run events.
+ * counts what has settled from the run events.
  */
 import { runMarkerOf, type ModelEntry } from "@unframed/contracts";
 import { composeSelection, trayFromRecipe, type GroupRecipe } from "@unframed/domain";

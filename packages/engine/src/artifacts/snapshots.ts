@@ -1,5 +1,5 @@
 /**
- * Artifact snapshots (spec 09): the still an artifact shows while it is not live. The engine
+ * Artifact snapshots: the still an artifact shows while it is not live. The engine
  * renders one in its headless Chrome whenever a shape has none for its current file and size,
  * and after every file change, every saved dial change and every resize of more than 10 %,
  * debounced a second per shape and one at a time. They go into the regenerable cache folder

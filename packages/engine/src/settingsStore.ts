@@ -16,7 +16,7 @@ export class EnvWriteError extends Data.TaggedError("EnvWriteError")<{ readonly 
 
 /**
  * The person's settings: the live values and the only code that changes `.env`. Callers
- * never see `.env` text. Spec 01's update rules, and the steps spec 10 inserts into them,
+ * never see `.env` text. The update rules, and the steps that guard paid work,
  * live in the lifecycle module, which is built on `write`.
  */
 export class SettingsStore extends Context.Service<
@@ -33,8 +33,8 @@ export class SettingsStore extends Context.Service<
      * a write is on disk the running process takes every variable it changed, except the
      * output folder when `holdOutputDir` is set (a folder move switches it later with
      * `useOutputDir`). A variable deleted from the file falls back to the process
-     * environment, except the key: deleting it clears the key in the running process
-     * (spec 10), and a key the shell provides applies again only at the next launch.
+     * environment, except the key: deleting it clears the key in the running process,
+     * and a key the shell provides applies again only at the next launch.
      * Nothing is emitted: call `emit`.
      */
     readonly write: (
@@ -79,7 +79,7 @@ export const settingsStoreLayer = (options: {
       const writeEnv = makeEnvWriter(config.envPath);
 
       const write = (changes: Readonly<Record<string, string | null>>, writeOptions: { readonly holdOutputDir?: boolean } = {}) => {
-        // Queued now, not when the effect runs: the OAuth callback relies on it (spec 10).
+        // Queued now, not when the effect runs: the OAuth callback relies on it.
         const written = writeEnv(changes).then((text) => {
           const fromFile = effectiveSettings(parseEnvText(text), options.processEnv);
           // Applied inside the write chain, so two writes apply in the order they landed.

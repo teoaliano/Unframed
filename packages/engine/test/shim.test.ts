@@ -16,7 +16,7 @@ const waitFor = async <A>(check: () => Promise<A | undefined>, what: string): Pr
   throw new Error(`timed out waiting for ${what}`);
 };
 
-/** The shim as a child process (spec 14, task 19): its lines on stdout, and a way to send it messages. */
+/** The shim as a child process: its lines on stdout, and a way to send it messages. */
 const shimPath = join(sourceEntry, "..", "mcpShim.ts");
 
 class Shim {

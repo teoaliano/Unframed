@@ -1,5 +1,5 @@
 /**
- * Text runs (spec 05), the text medium's mirror of the image run: a placeholder text
+ * Text runs, the text medium's mirror of the image run: a placeholder text
  * result, one upstream chat call, fill or remove, sidecar, events. Text completion shares
  * its adapter and sidecar, lands nothing, and fails its call instead of reporting events.
  */

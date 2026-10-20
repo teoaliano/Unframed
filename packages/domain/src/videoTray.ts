@@ -1,4 +1,4 @@
-/** The video tray's estimate and status lines (spec 04). */
+/** The video tray's estimate and status lines. */
 import { placeResults } from "./placement.ts";
 import type { VideoEntry } from "./videoProps.ts";
 import type { VideoCounts, VideoSettings } from "./videoRequest.ts";
@@ -38,7 +38,7 @@ export const formatVideoEstimate = (value: number): string => `est. ~$${value.to
 /** The share consent: on unless explicitly off. */
 export const shareConsent = (value: unknown): boolean => value !== false;
 
-/** A render placeholder's width, as spec 03's placeholders (spec 04). */
+/** A render placeholder's width, as the image placeholders. */
 export const RENDER_WIDTH = 320;
 
 /** The placeholder's height at its width: from the chosen ratio or exact size, else 16:9. */
@@ -49,7 +49,7 @@ export const renderHeight = (settings: VideoSettings): number => {
   return w > 0 && h > 0 ? (RENDER_WIDTH * h) / w : (RENDER_WIDTH * 9) / 16;
 };
 
-/** Where a render lands: spec 03's result placement from `anchor`, clear of every obstacle on the page. */
+/** Where a render lands: the result placement from `anchor`, clear of every obstacle on the page. */
 export const renderLanding = (anchor: { x: number; y: number; w: number; h: number }, obstacles: ReadonlyArray<{ x: number; y: number; w: number; h: number }>, settings: VideoSettings) => {
   const h = renderHeight(settings);
   const [at] = placeResults(anchor, [{ w: RENDER_WIDTH, h }], obstacles);

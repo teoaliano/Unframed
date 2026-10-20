@@ -166,7 +166,7 @@ test("moving one selected image above another swaps first and last live", async 
   await expect(badge(page, "shape:b")).toHaveText("last");
 
   // A drag of a selected shape moves the whole selection, so b moves on its own the way
-  // spec 03's badge test moves a shape: through the room, as another tab would.
+  // The badge test moves a shape: through the room, as another tab would.
   const current = (await roomRecords(engine, "default")).find((record) => record.id === "shape:b")!;
   await putRecords(engine, [{ ...current, y: -200 }]);
   await expect(badge(page, "shape:b")).toHaveText("first");

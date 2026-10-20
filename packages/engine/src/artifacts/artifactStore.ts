@@ -1,5 +1,5 @@
 /**
- * The artifact store (spec 09): the only code that writes artifact files. Every edit is a
+ * The artifact store: the only code that writes artifact files. Every edit is a
  * new file, opened with exclusive create, so no artifact file is ever overwritten or
  * deleted; a shape changes version only by its `file` prop changing. It also keeps the
  * motion library (the viewer, the bridge, the player, the runtime and GSAP) beside the
@@ -85,11 +85,28 @@ export const ensureLibrary = (folder: string): Promise<void> => ensure(folder, L
 
 export interface AgentSidecar {
   readonly source: "agent";
-  readonly kind: ArtifactKind;
+  readonly kind: ArtifactKind | "style";
   readonly chatId: string;
   readonly turn: number;
   /** The shape updated, `null` when creating. */
   readonly shapeId: string | null;
+  readonly title: string;
+  /** The style the chat followed when it wrote this page or motion: its shape and its file then. */
+  readonly style?: { readonly shapeId: string; readonly file: string };
+  readonly bytes: number;
+  readonly at: string;
+}
+
+/** A style version the person saved or a library preset brought in. */
+export interface StyleSidecar {
+  readonly source: "person" | "preset";
+  readonly kind: "style";
+  /** The style shape the version is for, `null` when it makes a new one. */
+  readonly shapeId: string | null;
+  /** The version it replaces, when it has one. */
+  readonly of?: string;
+  /** The library preset it came from. */
+  readonly preset?: string;
   readonly title: string;
   readonly bytes: number;
   readonly at: string;
@@ -139,16 +156,48 @@ const writeExclusive = (bytes: Buffer) => async (path: string) => {
 /** An agent's new version of a page or motion, with its agent sidecar. */
 export const writeAgentArtifact = async (
   folder: string,
-  input: { readonly kind: ArtifactKind; readonly html: string; readonly title: string; readonly chatId: string; readonly turn: number; readonly shapeId: string | null },
+  input: {
+    readonly kind: ArtifactKind | "style";
+    readonly html: string;
+    readonly title: string;
+    readonly chatId: string;
+    readonly turn: number;
+    readonly shapeId: string | null;
+    readonly style?: AgentSidecar["style"];
+  },
 ): Promise<{ file: string; bytes: number }> => {
   const bytes = Buffer.from(input.html, "utf8");
-  const file = await createNew(folder, { title: input.title, fallback: input.kind, ext: "html" }, writeExclusive(bytes), () => {
+  const ext = input.kind === "style" ? "md" : "html";
+  const file = await createNew(folder, { title: input.title, fallback: input.kind, ext }, writeExclusive(bytes), () => {
     const sidecar: AgentSidecar = {
       source: "agent",
       kind: input.kind,
       chatId: input.chatId,
       turn: input.turn,
       shapeId: input.shapeId,
+      title: input.title,
+      ...(input.style === undefined ? {} : { style: input.style }),
+      bytes: bytes.length,
+      at: new Date().toISOString(),
+    };
+    return `${JSON.stringify(sidecar, null, 2)}\n`;
+  });
+  return { file, bytes: bytes.length };
+};
+
+/** A style version the person saved, or one a library preset brings in, as a new `.md` file with its sidecar. */
+export const writeStyleFile = async (
+  folder: string,
+  input: { readonly markdown: string; readonly title: string; readonly source: StyleSidecar["source"]; readonly shapeId: string | null; readonly of?: string; readonly preset?: string },
+): Promise<{ file: string; bytes: number }> => {
+  const bytes = Buffer.from(input.markdown, "utf8");
+  const file = await createNew(folder, { title: input.title, fallback: "style", ext: "md" }, writeExclusive(bytes), () => {
+    const sidecar: StyleSidecar = {
+      source: input.source,
+      kind: "style",
+      shapeId: input.shapeId,
+      ...(input.of === undefined ? {} : { of: input.of }),
+      ...(input.preset === undefined ? {} : { preset: input.preset }),
       title: input.title,
       bytes: bytes.length,
       at: new Date().toISOString(),
@@ -158,7 +207,7 @@ export const writeAgentArtifact = async (
   return { file, bytes: bytes.length };
 };
 
-/** An uploaded composition, saved as an upload with spec 02's sidecar. */
+/** An uploaded composition, saved as an upload with its sidecar. */
 export const writeUploadedArtifact = async (folder: string, input: { readonly html: string; readonly fileName: string }): Promise<{ file: string; bytes: number }> => {
   const bytes = Buffer.from(input.html, "utf8");
   const title = input.fileName.replace(/\.[^.]*$/, "");

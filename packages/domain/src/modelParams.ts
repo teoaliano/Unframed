@@ -2,18 +2,18 @@
 export type ImagePropKey = "resolution" | "size" | "aspect_ratio" | "quality" | "background" | "output_format";
 
 export interface PropSpec {
-  /** An image prop, or a video prop (spec 04). */
+  /** An image prop, or a video prop. */
   readonly key: string;
   readonly label: string;
   /** Exactly the values the model declares. */
   readonly values: ReadonlyArray<string>;
   /** Menu labels for values that read differently from the chip (exact sizes). */
   readonly optionLabels?: Readonly<Record<string, string>>;
-  /** Chip text for values that read differently from the value (spec 04: Input, Seconds, Audio). */
+  /** Chip text for values that read differently from the value (Input, Seconds, Audio). */
   readonly chipLabels?: Readonly<Record<string, string>>;
-  /** A yes-or-no prop shown as one checkbox (spec 04: Audio). Its value is a boolean. */
+  /** A yes-or-no prop shown as one checkbox (Audio). Its value is a boolean. */
   readonly checkbox?: true;
-  /** Always in the tray: its menu has no Remove (spec 04: Input and Seconds). */
+  /** Always in the tray: its menu has no Remove (Input and Seconds). */
   readonly required?: true;
 }
 

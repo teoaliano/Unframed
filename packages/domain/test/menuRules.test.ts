@@ -121,7 +121,7 @@ describe("contextMenu", () => {
     expect(outline(shape(mark, [mark], { clipboard: true }))).toEqual([["edit", ["Cut ⌘X", "Copy ⌘C", "Paste ⌘V", "Group ⌘G"]]]);
   });
 
-  it("offers Add to library only for a selection, once spec 06 has registered it", () => {
+  it("offers Add to library only for a selection, once the library has registered it", () => {
     expect(outline(shape(mark, [mark], { libraryRegistered: true })).at(-1)).toEqual(["library", ["Add to library"]]);
     expect(outline(shape(mark, [mark])).some(([section]) => section === "library")).toBe(false);
     const canvas = contextMenu({ ...base, libraryRegistered: true, target: { kind: "canvas" }, selection: [] });

@@ -1,7 +1,7 @@
 /**
- * The pure half of spec 10's job lifecycle: what an output folder move, a project rename
- * or delete and a key removal do to the records of spec 04's job store. The engine reads
- * the store strictly, runs these on spec 04's queue and prunes on every write.
+ * The pure half of the job lifecycle: what an output folder move, a project rename
+ * or delete and a key removal do to the records of the render job store. The engine reads
+ * the store strictly, runs these on the render queue and prunes on every write.
  */
 import { isPendingFor, upsertJob, type RenderJob } from "./renderJobs.ts";
 

@@ -1,5 +1,5 @@
 /**
- * The legacy graph reader (spec 11): the old graph as it last stood, from its snapshot
+ * The legacy graph reader: the old graph as it last stood, from its snapshot
  * (`graph.json`) and its journal (`graph.log`), by the old app's replay rules.
  */
 import { applyLegacyOp, finite, keptEdge, record, type LegacyEdge, type LegacyGraph, type LegacyNode } from "./graph.ts";

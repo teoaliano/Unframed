@@ -29,7 +29,7 @@ export interface Uploaded {
 
 /**
  * Sends bytes to the engine's upload route. `sidecar` carries what a composite or sketch
- * adds to its sidecar (spec 03). Rejects with the route's own message.
+ * adds to its sidecar. Rejects with the route's own message.
  */
 export const uploadFile = async (project: string, file: Blob, name: string, signal?: AbortSignal, sidecar?: Readonly<Record<string, string>>): Promise<Uploaded> => {
   const query = new URLSearchParams({ name, ...sidecar });

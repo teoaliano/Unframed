@@ -16,7 +16,7 @@ test("a usable selection gets Generate and its count; a named group reads by its
   await clickShape(page, "shape:starter-subject");
   await expect(toolbar(page).getByRole("button", { name: "Generate" })).toBeVisible();
   await expect(toolbar(page).getByTestId("selection-hint")).toHaveText("1 selected");
-  // The hint and Agent come before Generate, which ends the bar, once spec 08 registers the Agent tray. No dividers.
+  // The hint and Agent come before Generate, which ends the bar, once the Agent tray is registered. No dividers.
   await expect(toolbar(page).getByRole("button")).toHaveText(["Agent", "Generate"]);
   await expect(toolbar(page).locator("[data-slot='separator']")).toHaveCount(0);
 

@@ -1,5 +1,5 @@
 /**
- * The dev share relay (spec 01): `pnpm dev:share` reaches the Vite dev server through a
+ * The dev share relay: `pnpm dev:share` reaches the Vite dev server through a
  * tunnel at one https origin. The dev proxy readdresses a request that came through that
  * origin to loopback before the engine's guard sees it. Every other Origin and Host is
  * forwarded unchanged, so the guard still refuses it.

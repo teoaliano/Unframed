@@ -1,5 +1,5 @@
 /**
- * The canvas an import makes, described without tldraw (spec 11): every shape by a key
+ * The canvas an import makes, described without tldraw: every shape by a key
  * that stays the same each time the same old files are mapped. `legacyRecords` turns it
  * into tldraw records.
  */
@@ -17,7 +17,7 @@ export type LegacyMedia =
   /** Only in a converted preset: bytes the insert writes into the project first. */
   | { readonly kind: "data"; readonly url: string; readonly name: string; readonly mime: string; readonly w: number; readonly h: number };
 
-/** Spec 03's approximate result recipe, its sources as shape keys. */
+/** The approximate result recipe, its sources as shape keys. */
 export interface LegacyResultRecipe {
   readonly medium: LegacyMedium;
   readonly model: string;
@@ -30,7 +30,7 @@ export interface LegacyResultRecipe {
   readonly sentPrompt?: string;
 }
 
-/** Spec 03's result meta for an imported result, its sources as shape keys, with its recipe on it. */
+/** The result meta for an imported result, its sources as shape keys, with its recipe on it. */
 export interface LegacyResult {
   readonly sidecar: string | null;
   readonly medium: LegacyMedium;
@@ -43,7 +43,7 @@ export interface LegacyResult {
   readonly recipe: LegacyResultRecipe;
 }
 
-/** A render still in flight: spec 04's render placeholder, bound to its job. */
+/** A render still in flight: a render placeholder, bound to its job. */
 export interface LegacyRender {
   readonly jobId: string;
   readonly startedAt: number;

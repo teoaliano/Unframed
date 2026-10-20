@@ -1,5 +1,5 @@
 /**
- * The canvas tools' pure half (spec 07): what `canvas_read` shows the agent, and how a
+ * The canvas tools' pure half: what `canvas_read` shows the agent, and how a
  * `canvas_write` batch becomes one room change: every refusal, provisional ids, the
  * canvas's own `@id` counter, run markers stripped, group rules and rename.
  */
@@ -37,6 +37,7 @@ export const shapeKind = (type: string | undefined): ShapeKind => {
     case "video":
     case "page":
     case "motion":
+    case "style":
       return type;
     case "frame":
       return "group";
@@ -137,7 +138,7 @@ export const canvasShapesOf = (records: ReadonlyArray<CanvasRecord>, boxes: Read
   });
 };
 
-/** The image each mark sits on: the topmost image with a file that it overlaps and sits above (spec 03's rule). */
+/** The image each mark sits on: the topmost image with a file that it overlaps and sits above. */
 export const markOwner = (shapes: ReadonlyArray<CanvasShape>): Map<string, string> => {
   const images = shapes.filter((shape) => shape.kind === "image" && shape.file !== undefined);
   const owners = new Map<string, string>();
@@ -210,6 +211,12 @@ export const canvasView = (input: CanvasViewInput): CanvasView => {
         entry.file = typeof props.file === "string" ? props.file : "";
         entry.title = typeof props.title === "string" ? props.title : "";
         if (props.dials !== undefined && Object.keys(obj(props.dials)).length > 0) entry.dials = props.dials;
+        if (typeof props.style === "string" && props.style !== "") entry.style = agentShapeId(props.style);
+        break;
+      case "style":
+        // Never the document itself: style_read answers it, so a canvas read stays small.
+        entry.file = typeof props.file === "string" ? props.file : "";
+        entry.title = typeof props.title === "string" ? props.title : "";
         break;
       case "mark": {
         entry.type = record.type;
@@ -458,6 +465,7 @@ const precheck = (ops: ReadonlyArray<unknown>, ctx: BatchContext): void => {
     if (type === "create") {
       const kind = record.kind;
       if (kind === "page" || kind === "motion") refuse("create: make pages and motions with page_write and motion_write");
+      if (kind === "style") refuse("create: make styles with style_write");
       if (typeof kind !== "string" || !CREATE_KINDS.has(kind)) refuse(`create: unknown kind "${String(kind)}"`);
       const id = record.id;
       if (typeof id !== "string" || id === "") refuse('create: id must be a string (use "new:<name>" for a fresh id)');
@@ -593,7 +601,7 @@ const create = (batch: Batch, ctx: BatchContext, op: Record<string, unknown>): v
   batch.put(record);
 };
 
-/** Renames any shape with an `@id` exactly as the canvas does (spec 06). */
+/** Renames any shape with an `@id` exactly as the canvas does. */
 const renameShape = (batch: Batch, ctx: BatchContext, shape: CanvasRecord, typed: unknown, op: string): void => {
   if (readRef(shape) === undefined) refuse(`${op}: ${agentShapeId(shape.id)} has no @id to rename`);
   if (typeof typed !== "string") refuse(`${op}: name must be a string`);

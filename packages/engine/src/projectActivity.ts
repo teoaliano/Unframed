@@ -12,7 +12,7 @@ export interface ActivitySource {
 }
 
 /**
- * The changes since the last tick (spec 17). A project is sent when its counts change, so the
+ * The changes since the last tick. A project is sent when its counts change, so the
  * first tick sends every project with work; a project whose work ends is sent once with zeros.
  * Quiet projects are never sent.
  */

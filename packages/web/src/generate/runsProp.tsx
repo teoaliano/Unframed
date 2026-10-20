@@ -1,5 +1,5 @@
 /**
- * The Runs prop (spec 05), image medium only: a count up to the domain's `RUNS_CAP` fires that many
+ * The Runs prop, image medium only: a count up to the domain's `RUNS_CAP` fires that many
  * generations as one batch; Free takes the count from a list in the selection. It is not a
  * model trait, so a model change leaves it. Its values live in the tray's props as `runs`
  * and `viewFinalPrompt`, which is also how last-used values store them.
@@ -80,7 +80,7 @@ const RunsChip = ({ props, onChange, open, onOpenChange }: TrayPropChipProps) =>
                 onFocus={fixed}
                 onPointerDown={fixed}
                 onKeyDown={(event) => {
-                  // Digits only (spec 05): the number field would also take a sign or a separator.
+                  // Digits only: the number field would also take a sign or a separator.
                   if (event.key.length === 1 && !/\d/.test(event.key) && !event.metaKey && !event.ctrlKey) event.preventDefault();
                 }}
               />

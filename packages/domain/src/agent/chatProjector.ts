@@ -1,5 +1,5 @@
 /**
- * The chat projector (spec 07, t3code's shape): folds committed events into the read model.
+ * The chat projector (t3code's shape): folds committed events into the read model.
  * Pure: the engine uses it for its in-memory model and the web for a reconnecting rail.
  */
 import type {
@@ -174,6 +174,8 @@ const applyToChat = (chat: Chat, event: ChatEvent): Chat => {
       for (const id of (p.ids as string[]) ?? []) if (!tags.includes(id)) tags.push(id);
       return { ...chat, tags, updatedAt: at };
     }
+    case "thread.style-set":
+      return { ...chat, style: typeof p.styleId === "string" ? p.styleId : null, updatedAt: at };
     case "thread.untagged": {
       const gone = new Set((p.ids as string[]) ?? []);
       return { ...chat, tags: chat.tags.filter((tag) => !gone.has(tag)), updatedAt: at };
@@ -237,6 +239,7 @@ export const projectChats = (model: ProjectChats, event: ChatEvent): ProjectChat
       title: str(p.title),
       titledBy: (p.titledBy ?? null) as Chat["titledBy"],
       tags: (p.tags as string[]) ?? [],
+      style: null,
       modelSelection: p.modelSelection,
       runtimeMode: p.runtimeMode,
       interactionMode: p.interactionMode,

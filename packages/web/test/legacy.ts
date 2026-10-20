@@ -1,5 +1,5 @@
 /**
- * Browser-seam helpers for spec 11: the app over an output folder copied from the old-format
+ * Browser-seam helpers for the old-app import: the app over an output folder copied from the old-format
  * samples, opening `everything` unless told otherwise. Tests change the copy, never the samples.
  */
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";

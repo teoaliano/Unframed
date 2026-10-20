@@ -51,7 +51,7 @@ describe("page_write", () => {
   });
 
   it("puts a new page at (80, 80) with nothing selected", async () => {
-    const agent = await startAgentEngine({ script: await script([{ tools: [{ name: "page_write", input: { html: "<p>x</p>" } }] }]) });
+    const agent = await startAgentEngine({ script: await script([{ tools: [{ name: "page_write", input: { html: "<html><p>x</p></html>" } }] }]) });
     await run(agent);
     const created = (await roomRecords(agent)).find((record) => record.type === "page");
     expect(created).toMatchObject({ x: 80, y: 80, props: { title: "" } });
@@ -60,7 +60,7 @@ describe("page_write", () => {
 
   it("with shapeId writes a new file and points the shape at it, keeps the old file and title, and the turn's Revert points it back", async () => {
     const agent = await startAgentEngine({
-      script: await script([{ tools: [{ name: "page_write", input: { shapeId: "pg1", html: "<body>v2</body>" } }] }]),
+      script: await script([{ tools: [{ name: "page_write", input: { shapeId: "pg1", html: "<html><body>v2</body></html>" } }] }]),
     });
     await writeFile(join(agent.folder, "1-landing.html"), "<body>v1</body>");
     await seed(agent, [pageShape("pg1", "100", { file: "1-landing.html", title: "Landing" })]);
@@ -72,7 +72,7 @@ describe("page_write", () => {
     expect(shape.props.title).toBe("Landing");
     expect(write?.result).toMatchObject({ ok: true, shapeId: "pg1", file: shape.props.file, title: "Landing" });
     expect(await readFile(join(agent.folder, "1-landing.html"), "utf8")).toBe("<body>v1</body>");
-    expect(await readFile(join(agent.folder, shape.props.file), "utf8")).toBe(`<body>\n${BRIDGE_TAG}v2</body>`);
+    expect(await readFile(join(agent.folder, shape.props.file), "utf8")).toBe(`<html><body>\n${BRIDGE_TAG}v2</body></html>`);
     expect(JSON.parse(await readFile(join(agent.folder, shape.props.file.replace(/\.html$/, ".json")), "utf8"))).toMatchObject({ shapeId: "pg1", title: "Landing" });
     expect(chat.turns[0]?.files).toEqual([{ shapeId: "shape:pg1", kind: "page", change: "updated", file: shape.props.file, previousFile: "1-landing.html" }]);
 
@@ -86,8 +86,8 @@ describe("page_write", () => {
       script: await script([
         {
           tools: [
-            { name: "page_write", input: { shapeId: "pg1", html: "<p>a</p>", title: "  Landing  " } },
-            { name: "page_write", input: { shapeId: "pg2", html: "<p>b</p>", title: "x".repeat(130) } },
+            { name: "page_write", input: { shapeId: "pg1", html: "<html><p>a</p></html>", title: "  Landing  " } },
+            { name: "page_write", input: { shapeId: "pg2", html: "<html><p>b</p></html>", title: "x".repeat(130) } },
           ],
         },
       ]),
@@ -103,8 +103,8 @@ describe("page_write", () => {
       script: await script([
         {
           tools: [
-            { name: "page_write", input: { shapeId: "pg1", html: "<p>a</p>", title: "Pricing" } },
-            { name: "motion_write", input: { shapeId: "m1", html: "<div id=root></div>", title: "Outro" } },
+            { name: "page_write", input: { shapeId: "pg1", html: "<html><p>a</p></html>", title: "Pricing" } },
+            { name: "motion_write", input: { shapeId: "m1", html: "<html><div id=root></div></html>", title: "Outro" } },
           ],
         },
       ]),
@@ -120,7 +120,7 @@ describe("page_write", () => {
 
   it("refuses empty html, a page over 2 MiB once tagged, an unknown shape and the wrong kind, and writes nothing", async () => {
     // The bridge tag and its newline take the page from exactly the limit to over it.
-    const nearly = `<p>${"a".repeat(2_097_152 - 7)}</p>`;
+    const nearly = `<html>${"a".repeat(2_097_152 - 13)}</html>`;
     const tagged = Buffer.byteLength(`${BRIDGE_TAG}\n${nearly}`);
     const agent = await startAgentEngine({
       script: await script([
@@ -130,9 +130,9 @@ describe("page_write", () => {
             { name: "page_write", input: { html: "   " } },
             { name: "page_write", input: { html: 42 } },
             { name: "page_write", input: { html: nearly } },
-            { name: "page_write", input: { shapeId: "nope", html: "<p>x</p>" } },
-            { name: "page_write", input: { shapeId: "m1", html: "<p>x</p>" } },
-            { name: "page_write", input: { shapeId: "i1", html: "<p>x</p>" } },
+            { name: "page_write", input: { shapeId: "nope", html: "<html><p>x</p></html>" } },
+            { name: "page_write", input: { shapeId: "m1", html: "<html><p>x</p></html>" } },
+            { name: "page_write", input: { shapeId: "i1", html: "<html><p>x</p></html>" } },
           ],
         },
       ]),
@@ -157,8 +157,8 @@ describe("page_write", () => {
       script: await script([
         {
           tools: [
-            { name: "page_write", input: { title: "Landing", html: "<p>new</p>" } },
-            { name: "page_write", input: { shapeId: "pg1", html: "<p>again</p>" } },
+            { name: "page_write", input: { title: "Landing", html: "<html><p>new</p></html>" } },
+            { name: "page_write", input: { shapeId: "pg1", html: "<html><p>again</p></html>" } },
           ],
         },
       ]),
@@ -185,7 +185,7 @@ describe("page_write", () => {
     ]);
     // The preview URL answers on the preview origin.
     const served = await agent.engine.request(new URL(first!.result.previewUrl).pathname, { port: agent.engine.previewPort, headers: { host: `127.0.0.1:${agent.engine.previewPort}` } });
-    expect(served.text).toContain("<p>new</p>");
+    expect(served.text).toContain("<html><p>new</p></html>");
   });
 });
 
@@ -250,18 +250,18 @@ describe("motion_write", () => {
   });
 
   it("creates a motion at the agent size of 480 by 300", async () => {
-    const agent = await startAgentEngine({ script: await script([{ tools: [{ name: "motion_write", input: { title: "Sequence", html: "<div id=root></div>" } }] }]) });
+    const agent = await startAgentEngine({ script: await script([{ tools: [{ name: "motion_write", input: { title: "Sequence", html: "<html><div id=root></div></html>" } }] }]) });
     await run(agent);
     const created = (await roomRecords(agent)).find((record) => record.type === "motion");
     expect(created).toMatchObject({ x: 80, y: 80, props: { w: 480, h: 300, title: "Sequence", fileName: "" } });
-    expect(await readFile(join(agent.folder, created.props.file), "utf8")).toBe(`${RUNTIME_TAG}\n${BRIDGE_TAG}\n<div id=root></div>`);
+    expect(await readFile(join(agent.folder, created.props.file), "utf8")).toBe(`${RUNTIME_TAG}\n${BRIDGE_TAG}\n<html><div id=root></div></html>`);
   });
 
   it("rewrites a library file whose size differs from its source and leaves the unchanged ones alone", async () => {
     const agent = await startAgentEngine({
       script: await script([
-        { tools: [{ name: "motion_write", input: { html: "<div id=root></div>" } }] },
-        { tools: [{ name: "motion_write", input: { html: "<div id=root>2</div>" } }] },
+        { tools: [{ name: "motion_write", input: { html: "<html><div id=root></div></html>" } }] },
+        { tools: [{ name: "motion_write", input: { html: "<html><div id=root>2</div></html>" } }] },
       ]),
     });
     const chatId = await agent.createChat();
@@ -283,7 +283,7 @@ describe("motion_write", () => {
   });
 
   it("refuses when the library cannot be written, and writes no composition", async () => {
-    const agent = await startAgentEngine({ script: await script([{ tools: [{ name: "motion_write", input: { html: "<div id=root></div>" } }] }]) });
+    const agent = await startAgentEngine({ script: await script([{ tools: [{ name: "motion_write", input: { html: "<html><div id=root></div></html>" } }] }]) });
     await mkdir(join(agent.folder, "hyperframes-player.js"));
     const { chat } = await run(agent);
     const [write] = toolResults(chat, "motion_write");
@@ -299,13 +299,13 @@ describe("artifact diffs through the artifact tools", () => {
       script: await script([
         {
           tools: [
-            { name: "page_write", input: { shapeId: "pg1", html: "<h1>Landing</h1>\n<p>Two, changed</p>\n" } },
-            { name: "motion_write", input: { title: "Sequence", html: "<div id=root>seq</div>\n" } },
+            { name: "page_write", input: { shapeId: "pg1", html: "<html>\n<h1>Landing</h1>\n<p>Two, changed</p>\n</html>\n" } },
+            { name: "motion_write", input: { title: "Sequence", html: "<html>\n<div id=root>seq</div>\n</html>\n" } },
           ],
         },
       ]),
     });
-    await writeFile(join(agent.folder, "1-landing.html"), "<h1>Landing</h1>\n<p>Two</p>\n");
+    await writeFile(join(agent.folder, "1-landing.html"), "<html>\n<h1>Landing</h1>\n<p>Two</p>\n</html>\n");
     await seed(agent, [pageShape("pg1", "100", { file: "1-landing.html", title: "Landing" })]);
     const { chatId, chat } = await run(agent);
     const [page] = toolResults(chat, "page_write");
@@ -321,5 +321,155 @@ describe("artifact diffs through the artifact tools", () => {
     expect(motionDiff!.deletions).toBe(0);
     expect(motionDiff!.additions).toBeGreaterThan(0);
     expect(motionDiff!.patch).toContain("+<div id=root>seq</div>");
+  });
+});
+
+describe("the document checks", () => {
+  it("refuse a page_write that loads from a CDN or is not a whole document, and write no file", async () => {
+    const agent = await startAgentEngine({
+      script: await script([
+        {
+          tools: [
+            { name: "page_write", input: { title: "Landing", html: '<!doctype html><html><head><script src="https://cdn.tailwindcss.com"></script></head><body>Hi</body></html>' } },
+            { name: "motion_write", input: { title: "Intro", html: '<html><script src="anime.min.js"></script><div id=root></div></html>' } },
+            { name: "page_write", input: { title: "Bare", html: "<h1>Hi</h1>" } },
+          ],
+        },
+      ]),
+    });
+    const { chat } = await run(agent);
+    expect([...toolResults(chat, "page_write"), ...toolResults(chat, "motion_write")].map((result) => [result.status, result.result.error])).toEqual([
+      ["failed", 'the page cannot work in Unframed, so nothing was written: <script src="https://cdn.tailwindcss.com"> loads from the internet, and nothing external loads in Unframed: inline the script.'],
+      ["failed", "the page cannot work in Unframed, so nothing was written: it is not a whole HTML document (it has neither <!doctype html> nor <html>): send the complete document."],
+      ["failed", 'the motion cannot work in Unframed, so nothing was written: <script src="anime.min.js"> is not a file beside the motion: a motion loads only <script src="gsap.js"></script>, so inline anything else.'],
+    ]);
+    expect(await artifactFiles(agent)).toEqual([]);
+    expect((await roomRecords(agent)).filter((record) => record.type === "page" || record.type === "motion")).toEqual([]);
+  });
+});
+
+describe("page_edit and motion_edit", () => {
+  const LANDING = "<!doctype html><html><head><title>x</title></head><body><h1>Hello</h1><p>One</p></body></html>";
+
+  it("applies the edits to the current file, writes them as a new version beside the old one, and moves the shape like a write", async () => {
+    const agent = await startAgentEngine({
+      script: await script([
+        {
+          tools: [
+            {
+              name: "page_edit",
+              input: {
+                shapeId: "pg1",
+                title: "Welcome",
+                edits: [
+                  { old_string: "<h1>Hello</h1>", new_string: "<h1>Welcome</h1>" },
+                  { old_string: "<p>One</p>", new_string: "<p>Two</p>" },
+                ],
+              },
+            },
+          ],
+        },
+      ]),
+    });
+    await writeFile(join(agent.folder, "1-landing.html"), LANDING);
+    await seed(agent, [pageShape("pg1", "100", { file: "1-landing.html", title: "Landing" })]);
+    const { chatId, chat } = await run(agent);
+    const [edit] = toolResults(chat, "page_edit");
+    expect(edit?.status).toBe("completed");
+    const shape = await roomShape(agent, "pg1");
+    expect(shape.props).toMatchObject({ title: "Welcome", file: expect.stringMatching(/^\d+-welcome\.html$/) });
+    expect(edit?.result).toMatchObject({ ok: true, shapeId: "pg1", file: shape.props.file, title: "Welcome", previewUrl: expect.stringContaining(shape.props.file) });
+    expect(await readFile(join(agent.folder, "1-landing.html"), "utf8")).toBe(LANDING);
+    expect(await readFile(join(agent.folder, shape.props.file), "utf8")).toBe(`<!doctype html><html><head><title>x</title>${BRIDGE_TAG}\n</head><body><h1>Welcome</h1><p>Two</p></body></html>`);
+    expect(JSON.parse(await readFile(join(agent.folder, shape.props.file.replace(/\.html$/, ".json")), "utf8"))).toMatchObject({ source: "agent", kind: "page", chatId, turn: 1, shapeId: "pg1", title: "Welcome" });
+    expect(chat.tags).toEqual(["shape:pg1"]);
+    expect(chat.activities.filter((activity) => activity.kind === "artifact.written").map((event) => [event.summary, event.payload])).toEqual([
+      ["Updated page · Welcome", { artifact: { shapeId: "pg1", file: shape.props.file, title: "Welcome", kind: "page", created: false } }],
+    ]);
+    expect(chat.turns[0]?.files).toEqual([{ shapeId: "shape:pg1", kind: "page", change: "updated", file: shape.props.file, previousFile: "1-landing.html" }]);
+
+    await agent.dispatch({ type: "thread.turn.revert", threadId: chatId, turnCount: 1 });
+    await (await agent.watch(chatId)).until((current) => current.turns[0]?.reverted !== undefined, "the revert");
+    expect((await roomShape(agent, "pg1")).props.file).toBe("1-landing.html");
+  });
+
+  it("keeps a motion's runtime and bridge once, edited from a file that already carries them", async () => {
+    const agent = await startAgentEngine({
+      script: await script([{ tools: [{ name: "motion_edit", input: { shapeId: "m1", edits: [{ old_string: 'data-duration="2"', new_string: 'data-duration="3"' }] } }] }]),
+    });
+    const composition = `<html><head>${RUNTIME_TAG}\n${BRIDGE_TAG}\n<script src="gsap.js"></script></head><body><div id="root" data-duration="2"></div></body></html>`;
+    await writeFile(join(agent.folder, "2-intro.html"), composition);
+    await seed(agent, [motionShape("m1", "101", "Intro", { file: "2-intro.html" })]);
+    const { chat } = await run(agent);
+    expect(toolResults(chat, "motion_edit")[0]?.status).toBe("completed");
+    const shape = await roomShape(agent, "m1");
+    expect(shape.props.file).toMatch(/^\d+-intro\.html$/);
+    expect(await readFile(join(agent.folder, shape.props.file), "utf8")).toBe(composition.replace('data-duration="2"', 'data-duration="3"'));
+    for (const name of LIBRARY) expect((await stat(join(agent.folder, name))).size, name).toBeGreaterThan(0);
+  });
+
+  it("writes nothing and leaves the shape alone when an edit misses, matches twice, or brings in something external", async () => {
+    const agent = await startAgentEngine({
+      script: await script([
+        {
+          tools: [
+            { name: "page_edit", input: { shapeId: "pg1", edits: [{ old_string: "<h1>Hello</h1>", new_string: "<h1>Hi</h1>" }, { old_string: "<p>Three</p>", new_string: "" }] } },
+            { name: "page_edit", input: { shapeId: "pg1", edits: [{ old_string: "<", new_string: "[" }] } },
+            { name: "page_edit", input: { shapeId: "pg1", edits: [{ old_string: "<title>x</title>", new_string: '<title>x</title><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter">' }] } },
+            { name: "page_edit", input: { shapeId: "pg1", edits: [] } },
+          ],
+        },
+      ]),
+    });
+    await writeFile(join(agent.folder, "1-landing.html"), LANDING);
+    await seed(agent, [pageShape("pg1", "100", { file: "1-landing.html", title: "Landing" })]);
+    const { chat } = await run(agent);
+    expect(toolResults(chat, "page_edit").map((result) => [result.status, result.result.error])).toEqual([
+      ["failed", "edit 2: old_string matched 0 times; it must match exactly once. Nothing was written. Read the current text with page_read and quote it exactly."],
+      ["failed", expect.stringMatching(/^edit 1: old_string matched 13 times; it must match exactly once\. Nothing was written\./)],
+      ["failed", expect.stringMatching(/^the page cannot work in Unframed, so nothing was written: <link href="https:\/\/fonts\.googleapis\.com/)],
+      ["failed", "edits must be a list of 1 to 20 { old_string, new_string } changes. Nothing was written."],
+    ]);
+    expect(await artifactFiles(agent)).toEqual(["1-landing.html"]);
+    expect((await roomShape(agent, "pg1")).props.file).toBe("1-landing.html");
+    expect(chat.tags).toEqual([]);
+  });
+
+  it("refuses an unknown shape, the wrong kind, a missing shapeId and a shape with no file", async () => {
+    const agent = await startAgentEngine({
+      script: await script([
+        {
+          tools: [
+            { name: "page_edit", input: { shapeId: "gone", edits: [{ old_string: "a", new_string: "b" }] } },
+            { name: "page_edit", input: { shapeId: "m1", edits: [{ old_string: "a", new_string: "b" }] } },
+            { name: "page_edit", input: { shapeId: "pg2", edits: [{ old_string: "a", new_string: "b" }] } },
+            { name: "motion_edit", input: { shapeId: "pg1", edits: [{ old_string: "a", new_string: "b" }] } },
+            { name: "motion_edit", input: { edits: [{ old_string: "a", new_string: "b" }] } },
+          ],
+        },
+      ]),
+    });
+    await writeFile(join(agent.folder, "1-landing.html"), LANDING);
+    await seed(agent, [pageShape("pg1", "100", { file: "1-landing.html" }), motionShape("m1", "101", "Intro", { file: "1-landing.html" }, { y: 500 }), pageShape("pg2", "102", {}, { y: 1000 })]);
+    const { chat } = await run(agent);
+    expect([...toolResults(chat, "page_edit"), ...toolResults(chat, "motion_edit")].map((result) => result.result.error)).toEqual([
+      "no shape gone",
+      "shape m1 is a motion, not a page",
+      "page pg2 has no file yet; write it with page_write",
+      "shape pg1 is a page, not a motion",
+      "shapeId must name the motion to edit",
+    ]);
+    expect(await artifactFiles(agent)).toEqual(["1-landing.html"]);
+  });
+
+  it("is refused in plan mode, like the write tools", async () => {
+    const agent = await startAgentEngine({ script: await script([{ tools: [{ name: "page_edit", input: { shapeId: "pg1", edits: [{ old_string: "Hello", new_string: "Hi" }] } }] }]) });
+    await writeFile(join(agent.folder, "1-landing.html"), LANDING);
+    await seed(agent, [pageShape("pg1", "100", { file: "1-landing.html" })]);
+    const chatId = await agent.createChat({ interactionMode: "plan" });
+    await agent.send(chatId, "go");
+    const chat = await agent.settled(chatId, 1);
+    expect(toolResults(chat, "page_edit")[0]).toMatchObject({ status: "failed", result: { error: "Plan mode changes nothing, so this write did not happen; put the change in your plan instead." } });
+    expect(await artifactFiles(agent)).toEqual(["1-landing.html"]);
   });
 });

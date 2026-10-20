@@ -14,7 +14,7 @@ if (shareValue !== undefined && shareValue.trim() !== "" && shareOrigin === unde
   throw new Error(`UNFRAMED_DEV_SHARE_ORIGIN must be a bare https origin, got ${JSON.stringify(shareValue)}`);
 }
 
-// The dev share relay (spec 01). Without a share origin the proxy forwards headers untouched.
+// The dev share relay. Without a share origin the proxy forwards headers untouched.
 const relay: ProxyOptions["configure"] = (proxy) => {
   if (shareOrigin === undefined) return;
   const readdress = (proxyReq: { setHeader(name: string, value: string): void }, req: { headers: Record<string, string | string[] | undefined> }) => {
@@ -34,7 +34,7 @@ const relay: ProxyOptions["configure"] = (proxy) => {
 
 export default defineConfig({
   plugins: [react(), tailwindcss()],
-  // t3code's UI kit imports itself through "~" (spec 12), kept so its files stay a mechanical merge.
+  // t3code's UI kit imports itself through "~", kept so its files stay a mechanical merge.
   resolve: { alias: { "~": fileURLToPath(new URL("./src", import.meta.url)) } },
   // No .env files: the repo's .env holds the OpenRouter key, and nothing from it may
   // reach the client. The one build-time value is read explicitly below.

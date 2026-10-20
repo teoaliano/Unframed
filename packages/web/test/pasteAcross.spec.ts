@@ -2,8 +2,9 @@ import { readdir, readFile, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { copySelection, openCanvas, shapeOnScreen, toast, waitForRoom } from "./canvas.ts";
 import { expect, test } from "./fixtures.ts";
+import { clickShape } from "./generation.ts";
 import { pngBytes } from "./images.ts";
-import { filledMedia, putRecords, uploadToEngine } from "./media.ts";
+import { filledMedia, putRecords, styleRecord, uploadToEngine } from "./media.ts";
 
 test.use({ permissions: ["clipboard-read", "clipboard-write"] });
 
@@ -85,4 +86,25 @@ test("pasting into another project copies every file in; a pasted page always ge
   await expect(toast(page, /^Could not copy the page's file: /)).toBeVisible();
   const emptied = await waitForRoom(engine, "beta", (records) => records.find((record) => record.type === "page" && !before.has(record.id)));
   expect(emptied.props.file).toBe("");
+});
+
+test("a style pasted into another project brings a copy of its document and keeps its card", async ({ page, engine }) => {
+  const rpc = await engine.rpc();
+  await rpc.call("projects.create", { name: "alpha" });
+  await rpc.call("projects.create", { name: "beta" });
+  await rpc.call("preferences.set", { key: "project.active", value: "alpha" });
+  await openCanvas(page, engine, "alpha");
+  const file = await uploadToEngine(engine, "linear.md", Buffer.from("# Linear\n\nAccent #5e6ad2\n"), "text/markdown", "alpha");
+  await putRecords(engine, [styleRecord("shape:linear", "160", { x: 440, y: 60 }, file, "Linear", { swatches: ["#5e6ad2"], excerpt: "Accent #5e6ad2" })], "alpha");
+  await expect(shapeOnScreen(page, "shape:linear")).toHaveCount(1);
+  await clickShape(page, "shape:linear");
+  await copySelection(page);
+
+  await page.getByRole("button", { name: "All projects" }).click();
+  await page.getByRole("menuitemradio", { name: "beta" }).click();
+  await expect(page.locator("[data-canvas-project='beta'] .tl-canvas")).toBeVisible();
+  await page.keyboard.press("ControlOrMeta+v");
+  const pasted = await waitForRoom(engine, "beta", (records) => records.find((record) => record.type === "style"));
+  expect(pasted.props).toMatchObject({ title: "Linear", swatches: ["#5e6ad2"], excerpt: "Accent #5e6ad2" });
+  expect(await readFile(join(engine.dataDir, "output", "beta", pasted.props.file), "utf8")).toBe("# Linear\n\nAccent #5e6ad2\n");
 });

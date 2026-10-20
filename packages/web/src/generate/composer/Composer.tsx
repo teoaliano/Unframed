@@ -19,7 +19,7 @@ const isSendKey = (event: { readonly key: string; readonly metaKey: boolean; rea
 const isEditable = (target: EventTarget | null) => target instanceof HTMLElement && target.closest("input, textarea, [contenteditable='true']") !== null;
 
 /**
- * The composer shell, shared by the Generate tray and the Agent tray (spec 08). It owns
+ * The composer shell, shared by the Generate tray and the Agent tray. It owns
  * Esc, the send key and the selection binding; a tray owns its bands and what send does.
  */
 export const Composer = ({ mode, project, recipe, onCollapse }: ComposerProps) => {

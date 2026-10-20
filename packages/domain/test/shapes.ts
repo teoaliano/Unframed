@@ -49,3 +49,5 @@ export const artifact = (id: string, kind: "page" | "motion", at: At = {}, file 
 });
 
 export const mark = (id: string, at: At = {}): CanvasShape => ({ id, kind: "mark", ...place({ w: 20, h: 20, ...at }) });
+
+export const style = (id: string, at: At = {}, file = "linear.md"): CanvasShape => ({ id, kind: "style", ref: id, file, ...place({ w: 320, h: 240, ...at }) });

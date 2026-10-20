@@ -1,7 +1,7 @@
 import type { ReactElement, ReactNode } from "react";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "~/components/ui/tooltip";
 
-/** The look of the chrome's floating cards (spec 12): glass over the canvas, the kit's border and radius. */
+/** The look of the chrome's floating cards: glass over the canvas, the kit's border and radius. */
 export const cornerCardClass = "box-border flex h-11 min-w-11 items-center gap-2 rounded-xl border p-[5px] shadow-lg/5 surface-glass";
 
 /** A kit tooltip on `children`, which must be the trigger element. */

@@ -26,7 +26,7 @@ const activity = (kind: string, turnId: string | null, payload: unknown): ChatAc
   createdAt: "2026-10-15T00:00:00.000Z",
 });
 
-describe("generate's permission (spec 14, in-app agents)", () => {
+describe("generate's permission (in-app agents)", () => {
   it("asks in Supervised mode, as a dynamic tool call the detail of which names the estimate", () => {
     expect(generate("approval-required")).toEqual({ kind: "ask", requestType: "dynamic_tool_call" });
   });

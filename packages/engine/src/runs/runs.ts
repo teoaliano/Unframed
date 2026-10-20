@@ -65,19 +65,19 @@ export class Runs extends Context.Service<
   Runs,
   {
     readonly image: (request: ImageRunRequest) => Effect.Effect<{ runId: string; batchId: string; placeholders: string[] }, UnframedError>;
-    /** Spec 05: answers once the run's empty text result is in the room; the answer fills it later. */
+    /** Answers once the run's empty text result is in the room; the answer fills it later. */
     readonly text: (request: TextRunRequest) => Effect.Effect<{ runId: string; batchId: string; placeholders: string[] }, UnframedError>;
-    /** Spec 05: one text call that lands nothing. */
+    /** One text call that lands nothing. */
     readonly complete: (request: TextCompleteRequest) => Effect.Effect<TextCompleteAnswer, UnframedError>;
     readonly subscribe: (project: string) => Stream.Stream<RunEvent>;
     readonly recipe: (project: string, shapeId: string) => Effect.Effect<ResultRecipe, UnframedError>;
     /** Copies a result's sidecar and the files its recipe names from `from` into `project`, beside `file`. */
     readonly copyRecipe: (project: string, from: string, sidecar: string, file: string) => Effect.Effect<{ sidecar: string }, UnframedError>;
-    /** Spec 10: how many runs are still generating, in one project (a name, slugged) or in all. */
+    /** How many runs are still generating, in one project (a name, slugged) or in all. */
     readonly liveRuns: (project?: string) => Effect.Effect<number>;
     /**
-     * Spec 09: a motion render joins the run registry as a live run of its project, so its
-     * placeholder is resolved like any non-durable run and spec 10's checks count it.
+     * A motion render joins the run registry as a live run of its project, so its
+     * placeholder is resolved like any non-durable run and the lifecycle checks count it.
      */
     readonly track: (runId: string, project: string) => { settle: (outcome: RunOutcome<LandedClip>) => void; forget: () => void };
   }
@@ -137,7 +137,7 @@ export const runsLayer = Layer.effect(
     /** Resolves one marker: leave a live run's, fill a landed output's, clear the rest. */
     const resolve = (shape: Shape, room: RoomAccess) => {
       const marker = runMarkerOf(shape);
-      // Spec 04 resolves durable markers against its render job store.
+      // Render jobs resolve durable markers against their job store.
       if (!marker || marker.durable) return;
       const run = registry.get(marker.runId);
       const outcome = run?.outputs.get(marker.runIndex);
@@ -443,7 +443,7 @@ export const runsLayer = Layer.effect(
           else if (ref.original === undefined) references.push({ kind: ref.kind, file: yield* copyOf(ref.file) });
           else references.push({ kind: ref.kind, file: yield* copyOf(ref.file), original: yield* copyOf(ref.original) });
         }
-        // Spec 05: a text result's only file is its sidecar, so its copy is a new sidecar that never overwrites.
+        // A text result's only file is its sidecar, so its copy is a new sidecar that never overwrites.
         if (source.recipe.medium === "text") {
           const next = { ...source.sidecar, recipe: { ...source.recipe, references } };
           return yield* Effect.tryPromise({

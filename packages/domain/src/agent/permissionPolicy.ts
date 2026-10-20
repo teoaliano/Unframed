@@ -1,5 +1,5 @@
 /**
- * The permission policy (spec 07, t3code's four runtime modes, unchanged): what a tool call
+ * The permission policy (t3code's four runtime modes, unchanged): what a tool call
  * gets, in a fixed order, and how each runtime mode maps onto Claude's permission mode and
  * Codex's sandbox and approval settings.
  */
@@ -10,8 +10,17 @@ import { classifyRequest, type RequestType } from "./runtimeEvents.ts";
 /** The provider-side prefix of every tool the Unframed MCP server registers. */
 export const UNFRAMED_TOOL_PREFIX = "mcp__unframed__";
 
-/** The Unframed tools that change something, refused in plan mode. The last two are spec 09's. */
-export const UNFRAMED_WRITE_TOOLS: ReadonlySet<string> = new Set(["canvas_write", "page_write", "motion_write", "generate"]);
+/** The Unframed tools that change something, refused in plan mode: the canvas write, the artifact and style writes and edits, and generate. */
+export const UNFRAMED_WRITE_TOOLS: ReadonlySet<string> = new Set([
+  "canvas_write",
+  "page_write",
+  "motion_write",
+  "page_edit",
+  "motion_edit",
+  "style_write",
+  "style_edit",
+  "generate",
+]);
 
 export type PolicyAnswer =
   /** `AskUserQuestion`: open a question and wait; allow with the answers. */
@@ -43,7 +52,7 @@ export const decidePermission = ({ runtimeMode, interactionMode, tool, input }: 
   if (tool.startsWith(UNFRAMED_TOOL_PREFIX)) {
     const name = tool.slice(UNFRAMED_TOOL_PREFIX.length);
     if (interactionMode === "plan" && UNFRAMED_WRITE_TOOLS.has(name)) return { kind: "deny", message: PLAN_NO_WRITES_MESSAGE };
-    // A paid generation asks in Supervised mode, with its estimate as the request's detail (spec 14, "In-app agents").
+    // A paid generation asks in Supervised mode, with its estimate as the request's detail.
     if (name === "generate" && runtimeMode !== "full-access") return { kind: "ask", requestType: "dynamic_tool_call" };
     return { kind: "allow" };
   }

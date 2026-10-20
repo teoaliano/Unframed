@@ -65,18 +65,18 @@ export const sidecarFileName = (file: string): string => `${withoutExtension(fil
 
 /**
  * The sidecar of an uploaded or copied file. `of` is the source file of a copy, or the
- * canvas image a composite was rendered from. A composite and a sketch (spec 03) also
+ * canvas image a composite was rendered from. A composite and a sketch also
  * record the marks they hold and the crop they were cut to.
  */
 export interface MediaSidecar {
-  /** Spec 11 adds `legacy-graph` (a file an import extracted) and `legacy-preset` (bytes an old preset carried inline). */
+  /** The legacy import adds `legacy-graph` (a file an import extracted) and `legacy-preset` (bytes an old preset carried inline). */
   readonly source: "upload" | "copy" | "composite" | "sketch" | "legacy-graph" | "legacy-preset";
   readonly fileName: string;
   readonly mime: string;
   readonly bytes: number;
   readonly at: string;
   readonly of?: string;
-  /** Spec 06: the project a copy for a preset came from. */
+  /** The project a copy for a preset came from. */
   readonly ofProject?: string;
   readonly marks?: ReadonlyArray<string>;
   readonly crop?: unknown;

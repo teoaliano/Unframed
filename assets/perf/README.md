@@ -1,6 +1,6 @@
 # Performance fixtures and method
 
-- `busy-page.html`: a page artifact that redraws a 1024 by 1024 canvas and reads its pixels back on every animation frame. Spec 09's artifact budget puts ten of these on one board. It stands in for the agent-written effect pages (mosaics, LED panels, paint effects) that made the old desktop app pan at 15 frames per second.
+- `busy-page.html`: a page artifact that redraws a 1024 by 1024 canvas and reads its pixels back on every animation frame. The artifact budget in `packages/web/test/artifactPerformance.spec.ts` puts ten of these on one board. It stands in for the agent-written effect pages (mosaics, LED panels, paint effects) that made the old desktop app pan at 15 frames per second.
 
 ## How the old app was measured (2026-09-28)
 
@@ -17,4 +17,4 @@ A headless Chrome script opened the real project with ten page artifacts, fit it
 
 Every frame of every page ran at about 17 animation frames per second even with nobody touching the canvas, because they all shared one thread with the canvas.
 
-Two causes, both fixed in the specs: the preview origin was the same site as the app in the desktop shell (ports do not separate sites), and every artifact frame was mounted and running at all times. Spec 09 "Keeping artifacts off the canvas thread" and contract 9 in the index are the fix. The budget tasks measure the same way, in the hosted shape.
+Two causes, both fixed in the rewrite: the preview origin was the same site as the app in the desktop shell (ports do not separate sites), and every artifact frame was mounted and running at all times. Serving artifacts from the preview origin under the other loopback name, and running only the selected, pinned or edited ones, is the fix ("The canvas thread belongs to the canvas" in `docs/contracts.md`). The budget tasks measure the same way, in the hosted shape.

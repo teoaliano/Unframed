@@ -1,5 +1,5 @@
 /**
- * Approximate recipes (spec 03, for spec 11's imported results): the old app recorded what
+ * Approximate recipes, for imported results: the old app recorded what
  * it sent as one prompt, never which shapes or files. Recipe mode on such a result
  * recomposes the run from its sources as they are on the canvas now, by the selection to
  * request rule, skipping any that are gone, with the recipe's model and params.

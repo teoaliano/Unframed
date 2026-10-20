@@ -72,7 +72,7 @@ const assetSource = (allowLinks: boolean) =>
 // ---------------------------------------------------------------------------------------
 // Shape meta and props.
 
-/** Where later specs keep their fields (result, run, runError, recipe), and nowhere else in meta. */
+/** Where the other features keep their fields (result, run, runError, recipe), and nowhere else in meta. */
 const unframedMeta = { unframed: T.jsonValue.optional() };
 
 export interface PromptMeta {
@@ -100,6 +100,8 @@ export interface ArtifactShapeProps {
   title: string;
   fileName: string;
   dials?: Record<string, unknown>;
+  /** The style shape the agent followed when it wrote this version: a room shape id. */
+  style?: string;
 }
 
 const artifactProps = {
@@ -109,6 +111,32 @@ const artifactProps = {
   title: T.string,
   fileName: T.string,
   dials: T.dict(T.string, T.jsonValue).optional(),
+  style: T.string.optional(),
+};
+
+/**
+ * A style document (a DESIGN.md): its markdown file in the project folder, its title, its
+ * original file name, and what the canvas card shows, worked out when the file is written
+ * so a render reads no file: the first few distinct hex colours and the opening lines.
+ */
+export interface StyleShapeProps {
+  w: number;
+  h: number;
+  file: string;
+  title: string;
+  fileName: string;
+  swatches: string[];
+  excerpt: string;
+}
+
+const styleProps = {
+  w: T.nonZeroNumber,
+  h: T.nonZeroNumber,
+  file: bareFileOrEmpty,
+  title: T.string,
+  fileName: T.string,
+  swatches: T.arrayOf(T.string),
+  excerpt: T.string,
 };
 
 /** Every later change to page and motion props is a migration here, used by the room and the web alike. */
@@ -121,11 +149,12 @@ declare module "@tldraw/tlschema" {
   interface TLGlobalShapePropsMap {
     page: ArtifactShapeProps;
     motion: ArtifactShapeProps;
+    style: StyleShapeProps;
   }
 }
 
 /** The shape kinds Unframed adds meaning to. Every other tldraw shape is a mark. */
-export type UnframedKind = "prompt" | "image" | "video" | "group" | "page" | "motion";
+export type UnframedKind = "prompt" | "image" | "video" | "group" | "page" | "motion" | "style";
 
 export const kindOfShapeType = (type: string): UnframedKind | "mark" => {
   switch (type) {
@@ -135,6 +164,7 @@ export const kindOfShapeType = (type: string): UnframedKind | "mark" => {
     case "video":
     case "page":
     case "motion":
+    case "style":
       return type;
     case "frame":
       return "group";
@@ -158,6 +188,7 @@ export const canvasSchema = (): TLSchema => {
       frame: { ...keptShapes.frame, meta: unframedMeta },
       page: { props: artifactProps, meta: refMeta, migrations: artifactMigrations() },
       motion: { props: artifactProps, meta: refMeta, migrations: artifactMigrations() },
+      style: { props: styleProps, meta: refMeta, migrations: createShapePropsMigrationSequence({ sequence: [] }) },
     },
     bindings: defaultBindingSchemas,
     assets: {

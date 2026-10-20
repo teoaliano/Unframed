@@ -1,5 +1,5 @@
 /**
- * The import report (spec 11): what changed, what was not kept and which files were
+ * The import report: what changed, what was not kept and which files were
  * missing, in the exact sentences the person reads. Every string lives here.
  */
 export type ReportSection = "changed" | "notKept" | "missing";

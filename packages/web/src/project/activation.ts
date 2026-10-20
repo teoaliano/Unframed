@@ -5,7 +5,7 @@ import { isConnectionFailure, type EngineConnection } from "../rpc/engine.ts";
 import { showError } from "../toasts.tsx";
 
 export const ACTIVE_PROJECT_KEY = "project.active";
-/** The saved tabs (spec 17): the order and the active tab. It replaces `project.active` as the place a restart reads from. */
+/** The saved tabs: the order and the active tab. It replaces `project.active` as the place a restart reads from. */
 export const TABS_KEY = "project.tabs";
 const LIST_RETRY_MS = 1000;
 export const DEFAULT_PROJECT = "default";
@@ -80,7 +80,7 @@ export class ProjectActivation {
       return;
     }
     await this.beforeSwitch?.();
-    // Opening a project already open keeps its tab; a new one joins the end (spec 17).
+    // Opening a project already open keeps its tab; a new one joins the end.
     this.update({ active: name, order });
     this.persistTabs();
     await this.engine.call("preferences.set", { key: ACTIVE_PROJECT_KEY, value: name }).catch((error: unknown) => {
@@ -89,7 +89,7 @@ export class ProjectActivation {
   }
 
   /**
-   * Closes a tab (spec 17). Closing the active one settles its canvas first, then activates
+   * Closes a tab. Closing the active one settles its canvas first, then activates
    * the neighbour; a background tab only leaves the strip. Closing deletes nothing.
    */
   async closeTab(name: string): Promise<void> {
@@ -153,7 +153,7 @@ export class ProjectActivation {
   }
 
   /**
-   * After an output folder change (spec 10): the canvas unmounts first, because the same name
+   * After an output folder change: the canvas unmounts first, because the same name
    * is another project in the new folder. The saved tabs are read again against the new folder.
    */
   async reopen(): Promise<void> {
@@ -222,5 +222,5 @@ export class ProjectActivation {
 export const useActiveProject = (activation: ProjectActivation): string | undefined =>
   useSyncExternalStore(activation.subscribe, activation.activeProject);
 
-/** The whole tab state, for the strip (spec 17). */
+/** The whole tab state, for the strip. */
 export const useTabState = (activation: ProjectActivation): TabState => useSyncExternalStore(activation.subscribe, activation.tabState);

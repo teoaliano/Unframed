@@ -57,7 +57,7 @@ const liveFiles = async (agent: AgentEngine) => (await readdir(agent.folder)).fi
 describe("the live viewer's pointer", () => {
   it("is written only once the shape is opened in a tab, then names each new version and carries the dials", async () => {
     const agent = await startAgentEngine({
-      script: await scriptFolder({ artifacts: { when: "^go", turns: [{ text: "Done.", tools: [{ name: "page_write", input: { shapeId: "pg1", html: "<body>v2</body>" } }] }] } }),
+      script: await scriptFolder({ artifacts: { when: "^go", turns: [{ text: "Done.", tools: [{ name: "page_write", input: { shapeId: "pg1", html: "<html><body>v2</body></html>" } }] }] } }),
     });
     await writeFile(join(agent.folder, "1-landing.html"), "<body>v1</body>");
     await put(agent, [pageShape("pg1", "100", { file: "1-landing.html", title: "Landing" }), pageShape("pg2", "101", { file: "1-landing.html" }, { y: 500 })]);

@@ -6,7 +6,7 @@ type Finished = Extract<RunEvent, { type: "finished" }>;
 
 /**
  * The run report: `<succeeded> of <count> succeeded.` and the distinct errors, plus results
- * that outlived their placeholder. A Free batch's notes (spec 05) follow the outcome line,
+ * that outlived their placeholder. A Free batch's notes follow the outcome line,
  * or stand alone as an info report when every output succeeded.
  */
 export const runReport = (event: Finished, notes = ""): { readonly message: string; readonly type: "error" | "warning" | "info" } | undefined => {

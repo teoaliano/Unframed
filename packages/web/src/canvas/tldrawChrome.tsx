@@ -1,5 +1,5 @@
 /**
- * tldraw's UI as Unframed shows it: Lucide icons, the parts spec 02 hides, and the style
+ * tldraw's UI as Unframed shows it: Lucide icons, the parts Unframed hides, and the style
  * panel only when it has something to set. The canvas and the design-system catalogue both
  * mount tldraw with these, so the catalogue shows exactly what the canvas does.
  */
@@ -48,6 +48,6 @@ export const TLDRAW_CHROME: TLComponents = {
   ImageToolbar: null,
   VideoToolbar: null,
   StylePanel,
-  // One bottom bar: quick actions, tools and Unframed's own buttons (spec 02).
+  // One bottom bar: quick actions, tools and Unframed's own buttons.
   Toolbar: BottomToolbar,
 };

@@ -3,7 +3,7 @@ import { readFile, rm } from "node:fs/promises";
 import { ENGINE_VERSION } from "../agent/version.ts";
 
 /**
- * The discovery file (spec 14): where this engine listens right now, for the stdio shim. It is
+ * The discovery file: where this engine listens right now, for the stdio shim. It is
  * written in every run, just after the ready message. The write is synchronous on purpose: no
  * write is ever pending when `stop` runs, so a shutdown cannot leave a file behind.
  */

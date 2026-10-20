@@ -5,16 +5,16 @@ import type { TestEngine } from "../../engine/test/engineProcess.ts";
 import { promptRecord, putRecords } from "./media.ts";
 
 /**
- * Spec 17's budget suite. Ten project tabs, each a 100-shape board, against one tab with the same
+ * The project tabs budget suite. Ten project tabs, each a 100-shape board, against one tab with the same
  * board. Counts and ratios run everywhere; timing thresholds run on real hardware only (CI skips
- * them with an annotation, as spec 02 says). Heap is read after two forced collections.
+ * them with an annotation). Heap is read after two forced collections.
  */
 test.describe.configure({ mode: "serial", timeout: 600_000 });
 
 const CI = Boolean(process.env.CI);
 /**
- * Main's idle CPU over 10 s with one project: the median of 20 interleaved windows on this Mac (spec 17, "Measured
- * baselines"). One tab may cost this much more than main; the gap is accepted and recorded in spec 17 as a known gap.
+ * Main's idle CPU over 10 s with one project: the median of 20 interleaved windows on this Mac, the measured
+ * baseline. One tab may cost this much more than main; the gap is accepted as a known gap.
  */
 const MAIN_IDLE_MS = 283.5;
 const SHAPES = 100;
@@ -159,7 +159,7 @@ test("ten project tabs cost about one: heap, nodes, listeners, editors, sockets 
   // Memory and listeners: the budget table's ratios against one tab.
   const heapRatio = CI ? 1.25 : 1.1;
   expect(ten.heap / single.heap).toBeLessThanOrEqual(heapRatio);
-  // Spec 17: the canvas side keeps its count; the strip holds one small fixed set of nodes per tab.
+  // The canvas side keeps its count; the strip holds one small fixed set of nodes per tab.
   expect(ten.nodes / single.nodes).toBeLessThanOrEqual(1.05);
   expect(ten.stripNodes / (TABS + 1)).toBeLessThanOrEqual(25);
   expect(ten.listeners / single.listeners).toBeLessThanOrEqual(1.05);
@@ -168,7 +168,7 @@ test("ten project tabs cost about one: heap, nodes, listeners, editors, sockets 
   else {
     expect(median).toBeLessThanOrEqual(1500);
     expect(tenIdle).toBeLessThanOrEqual(singleIdle * 1.05 + 20);
-    // The accepted one-tab tolerance against main (spec 17, known gap): 1.05 times main plus 20 ms.
+    // The accepted one-tab tolerance against main (a known gap): 1.05 times main plus 20 ms.
     expect(singleIdle).toBeLessThanOrEqual(MAIN_IDLE_MS * 1.05 + 20);
   }
 });

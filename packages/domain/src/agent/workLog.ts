@@ -1,5 +1,5 @@
 /**
- * The work log (spec 08, after t3code's `deriveWorkLogEntries`): a turn's tool calls, merged
+ * The work log (after t3code's `deriveWorkLogEntries`): a turn's tool calls, merged
  * by tool call id into rows with a label, a tone and a lifecycle state, consecutive rows
  * folded into a group whose summary counts what was done, sub-agents folded into one row
  * per spawn, and errors standing alone. Also the activity line's words for what the agent
@@ -98,7 +98,7 @@ export const describeTool = (input: { readonly toolName: string; readonly itemTy
       case "canvas_read":
         return { label: "Read the canvas", action: "tool" };
       case "canvas_select": {
-        // A selection is not part of the canvas, so the row says Revert leaves it alone (spec 14).
+        // A selection is not part of the canvas, so the row says Revert leaves it alone.
         const count = Array.isArray(toolInput.shapeIds) ? toolInput.shapeIds.length : 0;
         return { label: count === 0 ? "Cleared the selection. Revert does not undo a selection." : `Selected ${plural(count, "shape")}. Revert does not undo a selection.`, action: "tool" };
       }
@@ -107,7 +107,7 @@ export const describeTool = (input: { readonly toolName: string; readonly itemTy
         return { label: `Changed the canvas (${plural(ops, "change")})`, action: "canvas" };
       }
       case "generate": {
-        // The row is the start of a paid generation; its landing is an activity of the turn (spec 14, "Cost shown").
+        // The row is the start of a paid generation; its landing is an activity of the turn.
         const medium = toolInput.medium === "video" ? "a video generation" : toolInput.medium === "text" ? "a text generation" : "an image generation";
         return { label: `Started ${medium}`, action: "tool" };
       }
@@ -117,8 +117,18 @@ export const describeTool = (input: { readonly toolName: string; readonly itemTy
         return { label: `Read page ${artifactTitle(toolInput, result, "page")}`, action: "read" };
       case "motion_write":
         return { label: `Wrote motion ${artifactTitle(toolInput, result, "motion")}`, action: "canvas" };
+      case "page_edit":
+        return { label: `Edited page ${artifactTitle(toolInput, result, "page")}`, action: "canvas" };
+      case "motion_edit":
+        return { label: `Edited motion ${artifactTitle(toolInput, result, "motion")}`, action: "canvas" };
       case "motion_read":
         return { label: `Read motion ${artifactTitle(toolInput, result, "motion")}`, action: "read" };
+      case "style_read":
+        return { label: `Read style ${artifactTitle(toolInput, result, "style")}`, action: "read" };
+      case "style_write":
+        return { label: `Wrote style ${artifactTitle(toolInput, result, "style")}`, action: "canvas" };
+      case "style_edit":
+        return { label: `Edited style ${artifactTitle(toolInput, result, "style")}`, action: "canvas" };
       default:
         if (own.startsWith("preview")) return { label: `Looked at ${artifactTitle(toolInput, result, "the page")} in a browser`, action: "browser" };
         return { label: own, action: "tool" };
@@ -256,6 +266,10 @@ export const workLog = (activities: ReadonlyArray<ChatActivity>, options: { read
       spawn.tasks.set(taskId, task);
       continue;
     }
+    if (activity.kind === "style.attached") {
+      items.push({ kind: "row", row: { kind: "row", id: activity.id, turnId: activity.turnId, label: activity.summary, tone: "info", state: "completed", action: "tool" } });
+      continue;
+    }
     if (activity.tone === "error" && activity.kind !== "rate-limit") {
       const message = text(payload.message) ?? text(payload.errorMessage);
       items.push({
@@ -318,7 +332,12 @@ const ACTIVITY_BY_TOOL: ReadonlyArray<readonly [RegExp, string]> = [
   [/^mcp__unframed__page_write$/, "Writing the page…"],
   [/^mcp__unframed__page_read$/, "Reading the page…"],
   [/^mcp__unframed__motion_write$/, "Writing the motion…"],
+  [/^mcp__unframed__page_edit$/, "Editing the page…"],
+  [/^mcp__unframed__motion_edit$/, "Editing the motion…"],
   [/^mcp__unframed__motion_read$/, "Reading the motion…"],
+  [/^mcp__unframed__style_read$/, "Reading the style…"],
+  [/^mcp__unframed__style_write$/, "Writing the style…"],
+  [/^mcp__unframed__style_edit$/, "Editing the style…"],
   [/^read$/i, "Reading a file…"],
   [/^write$/i, "Writing a file…"],
   [/^(edit|multiedit|notebookedit)$/i, "Editing a file…"],

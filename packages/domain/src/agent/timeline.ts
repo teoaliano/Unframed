@@ -16,7 +16,8 @@ export interface TimelineTurn {
 
 const WORK_KINDS = new Set(["tool.started", "tool.updated", "tool.completed", "task.started", "task.progress", "task.completed"]);
 
-const isWork = (activity: ChatActivity) => WORK_KINDS.has(activity.kind) || (activity.tone === "error" && activity.kind !== "rate-limit");
+const isWork = (activity: ChatActivity) =>
+  WORK_KINDS.has(activity.kind) || activity.kind === "style.attached" || (activity.tone === "error" && activity.kind !== "rate-limit");
 
 /** What ties a tool call's or a sub-agent's activities together, as the work log merges them. */
 const lifecycleOf = (activity: ChatActivity): string | undefined => {

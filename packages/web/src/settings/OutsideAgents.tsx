@@ -1,5 +1,5 @@
 /**
- * The settings dialog's "Agents outside Unframed" block (spec 14): the connections, Revoke with a
+ * The settings dialog's "Agents outside Unframed" block: the connections, Revoke with a
  * confirmation, and Connect an agent, whose setup is shown once and never again.
  */
 import { connectionClientLabel, money, periodWords, type ConnectionClient, type SpendPeriod } from "@unframed/domain";
@@ -62,7 +62,7 @@ const CodeBlock = ({ step }: { readonly step: SetupStep }) => {
   );
 };
 
-/** The Connect an agent dialog (spec 14, "Connect an agent"): the client, a name, the setup once. */
+/** The Connect an agent dialog: the client, a name, the setup once. */
 const ConnectDialog = ({ open, onClose, onMade }: { readonly open: boolean; readonly onClose: () => void; readonly onMade: () => void }) => {
   const engine = useEngine();
   const [client, setClient] = useState<ConnectionClient>("claude-code");
@@ -169,13 +169,13 @@ const ConnectDialog = ({ open, onClose, onMade }: { readonly open: boolean; read
   );
 };
 
-/** The spend line of a row: what the connection has spent, against its limit when it has one (spec 14). */
+/** The spend line of a row: what the connection has spent, against its limit when it has one. */
 export const spendText = (connection: AgentConnection): string =>
   connection.spendLimit === null
     ? `Spent ${money(connection.spent)}, no limit`
     : `Spent ${money(connection.spent)} of ${money(connection.spendLimit.usd)} ${periodWords(connection.spendLimit.period)}`;
 
-/** The Limit action's dialog: changes one connection's limit, or removes it when the amount is empty (spec 14). */
+/** The Limit action's dialog: changes one connection's limit, or removes it when the amount is empty. */
 const LimitDialog = ({ connection, onClose, onSaved }: { readonly connection: AgentConnection | undefined; readonly onClose: () => void; readonly onSaved: () => void }) => {
   const engine = useEngine();
   const [amount, setAmount] = useState("");

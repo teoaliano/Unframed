@@ -61,7 +61,7 @@ interface ScriptedSession {
 const nothing = () => {};
 
 /**
- * The scripted agent (spec 07): an adapter like the others that replaces the model and
+ * The scripted agent: an adapter like the others that replaces the model and
  * nothing else. Its Unframed tool calls go through the real MCP endpoint and handlers, and
  * its provider tool calls through the real permission decision; no provider tool ever runs.
  */

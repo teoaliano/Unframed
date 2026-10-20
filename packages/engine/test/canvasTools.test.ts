@@ -114,7 +114,7 @@ describe("canvas_write", () => {
 });
 
 describe("canvas_write group ops", () => {
-  it("reparents by spec 02's rules and renames by spec 06's, rewriting @ references in the same write", async () => {
+  it("reparents and renames by the canvas rules, rewriting @ references in the same write", async () => {
     const script = await scriptFolder({
       groups: {
         when: "^group",

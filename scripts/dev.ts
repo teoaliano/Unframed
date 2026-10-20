@@ -5,7 +5,7 @@
  *
  * `pnpm dev:share` (`--share`) also serves the Vite port on this machine's tailnet with
  * `tailscale serve`, so the app opens on another of your devices, and removes the mapping
- * on exit. The engine stays loopback only: the dev proxy relays the tailnet origin (spec 01).
+ * on exit. The engine stays loopback only: the dev proxy relays the tailnet origin.
  */
 import { execFileSync, spawn, type ChildProcess } from "node:child_process";
 import { join } from "node:path";

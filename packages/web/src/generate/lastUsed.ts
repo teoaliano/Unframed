@@ -6,7 +6,7 @@ import type { PropValue } from "./mediumRegistry.ts";
 export interface LastUsed {
   readonly model?: string;
   readonly props: Readonly<Record<string, PropValue>>;
-  /** Spec 04: the share consent, stored beside the props; the tray holds it as one of them. */
+  /** The share consent, stored beside the props; the tray holds it as one of them. */
   readonly shareLocalVideos?: boolean;
 }
 

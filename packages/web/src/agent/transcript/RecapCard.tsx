@@ -61,7 +61,7 @@ export const RecapCard = ({ editor, turn, activities, running, newest, labelOf, 
   const rows = useRecapRows(editor, activities, turn.files);
   const [open, setOpen] = useState(true);
   if (rows.length === 0) return null;
-  // What the turn's paid generations cost, counted from their activities (spec 14, "Cost shown").
+  // What the turn's paid generations cost, counted from their activities.
   const spendLine = generationRecapLine(generationSpendOf(activities, turn.turnId));
   const changed = (turn.files?.length ?? 0) > 0;
   const reverted = turn.reverted;

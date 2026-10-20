@@ -9,11 +9,11 @@ const typing = (target: EventTarget | null): boolean => {
   return target.isContentEditable || target.closest("[contenteditable='true'], input, textarea, select") !== null;
 };
 
-/** A dialog or menu that is open owns the keyboard (spec 17): tab shortcuts wait. */
+/** A dialog or menu that is open owns the keyboard: tab shortcuts wait. */
 const dialogOpen = (): boolean => document.querySelector("[role=dialog], [role=alertdialog]") !== null;
 
 /**
- * The project tab shortcuts (spec 17, following Figma's desktop app). `Cmd` is Ctrl off macOS.
+ * The project tab shortcuts, following Figma's desktop app. `Cmd` is Ctrl off macOS.
  * Cmd+T opens the project list, Cmd+W closes the active tab, Cmd+Shift+T reopens the last closed,
  * Cmd+1 to Cmd+8 jump to a tab and Cmd+9 to the last, and Ctrl+Tab cycles on every platform.
  * Alt+ArrowLeft and Alt+ArrowRight move the focused tab. None fire while a field or dialog has focus.

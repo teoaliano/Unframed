@@ -331,7 +331,7 @@ describe("the callback page", () => {
 
   /**
    * The kit's dark `--background` (Tailwind's neutral-950, oklch(14.5% 0 0)) and `--foreground`
-   * (neutral-100, oklch(97% 0 0)) as sRGB, and the kit's sans stack (spec 12).
+   * (neutral-100, oklch(97% 0 0)) as sRGB, and the kit's sans stack.
    */
   const DARK_PAGE = /body \{[^}]*margin: 0;[^}]*background: #0a0a0a;[^}]*color: #f5f5f5;[^}]*font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;/;
 

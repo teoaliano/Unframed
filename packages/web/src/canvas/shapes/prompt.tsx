@@ -25,7 +25,7 @@ export const PROMPT_HUG_WIDTH = 320;
 export const PROMPT_MIN_WIDTH = 40;
 export const PROMPT_MIN_HEIGHT = 28;
 export const PROMPT_HINT = "Add text…";
-/** What a text result's placeholder says while its run is in flight (spec 05). */
+/** What a text result's placeholder says while its run is in flight. */
 export const PROMPT_RUNNING = "Running…";
 
 const HINT_TEXT = toRichText(PROMPT_HINT);
@@ -131,7 +131,7 @@ const PromptShape = ({ shape, util }: { readonly shape: TLTextShape; readonly ut
   const isSelected = useValue("prompt selected", () => editor.getOnlySelectedShapeId() === shape.id, [editor, shape.id]);
   const empty = isEmptyPrompt(shape);
   const { ref } = metaOf(shape);
-  // A text result (spec 05) carries its cost on its line; its placeholder says the run is in flight.
+  // A text result carries its cost on its line; its placeholder says the run is in flight.
   const result = resultMetaOf(shape);
   const running = empty && runMarkerOf(shape) !== undefined;
   const cost = result?.medium === "text" && result.cost !== null ? `${formatCost(result.cost)} · ` : "";

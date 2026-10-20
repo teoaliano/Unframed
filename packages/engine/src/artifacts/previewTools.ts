@@ -1,5 +1,5 @@
 /**
- * The agent's preview tools (spec 09, after t3code's preview toolkit): a headless browser tab
+ * The agent's preview tools (after t3code's preview toolkit): a headless browser tab
  * per chat, bound to this project's artifacts instead of arbitrary URLs. The agent opens what
  * it made, looks at it and clicks through it. The tab only ever loads the preview origin, and
  * the tools read the canvas, never write it.
@@ -64,7 +64,7 @@ export interface PreviewDeps {
   readonly chrome: HeadlessChrome;
   readonly findChrome: () => Promise<string | undefined>;
   readonly previewPort: () => number;
-  /** Spec 01's open-project registry: the project's closer closes every preview tab of it. */
+  /** The open-project registry: the project's closer closes every preview tab of it. */
   readonly registerCloser: (project: string, close: () => Promise<void>) => void;
 }
 

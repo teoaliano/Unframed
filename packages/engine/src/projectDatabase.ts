@@ -27,7 +27,7 @@ export interface Migration {
   readonly up: (db: DatabaseSync) => void;
 }
 
-/** The one ordered list. Every table a later spec adds to the project database is a migration here. */
+/** The one ordered list. Every table added to the project database is a migration here. */
 export const MIGRATIONS: ReadonlyArray<Migration> = [
   { id: 1, name: "tldraw sync storage", up: createSyncStorageTables },
   { id: 2, name: "canvas_changes", up: createCanvasChangesTable },
@@ -86,7 +86,7 @@ export class ProjectDatabase extends Context.Service<
   {
     /** The project's handle, opened (and the file created and migrated) on first use. `project` is a slug. */
     readonly open: (project: string) => Effect.Effect<ProjectDb, UnframedError>;
-    /** How the project folder's import from the old app stands (spec 11), without starting it. */
+    /** How the project folder's import from the old app stands, without starting it. */
     readonly importState: (project: string) => Effect.Effect<ImportState>;
     /** Forgets a failed import, so the next `open` runs it again. */
     readonly retryImport: (project: string) => Effect.Effect<void>;
@@ -118,7 +118,7 @@ export const projectDatabaseLayer = Layer.effect(
         const path = join(folder, DATABASE_FILE);
         const cached = handles.get(path);
         if (cached) return cached;
-        // Spec 11: a folder that still holds an old graph is imported before its file is first created.
+        // A folder that still holds an old graph is imported before its file is first created.
         yield* Effect.tryPromise({
           try: () => importer.ensure(folder, project),
           catch: (error) =>

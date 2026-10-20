@@ -1,5 +1,5 @@
 /**
- * What an old output's settings and an old sidecar become (spec 11): a group's standing
+ * What an old output's settings and an old sidecar become: a group's standing
  * recipe from the output's data, and a result's approximate recipe from its sidecar.
  */
 import type { GroupRecipe, RecipeValue } from "../recipeRules.ts";

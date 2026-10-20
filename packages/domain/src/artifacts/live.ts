@@ -1,5 +1,5 @@
 /**
- * The live viewer (spec 09), `unframed-live.html`: what "Open in a new tab" opens. It frames
+ * The live viewer, `unframed-live.html`: what "Open in a new tab" opens. It frames
  * a shape's current file and follows the shape: every second it loads the shape's pointer,
  * `unframed-live-<key>.js`, which the engine keeps current once the shape has been opened in
  * a tab, and it swaps to a new version or posts new dials without a reload. All of it is

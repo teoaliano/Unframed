@@ -1,5 +1,5 @@
 /**
- * The render job store's pure half (spec 04): the record format of `jobs.json` and the
+ * The render job store's pure half: the record format of `jobs.json` and the
  * rules for merging, pruning, giving up and reading it, plus the one classification of an
  * upstream job status. The engine owns the file, the queue and the reads.
  */
@@ -31,7 +31,7 @@ export interface RenderJob {
   /** Epoch ms of the first unanswered poll in the current run of them. */
   readonly unreachableSince?: number;
   readonly landing?: { readonly shapeId?: string; readonly x: number; readonly y: number; readonly w: number; readonly h: number };
-  /** Spec 03's recipe schema. */
+  /** The result recipe schema. */
   readonly recipe?: unknown;
   readonly forgotten?: true;
 }

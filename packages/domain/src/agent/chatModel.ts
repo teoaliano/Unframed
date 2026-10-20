@@ -1,5 +1,5 @@
 /**
- * The chat store's model (spec 07), rebuilt on t3code's orchestration: the read model of a
+ * The chat store's model, rebuilt on t3code's orchestration: the read model of a
  * chat, the commands that change it and the events they become. The decider and the
  * projector in this folder are the only code that interprets them.
  */
@@ -16,7 +16,7 @@ export interface Traits {
   readonly fastMode?: boolean;
 }
 
-/** An outside chat's provider is `outside`: no Unframed adapter runs it (spec 14). */
+/** An outside chat's provider is `outside`: no Unframed adapter runs it. */
 export type ChatProvider = AgentProvider | "outside";
 
 /** An in-app agent's selection, which is what a command may carry. */
@@ -109,7 +109,7 @@ export interface TurnRevert {
   readonly at: string;
 }
 
-/** Which outside client a chat belongs to, and the session that made it (spec 14). */
+/** Which outside client a chat belongs to, and the session that made it. */
 export interface OutsideChatRef {
   readonly connectionId: string;
   readonly sessionId: string;
@@ -158,13 +158,15 @@ export interface Chat {
   readonly createdAt: string;
   readonly updatedAt: string;
   readonly deletedAt: string | null;
-  /** Set on an outside chat: the connection and session it shows calls from (spec 14). */
+  /** Set on an outside chat: the connection and session it shows calls from. */
   readonly outside?: OutsideChatRef;
   /** "" until someone names it; at most 60 characters. */
   readonly title: string;
   readonly titledBy: TitledBy | null;
   /** The artifacts it touched, in first-touch order. */
   readonly tags: ReadonlyArray<string>;
+  /** The style shape it follows (a room id), attached by the latest message that had one selected. */
+  readonly style: string | null;
   readonly modelSelection: ModelSelection;
   readonly runtimeMode: RuntimeMode;
   readonly interactionMode: InteractionMode;
@@ -242,6 +244,11 @@ export type ThreadClientCommand = CommandBase &
           /** Resolved by the engine from the stored files before the decider sees them. */
           readonly attachments: ReadonlyArray<AttachmentRef | MessageAttachment>;
           readonly context?: MessageContext;
+          /**
+           * The style shape the selection holds, resolved by the engine from the canvas before
+           * the decider sees it, with the chat's current style's title for the work log.
+           */
+          readonly style?: { readonly id: string; readonly title: string; readonly previousTitle?: string };
         };
         readonly steer?: boolean;
         readonly modelSelection?: ModelSelection;
@@ -259,6 +266,10 @@ export type ThreadClientCommand = CommandBase &
     | { readonly type: "thread.tags.remove"; readonly ids: ReadonlyArray<string> }
     /** Undo of a Detach. The engine keeps only ids that are artifacts on the canvas, as for `thread.create`'s tags. */
     | { readonly type: "thread.tags.add"; readonly ids: ReadonlyArray<string> }
+    /** Detach of the chat's style. */
+    | { readonly type: "thread.style.remove"; readonly styleId: string }
+    /** Undo of a style Detach. The engine checks it is a style on the canvas first. */
+    | { readonly type: "thread.style.set"; readonly styleId: string }
   );
 
 export interface ActivityInput {
@@ -275,7 +286,7 @@ export interface ActivityInput {
 export type InternalCommand = CommandBase &
   (
     | { readonly type: "thread.session.set"; readonly session: ChatSession }
-    /** An outside session's first call into a project: makes its chat (spec 14). The engine mints `threadId`. */
+    /** An outside session's first call into a project: makes its chat. The engine mints `threadId`. */
     | {
         readonly type: "thread.outside.create";
         readonly title: string;
@@ -331,6 +342,7 @@ export type ChatEventType =
   | "thread.activity-appended"
   | "thread.tagged"
   | "thread.untagged"
+  | "thread.style-set"
   | "thread.turn-files-completed"
   | "thread.turn-revert-requested"
   | "thread.turn-reverted"

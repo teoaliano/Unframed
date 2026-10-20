@@ -29,7 +29,7 @@ export interface ProviderServiceOptions {
 }
 
 /**
- * The provider service (spec 07): owns the adapters, routes by the chat's provider, issues
+ * The provider service: owns the adapters, routes by the chat's provider, issues
  * the MCP token per session, keeps the resume cursor in `provider_session_runtime`, and
  * closes a session that has been quiet for ten minutes. Operations on one chat's session
  * run one at a time.

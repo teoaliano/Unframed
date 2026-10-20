@@ -231,6 +231,8 @@ export const composeSelection = (input: CompositionInput): Composition => {
         contributes.set(shape.id, loose.map((mark) => mark.id));
         break;
       }
+      // A style is for the agent: Generate sends nothing of it and gives it no badge.
+      case "style":
       case "prompt":
       case "group":
         break;

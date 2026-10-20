@@ -1,5 +1,5 @@
 /**
- * The video tray's props (spec 04): which props a video model declares and their options,
+ * The video tray's props: which props a video model declares and their options,
  * the input mode's healing rule, the defaults and the reset on a model change.
  */
 import { exactSizeLabel, type ModelParams, type PropSpec } from "./modelParams.ts";

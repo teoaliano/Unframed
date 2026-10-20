@@ -16,13 +16,14 @@ const DiffPanel = lazy(() => import("../diff/DiffPanel.tsx").then((module) => ({
 import { NEW_CHAT, useChatClient, useChats, useProviders, useRailUi, useWatchedThread } from "../store.ts";
 import { EMPTY_CHAT, Transcript } from "../transcript/Transcript.tsx";
 import { NoProvider } from "./NoProvider.tsx";
+import { StyleChip } from "./StyleChip.tsx";
 import { TabStrip } from "./TabStrip.tsx";
 import { ThreadSearch } from "./ThreadSearch.tsx";
 import { platform } from "../../canvas/platform.ts";
 
 export interface AgentRailProps {
   readonly project: string;
-  /** The editor's left column (spec 09): no transition, no Close, no Locate. */
+  /** The editor's left column: no transition, no Close, no Locate. */
   readonly embedded?: boolean;
   /** Inside the kit Sheet, on a window too narrow to dock it: the Sheet is the surface and the motion. */
   readonly inSheet?: boolean;
@@ -52,7 +53,7 @@ const keyIsTaken = (target: EventTarget | null): boolean => {
 
 /*
  * 380 px, docked left over the canvas where the editor's chat column sits, on solid
- * --background with the kit's border: on glass it crossed spec 02's pan budget. It stops
+ * --background with the kit's border: on glass it crossed the pan budget. It stops
  * above the bottom-left zoom controls, which stay usable. The slide is a CSS transition on
  * `transform` (not Tailwind's `translate`), so reopening mid-exit reverses from where it is.
  */
@@ -66,9 +67,9 @@ const EMBEDDED_CLASS = "relative box-border flex size-full min-h-0 flex-col font
 const CARD_HOME = 8;
 
 /**
- * The top-left chrome card's box (spec 02), measured again whenever it could move: its size
+ * The top-left chrome card's box, measured again whenever it could move: its size
  * changes, the window resizes, or a stylesheet or the card's own attributes change, which is
- * how a shell's injected CSS (spec 01) moves it.
+ * how a shell's injected CSS moves it.
  */
 const useCardBox = (): DOMRect | undefined => {
   const [box, setBox] = useState<DOMRect>();
@@ -108,7 +109,7 @@ const ChromeRow = () => {
 };
 
 /**
- * In the editor the card stays under the editor (spec 09), but a shell that moved it from
+ * In the editor the card stays under the editor, but a shell that moved it from
  * its home made that room for its window buttons, which would sit on this rail's header.
  * The header moves by the same offsets: right by as much as the card moved right, so the
  * buttons sit inline beside it, and down only by as much as the card moved down.
@@ -120,7 +121,7 @@ const useShellOffset = (): { readonly left: number; readonly top: number } => {
 };
 
 /**
- * The chat rail (spec 08): the project's chats as folder tabs filtered by the selected
+ * The chat rail: the project's chats as folder tabs filtered by the selected
  * artifacts, the active chat's transcript, its pending panels and the composer's Agent
  * tray, behind one component that the canvas and the artifact editor both mount.
  */
@@ -284,6 +285,7 @@ export const AgentRail = ({ project, embedded, inSheet, filterTo, onLocate, onOp
         <TabStrip client={client} chats={visible} observed={chats} active={active} selectedCount={selectedArtifacts.length} onDelete={setDeleting} />
         {ui.searchOpen && <ThreadSearch client={client} chats={chats} onClose={() => client.setUi({ searchOpen: false })} />}
       </div>
+      {active && <StyleChip client={client} chat={activeChat} />}
       <div className="relative flex min-h-0 flex-1 flex-col">
         {none && statuses ? (
           <NoProvider client={client} />

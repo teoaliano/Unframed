@@ -54,6 +54,8 @@ describe("the work log", () => {
       ...call("6", "mcp__unframed__motion_write", { title: "Intro" }),
       ...call("7", "mcp__unframed__motion_read", { shapeId: "m1" }, { result: { title: "Intro" } }),
       ...call("8", "mcp__unframed__preview_open", { title: "Landing" }),
+      ...call("9", "mcp__unframed__page_edit", { shapeId: "p1" }, { result: { title: "Landing" } }),
+      ...call("10", "mcp__unframed__motion_edit", { shapeId: "m1", title: "Outro" }),
     ]);
     expect((labels[0] as WorkGroup).rows.map((row) => row.label)).toEqual([
       "Read the canvas",
@@ -64,8 +66,10 @@ describe("the work log", () => {
       "Wrote motion Intro",
       "Read motion Intro",
       "Looked at Landing in a browser",
+      "Edited page Landing",
+      "Edited motion Outro",
     ]);
-    expect((labels[0] as WorkGroup).summary).toBe("Used 1 tool, changed the canvas 4 times, read 2 files, and used the browser 1 time");
+    expect((labels[0] as WorkGroup).summary).toBe("Used 1 tool, changed the canvas 6 times, read 2 files, and used the browser 1 time");
   });
 
   it("folds consecutive calls into a group whose summary counts what they did", () => {
@@ -123,6 +127,8 @@ describe("the activity line", () => {
     expect(activityLabel(call("4", "Grep", { pattern: "x" }), "t1")).toBe("Searching…");
     expect(activityLabel(call("5", "WebSearch", { query: "x" }), "t1")).toBe("Searching the web…");
     expect(activityLabel(call("6", "Mystery", {}), "t1")).toBe("Working…");
+    expect(activityLabel(call("7", "mcp__unframed__page_edit", {}), "t1")).toBe("Editing the page…");
+    expect(activityLabel(call("8", "mcp__unframed__motion_edit", {}), "t1")).toBe("Editing the motion…");
   });
 
   it("says Thinking… before the turn's first tool", () => {

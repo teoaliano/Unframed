@@ -6,10 +6,14 @@ import {
   ARTIFACT_PERFORMANCE,
   DIALS_CONTRACT,
   DIALS_TIMELINE,
+  MOTION_EDIT_ARGUMENTS,
+  MOTION_EDIT_TEXT,
   MOTION_READ_SHAPE_ID,
   MOTION_READ_TEXT,
   MOTION_WRITE_ARGUMENTS,
   MOTION_WRITE_TEXT,
+  PAGE_EDIT_ARGUMENTS,
+  PAGE_EDIT_TEXT,
   PAGE_READ_SHAPE_ID,
   PAGE_READ_TEXT,
   PAGE_WRITE_ARGUMENTS,
@@ -50,6 +54,13 @@ describe("the artifact tools' model-facing text is the assets' text", () => {
     const [page, motion] = sections("artifact-read-tools.md");
     expect([PAGE_READ_TEXT, PAGE_READ_SHAPE_ID]).toEqual([page!.text, page!.args.shapeId]);
     expect([MOTION_READ_TEXT, MOTION_READ_SHAPE_ID]).toEqual([motion!.text, motion!.args.shapeId]);
+  });
+
+  it("holds the edit tools and their arguments", () => {
+    const [page, motion] = sections("artifact-edit-tools.md");
+    expect([page!.name, motion!.name]).toEqual(["page_edit", "motion_edit"]);
+    expect([PAGE_EDIT_TEXT, PAGE_EDIT_ARGUMENTS]).toEqual([page!.text, page!.args]);
+    expect([MOTION_EDIT_TEXT, MOTION_EDIT_ARGUMENTS]).toEqual([motion!.text, motion!.args]);
   });
 
   it("holds all twelve preview tools and their arguments", () => {

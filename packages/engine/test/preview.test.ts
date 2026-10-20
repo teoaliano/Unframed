@@ -27,7 +27,7 @@ const expectNotFound = async (engine: TestEngine, path: string, method = "GET") 
 };
 
 describe("the preview origin", () => {
-  it("serves this spec's route on the port the ready message and server.health report", async () => {
+  it("serves the preview route on the port the ready message and server.health report", async () => {
     const { engine } = await withProject({ "landing.html": "<h1>Hello</h1>" });
     expect(engine.messages).toContainEqual(expect.objectContaining({ type: "ready", previewPort: engine.previewPort }));
     expect((await (await engine.rpc()).call("server.health")).previewPort).toBe(engine.previewPort);

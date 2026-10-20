@@ -41,7 +41,7 @@ export const loadCatalogue = async (engine: EngineConnection, medium: Catalogue)
   return answer;
 };
 
-/** The session's catalogue for a medium, fetched only when there is none yet: for surfaces that are not a tray (spec 06's recipe bar). */
+/** The session's catalogue for a medium, fetched only when there is none yet: for surfaces that are not a tray (the recipe bar). */
 export const useKnownCatalogue = (engine: EngineConnection, medium: Catalogue): ModelsListAnswer | undefined => {
   const [answer, setAnswer] = useState(() => lists.get(medium));
   useEffect(() => {

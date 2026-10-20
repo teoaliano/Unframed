@@ -1,4 +1,4 @@
-/** The settings dialog's Local agents section (spec 10): provider statuses, command paths and the follow-up choice. */
+/** The settings dialog's Local agents section: provider statuses, command paths and the follow-up choice. */
 import type { ProviderStatus, ProviderStatuses } from "@unframed/contracts";
 import { useId } from "react";
 import { Button } from "~/components/ui/button";
@@ -10,7 +10,7 @@ import { Switch } from "~/components/ui/switch";
 import { linkClass, SectionHeading } from "./fields.tsx";
 
 export const FOLLOW_UP_KEY = "agent.followUp";
-/** Off unless set, as t3code ships it: plan mode, its toggle, `/plan`, `/default` and Shift+Tab (spec 08). */
+/** Off unless set, as t3code ships it: plan mode, its toggle, `/plan`, `/default` and Shift+Tab. */
 export const PLAN_MODE_KEY = "agent.planMode";
 export type FollowUp = "queue" | "steer";
 

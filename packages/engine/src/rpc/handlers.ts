@@ -148,7 +148,7 @@ export const rpcHandlersLayer = UnframedRpcs.toLayer(
       "run.text": (request) => runs.text(request),
       "text.complete": (request) => runs.complete(request),
       "run.subscribe": ({ project }) => runs.subscribe(project),
-      // A render placeholder has no sidecar until its clip lands: its recipe is in the job record (spec 04).
+      // A render placeholder has no sidecar until its clip lands: its recipe is in the job record.
       "recipe.read": ({ project, shapeId }) =>
         runs.recipe(project, shapeId).pipe(
           Effect.catchIf(
@@ -179,6 +179,7 @@ export const rpcHandlersLayer = UnframedRpcs.toLayer(
       "orchestration.getTurnDiff": (input) => agents.turnDiff(input),
       "orchestration.getFullThreadDiff": ({ toTurnCount, ...rest }) => agents.turnDiff({ ...rest, fromTurnCount: 0, toTurnCount }),
       "motion.upload": (input) => artifacts.upload(input),
+      "style.write": (input) => artifacts.writeStyle(input),
       "motion.renderStart": (input) => artifacts.renderStart(input),
       "motion.renderStatus": ({ project, id }) => artifacts.renderStatus(project, id),
       "artifact.snapshots": ({ project }) => artifacts.snapshots(project),

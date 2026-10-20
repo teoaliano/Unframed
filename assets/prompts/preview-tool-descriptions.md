@@ -1,8 +1,8 @@
 # Preview tool descriptions
 
-Used by spec 08. The model-facing descriptions of the twelve preview tools on spec 07's Unframed MCP server, and of their arguments. No placeholders.
+Held in `packages/domain/src/artifacts/prompts.ts`. The model-facing descriptions of the twelve preview tools on the Unframed MCP server, and of their arguments. No placeholders.
 
-Source: t3code (github.com/pingdotgg/t3code, MIT licence), `apps/server/src/mcp/toolkits/preview/tools.ts` for the tool descriptions and `packages/contracts/src/previewAutomation.ts` for the argument descriptions. Rewritten as spec 08 describes: each chat has one tab, so no tool takes a `tabId`; a tab opens a page or motion named by `shapeId`, so no tool takes a URL or a dev-server target; the snapshot has no `save` option; and the recording tools are left out. Every other sentence is t3code's text.
+Source: t3code (github.com/pingdotgg/t3code, MIT licence), `apps/server/src/mcp/toolkits/preview/tools.ts` for the tool descriptions and `packages/contracts/src/previewAutomation.ts` for the argument descriptions. Rewritten for Unframed: each chat has one tab, so no tool takes a `tabId`; a tab opens a page or motion named by `shapeId`, so no tool takes a URL or a dev-server target; the snapshot has no `save` option; and the recording tools are left out. Every other sentence is t3code's text.
 
 ## preview_status
 

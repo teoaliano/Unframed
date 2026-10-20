@@ -147,7 +147,7 @@ export const GenerateTray = ({ project, recipe, onSent, onMenuOpen, handle }: Ge
 
   const entryOf = useCallback((model: string | undefined) => catalogue?.models.find((entry) => entry.id === model), [catalogue]);
 
-  // The one recipe group the selection held when the composer opened (spec 06): its recipe is the tray's start.
+  // The one recipe group the selection held when the composer opened: its recipe is the tray's start.
   const [standing] = useState(() => (recipe ? undefined : appliedRecipe(editor)?.recipe));
   useEffect(() => {
     if (standing && composerState(editor).get().medium !== standing.medium) setMedium(editor, standing.medium);
@@ -200,7 +200,7 @@ export const GenerateTray = ({ project, recipe, onSent, onMenuOpen, handle }: Ge
 
   const resolved = useValue("recipe instruction", () => (recipe ? resolveReferences(instruction, canvasShapes(editor)) : undefined), [editor, recipe, instruction]);
   const shapes = useValue("canvas shapes", () => canvasShapes(editor), [editor]);
-  // An imported result (spec 11) sends from its sources as they are now.
+  // An imported result sends from its sources as they are now.
   const live = useValue("imported recipe sources", () => (recipe?.recipe.approximate ? liveSource(editor, recipe.shapeId, recipe.recipe, instruction) : undefined), [editor, recipe, instruction]);
   const source: RunSource =
     live ??

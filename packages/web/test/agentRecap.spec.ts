@@ -62,7 +62,7 @@ test("after a turn the recap card lists what it touched with Editor and Locate, 
   await expect(rows.nth(1).getByRole("button")).toHaveCount(0);
   await expect(rows.nth(1).getByTestId("recap-label")).toHaveCSS("text-decoration-line", "line-through");
 
-  // Editor goes into the editor (spec 09).
+  // Editor goes into the editor.
   await rows.nth(0).getByRole("button", { name: "Editor" }).click();
   const region = page.getByRole("region", { name: "Editing Intro (red)" });
   await expect(region).toBeVisible();

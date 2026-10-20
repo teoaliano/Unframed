@@ -1,5 +1,5 @@
 /**
- * The project tab rules (spec 17). Pure: the web keeps the tab store and the engine answers
+ * The project tab rules. Pure: the web keeps the tab store and the engine answers
  * the activity; these functions say what the order, the neighbour, the restore and the width are.
  */
 
@@ -7,10 +7,10 @@
 export const TAB_MIN_WIDTH = 120;
 /** Tabs never get wider than this, however few are open. */
 export const TAB_MAX_WIDTH = 200;
-/** How many closed projects the reopen stack keeps (spec 17). */
+/** How many closed projects the reopen stack keeps. */
 export const CLOSED_TAB_LIMIT = 10;
 
-/** One project's live work and waiting requests, as the engine reports them (spec 17's activity stream). */
+/** One project's live work and waiting requests, as the engine's activity stream reports them. */
 export interface TabActivity {
   readonly running: number;
   readonly needsYou: number;
@@ -52,7 +52,7 @@ export const moveTab = (order: ReadonlyArray<string>, name: string, to: number):
 /**
  * Restores the saved order against the projects that exist. A saved name that no longer exists is
  * dropped. The active tab is the saved one when it survived, else the first tab. With nothing
- * left, the result is empty and the caller falls back the way spec 02 does.
+ * left, the result is empty and the caller falls back to its default.
  */
 export const restoreTabs = (
   saved: { readonly order: ReadonlyArray<string>; readonly active: string | null | undefined },

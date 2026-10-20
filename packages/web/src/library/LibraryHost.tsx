@@ -1,5 +1,5 @@
 /**
- * The library on the canvas (spec 06): the Library button in its chrome slot, the "Add to
+ * The library on the canvas: the Library button in its chrome slot, the "Add to
  * library" handler the context menu calls, and the two dialogs they open.
  */
 import { UnframedError } from "@unframed/contracts";
