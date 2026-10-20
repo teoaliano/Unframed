@@ -10,7 +10,7 @@ import type { ChatClient } from "../store.ts";
 /**
  * The style the active chat follows, as a chip under its tab with Detach. A toast says what
  * was detached and offers Undo, which attaches it again. Nothing shows when the chat has no
- * style.
+ * style, or its style is no longer on the canvas.
  */
 export const StyleChip = ({ client, chat }: { readonly client: ChatClient; readonly chat: Chat | undefined }) => {
   const editor = useMaybeEditor();
@@ -19,8 +19,10 @@ export const StyleChip = ({ client, chat }: { readonly client: ChatClient; reado
     "chat style",
     () => {
       if (styleId === null) return undefined;
+      // A style no longer on the canvas is not shown, as Detach leaves out artifacts that are gone.
       const shape = editor?.getShape(styleId as TLShapeId);
-      const title = shape?.type === "style" ? String((shape.props as { title?: unknown }).title ?? "").trim() : "";
+      if (shape?.type !== "style") return undefined;
+      const title = String((shape.props as { title?: unknown }).title ?? "").trim();
       return title === "" ? "Style" : title;
     },
     [editor, styleId],
