@@ -1,5 +1,5 @@
 import { shapeKind, shapeLabel, type ShapeKind } from "@unframed/domain";
-import { AlignLeft, AppWindow, Clapperboard, Group, Image, PenLine, SquarePlay, X, type LucideIcon } from "lucide-react";
+import { AlignLeft, AppWindow, Clapperboard, Group, Image, Palette, PenLine, SquarePlay, X, type LucideIcon } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useValue, type Editor, type TLShapeId } from "tldraw";
 import { Badge } from "~/components/ui/badge";
@@ -12,6 +12,7 @@ export const KIND_ICONS: Record<ShapeKind, LucideIcon> = {
   group: Group,
   page: AppWindow,
   motion: Clapperboard,
+  style: Palette,
   mark: PenLine,
 };
 
@@ -22,6 +23,7 @@ const KIND_NOUNS: Record<ShapeKind, string> = {
   group: "group",
   page: "page",
   motion: "motion",
+  style: "style",
   mark: "mark",
 };
 
@@ -44,10 +46,12 @@ export const describeShape = (editor: Editor, id: string): ChipShape | undefined
 
 export type Chip = { readonly kind: "artifact"; readonly shape: ChipShape } | { readonly kind: "count"; readonly ids: ReadonlyArray<string>; readonly label: string };
 
-/** One chip per artifact; everything else collapsed into one count chip ("3 inputs", or "1 image" when all the same kind). */
+const OWN_CHIP = new Set<ShapeKind>(["page", "motion", "style"]);
+
+/** One chip per artifact or style; everything else collapsed into one count chip ("3 inputs", or "1 image" when all the same kind). */
 export const chipsOf = (shapes: ReadonlyArray<ChipShape>): Chip[] => {
-  const artifacts = shapes.filter((shape) => shape.kind === "page" || shape.kind === "motion");
-  const rest = shapes.filter((shape) => shape.kind !== "page" && shape.kind !== "motion");
+  const artifacts = shapes.filter((shape) => OWN_CHIP.has(shape.kind));
+  const rest = shapes.filter((shape) => !OWN_CHIP.has(shape.kind));
   const chips: Chip[] = artifacts.map((shape) => ({ kind: "artifact", shape }));
   if (rest.length > 0) {
     const kinds = new Set(rest.map((shape) => shape.kind));

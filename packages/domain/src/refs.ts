@@ -22,7 +22,7 @@ export interface CanvasRecordLike {
 }
 
 /** The shape kinds that carry a ref in `meta.ref`. A group's ref is its name. */
-export const META_REF_TYPES: ReadonlySet<string> = new Set(["text", "image", "video", "page", "motion"]);
+export const META_REF_TYPES: ReadonlySet<string> = new Set(["text", "image", "video", "page", "motion", "style"]);
 
 const field = (value: unknown, key: string): unknown =>
   typeof value === "object" && value !== null ? (value as Record<string, unknown>)[key] : undefined;

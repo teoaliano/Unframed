@@ -182,6 +182,8 @@ export const ClientChatCommand = Schema.Union([
   Schema.Struct({ type: Schema.Literal("thread.session.stop"), ...Base }),
   Schema.Struct({ type: Schema.Literal("thread.tags.remove"), ...Base, ids: Schema.Array(Schema.String) }),
   Schema.Struct({ type: Schema.Literal("thread.tags.add"), ...Base, ids: Schema.Array(Schema.String) }),
+  Schema.Struct({ type: Schema.Literal("thread.style.remove"), ...Base, styleId: Schema.String }),
+  Schema.Struct({ type: Schema.Literal("thread.style.set"), ...Base, styleId: Schema.String }),
   Schema.Struct({ type: Schema.Literal("project.chats.clear"), commandId: Schema.String, projectId: Schema.String }),
 ]);
 export type ClientChatCommand = typeof ClientChatCommand.Type;
@@ -290,6 +292,8 @@ export const Chat = Schema.Struct({
   outside: Schema.optionalKey(OutsideChatRef),
   titledBy: Schema.NullOr(Schema.Literals(["user", "agent"])),
   tags: Schema.Array(Schema.String),
+  /** The style shape the chat follows, a room id. */
+  style: Schema.NullOr(Schema.String),
   modelSelection: ChatModelSelection,
   runtimeMode: RuntimeMode,
   interactionMode: InteractionMode,

@@ -185,7 +185,7 @@ export interface RecapRow {
   readonly rewritten: boolean;
 }
 
-const ARTIFACT_TOOLS = new Set(["page_write", "page_edit", "page_read", "motion_write", "motion_edit", "motion_read"]);
+const ARTIFACT_TOOLS = new Set(["page_write", "page_edit", "page_read", "motion_write", "motion_edit", "motion_read", "style_write", "style_edit", "style_read"]);
 
 const record = (value: unknown): Record<string, unknown> => (typeof value === "object" && value !== null ? (value as Record<string, unknown>) : {});
 
@@ -230,7 +230,7 @@ export const recapRows = (
     const input = record(data.input ?? inputs.get(record(activity.payload).itemId));
     const result = record(data.result);
     if (ARTIFACT_TOOLS.has(tool)) {
-      const kind = tool.startsWith("page") ? "page" : "motion";
+      const kind = tool.startsWith("page") ? "page" : tool.startsWith("style") ? "style" : "motion";
       touch(input.shapeId ?? result.shapeId ?? result.id, kind, input.title);
     } else if (tool === "canvas_write") {
       const ids = record(result.ids);

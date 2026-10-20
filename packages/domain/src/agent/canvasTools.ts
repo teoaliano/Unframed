@@ -37,6 +37,7 @@ export const shapeKind = (type: string | undefined): ShapeKind => {
     case "video":
     case "page":
     case "motion":
+    case "style":
       return type;
     case "frame":
       return "group";
@@ -210,6 +211,12 @@ export const canvasView = (input: CanvasViewInput): CanvasView => {
         entry.file = typeof props.file === "string" ? props.file : "";
         entry.title = typeof props.title === "string" ? props.title : "";
         if (props.dials !== undefined && Object.keys(obj(props.dials)).length > 0) entry.dials = props.dials;
+        if (typeof props.style === "string" && props.style !== "") entry.style = agentShapeId(props.style);
+        break;
+      case "style":
+        // Never the document itself: style_read answers it, so a canvas read stays small.
+        entry.file = typeof props.file === "string" ? props.file : "";
+        entry.title = typeof props.title === "string" ? props.title : "";
         break;
       case "mark": {
         entry.type = record.type;
@@ -458,6 +465,7 @@ const precheck = (ops: ReadonlyArray<unknown>, ctx: BatchContext): void => {
     if (type === "create") {
       const kind = record.kind;
       if (kind === "page" || kind === "motion") refuse("create: make pages and motions with page_write and motion_write");
+      if (kind === "style") refuse("create: make styles with style_write");
       if (typeof kind !== "string" || !CREATE_KINDS.has(kind)) refuse(`create: unknown kind "${String(kind)}"`);
       const id = record.id;
       if (typeof id !== "string" || id === "") refuse('create: id must be a string (use "new:<name>" for a fresh id)');

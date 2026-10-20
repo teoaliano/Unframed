@@ -75,6 +75,8 @@ export * from "./artifacts/chromeCandidates.ts";
 export * from "./artifacts/viewer.ts";
 export * from "./artifacts/live.ts";
 export * from "./artifacts/preview.ts";
+export * from "./styles/styleRules.ts";
+export * from "./styles/prompts.ts";
 export type { LegacyEdge, LegacyGraph, LegacyNode } from "./legacy/graph.ts";
 export * from "./legacy/report.ts";
 export { rebuild, type Rebuilt } from "./legacy/reader.ts";

@@ -83,7 +83,7 @@ export const planRename = (shapes: ReadonlyArray<CanvasShape>, id: string, typed
     from: shape.ref,
     to,
     rewrites: renamePlan(shapes, shape.ref, to),
-    ...(shape.kind === "page" || shape.kind === "motion" ? { title: to } : {}),
+    ...(shape.kind === "page" || shape.kind === "motion" || shape.kind === "style" ? { title: to } : {}),
   };
 };
 

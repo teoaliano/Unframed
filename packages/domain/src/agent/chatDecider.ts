@@ -17,6 +17,7 @@ import type {
 } from "./chatModel.ts";
 import { DEFAULT_RUNTIME_MODE } from "./chatModel.ts";
 import { requestActivity } from "./chatProjector.ts";
+import { styleAttachedSummary } from "../styles/styleRules.ts";
 
 export const TITLE_MAX = 60;
 
@@ -61,6 +62,7 @@ const outsideRefused = (command: ChatCommand): boolean =>
   command.type === "thread.runtime-mode.set" ||
   command.type === "thread.interaction-mode.set" ||
   command.type === "thread.checkpoint.revert" ||
+  command.type === "thread.style.set" ||
   (command.type === "thread.meta.update" && command.modelSelection !== undefined);
 
 /** Checks a model change; `undefined` when it may be applied. */
@@ -198,6 +200,25 @@ export const decide = (command: ChatCommand, model: ProjectChats, now: string): 
 
       const turnId = steer ? chat.latestTurn!.turnId : `turn:${message.messageId}`;
       const turnCount = steer ? chat.latestTurn!.turnCount : (chat.turns.at(-1)?.turnCount ?? 0) + 1;
+      // A chat holds one style: a message with a different one selected replaces it, and the work log says so.
+      const style = message.style;
+      const styleEvents: PendingEvent[] =
+        style === undefined || style.id === chat.style
+          ? []
+          : [
+              event("thread.style-set", id, { styleId: style.id, previous: chat.style }),
+              event("thread.activity-appended", id, {
+                activity: {
+                  id: `style:${message.messageId}`,
+                  tone: "info",
+                  kind: "style.attached",
+                  summary: styleAttachedSummary(style.title, chat.style === null ? undefined : (style.previousTitle ?? "the earlier style")),
+                  payload: { styleId: style.id, title: style.title, previous: chat.style },
+                  turnId,
+                  createdAt: command.createdAt,
+                },
+              }),
+            ];
       events.push(
         event("thread.message-sent", id, {
           messageId: message.messageId,
@@ -209,6 +230,7 @@ export const decide = (command: ChatCommand, model: ProjectChats, now: string): 
           ...(message.context ? { context: { selection: [...message.context.selection] } } : {}),
           createdAt: command.createdAt,
         }),
+        ...styleEvents,
         event("thread.turn-start-requested", id, {
           turnId,
           turnCount,
@@ -371,6 +393,14 @@ export const decide = (command: ChatCommand, model: ProjectChats, now: string): 
       if (gone.length === 0) return reject("not_found", "This chat is not linked to that artifact.");
       return accept(event("thread.untagged", id, { ids: gone }));
     }
+
+    case "thread.style.remove":
+      if (chat.style === null || chat.style !== command.styleId) return reject("not_found", "This chat does not follow that style.");
+      return accept(event("thread.style-set", id, { styleId: null, previous: chat.style }));
+
+    case "thread.style.set":
+      if (chat.style === command.styleId) return reject("bad_request", NO_EVENTS);
+      return accept(event("thread.style-set", id, { styleId: command.styleId, previous: chat.style }));
 
     case "thread.turn.files.complete":
       return accept(event("thread.turn-files-completed", id, { turnCount: command.turnCount, files: command.files }));

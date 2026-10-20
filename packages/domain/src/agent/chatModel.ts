@@ -165,6 +165,8 @@ export interface Chat {
   readonly titledBy: TitledBy | null;
   /** The artifacts it touched, in first-touch order. */
   readonly tags: ReadonlyArray<string>;
+  /** The style shape it follows (a room id), attached by the latest message that had one selected. */
+  readonly style: string | null;
   readonly modelSelection: ModelSelection;
   readonly runtimeMode: RuntimeMode;
   readonly interactionMode: InteractionMode;
@@ -242,6 +244,11 @@ export type ThreadClientCommand = CommandBase &
           /** Resolved by the engine from the stored files before the decider sees them. */
           readonly attachments: ReadonlyArray<AttachmentRef | MessageAttachment>;
           readonly context?: MessageContext;
+          /**
+           * The style shape the selection holds, resolved by the engine from the canvas before
+           * the decider sees it, with the chat's current style's title for the work log.
+           */
+          readonly style?: { readonly id: string; readonly title: string; readonly previousTitle?: string };
         };
         readonly steer?: boolean;
         readonly modelSelection?: ModelSelection;
@@ -259,6 +266,10 @@ export type ThreadClientCommand = CommandBase &
     | { readonly type: "thread.tags.remove"; readonly ids: ReadonlyArray<string> }
     /** Undo of a Detach. The engine keeps only ids that are artifacts on the canvas, as for `thread.create`'s tags. */
     | { readonly type: "thread.tags.add"; readonly ids: ReadonlyArray<string> }
+    /** Detach of the chat's style. */
+    | { readonly type: "thread.style.remove"; readonly styleId: string }
+    /** Undo of a style Detach. The engine checks it is a style on the canvas first. */
+    | { readonly type: "thread.style.set"; readonly styleId: string }
   );
 
 export interface ActivityInput {
@@ -331,6 +342,7 @@ export type ChatEventType =
   | "thread.activity-appended"
   | "thread.tagged"
   | "thread.untagged"
+  | "thread.style-set"
   | "thread.turn-files-completed"
   | "thread.turn-revert-requested"
   | "thread.turn-reverted"

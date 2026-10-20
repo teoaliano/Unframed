@@ -1,5 +1,5 @@
 /**
- * `page_edit` and `motion_edit`: an ordered list of exact string replacements
+ * `page_edit`, `motion_edit` and `style_edit`: an ordered list of exact string replacements
  * applied to an in-memory copy of an artifact's current file. Any edit that does not match
  * exactly once refuses the whole list, so a failed call writes nothing.
  */
@@ -17,7 +17,7 @@ const occurrences = (text: string, needle: string): number => {
 };
 
 /** The edited text, or the refusal naming the first edit that failed. */
-export const applyArtifactEdits = (text: string, edits: unknown, kind: ArtifactKind): { html: string } | { error: string } => {
+export const applyArtifactEdits = (text: string, edits: unknown, kind: ArtifactKind | "style"): { html: string } | { error: string } => {
   if (!Array.isArray(edits) || edits.length === 0) return { error: `edits must be a list of 1 to ${ARTIFACT_EDITS_MAX} { old_string, new_string } changes. ${NOTHING}` };
   if (edits.length > ARTIFACT_EDITS_MAX) return { error: `${edits.length} edits is too many; one call takes 1 to ${ARTIFACT_EDITS_MAX}. ${NOTHING}` };
   let html = text;

@@ -10,8 +10,17 @@ import { classifyRequest, type RequestType } from "./runtimeEvents.ts";
 /** The provider-side prefix of every tool the Unframed MCP server registers. */
 export const UNFRAMED_TOOL_PREFIX = "mcp__unframed__";
 
-/** The Unframed tools that change something, refused in plan mode: the canvas write, the artifact writes and edits, and generate. */
-export const UNFRAMED_WRITE_TOOLS: ReadonlySet<string> = new Set(["canvas_write", "page_write", "motion_write", "page_edit", "motion_edit", "generate"]);
+/** The Unframed tools that change something, refused in plan mode: the canvas write, the artifact and style writes and edits, and generate. */
+export const UNFRAMED_WRITE_TOOLS: ReadonlySet<string> = new Set([
+  "canvas_write",
+  "page_write",
+  "motion_write",
+  "page_edit",
+  "motion_edit",
+  "style_write",
+  "style_edit",
+  "generate",
+]);
 
 export type PolicyAnswer =
   /** `AskUserQuestion`: open a question and wait; allow with the answers. */

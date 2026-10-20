@@ -123,6 +123,12 @@ export const describeTool = (input: { readonly toolName: string; readonly itemTy
         return { label: `Edited motion ${artifactTitle(toolInput, result, "motion")}`, action: "canvas" };
       case "motion_read":
         return { label: `Read motion ${artifactTitle(toolInput, result, "motion")}`, action: "read" };
+      case "style_read":
+        return { label: `Read style ${artifactTitle(toolInput, result, "style")}`, action: "read" };
+      case "style_write":
+        return { label: `Wrote style ${artifactTitle(toolInput, result, "style")}`, action: "canvas" };
+      case "style_edit":
+        return { label: `Edited style ${artifactTitle(toolInput, result, "style")}`, action: "canvas" };
       default:
         if (own.startsWith("preview")) return { label: `Looked at ${artifactTitle(toolInput, result, "the page")} in a browser`, action: "browser" };
         return { label: own, action: "tool" };
@@ -260,6 +266,10 @@ export const workLog = (activities: ReadonlyArray<ChatActivity>, options: { read
       spawn.tasks.set(taskId, task);
       continue;
     }
+    if (activity.kind === "style.attached") {
+      items.push({ kind: "row", row: { kind: "row", id: activity.id, turnId: activity.turnId, label: activity.summary, tone: "info", state: "completed", action: "tool" } });
+      continue;
+    }
     if (activity.tone === "error" && activity.kind !== "rate-limit") {
       const message = text(payload.message) ?? text(payload.errorMessage);
       items.push({
@@ -325,6 +335,9 @@ const ACTIVITY_BY_TOOL: ReadonlyArray<readonly [RegExp, string]> = [
   [/^mcp__unframed__page_edit$/, "Editing the page…"],
   [/^mcp__unframed__motion_edit$/, "Editing the motion…"],
   [/^mcp__unframed__motion_read$/, "Reading the motion…"],
+  [/^mcp__unframed__style_read$/, "Reading the style…"],
+  [/^mcp__unframed__style_write$/, "Writing the style…"],
+  [/^mcp__unframed__style_edit$/, "Editing the style…"],
   [/^read$/i, "Reading a file…"],
   [/^write$/i, "Writing a file…"],
   [/^(edit|multiedit|notebookedit)$/i, "Editing a file…"],

@@ -15,7 +15,7 @@ Read the whole canvas: every shape with its id, kind, ref (its @id), position, s
 ## canvas_write
 
 ```text
-Change the canvas with one batch of operations, applied all or nothing, as one step of this turn that the person can revert. Ops: {type:"create", id, kind, x, y, w?, h?, parent?, props} -- use an id like "new:hero" and the result tells you the real id; {type:"update", id, props} -- a shallow patch onto the shape's props, null deletes a key; {type:"move", id, x, y} ; {type:"resize", id, w, h} ; {type:"delete", id} -- deleting a group deletes its members ; {type:"reparent", id, parent} -- into a group, or null to take it out ; {type:"rename", id, name} -- renames a prompt, image, video, page, motion or group and rewrites every @ reference to it. Kinds: prompt (props.text), image and video (props.file names an existing project file, or props.url for a clip link), group (props.name), mark (props.type is geo, note, arrow or line, plus that tldraw type's own props). Make pages and motions with page_write and motion_write, not here. Never put bytes or data: URLs in shape props. At most 200 ops per call.
+Change the canvas with one batch of operations, applied all or nothing, as one step of this turn that the person can revert. Ops: {type:"create", id, kind, x, y, w?, h?, parent?, props} -- use an id like "new:hero" and the result tells you the real id; {type:"update", id, props} -- a shallow patch onto the shape's props, null deletes a key; {type:"move", id, x, y} ; {type:"resize", id, w, h} ; {type:"delete", id} -- deleting a group deletes its members ; {type:"reparent", id, parent} -- into a group, or null to take it out ; {type:"rename", id, name} -- renames a prompt, image, video, page, motion, style or group and rewrites every @ reference to it. Kinds: prompt (props.text), image and video (props.file names an existing project file, or props.url for a clip link), group (props.name), mark (props.type is geo, note, arrow or line, plus that tldraw type's own props). Make pages, motions and styles with page_write, motion_write and style_write, not here. Never put bytes or data: URLs in shape props. At most 200 ops per call.
 ```
 
 Arguments:
@@ -30,3 +30,4 @@ Each description lives in one file. Build the full text as each file says.
 - `motion_write`: `motion-write-tool.md`, followed by `dials-contract.md`, then `dials-timeline.md`.
 - `page_edit` and `motion_edit`: their sections of `artifact-edit-tools.md`, each alone.
 - `page_read` and `motion_read`: `artifact-read-tools.md`.
+- `style_read`, `style_write` and `style_edit`: their sections of `style-tools.md`.
