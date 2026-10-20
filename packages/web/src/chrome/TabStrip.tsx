@@ -120,6 +120,8 @@ export const TabStrip = ({ left, right }: { readonly left: number; readonly righ
   }, [active]);
 
   const width = tabWidth(available - MENU_SPACE, order.length);
+  // Drag a tab onto another to take its place (spec 17); Alt+arrow does the same from the keyboard.
+  const [dragging, setDragging] = useState<string>();
 
   const onTabKey = (event: KeyboardEvent<HTMLDivElement>, name: string) => {
     if (event.key === "Enter" || event.key === " ") {
@@ -155,6 +157,21 @@ export const TabStrip = ({ left, right }: { readonly left: number; readonly righ
               data-status={status}
               title={[name, STATUS_LABEL[status]].filter(Boolean).join(" · ")}
               style={{ width }}
+              draggable
+              onDragStart={(event) => {
+                event.dataTransfer.setData("text/plain", name);
+                event.dataTransfer.effectAllowed = "move";
+                setDragging(name);
+              }}
+              onDragOver={(event) => {
+                if (dragging !== undefined && dragging !== name) event.preventDefault();
+              }}
+              onDrop={(event) => {
+                event.preventDefault();
+                if (dragging !== undefined && dragging !== name) activation.moveTab(dragging, order.indexOf(name));
+                setDragging(undefined);
+              }}
+              onDragEnd={() => setDragging(undefined)}
               onClick={() => void activation.activate(name)}
               onKeyDown={(event) => onTabKey(event, name)}
               onAuxClick={(event: MouseEvent) => {
