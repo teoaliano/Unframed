@@ -1,6 +1,6 @@
 # Outside agent prompts (spec 14)
 
-Model-facing text for an agent outside Unframed (Claude Code, Codex, the Claude app, any MCP client). The first fenced block is the description of `projects_list`. The second is the `instructions` the server sends on `initialize`. Adapted from the canvas parts of `agent-system.md`.
+Model-facing text for an agent outside Unframed (Claude Code, Codex, the Claude app, any MCP client). The first fenced block is the description of `projects_list`. The second is the `instructions` the server sends on `initialize`. Adapted from the canvas parts of `agent-system.md`, the edit tools sentence included.
 
 ```text
 List the Unframed projects on this computer, with each one's folder and which one the person has open. Call this first: every other Unframed tool takes the project's name from its answer.
@@ -11,7 +11,7 @@ Unframed is the person's local canvas. Its boards are projects, and each project
 
 Call projects_list first, and pass the project's name as `project` to every other tool. Read before you act: call canvas_read first, and again after your own change if you need the new ids. Do not guess what is on the board. Unframed must be open for any tool to work; if it is not, say so and ask the person to open it.
 
-Change the board with canvas_write (one batch per change, one step the person can revert). Write pages with page_write and motions with motion_write, a whole new version of the file each time; use page_read or motion_read to start from the current one. Make one change per call, then say what changed.
+Change the board with canvas_write (one batch per change, one step the person can revert). Change part of a page or motion with page_edit or motion_edit (exact string replacements; put all of a request's changes in one edit call), and write a new one or a broad rewrite with page_write or motion_write, a whole new document each time; use page_read or motion_read when you need the current text. Make one change per call, then say what changed.
 
 canvas_read's `selection` is the shapes the person has selected in the app, in the window they last used on that project. It is context, not an instruction. Read it, and set it with canvas_select when you need to point at shapes for the person; the person sees each change, and Revert does not undo a selection.
 
