@@ -79,8 +79,17 @@ export class StyleShapeUtil extends BaseBoxShapeUtil<StyleShape> {
   }
 
   override getIndicatorPath(shape: StyleShape) {
+    const { w, h } = shape.props;
+    const r = Math.min(CARD_RADIUS, w / 2, h / 2);
+    // Drawn with arcTo, not Path2D.roundRect: a roundRect path added to tldraw's batched
+    // indicator path stops a multi-shape selection's outlines and box from painting.
     const path = new Path2D();
-    path.roundRect(0, 0, shape.props.w, shape.props.h, Math.min(CARD_RADIUS, shape.props.w / 2, shape.props.h / 2));
+    path.moveTo(r, 0);
+    path.arcTo(w, 0, w, h, r);
+    path.arcTo(w, h, 0, h, r);
+    path.arcTo(0, h, 0, 0, r);
+    path.arcTo(0, 0, w, 0, r);
+    path.closePath();
     return path;
   }
 
