@@ -107,7 +107,7 @@ export const ParametersPanel = ({ shapeId }: { readonly shapeId: TLShapeId }) =>
           </Button>
         </Tip>
       </header>
-      <div className="min-h-0 flex-1 overflow-auto" data-scrolls="true">
+      <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden" data-scrolls="true">
         {announcement === undefined ? (
           <p className="mx-2.5 my-4 text-sm text-muted-foreground">No parameters yet.</p>
         ) : (
