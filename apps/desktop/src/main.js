@@ -502,17 +502,12 @@ const windowChrome = () => {
 // 2x screenshot, not taken from Apple's docs. So y 17 centres them on y 24, and
 // x 20 sets them 12 inside the card's left edge.
 //
-// 92 of left inset was picked by eye in the running app, not derived: it makes
-// the gap from the green light to the logo match the gaps from the logo to the
-// project name and from the chevron to the settings button, about 22 each.
-//
 // `!important` is load-bearing, not defensive. insertCSS lands its sheet with
 // *lower* cascade priority than the page's own, so an override that merely ties
-// on specificity -- `.unframed-chrome-left` against `.unframed-chrome-left` -- silently
-// loses and the window looks exactly as if nothing had been injected at all.
+// on specificity with the page's rule silently loses and the window looks
+// exactly as if nothing had been injected at all.
 const PLATFORM_CSS = mac
-  ? `.unframed-chrome-left { padding-left: 92px !important; }
-`
+  ? ''
   // The right card moves DOWN rather than sideways. Windows pins its caption
   // buttons to the corner -- unlike macOS, where trafficLightPosition put the
   // lights wherever the card wanted them -- so the only question is which
