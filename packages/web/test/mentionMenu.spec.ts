@@ -116,3 +116,29 @@ test.describe("the mention menu", () => {
     await expect.poll(() => page.evaluate(() => (document.activeElement as HTMLElement | null)?.isContentEditable ?? false)).toBe(false);
   });
 });
+
+test("with the prompt at the top edge, the mention list is pushed under the tab strip and no row is covered by it", async ({ page, engine }) => {
+  await openCanvas(page, engine);
+  await newPrompt(page, engine);
+  await page.keyboard.type("A photo of @");
+  await expect(menu(page)).toBeVisible();
+  const prompt = page.locator(".tl-shape[data-shape-type='text']").filter({ hasText: "A photo of" });
+  // Pan the canvas, from an empty point, until the prompt's top is under the bar's 48 px.
+  const empty = await emptyCanvasPoint(page);
+  await page.mouse.move(empty.x, empty.y);
+  for (let step = 0; step < 60 && (await prompt.boundingBox())!.y > 0; step++) await page.mouse.wheel(0, 40);
+  const strip = (await page.locator(".unframed-tabs").boundingBox())!;
+  await expect(menu(page)).toBeVisible();
+  // Under the strip's bottom edge, not in its band.
+  expect((await menu(page).boundingBox())!.y).toBeGreaterThanOrEqual(strip.y + strip.height);
+  // No row's centre is under the strip.
+  const count = await rows(page).count();
+  for (let index = 0; index < count; index++) {
+    const row = (await rows(page).nth(index).boundingBox())!;
+    const underStrip = await page.evaluate(
+      ({ x, y }) => document.elementFromPoint(x, y)?.closest("[data-testid='tab-strip']") !== null,
+      { x: row.x + row.width / 2, y: row.y + row.height / 2 },
+    );
+    expect(underStrip, `row ${index}`).toBe(false);
+  }
+});

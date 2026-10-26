@@ -99,6 +99,14 @@
   padding: 10px;
 }
 
+/*
+ * DialKit's sticky headers paint a band 12 px wider than themselves on each side. Inside the 10 px
+ * inset that band pokes 2 px past the panel and makes it scroll sideways, so the band takes the inset.
+ */
+:root .dialkit-root[data-theme] :is(.dialkit-panel-inline > .dialkit-folder-root > .dialkit-panel-header, .dialkit-folder-section > .dialkit-folder-header)::before {
+  inset: 0 -10px;
+}
+
 /* The kit's type: 14 px labels and values, not DialKit's 13 px. */
 :root .dialkit-root[data-theme]
   :is(
@@ -173,4 +181,25 @@
   transform: none;
   padding-bottom: 0;
   border-bottom: 0;
+}
+
+/*
+ * Hovered or dragged, the fill and the ticks take the muted tone, which is also the label's colour, so
+ * the label vanished into the fill. The fill takes the border tone instead, and the label takes the
+ * foreground and sits above the fill and the ticks. The ticks stop short of the label.
+ */
+:root .dialkit-root[data-theme] .dialkit-slider-label {
+  z-index: 1;
+}
+
+:root .dialkit-root[data-theme] .dialkit-slider-hashmarks {
+  mask-image: linear-gradient(to right, transparent 72px, #000 72px);
+}
+
+:root .dialkit-root[data-theme] .dialkit-slider-active .dialkit-slider-label {
+  color: var(--dial-text-focus);
+}
+
+:root .dialkit-root[data-theme] .dialkit-slider-active .dialkit-slider-fill {
+  background: var(--border);
 }

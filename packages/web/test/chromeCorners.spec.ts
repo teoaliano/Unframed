@@ -18,16 +18,15 @@ test("the top-left card holds the logo; Settings sits at the end opposite the wi
   await expect(page.getByRole("button", { name: "Help" })).toHaveCount(0);
 });
 
-test("the bar's start sits at the window edge, 48 tall; the lights' zone is 78 px, the logo 20 px into the bar", async ({ page, engine }) => {
+test("the bar's start sits at the window edge, 48 tall; the lights' zone is 92 px, the logo 20 px into the bar", async ({ page, engine }) => {
   await openCanvas(page, engine);
   const card = page.locator(".unframed-chrome-left");
   const box = (await card.boundingBox())!;
-  // The reference (the user's prototype): the bar is 48 px tall, its start is 14 px in from the window edge and the
-  // three lights are 52 px wide with 12 px to the bar, so the start region is 78 px before the logo's 20 px padding.
+  // The bar is 48 px tall and its start region is the lights' zone (92 px) before the logo's 20 px padding.
   expect([box.x, box.y, box.height]).toEqual([0, 0, 48]);
   const logo = (await card.getByRole("img", { name: "Unframed" }).boundingBox())!;
   expect([logo.width, logo.height]).toEqual([24, 24]);
-  expect(logo.x).toBe(78 + 20);
+  expect(logo.x).toBe(92 + 20);
   const strip = (await page.getByTestId("tab-strip").boundingBox())!;
   expect(strip.height).toBe(48);
   expect(strip.y + strip.height / 2).toBe(24);

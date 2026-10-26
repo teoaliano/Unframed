@@ -141,10 +141,25 @@
   padding-top: 64px;
 }
 
-/* While the artifact editor is open it replaces the canvas on screen; tldraw's watermark stays visible below it. */
+/* While the artifact editor is open it replaces the canvas on screen; tldraw's watermark stays visible over it. */
 [data-artifact-editor] .tl-canvas,
 [data-artifact-editor] .tlui-layout {
   visibility: hidden;
+}
+
+/* Its children (the selection toolbar, cursors) set their own visibility, so this one is hidden whole. */
+[data-artifact-editor] .tl-canvas__in-front {
+  display: none;
+}
+
+/*
+ * The container rises above the editor (700) so the watermark, the one thing left showing in it, stays over the editor's
+ * corner. It takes no pointer events, so the editor under it gets them all; the watermark keeps its own "pointer-events: all".
+ * Everything else in the container is hidden above, and the top bar and the docked rail sit outside it, under the editor.
+ */
+[data-artifact-editor] .tl-container {
+  z-index: 800;
+  pointer-events: none;
 }
 
 /*

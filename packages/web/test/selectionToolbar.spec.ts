@@ -83,13 +83,15 @@ test("the bar sits centred above the selection, flips below it at the top edge a
   for (let step = 0; step < 40 && ((await subject.boundingBox())!.y > 10); step++) await page.mouse.wheel(0, 40);
   await expect(bar).toHaveAttribute("data-side", "below");
   const moved = (await subject.boundingBox())!;
-  await expect.poll(async () => (await bar.boundingBox())!.y).toBeCloseTo(moved.y + moved.height + 12, 0);
+  // Below the subject, and never inside the top bar: a bar that would land in the strip's band starts 8 px under it.
+  const strip = (await page.locator(".unframed-tabs").boundingBox())!;
+  await expect.poll(async () => (await bar.boundingBox())!.y).toBeCloseTo(Math.max(moved.y + moved.height + 12, strip.y + strip.height + 8), 0);
 
-  // Scroll it past the left edge: the bar stays inside, and beside the top-left card, never under it.
+  // Scroll it past the left edge: the bar stays inside, and never under the top bar. Beside the bar's
+  // band it would land on the tab strip, so it goes below the strip instead.
   for (let step = 0; step < 60 && ((await subject.boundingBox())!.x > -100); step++) await page.mouse.wheel(40, 0);
   const canvas = (await page.locator(".tl-container").boundingBox())!;
-  const card = (await page.locator(".unframed-chrome-left").boundingBox())!;
-  await expect.poll(async () => (await bar.boundingBox())!.x).toBeCloseTo(card.x + card.width + 8, 0);
+  await expect.poll(async () => { const box = (await bar.boundingBox())!; return box.y >= strip.y + strip.height || box.x >= strip.x + strip.width; }).toBe(true);
   // Lower down, clear of the card's band, it keeps 8 px from the canvas's edge.
   for (let step = 0; step < 20 && ((await subject.boundingBox())!.y < 200); step++) await page.mouse.wheel(0, -40);
   await expect.poll(async () => (await bar.boundingBox())!.x).toBeCloseTo(canvas.x + 8, 0);
@@ -147,4 +149,30 @@ test("the bar hides while a shape is dragged, the canvas is dragged or a box is 
   await page.mouse.move(barBox.x + barBox.width / 2, barBox.y + barBox.height / 2);
   await page.mouse.wheel(0, 120);
   await expect.poll(async () => (await subject.boundingBox())!.y).toBeLessThan(before.y - 50);
+});
+
+test("a selection at the top edge gets its toolbar below the tab strip, its buttons uncovered", async ({ page, generation }) => {
+  await openCanvas(page, generation.engine);
+  const subject = page.locator("[data-shape-id='shape:starter-subject']");
+  await clickShape(page, "shape:starter-subject");
+  const bar = toolbar(page);
+  await expect(bar).toBeVisible();
+
+  // Scroll the canvas until the subject sits near the top: its bar would have landed in the strip's 48 px.
+  const start = await centre(subject);
+  await page.mouse.move(start.x, start.y);
+  for (let step = 0; step < 40 && ((await subject.boundingBox())!.y > 60); step++) await page.mouse.wheel(0, 40);
+
+  const strip = (await page.getByTestId("tab-strip").boundingBox())!;
+  const box = (await bar.boundingBox())!;
+  expect(box.y >= strip.y + strip.height || box.x >= strip.x + strip.width).toBe(true);
+  // Every button of the bar is reachable: the topmost element at its centre is the bar itself.
+  for (const name of ["Agent", "Generate"]) {
+    const button = (await bar.getByRole("button", { name }).boundingBox())!;
+    const onTop = await page.evaluate(
+      ({ x, y }) => document.elementFromPoint(x, y)?.closest("[data-testid='selection-toolbar']") !== null,
+      { x: button.x + button.width / 2, y: button.y + button.height / 2 },
+    );
+    expect(onTop, name).toBe(true);
+  }
 });

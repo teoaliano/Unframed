@@ -111,10 +111,10 @@ export const ArtifactEditor = ({ shapeId, onClose, onOpen }: ArtifactEditorProps
   const Icon = facts.kind === "page" ? AppWindow : Clapperboard;
 
   return (
-    // It stops above tldraw's watermark band (8 px from the corner, 36 px tall), which stays uncovered.
+    // Full height. tldraw's watermark stays over its bottom-right corner: tldraw.css lifts the tldraw container above this layer.
     <div
       data-testid="artifact-editor"
-      className="pointer-events-auto absolute inset-x-0 top-0 bottom-13 z-[700] box-border grid grid-cols-[360px_minmax(0,1fr)_320px] gap-3 bg-background p-3 font-sans text-foreground"
+      className="pointer-events-auto absolute inset-0 z-[700] box-border grid grid-cols-[360px_minmax(0,1fr)_320px] gap-3 bg-background p-3 font-sans text-foreground"
       {...KEEP_FROM_CANVAS}
     >
       <section data-editor-column="rail" className={COLUMN}>
@@ -189,7 +189,8 @@ export const ArtifactEditor = ({ shapeId, onClose, onOpen }: ArtifactEditorProps
           )}
         </div>
       </section>
-      <section data-editor-column="parameters" className={COLUMN}>
+      {/* The bottom 40 px hold tldraw's watermark, which sits over this corner, so the controls end above it. */}
+      <section data-editor-column="parameters" className={cn(COLUMN, "pb-10")}>
         <Parameters
           key={facts.file}
           shapeId={shapeId}

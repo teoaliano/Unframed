@@ -1,7 +1,7 @@
 {
   "name": "unframed-app",
   "private": true,
-  "version": "0.0.19",
+  "version": "0.0.20",
   "description": "Desktop shell for Unframed.",
   "author": "teoaliano",
   "type": "commonjs",
@@ -13,7 +13,7 @@
   },
   "dependencies": {
     "electron-updater": "^6.8.9",
-    "unframed": "github:teoaliano/Unframed#engine-v0.8.2-dist"
+    "unframed": "github:teoaliano/Unframed#engine-v0.8.3-dist"
   },
   "devDependencies": {
     "electron": "^44.4.5",

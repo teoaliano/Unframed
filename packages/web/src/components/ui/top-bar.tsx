@@ -1,6 +1,6 @@
 "use client";
 
-import type { ComponentPropsWithRef, DragEvent, MouseEvent, ReactNode } from "react";
+import type { ComponentPropsWithRef, CSSProperties, DragEvent, MouseEvent, ReactNode } from "react";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 
 import { Menu, MenuItem, MenuPopup, MenuSeparator } from "~/components/ui/menu";
@@ -65,8 +65,12 @@ export interface TopBarProps {
 // window controls 14 px in from the window edge.
 const BAR_HEIGHT = 48;
 const CURVE = 20;
-/** Window edge to the bar on macOS: 14 px in, the three 12 px lights with 8 px between, then 12 px to the bar. */
-const LIGHTS_ZONE = 78;
+/**
+ * Window edge to the bar on macOS. The shell puts the traffic lights at x 20 (main.js `trafficLightPosition`); the three
+ * lights span about 60 px, so they end near x 80 and the bar starts 12 px after them. The start region's spacer and the
+ * bar's left edge both use this one number.
+ */
+const LIGHTS_ZONE = 92;
 /** The bar's end to the Settings button (the flare overlaps the button's first 8 px). */
 const SETTINGS_GAP = 12;
 /** The Windows caption buttons (144 px) and the 12 px to the bar. */
@@ -201,9 +205,9 @@ export const TopBar = ({
     </div>
   );
   const region = (base: string, custom: TopBarRegion | undefined): TopBarRegion => ({ ...custom, className: cn(base, custom?.className) });
-  const controlsSpace = (width: string) =>
+  const controlsSpace = (width: string, style?: CSSProperties) =>
     controls === "none" ? null : (
-      <div data-slot="top-bar-controls" aria-hidden className={cn("h-12 shrink-0", width)}>
+      <div data-slot="top-bar-controls" aria-hidden className={cn("h-12 shrink-0", width)} style={style}>
         {controls === "stand-ins" && <WindowDots />}
       </div>
     );
@@ -217,7 +221,7 @@ export const TopBar = ({
         </svg>
       </div>
       <div data-slot="top-bar-start" {...region(`${positioned}flex h-12 shrink-0 items-center`, regions.start)}>
-        {!windows && controlsSpace("w-[78px]")}
+        {!windows && controlsSpace("", { width: LIGHTS_ZONE })}
         {windows && <span className="flex shrink-0 items-center ps-3.5">{settingsNode}</span>}
         <span className={cn("flex shrink-0 items-center", windows ? "ms-3 ps-5 pe-2.5" : "ps-5 pe-2.5")}>{logo}</span>
       </div>
