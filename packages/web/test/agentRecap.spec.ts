@@ -11,9 +11,14 @@ const RETITLE = {
   turns: [{ tools: [{ name: "canvas_write", input: { ops: [retitle("m1", "Intro (red)"), retitle("m2", "Outro (red)")] } }], text: "Retitled both." }],
 };
 
+const REFUSED_EDIT = {
+  when: "^change the pricing heading",
+  turns: [{ tools: [{ name: "page_edit", input: { shapeId: "g1", edits: [{ old_string: "Pricing", new_string: "Plans" }] } }], text: "That text is not on the page." }],
+};
+
 const test = base.extend<{ agent: TestEngine }>({
   agent: async ({}, use) => {
-    const engine = await startAgentEngine({ script: await scriptFolder({ retitle: RETITLE }) });
+    const engine = await startAgentEngine({ script: await scriptFolder({ retitle: RETITLE, refused: REFUSED_EDIT }) });
     await use(engine);
     await engine.dispose();
   },
@@ -99,4 +104,20 @@ test("a revert names the shape it left alone because the person changed it since
   await expect(card.getByTestId("recap-skipped")).toHaveText("Left 1 shape alone because they changed since: Hand-made (by the person).");
   await expect.poll(() => titleOf(agent, "shape:m2")).toBe("Outro");
   expect(await titleOf(agent, "shape:m1")).toBe("Hand-made");
+});
+
+test("a refused page edit says what it tried, opens to the error the agent read, and gets no recap card", async ({ page, agent }) => {
+  await openCanvas(page, agent);
+  await putRecords(agent, artifactColumn([{ id: "shape:g1", title: "Landing" }]));
+  await expect(shapeOnScreen(page, "shape:g1")).toBeVisible();
+  const panel = await openRail(page);
+  await say(panel, "change the pricing heading");
+  await expect(panel.locator("[data-role='assistant']").last()).toContainText("That text is not on the page.");
+
+  await panel.getByRole("button", { name: /^Worked for/ }).click();
+  const row = panel.getByTestId("work-row").filter({ hasText: "Couldn't edit page Landing" });
+  await expect(row).toHaveAttribute("data-state", "failed");
+  await row.getByRole("button").click();
+  await expect(row.getByTestId("work-row-body")).toContainText(/\S/);
+  await expect(panel.getByTestId("recap-card")).toHaveCount(0);
 });

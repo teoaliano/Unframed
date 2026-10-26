@@ -7,6 +7,7 @@
 import type { ChatActivity, OutsideChatRef, TurnFile } from "./chatModel.ts";
 import { connectionClientLabel } from "../outside/connectionSetup.ts";
 import { shapeLabel } from "./shapeLabel.ts";
+import { toolResult } from "./workLog.ts";
 import { agentShapeId, roomShapeId as shapeId } from "./turnText.ts";
 
 /** What the rules read of a chat: its summary. */
@@ -198,7 +199,7 @@ const toolName = (activity: ChatActivity): string => {
 /**
  * The recap card's rows for one turn, in first-touch order: the shapes its page and motion
  * tool calls named, the shapes its `canvas_write` ops named (created ones by the id the
- * result gave them), then its turn changes. `canvas_read` contributes nothing. A shape no
+ * result gave them), then its turn changes. `canvas_read` and refused calls contribute nothing. A shape no
  * longer on the canvas is marked deleted.
  */
 export const recapRows = (
@@ -223,12 +224,13 @@ export const recapRows = (
     const given = record(payload.data).input;
     if (activity.kind.startsWith("tool.") && given !== undefined && !inputs.has(payload.itemId)) inputs.set(payload.itemId, given);
   }
-  const completed = [...activities].filter((activity) => activity.kind === "tool.completed").sort((a, b) => a.sequence - b.sequence);
+  // A refused call touched nothing, so it adds no row.
+  const completed = [...activities].filter((activity) => activity.kind === "tool.completed" && record(activity.payload).status !== "failed").sort((a, b) => a.sequence - b.sequence);
   for (const activity of completed) {
     const tool = toolName(activity);
     const data = record(record(activity.payload).data);
     const input = record(data.input ?? inputs.get(record(activity.payload).itemId));
-    const result = record(data.result);
+    const result = toolResult(data.result);
     if (ARTIFACT_TOOLS.has(tool)) {
       const kind = tool.startsWith("page") ? "page" : tool.startsWith("style") ? "style" : "motion";
       touch(input.shapeId ?? result.shapeId ?? result.id, kind, input.title);

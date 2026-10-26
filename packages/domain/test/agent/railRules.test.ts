@@ -185,6 +185,23 @@ describe("the recap rows", () => {
     expect(rows.some((row) => row.shapeId === "shape:p9")).toBe(false);
   });
 
+  it("leaves out calls that failed: a refused write touched nothing", () => {
+    const refused = (toolName: string, input: Record<string, unknown>) => {
+      const itemId = `i${++sequence}`;
+      return [
+        activity("tool.started", { itemId, itemType: "mcp_tool_call", status: "inProgress", data: { toolName, input } }),
+        activity("tool.completed", { itemId, itemType: "mcp_tool_call", status: "failed", data: { toolName, result: { error: "refused" } } }),
+      ];
+    };
+    const activities = [
+      ...refused("mcp__unframed__page_edit", { shapeId: "g1", edits: [] }),
+      ...refused("mcp__unframed__page_write", { shapeId: "g1", html: "<p>" }),
+      ...refused("mcp__unframed__canvas_write", { ops: [{ type: "move", id: "p1", x: 0, y: 0 }] }),
+    ];
+    expect(recapRows(activities, [], [{ id: "shape:g1", kind: "page", title: "Landing" }])).toEqual([]);
+    expect(recapRows([...activities, ...call("mcp__unframed__page_read", { shapeId: "g1" })], [], [{ id: "shape:g1", kind: "page", title: "Landing" }]).map((row) => row.label)).toEqual(["Landing"]);
+  });
+
   it("adds the turn changes after the tool calls, and offers a diff for a page or motion whose file the turn wrote", () => {
     const activities = call("mcp__unframed__motion_write", { shapeId: "m1", title: "Intro" });
     const rows = recapRows(
