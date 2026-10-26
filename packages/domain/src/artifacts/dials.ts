@@ -182,6 +182,8 @@ export interface BridgeWindow {
   addEventListener(type: "message", listener: (event: { source: unknown; origin: string; data: unknown }) => void): void;
   addEventListener(type: "wheel", listener: (event: BridgeWheel) => void, options: { passive: boolean }): void;
   addEventListener(type: "contextmenu", listener: (event: BridgeMenuEvent) => void): void;
+  /** The tokens script's event: a kit or a mode changed, so the declaration is applied again. */
+  addEventListener(type: "unframed:tokens", listener: () => void): void;
   __hfVariables?: { unframedDials?: unknown };
   unframed?: unknown;
   console: { error(...args: unknown[]): void };
@@ -266,6 +268,12 @@ export function installDialsBridge(win: BridgeWindow, dials: DialRules): void {
     } else if (data.type === "unframed:dials:set") {
       set(data.values);
     }
+  });
+
+  // A kit or mode change (spec 19): the last declaration is applied again with its current values,
+  // so a motion that reads its tokens while it builds rebuilds with them.
+  win.addEventListener("unframed:tokens", () => {
+    if (state !== undefined) run(state);
   });
 
   // A pinch (Ctrl or Cmd with the wheel) over a framed artifact would zoom the whole app:

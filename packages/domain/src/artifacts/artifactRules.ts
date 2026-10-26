@@ -44,31 +44,51 @@ export const artifactFileName = (input: {
 
 export const RUNTIME_TAG = '<script src="hyperframes-runtime.js" data-hyperframes-preview-runtime></script>';
 export const BRIDGE_TAG = '<script src="unframed-dials.js"></script>';
+export const TOKENS_TAG = '<script src="unframed-tokens.js"></script>';
 
 const HAS_RUNTIME = /data-hyperframes-preview-runtime|hyperframes-runtime\.js|hyperframe\.runtime\.iife\.js/i;
 const HAS_BRIDGE = /unframed-dials\.js/i;
+const HAS_TOKENS = /unframed-tokens\.js/i;
+const HEAD_OPEN = /<head(?:\s[^>]*)?>/i;
 const HEAD_CLOSE = /<\/head\s*>/i;
 const BODY_OPEN = /<body(?:\s[^>]*)?>/i;
 
 /**
- * The runtime and bridge tags a written file carries: a motion gets the runtime, then the
- * bridge; an agent's page gets the bridge only. A tag the document already has (by its
+ * The tags a written file carries. The tokens tag goes first, right after the opening head
+ * tag (so it runs before anything the artifact puts in its head). Then, before the head's
+ * close, come the runtime (a motion only) and the bridge. A document with no head gets them
+ * after its opening body tag, else at the very top. A tag the document already has (by its
  * marker) is skipped, so reading a file back and writing it again adds nothing.
  */
 export const injectTags = (html: string, kind: ArtifactKind): string => {
   const tags: string[] = [];
   if (kind === "motion" && !HAS_RUNTIME.test(html)) tags.push(RUNTIME_TAG);
   if (!HAS_BRIDGE.test(html)) tags.push(BRIDGE_TAG);
-  if (tags.length === 0) return html;
-  const block = tags.join("\n");
-  const head = HEAD_CLOSE.exec(html);
-  if (head) return `${html.slice(0, head.index)}${block}\n${html.slice(head.index)}`;
-  const body = BODY_OPEN.exec(html);
+  let out = html;
+  if (tags.length > 0) {
+    const block = tags.join("\n");
+    const head = HEAD_CLOSE.exec(html);
+    if (head) out = `${html.slice(0, head.index)}${block}\n${html.slice(head.index)}`;
+    else {
+      const body = BODY_OPEN.exec(html);
+      if (body) {
+        const end = body.index + body[0].length;
+        out = `${html.slice(0, end)}\n${block}${html.slice(end)}`;
+      } else out = `${block}\n${html}`;
+    }
+  }
+  if (HAS_TOKENS.test(out)) return out;
+  const opening = HEAD_OPEN.exec(out);
+  if (opening) {
+    const end = opening.index + opening[0].length;
+    return `${out.slice(0, end)}${TOKENS_TAG}\n${out.slice(end)}`;
+  }
+  const body = BODY_OPEN.exec(out);
   if (body) {
     const end = body.index + body[0].length;
-    return `${html.slice(0, end)}\n${block}${html.slice(end)}`;
+    return `${out.slice(0, end)}\n${TOKENS_TAG}${out.slice(end)}`;
   }
-  return `${block}\n${html}`;
+  return `${TOKENS_TAG}\n${out}`;
 };
 
 /** The title an artifact shows: its title, else its original file name without `.html` or `.htm`, else nothing. */
