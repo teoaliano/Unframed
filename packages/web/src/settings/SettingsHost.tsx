@@ -1,5 +1,5 @@
 /**
- * Settings in the chrome (spec 10): the button in the top-right card's Settings slot and the
+ * Settings in the chrome: the button in the top-right card's Settings slot and the
  * dialog it opens. The pending OpenRouter connection lives here, above the dialog.
  */
 import { KeyRound, Settings as Gear } from "lucide-react";

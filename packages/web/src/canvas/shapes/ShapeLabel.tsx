@@ -5,7 +5,7 @@ import { pressLabel, renamingShape, startRename } from "../rename.ts";
 import { RenameField } from "./RenameField.tsx";
 import { shapeLabelClass } from "./looks.ts";
 
-const KIND_WORDS: Readonly<Record<string, string>> = { prompt: "Prompt", group: "Group", image: "Image", video: "Video", page: "Page", motion: "Motion" };
+const KIND_WORDS: Readonly<Record<string, string>> = { prompt: "Prompt", group: "Group", image: "Image", video: "Video", page: "Page", motion: "Motion", style: "Style" };
 
 /**
  * The label above a shape's top-left corner, in a 22 px band that is part of the shape and

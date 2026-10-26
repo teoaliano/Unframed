@@ -24,7 +24,7 @@ export const RPC_PATH = "/ws";
 /**
  * Methods whose payload refuses any field its schema does not name, at any depth. A chat
  * command never carries a binary path or anything else a page could use to choose what
- * runs (spec 07): paths arrive only through settings.
+ * runs: paths arrive only through settings.
  */
 const STRICT_PAYLOADS: ReadonlySet<string> = new Set(["orchestration.dispatchCommand"]);
 
@@ -32,7 +32,7 @@ const STRICT_PAYLOADS: ReadonlySet<string> = new Set(["orchestration.dispatchCom
  * The RPC socket at `/ws`: every connected client, and the RPC server protocol that
  * carries their messages. One bad frame closes only its own socket. Hand-written because
  * Effect's socket protocol answers a non-JSON frame and an undecodable payload with a
- * defect, where the spec needs a 1007 close and `bad_request` naming the field.
+ * defect, where a bad frame needs a 1007 close and `bad_request` naming the field.
  */
 export class RpcSockets extends Context.Service<
   RpcSockets,

@@ -4,7 +4,7 @@ import { emptyCanvasPoint, openCanvas, roomRecords, shapeOnScreen, toast } from 
 import { expect, test } from "./fixtures.ts";
 import { expectSlot, expectToken } from "./kit.ts";
 import { presetsFile, writePresets } from "./library.ts";
-import { artifactRecord, emptyMedia, groupRecord, inGroup, promptRecord, putRecords } from "./media.ts";
+import { artifactRecord, emptyMedia, groupRecord, inGroup, promptRecord, putRecords, styleRecord } from "./media.ts";
 
 const menu = (page: Page) => page.getByTestId("context-menu");
 const addToLibrary = (page: Page) => menu(page).getByTestId("context-menu.unframed-add-to-library");
@@ -177,4 +177,17 @@ test("a save that fails says so under the name and keeps the dialog open", async
   await expect(saveDialog(page).getByRole("alert")).toHaveText("Could not save. Is the local server running?");
   await expect(saveDialog(page)).toBeVisible();
   expect(await readFile(presetsFile(engine), "utf8")).toBe("[ not json");
+});
+
+test("saving a style offers its title as the name, with placeholders for a style", async ({ page, engine }) => {
+  await openCanvas(page, engine);
+  await putRecords(engine, [styleRecord("shape:linear", "310", { x: 440, y: 80 }, "1-linear.md", "Linear")]);
+  await expect(shapeOnScreen(page, "shape:linear")).toBeVisible();
+  await rightClickShape(page, "shape:linear");
+  await addToLibrary(page).click();
+  const dialog = saveDialog(page);
+  const name = dialog.getByRole("textbox", { name: "Name" });
+  await expect(name).toHaveValue("Linear");
+  await expect(name).toHaveAttribute("placeholder", "e.g. Brand guidelines");
+  await expect(dialog.getByRole("textbox", { name: "Description" })).toHaveAttribute("placeholder", "The look it gives, in a line");
 });

@@ -33,6 +33,7 @@ const chat = (messages: ChatMessage[], activities: ChatActivity[]): Chat => ({
   title: "",
   titledBy: null,
   tags: [],
+  style: null,
   modelSelection: { provider: "claude", model: "", traits: {} },
   runtimeMode: "full-access",
   interactionMode: "default",

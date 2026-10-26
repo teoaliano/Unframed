@@ -1,5 +1,5 @@
 /**
- * The window's share of the live selection (spec 14, "The live selection"): it reports its
+ * The window's share of the live selection: it reports its
  * selection of this project to the engine when it changes, and selects what the engine asks.
  */
 import type { Editor, TLShapeId } from "tldraw";

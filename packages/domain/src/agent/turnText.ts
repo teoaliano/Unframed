@@ -1,5 +1,5 @@
 /**
- * The sentences a turn is framed with (spec 07): the canvas tools check, the failure
+ * The sentences a turn is framed with: the canvas tools check, the failure
  * sentence, the change note and the preamble the model reads before each message.
  */
 import { UNFRAMED_TOOL_PREFIX } from "./permissionPolicy.ts";
@@ -143,13 +143,17 @@ export const attachmentLines = (attachments: ReadonlyArray<PreambleAttachment>):
     ? undefined
     : attachments.map((attachment) => `Attached ${attachment.kind === "image" ? "image" : "file"} "${attachment.name}": ${attachment.path}`).join("\n");
 
-/** The preamble: the selection, the change note and the attachments, each its own paragraph. */
+/** The preamble: the selection, the chat's style, the change note and the attachments, each its own paragraph. */
 export const buildPreamble = (parts: {
   readonly selected: ReadonlyArray<SelectedShape>;
+  /** The line naming the style the chat follows (`styleLine`), never the document. */
+  readonly style?: string | undefined;
   readonly changeNote?: string | undefined;
   readonly attachments: ReadonlyArray<PreambleAttachment>;
 }): string =>
-  [selectionLine(parts.selected), parts.changeNote, attachmentLines(parts.attachments)].filter((part): part is string => part !== undefined).join("\n\n");
+  [selectionLine(parts.selected), parts.style, parts.changeNote, attachmentLines(parts.attachments)]
+    .filter((part): part is string => part !== undefined)
+    .join("\n\n");
 
 /** The model's copy of a message: the preamble, then the person's text. */
 export const modelMessage = (preamble: string, text: string): string => (preamble === "" ? text : text === "" ? preamble : `${preamble}\n\n${text}`);

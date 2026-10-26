@@ -1,5 +1,5 @@
 /**
- * The tab's poll of its render placeholders (spec 04). The engine's sweep is what lands a
+ * The tab's poll of its render placeholders. The engine's sweep is what lands a
  * render with no tab open; this only shortens the wait. The shape's own update from the
  * engine is what the tab shows.
  */

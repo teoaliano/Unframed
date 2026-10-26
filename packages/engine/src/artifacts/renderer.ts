@@ -1,8 +1,8 @@
 /**
- * Motion renders (spec 09): a composition to an MP4 with HyperFrames' producer and the
+ * Motion renders: a composition to an MP4 with HyperFrames' producer and the
  * person's own Chrome, in the engine. Renders are an in-memory map, not a durable store: a
  * render is free local compute on files still on disk, so one lost to a restart costs a
- * click. Each joins spec 03's run registry, so its placeholder is resolved like any
+ * click. Each joins the run registry, so its placeholder is resolved like any
  * non-durable run.
  */
 import { randomBytes } from "node:crypto";
@@ -113,9 +113,9 @@ export interface RendererDeps {
   readonly slug: (project: string) => string;
   readonly read: (project: string) => Promise<ReadonlyArray<TLRecord>>;
   readonly apply: (project: string, change: CanvasChange, origin: ChangeOrigin) => Promise<Applied>;
-  /** Spec 03's run registry. */
+  /** The run registry. */
   readonly track: (runId: string, project: string) => { settle: (outcome: RunOutcome<LandedClip>) => void; forget: () => void };
-  /** Spec 01's open-project registry: answers the closer's unregister function. */
+  /** The open-project registry: answers the closer's unregister function. */
   readonly registerCloser: (project: string, close: () => Promise<void>) => Promise<unknown>;
 }
 

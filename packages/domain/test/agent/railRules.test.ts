@@ -163,20 +163,43 @@ describe("the recap rows", () => {
       ...call("mcp__unframed__motion_read", { shapeId: "m1" }),
       ...call("mcp__unframed__canvas_write", { ops: [{ type: "create", id: "new:note", kind: "prompt", x: 0, y: 0 }, { type: "move", id: "m1", x: 1, y: 2 }, { type: "update", id: "shape:p2" }] }, { ok: true, ids: { "new:note": "p7" } }),
       ...call("mcp__unframed__page_write", { shapeId: "g1", title: "Landing" }),
+      ...call("mcp__unframed__page_edit", { shapeId: "g3", edits: [] }),
+      ...call("mcp__unframed__motion_edit", { shapeId: "m4", edits: [] }),
     ];
     const rows = recapRows(activities, [], [
       { id: "shape:m1", kind: "motion", title: "Intro" },
       { id: "shape:p7", kind: "prompt" },
       { id: "shape:p2", kind: "prompt", title: "  " },
       { id: "shape:g1", kind: "page", fileName: "landing.html" },
+      { id: "shape:g3", kind: "page", title: "Pricing" },
+      { id: "shape:m4", kind: "motion", title: "Outro" },
     ]);
     expect(rows.map((row) => [row.shapeId, row.kind, row.label])).toEqual([
       ["shape:m1", "motion", "Intro"],
       ["shape:p7", "prompt", "p7"],
       ["shape:p2", "prompt", "p2"],
       ["shape:g1", "page", "landing"],
+      ["shape:g3", "page", "Pricing"],
+      ["shape:m4", "motion", "Outro"],
     ]);
     expect(rows.some((row) => row.shapeId === "shape:p9")).toBe(false);
+  });
+
+  it("leaves out calls that failed: a refused write touched nothing", () => {
+    const refused = (toolName: string, input: Record<string, unknown>) => {
+      const itemId = `i${++sequence}`;
+      return [
+        activity("tool.started", { itemId, itemType: "mcp_tool_call", status: "inProgress", data: { toolName, input } }),
+        activity("tool.completed", { itemId, itemType: "mcp_tool_call", status: "failed", data: { toolName, result: { error: "refused" } } }),
+      ];
+    };
+    const activities = [
+      ...refused("mcp__unframed__page_edit", { shapeId: "g1", edits: [] }),
+      ...refused("mcp__unframed__page_write", { shapeId: "g1", html: "<p>" }),
+      ...refused("mcp__unframed__canvas_write", { ops: [{ type: "move", id: "p1", x: 0, y: 0 }] }),
+    ];
+    expect(recapRows(activities, [], [{ id: "shape:g1", kind: "page", title: "Landing" }])).toEqual([]);
+    expect(recapRows([...activities, ...call("mcp__unframed__page_read", { shapeId: "g1" })], [], [{ id: "shape:g1", kind: "page", title: "Landing" }]).map((row) => row.label)).toEqual(["Landing"]);
   });
 
   it("adds the turn changes after the tool calls, and offers a diff for a page or motion whose file the turn wrote", () => {

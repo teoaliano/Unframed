@@ -20,7 +20,7 @@ export interface ToolbarShape {
   readonly result?: ResultFacts | undefined;
   /** The shape carries a run marker. */
   readonly generating?: boolean | undefined;
-  /** Present on a group with a standing recipe (spec 06): how many outputs it makes. */
+  /** Present on a group with a standing recipe: how many outputs it makes. */
   readonly recipe?: { readonly runs: RunsValue } | undefined;
 }
 
@@ -43,7 +43,7 @@ export type ToolbarState =
   | { readonly kind: "generating"; readonly shapeId: string }
   | { readonly kind: "open"; readonly shapeId: string }
   | { readonly kind: "generate"; readonly hint: string }
-  /** Spec 06: exactly one recipe group among the selection. Its Generate runs the recipe at once. */
+  /** Exactly one recipe group among the selection. Its Generate runs the recipe at once. */
   | { readonly kind: "recipe"; readonly groupId: string; readonly name: string; readonly runs: RunsValue }
   | { readonly kind: "agent" };
 
@@ -58,9 +58,10 @@ export const formatCost = (cost: number): string => `$${cost.toFixed(4)}`;
 /**
  * What a selection is called on the toolbar and above the composer's box: `@<name>` for
  * exactly one group, `<n> images · $<total>` for exactly every member of one batch of two
- * or more, otherwise `<n> selected`.
+ * or more, otherwise `<n> selected`. Generate sends nothing of a style, so styles are not counted.
  */
-export const selectionHint = (selected: ReadonlyArray<ToolbarShape>, results: ReadonlyArray<ToolbarShape>): string => {
+export const selectionHint = (all: ReadonlyArray<ToolbarShape>, results: ReadonlyArray<ToolbarShape>): string => {
+  const selected = all.filter((shape) => shape.kind !== "style");
   const [only] = selected;
   if (selected.length === 1 && only?.kind === "group" && only.ref !== undefined) return `@${only.ref}`;
   return batchHint(selected, results) ?? `${selected.length} selected`;
@@ -93,7 +94,7 @@ export const toolbarState = (input: ToolbarInput): ToolbarState => {
       if (only.generating) return { kind: "generating", shapeId: only.id };
       return { kind: "result", shapeId: only.id, generate: input.usable };
     }
-    if ((only.kind === "page" || only.kind === "motion") && only.file) return { kind: "open", shapeId: only.id };
+    if ((only.kind === "page" || only.kind === "motion" || only.kind === "style") && only.file) return { kind: "open", shapeId: only.id };
   }
   const recipeGroup = recipeGroupOf(selected);
   if (recipeGroup?.recipe) return { kind: "recipe", groupId: recipeGroup.id, name: recipeGroup.ref ?? "", runs: recipeGroup.recipe.runs };

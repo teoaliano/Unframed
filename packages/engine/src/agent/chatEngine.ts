@@ -54,7 +54,7 @@ const readEvent = (row: Record<string, unknown>): ChatEvent => ({
 });
 
 /**
- * One project's chat store (spec 07, t3code's orchestration engine): one queue that takes
+ * One project's chat store (t3code's orchestration engine): one queue that takes
  * commands one at a time. For each: look up its receipt, decide against the in-memory
  * model, then in ONE SQLite transaction append the events, apply the SQL projectors and
  * write the receipt. Only after the commit does the model change and do listeners hear.

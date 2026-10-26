@@ -355,7 +355,7 @@ export const CompactControlsMenu = ({
 // ---------------------------------------------------------------------------------------
 // The context window meter.
 
-/** The chat's latest token usage, from spec 07's context window activities. */
+/** The chat's latest token usage, from the context window activities. */
 export const latestUsage = (chat: Chat | undefined): ContextUsage | undefined => {
   for (const activity of [...(chat?.activities ?? [])].reverse()) {
     if (activity.kind !== "context-window.updated") continue;

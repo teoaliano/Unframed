@@ -2,7 +2,7 @@ import { expect, isSettingsChunk, test, watchRpcSockets } from "./fixtures.ts";
 
 /**
  * The shell's colour hooks keep the formats it has always read, a hex secondary text colour
- * and an rgb() body, now from t3code's tokens (spec 12): the muted foreground (zinc-500 in
+ * and an rgb() body, now from t3code's tokens: the muted foreground (zinc-500 in
  * light, neutral-500 mixed 90 % with white in dark) and the background (zinc-25, neutral-950).
  */
 const LIGHT = { background: "rgb(252, 252, 252)", secondary: "#71717b" };

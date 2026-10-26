@@ -1,5 +1,5 @@
 /**
- * The kit's looks for Unframed's own shape parts (spec 12). tldraw draws the shapes, so
+ * The kit's looks for Unframed's own shape parts. tldraw draws the shapes, so
  * these are class recipes on plain elements rather than kit components.
  */
 
@@ -12,3 +12,6 @@ export const mediaCardClass = "box-border rounded-lg border bg-card font-sans te
 
 /** An empty page or motion, and a filled one's still: the kit's card with the larger radius. */
 export const artifactCardClass = "box-border rounded-xl border bg-card";
+
+/** A style document: the kit's card with square corners. */
+export const styleCardClass = "box-border border bg-card";

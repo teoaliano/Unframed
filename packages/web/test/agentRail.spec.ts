@@ -97,7 +97,7 @@ test("the rail is t3code's chat panel on the kit: a shell on --background with a
   await expect(tabs(page).first()).toHaveText("Eighth");
   await inBothSchemes(page, async () => {
     await page.mouse.move(10, 400);
-    // Solid --background, not glass: spec 12's budget decides, and the glass rail crossed spec 02's pan budget.
+    // Solid --background, not glass: the glass rail crossed the pan frame budget.
     await expectToken(panel, "background-color", "--background");
     await expectToken(panel, "border-left-color", "--color-border");
     await expect(panel.getByRole("heading", { name: "Agent" })).toBeVisible();

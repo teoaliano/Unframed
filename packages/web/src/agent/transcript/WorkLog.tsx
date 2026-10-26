@@ -48,6 +48,10 @@ export const IconSlot = ({ children, tone = "muted" }: { readonly children: Reac
   <span className={tone === "error" ? "flex size-6 shrink-0 items-center justify-center text-destructive" : "flex size-6 shrink-0 items-center justify-center text-icon-muted"}>{children}</span>
 );
 
+/** A notice row (the chat's style changing) wraps instead of cutting its sentence short, its icon on the first line. */
+const NOTICE_ROW_CLASS =
+  "group/timeline-row relative flex min-h-6 w-full min-w-0 select-none items-start gap-1.5 rounded-md px-0.5 py-0.5 text-left text-sm leading-relaxed transition-colors duration-150";
+
 /** Where an opened row's detail sits: under the label, on the muted fill. */
 const BODY_CLASS = "ms-7 mt-1 mb-1 cursor-default rounded-md bg-muted/40 px-3 py-2";
 
@@ -64,12 +68,16 @@ export const WorkRowView = ({ row }: { readonly row: WorkRow }) => {
   const [open, setOpen] = useState(false);
   const expandable = row.command !== undefined || row.detail !== undefined || (row.changedFiles?.length ?? 0) > 1 || row.image !== undefined;
   const failed = row.tone === "error" || row.state === "failed";
+  const notice = row.tone === "info" && !expandable;
   const head = (
     <>
       <IconSlot tone={failed ? "error" : "muted"}>
         <StateIcon state={row.state} tone={row.tone} />
       </IconSlot>
-      <span className={failed ? "min-w-0 flex-1 truncate font-medium text-destructive-foreground" : "min-w-0 flex-1 truncate text-secondary-label"} data-testid="work-row-label">
+      <span
+        className={failed ? "min-w-0 flex-1 truncate font-medium text-destructive-foreground" : notice ? "min-w-0 flex-1 break-words text-secondary-label" : "min-w-0 flex-1 truncate text-secondary-label"}
+        data-testid="work-row-label"
+      >
         {row.label}
       </span>
       <Chevron open={open} hidden={!expandable} />
@@ -82,7 +90,7 @@ export const WorkRowView = ({ row }: { readonly row: WorkRow }) => {
           {head}
         </Disclosure>
       ) : (
-        <div className={ROW_CLASS}>{head}</div>
+        <div className={notice ? NOTICE_ROW_CLASS : ROW_CLASS}>{head}</div>
       )}
       {open && (
         <div className={BODY_CLASS} data-testid="work-row-body">

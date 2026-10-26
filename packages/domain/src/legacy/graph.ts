@@ -1,5 +1,5 @@
 /**
- * The old app's project graph (spec 11): nodes wired by edges, as `graph.json` and each
+ * The old app's project graph: nodes wired by edges, as `graph.json` and each
  * `graph.log` op leave it. Only the reader builds these; the normaliser and the mapper
  * read them.
  */

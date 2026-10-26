@@ -8,7 +8,7 @@ import { ENGINE_VERSION } from "./version.ts";
 import { errorText } from "../log.ts";
 import type { ConnectionBook, ConnectionRecord } from "../agentConnections/book.ts";
 
-/** The one tool an outside connection has before the canvas tools join the list (spec 14). */
+/** The one tool an outside connection has before the canvas tools join the list. */
 export const PROJECTS_LIST = "projects_list";
 
 export const MCP_PATH = "/mcp";
@@ -19,7 +19,7 @@ const PROTOCOL_VERSION = "2025-06-18";
 export interface McpBinding {
   readonly project: string;
   readonly chatId: string;
-  /** The outside connection the call came through, when it came through one (spec 14). */
+  /** The outside connection the call came through, when it came through one. */
   readonly connectionId?: string;
 }
 
@@ -55,11 +55,11 @@ export class McpTokens {
   }
 }
 
-/** A tool result: JSON text, marked as an error for a refusal. Never bytes, except a preview's screenshot (spec 09). */
+/** A tool result: JSON text, marked as an error for a refusal. Never bytes, except a preview's screenshot. */
 export interface ToolAnswer {
   readonly value: unknown;
   readonly isError?: boolean;
-  /** Plain text notes that come before the JSON, such as an outside chat's change note (spec 14). */
+  /** Plain text notes that come before the JSON, such as an outside chat's change note. */
   readonly notes?: ReadonlyArray<string>;
   /** Pictures that follow the JSON as MCP image content. */
   readonly images?: ReadonlyArray<{ readonly data: string; readonly mimeType: string }>;
@@ -75,7 +75,7 @@ export interface McpTool {
   readonly call: (binding: McpBinding, args: Record<string, unknown>) => Promise<ToolAnswer>;
 }
 
-/** The tools the Unframed server registers. Spec 09 adds its artifact and preview tools here. */
+/** The tools the Unframed server registers. The artifact and preview tools join them here. */
 export class McpToolRegistry {
   private readonly tools = new Map<string, McpTool>();
 
@@ -131,7 +131,7 @@ export interface OutsideProject {
   readonly active: boolean;
 }
 
-/** Spec 14: a session's id is the MCP session header `initialize` answers with a fresh UUID. */
+/** A session's id is the MCP session header `initialize` answers with a fresh UUID. */
 const SESSION_HEADER = "mcp-session-id";
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 export const SESSION_ID_SENTENCE = "Send the Mcp-Session-Id that initialize answered.";
@@ -139,7 +139,7 @@ export const SESSION_ID_SENTENCE = "Send the Mcp-Session-Id that initialize answ
 /**
  * The Unframed MCP endpoint, streamable HTTP answered as plain JSON, on the engine's origin
  * behind the loopback guard. A request without a live session token or a live connection
- * token is refused with 401 before any tool runs. A connection token (spec 14) reaches only
+ * token is refused with 401 before any tool runs. A connection token reaches only
  * the outside tool list, under the session its `initialize` opened.
  */
 export const mcpRoute =
@@ -229,7 +229,7 @@ const outsideRequest = async (req: http.IncomingMessage, res: http.ServerRespons
   return true;
 };
 
-/** A tool's schema with the required `project` every outside call names (spec 14, "The outside tool list"). */
+/** A tool's schema with the required `project` every outside call names. */
 export const withProject = (tool: Pick<McpTool, "name" | "description" | "inputSchema">) => {
   const schema = tool.inputSchema as { properties?: Record<string, unknown>; required?: string[] };
   return {
@@ -248,7 +248,7 @@ const PROJECTS_LIST_TOOL = { name: PROJECTS_LIST, description: OUTSIDE_PROJECTS_
 /** The outside tool list: `projects_list` first, then each Unframed tool with a required `project`. The shim answers from this too. */
 export const outsideToolList = (tools: ReadonlyArray<Pick<McpTool, "name" | "description" | "inputSchema">>) => [PROJECTS_LIST_TOOL, ...tools.map(withProject)];
 
-/** The `initialize` answer an outside connection gets (spec 14). */
+/** The `initialize` answer an outside connection gets. */
 export const outsideInitializeResult = (protocolVersion: unknown) => ({
   protocolVersion: typeof protocolVersion === "string" ? protocolVersion : PROTOCOL_VERSION,
   capabilities: { tools: { listChanged: false } },

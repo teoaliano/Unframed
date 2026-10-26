@@ -1,5 +1,5 @@
 /**
- * A motion's render (spec 09): started from the selection toolbar or the editor's header,
+ * A motion's render: started from the selection toolbar or the editor's header,
  * followed until the engine lands the MP4, and shown under the shape while it runs. The
  * state is the canvas's, by shape, so every place that starts or shows a render agrees.
  */

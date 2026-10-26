@@ -1,7 +1,7 @@
-import { activityLabel, agentShapeId, resetMoment, buildTimeline, type TimelineBlock, formatWorkDuration, revertSkipLine, type Chat, type ChatMessage, type ChatTurn } from "@unframed/domain";
+import { activityLabel, agentShapeId, resetMoment, roomShapeId, shapeLabel, buildTimeline, type TimelineBlock, formatWorkDuration, revertSkipLine, type Chat, type ChatMessage, type ChatTurn } from "@unframed/domain";
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { Brain, ChevronDown, ChevronRight, Clock, Undo2, X } from "lucide-react";
-import { useMaybeEditor } from "tldraw";
+import { useMaybeEditor, type TLShapeId } from "tldraw";
 import { Badge } from "~/components/ui/badge";
 import { Button, InlineButton } from "~/components/ui/button";
 import { Tip } from "../../chrome/ui.tsx";
@@ -126,7 +126,7 @@ export interface TranscriptProps {
   readonly onOpenEditor?: (shapeId: string) => void;
 }
 
-/** The line at the foot of an outside chat once its session ends or its connection is revoked (spec 14). */
+/** The line at the foot of an outside chat once its session ends or its connection is revoked. */
 const OutsideNote = ({ activities }: { readonly activities: Chat["activities"] }) => {
   const last = [...activities].reverse().find((activity) => activity.kind === "outside.disconnected" || activity.kind === "outside.session-ended");
   if (!last) return null;
@@ -197,7 +197,8 @@ export const Transcript = ({ client, chatId, embedded, onLocate, onOpenEditor }:
 
   if (!chat) return <div className={SCROLLER_CLASS} data-testid="transcript" />;
   const author = chat.modelSelection.provider === "outside" ? "Outside Unframed" : providerName(chat.modelSelection.provider);
-  const timeline = buildTimeline(chat);
+  // A refused call carries no title back, so its row reads the shape's title off the canvas.
+  const timeline = buildTimeline(chat, { titleOf: (id) => (editor ? shapeLabel((editor.getShape(roomShapeId(id) as TLShapeId)?.props ?? {}) as Record<string, unknown>) : undefined) });
   const latest = chat.latestTurn;
   const streaming = chat.messages.some((message) => message.streaming && message.role === "assistant" && message.turnId === latest?.turnId);
   const assistant = (message: ChatMessage) => (

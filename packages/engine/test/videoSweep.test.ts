@@ -141,7 +141,7 @@ describe("the job store", () => {
       return Buffer.from("moved clip");
     });
     await eventually(async () => rendering.jobs.downloads.length === 1, "the download to start");
-    // Spec 10 repoints a renamed project's pending records while the clip is on its way.
+    // The lifecycle repoints a renamed project's pending records while the clip is on its way.
     const renamed = join(rendering.output, "renamed");
     await mkdir(renamed, { recursive: true });
     const jobs = await readJobs(rendering);

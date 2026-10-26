@@ -1,5 +1,5 @@
 /**
- * Recipe groups (spec 06): a group's standing settings, spec 03's `GroupRecipe`, as the
+ * Recipe groups: a group's standing settings, the `GroupRecipe`, as the
  * composer's tray and the group's label speak it.
  */
 import { readRunsValue, type RunsValue } from "./runsValue.ts";
@@ -8,7 +8,7 @@ import { modelPart } from "./toolbar.ts";
 export type RecipeMedium = "image" | "video" | "text";
 export type RecipeValue = string | number | boolean;
 
-/** Spec 03's `GroupRecipe`: no instruction, no selection prompt, no references. */
+/** The `GroupRecipe`: no instruction, no selection prompt, no references. */
 export interface GroupRecipe {
   readonly medium: RecipeMedium;
   readonly model: string;

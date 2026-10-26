@@ -1,5 +1,5 @@
 /**
- * The Agent tray's rules (spec 08, after t3code's composer logic): when a paste becomes a
+ * The Agent tray's rules (after t3code's composer logic): when a paste becomes a
  * file and what it is called, how slash commands rank, and what the context window meter
  * says.
  */
@@ -141,7 +141,7 @@ export const formatTokens = (value: number): string => {
 
 const formatPercent = (value: number): string => (value < 10 ? `${value.toFixed(1).replace(/\.0$/, "")}%` : `${Math.round(value)}%`);
 
-/** What the context window meter shows for a usage (spec 08). */
+/** What the context window meter shows for a usage. */
 export const contextMeter = (usage: ContextUsage): ContextMeterView => {
   const max = usage.maxTokens !== undefined && usage.maxTokens > 0 ? usage.maxTokens : undefined;
   const percent = max === undefined ? null : Math.max(0, Math.min(100, (usage.usedTokens / max) * 100));

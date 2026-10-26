@@ -1,4 +1,4 @@
-/** Browser-seam helpers for spec 06's library: presets written straight into `presets.json`, and the dialogs. */
+/** Browser-seam helpers for the library: presets written straight into `presets.json`, and the dialogs. */
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { Locator, Page } from "@playwright/test";

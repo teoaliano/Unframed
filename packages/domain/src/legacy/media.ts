@@ -1,5 +1,5 @@
 /**
- * Media in old graphs (spec 11): inline `data:` URLs, `https://` clip links, file names
+ * Media in old graphs: inline `data:` URLs, `https://` clip links, file names
  * carried in result URLs and saved paths, and the names extracted files get.
  */
 import { extensionFor } from "../media.ts";

@@ -1,5 +1,5 @@
 /**
- * What the canvas knows about its artifacts beyond their records (spec 09): which are pinned
+ * What the canvas knows about its artifacts beyond their records: which are pinned
  * with "Keep playing", which one is open in the editor, which one has its Parameters panel
  * open, which ones run a live frame and what each live frame announced, the preview origin's
  * port and each shape's status line. Every fact a shape component reads is

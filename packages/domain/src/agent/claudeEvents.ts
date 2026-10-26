@@ -1,5 +1,5 @@
 /**
- * The Claude adapter's pure half (spec 07): how the Agent SDK's messages become canonical
+ * The Claude adapter's pure half: how the Agent SDK's messages become canonical
  * runtime events, as t3code maps them. A small state carries what one message needs from
  * the ones before it (the tool a result answers, whether text arrived as deltas).
  */

@@ -3,7 +3,7 @@ import { refTokens } from "../refs.ts";
 const NUMERIC = /^\d+$/;
 
 /**
- * Spec 02's `nextRef` over an old graph while it is being imported: one past the largest
+ * `nextRef` over an old graph while it is being imported: one past the largest
  * numeric id and numeric `@` token, and 99, counting every ref minted so far. `texts` are
  * every text that will be a prompt on the new canvas, answers included.
  */

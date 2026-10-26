@@ -56,7 +56,7 @@ test("the tray: the model chip, the default props the model declares, value menu
   await expect(page.getByRole("menu", { name: "Size" })).toHaveCount(0);
   await expect(composer(page)).toBeVisible();
 
-  // With every declared prop in the tray, + add prop lists only Runs (spec 05), which is not a model trait.
+  // With every declared prop in the tray, + add prop lists only Runs, which is not a model trait.
   for (const [label, menu] of [
     ["Ratio 1:1", "Ratio"],
     ["Format png", "Format"],

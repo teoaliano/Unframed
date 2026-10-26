@@ -29,12 +29,13 @@ import { PreferencesStore } from "../preferencesStore.ts";
 import { Projects } from "../projects.ts";
 import { AgentRuntime, DispatchError } from "./runtime.ts";
 import { ArtifactTools } from "../artifacts/artifactTools.ts";
+import { StyleTools } from "../styles/styleTools.ts";
 import { Artifacts } from "../artifacts/layer.ts";
 import { PreviewTools } from "../artifacts/previewTools.ts";
 import { openShell, openThread } from "./subscriptions.ts";
 
 /**
- * The agent runtime at the Effect boundary (spec 07): the RPC methods and the two plain HTTP
+ * The agent runtime at the Effect boundary: the RPC methods and the two plain HTTP
  * routes (the MCP endpoint and the signed attachment upload path).
  */
 export class Agents extends Context.Service<
@@ -77,7 +78,7 @@ export const agentsLayer = Layer.effect(
         throw error instanceof UnframedError ? new Error(error.message) : error;
       });
 
-    /** Every project in the output folder, sorted by name, with its folder and the active one (spec 14). */
+    /** Every project in the output folder, sorted by name, with its folder and the active one. */
     const outsideProjects = (): Promise<ReadonlyArray<OutsideProject>> =>
       run(
         Effect.gen(function* () {
@@ -143,7 +144,7 @@ export const agentsLayer = Layer.effect(
       runEnvironment: (provider) => run(detection.runEnvironment(provider)),
       defaultModel: async (provider) => defaultModel((await run(detection.statuses({})))[provider].models ?? []),
       realAdapter,
-      extraTools: (tools) => [...new ArtifactTools(tools, () => previewPort).tools(), ...preview.tools()],
+      extraTools: (tools) => [...new ArtifactTools(tools, () => previewPort).tools(), ...new StyleTools(tools).tools(), ...preview.tools()],
       onSessionClosed: (_project, chatId) => void preview.closeChat(chatId),
     });
 

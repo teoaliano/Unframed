@@ -105,7 +105,7 @@ const cursorOf = (value: unknown): ClaudeCursor => {
 };
 
 /**
- * The Claude adapter (spec 07): one long-lived Agent SDK `query()` per chat, fed by a
+ * The Claude adapter: one long-lived Agent SDK `query()` per chat, fed by a
  * streaming prompt, with Claude Code's own tools and system prompt, Unframed's
  * instructions appended, the Unframed MCP server over HTTP, and every permission decision
  * made by the permission policy.
@@ -219,7 +219,7 @@ export const claudeAdapter = (context: AdapterContext): ProviderAdapter => {
         systemPrompt: { type: "preset", preset: "claude_code", append: AGENT_SYSTEM_PROMPT },
         tools: { type: "preset", preset: "claude_code" },
         allowedTools: context.registeredTools().map((name) => `${UNFRAMED_TOOL_PREFIX}${name}`),
-        // The outside connection's server never serves an in-app session (spec 14).
+        // The outside connection's server never serves an in-app session.
         disallowedTools: inAppClaudeDisallowedTools(),
         settingSources: ["user", "project", "local"],
         mcpServers: { [MCP_SERVER_NAME]: { type: "http", url: input.mcp.url, headers: { Authorization: `Bearer ${input.mcp.token}` } } },

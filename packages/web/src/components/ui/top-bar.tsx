@@ -50,7 +50,7 @@ export interface TopBarProps {
   };
   /**
    * "flow" lays the regions out in a row (the catalogue). "fixed" leaves them to their own fixed positions, which the app's
-   * DOM hooks give them (spec 01), so the regions are not made relative.
+   * DOM hooks give them, so the regions are not made relative.
    */
   readonly layout?: "flow" | "fixed" | undefined;
   /**
@@ -94,7 +94,7 @@ const WindowDots = () => (
 );
 
 /**
- * The project tab bar (spec 17), drawn to the reference: a 48 px bar with a 20 px flare and corner at each end, its border on
+ * The project tab bar, drawn to the reference: a 48 px bar with a 20 px flare and corner at each end, its border on
  * the outline, the window controls and Settings beside it. The tabs are the kit's underline Tabs, the buttons the kit's
  * buttons; a right-click on a tab opens Close, Close all tabs, Rename and Delete.
  */
@@ -138,7 +138,7 @@ export const TopBar = ({
   };
 
   // Close, drag, middle-click and the right-click menu sit on the list, not on each tab: a handler per tab adds
-  // listeners the budget counts (spec 17).
+  // listeners the budget counts.
   const onListClick = (event: MouseEvent<HTMLDivElement>) => {
     if (!(event.target instanceof Element) || event.target.closest("[data-close]") === null) return;
     const name = tabOf(event.target);

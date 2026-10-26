@@ -1,5 +1,5 @@
 /**
- * The Codex adapter's pure half (spec 07): how `codex app-server` notifications and server
+ * The Codex adapter's pure half: how `codex app-server` notifications and server
  * requests become canonical runtime events, as t3code maps them, and what the person's
  * answers become on the wire.
  */

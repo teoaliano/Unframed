@@ -15,7 +15,7 @@ type Field = keyof SettingsPatchInput;
 const MODEL = /^[\w.-]+\/[\w.:-]+$/;
 const OPENROUTER_KEY = /^sk-or-[\w.-]{8,200}$/;
 
-/** The one key validator: a pasted key and a key OpenRouter returns (spec 10) pass the same check. */
+/** The one key validator: a pasted key and a key OpenRouter returns pass the same check. */
 export const isOpenRouterKey = (value: string): boolean => OPENROUTER_KEY.test(value);
 const COMMAND = /^[^\n\r"'#;&|$`<>(){}\s][^\n\r"'#;&|$`<>(){}]{0,399}$/;
 const MODEL_MESSAGE = 'That does not look like a model slug. Expected something like "openai/gpt-image-2".';

@@ -1,5 +1,5 @@
 /**
- * What the project mapper and the preset converter share (spec 11): the old app's default
+ * What the project mapper and the preset converter share: the old app's default
  * sizes, where a text output's instructions and answer go, and the approximate recipe an
  * imported result carries.
  */
@@ -62,7 +62,7 @@ export const grownToHold = (group: { readonly w: number; readonly h: number }, m
   h: Math.max(group.h, member.y + member.h + SIDE_MARGIN),
 });
 
-/** Spec 03's approximate recipe: what the old app recorded, and the prompt it sent when a sidecar says. */
+/** The approximate recipe: what the old app recorded, and the prompt it sent when a sidecar says. */
 export const resultRecipe = (
   medium: LegacyMedium,
   model: string,

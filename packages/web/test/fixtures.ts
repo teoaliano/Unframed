@@ -19,7 +19,7 @@ export const FIXTURE_KEY = "sk-or-v1-test-key-0000abcd";
  * Starts an engine serving the built web, the way the desktop shell hosts it, with the
  * test-only canvas methods on so a test can read what the room holds. Without a `dotenv`
  * it has a key from the process environment, because a keyless app opens the settings
- * dialog over the canvas at first load (spec 10); `.env` stays untouched either way.
+ * dialog over the canvas at first load; `.env` stays untouched either way.
  */
 export const startHostedEngine = (options: EngineOptions = {}): Promise<TestEngine> =>
   startEngine({
@@ -27,7 +27,7 @@ export const startHostedEngine = (options: EngineOptions = {}): Promise<TestEngi
     ...options,
     env: {
       UNFRAMED_TEST_CANVAS: "1",
-      // Spec 09: no engine-owned Chrome for snapshots or renders unless a test asks for the stub.
+      // No engine-owned Chrome for snapshots or renders unless a test asks for the stub.
       UNFRAMED_TEST_RENDERER: "no-chrome",
       ...NO_AGENT_CLI,
       ...(options.dotenv === undefined ? { OPENROUTER_API_KEY: FIXTURE_KEY } : {}),

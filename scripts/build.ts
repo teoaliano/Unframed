@@ -3,7 +3,7 @@
  *
  *   package.json            name "unframed", the engine version, no dev tooling
  *   server/index.js         the fork entry, every workspace and inlinable package inside
- *   server/mcp.js           the stdio shim an outside client runs (spec 14), the same bundling
+ *   server/mcp.js           the stdio shim an outside client runs, the same bundling
  *   client/dist/            the built web
  *   client/package.json     a shim so an older shell's `npm ci && npm run build` in
  *   client/package-lock.json  client/ succeeds and leaves client/dist alone
@@ -22,7 +22,7 @@ import { buildWeb, repoRoot } from "./buildWeb.ts";
  */
 export const RUNTIME_DEPENDENCIES: ReadonlyArray<string> = [
   "@anthropic-ai/claude-agent-sdk",
-  // Spec 09: the player, runtime and GSAP are copied from their installed files; the producer and puppeteer-core drive Chrome.
+  // The player, runtime and GSAP are copied from their installed files; the producer and puppeteer-core drive Chrome.
   "@hyperframes/core",
   "@hyperframes/engine",
   "@hyperframes/player",
@@ -108,7 +108,7 @@ export const buildBundle = async (out: string, env: Record<string, string | unde
 
   for (const [entry, outfile] of [
     [join(repoRoot, "packages/engine/src/main.ts"), join(out, "server", "index.js")],
-    // The stdio shim is a second entry: the outside setups run it through the Electron binary (spec 14).
+    // The stdio shim is a second entry: the outside setups run it through the Electron binary.
     [join(repoRoot, "packages/engine/src/mcpShim.ts"), join(out, "server", "mcp.js")],
   ] as const) {
     await build({

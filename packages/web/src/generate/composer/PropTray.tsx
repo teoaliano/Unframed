@@ -30,7 +30,7 @@ export interface PropTrayProps {
   readonly onMenuOpen: (open: boolean, close: () => void) => void;
 }
 
-/** The tray's one chip recipe (spec 12): the model chip, each prop chip and the Runs chip. */
+/** The tray's one chip recipe: the model chip, each prop chip and the Runs chip. */
 export const TrayChip = (props: ComponentProps<typeof Button>) => <Button variant="outline" size="compact" {...props} />;
 
 /**

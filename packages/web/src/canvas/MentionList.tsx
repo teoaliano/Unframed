@@ -31,7 +31,7 @@ const MentionThumb = ({ editor, row }: { readonly editor: Editor; readonly row: 
   if (row.kind === "image" && source.file !== undefined) {
     return (
       <span data-testid="mention-thumb" data-thumb="image" className="contents">
-        {/* A missing preview falls back to the original, as everywhere else (spec 02). */}
+        {/* A missing preview falls back to the original, as everywhere else. */}
         <img className={THUMB_CLASS} src={broken ? fileUrl(project, source.file) : previewUrl(project, source.file, 512)} alt="" draggable={false} onError={() => setBroken(true)} />
       </span>
     );
@@ -52,8 +52,8 @@ const MentionThumb = ({ editor, row }: { readonly editor: Editor; readonly row: 
 };
 
 /**
- * The rows of an `@` mention menu: a prompt's while it is edited (spec 02) and the
- * composer's box (spec 03). A press on a row inserts it; the highlighted row stays in view.
+ * The rows of an `@` mention menu: a prompt's while it is edited and the
+ * composer's box. A press on a row inserts it; the highlighted row stays in view.
  */
 export const MentionList = ({
   editor,

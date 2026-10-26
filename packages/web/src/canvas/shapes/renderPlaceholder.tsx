@@ -1,5 +1,5 @@
 /**
- * The render placeholder (spec 04): where a paid video render lands. Its state comes from
+ * The render placeholder: where a paid video render lands. Its state comes from
  * the shape's own `meta.unframed` fields, so every tab and every reload agrees.
  */
 import { runMarkerOf, unframedMetaOf } from "@unframed/contracts";

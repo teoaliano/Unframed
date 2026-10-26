@@ -1,10 +1,10 @@
 import type { ToolAnswer, McpBinding, McpTool } from "./mcp.ts";
 
-/** The description of `generate`, for an outside agent (spec 14). */
+/** The description of `generate`, for an outside agent. */
 export const GENERATE_DESCRIPTION =
   "Start one paid generation from the shapes you name: an image (one batch of up to 10 outputs), a video (one clip) or a text answer. The person pays OpenRouter for it. Call it with dryRun true first to see the final prompt and the estimate, then again to run. A selection that needs a sketch or a marked picture, or a reference video on this computer, cannot be sent from here: the answer says so, and the person makes that one in the app. The answer gives the run and its placeholders at once; the result lands later, and canvas_read shows its cost when it has one.";
 
-/** The `generate` tool, registered for an outside connection (spec 14). Its handler is the runtime's. */
+/** The `generate` tool, registered for an outside connection. Its handler is the runtime's. */
 export const generateTool = (run: (binding: McpBinding, args: Record<string, unknown>) => Promise<ToolAnswer>): McpTool => ({
   name: "generate",
   description: GENERATE_DESCRIPTION,

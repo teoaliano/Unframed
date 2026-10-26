@@ -1,7 +1,7 @@
 /**
  * The medium registry: the Generate tray reads its media from here. Each medium supplies
- * its label, catalogue, props, estimate, warnings and send. This spec registers `image`;
- * specs 04 and 05 register `video` and `text` the same way.
+ * its label, catalogue, props, estimate, warnings and send. `image` registers here;
+ * `video` and `text` register the same way.
  */
 import type { Medium, ModelEntry, ResultRecipe } from "@unframed/contracts";
 import type { CanvasShape, Composition, ModelParams } from "@unframed/domain";
@@ -34,12 +34,12 @@ export type RunSource =
       readonly kind: "selection";
       readonly composition: Composition;
       readonly selected: ReadonlyArray<string>;
-      /** The canvas the composition read, for rules that recompose it (spec 05's Free). */
+      /** The canvas the composition read, for rules that recompose it (Free). */
       readonly shapes: ReadonlyArray<CanvasShape>;
       /** The box's text as typed, before resolution. */
       readonly instruction: string;
       /**
-       * Recipe mode over an imported result (spec 11), which runs from its live sources: the
+       * Recipe mode over an imported result, which runs from its live sources: the
        * result the run answers for. Its outputs land beside it, and Free is not offered.
        */
       readonly answersFor?: string | undefined;
@@ -53,13 +53,13 @@ export interface SendInput {
   readonly project: string;
   readonly values: TrayValues;
   readonly source: RunSource;
-  /** False for a run that is not the composer's (spec 06's recipe group run): the last-used values stay as they were. */
+  /** False for a run that is not the composer's (a recipe group run): the last-used values stay as they were. */
   readonly remember?: boolean;
 }
 
 /**
  * What a send started: the batch whose events report its progress, or the shapes that
- * hold its work (spec 04's render placeholder). `"stay"` when nothing was sent yet.
+ * hold its work (the render placeholder). `"stay"` when nothing was sent yet.
  */
 export type SendOutcome = void | "stay" | { readonly batchId?: string; readonly shapeIds?: ReadonlyArray<string> };
 
@@ -81,7 +81,7 @@ export interface MediumDefinition {
   readonly catalogue: Payload<"models.list">["medium"];
   readonly dialogTitle: string;
   readonly browseUrl: string;
-  /** The props this model declares, with exactly its values. `props` is the tray's current values (spec 04: a stored input mode). */
+  /** The props this model declares, with exactly its values. `props` is the tray's current values (including a stored input mode). */
   readonly params: (entry: ModelEntry | undefined, props?: TrayProps) => ModelParams;
   readonly defaults: (params: ModelParams) => Record<string, PropValue>;
   /** The tray after a model change. */
@@ -92,29 +92,29 @@ export interface MediumDefinition {
   readonly pricing: (engine: EngineConnection, model: string) => Promise<unknown>;
   /** The price beside the send button, when it is exact. `pricing` is what `pricing` answered, once it has. */
   readonly estimate: (input: { readonly pricing: unknown; readonly props: TrayProps; readonly source: RunSource; readonly entry?: ModelEntry | undefined }) => string | undefined;
-  /** `props` are the tray's, once it has values; `entry` is its model's catalogue entry (spec 04). */
+  /** `props` are the tray's, once it has values; `entry` is its model's catalogue entry. */
   readonly status: (input: { readonly source: RunSource; readonly hasKey: boolean; readonly props?: TrayProps | undefined; readonly entry?: ModelEntry | undefined }) => TrayStatus;
   readonly sendLabel: (values: TrayValues) => string;
-  /** The send button's label while the engine acknowledges a send (spec 04: `Starting…`). */
+  /** The send button's label while the engine acknowledges a send (`Starting…`). */
   readonly sendingLabel?: string;
   /** The value "+ add prop" offers a prop with. The image rule when absent. */
   readonly addable?: (params: ModelParams, key: string, props: TrayProps) => PropValue | undefined;
-  /** Renders the status band itself, in place of the plain lines (spec 04: the share block sits among them). */
+  /** Renders the status band itself, in place of the plain lines (the share block sits among them). */
   readonly Status?: ComponentType<MediumStatusProps>;
-  /** Badge text by shape id, over the composition's own roles (spec 04: first, last, unused). */
+  /** Badge text by shape id, over the composition's own roles (first, last, unused). */
   readonly roles?: (input: { readonly composition: Composition; readonly props: TrayProps; readonly entry: ModelEntry | undefined }) => Readonly<Record<string, string>>;
-  /** The tray's props corrected once the catalogue is known (spec 04: a stored input mode the model cannot honour), or undefined when nothing changes. */
+  /** The tray's props corrected once the catalogue is known (a stored input mode the model cannot honour), or undefined when nothing changes. */
   readonly heal?: (input: { readonly props: TrayProps; readonly entry: ModelEntry | undefined; readonly loaded: boolean }) => Record<string, PropValue> | undefined;
   /**
    * Renders, uploads and starts the run. Resolves once the engine acknowledged it, or with
-   * `"stay"` when nothing was sent yet and the composer stays open (spec 05's final prompt).
+   * `"stay"` when nothing was sent yet and the composer stays open (the final prompt).
    */
   readonly send: (input: SendInput) => Promise<SendOutcome>;
   /** The tray's values from a recipe, for recipe mode. */
   readonly fromRecipe: (recipe: ResultRecipe) => TrayProps;
-  /** Tray props the model does not drive (spec 05's Runs), after the model's own. */
+  /** Tray props the model does not drive (Runs), after the model's own. */
   readonly trayProps?: ReadonlyArray<TrayPropDefinition>;
-  /** Rendered inside the tray, for a medium's own dialogs (spec 05's final prompt). */
+  /** Rendered inside the tray, for a medium's own dialogs (the final prompt). */
   readonly Overlay?: ComponentType<TrayOverlayProps>;
 }
 

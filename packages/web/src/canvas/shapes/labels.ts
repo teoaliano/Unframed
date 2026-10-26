@@ -1,7 +1,7 @@
 import { isMintedRef, readRef } from "@unframed/domain";
 import type { TLShape } from "tldraw";
 
-/** A name a person gave the shape (spec 06), or `undefined` while its `@id` is a minted number. */
+/** A name a person gave the shape, or `undefined` while its `@id` is a minted number. */
 export const nameOf = (shape: TLShape): string | undefined => {
   const ref = readRef(shape);
   return ref !== undefined && !isMintedRef(ref) ? ref : undefined;

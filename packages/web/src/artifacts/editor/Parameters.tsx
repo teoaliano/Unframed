@@ -1,5 +1,5 @@
 /**
- * The editor's right column (spec 09): the artifact's parameters as DialKit controls, and the
+ * The editor's right column: the artifact's parameters as DialKit controls, and the
  * box that asks the agent to add one.
  */
 import { addParameterInstruction, continuableChat, DEFAULT_RUNTIME_MODE, type ArtifactKind, type DialsAnnouncement } from "@unframed/domain";

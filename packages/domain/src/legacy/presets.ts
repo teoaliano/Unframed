@@ -1,6 +1,6 @@
 /**
- * The legacy preset converter (spec 11): an old `presets.json` entry, a fragment of the old
- * graph, as a spec 06 preset. An output makes it a recipe group, no output a plain group.
+ * The legacy preset converter: an old `presets.json` entry, a fragment of the old
+ * graph, as a preset. An output makes it a recipe group, no output a plain group.
  * The library converts on every read and never writes the result back, so this is pure
  * and idempotent. The content's tldraw schema is left for the engine to stamp.
  */
@@ -34,7 +34,7 @@ import { OUTPUT_MEDIUM, outputRecipe, type LegacyDefaults } from "./recipes.ts";
 import { legacyRecords } from "./records.ts";
 import type { LegacyMedium } from "./report.ts";
 
-/** A converted old preset: spec 06's record with the notes of what was not kept. */
+/** A converted old preset: the preset record with the notes of what was not kept. */
 export type ConvertedPreset = Preset & { readonly legacy: true; readonly notes: ReadonlyArray<string> };
 
 export const presetNotes = {
@@ -106,9 +106,9 @@ const placeBelow = (group: Shape, shapes: Shape[], shape: Shape) => {
 };
 
 /**
- * An old preset as a spec 06 preset with its notes, or `undefined` for an entry that is not
+ * An old preset as a preset with its notes, or `undefined` for an entry that is not
  * one (it has a `format`, or no fragment of nodes). `defaults` are the app's models, for an
- * output that names none. The numbered steps are spec 11's.
+ * output that names none.
  */
 export const convertPreset = (entry: unknown, options: { readonly defaults: LegacyDefaults }): ConvertedPreset | undefined => {
   const value = record(entry);

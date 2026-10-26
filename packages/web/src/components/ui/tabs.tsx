@@ -9,7 +9,7 @@ import { Button } from "~/components/ui/button";
 import { Spinner } from "~/components/ui/spinner";
 import { cn } from "~/lib/utils";
 
-// First draft for design review (spec 13): three looks, three sizes, a status slot and two overflow modes.
+// First draft for design review: three looks, three sizes, a status slot and two overflow modes.
 const tabsListVariants = cva("relative flex max-w-full items-center", {
   defaultVariants: {
     overflow: "scroll",

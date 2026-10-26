@@ -1,5 +1,5 @@
 /**
- * The OpenRouter connect flow's pure half (spec 10): PKCE ids and challenge, the authorize
+ * The OpenRouter connect flow's pure half: PKCE ids and challenge, the authorize
  * and callback URL builders, and the one pending attempt. Time and randomness come in as
  * parameters, so the engine owns the clock and the random source.
  */

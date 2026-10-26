@@ -1,5 +1,5 @@
 /**
- * The two presets that ship with the app (spec 06), Layerize and Prose to JSON: text recipe
+ * The two presets that ship with the app, Layerize and Prose to JSON: text recipe
  * groups built from the prompt text in assets, verbatim. They are never written to
  * `presets.json`, and their recipe takes the app's default text model when inserted.
  */

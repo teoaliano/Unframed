@@ -85,3 +85,10 @@ export const textOf = (record: TLRecord | undefined): string | undefined => {
 
 export const refOf = (record: TLRecord | undefined): string | undefined =>
   (record as { meta?: { ref?: string } } | undefined)?.meta?.ref ?? (record as { props?: { name?: string } } | undefined)?.props?.name;
+
+export const styleShape = (id: string, ref: string, props: Record<string, unknown> = {}, at: At = {}): TLRecord =>
+  ({
+    ...base(id, "style", at),
+    props: { w: 320, h: 240, file: "", title: "", fileName: "", swatches: [], excerpt: "", ...props },
+    meta: { ref },
+  }) as unknown as TLRecord;

@@ -1,6 +1,6 @@
 # Failure sentences
 
-Used by spec 07. When a turn fails, the engine appends one of these sentences below whatever the agent already said, as a new paragraph. Pick the sentence by the provider's failure subtype. `<subtype>` is the subtype as the provider reported it.
+Held by `FAILURE_SENTENCES` and its neighbours in `packages/domain/src/agent/prompts.ts`. When a turn fails, the engine appends one of these sentences below whatever the agent already said, as a new paragraph. Pick the sentence by the provider's failure subtype. `<subtype>` is the subtype as the provider reported it.
 
 Source: the old app's `FAILURES` and `failureMessage` in `server/agent.js`, and `QUIT_MID_TURN` in `server/threads.js`. Copied verbatim, em dashes included.
 
@@ -46,7 +46,7 @@ The agent reported an error.
 
 ## Quit mid-turn
 
-The failure a chat reads with when the engine stopped while its turn was running (spec 07, restart reconciliation). It is the turn's error and the chat's `lastError`.
+The failure a chat reads with when the engine stopped while its turn was running (restart reconciliation). It is the turn's error and the chat's `lastError`.
 
 ```text
 Unframed stopped while this turn was running, so it never finished. Send again to carry on where it left off.

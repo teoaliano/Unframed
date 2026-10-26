@@ -181,7 +181,7 @@ export const startEngine = async (host: EngineHost): Promise<RunningEngine> => {
   agents.runtime.setApiPort(apiPort);
   oauth.setApiPort(apiPort);
   process.stdout.write(banner(apiPort, settings));
-  // Before the ready message, as spec 14's Implementation Decisions say: the shim finds the port once ready is sent.
+  // Before the ready message: the shim finds the port once ready is sent.
   try {
     writeDiscovery(config.discoveryPath, apiPort, new Date());
   } catch (error) {

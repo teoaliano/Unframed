@@ -1,5 +1,5 @@
 /**
- * The outside turn rule (spec 14, "Outside turns"). An outside chat has no prompt boundary
+ * The outside turn rule. An outside chat has no prompt boundary
  * Unframed can see, so a turn is a run of calls close together in time.
  */
 

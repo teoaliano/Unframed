@@ -32,7 +32,7 @@ export interface CanvasToolDeps {
   readonly turnChanges: (project: string) => Promise<TurnChanges>;
   /** The chat's running turn and the selection its latest message was sent with. */
   readonly chatTurn: (project: string, chatId: string) => { turnCount: number | undefined; interactionMode: InteractionMode; selection: ReadonlyArray<string> };
-  /** Whether the chat is an outside one, whose read answers the live selection (spec 14). */
+  /** Whether the chat is an outside one, whose read answers the live selection. */
   readonly isOutside: (project: string, chatId: string) => boolean;
   /** The live selection of a project's windows, for an outside read. */
   readonly liveSelection: (project: string) => { shapeIds: string[]; note?: string };
@@ -76,7 +76,7 @@ const collectFiles = (ops: unknown): string[] => {
 };
 
 /**
- * The canvas tool service (spec 07): `canvas_read` and `canvas_write` over the project's
+ * The canvas tool service: `canvas_read` and `canvas_write` over the project's
  * sync room. A write is one batch and one room change with origin `chat:<chatId>`, and
  * records its turn changes; every artifact it touches tags the chat.
  */

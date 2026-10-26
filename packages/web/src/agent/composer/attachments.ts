@@ -60,7 +60,7 @@ const downscale = async (file: File): Promise<File | undefined> => {
 };
 
 /**
- * What the browser does to a file before it uploads (spec 08): HEIC and HEIF become JPEG
+ * What the browser does to a file before it uploads: HEIC and HEIF become JPEG
  * (a source over 50 MiB or 64 megapixels is too large), and an image over 10 MiB is
  * downscaled. Throws the sentence the rail shows when it cannot.
  */
@@ -83,7 +83,7 @@ export const prepareFile = async (file: File): Promise<File> => {
   return prepared;
 };
 
-/** Uploads one file through spec 07's signed one-use path, reporting progress. */
+/** Uploads one file through the signed one-use path, reporting progress. */
 const uploadFile = async (engine: EngineConnection, file: File, onProgress: (percent: number) => void): Promise<ChatAttachment> => {
   const { relativeUrl } = await engine.call("attachments.createUploadUrl", { name: file.name, mimeType: file.type, sizeBytes: file.size });
   return new Promise((resolve, reject) => {
@@ -110,7 +110,7 @@ const uploadFile = async (engine: EngineConnection, file: File, onProgress: (per
 let counter = 0;
 
 /**
- * The composer's staged attachments: limits checked before anything uploads (spec 07's
+ * The composer's staged attachments: limits checked before anything uploads (the domain's
  * sentences, shown by `onError`), each file prepared and uploaded as it is staged, retry
  * and remove.
  */

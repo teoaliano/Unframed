@@ -1,5 +1,5 @@
 import type { Chat, ChatActivity, ChatMessage, ChatTurn, ProposedPlan } from "./chatModel.ts";
-import { workLog, type WorkEntry } from "./workLog.ts";
+import { workLog, type TitleOf, type WorkEntry } from "./workLog.ts";
 
 export type TimelineBlock =
   | { readonly kind: "message"; readonly message: ChatMessage }
@@ -14,9 +14,10 @@ export interface TimelineTurn {
   readonly blocks: ReadonlyArray<TimelineBlock>;
 }
 
-const WORK_KINDS = new Set(["tool.started", "tool.updated", "tool.completed", "task.started", "task.progress", "task.completed"]);
+const WORK_KINDS = new Set(["tool.started", "tool.updated", "tool.completed", "tool.failed", "task.started", "task.progress", "task.completed"]);
 
-const isWork = (activity: ChatActivity) => WORK_KINDS.has(activity.kind) || (activity.tone === "error" && activity.kind !== "rate-limit");
+const isWork = (activity: ChatActivity) =>
+  WORK_KINDS.has(activity.kind) || activity.kind === "style.attached" || (activity.tone === "error" && activity.kind !== "rate-limit");
 
 /** What ties a tool call's or a sub-agent's activities together, as the work log merges them. */
 const lifecycleOf = (activity: ChatActivity): string | undefined => {
@@ -34,8 +35,9 @@ const lifecycleOf = (activity: ChatActivity): string | undefined => {
  * Order comes from timestamps, which only go to the millisecond and are stamped as the
  * engine takes each item in, so a call's end can sort after the reply that follows it.
  * A call's later activities therefore join the stretch where it started, never a new one.
+ * `titleOf` names the shapes a call gave only by id.
  */
-export const buildTimeline = (chat: Chat): TimelineTurn[] => {
+export const buildTimeline = (chat: Chat, options: { readonly titleOf?: TitleOf | undefined } = {}): TimelineTurn[] => {
   const turns: TimelineTurn[] = [];
   const byTurn = new Map<string | null, { messages: ChatMessage[]; activities: ChatActivity[]; plans: ProposedPlan[] }>();
   const bucket = (turnId: string | null) => {
@@ -91,7 +93,7 @@ export const buildTimeline = (chat: Chat): TimelineTurn[] => {
     }
     flush();
     const blocks = layout.map((part): TimelineBlock =>
-      part.kind === "stretch" ? { kind: "work", id: `work:${part.activities[0]!.id}`, entries: workLog(part.activities, { settled }) } : part,
+      part.kind === "stretch" ? { kind: "work", id: `work:${part.activities[0]!.id}`, entries: workLog(part.activities, { settled, titleOf: options.titleOf }) } : part,
     );
     return { key, turn, settled, blocks };
   };

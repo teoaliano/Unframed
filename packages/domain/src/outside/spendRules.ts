@@ -1,5 +1,5 @@
 /**
- * The spend limit of an outside connection (spec 14, "Spend limit (outside connections)"). Pure:
+ * The spend limit of an outside connection. Pure:
  * the connection store keeps the amounts, and these rules say what they mean.
  */
 

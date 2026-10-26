@@ -2,7 +2,7 @@ import type { Medium, ModelEntry } from "@unframed/contracts";
 import { atom, type Atom, type Editor } from "tldraw";
 import type { TrayProps } from "./mediumRegistry.ts";
 
-/** What the open Generate tray holds, for what the canvas draws from it: the role badges (spec 04's input modes). */
+/** What the open Generate tray holds, for what the canvas draws from it: the role badges (the input modes). */
 export interface TrayView {
   readonly medium: Medium;
   readonly props: TrayProps;

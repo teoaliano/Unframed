@@ -49,9 +49,10 @@ const describe = (editor: Editor, shape: TLShape, z: number): CanvasShape | unde
     if (source.file !== undefined) described.file = source.file;
     if (source.link !== undefined && kind === "video") described.link = source.link;
     if (kind === "image") described.crop = (field(shape.props, "crop") as Crop | null | undefined) ?? null;
-  } else if (kind === "page" || kind === "motion") {
+  } else if (kind === "page" || kind === "motion" || kind === "style") {
     const file = field(shape.props, "file");
     if (typeof file === "string" && file !== "") described.file = file;
+    if (kind === "style" && field(shape.props, "role") === "document") described.document = true;
   }
   return described;
 };
@@ -74,7 +75,7 @@ export const canvasShapes = (editor: Editor): CanvasShape[] => {
 export const toolbarShape = (editor: Editor, shape: TLShape): ToolbarShape => {
   const kind = kindOfShapeType(shape.type);
   const result = resultMetaOf(shape);
-  const file = kind === "page" || kind === "motion" ? field(shape.props, "file") : undefined;
+  const file = kind === "page" || kind === "motion" || kind === "style" ? field(shape.props, "file") : undefined;
   const recipe = kind === "group" ? readGroupRecipe(unframedMetaOf(shape).recipe) : undefined;
   return {
     id: shape.id,

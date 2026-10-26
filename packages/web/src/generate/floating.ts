@@ -90,7 +90,7 @@ export const canvasRoom = (editor: Editor): CanvasRoom => {
   const container = editor.getContainer();
   // The bottom bar sits above floating UI in tldraw's layer: it stays clear of it.
   const bar = container.querySelector<HTMLElement>("[data-unframed-toolbar]")?.getBoundingClientRect();
-  // The top bar is the room floating UI keeps clear of: the top-left card (spec 02) and the project tab strip (spec 17).
+  // The top bar is the room floating UI keeps clear of: the top-left card and the project tab strip.
   // The strip sits above the canvas's layers, so a toolbar under it would be covered and unreachable.
   const doc = container.ownerDocument;
   const band = [".unframed-chrome-left", ".unframed-tabs"]

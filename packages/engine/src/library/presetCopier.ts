@@ -1,8 +1,8 @@
 /**
- * The preset media copier (spec 06): brings every file a preset points at into the project
+ * The preset media copier: brings every file a preset points at into the project
  * it is inserted into, each under a new name with a copy sidecar naming where it came from.
  * A file that is gone, or whose project is gone, answers `missing`, so its shape arrives
- * empty instead of failing the insert. A converted old preset (spec 11) may carry bytes as
+ * empty instead of failing the insert. A converted old preset may carry bytes as
  * a `data:` URL instead, written into the project with a `legacy-preset` sidecar.
  */
 import { isBareFileName, unframedError, type CopiedPresetFile, type PresetFileRef, type UnframedError } from "@unframed/contracts";
@@ -41,7 +41,7 @@ export const copyPresetFiles = (
         copied.push({ file: saved.file });
         continue;
       }
-      // An empty project is spec 11's converted preset: the file is in the project it goes into.
+      // An empty project is a converted old preset: the file is in the project it goes into.
       const from = each.project === "" ? project : each.project;
       const answer = yield* media.copy(project, each.file, from, from).pipe(
         Effect.map((file): CopiedPresetFile => ({ file })),

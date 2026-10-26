@@ -85,7 +85,7 @@ const validateRecords = (records: ReadonlyArray<TLRecord>): void => {
 };
 
 /**
- * Writes a project's first canvas into a database no room has opened (spec 11's import):
+ * Writes a project's first canvas into a database no room has opened (the legacy import):
  * tldraw's document and page, then `records` as one change in the change log with
  * `origin`. A room opened on it later finds a canvas and seeds no starter content.
  */

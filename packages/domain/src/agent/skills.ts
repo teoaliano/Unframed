@@ -1,7 +1,6 @@
 /**
- * The slash commands and skills each provider offers the composer (spec 07, used by spec
- * 08). Claude's skills are scanned from `SKILL.md` folders; Codex's come from its
- * app-server. These rules parse and merge what was found.
+ * The slash commands and skills each provider offers the composer. Claude's skills are
+ * scanned from `SKILL.md` folders; Codex's come from its app-server. These rules parse and merge what was found.
  */
 
 export interface OfferedCommand {

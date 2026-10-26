@@ -97,7 +97,7 @@ describe("nextRef", () => {
 });
 
 describe("slug", () => {
-  it("is spec 01's slug rule", () => {
+  it("is the slug rule", () => {
     expect(slug("My Group!")).toBe("my-group");
   });
 });

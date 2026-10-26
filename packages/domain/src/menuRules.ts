@@ -10,13 +10,13 @@ export interface MenuShape {
   readonly file?: string;
   /** A video filled with an `https://` link: filled, but with no file to reveal. */
   readonly link?: boolean;
-  /** A prompt that is a text result (spec 05). */
+  /** A prompt that is a text result. */
   readonly textResult?: boolean;
   /** The group this shape is a member of. */
   readonly parent?: string;
-  /** A group with a standing recipe (spec 06). */
+  /** A group with a standing recipe. */
   readonly recipe?: boolean;
-  /** A page or motion that has a file (spec 09). Its `file` is that file. */
+  /** A page or motion that has a file. Its `file` is that file. */
   readonly filledArtifact?: boolean;
 }
 
@@ -28,10 +28,10 @@ export interface MenuInput {
   readonly selection: ReadonlyArray<MenuShape>;
   /** The clipboard holds tldraw content, a picture, a clip or text. */
   readonly clipboard: boolean;
-  /** Spec 06 has registered the Add to library handler. */
+  /** The presets library has registered the Add to library handler. */
   readonly libraryRegistered: boolean;
   readonly platform: string;
-  /** Spec 09: the artifacts this project has pinned with "Keep playing". */
+  /** The artifacts this project has pinned with "Keep playing". */
   readonly pinned?: ReadonlyArray<string>;
 }
 
@@ -46,14 +46,14 @@ export type MenuItem =
   | { readonly action: "copy-ref"; readonly label: string; readonly ref: string }
   /** Opens the name field in the right-clicked shape's label; F2 does the same for the one selected shape. */
   | { readonly action: "rename"; readonly label: string; readonly shortcut: string }
-  /** Spec 05: a plain prompt with a text result's text, beside it, so its `@` tokens resolve. */
+  /** A plain prompt with a text result's text, beside it, so its `@` tokens resolve. */
   | { readonly action: "copy-as-prompt"; readonly label: string }
   | { readonly action: EditAction; readonly label: string; readonly shortcut: string }
-  /** Spec 06: a recipe group back to a plain group. */
+  /** A recipe group back to a plain group. */
   | { readonly action: "clear-recipe"; readonly label: string }
-  /** Spec 09: pins a filled artifact so it keeps running; disabled at three, saying why. */
+  /** Pins a filled artifact so it keeps running; disabled at three, saying why. */
   | { readonly action: "keep-playing"; readonly label: string; readonly checked: boolean; readonly disabled?: boolean; readonly tooltip?: string }
-  /** Spec 06: shown for any selection, disabled when it cannot become one group. */
+  /** Shown for any selection, disabled when it cannot become one group. */
   | { readonly action: "add-to-library"; readonly label: string; readonly disabled?: boolean; readonly tooltip?: string }
   | { readonly action: AddAction; readonly label: string };
 

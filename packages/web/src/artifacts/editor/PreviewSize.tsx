@@ -1,5 +1,5 @@
 /**
- * The editor's preview size (spec 09): Fill, three named sizes or a typed one, chosen in a
+ * The editor's preview size: Fill, three named sizes or a typed one, chosen in a
  * popover from the centre header and remembered per artifact for the session only, never on
  * the shape.
  */

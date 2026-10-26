@@ -1,5 +1,5 @@
 /**
- * The project importer (spec 11): the one-time import of a folder the old app made. It
+ * The project importer: the one-time import of a folder the old app made. It
  * runs inside the project database's opener, before the file is first created: it reads
  * the old files, maps them through the domain's legacy modules, writes the files an
  * import extracts, and builds `unframed.sqlite` in a temporary file renamed into place

@@ -1,6 +1,6 @@
 # Legacy samples
 
-Old-format files for spec 11 (legacy import). The domain, engine and browser seams all use them as fixtures. Tests copy this folder into a temp output folder and work on the copy. Never edit these files in place, and never let a test write here.
+Old-format files for the legacy import (`packages/domain/src/legacy/`). The domain, engine and browser seams all use them as fixtures. Tests copy this folder into a temp output folder and work on the copy. Never edit these files in place, and never let a test write here.
 
 This folder stands in for an old output folder: `jobs.json` and `presets.json` sit at its root, and each subfolder is one project. All content is invented (a fox, a cliff, a hiker in a yellow jacket and brown boots). Nothing comes from a real user folder.
 
@@ -23,7 +23,7 @@ legacy-samples/
 
 `version` is 4. It holds 41 nodes and 14 edges. Old autosaves left stale keys on some nodes: `selected` and `measured` on 100, `dragging` on 106, and `extent` on the two members 120 and 121. The importer must ignore all of them.
 
-In the table, "rule 1", "rule 2" and "rule 3" are spec 11's three rules for where a recipe goes (one group, a box around the sources, where the output stood).
+In the table, "rule 1", "rule 2" and "rule 3" are the legacy import's three rules for where a recipe goes (one group, a box around the sources, where the output stood).
 
 | id | type | what it covers |
 | --- | --- | --- |
@@ -132,25 +132,25 @@ Results name their files as `/api/file/everything/<name>` and as a `savedPath` u
 | `vid_4b9e2d6f03` | legacy-snapshot | done | Has `savedPath` and `cost`. The clip is on disk. |
 | `vid_9a1c7e3b58` | other-project | pending | Same id as broken-snapshot's job, under another project. Has `unreachableSince`. |
 
-`startedAt`, `resolvedAt` and `unreachableSince` are epoch milliseconds, because the old `jobs.js` wrote `Date.now()`. Spec 11's `LegacyJob` type says `string`. The importer does not read these fields, but the type in the spec should say `number`. Key order follows the old store (`startedAt` first, `id` last).
+`startedAt`, `resolvedAt` and `unreachableSince` are epoch milliseconds, because the old `jobs.js` wrote `Date.now()`. Key order follows the old store (`startedAt` first, `id` last).
 
 ## presets.json
 
-Five entries. The first is in spec 06's current format and the other four are old entries with no `format` key, in the order a real mixed file has them (new saves go first).
+Five entries. The first is in the library's current format and the other four are old entries with no `format` key, in the order a real mixed file has them (new saves go first).
 
 | id | name | covers |
 | --- | --- | --- |
-| `user-mfe1q9w2` | Fox on the cliff | Spec 06's current format (`format: 2`, `kind: "group"`). See the note below. |
+| `user-mfe1q9w2` | Fox on the cliff | The library's current format (`format: 2`, `kind: "group"`). See the note below. |
 | `user-mf2k8a1c` | Split into parts | A flow with an output: planner prompt, text output, Free image output, empty image, wired as the old Layerize. The image output carries a captured `results` entry, so "Its old results were not kept." applies. The text output feeds the image output, so it loses its model. It has `needs`. Its `kind` is `"text"`, because the old save took the first output in node order. |
 | `user-mf1x9k4b` | Fox walk clip | Holds an image with a `data:` URL. Also covers: an `https://` video link, a video output as the recipe output with a `job` marker, a second (image) output with a `running` marker that is not kept, a group `pose` that gets flattened into the preset's group, and a page that is dropped. |
 | `user-mf1b5y2e` | Detail list | A block that is a lone text output with instructions. |
 | `user-mf0a3z7d` | Hiker character | A block with no output: group `character` with a prompt member and an image member whose `file` names `1789030920022-hiker.png` with no project. It has no `savedAt`, like the earliest saves. |
 
-### The spec 06 entry is hand-written
+### The current-format entry is hand-written
 
-`user-mfe1q9w2`'s `content` was written by hand, not copied from tldraw. It holds one `frame` shape (the group, `props.name: "fox-cliff"`) with two children: a `text` shape (`meta.ref: "100"`) and an `image` shape (`meta.ref: "101"`), plus one image asset record and a `schema` object. Once spec 06 exists, the implementer should regenerate this entry from a real tldraw copy if tldraw's schema rejects it. Two choices here are mine, because spec 06 does not fix them:
+`user-mfe1q9w2`'s `content` was written by hand, not copied from tldraw. It holds one `frame` shape (the group, `props.name: "fox-cliff"`) with two children: a `text` shape (`meta.ref: "100"`) and an `image` shape (`meta.ref: "101"`), plus one image asset record and a `schema` object. Regenerate this entry from a real tldraw copy if tldraw's schema ever rejects it. Two choices here were made by hand:
 
-- The portable file pointer is the asset's `props.src` set to `preset-file:everything/1789030860011-cliff.png`, meaning project `everything`, file `1789030860011-cliff.png`. That file exists in `everything/`. tldraw's default asset validator only accepts http, https, data and asset URLs, so spec 02's `project-file:` marker and this pointer both need the same validator allowance.
+- The portable file pointer is the asset's `props.src` set to `preset-file:everything/1789030860011-cliff.png`, meaning project `everything`, file `1789030860011-cliff.png`. That file exists in `everything/`. tldraw's default asset validator only accepts http, https, data and asset URLs, so the canvas's `project-file:` marker and this pointer both need the same validator allowance.
 - The `schema.sequences` numbers are plausible tldraw values, not ones taken from a real store. The text shape uses `richText`.
 
 ## Numbers worth knowing

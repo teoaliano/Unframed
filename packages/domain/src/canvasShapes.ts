@@ -1,7 +1,7 @@
 import type { Box } from "./grouping.ts";
 
-/** What a shape is, for generation: spec 02's kinds. Every tldraw shape without one is a mark. */
-export type ShapeKind = "prompt" | "image" | "video" | "group" | "page" | "motion" | "mark";
+/** What a shape is, for generation. Every tldraw shape without one is a mark. */
+export type ShapeKind = "prompt" | "image" | "video" | "group" | "page" | "motion" | "style" | "mark";
 
 /** tldraw's image crop: the visible region as fractions of the picture. */
 export interface Crop {
@@ -27,9 +27,11 @@ export interface CanvasShape {
   readonly ref?: string | undefined;
   /** A prompt's plain text. */
   readonly text?: string | undefined;
-  /** A prompt that is a text result (spec 05): its text is used literally. */
+  /** A prompt that is a text result: its text is used literally. */
   readonly textResult?: boolean | undefined;
-  /** The project file an image, video, page or motion names. */
+  /** A style shape whose role is `document`: markdown the agent may read, never a chat's style. */
+  readonly document?: boolean | undefined;
+  /** The project file an image, video, page, motion or style names. */
   readonly file?: string | undefined;
   /** The `https://` link a video holds. */
   readonly link?: string | undefined;

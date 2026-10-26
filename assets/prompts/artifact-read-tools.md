@@ -1,8 +1,8 @@
 # page_read and motion_read
 
-Used by spec 07's Unframed MCP server and spec 09. The model-facing descriptions of the two read tools and their one argument. No placeholders.
+Held in `packages/domain/src/artifacts/prompts.ts`. The model-facing descriptions of the two read tools and their one argument. No placeholders.
 
-Source: the old app's `ARTIFACTS.page.describeRead`, `ARTIFACTS.motion.describeRead` and the argument description in `artifactTools`, `server/agentTools.js`. Verbatim, with the `nodeId` argument renamed `shapeId` (spec 07).
+Source: the old app's `ARTIFACTS.page.describeRead`, `ARTIFACTS.motion.describeRead` and the argument description in `artifactTools`, `server/agentTools.js`. Verbatim, with the `nodeId` argument renamed `shapeId`.
 
 ## page_read
 

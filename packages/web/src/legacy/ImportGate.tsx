@@ -1,5 +1,5 @@
 /**
- * The import from the old app, in the web (spec 11): before a project's canvas mounts,
+ * The import from the old app, in the web: before a project's canvas mounts,
  * the gate asks whether its folder is being imported. While it is, the canvas's place
  * says so; a failed import says why and offers Try again; once there is a canvas, a
  * report nobody has seen opens in its dialog.

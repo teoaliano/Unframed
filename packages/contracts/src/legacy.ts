@@ -1,5 +1,5 @@
 /**
- * Spec 11's import from the old app: the report stored with an imported project, and the
+ * The import from the old app: the report stored with an imported project, and the
  * methods the web's loading, failure and report states use.
  */
 import * as Schema from "effect/Schema";

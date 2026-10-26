@@ -50,7 +50,7 @@ interface CodexSession {
 const threadIdOf = (result: unknown): string => String((result as { thread?: { id?: unknown } } | undefined)?.thread?.id ?? "");
 
 /**
- * The Codex adapter (spec 07): one `codex app-server` per chat, spoken to in
+ * The Codex adapter: one `codex app-server` per chat, spoken to in
  * newline-delimited JSON messages. Thread start or resume by id, a turn per message with
  * the runtime mode's policies, approvals and questions turned into requests the person
  * answers, and plan mode as Codex's collaboration mode.

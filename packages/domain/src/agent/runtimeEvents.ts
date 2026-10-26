@@ -1,5 +1,5 @@
 /**
- * The canonical runtime events (spec 07, t3code's names and fields, the subset Unframed
+ * The canonical runtime events (t3code's names and fields, the subset Unframed
  * consumes). Every provider adapter translates its native protocol into these, so the chat
  * store never knows which provider runs a chat.
  */

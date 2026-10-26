@@ -4,6 +4,7 @@ import type { DatabaseSync } from "node:sqlite";
 import {
   agentShapeId,
   buildPreamble,
+  canvasShapesOf,
   changeNote,
   chatSummary,
   DEFAULT_RUNTIME_MODE,
@@ -17,8 +18,12 @@ import {
   searchChats,
   selectionLabel,
   shapeKind,
+  styleLine,
+  styleOfSelection,
+  styleRoleOf,
   type ActivityInput,
   type AgentProvider,
+  type CanvasRecord,
   type Chat,
   type ChatCommand,
   type ChatEvent,
@@ -59,7 +64,7 @@ export interface GenerationRuns {
   /** The models of a kind, and the default one: the settings' image or video model. */
   readonly models: (kind: "image" | "video") => Promise<ReadonlyArray<ModelEntry>>;
   readonly defaultModel: (kind: "image" | "video") => Promise<string>;
-  /** A render job (spec 04) and how it ends (spec 14: an agent's video). */
+  /** A render job and how it ends (an agent's video). */
   readonly startVideo: (request: VideoStartRequest) => Promise<{ jobId: string; status: string; shapeId: string }>;
   readonly onVideoFinished: (jobId: string, handler: (outcome: { ok: boolean; cost: number | null }) => void) => () => void;
   readonly track: (project: string, handler: (event: RunEvent) => void) => () => void;
@@ -75,14 +80,15 @@ import { ProviderService, SESSION_IDLE_MS } from "./providerService.ts";
 import { writeTurnSidecar } from "./sidecar.ts";
 import { planRevert, TurnChanges } from "./turnChanges.ts";
 import { artifactDiff } from "./turnDiff.ts";
+import { shapeBoxes } from "../runs/shapeBounds.ts";
 
 export interface AgentRuntimeDeps {
   readonly dataDir: string;
-  /** The windows' live selection, read and set by outside calls (spec 14). */
+  /** The windows' live selection, read and set by outside calls. */
   readonly selection: LiveSelection;
-  /** The run services and the connection store, for an agent's `generate` (spec 14). */
+  /** The run services and the connection store, for an agent's `generate`. */
   readonly generationRuns: GenerationRuns;
-  /** The outside turn's idle time; two minutes unless a test shortens it (spec 14). */
+  /** The outside turn's idle time; two minutes unless a test shortens it. */
   readonly outsideTurnIdleMs?: number;
   readonly testAgentScript: string | undefined;
   readonly idleMs: number | undefined;
@@ -103,14 +109,14 @@ export interface AgentRuntimeDeps {
   readonly defaultModel: (provider: AgentProvider) => Promise<string | undefined>;
   /** Builds the real provider adapters; the scripted one replaces both under the test variable. */
   readonly realAdapter: (provider: AgentProvider, context: AdapterContext) => ProviderAdapter;
-  /** The tools other specs add to the Unframed MCP server (spec 09: the artifact and preview tools). */
+  /** The tools other modules add to the Unframed MCP server (the artifact and preview tools). */
   readonly extraTools?: (context: AgentToolContext) => ReadonlyArray<McpTool>;
-  /** Told when a chat's provider session closes, for whatever it held open (spec 09's preview tabs). */
+  /** Told when a chat's provider session closes, for whatever it held open (such as preview tabs). */
   readonly onSessionClosed?: (project: string, chatId: string) => void;
 }
 
-/** A dispatch refusal the RPC layer answers as spec 01's error. */
-/** A turn's paid runs are counted by chat and turn, so a revert can wait for the ones still landing (spec 14). */
+/** A dispatch refusal the RPC layer answers as the RPC error. */
+/** A turn's paid runs are counted by chat and turn, so a revert can wait for the ones still landing. */
 const runKey = (chatId: string, turn: number): string => `${chatId}:${turn}`;
 
 export class DispatchError extends Error {
@@ -156,16 +162,16 @@ type Bare<C> = C extends unknown ? Omit<C, "commandId" | "projectId" | "threadId
 const record = (value: unknown): Record<string, any> => (typeof value === "object" && value !== null ? (value as Record<string, any>) : {});
 
 /**
- * The agent runtime (spec 07): the chat store of every open project, the reactors that run
+ * The agent runtime: the chat store of every open project, the reactors that run
  * its side effects, the provider service, the MCP server's tools and the attachment store.
  * Reactors run after an intent is committed and report back through more commands.
  */
 export class AgentRuntime {
   readonly tokens = new McpTokens();
   readonly registry = new McpToolRegistry();
-  /** The outside calls: an outside session's chat and turn in each project (spec 14). */
+  /** The outside calls: an outside session's chat and turn in each project. */
   readonly outside: OutsideChats;
-  /** The tools only an outside connection has, after the registry's (spec 14). */
+  /** The tools only an outside connection has, after the registry's. */
   readonly outsideTools: McpTool[];
   private readonly generation: AgentGeneration;
   readonly attachments: AttachmentStore;
@@ -173,7 +179,7 @@ export class AgentRuntime {
   private readonly projects = new Map<string, Promise<ProjectAgent>>();
   private readonly chatProjects = new Map<string, string>();
   private readonly activeTurns = new Map<string, ActiveTurn>();
-  /** The paid runs each in-app or outside turn still has landing, by chat and turn (spec 14). */
+  /** The paid runs each in-app or outside turn still has landing, by chat and turn. */
   private readonly paidRuns = new Map<string, number>();
   private readonly adapters = new Map<AgentProvider, ProviderAdapter>();
   /** The project agents that finished opening. */
@@ -200,7 +206,7 @@ export class AgentRuntime {
         ),
     };
     for (const tool of new CanvasTools(context).tools()) this.registry.register(tool);
-    // Outside calls only: `canvas_select` never reaches an in-app agent (spec 07, spec 14).
+    // Outside calls only: `canvas_select` never reaches an in-app agent.
     this.generation = new AgentGeneration({
       records: (project) => deps.rooms.read(project),
       recordsOf: async (project, ids) => {
@@ -257,7 +263,7 @@ export class AgentRuntime {
       deps.outsideTurnIdleMs ?? OUTSIDE_TURN_IDLE_MS,
     );
     for (const tool of deps.extraTools?.(context) ?? []) this.registry.register(tool);
-    // In-app and outside agents both have `generate`; an outside call's own check (its connection's limit) is the only difference (spec 14).
+    // In-app and outside agents both have `generate`; an outside call's own check (its connection's limit) is the only difference.
     this.registry.register(generateTool((binding, args) => this.generateFor(binding, args)));
     this.providers = new ProviderService({
       adapterFor: (provider) => this.adapterFor(provider),
@@ -314,7 +320,7 @@ export class AgentRuntime {
 
 
   /**
-   * What a project's chats are doing now (spec 17): chats with a turn running, and chats waiting on
+   * What a project's chats are doing now: chats with a turn running, and chats waiting on
    * the person. Reads only a chat store that is already open, so a closed project costs nothing.
    */
   liveActivity(name: string): { readonly running: number; readonly needsYou: number } {
@@ -357,7 +363,7 @@ export class AgentRuntime {
   }
 
   private async closeProject(agent: ProjectAgent): Promise<void> {
-    // Rename, delete, a folder move and shutdown all close the project: its open outside turns settle first (spec 14).
+    // Rename, delete, a folder move and shutdown all close the project: its open outside turns settle first.
     await this.outside.settleOpen(agent).catch((error: unknown) => logError(`outside turns of ${agent.slug}: ${errorText(error)}`));
     agent.closed = true;
     if (this.settledAgents.get(agent.slug) === agent) {
@@ -377,7 +383,7 @@ export class AgentRuntime {
       const running = chat.latestTurn?.state === "running" || chat.session?.status === "starting" || chat.session?.status === "running";
       if (!running || this.providers.has(chat.id)) continue;
       if (chat.outside !== undefined) {
-        // An outside turn was not cut off by Unframed: the agent just stopped being heard, so it settles as completed (spec 14).
+        // An outside turn was not cut off by Unframed: the agent just stopped being heard, so it settles as completed.
         await this.outside.settle(agent, chat.id);
         if (agent.engine.chat(chat.id)?.session?.status === "running") {
           await this.internal(agent, chat.id, { type: "thread.session.set", session: { status: "ready", activeTurnId: null, lastError: null } });
@@ -420,12 +426,12 @@ export class AgentRuntime {
   }
 
 
-  /** A session of an outside client ended: its open turns settle, and its chats say so (spec 14). */
+  /** A session of an outside client ended: its open turns settle, and its chats say so. */
   endOutsideSession(sessionId: string): Promise<void> {
     return this.outside.endSession(sessionId, [...this.settledAgents.values()]);
   }
 
-  /** A connection was revoked: its chats' open turns settle, and each says it is disconnected (spec 14). */
+  /** A connection was revoked: its chats' open turns settle, and each says it is disconnected. */
   disconnectOutside(connectionId: string): Promise<void> {
     return this.outside.disconnect(connectionId, [...this.settledAgents.values()]);
   }
@@ -433,11 +439,11 @@ export class AgentRuntime {
   /** Dispatches a command the web sent: attachments and tags are resolved against the files and the canvas first. */
   async dispatch(command: ClientCommand): Promise<{ sequence: number }> {
     const agent = await this.project(command.projectId);
-    // An in-app turn cannot be reverted while one of its paid generations is still landing (spec 14).
+    // An in-app turn cannot be reverted while one of its paid generations is still landing.
     if (command.type === "thread.turn.revert" && agent.engine.chat(command.threadId)?.outside === undefined && (this.paidRuns.get(runKey(command.threadId, command.turnCount)) ?? 0) > 0) {
       throw new DispatchError("conflict", "Wait for the generation to land before reverting.");
     }
-    // Reverting an open outside turn settles it first, then reverts it (spec 14). The web cannot stop an outside agent.
+    // Reverting an open outside turn settles it first, then reverts it. The web cannot stop an outside agent.
     if (command.type === "thread.turn.revert" && agent.engine.chat(command.threadId)?.outside !== undefined) {
       await this.outside.settle(agent, command.threadId);
     }
@@ -448,7 +454,10 @@ export class AgentRuntime {
         const stored = await this.attachments.resolve(ref);
         attachments.push(stored ?? { id: ref.id, name: ref.name });
       }
-      resolved = { ...command, message: { ...command.message, attachments } };
+      const style = await this.styleSelected(agent, command.threadId, command.message.context?.selection ?? []);
+      resolved = { ...command, message: { ...command.message, attachments, ...(style === undefined ? {} : { style }) } };
+    } else if (command.type === "thread.style.set") {
+      if ((await this.styleRecord(agent.slug, command.styleId)) === undefined) throw new DispatchError("not_found", "That style is no longer on the canvas.");
     } else if (command.type === "thread.create" && command.tags !== undefined) {
       resolved = { ...command, tags: await this.artifactsAmong(agent.slug, command.tags) };
     } else if (command.type === "thread.tags.add") {
@@ -488,6 +497,26 @@ export class AgentRuntime {
     return ids.filter((id) => artifacts.has(id));
   }
 
+  /** A style shape on the canvas, by its room id. */
+  private async styleRecord(project: string, id: string): Promise<TLRecord | undefined> {
+    const found = (await this.deps.rooms.read(project)).find((item) => item.id === id);
+    return found?.typeName === "shape" && found.type === "style" ? found : undefined;
+  }
+
+  /** The style a message's selection attaches, with the chat's current style's title for the work log. */
+  private async styleSelected(agent: ProjectAgent, chatId: string, selection: ReadonlyArray<string>): Promise<{ id: string; title: string; previousTitle?: string } | undefined> {
+    if (selection.length === 0) return undefined;
+    const records = await this.deps.rooms.read(agent.slug);
+    const found = styleOfSelection(canvasShapesOf(records as unknown as ReadonlyArray<CanvasRecord>, shapeBoxes(records)), selection);
+    if (found === undefined) return undefined;
+    const titleOf = (id: string) => {
+      const props = record(record(records.find((item) => item.id === id)).props);
+      return selectionLabel({ ...(typeof props.title === "string" ? { title: props.title } : {}) }) ?? "Style";
+    };
+    const current = agent.engine.chat(chatId)?.style ?? null;
+    return { id: found.id, title: titleOf(found.id), ...(current === null ? {} : { previousTitle: titleOf(current) }) };
+  }
+
   /** The tag reactor: adds the ids the chat does not have yet. Adding one it has is a no-op. */
   private async tag(project: string, chatId: string, ids: ReadonlyArray<string>): Promise<void> {
     const agent = await this.project(project);
@@ -496,7 +525,7 @@ export class AgentRuntime {
     if (fresh.length > 0) await this.internal(agent, chatId, { type: "thread.tags.add", ids: fresh });
   }
 
-  /** An outside call of `generate`: its open turn, and the checked arguments (spec 14). */
+  /** An outside call of `generate`: its open turn, and the checked arguments. */
   private async generateFor(binding: McpBinding, args: Record<string, unknown>): Promise<ToolAnswer> {
     const checked = generateArguments(args);
     if (!checked.ok) return { value: { error: checked.message }, isError: true };
@@ -506,7 +535,7 @@ export class AgentRuntime {
     return this.generation.generate({ project: binding.project, chatId: binding.chatId, turn, turnId, connectionId: binding.connectionId, ...checked });
   }
 
-  /** What an in-app `generate`'s approval says: the medium, the shapes and the estimate, from a dry run (spec 14). */
+  /** What an in-app `generate`'s approval says: the medium, the shapes and the estimate, from a dry run. */
   private async generationDetail(chatId: string, input: Readonly<Record<string, unknown>>): Promise<string | undefined> {
     const project = this.chatProjects.get(chatId);
     const checked = generateArguments(input);
@@ -528,6 +557,7 @@ export class AgentRuntime {
       turnId: chat?.latestTurn?.state === "running" ? chat.latestTurn.turnId : active?.turnId,
       interactionMode: active?.interactionMode ?? chat?.interactionMode ?? "default",
       selection: latestUser?.context?.selection ?? [],
+      style: chat?.style ?? null,
     };
   }
 
@@ -661,7 +691,7 @@ export class AgentRuntime {
       const props = record(shape.props);
       const asset = typeof props.assetId === "string" ? byId.get(props.assetId) : undefined;
       selected.push({
-        kind: shapeKind(shape.type),
+        kind: shape.type === "style" && styleRoleOf(props) === "document" ? "document" : shapeKind(shape.type),
         id: agentShapeId(id),
         label: selectionLabel({
           ...(typeof props.title === "string" ? { title: props.title } : {}),
@@ -670,12 +700,20 @@ export class AgentRuntime {
         }),
       });
     }
+    // Read at send time, so a style the person edited since is named by its new file.
+    const style = chat.style === null ? undefined : byId.get(chat.style);
+    const styleProps = record(record(style).props);
+    const line =
+      style?.typeName === "shape" && style.type === "style" && styleRoleOf(styleProps) === "style" && typeof styleProps.file === "string" && styleProps.file !== ""
+        ? styleLine({ id: agentShapeId(style.id), title: typeof styleProps.title === "string" && styleProps.title.trim() !== "" ? styleProps.title.trim() : "Style", file: styleProps.file })
+        : undefined;
     let note: string | undefined;
     if (chat.lastClock !== null) {
       note = changeNote(await this.deps.rooms.changeLog(agent.slug, chat.lastClock), chat.id);
     }
     return buildPreamble({
       selected,
+      style: line,
       changeNote: note,
       attachments: attachments.flatMap((attachment) => {
         const path = this.attachments.path(attachment.id);
@@ -979,7 +1017,7 @@ export class AgentRuntime {
           restored.push(...outcome.restored);
           skipped.push(...outcome.skipped);
         }
-        // Chat-wide, so it outlives the dropped turns: the rail says which shapes were left alone (spec 08).
+        // Chat-wide, so it outlives the dropped turns: the rail says which shapes were left alone.
         await this.activity(agent, chatId, {
           id: `checkpoint-reverted:${randomUUID()}`,
           tone: "info",
@@ -1004,13 +1042,13 @@ export class AgentRuntime {
   }
 
 
-  /** Thread search (spec 08): this project's chats whose messages or final replies match. */
+  /** Thread search: this project's chats whose messages or final replies match. */
   async searchThreads(project: string, query: string, limit: number | undefined): Promise<ThreadSearchMatch[]> {
     const agent = await this.project(project);
     return searchChats(Object.values(agent.engine.model.chats), query, limit ?? SEARCH_LIMIT_MAX);
   }
 
-  /** The pages and motions a chat's turns `from + 1` to `to` wrote, as diffs (spec 08). */
+  /** The pages and motions a chat's turns `from + 1` to `to` wrote, as diffs. */
   async turnDiff(project: string, chatId: string, from: number, to: number, ignoreWhitespace: boolean): Promise<{ files: ArtifactDiffFile[] }> {
     const agent = await this.project(project);
     const chat = agent.engine.chat(chatId);

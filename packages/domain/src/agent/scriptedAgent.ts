@@ -1,5 +1,5 @@
 /**
- * The scripted agent's script format (spec 07): parsing, choosing a chat's script by its
+ * The scripted agent's script format: parsing, choosing a chat's script by its
  * first message, and the sentences a script fails a turn with. It replaces the model and
  * nothing else.
  */
@@ -21,7 +21,7 @@ export interface ScriptTurn {
   readonly tasks?: ReadonlyArray<{ readonly title: string; readonly status: string }>;
   readonly rateLimit?: { readonly status: "allowed" | "allowed_warning" | "rejected"; readonly resetsAt?: string };
   readonly plan?: string;
-  /** Token usage reported as the turn ends, as a provider reports its context window (spec 08's meter). */
+  /** Token usage reported as the turn ends, as a provider reports its context window for the meter. */
   readonly usage?: { readonly usedTokens: number; readonly maxTokens?: number; readonly totalProcessedTokens?: number };
   readonly title?: string;
   readonly isError?: boolean;

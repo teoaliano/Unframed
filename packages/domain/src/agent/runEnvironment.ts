@@ -1,5 +1,5 @@
 /**
- * The environment a provider CLI runs in (spec 07). Probes and sessions build it the same
+ * The environment a provider CLI runs in. Probes and sessions build it the same
  * way, so a probe never calls a CLI ready that a session then cannot spawn.
  */
 

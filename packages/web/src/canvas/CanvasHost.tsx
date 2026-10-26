@@ -29,6 +29,7 @@ import { installRefMinting, RefMinter } from "./refs.ts";
 import { installRename } from "./rename.ts";
 import { watchRunProgress } from "../generate/recipeRuns.ts";
 import { MotionShapeUtil, PageShapeUtil } from "./shapes/artifact.tsx";
+import { StyleShapeUtil } from "./shapes/style.tsx";
 import { GroupShapeUtil } from "./shapes/group.tsx";
 import { ImageMediaUtil, VideoMediaUtil } from "./shapes/media.tsx";
 import { PromptShapeUtil } from "./shapes/prompt.tsx";
@@ -39,7 +40,7 @@ import { TLDRAW_ASSET_URLS, TLDRAW_CHROME, TLDRAW_OPTIONS } from "./tldrawChrome
 /** How long a project switch waits for the room to acknowledge this tab's pending edits. */
 const SETTLE_BEFORE_SWITCH_MS = 2000;
 
-const SHAPE_UTILS = [PromptShapeUtil, ImageMediaUtil, VideoMediaUtil, GroupShapeUtil, PageShapeUtil, MotionShapeUtil];
+const SHAPE_UTILS = [PromptShapeUtil, ImageMediaUtil, VideoMediaUtil, GroupShapeUtil, PageShapeUtil, MotionShapeUtil, StyleShapeUtil];
 
 /** Unframed's tldraw chrome, and the canvas's own parts: the dot grid behind, badges and overlays on top, the context menu. */
 const COMPONENTS: TLComponents = {
@@ -122,7 +123,7 @@ export const CanvasHost = ({ project, activation }: { readonly project: string; 
     const stopSelection = installSelectionReporter(editor, engine, project);
     content.current = { project, engine, minter };
     installExternalContent(editor, content.current);
-    // A tab that comes back to the front keeps the view it had (spec 17); a first open fits.
+    // A tab that comes back to the front keeps the view it had; a first open fits.
     const camera = recalledCamera(project);
     if (camera) editor.setCamera(camera, { animation: { duration: 0 } });
     else fitToShapes(editor);

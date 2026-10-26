@@ -1,6 +1,6 @@
 /**
- * An imported canvas as tldraw records (spec 11): the shapes and assets the room stores,
- * in the canvas schema, with Unframed's fields where spec 02, 03, 04 and 06 put them.
+ * An imported canvas as tldraw records: the shapes and assets the room stores,
+ * in the canvas schema, with Unframed's fields where the canvas schema puts them.
  */
 import { richTextOf } from "../agent/canvasTools.ts";
 import type { ContentAsset, ContentShape } from "../presetRules.ts";

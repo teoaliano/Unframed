@@ -1,5 +1,5 @@
 /**
- * Browser-seam helpers for spec 05: the generation engine of `generation.ts` with the text
+ * Browser-seam helpers for text: the generation engine of `generation.ts` with the text
  * catalogue and a scripted chat endpoint too, and ways to reach the text medium and the
  * Runs prop.
  */

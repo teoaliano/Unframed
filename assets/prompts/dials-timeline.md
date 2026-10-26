@@ -1,6 +1,6 @@
 # Dials timeline rule
 
-Used by spec 07's Unframed MCP server and spec 09. Appended, after one space, to the motion write description only, after the dials contract: how a value the timeline owns is exposed. No placeholders.
+Held in `packages/domain/src/artifacts/prompts.ts`. Appended, after one space, to the motion write description only, after the dials contract: how a value the timeline owns is exposed. No placeholders.
 
 Source: the old app's `DIALS_TIMELINE` in `server/agentTools.js`, its sentences joined with single spaces. Verbatim.
 

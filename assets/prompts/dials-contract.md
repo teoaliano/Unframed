@@ -1,6 +1,6 @@
 # Dials contract
 
-Used by spec 07's Unframed MCP server and spec 09. Appended, after one space, to both artifact write descriptions (`page-write-tool.md` and `motion-write-tool.md`). It is one shared text so the two cannot drift. No placeholders.
+Held by `DIALS_CONTRACT` in `packages/domain/src/artifacts/prompts.ts`. Appended, after one space, to both artifact write descriptions (`page-write-tool.md` and `motion-write-tool.md`). It is one shared text so the two cannot drift. No placeholders.
 
 Source: the old app's `DIALS_CONTRACT` in `server/agentTools.js`, its sentences joined with single spaces. Verbatim.
 

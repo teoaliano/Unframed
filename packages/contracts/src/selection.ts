@@ -1,6 +1,6 @@
 import * as Schema from "effect/Schema";
 
-/** A window's selection on one project's canvas, as it reports it (spec 14, "The live selection"). */
+/** A window's selection on one project's canvas, as it reports it. */
 export const SelectionReport = Schema.Struct({
   project: Schema.String,
   windowId: Schema.String,

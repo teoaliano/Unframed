@@ -8,7 +8,7 @@ import { TabStrip } from "./TabStrip.tsx";
 import { useTabShortcuts } from "./tabShortcuts.ts";
 import { useSlots } from "./slots.ts";
 
-/** Windows draws its caption buttons over the top-right corner (spec 01's repair). */
+/** Windows draws its caption buttons over the top-right corner. */
 const CAPTION_WIDTH = 144;
 
 const LogoMark = () => (
@@ -21,8 +21,8 @@ const LogoMark = () => (
 );
 
 /**
- * The top bar (spec 17): one full-width bar, drawn by `components/ui/top-bar`. Its three regions keep
- * the DOM hooks of spec 01 (`.unframed-chrome-left`, `.unframed-tabs`, `.unframed-chrome-right`), so the
+ * The top bar: one full-width bar, drawn by `components/ui/top-bar`. Its three regions keep
+ * the shell's DOM hooks (`.unframed-chrome-left`, `.unframed-tabs`, `.unframed-chrome-right`), so the
  * shell can still move them. Settings sits at the end opposite the window controls: the top-right on
  * macOS, the far left on Windows, where it is the first thing in the start region.
  */

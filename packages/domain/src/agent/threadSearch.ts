@@ -1,5 +1,5 @@
 /**
- * Thread search (spec 08, t3code's `searchThreads`): which chats a query finds and the
+ * Thread search (t3code's `searchThreads`): which chats a query finds and the
  * snippet each shows. Only the person's messages and each turn's final agent reply are
  * searched: never titles, reasoning or text still streaming.
  */

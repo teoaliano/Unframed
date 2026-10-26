@@ -1,5 +1,22 @@
-import { parseAssetMarker, projectFileMarker, UnframedError } from "@unframed/contracts";
-import { isArtifactKind, isVideoLink, META_REF_TYPES, pastedFileName, readRef, refOnPaste, rewriteRichTextTokens, VIDEO_FILE_LIMIT, VIDEO_TOO_LARGE_MESSAGE } from "@unframed/domain";
+import { parseAssetMarker, projectFileMarker, UnframedError, type StyleRole } from "@unframed/contracts";
+import {
+  droppedStyleRole,
+  isArtifactKind,
+  isStyleFile,
+  isVideoLink,
+  META_REF_TYPES,
+  pastedFileName,
+  readRef,
+  refOnPaste,
+  rewriteRichTextTokens,
+  STYLE_DEFAULT_SIZE,
+  STYLE_SIZE_LIMIT,
+  STYLE_TOO_LARGE_MESSAGE,
+  styleCard,
+  styleTitleFor,
+  VIDEO_FILE_LIMIT,
+  VIDEO_TOO_LARGE_MESSAGE,
+} from "@unframed/domain";
 import {
   AssetRecordType,
   createShapeId,
@@ -35,13 +52,24 @@ const MULTI_DROP_OFFSET = 24;
 
 const messageOf = (error: unknown) => (error instanceof UnframedError || error instanceof Error ? error.message : String(error));
 
-type DroppedKind = MediaKind | "page";
+type DroppedKind = MediaKind | "page" | "style";
 
 const kindOf = (file: File): DroppedKind | undefined => {
   if (file.type.startsWith("image/")) return "image";
   if (file.type.startsWith("video/")) return "video";
   if (file.type === "text/html" || /\.html?$/i.test(file.name)) return "page";
+  if (isStyleFile(file)) return "style";
   return undefined;
+};
+
+class StyleRefused extends Error {}
+
+/** A dropped style document: its text, read once for the card, and its upload as a project file with a sidecar. */
+const uploadStyle = async (ctx: ContentContext, file: File): Promise<{ file: string; role: StyleRole; props: { title: string; swatches: string[]; excerpt: string } }> => {
+  if (file.size > STYLE_SIZE_LIMIT) throw new StyleRefused(STYLE_TOO_LARGE_MESSAGE);
+  const markdown = await file.text();
+  const saved = await uploadFile(ctx.project, new Blob([markdown], { type: "text/markdown" }), file.name || "style.md");
+  return { file: saved.file, role: droppedStyleRole(markdown), props: { title: styleTitleFor(markdown, file.name || "Style"), ...styleCard(markdown) } };
 };
 
 const withoutExtension = (name: string) => name.replace(/\.[^.]*$/, "");
@@ -85,6 +113,13 @@ const createPage = (editor: Editor, file: string, fileName: string, point: VecLi
 /** Uploads one file, then puts its shape at `point` (captured when the file arrived). */
 const addFile = async (editor: Editor, ctx: ContentContext, file: File, kind: DroppedKind, point: VecLike, failure: string) => {
   try {
+    if (kind === "style") {
+      const saved = await uploadStyle(ctx, file);
+      const id = createShapeId();
+      editor.markHistoryStoppingPoint("add style");
+      editor.createShape({ id, type: "style", ...centred(point, STYLE_DEFAULT_SIZE), props: { ...STYLE_DEFAULT_SIZE, file: saved.file, fileName: file.name, ...saved.props, role: saved.role } } as TLShape);
+      return id;
+    }
     if (kind === "page") {
       const saved = await uploadFile(ctx.project, file, file.name || "page.html");
       editor.markHistoryStoppingPoint("add page");
@@ -94,14 +129,14 @@ const addFile = async (editor: Editor, ctx: ContentContext, file: File, kind: Dr
     editor.markHistoryStoppingPoint("add media");
     return createMediaShape(editor, kind, asset, point);
   } catch (error) {
-    if (error instanceof MediaRefused) showError(error.message);
+    if (error instanceof MediaRefused || error instanceof StyleRefused) showError(error.message);
     else showError(`${failure} ${file.name || `that ${kind}`}: ${messageOf(error)}`);
     return undefined;
   }
 };
 
 /**
- * An `.html` dropped onto a page or a motion (spec 09) replaces its file: a page takes it as a
+ * An `.html` dropped onto a page or a motion replaces its file: a page takes it as a
  * plain upload, a motion through the motion upload, which adds the runtime and the bridge.
  * The title keeps its value when it has one. One person edit, one undo step.
  */
@@ -129,8 +164,9 @@ const replaceArtifactFile = async (editor: Editor, ctx: ContentContext, target: 
 /**
  * Files dropped on the canvas. A picture dropped on an image, or a clip on a video,
  * replaces its media, and an `.html` dropped on a page or a motion replaces its file;
- * anything else lands at the drop point, several files 24 px apart. Only images, clips up
- * to 25 MB and HTML pages are taken.
+ * a markdown file dropped on a style is its new version; anything else lands at the drop
+ * point, several files 24 px apart. Only images, clips up to 25 MB, HTML pages and markdown
+ * style documents up to 100 KiB are taken.
  */
 export const handleDrop = async (editor: Editor, ctx: ContentContext, files: ReadonlyArray<File>, point: VecLike) => {
   const [only] = files;
@@ -138,6 +174,21 @@ export const handleDrop = async (editor: Editor, ctx: ContentContext, files: Rea
     const target = editor.getShapeAtPoint(point, { hitInside: true, hitFrameInside: false });
     const kind = kindOf(only);
     if (target && isArtifactKind(target.type) && kind === "page") return replaceArtifactFile(editor, ctx, target, only);
+    if (target?.type === "style" && kind === "style") {
+      // A document dropped on a style is its new version: one person edit, one undo step.
+      try {
+        const saved = await uploadStyle(ctx, only);
+        const shape = editor.getShape(target.id);
+        if (!shape) return;
+        editor.markHistoryStoppingPoint("replace style");
+        const { title, ...card } = saved.props;
+        const current = (shape.props as { title: string }).title;
+        editor.updateShape({ id: shape.id, type: "style", props: { file: saved.file, fileName: only.name, ...card, title: current !== "" ? current : title } } as TLShape);
+      } catch (error) {
+        showError(error instanceof StyleRefused ? error.message : `Could not add ${only.name}: ${messageOf(error)}`);
+      }
+      return;
+    }
     if (target && (target.type === "image" || target.type === "video") && kind === target.type) {
       try {
         const asset = await uploadMediaFile(editor, kind, only);
@@ -239,7 +290,7 @@ const fixUpPastedShapes = async (editor: Editor, ctx: ContentContext, pasted: Un
   const copy = async (file: string) => (await ctx.engine.call("files.copy", { project: ctx.project, file, from: source })).file;
 
   for (const shape of content.shapes) {
-    if (shape.type !== "page" && shape.type !== "motion") continue;
+    if (shape.type !== "page" && shape.type !== "motion" && shape.type !== "style") continue;
     const props = shape.props as { file: string };
     if (props.file === "") continue;
     try {
@@ -279,7 +330,7 @@ const fixUpPastedShapes = async (editor: Editor, ctx: ContentContext, pasted: Un
 
   const ids = new Map<string, string>();
   // Refs are unique across the canvas, so a pasted name is taken by any of them. A name is
-  // kept, suffixed when taken (spec 06); a minted ref is minted again.
+  // kept, suffixed when taken; a minted ref is minted again.
   const taken = new Set(editor.getCurrentPageShapes().flatMap((shape) => readRef(shape) ?? []));
   const mint = () => ctx.minter.mint();
   for (const shape of content.shapes) {
@@ -307,7 +358,7 @@ const fixUpPastedShapes = async (editor: Editor, ctx: ContentContext, pasted: Un
 };
 
 /**
- * A result pasted from another project brings its recipe along (spec 03): its sidecar and
+ * A result pasted from another project brings its recipe along: its sidecar and
  * every file the recipe names are copied in beside the image's copy. A result whose recipe
  * cannot come along pastes as an ordinary image.
  */
@@ -320,7 +371,7 @@ const copyRecipes = async (ctx: ContentContext, source: string, content: TLConte
     const assetId = (shape.props as { assetId?: string | null }).assetId;
     const marker = parseAssetMarker(String((assetId ? byId.get(assetId)?.props as { src?: string | null } | undefined : undefined)?.src ?? ""));
     try {
-      // A text result (spec 05) has no picture: its sidecar is its one file.
+      // A text result has no picture: its sidecar is its one file.
       const file = shape.type === "text" ? result.sidecar : marker?.kind === "project-file" ? marker.file : undefined;
       if (file === undefined) throw new Error("the result has no picture here");
       const copied = await ctx.engine.call("recipe.copy", { project: ctx.project, from: source, sidecar: result.sidecar, file });

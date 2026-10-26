@@ -48,8 +48,8 @@ export const contentTypeFor = (name: string): string =>
  * `fileNameOf` keeps only the name's basename, so neither can escape the project folder.
  * With `preview=512` or `preview=2048` it serves that file's display preview from the
  * cache folder instead, or 404 when there is none (the web then falls back to the original).
- * With `snapshot=<w>x<h>` it serves an artifact's still at that size from the cache folder
- * (spec 09): a picture, never the page itself.
+ * With `snapshot=<w>x<h>` it serves an artifact's still at that size from the cache
+ * folder: a picture, never the page itself.
  */
 export const projectFileRoute =
   (projectFolder: (project: string) => Promise<string | undefined>): Route =>

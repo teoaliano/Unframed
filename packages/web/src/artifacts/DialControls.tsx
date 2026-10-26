@@ -1,5 +1,5 @@
 /**
- * An artifact's parameters as DialKit controls (spec 09), shared by the editor's Parameters
+ * An artifact's parameters as DialKit controls, shared by the editor's Parameters
  * column and the canvas's Parameters panel. Only lazily loaded modules import this one, so
  * DialKit and its stylesheet never reach a board where neither is open.
  */

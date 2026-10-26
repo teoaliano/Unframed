@@ -33,7 +33,7 @@ const tabMenuItem = async (page: Page, project: string, item: string) => {
 };
 
 /*
- * Spec 12's sweep: every surface in turn, and on each no button, menu item, field or dialog
+ * The kit sweep: every surface in turn, and on each no button, menu item, field or dialog
  * that a kit component did not render.
  */
 

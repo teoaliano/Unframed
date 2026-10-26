@@ -1,5 +1,5 @@
 /**
- * The kit menu's popup and row look (spec 12), for listboxes the kit's Menu cannot host:
+ * The kit menu's popup and row look, for listboxes the kit's Menu cannot host:
  * the mention, slash and chat search menus, whose text field keeps the keyboard while
  * they are open. A row shows as highlighted while it carries `data-highlighted`.
  */

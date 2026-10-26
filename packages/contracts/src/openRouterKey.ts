@@ -1,4 +1,4 @@
-/** Spec 10: the OpenRouter key flow, key removal and the project lifecycle methods. */
+/** The OpenRouter key flow, key removal and the project lifecycle methods. */
 import * as Schema from "effect/Schema";
 import * as Rpc from "effect/unstable/rpc/Rpc";
 import { UnframedError } from "./errors.ts";

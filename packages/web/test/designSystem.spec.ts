@@ -7,7 +7,7 @@ import { createServer, type ViteDevServer } from "vite";
 import { webDist } from "./fixtures.ts";
 
 /*
- * Spec 13: the design-system catalogue exists in the web dev server only. These start that
+ * The design-system catalogue exists in the web dev server only. These start that
  * server on a free port, as `pnpm dev` does, and read the build the other specs serve.
  */
 const webRoot = fileURLToPath(new URL("..", import.meta.url));

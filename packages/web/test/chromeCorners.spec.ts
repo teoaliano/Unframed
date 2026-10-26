@@ -11,9 +11,9 @@ test("the top-left card holds the logo; Settings sits at the end opposite the wi
   await expect(left.getByRole("img", { name: "Unframed" })).toBeVisible();
   const settings = page.getByRole("button", { name: /^(Settings|Add your API key)$/ });
   await expect(settings).toHaveCount(1);
-  // Spec 17: macOS and Linux keep Settings at the far right, Windows at the far left, before the logo.
+  // macOS and Linux keep Settings at the far right, Windows at the far left, before the logo.
   expect(await page.locator(os.name === "win32" ? ".unframed-chrome-left" : ".unframed-chrome-right").getByRole("button", { name: /^(Settings|Add your API key)$/ }).count()).toBe(1);
-  // Spec 01: the shell's CSS expects exactly one right card.
+  // The shell's CSS expects exactly one right card.
   await expect(page.locator(".unframed-chrome-right")).toHaveCount(1);
   await expect(page.getByRole("button", { name: "Help" })).toHaveCount(0);
 });

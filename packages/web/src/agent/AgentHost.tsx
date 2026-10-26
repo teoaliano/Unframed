@@ -1,5 +1,5 @@
 /**
- * The agent on the canvas (spec 08): the Agent button in the top-right chrome, the
+ * The agent on the canvas: the Agent button in the top-right chrome, the
  * composer's Agent tray, and the chat rail docked to the left edge.
  */
 import { Sparkles } from "lucide-react";

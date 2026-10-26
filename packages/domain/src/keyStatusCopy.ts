@@ -1,9 +1,9 @@
 /**
- * What the settings dialog says about the saved OpenRouter key (spec 10): the status line
+ * What the settings dialog says about the saved OpenRouter key: the status line
  * from a `KeyStatus`, and the expiry note under it.
  */
 
-/** Spec 10's `KeyStatus`, as `oauth.status` answers it. */
+/** The `KeyStatus`, as `oauth.status` answers it. */
 export type KeyStatusValue =
   | { readonly hasKey: false }
   | { readonly hasKey: true; readonly revoked: true }

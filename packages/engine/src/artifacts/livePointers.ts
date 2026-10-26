@@ -1,5 +1,5 @@
 /**
- * The live viewer's pointers (spec 09): one small file, `unframed-live-<key>.js`, for each
+ * The live viewer's pointers: one small file, `unframed-live-<key>.js`, for each
  * artifact shape the person opened in a tab, naming the shape's current file and dials, or
  * that it was deleted. "Open in a new tab" writes the first one; from then on the pointer
  * file on disk is what marks the shape as followed, and the engine rewrites it after every

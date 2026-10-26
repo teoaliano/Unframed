@@ -1,4 +1,4 @@
-/** Artifacts (spec 09): motion uploads, motion renders and artifact snapshots. */
+/** Artifacts: motion uploads, motion renders and artifact snapshots. */
 import * as Schema from "effect/Schema";
 import * as Rpc from "effect/unstable/rpc/Rpc";
 import { UnframedError } from "./errors.ts";
@@ -7,6 +7,27 @@ import { UnframedError } from "./errors.ts";
 export const MotionUpload = Rpc.make("motion.upload", {
   payload: Schema.Struct({ project: Schema.String, fileName: Schema.String, html: Schema.String }),
   success: Schema.Struct({ file: Schema.String, fileName: Schema.String, bytes: Schema.Number, mime: Schema.Literal("text/html") }),
+  error: UnframedError,
+});
+
+/**
+ * A style version the person saved in the markdown window, or a style a library preset
+ * brings in: always a new `.md` file with its sidecar, never an overwrite. The web then
+ * points the shape at it, as the person's own change.
+ */
+export const StyleWrite = Rpc.make("style.write", {
+  payload: Schema.Struct({
+    project: Schema.String,
+    markdown: Schema.String,
+    title: Schema.String,
+    /** The style shape it is a version of; absent for a new style. */
+    shapeId: Schema.optionalKey(Schema.String),
+    /** The file it replaces. */
+    of: Schema.optionalKey(Schema.String),
+    /** The library preset it comes from. */
+    preset: Schema.optionalKey(Schema.String),
+  }),
+  success: Schema.Struct({ file: Schema.String, bytes: Schema.Number, swatches: Schema.Array(Schema.String), excerpt: Schema.String }),
   error: UnframedError,
 });
 

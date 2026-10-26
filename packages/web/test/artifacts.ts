@@ -1,4 +1,4 @@
-/** Browser-seam helpers for pages and motions (spec 09): files in the project folder, shapes that name them, their frames. */
+/** Browser-seam helpers for pages and motions: files in the project folder, shapes that name them, their frames. */
 import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { FrameLocator, Locator, Page } from "@playwright/test";

@@ -1,8 +1,8 @@
 /**
- * The render job store's I/O half (spec 04): `<output folder>/jobs.json`, one JSON array.
+ * The render job store's I/O half: `<output folder>/jobs.json`, one JSON array.
  * Every write runs on one module-level queue, so no two read-modify-writes interleave, and
  * lands through a temp file renamed over the store, so a crash leaves the old file or the
- * new one. Spec 10's lifecycle actions run on the same queue with strict reads.
+ * new one. The lifecycle actions run on the same queue with strict reads.
  */
 import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -34,8 +34,8 @@ export const readJobsLenient = async (outputDir: string): Promise<RenderJob[]> =
 };
 
 /**
- * Only a missing file reads as `[]`. For every lifecycle action that could strand a render
- * (spec 10), because "0 pending" from a damaged store reads exactly like "nothing in flight".
+ * Only a missing file reads as `[]`. For every lifecycle action that could strand a render,
+ * because "0 pending" from a damaged store reads exactly like "nothing in flight".
  */
 export const readJobsStrict = async (outputDir: string): Promise<RenderJob[]> => {
   const path = jobStorePath(outputDir);

@@ -18,7 +18,7 @@ const looks = (page: Page) =>
   });
 
 /**
- * What spec 12 says each surface is: the body and grid on --background (the body in sRGB,
+ * What each surface is: the body and grid on --background (the body in sRGB,
  * the format the shell reads), the top bar opaque on the same background.
  */
 const expected = async (page: Page, theme: "light" | "dark") => ({

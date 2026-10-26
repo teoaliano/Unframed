@@ -66,7 +66,7 @@ export class MediaStore extends Context.Service<
     ) => Promise<SavedFile>;
     /** Writes a regenerable display preview of `file` into the cache folder. No sidecar. */
     readonly savePreview: (project: string, file: string, size: PreviewSize, body: AsyncIterable<Buffer>) => Promise<{ bytes: number }>;
-    /** `ofProject` names the source project in the copy's sidecar (spec 06's preset copies). */
+    /** `ofProject` names the source project in the copy's sidecar (preset copies). */
     readonly copy: (project: string, file: string, from?: string, ofProject?: string) => Effect.Effect<string, UnframedError>;
     /** The absolute project folder, when the project exists. */
     readonly folder: (project: string) => Promise<string | undefined>;

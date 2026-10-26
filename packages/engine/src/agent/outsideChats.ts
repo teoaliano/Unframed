@@ -34,14 +34,14 @@ export interface OutsideCall {
   readonly args: Record<string, unknown>;
 }
 
-/** The chat an outside session's calls into one project show in (spec 14, "The outside chat"). */
+/** The chat an outside session's calls into one project show in. */
 export const outsideChatOf = (chats: ReadonlyArray<Chat>, connectionId: string, sessionId: string): Chat | undefined =>
   chats
     .filter((chat) => chat.deletedAt === null && chat.outside?.connectionId === connectionId && chat.outside.sessionId === sessionId)
     .sort((a, b) => (a.createdAt < b.createdAt ? 1 : a.createdAt > b.createdAt ? -1 : 0))[0];
 
 /**
- * The outside calls (spec 14): one call from an outside session into one project. It finds or makes
+ * The outside calls: one call from an outside session into one project. It finds or makes
  * the session's chat there, opens or continues its turn by the idle rule, records the call's
  * activities, runs the tool in that chat, and settles the turn once it has been quiet for the idle time.
  */
@@ -51,7 +51,7 @@ export class OutsideChats {
   private readonly agents = new Map<string, OutsideAgent>();
   /** The room clock at the end of each chat's last call: the change note counts from here. */
   private readonly clockAtLastCall = new Map<string, number>();
-  /** Paid runs each chat's agent started that have not landed or failed yet (spec 14, "Outside turns"). */
+  /** Paid runs each chat's agent started that have not landed or failed yet. */
   private readonly inFlight = new Map<string, number>();
   /** Chats whose settle was asked for while a run was in flight: they settle when the last run ends. */
   private readonly deferred = new Set<string>();
@@ -111,7 +111,7 @@ export class OutsideChats {
     return note === undefined ? answer : { ...answer, notes: [note] };
   }
 
-  /** The change note an outside call's result starts with, when the canvas changed since the chat's last call (spec 14). */
+  /** The change note an outside call's result starts with, when the canvas changed since the chat's last call. */
   private async changeNoteFor(agent: OutsideAgent, chatId: string): Promise<string | undefined> {
     const since = this.clockAtLastCall.get(chatId) ?? agent.engine.chat(chatId)?.lastClock ?? null;
     if (since === null) return undefined;
@@ -237,7 +237,7 @@ export class OutsideChats {
     const chat = agent.engine.chat(chatId);
     // Only an outside chat settles here: an in-app chat's turn belongs to its own agent.
     if (chat?.outside === undefined) return;
-    // A paid run is never cut off: the turn settles once the last of its runs has landed (spec 14).
+    // A paid run is never cut off: the turn settles once the last of its runs has landed.
     if ((this.inFlight.get(chatId) ?? 0) > 0) {
       this.deferred.add(chatId);
       return;

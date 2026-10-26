@@ -3,7 +3,7 @@ import { createShapeId, type Editor, type TLShape, type TLTextShape } from "tldr
 import { pageBox } from "./facts.ts";
 
 /**
- * Copy as prompt (spec 05): a plain prompt with a text result's text, placed beside it by
+ * Copy as prompt: a plain prompt with a text result's text, placed beside it by
  * result placement. It carries no result meta, so its own `@` tokens resolve like any
  * prompt's; the text result keeps saying what the model produced.
  */

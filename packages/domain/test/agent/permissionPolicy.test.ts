@@ -32,7 +32,7 @@ describe("the permission policy, in order", () => {
       expect(decidePermission({ runtimeMode, interactionMode: "default", tool: "mcp__unframed__canvas_write", input: {} })).toEqual({ kind: "allow" });
       expect(decidePermission({ runtimeMode, interactionMode: "plan", tool: "mcp__unframed__canvas_read", input: {} })).toEqual({ kind: "allow" });
     }
-    for (const tool of ["mcp__unframed__canvas_write", "mcp__unframed__page_write", "mcp__unframed__motion_write"]) {
+    for (const tool of ["mcp__unframed__canvas_write", "mcp__unframed__page_write", "mcp__unframed__motion_write", "mcp__unframed__page_edit", "mcp__unframed__motion_edit"]) {
       expect(decidePermission({ runtimeMode: "full-access", interactionMode: "plan", tool, input: {} })).toEqual({
         kind: "deny",
         message: "Plan mode changes nothing, so this write did not happen; put the change in your plan instead.",

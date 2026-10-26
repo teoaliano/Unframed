@@ -1,5 +1,5 @@
 /**
- * Chat attachments (spec 07, t3code's limits): what a file is, whether a message's set is
+ * Chat attachments (t3code's limits): what a file is, whether a message's set is
  * within the limits, and the id a stored file gets. The composer and the engine both use
  * these, so they never disagree about what a file is.
  */

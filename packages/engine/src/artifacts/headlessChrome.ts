@@ -1,5 +1,5 @@
 /**
- * The engine-owned headless Chrome (spec 09) that snapshots and the agent's previews use:
+ * The engine-owned headless Chrome that snapshots and the agent's previews use:
  * the Chromium the Chrome finder found, launched on first need and closed after five
  * minutes without work. It only ever loads the preview origin.
  */

@@ -70,7 +70,7 @@ export interface Handoff {
 const EMPTY_QUEUE: ReadonlyArray<QueuedMessage> = [];
 
 /**
- * The chat client state (spec 08, t3code's client-runtime shape): the project's chat
+ * The chat client state (t3code's client-runtime shape): the project's chat
  * summaries from `subscribeShell`, the chats on screen from `subscribeThread` folded with
  * the domain projector and de-duplicated by sequence, optimistic user messages, the
  * provider statuses, and a `dispatch` that stamps command ids. Reconnects resubscribe and
@@ -109,7 +109,7 @@ export class ChatClient {
     this.stopShell = engine.subscribe("orchestration.subscribeShell", { projectId: project }, (item) => this.onShell(item));
   }
 
-  /** The unsent drafts, for a project tab that goes to the background (spec 17). */
+  /** The unsent drafts, for a project tab that goes to the background. */
   drafts(): ReadonlyArray<readonly [string, ChatDraft]> {
     return [...this.drafts_];
   }
@@ -402,7 +402,7 @@ export class ChatClient {
   }
 
   // -------------------------------------------------------------------------------------
-  // The Follow-up behavior preference (spec 10 shows its control): Queue unless set.
+  // The Follow-up behavior preference (Settings shows its control): Queue unless set.
 
   get followUp(): "queue" | "steer" {
     if (!this.followUpWatch) {
@@ -415,7 +415,7 @@ export class ChatClient {
     return this.followUpValue;
   }
 
-  /** The Plan mode preference (spec 10 shows its control): off unless set, as in t3code. */
+  /** The Plan mode preference (Settings shows its control): off unless set, as in t3code. */
   get planMode(): boolean {
     if (!this.planModeWatch) {
       this.planModeWatch = this.engine.subscribe("preferences.subscribe", { keys: ["agent.planMode"] }, (change) => {
@@ -459,7 +459,7 @@ const disposeIfIdle = (project: string, entry: ClientEntry) =>
   setTimeout(() => {
     if (entry.holders > 0 || clients.get(project) !== entry) return;
     clients.delete(project);
-    // The drafts outlive the client, so a tab that comes back shows what the person typed (spec 17).
+    // The drafts outlive the client, so a tab that comes back shows what the person typed.
     rememberDrafts(project, entry.client.drafts());
     entry.client.dispose();
   }, 1000);

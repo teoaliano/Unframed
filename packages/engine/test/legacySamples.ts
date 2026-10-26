@@ -1,4 +1,4 @@
-/** The old-format samples of spec 11, for the engine and browser seams alike. Framework-free. */
+/** The old-format samples of the legacy import, for the engine and browser seams alike. Framework-free. */
 import { cp } from "node:fs/promises";
 import { join } from "node:path";
 import { repoRoot } from "./engineProcess.ts";
