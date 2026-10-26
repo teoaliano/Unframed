@@ -1,6 +1,7 @@
 /**
  * The style documents that ship in the library: ten DESIGN.md files from
- * VoltAgent/awesome-design-md (MIT), kept verbatim under `assets/design-md/<folder>/`.
+ * VoltAgent/awesome-design-md (MIT), kept under `assets/design-md/<folder>/`
+ * as upstream wrote them, apart from the brand name corrected in `stripe/DESIGN.md`.
  * They are never written to `presets.json`; inserting one writes its markdown into the
  * project as a new style file.
  */

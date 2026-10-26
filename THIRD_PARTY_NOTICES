@@ -83,8 +83,9 @@ awesome-design-md (the library's style presets)
 --------------------------------------------------------------------------------
 
 The ten DESIGN.md files in assets/design-md (apple, claude, vercel, notion, airbnb,
-linear.app, stripe, figma, bmw-m, coinbase) come verbatim from VoltAgent/awesome-design-md
+linear.app, stripe, figma, bmw-m, coinbase) come from VoltAgent/awesome-design-md
 (https://github.com/VoltAgent/awesome-design-md, commit
-3b605329240ce735b510037cca322f1831fdd7f8). They describe the visual language of those
-brands and are not affiliated with or endorsed by them. awesome-design-md is used under the
-MIT License; its text is in assets/design-md/LICENSE.
+3b605329240ce735b510037cca322f1831fdd7f8), except one correction: stripe/DESIGN.md spells
+the brand "Stripi" three times upstream, and the copy here says "Stripe". They describe the
+visual language of those brands and are not affiliated with or endorsed by them.
+awesome-design-md is used under the MIT License; its text is in assets/design-md/LICENSE.

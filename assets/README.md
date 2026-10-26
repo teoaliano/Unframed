@@ -28,7 +28,7 @@ The design canvas for selection-based generation. Open the `.dc.html` files in a
 
 ## design-md/
 
-The library's system style presets: ten DESIGN.md files, verbatim, from VoltAgent/awesome-design-md (MIT) at commit `3b605329240ce735b510037cca322f1831fdd7f8`. `packages/domain/src/styles/stylePresets.ts` lists them with their one-line descriptions, and `packages/web/src/library/systemPresets.ts` loads the markdown when one is inserted.
+The library's system style presets: ten DESIGN.md files from VoltAgent/awesome-design-md (MIT) at commit `3b605329240ce735b510037cca322f1831fdd7f8`, verbatim except `stripe/DESIGN.md`, where the upstream file's three misspellings of the brand as "Stripi" are corrected to "Stripe". `packages/domain/src/styles/stylePresets.ts` lists them with their one-line descriptions, and `packages/web/src/library/systemPresets.ts` loads the markdown when one is inserted.
 
 - `design-md/LICENSE`: the repository's MIT licence.
 - `design-md/<name>/DESIGN.md`: one style each, for `apple`, `claude`, `vercel`, `notion`, `airbnb`, `linear.app`, `stripe`, `figma`, `bmw-m` and `coinbase`.

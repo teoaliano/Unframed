@@ -15,7 +15,7 @@ export const builtInPresets = (): ReadonlyArray<Preset> => {
 // Each DESIGN.md is its own chunk, fetched only when that style is inserted.
 const DOCUMENTS = import.meta.glob<string>("../../../../assets/design-md/*/DESIGN.md", { query: "?raw", import: "default" });
 
-/** A shipped style's markdown, verbatim from `assets/design-md`. */
+/** A shipped style's markdown, as `assets/design-md` holds it. */
 export const styleMarkdown = async (presetId: string): Promise<string> => {
   const style = STYLE_PRESETS.find((known) => known.id === presetId);
   const load = style === undefined ? undefined : DOCUMENTS[`../../../../assets/design-md/${style.folder}/DESIGN.md`];
