@@ -386,3 +386,68 @@ test("the Parameters panel fits its width: nothing in it scrolls sideways, in ei
     expect(widths.scroll).toBeLessThanOrEqual(widths.client);
   });
 });
+
+const EDGES_DIALS = `<!doctype html><html><head><style>body{margin:0;font:14px sans-serif}</style>${BRIDGE_TAG}</head><body><pre id="values">none</pre>
+<script>
+unframed.dials("Blueprint loader", { edges: { radius: [14, 0, 40], inset: [4, 0, 20] }, speed: [1.5, 0, 4, 0.1] }, function (v) { document.getElementById("values").textContent = JSON.stringify(v); });
+</script></body></html>`;
+
+test("a slider's label and value stay readable while it is hovered and while it is dragged", async ({ page, agent }) => {
+  await openCanvas(page, agent);
+  await writeBridge(agent);
+  await filledArtifact(agent, { id: "shape:tuned", kind: "page", ref: "150", at: { x: -520, y: -40 }, size: { w: 300, h: 200 }, title: "Tuned", html: EDGES_DIALS });
+  await expect(shapeOnScreen(page, "shape:tuned")).toBeVisible();
+  await clickShape(page, "shape:tuned");
+  await parametersToggle(page).click();
+  const panel = canvasPanel(page, "Tuned");
+  const slider = panel.getByRole("slider", { name: "Radius" });
+  await expect(slider).toBeVisible();
+  const row = panel.locator(".dialkit-slider").first();
+  // The WCAG contrast of the label and the value against what is painted under each: the fill where it reaches, else the row.
+  const contrast = () =>
+    row.evaluate((element) => {
+      // Linear RGB of `over` painted on `under`, so a translucent fill is judged as it looks.
+      const paint = (over: string, under: string) => {
+        const canvas = document.createElement("canvas");
+        canvas.width = canvas.height = 1;
+        const context = canvas.getContext("2d", { willReadFrequently: true })!;
+        context.fillStyle = under;
+        context.fillRect(0, 0, 1, 1);
+        context.fillStyle = over;
+        context.fillRect(0, 0, 1, 1);
+        return [...context.getImageData(0, 0, 1, 1).data.slice(0, 3)].map((channel) => {
+          const c = channel / 255;
+          return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+        });
+      };
+      const luminance = ([r, g, b]: number[]) => 0.2126 * r! + 0.7152 * g! + 0.0722 * b!;
+      const ratio = (a: number, b: number) => (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
+      const surface = getComputedStyle(element).backgroundColor;
+      const fill = element.querySelector<HTMLElement>(".dialkit-slider-fill")!;
+      const fillColour = getComputedStyle(fill).backgroundColor;
+      const fillEnd = fill.getBoundingClientRect().right;
+      // The part's backdrop: the fill's colour over the surface where the fill reaches the part, else the surface.
+      const backdropUnder = (part: Element) => {
+        const box = part.getBoundingClientRect();
+        return box.left + box.width / 2 < fillEnd ? paint(fillColour, surface) : paint(surface, surface);
+      };
+      const pair = (part: Element) => ratio(luminance(paint(getComputedStyle(part).color, "#000")), luminance(backdropUnder(part)));
+      return {
+        label: pair(element.querySelector(".dialkit-slider-label")!),
+        value: pair(element.querySelector(".dialkit-slider-value")!),
+      };
+    });
+  await inBothSchemes(page, async () => {
+    await row.hover();
+    await expect.poll(async () => (await contrast()).label).toBeGreaterThanOrEqual(4.5);
+    await expect.poll(async () => (await contrast()).value).toBeGreaterThanOrEqual(4.5);
+    const box = (await slider.boundingBox())!;
+    await page.mouse.move(box.x + box.width * 0.3, box.y + box.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(box.x + box.width * 0.6, box.y + box.height / 2, { steps: 5 });
+    await expect.poll(async () => (await contrast()).label).toBeGreaterThanOrEqual(4.5);
+    await expect.poll(async () => (await contrast()).value).toBeGreaterThanOrEqual(4.5);
+    await page.mouse.up();
+    await page.mouse.move(0, 0);
+  });
+});
