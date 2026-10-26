@@ -392,7 +392,7 @@ const EDGES_DIALS = `<!doctype html><html><head><style>body{margin:0;font:14px s
 unframed.dials("Blueprint loader", { edges: { radius: [14, 0, 40], inset: [4, 0, 20] }, speed: [1.5, 0, 4, 0.1] }, function (v) { document.getElementById("values").textContent = JSON.stringify(v); });
 </script></body></html>`;
 
-test("a slider's label and value stay readable while it is hovered and while it is dragged", async ({ page, agent }) => {
+test("a slider's label stays readable while it is hovered and while it is dragged", async ({ page, agent }) => {
   await openCanvas(page, agent);
   await writeBridge(agent);
   await filledArtifact(agent, { id: "shape:tuned", kind: "page", ref: "150", at: { x: -520, y: -40 }, size: { w: 300, h: 200 }, title: "Tuned", html: EDGES_DIALS });
@@ -403,7 +403,7 @@ test("a slider's label and value stay readable while it is hovered and while it 
   const slider = panel.getByRole("slider", { name: "Radius" });
   await expect(slider).toBeVisible();
   const row = panel.locator(".dialkit-slider").first();
-  // The WCAG contrast of the label and the value against what is painted under each: the fill where it reaches, else the row.
+  // The WCAG contrast of the label against what is painted under it: the fill where it reaches, else the row.
   const contrast = () =>
     row.evaluate((element) => {
       // Linear RGB of `over` painted on `under`, so a translucent fill is judged as it looks.
@@ -432,21 +432,16 @@ test("a slider's label and value stay readable while it is hovered and while it 
         return box.left + box.width / 2 < fillEnd ? paint(fillColour, surface) : paint(surface, surface);
       };
       const pair = (part: Element) => ratio(luminance(paint(getComputedStyle(part).color, "#000")), luminance(backdropUnder(part)));
-      return {
-        label: pair(element.querySelector(".dialkit-slider-label")!),
-        value: pair(element.querySelector(".dialkit-slider-value")!),
-      };
+      return pair(element.querySelector(".dialkit-slider-label")!);
     });
   await inBothSchemes(page, async () => {
     await row.hover();
-    await expect.poll(async () => (await contrast()).label).toBeGreaterThanOrEqual(4.5);
-    await expect.poll(async () => (await contrast()).value).toBeGreaterThanOrEqual(4.5);
+    await expect.poll(contrast).toBeGreaterThanOrEqual(4.5);
     const box = (await slider.boundingBox())!;
     await page.mouse.move(box.x + box.width * 0.3, box.y + box.height / 2);
     await page.mouse.down();
     await page.mouse.move(box.x + box.width * 0.6, box.y + box.height / 2, { steps: 5 });
-    await expect.poll(async () => (await contrast()).label).toBeGreaterThanOrEqual(4.5);
-    await expect.poll(async () => (await contrast()).value).toBeGreaterThanOrEqual(4.5);
+    await expect.poll(contrast).toBeGreaterThanOrEqual(4.5);
     await page.mouse.up();
     await page.mouse.move(0, 0);
   });

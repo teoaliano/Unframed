@@ -184,20 +184,19 @@
 }
 
 /*
- * Hovered or dragged, the fill and the ticks take the muted tone, which was the label's own colour,
- * so the label vanished into the fill and a tick crossed the value. The fill takes the border tone
- * instead, the label and value take the foreground, and both sit above the fill and the ticks.
+ * Hovered or dragged, the fill and the ticks take the muted tone, which is also the label's colour, so
+ * the label vanished into the fill. The fill takes the border tone instead, and the label takes the
+ * foreground and sits above the fill and the ticks. The ticks stop short of the label.
  */
-:root .dialkit-root[data-theme] :is(.dialkit-slider-label, .dialkit-slider-value, .dialkit-slider-input) {
+:root .dialkit-root[data-theme] .dialkit-slider-label {
   z-index: 1;
 }
 
-/* The ticks stop short of the label and the value, so none touches a glyph. */
 :root .dialkit-root[data-theme] .dialkit-slider-hashmarks {
-  mask-image: linear-gradient(to right, transparent 72px, #000 72px, #000 calc(100% - 48px), transparent calc(100% - 48px));
+  mask-image: linear-gradient(to right, transparent 72px, #000 72px);
 }
 
-:root .dialkit-root[data-theme] .dialkit-slider-active :is(.dialkit-slider-label, .dialkit-slider-value) {
+:root .dialkit-root[data-theme] .dialkit-slider-active .dialkit-slider-label {
   color: var(--dial-text-focus);
 }
 
