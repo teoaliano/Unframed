@@ -763,13 +763,13 @@ code {
   }
 
   /*
-   * The project tab strip (spec 17) sits in the chrome row. Its layer is below the canvas's in-front layer (250 is
-   * above 200), so the selection bar and the composer, which live there, stay on top of it. The chrome cards are 400.
+   * The project tab strip (spec 17) sits in the chrome row. It keeps its place with the rail open, so it sits above the
+   * docked rail (600) and under the docked top-left card (700). The chrome cards are 400.
    */
   .unframed-tabs {
     position: fixed;
     top: 0;
-    z-index: 200;
+    z-index: 650;
   }
 
 }

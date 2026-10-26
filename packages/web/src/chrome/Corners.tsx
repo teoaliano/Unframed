@@ -8,11 +8,8 @@ import { TabStrip } from "./TabStrip.tsx";
 import { useTabShortcuts } from "./tabShortcuts.ts";
 import { useSlots } from "./slots.ts";
 
-/** The rail's width (spec 08): the strip starts after it while the rail is docked. */
-const RAIL_WIDTH = 380;
 /** Windows draws its caption buttons over the top-right corner (spec 01's repair). */
 const CAPTION_WIDTH = 144;
-const GAP = 8;
 
 const LogoMark = () => (
   <span
@@ -56,8 +53,6 @@ export const TopCorners = () => {
     return () => observer.disconnect();
   }, [settingsOnLeft, active]);
 
-  const stripLeft = docked ? RAIL_WIDTH + GAP : edges.left;
-
   return (
     <TooltipProvider delay={400}>
       <TabStrip
@@ -72,7 +67,7 @@ export const TopCorners = () => {
             className: "unframed-chrome-left data-docked:z-[700] data-docked:border-transparent data-docked:bg-transparent",
             "data-docked": docked ? "" : undefined,
           },
-          tabs: { className: "unframed-tabs", style: { left: stripLeft, right: edges.right }, "data-testid": "tab-strip" },
+          tabs: { className: "unframed-tabs", style: { left: edges.left, right: edges.right }, "data-testid": "tab-strip" },
           end: { ref: right, className: "unframed-chrome-right" },
         }}
       />
