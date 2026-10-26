@@ -66,6 +66,8 @@ export * from "./agent/timeline.ts";
 export * from "./oauthAttempt.ts";
 export * from "./keyStatusCopy.ts";
 export * from "./jobLifecycle.ts";
+export * from "./designFields.ts";
+export * from "./elementChips.ts";
 export * from "./artifacts/prompts.ts";
 export * from "./artifacts/dials.ts";
 export * from "./artifacts/artifactRules.ts";
