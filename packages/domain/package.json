@@ -4,9 +4,15 @@
   "private": true,
   "type": "module",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./html": "./src/html/index.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit -p ."
+  },
+  "dependencies": {
+    "@unframed/contracts": "workspace:*",
+    "@hyperframes/parsers": "0.8.93",
+    "parse5": "8.0.1"
   }
 }
