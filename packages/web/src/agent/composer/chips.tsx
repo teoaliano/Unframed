@@ -1,5 +1,5 @@
-import { shapeKind, shapeLabel, type ShapeKind } from "@unframed/domain";
-import { AlignLeft, AppWindow, Clapperboard, Group, Image, Palette, PenLine, SquarePlay, X, type LucideIcon } from "lucide-react";
+import { shapeKind, shapeLabel, styleRoleOf, type ShapeKind } from "@unframed/domain";
+import { AlignLeft, AppWindow, Clapperboard, FileText, Group, Image, Palette, PenLine, SquarePlay, X, type LucideIcon } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useValue, type Editor, type TLShapeId } from "tldraw";
 import { Badge } from "~/components/ui/badge";
@@ -31,6 +31,8 @@ export interface ChipShape {
   readonly id: string;
   readonly kind: ShapeKind;
   readonly label: string;
+  /** A style shape whose role is `document`. */
+  readonly document?: boolean;
 }
 
 
@@ -40,8 +42,10 @@ export const describeShape = (editor: Editor, id: string): ChipShape | undefined
   if (!shape) return undefined;
   const kind = shapeKind(shape.type);
   const props = shape.props as Record<string, unknown>;
-  const label = shapeLabel(props) ?? KIND_NOUNS[kind][0]!.toUpperCase() + KIND_NOUNS[kind].slice(1);
-  return { id: shape.id, kind, label };
+  const document = kind === "style" && styleRoleOf(props) === "document";
+  const noun = document ? "document" : KIND_NOUNS[kind];
+  const label = shapeLabel(props) ?? noun[0]!.toUpperCase() + noun.slice(1);
+  return { id: shape.id, kind, label, ...(document ? { document } : {}) };
 };
 
 export type Chip = { readonly kind: "artifact"; readonly shape: ChipShape } | { readonly kind: "count"; readonly ids: ReadonlyArray<string>; readonly label: string };
@@ -111,7 +115,7 @@ export const ChipRow = ({ shapes, onRemove }: { readonly shapes: ReadonlyArray<C
     <div className="flex flex-wrap gap-1" role="list" aria-label="Context">
       {chips.map((chip) => {
         const label = chip.kind === "artifact" ? chip.shape.label : chip.label;
-        const Icon = chip.kind === "artifact" ? KIND_ICONS[chip.shape.kind] : undefined;
+        const Icon = chip.kind === "artifact" ? (chip.shape.document ? FileText : KIND_ICONS[chip.shape.kind]) : undefined;
         return (
           <Badge key={chip.kind === "artifact" ? chip.shape.id : "count"} variant="outline" size="lg" className="max-w-full" role="listitem" data-chip={chip.kind}>
             {Icon && <Icon aria-hidden />}

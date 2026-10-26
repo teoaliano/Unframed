@@ -10,12 +10,13 @@ import { projectPath } from "./artifacts.ts";
 import { engineChat, onlyChat, openRail, rail, say, scriptFolder, startAgentEngine } from "./agent.ts";
 
 const LINEAR = "# Linear\n\nCalm and dense, for focused work.\n\n- Accent: #5E6AD2\n- Canvas: #08090a\n";
+const NOTES = "# Standup notes\n\nShip the card by Friday.\n\n- Issue #12 is still open\n";
 
 test("a dropped .md becomes a style card with its title, its colours and its opening lines", async ({ page, engine }) => {
   await openCanvas(page, engine);
   await dropFiles(page, await emptyCanvasPoint(page), [{ name: "linear.md", mime: "text/markdown", bytes: Buffer.from(LINEAR) }]);
   const style = await waitForRoom(engine, "default", (records) => records.find((record) => record.type === "style"));
-  expect(style.props).toMatchObject({ title: "Linear", fileName: "linear.md", swatches: ["#5e6ad2", "#08090a"], excerpt: "Calm and dense, for focused work. Accent: #5E6AD2 Canvas: #08090a" });
+  expect(style.props).toMatchObject({ role: "style", title: "Linear", fileName: "linear.md", swatches: ["#5e6ad2", "#08090a"], excerpt: "Calm and dense, for focused work. Accent: #5E6AD2 Canvas: #08090a" });
   expect(style.props.file).toMatch(/^\d+-linear\.md$/);
   expect(await readFile(projectPath(engine, style.props.file), "utf8")).toBe(LINEAR);
   const card = shapeOnScreen(page, style.id).getByTestId("style-card");
@@ -31,6 +32,20 @@ test("a dropped .md becomes a style card with its title, its colours and its ope
   await dropFiles(page, await emptyCanvasPoint(page), [{ name: "huge.md", mime: "text/markdown", size: 102_401 }]);
   await expect(toast(page, "A style document is at most 100 KiB of markdown.")).toBeVisible();
   expect((await roomRecords(engine, "default")).filter((record) => record.type === "style")).toHaveLength(1);
+});
+
+test("a dropped .md that names no colours becomes a document card: a file icon, no swatches", async ({ page, engine }) => {
+  await openCanvas(page, engine);
+  await dropFiles(page, await emptyCanvasPoint(page), [{ name: "notes.md", mime: "text/markdown", bytes: Buffer.from(NOTES) }]);
+  const shape = await waitForRoom(engine, "default", (records) => records.find((record) => record.type === "style"));
+  expect(shape.props).toMatchObject({ role: "document", title: "Standup notes", fileName: "notes.md", swatches: [] });
+  const card = shapeOnScreen(page, shape.id).getByTestId("style-card");
+  await expect(card).toHaveAttribute("data-role", "document");
+  await expect(card.getByTestId("document-icon")).toBeVisible();
+  await expect(card.getByTestId("style-icon")).toHaveCount(0);
+  await expect(card.getByTestId("style-swatches")).toHaveCount(0);
+  await expect(card.getByTestId("style-title")).toHaveText("Standup notes");
+  await expect(card.getByTestId("style-excerpt")).toContainText("Ship the card by Friday.");
 });
 
 test("a style from the library lands as a new file in the project with that document", async ({ page, engine }) => {
@@ -82,6 +97,34 @@ test("the markdown window shows the document, saves an edit as a new version, an
   await page.keyboard.press("ControlOrMeta+z");
   await expect.poll(async () => (await settledRecord(engine, "default", "shape:linear"))?.props.file).toBe("1-linear.md");
   expect(existsSync(projectPath(engine, saved.props.file))).toBe(true);
+});
+
+test("the window's switch makes a style a document as a canvas change, and undo on the canvas makes it a style again", async ({ page, engine }) => {
+  await openCanvas(page, engine);
+  await writeFile(projectPath(engine, "1-linear.md"), LINEAR);
+  await putRecords(engine, [styleRecord("shape:linear", "300", { x: 620, y: 80 }, "1-linear.md", "Linear", { swatches: ["#5e6ad2"] })]);
+  await expect(shapeOnScreen(page, "shape:linear")).toBeVisible();
+  await clickShape(page, "shape:linear");
+  await toolbar(page).getByRole("button", { name: "Open" }).click();
+  const window = page.getByTestId("style-window");
+  const role = window.getByRole("group", { name: "Use as" });
+  await expect(role.getByRole("button", { name: "Style" })).toHaveAttribute("aria-pressed", "true");
+  await role.getByRole("button", { name: "Document" }).click();
+  await expect(role.getByRole("button", { name: "Document" })).toHaveAttribute("aria-pressed", "true");
+  await expect.poll(async () => (await settledRecord(engine, "default", "shape:linear"))?.props.role).toBe("document");
+  // A role is not a new version: the shape keeps its file.
+  expect((await settledRecord(engine, "default", "shape:linear"))?.props.file).toBe("1-linear.md");
+  const card = shapeOnScreen(page, "shape:linear").getByTestId("style-card");
+  await expect(card).toHaveAttribute("data-role", "document");
+  await expect(card.getByTestId("style-swatches")).toHaveCount(0);
+
+  await page.keyboard.press("Escape");
+  await expect(window).toHaveCount(0);
+  await page.keyboard.press("ControlOrMeta+z");
+  // Back to the props it had: no role, which reads as a style.
+  await expect.poll(async () => (await settledRecord(engine, "default", "shape:linear"))?.props.role).toBeUndefined();
+  await expect(card).toHaveAttribute("data-role", "style");
+  await expect(card.locator("[data-swatch]")).toHaveCount(1);
 });
 
 test("the read view shows the document first, its front matter folded under Details and wrapped, and a save keeps the front matter byte for byte", async ({ page, engine }) => {
@@ -156,6 +199,26 @@ test.describe("a chat's style", () => {
       await agent.dispose();
     }
   });
+});
+
+test("a selected document sent to the agent is material, never the chat's style: no chip appears", async ({ page }) => {
+  const script = await scriptFolder({ notes: { when: "^summarise", turns: [{ text: "Read the notes." }] } });
+  const agent = await startAgentEngine({ script });
+  try {
+    await openCanvas(page, agent);
+    await writeFile(projectPath(agent, "1-notes.md"), NOTES);
+    await putRecords(agent, [styleRecord("shape:notes", "300", { x: 620, y: 80 }, "1-notes.md", "Standup notes", { role: "document" })]);
+    await expect(shapeOnScreen(page, "shape:notes")).toBeVisible();
+    await clickShape(page, "shape:notes");
+    const panel = await openRail(page);
+    await say(panel, "summarise these notes");
+    await expect(panel.locator("[data-role='assistant']")).toContainText("Read the notes.");
+    const chat = await onlyChat(agent, (current) => current.turns.length === 1);
+    expect(chat.style).toBeNull();
+    await expect(rail(page).getByTestId("chat-style")).toHaveCount(0);
+  } finally {
+    await agent.dispose();
+  }
 });
 
 test("the work log line naming the chat's style wraps rather than cutting a long title short", async ({ page }) => {

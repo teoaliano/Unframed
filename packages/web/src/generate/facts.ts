@@ -52,6 +52,7 @@ const describe = (editor: Editor, shape: TLShape, z: number): CanvasShape | unde
   } else if (kind === "page" || kind === "motion" || kind === "style") {
     const file = field(shape.props, "file");
     if (typeof file === "string" && file !== "") described.file = file;
+    if (kind === "style" && field(shape.props, "role") === "document") described.document = true;
   }
   return described;
 };

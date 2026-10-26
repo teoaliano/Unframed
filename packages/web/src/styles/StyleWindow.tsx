@@ -1,5 +1,5 @@
-import { UnframedError, type StyleShapeProps } from "@unframed/contracts";
-import { splitFrontMatter } from "@unframed/domain";
+import { UnframedError, type StyleRole, type StyleShapeProps } from "@unframed/contracts";
+import { splitFrontMatter, styleRoleOf } from "@unframed/domain";
 import { Markdown } from "@tiptap/markdown";
 import { TableKit } from "@tiptap/extension-table";
 import { EditorContent, useEditor as useTiptap } from "@tiptap/react";
@@ -12,6 +12,7 @@ import { Button } from "~/components/ui/button";
 import { Collapsible, CollapsiblePanel, CollapsibleTrigger } from "~/components/ui/collapsible";
 import { Dialog, DialogClose, DialogDescription, DialogFooter, DialogHeader, DialogPanel, DialogPopup, DialogTitle } from "~/components/ui/dialog";
 import { Spinner } from "~/components/ui/spinner";
+import { Toggle, ToggleGroup } from "~/components/ui/toggle-group";
 import { ChatMarkdown } from "../agent/transcript/ChatMarkdown.tsx";
 import { fileUrl } from "../canvas/assetStore.ts";
 import { useCanvasProject, useEngine } from "../context.ts";
@@ -81,7 +82,8 @@ export const StyleWindow = ({ shapeId, onClose }: { readonly shapeId: TLShapeId;
   const shape = useValue("style shape", () => editor.getShape(shapeId) as TLShape<"style"> | undefined, [editor, shapeId]);
   const props = shape?.props as StyleShapeProps | undefined;
   const file = props?.file ?? "";
-  const title = props?.title.trim() || "Style";
+  const role = styleRoleOf(props);
+  const title = props?.title.trim() || (role === "document" ? "Document" : "Style");
   const [text, setText] = useState<{ readonly file: string; readonly markdown: string }>();
   const [problem, setProblem] = useState<string>();
   const [editing, setEditing] = useState(false);
@@ -134,6 +136,13 @@ export const StyleWindow = ({ shapeId, onClose }: { readonly shapeId: TLShapeId;
     }
   };
 
+  // A role is a canvas change, not a new version: one undo step on the canvas flips it back.
+  const changeRole = (next: StyleRole) => {
+    if (next === role || !shape) return;
+    editor.markHistoryStoppingPoint("style role");
+    editor.updateShape({ id: shapeId, type: "style", props: { role: next } } as TLShape);
+  };
+
   // The canvas listens for its shortcuts on the document: keys typed in the window stop here,
   // so the window closes itself on Escape.
   const keep = (event: KeyboardEvent) => {
@@ -149,7 +158,23 @@ export const StyleWindow = ({ shapeId, onClose }: { readonly shapeId: TLShapeId;
     <Dialog open onOpenChange={(open) => !open && onClose()}>
       <DialogPopup data-testid="style-window" className="max-h-[min(860px,calc(100vh-48px))] max-w-[760px]" onKeyDown={keep} onKeyUp={keep}>
         <DialogHeader>
-          <DialogTitle>{title}</DialogTitle>
+          <div className="flex min-w-0 items-center gap-3 pe-8">
+            <DialogTitle className="min-w-0 flex-1">{title}</DialogTitle>
+            <ToggleGroup
+              aria-label="Use as"
+              className="shrink-0"
+              variant="segmented"
+              value={[role]}
+              onValueChange={(value) => {
+                const next = value[0];
+                if (next === "style" || next === "document") changeRole(next);
+              }}
+              data-testid="style-role"
+            >
+              <Toggle value="style">Style</Toggle>
+              <Toggle value="document">Document</Toggle>
+            </ToggleGroup>
+          </div>
           <DialogDescription>{editing ? "Editing saves a new version; undo on the canvas brings the old one back." : file === "" ? "No document yet." : file}</DialogDescription>
         </DialogHeader>
         <DialogPanel>

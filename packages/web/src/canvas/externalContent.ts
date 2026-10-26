@@ -1,5 +1,6 @@
-import { parseAssetMarker, projectFileMarker, UnframedError } from "@unframed/contracts";
+import { parseAssetMarker, projectFileMarker, UnframedError, type StyleRole } from "@unframed/contracts";
 import {
+  droppedStyleRole,
   isArtifactKind,
   isStyleFile,
   isVideoLink,
@@ -64,11 +65,11 @@ const kindOf = (file: File): DroppedKind | undefined => {
 class StyleRefused extends Error {}
 
 /** A dropped style document: its text, read once for the card, and its upload as a project file with a sidecar. */
-const uploadStyle = async (ctx: ContentContext, file: File): Promise<{ file: string; props: { title: string; swatches: string[]; excerpt: string } }> => {
+const uploadStyle = async (ctx: ContentContext, file: File): Promise<{ file: string; role: StyleRole; props: { title: string; swatches: string[]; excerpt: string } }> => {
   if (file.size > STYLE_SIZE_LIMIT) throw new StyleRefused(STYLE_TOO_LARGE_MESSAGE);
   const markdown = await file.text();
   const saved = await uploadFile(ctx.project, new Blob([markdown], { type: "text/markdown" }), file.name || "style.md");
-  return { file: saved.file, props: { title: styleTitleFor(markdown, file.name || "Style"), ...styleCard(markdown) } };
+  return { file: saved.file, role: droppedStyleRole(markdown), props: { title: styleTitleFor(markdown, file.name || "Style"), ...styleCard(markdown) } };
 };
 
 const withoutExtension = (name: string) => name.replace(/\.[^.]*$/, "");
@@ -116,7 +117,7 @@ const addFile = async (editor: Editor, ctx: ContentContext, file: File, kind: Dr
       const saved = await uploadStyle(ctx, file);
       const id = createShapeId();
       editor.markHistoryStoppingPoint("add style");
-      editor.createShape({ id, type: "style", ...centred(point, STYLE_DEFAULT_SIZE), props: { ...STYLE_DEFAULT_SIZE, file: saved.file, fileName: file.name, ...saved.props } } as TLShape);
+      editor.createShape({ id, type: "style", ...centred(point, STYLE_DEFAULT_SIZE), props: { ...STYLE_DEFAULT_SIZE, file: saved.file, fileName: file.name, ...saved.props, role: saved.role } } as TLShape);
       return id;
     }
     if (kind === "page") {

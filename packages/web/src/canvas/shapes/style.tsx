@@ -1,6 +1,6 @@
 import type { StyleShapeProps } from "@unframed/contracts";
-import { readRef, STYLE_DEFAULT_SIZE } from "@unframed/domain";
-import { Palette } from "lucide-react";
+import { readRef, STYLE_DEFAULT_SIZE, styleRoleOf } from "@unframed/domain";
+import { FileText, Palette } from "lucide-react";
 import { BaseBoxShapeUtil, HTMLContainer, resizeBox, T, type RecordProps, type TLResizeInfo, type TLShape } from "tldraw";
 import { noteRender } from "../../fps/renders.ts";
 import { currentSlots } from "../../chrome/slots.ts";
@@ -18,30 +18,34 @@ const styleProps: RecordProps<StyleShape> = {
   fileName: T.string,
   swatches: T.arrayOf(T.string),
   excerpt: T.string,
+  role: T.literalEnum("style", "document").optional(),
 };
 
 export const STYLE_MIN = { w: 200, h: 120 };
 
 /**
- * A style document's card: its title, the colours it names and its opening lines, all read
- * from the shape's props, which every new version writes. A render reads no file and runs
- * nothing beyond the card itself.
+ * A markdown document's card: its title, the colours it names (a style's only) and its
+ * opening lines, all read from the shape's props, which every new version writes. A render
+ * reads no file and runs nothing beyond the card itself.
  */
 const StyleCard = ({ shape }: { readonly shape: StyleShape }) => {
   noteRender(shape.id);
   const props = shape.props as StyleShapeProps;
   const name = nameOf(shape);
-  const title = props.title.trim() || props.fileName.replace(/\.[^.]*$/, "") || "Style";
+  const document = styleRoleOf(props) === "document";
+  const noun = document ? "Document" : "Style";
+  const Icon = document ? FileText : Palette;
+  const title = props.title.trim() || props.fileName.replace(/\.[^.]*$/, "") || noun;
   return (
-    <HTMLContainer id={shape.id} className={`${styleCardClass} flex flex-col gap-2.5 overflow-hidden p-4 font-sans`} data-testid="style-card" style={{ width: props.w, height: props.h }}>
-      <ShapeLabel shapeId={shape.id} kind="style" name={readRef(shape)} width={props.w} text={name !== undefined ? `@${name}` : "Style"} />
+    <HTMLContainer id={shape.id} className={`${styleCardClass} flex flex-col gap-2.5 overflow-hidden p-4 font-sans`} data-testid="style-card" data-role={document ? "document" : "style"} style={{ width: props.w, height: props.h }}>
+      <ShapeLabel shapeId={shape.id} kind="style" name={readRef(shape)} width={props.w} text={name !== undefined ? `@${name}` : noun} />
       <div className="flex min-w-0 items-center gap-2">
-        <Palette aria-hidden className="size-4 shrink-0 text-muted-foreground" />
+        <Icon aria-hidden className="size-4 shrink-0 text-muted-foreground" data-testid={document ? "document-icon" : "style-icon"} />
         <span className="min-w-0 truncate text-sm font-medium text-foreground" data-testid="style-title">
           {title}
         </span>
       </div>
-      {props.swatches.length > 0 && (
+      {!document && props.swatches.length > 0 && (
         <div className="flex gap-1.5" data-testid="style-swatches">
           {props.swatches.map((colour) => (
             <span key={colour} className="size-6 shrink-0 rounded-md border border-foreground/15" style={{ backgroundColor: colour }} title={colour} data-swatch={colour} />
@@ -58,7 +62,7 @@ const StyleCard = ({ shape }: { readonly shape: StyleShape }) => {
   );
 };
 
-/** A style document (a DESIGN.md) on the canvas. Double-click opens it in the markdown window. */
+/** A markdown document on the canvas, a style (a DESIGN.md) or a plain document. Double-click opens it in the markdown window. */
 export class StyleShapeUtil extends BaseBoxShapeUtil<StyleShape> {
   static override type = "style" as const;
   static override props = styleProps;

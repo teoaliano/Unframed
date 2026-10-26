@@ -158,8 +158,8 @@ export const promptRecord = (id: string, ref: string, text: string, at: { x: num
 });
 
 /** A style document shape naming `file`, with the card its props would carry. */
-export const styleRecord = (id: string, ref: string, at: { x: number; y: number }, file: string, title: string, card: { swatches?: string[]; excerpt?: string } = {}) => ({
+export const styleRecord = (id: string, ref: string, at: { x: number; y: number }, file: string, title: string, card: { swatches?: string[]; excerpt?: string; role?: "style" | "document" } = {}) => ({
   ...baseShape(id, "style", at),
-  props: { w: 320, h: 240, file, fileName: "", title, swatches: card.swatches ?? [], excerpt: card.excerpt ?? "" },
+  props: { w: 320, h: 240, file, fileName: "", title, swatches: card.swatches ?? [], excerpt: card.excerpt ?? "", ...(card.role === undefined ? {} : { role: card.role }) },
   meta: { ref },
 });
