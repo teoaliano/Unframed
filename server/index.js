@@ -40307,7 +40307,7 @@ import { closeSync, fsyncSync, openSync, renameSync, writeSync } from "node:fs";
 import { readFile as readFile4, rm as rm4 } from "node:fs/promises";
 
 // packages/engine/src/agent/version.ts
-var ENGINE_VERSION = "0.8.2";
+var ENGINE_VERSION = "0.8.3";
 
 // packages/engine/src/agentConnections/discovery.ts
 var writeDiscovery = (path, port, startedAt) => {
