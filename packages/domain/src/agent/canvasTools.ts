@@ -134,6 +134,7 @@ export const canvasShapesOf = (records: ReadonlyArray<CanvasRecord>, boxes: Read
       ...(kind === "prompt" && obj(unframed.result).medium === "text" ? { textResult: true } : {}),
       ...(media.file === undefined ? {} : { file: media.file }),
       ...(media.url === undefined ? {} : { link: media.url }),
+      ...(kind === "style" && obj(shape.props).role === "document" ? { document: true } : {}),
     };
   });
 };
@@ -172,7 +173,7 @@ export const canvasView = (input: CanvasViewInput): CanvasView => {
     const local = input.boxes.get(record.id)?.local ?? { x: record.x ?? 0, y: record.y ?? 0, w: 0, h: 0 };
     const entry: Record<string, unknown> = {
       id: agentShapeId(record.id),
-      kind: fact.kind,
+      kind: fact.document === true ? "document" : fact.kind,
       x: record.x ?? 0,
       y: record.y ?? 0,
       w: round(local.w),

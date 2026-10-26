@@ -160,7 +160,7 @@ export class StyleTools {
         parentId: pageId,
         isLocked: false,
         opacity: 1,
-        props: { ...STYLE_DEFAULT_SIZE, file: written.file, title, fileName: "", ...card },
+        props: { ...STYLE_DEFAULT_SIZE, file: written.file, title, fileName: "", ...card, role: "style" },
         meta: { ref: nextRef(records as ReadonlyArray<{ typeName: string; type?: string; meta?: unknown }>) },
       } as unknown as Shape;
     }

@@ -43,7 +43,7 @@ export const stylePresets = (schema: unknown): Preset[] =>
       rotation: 0,
       isLocked: false,
       opacity: 1,
-      props: { ...STYLE_DEFAULT_SIZE, file: "", title: style.name, fileName: "", swatches: [], excerpt: "" },
+      props: { ...STYLE_DEFAULT_SIZE, file: "", title: style.name, fileName: "", swatches: [], excerpt: "", role: "style" },
       meta: { ref: "100" },
     };
     return {

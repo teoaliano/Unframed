@@ -36,6 +36,7 @@ import {
   readRef,
   roomShapeId,
   shapeKind,
+  styleRoleOf,
   type ActivityInput,
   type ArtifactKind,
   type InteractionMode,
@@ -152,7 +153,7 @@ export class ArtifactTools {
     const title = (given ?? current).trim();
 
     // A page or motion written in a chat that follows a style records which one, and its file then.
-    const styleShape = turn.style === null ? undefined : records.find((record) => record.id === turn.style && isShape(record) && record.type === "style");
+    const styleShape = turn.style === null ? undefined : records.find((record) => record.id === turn.style && isShape(record) && record.type === "style" && styleRoleOf(record.props) === "style");
     const styleFile = isShape(styleShape) && typeof styleShape.props.file === "string" ? styleShape.props.file : undefined;
     const folder = await context.folder(binding.project);
     let written: { file: string; bytes: number };

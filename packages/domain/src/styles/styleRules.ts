@@ -232,6 +232,13 @@ export const styleExcerpt = (markdown: string): string => {
   return joined.length > STYLE_EXCERPT_MAX ? `${joined.slice(0, STYLE_EXCERPT_MAX - 1).trimEnd()}…` : joined;
 };
 
+/** A style shape's role: `document` only when its props say so, since shapes made before roles are styles. */
+export const styleRoleOf = (props: unknown): "style" | "document" =>
+  typeof props === "object" && props !== null && (props as { role?: unknown }).role === "document" ? "document" : "style";
+
+/** The role a dropped markdown file takes: a style when it names colours, else a plain document. */
+export const droppedStyleRole = (markdown: string): "style" | "document" => (styleSwatches(markdown).length > 0 ? "style" : "document");
+
 /** What a style shape's card shows of its document; written into its props with every new version. */
 export const styleCard = (markdown: string): { swatches: string[]; excerpt: string } => ({ swatches: styleSwatches(markdown), excerpt: styleExcerpt(markdown) });
 
@@ -253,10 +260,11 @@ export const applyStyleEdits = (markdown: string, edits: unknown): { markdown: s
 
 /**
  * The style a message attaches to its chat: the first style shape in the selection's
- * reading order, a selected group's members included. `undefined` when none is selected.
+ * reading order, a selected group's members included, documents never. `undefined` when
+ * none is selected.
  */
 export const styleOfSelection = (shapes: ReadonlyArray<CanvasShape>, selected: ReadonlyArray<string>): CanvasShape | undefined =>
-  selectionOrder(shapes, selected).find((shape) => shape.kind === "style");
+  selectionOrder(shapes, selected).find((shape) => shape.kind === "style" && shape.document !== true);
 
 /** The preamble's line naming the chat's style: its id as the agent reads it, its title and its current file. */
 export const styleLine = (style: { readonly id: string; readonly title: string; readonly file: string }): string =>

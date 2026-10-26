@@ -173,6 +173,40 @@ describe("a chat's style", () => {
     expect(chat.style).toBe("shape:s2");
   });
 
+  it("is never a document: a selected document is listed as one for style_read and canvas_read, and a style turned into a document drops out", async () => {
+    const NOTES = "# Standup notes\n\n- Ship the card by Friday\n";
+    const agent = await startAgentEngine({
+      script: await script([
+        { expectPreamble: '^Selected: document d1 \\("Notes"\\)\\.$', tools: [{ name: "style_read", input: { shapeId: "d1" } }, { name: "canvas_read", input: {} }] },
+        { expectPreamble: `^Selected: style s1 \\("Linear"\\)\\.\\n\\n${escape(line("s1", "Linear", "1-linear.md"))}$` },
+        { expectPreamble: "^(?![\\s\\S]*follows the style)" },
+      ]),
+    });
+    await writeFile(join(agent.folder, "2-notes.md"), NOTES);
+    await seedLinear(agent, [styleShape("d1", "101", { file: "2-notes.md", title: "Notes", role: "document" }, { x: 400 })]);
+    const chatId = await agent.createChat();
+    await agent.send(chatId, "go", { selection: ["shape:d1"] });
+    let chat = await agent.settled(chatId, 1);
+    expect(chat.session?.lastError ?? null).toBeNull();
+    expect(chat.style).toBeNull();
+    expect(chat.activities.filter((activity) => activity.kind === "style.attached")).toHaveLength(0);
+    expect(toolResults(chat, "style_read")[0]?.result).toEqual({ shapeId: "d1", title: "Notes", file: "2-notes.md", markdown: NOTES });
+    const shapes = new Map(((toolResults(chat, "canvas_read")[0]?.result.shapes ?? []) as any[]).map((shape) => [shape.id, shape]));
+    expect(shapes.get("d1")).toMatchObject({ kind: "document", file: "2-notes.md", title: "Notes" });
+    expect(shapes.get("s1")).toMatchObject({ kind: "style" });
+
+    await agent.send(chatId, "go style", { selection: ["shape:s1"] });
+    chat = await agent.settled(chatId, 2);
+    expect(chat.session?.lastError ?? null).toBeNull();
+    expect(chat.style).toBe("shape:s1");
+    const linear = await roomShape(agent, "s1");
+    await seed(agent, [{ ...linear, props: { ...linear.props, role: "document" } }]);
+    await agent.send(chatId, "go on");
+    chat = await agent.settled(chatId, 3);
+    expect(chat.session?.lastError ?? null).toBeNull();
+    expect(chat.latestTurn?.state).toBe("completed");
+  });
+
   it("is recorded on a page written in the chat, in its props and its sidecar, and canvas_read reports it", async () => {
     const agent = await startAgentEngine({
       script: await script([

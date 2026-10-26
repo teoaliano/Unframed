@@ -29,6 +29,8 @@ export interface CanvasShape {
   readonly text?: string | undefined;
   /** A prompt that is a text result: its text is used literally. */
   readonly textResult?: boolean | undefined;
+  /** A style shape whose role is `document`: markdown the agent may read, never a chat's style. */
+  readonly document?: boolean | undefined;
   /** The project file an image, video, page, motion or style names. */
   readonly file?: string | undefined;
   /** The `https://` link a video holds. */

@@ -20,6 +20,7 @@ import {
   shapeKind,
   styleLine,
   styleOfSelection,
+  styleRoleOf,
   type ActivityInput,
   type AgentProvider,
   type CanvasRecord,
@@ -690,7 +691,7 @@ export class AgentRuntime {
       const props = record(shape.props);
       const asset = typeof props.assetId === "string" ? byId.get(props.assetId) : undefined;
       selected.push({
-        kind: shapeKind(shape.type),
+        kind: shape.type === "style" && styleRoleOf(props) === "document" ? "document" : shapeKind(shape.type),
         id: agentShapeId(id),
         label: selectionLabel({
           ...(typeof props.title === "string" ? { title: props.title } : {}),
@@ -703,7 +704,7 @@ export class AgentRuntime {
     const style = chat.style === null ? undefined : byId.get(chat.style);
     const styleProps = record(record(style).props);
     const line =
-      style?.typeName === "shape" && style.type === "style" && typeof styleProps.file === "string" && styleProps.file !== ""
+      style?.typeName === "shape" && style.type === "style" && styleRoleOf(styleProps) === "style" && typeof styleProps.file === "string" && styleProps.file !== ""
         ? styleLine({ id: agentShapeId(style.id), title: typeof styleProps.title === "string" && styleProps.title.trim() !== "" ? styleProps.title.trim() : "Style", file: styleProps.file })
         : undefined;
     let note: string | undefined;

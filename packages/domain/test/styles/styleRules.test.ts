@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 import {
   applyStyleEdits,
   composeSelection,
+  droppedStyleRole,
   STYLE_EDIT_ARGUMENTS,
   STYLE_EDIT_TEXT,
   STYLE_LINE_TEMPLATE,
@@ -18,6 +19,7 @@ import {
   styleHeading,
   styleLine,
   styleOfSelection,
+  styleRoleOf,
   styleSwatches,
   styleTitleFor,
   selectionHint,
@@ -178,11 +180,33 @@ describe("which style a message attaches", () => {
     expect(styleOfSelection(shapes, ["p"])).toBeUndefined();
   });
 
+  it("is never a document, which the selection skips for the next style in reading order", () => {
+    const shapes = [style("notes", { x: 0, y: 0 }), style("s1", { x: 500, y: 0 })].map((shape) => (shape.id === "notes" ? { ...shape, document: true } : shape));
+    expect(styleOfSelection(shapes, ["notes"])).toBeUndefined();
+    expect(styleOfSelection(shapes, ["notes", "s1"])?.id).toBe("s1");
+  });
+
   it("is named in the preamble by id, title and file, never by its text", () => {
     expect(styleLine({ id: "s204", title: "Linear", file: "1-linear-2.md" })).toBe(
       'This chat follows the style "Linear" (style s204, file 1-linear-2.md). Read it with style_read before designing if it is not in your context or the file changed.',
     );
     expect(styleLine({ id: "s", title: 'The "Big" one $&', file: "f.md" })).toContain("\"The 'Big' one $&\"");
+  });
+});
+
+describe("a markdown shape's role", () => {
+  it("is a style when a dropped file names colours, else a document", () => {
+    expect(droppedStyleRole("# Linear\n\nCalm.\n\n- Accent: #5E6AD2\n")).toBe("style");
+    expect(droppedStyleRole(preset("linear.app"))).toBe("style");
+    expect(droppedStyleRole("# Standup notes\n\n- Ship the card by Friday\n- Issue #12 is open\n")).toBe("document");
+    expect(droppedStyleRole("")).toBe("document");
+  });
+
+  it("reads as a style unless the props say document, so shapes made before roles stay styles", () => {
+    expect(styleRoleOf({ file: "1-linear.md" })).toBe("style");
+    expect(styleRoleOf({ role: "style" })).toBe("style");
+    expect(styleRoleOf({ role: "document" })).toBe("document");
+    expect(styleRoleOf(undefined)).toBe("style");
   });
 });
 

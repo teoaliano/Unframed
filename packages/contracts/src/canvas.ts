@@ -114,10 +114,14 @@ const artifactProps = {
   style: T.string.optional(),
 };
 
+/** What a markdown shape is for: a style a chat follows, or a plain document the agent can read. */
+export type StyleRole = "style" | "document";
+
 /**
- * A style document (a DESIGN.md): its markdown file in the project folder, its title, its
- * original file name, and what the canvas card shows, worked out when the file is written
- * so a render reads no file: the first few distinct hex colours and the opening lines.
+ * A markdown document on the canvas: its file in the project folder, its title, its original
+ * file name, and what the canvas card shows, worked out when the file is written so a render
+ * reads no file: the first few distinct hex colours and the opening lines. `role` absent is
+ * a style, as every shape made before roles existed.
  */
 export interface StyleShapeProps {
   w: number;
@@ -127,6 +131,7 @@ export interface StyleShapeProps {
   fileName: string;
   swatches: string[];
   excerpt: string;
+  role?: StyleRole;
 }
 
 const styleProps = {
@@ -137,6 +142,7 @@ const styleProps = {
   fileName: T.string,
   swatches: T.arrayOf(T.string),
   excerpt: T.string,
+  role: T.literalEnum("style", "document").optional(),
 };
 
 /** Every later change to page and motion props is a migration here, used by the room and the web alike. */
