@@ -204,6 +204,7 @@ export const AgentRail = ({ project, embedded, inSheet, filterTo, onLocate, onOp
       className={embedded || inSheet ? EMBEDDED_CLASS : RAIL_CLASS}
       data-state={motion?.state}
       data-embedded={embedded ? "" : undefined}
+      data-rail={embedded ? "embedded" : inSheet ? "sheet" : "docked"}
       onPointerDown={(event) => event.stopPropagation()}
       // tldraw copies and cuts the canvas selection from a listener on the document: stopped here, the chat's own text is what the clipboard gets.
       onCopy={(event) => event.stopPropagation()}

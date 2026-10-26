@@ -547,7 +547,8 @@ function Toasts({ position }: { position: ToastPosition }) {
           // Unframed: toasts clear tldraw's zoom controls, through a footer offset the theme sets.
           "data-[position*=bottom]:bottom-[calc(var(--toast-inset)+var(--toast-footer-offset,0px))]",
           // Horizontal positioning
-          "data-[position*=left]:left-(--toast-inset)",
+          // Unframed: bottom-left toasts move right of the docked agent rail, through a start offset the theme sets.
+          "data-[position*=left]:left-[calc(var(--toast-inset)+var(--toast-start-offset,0px))]",
           "data-[position*=right]:right-(--toast-inset)",
           "data-[position*=center]:-translate-x-1/2 data-[position*=center]:left-1/2",
         )}

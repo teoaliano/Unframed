@@ -145,6 +145,10 @@ test.describe("a chat's style", () => {
       await expect(chip).toHaveCount(0);
       await expect.poll(async () => (await engineChat(agent, chat.id)).style).toBeNull();
       await expect(toast(page, "Detached the style Linear")).toBeVisible();
+      // The toast sits right of the rail, clear of the composer and its send row.
+      const toastBox = (await toast(page, "Detached the style Linear").boundingBox())!;
+      const railBox = (await panel.boundingBox())!;
+      expect(toastBox.x).toBeGreaterThanOrEqual(railBox.x + railBox.width);
       await page.locator("[data-slot='toast-action']").filter({ hasText: "Undo" }).click();
       await expect(rail(page).getByTestId("chat-style-label")).toHaveText("Linear");
       await expect.poll(async () => (await engineChat(agent, chat.id)).style).toBe("shape:linear");
@@ -152,4 +156,26 @@ test.describe("a chat's style", () => {
       await agent.dispose();
     }
   });
+});
+
+test("the work log line naming the chat's style wraps rather than cutting a long title short", async ({ page }) => {
+  const script = await scriptFolder({ styled: { when: "^make", turns: [{ text: "Done." }] } });
+  const agent = await startAgentEngine({ script });
+  try {
+    const title = "Linear, calm and dense, for focused product work";
+    await openCanvas(page, agent);
+    await writeFile(projectPath(agent, "1-linear.md"), LINEAR);
+    await putRecords(agent, [styleRecord("shape:linear", "300", { x: 620, y: 80 }, "1-linear.md", title)]);
+    await expect(shapeOnScreen(page, "shape:linear")).toBeVisible();
+    await clickShape(page, "shape:linear");
+    const panel = await openRail(page);
+    await say(panel, "make a landing page");
+    await expect(panel.locator("[data-role='assistant']")).toContainText("Done.");
+    await panel.getByTestId("worked-for").getByRole("button").click();
+    const label = panel.getByTestId("work-row-label");
+    await expect(label).toHaveText([`Following the style “${title}”`]);
+    expect(await label.evaluate((element) => element.scrollWidth <= element.clientWidth && element.getBoundingClientRect().height > 30)).toBe(true);
+  } finally {
+    await agent.dispose();
+  }
 });

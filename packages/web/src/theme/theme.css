@@ -487,6 +487,10 @@
   --artifact-page: var(--color-white);
   /* Unframed: bottom-left toasts sit above tldraw's zoom controls. */
   --toast-footer-offset: 2rem;
+  /* Unframed: while the docked agent rail is open, toasts start past its 380 px, clear of its composer. */
+  &:has([data-rail="docked"][data-state="open"]) {
+    --toast-start-offset: 380px;
+  }
 
   @variant dark {
     --canvas-dot: color-mix(in srgb, var(--foreground) 22%, var(--background));
