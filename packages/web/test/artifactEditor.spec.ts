@@ -9,6 +9,15 @@ import { expectSlot, expectToken, inBothSchemes, styleOf } from "./kit.ts";
 const editor = (page: Page) => page.getByTestId("artifact-editor");
 const column = (page: Page, name: "rail" | "centre" | "parameters") => editor(page).locator(`[data-editor-column="${name}"]`);
 
+/** Whether the element at the watermark's centre is the watermark itself, not something laid over it. */
+const hitIsWatermark = (page: Page): Promise<boolean> =>
+  page.evaluate(() => {
+    const watermark = document.querySelector(".tl-watermark_SEE-LICENSE");
+    if (!watermark) return false;
+    const box = watermark.getBoundingClientRect();
+    return document.elementFromPoint(box.x + box.width / 2, box.y + box.height / 2)?.closest(".tl-watermark_SEE-LICENSE") === watermark;
+  });
+
 const onBoard = async (page: Page, engine: Parameters<typeof openCanvas>[1]) => {
   await openCanvas(page, engine);
   await filledArtifact(engine, { id: "shape:landing", kind: "page", ref: "150", at: { x: -520, y: -40 }, size: { w: 400, h: 260 }, title: "Landing", html: "<h1>Welcome</h1>" });
@@ -38,8 +47,9 @@ test("double-click opens the editor: rail, live frame and parameters, with Back 
   await expect(column(page, "parameters")).toContainText("Parameters");
   // The canvas's own frames unload while the editor is open.
   await expect(shapeOnScreen(page, "shape:landing").locator("iframe")).toHaveCount(0);
-  // tldraw's watermark stays visible below the editor.
+  // tldraw's watermark stays visible over the editor's bottom-right corner, and wins a click there.
   await expect(page.locator(".tl-watermark_SEE-LICENSE")).toBeVisible();
+  expect(await hitIsWatermark(page)).toBe(true);
 
   await region.getByRole("button", { name: "Back to canvas" }).click();
   await expect(editor(page)).toHaveCount(0);
@@ -59,6 +69,48 @@ test("double-click opens the editor: rail, live frame and parameters, with Back 
   await page.keyboard.press("Escape");
   await expect(editor(page)).toHaveCount(0);
   expect(await shapeOnScreen(page, "shape:landing").boundingBox()).toEqual(moved);
+});
+
+test("the three columns run to the window's bottom edge at the margin they keep on top, and the watermark sits over the parameters corner without covering a control", async ({ page, agent }) => {
+  await onBoard(page, agent);
+  const at = await centre(shapeOnScreen(page, "shape:landing"));
+  await page.mouse.dblclick(at.x, at.y);
+  await expect(page.getByRole("region", { name: "Editing Landing" })).toBeVisible();
+
+  const { width, height } = page.viewportSize()!;
+  const margin = 12;
+  for (const name of ["rail", "centre", "parameters"] as const) {
+    const box = (await column(page, name).boundingBox())!;
+    expect(box.y, `${name} top`).toBeCloseTo(margin, 0);
+    expect(box.y + box.height, `${name} bottom`).toBeCloseTo(height - margin, 0);
+  }
+  const rail = (await column(page, "rail").boundingBox())!;
+  const parameters = (await column(page, "parameters").boundingBox())!;
+  expect(rail.x).toBeCloseTo(margin, 0);
+  expect(parameters.x + parameters.width).toBeCloseTo(width - margin, 0);
+
+  const watermark = (await page.locator(".tl-watermark_SEE-LICENSE").boundingBox())!;
+  expect(watermark.y + watermark.height).toBeLessThanOrEqual(height);
+  expect(await hitIsWatermark(page)).toBe(true);
+  // Nothing else laid over the editor: every point of the window outside the watermark hits the editor.
+  const strays = await page.evaluate(({ x, y, w, h }) => {
+    const editor = document.querySelector("[data-testid='artifact-editor']")!;
+    const hits: string[] = [];
+    for (let px = 16; px < window.innerWidth; px += 32) {
+      for (let py = 16; py < window.innerHeight; py += 32) {
+        if (px >= x && px <= x + w && py >= y && py <= y + h) continue;
+        const hit = document.elementFromPoint(px, py);
+        if (hit && !editor.contains(hit)) hits.push(`${px},${py} ${hit.tagName}.${hit.className.toString().slice(0, 30)}`);
+      }
+    }
+    return hits;
+  }, { x: watermark.x, y: watermark.y, w: watermark.width, h: watermark.height });
+  expect(strays).toEqual([]);
+  // Every control in the parameters column ends above the watermark's top edge.
+  for (const control of [column(page, "parameters").getByRole("button", { name: "Add" }), column(page, "parameters").getByPlaceholder(/Describe a parameter/)]) {
+    const box = (await control.boundingBox())!;
+    expect(box.y + box.height).toBeLessThanOrEqual(watermark.y);
+  }
 });
 
 test("the rail's header makes room for the shell's window buttons inline, moving down only as far as the card did, and follows the card live", async ({ page, agent }) => {
