@@ -99,6 +99,14 @@
   padding: 10px;
 }
 
+/*
+ * DialKit's sticky headers paint a band 12 px wider than themselves on each side. Inside the 10 px
+ * inset that band pokes 2 px past the panel and makes it scroll sideways, so the band takes the inset.
+ */
+:root .dialkit-root[data-theme] :is(.dialkit-panel-inline > .dialkit-folder-root > .dialkit-panel-header, .dialkit-folder-section > .dialkit-folder-header)::before {
+  inset: 0 -10px;
+}
+
 /* The kit's type: 14 px labels and values, not DialKit's 13 px. */
 :root .dialkit-root[data-theme]
   :is(

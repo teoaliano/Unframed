@@ -352,3 +352,37 @@ test("a page with no parameters opens a panel that asks the agent for one, in th
   expect(await userTexts(agent, chat!.id)).toEqual([addParameterInstruction({ wanted: "the background colour", kind: "page", title: "Plain" })]);
   await expect(page.getByRole("complementary", { name: "Agent" })).toBeVisible();
 });
+
+/** A parameter set shaped like a motion's panel in the screenshot: a select, a colour, toggles, numbers, and a collapsible section. */
+const PANEL_FIT_DIALS = `<!doctype html><html><head><style>body{margin:0;font:14px sans-serif}</style>${BRIDGE_TAG}</head><body><pre id="values">none</pre>
+<script>
+unframed.dials("Blueprint loader", {
+  speed: [1.5, 0, 4, 0.1],
+  wire: [40, 0, 100],
+  component: "Loader",
+  sizes: { width: [320, 100, 800], height: [180, 50, 600] },
+  version: ["v1", "v2", "v3"],
+  accent: "#a78bfa",
+  scrub: { on: true, time: [0.5, 0, 5, 0.01] },
+  caption: "A considerably longer caption than the panel is wide, which must wrap or truncate rather than widen it",
+}, function (v) { document.getElementById("values").textContent = JSON.stringify(v); });
+</script></body></html>`;
+
+test("the Parameters panel fits its width: nothing in it scrolls sideways, in either scheme", async ({ page, agent }) => {
+  await openCanvas(page, agent);
+  await writeBridge(agent);
+  await filledArtifact(agent, { id: "shape:tuned", kind: "page", ref: "150", at: { x: -520, y: -40 }, size: { w: 300, h: 200 }, title: "Tuned", html: PANEL_FIT_DIALS });
+  await expect(shapeOnScreen(page, "shape:tuned")).toBeVisible();
+  await clickShape(page, "shape:tuned");
+  await parametersToggle(page).click();
+  const panel = canvasPanel(page, "Tuned");
+  await expect(panel.getByRole("slider", { name: "Speed" })).toBeVisible();
+  const scroller = panel.locator('[data-scrolls="true"]');
+  await inBothSchemes(page, async () => {
+    await scroller.evaluate((element) => {
+      element.scrollTop = element.scrollHeight;
+    });
+    const widths = await scroller.evaluate((element) => ({ scroll: element.scrollWidth, client: element.clientWidth }));
+    expect(widths.scroll).toBeLessThanOrEqual(widths.client);
+  });
+});
