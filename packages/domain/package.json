@@ -8,5 +8,11 @@
   },
   "scripts": {
     "typecheck": "tsc --noEmit -p ."
+  },
+  "dependencies": {
+    "linkedom": "0.18.13"
+  },
+  "devDependencies": {
+    "gsap": "3.15.0"
   }
 }
