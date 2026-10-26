@@ -4,7 +4,7 @@ import { Palette } from "lucide-react";
 import { BaseBoxShapeUtil, HTMLContainer, resizeBox, T, type RecordProps, type TLResizeInfo, type TLShape } from "tldraw";
 import { noteRender } from "../../fps/renders.ts";
 import { currentSlots } from "../../chrome/slots.ts";
-import { artifactCardClass } from "./looks.ts";
+import { styleCardClass } from "./looks.ts";
 import { nameOf } from "./labels.ts";
 import { ShapeLabel } from "./ShapeLabel.tsx";
 
@@ -22,9 +22,6 @@ const styleProps: RecordProps<StyleShape> = {
 
 export const STYLE_MIN = { w: 200, h: 120 };
 
-/** The card's corner radius in page units: `rounded-xl` in artifactCardClass, the kit's --radius (10 px) plus 4. */
-const CARD_RADIUS = 14;
-
 /**
  * A style document's card: its title, the colours it names and its opening lines, all read
  * from the shape's props, which every new version writes. A render reads no file and runs
@@ -36,7 +33,7 @@ const StyleCard = ({ shape }: { readonly shape: StyleShape }) => {
   const name = nameOf(shape);
   const title = props.title.trim() || props.fileName.replace(/\.[^.]*$/, "") || "Style";
   return (
-    <HTMLContainer id={shape.id} className={`${artifactCardClass} flex flex-col gap-2.5 overflow-hidden p-4 font-sans`} data-testid="style-card" style={{ width: props.w, height: props.h }}>
+    <HTMLContainer id={shape.id} className={`${styleCardClass} flex flex-col gap-2.5 overflow-hidden p-4 font-sans`} data-testid="style-card" style={{ width: props.w, height: props.h }}>
       <ShapeLabel shapeId={shape.id} kind="style" name={readRef(shape)} width={props.w} text={name !== undefined ? `@${name}` : "Style"} />
       <div className="flex min-w-0 items-center gap-2">
         <Palette aria-hidden className="size-4 shrink-0 text-muted-foreground" />
@@ -79,23 +76,9 @@ export class StyleShapeUtil extends BaseBoxShapeUtil<StyleShape> {
   }
 
   override getIndicatorPath(shape: StyleShape) {
-    const { w, h } = shape.props;
-    const r = Math.min(CARD_RADIUS, w / 2, h / 2);
-    // Drawn with arcTo, not Path2D.roundRect: a roundRect path added to tldraw's batched
-    // indicator path stops a multi-shape selection's outlines and box from painting.
     const path = new Path2D();
-    path.moveTo(r, 0);
-    path.arcTo(w, 0, w, h, r);
-    path.arcTo(w, h, 0, h, r);
-    path.arcTo(0, h, 0, 0, r);
-    path.arcTo(0, 0, w, 0, r);
-    path.closePath();
+    path.rect(0, 0, shape.props.w, shape.props.h);
     return path;
-  }
-
-  /** The rounded indicator is the outline: the square selection box would cut across the card's corners. */
-  override hideSelectionBoundsFg() {
-    return true;
   }
 
   override onResize(shape: StyleShape, info: TLResizeInfo<StyleShape>) {
