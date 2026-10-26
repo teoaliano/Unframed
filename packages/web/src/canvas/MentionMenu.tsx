@@ -11,6 +11,9 @@ interface MentionState {
   readonly query: string;
 }
 
+/** The gap between the top bar's bottom edge and a list that is pushed under it. */
+const MENTION_MARGIN = 8;
+
 /** The `@query` right before the caret of the prompt being edited, if any. */
 const readMention = (text: TiptapEditor): MentionState | undefined => {
   const { from, to } = text.state.selection;
@@ -106,17 +109,23 @@ export const MentionMenu = () => {
     return () => window.removeEventListener("keydown", onKeyDown, { capture: true });
   }, []);
 
+  // Below the prompt, and never under the top bar: the tab strip covers the canvas, so a list that starts in its
+  // band would leave its rows unreachable. The list then opens just under the strip, over the prompt.
   const position = useValue(
     "mention menu position",
     () => {
       if (!open || !editingId) return undefined;
       const bounds = editor.getShapePageBounds(editingId as TLShapeId);
       if (!bounds) return undefined;
-      return editor.pageToViewport({ x: bounds.minX, y: bounds.maxY });
+      const below = editor.pageToViewport({ x: bounds.minX, y: bounds.maxY });
+      const container = editor.getContainer();
+      const strip = container.ownerDocument.querySelector<HTMLElement>(".unframed-tabs")?.getBoundingClientRect();
+      const floor = strip ? strip.bottom - container.getBoundingClientRect().top + MENTION_MARGIN : 0;
+      return { x: below.x, y: Math.max(below.y + 6, floor) };
     },
     [editor, editingId, open],
   );
 
   if (!open || !position) return null;
-  return <MentionList editor={editor} rows={rows} highlight={highlight} style={{ left: position.x, top: position.y + 6 }} onPick={insert} onHighlight={setHighlight} />;
+  return <MentionList editor={editor} rows={rows} highlight={highlight} style={{ left: position.x, top: position.y }} onPick={insert} onHighlight={setHighlight} />;
 };
