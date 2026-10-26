@@ -22,7 +22,7 @@ export const saveSubtitle = (captured: Pick<Captured, "members" | "recipe">): st
  */
 export const AddToLibraryDialog = ({ captured, onClose }: { readonly captured: Captured; readonly onClose: () => void }) => {
   const engine = useEngine();
-  const [name, setName] = useState("");
+  const [name, setName] = useState(captured.style?.title ?? "");
   const [summary, setSummary] = useState("");
   const [problem, setProblem] = useState<string>();
   const [busy, setBusy] = useState(false);
@@ -71,7 +71,7 @@ export const AddToLibraryDialog = ({ captured, onClose }: { readonly captured: C
             <span className={fieldNameClass}>Name</span>
             <Input
               ref={nameField}
-              placeholder="e.g. Portrait retouch"
+              placeholder={captured.style ? "e.g. Brand guidelines" : "e.g. Portrait retouch"}
               value={name}
               aria-invalid={problem !== undefined || undefined}
               onChange={(event) => {
@@ -87,7 +87,7 @@ export const AddToLibraryDialog = ({ captured, onClose }: { readonly captured: C
           )}
           <label className={fieldLabelClass}>
             <span className={fieldNameClass}>Description</span>
-            <Input placeholder="What it does, in a line" value={summary} onChange={(event) => setSummary(event.target.value)} />
+            <Input placeholder={captured.style ? "The look it gives, in a line" : "What it does, in a line"} value={summary} onChange={(event) => setSummary(event.target.value)} />
           </label>
         </DialogPanel>
         <DialogFooter>

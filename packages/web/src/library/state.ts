@@ -15,6 +15,8 @@ export interface Captured {
   /** How many shapes the preset holds, and whether its recipe goes with it: the save dialog's subtitle. */
   readonly members: number;
   readonly recipe: boolean;
+  /** Present when the selection is one style: its title, which the save dialog offers as the name. */
+  readonly style?: { readonly title: string } | undefined;
 }
 
 export interface LibraryUi {
@@ -46,5 +48,6 @@ export const captureSelection = (editor: Editor, project: string): Captured | un
   const captured = { project, content: structuredClone(content), bounds };
   const made = presetFromSelection(captured, { name: "" });
   if (!made.ok) return undefined;
-  return { ...captured, members: made.members, recipe: made.kind === "recipe" };
+  const style = made.kind === "style" ? { title: String(made.content.shapes[0]?.props.title ?? "").trim() } : undefined;
+  return { ...captured, members: made.members, recipe: made.kind === "recipe", ...(style ? { style } : {}) };
 };
