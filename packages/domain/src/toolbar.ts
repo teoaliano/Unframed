@@ -58,9 +58,10 @@ export const formatCost = (cost: number): string => `$${cost.toFixed(4)}`;
 /**
  * What a selection is called on the toolbar and above the composer's box: `@<name>` for
  * exactly one group, `<n> images · $<total>` for exactly every member of one batch of two
- * or more, otherwise `<n> selected`.
+ * or more, otherwise `<n> selected`. Generate sends nothing of a style, so styles are not counted.
  */
-export const selectionHint = (selected: ReadonlyArray<ToolbarShape>, results: ReadonlyArray<ToolbarShape>): string => {
+export const selectionHint = (all: ReadonlyArray<ToolbarShape>, results: ReadonlyArray<ToolbarShape>): string => {
+  const selected = all.filter((shape) => shape.kind !== "style");
   const [only] = selected;
   if (selected.length === 1 && only?.kind === "group" && only.ref !== undefined) return `@${only.ref}`;
   return batchHint(selected, results) ?? `${selected.length} selected`;
@@ -97,8 +98,7 @@ export const toolbarState = (input: ToolbarInput): ToolbarState => {
   }
   const recipeGroup = recipeGroupOf(selected);
   if (recipeGroup?.recipe) return { kind: "recipe", groupId: recipeGroup.id, name: recipeGroup.ref ?? "", runs: recipeGroup.recipe.runs };
-  // Generate sends nothing of a style, so the count leaves styles out.
-  if (input.usable) return { kind: "generate", hint: selectionHint(selected.filter((shape) => shape.kind !== "style"), input.results) };
+  if (input.usable) return { kind: "generate", hint: selectionHint(selected, input.results) };
   return { kind: "agent" };
 };
 
