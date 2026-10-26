@@ -2,6 +2,7 @@ import { existsSync } from "node:fs";
 import { readFile, writeFile } from "node:fs/promises";
 import { emptyCanvasPoint, openCanvas, roomRecords, settledRecord, shapeOnScreen, toast, waitForRoom } from "./canvas.ts";
 import { expect, test } from "./fixtures.ts";
+import { inBothSchemes, resolvedColor, styleOf } from "./kit.ts";
 import { clickShape, toolbar } from "./generation.ts";
 import { openLibrary, presetItem } from "./library.ts";
 import { dropFiles, putRecords, styleRecord } from "./media.ts";
@@ -20,6 +21,11 @@ test("a dropped .md becomes a style card with its title, its colours and its ope
   const card = shapeOnScreen(page, style.id).getByTestId("style-card");
   await expect(card.getByTestId("style-title")).toHaveText("Linear");
   await expect(card.locator("[data-swatch]")).toHaveCount(2);
+  // A near-black swatch keeps a visible edge on the card in both schemes: a border from the foreground token.
+  await inBothSchemes(page, async () => {
+    const edge = await styleOf(card.locator("[data-swatch='#08090a']"), "border-top-color");
+    expect(edge).toBe(await resolvedColor(page, "color-mix(in oklab, var(--foreground) 15%, transparent)"));
+  });
   await expect(card.getByTestId("style-excerpt")).toContainText("Calm and dense");
 
   await dropFiles(page, await emptyCanvasPoint(page), [{ name: "huge.md", mime: "text/markdown", size: 102_401 }]);
@@ -76,6 +82,43 @@ test("the markdown window shows the document, saves an edit as a new version, an
   await page.keyboard.press("ControlOrMeta+z");
   await expect.poll(async () => (await settledRecord(engine, "default", "shape:linear"))?.props.file).toBe("1-linear.md");
   expect(existsSync(projectPath(engine, saved.props.file))).toBe(true);
+});
+
+test("the read view shows the document first, its front matter folded under Details and wrapped, and a save keeps the front matter byte for byte", async ({ page, engine }) => {
+  const frontMatter = `---\nname: Linear\ndescription: "${"A near-black product-focused marketing canvas built around one lavender accent, ".repeat(3).trim()}"\ncolors:\n  primary: "#5e6ad2"\n---\n`;
+  await openCanvas(page, engine);
+  await writeFile(projectPath(engine, "1-linear.md"), `${frontMatter}${LINEAR}`);
+  await putRecords(engine, [styleRecord("shape:linear", "300", { x: 620, y: 80 }, "1-linear.md", "Linear")]);
+  await expect(shapeOnScreen(page, "shape:linear")).toBeVisible();
+  await clickShape(page, "shape:linear");
+  await toolbar(page).getByRole("button", { name: "Open" }).click();
+  const window = page.getByTestId("style-window");
+  const read = window.getByTestId("style-read");
+  await expect(read).toContainText("Calm and dense, for focused work.");
+  await expect(read).not.toContainText("near-black product-focused");
+  await expect(read.locator("pre, code").first()).toHaveCount(0);
+
+  await window.getByRole("button", { name: "Details" }).click();
+  const yaml = window.getByTestId("style-front-matter");
+  await expect(yaml).toContainText('primary: "#5e6ad2"');
+  await expect(yaml).toContainText("near-black product-focused");
+  expect(await yaml.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true);
+  // The document comes before Details.
+  const [bodyTop, detailsTop] = await Promise.all([read.getByText("Calm and dense, for focused work.").boundingBox(), window.getByTestId("style-details").boundingBox()]);
+  expect(bodyTop!.y).toBeLessThan(detailsTop!.y);
+
+  await window.getByRole("button", { name: "Edit" }).click();
+  await window.getByTestId("style-editor").getByText("Calm and dense, for focused work.").click();
+  await page.keyboard.press("End");
+  await page.keyboard.type(" Never loud.");
+  await window.getByRole("button", { name: "Save" }).click();
+  const saved = await waitForRoom(engine, "default", (records) => {
+    const shape = records.find((record) => record.id === "shape:linear");
+    return shape && shape.props.file !== "1-linear.md" ? shape : undefined;
+  });
+  const text = await readFile(projectPath(engine, saved.props.file), "utf8");
+  expect(text.startsWith(frontMatter)).toBe(true);
+  expect(text).toContain("Never loud.");
 });
 
 test.describe("a chat's style", () => {

@@ -4,11 +4,12 @@ import { Markdown } from "@tiptap/markdown";
 import { TableKit } from "@tiptap/extension-table";
 import { EditorContent, useEditor as useTiptap } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
-import { Pencil } from "lucide-react";
+import { ChevronRight, Pencil } from "lucide-react";
 import { useEffect, useRef, useState, type KeyboardEvent, type RefObject } from "react";
 import { useEditor, useValue, type TLShape, type TLShapeId } from "tldraw";
 import { Alert } from "~/components/ui/alert";
 import { Button } from "~/components/ui/button";
+import { Collapsible, CollapsiblePanel, CollapsibleTrigger } from "~/components/ui/collapsible";
 import { Dialog, DialogClose, DialogDescription, DialogFooter, DialogHeader, DialogPanel, DialogPopup, DialogTitle } from "~/components/ui/dialog";
 import { Spinner } from "~/components/ui/spinner";
 import { ChatMarkdown } from "../agent/transcript/ChatMarkdown.tsx";
@@ -17,10 +18,37 @@ import { useCanvasProject, useEngine } from "../context.ts";
 
 const messageOf = (error: unknown) => (error instanceof UnframedError || error instanceof Error ? error.message : String(error));
 
-/** The read view's text: front matter shown as the YAML it is, then the document. */
-const readable = (markdown: string): string => {
+/** The front matter's YAML without its `---` lines. */
+const yamlOf = (frontMatter: string): string =>
+  frontMatter
+    .replace(/^---[ \t]*\r?\n/, "")
+    .replace(/\r?\n---[ \t]*(\r?\n)?$/, "")
+    .trimEnd();
+
+/** The read view: the document rendered, then its front matter folded under Details, wrapped to the window. */
+const ReadView = ({ markdown }: { readonly markdown: string }) => {
   const { frontMatter, body } = splitFrontMatter(markdown);
-  return frontMatter === "" ? markdown : `\`\`\`yaml\n${frontMatter.trim()}\n\`\`\`\n\n${body}`;
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="flex flex-col gap-4" data-testid="style-read">
+      <ChatMarkdown text={body} />
+      {frontMatter !== "" && (
+        <div className="border-t pt-3">
+          <Collapsible open={open} onOpenChange={setOpen} data-testid="style-details">
+            <CollapsibleTrigger className="flex items-center gap-1 text-xs font-medium text-muted-foreground hover:text-foreground">
+              <ChevronRight aria-hidden className={open ? "size-3.5 rotate-90 transition-transform duration-200 motion-reduce:transition-none" : "size-3.5 transition-transform duration-200 motion-reduce:transition-none"} />
+              Details
+            </CollapsibleTrigger>
+            <CollapsiblePanel>
+              <pre className="m-0 mt-2 font-mono text-xs leading-relaxed whitespace-pre-wrap break-words text-muted-foreground select-text" data-testid="style-front-matter">
+                {yamlOf(frontMatter)}
+              </pre>
+            </CollapsiblePanel>
+          </Collapsible>
+        </div>
+      )}
+    </div>
+  );
 };
 
 /** The body editor: Tiptap with its markdown extension and tables, so a DESIGN.md's tables survive a save. */
@@ -131,9 +159,7 @@ export const StyleWindow = ({ shapeId, onClose }: { readonly shapeId: TLShapeId;
             (editing ? (
               <BodyEditor body={splitFrontMatter(text.markdown).body} reader={reader} />
             ) : (
-              <div data-testid="style-read">
-                <ChatMarkdown text={readable(text.markdown)} />
-              </div>
+              <ReadView markdown={text.markdown} />
             ))}
         </DialogPanel>
         <DialogFooter>

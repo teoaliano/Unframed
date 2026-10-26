@@ -22,6 +22,9 @@ const styleProps: RecordProps<StyleShape> = {
 
 export const STYLE_MIN = { w: 200, h: 120 };
 
+/** The card's corner radius in page units: `rounded-xl` in artifactCardClass, the kit's --radius (10 px) plus 4. */
+const CARD_RADIUS = 14;
+
 /**
  * A style document's card: its title, the colours it names and its opening lines, all read
  * from the shape's props, which every new version writes. A render reads no file and runs
@@ -44,7 +47,7 @@ const StyleCard = ({ shape }: { readonly shape: StyleShape }) => {
       {props.swatches.length > 0 && (
         <div className="flex gap-1.5" data-testid="style-swatches">
           {props.swatches.map((colour) => (
-            <span key={colour} className="size-6 shrink-0 rounded-md border" style={{ backgroundColor: colour }} title={colour} data-swatch={colour} />
+            <span key={colour} className="size-6 shrink-0 rounded-md border border-foreground/15" style={{ backgroundColor: colour }} title={colour} data-swatch={colour} />
           ))}
         </div>
       )}
@@ -77,8 +80,13 @@ export class StyleShapeUtil extends BaseBoxShapeUtil<StyleShape> {
 
   override getIndicatorPath(shape: StyleShape) {
     const path = new Path2D();
-    path.rect(0, 0, shape.props.w, shape.props.h);
+    path.roundRect(0, 0, shape.props.w, shape.props.h, Math.min(CARD_RADIUS, shape.props.w / 2, shape.props.h / 2));
     return path;
+  }
+
+  /** The rounded indicator is the outline: the square selection box would cut across the card's corners. */
+  override hideSelectionBoundsFg() {
+    return true;
   }
 
   override onResize(shape: StyleShape, info: TLResizeInfo<StyleShape>) {
