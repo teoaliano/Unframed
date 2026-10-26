@@ -754,6 +754,11 @@ code {
     z-index: 400;
   }
 
+  /* Settings sits with the bar's body above the docked rail (Corners.tsx): the bar's right flare overlaps it. */
+  .unframed-chrome-right {
+    z-index: 650;
+  }
+
   .unframed-chrome-left {
     left: 0;
   }

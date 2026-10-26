@@ -61,7 +61,9 @@ export const TopCorners = () => {
         logo={<LogoMark />}
         settings={SettingsButton && <SettingsButton />}
         regions={{
-          frame: { className: "absolute inset-x-0 top-0" },
+          // The bar's fill and outline sit with the strip above the docked rail (600). Under it, the rail hid the bar's left
+          // flare and bottom border, and the rail's right border showed through the bar.
+          frame: { className: "absolute inset-x-0 top-0 *:data-[slot=top-bar-body]:z-[650]" },
           start: {
             ref: left,
             className: "unframed-chrome-left data-docked:z-[700] data-docked:border-transparent data-docked:bg-transparent",
