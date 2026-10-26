@@ -35,8 +35,13 @@ const MARGIN = 8;
 export const placeFloating = (target: ScreenBox, size: { readonly w: number; readonly h: number }, canvas: CanvasRoom): FloatingPlace => {
   const centre = target.x + target.w / 2;
   const left = Math.min(Math.max(MARGIN, centre - size.w / 2), Math.max(MARGIN, canvas.w - MARGIN - size.w));
+  // Above the selection, unless the top bar is in the way: then below it, which keeps the labels above the
+  // selection visible. Only when neither side is clear does it sit at the band's bottom edge.
   const above = target.y - GAP - size.h;
-  if (above >= MARGIN) return { ...clearOfCard({ left, top: above }, size, canvas), side: "above" };
+  if (above >= MARGIN) {
+    const clear = clearOfCard({ left, top: above }, size, canvas);
+    if (clear.left === left && clear.top === above) return { ...clear, side: "above" };
+  }
   const below = target.y + target.h + GAP;
   if (below + size.h <= canvas.h - MARGIN) return { ...clearOfCard({ left, top: below }, size, canvas), side: "below" };
   return { ...clearOfCard({ left, top: MARGIN }, size, canvas), side: "pinned" };
