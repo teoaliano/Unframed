@@ -12,6 +12,7 @@ import { basename, dirname, join } from "node:path";
 import {
   artifactFileName,
   dialsBridgeSource,
+  editBridgeSource,
   LIVE_CHECK_FILE,
   LIVE_VIEWER_FILE,
   liveCheckSource,
@@ -25,6 +26,8 @@ import {
 const require = createRequire(import.meta.url);
 
 export const BRIDGE_FILE = "unframed-dials.js";
+/** The edit bridge (spec 18): loaded by the dials bridge on the first edit hello, and written beside it. */
+export const EDIT_BRIDGE_FILE = "unframed-edit.js";
 
 /** One file of the motion library: its fixed name and where its bytes come from. */
 interface LibraryFile {
@@ -43,11 +46,13 @@ const installed = (resolve: () => string) => {
 };
 
 const BRIDGE: LibraryFile = { name: BRIDGE_FILE, bytes: async () => Buffer.from(dialsBridgeSource(), "utf8") };
+const EDIT: LibraryFile = { name: EDIT_BRIDGE_FILE, bytes: async () => Buffer.from(editBridgeSource(), "utf8") };
 
 /** The five files, under fixed names. Nothing is vendored and nothing loads from a CDN. */
 const LIBRARY: ReadonlyArray<LibraryFile> = [
   { name: "hyperframes-viewer.html", bytes: async () => Buffer.from(viewerPageSource(), "utf8") },
   BRIDGE,
+  EDIT,
   // The player's global build sits beside its package entry.
   { name: "hyperframes-player.js", bytes: installed(() => join(dirname(require.resolve("@hyperframes/player")), "hyperframes-player.global.js")) },
   { name: "hyperframes-runtime.js", bytes: installed(() => require.resolve("@hyperframes/core/runtime")) },
@@ -70,7 +75,7 @@ const ensure = async (folder: string, files: ReadonlyArray<LibraryFile>): Promis
 };
 
 /** A page write ensures only the bridge; a page never gets the player, runtime or GSAP. */
-export const ensureBridge = (folder: string): Promise<void> => ensure(folder, [BRIDGE]);
+export const ensureBridge = (folder: string): Promise<void> => ensure(folder, [BRIDGE, EDIT]);
 
 const LIVE_FILES: ReadonlyArray<LibraryFile> = [
   { name: LIVE_VIEWER_FILE, bytes: async () => Buffer.from(liveViewerSource(), "utf8") },

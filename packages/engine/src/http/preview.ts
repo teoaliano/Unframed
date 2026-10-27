@@ -4,7 +4,7 @@ import http from "node:http";
 import { basename, dirname, join } from "node:path";
 import { pipeline } from "node:stream/promises";
 import { LIVE_CHECK_FILE, LIVE_VIEWER_FILE, loopbackGuard, projectSlug } from "@unframed/domain";
-import { BRIDGE_FILE, ensureBridge, ensureLiveViewer } from "../artifacts/artifactStore.ts";
+import { BRIDGE_FILE, EDIT_BRIDGE_FILE, ensureBridge, ensureLiveViewer } from "../artifacts/artifactStore.ts";
 import { NOT_FOUND } from "./respond.ts";
 import { guardUpgrade, refuseUpgrade } from "./guard.ts";
 
@@ -109,7 +109,7 @@ const handler =
     // one, so a fix reaches projects written before it. Only in a project that exists: a
     // request never makes a folder.
     const name = basename(path);
-    const refresh = name === BRIDGE_FILE ? ensureBridge : name === LIVE_VIEWER_FILE || name === LIVE_CHECK_FILE ? ensureLiveViewer : undefined;
+    const refresh = name === BRIDGE_FILE || name === EDIT_BRIDGE_FILE ? ensureBridge : name === LIVE_VIEWER_FILE || name === LIVE_CHECK_FILE ? ensureLiveViewer : undefined;
     if (refresh !== undefined && (await stat(dirname(path)).catch(() => undefined))?.isDirectory()) await refresh(dirname(path)).catch(() => undefined);
     const info = await stat(path).catch(() => undefined);
     if (!info?.isFile()) return refuse(res, 404, "not found", head);

@@ -1,6 +1,6 @@
 import { mkdir, readdir, readFile, utimes, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { BRIDGE_TAG } from "@unframed/domain";
+import { BRIDGE_TAG, editBridgeSource } from "@unframed/domain";
 import { stampElementIds } from "@unframed/domain/html";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { pageShape } from "./canvasRecords.ts";
@@ -209,5 +209,36 @@ describe("artifact.sourceTree and artifact.prepareEdit (spec 18)", () => {
         message: 'There is no project named "nowhere".',
       });
     });
+  });
+});
+
+describe("the preview origin and unframed-edit.js (spec 18)", () => {
+  let engine: TestEngine;
+  beforeAll(async () => {
+    engine = await startEngine();
+    await (await engine.rpc()).call("projects.create", { name: "frames" });
+  });
+  afterAll(() => engine.dispose());
+
+  it("writes the edit bridge beside the dials bridge and serves it with the usual headers, refreshing it when it differs", async () => {
+    const folder = join(engine.dataDir, "output", "frames");
+    await (await engine.rpc()).call("artifact.images", { project: "frames" });
+    const upload = await engine.request("/api/projects/frames/files?name=page.html", {
+      method: "POST",
+      body: "<h1>x</h1>",
+      headers: { "content-type": "text/html" },
+    });
+    expect(upload.status).toBe(200);
+    expect((await readFile(join(folder, "unframed-edit.js"), "utf8")).split("\n")[0]).toBe(editBridgeSource().split("\n")[0]);
+
+    await writeFile(join(folder, "unframed-edit.js"), "stale");
+    const served = await engine.request(`/p/frames/unframed-edit.js`, { port: engine.previewPort, headers: { host: `127.0.0.1:${engine.previewPort}` } });
+    expect(served.status).toBe(200);
+    // The engine's copy of the source is its own text; the test process only compares the header line.
+    expect(served.text.split("\n")[0]).toBe(editBridgeSource().split("\n")[0]);
+    expect(served.text).toContain("installEditBridge");
+    expect(served.headers["content-type"]).toMatch(/javascript/);
+    expect(served.headers["x-content-type-options"]).toBe("nosniff");
+    expect(served.headers["cache-control"]).toBe("no-cache");
   });
 });
