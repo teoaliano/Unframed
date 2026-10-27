@@ -51,4 +51,19 @@ describe("the kit on the canvas tools (spec 19, task 14)", () => {
     await agent.send(watcher, "what changed?");
     expect((await agent.settled(watcher, 2)).session?.lastError ?? null).toBeNull();
   });
+
+  it("answers an off-token note with a page write that has a literal near a token, and never refuses the write", async () => {
+    const html = "<html><head><style>.a{color:#1a73e9}</style></head><body>x</body></html>";
+    const agent = await startAgentEngine({
+      script: await scriptFolder({ pages: { when: "^go", turns: [{ text: "Written.", tools: [{ name: "page_write", input: { html } }] }] } }),
+    });
+    await seed(agent, []);
+    await agent.rpc.call("testCanvas.apply", { project: "board", change: { put: [documentWith(kit)], remove: [] }, origin: { kind: "server", id: "kit:c2" } });
+    const chatId = await agent.createChat();
+    await agent.send(chatId, "go", {});
+    const chat = await agent.settled(chatId, 1);
+    const [write] = toolResults(chat, "page_write");
+    expect(write?.status).toBe("completed");
+    expect(write?.result).toMatchObject({ ok: true, offToken: { count: 1, notes: ["#1a73e9 is near --color-brand-primary (#1a73e8)"] } });
+  });
 });

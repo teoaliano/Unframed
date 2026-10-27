@@ -20,6 +20,8 @@ import {
   MOTION_WRITE_ARGUMENTS,
   MOTION_WRITE_TEXT,
   nextRef,
+  offTokenNote,
+  offTokenValues,
   PAGE_READ_SHAPE_ID,
   PAGE_READ_TEXT,
   PAGE_WRITE_ARGUMENTS,
@@ -176,6 +178,8 @@ export class ArtifactTools {
       turnId: turn.turnId ?? null,
       createdAt: new Date().toISOString(),
     });
+    const kit = kitOf(records);
+    const offToken = kit === null ? undefined : offTokenNote(offTokenValues(html, kit));
     return {
       value: {
         ok: true,
@@ -184,6 +188,7 @@ export class ArtifactTools {
         title,
         previewUrl: artifactUrl({ appHostname: "localhost", previewPort: this.previewPort(), project: projectSlug(binding.project), file: written.file, kind }),
         clock: applied.clock,
+        ...(offToken === undefined ? {} : { offToken }),
       },
     };
   }

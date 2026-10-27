@@ -7,5 +7,6 @@ export { installTokens, tokensScript, kitStamp, type TokensWindow } from "./outp
 export { mergeKit, replaceKit, type KitSide, type MergeCounts, type MergeChoices, type MergeConflict, type MergeResult } from "./merge.ts";
 export { fromDtcg, fromCss, toDtcg, toCss, toTailwind, type ImportFile, type ImportFragment, type ImportResult } from "./formats.ts";
 export { offTokenValues, type OffTokenValue, type OffTokenPlace, type StyleRuleRef } from "./offTokens.ts";
+export { offTokenNote, OFF_TOKEN_NOTE_LIMIT, OFF_TOKEN_ADVICE, type OffTokenNote } from "./offTokenNote.ts";
 export { tokensForField } from "./tokenFields.ts";
 export { parseStylesheet, type CssRule, type CssDeclaration } from "./css.ts";
