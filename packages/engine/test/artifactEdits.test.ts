@@ -16,7 +16,7 @@ describe("artifact.sourceTree and artifact.prepareEdit (spec 18)", () => {
   let rpc: Awaited<ReturnType<TestEngine["rpc"]>>;
 
   beforeAll(async () => {
-    engine = await startEngine();
+    engine = await startEngine({ env: { UNFRAMED_TEST_CANVAS: "1" } });
     rpc = await engine.rpc();
     await rpc.call("projects.create", { name: "board" });
     folder = join(engine.dataDir, "output", "board");
@@ -85,6 +85,98 @@ describe("artifact.sourceTree and artifact.prepareEdit (spec 18)", () => {
     await expect(rpc.call("artifact.prepareEdit", { project: "board", shapeId: "shape:empty" })).rejects.toMatchObject({
       code: "not_found",
       message: "This page has no file yet.",
+    });
+  });
+
+  describe("artifact.edit", () => {
+    const sidecarOf = async (file: string) => JSON.parse(await readFile(join(folder, file.replace(/\.html$/, ".json")), "utf8"));
+    const put = async (record: unknown) => {
+      const tab = await connectTab(engine.port, "board");
+      await tab.loaded;
+      const verdict = await tab.pushRaw([record as never]);
+      await tab.close();
+      return verdict;
+    };
+    const editable = (id: string, extra: Record<string, unknown> = {}) =>
+      pageShape(id, "200", { file: "1-ready.html", title: "Ready", ...extra });
+
+    it("writes the edited text as a new version with its edit sidecar, and leaves the base file and the shape alone", async () => {
+      await put(editable("e1"));
+      const answer = await rpc.call("artifact.edit", {
+        project: "board",
+        shapeId: "shape:e1",
+        baseFile: "1-ready.html",
+        edits: [{ type: "text", elementId: "hf-aaaa", text: "Hello & more" }],
+      });
+      expect(answer).toEqual({ file: expect.stringMatching(/^\d+-ready\.html$/), summary: ["Text · Hello & more"] });
+      const written = await readFile(join(folder, answer.file), "utf8");
+      expect(written).toBe(stampElementIds(`${BRIDGE_TAG}\n<h1 data-hf-id="hf-aaaa">Hello &amp; more</h1>`));
+      expect(await readFile(join(folder, "1-ready.html"), "utf8")).toBe(READY);
+      expect(await sidecarOf(answer.file)).toMatchObject({ source: "edit", kind: "page", of: "1-ready.html", shapeId: "shape:e1", edits: ["Text · Hello & more"], title: "Ready" });
+      const read = (await rpc.call("testCanvas.read", { project: "board" })) as unknown as { records: Array<{ id: string; props?: { file?: string } }> };
+      expect(read.records.find((record) => record.id === "shape:e1")?.props?.file).toBe("1-ready.html");
+    });
+
+    it("refuses an edit whose base file is no longer the shape's file, with the reason elsewhere after a person's change", async () => {
+      await put(editable("e2"));
+      await expect(rpc.call("artifact.edit", { project: "board", shapeId: "shape:e2", baseFile: "0-old.html", edits: [{ type: "hide", elementId: "hf-aaaa", hidden: true }] })).rejects.toMatchObject({
+        code: "conflict",
+        details: { reason: "elsewhere" },
+      });
+    });
+
+    it("reports the reason agent when the file was moved by a chat", async () => {
+      await put(editable("e3"));
+      await rpc.call("testCanvas.apply", {
+        project: "board",
+        change: { put: [{ ...editable("e3"), props: { ...(editable("e3") as { props: object }).props, file: "2-agent.html" } }], remove: [] },
+        origin: { kind: "server", id: "chat:c1" },
+      });
+      await expect(rpc.call("artifact.edit", { project: "board", shapeId: "shape:e3", baseFile: "1-ready.html", edits: [{ type: "hide", elementId: "hf-aaaa", hidden: true }] })).rejects.toMatchObject({
+        code: "conflict",
+        details: { reason: "agent" },
+      });
+    });
+
+    it("refuses an empty list, a refused edit with its sentence, an unknown element, and a page over the limit, and writes nothing", async () => {
+      await put(editable("e4"));
+      const before = (await readdir(folder)).length;
+      await expect(rpc.call("artifact.edit", { project: "board", shapeId: "shape:e4", baseFile: "1-ready.html", edits: [] })).rejects.toMatchObject({
+        code: "bad_request",
+        message: "There is nothing to save.",
+      });
+      await expect(
+        rpc.call("artifact.edit", { project: "board", shapeId: "shape:e4", baseFile: "1-ready.html", edits: [{ type: "style", elementId: "hf-aaaa", property: "color", value: "red; x:1" }] }),
+      ).rejects.toMatchObject({ code: "bad_request", message: 'Colour cannot be "red; x:1".' });
+      await expect(rpc.call("artifact.edit", { project: "board", shapeId: "shape:e4", baseFile: "1-ready.html", edits: [{ type: "hide", elementId: "hf-zzzz", hidden: true }] })).rejects.toMatchObject({
+        code: "bad_request",
+        message: "There is no element hf-zzzz in this page any more.",
+      });
+      // The edit grows the page: the element's text is replaced by a longer run, past the limit.
+      const big = `<h1 data-hf-id="hf-aaaa">Hi</h1><p>${"a".repeat(2_000_000)}</p>`;
+      await writeFile(join(folder, "1-big.html"), big);
+      await put(pageShape("e5", "201", { file: "1-big.html", title: "Big" }));
+      await expect(
+        rpc.call("artifact.edit", { project: "board", shapeId: "shape:e5", baseFile: "1-big.html", edits: [{ type: "text", elementId: "hf-aaaa", text: "b".repeat(200_000) }] }),
+      ).rejects.toMatchObject({ code: "bad_request", message: expect.stringMatching(/^The page would be too large \(\d+ bytes; the limit is 2097152\)\.$/) });
+      expect((await readdir(folder)).length).toBe(before + 1);
+    });
+
+    it("refuses a text edit on a locked element and lets rename and hide through", async () => {
+      await put(editable("e6", { lockedElements: ["hf-aaaa"] }));
+      await expect(
+        rpc.call("artifact.edit", { project: "board", shapeId: "shape:e6", baseFile: "1-ready.html", edits: [{ type: "text", elementId: "hf-aaaa", text: "x" }] }),
+      ).rejects.toMatchObject({ code: "bad_request", message: "Hi is locked. Unlock it in Layers to edit it." });
+      const renamed = await rpc.call("artifact.edit", {
+        project: "board",
+        shapeId: "shape:e6",
+        baseFile: "1-ready.html",
+        edits: [
+          { type: "attribute", elementId: "hf-aaaa", name: "data-uf-name", value: "Title" },
+          { type: "hide", elementId: "hf-aaaa", hidden: true },
+        ],
+      });
+      expect(renamed.summary).toEqual(["Name · Title", "Hidden · Title"]);
     });
   });
 });

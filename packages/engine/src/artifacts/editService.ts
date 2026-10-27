@@ -6,9 +6,10 @@
 import { readdir, readFile, stat } from "node:fs/promises";
 import { extname, join } from "node:path";
 import type { TLRecord } from "@tldraw/tlschema";
-import { isBareFileName, unframedError, type ArtifactImage, type SourceTreeElement } from "@unframed/contracts";
-import { ARTIFACT_SIZE_LIMIT, artifactTitle, projectSlug, shapeKind, sidecarFileName } from "@unframed/domain";
-import { sourceTreeOf, stampElementIds } from "@unframed/domain/html";
+import { isBareFileName, unframedError, type ArtifactImage, type SourceEdit, type SourceTreeElement } from "@unframed/contracts";
+import { ARTIFACT_SIZE_LIMIT, artifactTitle, projectSlug, shapeKind, sidecarFileName, type ArtifactKind } from "@unframed/domain";
+import { applySourceEdits, sourceTreeOf, stampElementIds } from "@unframed/domain/html";
+import type { CommittedChange } from "../canvas/rooms.ts";
 import { byteSize, prepareArtifactHtml, tooLargeMessage } from "./artifactHtml.ts";
 import { ensureBridge, ensureLibrary, writeEditArtifact } from "./artifactStore.ts";
 
@@ -23,6 +24,25 @@ export interface EditServiceDeps {
   readonly read: (project: string) => Promise<ReadonlyArray<TLRecord>>;
 }
 
+type Origin = CommittedChange["origin"];
+
+/** The artifact shape an edit names, with its kind and its props, or the refusal when there is none. */
+const artifactShape = (records: ReadonlyArray<TLRecord>, shapeId: string) => {
+  const record = records.find((candidate) => candidate.id === shapeId);
+  const shape = record?.typeName === "shape" ? record : undefined;
+  const kind = shape === undefined ? undefined : shapeKind(shape.type);
+  if (shape === undefined || (kind !== "page" && kind !== "motion")) throw unframedError("not_found", `There is no page or motion ${shapeId} on this canvas.`);
+  return { kind, props: shape.props as { file?: unknown; title?: unknown; fileName?: unknown; lockedElements?: unknown } };
+};
+
+/** The element and the locked ancestor, if any, that holds an edit's element under a lock. */
+const lockedBy = (elementId: string, locked: ReadonlySet<string>, byId: ReadonlyMap<string, { parent: string | null; name: string }>): string | undefined => {
+  for (let id: string | null = elementId; id !== null; id = byId.get(id)?.parent ?? null) {
+    if (locked.has(id)) return id;
+  }
+  return undefined;
+};
+
 /** The folder, or the not-found refusal every edit RPC gives an unknown project. */
 const folderOf = async (deps: EditServiceDeps, project: string): Promise<string> => {
   const dir = await deps.folder(project);
@@ -32,7 +52,20 @@ const folderOf = async (deps: EditServiceDeps, project: string): Promise<string>
 
 const isReady = (html: string): boolean => BRIDGE_PRESENT.test(html) && stampElementIds(html) === html;
 
-export const artifactEditService = (deps: EditServiceDeps) => ({
+export const artifactEditService = (deps: EditServiceDeps) => {
+  /** The origin that last set each artifact's file, by project and shape: a chat's makes an agent conflict. */
+  const fileOrigins = new Map<string, Origin>();
+  const keyOf = (project: string, shapeId: string) => `${projectSlug(project)}\u0000${shapeId}`;
+
+  return {
+  /** Notes the origin of every committed change that set an artifact's file. */
+  committed: (project: string, change: CommittedChange): void => {
+    for (const record of change.records.values()) {
+      if (record.typeName !== "shape" || (record.type !== "page" && record.type !== "motion")) continue;
+      if (typeof (record.props as { file?: unknown }).file === "string") fileOrigins.set(keyOf(project, record.id), change.origin);
+    }
+  },
+
   /** The elements of a file that carry an id, and whether the file is ready for editing as it stands. */
   sourceTree: async (project: string, file: string): Promise<{ ready: boolean; elements: SourceTreeElement[] }> => {
     const dir = await folderOf(deps, project);
@@ -74,6 +107,39 @@ export const artifactEditService = (deps: EditServiceDeps) => ({
     return { file: written.file };
   },
 
+  /** The person's source edits to an artifact's base file, written as a new version (spec 18). */
+  edit: async (project: string, shapeId: string, baseFile: string, edits: readonly SourceEdit[]): Promise<{ file: string; summary: string[] }> => {
+    const dir = await folderOf(deps, project);
+    const { kind, props } = artifactShape(await deps.read(project), shapeId);
+    if (edits.length === 0) throw unframedError("bad_request", "There is nothing to save.");
+    if (props.file !== baseFile) {
+      const origin = fileOrigins.get(keyOf(project, shapeId));
+      const reason = origin?.kind === "server" && origin.id.startsWith("chat:") ? "agent" : "elsewhere";
+      throw unframedError("conflict", `This ${kind} changed while you were editing it.`, { reason });
+    }
+    const html = await readFile(join(dir, baseFile), "utf8").catch(() => {
+      throw unframedError("not_found", `No file ${baseFile} in this project.`);
+    });
+    const tree = sourceTreeOf(html);
+    const byId = new Map(tree.map((entry) => [entry.id, { parent: entry.parent, name: entry.name }]));
+    const locked = new Set(Array.isArray(props.lockedElements) ? (props.lockedElements as string[]) : []);
+    if (locked.size > 0) {
+      for (const edit of edits) {
+        // Rename and hide still work on a locked element, so a person can tidy what they protected.
+        if (edit.type === "attribute" || edit.type === "hide") continue;
+        const holder = lockedBy(edit.elementId, locked, byId);
+        if (holder !== undefined) throw unframedError("bad_request", `${byId.get(holder)?.name ?? holder} is locked. Unlock it in Layers to edit it.`);
+      }
+    }
+    const result = applySourceEdits(html, edits, kind);
+    if (!result.ok) throw unframedError("bad_request", result.refusal);
+    const prepared = prepareArtifactHtml(result.html, kind);
+    if (byteSize(prepared) > ARTIFACT_SIZE_LIMIT) throw unframedError("bad_request", tooLargeMessage(kind, byteSize(prepared)));
+    await (kind === "motion" ? ensureLibrary(dir) : ensureBridge(dir));
+    const written = await writeEditArtifact(dir, { kind, html: prepared, title: artifactTitle(props), of: baseFile, shapeId, edits: result.summary });
+    return { file: written.file, summary: result.summary };
+  },
+
   /** The project's images the preview origin serves, newest first. */
   images: async (project: string): Promise<{ images: ArtifactImage[] }> => {
     const dir = await folderOf(deps, project);
@@ -95,5 +161,5 @@ export const artifactEditService = (deps: EditServiceDeps) => ({
     );
     return { images: images.flatMap((image) => (image === undefined ? [] : [image])).sort((a, b) => b.at - a.at) };
   },
-});
-
+};
+};

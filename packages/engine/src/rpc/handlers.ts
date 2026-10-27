@@ -185,8 +185,7 @@ export const rpcHandlersLayer = UnframedRpcs.toLayer(
       "artifact.openLive": ({ project, shapeId }) => artifacts.openLive(project, shapeId),
       "artifact.sourceTree": ({ project, file }) => artifacts.sourceTree(project, file),
       "artifact.prepareEdit": ({ project, shapeId }) => artifacts.prepareEdit(project, shapeId),
-      // artifact.edit arrives with task 12; until then it answers unavailable.
-      "artifact.edit": () => Effect.fail(unframedError("unavailable", "Element editing is not available yet.")),
+      "artifact.edit": ({ project, shapeId, baseFile, edits }) => artifacts.edit(project, shapeId, baseFile, [...edits]),
       "artifact.images": ({ project }) => artifacts.images(project),
       "legacyImport.status": ({ project }) => legacy.status(project),
       "legacyImport.report": ({ project }) => legacy.report(project),

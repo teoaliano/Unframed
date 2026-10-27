@@ -3,7 +3,7 @@
  * and the snapshot stream, over the artifact store, the renderer and the snapshot service.
  */
 import { join } from "node:path";
-import type { ArtifactImage, ArtifactSnapshot, RenderStatus, SourceTreeElement } from "@unframed/contracts";
+import type { ArtifactImage, ArtifactSnapshot, RenderStatus, SourceEdit, SourceTreeElement } from "@unframed/contracts";
 import { UnframedError, unframedError } from "@unframed/contracts";
 import { projectSlug } from "@unframed/domain";
 import { byteSize, prepareArtifactHtml } from "./artifactHtml.ts";
@@ -49,6 +49,7 @@ export class Artifacts extends Context.Service<
     /** The element editor's file operations (spec 18). */
     readonly sourceTree: (project: string, file: string) => Effect.Effect<{ ready: boolean; elements: SourceTreeElement[] }, UnframedError>;
     readonly prepareEdit: (project: string, shapeId: string) => Effect.Effect<{ file: string }, UnframedError>;
+    readonly edit: (project: string, shapeId: string, baseFile: string, edits: SourceEdit[]) => Effect.Effect<{ file: string; summary: string[] }, UnframedError>;
     readonly images: (project: string) => Effect.Effect<{ images: ArtifactImage[] }, UnframedError>;
     /** The Chromium this machine has, for the agent's previews and snapshots. */
     readonly findChrome: () => Promise<string | undefined>;
@@ -97,6 +98,7 @@ export const artifactsLayer = Layer.effect(
     yield* rooms.afterCommit((project, change) => snapshots.committed(project, [...change.records.values()]));
 
     const edits = artifactEditService({ folder: (project) => media.folder(project), read: (project) => run(rooms.read(project)) });
+    yield* rooms.afterCommit((project, change) => edits.committed(project, change));
     const fromEdits = <A>(attempt: () => Promise<A>): Effect.Effect<A, UnframedError> =>
       Effect.tryPromise({
         try: attempt,
@@ -168,6 +170,7 @@ export const artifactsLayer = Layer.effect(
       openLive,
       sourceTree: (project, file) => fromEdits(() => edits.sourceTree(project, file)),
       prepareEdit: (project, shapeId) => fromEdits(() => edits.prepareEdit(project, shapeId)),
+      edit: (project, shapeId, baseFile, list) => fromEdits(() => edits.edit(project, shapeId, baseFile, list)),
       images: (project) => fromEdits(() => edits.images(project)),
       findChrome: chrome,
       chrome: headless,
