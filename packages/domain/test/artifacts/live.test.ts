@@ -220,6 +220,20 @@ describe("the shipped live viewer", () => {
     expect(frame.posted.at(-1)?.message).toEqual({ type: "unframed:tokens:mode", mode: null });
   });
 
+  it("remounts its frame when the pointer's kit stamp changes, and not when it stays the same", () => {
+    const viewer = runViewer("?s=landing");
+    viewer.pointer({ kind: "page", file: "1-landing.html", title: "", dials: null, kit: "aaaa1111" });
+    viewer.frames[0].fire("load");
+    viewer.pointer({ kind: "page", file: "1-landing.html", title: "", dials: null, kit: "aaaa1111" });
+    expect(viewer.frames).toHaveLength(1);
+    viewer.pointer({ kind: "page", file: "1-landing.html", title: "", dials: null, kit: "bbbb2222" });
+    expect(viewer.frames).toHaveLength(2);
+    expect(viewer.frames[1].src).toBe("1-landing.html");
+    expect(viewer.frames[0].removed).toBe(false);
+    viewer.frames[1].fire("load");
+    expect(viewer.frames[0].removed).toBe(true);
+  });
+
   it("loads a new version hidden behind the current one and swaps once it has loaded", () => {
     const viewer = runViewer("?s=landing");
     viewer.pointer({ kind: "page", file: "1-landing.html", title: "", dials: null });

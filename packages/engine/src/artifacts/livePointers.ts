@@ -9,7 +9,7 @@
  */
 import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
-import { artifactTitle, isArtifactKind, liveKey, livePointerFileName, livePointerKey, livePointerSource, parseLivePointer, type LivePointer } from "@unframed/domain";
+import { artifactTitle, isArtifactKind, kitStamp, liveKey, livePointerFileName, livePointerKey, livePointerSource, parseLivePointer, type Kit, type LivePointer } from "@unframed/domain";
 import type { TLRecord } from "@tldraw/tlschema";
 import { writeFileAtomic } from "../atomicFile.ts";
 import { errorText, logError } from "../log.ts";
@@ -20,7 +20,7 @@ type ArtifactRecord = TLRecord & { type: "page" | "motion"; props: { file: strin
 const isArtifact = (record: TLRecord | undefined): record is ArtifactRecord =>
   record?.typeName === "shape" && isArtifactKind(record.type) && typeof (record.props as { file?: unknown }).file === "string";
 
-const pointerOf = (shape: ArtifactRecord): LivePointer => {
+const pointerOf = (shape: ArtifactRecord, kit: Kit | null): LivePointer => {
   const dials = shape.props.dials;
   const mode = (shape.props as { mode?: string }).mode;
   return {
@@ -29,6 +29,7 @@ const pointerOf = (shape: ArtifactRecord): LivePointer => {
     title: artifactTitle(shape.props),
     dials: dials !== undefined && Object.keys(dials).length > 0 ? dials : null,
     ...(mode !== undefined ? { mode } : {}),
+    ...(kit !== null ? { kit: kitStamp(kit) } : {}),
   };
 };
 
@@ -44,19 +45,19 @@ export class LivePointers {
   }
 
   /** "Open in a new tab" on `shape`: writes its pointer, and the viewer and check beside it. */
-  open(project: string, shape: TLRecord | undefined): Promise<boolean> {
+  open(project: string, shape: TLRecord | undefined, kit: Kit | null = null): Promise<boolean> {
     if (!isArtifact(shape)) return Promise.resolve(false);
     const key = liveKey(shape.id);
     if (key === undefined) return Promise.resolve(false);
     return this.enqueue(project, async (folder) => {
       await ensureLiveViewer(folder);
-      await this.write(folder, key, livePointerSource(pointerOf(shape)));
+      await this.write(folder, key, livePointerSource(pointerOf(shape, kit)));
       return true;
     });
   }
 
   /** A room opened: every followed shape's pointer is brought up to date, or marked deleted. */
-  opened(project: string, records: ReadonlyArray<TLRecord>): void {
+  opened(project: string, records: ReadonlyArray<TLRecord>, kit: Kit | null = null): void {
     void this.enqueue(project, async (folder) => {
       const keys = (await readdir(folder).catch(() => [] as string[])).flatMap((name) => livePointerKey(name) ?? []);
       if (keys.length === 0) return;
@@ -66,12 +67,12 @@ export class LivePointers {
         if (key !== undefined) byKey.set(key, record as ArtifactRecord);
       }
       await ensureLiveViewer(folder);
-      await this.follow(folder, keys.map((key) => ({ key, shape: byKey.get(key) })));
+      await this.follow(folder, keys.map((key) => ({ key, shape: byKey.get(key) })), kit);
     }).catch(() => undefined);
   }
 
   /** A commit: the followed shapes it put are brought up to date, the ones it removed marked deleted. */
-  committed(project: string, put: Iterable<TLRecord>, removed: ReadonlyArray<string>): void {
+  committed(project: string, put: Iterable<TLRecord>, removed: ReadonlyArray<string>, kit: Kit | null = null): void {
     const next: Next[] = [];
     for (const record of put) {
       const key = isArtifact(record) ? liveKey(record.id) : undefined;
@@ -82,7 +83,18 @@ export class LivePointers {
       if (key !== undefined) next.push({ key, shape: undefined });
     }
     if (next.length === 0) return;
-    void this.enqueue(project, (folder) => this.follow(folder, next)).catch(() => undefined);
+    void this.enqueue(project, (folder) => this.follow(folder, next, kit)).catch(() => undefined);
+  }
+
+  /** The project kit changed: every followed artifact's pointer names the new stamp. */
+  kitChanged(project: string, records: ReadonlyArray<TLRecord>, kit: Kit | null): void {
+    const next: Next[] = [];
+    for (const record of records) {
+      const key = isArtifact(record) ? liveKey(record.id) : undefined;
+      if (key !== undefined) next.push({ key, shape: record as ArtifactRecord });
+    }
+    if (next.length === 0) return;
+    void this.enqueue(project, (folder) => this.follow(folder, next, kit)).catch(() => undefined);
   }
 
   /** One chain, in commit order, so an older pointer never lands after a newer one. */
@@ -96,12 +108,12 @@ export class LivePointers {
   }
 
   /** Rewrites the pointers that exist among `next`. A shape with no pointer was never opened in a tab. */
-  private async follow(folder: string, next: ReadonlyArray<Next>): Promise<void> {
+  private async follow(folder: string, next: ReadonlyArray<Next>, kit: Kit | null): Promise<void> {
     for (const { key, shape } of next) {
       const before = await readFile(join(folder, livePointerFileName(key)), "utf8").catch(() => undefined);
       if (before === undefined) continue;
       let text: string;
-      if (shape !== undefined) text = livePointerSource(pointerOf(shape));
+      if (shape !== undefined) text = livePointerSource(pointerOf(shape, kit));
       else {
         const last = parseLivePointer(before);
         if (last === undefined || last.deleted) continue;

@@ -47,6 +47,8 @@ export interface LivePointer {
   readonly dials: Readonly<Record<string, unknown>> | null;
   /** The kit mode the shape shows (spec 19); `null` or absent is the kit's default mode. */
   readonly mode?: string | null;
+  /** The project kit's stamp (spec 19). A new stamp makes the viewer load a fresh frame. */
+  readonly kit?: string;
   /** The shape is no longer on the canvas. An undo can bring it back, so the pointer stays. */
   readonly deleted?: true;
 }
@@ -61,6 +63,7 @@ export const livePointerSource = (pointer: LivePointer): string =>
     title: pointer.title,
     dials: pointer.dials,
     ...(pointer.mode !== undefined ? { mode: pointer.mode } : {}),
+    ...(pointer.kit !== undefined ? { kit: pointer.kit } : {}),
     ...(pointer.deleted ? { deleted: true } : {}),
   })});\n`;
 
@@ -77,6 +80,7 @@ export const parseLivePointer = (text: string): LivePointer | undefined => {
       title: typeof value.title === "string" ? value.title : "",
       dials: typeof value.dials === "object" && value.dials !== null ? value.dials : null,
       ...(typeof value.mode === "string" || value.mode === null ? { mode: value.mode } : {}),
+      ...(typeof value.kit === "string" ? { kit: value.kit } : {}),
       ...(value.deleted === true ? { deleted: true as const } : {}),
     };
   } catch {
@@ -167,6 +171,8 @@ export function liveViewer(win: LiveWindow, doc: LiveDocument): void {
   let shown: { kind: string; file: string; dials: string } | undefined;
   // The kit mode the pointer names, sent to each frame on load and when it changes.
   let mode: string | null = null;
+  // The kit stamp the pointer last named: a new one swaps in a fresh frame, so the kit is read from the file.
+  let stamp: string | undefined;
   let saved: Dials | null = null;
   let missed = 0;
   let count = 0;
@@ -216,7 +222,7 @@ export function liveViewer(win: LiveWindow, doc: LiveDocument): void {
     if (typeof pointer !== "object" || pointer === null) return;
     missed = 0;
     show(status, "");
-    const read = pointer as { kind?: unknown; file?: unknown; title?: unknown; dials?: unknown; mode?: unknown; deleted?: unknown };
+    const read = pointer as { kind?: unknown; file?: unknown; title?: unknown; dials?: unknown; mode?: unknown; kit?: unknown; deleted?: unknown };
     const kind = read.kind === "motion" ? "motion" : "page";
     const file = typeof read.file === "string" ? read.file : "";
     const dials = nonEmpty(read.dials) ? read.dials : null;
@@ -239,8 +245,11 @@ export function liveViewer(win: LiveWindow, doc: LiveDocument): void {
     const nextMode = typeof read.mode === "string" ? read.mode : null;
     const modeChanged = nextMode !== mode;
     mode = nextMode;
+    const nextStamp = typeof read.kit === "string" ? read.kit : undefined;
+    const kitChanged = stamp !== undefined && nextStamp !== stamp;
+    stamp = nextStamp;
     // Values that went back to none need a fresh document: a set only ever adds values.
-    if (before === undefined || before.kind !== kind || before.file !== file || (before.dials !== "null" && dials === null)) mount(kind, file);
+    if (before === undefined || before.kind !== kind || before.file !== file || (before.dials !== "null" && dials === null) || kitChanged) mount(kind, file);
     else {
       if (before.dials !== text && dials !== null) for (const frame of frames) post(frame, { type: "unframed:dials:set", values: dials });
       if (modeChanged) for (const frame of frames) post(frame, { type: "unframed:tokens:mode", mode });
