@@ -1,3 +1,4 @@
+import { readFile } from "node:fs/promises";
 import type { FrameLocator, Page } from "@playwright/test";
 import { addParameterInstruction, BRIDGE_TAG } from "@unframed/domain";
 import { connectTab } from "../../engine/test/syncClient.ts";
@@ -5,7 +6,7 @@ import { centre, openCanvas, roomRecords, settledRecord, shapeOnScreen } from ".
 import { engineChats, expect, test, userTexts } from "./agent.ts";
 import { clickShape } from "./generation.ts";
 import { putRecords } from "./media.ts";
-import { dialsPage, filledArtifact, insideComposition, insideFrame, writeBridge, writeProjectFile } from "./artifacts.ts";
+import { dialsPage, filledArtifact, insideComposition, insideFrame, projectPath, writeBridge, writeProjectFile } from "./artifacts.ts";
 import { expectToken, inBothSchemes, styleOf } from "./kit.ts";
 
 const editor = (page: Page) => page.getByTestId("artifact-editor");
@@ -16,6 +17,8 @@ const openEditor = async (page: Page, id: string, name: string) => {
   const at = await centre(shapeOnScreen(page, id));
   await page.mouse.dblclick(at.x, at.y);
   await expect(page.getByRole("region", { name: `Editing ${name}` })).toBeVisible();
+  // The dials live in the Parameters tab; the editor opens on Design (spec 18).
+  await editor(page).locator('[data-editor-column="parameters"]').getByRole("tab", { name: "Parameters" }).click();
 };
 
 const dialsOf = async (engine: Parameters<typeof roomRecords>[0], id: string) => (await roomRecords(engine, "default")).find((record) => record.id === id)?.props.dials;
@@ -35,15 +38,13 @@ test("an artifact that declares parameters shows them as DialKit controls; one t
   await expect(dials.getByText("Caption")).toBeVisible();
   await expect(dials.getByText("Scene")).toBeVisible();
   await expect(editor(page).getByRole("textbox", { name: "Add a parameter" })).toHaveAttribute("placeholder", "Add a parameter… (e.g. the background colour, the title size)");
-  // One inset down the column: the header's icon, the dials' title and the parameter box line up.
+  // One inset down the column: the dials' title and the parameter box line up.
   const lefts = await Promise.all([
-    editor(page).getByTestId("artifact-dials").locator("xpath=ancestor::*[.//header][1]").locator("header svg").first().boundingBox(),
     dials.locator(".dialkit-folder-title-root").boundingBox(),
     editor(page).getByRole("textbox", { name: "Add a parameter" }).boundingBox(),
   ]);
-  const [icon, title, box] = lefts.map((each) => Math.round(each!.x));
-  expect(Math.abs(title! - icon!)).toBeLessThanOrEqual(1);
-  expect(Math.abs(box! - icon!)).toBeLessThanOrEqual(1);
+  const [title, box] = lefts.map((each) => Math.round(each!.x));
+  expect(Math.abs(box! - title!)).toBeLessThanOrEqual(1);
   await page.keyboard.press("Escape");
 
   await page.mouse.click(640, 600);
@@ -150,10 +151,12 @@ test("a new version that drops or retypes a parameter keeps the rest and rebuild
   await expect(dials.getByRole("slider", { name: "Size" })).toHaveAttribute("aria-valuenow", "30");
   await expect.poll(() => shown(editorFrame(page))).toEqual({ accent: "#ff0000", size: 30, caption: "Saved" });
 
+  // The editor prepares the page first (its ids and tags), so the room names the prepared file from here on.
+  await expect.poll(async () => (await readFile(projectPath(agent, (await roomRecords(agent, "default")).find((item) => item.id === "shape:tuned")!.props.file), "utf8")).includes("data-hf-id"), { timeout: 20_000 }).toBe(true);
   // The agent's next version: caption gone, size now text, a new switch.
   await writeProjectFile(agent, "2-tuned.html", dialsPage({ accent: "#a78bfa", size: "big", glow: true }).replace(BRIDGE_TAG, `${BRIDGE_TAG}<!-- v2 -->`));
   const record = (await roomRecords(agent, "default")).find((item) => item.id === "shape:tuned")!;
-  expect(record.props.file).toBe(file);
+  expect(record.props.file).not.toBe(file);
   await putRecords(agent, [{ ...record, props: { ...record.props, file: "2-tuned.html" } }]);
 
   await expect(dials.getByRole("slider", { name: "Size" })).toHaveCount(0, { timeout: 10_000 });

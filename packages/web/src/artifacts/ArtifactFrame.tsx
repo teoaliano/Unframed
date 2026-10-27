@@ -14,6 +14,18 @@ export interface ArtifactFrameProps {
   readonly onAnnounce?: (announcement: DialsAnnouncement) => void;
   /** Hands the parent a way to post `unframed:dials:set` to this frame. */
   readonly onReady?: (post: (values: unknown) => void) => void;
+  /** The editor's frame: says `unframed:edit:hello` so the edit bridge loads (spec 18). */
+  readonly editable?: boolean;
+  /** Every `unframed:edit:*` message the frame sends, after the origin and window checks. */
+  readonly onEdit?: (message: EditMessage) => void;
+  /** Hands the parent a way to post an `unframed:edit:*` message to this frame. */
+  readonly onEditReady?: (post: (message: unknown) => void) => void;
+}
+
+/** A message the edit bridge or a motion's viewer sends the editor (spec 18, the protocol table). */
+export interface EditMessage {
+  readonly type: string;
+  readonly [key: string]: unknown;
 }
 
 const nonEmpty = (dials: Readonly<Record<string, unknown>> | undefined) => dials !== undefined && Object.keys(dials).length > 0;
@@ -76,6 +88,9 @@ interface FrameMenu {
   readonly clientY: number;
 }
 
+const isEdit = (data: unknown): data is EditMessage =>
+  typeof data === "object" && data !== null && typeof (data as { type?: unknown }).type === "string" && (data as { type: string }).type.startsWith("unframed:edit:");
+
 const isMenu = (data: unknown): data is FrameMenu =>
   typeof data === "object" && data !== null && (data as { type?: unknown }).type === "unframed:contextmenu" && typeof (data as FrameMenu).clientX === "number" && typeof (data as FrameMenu).clientY === "number";
 
@@ -108,7 +123,7 @@ const openShapeMenu = (frame: HTMLIFrameElement, menu: FrameMenu) => {
  * and on load, answers an announcement with the shape's saved values, and sends them again
  * the moment they change. It accepts `unframed:dials` only from its own frame's window.
  */
-export const ArtifactFrame = ({ project, kind, file, previewPort, dials, interactive, lazy, onAnnounce, onReady }: ArtifactFrameProps) => {
+export const ArtifactFrame = ({ project, kind, file, previewPort, dials, interactive, lazy, onAnnounce, onReady, editable = false, onEdit, onEditReady }: ArtifactFrameProps) => {
   const frame = useRef<HTMLIFrameElement>(null);
   const url = urlOf(project, kind, file, previewPort);
   const target = new URL(url).origin;
@@ -117,6 +132,10 @@ export const ArtifactFrame = ({ project, kind, file, previewPort, dials, interac
   const announce = useRef(onAnnounce);
   announce.current = onAnnounce;
   const heard = useRef<DialsAnnouncement | undefined>(undefined);
+  const editing = useRef(editable);
+  editing.current = editable;
+  const onEditMessage = useRef(onEdit);
+  onEditMessage.current = onEdit;
 
   const post = (message: unknown) => {
     try {
@@ -126,16 +145,22 @@ export const ArtifactFrame = ({ project, kind, file, previewPort, dials, interac
     }
   };
   // On the canvas the frame also asks for right-clicks, so a selected frame still opens its shape's menu.
-  const hello = () => post({ type: "unframed:dials:hello", ...(frame.current && canvasUnder(frame.current) ? { menus: true } : {}) });
+  const hello = () => {
+    post({ type: "unframed:dials:hello", ...(frame.current && canvasUnder(frame.current) ? { menus: true } : {}) });
+    // The edit bridge loads on this hello (spec 18). Canvas frames never say it, so they carry no edit code.
+    if (editing.current) post({ type: "unframed:edit:hello" });
+  };
   const set = (values: unknown) => post({ type: "unframed:dials:set", values });
 
   useEffect(() => {
     onReady?.(set);
+    onEditReady?.((message) => post(message));
     hello();
     const onMessage = (event: MessageEvent) => {
       if (!frame.current || event.source !== frame.current.contentWindow) return;
       if (isWheel(event.data)) return zoomCanvas(frame.current, event.data);
       if (isMenu(event.data)) return openShapeMenu(frame.current, event.data);
+      if (isEdit(event.data)) return onEditMessage.current?.(event.data);
       const data = event.data as DialsAnnouncement | null;
       if (typeof data !== "object" || data === null || data.type !== "unframed:dials") return;
       heard.current = data;

@@ -7,6 +7,8 @@ import { connectTab } from "../../engine/test/syncClient.ts";
 import { expectSlot, expectToken, inBothSchemes, styleOf } from "./kit.ts";
 
 const editor = (page: Page) => page.getByTestId("artifact-editor");
+/** The Parameters tab is one of the editor's panels; the Design tab is shown on open (spec 18). */
+const openParameters = (page: Page) => editor(page).locator('[data-editor-column="parameters"]').getByRole("tab", { name: "Parameters" }).click();
 const column = (page: Page, name: "rail" | "centre" | "parameters") => editor(page).locator(`[data-editor-column="${name}"]`);
 
 /** Whether the element at the watermark's centre is the watermark itself, not something laid over it. */
@@ -107,6 +109,7 @@ test("the three columns run to the window's bottom edge at the margin they keep 
   }, { x: watermark.x, y: watermark.y, w: watermark.width, h: watermark.height });
   expect(strays).toEqual([]);
   // Every control in the parameters column ends above the watermark's top edge.
+  await openParameters(page);
   for (const control of [column(page, "parameters").getByRole("button", { name: "Add" }), column(page, "parameters").getByPlaceholder(/Describe a parameter/)]) {
     const box = (await control.boundingBox())!;
     expect(box.y + box.height).toBeLessThanOrEqual(watermark.y);
@@ -237,6 +240,7 @@ test("Escape typed in the composer or the parameter box stays in the editor, and
   await editor(page).getByRole("textbox", { name: "Message the agent" }).click();
   await page.keyboard.press("Escape");
   await expect(region).toBeVisible();
+  await openParameters(page);
   await editor(page).getByRole("textbox", { name: "Add a parameter" }).click();
   await page.keyboard.press("Escape");
   await expect(region).toBeVisible();
@@ -318,6 +322,7 @@ test("the editor's columns, header actions and parameter box are the kit's, in b
 
   const back = region.getByRole("button", { name: "Back to canvas" });
   const newTab = region.getByRole("button", { name: "Open in a new tab" });
+  await openParameters(page);
   const box = editor(page).getByRole("textbox", { name: "Add a parameter" });
   const add = editor(page).getByRole("button", { name: "Add", exact: true });
   await expectSlot(back, "tooltip-trigger");
