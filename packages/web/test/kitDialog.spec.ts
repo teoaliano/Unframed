@@ -1,7 +1,9 @@
+import { readdir, readFile } from "node:fs/promises";
+import { join } from "node:path";
 import type { Locator, Page } from "@playwright/test";
-import { openCanvas, roomRecords, toast } from "./canvas.ts";
 import { expect, test } from "./fixtures.ts";
-import { putRecords } from "./media.ts";
+import { centre, openCanvas, roomRecords, toast } from "./canvas.ts";
+import { dropFiles, putRecords } from "./media.ts";
 import type { TestEngine } from "../../engine/test/engineProcess.ts";
 
 /** The Kit dialog (spec 19): the bottom bar's Kit button, the empty state, and New kit. */
@@ -309,4 +311,57 @@ test("Update in library replaces the library kit, adds to its revision, and keep
   const [preset] = await libraryKits(engine);
   expect(preset!.kit.tokens.find((token: { path: string }) => token.path === "color/brand/primary").values).toEqual({ light: "#1a73e8", dark: "#000000" });
   await expect.poll(() => kitOf(engine, project)).toMatchObject({ from: { presetId: preset!.id, revision: 2 } });
+});
+
+const outputFolder = (engine: TestEngine, project: string) => join(engine.dataDir, "output", project);
+
+test("import pasted CSS: the summary, then Import creates the kit as one undo step", async ({ page, engine }) => {
+  const project = await openCanvas(page, engine);
+  await page.getByRole("button", { name: "Kit", exact: true }).click();
+  const dialog = kitDialog(page);
+  await dialog.getByRole("button", { name: "Import" }).click();
+  const importing = page.getByRole("dialog", { name: "Import" });
+  await importing.getByRole("textbox", { name: "Paste" }).fill(":root { --color-brand-primary: #1a73e8; --space-md: 16px; }");
+
+  await expect(importing).toContainText("Adds 2 tokens, changes 0, adds the modes default. Skips 0 it could not read.");
+  await importing.getByRole("button", { name: "Import" }).click();
+
+  await expect.poll(() => kitOf(engine, project)).toMatchObject({ name: "Kit", tokens: [expect.objectContaining({ path: "color/brand/primary", type: "color", value: "#1a73e8" }), expect.objectContaining({ path: "space/md", type: "dimension", value: "16px" })] });
+  await page.keyboard.press("ControlOrMeta+z");
+  await expect.poll(() => kitOf(engine, project)).toBeUndefined();
+});
+
+test("import a DTCG file as a mode: the file name gives the mode, and its tokens change", async ({ page, engine }) => {
+  const project = await openCanvas(page, engine);
+  await seedKit(engine);
+  await page.getByRole("button", { name: "Kit", exact: true }).click();
+  const dialog = kitDialog(page);
+  await dialog.getByRole("button", { name: "More" }).click();
+  await page.getByRole("menuitem", { name: "Import…" }).click();
+  const importing = page.getByRole("dialog", { name: "Import" });
+
+  const file = JSON.stringify({ color: { brand: { primary: { $type: "color", $value: "#000000" } } } });
+  await dropFiles(page, await centre(importing.getByTestId("import-drop")), [{ name: "night.tokens.json", mime: "application/json", bytes: Buffer.from(file) }]);
+  await expect(importing).toContainText("Adds 0 tokens, changes 1, adds the modes night. Skips 0 it could not read.");
+  await importing.getByRole("button", { name: "Import" }).click();
+
+  await expect.poll(() => kitOf(engine, project)).toMatchObject({ modes: ["light", "dark", "night"] });
+  await expect.poll(() => tokenOf(engine, project, "color/brand/primary")).toMatchObject({ values: { light: "#1a73e8", dark: "#8ab4f8", night: "#000000" } });
+});
+
+test("export writes the kit to the project folder and says so with a Reveal action", async ({ page, engine }) => {
+  const project = await openCanvas(page, engine);
+  await seedKit(engine);
+  await page.getByRole("button", { name: "Kit", exact: true }).click();
+  const dialog = kitDialog(page);
+  await dialog.getByRole("button", { name: "More" }).click();
+  await page.getByRole("menuitem", { name: "Export" }).click();
+  await page.getByRole("menuitem", { name: "DTCG JSON" }).click();
+
+  await expect(toast(page, /^Saved .*\.tokens\.json in the project folder\.$/)).toBeVisible();
+  await expect(page.getByRole("button", { name: "Reveal" })).toBeVisible();
+  const files = await readdir(outputFolder(engine, project));
+  const exported = files.find((name) => name.endsWith(".tokens.json"));
+  expect(exported).toBeDefined();
+  expect(JSON.parse(await readFile(join(outputFolder(engine, project), exported!), "utf8"))).toMatchObject({ color: { brand: { primary: { $type: "color", $value: "#1a73e8" } } } });
 });

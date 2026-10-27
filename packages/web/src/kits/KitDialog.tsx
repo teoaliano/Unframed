@@ -6,11 +6,14 @@ import { AlertDialog, AlertDialogClose, AlertDialogDescription, AlertDialogFoote
 import { Button } from "~/components/ui/button";
 import { Dialog, DialogHeader, DialogPanel, DialogPopup, DialogTitle } from "~/components/ui/dialog";
 import { Input } from "~/components/ui/input";
-import { Menu, MenuItem, MenuPopup } from "~/components/ui/menu";
+import { Menu, MenuItem, MenuPopup, MenuSub, MenuSubPopup, MenuSubTrigger, MenuTrigger } from "~/components/ui/menu";
+import type { KitExportFormat } from "@unframed/contracts";
 import { useCanvasProject, useEngine } from "../context.ts";
 import { KitTable, type KitUsageCounts } from "./KitTable.tsx";
 import { commitKit, kitOf, linkKit } from "./kitRoom.ts";
 import { linkFor, SaveKitDialog, updateInLibrary } from "./KitLibrary.tsx";
+import { ImportKitDialog } from "./KitImport.tsx";
+import { showError, showReveal } from "../toasts.tsx";
 
 export const NO_KIT_MESSAGE = "This project has no kit yet. A kit holds the colours, sizes, fonts and motion values its pages and motions share.";
 export const DEFAULT_KIT_NAME = "Kit";
@@ -32,6 +35,7 @@ export const KitDialog = ({ onClose, onFromLibrary }: { readonly onClose: () => 
   const [usage, setUsage] = useState<KitUsageCounts>(NO_USE);
   const [ask, setAsk] = useState<Ask>();
   const [saving, setSaving] = useState(false);
+  const [importing, setImporting] = useState(false);
 
   // Used-by counts are read when the dialog opens and after each kit change (spec 19).
   useEffect(() => {
@@ -60,6 +64,14 @@ export const KitDialog = ({ onClose, onFromLibrary }: { readonly onClose: () => 
     if (done !== undefined) relink(done.presetId, done.revision);
   };
 
+  /** Export writes the kit into the project folder; the toast offers to reveal the file. */
+  const exportKit = (format: KitExportFormat) => {
+    engine
+      .call("kit.exportFile", { project, format })
+      .then(({ file }) => showReveal(`Saved ${file} in the project folder.`, () => void engine.call("files.reveal", { project, fileNames: [file] })))
+      .catch((error: unknown) => showError(error instanceof Error ? error.message : String(error)));
+  };
+
   const titleOf = (id: string) => (editor.getShape(id as TLShapeId) as { props?: { title?: string } } | undefined)?.props?.title ?? id;
 
   const confirmDelete = () => {
@@ -80,7 +92,16 @@ export const KitDialog = ({ onClose, onFromLibrary }: { readonly onClose: () => 
         <DialogPopup data-testid="kit" className="max-w-[960px]">
           <DialogHeader>
             <DialogTitle>Kit</DialogTitle>
-            {kit !== null && <KitMenu linked={kit.from !== undefined} onSave={() => setSaving(true)} onUpdate={() => void update()} onDelete={() => setAsk({ kind: "kit" })} />}
+            {kit !== null && (
+              <KitMenu
+                linked={kit.from !== undefined}
+                onSave={() => setSaving(true)}
+                onUpdate={() => void update()}
+                onImport={() => setImporting(true)}
+                onExport={exportKit}
+                onDelete={() => setAsk({ kind: "kit" })}
+              />
+            )}
           </DialogHeader>
           <DialogPanel>
             {kit === null ? (
@@ -91,7 +112,9 @@ export const KitDialog = ({ onClose, onFromLibrary }: { readonly onClose: () => 
                   <Button variant="outline" onClick={onFromLibrary}>
                     From library
                   </Button>
-                  <Button variant="outline">Import</Button>
+                  <Button variant="outline" onClick={() => setImporting(true)}>
+                    Import
+                  </Button>
                 </div>
               </div>
             ) : (
@@ -116,6 +139,13 @@ export const KitDialog = ({ onClose, onFromLibrary }: { readonly onClose: () => 
       </Dialog>
 
       {saving && kit !== null && <SaveKitDialog kit={kit} onClose={() => setSaving(false)} onSaved={(presetId, revision) => { relink(presetId, revision); setSaving(false); }} />}
+
+      {importing && (
+        <ImportKitDialog
+          kit={kit}
+          onClose={() => setImporting(false)}
+        />
+      )}
 
       <AlertDialog open={ask !== undefined} onOpenChange={(open) => !open && setAsk(undefined)}>
         <AlertDialogPopup className="max-w-[400px]">
@@ -152,17 +182,33 @@ export const KitDialog = ({ onClose, onFromLibrary }: { readonly onClose: () => 
 };
 
 /** The kit's More menu: the actions that are not a cell's. */
-const KitMenu = ({ linked, onSave, onUpdate, onDelete }: { readonly linked: boolean; readonly onSave: () => void; readonly onUpdate: () => void; readonly onDelete: () => void }) => {
-  const [open, setOpen] = useState(false);
+const EXPORTS: ReadonlyArray<{ readonly format: KitExportFormat; readonly label: string }> = [
+  { format: "dtcg", label: "DTCG JSON" },
+  { format: "css", label: "CSS variables" },
+  { format: "tailwind", label: "Tailwind @theme" },
+];
+
+const KitMenu = ({ linked, onSave, onUpdate, onImport, onExport, onDelete }: { readonly linked: boolean; readonly onSave: () => void; readonly onUpdate: () => void; readonly onImport: () => void; readonly onExport: (format: KitExportFormat) => void; readonly onDelete: () => void }) => {
   const trigger = useRef<HTMLButtonElement>(null);
   return (
-    <Menu open={open} onOpenChange={setOpen}>
-      <Button ref={trigger} variant="ghost" size="icon-sm" aria-label="More" aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen((was) => !was)}>
+    <Menu>
+      <MenuTrigger ref={trigger} render={<Button variant="ghost" size="icon-sm" aria-label="More" />}>
         <EllipsisIcon aria-hidden />
-      </Button>
+      </MenuTrigger>
       <MenuPopup anchor={trigger} side="bottom" align="end">
         <MenuItem onClick={onSave}>Save to library</MenuItem>
         {linked && <MenuItem onClick={onUpdate}>Update in library</MenuItem>}
+        <MenuItem onClick={onImport}>Import…</MenuItem>
+        <MenuSub>
+          <MenuSubTrigger>Export</MenuSubTrigger>
+          <MenuSubPopup>
+            {EXPORTS.map((item) => (
+              <MenuItem key={item.format} onClick={() => onExport(item.format)}>
+                {item.label}
+              </MenuItem>
+            ))}
+          </MenuSubPopup>
+        </MenuSub>
         <MenuItem onClick={onDelete}>Delete kit</MenuItem>
       </MenuPopup>
     </Menu>
