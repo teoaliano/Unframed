@@ -1,10 +1,10 @@
 import { createReadStream } from "node:fs";
-import { stat } from "node:fs/promises";
+import { readFile, stat, writeFile } from "node:fs/promises";
 import http from "node:http";
 import { basename, dirname, join } from "node:path";
 import { pipeline } from "node:stream/promises";
-import { LIVE_CHECK_FILE, LIVE_VIEWER_FILE, loopbackGuard, projectSlug } from "@unframed/domain";
-import { BRIDGE_FILE, ensureBridge, ensureLiveViewer } from "../artifacts/artifactStore.ts";
+import { COMPONENT_HELPER_FILE, compileComponent, LIVE_CHECK_FILE, LIVE_VIEWER_FILE, loopbackGuard, projectSlug } from "@unframed/domain";
+import { BRIDGE_FILE, ensureBridge, ensureComponentHelper, ensureLiveViewer } from "../artifacts/artifactStore.ts";
 import { NOT_FOUND } from "./respond.ts";
 import { guardUpgrade, refuseUpgrade } from "./guard.ts";
 
@@ -93,6 +93,22 @@ const refuse = (res: http.ServerResponse, status: number, body: string, head: bo
 /** The ETag: size and whole-millisecond mtime, both in hex. */
 const etagOf = (size: number, mtimeMs: number) => `"${size.toString(16)}-${Math.floor(mtimeMs).toString(16)}"`;
 
+const COMPILED_SUFFIX = ".component.js";
+
+/** Writes `<base>.component.js` from `<base>.html` when that sheet exists and is a valid component. */
+const compileMissing = async (folder: string, compiled: string): Promise<void> => {
+  const sheet = `${compiled.slice(0, -COMPILED_SUFFIX.length)}.html`;
+  const html = await readFile(join(folder, sheet), "utf8").catch(() => undefined);
+  if (html === undefined) return;
+  let script: string;
+  try {
+    script = compileComponent(html, sheet);
+  } catch {
+    return;
+  }
+  await writeFile(join(folder, compiled), script, { flag: "wx" }).catch(() => undefined);
+};
+
 const handler =
   (outputDir: () => Promise<string>) =>
   async (req: http.IncomingMessage, res: http.ServerResponse): Promise<void> => {
@@ -109,8 +125,14 @@ const handler =
     // one, so a fix reaches projects written before it. Only in a project that exists: a
     // request never makes a folder.
     const name = basename(path);
-    const refresh = name === BRIDGE_FILE ? ensureBridge : name === LIVE_VIEWER_FILE || name === LIVE_CHECK_FILE ? ensureLiveViewer : undefined;
-    if (refresh !== undefined && (await stat(dirname(path)).catch(() => undefined))?.isDirectory()) await refresh(dirname(path)).catch(() => undefined);
+    const refresh =
+      name === BRIDGE_FILE ? ensureBridge : name === COMPONENT_HELPER_FILE ? ensureComponentHelper : name === LIVE_VIEWER_FILE || name === LIVE_CHECK_FILE ? ensureLiveViewer : undefined;
+    const folderExists = (await stat(dirname(path)).catch(() => undefined))?.isDirectory() ?? false;
+    if (refresh !== undefined && folderExists) await refresh(dirname(path)).catch(() => undefined);
+    // A missing compiled component is built from its sheet, the same bytes the compiler makes (spec 20).
+    if (folderExists && name.endsWith(COMPILED_SUFFIX) && !(await stat(path).catch(() => undefined))?.isFile()) {
+      await compileMissing(dirname(path), name).catch(() => undefined);
+    }
     const info = await stat(path).catch(() => undefined);
     if (!info?.isFile()) return refuse(res, 404, "not found", head);
     const etag = etagOf(info.size, info.mtimeMs);

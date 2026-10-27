@@ -11,10 +11,13 @@ export type BoardCell = { readonly values: Readonly<Record<string, string>>; rea
 
 export type BoardCells = { readonly cells: readonly BoardCell[]; readonly line?: string };
 
-const labelOf = (values: Readonly<Record<string, string>>, names: readonly string[]): string =>
-  names.length === 0 ? "Default" : names.map((name) => values[name]).join(" · ");
-
-export const boardCells = (declaration: Pick<ComponentDeclaration, "variants">): BoardCells => {
+/**
+ * The rule itself, with no reference to this module, so the sheet helper can carry its text
+ * (`boardCellsRule.toString()`), as the dials bridge carries its rules.
+ */
+export const boardCellsRule = (declaration: Pick<ComponentDeclaration, "variants">, cap: number): BoardCells => {
+  const labelOf = (values: Readonly<Record<string, string>>, names: readonly string[]): string =>
+    names.length === 0 ? "Default" : names.map((name) => values[name]).join(" · ");
   const names = Object.keys(declaration.variants);
   const lists = names.map((name) => declaration.variants[name] ?? []);
   const defaults: Record<string, string> = {};
@@ -23,7 +26,7 @@ export const boardCells = (declaration: Pick<ComponentDeclaration, "variants">):
   });
   const total = lists.reduce((product, list) => product * list.length, 1);
 
-  if (total <= BOARD_CAP) {
+  if (total <= cap) {
     const cells: BoardCell[] = [];
     for (let index = 0; index < total; index++) {
       const values: Record<string, string> = {};
@@ -48,3 +51,5 @@ export const boardCells = (declaration: Pick<ComponentDeclaration, "variants">):
   });
   return { cells, line: `${total} combinations; showing each variant on its own.` };
 };
+
+export const boardCells = (declaration: Pick<ComponentDeclaration, "variants">): BoardCells => boardCellsRule(declaration, BOARD_CAP);

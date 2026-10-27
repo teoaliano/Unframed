@@ -6,11 +6,15 @@
  * compositions, so the preview origin never needs a second route.
  */
 import { constants, existsSync } from "node:fs";
-import { copyFile, mkdir, open, readFile, stat, writeFile } from "node:fs/promises";
+import { copyFile, mkdir, open, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { basename, dirname, join } from "node:path";
 import {
   artifactFileName,
+  compiledFileName,
+  compileComponent,
+  componentHelperSource,
+  COMPONENT_HELPER_FILE,
   dialsBridgeSource,
   LIVE_CHECK_FILE,
   LIVE_VIEWER_FILE,
@@ -72,6 +76,14 @@ const ensure = async (folder: string, files: ReadonlyArray<LibraryFile>): Promis
 /** A page write ensures only the bridge; a page never gets the player, runtime or GSAP. */
 export const ensureBridge = (folder: string): Promise<void> => ensure(folder, [BRIDGE]);
 
+const COMPONENT_HELPER: LibraryFile = { name: COMPONENT_HELPER_FILE, bytes: async () => Buffer.from(componentHelperSource(), "utf8") };
+
+/** A component write ensures the bridge and the sheet helper, by the same size rule. */
+export const ensureComponentLibrary = (folder: string): Promise<void> => ensure(folder, [BRIDGE, COMPONENT_HELPER]);
+
+/** The helper alone, for the preview origin's on-request refresh. */
+export const ensureComponentHelper = (folder: string): Promise<void> => ensure(folder, [COMPONENT_HELPER]);
+
 const LIVE_FILES: ReadonlyArray<LibraryFile> = [
   { name: LIVE_VIEWER_FILE, bytes: async () => Buffer.from(liveViewerSource(), "utf8") },
   { name: LIVE_CHECK_FILE, bytes: async () => Buffer.from(liveCheckSource(), "utf8") },
@@ -95,7 +107,11 @@ export interface AgentSidecar {
   readonly at: string;
 }
 
-const taken = (folder: string) => (name: string) => existsSync(join(folder, name)) || existsSync(join(folder, sidecarFileName(name)));
+/** A sheet's name is also taken by its compiled file (spec 20), so the pair never splits. */
+const taken = (folder: string) => (name: string) =>
+  existsSync(join(folder, name)) ||
+  existsSync(join(folder, sidecarFileName(name))) ||
+  (name.endsWith(".html") && existsSync(join(folder, compiledFileName(name))));
 
 /**
  * Creates a new file named from `title` (or `fallback`): `place` must create it exclusively
@@ -156,6 +172,62 @@ export const writeAgentArtifact = async (
     return `${JSON.stringify(sidecar, null, 2)}\n`;
   });
   return { file, bytes: bytes.length };
+};
+
+export interface ComponentSidecar {
+  readonly source: "agent";
+  readonly kind: "component";
+  readonly tag: string;
+  readonly compiled: string;
+  readonly chatId: string;
+  readonly turn: number;
+  /** The shape updated, `null` when creating. */
+  readonly shapeId: string | null;
+  readonly title: string;
+  readonly bytes: number;
+  readonly at: string;
+}
+
+/**
+ * An agent's new version of a component (spec 20): its sheet and the compiled file beside it,
+ * both with exclusive create, then the agent sidecar. The compiled file goes first, so a
+ * sheet never exists without its build; a sheet that loses the name race takes its build back.
+ * The caller has checked the sheet (`readComponentSheet`), so this throws only on a bad sheet.
+ */
+export const writeComponentSheet = async (
+  folder: string,
+  input: { readonly html: string; readonly tag: string; readonly title: string; readonly chatId: string; readonly turn: number; readonly shapeId: string | null },
+): Promise<{ file: string; compiled: string; bytes: number }> => {
+  const bytes = Buffer.from(input.html, "utf8");
+  let compiled = "";
+  const place = async (path: string) => {
+    const file = basename(path);
+    const build = join(folder, compiledFileName(file));
+    compiled = compiledFileName(file);
+    await writeExclusive(Buffer.from(compileComponent(input.html, file), "utf8"))(build);
+    try {
+      await writeExclusive(bytes)(path);
+    } catch (error) {
+      await rm(build, { force: true });
+      throw error;
+    }
+  };
+  const file = await createNew(folder, { title: input.title, fallback: "component", ext: "html" }, place, () => {
+    const sidecar: ComponentSidecar = {
+      source: "agent",
+      kind: "component",
+      tag: input.tag,
+      compiled,
+      chatId: input.chatId,
+      turn: input.turn,
+      shapeId: input.shapeId,
+      title: input.title,
+      bytes: bytes.length,
+      at: new Date().toISOString(),
+    };
+    return `${JSON.stringify(sidecar, null, 2)}\n`;
+  });
+  return { file, compiled, bytes: bytes.length };
 };
 
 /** An uploaded composition, saved as an upload with spec 02's sidecar. */
