@@ -6,7 +6,7 @@
  */
 import { isTweenConfigKey } from "@hyperframes/parsers/gsap-constants";
 import { findTimelineScript, parseGsapScriptAcornForWrite, type TweenCallInfo } from "@hyperframes/parsers/gsap-parser-acorn";
-import { ownerContextFor, ownerOf, type OwnerContext, type ScriptNode } from "./owners.ts";
+import { dialsCallback, ownerContextFor, ownerOf, type OwnerContext, type ScriptNode } from "./owners.ts";
 
 export type OwnerKind = "source" | "dial" | "token" | "script";
 export type OwnerCounts = Record<OwnerKind, number>;
@@ -36,25 +36,6 @@ const inlineScripts = (html: string): { textContent: string }[] =>
   [...html.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script\s*>/gi)]
     .filter((match) => !/\bsrc\s*=/i.test(match[1]!))
     .map((match) => ({ textContent: match[2]! }));
-
-const isDialsCall = (node: AstNode): boolean =>
-  node.type === "CallExpression" &&
-  node.callee.type === "MemberExpression" &&
-  node.callee.object.type === "Identifier" &&
-  node.callee.object.name === "unframed" &&
-  node.callee.property.name === "dials";
-
-const walk = (node: unknown, visit: (node: AstNode) => void): void => {
-  if (!node || typeof node !== "object") return;
-  if (Array.isArray(node)) return node.forEach((child) => walk(child, visit));
-  const current = node as AstNode;
-  if (typeof current.type === "string") visit(current);
-  for (const key of Object.keys(current)) {
-    if (key === "start" || key === "end") continue;
-    const child = current[key];
-    if (child && typeof child === "object") walk(child, visit);
-  }
-};
 
 const ownerKindOf = (node: AstNode | undefined, context: OwnerContext): OwnerKind =>
   node ? ownerOf(node as ScriptNode, context).kind : "script";
@@ -86,7 +67,7 @@ export function probeMotion(html: string): ProbeCounts {
   const parsed = parseGsapScriptAcornForWrite(script.textContent);
   if (!parsed) return { ...counts, readOnly: {} };
   const context = ownerContextFor(parsed.ast as ScriptNode, script.textContent);
-  const dialsFn = dialsFunction(parsed.ast);
+  const dialsFn = dialsCallback(parsed.ast as ScriptNode)?.fn ?? null;
 
   for (const { call } of parsed.located) {
     const vars = call.varsArg as AstNode | undefined;
@@ -134,11 +115,3 @@ export function probeMotion(html: string): ProbeCounts {
 }
 
 const isConfigKey = (name: string | null): boolean => name !== null && (isTweenConfigKey(name) || name === "keyframes" || name === "motionPath" || name === "ease");
-
-const dialsFunction = (ast: AstNode): AstNode | null => {
-  let apply: AstNode | null = null;
-  walk(ast, (node) => {
-    if (isDialsCall(node)) apply = node.arguments[2] ?? null;
-  });
-  return apply;
-};
