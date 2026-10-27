@@ -49,7 +49,11 @@ importers:
         specifier: 4.0.0-rc.115
         version: 4.0.0-rc.115
 
-  packages/domain: {}
+  packages/domain:
+    dependencies:
+      '@hyperframes/parsers':
+        specifier: 0.8.206
+        version: 0.8.206
 
   packages/engine:
     dependencies:

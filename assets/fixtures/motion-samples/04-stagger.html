@@ -1,0 +1,18 @@
+<html><head><style>
+#root{position:relative;overflow:hidden;background:#111}
+.clip{position:absolute;inset:0;display:flex;gap:16px;align-items:center;justify-content:center}
+.tile{width:80px;height:80px;background:#34d399;border-radius:12px}
+.dot{width:24px;height:24px;background:#fbbf24;border-radius:50%}
+</style></head><body>
+<div id="root" data-composition-id="main" data-start="0" data-duration="3" data-width="640" data-height="360">
+  <div id="c" class="clip" data-start="0" data-duration="3">
+    <div class="tile"></div><div class="tile"></div><div class="tile"></div><div class="dot"></div><div class="dot"></div><div class="dot"></div>
+  </div>
+</div>
+<script src="gsap.js"></script>
+<script>
+window.__timelines = window.__timelines || {};
+window.__timelines.main = gsap.timeline({ paused: true });
+window.__timelines.main.fromTo('.tile', { opacity: 0, y: 40 }, { opacity: 1, y: 0, duration: 0.5, stagger: 0.08 }, 0.3);
+window.__timelines.main.to('.dot', { scale: 1.4, duration: 0.3, stagger: { each: 0.05 }, yoyo: true, repeat: 1 }, 1.5);
+</script></body></html>
