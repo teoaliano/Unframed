@@ -6,7 +6,7 @@ import { FIXTURES, scriptFolder, startAgentEngine, type AgentEngine } from "./ag
 import { geoMark, motionShape, roomRecords, roomShape, seed, toolResults } from "./agentCanvas.ts";
 import { imageShape, pageShape } from "./canvasRecords.ts";
 
-const LIBRARY = ["gsap.js", "hyperframes-player.js", "hyperframes-runtime.js", "hyperframes-viewer.html", "unframed-dials.js"];
+const LIBRARY = ["gsap.js", "hyperframes-player.js", "hyperframes-runtime.js", "hyperframes-viewer.html", "unframed-dials.js", "unframed-edit.js"];
 
 const script = (turns: Array<{ text?: string; tools: Array<{ name: string; input: Record<string, unknown> }> }>) =>
   scriptFolder({ artifacts: { when: "^go", turns: turns.map((turn) => ({ text: turn.text ?? "Done.", tools: turn.tools })) } });
@@ -47,7 +47,7 @@ describe("page_write", () => {
     // The engine writes the bridge from the domain module; its source text is the engine process's own.
     expect((await readFile(join(agent.folder, "unframed-dials.js"), "utf8")).split("\n")[0]).toBe(dialsBridgeSource().split("\n")[0]);
     const present = new Set(await readdir(agent.folder));
-    for (const name of LIBRARY.filter((name) => name !== "unframed-dials.js")) expect(present.has(name), name).toBe(false);
+    for (const name of LIBRARY.filter((name) => name !== "unframed-dials.js" && name !== "unframed-edit.js")) expect(present.has(name), name).toBe(false);
   });
 
   it("writes a page that already has the bridge tag and every id exactly as given", async () => {

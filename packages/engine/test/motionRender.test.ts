@@ -8,7 +8,7 @@ import { makeTempDir, startEngine, type TestEngine } from "./harness.ts";
 import type { TestRpcClient } from "./rpcClient.ts";
 
 const COMPOSITION = '<html><body><div id="root" data-composition-id="main" data-start="0" data-duration="2" data-width="640" data-height="360"></div></body></html>';
-const LIBRARY = ["gsap.js", "hyperframes-player.js", "hyperframes-runtime.js", "hyperframes-viewer.html", "unframed-dials.js"];
+const LIBRARY = ["gsap.js", "hyperframes-player.js", "hyperframes-runtime.js", "hyperframes-viewer.html", "unframed-dials.js", "unframed-edit.js"];
 
 interface Rendering {
   readonly engine: TestEngine;
