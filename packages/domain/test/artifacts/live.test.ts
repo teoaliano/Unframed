@@ -182,13 +182,16 @@ describe("the shipped live viewer", () => {
     viewer.pointer({ kind: "page", file: "1-landing.html", title: "", dials: { size: 3 } });
     const [frame] = viewer.frames;
     frame.fire("load");
-    expect(frame.posted).toEqual([{ message: { type: "unframed:dials:hello" }, targetOrigin: "http://localhost:18787" }]);
+    expect(frame.posted).toEqual([
+      { message: { type: "unframed:dials:hello" }, targetOrigin: "http://localhost:18787" },
+      { message: { type: "unframed:tokens:mode", mode: null }, targetOrigin: "http://localhost:18787" },
+    ]);
     viewer.send(frame, { type: "unframed:dials", values: { size: 1 } });
     expect(frame.posted.at(-1)).toEqual({ message: { type: "unframed:dials:set", values: { size: 3 } }, targetOrigin: "http://localhost:18787" });
     // Only from its own origin and its own frame.
     viewer.send(frame, { type: "unframed:dials" }, "http://127.0.0.1:5173");
     viewer.send({ contentWindow: {} }, { type: "unframed:dials" });
-    expect(frame.posted).toHaveLength(2);
+    expect(frame.posted).toHaveLength(3);
 
     // The same pointer again changes nothing; new dials are posted, not a new document.
     viewer.pointer({ kind: "page", file: "1-landing.html", title: "", dials: { size: 3 } });
@@ -198,6 +201,23 @@ describe("the shipped live viewer", () => {
     // Values cleared back to none: a fresh document shows the defaults.
     viewer.pointer({ kind: "page", file: "1-landing.html", title: "", dials: null });
     expect(viewer.frames).toHaveLength(2);
+  });
+
+  it("posts the pointer's kit mode to its frame on load and again when the mode changes, and no mode means the default", () => {
+    const viewer = runViewer("?s=landing");
+    viewer.pointer({ kind: "page", file: "1-landing.html", title: "", dials: null, mode: "dark" });
+    const [frame] = viewer.frames;
+    frame.fire("load");
+    expect(frame.posted.map((each: { message: unknown }) => each.message)).toEqual([{ type: "unframed:dials:hello" }, { type: "unframed:tokens:mode", mode: "dark" }]);
+    viewer.pointer({ kind: "page", file: "1-landing.html", title: "", dials: null, mode: "light" });
+    expect(frame.posted.at(-1)?.message).toEqual({ type: "unframed:tokens:mode", mode: "light" });
+    // The same mode again posts nothing new.
+    const count = frame.posted.length;
+    viewer.pointer({ kind: "page", file: "1-landing.html", title: "", dials: null, mode: "light" });
+    expect(frame.posted).toHaveLength(count);
+    // A pointer without a mode is the default mode.
+    viewer.pointer({ kind: "page", file: "1-landing.html", title: "", dials: null });
+    expect(frame.posted.at(-1)?.message).toEqual({ type: "unframed:tokens:mode", mode: null });
   });
 
   it("loads a new version hidden behind the current one and swaps once it has loaded", () => {

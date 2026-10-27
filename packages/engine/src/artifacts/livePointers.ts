@@ -22,11 +22,13 @@ const isArtifact = (record: TLRecord | undefined): record is ArtifactRecord =>
 
 const pointerOf = (shape: ArtifactRecord): LivePointer => {
   const dials = shape.props.dials;
+  const mode = (shape.props as { mode?: string }).mode;
   return {
     kind: shape.type,
     file: shape.props.file,
     title: artifactTitle(shape.props),
     dials: dials !== undefined && Object.keys(dials).length > 0 ? dials : null,
+    ...(mode !== undefined ? { mode } : {}),
   };
 };
 
