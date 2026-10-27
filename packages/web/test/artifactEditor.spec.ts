@@ -275,7 +275,15 @@ test("an artifact with no file says so and offers no new tab; Open in a new tab 
   const at = await centre(shapeOnScreen(page, "shape:landing"));
   await page.mouse.dblclick(at.x, at.y);
   const landing = page.getByRole("region", { name: "Editing Landing" });
-  const file = (await roomRecords(agent, "default")).find((record) => record.id === "shape:landing")!.props.file as string;
+  // The editor prepares a page written before element editing and swaps its file: wait for the room and the frame to agree.
+  let file = "";
+  await expect
+    .poll(async () => {
+      file = (await roomRecords(agent, "default")).find((record) => record.id === "shape:landing")!.props.file as string;
+      const src = (await landing.locator("iframe[data-artifact-frame]").getAttribute("src")) ?? "";
+      return file !== "" && src.endsWith(`/${file}`);
+    })
+    .toBe(true);
   const opened = page.context().waitForEvent("page");
   await landing.getByRole("button", { name: "Open in a new tab" }).click();
   const tab = await opened;
@@ -283,7 +291,8 @@ test("an artifact with no file says so and offers no new tab; Open in a new tab 
   // The app is on localhost, so the artifact is on the other loopback name.
   expect(tab.url()).toBe(`http://127.0.0.1:${agent.previewPort}/p/default/unframed-live.html?s=landing`);
   await expect(tab.frameLocator("iframe").getByRole("heading", { name: "Welcome" })).toBeVisible({ timeout: 10_000 });
-  await expect(tab.locator("iframe")).toHaveAttribute("src", file);
+  // The live viewer follows the newest file, which the editor's prepare may have just moved to.
+  await expect(tab.locator("iframe")).toHaveAttribute("src", file, { timeout: 15_000 });
   await expect(tab).toHaveTitle("Landing");
   await tab.close();
 });
