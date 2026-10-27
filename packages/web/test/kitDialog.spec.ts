@@ -166,3 +166,96 @@ test("a kit commit reaches another tab of the same project", async ({ page, cont
   await name.press("Enter");
   await expect(kitDialog(other).getByRole("textbox", { name: "Kit name" })).toHaveValue("Brand", { timeout: 5000 });
 });
+
+const tokenOf = async (engine: TestEngine, project: string, path: string) =>
+  (await kitOf(engine, project))?.tokens.find((token) => (token as { path: string }).path === path) as Record<string, unknown> | undefined;
+
+test("a token renames in place, its old name keeps answering until it is forgotten", async ({ page, engine }) => {
+  const project = await openCanvas(page, engine);
+  await seedKit(engine);
+  await page.getByRole("button", { name: "Kit", exact: true }).click();
+  const dialog = kitDialog(page);
+
+  await row(dialog, "color/brand/primary").getByRole("button", { name: "Token options color/brand/primary" }).click();
+  await page.getByRole("menuitem", { name: "Rename" }).click();
+  const field = dialog.getByRole("textbox", { name: "Rename color/brand/primary" });
+  await field.fill("color/brand/accent");
+  await field.press("Enter");
+
+  await expect(row(dialog, "color/brand/accent")).toContainText("Also answers to --color-brand-primary");
+  await expect.poll(() => tokenOf(engine, project, "color/brand/accent")).toMatchObject({ formerNames: ["--color-brand-primary"] });
+  await row(dialog, "color/brand/accent").getByRole("button", { name: "Forget --color-brand-primary" }).click();
+  await expect(row(dialog, "color/brand/accent")).not.toContainText("Also answers to");
+  await expect.poll(() => tokenOf(engine, project, "color/brand/accent")).not.toHaveProperty("formerNames");
+});
+
+test("deleting a token asks with its count, and deleting removes the row", async ({ page, engine }) => {
+  const project = await openCanvas(page, engine);
+  await seedKit(engine);
+  await page.getByRole("button", { name: "Kit", exact: true }).click();
+  const dialog = kitDialog(page);
+
+  await row(dialog, "dimension/space/md").getByRole("button", { name: "Token options dimension/space/md" }).click();
+  await page.getByRole("menuitem", { name: "Delete", exact: true }).click();
+  const confirm = page.getByRole("alertdialog");
+  await expect(confirm.getByRole("heading", { name: "Delete dimension/space/md?" })).toBeVisible();
+  await expect(confirm).toContainText("No artifact uses it.");
+  await confirm.getByRole("button", { name: "Delete token" }).click();
+
+  await expect(row(dialog, "dimension/space/md")).toHaveCount(0);
+  await expect.poll(() => tokenOf(engine, project, "dimension/space/md")).toBeUndefined();
+});
+
+test("modes: add, make default, rename, duplicate and delete, the last one kept", async ({ page, engine }) => {
+  const project = await openCanvas(page, engine);
+  await seedKit(engine);
+  await page.getByRole("button", { name: "Kit", exact: true }).click();
+  const dialog = kitDialog(page);
+
+  await dialog.getByRole("button", { name: "Add mode" }).click();
+  await dialog.getByRole("textbox", { name: "Mode name", exact: true }).fill("night");
+  await dialog.getByRole("textbox", { name: "Mode name", exact: true }).press("Enter");
+  await expect.poll(() => kitOf(engine, project)).toMatchObject({ modes: ["light", "dark", "night"] });
+
+  await dialog.getByRole("button", { name: "Mode options dark" }).click();
+  await page.getByRole("menuitem", { name: "Make default" }).click();
+  await expect.poll(() => kitOf(engine, project)).toMatchObject({ modes: ["dark", "light", "night"] });
+  await expect(dialog.getByRole("columnheader", { name: /^dark/ })).toContainText("default");
+
+  await dialog.getByRole("button", { name: "Mode options light" }).click();
+  await page.getByRole("menuitem", { name: "Rename mode" }).click();
+  const rename = dialog.getByRole("textbox", { name: "Mode name light" });
+  await rename.fill("day");
+  await rename.press("Enter");
+  await expect.poll(() => kitOf(engine, project)).toMatchObject({ modes: ["dark", "day", "night"] });
+
+  await dialog.getByRole("button", { name: "Mode options dark" }).click();
+  await page.getByRole("menuitem", { name: "Duplicate mode" }).click();
+  await expect.poll(() => kitOf(engine, project)).toMatchObject({ modes: ["dark", "day", "night", "dark-copy"] });
+  await expect.poll(() => tokenOf(engine, project, "color/brand/primary")).toMatchObject({ values: { day: "#1a73e8", dark: "#8ab4f8", "dark-copy": "#8ab4f8" } });
+
+  await dialog.getByRole("button", { name: "Mode options night" }).click();
+  await page.getByRole("menuitem", { name: "Delete mode" }).click();
+  const confirm = page.getByRole("alertdialog");
+  await expect(confirm.getByRole("heading", { name: "Delete the night mode?" })).toBeVisible();
+  await expect(confirm).toContainText("No artifact uses this mode.");
+  await confirm.getByRole("button", { name: "Delete mode" }).click();
+  await expect.poll(() => kitOf(engine, project)).toMatchObject({ modes: ["dark", "day", "dark-copy"] });
+});
+
+test("Delete kit asks, and the project is left with no kit", async ({ page, engine }) => {
+  const project = await openCanvas(page, engine);
+  await seedKit(engine);
+  await page.getByRole("button", { name: "Kit", exact: true }).click();
+  const dialog = kitDialog(page);
+
+  await dialog.getByRole("button", { name: "More" }).click();
+  await page.getByRole("menuitem", { name: "Delete kit" }).click();
+  const confirm = page.getByRole("alertdialog");
+  await expect(confirm.getByRole("heading", { name: "Delete this project's kit?" })).toBeVisible();
+  await expect(confirm).toContainText("Pages and motions keep their files, and lose every token value. The library is untouched.");
+  await confirm.getByRole("button", { name: "Delete kit" }).click();
+
+  await expect(dialog).toContainText("This project has no kit yet.");
+  await expect.poll(() => kitOf(engine, project)).toBeUndefined();
+});

@@ -1,6 +1,6 @@
 /**
  * The Kit table (spec 19): the groups on the left, the search, the tokens as rows with one column
- * per mode, the row menu that picks one value or one per mode, and Add token.
+ * per mode, the row menu, the mode menus, and Add token and Add mode.
  */
 import { applyKitOps, cssName, TOKEN_TYPES, type Kit, type KitOp, type Token, type TokenType, type TokenValue } from "@unframed/domain";
 import { useRef, useState } from "react";
@@ -8,6 +8,7 @@ import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
 import { Menu, MenuItem, MenuPopup } from "~/components/ui/menu";
 import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "~/components/ui/select";
+import { Tip } from "../chrome/ui.tsx";
 import { ValueCell } from "./KitCells.tsx";
 
 /** The value a new token of each type starts with, so it is valid before the person edits it. */
@@ -27,10 +28,37 @@ export const valueIn = (token: Token, mode: string, kit: Kit): TokenValue | unde
 
 const groupOf = (path: string): string => path.split("/")[0]!;
 
-export const KitTable = ({ kit, usage, apply }: { readonly kit: Kit; readonly usage: Readonly<Record<string, readonly string[]>>; readonly apply: (ops: ReadonlyArray<KitOp>) => string | undefined }) => {
+/** The artifacts that use a token or mode, named in a tooltip: at most ten titles, then the rest. */
+export const usedByLabel = (ids: ReadonlyArray<string>, titleOf: (id: string) => string): string => {
+  const titles = ids.slice(0, 10).map(titleOf);
+  const rest = ids.length - titles.length;
+  return rest > 0 ? [...titles, `and ${rest} more`].join("\n") : titles.join("\n");
+};
+
+/** Which artifact shapes use each token path and each mode (kit.usage). */
+export interface KitUsageCounts {
+  readonly tokens: Readonly<Record<string, readonly string[]>>;
+  readonly modes: Readonly<Record<string, readonly string[]>>;
+}
+
+export interface KitTableProps {
+  readonly kit: Kit;
+  readonly usage: KitUsageCounts;
+  readonly apply: (ops: ReadonlyArray<KitOp>) => string | undefined;
+  readonly titleOf: (id: string) => string;
+  readonly onAskDeleteToken: (path: string) => void;
+  readonly onAskDeleteMode: (mode: string) => void;
+}
+
+export const KitTable = (props: KitTableProps) => {
+  const { kit, apply, titleOf, onAskDeleteToken, onAskDeleteMode } = props;
+  const usage = props.usage;
   const [group, setGroup] = useState("All");
   const [query, setQuery] = useState("");
   const [adding, setAdding] = useState(false);
+  const [addingMode, setAddingMode] = useState(false);
+  const [renaming, setRenaming] = useState<string>();
+  const [renamingMode, setRenamingMode] = useState<string>();
   const [problem, setProblem] = useState<string>();
 
   const groups = [...new Set(kit.tokens.map((token) => groupOf(token.path)))].map((name) => ({
@@ -42,9 +70,15 @@ export const KitTable = ({ kit, usage, apply }: { readonly kit: Kit; readonly us
     (token) => (group === "All" || groupOf(token.path) === group) && (needle === "" || token.path.includes(needle) || cssName(token.path).includes(needle)),
   );
 
-  const commit = (ops: ReadonlyArray<KitOp>) => {
-    const refusal = applyKitOps(kit, ops);
-    if (!refusal.ok) return refusal.refusal;
+  /** A refusal stays under its field; a commit that worked closes the field. */
+  const finish = (refusal: string | undefined, close: () => void): string | undefined => {
+    if (refusal === undefined) close();
+    return refusal;
+  };
+
+  const commit = (ops: ReadonlyArray<KitOp>): string | undefined => {
+    const check = applyKitOps(kit, ops);
+    if (!check.ok) return check.refusal;
     return apply(ops);
   };
 
@@ -84,31 +118,78 @@ export const KitTable = ({ kit, usage, apply }: { readonly kit: Kit; readonly us
                 <th scope="col" className="px-2 py-1.5 font-medium">Type</th>
                 {kit.modes.map((mode, index) => (
                   <th scope="col" key={mode} className="px-2 py-1.5 font-medium">
-                    {mode}
-                    {index === 0 && <span className="ml-1 text-muted-foreground/70">default</span>}
+                    {renamingMode === mode ? (
+                      <NameField label={`Mode name ${mode}`} initial={mode} onCancel={() => setRenamingMode(undefined)} onCommit={(name) => finish(commit([{ op: "renameMode", name: mode, to: name }]), () => setRenamingMode(undefined))} />
+                    ) : (
+                      <span className="inline-flex items-center gap-1">
+                        {mode}
+                        {index === 0 && <span className="text-muted-foreground/70">default</span>}
+                        <ModeMenu
+                          mode={mode}
+                          isDefault={index === 0}
+                          onRename={() => setRenamingMode(mode)}
+                          onDefault={() => commit([{ op: "setDefaultMode", name: mode }])}
+                          onDuplicate={() => commit([{ op: "addMode", name: `${mode}-copy`, copyFrom: mode }])}
+                          onDelete={() => onAskDeleteMode(mode)}
+                        />
+                      </span>
+                    )}
                   </th>
                 ))}
+                <th scope="col" className="px-2 py-1.5 font-medium">
+                  {addingMode ? (
+                    <NameField label="Mode name" initial="" onCancel={() => setAddingMode(false)} onCommit={(name) => finish(commit([{ op: "addMode", name }]), () => setAddingMode(false))} />
+                  ) : (
+                    <Button variant="ghost" size="xs" onClick={() => setAddingMode(true)}>
+                      Add mode
+                    </Button>
+                  )}
+                </th>
                 <th scope="col" className="px-2 py-1.5 font-medium">Used by</th>
               </tr>
             </thead>
             <tbody>
               {shown.map((token) => {
                 const oneValue = token.value !== undefined;
+                const former = token.formerNames ?? [];
+                const users = usage.tokens[token.path] ?? [];
                 return (
                   <tr key={token.path} data-token={token.path} className="border-t align-top">
                     <td className="px-2 py-2">
                       <div className="flex items-start gap-1">
                         <span className="grid min-w-0">
-                          <span className="truncate">{token.path}</span>
+                          {renaming === token.path ? (
+                            <NameField label={`Rename ${token.path}`} initial={token.path} onCancel={() => setRenaming(undefined)} onCommit={(to) => finish(commit([{ op: "renameToken", path: token.path, to }]), () => setRenaming(undefined))} />
+                          ) : (
+                            <span className="truncate">{token.path}</span>
+                          )}
                           <span className="truncate font-mono text-xs text-muted-foreground">{cssName(token.path)}</span>
+                          {former.length > 0 && (
+                            <span className="text-xs text-muted-foreground">
+                              Also answers to {former.join(", ")}{" "}
+                              {former.map((name) => (
+                                <Button key={name} variant="link" size="xs" onClick={() => commit([{ op: "forgetFormerName", path: token.path, cssName: name }])}>
+                                  Forget {name}
+                                </Button>
+                              ))}
+                            </span>
+                          )}
                         </span>
-                        <RowMenu token={token} onePerMode={(perMode) => onePerMode(token, perMode)} oneValue={oneValue} />
+                        <RowMenu
+                          token={token}
+                          oneValue={oneValue}
+                          hasFormer={former.length > 0}
+                          onePerMode={(perMode) => onePerMode(token, perMode)}
+                          onRename={() => setRenaming(token.path)}
+                          onForget={() => former.forEach((name) => commit([{ op: "forgetFormerName", path: token.path, cssName: name }]))}
+                          onDelete={() => onAskDeleteToken(token.path)}
+                        />
                       </div>
                     </td>
                     <td className="px-2 py-2 text-muted-foreground">{token.type}</td>
                     {oneValue ? (
                       <td className="px-2 py-2" colSpan={kit.modes.length} data-mode="all">
-                        <ValueCell token={token} label={`${token.path}`} value={token.value} onCommit={(next) => setValue(token, kit.modes[0]!, next)} />
+                        <ValueCell token={token} label={token.path} value={token.value} onCommit={(next) => setValue(token, kit.modes[0]!, next)} />
                       </td>
                     ) : (
                       kit.modes.map((mode) => (
@@ -117,7 +198,14 @@ export const KitTable = ({ kit, usage, apply }: { readonly kit: Kit; readonly us
                         </td>
                       ))
                     )}
-                    <td className="px-2 py-2 tabular-nums text-muted-foreground">{usage[token.path]?.length || ""}</td>
+                    <td className="px-2 py-2" />
+                    <td className="px-2 py-2 tabular-nums text-muted-foreground">
+                      {users.length > 0 && (
+                        <Tip label={<span className="whitespace-pre-line">{usedByLabel(users, titleOf)}</span>}>
+                          <span>{users.length}</span>
+                        </Tip>
+                      )}
+                    </td>
                   </tr>
                 );
               })}
@@ -142,7 +230,53 @@ const GroupButton = ({ name, count, active, onClick }: { readonly name: string; 
   </Button>
 );
 
-const RowMenu = ({ token, oneValue, onePerMode }: { readonly token: Token; readonly oneValue: boolean; readonly onePerMode: (perMode: boolean) => void }) => {
+/** A name typed in place: Enter commits, Escape or leaving the field cancels; a refusal shows under it. */
+const NameField = ({ label, initial, onCommit, onCancel }: { readonly label: string; readonly initial: string; readonly onCommit: (name: string) => string | undefined; readonly onCancel: () => void }) => {
+  const [text, setText] = useState(initial);
+  const [problem, setProblem] = useState<string>();
+  return (
+    <span className="grid gap-1">
+      <Input
+        size="sm"
+        font="mono"
+        aria-label={label}
+        autoFocus
+        value={text}
+        onChange={(event) => setText(event.currentTarget.value)}
+        onKeyDown={(event) => {
+          if (event.key === "Enter") setProblem(onCommit(text.trim()));
+          if (event.key === "Escape") onCancel();
+        }}
+        onBlur={onCancel}
+      />
+      {problem !== undefined && (
+        <span role="alert" className="text-xs text-destructive">
+          {problem}
+        </span>
+      )}
+    </span>
+  );
+};
+
+const ModeMenu = ({ mode, isDefault, onRename, onDefault, onDuplicate, onDelete }: { readonly mode: string; readonly isDefault: boolean; readonly onRename: () => void; readonly onDefault: () => void; readonly onDuplicate: () => void; readonly onDelete: () => void }) => {
+  const [open, setOpen] = useState(false);
+  const trigger = useRef<HTMLButtonElement>(null);
+  return (
+    <Menu open={open} onOpenChange={setOpen}>
+      <Button ref={trigger} variant="ghost" size="icon-xs" aria-label={`Mode options ${mode}`} aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen((was) => !was)}>
+        …
+      </Button>
+      <MenuPopup anchor={trigger} side="bottom" align="start">
+        <MenuItem onClick={onRename}>Rename mode</MenuItem>
+        {!isDefault && <MenuItem onClick={onDefault}>Make default</MenuItem>}
+        <MenuItem onClick={onDuplicate}>Duplicate mode</MenuItem>
+        <MenuItem onClick={onDelete}>Delete mode</MenuItem>
+      </MenuPopup>
+    </Menu>
+  );
+};
+
+const RowMenu = ({ token, oneValue, hasFormer, onePerMode, onRename, onForget, onDelete }: { readonly token: Token; readonly oneValue: boolean; readonly hasFormer: boolean; readonly onePerMode: (perMode: boolean) => void; readonly onRename: () => void; readonly onForget: () => void; readonly onDelete: () => void }) => {
   const [open, setOpen] = useState(false);
   const trigger = useRef<HTMLButtonElement>(null);
   return (
@@ -151,11 +285,10 @@ const RowMenu = ({ token, oneValue, onePerMode }: { readonly token: Token; reado
         …
       </Button>
       <MenuPopup anchor={trigger} side="bottom" align="end">
-        {oneValue ? (
-          <MenuItem onClick={() => onePerMode(true)}>A value per mode</MenuItem>
-        ) : (
-          <MenuItem onClick={() => onePerMode(false)}>One value for all modes</MenuItem>
-        )}
+        {oneValue ? <MenuItem onClick={() => onePerMode(true)}>A value per mode</MenuItem> : <MenuItem onClick={() => onePerMode(false)}>One value for all modes</MenuItem>}
+        <MenuItem onClick={onRename}>Rename</MenuItem>
+        {hasFormer && <MenuItem onClick={onForget}>Forget old names</MenuItem>}
+        <MenuItem onClick={onDelete}>Delete</MenuItem>
       </MenuPopup>
     </Menu>
   );
