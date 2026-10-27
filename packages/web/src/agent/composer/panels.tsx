@@ -9,6 +9,10 @@ import type { ChatClient } from "../store.ts";
 import type { PromptEditorHandle } from "./PromptEditor.tsx";
 import { record } from "../record.ts";
 import { composerGlassClass } from "../../chrome/composerSurface.ts";
+import { ChatMarkdown } from "../transcript/ChatMarkdown.tsx";
+
+/** A request's id, as its payload carries it. */
+export const requestIdOf = (activity: ChatActivity): string => String(record(activity.payload).requestId);
 
 /** The chat's open requests of a kind that its running turn waits on: a turn that ended waits on nothing. */
 export const waitingRequests = (chat: Chat, kind: "approval" | "user-input"): ChatActivity[] => {
@@ -42,11 +46,11 @@ export const TARGET_SHOWN = 300;
  * The pending approval (t3code's panel): the request's kind, the tool, and its target in
  * full up to 300 characters with how many more it did not show, then Decline, Approve and
  * the other answers. It clears at once on a click; a refused answer shows what is really
- * pending again.
+ * pending again. One the typing guard holds is not shown yet.
  */
-export const ApprovalPanel = ({ client, chat }: { readonly client: ChatClient; readonly chat: Chat }) => {
+export const ApprovalPanel = ({ client, chat, held }: { readonly client: ChatClient; readonly chat: Chat; readonly held: ReadonlySet<string> }) => {
   const [answered, setAnswered] = useState<ReadonlySet<string>>(new Set());
-  const pending = waitingRequests(chat, "approval").filter((activity) => !answered.has(String(record(activity.payload).requestId)));
+  const pending = waitingRequests(chat, "approval").filter((activity) => !answered.has(requestIdOf(activity)) && !held.has(requestIdOf(activity)));
   const request = pending[0];
   if (!request) return null;
   const payload = record(request.payload);
@@ -190,9 +194,9 @@ export const QuestionPanel = ({
       </header>
       {!collapsed && (
         <div className="pe-1 pb-1 wrap-anywhere">
-          <p className="m-0 text-sm text-foreground/85" data-testid="panel-question">
-            {question.question}
-          </p>
+          <div className="text-foreground/85" data-testid="panel-question">
+            <ChatMarkdown text={question.question} />
+          </div>
           {question.multiSelect && (
             <p className="m-0 mt-1 flex items-center gap-1 text-xs text-secondary-label">
               <ListChecks aria-hidden className="size-3" /> Select one or more options.
@@ -274,10 +278,12 @@ export const PlanActions = ({ refine, busy, onSend, onNewChat }: { readonly refi
 /**
  * Answering the chat's open question from the composer (t3code's flow): an option chosen
  * in the panel or an answer typed in the box, per question; Send moves to the next and
- * sends every answer from the last. `text` is the box's current draft.
+ * sends every answer from the last. `text` is the box's current answer. A question the
+ * typing guard holds is not asked yet.
  */
-export const useQuestionAnswers = (client: ChatClient, chat: Chat | undefined, box: RefObject<PromptEditorHandle | null>, text: string) => {
-  const asked = openQuestion(chat);
+export const useQuestionAnswers = (client: ChatClient, chat: Chat | undefined, box: RefObject<PromptEditorHandle | null>, text: string, held: ReadonlySet<string>) => {
+  const open = openQuestion(chat);
+  const asked = open && !held.has(open.requestId) ? open : undefined;
   const [index, setIndex] = useState(0);
   const [chosen, setChosen] = useState<Record<string, ReadonlyArray<string>>>({});
   const typedAnswers = useRef<Record<string, string>>({});
@@ -331,8 +337,8 @@ export const useQuestionAnswers = (client: ChatClient, chat: Chat | undefined, b
     }
     setSubmitting(true);
     try {
+      // The box keeps the answer until the question goes; then the composer puts the draft back.
       await client.dispatch({ type: "thread.user-input.respond", threadId: chat.id, requestId: asked.requestId, answers });
-      box.current?.clear();
     } catch (error) {
       client.reportError(error);
     } finally {
@@ -345,5 +351,5 @@ export const useQuestionAnswers = (client: ChatClient, chat: Chat | undefined, b
   };
   const panel =
     asked && question ? <QuestionPanel state={{ ...asked, index, chosen }} onChoose={choose} onDismiss={dismiss} /> : null;
-  return { question, answering: question !== undefined, index, lastQuestion, ready, submitting, move, answer, panel };
+  return { question, requestId: asked?.requestId, answering: question !== undefined, index, lastQuestion, ready, submitting, move, answer, panel };
 };

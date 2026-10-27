@@ -72,6 +72,42 @@ export const draftDoc = (text: string): JSONContent => ({
   }),
 });
 
+/** Marks a transaction the composer made, so the typing guard does not take it for typing. */
+const SET_BY_COMPOSER = "agentDraftSetByComposer";
+
+/** The caret's line box (t3code's `caretLineRect`): a collapsed range at a line or chip edge has no rect of its own, so it measures a neighbour. */
+const caretLineRect = (range: Range, edge: "start" | "end"): DOMRect | null => {
+  const rects = [...range.getClientRects()].filter((rect) => rect.height > 0);
+  const own = edge === "start" ? rects.at(-1) : rects[0];
+  if (own) return own;
+  const container = range.startContainer;
+  const probe = (text: Text, at: number): DOMRect | null => {
+    const measure = document.createRange();
+    measure.setStart(text, at);
+    measure.setEnd(text, at + 1);
+    const found = [...measure.getClientRects()].find((rect) => rect.height > 0);
+    if (found) return found;
+    const bounds = measure.getBoundingClientRect();
+    return bounds.height > 0 ? bounds : null;
+  };
+  if (container instanceof Text) {
+    if (container.data.length === 0) return null;
+    return probe(container, Math.max(0, Math.min(edge === "start" ? range.startOffset : range.startOffset - 1, container.data.length - 1)));
+  }
+  if (!(container instanceof HTMLElement)) return null;
+  const before = container.childNodes[range.startOffset - 1];
+  const neighbour = before ?? container.childNodes[range.startOffset];
+  if (neighbour instanceof HTMLElement) {
+    const bounds = neighbour.getBoundingClientRect();
+    if (bounds.height > 0) return bounds;
+  } else if (neighbour instanceof Text && neighbour.data.length > 0) {
+    const found = probe(neighbour, neighbour === before ? neighbour.data.length - 1 : 0);
+    if (found) return found;
+  }
+  const bounds = container.getBoundingClientRect();
+  return bounds.height > 0 ? bounds : null;
+};
+
 /** The text before the caret, for the `@`, `/` and `$` menus. */
 export interface Trigger {
   readonly char: "@" | "/" | "$";
@@ -109,14 +145,17 @@ export interface PromptEditorHandle {
   /** Replaces a trigger's text with a chip, or with plain text. */
   replaceTrigger(trigger: Trigger, insert: DraftChip | string): void;
   insertText(text: string): void;
-  /** Whether the caret is on the draft's first line (ArrowUp recalls there) or last line. */
-  caretLine(): { first: boolean; last: boolean };
+  /** Whether the caret is on the draft's first visual line (`start`, where ArrowUp recalls) or its last (`end`), wrapped lines counted. */
+  caretOnVisualEdge(edge: "start" | "end"): boolean;
 }
 
 export interface PromptEditorProps {
   readonly placeholder: string;
   readonly label: string;
-  readonly onChange: (text: string) => void;
+  /** Every change to the draft; `typed` is false for one the composer made (`setText`, `clear`). */
+  readonly onChange: (text: string, typed: boolean) => void;
+  readonly onFocus?: () => void;
+  readonly onBlur?: () => void;
   readonly onTrigger: (trigger: Trigger | undefined) => void;
   /**
    * Keys the composer handles before the editor: return true to take the key. Enter
@@ -138,9 +177,9 @@ export interface PromptEditorProps {
  * formatting off, so typed markdown stays literal, and one paragraph per line. Enter
  * sends; Shift+Enter and Option+Enter break the line.
  */
-export const PromptEditor = ({ placeholder, label, onChange, onTrigger, onKey, onSubmit, onPaste, handle, disabled, autofocus, initialText }: PromptEditorProps) => {
-  const latest = useRef({ onChange, onTrigger, onKey, onSubmit, onPaste });
-  latest.current = { onChange, onTrigger, onKey, onSubmit, onPaste };
+export const PromptEditor = ({ placeholder, label, onChange, onFocus, onBlur, onTrigger, onKey, onSubmit, onPaste, handle, disabled, autofocus, initialText }: PromptEditorProps) => {
+  const latest = useRef({ onChange, onFocus, onBlur, onTrigger, onKey, onSubmit, onPaste });
+  latest.current = { onChange, onFocus, onBlur, onTrigger, onKey, onSubmit, onPaste };
   const placeholderRef = useRef(placeholder);
   placeholderRef.current = placeholder;
   const editor = useEditor({
@@ -194,7 +233,9 @@ export const PromptEditor = ({ placeholder, label, onChange, onTrigger, onKey, o
       },
       handlePaste: (_view, event) => latest.current.onPaste(event),
     },
-    onUpdate: ({ editor: current }) => latest.current.onChange(draftText(current.getJSON())),
+    onUpdate: ({ editor: current, transaction }) => latest.current.onChange(draftText(current.getJSON()), transaction.getMeta(SET_BY_COMPOSER) !== true),
+    onFocus: () => latest.current.onFocus?.(),
+    onBlur: () => latest.current.onBlur?.(),
     onTransaction: ({ editor: current }) => latest.current.onTrigger(readTrigger(current)),
   });
   useEffect(() => {
@@ -202,7 +243,8 @@ export const PromptEditor = ({ placeholder, label, onChange, onTrigger, onKey, o
     if (editor && !editor.isDestroyed) editor.view.dispatch(editor.state.tr.setMeta("placeholder", placeholder));
   }, [editor, placeholder]);
   useEffect(() => {
-    editor?.setEditable(disabled !== true);
+    // No update: it would save the box's text as the draft before the composer puts the draft back.
+    editor?.setEditable(disabled !== true, false);
   }, [editor, disabled]);
 
   useImperativeHandle(
@@ -217,6 +259,7 @@ export const PromptEditor = ({ placeholder, label, onChange, onTrigger, onKey, o
         editor
           .chain()
           .setMeta("addToHistory", options?.undoable !== false)
+          .setMeta(SET_BY_COMPOSER, true)
           .setContent(draftDoc(text), { emitUpdate: true })
           .run();
         if (options?.focus === false) return;
@@ -226,7 +269,7 @@ export const PromptEditor = ({ placeholder, label, onChange, onTrigger, onKey, o
         else editor.commands.focus("end");
       },
       clear: () => {
-        editor?.commands.setContent({ type: "doc", content: [{ type: "paragraph" }] }, { emitUpdate: true });
+        editor?.chain().setMeta(SET_BY_COMPOSER, true).setContent({ type: "doc", content: [{ type: "paragraph" }] }, { emitUpdate: true }).run();
       },
       replaceTrigger: (trigger, insert) => {
         if (!editor) return;
@@ -238,14 +281,20 @@ export const PromptEditor = ({ placeholder, label, onChange, onTrigger, onKey, o
         const content: JSONContent[] = text.split("\n").flatMap((line, index): JSONContent[] => [...(index === 0 ? [] : [{ type: "hardBreak" }]), ...(line === "" ? [] : [{ type: "text", text: line }])]);
         editor?.chain().focus().insertContent(content).run();
       },
-      caretLine: () => {
-        if (!editor) return { first: true, last: true };
+      caretOnVisualEdge: (edge) => {
+        if (!editor || editor.isDestroyed || draftText(editor.getJSON()) === "") return true;
         // Read from the DOM: the editor state catches up with a caret move only after the key that made it.
         const root = editor.view.dom;
-        let node = window.getSelection()?.anchorNode ?? null;
-        while (node && node.parentNode !== root) node = node.parentNode;
-        if (!node) return { first: true, last: true };
-        return { first: node === root.firstChild, last: node === root.lastChild };
+        const selection = window.getSelection();
+        if (!selection || !selection.isCollapsed || selection.rangeCount === 0 || !selection.anchorNode || !root.contains(selection.anchorNode)) return false;
+        let line: globalThis.Node | null = selection.anchorNode;
+        while (line && line.parentNode !== root) line = line.parentNode;
+        if (!line || line !== (edge === "start" ? root.firstChild : root.lastChild)) return false;
+        const caret = caretLineRect(selection.getRangeAt(0), edge);
+        if (!caret) return false;
+        const bounds = (line instanceof HTMLElement ? line : root).getBoundingClientRect();
+        const threshold = caret.height / 2;
+        return edge === "start" ? caret.top - bounds.top < threshold : bounds.bottom - caret.bottom < threshold;
       },
     }),
     [editor],

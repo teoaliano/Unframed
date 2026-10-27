@@ -1,9 +1,11 @@
 /**
  * The Agent tray's rules (spec 08, after t3code's composer logic): when a paste becomes a
- * file and what it is called, how slash commands rank, and what the context window meter
- * says.
+ * file and what it is called, how slash commands rank, what the context window meter
+ * says, how a restored draft joins the current one, what ArrowUp recalls, whether a
+ * follow-up queues or steers, and when the typing guard holds a request back.
  */
 import { ATTACHMENT_LIMITS } from "./attachments.ts";
+import { IMPLEMENT_PLAN_PROMPT } from "./prompts.ts";
 
 // ---------------------------------------------------------------------------------------
 // Large paste.
@@ -156,4 +158,165 @@ export const contextMeter = (usage: ContextUsage): ContextMeterView => {
     overloaded: percent !== null && percent > 90,
     totalProcessedText: usage.totalProcessedTokens !== undefined && usage.totalProcessedTokens > 0 ? formatTokens(usage.totalProcessedTokens) : null,
   };
+};
+
+// ---------------------------------------------------------------------------------------
+// Restoring into a draft (a stash entry, a queued message given back, Edit from here).
+
+/** The restored prompt after the current one, a blank line between (t3code's stash restore). */
+export const appendRestoredPrompt = (current: string, restored: string): string => {
+  if (restored.length === 0) return current;
+  return current.trim().length > 0 ? `${current.replace(/\s+$/, "")}\n\n${restored}` : restored;
+};
+
+/** The current items, then the restored ones the current ones lack, matched by `keyOf`. */
+export const mergeRestored = <T>(current: ReadonlyArray<T>, restored: ReadonlyArray<T>, keyOf: (item: T) => string): T[] => {
+  const seen = new Set(current.map(keyOf));
+  const merged = [...current];
+  for (const item of restored) {
+    const key = keyOf(item);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    merged.push(item);
+  }
+  return merged;
+};
+
+// ---------------------------------------------------------------------------------------
+// Prompt history (ArrowUp and ArrowDown).
+
+export interface PromptHistoryMessage {
+  readonly id: string;
+  readonly role: string;
+  readonly text: string;
+}
+
+export interface PromptHistoryEntry {
+  readonly id: string;
+  readonly prompt: string;
+}
+
+/** The entry being shown, and the text it put in the box: an edit ends the recall. */
+export interface PromptHistoryPosition {
+  readonly entryId: string;
+  readonly recalled: string;
+}
+
+const MENTION_CHIP = /\[[A-Z][A-Za-z]*: [^;\]]*; ref=[^\]]+\]/g;
+const IMPLEMENT_PLAN_PREFIX = IMPLEMENT_PLAN_PROMPT.slice(0, IMPLEMENT_PLAN_PROMPT.indexOf("<plan>")).trim();
+
+/**
+ * A sent message as ArrowUp puts it back, or "" when it recalls nothing: mention chips go
+ * (t3code strips context chips on recall), and an implement-plan prompt or a message with
+ * no text of its own is skipped.
+ */
+export const recallablePrompt = (text: string): string => {
+  let prompt = text.trim();
+  for (const match of [...prompt.matchAll(MENTION_CHIP)].reverse()) {
+    let start = match.index;
+    let end = start + match[0].length;
+    if (prompt[end] === " ") end += 1;
+    else if (prompt[start - 1] === " ") start -= 1;
+    prompt = prompt.slice(0, start) + prompt.slice(end);
+  }
+  const trimmed = prompt.trim();
+  return trimmed.startsWith(IMPLEMENT_PLAN_PREFIX) ? "" : trimmed;
+};
+
+/** What ArrowUp can recall from a chat's messages, oldest first, a repeat kept once (as its latest). */
+export const promptHistoryEntries = (messages: ReadonlyArray<PromptHistoryMessage>): PromptHistoryEntry[] => {
+  const entries: PromptHistoryEntry[] = [];
+  for (const message of messages) {
+    if (message.role !== "user") continue;
+    const prompt = recallablePrompt(message.text);
+    if (prompt.length === 0) continue;
+    if (entries.at(-1)?.prompt === prompt) {
+      entries[entries.length - 1] = { id: message.id, prompt };
+      continue;
+    }
+    entries.push({ id: message.id, prompt });
+  }
+  return entries;
+};
+
+/**
+ * One ArrowUp (`backward`) or ArrowDown (`forward`) through the history (t3code's): `null`
+ * when the key is not history's to take; forward past the newest gives an empty draft.
+ */
+export const stepPromptHistory = (input: {
+  readonly direction: "backward" | "forward";
+  readonly entries: ReadonlyArray<PromptHistoryEntry>;
+  readonly position: PromptHistoryPosition | null;
+  readonly currentPrompt: string;
+}): { readonly position: PromptHistoryPosition | null; readonly prompt: string } | null => {
+  const { entries, position, currentPrompt } = input;
+  let active = -1;
+  if (position && position.recalled === currentPrompt) {
+    active = entries.findIndex((entry) => entry.id === position.entryId);
+    if (active < 0) active = entries.findLastIndex((entry) => entry.prompt === position.recalled);
+  }
+  if (input.direction === "backward") {
+    if (active < 0 && currentPrompt.length > 0) return null;
+    const entry = entries[active < 0 ? entries.length - 1 : active - 1];
+    return entry ? { position: { entryId: entry.id, recalled: entry.prompt }, prompt: entry.prompt } : null;
+  }
+  if (active < 0) return null;
+  const entry = entries[active + 1];
+  return entry ? { position: { entryId: entry.id, recalled: entry.prompt }, prompt: entry.prompt } : { position: null, prompt: "" };
+};
+
+// ---------------------------------------------------------------------------------------
+// Queue or steer.
+
+export type FollowUpAction = "queue" | "steer";
+
+/** What a message sent while a turn runs does: the Follow-up behavior setting, flipped by Cmd (Ctrl off Mac). */
+export const followUpAction = (setting: FollowUpAction, alternate: boolean): FollowUpAction => (alternate ? (setting === "queue" ? "steer" : "queue") : setting);
+
+// ---------------------------------------------------------------------------------------
+// The typing guard.
+
+/** How long the person must stop typing before a request that arrived meanwhile shows. */
+export const TYPING_IDLE_MS = 1500;
+
+export interface TypingGuard {
+  /** Every request seen: one shown once is never held again. */
+  readonly seen: ReadonlySet<string>;
+  readonly held: ReadonlySet<string>;
+  readonly focused: boolean;
+  readonly lastTypedAt: number;
+}
+
+export type TypingGuardEvent =
+  | { readonly type: "requests"; readonly requestIds: ReadonlyArray<string>; readonly now: number }
+  | { readonly type: "type"; readonly now: number }
+  | { readonly type: "focus" | "blur" | "send" | "idle" };
+
+export const createTypingGuard = (): TypingGuard => ({ seen: new Set(), held: new Set(), focused: false, lastTypedAt: -Infinity });
+
+/**
+ * t3code's typing guard: an approval or question that arrives while the composer has focus
+ * and the person typed in the last 1.5 s is held back until they pause, send or blur, so a
+ * keystroke meant for the draft never lands on it.
+ */
+export const updateTypingGuard = (state: TypingGuard, event: TypingGuardEvent): TypingGuard => {
+  switch (event.type) {
+    case "requests": {
+      const seen = new Set(state.seen);
+      const held = new Set([...state.held].filter((id) => event.requestIds.includes(id)));
+      for (const id of event.requestIds) {
+        if (!seen.has(id) && state.focused && event.now - state.lastTypedAt < TYPING_IDLE_MS) held.add(id);
+        seen.add(id);
+      }
+      return { ...state, seen, held };
+    }
+    case "type":
+      return { ...state, lastTypedAt: event.now };
+    case "focus":
+      return { ...state, focused: true };
+    case "blur":
+    case "send":
+    case "idle":
+      return { ...state, held: new Set(), lastTypedAt: -Infinity, focused: event.type === "blur" ? false : state.focused };
+  }
 };

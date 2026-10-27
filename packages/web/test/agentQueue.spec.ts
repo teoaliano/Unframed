@@ -3,6 +3,7 @@ import type { TestEngine } from "../../engine/test/engineProcess.ts";
 import { openCanvas } from "./canvas.ts";
 import { answerApproval, createChat, engineChat, expect, openRail, pendingRequest, promptBox, rpcOf, scriptFolder, sendThrough, startAgentEngine, userTexts } from "./agent.ts";
 import { test as base } from "./fixtures.ts";
+import { platformOf } from "./platform.ts";
 
 /** Every turn asks for one command, so a Supervised chat parks on it until it is answered. */
 const PARKING = {
@@ -60,12 +61,13 @@ test("a message sent while a turn runs waits as Queued and goes after the next t
   const before = await userTexts(agent, chatId);
   await expect(panel.getByRole("button", { name: "Queue message" })).toBeVisible();
 
-  // Cancel gives a queued message back to the composer.
+  // Cancel gives a queued message back to the composer, after what is being typed there.
   await type(panel, "take me back");
   await expect(queued).toHaveCount(1);
+  await promptBox(panel).pressSequentially("half typed");
   await queued.getByRole("button", { name: "Cancel and return to the composer" }).click();
   await expect(queued).toHaveCount(0);
-  await expect(promptBox(panel)).toHaveText("take me back");
+  await expect(panel.locator(".ProseMirror p")).toHaveText(["half typed", "", "take me back"]);
 
   // Two queued, the second after the first; Stop returns both and ends the turn.
   await page.keyboard.press("ControlOrMeta+a");
@@ -105,4 +107,31 @@ test("Steer sends into the running turn at once: Cmd+Enter under Queue, Send now
   await expect.poll(async () => (await userTexts(agent, chatId)).at(-1)).toBe("steer by the setting");
   await type(reopened, "queue with the modifier", "ControlOrMeta+Enter");
   await expect(reopened.getByTestId("queued-message")).toHaveCount(1);
+});
+
+test("while a turn runs Send says what it will do: Queue message or Steer message by the setting, its tooltip names the other, and Cmd-click does the other once", async ({ page, agent }) => {
+  const { panel, chatId } = await parkedChat(page, agent);
+  const { mac } = await platformOf(page);
+  const command = mac ? "⌘" : "Ctrl";
+  const enter = mac ? "⌘Enter" : "Ctrl+Enter";
+  const queueButton = panel.getByRole("button", { name: "Queue message" });
+  await expect(queueButton.locator("svg.lucide-list-plus")).toHaveCount(1);
+  await promptBox(panel).click();
+  await promptBox(panel).pressSequentially("steered by a click");
+  await queueButton.hover();
+  await expect(page.getByText(`Click to queue, ${command}-click or ${enter} to steer`, { exact: true })).toBeVisible();
+  await queueButton.click({ modifiers: ["ControlOrMeta"] });
+  await expect.poll(() => userTexts(agent, chatId)).toEqual(["park here", "steered by a click"]);
+  await expect(panel.getByTestId("queued-message")).toHaveCount(0);
+
+  await (await rpcOf(agent)).call("preferences.set", { key: "agent.followUp", value: "steer" });
+  const steerButton = panel.getByRole("button", { name: "Steer message" });
+  await expect(steerButton.locator("svg.lucide-corner-up-right")).toHaveCount(1);
+  await promptBox(panel).click();
+  await promptBox(panel).pressSequentially("queued by a click");
+  await page.mouse.move(5, 5);
+  await steerButton.hover();
+  await expect(page.getByText(`Click to steer, ${command}-click or ${enter} to queue`, { exact: true })).toBeVisible();
+  await steerButton.click({ modifiers: ["ControlOrMeta"] });
+  await expect(panel.getByTestId("queued-message")).toContainText("queued by a click");
 });

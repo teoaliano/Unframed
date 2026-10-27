@@ -2,17 +2,24 @@ import type { ChatAttachment, ModelSelection } from "@unframed/contracts";
 import {
   actionablePlan,
   agentSelectionOf,
+  appendRestoredPrompt,
   continuableChat,
   DEFAULT_RUNTIME_MODE,
+  followUpAction,
   implementPlanText,
   implementPlanTitle,
+  mergeRestored,
   pasteBecomesFile,
   pastedTextFileName,
+  promptHistoryEntries,
+  promptLengthError,
+  stepPromptHistory,
   tabLabel,
   type InteractionMode,
+  type PromptHistoryPosition,
   type RuntimeMode,
 } from "@unframed/domain";
-import { ArrowLeft, Paperclip } from "lucide-react";
+import { ArrowLeft, CornerUpRight, ListPlus, Paperclip } from "lucide-react";
 import { createPortal } from "react-dom";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from "react";
 import type { AgentTrayProps as SlotProps } from "../../chrome/slots.ts";
@@ -27,7 +34,8 @@ import { Tip } from "../../chrome/ui.tsx";
 import { MessageAction, SendArrow, StopSquare } from "../../chrome/MessageAction.tsx";
 import { formatSize, useAttachments } from "./attachments.ts";
 import { StashMenu, useStash } from "./stash.tsx";
-import { ApprovalPanel, choiceOnly, PlanActions, PlanReady, useQuestionAnswers, waitingRequests } from "./panels.tsx";
+import { ApprovalPanel, choiceOnly, openQuestion, PlanActions, PlanReady, requestIdOf, useQuestionAnswers, waitingRequests } from "./panels.tsx";
+import { useTypingGuard } from "./typingGuard.ts";
 import { platform } from "../../canvas/platform.ts";
 import { showNotice } from "../../toasts.tsx";
 import { AttachmentShelf } from "./AttachmentShelf.tsx";
@@ -80,6 +88,24 @@ export interface AgentTrayProps {
   readonly dropTarget?: RefObject<HTMLElement | null>;
 }
 
+/** Whether Cmd or Ctrl is held: Send then shows the other follow-up action (t3code's). */
+const useCommandHeld = (): boolean => {
+  const [held, setHeld] = useState(false);
+  useEffect(() => {
+    const update = (event: KeyboardEvent) => setHeld(event.metaKey || event.ctrlKey);
+    const reset = () => setHeld(false);
+    window.addEventListener("keydown", update, true);
+    window.addEventListener("keyup", update, true);
+    window.addEventListener("blur", reset);
+    return () => {
+      window.removeEventListener("keydown", update, true);
+      window.removeEventListener("keyup", update, true);
+      window.removeEventListener("blur", reset);
+    };
+  }, []);
+  return held;
+};
+
 interface OpenMenu {
   readonly label: string;
   readonly trigger: Trigger;
@@ -106,17 +132,27 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
   // rail show the same text whichever is mounted. The toolbar's tray keeps its own.
   const draftKey = variant === "rail" ? (chatId ?? NEW_CHAT) : undefined;
   const [initialDraft] = useState(() => (draftKey === undefined ? EMPTY_DRAFT : client.draft(draftKey)));
-  const [text, setText] = useState(initialDraft.text);
+  // A box that opens on a question shows its answer; the draft waits on the client.
+  const [initialText] = useState(() => (variant === "rail" && openQuestion(chat) !== undefined ? "" : initialDraft.text));
+  const [text, setText] = useState(initialText);
   const draftKeyRef = useRef(draftKey);
   const draftVersion = useDraftVersion(client, draftKey ?? "");
   const chips = useSelectionChips(canvas, text.trim() === "");
   /** The context chips this draft's @ mentions added: they belong to the draft, not to the canvas selection. */
   const mentionIds = useRef<ReadonlyArray<string>>([]);
+  /** A question holds the box for its answer: the draft is set aside on the client until it goes. */
+  const answeringRef = useRef(false);
+  const guard = useTypingGuard(
+    chatId ?? NEW_CHAT,
+    variant === "rail" && chat ? [...waitingRequests(chat, "approval"), ...waitingRequests(chat, "user-input")].map(requestIdOf) : [],
+  );
   const saveDraft = (value: string) => {
-    if (draftKeyRef.current !== undefined) client.setDraft(draftKeyRef.current, { text: value, mentions: mentionIds.current });
+    if (draftKeyRef.current !== undefined && !answeringRef.current) client.setDraft(draftKeyRef.current, { text: value, mentions: mentionIds.current });
   };
-  const onDraftChange = (value: string) => {
+  const onDraftChange = (value: string, typed: boolean) => {
     setText(value);
+    if (answeringRef.current) return;
+    if (typed) guard.onType();
     saveDraft(value);
   };
   /** After a send or a stash the chips go back to the selection, and no mention is the draft's any more. */
@@ -134,7 +170,7 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
     // Set first: the text below fires a change, which saves the draft with these mentions.
     mentionIds.current = stored.mentions;
     chips.set([...kept, ...stored.mentions.filter((id) => !kept.includes(id))]);
-    if (shown.text !== stored.text) box.current?.setText(stored.text, { focus: false, undoable: false });
+    if (shown.text !== stored.text && !answeringRef.current) box.current?.setText(stored.text, { focus: false, undoable: false });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [client, draftKey, draftVersion]);
   const [trigger, setTrigger] = useState<Trigger>();
@@ -330,40 +366,22 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
   }, [onMenuOpen, modeOpen]);
   useEffect(() => () => onMenuOpen?.("more-controls", false), [onMenuOpen]);
 
-  // ArrowUp in an empty box recalls this chat's earlier messages, newest first; editing one ends the recall.
-  const recall = useRef<{ index: number; text: string } | undefined>(undefined);
+  // ArrowUp recalls this chat's earlier messages (t3code's prompt history); editing one ends the recall.
+  const historyPosition = useRef<PromptHistoryPosition | null>(null);
   useEffect(() => {
-    recall.current = undefined;
+    historyPosition.current = null;
   }, [chatId]);
-  const history = (direction: "up" | "down"): boolean => {
-    const earlier = (chat?.messages ?? []).filter((message) => message.role === "user").map((message) => message.text).reverse();
+  const history = (direction: "backward" | "forward"): boolean => {
+    if (answeringRef.current || attachments.staged.length > 0) return false;
     const current = box.current?.text() ?? "";
-    const recalled = recall.current;
-    if (recalled && recalled.text !== current) recall.current = undefined;
-    const line = box.current?.caretLine() ?? { first: true, last: true };
-    if (!recall.current) {
-      if (direction === "down" || current !== "" || earlier.length === 0) return false;
-      recall.current = { index: 0, text: earlier[0]! };
-      box.current?.setText(earlier[0]!);
-      return true;
-    }
-    if (direction === "up") {
-      if (!line.first) return false;
-      const index = recall.current.index + 1;
-      if (index >= earlier.length) return true;
-      recall.current = { index, text: earlier[index]! };
-      box.current?.setText(earlier[index]!);
-      return true;
-    }
-    if (!line.last) return false;
-    const index = recall.current.index - 1;
-    if (index < 0) {
-      recall.current = undefined;
-      box.current?.clear();
-      return true;
-    }
-    recall.current = { index, text: earlier[index]! };
-    box.current?.setText(earlier[index]!);
+    const position = historyPosition.current;
+    if (position === null && current.length > 0) return false;
+    if (!box.current?.caretOnVisualEdge(direction === "backward" ? "start" : "end")) return false;
+    // Built on the keypress: the messages change with every streamed reply.
+    const step = stepPromptHistory({ direction, entries: promptHistoryEntries(chat?.messages ?? []), position, currentPrompt: current });
+    if (!step) return false;
+    historyPosition.current = step.position;
+    box.current?.setText(step.prompt);
     return true;
   };
 
@@ -394,7 +412,7 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
       return true;
     }
     if (!menu && !event.shiftKey && !event.altKey && !event.metaKey && !event.ctrlKey && (event.key === "ArrowUp" || event.key === "ArrowDown")) {
-      return history(event.key === "ArrowUp" ? "up" : "down");
+      return history(event.key === "ArrowUp" ? "backward" : "forward");
     }
     if (planMode && event.key === "Tab" && event.shiftKey && !menu) {
       setInteraction(interactionMode === "plan" ? "default" : "plan");
@@ -417,9 +435,27 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
   };
 
   // What waits on the person in this chat: an approval, a question, a plan to implement.
-  const approvalPending = variant === "rail" && chat !== undefined && waitingRequests(chat, "approval").length > 0;
-  const questions = useQuestionAnswers(client, variant === "rail" ? chat : undefined, box, text);
+  const approvalPending = variant === "rail" && chat !== undefined && waitingRequests(chat, "approval").some((request) => !guard.held.has(requestIdOf(request)));
+  const questions = useQuestionAnswers(client, variant === "rail" ? chat : undefined, box, text, guard.held);
   const { question, answering } = questions;
+  answeringRef.current = answering;
+  // A question takes the box for its answer; once it goes, the draft set aside comes back.
+  const questionKey = answering ? `${chatId}:${questions.requestId}` : undefined;
+  const shownQuestion = useRef<string | undefined>(undefined);
+  useEffect(() => {
+    const was = shownQuestion.current;
+    shownQuestion.current = questionKey;
+    if (questionKey === was) return;
+    if (questionKey !== undefined) {
+      box.current?.setText("", { focus: false, undoable: false });
+      return;
+    }
+    if (draftKeyRef.current === undefined) return;
+    const draft = client.draft(draftKeyRef.current).text;
+    if ((box.current?.text() ?? "") !== draft) box.current?.setText(draft, { focus: false, undoable: false });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [questionKey]);
+  const lengthError = answering ? undefined : promptLengthError(text);
   const planFollowUp = variant === "rail" && chat !== undefined && !running && !answering && interactionMode === "plan" && attachments.staged.length === 0 ? actionablePlan(chat) : undefined;
 
   const placeholder = approvalPending
@@ -434,7 +470,9 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
           ? PLACEHOLDERS.noProvider
           : PLACEHOLDERS.default;
 
-  const canSend = answering ? questions.ready : planFollowUp ? !sending : !noProvider && !sending && (text.trim() !== "" || attachments.staged.length > 0);
+  const canSend = answering
+    ? questions.ready
+    : lengthError === undefined && (planFollowUp ? !sending : !noProvider && !sending && (text.trim() !== "" || attachments.staged.length > 0));
 
   /** Implement: the chat back to building, then the plan after t3code's prefix; or the same in a new chat named after it. */
   const implementPlan = async (inNewChat: boolean) => {
@@ -468,9 +506,16 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
   const followUp = useFollowUp(client);
   const stash = useStash(client.engine, client.project);
   const [stashOpen, setStashOpen] = useState(false);
+  /**
+   * A draft put back (a stash entry, queued messages given back, Edit from here) joins the
+   * current one: its text after the draft's, its chips and attachments added (t3code's).
+   * While a question holds the box it joins the draft set aside.
+   */
   const restoreDraft = (draft: { readonly text: string; readonly selection: ReadonlyArray<string>; readonly attachments: ReadonlyArray<ChatAttachment> }) => {
-    box.current?.setText(draft.text);
-    chips.set(draft.selection);
+    const aside = answeringRef.current ? draftKeyRef.current : undefined;
+    if (aside !== undefined) client.setDraft(aside, { text: appendRestoredPrompt(client.draft(aside).text, draft.text), mentions: mentionIds.current });
+    else box.current?.setText(appendRestoredPrompt(box.current.text(), draft.text));
+    chips.add(draft.selection);
     attachments.restore(draft.attachments);
   };
   /** Cmd+S: a draft goes to the stash; with an empty box the only entry comes back, or the menu opens. */
@@ -490,9 +535,14 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
     }
   };
   const send = async (invert = false) => {
-    if (answering) return questions.answer();
+    if (answering) {
+      guard.onSend();
+      return questions.answer();
+    }
     const message = box.current?.text() ?? "";
     const sentFrom = draftKeyRef.current;
+    if (promptLengthError(message) !== undefined) return;
+    guard.onSend();
     if (planFollowUp && message.trim() === "") return implementPlan(false);
     if (noProvider || (message.trim() === "" && attachments.staged.length === 0) || sending) return;
     setSending(true);
@@ -516,8 +566,7 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
       if (!planMode && current?.interactionMode === "plan") await client.dispatch({ type: "thread.interaction-mode.set", threadId: target, interactionMode: "default" });
       if (current?.latestTurn?.state === "running") {
         // Queue waits for the turn's next tool call or its end; Steer joins the turn now. Cmd+Enter flips it once.
-        const steer = (followUp === "steer") !== invert;
-        if (steer) await sendMessage(client, target, outgoing, { steer: true });
+        if (followUpAction(followUp, invert) === "steer") await sendMessage(client, target, outgoing, { steer: true });
         else client.enqueue(target, outgoing, latestCompletedTool(current));
       } else {
         await sendMessage(client, target, outgoing);
@@ -537,11 +586,11 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
     if (chatId === null) return;
     const drafts = client.takeHandoffs(chatId);
     if (drafts.length === 0) return;
-    const current = box.current?.text() ?? "";
-    const returned = drafts.map((draft) => draft.text).join("\n\n");
-    box.current?.setText(current.trim() === "" ? returned : `${current}\n\n${returned}`);
-    chips.set([...new Set(drafts.flatMap((draft) => draft.selection))]);
-    attachments.restore(drafts.flatMap((draft) => draft.attachments));
+    restoreDraft({
+      text: drafts.map((draft) => draft.text).join("\n\n"),
+      selection: drafts.flatMap((draft) => draft.selection),
+      attachments: drafts.flatMap((draft) => draft.attachments),
+    });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [handoffs, chatId, client]);
 
@@ -555,7 +604,7 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
 
   return (
     <div className="flex flex-col gap-1.5" data-variant={variant} data-testid="agent-tray" ref={root}>
-      {approvalPending && chat && <ApprovalPanel client={client} chat={chat} />}
+      {approvalPending && chat && <ApprovalPanel client={client} chat={chat} held={guard.held} />}
       {questions.panel}
       {planFollowUp && <PlanReady plan={planFollowUp} />}
       {dragging &&
@@ -587,7 +636,9 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
           placeholder={placeholder}
           label={PROMPT_LABEL}
           onChange={onDraftChange}
-          initialText={initialDraft.text}
+          onFocus={guard.onFocus}
+          onBlur={guard.onBlur}
+          initialText={initialText}
           onTrigger={setTrigger}
           onKey={onKey}
           onSubmit={(event) => void send(platform() === "darwin" ? event.metaKey : event.ctrlKey)}
@@ -596,6 +647,11 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
           disabled={answering && choiceOnly(question)}
           autofocus={variant === "toolbar"}
         />
+        {lengthError !== undefined && (
+          <p role="alert" className="m-0 px-0.5 text-xs text-destructive" data-testid="prompt-length-error">
+            {lengthError}
+          </p>
+        )}
         {menu && <ComposerMenu label={menu.label} items={menu.items} highlight={highlight} empty={menu.empty} anchor={boxElement} onPick={menu.pick} onHighlight={setHighlight} />}
         {/* One line: the access and plan controls sit in the More menu, as in t3code's compact footer. */}
         {/* Nothing overlaps: the tools share the line's width, the traits and then the model label truncate first, and Send's group keeps its size. */}
@@ -688,9 +744,7 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
             ) : planFollowUp ? (
               <PlanActions refine={text.trim() !== ""} busy={sending} onSend={() => void send()} onNewChat={() => void implementPlan(true)} />
             ) : (
-              <MessageAction tone="send" aria-label={running ? "Queue message" : "Send"} disabled={!canSend} onClick={() => void send()}>
-                <SendArrow />
-              </MessageAction>
+              <SendButton running={running} followUp={followUp} disabled={!canSend} onSend={(alternate) => void send(alternate)} />
             )}
           </div>
         </div>
@@ -702,6 +756,34 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
         </Alert>
       )}
     </div>
+  );
+};
+
+/**
+ * The round Send (t3code's primary action). While a turn runs it says what the message will
+ * do, "Queue message" or "Steer message" by the Follow-up behavior setting, the other while
+ * Cmd or Ctrl is held, and a Cmd-click or Ctrl-click does the other for one message.
+ */
+const SendButton = ({ running, followUp, disabled, onSend }: { readonly running: boolean; readonly followUp: "queue" | "steer"; readonly disabled: boolean; readonly onSend: (alternate: boolean) => void }) => {
+  const commandHeld = useCommandHeld();
+  if (!running) {
+    return (
+      <MessageAction tone="send" aria-label="Send" disabled={disabled} onClick={() => onSend(false)}>
+        <SendArrow />
+      </MessageAction>
+    );
+  }
+  const action = followUpAction(followUp, commandHeld);
+  const mac = platform() === "darwin";
+  const tip = `Click to ${followUp}, ${mac ? "⌘" : "Ctrl"}-click or ${mac ? "⌘Enter" : "Ctrl+Enter"} to ${followUpAction(followUp, true)}`;
+  return (
+    <Tip label={tip} side="top">
+      <span className="inline-flex">
+        <MessageAction tone="send" aria-label={action === "queue" ? "Queue message" : "Steer message"} disabled={disabled} onClick={(event) => onSend(event.metaKey || event.ctrlKey)}>
+          {action === "queue" ? <ListPlus aria-hidden className="size-4" /> : <CornerUpRight aria-hidden className="size-4" />}
+        </MessageAction>
+      </span>
+    </Tip>
   );
 };
 

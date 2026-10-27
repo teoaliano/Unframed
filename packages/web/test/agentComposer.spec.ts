@@ -305,6 +305,91 @@ test("ArrowUp in an empty box recalls this chat's earlier messages, newest first
   }
 });
 
+test("restoring a stashed prompt puts it after the draft and adds only the files the draft lacks", async ({ page, agent }) => {
+  await openCanvas(page, agent);
+  const panel = await openRail(page);
+  const box = promptBox(panel);
+  const shelf = panel.getByTestId("attachments");
+  const attach = async () => {
+    const chooser = page.waitForEvent("filechooser");
+    await panel.getByRole("button", { name: "Attach files" }).click();
+    await (await chooser).setFiles([{ name: "notes.txt", mimeType: "text/plain", buffer: Buffer.from("eleven char") }]);
+    await expect(shelf.locator("[data-chip='file'][data-status='ready']")).toHaveCount(1);
+  };
+  await attach();
+  await box.click();
+  await box.pressSequentially("set aside");
+  await page.keyboard.press("ControlOrMeta+s");
+  await expect(box).toHaveText("");
+  await expect(shelf).toHaveCount(0);
+
+  await box.pressSequentially("now typing");
+  await attach();
+  await panel.getByTestId("stash-badge").click();
+  await page.getByRole("menu", { name: "Stashed prompts" }).getByRole("menuitem").first().click();
+  await expect(panel.locator(".ProseMirror p")).toHaveText(["now typing", "", "set aside"]);
+  await expect(shelf.locator("[data-chip='file']")).toHaveText(["notes.txt11 B"]);
+});
+
+test("a prompt over 120,000 characters says by how much under the box and cannot be sent", async ({ page, agent }) => {
+  await openCanvas(page, agent);
+  const panel = await openRail(page);
+  const box = promptBox(panel);
+  await box.click();
+  await page.keyboard.insertText("x".repeat(120_002));
+  const error = panel.getByTestId("prompt-length-error");
+  await expect(error).toHaveText("Prompt is 2 characters over the 120,000-character limit. Shorten or split it before sending.");
+  await expect(panel.getByRole("button", { name: "Send", exact: true })).toBeDisabled();
+  await page.keyboard.press("Enter");
+  await expect(panel.locator("[data-role='user']")).toHaveCount(0);
+  await page.keyboard.press("Backspace");
+  await expect(error).toHaveText("Prompt is 1 character over the 120,000-character limit. Shorten or split it before sending.");
+  await page.keyboard.press("Backspace");
+  await expect(error).toHaveCount(0);
+  await expect(panel.getByRole("button", { name: "Send", exact: true })).toBeEnabled();
+});
+
+test("ArrowUp recalls a repeated message once, moves through a wrapped line before it recalls, and is off while a file is staged", async ({ page }) => {
+  const agent = await startAgentEngine({ script: await scriptFolder({ history: { when: "^history", turns: [{ text: "One." }, { text: "Two." }, { text: "Three." }] } }) });
+  try {
+    await openCanvas(page, agent);
+    const panel = await openRail(page);
+    const box = promptBox(panel);
+    const lines = panel.locator(".ProseMirror p");
+    const long = `history long ${"word ".repeat(40).trim()}`;
+    await box.click();
+    for (const [index, message] of [long, "history short", "history short"].entries()) {
+      await page.keyboard.type(message);
+      await page.keyboard.press("Enter");
+      await expect(panel.locator("[data-role='assistant']")).toHaveCount(index + 1);
+    }
+
+    await page.keyboard.press("ArrowUp");
+    await expect(lines).toHaveText(["history short"]);
+    await page.keyboard.press("ArrowUp");
+    await expect(lines).toHaveText([long]);
+    // The caret is on the last of several wrapped lines: ArrowUp moves it up a line first.
+    await page.keyboard.press("ArrowUp");
+    await expect(lines).toHaveText([long]);
+    await page.keyboard.press("ArrowDown");
+    await expect(lines).toHaveText([long]);
+    await page.keyboard.press("End");
+    await page.keyboard.press("ArrowDown");
+    await expect(lines).toHaveText(["history short"]);
+    await page.keyboard.press("ArrowDown");
+    await expect(box).toHaveText("");
+
+    const chooser = page.waitForEvent("filechooser");
+    await panel.getByRole("button", { name: "Attach files" }).click();
+    await (await chooser).setFiles([{ name: "notes.txt", mimeType: "text/plain", buffer: Buffer.from("eleven char") }]);
+    await box.click();
+    await page.keyboard.press("ArrowUp");
+    await expect(box).toHaveText("");
+  } finally {
+    await agent.dispose();
+  }
+});
+
 const MENU_GLASS = "color-mix(in srgb, var(--popover) 18%, color-mix(in srgb, var(--popover) var(--glass-opacity), transparent))";
 
 test("the Agent tray is t3code's composer on the kit: the rounded shell, kit chips and controls, the round Send, the kit menu look", async ({ page, agent }) => {

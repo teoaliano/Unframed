@@ -1,5 +1,5 @@
 import type { ChatAttachment } from "@unframed/contracts";
-import { ATTACHMENT_LIMITS, attachmentLimitError, classifyAttachment } from "@unframed/domain";
+import { ATTACHMENT_LIMITS, attachmentLimitError, classifyAttachment, mergeRestored } from "@unframed/domain";
 import { useCallback, useMemo, useRef, useState } from "react";
 import type { EngineConnection } from "../../rpc/engine.ts";
 
@@ -197,10 +197,13 @@ export const useAttachments = (engine: EngineConnection, onError: (message: stri
   }, []);
 
   const clear = useCallback(() => setStaged([]), []);
-  /** Puts attachments that were already uploaded back (Edit from here, a stash). */
+  /**
+   * Adds attachments that were already uploaded back (Edit from here, a stash), after those
+   * staged; one staged already, by name, size and kind, is not added twice.
+   */
   const restore = useCallback((attachments: ReadonlyArray<ChatAttachment>) => {
-    setStaged(
-      attachments.map((attachment) => ({
+    const restored = attachments.map(
+      (attachment): Staged => ({
         key: `staged-${++counter}`,
         name: attachment.name,
         kind: attachment.kind,
@@ -209,8 +212,9 @@ export const useAttachments = (engine: EngineConnection, onError: (message: stri
         status: "ready",
         progress: 100,
         attachment,
-      })),
+      }),
     );
+    setStaged((all) => mergeRestored(all, restored, (item) => `${item.kind}\u0000${item.size}\u0000${item.name}`));
   }, []);
 
   return useMemo(() => ({ staged, add, remove, retry, settle, clear, restore }), [staged, add, remove, retry, settle, clear, restore]);

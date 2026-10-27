@@ -2,7 +2,7 @@ import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { Locator } from "@playwright/test";
 import { openCanvas } from "./canvas.ts";
-import { createChat, engineChat, expect, FIXTURES, openRail, say, test } from "./agent.ts";
+import { createChat, engineChat, expect, FIXTURES, openRail, pendingRequest, promptBox, say, scriptFolder, sendThrough, startAgentEngine, test } from "./agent.ts";
 import { expectSlot, expectToken, inBothSchemes, resolvedColor, styleOf } from "./kit.ts";
 
 const reply = (panel: Locator) => panel.locator("[data-role='assistant']");
@@ -156,4 +156,102 @@ test("the question panel is t3code's: kit Buttons in its header and for its opti
   await expectSlot(hero, "button");
   await expectToken(hero, "background-color", "--accent");
   await expectSlot(panel.getByRole("button", { name: "Submit answers" }), "message-action");
+});
+
+test("a question that arrives over a draft sets the draft aside: the box takes the answer, and the draft comes back once it is answered", async ({ page, agent }) => {
+  await openCanvas(page, agent);
+  const chatId = await createChat(agent, { title: "Asking" });
+  const panel = await openRail(page);
+  const box = promptBox(panel);
+  await box.click();
+  await box.pressSequentially("my own draft");
+  await box.blur();
+  await sendThrough(agent, chatId, "ask me first about the page");
+
+  const question = panel.getByTestId("question-panel");
+  await expect(question.getByTestId("panel-count")).toHaveText("1/2");
+  await expect(box).toHaveText("");
+  await expect(panel.locator("[data-placeholder]")).toHaveAttribute("data-placeholder", "Type your own answer, or leave this blank to use the selected option");
+  await box.click();
+  await box.pressSequentially("Sepia");
+  await panel.getByRole("button", { name: "Next question" }).click();
+  await question.getByRole("checkbox", { name: /Hero/ }).click();
+  await panel.getByRole("button", { name: "Submit answers" }).click();
+  await expect(question).toHaveCount(0);
+  await expect(box).toHaveText("my own draft");
+  const resolved = (await engineChat(agent, chatId)).activities.find((activity) => activity.kind === "user-input.resolved");
+  expect((resolved?.payload as { answers?: unknown }).answers).toEqual({ "Which look should the page have?": "Sepia", "Which sections should it have?": ["Hero"] });
+});
+
+test("a question's text is markdown: a link opens in a new tab and markup shows as text", async ({ page }) => {
+  const asking = {
+    when: "^ask",
+    turns: [
+      {
+        question: {
+          questions: [
+            {
+              id: "look",
+              header: "Look",
+              question: "Which look? See [the brief](https://example.com/brief) and <b>this</b>.",
+              options: [{ label: "Warm", description: "" }, { label: "Cool", description: "" }],
+              multiSelect: false,
+            },
+          ],
+        },
+        text: "Thanks.",
+      },
+    ],
+  };
+  const agent = await startAgentEngine({ script: await scriptFolder({ asking }) });
+  try {
+    await openCanvas(page, agent);
+    const panel = await openRail(page);
+    await say(panel, "ask about the look");
+    const text = panel.getByTestId("question-panel").getByTestId("panel-question");
+    const link = text.getByRole("link", { name: "the brief" });
+    await expect(link).toHaveAttribute("href", "https://example.com/brief");
+    await expect(link).toHaveAttribute("target", "_blank");
+    await expect(link).toHaveAttribute("rel", "noopener noreferrer");
+    await expect(text).toHaveText("Which look? See the brief and <b>this</b>.");
+    await expect(text.locator("b")).toHaveCount(0);
+  } finally {
+    await agent.dispose();
+  }
+});
+
+test("an approval that arrives while the person types waits until they pause for 1.5 s", async ({ page, agent }) => {
+  await page.clock.install();
+  await openCanvas(page, agent);
+  const chatId = await createChat(agent, { runtimeMode: "approval-required", title: "Cleanup" });
+  const panel = await openRail(page);
+  const box = promptBox(panel);
+  const approval = panel.getByTestId("approval-panel");
+  await box.click();
+  await box.pressSequentially("a thought in progress");
+  await sendThrough(agent, chatId, "clean the build please");
+
+  // A key every 100 ms until the engine holds the approval, then for a while after it reached the page.
+  let parked = false;
+  const waiting = expect
+    .poll(() => pendingRequest(agent, chatId), { timeout: 15_000 })
+    .toBeDefined()
+    .then(() => {
+      parked = true;
+    });
+  while (!parked) {
+    await box.press(".");
+    await page.waitForTimeout(100);
+  }
+  await waiting;
+  await expect(panel.locator("[data-role='user']")).toContainText("clean the build please");
+  for (let n = 0; n < 8; n++) {
+    await box.press(".");
+    await page.waitForTimeout(100);
+  }
+  await expect(approval).toHaveCount(0);
+
+  await page.clock.fastForward(1600);
+  await expect(approval.getByTestId("approval-target")).toHaveText("rm -rf build");
+  await expect(box).toHaveText(/^a thought in progress\.+$/);
 });
