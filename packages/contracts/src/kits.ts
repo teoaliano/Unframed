@@ -3,9 +3,30 @@ import * as Schema from "effect/Schema";
 import * as Rpc from "effect/unstable/rpc/Rpc";
 import { UnframedError } from "./errors.ts";
 
+export const TOKEN_TYPES = ["color", "dimension", "fontFamily", "fontWeight", "textStyle", "shadow", "duration", "easing"] as const;
+export type TokenType = (typeof TOKEN_TYPES)[number];
+
 export const KIT_EXPORT_FORMATS = ["dtcg", "css", "tailwind"] as const;
 export const KitExportFormat = Schema.Literals(KIT_EXPORT_FORMATS);
 export type KitExportFormat = typeof KitExportFormat.Type;
+
+/** One token of a kit as a schema: the shape a library kit entry stores. The rules live in the domain. */
+export const KitDefinitionToken = Schema.Struct({
+  path: Schema.String,
+  type: Schema.Literals(TOKEN_TYPES),
+  value: Schema.optionalKey(Schema.Unknown),
+  values: Schema.optionalKey(Schema.Record(Schema.String, Schema.Unknown)),
+  description: Schema.optionalKey(Schema.String),
+  formerNames: Schema.optionalKey(Schema.Array(Schema.String)),
+});
+
+/** A kit as a library entry stores it: a Kit without its `from` link. */
+export const KitDefinition = Schema.Struct({
+  name: Schema.String,
+  modes: Schema.Array(Schema.String),
+  tokens: Schema.Array(KitDefinitionToken),
+});
+export type KitDefinition = typeof KitDefinition.Type;
 
 /** Which artifact shapes refer to each token path, and which to each mode. */
 export const KitUsage = Rpc.make("kit.usage", {
@@ -29,8 +50,6 @@ export const KitExportFile = Rpc.make("kit.exportFile", {
  * as a preset, and the domain's rules read. The domain re-exports these names.
  */
 
-export const TOKEN_TYPES = ["color", "dimension", "fontFamily", "fontWeight", "textStyle", "shadow", "duration", "easing"] as const;
-export type TokenType = (typeof TOKEN_TYPES)[number];
 
 export interface TextStyle {
   fontFamily: string;

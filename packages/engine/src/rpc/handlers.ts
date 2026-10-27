@@ -195,6 +195,22 @@ export const rpcHandlersLayer = UnframedRpcs.toLayer(
             catch: (error) => unframedError("internal", `Could not read the uses of the kit: ${errorText(error)}`),
           });
         }),
+      "kit.saveToLibrary": ({ project, name, summary }) =>
+        Effect.gen(function* () {
+          if (name.trim() === "") return yield* unframedError("bad_request", "Give it a name.");
+          const kit = kitOf(yield* rooms.read(project));
+          if (kit === null) return yield* unframedError("bad_request", "This project has no kit yet.");
+          const { from: _link, ...definition } = kit;
+          return yield* presets.saveKit({ name, summary, kit: definition });
+        }),
+      "kit.updateInLibrary": ({ project }) =>
+        Effect.gen(function* () {
+          const kit = kitOf(yield* rooms.read(project));
+          if (kit === null) return yield* unframedError("bad_request", "This project has no kit yet.");
+          if (kit.from === undefined) return yield* unframedError("bad_request", "This kit is not linked to your library.");
+          const { from, ...definition } = kit;
+          return yield* presets.updateKit({ id: from.presetId, kit: definition, knownRevision: from.revision });
+        }),
       "kit.exportFile": ({ project, format }) =>
         Effect.gen(function* () {
           const kit = kitOf(yield* rooms.read(project));

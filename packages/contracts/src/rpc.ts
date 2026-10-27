@@ -23,6 +23,7 @@ import {
 } from "./agent.ts";
 import { ArtifactOpenLive, ArtifactSnapshots, MotionRenderStart, MotionRenderStatus, MotionUpload } from "./artifacts.ts";
 import { KitExportFile, KitUsage } from "./kits.ts";
+import { KitSaveToLibrary, KitUpdateInLibrary } from "./library.ts";
 import { LegacyImportMarkSeen, LegacyImportReport, LegacyImportRetry, LegacyImportStatus } from "./legacy.ts";
 import { AgentConnectionsCreate, AgentConnectionsCreateAnswer, AgentConnectionsListAnswer, AgentConnectionsRevoke, AgentConnectionsSetSpendLimit } from "./agentConnections.ts";
 import { SelectionApply, SelectionReport, SelectionSubscribe } from "./selection.ts";
@@ -377,6 +378,8 @@ export const UnframedRpcs = RpcGroup.make(
   ArtifactOpenLive,
   KitUsage,
   KitExportFile,
+  KitSaveToLibrary,
+  KitUpdateInLibrary,
   LegacyImportStatus,
   LegacyImportReport,
   LegacyImportMarkSeen,
