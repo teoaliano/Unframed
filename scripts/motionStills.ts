@@ -107,7 +107,7 @@ for (const composition of compositions) {
     format: "mp4",
     entryFile: entry,
     logger: quietLogger,
-    producerConfig: engine.resolveConfig({ chromePath, fps: FPS, quality: "standard" }),
+    producerConfig: engine.resolveConfig({ chromePath, fps: FPS, quality: "standard", staticFrameDedup: false }),
   });
   await producer.executeRenderJob(job, folder, output, (current: { progress: number }, message: string) => {
     process.stdout.write(`  ${composition.name} ${current.progress}% ${message}\n`);
