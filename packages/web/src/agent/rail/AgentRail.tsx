@@ -52,12 +52,13 @@ const keyIsTaken = (target: EventTarget | null): boolean => {
 
 /*
  * 380 px, docked left over the canvas where the editor's chat column sits, on solid
- * --background with the kit's border: on glass it crossed spec 02's pan budget. It stops
- * above the bottom-left zoom controls, which stay usable. The slide is a CSS transition on
+ * --background with the kit's border: on glass it crossed spec 02's pan budget. It runs from
+ * the top bar's bottom border (48 px, spec 17) to the window's bottom, so the bar's border and
+ * the rail's right border meet with no gap; theme.css moves the zoom controls beside it. The slide is a CSS transition on
  * `transform` (not Tailwind's `translate`), so reopening mid-exit reverses from where it is.
  */
 const RAIL_CLASS =
-  "pointer-events-auto absolute top-0 left-0 bottom-[52px] z-[600] box-border flex w-[380px] flex-col rounded-br-xl border-r border-b bg-background font-sans text-foreground [transform:none] opacity-100 [transition:transform_260ms_var(--ease-drawer),opacity_200ms_ease-out] starting:data-[state=open]:[transform:translateX(-100%)] starting:data-[state=open]:opacity-0 data-[state=closed]:pointer-events-none data-[state=closed]:[transform:translateX(-100%)] data-[state=closed]:opacity-0 data-[state=closed]:[transition:transform_200ms_var(--ease-drawer),opacity_160ms_ease-out] motion-reduce:[transition:opacity_160ms_ease-out] motion-reduce:data-[state=closed]:[transform:none] motion-reduce:data-[state=closed]:[transition:opacity_160ms_ease-out]";
+  "pointer-events-auto absolute top-12 left-0 bottom-0 z-[600] box-border flex w-[380px] flex-col border-r bg-background font-sans text-foreground [transform:none] opacity-100 [transition:transform_260ms_var(--ease-drawer),opacity_200ms_ease-out] starting:data-[state=open]:[transform:translateX(-100%)] starting:data-[state=open]:opacity-0 data-[state=closed]:pointer-events-none data-[state=closed]:[transform:translateX(-100%)] data-[state=closed]:opacity-0 data-[state=closed]:[transition:transform_200ms_var(--ease-drawer),opacity_160ms_ease-out] motion-reduce:[transition:opacity_160ms_ease-out] motion-reduce:data-[state=closed]:[transform:none] motion-reduce:data-[state=closed]:[transition:opacity_160ms_ease-out]";
 
 /** The editor's left column, or the Sheet: the same rail in place, with no surface or motion of its own. */
 const EMBEDDED_CLASS = "relative box-border flex size-full min-h-0 flex-col font-sans text-foreground";
@@ -93,18 +94,6 @@ const useCardBox = (): DOMRect | undefined => {
     };
   }, []);
   return box;
-};
-
-/**
- * The room at the top of the docked rail for the top-left chrome card, which sits over it:
- * as tall as the card reaches, plus its margin, so a shell that moves the card moves the
- * row with it.
- */
-const ChromeRow = () => {
-  const box = useCardBox();
-  // The docked rail starts at the top of the window, so the card's bottom edge is the row's height.
-  const height = box === undefined ? 60 : Math.max(0, Math.round(box.bottom + 12));
-  return <div className="shrink-0 border-b" style={{ height }} data-testid="rail-chrome-row" />;
 };
 
 /**
@@ -200,6 +189,7 @@ export const AgentRail = ({ project, embedded, inSheet, filterTo, onLocate, onOp
         motion?.ref(element);
       }}
       aria-label="Agent"
+      data-slot={embedded || inSheet ? undefined : "docked-rail"}
       className={embedded || inSheet ? EMBEDDED_CLASS : RAIL_CLASS}
       data-state={motion?.state}
       data-embedded={embedded ? "" : undefined}
@@ -231,8 +221,6 @@ export const AgentRail = ({ project, embedded, inSheet, filterTo, onLocate, onOp
         if (!target.closest("input, textarea, [contenteditable='true']")) event.preventDefault();
       }}
     >
-      {/* Docked, the top-left chrome card sits over this row as the rail's own top line. */}
-      {!embedded && !inSheet && <ChromeRow />}
       {offset.top > 0 && <div className="shrink-0" style={{ height: offset.top }} data-testid="rail-shell-space" />}
       <header className="flex h-12 shrink-0 items-center gap-1 pr-2 pl-3.5" style={offset.left > 0 ? { paddingLeft: 14 + offset.left } : undefined}>
         <Sparkles aria-hidden className="size-4 shrink-0 text-foreground" />

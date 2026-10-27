@@ -58,6 +58,7 @@ export const TopCorners = () => {
       <TabStrip
         platform={settingsOnLeft ? "windows" : "macos"}
         controls="space"
+        squareStart={docked}
         logo={<LogoMark />}
         settings={SettingsButton && <SettingsButton />}
         regions={{

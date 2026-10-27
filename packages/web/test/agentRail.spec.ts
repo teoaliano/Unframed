@@ -30,7 +30,7 @@ const transitionsOnOpen = (page: import("@playwright/test").Page) =>
       }),
   );
 
-test("the Agent button slides the rail in from the left, the top-left card becomes its top row, and Close slides it out and removes it", async ({ page, agent }) => {
+test("the Agent button slides the rail in from the left under the top bar, full height, and Close slides it out and removes it", async ({ page, agent }) => {
   await openCanvas(page, agent);
   const card = page.locator(".unframed-chrome-left");
   await expect(agentChromeButton(page)).toBeVisible();
@@ -49,18 +49,20 @@ test("the Agent button slides the rail in from the left, the top-left card becom
   await expect.poll(async () => ["none", "matrix(1, 0, 0, 1, 0, 0)"].includes((await computed(panel, "transform")).transform ?? "")).toBe(true);
   const box = (await panel.boundingBox())!;
   expect(box.x).toBeCloseTo(0, 0);
-  expect(box.y).toBe(0);
+  // It runs from the top bar's bottom border to the window's bottom.
+  expect(box.y).toBe(48);
+  expect(box.y + box.height).toBe(page.viewportSize()!.height);
+  expect(await computed(panel, "border-bottom-width", "border-bottom-right-radius")).toEqual({ "border-bottom-width": "0px", "border-bottom-right-radius": "0px" });
 
-  // The top-left card becomes the rail's top row: no frame of its own, still usable, over
-  // the rail's chrome row, with the Agent header below it.
+  // The top-left card stays in the bar, usable, and the bar runs square from the window's left edge.
   await expect(card).toHaveAttribute("data-docked", "");
   await expect(card).not.toHaveAttribute("inert");
-  expect(await computed(card, "background-color", "border-top-color")).toEqual({ "background-color": "rgba(0, 0, 0, 0)", "border-top-color": "rgba(0, 0, 0, 0)" });
-  const cardBox = (await card.boundingBox())!;
-  const row = (await panel.getByTestId("rail-chrome-row").boundingBox())!;
-  expect(cardBox.y + cardBox.height).toBeLessThanOrEqual(row.y + row.height);
-  expect((await panel.getByRole("heading", { name: "Agent" }).boundingBox())!.y).toBeGreaterThanOrEqual(row.y + row.height);
+  expect((await page.locator("[data-slot='top-bar-body']").boundingBox())!.x).toBe(0);
   await expect(page.getByRole("button", { name: /^(Settings|Add your API key)$/ })).toBeVisible();
+
+  // The zoom controls and the bottom toolbar move out beside the rail.
+  expect((await page.locator(".tlui-navigation-panel").boundingBox())!.x).toBeGreaterThanOrEqual(380);
+  expect((await page.getByTestId("bottom-toolbar").boundingBox())!.x).toBeGreaterThanOrEqual(380);
 
   // Close runs the faster exit, then the rail leaves the page.
   await panel.getByRole("button", { name: "Close" }).click();
@@ -68,6 +70,8 @@ test("the Agent button slides the rail in from the left, the top-left card becom
   expect(await computed(panel, "transition-duration")).toEqual({ "transition-duration": "0.2s, 0.16s" });
   await expect(panel).toHaveCount(0);
   await expect(card).not.toHaveAttribute("data-docked");
+  expect((await page.locator("[data-slot='top-bar-body']").boundingBox())!.x).toBeGreaterThan(0);
+  expect((await page.locator(".tlui-navigation-panel").boundingBox())!.x).toBe(0);
 
   // Reopened, it comes back at rest.
   await openRail(page);
@@ -128,8 +132,8 @@ test("the rail is t3code's chat panel on the kit: a shell on --background with a
   });
 });
 
-test.describe("on a window of 980 px or less", () => {
-  test.use({ viewport: { width: 900, height: 760 } });
+test.describe("on a window narrower than 1280 px", () => {
+  test.use({ viewport: { width: 1200, height: 760 } });
 
   test("the rail opens as the kit Sheet from the left, over a backdrop, and Close or Escape closes it", async ({ page, agent }) => {
     await openCanvas(page, agent);

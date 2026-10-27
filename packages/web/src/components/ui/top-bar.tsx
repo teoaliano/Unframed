@@ -58,6 +58,11 @@ export interface TopBarProps {
    * draws nothing: the app's controls are the window's own, drawn over that space. "none" leaves it out.
    */
   readonly controls?: "stand-ins" | "space" | "none" | undefined;
+  /**
+   * The bar runs square from the window's left edge, with no flare or corner there: a panel docked under it (the agent
+   * rail) meets its bottom border with no gap.
+   */
+  readonly squareStart?: boolean | undefined;
 }
 
 // The measured geometry of the reference (the user's prototype, `component-mac-topbar.html`): a 48 px bar whose two ends
@@ -81,9 +86,14 @@ const CAPTION_ZONE = 156;
  * bar, and a 20 px convex corner at the bottom, inside it. The top stays open against the window edge. The fill closes the
  * top; the stroke does not, so the border is the outline and nothing more.
  */
-const barFill = (width: number) =>
-  `M${-CURVE} 0A${CURVE} ${CURVE} 0 0 1 0 ${CURVE}V${BAR_HEIGHT - CURVE}A${CURVE} ${CURVE} 0 0 0 ${CURVE} ${BAR_HEIGHT}H${width - CURVE}A${CURVE} ${CURVE} 0 0 0 ${width} ${BAR_HEIGHT - CURVE}V${CURVE}A${CURVE} ${CURVE} 0 0 1 ${width + CURVE} 0Z`;
-const barStroke = (width: number) => barFill(width).replace(/Z$/, "");
+const barEnd = (width: number) => `H${width - CURVE}A${CURVE} ${CURVE} 0 0 0 ${width} ${BAR_HEIGHT - CURVE}V${CURVE}A${CURVE} ${CURVE} 0 0 1 ${width + CURVE} 0`;
+const barFill = (width: number, squareStart: boolean) =>
+  squareStart
+    ? `M0 0V${BAR_HEIGHT}${barEnd(width)}Z`
+    : `M${-CURVE} 0A${CURVE} ${CURVE} 0 0 1 0 ${CURVE}V${BAR_HEIGHT - CURVE}A${CURVE} ${CURVE} 0 0 0 ${CURVE} ${BAR_HEIGHT}${barEnd(width)}Z`;
+/** A square start has no side at the window edge, so its outline starts on the bottom border. */
+const barStroke = (width: number, squareStart: boolean) =>
+  squareStart ? `M0 ${BAR_HEIGHT}${barEnd(width)}` : barFill(width, false).replace(/Z$/, "");
 
 const WindowDots = () => (
   <span className="flex h-full items-center gap-2 ps-3.5">
@@ -114,6 +124,7 @@ export const TopBar = ({
   regions = {},
   layout = "flow",
   controls = "stand-ins",
+  squareStart = false,
 }: TopBarProps) => {
   const scroller = useRef<HTMLDivElement>(null);
   const rootRef = useRef<HTMLDivElement>(null);
@@ -184,10 +195,10 @@ export const TopBar = ({
       const bar = root.getBoundingClientRect();
       const square = settingsNode.getBoundingClientRect();
       if (windows) {
-        body.style.left = `${square.right + SETTINGS_GAP - bar.left}px`;
+        body.style.left = squareStart ? "0px" : `${square.right + SETTINGS_GAP - bar.left}px`;
         body.style.right = `${CAPTION_ZONE}px`;
       } else {
-        body.style.left = `${LIGHTS_ZONE}px`;
+        body.style.left = squareStart ? "0px" : `${LIGHTS_ZONE}px`;
         body.style.right = `${bar.right - (square.left - SETTINGS_GAP)}px`;
       }
       setBodyWidth(Math.round(body.getBoundingClientRect().width));
@@ -196,7 +207,7 @@ export const TopBar = ({
     const observer = new ResizeObserver(measure);
     for (const element of [root, settingsNode]) observer.observe(element);
     return () => observer.disconnect();
-  }, [windows]);
+  }, [windows, squareStart]);
 
   const positioned = layout === "flow" ? "relative " : "";
   const settingsNode = (
@@ -216,8 +227,8 @@ export const TopBar = ({
     <div data-slot="top-bar" data-platform={platform} ref={rootRef} {...region("relative box-border flex h-12 w-full min-w-0 items-stretch", regions.frame)}>
       <div data-slot="top-bar-body" ref={bodyRef} aria-hidden className="absolute inset-y-0 left-0 right-0">
         <svg className="pointer-events-none absolute inset-0 overflow-visible" width={bodyWidth} height={BAR_HEIGHT}>
-          <path d={barFill(bodyWidth)} className="fill-background stroke-none" />
-          <path d={barStroke(bodyWidth)} className="fill-none stroke-border" />
+          <path d={barFill(bodyWidth, squareStart)} className="fill-background stroke-none" />
+          <path d={barStroke(bodyWidth, squareStart)} className="fill-none stroke-border" />
         </svg>
       </div>
       <div data-slot="top-bar-start" {...region(`${positioned}flex h-12 shrink-0 items-center`, regions.start)}>

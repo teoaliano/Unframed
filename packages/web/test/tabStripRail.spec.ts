@@ -20,25 +20,18 @@ test("the tab strip keeps its left edge with the rail open and closed, and stays
   expect(topmost).toBe(true);
 });
 
-test("the bar's fill and outline stay above the docked rail", async ({ page, agent }) => {
+test("the docked rail meets the bar's bottom border: no part of it shows in the bar, and the bar has no corner above it", async ({ page, agent }) => {
   await openCanvas(page, agent);
   const panel = await openRail(page);
-  // The rail slides in; measure it once it has stopped at the left edge.
   await expect.poll(async () => (await panel.boundingBox())?.x).toBe(0);
   const box = (await panel.boundingBox())!;
-  await panel.evaluate((element) => element.setAttribute("data-rail-under-test", ""));
+  const body = (await page.locator("[data-slot='top-bar-body']").boundingBox())!;
+  expect(box.y).toBe(body.y + body.height);
+  expect(body.x).toBe(0);
 
-  // The rail's right border and the bar's bottom border cross here; the bar's body must paint over the rail.
-  const order = await page.evaluate(
-    ({ x, y }) =>
-      document.elementsFromPoint(x, y).map((element) => {
-        if (element.matches("[data-slot='top-bar-body']")) return "bar";
-        if (element.closest("[data-rail-under-test]")) return "rail";
-        return "";
-      }),
-    { x: box.x + box.width - 1, y: 46 },
-  );
-  expect(order).toContain("bar");
-  expect(order).toContain("rail");
-  expect(order.indexOf("bar")).toBeLessThan(order.indexOf("rail"));
+  // The rail's right border and the bar's left end, inside the bar: only the bar paints there.
+  for (const point of [{ x: box.x + box.width - 1, y: 24 }, { x: 4, y: 46 }]) {
+    const inRail = await panel.evaluate((rail, { x, y }) => document.elementsFromPoint(x, y).some((element) => rail.contains(element)), point);
+    expect(inRail).toBe(false);
+  }
 });

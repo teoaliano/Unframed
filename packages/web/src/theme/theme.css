@@ -747,15 +747,11 @@ code {
  * layered CSS with no !important, so unlayered shell styles win.
  */
 @layer components {
+  /* The bar's ends sit with its body (Corners.tsx) above the docked rail, or the body's fill covers them. */
   .unframed-chrome-left,
   .unframed-chrome-right {
     position: fixed;
     top: 0;
-    z-index: 400;
-  }
-
-  /* Settings sits with the bar's body above the docked rail (Corners.tsx): the bar's right flare overlaps it. */
-  .unframed-chrome-right {
     z-index: 650;
   }
 
@@ -769,7 +765,7 @@ code {
 
   /*
    * The project tab strip (spec 17) sits in the chrome row. It keeps its place with the rail open, so it sits above the
-   * docked rail (600) and under the docked top-left card (700). The chrome cards are 400.
+   * docked rail (600) and under the docked top-left card (700).
    */
   .unframed-tabs {
     position: fixed;
