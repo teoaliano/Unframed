@@ -117,10 +117,10 @@ const RULER_STEPS = [1 / FRAME_RATE, 0.1, 0.5, 1, 5, 10];
 export const rulerStep = (pxPerSecond: number): number =>
   RULER_STEPS.find((step) => step * pxPerSecond >= LABEL_PIXELS) ?? 10;
 
-export type DialEntry = { readonly kind: "range"; readonly min: number; readonly max: number; readonly step?: number } | { readonly kind: "number"; readonly value: number };
+export type DialLimit = { readonly kind: "range"; readonly min: number; readonly max: number; readonly step?: number } | { readonly kind: "number"; readonly value: number };
 
 /** A dial's value after a drag: a range stops at its min and max and rounds to its step; a number stops at 0. */
-export function clampDialValue(entry: DialEntry, value: number): number {
+export function clampDialValue(entry: DialLimit, value: number): number {
   if (entry.kind === "number") return Math.max(0, value);
   const stepped = entry.step !== undefined && entry.step > 0 ? entry.min + Math.round((value - entry.min) / entry.step) * entry.step : value;
   return Math.min(entry.max, Math.max(entry.min, stepped));

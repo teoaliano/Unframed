@@ -26,9 +26,9 @@ describe("motion.timeline", () => {
     expect(reading.length).toEqual({ kind: "source", value: 4 });
     expect(reading.clips.map((clip: { id: string }) => clip.id)).toEqual(["intro", "outro"]);
     expect(reading.tweens).toHaveLength(2);
-    expect(reading.tweens[0].start).toEqual({ kind: "source", value: 0.2 });
-    expect(reading.tweens[0].duration).toEqual({ kind: "source", value: 0.8 });
-    expect(reading.clips[0].carry.tweens).toEqual([{ index: 0, id: reading.tweens[0].ref.id }]);
+    expect(reading.tweens[0]!.start).toEqual({ kind: "source", value: 0.2 });
+    expect(reading.tweens[0]!.duration).toEqual({ kind: "source", value: 0.8 });
+    expect(reading.clips[0]!.carry).toEqual({ tweens: [{ index: 0, id: reading.tweens[0]!.ref.id }], dials: [] });
     expect(await rpc.call("motion.timeline", { project: "board", file: "1-intro.html" })).toEqual(reading);
   });
 
