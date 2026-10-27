@@ -1,4 +1,4 @@
-import { readdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, utimes, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { BRIDGE_TAG } from "@unframed/domain";
 import { stampElementIds } from "@unframed/domain/html";
@@ -177,6 +177,37 @@ describe("artifact.sourceTree and artifact.prepareEdit (spec 18)", () => {
         ],
       });
       expect(renamed.summary).toEqual(["Name · Title", "Hidden · Title"]);
+    });
+  });
+
+  describe("artifact.images", () => {
+    it("lists the served image types newest first with their original names, and leaves out everything else", async () => {
+      await rpc.call("projects.create", { name: "pics" });
+      const dir = join(engine.dataDir, "output", "pics");
+      await writeFile(join(dir, "10-old.png"), "x");
+      await writeFile(join(dir, "10-old.json"), JSON.stringify({ source: "upload", fileName: "Red Fox.PNG" }));
+      await writeFile(join(dir, "20-new.jpg"), "x");
+      await writeFile(join(dir, "15-plain.webp"), "x");
+      await writeFile(join(dir, "30-skip.avif"), "x");
+      await writeFile(join(dir, "31-notes.txt"), "x");
+      await mkdir(join(dir, ".cache"), { recursive: true });
+      await writeFile(join(dir, ".cache", "pv.png"), "x");
+      await utimes(join(dir, "10-old.png"), new Date(1_000_000), new Date(1_000_000));
+      await utimes(join(dir, "15-plain.webp"), new Date(2_000_000), new Date(2_000_000));
+      await utimes(join(dir, "20-new.jpg"), new Date(3_000_000), new Date(3_000_000));
+      const answer = await rpc.call("artifact.images", { project: "pics" });
+      expect(answer.images).toEqual([
+        { file: "20-new.jpg", fileName: "20-new.jpg", at: 3_000_000 },
+        { file: "15-plain.webp", fileName: "15-plain.webp", at: 2_000_000 },
+        { file: "10-old.png", fileName: "Red Fox.PNG", at: 1_000_000 },
+      ]);
+    });
+
+    it("refuses a project that does not exist", async () => {
+      await expect(rpc.call("artifact.images", { project: "nowhere" })).rejects.toMatchObject({
+        code: "not_found",
+        message: 'There is no project named "nowhere".',
+      });
     });
   });
 });
