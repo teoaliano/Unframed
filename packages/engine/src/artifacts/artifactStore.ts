@@ -191,14 +191,14 @@ export interface ComponentSidecar {
 }
 
 /**
- * An agent's new version of a component (spec 20): its sheet and the compiled file beside it,
- * both with exclusive create, then the agent sidecar. The compiled file goes first, so a
- * sheet never exists without its build; a sheet that loses the name race takes its build back.
- * The caller has checked the sheet (`readComponentSheet`), so this throws only on a bad sheet.
+ * A sheet and the compiled file beside it, both with exclusive create: the compiled file goes
+ * first, so a sheet never exists without its build; a sheet that loses the name race takes its
+ * build back. `sidecar` gets the compiled file's name and answers the sheet's sidecar.
  */
-export const writeComponentSheet = async (
+const createSheet = async (
   folder: string,
-  input: { readonly html: string; readonly tag: string; readonly title: string; readonly chatId: string; readonly turn: number; readonly shapeId: string | null },
+  input: { readonly html: string; readonly title: string; readonly fallback: string },
+  sidecar: (compiled: string, bytes: number) => object,
 ): Promise<{ file: string; compiled: string; bytes: number }> => {
   const bytes = Buffer.from(input.html, "utf8");
   let compiled = "";
@@ -214,7 +214,19 @@ export const writeComponentSheet = async (
       throw error;
     }
   };
-  const file = await createNew(folder, { title: input.title, fallback: "component", ext: "html" }, place, () => {
+  const file = await createNew(folder, { title: input.title, fallback: input.fallback, ext: "html" }, place, () => `${JSON.stringify(sidecar(compiled, bytes.length), null, 2)}\n`);
+  return { file, compiled, bytes: bytes.length };
+};
+
+/**
+ * An agent's new version of a component (spec 20): its sheet, the compiled file beside it and the
+ * agent sidecar. The caller has checked the sheet (`readComponentSheet`), so this throws only on a bad sheet.
+ */
+export const writeComponentSheet = (
+  folder: string,
+  input: { readonly html: string; readonly tag: string; readonly title: string; readonly chatId: string; readonly turn: number; readonly shapeId: string | null },
+): Promise<{ file: string; compiled: string; bytes: number }> =>
+  createSheet(folder, { html: input.html, title: input.title, fallback: "component" }, (compiled, bytes) => {
     const sidecar: ComponentSidecar = {
       source: "agent",
       kind: "component",
@@ -224,13 +236,31 @@ export const writeComponentSheet = async (
       turn: input.turn,
       shapeId: input.shapeId,
       title: input.title,
-      bytes: bytes.length,
+      bytes,
       at: new Date().toISOString(),
     };
-    return `${JSON.stringify(sidecar, null, 2)}\n`;
+    return sidecar;
   });
-  return { file, compiled, bytes: bytes.length };
-};
+
+/**
+ * A copy of a sheet under a new tag (spec 20's `component.copy`), with spec 02's copy sidecar plus
+ * the tag and the compiled file. `fileName` is the source's name without its stamp.
+ */
+export const writeCopiedComponentSheet = (
+  folder: string,
+  input: { readonly html: string; readonly tag: string; readonly fileName: string; readonly of: string; readonly ofProject?: string | undefined },
+): Promise<{ file: string; compiled: string; bytes: number }> =>
+  createSheet(folder, { html: input.html, title: input.fileName.replace(/\.html$/, ""), fallback: "component" }, (compiled, bytes) => ({
+    source: "copy",
+    fileName: input.fileName,
+    mime: "text/html",
+    bytes,
+    at: new Date().toISOString(),
+    of: input.of,
+    ...(input.ofProject === undefined ? {} : { ofProject: input.ofProject }),
+    tag: input.tag,
+    compiled,
+  }));
 
 /**
  * Writes `<base>.component.js` from its sheet `<base>.html` when the sheet exists and is a valid

@@ -9,3 +9,9 @@ export const copiedTag = (tag: string, taken: ReadonlySet<string>): string => {
     if (!taken.has(candidate)) return candidate;
   }
 };
+
+const DECLARATION = /(<script\b[^>]*data-uf-component>)([\s\S]*?)(<\/script>)/i;
+
+/** The sheet with its declaration's tag replaced (spec 20's copy): every other byte of the sheet is kept. The sheet must be valid. */
+export const retagSheet = (html: string, tag: string): string =>
+  html.replace(DECLARATION, (_all, open: string, body: string, close: string) => `${open}${JSON.stringify({ ...JSON.parse(body), tag })}${close}`);

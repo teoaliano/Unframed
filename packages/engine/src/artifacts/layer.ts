@@ -23,6 +23,7 @@ import { producerBackend, Renderer, RenderRefused, stubBackend } from "./rendere
 import { HeadlessChrome } from "./headlessChrome.ts";
 import { LivePointers } from "./livePointers.ts";
 import { ComponentPins, type PinsItem } from "./componentPins.ts";
+import { copyComponentSheet, ComponentCopyRefused } from "./componentCopy.ts";
 import { chromeSnapshotRenderer, Snapshots, stubSnapshotRenderer, type SnapshotRenderer } from "./snapshots.ts";
 import { SettingsStore } from "../settingsStore.ts";
 import { Shutdown } from "../shutdown.ts";
@@ -45,6 +46,8 @@ export class Artifacts extends Context.Service<
     readonly snapshots: (project: string) => Stream.Stream<ArtifactSnapshot, UnframedError>;
     /** Every page and motion file's component pins, then each newly named file's (spec 20). */
     readonly componentPins: (project: string) => Stream.Stream<ComponentPinsItem, UnframedError>;
+    /** `component.copy` (spec 20): a sheet copied under its fresh tag. */
+    readonly componentCopy: (input: { project: string; file: string; from?: string | undefined }) => Effect.Effect<{ file: string; tag: string }, UnframedError>;
     /** "Open in a new tab": the shape's live viewer pointer, kept current from then on. */
     readonly openLive: (project: string, shapeId: string) => Effect.Effect<{}, UnframedError>;
     /** The Chromium this machine has, for the agent's previews and snapshots. */
@@ -176,6 +179,32 @@ export const artifactsLayer = Layer.effect(
             );
           }),
         ),
+      componentCopy: (input) =>
+        Effect.gen(function* () {
+          const project = projectSlug(input.project);
+          const from = input.from === undefined ? project : projectSlug(input.from);
+          const destination = yield* Effect.promise(() => media.folder(project));
+          if (destination === undefined) return yield* unframedError("not_found", `There is no project named "${project}".`);
+          const source = yield* Effect.promise(() => media.folder(from));
+          if (source === undefined) return yield* unframedError("bad_request", "That is not a file in this project.");
+          const records = yield* rooms.read(project);
+          const taken = new Set<string>();
+          for (const record of records) {
+            const tag = (record as { type?: unknown; props?: { tag?: unknown } }).type === "component" ? (record as { props?: { tag?: unknown } }).props?.tag : undefined;
+            if (typeof tag === "string") taken.add(tag);
+          }
+          return yield* Effect.tryPromise({
+            try: () =>
+              copyComponentSheet({
+                source,
+                destination,
+                file: input.file,
+                taken,
+                ofProject: from === project ? undefined : from,
+              }),
+            catch: (error) => (error instanceof ComponentCopyRefused ? unframedError(error.code, error.message) : unframedError("internal", `Could not copy the component: ${errorText(error)}`)),
+          });
+        }),
       openLive,
       findChrome: chrome,
       chrome: headless,

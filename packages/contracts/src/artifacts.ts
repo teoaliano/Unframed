@@ -87,3 +87,13 @@ export const ComponentPinsSubscribe = Rpc.make("component.pins", {
   error: UnframedError,
   stream: true,
 });
+
+/**
+ * Copies a component sheet (spec 20): a fresh tag within the project, and across projects the same
+ * tag when the destination's canvas does not hold it. Answers the copy's file and tag.
+ */
+export const ComponentCopy = Rpc.make("component.copy", {
+  payload: Schema.Struct({ project: Schema.String, file: Schema.String, from: Schema.optionalKey(Schema.String) }),
+  success: Schema.Struct({ file: Schema.String, tag: Schema.String }),
+  error: UnframedError,
+});
