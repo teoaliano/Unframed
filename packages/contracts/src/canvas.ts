@@ -15,6 +15,10 @@ import {
   type TLSchema,
 } from "@tldraw/tlschema";
 import { T } from "@tldraw/validate";
+import { kitRefusal, type Kit } from "@unframed/domain";
+
+/** The kit record (spec 19) is the domain's type: the room, the library and every kit rule read one copy. */
+export type { Kit, Token, TokenValue, TextStyle, KitLink } from "@unframed/domain";
 
 // ---------------------------------------------------------------------------------------
 // Asset markers: the one definition.
@@ -100,6 +104,8 @@ export interface ArtifactShapeProps {
   title: string;
   fileName: string;
   dials?: Record<string, unknown>;
+  /** The kit mode this artifact shows (spec 19). Absent means the kit's default mode. */
+  mode?: string;
 }
 
 const artifactProps = {
@@ -109,9 +115,10 @@ const artifactProps = {
   title: T.string,
   fileName: T.string,
   dials: T.dict(T.string, T.jsonValue).optional(),
+  mode: T.string.optional(),
 };
 
-/** Every later change to page and motion props is a migration here, used by the room and the web alike. */
+/** Every later change to page and motion props is a migration here, used by the room and the web alike. A new optional prop needs none. */
 const artifactMigrations = () => createShapePropsMigrationSequence({ sequence: [] });
 
 export const ARTIFACT_TYPES = ["page", "motion"] as const;
@@ -145,11 +152,35 @@ export const kindOfShapeType = (type: string): UnframedKind | "mark" => {
 
 const { embed: _embed, bookmark: _bookmark, ...keptShapes } = defaultShapeSchemas;
 
+/**
+ * The shape of a kit before the domain's rules read it. The rules assume these fields, so a
+ * kit that lacks one is refused here rather than read as broken.
+ */
+const kitShape = T.object({
+  format: T.literal(1),
+  name: T.string,
+  modes: T.arrayOf(T.string),
+  tokens: T.arrayOf(T.jsonValue),
+}).allowUnknownProperties();
+
+/** The document record's kit, when it has one, must pass the domain's kit rules (spec 19). */
+const checkKit = (document: unknown): void => {
+  const kit = (document as { meta?: { unframed?: { kit?: unknown } } } | null)?.meta?.unframed?.kit;
+  if (kit === undefined) return;
+  try {
+    kitShape.validate(kit);
+  } catch {
+    throw new T.ValidationError("That kit is not in the form the app writes.");
+  }
+  const refusal = kitRefusal(kit as Kit);
+  if (refusal !== null) throw new T.ValidationError(refusal);
+};
+
 let schema: TLSchema | undefined;
 
 /** The one canvas schema, made once. */
 export const canvasSchema = (): TLSchema => {
-  schema ??= createTLSchema({
+  schema ??= withKitCheck(createTLSchema({
     shapes: {
       ...keptShapes,
       text: { ...keptShapes.text, meta: { ...refMeta, sized: T.boolean.optional() } },
@@ -164,6 +195,18 @@ export const canvasSchema = (): TLSchema => {
       image: { migrations: imageAssetMigrations, props: { ...imageAssetProps, src: assetSource(false) } },
       video: { migrations: videoAssetMigrations, props: { ...videoAssetProps, src: assetSource(true) } },
     },
-  });
+  }));
   return schema;
+};
+
+/** Wraps the document record's validator so a kit that breaks a rule refuses the record (spec 19). */
+const withKitCheck = (built: TLSchema): TLSchema => {
+  const document = built.types.document as unknown as { validate: (record: unknown, before?: unknown) => unknown };
+  const validate = document.validate.bind(document);
+  document.validate = (record, before) => {
+    const checked = validate(record, before);
+    checkKit(checked);
+    return checked;
+  };
+  return built;
 };
