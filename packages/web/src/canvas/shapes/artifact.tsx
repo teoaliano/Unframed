@@ -27,6 +27,7 @@ const artifactProps: RecordProps<ArtifactShape> = {
   title: T.string,
   fileName: T.string,
   dials: T.dict(T.string, T.jsonValue).optional(),
+  mode: T.string.optional(),
 };
 
 /** The row under a motion (Render) is this tall; the status line goes below it. */
@@ -97,7 +98,7 @@ const FilledArtifact = ({ shape, kind }: { readonly shape: ArtifactShape; readon
       <HTMLContainer id={shape.id} data-testid="artifact-card" data-artifact-kind={kind} data-live={live ? "true" : undefined} style={{ width: props.w, height: props.h }}>
         <ShapeLabel shapeId={shape.id} kind={kind} name={readRef(shape)} width={props.w} text={name !== undefined ? `@${name}` : title} />
         {live && port !== undefined ? (
-          <CanvasFrame key={props.file} shapeId={shape.id} project={project} kind={kind} file={props.file} previewPort={port} dials={props.dials} kit={kit} interactive={interactive} lazy />
+          <CanvasFrame key={props.file} shapeId={shape.id} project={project} kind={kind} file={props.file} previewPort={port} dials={props.dials} kit={kit} mode={props.mode} interactive={interactive} lazy />
         ) : (
           <Still shape={shape} title={title} />
         )}

@@ -14,6 +14,7 @@ import { Tip } from "../../chrome/ui.tsx";
 import { useCanvasProject, useEngine } from "../../context.ts";
 import { ArtifactFrame, outsideUrlOf } from "../ArtifactFrame.tsx";
 import { kitOf } from "../kit.ts";
+import { KitModePicker } from "../KitMode.tsx";
 import { previewPort } from "../state.ts";
 import { RenderButton } from "../render.tsx";
 import { COLUMN, ColumnHeader, Parameters } from "./Parameters.tsx";
@@ -61,7 +62,7 @@ export const ArtifactEditor = ({ shapeId, onClose, onOpen }: ArtifactEditorProps
       const shape = editor.getShape(shapeId);
       if (!shape || !isArtifactKind(shape.type)) return undefined;
       const props = shape.props as ArtifactShapeProps;
-      return { kind: shape.type as ArtifactKind, file: props.file, title: props.title, fileName: props.fileName, dials: props.dials };
+      return { kind: shape.type as ArtifactKind, file: props.file, title: props.title, fileName: props.fileName, dials: props.dials, mode: props.mode };
     },
     [editor, shapeId],
   );
@@ -139,6 +140,7 @@ export const ArtifactEditor = ({ shapeId, onClose, onOpen }: ArtifactEditorProps
               {facts.kind}
             </span>
           </span>
+          {facts.file !== "" && kit && <KitModePicker shapeId={shapeId} variant="header" />}
           {facts.file !== "" && <PreviewSizeControl size={size} onChange={setSize} scale={scale} />}
           {facts.kind === "motion" && facts.file !== "" && <RenderButton shapeId={shapeId} />}
           {facts.file !== "" && port !== undefined && (
@@ -182,6 +184,7 @@ export const ArtifactEditor = ({ shapeId, onClose, onOpen }: ArtifactEditorProps
                   previewPort={port}
                   dials={facts.dials}
                   kit={kit}
+                  mode={facts.mode}
                   interactive
                   lazy={false}
                   onAnnounce={setAnnouncement}
