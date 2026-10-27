@@ -191,7 +191,8 @@ export const LibraryDialog = ({ onClose, onAdd }: { readonly onClose: () => void
   const load = useCallback(async () => {
     try {
       const { presets: listed } = await engine.call("library.list");
-      setPresets(listed as unknown as Preset[]);
+      // Kit entries (spec 19) get their own card in the Kits filter; until it lands they are not shown.
+      setPresets(listed.filter((preset) => preset.kind !== "kit") as unknown as Preset[]);
       setReadFailure(undefined);
     } catch (error) {
       setPresets([]);
