@@ -141,16 +141,6 @@ export const KitDialog = ({ onClose, onFromLibrary }: { readonly onClose: () => 
         <DialogPopup data-testid="kit" className="max-w-[960px]">
           <DialogHeader>
             <DialogTitle>Kit</DialogTitle>
-            {kit !== null && (
-              <KitMenu
-                linked={kit.from !== undefined && linkedPreset !== null}
-                onSave={() => setSaving(true)}
-                onUpdate={() => void update()}
-                onImport={() => setImporting(true)}
-                onExport={exportKit}
-                onDelete={() => setAsk({ kind: "kit" })}
-              />
-            )}
           </DialogHeader>
           <DialogPanel>
             {kit === null ? (
@@ -177,13 +167,24 @@ export const KitDialog = ({ onClose, onFromLibrary }: { readonly onClose: () => 
                     </Button>
                   </p>
                 )}
-                <Input
-                  key={kit.name}
-                  aria-label="Kit name"
-                  defaultValue={kit.name}
-                  onKeyDown={(event) => event.key === "Enter" && event.currentTarget.blur()}
-                  onBlur={(event) => event.currentTarget.value !== kit.name && apply([{ op: "rename", name: event.currentTarget.value }])}
-                />
+                <div className="flex items-center gap-2">
+                  <Input
+                    key={kit.name}
+                    aria-label="Kit name"
+                    defaultValue={kit.name}
+                    className="min-w-0 flex-1"
+                    onKeyDown={(event) => event.key === "Enter" && event.currentTarget.blur()}
+                    onBlur={(event) => event.currentTarget.value !== kit.name && apply([{ op: "rename", name: event.currentTarget.value }])}
+                  />
+                  <KitMenu
+                    linked={kit.from !== undefined && linkedPreset !== null}
+                    onSave={() => setSaving(true)}
+                    onUpdate={() => void update()}
+                    onImport={() => setImporting(true)}
+                    onExport={exportKit}
+                    onDelete={() => setAsk({ kind: "kit" })}
+                  />
+                </div>
                 <KitTable kit={kit} usage={usage} apply={apply} titleOf={titleOf} onAskDeleteToken={(path) => setAsk({ kind: "token", path })} onAskDeleteMode={(mode) => setAsk({ kind: "mode", mode })} />
               </div>
             )}

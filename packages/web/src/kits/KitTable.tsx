@@ -28,6 +28,29 @@ export const valueIn = (token: Token, mode: string, kit: Kit): TokenValue | unde
 
 const groupOf = (path: string): string => path.split("/")[0]!;
 
+/** Past this many rows the table renders only the rows in view (spec 19). */
+export const VIRTUAL_ROWS = 200;
+const ROW_HEIGHT = 56;
+const VIEWPORT_HEIGHT = 480;
+const OVERSCAN = 8;
+
+/** The rows to draw: all of them, or past VIRTUAL_ROWS the rows in view, with spacers standing in for the rest. */
+function windowRows<T>(rows: ReadonlyArray<T>, scrollTop: number, windowing: boolean): { rows: ReadonlyArray<T>; before: number; after: number } {
+  if (!windowing) return { rows, before: 0, after: 0 };
+  const first = Math.max(0, Math.floor(scrollTop / ROW_HEIGHT) - OVERSCAN);
+  const last = Math.min(rows.length, first + Math.ceil(VIEWPORT_HEIGHT / ROW_HEIGHT) + 2 * OVERSCAN);
+  return { rows: rows.slice(first, last), before: first * ROW_HEIGHT, after: (rows.length - last) * ROW_HEIGHT };
+}
+
+/** A token written whole, with its value or values, and the description it keeps (none when undefined). */
+const tokenOp = (token: Token, body: { readonly value: TokenValue } | { readonly values: Record<string, TokenValue> }, description: string | undefined): KitOp => ({
+  op: "setToken",
+  path: token.path,
+  type: token.type,
+  ...body,
+  ...(description !== undefined ? { description } : {}),
+});
+
 /** The artifacts that use a token or mode, named in a tooltip: at most ten titles, then the rest. */
 export const usedByLabel = (ids: ReadonlyArray<string>, titleOf: (id: string) => string): string => {
   const titles = ids.slice(0, 10).map(titleOf);
@@ -60,6 +83,8 @@ export const KitTable = (props: KitTableProps) => {
   const [renaming, setRenaming] = useState<string>();
   const [renamingMode, setRenamingMode] = useState<string>();
   const [problem, setProblem] = useState<string>();
+  const [describing, setDescribing] = useState<string>();
+  const [scrollTop, setScrollTop] = useState(0);
 
   const groups = [...new Set(kit.tokens.map((token) => groupOf(token.path)))].map((name) => ({
     name,
@@ -69,6 +94,7 @@ export const KitTable = (props: KitTableProps) => {
   const shown = kit.tokens.filter(
     (token) => (group === "All" || groupOf(token.path) === group) && (needle === "" || token.path.includes(needle) || cssName(token.path).includes(needle)),
   );
+  const windowed = windowRows(shown, scrollTop, shown.length > VIRTUAL_ROWS);
 
   /** A refusal stays under its field; a commit that worked closes the field. */
   const finish = (refusal: string | undefined, close: () => void): string | undefined => {
@@ -83,15 +109,22 @@ export const KitTable = (props: KitTableProps) => {
   };
 
   const setValue = (token: Token, mode: string, value: TokenValue): string | undefined => {
-    if (token.value !== undefined) return commit([{ op: "setToken", path: token.path, type: token.type, value }]);
-    return commit([{ op: "setToken", path: token.path, type: token.type, values: { ...token.values, [mode]: value } }]);
+    if (token.value !== undefined) return commit([tokenOp(token, { value }, token.description)]);
+    return commit([tokenOp(token, { values: { ...token.values, [mode]: value } }, token.description)]);
   };
 
   const onePerMode = (token: Token, perMode: boolean) => {
     const base = valueIn(token, kit.modes[0]!, kit);
     if (base === undefined) return;
-    if (perMode) commit([{ op: "setToken", path: token.path, type: token.type, values: Object.fromEntries(kit.modes.map((mode) => [mode, base])) }]);
-    else commit([{ op: "setToken", path: token.path, type: token.type, value: base }]);
+    if (perMode) commit([tokenOp(token, { values: Object.fromEntries(kit.modes.map((mode) => [mode, base])) }, token.description)]);
+    else commit([tokenOp(token, { value: base }, token.description)]);
+  };
+
+  /** The description is written with the token's own values; an empty text removes it. */
+  const setDescription = (token: Token, text: string): string | undefined => {
+    const trimmed = text.trim();
+    const description = trimmed === "" ? undefined : trimmed;
+    return commit([token.value !== undefined ? tokenOp(token, { value: token.value }, description) : tokenOp(token, { values: token.values ?? {} }, description)]);
   };
 
   const addToken = (path: string, type: TokenType) => {
@@ -110,7 +143,10 @@ export const KitTable = (props: KitTableProps) => {
       </nav>
       <div className="grid min-w-0 gap-3">
         <Input type="search" placeholder="Search tokens…" aria-label="Search tokens" value={query} onChange={(event) => setQuery(event.currentTarget.value)} />
-        <div className="overflow-x-auto">
+        <div
+          className={shown.length > VIRTUAL_ROWS ? "max-h-[480px] overflow-auto" : "overflow-x-auto"}
+          onScroll={(event) => setScrollTop(event.currentTarget.scrollTop)}
+        >
           <table className="w-full min-w-[560px] border-separate border-spacing-0 text-left text-sm">
             <thead>
               <tr className="text-xs text-muted-foreground">
@@ -149,21 +185,26 @@ export const KitTable = (props: KitTableProps) => {
               </tr>
             </thead>
             <tbody>
-              {shown.map((token) => {
+              {windowed.before > 0 && (
+                <tr aria-hidden style={{ height: windowed.before }}>
+                  <td colSpan={kit.modes.length + 4} />
+                </tr>
+              )}
+              {windowed.rows.map((token) => {
                 const oneValue = token.value !== undefined;
                 const former = token.formerNames ?? [];
                 const users = usage.tokens[token.path] ?? [];
                 return (
                   <tr key={token.path} data-token={token.path} className="border-t align-top">
-                    <td className="px-2 py-2">
+                    <td className="min-w-[15rem] px-2 py-2">
                       <div className="flex items-start gap-1">
                         <span className="grid min-w-0">
                           {renaming === token.path ? (
                             <NameField label={`Rename ${token.path}`} initial={token.path} onCancel={() => setRenaming(undefined)} onCommit={(to) => finish(commit([{ op: "renameToken", path: token.path, to }]), () => setRenaming(undefined))} />
                           ) : (
-                            <span className="truncate">{token.path}</span>
+                            <span className="truncate" title={token.path}>{token.path}</span>
                           )}
-                          <span className="truncate font-mono text-xs text-muted-foreground">{cssName(token.path)}</span>
+                          <span className="truncate font-mono text-xs text-muted-foreground" title={cssName(token.path)}>{cssName(token.path)}</span>
                           {former.length > 0 && (
                             <span className="text-xs text-muted-foreground">
                               Also answers to {former.join(", ")}{" "}
@@ -181,20 +222,29 @@ export const KitTable = (props: KitTableProps) => {
                           hasFormer={former.length > 0}
                           onePerMode={(perMode) => onePerMode(token, perMode)}
                           onRename={() => setRenaming(token.path)}
+                          onDescribe={() => setDescribing(token.path)}
                           onForget={() => former.forEach((name) => commit([{ op: "forgetFormerName", path: token.path, cssName: name }]))}
                           onDelete={() => onAskDeleteToken(token.path)}
                         />
                       </div>
+                      {describing === token.path && (
+                        <NameField
+                          label={`Description ${token.path}`}
+                          initial={token.description ?? ""}
+                          onCancel={() => setDescribing(undefined)}
+                          onCommit={(text) => finish(setDescription(token, text), () => setDescribing(undefined))}
+                        />
+                      )}
                     </td>
                     <td className="px-2 py-2 text-muted-foreground">{token.type}</td>
                     {oneValue ? (
                       <td className="px-2 py-2" colSpan={kit.modes.length} data-mode="all">
-                        <ValueCell token={token} label={token.path} value={token.value} onCommit={(next) => setValue(token, kit.modes[0]!, next)} />
+                        <ValueCell token={token} tokens={kit.tokens} label={token.path} value={token.value} onCommit={(next) => setValue(token, kit.modes[0]!, next)} />
                       </td>
                     ) : (
                       kit.modes.map((mode) => (
                         <td key={mode} className="px-2 py-2" data-mode={mode}>
-                          <ValueCell token={token} label={`${token.path} ${mode}`} value={valueIn(token, mode, kit)} onCommit={(next) => setValue(token, mode, next)} />
+                          <ValueCell token={token} tokens={kit.tokens} label={`${token.path} ${mode}`} value={valueIn(token, mode, kit)} onCommit={(next) => setValue(token, mode, next)} />
                         </td>
                       ))
                     )}
@@ -209,6 +259,11 @@ export const KitTable = (props: KitTableProps) => {
                   </tr>
                 );
               })}
+              {windowed.after > 0 && (
+                <tr aria-hidden style={{ height: windowed.after }}>
+                  <td colSpan={kit.modes.length + 4} />
+                </tr>
+              )}
             </tbody>
           </table>
         </div>
@@ -279,7 +334,7 @@ const ModeMenu = ({ mode, isDefault, onRename, onDefault, onDuplicate, onDelete 
   );
 };
 
-const RowMenu = ({ token, oneValue, hasFormer, onePerMode, onRename, onForget, onDelete }: { readonly token: Token; readonly oneValue: boolean; readonly hasFormer: boolean; readonly onePerMode: (perMode: boolean) => void; readonly onRename: () => void; readonly onForget: () => void; readonly onDelete: () => void }) => {
+const RowMenu = ({ token, oneValue, hasFormer, onePerMode, onRename, onDescribe, onForget, onDelete }: { readonly token: Token; readonly oneValue: boolean; readonly hasFormer: boolean; readonly onePerMode: (perMode: boolean) => void; readonly onRename: () => void; readonly onDescribe: () => void; readonly onForget: () => void; readonly onDelete: () => void }) => {
   const [open, setOpen] = useState(false);
   const trigger = useRef<HTMLButtonElement>(null);
   return (
@@ -290,6 +345,7 @@ const RowMenu = ({ token, oneValue, hasFormer, onePerMode, onRename, onForget, o
       <MenuPopup anchor={trigger} side="bottom" align="end">
         {oneValue ? <MenuItem onClick={() => onePerMode(true)}>A value per mode</MenuItem> : <MenuItem onClick={() => onePerMode(false)}>One value for all modes</MenuItem>}
         <MenuItem onClick={onRename}>Rename</MenuItem>
+        <MenuItem onClick={onDescribe}>Description</MenuItem>
         {hasFormer && <MenuItem onClick={onForget}>Forget old names</MenuItem>}
         <MenuItem onClick={onDelete}>Delete</MenuItem>
       </MenuPopup>

@@ -366,3 +366,122 @@ test("export writes the kit to the project folder and says so with a Reveal acti
   expect(exported).toBeDefined();
   expect(JSON.parse(await readFile(join(outputFolder(engine, project), exported!), "utf8"))).toMatchObject({ color: { brand: { primary: { $type: "color", $value: "#1a73e8" } } } });
 });
+
+/** A kit with one token of each editor: a colour with an alias target, a dimension, a duration, a weight and a text style. */
+const editorKit = {
+  format: 1,
+  name: "Brand",
+  modes: ["light", "dark"],
+  tokens: [
+    { path: "color/brand/primary", type: "color", values: { light: "#1a73e8", dark: "#8ab4f8" } },
+    { path: "color/brand/accent", type: "color", value: "#ff0000" },
+    { path: "dimension/space/md", type: "dimension", value: "16px" },
+    { path: "duration/motion/fast", type: "duration", value: "200ms" },
+    { path: "font-weight/type/bold", type: "fontWeight", value: 700 },
+    { path: "text-style/type/heading", type: "textStyle", value: { fontFamily: "Inter", fontSize: "32px", fontWeight: 700, lineHeight: 1.2, letterSpacing: "0px" } },
+  ],
+};
+
+const openEditorKit = async (page: Page, engine: TestEngine, kit: unknown = editorKit) => {
+  const project = await openCanvas(page, engine);
+  await putRecords(engine, [{ id: "document:document", typeName: "document", gridSize: 10, name: "", meta: { unframed: { kit } } }]);
+  await page.getByRole("button", { name: "Kit", exact: true }).click();
+  return { project, dialog: kitDialog(page) };
+};
+
+
+test("the colour popover edits the colour and its opacity, committed as one value", async ({ page, engine }) => {
+  const { project, dialog } = await openEditorKit(page, engine);
+
+  await row(dialog, "color/brand/primary").getByRole("button", { name: "Options color/brand/primary dark" }).click();
+  await page.getByLabel("color/brand/primary dark colour").fill("#102030");
+  await page.getByLabel("color/brand/primary dark colour").press("Tab");
+  await expect.poll(() => tokenOf(engine, project, "color/brand/primary")).toMatchObject({ values: { light: "#1a73e8", dark: "#102030" } });
+
+  await page.getByLabel("color/brand/primary dark opacity").fill("50");
+  await page.getByLabel("color/brand/primary dark opacity").press("Enter");
+  await expect.poll(() => tokenOf(engine, project, "color/brand/primary")).toMatchObject({ values: { light: "#1a73e8", dark: "#10203080" } });
+});
+
+test("a colour cell takes an alias from the Use a token list, and shows the target as a chip", async ({ page, engine }) => {
+  const { project, dialog } = await openEditorKit(page, engine);
+
+  await row(dialog, "color/brand/accent").getByRole("button", { name: "Options color/brand/accent", exact: true }).click();
+  await expect(page.getByText("Use a token", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "color/brand/primary", exact: true }).click();
+
+  await expect.poll(() => tokenOf(engine, project, "color/brand/accent")).toMatchObject({ value: "{color/brand/primary}" });
+  await expect(row(dialog, "color/brand/accent").locator("[data-alias='color/brand/primary']")).toBeVisible();
+});
+
+test("a dimension is a number and a unit, and a duration takes its unit", async ({ page, engine }) => {
+  const { project, dialog } = await openEditorKit(page, engine);
+
+  const number = row(dialog, "dimension/space/md").getByLabel("dimension/space/md number");
+  await number.fill("2");
+  await number.press("Enter");
+  await expect.poll(() => tokenOf(engine, project, "dimension/space/md")).toMatchObject({ value: "2px" });
+
+  await row(dialog, "dimension/space/md").getByLabel("dimension/space/md unit").click();
+  await page.getByRole("option", { name: "rem", exact: true }).click();
+  await expect.poll(() => tokenOf(engine, project, "dimension/space/md")).toMatchObject({ value: "2rem" });
+
+  await row(dialog, "duration/motion/fast").getByLabel("duration/motion/fast unit").click();
+  await page.getByRole("option", { name: "s", exact: true }).click();
+  await expect.poll(() => tokenOf(engine, project, "duration/motion/fast")).toMatchObject({ value: "200s" });
+});
+
+test("a font weight is a select of 100 to 900 and the keywords", async ({ page, engine }) => {
+  const { project, dialog } = await openEditorKit(page, engine);
+
+  await row(dialog, "font-weight/type/bold").getByLabel("font-weight/type/bold weight").click();
+  await expect(page.getByRole("option")).toHaveCount(13);
+  await page.getByRole("option", { name: "600", exact: true }).click();
+  await expect.poll(() => tokenOf(engine, project, "font-weight/type/bold")).toMatchObject({ value: 600 });
+});
+
+test("a text style opens a popover with its five fields, each committed on its own", async ({ page, engine }) => {
+  const { project, dialog } = await openEditorKit(page, engine);
+
+  await row(dialog, "text-style/type/heading").getByRole("button", { name: "Options text-style/type/heading", exact: true }).click();
+  const size = page.getByLabel("text-style/type/heading text style fontSize");
+  await size.fill("40px");
+  await size.press("Enter");
+  await expect.poll(() => tokenOf(engine, project, "text-style/type/heading")).toMatchObject({ value: { fontFamily: "Inter", fontSize: "40px", fontWeight: 700, lineHeight: 1.2, letterSpacing: "0px" } });
+  await expect(page.getByLabel("text-style/type/heading text style lineHeight")).toHaveValue("1.2");
+});
+
+test("the row menu's Description writes the token's description, and an empty one removes it", async ({ page, engine }) => {
+  const { project, dialog } = await openEditorKit(page, engine);
+
+  await row(dialog, "dimension/space/md").getByRole("button", { name: "Token options dimension/space/md" }).click();
+  await page.getByRole("menuitem", { name: "Description", exact: true }).click();
+  const field = dialog.getByRole("textbox", { name: "Description dimension/space/md" });
+  await field.fill("Gap between cards");
+  await field.press("Enter");
+  await expect.poll(() => tokenOf(engine, project, "dimension/space/md")).toMatchObject({ value: "16px", description: "Gap between cards" });
+
+  await row(dialog, "dimension/space/md").getByRole("button", { name: "Token options dimension/space/md" }).click();
+  await page.getByRole("menuitem", { name: "Description", exact: true }).click();
+  await dialog.getByRole("textbox", { name: "Description dimension/space/md" }).fill("");
+  await dialog.getByRole("textbox", { name: "Description dimension/space/md" }).press("Enter");
+  await expect.poll(() => tokenOf(engine, project, "dimension/space/md")).not.toHaveProperty("description");
+});
+
+test("past 200 rows the table draws only the rows in view, and scrolling reaches the rest", async ({ page, engine }) => {
+  const many = {
+    ...editorKit,
+    tokens: Array.from({ length: 260 }, (_, index) => ({ path: `dimension/space/t${String(index).padStart(3, "0")}`, type: "dimension", value: `${index}px` })),
+  };
+  const { dialog } = await openEditorKit(page, engine, many);
+
+  await expect(row(dialog, "dimension/space/t000")).toBeVisible();
+  await expect(dialog.locator("[data-token]")).not.toHaveCount(260);
+  expect(await dialog.locator("[data-token]").count()).toBeLessThan(60);
+  await expect(row(dialog, "dimension/space/t259")).toHaveCount(0);
+
+  await dialog.locator(".max-h-\\[480px\\]").evaluate((element) => {
+    element.scrollTop = element.scrollHeight;
+  });
+  await expect(row(dialog, "dimension/space/t259")).toBeVisible();
+});
