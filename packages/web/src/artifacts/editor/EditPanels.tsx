@@ -11,7 +11,9 @@ import { Input } from "~/components/ui/input";
 import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "~/components/ui/select";
 import { Toggle, ToggleGroup } from "~/components/ui/toggle-group";
 import { cn } from "~/lib/utils";
+import { previewUrl } from "../../canvas/assetStore.ts";
 import { showError } from "../../toasts.tsx";
+import { ImagePicker } from "./ImagePicker.tsx";
 import type { EditReport, EditSession } from "./editSession.ts";
 
 const WEIGHTS = [100, 200, 300, 400, 500, 600, 700, 800, 900];
@@ -122,9 +124,27 @@ const Row = ({ label, children }: { readonly label: string; readonly children: R
 /** The source's inline declarations of an element, property names lowercased. */
 const sourceInline = (element: SourceTreeElement | undefined): Record<string, string> => element?.style ?? {};
 
+/** The picture an element shows: an img's file, or the one url() of its background image; null when it shows none. */
+const pictureOf = (report: EditReport): { readonly target: "src" | "background"; readonly file: string } | null => {
+  if (report.tag === "img") return { target: "src", file: report.src ?? "" };
+  const match = /^url\(\s*["']?([^"')]*)["']?\s*\)$/.exec(report.computed["background-image"] ?? "");
+  return match === null ? null : { target: "background", file: match[1] ?? "" };
+};
+
+/** The bare project file name a picture's URL ends in: a computed background is an absolute URL. */
+const fileNameOf = (url: string): string => {
+  const last = url.split("/").pop() ?? "";
+  try {
+    return decodeURIComponent(last.split("?")[0] ?? "");
+  } catch {
+    return last;
+  }
+};
+
 export interface DesignTabProps {
   readonly session: EditSession;
   readonly kind: "page" | "motion";
+  readonly project: string;
   readonly dials: Readonly<Record<string, unknown>> | undefined;
   readonly locked: readonly string[];
 }
@@ -140,7 +160,7 @@ const chainOf = (elements: readonly SourceTreeElement[], id: string): string[] =
   return chain;
 };
 
-export const DesignTab = ({ session, kind, dials, locked }: DesignTabProps) => {
+export const DesignTab = ({ session, kind, project, dials, locked }: DesignTabProps) => {
   const { selection, reports, tree, preparing, prepareError, pending } = session;
   if (preparing) return <p className="m-0 p-2.5 text-sm text-muted-foreground">{`Getting this ${kind} ready for editing…`}</p>;
   if (prepareError !== undefined) return <p className="m-0 p-2.5 text-sm text-destructive-foreground">{prepareError}</p>;
@@ -196,6 +216,24 @@ export const DesignTab = ({ session, kind, dials, locked }: DesignTabProps) => {
 
   const owners = TEXT_FIELDS.map((field) => ownerOf(field.property, normaliserFor(field.property)));
   const blocked = owners.map(ownerLine).find((line) => line !== null) ?? null;
+
+  const picture = pictureOf(report);
+  // An image edit still in the burst is the person's own, as a style edit is: its owner stays the source until written.
+  const pictureOwner: FieldOwner =
+    picture === null ? { owner: "source" }
+    : burst.some((edit) => edit.type === "image" && edit.elementId === id && edit.target === picture.target) ? { owner: "source" }
+    : picture.target === "src" ?
+      element === undefined ? { owner: "script" }
+      : fieldOwner({
+          field: { kind: "src" },
+          source: { inline: sourceStyle, text: element.text, src: element.src ?? null },
+          live: { inline: report.inline, text: report.text, src: report.src, animated: report.animated },
+          dials: dials ?? {},
+          locked: isLocked,
+          normalise: (value) => value,
+        })
+    : ownerOf("background-image", normaliserFor("background-image"));
+  const pictureLine = picture === null ? null : ownerLine(pictureOwner);
 
   return (
     <div className="flex min-h-0 flex-col gap-3 overflow-auto p-2.5" data-testid="design-tab">
@@ -271,6 +309,18 @@ export const DesignTab = ({ session, kind, dials, locked }: DesignTabProps) => {
         })}
         {blocked !== null && <p className="m-0 text-xs text-muted-foreground">{blocked}</p>}
       </fieldset>
+      {picture !== null && (
+        <fieldset aria-label="Image" className="m-0 flex flex-col gap-2 border-0 p-0">
+          <legend className="mb-1 text-xs font-medium text-muted-foreground">Image</legend>
+          <div className="flex items-center gap-2">
+            {fileNameOf(picture.file) !== "" && <img alt="" src={previewUrl(project, fileNameOf(picture.file), 512)} className="size-10 shrink-0 rounded-sm object-cover" />}
+            {pictureOwner.owner === "source" && (
+              <ImagePicker project={project} onChoose={(file) => session.patch({ type: "image", elementId: id!, target: picture.target, file })} />
+            )}
+          </div>
+          {pictureLine !== null && <p className="m-0 text-xs text-muted-foreground">{pictureLine}</p>}
+        </fieldset>
+      )}
     </div>
   );
 };

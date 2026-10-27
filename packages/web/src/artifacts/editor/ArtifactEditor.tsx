@@ -295,7 +295,7 @@ export const ArtifactEditor = ({ shapeId, onClose, onOpen }: ArtifactEditorProps
             </TabsList>
           </Tabs>
         </ColumnHeader>
-        {panel === "design" && <DesignTab session={session} kind={facts.kind} dials={facts.dials} locked={facts.locked} />}
+        {panel === "design" && <DesignTab session={session} kind={facts.kind} project={project} dials={facts.dials} locked={facts.locked} />}
         {panel === "layers" && <LayersTab session={session} kind={facts.kind} />}
         {panel === "parameters" && (
           <ParametersBody
