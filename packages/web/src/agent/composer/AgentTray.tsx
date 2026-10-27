@@ -13,20 +13,22 @@ import {
   pastedTextFileName,
   promptHistoryEntries,
   promptLengthError,
+  queuedEditBlockedReason,
+  resolveQueuedEditExit,
   stepPromptHistory,
   tabLabel,
   type InteractionMode,
   type PromptHistoryPosition,
   type RuntimeMode,
 } from "@unframed/domain";
-import { ArrowLeft, CornerUpRight, ListPlus, Paperclip } from "lucide-react";
+import { ArrowLeft, Check, CornerUpRight, ListPlus, Paperclip } from "lucide-react";
 import { createPortal } from "react-dom";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from "react";
 import type { AgentTrayProps as SlotProps } from "../../chrome/slots.ts";
 import { useEngine } from "../../context.ts";
 import { effectiveModel, noProviderReady, providerName, readyProviders } from "../providers.ts";
 import { createChat, sendMessage } from "../send.ts";
-import { EMPTY_DRAFT, NEW_CHAT, sameDraft, useChatClient, useChats, useDraftVersion, useFollowUp, useHandoffVersion, usePlanMode, useProviders, useRailUi, useWatchedThread, type ChatClient } from "../store.ts";
+import { EMPTY_DRAFT, NEW_CHAT, sameDraft, useChatClient, useChats, useDraftVersion, useFollowUp, useHandoffVersion, usePlanMode, useProviders, useQueue, useRailUi, useWatchedThread, type ChatClient, type QueuedMessage } from "../store.ts";
 import { latestCompletedTool, returnQueued, sendQueued } from "../queue.tsx";
 import { Alert, AlertDescription } from "~/components/ui/alert";
 import { Button } from "~/components/ui/button";
@@ -45,6 +47,7 @@ import { mentionItems } from "./mentions.tsx";
 import { slashItems, skillMenuItems } from "./commands.tsx";
 import { CompactControlsMenu, ContextMeter, declaredTraits, latestUsage, ModelPicker, TraitsPicker } from "./pickers.tsx";
 import { PromptEditor, type PromptEditorHandle, type Trigger } from "./PromptEditor.tsx";
+import { UpNext } from "./UpNext.tsx";
 import { useMaybeEditor, useValue } from "tldraw";
 import { Input } from "~/components/ui/input";
 import { composerGlassClass } from "../../chrome/composerSurface.ts";
@@ -142,12 +145,19 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
   const mentionIds = useRef<ReadonlyArray<string>>([]);
   /** A question holds the box for its answer: the draft is set aside on the client until it goes. */
   const answeringRef = useRef(false);
+  /** A queued message open in the box (t3code's queued edit): the chat's draft waits on the client meanwhile. */
+  const [editing, setEditing] = useState<{ readonly id: string; readonly chatId: string; readonly originalText: string } | null>(null);
+  const editingRef = useRef(editing);
+  const setEdit = (next: typeof editing) => {
+    editingRef.current = next;
+    setEditing(next);
+  };
   const guard = useTypingGuard(
     chatId ?? NEW_CHAT,
     variant === "rail" && chat ? [...waitingRequests(chat, "approval"), ...waitingRequests(chat, "user-input")].map(requestIdOf) : [],
   );
   const saveDraft = (value: string) => {
-    if (draftKeyRef.current !== undefined && !answeringRef.current) client.setDraft(draftKeyRef.current, { text: value, mentions: mentionIds.current });
+    if (draftKeyRef.current !== undefined && !answeringRef.current && editingRef.current === null) client.setDraft(draftKeyRef.current, { text: value, mentions: mentionIds.current });
   };
   const onDraftChange = (value: string, typed: boolean) => {
     setText(value);
@@ -162,7 +172,9 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
   // Declared before the handoff effect: on a chat switch the chat's draft lands first, then any handoff joins it.
   useEffect(() => {
     draftKeyRef.current = draftKey;
-    if (draftKey === undefined) return;
+    // Another chat's draft ends an edit as Cancel would.
+    if (editingRef.current !== null && editingRef.current.chatId !== chatId) setEdit(null);
+    if (draftKey === undefined || editingRef.current !== null) return;
     const stored = client.draft(draftKey);
     const shown = { text: box.current?.text() ?? "", mentions: mentionIds.current };
     if (sameDraft(shown, stored)) return;
@@ -411,6 +423,13 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
       setModeOpen(true);
       return true;
     }
+    // Alt+ArrowUp at the start of the box edits the newest queued message (t3code's).
+    if (!menu && event.altKey && !event.shiftKey && !event.metaKey && !event.ctrlKey && event.key === "ArrowUp" && variant === "rail" && chatId !== null) {
+      const latest = client.queue(chatId).at(-1);
+      if (!latest || latest.state !== "waiting" || editingRef.current !== null || answeringRef.current || !box.current?.caretAtStart()) return false;
+      if (!event.repeat) beginEdit(latest);
+      return true;
+    }
     if (!menu && !event.shiftKey && !event.altKey && !event.metaKey && !event.ctrlKey && (event.key === "ArrowUp" || event.key === "ArrowDown")) {
       return history(event.key === "ArrowUp" ? "backward" : "forward");
     }
@@ -447,6 +466,7 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
     shownQuestion.current = questionKey;
     if (questionKey === was) return;
     if (questionKey !== undefined) {
+      setEdit(null);
       box.current?.setText("", { focus: false, undoable: false });
       return;
     }
@@ -472,7 +492,9 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
 
   const canSend = answering
     ? questions.ready
-    : lengthError === undefined && (planFollowUp ? !sending : !noProvider && !sending && (text.trim() !== "" || attachments.staged.length > 0));
+    : editing !== null
+      ? lengthError === undefined && text.trim() !== ""
+      : lengthError === undefined && (planFollowUp ? !sending : !noProvider && !sending && (text.trim() !== "" || attachments.staged.length > 0));
 
   /** Implement: the chat back to building, then the plan after t3code's prefix; or the same in a new chat named after it. */
   const implementPlan = async (inNewChat: boolean) => {
@@ -512,7 +534,7 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
    * While a question holds the box it joins the draft set aside.
    */
   const restoreDraft = (draft: { readonly text: string; readonly selection: ReadonlyArray<string>; readonly attachments: ReadonlyArray<ChatAttachment> }) => {
-    const aside = answeringRef.current ? draftKeyRef.current : undefined;
+    const aside = answeringRef.current || editingRef.current !== null ? draftKeyRef.current : undefined;
     if (aside !== undefined) client.setDraft(aside, { text: appendRestoredPrompt(client.draft(aside).text, draft.text), mentions: mentionIds.current });
     else box.current?.setText(appendRestoredPrompt(box.current.text(), draft.text));
     chips.add(draft.selection);
@@ -539,6 +561,7 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
       guard.onSend();
       return questions.answer();
     }
+    if (editingRef.current !== null) return saveEdit();
     const message = box.current?.text() ?? "";
     const sentFrom = draftKeyRef.current;
     if (promptLengthError(message) !== undefined) return;
@@ -594,8 +617,64 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [handoffs, chatId, client]);
 
+  const queue = useQueue(client, variant === "rail" ? chatId : null);
+  const beginEdit = (item: QueuedMessage) => {
+    if (chatId === null || answeringRef.current) return;
+    historyPosition.current = null;
+    setEdit({ id: item.id, chatId, originalText: item.message.text });
+    box.current?.setText(item.message.text);
+  };
+  /** Ends the edit and puts the chat's draft back in the box. */
+  const endEdit = (options?: { readonly focus?: boolean }) => {
+    setEdit(null);
+    box.current?.setText(draftKeyRef.current === undefined ? "" : client.draft(draftKeyRef.current).text, options);
+  };
+  const updateQueued = (edit: { readonly id: string; readonly chatId: string }, text: string) =>
+    client.updateQueue(edit.chatId, (current) => current.map((item) => (item.id === edit.id ? { ...item, message: { ...item.message, text } } : item)));
+  /** Update queued message: the new text replaces the queued one in place, while it is still waiting. */
+  const saveEdit = () => {
+    const edit = editingRef.current;
+    const message = box.current?.text() ?? "";
+    if (!edit || message.trim() === "" || promptLengthError(message) !== undefined) return;
+    // One that left the queue meanwhile is the watcher's below.
+    if (!client.queue(edit.chatId).some((item) => item.id === edit.id && item.state === "waiting")) return;
+    updateQueued(edit, message);
+    endEdit();
+  };
+  // The edited message went out (or came back) before it was saved: t3code's reconciliation.
+  useEffect(() => {
+    const edit = editingRef.current;
+    if (!edit || edit.chatId !== chatId || queue.some((item) => item.id === edit.id && item.state === "waiting")) return;
+    const current = box.current?.text() ?? "";
+    const draft = draftKeyRef.current === undefined ? EMPTY_DRAFT : client.draft(draftKeyRef.current);
+    const recovery = resolveQueuedEditExit({
+      editChanged: current !== edit.originalText,
+      threadDraftEmpty: draft.text.trim() === "" && draft.mentions.length === 0 && attachments.staged.length === 0,
+    });
+    if (recovery === "kept") {
+      setEdit(null);
+      saveDraft(current);
+    } else {
+      endEdit({ focus: false });
+    }
+    if (recovery === "clean") return;
+    showNotice(
+      "Queued message is no longer queued",
+      recovery === "kept" ? "info" : "warning",
+      recovery === "kept" ? "Your unsaved edit was kept in the composer." : "Your unsaved edit was discarded.",
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [queue, chatId]);
+
   const interrupt = () => {
     if (!chat?.latestTurn) return;
+    // An edit in progress is kept: it goes back with the rest.
+    const edit = editingRef.current;
+    if (edit !== null) {
+      const message = box.current?.text() ?? "";
+      if (message.trim() !== "") updateQueued(edit, message);
+      endEdit();
+    }
     // Stop gives every queued message back to the composer.
     returnQueued(client, chat.id);
     void client.dispatch({ type: "thread.turn.interrupt", threadId: chat.id, turnId: chat.latestTurn.turnId }).catch((error: unknown) => client.reportError(error));
@@ -604,6 +683,17 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
 
   return (
     <div className="flex flex-col gap-1.5" data-variant={variant} data-testid="agent-tray" ref={root}>
+      {variant === "rail" && chatId !== null && (
+        <UpNext
+          client={client}
+          chatId={chatId}
+          running={running}
+          editingId={editing?.chatId === chatId ? editing.id : null}
+          editBlockedReason={queuedEditBlockedReason({ openQuestionCount: answering ? 1 : 0 })}
+          onEdit={beginEdit}
+          onCancelEdit={() => endEdit()}
+        />
+      )}
       {approvalPending && chat && <ApprovalPanel client={client} chat={chat} held={guard.held} />}
       {questions.panel}
       {planFollowUp && <PlanReady plan={planFollowUp} />}
@@ -741,10 +831,10 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
                   {questions.submitting ? "Submitting..." : !questions.lastQuestion ? "Next question" : questions.index > 0 ? "Submit answers" : "Submit answer"}
                 </MessageAction>
               </>
-            ) : planFollowUp ? (
+            ) : planFollowUp && editing === null ? (
               <PlanActions refine={text.trim() !== ""} busy={sending} onSend={() => void send()} onNewChat={() => void implementPlan(true)} />
             ) : (
-              <SendButton running={running} followUp={followUp} disabled={!canSend} onSend={(alternate) => void send(alternate)} />
+              <SendButton running={running} editing={editing !== null} followUp={followUp} disabled={!canSend} onSend={(alternate) => void send(alternate)} />
             )}
           </div>
         </div>
@@ -762,10 +852,30 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
 /**
  * The round Send (t3code's primary action). While a turn runs it says what the message will
  * do, "Queue message" or "Steer message" by the Follow-up behavior setting, the other while
- * Cmd or Ctrl is held, and a Cmd-click or Ctrl-click does the other for one message.
+ * Cmd or Ctrl is held, and a Cmd-click or Ctrl-click does the other for one message. While a
+ * queued message is open in the box it is a check, "Update queued message".
  */
-const SendButton = ({ running, followUp, disabled, onSend }: { readonly running: boolean; readonly followUp: "queue" | "steer"; readonly disabled: boolean; readonly onSend: (alternate: boolean) => void }) => {
+const SendButton = ({
+  running,
+  editing,
+  followUp,
+  disabled,
+  onSend,
+}: {
+  readonly running: boolean;
+  readonly editing: boolean;
+  readonly followUp: "queue" | "steer";
+  readonly disabled: boolean;
+  readonly onSend: (alternate: boolean) => void;
+}) => {
   const commandHeld = useCommandHeld();
+  if (editing) {
+    return (
+      <MessageAction tone="send" aria-label="Update queued message" disabled={disabled} onClick={() => onSend(false)}>
+        <Check aria-hidden className="size-4" />
+      </MessageAction>
+    );
+  }
   if (!running) {
     return (
       <MessageAction tone="send" aria-label="Send" disabled={disabled} onClick={() => onSend(false)}>

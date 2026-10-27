@@ -147,6 +147,8 @@ export interface PromptEditorHandle {
   insertText(text: string): void;
   /** Whether the caret is on the draft's first visual line (`start`, where ArrowUp recalls) or its last (`end`), wrapped lines counted. */
   caretOnVisualEdge(edge: "start" | "end"): boolean;
+  /** Whether the caret sits before the draft's first character, nothing selected. */
+  caretAtStart(): boolean;
 }
 
 export interface PromptEditorProps {
@@ -295,6 +297,14 @@ export const PromptEditor = ({ placeholder, label, onChange, onFocus, onBlur, on
         const bounds = (line instanceof HTMLElement ? line : root).getBoundingClientRect();
         const threshold = caret.height / 2;
         return edge === "start" ? caret.top - bounds.top < threshold : bounds.bottom - caret.bottom < threshold;
+      },
+      caretAtStart: () => {
+        if (!editor || editor.isDestroyed) return false;
+        // Read from the DOM, as above: an arrow key just pressed may not be in the editor state yet.
+        const root = editor.view.dom;
+        const selection = window.getSelection();
+        if (!selection || !selection.isCollapsed || !selection.anchorNode || !root.contains(selection.anchorNode)) return false;
+        return editor.view.posAtDOM(selection.anchorNode, selection.anchorOffset) === Selection.atStart(editor.state.doc).from;
       },
     }),
     [editor],

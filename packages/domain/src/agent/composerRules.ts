@@ -274,6 +274,42 @@ export type FollowUpAction = "queue" | "steer";
 export const followUpAction = (setting: FollowUpAction, alternate: boolean): FollowUpAction => (alternate ? (setting === "queue" ? "steer" : "queue") : setting);
 
 // ---------------------------------------------------------------------------------------
+// The queue's order and editing a queued message (t3code's Up next).
+
+/** The queue with one message moved to just before another, or to the end for `null`; unchanged when either is unknown. */
+export const moveQueued = <T extends { readonly id: string }>(queue: ReadonlyArray<T>, id: string, beforeId: string | null): T[] => {
+  const moving = queue.find((item) => item.id === id);
+  if (!moving || id === beforeId || (beforeId !== null && !queue.some((item) => item.id === beforeId))) return [...queue];
+  const rest = queue.filter((item) => item !== moving);
+  const at = beforeId === null ? rest.length : rest.findIndex((item) => item.id === beforeId);
+  return [...rest.slice(0, at), moving, ...rest.slice(at)];
+};
+
+/**
+ * Where a row dropped at a gap (0 is above the first row, the queue's length below the last)
+ * goes: the id it lands before, `null` for the end, or undefined when it would not move.
+ */
+export const queuedDropTarget = (ids: ReadonlyArray<string>, draggedId: string, insertIndex: number): string | null | undefined => {
+  const from = ids.indexOf(draggedId);
+  if (from === -1 || insertIndex === from || insertIndex === from + 1) return undefined;
+  return ids[insertIndex] ?? null;
+};
+
+/**
+ * What happens to an open edit when its message leaves the queue: an unchanged edit just
+ * closes; a changed one stays in the composer as the chat's draft when that draft is empty,
+ * and is dropped otherwise so it never overwrites the person's other work.
+ */
+export const resolveQueuedEditExit = (input: { readonly editChanged: boolean; readonly threadDraftEmpty: boolean }): "kept" | "discarded" | "clean" => {
+  if (!input.editChanged) return "clean";
+  return input.threadDraftEmpty ? "kept" : "discarded";
+};
+
+/** Why a queued message cannot be opened in the composer now: an open question holds the composer for its answer. */
+export const queuedEditBlockedReason = (input: { readonly openQuestionCount: number }): string | null =>
+  input.openQuestionCount > 0 ? "Answer the question to edit queued messages" : null;
+
+// ---------------------------------------------------------------------------------------
 // The typing guard.
 
 /** How long the person must stop typing before a request that arrived meanwhile shows. */

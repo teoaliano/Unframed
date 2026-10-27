@@ -8,10 +8,14 @@ import {
   implementPlanText,
   LARGE_PASTE_BYTES,
   mergeRestored,
+  moveQueued,
   pasteBecomesFile,
   pastedTextFileName,
+  queuedDropTarget,
+  queuedEditBlockedReason,
   promptHistoryEntries,
   recallablePrompt,
+  resolveQueuedEditExit,
   searchSlashCommands,
   stepPromptHistory,
   TYPING_IDLE_MS,
@@ -228,5 +232,49 @@ describe("the typing guard", () => {
     expect(held.held.size).toBe(2);
     for (const type of ["idle", "send", "blur"] as const) expect(updateTypingGuard(held, { type }).held.size).toBe(0);
     expect([...updateTypingGuard(held, { type: "requests", requestIds: ["r2"], now: 20 }).held]).toEqual(["r2"]);
+  });
+});
+
+describe("the queue's order", () => {
+  const queue = ["a", "b", "c", "d"].map((id) => ({ id }));
+  const ids = (items: ReadonlyArray<{ id: string }>) => items.map((item) => item.id).join("");
+
+  it("moves a message before another, or to the end", () => {
+    expect(ids(moveQueued(queue, "c", "a"))).toBe("cabd");
+    expect(ids(moveQueued(queue, "a", "d"))).toBe("bcad");
+    expect(ids(moveQueued(queue, "b", null))).toBe("acdb");
+  });
+
+  it("leaves the queue as it is for an unknown message or a move onto itself", () => {
+    expect(ids(moveQueued(queue, "x", "a"))).toBe("abcd");
+    expect(ids(moveQueued(queue, "b", "b"))).toBe("abcd");
+    expect(ids(moveQueued(queue, "b", "x"))).toBe("abcd");
+  });
+
+  it("turns a drop at a gap into the message it lands before, and a drop beside itself into no move", () => {
+    const order = ["a", "b", "c"];
+    expect(queuedDropTarget(order, "c", 0)).toBe("a");
+    expect(queuedDropTarget(order, "a", 3)).toBeNull();
+    expect(queuedDropTarget(order, "a", 2)).toBe("c");
+    expect(queuedDropTarget(order, "b", 1)).toBeUndefined();
+    expect(queuedDropTarget(order, "b", 2)).toBeUndefined();
+    expect(queuedDropTarget(order, "x", 0)).toBeUndefined();
+  });
+});
+
+describe("editing a queued message", () => {
+  it("closes an unchanged edit without touching the draft", () => {
+    expect(resolveQueuedEditExit({ editChanged: false, threadDraftEmpty: true })).toBe("clean");
+    expect(resolveQueuedEditExit({ editChanged: false, threadDraftEmpty: false })).toBe("clean");
+  });
+
+  it("keeps a changed edit only when the chat's draft is empty", () => {
+    expect(resolveQueuedEditExit({ editChanged: true, threadDraftEmpty: true })).toBe("kept");
+    expect(resolveQueuedEditExit({ editChanged: true, threadDraftEmpty: false })).toBe("discarded");
+  });
+
+  it("blocks edits only while a question holds the composer", () => {
+    expect(queuedEditBlockedReason({ openQuestionCount: 0 })).toBeNull();
+    expect(queuedEditBlockedReason({ openQuestionCount: 1 })).toBe("Answer the question to edit queued messages");
   });
 });
