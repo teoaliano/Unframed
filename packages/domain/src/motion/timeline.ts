@@ -76,6 +76,8 @@ export interface MotionTimeline {
   readonly clips: readonly Clip[];
   readonly tweens: readonly Tween[];
   readonly elements: Readonly<Record<string, ElementInfo>>;
+  /** The root element's data-hf-id, or null when the file has no root. */
+  readonly root: string | null;
 }
 
 /** The runtime's own start and duration for a clip, by the clip's element id (the `timeline` message). */
@@ -368,14 +370,14 @@ const compositionOf = (document: Doc, options: MotionTimelineOptions) => {
     };
   });
   const length = root ? attributeOwner(root.getAttribute("data-duration")) : { kind: "script" as const, text: "" };
-  return { elements, clips, length };
+  return { elements, clips, length, root: root ? idOf(root) : null };
 };
 
 export function motionTimeline(html: string, options: MotionTimelineOptions = {}): MotionTimeline {
   const file = options.file ?? "";
   const stamped = ensureHfIds(html);
   const document = (parseHTML(stamped) as unknown as { document: Doc }).document;
-  const { elements, clips: bareClips, length } = compositionOf(document, options);
+  const { elements, clips: bareClips, length, root: rootId } = compositionOf(document, options);
   const script = findTimelineScript(inlineScripts(html));
   const parsed = script ? parseGsapScriptAcornForWrite(script.textContent) : null;
   let tweens: Tween[] = [];
@@ -395,6 +397,6 @@ export function motionTimeline(html: string, options: MotionTimelineOptions = {}
   const unfinished: Clip[] = bareClips.map((clip) => ({ ...clip, carry: placeholder }));
   const model = { clips: unfinished, tweens, elements };
   const clips = unfinished.map((clip) => ({ ...clip, carry: carryOf(model, clip) }));
-  return { file, script: state, length, clips, tweens, elements };
+  return { file, script: state, length, clips, tweens, elements, root: rootId };
 }
 

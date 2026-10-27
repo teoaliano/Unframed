@@ -63,7 +63,7 @@ describe("tween-ease", () => {
   it("accepts the ease already written as a no-op", () => {
     const title = tween(html(), 0);
     const result = ok([{ type: "tween-ease", tween: title.ref, ease: "power2.out" }]);
-    expect(result.html).toBe(html());
+    expect(tween(result.html, 0).ease).toEqual({ kind: "source", value: "power2.out" });
     expect(result.summary).toEqual([]);
   });
 

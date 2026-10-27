@@ -4,7 +4,11 @@
  * checked against the file's own reading (owner, lock, id), and writes only the bytes it changes.
  * Spec 18's `applySourceEdits` gathers these with its other edit types.
  */
-import { findTimelineScript, parseGsapScriptAcornForWrite } from "@hyperframes/parsers/gsap-parser-acorn";
+import { findTimelineScript, parseGsapScriptAcornForWrite, type TweenCallInfo } from "@hyperframes/parsers/gsap-parser-acorn";
+import { retimeClipTweensInScript, type ClipTweenRetime } from "@hyperframes/parsers/gsap-writer-acorn";
+import { stampHfIdsInPlace } from "@hyperframes/parsers/hf-ids";
+import { linkedomDocument } from "./dom.ts";
+import { carryOf } from "./carry.ts";
 import { resizeKeyframedTweenInScript, updateAnimationInScript, updateKeyframeInScript } from "@hyperframes/parsers/gsap-writer-acorn";
 import { EASE_CATALOGUE } from "./eases.ts";
 import type { ScriptNode } from "./owners.ts";
@@ -15,7 +19,9 @@ export type MotionEdit =
   | { readonly type: "tween-time"; readonly tween: TweenRef; readonly start?: number; readonly duration?: number }
   | { readonly type: "tween-ease"; readonly tween: TweenRef; readonly ease: string | { readonly token: string } }
   | { readonly type: "tween-stagger"; readonly tween: TweenRef; readonly each: number }
-  | { readonly type: "tween-value"; readonly tween: TweenRef; readonly at: number; readonly property: string; readonly value: number | string | { readonly token: string } };
+  | { readonly type: "tween-value"; readonly tween: TweenRef; readonly at: number; readonly property: string; readonly value: number | string | { readonly token: string } }
+  | { readonly type: "clip-time"; readonly clip: string; readonly start?: number; readonly duration?: number }
+  | { readonly type: "composition-duration"; readonly seconds: number };
 
 export interface MotionEditOptions {
   /** `data-hf-id`s of the elements the person locked in Layers. Descendants of one are locked too. */
@@ -51,9 +57,9 @@ const splice = (html: string, span: ScriptSpan, text: string): string => html.sl
 const nameOf = (reading: MotionTimeline, hfId: string | undefined): string => (hfId ? reading.elements[hfId]?.name ?? hfId : "the tween");
 
 /** The first locked element among a tween's targets, or one of their ancestors. */
-const lockedAmong = (reading: MotionTimeline, tween: Tween, locked: ReadonlySet<string> | undefined): string | null => {
+const lockedAmong = (reading: MotionTimeline, targets: readonly string[], locked: ReadonlySet<string> | undefined): string | null => {
   if (!locked || locked.size === 0) return null;
-  for (const target of tween.targets) {
+  for (const target of targets) {
     let current: string | null | undefined = target;
     while (current) {
       if (locked.has(current)) return current;
@@ -81,7 +87,7 @@ const applyTweenTime = (session: Session, edit: Extract<MotionEdit, { type: "twe
   const name = nameOf(base, tween.targets[0]);
   const field = edit.start !== undefined ? "start" : "duration";
   if (tween.readOnly !== null) return refuse(`${name}'s ${field} is set by the agent's code.`);
-  const locked = lockedAmong(base, tween, options.lockedElements);
+  const locked = lockedAmong(base, tween.targets, options.lockedElements);
   if (locked !== null) return refuse(lockSentence(nameOf(base, locked)));
   if (edit.start !== undefined && tween.start.kind !== "source") return refuse(`${name}'s start is set by the agent's code.`);
   if (edit.duration !== undefined) {
@@ -123,6 +129,22 @@ const applyTweenTime = (session: Session, edit: Extract<MotionEdit, { type: "twe
 
 const refuse = (refusal: string): MotionEditResult => ({ ok: false, refusal });
 
+/** Sets an attribute on the start tag of the element with this data-hf-id, outside the script. */
+const setAttribute = (html: string, hfId: string, name: string, value: string): string => {
+  const tag = new RegExp(`<[a-zA-Z][^>]*?\\sdata-hf-id="${hfId}"[^>]*>`);
+  const match = tag.exec(html);
+  if (!match) return html;
+  const current = match[0];
+  const attribute = new RegExp(`(\\s${name}=")[^"]*(")`);
+  const updated = attribute.test(current)
+    ? current.replace(attribute, `$1${value}$2`)
+    : current.replace(/>$/, ` ${name}="${value}">`);
+  return html.slice(0, match.index) + updated + html.slice(match.index + current.length);
+};
+
+/** Milliseconds are kept, and a clip or the length is never shorter than one frame. */
+const atLeastFrame = (seconds: number): number => millis(Math.max(MIN_DURATION, seconds));
+
 const applyTweenValue = (session: Session, edit: Extract<MotionEdit, { type: "tween-value" }>, base: MotionTimeline, options: MotionEditOptions): MotionEditResult | null => {
   const found = locate(session, edit, base);
   if ("refusal" in found) return found.refusal;
@@ -132,7 +154,7 @@ const applyTweenValue = (session: Session, edit: Extract<MotionEdit, { type: "tw
   const owner = diamond.values[edit.property];
   if (!owner) return refuse(`${name} has no ${edit.property} at this diamond.`);
   if (owner.kind !== "source" && owner.kind !== "token") return refuse(`${name}'s ${edit.property} is set by the agent's code.`);
-  const locked = lockedAmong(base, tween, options.lockedElements);
+  const locked = lockedAmong(base, tween.targets, options.lockedElements);
   if (locked !== null) return refuse(lockSentence(nameOf(base, locked)));
   const current = owner.kind === "source" ? owner.value : undefined;
   const resolved = valueFor(edit, current, name, options.tokenKind);
@@ -140,7 +162,7 @@ const applyTweenValue = (session: Session, edit: Extract<MotionEdit, { type: "tw
 
   const parsed = parseGsapScriptAcornForWrite(text)!;
   const call = parsed.located[index]!;
-  const { node, keyframe } = diamondNode(call.call as never, call.animation, edit.at);
+  const { node, keyframe } = diamondNode(call.call, call.animation, edit.at);
   if (!node) return refuse(`${name} has no ${edit.property} at this diamond.`);
   const raws: [string, string][] = [];
   const props: Record<string, number | string> = {};
@@ -168,6 +190,56 @@ const applyTweenValue = (session: Session, edit: Extract<MotionEdit, { type: "tw
   session.ids[index] = movedId;
   const shown = typeof edit.value === "object" ? `the ${edit.value.token} token` : String(edit.value);
   session.summary.push(`Set ${name} ${edit.property} to ${typeof resolved.text === "number" || typeof resolved.text === "string" ? resolved.text : shown}`);
+  return null;
+};
+
+const applyClipTime = (session: Session, edit: Extract<MotionEdit, { type: "clip-time" }>, base: MotionTimeline, options: MotionEditOptions): MotionEditResult | null => {
+  const clip = base.clips.find((candidate) => candidate.hfId === edit.clip);
+  if (!clip) return refuse(`No clip ${edit.clip} in this motion.`);
+  if ((edit.start !== undefined && clip.start.kind !== "source") || (edit.duration !== undefined && clip.duration.kind !== "source")) {
+    return refuse("Set by the agent's code.");
+  }
+  const carry = carryOf(base, clip, { stretch: edit.duration !== undefined });
+  if ("refused" in carry) return refuse(carry.refused);
+  const locked = options.lockedElements;
+  const carried = base.tweens.filter((tween) => carry.tweens.some((ref) => ref.index === tween.ref.index));
+  for (const hfId of [clip.hfId, ...carried.flatMap((tween) => tween.targets)]) {
+    const hit = lockedAmong(base, [hfId], locked);
+    if (hit !== null) return refuse(lockSentence(nameOf(base, hit)));
+  }
+
+  const oldStart = clip.start.kind === "source" && typeof clip.start.value === "number" ? clip.start.value : 0;
+  const oldDuration = clip.duration.kind === "source" && typeof clip.duration.value === "number" ? clip.duration.value : 0;
+  const newStart = edit.start !== undefined ? millis(Math.max(0, edit.start)) : oldStart;
+  const newDuration = edit.duration !== undefined ? atLeastFrame(edit.duration) : oldDuration;
+
+  let html = session.html;
+  if (edit.start !== undefined) html = setAttribute(html, clip.hfId, "data-start", String(newStart));
+  if (edit.duration !== undefined) html = setAttribute(html, clip.hfId, "data-duration", String(newDuration));
+  const span = timelineSpan(html);
+  if (span && carried.length > 0 && (newStart !== oldStart || newDuration !== oldDuration)) {
+    const selector = `[data-hf-id="${clip.hfId}"]`;
+    const retime: ClipTweenRetime = newDuration !== oldDuration
+      ? { kind: "scale", targetSelector: selector, oldStart, oldDuration, newStart, newDuration }
+      : { kind: "shift", targetSelector: selector, delta: newStart - oldStart };
+    const retimed = retimeClipTweensInScript(span.textContent, [retime], linkedomDocument(html) as never).script;
+    html = splice(html, span, retimed);
+  }
+  const parsed = parseGsapScriptAcornForWrite(timelineSpan(html)?.textContent ?? "");
+  if (!parsed) return refuse(`The edit to ${clip.id} could not be applied.`);
+  session.html = html;
+  session.ids = parsed.located.map((entry) => entry.id);
+  if (edit.start !== undefined) session.summary.push(`Moved clip ${clip.id} to ${newStart} s`);
+  if (edit.duration !== undefined) session.summary.push(`Set clip ${clip.id} to ${newDuration} s long`);
+  return null;
+};
+
+const applyCompositionDuration = (session: Session, edit: Extract<MotionEdit, { type: "composition-duration" }>, base: MotionTimeline, options: MotionEditOptions): MotionEditResult | null => {
+  if (base.length.kind !== "source") return refuse("The length is set by the agent's code.");
+  if (base.root !== null && options.lockedElements?.has(base.root)) return refuse(lockSentence(nameOf(base, base.root)));
+  const seconds = atLeastFrame(edit.seconds);
+  session.html = setAttribute(session.html, base.root ?? "", "data-duration", String(seconds));
+  session.summary.push(`Set the length to ${seconds} s`);
   return null;
 };
 
@@ -211,7 +283,7 @@ const keyOfNode = (property: ScriptNode): string | null => {
 };
 
 /** The object literal that holds a diamond's values in the call, as the writer's parse has it. */
-const diamondNode = (call: { varsArg?: unknown; fromArg?: unknown; method: string }, animation: { keyframes?: unknown }, at: number): { node: ScriptNode | undefined; keyframe: number | null } => {
+const diamondNode = (call: TweenCallInfo, animation: { keyframes?: unknown }, at: number): { node: ScriptNode | undefined; keyframe: number | null } => {
   if (animation.keyframes) {
     const keyframes = propertiesOf(call.varsArg as ScriptNode).find((p) => keyOfNode(p) === "keyframes")?.value as ScriptNode | undefined;
     const step = propertiesOf(keyframes).find((p) => {
@@ -251,7 +323,7 @@ const applyTweenEase = (session: Session, edit: Extract<MotionEdit, { type: "twe
   const written = tween.ease;
   const token = typeof edit.ease === "object" ? edit.ease.token : null;
   if (written !== null && written.kind !== "source" && written.kind !== "token") return refuse(`${name}'s ease is set by the agent's code.`);
-  const locked = lockedAmong(base, tween, options.lockedElements);
+  const locked = lockedAmong(base, tween.targets, options.lockedElements);
   if (locked !== null) return refuse(lockSentence(nameOf(base, locked)));
 
   if (token !== null) {
@@ -282,7 +354,7 @@ const applyTweenStagger = (session: Session, edit: Extract<MotionEdit, { type: "
   if (tween.readOnly !== null) return refuse(`${name}'s stagger is set by the agent's code.`);
   if (tween.stagger === null) return refuse(`${name} has no stagger to space.`);
   if (tween.stagger.kind !== "source" || tween.staggerForm === "other" || tween.staggerForm === null) return refuse(`${name}'s stagger is set by the agent's code.`);
-  const locked = lockedAmong(base, tween, options.lockedElements);
+  const locked = lockedAmong(base, tween.targets, options.lockedElements);
   if (locked !== null) return refuse(lockSentence(nameOf(base, locked)));
 
   const each = millis(Math.max(0, edit.each));
@@ -301,8 +373,9 @@ const applyTweenStagger = (session: Session, edit: Extract<MotionEdit, { type: "
 
 /** Applies edits in order to one motion file. Nothing is written unless every edit applies. */
 export function applyMotionEdits(html: string, edits: readonly MotionEdit[], options: MotionEditOptions = {}): MotionEditResult {
-  const base = motionTimeline(html);
-  const session: Session = { html, ids: base.tweens.map((tween) => tween.ref.id), summary: [] };
+  const stamped = stampHfIdsInPlace(html);
+  const base = motionTimeline(stamped);
+  const session: Session = { html: stamped, ids: base.tweens.map((tween) => tween.ref.id), summary: [] };
   for (const edit of edits) {
     const refusal = edit.type === "tween-time"
       ? applyTweenTime(session, edit, base, options)
@@ -310,7 +383,11 @@ export function applyMotionEdits(html: string, edits: readonly MotionEdit[], opt
         ? applyTweenEase(session, edit, base, options)
         : edit.type === "tween-stagger"
           ? applyTweenStagger(session, edit, base, options)
-          : applyTweenValue(session, edit, base, options);
+          : edit.type === "tween-value"
+            ? applyTweenValue(session, edit, base, options)
+            : edit.type === "clip-time"
+              ? applyClipTime(session, edit, base, options)
+              : applyCompositionDuration(session, edit, base, options);
     if (refusal) return refusal;
   }
   return { ok: true, html: session.html, summary: session.summary };
