@@ -41,6 +41,7 @@ import type { TurnChanges } from "../agent/turnChanges.ts";
 import { indexOnTop } from "../runs/placeholders.ts";
 import { shapeBoxes } from "../runs/shapeBounds.ts";
 import { ensureBridge, ensureLibrary, readArtifact, writeAgentArtifact } from "./artifactStore.ts";
+import { ensureTokens, kitOf } from "../kits/tokensFile.ts";
 
 const PAGE_ID = "page:page";
 
@@ -114,6 +115,7 @@ export class ArtifactTools {
     let written: { file: string; bytes: number };
     try {
       await (kind === "motion" ? ensureLibrary(folder) : ensureBridge(folder));
+      await ensureTokens(folder, kitOf(records));
       written = await writeAgentArtifact(folder, {
         kind,
         html,

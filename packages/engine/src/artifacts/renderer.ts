@@ -18,6 +18,7 @@ import { errorText, logError, logInfo } from "../log.ts";
 import { clearChange, fillFor, indexOnTop, isShape, PLACEHOLDER_WIDTH, videoPlaceholder, type LandedClip, type RunOutcome } from "../runs/placeholders.ts";
 import { shapePageBoxes } from "../runs/shapeBounds.ts";
 import { ensureLibrary, placeRenderOutput } from "./artifactStore.ts";
+import { ensureTokens, kitOf } from "../kits/tokensFile.ts";
 
 const COMPOSITION_FILE = /^[A-Za-z0-9][A-Za-z0-9._-]*\.html?$/;
 
@@ -173,6 +174,9 @@ export class Renderer {
 
     const size = compositionSize(await readFile(path, "utf8").catch(() => ""));
     const records = await this.deps.read(project);
+    await ensureTokens(folder, kitOf(records)).catch((error) => {
+      throw new RenderRefused("internal", `Could not prepare the tokens script: ${errorText(error)}`);
+    });
     const pageId = records.find((record) => record.typeName === "page")?.id ?? "page:page";
     const boxes = shapePageBoxes(records);
     const anchor = boxes.find((entry) => entry.id === input.shapeId)?.box ?? { x: 0, y: 0, w: 0, h: 0 };

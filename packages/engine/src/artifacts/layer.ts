@@ -12,12 +12,14 @@ import * as Layer from "effect/Layer";
 import * as PubSub from "effect/PubSub";
 import * as Stream from "effect/Stream";
 import { CanvasRooms } from "../canvas/rooms.ts";
-import { errorText } from "../log.ts";
+import { errorText, logError } from "../log.ts";
+import { TLDOCUMENT_ID } from "@tldraw/tlschema";
 import { MediaStore } from "../media/mediaStore.ts";
 import { OpenProjects } from "../openProjects.ts";
 import { Runs } from "../runs/runs.ts";
 import { Config } from "../services.ts";
 import { ensureLibrary, writeUploadedArtifact } from "./artifactStore.ts";
+import { ensureTokens, kitOf, TOKENS_FILE } from "../kits/tokensFile.ts";
 import { findChrome } from "./chrome.ts";
 import { producerBackend, Renderer, RenderRefused, stubBackend } from "./renderer.ts";
 import { HeadlessChrome } from "./headlessChrome.ts";
@@ -90,6 +92,17 @@ export const artifactsLayer = Layer.effect(
     });
     yield* rooms.afterCommit((project, change) => snapshots.committed(project, [...change.records.values()]));
 
+    // The tokens script follows the kit: after every commit that touches the document record, and when a room opens.
+    const writeTokens = (project: string, kit: ReturnType<typeof kitOf>) =>
+      void media
+        .folder(project)
+        .then((folder) => (folder === undefined ? undefined : ensureTokens(folder, kit)))
+        .catch((error: unknown) => logError(`${project}: could not write ${TOKENS_FILE}: ${errorText(error)}`));
+    yield* rooms.afterOpen((project, room) => writeTokens(project, kitOf(room.read())));
+    yield* rooms.afterCommit((project, change, room) => {
+      if (change.records.has(TLDOCUMENT_ID)) writeTokens(project, kitOf(room.read()));
+    });
+
     const pointers = new LivePointers((project) => media.folder(project));
     yield* rooms.afterOpen((project, room) => pointers.opened(project, room.read()));
     yield* rooms.afterCommit((project, change) => pointers.committed(project, change.records.values(), change.removed));
@@ -126,6 +139,7 @@ export const artifactsLayer = Layer.effect(
         return yield* Effect.tryPromise({
           try: async () => {
             await ensureLibrary(folder);
+            await ensureTokens(folder, kitOf(await run(rooms.read(input.project))));
             const saved = await writeUploadedArtifact(folder, { html: injectTags(input.html, "motion"), fileName });
             return { file: saved.file, fileName, bytes: saved.bytes, mime: "text/html" as const };
           },
