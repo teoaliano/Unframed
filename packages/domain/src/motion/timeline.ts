@@ -8,6 +8,7 @@ import { classifyPropertyGroup, isTweenConfigKey, type PropertyGroupName } from 
 import { ensureHfIds } from "@hyperframes/parsers/hf-ids";
 import { findTimelineScript, parseGsapScriptAcornForWrite, type TweenCallInfo } from "@hyperframes/parsers/gsap-parser-acorn";
 import { parseHTML } from "linkedom";
+import { carryOf, type Carry } from "./carry.ts";
 import { dialsCallback, ownerOf, constantNumber, type Owner, type OwnerContext, type ScriptNode } from "./owners.ts";
 
 export type PropertyGroup = PropertyGroupName;
@@ -48,14 +49,41 @@ export interface Tween {
   readonly source: string;
 }
 
+/** A timed element of the root. Its carry is what a move or stretch takes with it (carry.ts). */
+export interface Clip {
+  readonly hfId: string;
+  /** The element's id attribute, or its data-hf-id when it has none. */
+  readonly id: string;
+  readonly track: number;
+  readonly start: Owner;
+  readonly duration: Owner;
+  readonly carry: Carry;
+}
+
+/** One element of the composition: its layer name, its parent element and its nearest clip. */
+export interface ElementInfo {
+  readonly name: string;
+  readonly parent: string | null;
+  /** The nearest clip the element is in, itself included. */
+  readonly clip: string | null;
+}
+
 export interface MotionTimeline {
   readonly file: string;
   readonly script: "ok" | "none" | "unreadable";
+  /** The root's data-duration: the motion's length. */
+  readonly length: Owner;
+  readonly clips: readonly Clip[];
   readonly tweens: readonly Tween[];
+  readonly elements: Readonly<Record<string, ElementInfo>>;
 }
+
+/** The runtime's own start and duration for a clip, by the clip's element id (the `timeline` message). */
+export type RuntimeClips = Readonly<Record<string, { readonly start: number; readonly duration: number }>>;
 
 export interface MotionTimelineOptions {
   readonly file?: string;
+  readonly runtime?: RuntimeClips;
 }
 
 const SOURCE_CUT = 300;
@@ -187,9 +215,10 @@ export function staggerOffsets(tween: Tween, targetCount = tween.targets.length)
   const offsets = Array.from({ length: targetCount }, () => 0);
   const owner = tween.stagger;
   if (!owner || owner.kind !== "source" || typeof owner.value !== "number" || tween.staggerForm === null || tween.staggerForm === "other") return offsets;
+  const value = owner.value;
   return offsets.map((_, index) => {
-    if (tween.staggerForm === "amount") return targetCount > 1 ? (index * owner.value) / (targetCount - 1) : 0;
-    return index * owner.value;
+    if (tween.staggerForm === "amount") return targetCount > 1 ? (index * value) / (targetCount - 1) : 0;
+    return index * value;
   });
 }
 
@@ -264,7 +293,7 @@ const startOf = (node: ScriptNode, context: OwnerContext): Owner => {
 };
 
 /** The `data-hf-id`s a selector matches, in document order; none when it does not resolve. */
-const targetsOf = (document: Document, selector: string, partial: boolean): string[] => {
+const targetsOf = (document: Doc, selector: string, partial: boolean): string[] => {
   if (partial || !selector || selector.startsWith("__")) return [];
   try {
     return [...document.querySelectorAll(selector)].map((element) => element.getAttribute("data-hf-id") ?? "").filter((id) => id !== "");
@@ -273,20 +302,99 @@ const targetsOf = (document: Document, selector: string, partial: boolean): stri
   }
 };
 
+const NUMBER_TEXT = /^-?\d+(\.\d+)?$/;
+
+/** An attribute's value as an owner: a plain number is source, anything else (a clip name, a blank) is script. */
+const attributeOwner = (text: string | null): Owner => {
+  const value = text ?? "";
+  return NUMBER_TEXT.test(value.trim()) ? { kind: "source", value: Number(value) } : { kind: "script", text: value };
+};
+
+/** The parts of a DOM element and document the reading uses (linkedom provides them, the domain has no DOM lib). */
+interface El {
+  readonly id: string;
+  getAttribute(name: string): string | null;
+  hasAttribute(name: string): boolean;
+  readonly parentElement: El | null;
+}
+interface Doc {
+  querySelector(selector: string): El | null;
+  querySelectorAll(selector: string): El[];
+}
+
+const ancestorsOf = (element: El): El[] => {
+  const chain: El[] = [];
+  let current: El | null = element;
+  while (current) {
+    chain.push(current);
+    current = current.parentElement ?? null;
+  }
+  return chain;
+};
+
+/** The elements, the clips and the length of the composition, read from the stamped document. */
+const compositionOf = (document: Doc, options: MotionTimelineOptions) => {
+  const root = document.querySelector("[data-composition-id]");
+  const elements: Record<string, ElementInfo> = {};
+  const clipElements = root
+    ? [...document.querySelectorAll("[data-start]")].filter((el) => el !== root && ancestorsOf(el).includes(root))
+    : [];
+  const isClip = new Set(clipElements);
+  const idOf = (element: El) => element.getAttribute("data-hf-id") ?? "";
+  for (const element of document.querySelectorAll("[data-hf-id]")) {
+    const chain = ancestorsOf(element as El).slice(1);
+    const parent = chain.find((ancestor) => ancestor.hasAttribute("data-hf-id"));
+    const clip = [element as El, ...chain].find((candidate) => isClip.has(candidate));
+    elements[idOf(element as El)] = {
+      name: (element as El).id || idOf(element as El),
+      parent: parent ? idOf(parent) : null,
+      clip: clip ? idOf(clip) : null,
+    };
+  }
+  const clips = clipElements.map((element): Omit<Clip, "carry"> => {
+    const hfId = idOf(element);
+    const id = element.id || hfId;
+    const start = attributeOwner(element.getAttribute("data-start"));
+    const duration = attributeOwner(element.getAttribute("data-duration"));
+    const runtime = options.runtime?.[id];
+    const sourceStart = start.kind === "source" && typeof start.value === "number" ? start.value : null;
+    const sourceDuration = duration.kind === "source" && typeof duration.value === "number" ? duration.value : null;
+    return {
+      hfId,
+      id,
+      track: Number(element.getAttribute("data-track-index") ?? 0) || 0,
+      start: runtime && sourceStart !== null && runtime.start !== sourceStart ? { kind: "script", text: String(sourceStart) } : start,
+      duration: runtime && sourceDuration !== null && runtime.duration !== sourceDuration ? { kind: "script", text: String(sourceDuration) } : duration,
+    };
+  });
+  const length = root ? attributeOwner(root.getAttribute("data-duration")) : { kind: "script" as const, text: "" };
+  return { elements, clips, length };
+};
+
 export function motionTimeline(html: string, options: MotionTimelineOptions = {}): MotionTimeline {
   const file = options.file ?? "";
+  const stamped = ensureHfIds(html);
+  const document = parseHTML(stamped).document as unknown as Doc;
+  const { elements, clips: bareClips, length } = compositionOf(document, options);
   const script = findTimelineScript(inlineScripts(html));
-  if (!script) return { file, script: "none", tweens: [] };
-  const parsed = parseGsapScriptAcornForWrite(script.textContent);
-  if (!parsed) return { file, script: "unreadable", tweens: [] };
-  const text = script.textContent;
-  const callback = dialsCallback(parsed.ast as ScriptNode);
-  const context: OwnerContext = { source: text, dial: callback?.scope ?? null };
-  const dialsFn = callback?.fn ?? null;
-  const document = parseHTML(ensureHfIds(html)).document;
-  const tweens = parsed.located.map((entry, index) =>
-    tweenOf(entry.call, index, entry.id, context, text, dialsFn, targetsOf(document, entry.call.selector, entry.call.selectorPartial === true)),
-  );
-  return { file, script: "ok", tweens };
+  const parsed = script ? parseGsapScriptAcornForWrite(script.textContent) : null;
+  let tweens: Tween[] = [];
+  let state: MotionTimeline["script"] = "none";
+  if (script && !parsed) state = "unreadable";
+  if (script && parsed) {
+    state = "ok";
+    const text = script.textContent;
+    const callback = dialsCallback(parsed.ast as ScriptNode);
+    const context: OwnerContext = { source: text, dial: callback?.scope ?? null };
+    const dialsFn = callback?.fn ?? null;
+    tweens = parsed.located.map((entry, index) =>
+      tweenOf(entry.call, index, entry.id, context, text, dialsFn, targetsOf(document, entry.call.selector, entry.call.selectorPartial === true)),
+    );
+  }
+  const placeholder: Carry = { tweens: [], dials: [] };
+  const unfinished: Clip[] = bareClips.map((clip) => ({ ...clip, carry: placeholder }));
+  const model = { clips: unfinished, tweens, elements };
+  const clips = unfinished.map((clip) => ({ ...clip, carry: carryOf(model, clip) }));
+  return { file, script: state, length, clips, tweens, elements };
 }
 
