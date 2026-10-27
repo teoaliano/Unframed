@@ -3,6 +3,7 @@
  * chat, the commands that change it and the events they become. The decider and the
  * projector in this folder are the only code that interprets them.
  */
+import type { ElementChip } from "@unframed/contracts";
 import type { AgentProvider, Effort } from "./providerStatus.ts";
 
 export type RuntimeMode = "approval-required" | "auto-accept-edits" | "auto" | "full-access";
@@ -49,6 +50,8 @@ export interface MessageAttachment {
 
 export interface MessageContext {
   readonly selection: ReadonlyArray<string>;
+  /** The elements the person pointed at (spec 18). */
+  readonly elements?: ReadonlyArray<ElementChip>;
 }
 
 export type MessageRole = "user" | "assistant" | "reasoning";
