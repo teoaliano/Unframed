@@ -150,3 +150,134 @@ test("Delete on a kit card asks with the kit's own body, and removes it", async 
   await expect(presetItem(page, "Brand")).toHaveCount(0);
   await expect.poll(() => libraryKits(engine)).toEqual([]);
 });
+
+const tokenOf = async (engine: TestEngine, project: string, path: string) =>
+  (await kitOf(engine, project))?.tokens.find((token) => token.path === path) as Record<string, any> | undefined;
+
+/** The project's kit as it took the library kit at revision 1: primary, a space token it changed, and one it added. */
+const linkedKit = {
+  format: 1,
+  name: "Brand",
+  modes: ["light", "dark"],
+  tokens: [
+    { path: "color/brand/primary", type: "color", values: { light: "#1a73e8", dark: "#8ab4f8" } },
+    { path: "dimension/space/md", type: "dimension", value: "18px" },
+    { path: "dimension/space/lg", type: "dimension", value: "24px" },
+  ],
+  from: {
+    presetId: "kit-brand",
+    revision: 1,
+    base: {
+      modes: ["light", "dark"],
+      tokens: [
+        { path: "color/brand/primary", type: "color", values: { light: "#1a73e8", dark: "#8ab4f8" } },
+        { path: "dimension/space/md", type: "dimension", value: "16px" },
+      ],
+    },
+  },
+};
+
+/** The library kit at revision 2: primary's light value changed, space md changed, and a colour added. */
+const newerLibraryKit = libraryKit("kit-brand", "Brand", {
+  revision: 2,
+  tokens: [
+    { path: "color/brand/primary", type: "color", values: { light: "#0b57d0", dark: "#8ab4f8" } },
+    { path: "dimension/space/md", type: "dimension", value: "20px" },
+    { path: "color/brand/accent", type: "color", value: "#ff0000" },
+  ],
+});
+
+/** Seeds a project kit into the open canvas, opens the Kit dialog on it, and returns the dialog. */
+const openSeededKit = async (page: Page, engine: TestEngine, kit: { name: string }) => {
+  await seedKit(engine, kit);
+  await page.getByRole("button", { name: "Kit", exact: true }).click();
+  const dialog = page.getByRole("dialog", { name: "Kit" });
+  await expect(dialog.getByRole("textbox", { name: "Kit name" })).toHaveValue(kit.name);
+  return dialog;
+};
+
+test("the source line names the library kit, and a newer library revision offers Update from kit", async ({ page, engine }) => {
+  const project = await openCanvas(page, engine);
+  await writePresets(engine, [newerLibraryKit]);
+  const dialog = await openSeededKit(page, engine, linkedKit);
+
+  await expect(dialog).toContainText("From “Brand” in your library.");
+  await dialog.getByRole("button", { name: "Update from kit", exact: true }).click();
+
+  const update = page.getByRole("dialog", { name: "Update from “Brand”" });
+  await expect(update).toContainText("1 updated, 1 added, 2 kept as you changed them here, 0 no longer in the kit");
+  const conflict = update.locator('[data-conflict="dimension/space/md|light"]');
+  await expect(conflict).toContainText("Here: 18px");
+  await expect(conflict).toContainText("Kit: 20px");
+  await expect(conflict.getByRole("button", { name: "Keep mine", exact: true })).toHaveAttribute("aria-pressed", "true");
+  await conflict.getByRole("button", { name: "Take the kit's", exact: true }).click();
+  await update.getByRole("button", { name: "Update", exact: true }).click();
+
+  await expect(update).toHaveCount(0);
+  await expect.poll(() => kitOf(engine, project)).toMatchObject({ from: { presetId: "kit-brand", revision: 2 } });
+  await expect.poll(() => tokenOf(engine, project, "color/brand/accent")).toMatchObject({ value: "#ff0000" });
+  await expect.poll(() => tokenOf(engine, project, "color/brand/primary")).toMatchObject({ values: { light: "#0b57d0", dark: "#8ab4f8" } });
+  await expect.poll(() => tokenOf(engine, project, "dimension/space/md")).toMatchObject({ values: { light: "20px", dark: "18px" } });
+  await expect.poll(() => tokenOf(engine, project, "dimension/space/lg")).toMatchObject({ value: "24px" });
+
+  // One undo step takes the whole update back.
+  await page.keyboard.press("Escape");
+  await page.keyboard.press("ControlOrMeta+z");
+  await expect.poll(() => kitOf(engine, project)).toMatchObject({ from: { revision: 1 } });
+  await expect.poll(() => tokenOf(engine, project, "dimension/space/md")).toMatchObject({ value: "18px" });
+});
+
+test("a library kit that is gone is said so, and the project keeps its copy", async ({ page, engine }) => {
+  await openCanvas(page, engine);
+  await writePresets(engine, []);
+  const dialog = await openSeededKit(page, engine, linkedKit);
+
+  await expect(dialog).toContainText("The library kit “Brand” is gone. This project keeps its copy.");
+  await expect(dialog.getByRole("button", { name: "Update from kit", exact: true })).toHaveCount(0);
+  await dialog.getByRole("button", { name: "More" }).click();
+  await expect(page.getByRole("menuitem", { name: "Update in library" })).toHaveCount(0);
+});
+
+test("Update in library refused for a newer library revision says so, and offers Update from kit", async ({ page, engine }) => {
+  await openCanvas(page, engine);
+  await writePresets(engine, [newerLibraryKit]);
+  const dialog = await openSeededKit(page, engine, linkedKit);
+
+  await dialog.getByRole("button", { name: "More" }).click();
+  await page.getByRole("menuitem", { name: "Update in library" }).click();
+  const alert = dialog.getByRole("alert");
+  await expect(alert).toContainText("The library kit changed since this project took it. Update from kit first, so you do not overwrite those changes.");
+  await expect(toast(page, "Updated “Brand” in your library.")).toHaveCount(0);
+  await alert.getByRole("button", { name: "Update from kit", exact: true }).click();
+  await expect(page.getByRole("dialog", { name: "Update from “Brand”" })).toBeVisible();
+});
+
+test("Apply on the kit a project came from acts as Update from kit", async ({ page, engine }) => {
+  const project = await openCanvas(page, engine);
+  await writePresets(engine, [newerLibraryKit]);
+  const dialog = await openSeededKit(page, engine, linkedKit);
+  await page.keyboard.press("Escape");
+  await expect(dialog).toHaveCount(0);
+
+  await openKitsFilter(page);
+  await presetItem(page, "Brand").getByRole("button", { name: "Apply", exact: true }).click();
+  await expect(page.getByRole("dialog", { name: "Update from “Brand”" })).toBeVisible();
+  await expect(page.getByRole("alertdialog")).toHaveCount(0);
+  await expect.poll(() => kitOf(engine, project)).toMatchObject({ from: { presetId: "kit-brand", revision: 1 } });
+});
+
+test("with no differences from the library kit, Update from kit is not offered", async ({ page, engine }) => {
+  await openCanvas(page, engine);
+  const same = libraryKit("kit-brand", "Brand", {
+    revision: 2,
+    tokens: [
+      { path: "color/brand/primary", type: "color", values: { light: "#1a73e8", dark: "#8ab4f8" } },
+      { path: "dimension/space/md", type: "dimension", value: "16px" },
+    ],
+  });
+  await writePresets(engine, [same]);
+  const dialog = await openSeededKit(page, engine, linkedKit);
+
+  await expect(dialog).toContainText("From “Brand” in your library.");
+  await expect(dialog.getByRole("button", { name: "Update from kit", exact: true })).toHaveCount(0);
+});

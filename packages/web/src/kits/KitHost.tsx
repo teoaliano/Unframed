@@ -7,6 +7,7 @@ import { TldrawUiButtonIcon, TldrawUiToolbarButton, useEditor, useValue } from "
 import { registerSlot } from "../chrome/slots.ts";
 import { libraryUi } from "../library/state.ts";
 import { KitDialog } from "./KitDialog.tsx";
+import { UpdateFromKitDialog } from "./KitApply.tsx";
 import { kitUi } from "./state.ts";
 
 /** The Kit in the bottom bar: a tldraw toolbar button beside Library. */
@@ -22,6 +23,7 @@ const KitButton = () => {
 export const KitHost = () => {
   const editor = useEditor();
   const open = useValue("kit ui", () => kitUi(editor).get().open, [editor]);
+  const merging = useValue("kit merge", () => kitUi(editor).get().merging, [editor]);
 
   useEffect(() => registerSlot("kitButton", KitButton), []);
 
@@ -30,5 +32,11 @@ export const KitHost = () => {
     close();
     libraryUi(editor).update((state) => ({ ...state, open: true, type: "kit" }));
   };
-  return open ? <KitDialog onClose={close} onFromLibrary={fromLibrary} /> : null;
+  const endMerge = () => kitUi(editor).update((state) => ({ ...state, merging: undefined }));
+  return (
+    <>
+      {open && <KitDialog onClose={close} onFromLibrary={fromLibrary} />}
+      {merging !== undefined && <UpdateFromKitDialog editor={editor} preset={merging} onClose={endMerge} />}
+    </>
+  );
 };

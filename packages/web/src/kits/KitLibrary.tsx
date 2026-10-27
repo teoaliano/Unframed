@@ -3,7 +3,8 @@
  * the kit, and Update in library, which replaces the linked library kit with the project's.
  */
 import { UnframedError } from "@unframed/contracts";
-import { PRESET_EMPTY_NAME_MESSAGE, type Kit, type Token } from "@unframed/domain";
+import { PRESET_EMPTY_NAME_MESSAGE, type Kit, type KitPreset, type LibraryEntry, type Token } from "@unframed/domain";
+import type { EngineConnection } from "../rpc/engine.ts";
 import { useState } from "react";
 import { Button } from "~/components/ui/button";
 import { Dialog, DialogClose, DialogDescription, DialogFooter, DialogHeader, DialogPanel, DialogPopup, DialogTitle } from "~/components/ui/dialog";
@@ -83,14 +84,27 @@ export const SaveKitDialog = ({ kit, onClose, onSaved }: { readonly kit: Kit; re
   );
 };
 
-/** Update in library: the engine replaces the linked preset. Answers the new revision and name, or the refusal's message. */
-export const updateInLibrary = async (engine: ReturnType<typeof useEngine>, project: string): Promise<{ presetId: string; revision: number } | undefined> => {
+export type UpdateOutcome = { readonly kind: "updated"; readonly presetId: string; readonly revision: number } | { readonly kind: "newer"; readonly message: string } | { readonly kind: "failed" };
+
+/**
+ * Update in library: the engine replaces the linked preset. A library kit newer than the project's
+ * last take is `newer`, which the dialog answers with Update from kit rather than a toast.
+ */
+export const updateInLibrary = async (engine: ReturnType<typeof useEngine>, project: string): Promise<UpdateOutcome> => {
   try {
     const { preset } = await engine.call("kit.updateInLibrary", { project });
     showNotice(`Updated “${preset.name}” in your library.`, "info");
-    return { presetId: preset.id, revision: (preset as { revision: number }).revision };
+    return { kind: "updated", presetId: preset.id, revision: (preset as { revision: number }).revision };
   } catch (error) {
+    if (error instanceof UnframedError && error.code === "conflict") return { kind: "newer", message: error.message };
     showError(messageOf(error));
-    return undefined;
+    return { kind: "failed" };
   }
+};
+
+/** The library's kit entry with this id, or undefined when it is not in the library. */
+export const libraryKitById = async (engine: EngineConnection, id: string): Promise<KitPreset | undefined> => {
+  const { presets } = await engine.call("library.list");
+  const found = (presets as unknown as LibraryEntry[]).find((entry) => entry.id === id);
+  return found?.kind === "kit" ? found : undefined;
 };

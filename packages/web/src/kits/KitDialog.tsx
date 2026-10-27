@@ -1,4 +1,4 @@
-import { applyKitOps, type KitOp } from "@unframed/domain";
+import { applyKitOps, type KitOp, type KitPreset } from "@unframed/domain";
 import { useEffect, useRef, useState } from "react";
 import { useEditor, useValue, type TLShapeId } from "tldraw";
 import { EllipsisIcon } from "lucide-react";
@@ -11,7 +11,9 @@ import type { KitExportFormat } from "@unframed/contracts";
 import { useCanvasProject, useEngine } from "../context.ts";
 import { KitTable, type KitUsageCounts } from "./KitTable.tsx";
 import { commitKit, kitOf, linkKit } from "./kitRoom.ts";
-import { linkFor, SaveKitDialog, updateInLibrary } from "./KitLibrary.tsx";
+import { libraryKitById, linkFor, SaveKitDialog, updateInLibrary } from "./KitLibrary.tsx";
+import { hasDifferences, mergeWith } from "./KitApply.tsx";
+import { kitUi } from "./state.ts";
 import { ImportKitDialog } from "./KitImport.tsx";
 import { showError, showReveal } from "../toasts.tsx";
 
@@ -36,6 +38,12 @@ export const KitDialog = ({ onClose, onFromLibrary }: { readonly onClose: () => 
   const [ask, setAsk] = useState<Ask>();
   const [saving, setSaving] = useState(false);
   const [importing, setImporting] = useState(false);
+  // The library kit this project came from: undefined while it is read, null when it is gone.
+  const [linkedPreset, setLinkedPreset] = useState<KitPreset | null>();
+  // The engine refused Update in library because the library kit is newer; the dialog offers Update from kit.
+  const [newer, setNewer] = useState<string>();
+  const fromId = kit?.from?.presetId;
+  const fromRevision = kit?.from?.revision;
 
   // Used-by counts are read when the dialog opens and after each kit change (spec 19).
   useEffect(() => {
@@ -59,10 +67,51 @@ export const KitDialog = ({ onClose, onFromLibrary }: { readonly onClose: () => 
     if (current !== null) linkKit(editor, linkFor(presetId, revision, current));
   };
 
+  // The library kit a project came from is read when the dialog opens and after each update.
+  useEffect(() => {
+    if (fromId === undefined) return;
+    let live = true;
+    libraryKitById(engine, fromId)
+      .then((found) => live && setLinkedPreset(found ?? null))
+      .catch(() => live && setLinkedPreset(undefined));
+    return () => {
+      live = false;
+    };
+  }, [engine, fromId, fromRevision]);
+
   const update = async () => {
-    const done = await updateInLibrary(engine, project);
-    if (done !== undefined) relink(done.presetId, done.revision);
+    const outcome = await updateInLibrary(engine, project);
+    if (outcome.kind === "updated") {
+      setNewer(undefined);
+      relink(outcome.presetId, outcome.revision);
+    } else if (outcome.kind === "newer") setNewer(outcome.message);
   };
+
+  /** Opens Update from kit for the library kit this project came from. */
+  const updateFromKit = async () => {
+    if (kit?.from === undefined) return;
+    const found = await libraryKitById(engine, kit.from.presetId);
+    if (found !== undefined) kitUi(editor).update((state) => ({ ...state, merging: found }));
+  };
+
+  /** The source line: the library kit it came from, the offer of Update from kit, or that the library kit is gone. */
+  const sourceLine = () => {
+    if (kit === null || kit.from === undefined || linkedPreset === undefined) return null;
+    if (linkedPreset === null)
+      return <p className="m-0 text-sm text-muted-foreground">{`The library kit “${kit.name}” is gone. This project keeps its copy.`}</p>;
+    const offer = linkedPreset.revision > kit.from.revision && hasDifferences(mergeWith(kit, linkedPreset), kit);
+    return (
+      <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
+        <span>{`From “${linkedPreset.name}” in your library.`}</span>
+        {offer && (
+          <Button variant="ghost" size="sm" onClick={() => void updateFromKit()}>
+            Update from kit
+          </Button>
+        )}
+      </div>
+    );
+  };
+
 
   /** Export writes the kit into the project folder; the toast offers to reveal the file. */
   const exportKit = (format: KitExportFormat) => {
@@ -94,7 +143,7 @@ export const KitDialog = ({ onClose, onFromLibrary }: { readonly onClose: () => 
             <DialogTitle>Kit</DialogTitle>
             {kit !== null && (
               <KitMenu
-                linked={kit.from !== undefined}
+                linked={kit.from !== undefined && linkedPreset !== null}
                 onSave={() => setSaving(true)}
                 onUpdate={() => void update()}
                 onImport={() => setImporting(true)}
@@ -119,6 +168,15 @@ export const KitDialog = ({ onClose, onFromLibrary }: { readonly onClose: () => 
               </div>
             ) : (
               <div className="grid gap-4">
+                {sourceLine()}
+                {newer !== undefined && (
+                  <p role="alert" className="m-0 flex flex-wrap items-center gap-2 text-sm text-destructive">
+                    {newer}
+                    <Button variant="outline" size="sm" onClick={() => void updateFromKit()}>
+                      Update from kit
+                    </Button>
+                  </p>
+                )}
                 <Input
                   key={kit.name}
                   aria-label="Kit name"
