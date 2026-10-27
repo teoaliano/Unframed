@@ -106,14 +106,18 @@ export const artifactsLayer = Layer.effect(
     });
 
     const pointers = new LivePointers((project) => media.folder(project));
-    yield* rooms.afterOpen((project, room) => pointers.opened(project, room.read()));
-    yield* rooms.afterCommit((project, change) => pointers.committed(project, change.records.values(), change.removed));
+    yield* rooms.afterOpen((project, room) => pointers.opened(project, room.read(), kitOf(room.read())));
+    yield* rooms.afterCommit((project, change, room) => {
+      const kit = kitOf(room.read());
+      if (change.records.has(TLDOCUMENT_ID)) pointers.kitChanged(project, room.read(), kit);
+      pointers.committed(project, change.records.values(), change.removed, kit);
+    });
 
     const openLive = (project: string, shapeId: string) =>
       Effect.gen(function* () {
         const records = yield* rooms.read(project);
         const opened = yield* Effect.tryPromise({
-          try: () => pointers.open(projectSlug(project), records.find((record) => record.id === shapeId)),
+          try: () => pointers.open(projectSlug(project), records.find((record) => record.id === shapeId), kitOf(records)),
           catch: (error) => unframedError("internal", `Could not open the live viewer: ${errorText(error)}`),
         });
         if (opened === false) return yield* unframedError("not_found", `There is no page or motion ${shapeId} on this canvas.`);

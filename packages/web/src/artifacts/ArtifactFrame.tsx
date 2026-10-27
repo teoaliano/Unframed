@@ -1,4 +1,4 @@
-import { artifactUrl, defaultDialValues, liveViewerUrl, normaliseDials, type ArtifactKind, type DialsAnnouncement } from "@unframed/domain";
+import { artifactUrl, defaultDialValues, liveViewerUrl, normaliseDials, type ArtifactKind, type DialsAnnouncement, type Kit } from "@unframed/domain";
 import { useEffect, useRef } from "react";
 
 export interface ArtifactFrameProps {
@@ -8,6 +8,10 @@ export interface ArtifactFrameProps {
   readonly previewPort: number;
   /** The shape's saved parameter values, sent to the frame whenever it announces and whenever they change. */
   readonly dials: Readonly<Record<string, unknown>> | undefined;
+  /** The project kit (spec 19). A change is sent to the frame as `unframed:tokens:set`, with no reload. */
+  readonly kit?: Kit | null | undefined;
+  /** The kit mode the artifact shows (spec 19). Absent means the kit's default mode. */
+  readonly mode?: string | undefined;
   readonly interactive: boolean;
   /** The canvas loads its frames lazily; the editor's frame is live from the start. */
   readonly lazy: boolean;
@@ -108,7 +112,7 @@ const openShapeMenu = (frame: HTMLIFrameElement, menu: FrameMenu) => {
  * and on load, answers an announcement with the shape's saved values, and sends them again
  * the moment they change. It accepts `unframed:dials` only from its own frame's window.
  */
-export const ArtifactFrame = ({ project, kind, file, previewPort, dials, interactive, lazy, onAnnounce, onReady }: ArtifactFrameProps) => {
+export const ArtifactFrame = ({ project, kind, file, previewPort, dials, kit, mode, interactive, lazy, onAnnounce, onReady }: ArtifactFrameProps) => {
   const frame = useRef<HTMLIFrameElement>(null);
   const url = urlOf(project, kind, file, previewPort);
   const target = new URL(url).origin;
@@ -126,7 +130,10 @@ export const ArtifactFrame = ({ project, kind, file, previewPort, dials, interac
     }
   };
   // On the canvas the frame also asks for right-clicks, so a selected frame still opens its shape's menu.
-  const hello = () => post({ type: "unframed:dials:hello", ...(frame.current && canvasUnder(frame.current) ? { menus: true } : {}) });
+  const hello = () => {
+    post({ type: "unframed:dials:hello", ...(frame.current && canvasUnder(frame.current) ? { menus: true } : {}) });
+    post({ type: "unframed:tokens:mode", mode: mode ?? null });
+  };
   const set = (values: unknown) => post({ type: "unframed:dials:set", values });
 
   useEffect(() => {
@@ -162,6 +169,27 @@ export const ArtifactFrame = ({ project, kind, file, previewPort, dials, interac
     const declared = heard.current === undefined ? undefined : normaliseDials(heard.current.config);
     if (declared?.ok) set(defaultDialValues(declared.schema));
   }, [serialised]);
+
+  // A mode change is sent at once; the frame's tokens script re-applies its tokens for that mode.
+  const modeFirst = useRef(true);
+  useEffect(() => {
+    if (modeFirst.current) {
+      modeFirst.current = false;
+      return;
+    }
+    post({ type: "unframed:tokens:mode", mode: mode ?? null });
+  }, [mode]);
+
+  // A kit change reaches the frame at once: the tokens script replaces its style and re-applies its mode.
+  const kitText = JSON.stringify(kit ?? null);
+  const kitFirst = useRef(true);
+  useEffect(() => {
+    if (kitFirst.current) {
+      kitFirst.current = false;
+      return;
+    }
+    if (kit) post({ type: "unframed:tokens:set", kit: { format: kit.format, name: kit.name, modes: kit.modes, tokens: kit.tokens } });
+  }, [kitText]);
 
   return (
     <iframe
