@@ -211,7 +211,8 @@ export class Snapshots {
     const size = { w: shape.props.w, h: shape.props.h };
     if (onlyIfTokens && !(await readFile(join(folder, shape.props.file), "utf8").catch(() => "")).includes("unframed-tokens.js")) return;
     if (this.fresh.delete(key)) {
-      const cached = (await this.list(project)).some((snapshot) => snapshot.file === shape.props.file && snapshotFits(snapshot, size));
+      const want = this.seen.get(key);
+      const cached = (await this.list(project)).some((snapshot) => snapshot.file === shape.props.file && snapshotFits(snapshot, size) && (snapshot.mode ?? null) === (want?.mode ?? null) && (snapshot.kit ?? null) === (want?.kit ?? null));
       if (cached) return;
     }
     const picture = await renderer({
@@ -228,12 +229,12 @@ export class Snapshots {
     if (picture === undefined) return;
     const dir = join(folder, SNAPSHOT_FOLDER);
     await mkdir(dir, { recursive: true });
-    const name = snapshotFileName(shape.props.file, size);
+    const made = { mode: this.seen.get(key)?.mode ?? null, kit: this.seen.get(key)?.kit ?? null };
+    const name = snapshotFileName(shape.props.file, size, made);
     const temp = join(dir, `.${name}.${process.pid}.tmp`);
     await writeFile(temp, picture);
     await rename(temp, join(dir, name));
     const info = await stat(join(dir, name));
-    const made = this.seen.get(key);
-    this.deps.publish(project, { file: shape.props.file, w: Math.round(size.w), h: Math.round(size.h), at: Math.floor(info.mtimeMs), mode: made?.mode ?? null, kit: made?.kit ?? null });
+    this.deps.publish(project, { file: shape.props.file, w: Math.round(size.w), h: Math.round(size.h), at: Math.floor(info.mtimeMs), ...made });
   }
 }

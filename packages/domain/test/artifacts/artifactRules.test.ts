@@ -196,9 +196,12 @@ describe("which artifacts run", () => {
 });
 
 describe("snapshot names and fit", () => {
-  it("names a snapshot after the artifact file and its size, and reads the name back", () => {
-    expect(snapshotFileName("1-a.html", { w: 480.4, h: 320 })).toBe("1-a.html-480x320.png");
-    expect(parseSnapshotFileName("1-a.html-480x320.png")).toEqual({ file: "1-a.html", w: 480, h: 320 });
+  it("names a snapshot after the artifact file, its size, kit mode and kit stamp, and reads the name back", () => {
+    expect(snapshotFileName("1-a.html", { w: 480.4, h: 320 }, { mode: "dark", kit: "1a2b3c4d" })).toBe("1-a.html-480x320-dark-1a2b3c4d.png");
+    expect(snapshotFileName("1-a.html", { w: 480, h: 320 }, { mode: null, kit: null })).toBe("1-a.html-480x320-none-none.png");
+    expect(parseSnapshotFileName("1-a.html-480x320-dark-1a2b3c4d.png")).toEqual({ file: "1-a.html", w: 480, h: 320, mode: "dark", kit: "1a2b3c4d" });
+    expect(parseSnapshotFileName("1-a.html-480x320-none-none.png")).toEqual({ file: "1-a.html", w: 480, h: 320, mode: null, kit: null });
+    expect(parseSnapshotFileName("1-a.html-480x320.png")).toBeUndefined();
     expect(parseSnapshotFileName("photo.png-512.webp")).toBeUndefined();
   });
 

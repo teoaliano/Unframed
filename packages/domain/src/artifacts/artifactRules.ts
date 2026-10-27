@@ -206,12 +206,15 @@ export const snapshotFits = (snapshot: { readonly w: number; readonly h: number 
 /** Where a motion's snapshot catches it: 1 s in, or half way through a motion shorter than 1 s. An unknown length counts as long enough. */
 export const snapshotSeekSeconds = (duration: number): number => (Number.isFinite(duration) && duration > 0 && duration < 1 ? duration / 2 : 1);
 
-/** A snapshot's file in the cache folder: named after the artifact file and its size. */
-export const snapshotFileName = (file: string, size: { readonly w: number; readonly h: number }): string =>
-  `${file}-${Math.round(size.w)}x${Math.round(size.h)}.png`;
+/** A snapshot's file in the cache folder: named after the artifact file, its size, and the kit mode and stamp it was made with (`none` for no mode or no kit). */
+export type SnapshotKit = { readonly mode: string | null; readonly kit: string | null };
 
-/** Reads a snapshot file name back: the artifact file and the size, or nothing for any other name. */
-export const parseSnapshotFileName = (name: string): { file: string; w: number; h: number } | undefined => {
-  const match = /^(.+\.html?)-(\d+)x(\d+)\.png$/i.exec(name);
-  return match ? { file: match[1]!, w: Number(match[2]), h: Number(match[3]) } : undefined;
+export const snapshotFileName = (file: string, size: { readonly w: number; readonly h: number }, kit: SnapshotKit): string =>
+  `${file}-${Math.round(size.w)}x${Math.round(size.h)}-${kit.mode ?? "none"}-${kit.kit ?? "none"}.png`;
+
+/** Reads a snapshot file name back: the artifact file, the size, the kit mode and the kit stamp, or nothing for any other name. */
+export const parseSnapshotFileName = (name: string): { file: string; w: number; h: number; mode: string | null; kit: string | null } | undefined => {
+  const match = /^(.+\.html?)-(\d+)x(\d+)-([a-z0-9][a-z0-9-]{0,31}|none)-([0-9a-f]{8}|none)\.png$/i.exec(name);
+  if (!match) return undefined;
+  return { file: match[1]!, w: Number(match[2]), h: Number(match[3]), mode: match[4] === "none" ? null : match[4]!, kit: match[5] === "none" ? null : match[5]! };
 };
