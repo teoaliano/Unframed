@@ -19,7 +19,7 @@ import { OpenProjects } from "../openProjects.ts";
 import { Runs } from "../runs/runs.ts";
 import { Config } from "../services.ts";
 import { ensureLibrary, writeUploadedArtifact } from "./artifactStore.ts";
-import { ensureTokens, kitOf, TOKENS_FILE } from "../kits/tokensFile.ts";
+import { ensureTokensFor, kitOf, TOKENS_FILE, ensureTokens } from "../kits/tokensFile.ts";
 import { findChrome } from "./chrome.ts";
 import { producerBackend, Renderer, RenderRefused, stubBackend } from "./renderer.ts";
 import { HeadlessChrome } from "./headlessChrome.ts";
@@ -40,6 +40,7 @@ export class Artifacts extends Context.Service<
       file: string;
       title?: string | undefined;
       dials?: unknown;
+      mode?: string | undefined;
       shapeId: string;
     }) => Effect.Effect<{ id: string; status: "queued"; placeholder: string }, UnframedError>;
     readonly renderStatus: (project: string, id: string) => Effect.Effect<RenderStatus, UnframedError>;
@@ -87,17 +88,18 @@ export const artifactsLayer = Layer.effect(
       publish: (project, snapshot) => void run(PubSub.publish(written, { project, snapshot })),
     });
     yield* rooms.afterOpen((project, room) => {
-      snapshots.opened(project, room.read());
+      snapshots.opened(project, room.read(), kitOf(room.read()));
       void run(openProjects.register(project, "artifact snapshots", Effect.sync(() => snapshots.forget(project))));
     });
-    yield* rooms.afterCommit((project, change) => snapshots.committed(project, [...change.records.values()]));
+    yield* rooms.afterCommit((project, change, room) => {
+      const kit = kitOf(room.read());
+      if (change.records.has(TLDOCUMENT_ID)) snapshots.kitChanged(project, room.read(), kit);
+      snapshots.committed(project, [...change.records.values()], kit);
+    });
 
     // The tokens script follows the kit: after every commit that touches the document record, and when a room opens.
     const writeTokens = (project: string, kit: ReturnType<typeof kitOf>) =>
-      void media
-        .folder(project)
-        .then((folder) => (folder === undefined ? undefined : ensureTokens(folder, kit)))
-        .catch((error: unknown) => logError(`${project}: could not write ${TOKENS_FILE}: ${errorText(error)}`));
+      ensureTokensFor(() => media.folder(project), kit, (error) => logError(`${project}: could not write ${TOKENS_FILE}: ${errorText(error)}`));
     yield* rooms.afterOpen((project, room) => writeTokens(project, kitOf(room.read())));
     yield* rooms.afterCommit((project, change, room) => {
       if (change.records.has(TLDOCUMENT_ID)) writeTokens(project, kitOf(room.read()));

@@ -42,3 +42,23 @@ export const ensureTokens = (folder: string, kit: Kit | null): Promise<void> => 
   queue = run.catch(() => undefined);
   return run;
 };
+
+/** Writes started by a room's hooks and not yet finished, so a project removal can wait for them. */
+const inflight = new Set<Promise<unknown>>();
+
+/**
+ * Writes the script for a project whose folder is found when the write starts: a room's hooks
+ * call this, and a removal waits for every call still running (`settleTokens`).
+ */
+export const ensureTokensFor = (folder: () => Promise<string | undefined>, kit: Kit | null, onError: (error: unknown) => void): void => {
+  const run = folder()
+    .then((path) => (path === undefined ? undefined : ensureTokens(path, kit)))
+    .catch(onError);
+  inflight.add(run);
+  void run.finally(() => inflight.delete(run));
+};
+
+/** Resolves once every tokens write started so far has finished. */
+export const settleTokens = async (): Promise<void> => {
+  while (inflight.size > 0) await Promise.all([...inflight]);
+};

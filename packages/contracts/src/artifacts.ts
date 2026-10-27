@@ -20,6 +20,8 @@ export const MotionRenderStart = Rpc.make("motion.renderStart", {
     file: Schema.String,
     title: Schema.optionalKey(Schema.String),
     dials: Schema.optionalKey(Schema.Unknown),
+    /** The kit mode the render uses (spec 19). Absent means the default. */
+    mode: Schema.optionalKey(Schema.String),
     shapeId: Schema.String,
   }),
   success: Schema.Struct({ id: Schema.String, status: RenderState, placeholder: Schema.String }),
@@ -51,6 +53,9 @@ export const ArtifactSnapshot = Schema.Struct({
   w: Schema.Number,
   h: Schema.Number,
   at: Schema.Number,
+  /** The kit mode the picture shows, and the kit stamp it was made with (spec 19). Absent with no kit. */
+  mode: Schema.optionalKey(Schema.NullOr(Schema.String)),
+  kit: Schema.optionalKey(Schema.NullOr(Schema.String)),
 });
 export type ArtifactSnapshot = typeof ArtifactSnapshot.Type;
 

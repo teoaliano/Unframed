@@ -18,6 +18,7 @@ import { errorText, logError, logInfo } from "../log.ts";
 import { clearChange, fillFor, indexOnTop, isShape, PLACEHOLDER_WIDTH, videoPlaceholder, type LandedClip, type RunOutcome } from "../runs/placeholders.ts";
 import { shapePageBoxes } from "../runs/shapeBounds.ts";
 import { ensureLibrary, placeRenderOutput } from "./artifactStore.ts";
+import { kitStamp } from "@unframed/domain";
 import { ensureTokens, kitOf } from "../kits/tokensFile.ts";
 
 const COMPOSITION_FILE = /^[A-Za-z0-9][A-Za-z0-9._-]*\.html?$/;
@@ -28,11 +29,19 @@ export interface ProducerRun {
   readonly folder: string;
   readonly entry: string;
   readonly outputPath: string;
-  /** `{ unframedDials }` when the render has tuned values, else `null`. */
+  /** `{ unframedDials, unframedMode }` for the values the render has (spec 19 adds the mode), else `null`. */
   readonly variables: Record<string, unknown> | null;
   readonly chromePath: string;
   readonly onProgress: (progress: number, message: string) => void;
 }
+
+/** The producer's variables: the tuned dials and the kit mode, when there are any (spec 19). */
+const renderVariables = (dials: Record<string, unknown> | null, mode: string | undefined): Record<string, unknown> | null => {
+  const variables: Record<string, unknown> = {};
+  if (dials !== null && Object.keys(dials).length > 0) variables.unframedDials = dials;
+  if (mode !== undefined) variables.unframedMode = mode;
+  return Object.keys(variables).length === 0 ? null : variables;
+};
 
 /** The seam the test hook replaces: the producer and the Chrome search. */
 export interface RenderBackend {
@@ -155,7 +164,7 @@ export class Renderer {
     });
   }
 
-  async start(input: { project: string; file: string; title?: string | undefined; dials?: unknown; shapeId: string }): Promise<{ id: string; status: "queued"; placeholder: string }> {
+  async start(input: { project: string; file: string; title?: string | undefined; dials?: unknown; mode?: string | undefined; shapeId: string }): Promise<{ id: string; status: "queued"; placeholder: string }> {
     if (!COMPOSITION_FILE.test(input.file)) throw new RenderRefused("bad_request", "Which composition? Pass its .html file name.");
     const project = this.deps.slug(input.project);
     const folder = await this.deps.folder(input.project);
@@ -169,6 +178,8 @@ export class Renderer {
     }
     const title = (input.title ?? "").slice(0, ARTIFACT_TITLE_MAX);
     const dials = isPlainObject(input.dials) ? input.dials : null;
+    const kit = kitOf(await this.deps.read(project));
+    const mode = input.mode !== undefined && kit !== null && kit.modes.includes(input.mode) && input.mode !== kit.modes[0] ? input.mode : undefined;
     const startedAt = Date.now();
     const id = `r-${startedAt.toString(36)}-${[...randomBytes(6)].map((byte) => (byte % 36).toString(36)).join("")}`;
 
@@ -200,7 +211,7 @@ export class Renderer {
     }
     await this.track(project);
     this.renders.set(id, { id, project, file: input.file, status: "queued", progress: 0, message: "", output: null, error: null });
-    void this.run({ id, project, folder, file: input.file, title, dials, placeholder: placeholder.id, size, run });
+    void this.run({ id, project, folder, file: input.file, title, dials, mode, kit: kit === null ? undefined : { name: kit.name, stamp: kitStamp(kit) }, placeholder: placeholder.id, size, run });
     return { id, status: "queued", placeholder: placeholder.id };
   }
 
@@ -211,6 +222,8 @@ export class Renderer {
     file: string;
     title: string;
     dials: Record<string, unknown> | null;
+    mode: string | undefined;
+    kit: { name: string; stamp: string } | undefined;
     placeholder: string;
     size: { w: number; h: number };
     run: { settle: (outcome: RunOutcome<LandedClip>) => void };
@@ -226,11 +239,11 @@ export class Renderer {
         folder: job.folder,
         entry: job.file,
         outputPath,
-        variables: job.dials !== null && Object.keys(job.dials).length > 0 ? { unframedDials: job.dials } : null,
+        variables: renderVariables(job.dials, job.mode),
         chromePath,
         onProgress: (progress, message) => this.update(job.id, { progress, message }),
       });
-      const placed = await placeRenderOutput(job.folder, { from: outputPath, of: job.file, title: job.title, dials: job.dials });
+      const placed = await placeRenderOutput(job.folder, { from: outputPath, of: job.file, title: job.title, dials: job.dials, mode: job.mode, kit: job.kit });
       outcome = { ok: true, landed: { kind: "clip", file: placed.file, bytes: placed.bytes, w: job.size.w, h: job.size.h } };
     } catch (error) {
       outcome = { ok: false, error: errorText(error) };

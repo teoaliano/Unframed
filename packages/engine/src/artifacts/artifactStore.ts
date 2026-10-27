@@ -180,6 +180,10 @@ export interface RenderSidecar {
   readonly quality: "standard";
   readonly bytes: number;
   readonly dials?: Readonly<Record<string, unknown>>;
+  /** The kit mode the render used, when it is not the default (spec 19). */
+  readonly mode?: string;
+  /** The kit the render used, when the project had one (spec 19). */
+  readonly kit?: { readonly name: string; readonly stamp: string };
   readonly at: string;
 }
 
@@ -190,7 +194,7 @@ export interface RenderSidecar {
  */
 export const placeRenderOutput = async (
   folder: string,
-  input: { readonly from: string; readonly of: string; readonly title: string; readonly dials: Readonly<Record<string, unknown>> | null },
+  input: { readonly from: string; readonly of: string; readonly title: string; readonly dials: Readonly<Record<string, unknown>> | null; readonly mode?: string | undefined; readonly kit?: { readonly name: string; readonly stamp: string } | undefined },
 ): Promise<{ file: string; bytes: number }> => {
   const bytes = (await stat(input.from)).size;
   const place = (path: string) => copyFile(input.from, path, constants.COPYFILE_EXCL);
@@ -204,6 +208,8 @@ export const placeRenderOutput = async (
       quality: "standard",
       bytes,
       ...(input.dials !== null && Object.keys(input.dials).length > 0 ? { dials: input.dials } : {}),
+      ...(input.mode === undefined ? {} : { mode: input.mode }),
+      ...(input.kit === undefined ? {} : { kit: input.kit }),
       at: new Date().toISOString(),
     };
     return `${JSON.stringify(sidecar, null, 2)}\n`;
