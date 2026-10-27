@@ -9,7 +9,8 @@ import { Input } from "~/components/ui/input";
 import { Menu, MenuItem, MenuPopup } from "~/components/ui/menu";
 import { useCanvasProject, useEngine } from "../context.ts";
 import { KitTable, type KitUsageCounts } from "./KitTable.tsx";
-import { commitKit, kitOf } from "./kitRoom.ts";
+import { commitKit, kitOf, linkKit } from "./kitRoom.ts";
+import { linkFor, SaveKitDialog, updateInLibrary } from "./KitLibrary.tsx";
 
 export const NO_KIT_MESSAGE = "This project has no kit yet. A kit holds the colours, sizes, fonts and motion values its pages and motions share.";
 export const DEFAULT_KIT_NAME = "Kit";
@@ -30,6 +31,7 @@ export const KitDialog = ({ onClose, onFromLibrary }: { readonly onClose: () => 
   const [problem, setProblem] = useState<string>();
   const [usage, setUsage] = useState<KitUsageCounts>(NO_USE);
   const [ask, setAsk] = useState<Ask>();
+  const [saving, setSaving] = useState(false);
 
   // Used-by counts are read when the dialog opens and after each kit change (spec 19).
   useEffect(() => {
@@ -45,6 +47,17 @@ export const KitDialog = ({ onClose, onFromLibrary }: { readonly onClose: () => 
     const result = commitKit(editor, ops);
     setProblem(result.ok ? undefined : result.refusal);
     return result.ok ? undefined : result.refusal;
+  };
+
+  /** After a save or an update, the project's link says which library kit it matches, as it is now. */
+  const relink = (presetId: string, revision: number) => {
+    const current = kitOf(editor);
+    if (current !== null) linkKit(editor, linkFor(presetId, revision, current));
+  };
+
+  const update = async () => {
+    const done = await updateInLibrary(engine, project);
+    if (done !== undefined) relink(done.presetId, done.revision);
   };
 
   const titleOf = (id: string) => (editor.getShape(id as TLShapeId) as { props?: { title?: string } } | undefined)?.props?.title ?? id;
@@ -67,7 +80,7 @@ export const KitDialog = ({ onClose, onFromLibrary }: { readonly onClose: () => 
         <DialogPopup data-testid="kit" className="max-w-[960px]">
           <DialogHeader>
             <DialogTitle>Kit</DialogTitle>
-            {kit !== null && <KitMenu onDelete={() => setAsk({ kind: "kit" })} />}
+            {kit !== null && <KitMenu linked={kit.from !== undefined} onSave={() => setSaving(true)} onUpdate={() => void update()} onDelete={() => setAsk({ kind: "kit" })} />}
           </DialogHeader>
           <DialogPanel>
             {kit === null ? (
@@ -101,6 +114,8 @@ export const KitDialog = ({ onClose, onFromLibrary }: { readonly onClose: () => 
           </DialogPanel>
         </DialogPopup>
       </Dialog>
+
+      {saving && kit !== null && <SaveKitDialog kit={kit} onClose={() => setSaving(false)} onSaved={(presetId, revision) => { relink(presetId, revision); setSaving(false); }} />}
 
       <AlertDialog open={ask !== undefined} onOpenChange={(open) => !open && setAsk(undefined)}>
         <AlertDialogPopup className="max-w-[400px]">
@@ -137,7 +152,7 @@ export const KitDialog = ({ onClose, onFromLibrary }: { readonly onClose: () => 
 };
 
 /** The kit's More menu: the actions that are not a cell's. */
-const KitMenu = ({ onDelete }: { readonly onDelete: () => void }) => {
+const KitMenu = ({ linked, onSave, onUpdate, onDelete }: { readonly linked: boolean; readonly onSave: () => void; readonly onUpdate: () => void; readonly onDelete: () => void }) => {
   const [open, setOpen] = useState(false);
   const trigger = useRef<HTMLButtonElement>(null);
   return (
@@ -146,6 +161,8 @@ const KitMenu = ({ onDelete }: { readonly onDelete: () => void }) => {
         <EllipsisIcon aria-hidden />
       </Button>
       <MenuPopup anchor={trigger} side="bottom" align="end">
+        <MenuItem onClick={onSave}>Save to library</MenuItem>
+        {linked && <MenuItem onClick={onUpdate}>Update in library</MenuItem>}
         <MenuItem onClick={onDelete}>Delete kit</MenuItem>
       </MenuPopup>
     </Menu>

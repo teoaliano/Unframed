@@ -1,5 +1,5 @@
 import type { Locator, Page } from "@playwright/test";
-import { openCanvas, roomRecords } from "./canvas.ts";
+import { openCanvas, roomRecords, toast } from "./canvas.ts";
 import { expect, test } from "./fixtures.ts";
 import { putRecords } from "./media.ts";
 import type { TestEngine } from "../../engine/test/engineProcess.ts";
@@ -258,4 +258,55 @@ test("Delete kit asks, and the project is left with no kit", async ({ page, engi
 
   await expect(dialog).toContainText("This project has no kit yet.");
   await expect.poll(() => kitOf(engine, project)).toBeUndefined();
+});
+
+const libraryKits = async (engine: TestEngine): Promise<Array<Record<string, any>>> => {
+  const { presets } = await (await engine.rpc()).call("library.list");
+  return [...presets].filter((preset: { kind: string }) => preset.kind === "kit");
+};
+
+test("Save to library names the kit's size, saves it and links the project to it", async ({ page, engine }) => {
+  const project = await openCanvas(page, engine);
+  await seedKit(engine);
+  await page.getByRole("button", { name: "Kit", exact: true }).click();
+  const dialog = kitDialog(page);
+
+  await dialog.getByRole("button", { name: "More" }).click();
+  await page.getByRole("menuitem", { name: "Save to library" }).click();
+  const save = page.getByRole("dialog", { name: "Add to library" });
+  await expect(save).toContainText("4 tokens and 2 modes, saved as you have them now.");
+  await save.getByRole("textbox", { name: "Name" }).fill("Brand kit");
+  await save.getByRole("button", { name: "Save" }).click();
+
+  await expect(toast(page, "Saved “Brand kit” to your library.")).toBeVisible();
+  await expect.poll(async () => (await libraryKits(engine)).map((preset) => [preset.name, preset.revision])).toEqual([["Brand kit", 1]]);
+  const [preset] = await libraryKits(engine);
+  await expect.poll(() => kitOf(engine, project)).toMatchObject({ from: { presetId: preset!.id, revision: 1 } });
+});
+
+test("Update in library replaces the library kit, adds to its revision, and keeps the link", async ({ page, engine }) => {
+  const project = await openCanvas(page, engine);
+  await seedKit(engine);
+  await page.getByRole("button", { name: "Kit", exact: true }).click();
+  const dialog = kitDialog(page);
+  await dialog.getByRole("button", { name: "More" }).click();
+  await page.getByRole("menuitem", { name: "Save to library" }).click();
+  const save = page.getByRole("dialog", { name: "Add to library" });
+  await save.getByRole("textbox", { name: "Name" }).fill("Brand kit");
+  await save.getByRole("button", { name: "Save" }).click();
+  await expect(toast(page, "Saved “Brand kit” to your library.")).toBeVisible();
+  await expect.poll(() => kitOf(engine, project)).toMatchObject({ from: { revision: 1 } });
+  const dark = row(dialog, "color/brand/primary").locator("[data-mode='dark'] input");
+  await dark.fill("#000000");
+  await dark.press("Enter");
+  // The engine answers the update from the room, so the edit has to reach it first.
+  await expect.poll(() => tokenOf(engine, project, "color/brand/primary")).toMatchObject({ values: { light: "#1a73e8", dark: "#000000" } });
+  await dialog.getByRole("button", { name: "More" }).click();
+  await page.getByRole("menuitem", { name: "Update in library" }).click();
+
+  await expect(toast(page, "Updated “Brand kit” in your library.")).toBeVisible();
+  await expect.poll(async () => (await libraryKits(engine)).map((preset) => preset.revision)).toEqual([2]);
+  const [preset] = await libraryKits(engine);
+  expect(preset!.kit.tokens.find((token: { path: string }) => token.path === "color/brand/primary").values).toEqual({ light: "#1a73e8", dark: "#000000" });
+  await expect.poll(() => kitOf(engine, project)).toMatchObject({ from: { presetId: preset!.id, revision: 2 } });
 });
