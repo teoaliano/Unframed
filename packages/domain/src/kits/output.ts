@@ -112,5 +112,3 @@ export const kitStamp = (kit: Kit | null): string => {
   }
   return (hash >>> 0).toString(16).padStart(8, "0");
 };
-
-export { kitCss } from "./runtime.ts";

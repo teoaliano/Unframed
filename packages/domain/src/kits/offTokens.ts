@@ -298,7 +298,7 @@ const scanDeclaration = (kit: Kit, property: string, rawValue: string): Array<{ 
 /** Every literal in the artifact's source that sits close to a token of the kit. */
 export const offTokenValues = (html: string, kit: Kit): OffTokenValue[] => {
   if (kit.tokens.length === 0) return [];
-  const { document } = parseHTML(html);
+  const { document } = parseHTML(html) as unknown as { document: { querySelectorAll(selector: string): ArrayLike<unknown> } };
   const kitNames = new Set(kitCssNames(kit));
   const out: OffTokenValue[] = [];
   const add = (place: OffTokenPlace, property: string, rawValue: string) => {
