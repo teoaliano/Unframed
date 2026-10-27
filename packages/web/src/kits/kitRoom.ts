@@ -22,6 +22,9 @@ export const commitKit = (editor: Editor, ops: ReadonlyArray<KitOp>): KitCommit 
   const unframed: Record<string, unknown> = { ...(meta.unframed ?? {}) };
   if (result.kit === null) delete unframed.kit;
   else unframed.kit = result.kit;
+  // Each commit is its own undo step: a stopping point before and after it keeps the next commit out of this one.
+  editor.markHistoryStoppingPoint("kit");
   editor.run(() => editor.store.put([{ ...document, meta: { ...meta, unframed } } as never]), { history: "record" });
+  editor.markHistoryStoppingPoint("kit");
   return { ok: true };
 };

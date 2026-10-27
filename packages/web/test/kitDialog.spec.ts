@@ -130,3 +130,39 @@ test("one value for all modes, an easing from the catalogue, and Add token", asy
   await expect.poll(() => kitOf(engine, project)).toMatchObject({ tokens: expect.arrayContaining([expect.objectContaining({ path: "color/accent/hot", type: "color" })]) });
   await expect(row(dialog, "color/accent/hot")).toBeVisible();
 });
+
+test("each kit commit is one undo step on the canvas, and redo brings it back", async ({ page, engine }) => {
+  const project = await openCanvas(page, engine);
+  await page.getByRole("button", { name: "Kit", exact: true }).click();
+  const dialog = kitDialog(page);
+  await dialog.getByRole("button", { name: "New kit" }).click();
+  const name = dialog.getByRole("textbox", { name: "Kit name" });
+  await name.fill("Brand");
+  await name.press("Enter");
+  await expect.poll(() => kitOf(engine, project)).toMatchObject({ name: "Brand" });
+  await page.keyboard.press("Escape");
+  await expect(dialog).toHaveCount(0);
+
+  await page.keyboard.press("ControlOrMeta+z");
+  await expect.poll(() => kitOf(engine, project)).toMatchObject({ name: "Kit" });
+  await page.keyboard.press("ControlOrMeta+z");
+  await expect.poll(() => kitOf(engine, project)).toBeUndefined();
+  await page.keyboard.press("ControlOrMeta+Shift+z");
+  await expect.poll(() => kitOf(engine, project)).toMatchObject({ name: "Kit" });
+});
+
+test("a kit commit reaches another tab of the same project", async ({ page, context, engine }) => {
+  const project = await openCanvas(page, engine);
+  await page.getByRole("button", { name: "Kit", exact: true }).click();
+  await kitDialog(page).getByRole("button", { name: "New kit" }).click();
+
+  const other = await context.newPage();
+  await openCanvas(other, engine, project);
+  await other.getByRole("button", { name: "Kit", exact: true }).click();
+  await expect(kitDialog(other).getByRole("textbox", { name: "Kit name" })).toHaveValue("Kit");
+
+  const name = kitDialog(page).getByRole("textbox", { name: "Kit name" });
+  await name.fill("Brand");
+  await name.press("Enter");
+  await expect(kitDialog(other).getByRole("textbox", { name: "Kit name" })).toHaveValue("Brand", { timeout: 5000 });
+});

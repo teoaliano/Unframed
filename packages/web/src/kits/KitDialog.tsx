@@ -56,7 +56,13 @@ export const KitDialog = ({ onClose, onFromLibrary }: { readonly onClose: () => 
             </div>
           ) : (
             <div className="grid gap-4">
-              <Input key={kit.name} aria-label="Kit name" defaultValue={kit.name} onBlur={(event) => apply([{ op: "rename", name: event.currentTarget.value }])} />
+              <Input
+                key={kit.name}
+                aria-label="Kit name"
+                defaultValue={kit.name}
+                onKeyDown={(event) => event.key === "Enter" && event.currentTarget.blur()}
+                onBlur={(event) => event.currentTarget.value !== kit.name && apply([{ op: "rename", name: event.currentTarget.value }])}
+              />
               <KitTable kit={kit} usage={usage} apply={apply} />
             </div>
           )}
