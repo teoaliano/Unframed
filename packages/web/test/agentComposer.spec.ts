@@ -639,6 +639,8 @@ test("each chat's draft keeps its attachments, and every draft survives a reload
   await expect(promptBox(again)).toHaveText("Keep this for later");
   await expect(again.getByTestId("attachments").locator("[data-chip='file']")).toHaveText(["notes.txt11 B"]);
   await expect(again.getByTestId("attachments").getByLabel("Preview hero.png")).toBeVisible();
+  // The restored image's thumbnail is the stored file, loaded, not a blank tile.
+  await expect.poll(() => again.getByTestId("attachments").getByLabel("Preview hero.png").locator("img").evaluate((img: HTMLImageElement) => img.complete && img.naturalWidth)).toBe(20);
   await again.getByRole("tab", { name: "Other" }).click();
   await expect(promptBox(again)).toHaveText("Other thoughts");
 

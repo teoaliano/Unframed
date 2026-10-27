@@ -125,7 +125,10 @@ const uploadFile = async (engine: EngineConnection, file: File, onProgress: (per
 
 let counter = 0;
 
-const stagedOf = (attachment: ChatAttachment, preview: string | undefined): Staged => ({
+/** The engine serves a stored image back by id: a draft restored after a reload or from the stash has no file of its own to show. */
+const storedPreview = (attachment: ChatAttachment) => (attachment.kind === "image" ? `/api/attachments/${encodeURIComponent(attachment.id)}` : undefined);
+
+const stagedOf = (attachment: ChatAttachment, preview = storedPreview(attachment)): Staged => ({
   key: `staged-${++counter}`,
   name: attachment.name,
   kind: attachment.kind,
