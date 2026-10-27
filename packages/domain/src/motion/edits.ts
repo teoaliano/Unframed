@@ -5,14 +5,17 @@
  * Spec 18's `applySourceEdits` gathers these with its other edit types.
  */
 import { findTimelineScript, parseGsapScriptAcornForWrite } from "@hyperframes/parsers/gsap-parser-acorn";
-import { resizeKeyframedTweenInScript, updateAnimationInScript } from "@hyperframes/parsers/gsap-writer-acorn";
+import { resizeKeyframedTweenInScript, updateAnimationInScript, updateKeyframeInScript } from "@hyperframes/parsers/gsap-writer-acorn";
 import { EASE_CATALOGUE } from "./eases.ts";
+import type { ScriptNode } from "./owners.ts";
 import { motionTimeline, type MotionTimeline, type Tween, type TweenRef } from "./timeline.ts";
+import { NAMED_COLOURS } from "./colours.ts";
 
 export type MotionEdit =
   | { readonly type: "tween-time"; readonly tween: TweenRef; readonly start?: number; readonly duration?: number }
   | { readonly type: "tween-ease"; readonly tween: TweenRef; readonly ease: string | { readonly token: string } }
-  | { readonly type: "tween-stagger"; readonly tween: TweenRef; readonly each: number };
+  | { readonly type: "tween-stagger"; readonly tween: TweenRef; readonly each: number }
+  | { readonly type: "tween-value"; readonly tween: TweenRef; readonly at: number; readonly property: string; readonly value: number | string | { readonly token: string } };
 
 export interface MotionEditOptions {
   /** `data-hf-id`s of the elements the person locked in Layers. Descendants of one are locked too. */
@@ -120,6 +123,109 @@ const applyTweenTime = (session: Session, edit: Extract<MotionEdit, { type: "twe
 
 const refuse = (refusal: string): MotionEditResult => ({ ok: false, refusal });
 
+const applyTweenValue = (session: Session, edit: Extract<MotionEdit, { type: "tween-value" }>, base: MotionTimeline, options: MotionEditOptions): MotionEditResult | null => {
+  const found = locate(session, edit, base);
+  if ("refusal" in found) return found.refusal;
+  const { tween, name, span, text, entry, index } = found;
+  const diamond = tween.keyframes.find((k) => k.at === edit.at);
+  if (!diamond) return refuse(`${name} has no ${edit.at === 0 ? "start" : "end"} value to set.`);
+  const owner = diamond.values[edit.property];
+  if (!owner) return refuse(`${name} has no ${edit.property} at this diamond.`);
+  if (owner.kind !== "source" && owner.kind !== "token") return refuse(`${name}'s ${edit.property} is set by the agent's code.`);
+  const locked = lockedAmong(base, tween, options.lockedElements);
+  if (locked !== null) return refuse(lockSentence(nameOf(base, locked)));
+  const current = owner.kind === "source" ? owner.value : undefined;
+  const resolved = valueFor(edit, current, name, options.tokenKind);
+  if ("refusal" in resolved) return refuse(resolved.refusal);
+
+  const parsed = parseGsapScriptAcornForWrite(text)!;
+  const call = parsed.located[index]!;
+  const { node, keyframe } = diamondNode(call.call as never, call.animation, edit.at);
+  if (!node) return refuse(`${name} has no ${edit.property} at this diamond.`);
+  const raws: [string, string][] = [];
+  const props: Record<string, number | string> = {};
+  for (const property of propertiesOf(node)) {
+    const key = keyOfNode(property);
+    if (key === null) continue;
+    if (key === edit.property) {
+      props[key] = typeof resolved.text === "object" ? "__unframed_token__" : resolved.text;
+      continue;
+    }
+    const placeholder = `__unframed_raw_${raws.length}__`;
+    raws.push([placeholder, text.slice(property.value.start, property.value.end)]);
+    props[key] = placeholder;
+  }
+  let next: string;
+  if (keyframe !== null) next = updateKeyframeInScript(text, entry.id, keyframe, props);
+  else if (node === call.call.fromArg) next = updateAnimationInScript(text, entry.id, { fromProperties: props });
+  else next = updateAnimationInScript(text, entry.id, { properties: props });
+  if (typeof resolved.text === "object") next = next.replace('"__unframed_token__"', `unframed.token(${JSON.stringify(resolved.text.token)})`);
+  for (const [placeholder, raw] of raws) next = next.replace(`"${placeholder}"`, raw);
+  if (next === text) return refuse(`The edit to ${name} could not be applied.`);
+  const movedId = parseGsapScriptAcornForWrite(next)?.located[index]?.id;
+  if (movedId === undefined) return refuse(`The edit to ${name} could not be applied.`);
+  session.html = splice(session.html, span, next);
+  session.ids[index] = movedId;
+  const shown = typeof edit.value === "object" ? `the ${edit.value.token} token` : String(edit.value);
+  session.summary.push(`Set ${name} ${edit.property} to ${typeof resolved.text === "number" || typeof resolved.text === "string" ? resolved.text : shown}`);
+  return null;
+};
+
+const COLOUR_FORMS = [/^#(?:[0-9a-f]{3,4}|[0-9a-f]{6}|[0-9a-f]{8})$/i, /^rgba?\(.+\)$/i, /^hsla?\(.+\)$/i, /^oklch\(.+\)$/i];
+const NUMBER_TEXT = /^-?\d+(?:\.\d+)?(?:px|%|em|rem|vw|vh|deg|s|ms)?$/i;
+
+const isColourText = (text: string): boolean => COLOUR_FORMS.some((form) => form.test(text.trim())) || NAMED_COLOURS.has(text.trim().toLowerCase());
+const isNumberText = (text: string): boolean => NUMBER_TEXT.test(text.trim());
+
+/** A number takes the unit of the literal it replaces: `"120px"` stays in px. Null when the literal has no number. */
+const unitOf = (current: number | string): string | null => {
+  if (typeof current === "number") return "";
+  const match = /^-?\d+(?:\.\d+)?([a-z%]*)$/i.exec(current.trim());
+  return match ? match[1]! : null;
+};
+
+/** The value a tween-value writes, or the refusal sentence when the value does not fit the literal. */
+const valueFor = (edit: Extract<MotionEdit, { type: "tween-value" }>, current: number | string | undefined, name: string, tokenKind: MotionEditOptions["tokenKind"]): { text: number | string | { token: string } } | { refusal: string } => {
+  const { value, property } = edit;
+  if (typeof value === "object") {
+    const kind = tokenKind?.(value.token);
+    const numeric = typeof current === "number" || (typeof current === "string" && isNumberText(current));
+    if (kind === "colour" && typeof current === "string" && isColourText(current)) return { text: value };
+    if ((kind === "number" || kind === "duration") && numeric) return { text: value };
+    return { refusal: `${value.token} is not a token of a matching type.` };
+  }
+  if (typeof value === "number") {
+    const unit = current === undefined ? "" : unitOf(current);
+    if (unit === null) return { refusal: `${name}'s ${property} takes a colour, not a number.` };
+    return { text: unit === "" ? value : `${value}${unit}` };
+  }
+  if (isColourText(value) || isNumberText(value)) return { text: value };
+  return { refusal: `${value} is not a colour or a number.` };
+};
+
+const keyOfNode = (property: ScriptNode): string | null => {
+  if (property.computed) return null;
+  if (property.key.type === "Identifier") return property.key.name;
+  if (property.key.type === "Literal") return String(property.key.value);
+  return null;
+};
+
+/** The object literal that holds a diamond's values in the call, as the writer's parse has it. */
+const diamondNode = (call: { varsArg?: unknown; fromArg?: unknown; method: string }, animation: { keyframes?: unknown }, at: number): { node: ScriptNode | undefined; keyframe: number | null } => {
+  if (animation.keyframes) {
+    const keyframes = propertiesOf(call.varsArg as ScriptNode).find((p) => keyOfNode(p) === "keyframes")?.value as ScriptNode | undefined;
+    const step = propertiesOf(keyframes).find((p) => {
+      const pct = /^(\d+(?:\.\d+)?)%$/.exec(keyOfNode(p) ?? "");
+      return pct !== null && Number(pct[1]) / 100 === at;
+    });
+    return { node: step?.value as ScriptNode | undefined, keyframe: at * 100 };
+  }
+  if (at === 0 && call.method === "fromTo") return { node: call.fromArg as ScriptNode | undefined, keyframe: null };
+  return { node: call.varsArg as ScriptNode | undefined, keyframe: null };
+};
+
+const propertiesOf = (node: ScriptNode | undefined): ScriptNode[] => (node?.type === "ObjectExpression" ? node.properties.filter((p: ScriptNode) => p.type === "Property") : []);
+
 /** Stands in for a token expression while the writer runs; the writer quotes it like any string. */
 const tokenPlaceholder = (index: number) => `__unframed_token_${index}__`;
 
@@ -202,7 +308,9 @@ export function applyMotionEdits(html: string, edits: readonly MotionEdit[], opt
       ? applyTweenTime(session, edit, base, options)
       : edit.type === "tween-ease"
         ? applyTweenEase(session, edit, base, options)
-        : applyTweenStagger(session, edit, base, options);
+        : edit.type === "tween-stagger"
+          ? applyTweenStagger(session, edit, base, options)
+          : applyTweenValue(session, edit, base, options);
     if (refusal) return refusal;
   }
   return { ok: true, html: session.html, summary: session.summary };
