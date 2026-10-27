@@ -64,7 +64,8 @@ describe("artifact snapshots", () => {
       dials: { accent: "#ff0000" },
     });
     await until(async () => stream.values.length === 1, "the stream to say so");
-    expect(stream.values[0]).toEqual({ file: "1-landing.html", w: 480, h: 320, at: expect.any(Number) });
+    // No kit in this project: the record names no mode and no kit stamp (spec 19).
+    expect(stream.values[0]).toEqual({ file: "1-landing.html", w: 480, h: 320, at: expect.any(Number), mode: null, kit: null });
     const served = await agent.engine.request("/api/file/board/1-landing.html?snapshot=480x320");
     expect(served.status).toBe(200);
     expect(served.headers["content-type"]).toBe("image/png");
