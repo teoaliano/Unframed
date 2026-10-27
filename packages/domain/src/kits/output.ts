@@ -7,6 +7,7 @@
 import { kitCore, type KitCore } from "./core.ts";
 import { EASE_CSS } from "./easings.ts";
 import type { Kit } from "./types.ts";
+import { kitCss } from "./runtime.ts";
 
 /** The window the installer runs against: a browser's, or a test's stub. */
 export interface TokensWindow {
@@ -102,9 +103,13 @@ export const tokensScript = (kit: Kit | null): string =>
     "",
   ].join("\n");
 
-/** An 8-character hash (FNV-1a) of the tokens script's text: the stamp of a kit's output. */
+/**
+ * An 8-character hash (FNV-1a) of a kit's CSS and modes: the stamp a snapshot, a live frame or a
+ * render records. It hashes the data the script carries, not the script text, which depends on
+ * how the source was built, so the stamp is the same in tests, the source run and the bundle.
+ */
 export const kitStamp = (kit: Kit | null): string => {
-  const text = tokensScript(kit);
+  const text = kit === null ? "no kit" : JSON.stringify({ css: kitCss(kit), modes: kit.modes });
   let hash = 0x811c9dc5;
   for (let i = 0; i < text.length; i++) {
     hash ^= text.charCodeAt(i);

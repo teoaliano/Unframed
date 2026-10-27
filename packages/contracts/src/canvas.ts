@@ -15,10 +15,7 @@ import {
   type TLSchema,
 } from "@tldraw/tlschema";
 import { T } from "@tldraw/validate";
-import { kitRefusal, type Kit } from "@unframed/domain";
-
-/** The kit record (spec 19) is the domain's type: the room, the library and every kit rule read one copy. */
-export type { Kit, Token, TokenValue, TextStyle, KitLink } from "@unframed/domain";
+import type { Kit } from "./kits.ts";
 
 // ---------------------------------------------------------------------------------------
 // Asset markers: the one definition.
@@ -153,8 +150,8 @@ export const kindOfShapeType = (type: string): UnframedKind | "mark" => {
 const { embed: _embed, bookmark: _bookmark, ...keptShapes } = defaultShapeSchemas;
 
 /**
- * The shape of a kit before the domain's rules read it. The rules assume these fields, so a
- * kit that lacks one is refused here rather than read as broken.
+ * The kit's shape, before a rule reads it: the fields every rule assumes. A kit that lacks one
+ * is refused here, so the rules never meet a broken record (spec 19).
  */
 const kitShape = T.object({
   format: T.literal(1),
@@ -163,8 +160,12 @@ const kitShape = T.object({
   tokens: T.arrayOf(T.jsonValue),
 }).allowUnknownProperties();
 
-/** The document record's kit, when it has one, must pass the domain's kit rules (spec 19). */
-const checkKit = (document: unknown): void => {
+/**
+ * The document record's kit must have the right shape and pass `refusalOf`, the domain's kit
+ * rules, which the engine supplies. Contracts depends on no other workspace package, so the
+ * rules come in as a function and the room keeps them.
+ */
+const checkKit = (document: unknown, refusalOf: (kit: Kit) => string | null): void => {
   const kit = (document as { meta?: { unframed?: { kit?: unknown } } } | null)?.meta?.unframed?.kit;
   if (kit === undefined) return;
   try {
@@ -172,15 +173,14 @@ const checkKit = (document: unknown): void => {
   } catch {
     throw new T.ValidationError("That kit is not in the form the app writes.");
   }
-  const refusal = kitRefusal(kit as Kit);
+  const refusal = refusalOf(kit as Kit);
   if (refusal !== null) throw new T.ValidationError(refusal);
 };
 
 let schema: TLSchema | undefined;
 
-/** The one canvas schema, made once. */
-export const canvasSchema = (): TLSchema => {
-  schema ??= withKitCheck(createTLSchema({
+const buildSchema = (refusalOf?: (kit: Kit) => string | null): TLSchema => {
+  const built = createTLSchema({
     shapes: {
       ...keptShapes,
       text: { ...keptShapes.text, meta: { ...refMeta, sized: T.boolean.optional() } },
@@ -195,18 +195,24 @@ export const canvasSchema = (): TLSchema => {
       image: { migrations: imageAssetMigrations, props: { ...imageAssetProps, src: assetSource(false) } },
       video: { migrations: videoAssetMigrations, props: { ...videoAssetProps, src: assetSource(true) } },
     },
-  }));
+  });
+  if (refusalOf !== undefined) {
+    const document = built.types.document as unknown as { validate: (record: unknown, before?: unknown) => unknown };
+    const validate = document.validate.bind(document);
+    document.validate = (record, before) => {
+      const checked = validate(record, before);
+      checkKit(checked, refusalOf);
+      return checked;
+    };
+  }
+  return built;
+};
+
+/** The one canvas schema, made once, without the kit rules (the web store reads it this way). */
+export const canvasSchema = (): TLSchema => {
+  schema ??= buildSchema();
   return schema;
 };
 
-/** Wraps the document record's validator so a kit that breaks a rule refuses the record (spec 19). */
-const withKitCheck = (built: TLSchema): TLSchema => {
-  const document = built.types.document as unknown as { validate: (record: unknown, before?: unknown) => unknown };
-  const validate = document.validate.bind(document);
-  document.validate = (record, before) => {
-    const checked = validate(record, before);
-    checkKit(checked);
-    return checked;
-  };
-  return built;
-};
+/** The canvas schema the engine's room uses: the same records, plus the kit rules it is given (spec 19). */
+export const roomSchema = (refusalOf: (kit: Kit) => string | null): TLSchema => buildSchema(refusalOf);

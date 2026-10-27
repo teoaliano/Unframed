@@ -1,6 +1,6 @@
 import type { DatabaseSync } from "node:sqlite";
-import { canvasSchema } from "@unframed/contracts";
-import { nextRef, readRef } from "@unframed/domain";
+import { roomSchema } from "@unframed/contracts";
+import { kitRefusal, nextRef, readRef } from "@unframed/domain";
 import {
   NodeSqliteWrapper,
   SQLiteSyncStorage,
@@ -58,12 +58,16 @@ export class InvalidChange extends Error {}
 /** A tab closed this way does not reconnect: tldraw's sync error close code. */
 export const SYNC_ERROR_CLOSE = 4099;
 
+/** The room's schema: the canvas records, with the kit rules the domain holds (spec 19). */
+let roomSchemaCache: ReturnType<typeof roomSchema> | undefined;
+const roomSchemaOf = () => (roomSchemaCache ??= roomSchema(kitRefusal));
+
 const STORAGE_ORIGIN: ChangeOrigin = { kind: "system", id: "storage" };
 
 const initialSnapshot = (): RoomSnapshot => ({
   documentClock: 0,
   tombstoneHistoryStartsAtClock: 0,
-  schema: canvasSchema().serialize(),
+  schema: roomSchemaOf().serialize(),
   documents: [
     { state: DocumentRecordType.create({ id: TLDOCUMENT_ID }), lastChangedClock: 0 },
     { state: PageRecordType.create({ id: "page:page" as TLPageId, name: "Page 1", index: "a1" as TLPage["index"] }), lastChangedClock: 0 },
@@ -72,7 +76,7 @@ const initialSnapshot = (): RoomSnapshot => ({
 
 /** Refuses records that fail the canvas schema, naming the first one. */
 const validateRecords = (records: ReadonlyArray<TLRecord>): void => {
-  const schema = canvasSchema();
+  const schema = roomSchemaOf();
   for (const record of records) {
     const type = schema.types[record.typeName as keyof typeof schema.types];
     if (!type) throw new InvalidChange(`There is no record type "${String(record.typeName)}".`);
@@ -140,7 +144,7 @@ export class CanvasRoom {
     this.storage = new LoggedStorage(inner, db, () => this.currentOrigin, (change) => this.hooks.onCommit(this, change));
     this.tl = new TLSocketRoom<TLRecord, void>({
       storage: this.storage,
-      schema: canvasSchema(),
+      schema: roomSchemaOf(),
       log: { error: (...args: unknown[]) => logError(`canvas ${project}: ${args.map((arg) => errorText(arg)).join(" ")}`) },
     });
     if (fresh) this.seedStarter();

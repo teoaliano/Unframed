@@ -23,3 +23,50 @@ export const KitExportFile = Rpc.make("kit.exportFile", {
   success: Schema.Struct({ file: Schema.String }),
   error: UnframedError,
 });
+
+/*
+ * The kit record (spec 19): the shapes the room stores as `meta.unframed.kit`, the library keeps
+ * as a preset, and the domain's rules read. The domain re-exports these names.
+ */
+
+export const TOKEN_TYPES = ["color", "dimension", "fontFamily", "fontWeight", "textStyle", "shadow", "duration", "easing"] as const;
+export type TokenType = (typeof TOKEN_TYPES)[number];
+
+export interface TextStyle {
+  fontFamily: string;
+  fontSize: string;
+  fontWeight: number | string;
+  lineHeight: string | number;
+  letterSpacing: string;
+}
+
+/** A literal, a text style, or an alias written `{path}`. */
+export type TokenValue = string | number | TextStyle;
+
+export interface Token {
+  path: string;
+  type: TokenType;
+  /** One value for every mode. Exactly one of `value` and `values` is set. */
+  value?: TokenValue;
+  /** A value per mode. A mode it leaves out uses the default mode's value. */
+  values?: Record<string, TokenValue>;
+  description?: string;
+  /** CSS names kept working after a rename. */
+  formerNames?: string[];
+}
+
+export interface KitLink {
+  presetId: string;
+  revision: number;
+  base: { modes: string[]; tokens: Token[] };
+}
+
+export interface Kit {
+  format: 1;
+  name: string;
+  /** The first is the default mode. */
+  modes: string[];
+  /** In the order the dialog shows them. */
+  tokens: Token[];
+  from?: KitLink;
+}

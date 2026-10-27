@@ -10,7 +10,8 @@
     "typecheck": "tsc --noEmit -p ."
   },
   "dependencies": {
-    "linkedom": "0.18.13"
+    "linkedom": "0.18.13",
+    "@unframed/contracts": "workspace:*"
   },
   "devDependencies": {
     "gsap": "3.15.0"

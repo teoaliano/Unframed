@@ -45,15 +45,15 @@ importers:
       '@tldraw/validate':
         specifier: 5.4.2
         version: 5.4.2
-      '@unframed/domain':
-        specifier: workspace:*
-        version: link:../domain
       effect:
         specifier: 4.0.0-rc.115
         version: 4.0.0-rc.115
 
   packages/domain:
     dependencies:
+      '@unframed/contracts':
+        specifier: workspace:*
+        version: link:../contracts
       linkedom:
         specifier: 0.18.13
         version: 0.18.13
