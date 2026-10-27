@@ -4,12 +4,17 @@
  * given an owner by `ownerOf`; anything the timeline cannot edit carries a sentence saying why.
  * This module answers questions only. Edits are `applyMotionEdits` (task 10 onward).
  */
-import { isTweenConfigKey, type PropertyGroupName } from "@hyperframes/parsers/gsap-constants";
+import { classifyPropertyGroup, isTweenConfigKey, type PropertyGroupName } from "@hyperframes/parsers/gsap-constants";
+import { ensureHfIds } from "@hyperframes/parsers/hf-ids";
 import { findTimelineScript, parseGsapScriptAcornForWrite, type TweenCallInfo } from "@hyperframes/parsers/gsap-parser-acorn";
-import { dialsCallback, ownerOf, type Owner, type OwnerContext, type ScriptNode } from "./owners.ts";
+import { parseHTML } from "linkedom";
+import { dialsCallback, ownerOf, constantNumber, type Owner, type OwnerContext, type ScriptNode } from "./owners.ts";
 
 export type PropertyGroup = PropertyGroupName;
 export type TweenMethod = "to" | "from" | "fromTo" | "set";
+/** `number` and `each` space the targets evenly, `amount` spreads a total; `other` is read-only. */
+export type StaggerForm = "number" | "each" | "amount" | "other";
+const GROUP_ORDER: readonly PropertyGroup[] = ["position", "scale", "size", "rotation", "visual", "other"];
 
 export interface TweenRef {
   /** Source order in the timeline script. Value edits do not change it. */
@@ -28,13 +33,14 @@ export interface KeyframeValues {
 export interface Tween {
   readonly ref: TweenRef;
   readonly method: TweenMethod;
-  /** `data-hf-id` of each target in document order. Filled from the document in task 7. */
+  /** `data-hf-id` of each target in document order. */
   readonly targets: readonly string[];
   readonly groups: readonly PropertyGroup[];
   readonly start: Owner;
   readonly duration: Owner;
   readonly ease: Owner | null;
   readonly stagger: Owner | null;
+  readonly staggerForm: StaggerForm | null;
   readonly repeat: { readonly count: number | null; readonly yoyo: boolean } | null;
   readonly keyframes: readonly KeyframeValues[];
   readonly readOnly: string | null;
@@ -130,6 +136,7 @@ const readOnlyReason = (
   keyframes: ScriptNode | undefined,
   steps: KeyframeValues[] | null,
   dialsFn: ScriptNode | null,
+  unresolved: boolean,
 ): string | null => {
   const ancestors = call.ancestors as ScriptNode[];
   if (ancestors.some((node) => LOOP_NODES.has(node.type))) return "It runs in a loop.";
@@ -137,6 +144,7 @@ const readOnlyReason = (
     return "It runs in a loop.";
   }
   if (ancestors.some((node) => FUNCTION_NODES.has(node.type) && node !== dialsFn)) return "It is built by a helper.";
+  if (unresolved) return "Its target is found while the motion runs.";
   if (keyframes && (steps === null || !ownersAreFixed(steps))) return "Its keyframes are computed.";
   const vars = call.varsArg as ScriptNode | undefined;
   if (propertiesOf(vars).some((p) => keyOf(p) === "motionPath")) return "It follows a motion path.";
@@ -158,6 +166,39 @@ const repeatOf = (vars: ScriptNode | undefined): Repeat => {
   return { count, yoyo: yoyo?.type === "Literal" && yoyo.value === true };
 };
 
+/** The stagger of a tween: its owner, and which form it was written in. */
+const staggerOf = (vars: ScriptNode | undefined, context: OwnerContext): { owner: Owner | null; form: StaggerForm | null } => {
+  const node = propertiesOf(vars).find((p) => keyOf(p) === "stagger")?.value as ScriptNode | undefined;
+  if (!node) return { owner: null, form: null };
+  if (node.type !== "ObjectExpression") {
+    return { owner: ownerOf(node, context), form: constantNumber(node) === null && ownerOf(node, context).kind !== "source" ? "other" : "number" };
+  }
+  const keys = propertiesOf(node).map(keyOf);
+  const spacing = propertiesOf(node).find((p) => keyOf(p) === "each" || keyOf(p) === "amount");
+  const timingOnly = keys.length === 1 && spacing !== undefined;
+  if (!timingOnly) return { owner: { kind: "script", text: context.source.slice(node.start, node.end) }, form: "other" };
+  const form: StaggerForm = keyOf(spacing!) === "amount" ? "amount" : "each";
+  const owner = ownerOf(spacing!.value, context);
+  return owner.kind === "source" ? { owner, form } : { owner, form: "other" };
+};
+
+/** Per-target offsets in seconds for a stagger with a static value; zeros when there is none. */
+export function staggerOffsets(tween: Tween, targetCount = tween.targets.length): number[] {
+  const offsets = Array.from({ length: targetCount }, () => 0);
+  const owner = tween.stagger;
+  if (!owner || owner.kind !== "source" || typeof owner.value !== "number" || tween.staggerForm === null || tween.staggerForm === "other") return offsets;
+  return offsets.map((_, index) => {
+    if (tween.staggerForm === "amount") return targetCount > 1 ? (index * owner.value) / (targetCount - 1) : 0;
+    return index * owner.value;
+  });
+}
+
+const groupsOf = (keyframes: readonly KeyframeValues[]): PropertyGroup[] => {
+  const seen = new Set<PropertyGroup>();
+  for (const step of keyframes) for (const key of Object.keys(step.values)) seen.add(classifyPropertyGroup(key));
+  return GROUP_ORDER.filter((group) => seen.has(group));
+};
+
 const tweenOf = (
   call: TweenCallInfo,
   index: number,
@@ -165,6 +206,7 @@ const tweenOf = (
   context: OwnerContext,
   source: string,
   dialsFn: ScriptNode | null,
+  targets: readonly string[],
 ): Tween => {
   const vars = call.varsArg as ScriptNode | undefined;
   const props = propertiesOf(vars);
@@ -196,18 +238,20 @@ const tweenOf = (
   const startOwner: Owner = positionNode ? startOf(positionNode, context) : { kind: "script", text: "" };
   const easeNode = find("ease");
 
+  const stagger = staggerOf(vars, context);
   return {
     ref: { index, id },
     method: call.method,
-    targets: [],
-    groups: [],
+    targets,
+    groups: groupsOf(keyframes),
     start: startOwner,
     duration: durationOwner,
     ease: easeNode ? ownerOf(easeNode, context) : null,
-    stagger: null,
+    stagger: stagger.owner,
+    staggerForm: stagger.form,
     repeat: repeatOf(vars),
     keyframes,
-    readOnly: readOnlyReason(call, keyframesNode, steps, dialsFn),
+    readOnly: readOnlyReason(call, keyframesNode, steps, dialsFn, targets.length === 0),
     source: sourceOf(call, source),
   };
 };
@@ -217,6 +261,16 @@ const startOf = (node: ScriptNode, context: OwnerContext): Owner => {
   const owner = ownerOf(node, context);
   if (owner.kind === "source" && typeof owner.value !== "number") return { kind: "script", text: context.source.slice(node.start, node.end) };
   return owner;
+};
+
+/** The `data-hf-id`s a selector matches, in document order; none when it does not resolve. */
+const targetsOf = (document: Document, selector: string, partial: boolean): string[] => {
+  if (partial || !selector || selector.startsWith("__")) return [];
+  try {
+    return [...document.querySelectorAll(selector)].map((element) => element.getAttribute("data-hf-id") ?? "").filter((id) => id !== "");
+  } catch {
+    return [];
+  }
 };
 
 export function motionTimeline(html: string, options: MotionTimelineOptions = {}): MotionTimeline {
@@ -229,7 +283,10 @@ export function motionTimeline(html: string, options: MotionTimelineOptions = {}
   const callback = dialsCallback(parsed.ast as ScriptNode);
   const context: OwnerContext = { source: text, dial: callback?.scope ?? null };
   const dialsFn = callback?.fn ?? null;
-  const tweens = parsed.located.map((entry, index) => tweenOf(entry.call, index, entry.id, context, text, dialsFn));
+  const document = parseHTML(ensureHfIds(html)).document;
+  const tweens = parsed.located.map((entry, index) =>
+    tweenOf(entry.call, index, entry.id, context, text, dialsFn, targetsOf(document, entry.call.selector, entry.call.selectorPartial === true)),
+  );
   return { file, script: "ok", tweens };
 }
 

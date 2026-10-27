@@ -54,6 +54,9 @@ importers:
       '@hyperframes/parsers':
         specifier: 0.8.206
         version: 0.8.206
+      linkedom:
+        specifier: 0.18.13
+        version: 0.18.13
 
   packages/engine:
     dependencies:
