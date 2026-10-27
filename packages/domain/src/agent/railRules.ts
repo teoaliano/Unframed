@@ -185,7 +185,7 @@ export interface RecapRow {
   readonly rewritten: boolean;
 }
 
-const ARTIFACT_TOOLS = new Set(["page_write", "page_read", "motion_write", "motion_read"]);
+const ARTIFACT_TOOLS = new Set(["page_write", "page_read", "motion_write", "motion_read", "component_write", "component_read"]);
 
 const record = (value: unknown): Record<string, unknown> => (typeof value === "object" && value !== null ? (value as Record<string, unknown>) : {});
 
@@ -230,7 +230,7 @@ export const recapRows = (
     const input = record(data.input ?? inputs.get(record(activity.payload).itemId));
     const result = record(data.result);
     if (ARTIFACT_TOOLS.has(tool)) {
-      const kind = tool.startsWith("page") ? "page" : "motion";
+      const kind = tool.startsWith("page") ? "page" : tool.startsWith("component") ? "component" : "motion";
       touch(input.shapeId ?? result.shapeId ?? result.id, kind, input.title);
     } else if (tool === "canvas_write") {
       const ids = record(result.ids);
@@ -244,7 +244,7 @@ export const recapRows = (
   const rewritten = new Set<string>();
   for (const change of turnChanges) {
     touch(change.shapeId, change.kind);
-    if ((change.kind === "page" || change.kind === "motion") && change.file !== undefined && (change.previousFile !== undefined || change.change === "created")) {
+    if ((change.kind === "page" || change.kind === "motion" || change.kind === "component") && change.file !== undefined && (change.previousFile !== undefined || change.change === "created")) {
       rewritten.add(shapeId(change.shapeId));
     }
   }

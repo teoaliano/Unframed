@@ -98,3 +98,4 @@ export * from "./components/copy.ts";
 export * from "./components/helper.ts";
 export * from "./components/pins.ts";
 export * from "./components/title.ts";
+export * from "./components/prompts.ts";

@@ -8,6 +8,9 @@ import { boxesOverlap, clampGroupSize, mayBeGroupMember } from "../grouping.ts";
 import { planRename } from "../groupRules.ts";
 import { nextRef, plainText, readRef, rewriteRichTextTokens } from "../refs.ts";
 import { readingOrder, type CanvasShape, type ShapeKind } from "../canvasShapes.ts";
+import { compiledFileName } from "../components/compile.ts";
+import type { ComponentDeclaration } from "../components/sheet.ts";
+import type { Pin } from "../components/pins.ts";
 import { nameRefusal, slugName, uniqueName } from "../groupRules.ts";
 import { agentShapeId, roomShapeId } from "./turnText.ts";
 
@@ -107,6 +110,10 @@ export interface CanvasViewInput {
   readonly recipes: ReadonlyMap<string, unknown>;
   /** The room ids the person had selected with the latest message. */
   readonly selection: ReadonlyArray<string>;
+  /** Each component shape's current sheet declaration, by room id; absent when the sheet cannot be read (spec 20). */
+  readonly declarations?: ReadonlyMap<string, ComponentDeclaration>;
+  /** Each page or motion's pins, by room id (spec 20). */
+  readonly pins?: ReadonlyMap<string, ReadonlyArray<Pin>>;
 }
 
 export interface CanvasView {
@@ -164,6 +171,10 @@ export const canvasView = (input: CanvasViewInput): CanvasView => {
   const shapes = canvasShapesOf(input.records, input.boxes);
   const facts = new Map(shapes.map((shape) => [shape.id, shape]));
   const owners = markOwner(shapes);
+  const currentSheets = new Map<string, string>();
+  for (const record of input.records) {
+    if (record.type === "component" && typeof record.props?.tag === "string" && typeof record.props.file === "string") currentSheets.set(record.props.tag, record.props.file);
+  }
   const out: Record<string, unknown>[] = [];
   for (const record of paintOrder(input.records)) {
     const fact = facts.get(record.id)!;
@@ -207,11 +218,27 @@ export const canvasView = (input: CanvasViewInput): CanvasView => {
         break;
       }
       case "page":
-      case "motion":
+      case "motion": {
         entry.file = typeof props.file === "string" ? props.file : "";
         entry.title = typeof props.title === "string" ? props.title : "";
         if (props.dials !== undefined && Object.keys(obj(props.dials)).length > 0) entry.dials = props.dials;
+        // A pin whose tag has no component shape waits for nothing, so it counts as current.
+        const pinned = input.pins?.get(record.id) ?? [];
+        if (pinned.length > 0) entry.components = pinned.map((pin) => ({ tag: pin.tag, sheet: pin.sheet, current: currentSheets.get(pin.tag) === undefined || currentSheets.get(pin.tag) === pin.sheet }));
         break;
+      }
+      case "component": {
+        const file = typeof props.file === "string" ? props.file : "";
+        const declaration = input.declarations?.get(record.id);
+        entry.title = typeof props.title === "string" ? props.title : "";
+        entry.tag = typeof props.tag === "string" ? props.tag : "";
+        entry.file = file;
+        entry.compiled = file === "" ? "" : compiledFileName(file);
+        entry.variants = declaration?.variants ?? {};
+        entry.props = declaration?.props ?? {};
+        entry.slots = declaration?.slots ?? [];
+        break;
+      }
       case "mark": {
         entry.type = record.type;
         const text = plainText(props.richText).trim();
@@ -459,6 +486,7 @@ const precheck = (ops: ReadonlyArray<unknown>, ctx: BatchContext): void => {
     if (type === "create") {
       const kind = record.kind;
       if (kind === "page" || kind === "motion") refuse("create: make pages and motions with page_write and motion_write");
+      if (kind === "component") refuse("create: make components with component_write");
       if (typeof kind !== "string" || !CREATE_KINDS.has(kind)) refuse(`create: unknown kind "${String(kind)}"`);
       const id = record.id;
       if (typeof id !== "string" || id === "") refuse('create: id must be a string (use "new:<name>" for a fresh id)');
@@ -624,6 +652,10 @@ const update = (batch: Batch, ctx: BatchContext, op: Record<string, unknown>): v
   const patch = stripEngineKeys(obj(op.props));
   const props: Record<string, unknown> = { ...obj(shape.props) };
   const kind = shapeKind(shape.type);
+  if (kind === "component") {
+    // A component's tag and sheet are written by component_write, which checks the sheet against the canvas (spec 20).
+    for (const field of ["tag", "file"]) if (field in patch) refuse(`update: ${field} is written by component_write`);
+  }
   if (kind === "group" && "name" in patch) {
     const { name, ...rest } = patch;
     renameShape(batch, ctx, shape, name, "update");

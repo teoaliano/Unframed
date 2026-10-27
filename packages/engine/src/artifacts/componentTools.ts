@@ -13,6 +13,10 @@ import {
   artifactUrl,
   BRIDGE_TAG,
   COMPONENT_HELPER_TAG,
+  COMPONENT_READ_SHAPE_ID,
+  COMPONENT_READ_TEXT,
+  COMPONENT_WRITE_ARGUMENTS,
+  COMPONENT_WRITE_TEXT,
   componentTitleFromTag,
   isMintedRef,
   nextRef,
@@ -218,9 +222,9 @@ export class ComponentTools {
         inputSchema: {
           type: "object",
           properties: {
-            html: { type: "string", description: "The component sheet: one HTML document with its declaration, style and template." },
-            shapeId: { type: "string", description: "The component shape to write a new version of. Leave it out to create a component." },
-            title: { type: "string", maxLength: ARTIFACT_TITLE_MAX, description: "The component's name. Defaults to its tag, without uf-, as words." },
+            html: { type: "string", description: COMPONENT_WRITE_ARGUMENTS.html },
+            shapeId: { type: "string", description: COMPONENT_WRITE_ARGUMENTS.shapeId },
+            title: { type: "string", maxLength: ARTIFACT_TITLE_MAX, description: COMPONENT_WRITE_ARGUMENTS.title },
           },
           required: ["html"],
         },
@@ -231,7 +235,7 @@ export class ComponentTools {
         description: COMPONENT_READ_TEXT,
         inputSchema: {
           type: "object",
-          properties: { shapeId: { type: "string", description: "The component shape to read." } },
+          properties: { shapeId: { type: "string", description: COMPONENT_READ_SHAPE_ID } },
           required: ["shapeId"],
         },
         call: (binding, args) => this.read(binding, args),
@@ -240,7 +244,4 @@ export class ComponentTools {
   }
 }
 
-const COMPONENT_WRITE_TEXT =
-  "Write a component: one shared custom element (<uf-button kind=\"primary\">) that pages and motions use as instances. The sheet is one HTML document with four marked parts: a <script type=\"application/json\" data-uf-component> declaration (tag, variants, props, slots), a <style type=\"text/x-uf-component\" data-uf-component-style>, a <div data-uf-template hidden> holding the markup, and an optional <div data-uf-example hidden>. Use the project's tokens for colours and sizes, no scripts, and no other component in the template. The engine compiles the sheet and adds the pins to the pages that use it. A person accepts updates, so say which artifacts wait rather than rewriting them unless asked.";
 
-const COMPONENT_READ_TEXT = "Read a component's current sheet HTML by its shape id.";

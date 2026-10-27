@@ -68,6 +68,17 @@ describe("the work log", () => {
     expect((labels[0] as WorkGroup).summary).toBe("Used 1 tool, changed the canvas 4 times, read 2 files, and used the browser 1 time");
   });
 
+  it("labels the component tools by their title and names them in the activity line", () => {
+    const labels = workLog([
+      ...call("1", "mcp__unframed__component_write", { title: "Button" }),
+      ...call("2", "mcp__unframed__component_read", { shapeId: "c1" }, { result: { title: "Button" } }),
+      ...call("3", "mcp__unframed__component_read", { shapeId: "c2" }, { result: {} }),
+    ]);
+    expect((labels[0] as WorkGroup).rows.map((row) => row.label)).toEqual(["Wrote component Button", "Read component Button", "Read component c2"]);
+    expect(activityLabel(call("4", "mcp__unframed__component_write", {}, { status: "running" }), "t1")).toBe("Writing the component…");
+    expect(activityLabel(call("5", "mcp__unframed__component_read", {}, { status: "running" }), "t1")).toBe("Reading the component…");
+  });
+
   it("folds consecutive calls into a group whose summary counts what they did", () => {
     const [group] = workLog([
       ...call("r1", "Read", { file_path: "a.md" }),
