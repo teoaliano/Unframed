@@ -7,6 +7,7 @@ import { openCanvas } from "./canvas.ts";
 import { agentChromeButton, chosenControl, createChat, enablePlanMode, engineChat, expect, onlyChat, openRail, promptBox, say, sendThrough, startAgentEngine, startProvidersEngine, tabs } from "./agent.ts";
 import { test as base } from "./fixtures.ts";
 import { expectToken } from "./kit.ts";
+import { platformOf } from "./platform.ts";
 
 /** An engine whose providers are signed-in fakes, torn down with its folder. */
 const test = base.extend<{ providers: TestEngine }>({
@@ -159,6 +160,54 @@ test("the model picker: provider tabs with logos, search, the Legacy section, an
   await popup.getByRole("option", { name: /Sonnet 5/ }).click();
   await expect(trigger).toHaveText("Sonnet 5");
   await expect.poll(async () => (await engineChat(providers, chatId)).modelSelection).toEqual({ provider: "claude", model: "claude-sonnet-5", traits: {} });
+});
+
+test("picker keys, as t3code binds them: Cmd+Shift+M toggles the model picker, Cmd+1 to Cmd+9 pick, Cmd+Shift+Arrow switches provider, ArrowLeft goes to the tabs; Cmd+Shift+E opens the traits", async ({ page, providers }) => {
+  const panel = await railReady(page, providers);
+  const box = promptBox(panel);
+  const trigger = panel.getByTestId("model-picker");
+  const popup = models(page);
+  const rows = popup.getByRole("listbox").getByTestId("model-name");
+  const { mac } = await platformOf(page);
+  await box.click();
+  await page.keyboard.press("ControlOrMeta+Shift+M");
+  await expect(popup).toBeVisible();
+  // The first nine rows show their chord.
+  await expect(popup.getByRole("option").locator("kbd")).toHaveText(["1", "2", "3", "4"].map((n) => (mac ? `⌘${n}` : `Ctrl+${n}`)));
+  await page.keyboard.press("ControlOrMeta+Shift+M");
+  await expect(popup).toHaveCount(0);
+
+  await box.click();
+  await page.keyboard.press("ControlOrMeta+Shift+M");
+  await page.keyboard.press("ControlOrMeta+2");
+  await expect(popup).toHaveCount(0);
+  await expect(trigger).toHaveText("Sonnet 5");
+
+  await box.click();
+  await page.keyboard.press("ControlOrMeta+Shift+M");
+  const search = popup.getByRole("textbox", { name: "Search models" });
+  await search.fill("son");
+  await page.keyboard.press("ControlOrMeta+Shift+ArrowDown");
+  await expect(popup.getByRole("tab", { name: "Codex" })).toHaveAttribute("aria-selected", "true");
+  await expect(search).toHaveValue("");
+  await expect(rows).toHaveText(["GPT-6", "GPT-5.5 Codex"]);
+  await page.keyboard.press("ControlOrMeta+Shift+ArrowDown");
+  await expect(popup.getByRole("tab", { name: "Claude" })).toHaveAttribute("aria-selected", "true");
+  await page.keyboard.press("ControlOrMeta+Shift+ArrowUp");
+  await expect(popup.getByRole("tab", { name: "Codex" })).toHaveAttribute("aria-selected", "true");
+
+  // ArrowLeft in an empty search goes to the provider tabs; ArrowRight comes back.
+  await search.focus();
+  await page.keyboard.press("ArrowLeft");
+  await expect(popup.getByRole("tab", { name: "Codex" })).toBeFocused();
+  await page.keyboard.press("ArrowRight");
+  await expect(search).toBeFocused();
+  await page.keyboard.press("Escape");
+  await expect(popup).toHaveCount(0);
+
+  await box.click();
+  await page.keyboard.press("ControlOrMeta+Shift+E");
+  await expect(page.getByRole("dialog", { name: "Traits" })).toBeVisible();
 });
 
 test("the model and traits are locked while a turn runs", async ({ page }) => {

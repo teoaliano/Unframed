@@ -72,6 +72,10 @@ export const draftDoc = (text: string): JSONContent => ({
   }),
 });
 
+/** Text as inline content, its line breaks kept. */
+const lineBreaks = (text: string): JSONContent[] =>
+  text.split("\n").flatMap((line, index): JSONContent[] => [...(index === 0 ? [] : [{ type: "hardBreak" }]), ...(line === "" ? [] : [{ type: "text", text: line }])]);
+
 /** Marks a transaction the composer made, so the typing guard does not take it for typing. */
 const SET_BY_COMPOSER = "agentDraftSetByComposer";
 
@@ -145,6 +149,8 @@ export interface PromptEditorHandle {
   /** Replaces a trigger's text with a chip, or with plain text. */
   replaceTrigger(trigger: Trigger, insert: DraftChip | string): void;
   insertText(text: string): void;
+  /** Puts text at the end of the draft and focuses it; false when the box takes no typing now. */
+  insertTextAtEnd(text: string): boolean;
   /** Whether the caret is on the draft's first visual line (`start`, where ArrowUp recalls) or its last (`end`), wrapped lines counted. */
   caretOnVisualEdge(edge: "start" | "end"): boolean;
   /** Whether the caret sits before the draft's first character, nothing selected. */
@@ -160,12 +166,10 @@ export interface PromptEditorProps {
   readonly onBlur?: () => void;
   readonly onTrigger: (trigger: Trigger | undefined) => void;
   /**
-   * Keys the composer handles before the editor: return true to take the key. Enter
-   * (without Shift or Option, never while composing) is `submit`.
+   * Keys the composer handles before the editor: return true to take the key. The composer
+   * decides which Enter sends (the Send shortcut setting); an Enter it leaves breaks the line.
    */
   readonly onKey: (event: KeyboardEvent) => boolean;
-  /** Enter, with the key event: Cmd+Enter flips queue and steer for one message. */
-  readonly onSubmit: (event: KeyboardEvent) => void;
   readonly onPaste: (event: ClipboardEvent) => boolean;
   readonly handle: Ref<PromptEditorHandle>;
   readonly disabled?: boolean;
@@ -176,12 +180,12 @@ export interface PromptEditorProps {
 
 /**
  * The Agent tray's box (t3code's composer editor): Tiptap with every mark and block
- * formatting off, so typed markdown stays literal, and one paragraph per line. Enter
- * sends; Shift+Enter and Option+Enter break the line.
+ * formatting off, so typed markdown stays literal, and one paragraph per line. Shift+Enter,
+ * Option+Enter and any Enter the composer does not send with break the line.
  */
-export const PromptEditor = ({ placeholder, label, onChange, onFocus, onBlur, onTrigger, onKey, onSubmit, onPaste, handle, disabled, autofocus, initialText }: PromptEditorProps) => {
-  const latest = useRef({ onChange, onFocus, onBlur, onTrigger, onKey, onSubmit, onPaste });
-  latest.current = { onChange, onFocus, onBlur, onTrigger, onKey, onSubmit, onPaste };
+export const PromptEditor = ({ placeholder, label, onChange, onFocus, onBlur, onTrigger, onKey, onPaste, handle, disabled, autofocus, initialText }: PromptEditorProps) => {
+  const latest = useRef({ onChange, onFocus, onBlur, onTrigger, onKey, onPaste });
+  latest.current = { onChange, onFocus, onBlur, onTrigger, onKey, onPaste };
   const placeholderRef = useRef(placeholder);
   placeholderRef.current = placeholder;
   const editor = useEditor({
@@ -226,11 +230,7 @@ export const PromptEditor = ({ placeholder, label, onChange, onFocus, onBlur, on
         if (event.key !== "Enter" || event.isComposing || event.keyCode === 229) return false;
         if (event.shiftKey) return false;
         event.preventDefault();
-        if (event.altKey) {
-          view.dispatch(view.state.tr.split(view.state.selection.from).scrollIntoView());
-          return true;
-        }
-        latest.current.onSubmit(event);
+        view.dispatch(view.state.tr.split(view.state.selection.from).scrollIntoView());
         return true;
       },
       handlePaste: (_view, event) => latest.current.onPaste(event),
@@ -279,9 +279,13 @@ export const PromptEditor = ({ placeholder, label, onChange, onFocus, onBlur, on
           typeof insert === "string" ? [{ type: "text", text: insert }] : [{ type: "agentChip", attrs: { ...insert } }, { type: "text", text: " " }];
         editor.chain().focus().insertContentAt({ from: trigger.from, to: trigger.to }, content).run();
       },
+      insertTextAtEnd: (text) => {
+        if (!editor || editor.isDestroyed || !editor.isEditable) return false;
+        editor.chain().focus("end").insertContent(lineBreaks(text)).run();
+        return true;
+      },
       insertText: (text) => {
-        const content: JSONContent[] = text.split("\n").flatMap((line, index): JSONContent[] => [...(index === 0 ? [] : [{ type: "hardBreak" }]), ...(line === "" ? [] : [{ type: "text", text: line }])]);
-        editor?.chain().focus().insertContent(content).run();
+        editor?.chain().focus().insertContent(lineBreaks(text)).run();
       },
       caretOnVisualEdge: (edge) => {
         if (!editor || editor.isDestroyed || draftText(editor.getJSON()) === "") return true;

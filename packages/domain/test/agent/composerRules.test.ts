@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
   appendRestoredPrompt,
+  composerKeyIntent,
+  composerRequiresModifier,
   contextMeter,
   createTypingGuard,
   followUpAction,
@@ -17,6 +19,7 @@ import {
   recallablePrompt,
   resolveQueuedEditExit,
   searchSlashCommands,
+  sendShortcutOf,
   stepPromptHistory,
   TYPING_IDLE_MS,
   updateTypingGuard,
@@ -203,6 +206,107 @@ describe("the follow-up action", () => {
     expect(followUpAction("queue", true)).toBe("steer");
     expect(followUpAction("steer", false)).toBe("steer");
     expect(followUpAction("steer", true)).toBe("queue");
+  });
+});
+
+describe("the send shortcut", () => {
+  it("reads a stored value, Enter unless it is a known one", () => {
+    expect(sendShortcutOf("mod-enter")).toBe("mod-enter");
+    expect(sendShortcutOf("mod-enter-multiline")).toBe("mod-enter-multiline");
+    expect(sendShortcutOf(undefined)).toBe("enter");
+    expect(sendShortcutOf("cmd")).toBe("enter");
+  });
+
+  it("asks for Cmd always, or only for a prompt of several lines", () => {
+    expect(composerRequiresModifier("enter", "two\nlines")).toBe(false);
+    expect(composerRequiresModifier("mod-enter-multiline", "one line")).toBe(false);
+    expect(composerRequiresModifier("mod-enter-multiline", "two\nlines")).toBe(true);
+    expect(composerRequiresModifier("mod-enter", "one line")).toBe(true);
+  });
+});
+
+describe("what a key in the composer does", () => {
+  const enter = { key: "Enter", metaKey: false, ctrlKey: false, altKey: false, shiftKey: false };
+  const base = { mac: false, sendShortcut: "enter" as const, prompt: "one line", running: false, newChat: false };
+
+  it.each([
+    ["enter", "one line", false, "foreground"],
+    ["enter", "two\nlines", false, "foreground"],
+    ["mod-enter-multiline", "one line", false, "foreground"],
+    ["mod-enter-multiline", "two\nlines", false, null],
+    ["mod-enter-multiline", "two\nlines", true, "foreground"],
+    ["mod-enter", "one line", false, null],
+    ["mod-enter", "one line", true, "foreground"],
+  ] as const)("honours %s for %j (Ctrl held: %s)", (sendShortcut, prompt, ctrlKey, expected) => {
+    expect(composerKeyIntent({ ...base, sendShortcut, prompt, key: { ...enter, ctrlKey } })).toBe(expected);
+  });
+
+  it("leaves Shift+Enter and Option+Enter to break the line", () => {
+    expect(composerKeyIntent({ ...base, key: { ...enter, shiftKey: true } })).toBeNull();
+    expect(composerKeyIntent({ ...base, key: { ...enter, altKey: true } })).toBeNull();
+  });
+
+  it("never sends while composing, on an IME key or on a held key", () => {
+    expect(composerKeyIntent({ ...base, key: { ...enter, isComposing: true } })).toBeNull();
+    expect(composerKeyIntent({ ...base, key: { ...enter, keyCode: 229 } })).toBeNull();
+    expect(composerKeyIntent({ ...base, key: { ...enter, repeat: true } })).toBeNull();
+  });
+
+  it("uses Cmd on a Mac and Ctrl elsewhere for the chords", () => {
+    const running = { ...base, running: true };
+    expect(composerKeyIntent({ ...running, mac: true, key: { ...enter, metaKey: true } })).toBe("alternate");
+    expect(composerKeyIntent({ ...running, mac: false, key: { ...enter, ctrlKey: true } })).toBe("alternate");
+    // Ctrl+Enter on a Mac is not the chord: it sends as Enter does.
+    expect(composerKeyIntent({ ...running, mac: true, key: { ...enter, ctrlKey: true } })).toBe("foreground");
+  });
+
+  describe("while a turn runs", () => {
+    const running = { ...base, running: true };
+
+    it("does the other follow-up action on Cmd+Enter when Enter sends", () => {
+      expect(composerKeyIntent({ ...running, key: enter })).toBe("foreground");
+      expect(composerKeyIntent({ ...running, key: { ...enter, ctrlKey: true } })).toBe("alternate");
+      expect(composerKeyIntent({ ...running, key: { ...enter, ctrlKey: true, shiftKey: true } })).toBe("steer-queued");
+    });
+
+    it("moves the other action to Cmd+Shift+Enter when sending needs Cmd", () => {
+      const strict = { ...running, sendShortcut: "mod-enter" as const };
+      expect(composerKeyIntent({ ...strict, key: enter })).toBeNull();
+      expect(composerKeyIntent({ ...strict, key: { ...enter, ctrlKey: true } })).toBe("foreground");
+      expect(composerKeyIntent({ ...strict, key: { ...enter, ctrlKey: true, shiftKey: true } })).toBe("alternate");
+    });
+
+    it("moves it only for a prompt of several lines with the multiline option", () => {
+      const multiline = { ...running, sendShortcut: "mod-enter-multiline" as const };
+      expect(composerKeyIntent({ ...multiline, prompt: "one", key: { ...enter, ctrlKey: true } })).toBe("alternate");
+      expect(composerKeyIntent({ ...multiline, prompt: "one", key: { ...enter, ctrlKey: true, shiftKey: true } })).toBe("steer-queued");
+      expect(composerKeyIntent({ ...multiline, prompt: "a\nb", key: { ...enter, ctrlKey: true } })).toBe("foreground");
+      expect(composerKeyIntent({ ...multiline, prompt: "a\nb", key: { ...enter, ctrlKey: true, shiftKey: true } })).toBe("alternate");
+    });
+  });
+
+  it("keeps Cmd+Shift+Enter for the oldest queued message while no turn runs", () => {
+    expect(composerKeyIntent({ ...base, key: { ...enter, ctrlKey: true, shiftKey: true } })).toBe("steer-queued");
+    expect(composerKeyIntent({ ...base, sendShortcut: "mod-enter", key: { ...enter, ctrlKey: true, shiftKey: true } })).toBe("steer-queued");
+  });
+
+  it("sends and starts a new chat on Cmd+Option+Enter, in a chat or a new one, whatever the send shortcut", () => {
+    for (const sendShortcut of ["enter", "mod-enter-multiline", "mod-enter"] as const) {
+      for (const newChat of [false, true]) {
+        expect(composerKeyIntent({ ...base, sendShortcut, newChat, prompt: "a\nb", key: { ...enter, ctrlKey: true, altKey: true } })).toBe("background");
+      }
+    }
+    expect(composerKeyIntent({ ...base, running: true, key: { ...enter, ctrlKey: true, altKey: true } })).toBe("background");
+  });
+
+  it("keeps Cmd+Enter a plain send in a new chat (no send in the background)", () => {
+    expect(composerKeyIntent({ ...base, newChat: true, key: { ...enter, ctrlKey: true } })).toBe("foreground");
+    expect(composerKeyIntent({ ...base, newChat: true, sendShortcut: "mod-enter", key: { ...enter, ctrlKey: true } })).toBe("foreground");
+  });
+
+  it("takes no other key", () => {
+    expect(composerKeyIntent({ ...base, key: { ...enter, key: "a" } })).toBeNull();
+    expect(composerKeyIntent({ ...base, key: { ...enter, key: "Tab", shiftKey: true } })).toBeNull();
   });
 });
 

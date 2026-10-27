@@ -3,6 +3,8 @@ import {
   actionablePlan,
   agentSelectionOf,
   appendRestoredPrompt,
+  composerKeyIntent,
+  composerRequiresModifier,
   continuableChat,
   DEFAULT_RUNTIME_MODE,
   followUpAction,
@@ -28,7 +30,24 @@ import type { AgentTrayProps as SlotProps } from "../../chrome/slots.ts";
 import { useEngine } from "../../context.ts";
 import { effectiveModel, noProviderReady, providerName, readyProviders } from "../providers.ts";
 import { createChat, sendMessage } from "../send.ts";
-import { EMPTY_DRAFT, NEW_CHAT, sameDraft, useChatClient, useChats, useDraftVersion, useFollowUp, useHandoffVersion, usePlanMode, useProviders, useQueue, useRailUi, useWatchedThread, type ChatClient, type QueuedMessage } from "../store.ts";
+import {
+  EMPTY_DRAFT,
+  NEW_CHAT,
+  sameDraft,
+  useChatClient,
+  useChats,
+  useDraftVersion,
+  useFollowUp,
+  useHandoffVersion,
+  usePlanMode,
+  useProviders,
+  useQueue,
+  useRailUi,
+  useSendShortcut,
+  useWatchedThread,
+  type ChatClient,
+  type QueuedMessage,
+} from "../store.ts";
 import { latestCompletedTool, returnQueued, sendQueued } from "../queue.tsx";
 import { Alert, AlertDescription } from "~/components/ui/alert";
 import { Button } from "~/components/ui/button";
@@ -38,6 +57,7 @@ import { formatSize, useAttachments } from "./attachments.ts";
 import { StashMenu, useStash } from "./stash.tsx";
 import { ApprovalPanel, choiceOnly, openQuestion, PlanActions, PlanReady, requestIdOf, useQuestionAnswers, waitingRequests } from "./panels.tsx";
 import { useTypingGuard } from "./typingGuard.ts";
+import { pasteIntoComposer, pastesInline, typesIntoComposer } from "./focusRedirect.ts";
 import { platform } from "../../canvas/platform.ts";
 import { showNotice } from "../../toasts.tsx";
 import { AttachmentShelf } from "./AttachmentShelf.tsx";
@@ -91,12 +111,12 @@ export interface AgentTrayProps {
   readonly dropTarget?: RefObject<HTMLElement | null>;
 }
 
-/** Whether Cmd or Ctrl is held: Send then shows the other follow-up action (t3code's). */
-const useCommandHeld = (): boolean => {
-  const [held, setHeld] = useState(false);
+/** Whether Cmd or Ctrl, and Shift, are held: Send then shows the other follow-up action (t3code's). */
+const useModifiersHeld = (): { readonly command: boolean; readonly shift: boolean } => {
+  const [held, setHeld] = useState({ command: false, shift: false });
   useEffect(() => {
-    const update = (event: KeyboardEvent) => setHeld(event.metaKey || event.ctrlKey);
-    const reset = () => setHeld(false);
+    const update = (event: KeyboardEvent) => setHeld({ command: event.metaKey || event.ctrlKey, shift: event.shiftKey });
+    const reset = () => setHeld({ command: false, shift: false });
     window.addEventListener("keydown", update, true);
     window.addEventListener("keyup", update, true);
     window.addEventListener("blur", reset);
@@ -192,6 +212,7 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
   const [draftInteraction, setDraftInteraction] = useState<InteractionMode>("default");
   const showError = useCallback((message: string) => client.setUi({ error: message }), [client]);
   const [modelOpen, setModelOpen] = useState(false);
+  const [traitsOpen, setTraitsOpen] = useState(false);
   const [modeOpen, setModeOpen] = useState(false);
 
   /** The model a message runs on: the chat's, or for a new chat the one picked here, else the first ready provider's default. */
@@ -271,10 +292,19 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
   /** Cmd+Shift+V (Ctrl+Shift+V off Mac) keeps the next large paste inline. */
   const inlineNext = useRef(0);
 
-  /**
-   * A paste of files attaches them (text pasted with them stays text); a large text paste
-   * becomes a text file attachment, unless Cmd+Shift+V asked for it inline.
-   */
+  /** A large text paste becomes a text file attachment, unless Cmd+Shift+V asked for it inline. */
+  const attachLargePaste = (pastedText: string): boolean => {
+    const inline = Date.now() - inlineNext.current < 1500;
+    inlineNext.current = 0;
+    if (pastedText === "" || inline || !pasteBecomesFile(pastedText, text.length)) return false;
+    const name = pastedTextFileName(attachments.staged.map((item) => item.name));
+    const file = new File([pastedText], name, { type: "text/plain;charset=utf-8" });
+    void attachments.add([file]);
+    showNotice(`Large paste attached as ${name}`, "info", `${formatSize(file.size)} · Use ${platform() === "darwin" ? "⌘⇧V" : "Ctrl+Shift+V"} to keep a large paste inline.`);
+    return true;
+  };
+
+  /** A paste of files attaches them (text pasted with them stays text); a large text paste becomes a file. */
   const onPaste = (event: ClipboardEvent): boolean => {
     const data = event.clipboardData;
     const pasted = [...(data?.files ?? [])];
@@ -287,14 +317,8 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
       }
       return false;
     }
-    const inline = Date.now() - inlineNext.current < 1500;
-    inlineNext.current = 0;
-    if (pastedText === "" || inline || !pasteBecomesFile(pastedText, text.length)) return false;
+    if (!attachLargePaste(pastedText)) return false;
     event.preventDefault();
-    const name = pastedTextFileName(attachments.staged.map((item) => item.name));
-    const file = new File([pastedText], name, { type: "text/plain;charset=utf-8" });
-    void attachments.add([file]);
-    showNotice(`Large paste attached as ${name}`, "info", `${formatSize(file.size)} · Use ${platform() === "darwin" ? "⌘⇧V" : "Ctrl+Shift+V"} to keep a large paste inline.`);
     return true;
   };
 
@@ -414,13 +438,17 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
       setStashOpen(false);
       return true;
     }
-    if (command && event.shiftKey && event.key === "Enter" && chat) {
-      const oldest = client.queue(chat.id)[0];
-      if (oldest) void sendQueued(client, chat.id, oldest.id);
+    // t3code's control chords; a held Cmd+Shift+M or E does not repeat its toggle.
+    if (command && event.shiftKey && !event.altKey && event.key.toLowerCase() === "a") {
+      setModeOpen(true);
       return true;
     }
-    if (command && event.shiftKey && event.key.toLowerCase() === "a") {
-      setModeOpen(true);
+    if (command && event.shiftKey && !event.altKey && event.key.toLowerCase() === "m") {
+      if (!event.repeat && !running) setModelOpen((open) => !open);
+      return true;
+    }
+    if (command && event.shiftKey && !event.altKey && event.key.toLowerCase() === "e") {
+      if (!event.repeat && !running) setTraitsOpen(true);
       return true;
     }
     // Alt+ArrowUp at the start of the box edits the newest queued message (t3code's).
@@ -430,6 +458,13 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
       if (!event.repeat) beginEdit(latest);
       return true;
     }
+    const intent = composerKeyIntent({ key: event, mac: platform() === "darwin", sendShortcut, prompt: box.current?.text() ?? "", running, newChat: chatId === null });
+    if (intent === "steer-queued") {
+      if (!chat) return false;
+      const oldest = client.queue(chat.id)[0];
+      if (oldest) void sendQueued(client, chat.id, oldest.id);
+      return true;
+    }
     if (!menu && !event.shiftKey && !event.altKey && !event.metaKey && !event.ctrlKey && (event.key === "ArrowUp" || event.key === "ArrowDown")) {
       return history(event.key === "ArrowUp" ? "backward" : "forward");
     }
@@ -437,7 +472,8 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
       setInteraction(interactionMode === "plan" ? "default" : "plan");
       return true;
     }
-    if (menu) {
+    // An open menu takes Enter, whichever Enter sends; the other chords still send.
+    if (menu && intent !== "alternate" && intent !== "background") {
       const count = menu.items.length;
       if (event.key === "ArrowDown" && count > 0) setHighlight((highlight + 1) % count);
       else if (event.key === "ArrowUp" && count > 0) setHighlight((highlight - 1 + count) % count);
@@ -450,7 +486,9 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
       } else return false;
       return true;
     }
-    return false;
+    if (intent === null) return false;
+    void send(intent === "alternate", intent === "background" && variant === "rail");
+    return true;
   };
 
   // What waits on the person in this chat: an approval, a question, a plan to implement.
@@ -526,6 +564,7 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
   };
 
   const followUp = useFollowUp(client);
+  const sendShortcut = useSendShortcut(client);
   const stash = useStash(client.engine, client.project);
   const [stashOpen, setStashOpen] = useState(false);
   /**
@@ -556,7 +595,8 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
       setStashOpen(true);
     }
   };
-  const send = async (invert = false) => {
+  /** `invert` does the other follow-up action; `thenNewChat` opens the rail's new chat once the message is out. */
+  const send = async (invert = false, thenNewChat = false) => {
     if (answering) {
       guard.onSend();
       return questions.answer();
@@ -595,6 +635,7 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
         await sendMessage(client, target, outgoing);
       }
       onSent?.();
+      if (thenNewChat) client.setUi({ chosen: NEW_CHAT, pinned: null });
     } catch (error) {
       client.reportError(error);
       if ((box.current?.text() ?? "") === "") box.current?.setText(message);
@@ -680,6 +721,32 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
     void client.dispatch({ type: "thread.turn.interrupt", threadId: chat.id, turnId: chat.latestTurn.turnId }).catch((error: unknown) => client.reportError(error));
   };
 
+  // Type-to-focus and paste-to-focus (t3code's): what goes into the rail outside a field lands in the box.
+  const boxTakesText = !(answering && choiceOnly(question));
+  const redirect = useRef({ attachLargePaste, boxTakesText });
+  redirect.current = { attachLargePaste, boxTakesText };
+  useEffect(() => {
+    const rail = variant === "rail" ? dropElement : null;
+    if (!rail) return;
+    const mac = platform() === "darwin";
+    const onRailKey = (event: KeyboardEvent) => {
+      if (pastesInline(event, rail, mac)) inlineNext.current = Date.now();
+      else if (typesIntoComposer(event, rail) && box.current?.insertTextAtEnd(event.key)) event.preventDefault();
+    };
+    const onRailPaste = (event: ClipboardEvent) => {
+      const pasted = pasteIntoComposer(event, rail);
+      if (pasted === null || !redirect.current.boxTakesText) return;
+      if (!redirect.current.attachLargePaste(pasted) && !box.current?.insertTextAtEnd(pasted)) return;
+      event.preventDefault();
+      event.stopPropagation();
+    };
+    rail.addEventListener("keydown", onRailKey);
+    rail.addEventListener("paste", onRailPaste);
+    return () => {
+      rail.removeEventListener("keydown", onRailKey);
+      rail.removeEventListener("paste", onRailPaste);
+    };
+  }, [variant, dropElement]);
 
   return (
     <div className="flex flex-col gap-1.5" data-variant={variant} data-testid="agent-tray" ref={root}>
@@ -731,7 +798,6 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
           initialText={initialText}
           onTrigger={setTrigger}
           onKey={onKey}
-          onSubmit={(event) => void send(platform() === "darwin" ? event.metaKey : event.ctrlKey)}
           onPaste={onPaste}
           handle={box}
           disabled={answering && choiceOnly(question)}
@@ -783,6 +849,8 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
               model={model}
               traits={selection.traits}
               disabled={running}
+              open={traitsOpen}
+              onOpenChange={setTraitsOpen}
               onChange={(traits) => setModelSelection({ ...selection, traits: declaredTraits(model, traits) })}
             />
             <CompactControlsMenu
@@ -834,7 +902,14 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
             ) : planFollowUp && editing === null ? (
               <PlanActions refine={text.trim() !== ""} busy={sending} onSend={() => void send()} onNewChat={() => void implementPlan(true)} />
             ) : (
-              <SendButton running={running} editing={editing !== null} followUp={followUp} disabled={!canSend} onSend={(alternate) => void send(alternate)} />
+              <SendButton
+                running={running}
+                editing={editing !== null}
+                followUp={followUp}
+                alternateNeedsShift={composerRequiresModifier(sendShortcut, text)}
+                disabled={!canSend}
+                onSend={(alternate) => void send(alternate)}
+              />
             )}
           </div>
         </div>
@@ -852,23 +927,26 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
 /**
  * The round Send (t3code's primary action). While a turn runs it says what the message will
  * do, "Queue message" or "Steer message" by the Follow-up behavior setting, the other while
- * Cmd or Ctrl is held, and a Cmd-click or Ctrl-click does the other for one message. While a
- * queued message is open in the box it is a check, "Update queued message".
+ * the other action's chord is held (Cmd, or Cmd+Shift when the Send shortcut needs Cmd for
+ * this prompt), and a Cmd-click or Ctrl-click does the other for one message. While a queued
+ * message is open in the box it is a check, "Update queued message".
  */
 const SendButton = ({
   running,
   editing,
   followUp,
+  alternateNeedsShift,
   disabled,
   onSend,
 }: {
   readonly running: boolean;
   readonly editing: boolean;
   readonly followUp: "queue" | "steer";
+  readonly alternateNeedsShift: boolean;
   readonly disabled: boolean;
   readonly onSend: (alternate: boolean) => void;
 }) => {
-  const commandHeld = useCommandHeld();
+  const held = useModifiersHeld();
   if (editing) {
     return (
       <MessageAction tone="send" aria-label="Update queued message" disabled={disabled} onClick={() => onSend(false)}>
@@ -883,9 +961,10 @@ const SendButton = ({
       </MessageAction>
     );
   }
-  const action = followUpAction(followUp, commandHeld);
+  const action = followUpAction(followUp, held.command && (held.shift || !alternateNeedsShift));
   const mac = platform() === "darwin";
-  const tip = `Click to ${followUp}, ${mac ? "⌘" : "Ctrl"}-click or ${mac ? "⌘Enter" : "Ctrl+Enter"} to ${followUpAction(followUp, true)}`;
+  const chord = alternateNeedsShift ? (mac ? "⇧⌘Enter" : "Ctrl+Shift+Enter") : mac ? "⌘Enter" : "Ctrl+Enter";
+  const tip = `Click to ${followUp}, ${mac ? "⌘" : "Ctrl"}-click or ${chord} to ${followUpAction(followUp, true)}`;
   return (
     <Tip label={tip} side="top">
       <span className="inline-flex">

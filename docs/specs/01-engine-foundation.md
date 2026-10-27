@@ -333,6 +333,7 @@ Keys in use, each owned by the spec named:
 | `library.view` | 06 | `"card"` or `"list"` |
 | `agent.followUp` | 08 (control in spec 10's dialog) | `"queue"` or `"steer"` |
 | `agent.planMode` | 08 (control in spec 10's dialog) | `true` turns plan mode on; off when unset |
+| `agent.sendShortcut` | 08 (control in spec 10's dialog) | `"enter"`, `"mod-enter-multiline"` or `"mod-enter"`; Enter when unset |
 | `agent.stash.<project>` | 08 | that project's stashed prompts |
 | `agent.diffLayout` | 08 | `"stacked"` or `"split"` |
 

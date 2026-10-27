@@ -274,6 +274,63 @@ export type FollowUpAction = "queue" | "steer";
 export const followUpAction = (setting: FollowUpAction, alternate: boolean): FollowUpAction => (alternate ? (setting === "queue" ? "steer" : "queue") : setting);
 
 // ---------------------------------------------------------------------------------------
+// The send shortcut and the composer's Enter chords (t3code's `composerSubmissionIntentForKey`).
+
+/** The Send shortcut setting: Enter, Cmd+Enter for a prompt of several lines, or Cmd+Enter always. */
+export type SendShortcut = "enter" | "mod-enter-multiline" | "mod-enter";
+
+export const sendShortcutOf = (value: unknown): SendShortcut => (value === "mod-enter" || value === "mod-enter-multiline" ? value : "enter");
+
+/** Whether Enter alone breaks the line for this prompt, so sending needs Cmd (Ctrl off Mac). */
+export const composerRequiresModifier = (sendShortcut: SendShortcut, prompt: string): boolean =>
+  sendShortcut === "mod-enter" || (sendShortcut === "mod-enter-multiline" && /[\r\n]/.test(prompt));
+
+export interface ComposerKey {
+  readonly key: string;
+  readonly metaKey: boolean;
+  readonly ctrlKey: boolean;
+  readonly altKey: boolean;
+  readonly shiftKey: boolean;
+  readonly isComposing?: boolean;
+  readonly keyCode?: number;
+  readonly repeat?: boolean;
+}
+
+/**
+ * What an Enter chord asks for: `foreground` sends (or saves, or answers), `alternate` sends
+ * with the other follow-up action, `background` sends and then opens a new chat, and
+ * `steer-queued` steers the oldest queued message into the running turn.
+ */
+export type ComposerKeyIntent = "foreground" | "alternate" | "background" | "steer-queued";
+
+/**
+ * t3code's default bindings resolved for a focused composer. Cmd+Enter is the other follow-up
+ * action while a turn runs; when the send shortcut asks for Cmd it moves to Cmd+Shift+Enter
+ * and takes that chord from steering the oldest queued message. Cmd+Option+Enter sends and
+ * starts a new chat. t3code's Cmd+Enter "send in the background" from a new chat is left out:
+ * it would take the chord the send shortcut sends with.
+ */
+export const composerKeyIntent = (input: {
+  readonly key: ComposerKey;
+  readonly mac: boolean;
+  readonly sendShortcut: SendShortcut;
+  readonly prompt: string;
+  readonly running: boolean;
+  readonly newChat: boolean;
+}): ComposerKeyIntent | null => {
+  const { key } = input;
+  if (key.isComposing === true || key.keyCode === 229 || key.repeat === true || key.key !== "Enter") return null;
+  const mod = input.mac ? key.metaKey && !key.ctrlKey : key.ctrlKey && !key.metaKey;
+  const requiresModifier = composerRequiresModifier(input.sendShortcut, input.prompt);
+  if (mod && key.altKey && !key.shiftKey) return "background";
+  if (mod && key.shiftKey && !key.altKey) return requiresModifier && input.running ? "alternate" : "steer-queued";
+  if (mod && !key.shiftKey && !key.altKey && input.running && !requiresModifier) return "alternate";
+  if (key.shiftKey || key.altKey) return null;
+  if (requiresModifier && !key.metaKey && !key.ctrlKey) return null;
+  return "foreground";
+};
+
+// ---------------------------------------------------------------------------------------
 // The queue's order and editing a queued message (t3code's Up next).
 
 /** The queue with one message moved to just before another, or to the end for `null`; unchanged when either is unknown. */

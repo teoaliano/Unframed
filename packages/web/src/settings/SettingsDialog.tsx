@@ -3,7 +3,7 @@
  * default models, the output folder and the local agents. Save sends only what changed.
  */
 import { UnframedError, type ProviderStatuses, type Settings, type SettingsPatch } from "@unframed/contracts";
-import { keyStatusCopy } from "@unframed/domain";
+import { keyStatusCopy, sendShortcutOf, type SendShortcut } from "@unframed/domain";
 import { CircleAlert, CircleCheck, FolderOpen } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Alert, AlertDescription, AlertTitle } from "~/components/ui/alert";
@@ -15,7 +15,7 @@ import { useActivation, useEngine } from "../context.ts";
 import { loadCatalogue } from "../generate/catalogue.ts";
 import { showNotice } from "../toasts.tsx";
 import { Copy, linkClass, ModelSelect, SectionHeading } from "./fields.tsx";
-import { FOLLOW_UP_KEY, LocalAgents, PLAN_MODE_KEY, type FollowUp } from "./LocalAgents.tsx";
+import { FOLLOW_UP_KEY, LocalAgents, PLAN_MODE_KEY, SEND_SHORTCUT_KEY, type FollowUp } from "./LocalAgents.tsx";
 import { OutsideAgents } from "./OutsideAgents.tsx";
 import { useSettingsUi, type SettingsUi } from "./settingsUi.ts";
 
@@ -87,6 +87,7 @@ export const SettingsDialog = ({ ui }: { readonly ui: SettingsUi }) => {
   const [statuses, setStatuses] = useState<ProviderStatuses>();
   const [checking, setChecking] = useState(false);
   const [followUp, setFollowUp] = useState<FollowUp>("queue");
+  const [sendShortcut, setSendShortcut] = useState<SendShortcut>("enter");
   const [planMode, setPlanMode] = useState(false);
   const keyField = useRef<HTMLInputElement>(null);
   const checks = useRef(0);
@@ -134,8 +135,9 @@ export const SettingsDialog = ({ ui }: { readonly ui: SettingsUi }) => {
       );
     }
     checkProviders(false);
-    const stop = engine.subscribe("preferences.subscribe", { keys: [FOLLOW_UP_KEY, PLAN_MODE_KEY] }, ({ key, value }) => {
+    const stop = engine.subscribe("preferences.subscribe", { keys: [FOLLOW_UP_KEY, PLAN_MODE_KEY, SEND_SHORTCUT_KEY] }, ({ key, value }) => {
       if (key === FOLLOW_UP_KEY) setFollowUp(value === "steer" ? "steer" : "queue");
+      if (key === SEND_SHORTCUT_KEY) setSendShortcut(sendShortcutOf(value));
       if (key === PLAN_MODE_KEY) setPlanMode(value === true);
     });
     return () => {
@@ -223,6 +225,10 @@ export const SettingsDialog = ({ ui }: { readonly ui: SettingsUi }) => {
   const setPlanModePreference = (value: boolean) => {
     setPlanMode(value);
     engine.call("preferences.set", { key: PLAN_MODE_KEY, value }).catch((error: unknown) => setBanner({ kind: "error", message: messageOf(error) }));
+  };
+  const setSendShortcutPreference = (value: SendShortcut) => {
+    setSendShortcut(value);
+    engine.call("preferences.set", { key: SEND_SHORTCUT_KEY, value }).catch((error: unknown) => setBanner({ kind: "error", message: messageOf(error) }));
   };
   const setFollowUpPreference = (value: FollowUp) => {
     setFollowUp(value);
@@ -366,6 +372,8 @@ export const SettingsDialog = ({ ui }: { readonly ui: SettingsUi }) => {
                 codexPath={draft.codexPath}
                 claudeConfigDir={draft.claudeConfigDir}
                 onChange={(field, value) => edit({ [field]: value })}
+                sendShortcut={sendShortcut}
+                onSendShortcut={setSendShortcutPreference}
                 followUp={followUp}
                 onFollowUp={setFollowUpPreference}
                 planMode={planMode}

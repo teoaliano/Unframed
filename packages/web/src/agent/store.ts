@@ -1,6 +1,6 @@
 import { rememberDrafts, takeDrafts } from "../project/tabMemory.ts";
 import { UnframedError, type ChatAttachment, type ChatSummary, type ClientChatCommand, type ProviderStatuses, type ShellStreamItem, type ThreadStreamItem } from "@unframed/contracts";
-import { projectChat, type Chat, type ChatEvent, type ChatMessage } from "@unframed/domain";
+import { projectChat, sendShortcutOf, type Chat, type ChatEvent, type ChatMessage, type SendShortcut } from "@unframed/domain";
 import { useEffect, useMemo, useSyncExternalStore } from "react";
 import type { EngineConnection } from "../rpc/engine.ts";
 
@@ -101,6 +101,8 @@ export class ChatClient {
   private followUpWatch: (() => void) | undefined;
   private planModeValue = false;
   private planModeWatch: (() => void) | undefined;
+  private sendShortcutValue: SendShortcut = "enter";
+  private sendShortcutWatch: (() => void) | undefined;
   private readonly stopShell: () => void;
 
   constructor(engine: EngineConnection, project: string) {
@@ -122,6 +124,7 @@ export class ChatClient {
     this.stopShell();
     this.followUpWatch?.();
     this.planModeWatch?.();
+    this.sendShortcutWatch?.();
     for (const entry of this.threads.values()) entry.stop();
     this.threads.clear();
   }
@@ -415,6 +418,18 @@ export class ChatClient {
     return this.followUpValue;
   }
 
+  /** The Send shortcut preference (spec 10 shows its control): Enter unless set. */
+  get sendShortcut(): SendShortcut {
+    if (!this.sendShortcutWatch) {
+      this.sendShortcutWatch = this.engine.subscribe("preferences.subscribe", { keys: ["agent.sendShortcut"] }, (change) => {
+        if (change.key !== "agent.sendShortcut") return;
+        this.sendShortcutValue = sendShortcutOf(change.value);
+        this.changed("ui");
+      });
+    }
+    return this.sendShortcutValue;
+  }
+
   /** The Plan mode preference (spec 10 shows its control): off unless set, as in t3code. */
   get planMode(): boolean {
     if (!this.planModeWatch) {
@@ -544,6 +559,12 @@ export const useHandoffVersion = (client: ChatClient): number => useKey(client, 
 export const usePlanMode = (client: ChatClient): boolean => {
   useKey(client, "ui");
   return client.planMode;
+};
+
+/** The Send shortcut preference, live. */
+export const useSendShortcut = (client: ChatClient): SendShortcut => {
+  useKey(client, "ui");
+  return client.sendShortcut;
 };
 
 /** The Follow-up behavior preference, live. */

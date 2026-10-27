@@ -219,3 +219,41 @@ test("Edit, or Alt+ArrowUp at the start of the composer, opens a queued message 
   await expect(lines).toHaveText(["too late"]);
   await expect(panel.getByRole("button", { name: "Update queued message" })).toHaveCount(0);
 });
+
+test("with the Send shortcut on Cmd+Enter always, Enter breaks the line while a turn runs, Cmd+Enter does the Follow-up behavior, Cmd+Shift+Enter the other, and Cmd+Enter saves a queued edit", async ({ page, agent }) => {
+  await (await rpcOf(agent)).call("preferences.set", { key: "agent.sendShortcut", value: "mod-enter" });
+  const { panel, chatId } = await parkedChat(page, agent);
+  const { mac } = await platformOf(page);
+  const box = promptBox(panel);
+  const lines = panel.locator(".ProseMirror p");
+  await box.click();
+  await box.pressSequentially("queue me");
+  await box.press("Enter");
+  await expect(lines).toHaveText(["queue me", ""]);
+  await expect(panel.getByTestId("queued-message")).toHaveCount(0);
+  await box.press("Backspace");
+  await box.press("ControlOrMeta+Enter");
+  await expect(panel.getByTestId("queued-message")).toHaveCount(1);
+  expect(await userTexts(agent, chatId)).toEqual(["park here"]);
+
+  // The tooltip names the chord that does the other action now.
+  await box.pressSequentially("steer me");
+  const queueButton = panel.getByRole("button", { name: "Queue message" });
+  await queueButton.hover();
+  await expect(page.getByText(`Click to queue, ${mac ? "⌘" : "Ctrl"}-click or ${mac ? "⇧⌘Enter" : "Ctrl+Shift+Enter"} to steer`, { exact: true })).toBeVisible();
+  // Cmd+Shift+Enter steers this message; the queued one stays where it is.
+  await box.press("ControlOrMeta+Shift+Enter");
+  await expect.poll(() => userTexts(agent, chatId)).toEqual(["park here", "steer me"]);
+  expect(await rowTexts(panel)).toEqual(["queue me"]);
+
+  // Editing a queued message: Enter breaks the line, Cmd+Enter saves it.
+  await box.click();
+  await box.press("Alt+ArrowUp");
+  await expect(lines).toHaveText(["queue me"]);
+  await box.press("End");
+  await box.press("Enter");
+  await box.pressSequentially("and more");
+  await box.press("ControlOrMeta+Enter");
+  await expect.poll(() => rowTexts(panel)).toEqual(["queue me\nand more"]);
+  await expect(panel.getByRole("button", { name: "Update queued message" })).toHaveCount(0);
+});

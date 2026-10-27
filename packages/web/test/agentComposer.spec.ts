@@ -3,7 +3,7 @@ import { openCanvas, shapeOnScreen, toast } from "./canvas.ts";
 import { clickShape, composer, toolbar } from "./generation.ts";
 import { pngBytes } from "./images.ts";
 import { filledMedia, putRecords } from "./media.ts";
-import { artifactColumn, chosenControl, createChat, enablePlanMode, expect, onlyChat, openRail, promptBox, rail, rpcOf, scriptFolder, startAgentEngine, test } from "./agent.ts";
+import { artifactColumn, chosenControl, createChat, enablePlanMode, engineChats, expect, onlyChat, openRail, promptBox, rail, rpcOf, say, scriptFolder, startAgentEngine, tabs, test, userTexts } from "./agent.ts";
 import type { TestEngine } from "../../engine/test/engineProcess.ts";
 import { expectSlot, expectToken, inBothSchemes, resolvedColor, styleOf } from "./kit.ts";
 import { platformOf } from "./platform.ts";
@@ -518,4 +518,103 @@ test("a draft shown again after a tab switch is not an undo step", async ({ page
   await promptBox(panel).click();
   await page.keyboard.press("ControlOrMeta+z");
   await expect(promptBox(panel)).not.toHaveText("");
+});
+
+test("the Send shortcut: Cmd+Enter for several lines sends one line on Enter and breaks a multiline one; Cmd+Enter always leaves Enter to break the line", async ({ page, agent }) => {
+  await (await rpcOf(agent)).call("preferences.set", { key: "agent.sendShortcut", value: "mod-enter-multiline" });
+  await openCanvas(page, agent);
+  const panel = await openRail(page);
+  const box = promptBox(panel);
+  const lines = panel.locator(".ProseMirror p");
+  await box.click();
+  await page.keyboard.type("one line");
+  await page.keyboard.press("Enter");
+  await expect(panel.locator("[data-role='assistant']")).toHaveCount(1);
+  const chatId = (await onlyChat(agent)).id;
+
+  await page.keyboard.type("first");
+  await page.keyboard.press("Shift+Enter");
+  await page.keyboard.type("second");
+  await page.keyboard.press("Enter");
+  await expect(lines).toHaveCount(2);
+  await page.keyboard.press("Backspace");
+  await page.keyboard.press("ControlOrMeta+Enter");
+  await expect(panel.locator("[data-role='assistant']")).toHaveCount(2);
+  await expect.poll(() => userTexts(agent, chatId)).toEqual(["one line", "first\nsecond"]);
+
+  await (await rpcOf(agent)).call("preferences.set", { key: "agent.sendShortcut", value: "mod-enter" });
+  await page.keyboard.type("only with the chord");
+  await page.keyboard.press("Enter");
+  await expect(lines).toHaveText(["only with the chord", ""]);
+  await page.keyboard.press("Backspace");
+  await page.keyboard.press("ControlOrMeta+Enter");
+  await expect.poll(async () => (await userTexts(agent, chatId)).at(-1)).toBe("only with the chord");
+  await expect(box).toHaveText("");
+});
+
+test("Cmd+Option+Enter sends and opens a new chat, from a chat and from a new one", async ({ page, agent }) => {
+  await openCanvas(page, agent);
+  const panel = await openRail(page);
+  const box = promptBox(panel);
+  await say(panel, "start here");
+  await expect(panel.locator("[data-role='assistant']")).toHaveCount(1);
+  await expect(tabs(page)).toHaveCount(1);
+  const first = (await onlyChat(agent)).id;
+
+  await box.click();
+  await page.keyboard.type("one more, then a new chat");
+  await page.keyboard.press("ControlOrMeta+Alt+Enter");
+  await expect.poll(async () => (await userTexts(agent, first)).at(-1)).toBe("one more, then a new chat");
+  await expect(tabs(page).and(page.locator("[aria-selected='true']"))).toHaveCount(0);
+  await expect(box).toHaveText("");
+  await expect(box).toBeFocused();
+
+  await page.keyboard.type("a fresh one");
+  await page.keyboard.press("ControlOrMeta+Alt+Enter");
+  await expect.poll(async () => (await engineChats(agent)).length).toBe(2);
+  await expect(tabs(page)).toHaveCount(2);
+  await expect(tabs(page).and(page.locator("[aria-selected='true']"))).toHaveCount(0);
+  await expect(box).toHaveText("");
+});
+
+test("in the rail, a key or a paste outside a field goes to the composer: after a click on the transcript or a chat tab, never from the canvas, a menu or a field", async ({ page, agent }) => {
+  await openCanvas(page, agent);
+  const panel = await openRail(page);
+  const box = promptBox(panel);
+  await say(panel, "hello there");
+  await expect(panel.locator("[data-role='assistant']")).toHaveCount(1);
+
+  // A click on a message leaves no field focused: typing goes to the end of the box.
+  await box.pressSequentially("draft ");
+  await panel.locator("[data-role='user'] [data-testid='message-text']").click();
+  await expect(box).not.toBeFocused();
+  await page.keyboard.type("typed");
+  await expect(box).toBeFocused();
+  await expect(box).toHaveText("draft typed");
+
+  // A paste goes there too.
+  await panel.locator("[data-role='user'] [data-testid='message-text']").click();
+  await page.evaluate(() => {
+    const transfer = new DataTransfer();
+    transfer.setData("text/plain", " pasted");
+    (document.activeElement ?? document.body).dispatchEvent(new ClipboardEvent("paste", { bubbles: true, cancelable: true, clipboardData: transfer }));
+  });
+  await expect(box).toHaveText("draft typed pasted");
+
+  // From the chat's tab as well.
+  await tabs(page).first().focus();
+  await page.keyboard.type("!");
+  await expect(box).toHaveText("draft typed pasted!");
+
+  // An open menu keeps its keys.
+  await panel.getByRole("button", { name: "More composer controls" }).click();
+  await expect(page.getByRole("menu")).toBeVisible();
+  await page.keyboard.type("x");
+  await page.keyboard.press("Escape");
+  await expect(box).toHaveText("draft typed pasted!");
+
+  // The canvas keeps its keys: tldraw's shortcuts, not the composer.
+  await page.mouse.click(700, 400);
+  await page.keyboard.type("q");
+  await expect(box).toHaveText("draft typed pasted!");
 });

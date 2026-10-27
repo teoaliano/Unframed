@@ -200,7 +200,9 @@ export const AgentRail = ({ project, embedded, inSheet, filterTo, onLocate, onOp
         motion?.ref(element);
       }}
       aria-label="Agent"
-      className={embedded || inSheet ? EMBEDDED_CLASS : RAIL_CLASS}
+      // A click outside a field focuses the rail, not the page, so a key typed next stays here and goes to the composer.
+      tabIndex={-1}
+      className={`${embedded || inSheet ? EMBEDDED_CLASS : RAIL_CLASS} outline-none`}
       data-state={motion?.state}
       data-embedded={embedded ? "" : undefined}
       onPointerDown={(event) => event.stopPropagation()}
