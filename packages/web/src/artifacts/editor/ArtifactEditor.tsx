@@ -13,6 +13,7 @@ import { AgentRail } from "../../agent/rail/AgentRail.tsx";
 import { Tip } from "../../chrome/ui.tsx";
 import { useCanvasProject, useEngine } from "../../context.ts";
 import { ArtifactFrame, outsideUrlOf } from "../ArtifactFrame.tsx";
+import { kitOf } from "../kit.ts";
 import { previewPort } from "../state.ts";
 import { RenderButton } from "../render.tsx";
 import { COLUMN, ColumnHeader, Parameters } from "./Parameters.tsx";
@@ -53,6 +54,7 @@ export const ArtifactEditor = ({ shapeId, onClose, onOpen }: ArtifactEditorProps
   const editor = useEditor();
   const project = useCanvasProject();
   const engine = useEngine();
+  const kit = useValue("project kit", () => kitOf(editor), [editor]);
   const facts = useValue(
     "edited artifact",
     () => {
@@ -179,6 +181,7 @@ export const ArtifactEditor = ({ shapeId, onClose, onOpen }: ArtifactEditorProps
                   file={facts.file}
                   previewPort={port}
                   dials={facts.dials}
+                  kit={kit}
                   interactive
                   lazy={false}
                   onAnnounce={setAnnouncement}

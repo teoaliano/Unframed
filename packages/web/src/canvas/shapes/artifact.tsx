@@ -6,6 +6,7 @@ import { BaseBoxShapeUtil, HTMLContainer, resizeBox, T, useEditor, useValue, typ
 import { ArtifactFrame, type ArtifactFrameProps } from "../../artifacts/ArtifactFrame.tsx";
 import { ProblemLine, RenderRow } from "../../artifacts/RenderRow.tsx";
 import { snapshotsOf, snapshotUrl, stillOf } from "../../artifacts/snapshots.ts";
+import { kitOf } from "../../artifacts/kit.ts";
 import { forgetFrame, hearFrame, isInteractive, isLive, previewPort, reachFrame } from "../../artifacts/state.ts";
 import { currentSlots } from "../../chrome/slots.ts";
 import { useCanvasProject } from "../../context.ts";
@@ -88,6 +89,7 @@ const FilledArtifact = ({ shape, kind }: { readonly shape: ArtifactShape; readon
   const live = useValue("artifact live", () => isLive(editor, shape.id), [editor, shape.id]);
   const interactive = useValue("artifact interactive", () => live && isInteractive(editor, shape.id), [editor, shape.id, live]);
   const port = useValue("preview port", () => previewPort.get(), []);
+  const kit = useValue("project kit", () => kitOf(editor), [editor]);
   const title = artifactTitle(props);
   const name = nameOf(shape);
   return (
@@ -95,7 +97,7 @@ const FilledArtifact = ({ shape, kind }: { readonly shape: ArtifactShape; readon
       <HTMLContainer id={shape.id} data-testid="artifact-card" data-artifact-kind={kind} data-live={live ? "true" : undefined} style={{ width: props.w, height: props.h }}>
         <ShapeLabel shapeId={shape.id} kind={kind} name={readRef(shape)} width={props.w} text={name !== undefined ? `@${name}` : title} />
         {live && port !== undefined ? (
-          <CanvasFrame key={props.file} shapeId={shape.id} project={project} kind={kind} file={props.file} previewPort={port} dials={props.dials} interactive={interactive} lazy />
+          <CanvasFrame key={props.file} shapeId={shape.id} project={project} kind={kind} file={props.file} previewPort={port} dials={props.dials} kit={kit} interactive={interactive} lazy />
         ) : (
           <Still shape={shape} title={title} />
         )}
