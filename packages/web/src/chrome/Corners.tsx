@@ -15,7 +15,7 @@ const LogoMark = () => (
   <span
     role="img"
     aria-label="Unframed"
-    className="block size-6 shrink-0 bg-foreground"
+    className="block size-4.5 shrink-0 bg-foreground"
     style={{ mask: `url("${logoUrl}") center / contain no-repeat`, WebkitMask: `url("${logoUrl}") center / contain no-repeat` }}
   />
 );

@@ -53,12 +53,12 @@ const keyIsTaken = (target: EventTarget | null): boolean => {
 /*
  * 380 px, docked left over the canvas where the editor's chat column sits, on solid
  * --background with the kit's border: on glass it crossed spec 02's pan budget. It runs from
- * the top bar's bottom border (48 px, spec 17) to the window's bottom, so the bar's border and
+ * the top bar's bottom border (36 px, spec 17) to the window's bottom, so the bar's border and
  * the rail's right border meet with no gap; theme.css moves the zoom controls beside it. The slide is a CSS transition on
  * `transform` (not Tailwind's `translate`), so reopening mid-exit reverses from where it is.
  */
 const RAIL_CLASS =
-  "pointer-events-auto absolute top-12 left-0 bottom-0 z-[600] box-border flex w-[380px] flex-col border-r bg-background font-sans text-foreground [transform:none] opacity-100 [transition:transform_260ms_var(--ease-drawer),opacity_200ms_ease-out] starting:data-[state=open]:[transform:translateX(-100%)] starting:data-[state=open]:opacity-0 data-[state=closed]:pointer-events-none data-[state=closed]:[transform:translateX(-100%)] data-[state=closed]:opacity-0 data-[state=closed]:[transition:transform_200ms_var(--ease-drawer),opacity_160ms_ease-out] motion-reduce:[transition:opacity_160ms_ease-out] motion-reduce:data-[state=closed]:[transform:none] motion-reduce:data-[state=closed]:[transition:opacity_160ms_ease-out]";
+  "pointer-events-auto absolute top-9 left-0 bottom-0 z-[600] box-border flex w-[380px] flex-col border-r bg-background font-sans text-foreground [transform:none] opacity-100 [transition:transform_260ms_var(--ease-drawer),opacity_200ms_ease-out] starting:data-[state=open]:[transform:translateX(-100%)] starting:data-[state=open]:opacity-0 data-[state=closed]:pointer-events-none data-[state=closed]:[transform:translateX(-100%)] data-[state=closed]:opacity-0 data-[state=closed]:[transition:transform_200ms_var(--ease-drawer),opacity_160ms_ease-out] motion-reduce:[transition:opacity_160ms_ease-out] motion-reduce:data-[state=closed]:[transform:none] motion-reduce:data-[state=closed]:[transition:opacity_160ms_ease-out]";
 
 /** The editor's left column, or the Sheet: the same rail in place, with no surface or motion of its own. */
 const EMBEDDED_CLASS = "relative box-border flex size-full min-h-0 flex-col font-sans text-foreground";

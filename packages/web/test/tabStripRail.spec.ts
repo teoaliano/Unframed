@@ -30,7 +30,7 @@ test("the docked rail meets the bar's bottom border: no part of it shows in the 
   expect(body.x).toBe(0);
 
   // The rail's right border and the bar's left end, inside the bar: only the bar paints there.
-  for (const point of [{ x: box.x + box.width - 1, y: 24 }, { x: 4, y: 46 }]) {
+  for (const point of [{ x: box.x + box.width - 1, y: body.height / 2 }, { x: 4, y: body.height - 2 }]) {
     const inRail = await panel.evaluate((rail, { x, y }) => document.elementsFromPoint(x, y).some((element) => rail.contains(element)), point);
     expect(inRail).toBe(false);
   }

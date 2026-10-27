@@ -18,22 +18,23 @@ test("the top-left card holds the logo; Settings sits at the end opposite the wi
   await expect(page.getByRole("button", { name: "Help" })).toHaveCount(0);
 });
 
-test("the bar's start sits at the window edge, 48 tall; the lights' zone is 92 px, the logo 20 px into the bar", async ({ page, engine }) => {
+test("the bar's start sits at the window edge, 36 tall; the lights' zone is 81 px, the logo 15 px into the bar", async ({ page, engine }) => {
   await openCanvas(page, engine);
   const card = page.locator(".unframed-chrome-left");
   const box = (await card.boundingBox())!;
-  // The bar is 48 px tall and its start region is the lights' zone (92 px) before the logo's 20 px padding.
-  expect([box.x, box.y, box.height]).toEqual([0, 0, 48]);
+  // The bar is 36 px tall and its start region is the lights' zone (81 px) before the logo's 15 px padding.
+  expect([box.x, box.y, box.height]).toEqual([0, 0, 36]);
   const logo = (await card.getByRole("img", { name: "Unframed" }).boundingBox())!;
-  expect([logo.width, logo.height]).toEqual([24, 24]);
-  expect(logo.x).toBe(92 + 20);
+  expect([logo.width, logo.height]).toEqual([18, 18]);
+  expect(logo.x).toBe(81 + 15);
   const strip = (await page.getByTestId("tab-strip").boundingBox())!;
-  expect(strip.height).toBe(48);
-  expect(strip.y + strip.height / 2).toBe(24);
+  expect(strip.height).toBe(36);
+  expect(strip.y + strip.height / 2).toBe(18);
   const settings = (await page.getByRole("button", { name: /^(Settings|Add your API key)$/ }).boundingBox())!;
-  // The reference's Settings is a 32 px circle, 12 px past the bar's end and 14 px from the window edge.
-  expect([settings.width, settings.height]).toEqual([32, 32]);
-  expect(settings.y + settings.height / 2).toBe(24);
+  // Settings is a 24 px circle, 9 px past the bar's end and 12 px from the window edge.
+  expect([settings.width, settings.height]).toEqual([24, 24]);
+  expect(settings.y + settings.height / 2).toBe(18);
+  expect(page.viewportSize()!.width - (settings.x + settings.width)).toBe(12);
   const right = await page.locator(".unframed-chrome-right").evaluate((element) => ({ top: getComputedStyle(element).top, right: getComputedStyle(element).right }));
   expect(right).toEqual({ top: "0px", right: "0px" });
 });

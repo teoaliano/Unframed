@@ -50,7 +50,7 @@ test("the Agent button slides the rail in from the left under the top bar, full 
   const box = (await panel.boundingBox())!;
   expect(box.x).toBeCloseTo(0, 0);
   // It runs from the top bar's bottom border to the window's bottom.
-  expect(box.y).toBe(48);
+  expect(box.y).toBe(36);
   expect(box.y + box.height).toBe(page.viewportSize()!.height);
   expect(await computed(panel, "border-bottom-width", "border-bottom-right-radius")).toEqual({ "border-bottom-width": "0px", "border-bottom-right-radius": "0px" });
 
