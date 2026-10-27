@@ -28,7 +28,7 @@ export const KitHost = () => {
   const close = () => kitUi(editor).update((state) => ({ ...state, open: false }));
   const fromLibrary = () => {
     close();
-    libraryUi(editor).update((state) => ({ ...state, open: true }));
+    libraryUi(editor).update((state) => ({ ...state, open: true, type: "kit" }));
   };
   return open ? <KitDialog onClose={close} onFromLibrary={fromLibrary} /> : null;
 };

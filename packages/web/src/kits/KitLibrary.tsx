@@ -3,7 +3,7 @@
  * the kit, and Update in library, which replaces the linked library kit with the project's.
  */
 import { UnframedError } from "@unframed/contracts";
-import { PRESET_EMPTY_NAME_MESSAGE, type Kit } from "@unframed/domain";
+import { PRESET_EMPTY_NAME_MESSAGE, type Kit, type Token } from "@unframed/domain";
 import { useState } from "react";
 import { Button } from "~/components/ui/button";
 import { Dialog, DialogClose, DialogDescription, DialogFooter, DialogHeader, DialogPanel, DialogPopup, DialogTitle } from "~/components/ui/dialog";
@@ -19,10 +19,10 @@ export const kitSaveSubtitle = (kit: Pick<Kit, "tokens" | "modes">): string =>
   `${kit.tokens.length} ${kit.tokens.length === 1 ? "token" : "tokens"} and ${kit.modes.length} ${kit.modes.length === 1 ? "mode" : "modes"}, saved as you have them now.`;
 
 /** The link a project keeps to the library kit it has as it is now: its revision and its tokens and modes. */
-export const linkFor = (presetId: string, revision: number, kit: Pick<Kit, "modes" | "tokens">) => ({
+export const linkFor = (presetId: string, revision: number, kit: { readonly modes: ReadonlyArray<string>; readonly tokens: ReadonlyArray<Token> }) => ({
   presetId,
   revision,
-  base: { modes: [...kit.modes], tokens: structuredClone(kit.tokens) },
+  base: { modes: [...kit.modes], tokens: structuredClone([...kit.tokens]) },
 });
 
 /** The Add to library form for a kit: a name and a description, as the library's own form. */

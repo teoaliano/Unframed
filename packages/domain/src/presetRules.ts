@@ -6,6 +6,7 @@
 import { mayBeGroupMember, wrapBox, type Box } from "./grouping.ts";
 import { refOnPaste, slugName } from "./groupRules.ts";
 import { readGroupRecipe, type RecipeMedium } from "./recipeRules.ts";
+import type { Token } from "./kits/types.ts";
 import { META_REF_TYPES, nextRef, rewriteRichTextTokens } from "./refs.ts";
 
 /** A shape record as tldraw's copy produces it. */
@@ -64,6 +65,26 @@ export interface Preset {
   /** Spec 11: what the conversion could not keep. */
   readonly notes?: ReadonlyArray<string>;
 }
+
+/** A kit preset (spec 19): the kit's values and a revision that goes up on every update. It has no content. */
+export interface KitPreset {
+  readonly format: 2;
+  readonly id: string;
+  readonly source: PresetSource;
+  readonly savedAt?: string;
+  readonly name: string;
+  readonly summary: string;
+  readonly kind: "kit";
+  readonly kit: { readonly name: string; readonly modes: ReadonlyArray<string>; readonly tokens: ReadonlyArray<Token> };
+  readonly revision: number;
+  readonly needs?: undefined;
+  readonly medium?: undefined;
+  readonly legacy?: undefined;
+  readonly notes?: undefined;
+}
+
+/** Every entry the Library lists: content presets and kit presets. */
+export type LibraryEntry = Preset | KitPreset;
 
 export const PRESET_NOT_ONE_GROUP_MESSAGE = "A preset is one group.";
 export const PRESET_SPLIT_MESSAGE = "A preset is one group. Select one group, or shapes outside any group.";
@@ -334,13 +355,21 @@ export const resolvePresetFiles = (
 // The Library dialog's list.
 
 /** What the list reads of a preset. */
-export type PresetSummary = Pick<Preset, "id" | "source" | "name" | "summary" | "kind"> & Partial<Pick<Preset, "savedAt" | "medium" | "needs">>;
+/** A library entry's kind as the Library's filter sees it: a content kind or a kit. */
+export type LibraryKind = PresetKind | "kit";
+
+export type PresetSummary = Pick<Preset, "id" | "source" | "name" | "summary"> & {
+  readonly kind: LibraryKind;
+  readonly savedAt?: string | undefined;
+  readonly medium?: RecipeMedium | undefined;
+  readonly needs?: string | undefined;
+};
 
 export type LibrarySort = "newest" | "oldest" | "az" | "za";
 
 export interface LibraryControls {
   readonly query: string;
-  readonly type: "all" | PresetKind;
+  readonly type: "all" | LibraryKind;
   readonly source: "any" | PresetSource;
   readonly sort: LibrarySort;
   /** 1-based. */
