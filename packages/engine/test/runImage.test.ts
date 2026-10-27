@@ -15,8 +15,8 @@ const upload = async (generating: Generating, name: string, bytes: Buffer, mime:
 const roomShapes = async (generating: Generating) =>
   ((await generating.rpc.call("testCanvas.read", { project: "board" })).records as any[]).filter((record) => record.typeName === "shape");
 
-// The tokens script is a helper the room writes when it opens (spec 19), not a run's output.
-const filesIn = async (generating: Generating) => (await readdir(folderOf(generating))).filter((name) => !name.startsWith(".") && name !== "unframed.sqlite" && !name.startsWith("unframed.sqlite") && name !== "unframed-tokens.js");
+// The tokens script and its transient temp files are helpers the room writes (spec 19), not a run's output.
+const filesIn = async (generating: Generating) => (await readdir(folderOf(generating))).filter((name) => !name.startsWith(".") && name !== "unframed.sqlite" && !name.startsWith("unframed.sqlite") && name !== "unframed-tokens.js" && !name.startsWith("unframed-tokens.js."));
 
 describe("run.image validation", () => {
   let generating: Generating;
