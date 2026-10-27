@@ -22,6 +22,8 @@ export const UNFRAMED_TOOLS = [
   "page_read",
   "motion_write",
   "motion_read",
+  "component_write",
+  "component_read",
   "preview_status",
   "preview_open",
   "preview_navigate",
