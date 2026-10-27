@@ -1,28 +1,22 @@
+import type { SourceEdit } from "@unframed/contracts";
+
 /**
  * Edit bursts (spec 18): the edits the editor collects before it writes them as one version. An
  * edit is keyed by its target and field, so a later edit of the same field replaces the earlier
  * one; dial values are held by path and written with the burst's file in one step.
  */
 
-/** One source edit, the same shape as contracts' `SourceEdit`. Spec 19 and later specs add members. */
-export type BurstSourceEdit =
-  | { readonly type: "text"; readonly elementId: string; readonly text: string }
-  | { readonly type: "style"; readonly elementId: string; readonly property: string; readonly value: string | null }
-  | { readonly type: "attribute"; readonly elementId: string; readonly name: string; readonly value: string | null }
-  | { readonly type: "hide"; readonly elementId: string; readonly hidden: boolean }
-  | { readonly type: "image"; readonly elementId: string; readonly target: "src" | "background"; readonly file: string };
-
-export type BurstEdit = BurstSourceEdit | { readonly type: "dial"; readonly path: string; readonly value: unknown };
+export type BurstEdit = SourceEdit | { readonly type: "dial"; readonly path: string; readonly value: unknown };
 
 export interface Burst {
-  readonly edits: ReadonlyMap<string, BurstSourceEdit>;
+  readonly edits: ReadonlyMap<string, SourceEdit>;
   readonly dials: ReadonlyMap<string, unknown>;
 }
 
 export const emptyBurst = (): Burst => ({ edits: new Map(), dials: new Map() });
 
 /** The target and field an edit replaces: a later edit with the same key takes its place. */
-const burstKey = (edit: BurstSourceEdit): string => {
+const burstKey = (edit: SourceEdit): string => {
   const field =
     edit.type === "text" ? "text"
     : edit.type === "style" ? `style:${edit.property}`
@@ -45,7 +39,7 @@ export function addToBurst(burst: Burst, edit: BurstEdit): Burst {
 }
 
 /** The burst's source edits, in the order each target and field was first edited. */
-export const burstEdits = (burst: Burst): BurstSourceEdit[] => [...burst.edits.values()];
+export const burstEdits = (burst: Burst): SourceEdit[] => [...burst.edits.values()];
 
 /** The burst's held dial values, by path, in the order each path was first changed. */
 export const burstDials = (burst: Burst): Array<{ readonly path: string; readonly value: unknown }> =>

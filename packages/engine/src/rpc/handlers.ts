@@ -183,6 +183,11 @@ export const rpcHandlersLayer = UnframedRpcs.toLayer(
       "motion.renderStatus": ({ project, id }) => artifacts.renderStatus(project, id),
       "artifact.snapshots": ({ project }) => artifacts.snapshots(project),
       "artifact.openLive": ({ project, shapeId }) => artifacts.openLive(project, shapeId),
+      // Element editing (spec 18): the handlers arrive with their tasks; until then each one answers unavailable.
+      "artifact.sourceTree": () => Effect.fail(unframedError("unavailable", "Element editing is not available yet.")),
+      "artifact.prepareEdit": () => Effect.fail(unframedError("unavailable", "Element editing is not available yet.")),
+      "artifact.edit": () => Effect.fail(unframedError("unavailable", "Element editing is not available yet.")),
+      "artifact.images": () => Effect.fail(unframedError("unavailable", "Element editing is not available yet.")),
       "legacyImport.status": ({ project }) => legacy.status(project),
       "legacyImport.report": ({ project }) => legacy.report(project),
       "legacyImport.markSeen": ({ project }) => legacy.markSeen(project),

@@ -52,6 +52,15 @@ describe("the canvas schema in the room", () => {
     expect(await stored(engine, "shape:m")).toMatchObject({ type: "motion", props: { dials: { speed: 2 } } });
   });
 
+  it("keeps a page with its locked element ids and refuses locks that are not a list of strings", async () => {
+    const locked = pageShape("locked", "107", { file: "1-x.html", lockedElements: ["hf-aaaa", "hf-bbbb"] });
+    expect(await pushOne(engine, locked)).toBe("committed");
+    expect(await stored(engine, "shape:locked")).toMatchObject({ props: { lockedElements: ["hf-aaaa", "hf-bbbb"] } });
+    const notList = pageShape("locked-bad", "108", { lockedElements: "hf-aaaa" });
+    expect(await pushOne(engine, notList)).toEqual({ closed: "INVALID_RECORD" });
+    expect(await stored(engine, "shape:locked-bad")).toBeUndefined();
+  });
+
   it("refuses a prompt with no ref, a page whose file is a path, a meta field outside meta.unframed and an embed", async () => {
     const withoutRef = { ...promptShape("no-ref", "1", "x"), meta: {} } as TLRecord;
     const pathFile = pageShape("bad-file", "104", { file: "../escape.html" });
