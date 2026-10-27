@@ -102,6 +102,7 @@ import {
   ZoomIn,
   ZoomOut,
   type LucideIcon,
+  Palette,
 } from "lucide-react";
 import { flushSync } from "react-dom";
 import { createRoot } from "react-dom/client";
@@ -207,7 +208,7 @@ const LUCIDE: Partial<Record<TLUiIconType, LucideIcon>> = {
 };
 
 /** Icons Unframed's own toolbar buttons name, beside tldraw's. */
-const UNFRAMED: Readonly<Record<string, LucideIcon>> = { library: Library, sparkles: Sparkles };
+const UNFRAMED: Readonly<Record<string, LucideIcon>> = { library: Library, palette: Palette, sparkles: Sparkles };
 
 /** Each mapped tldraw icon name and its Lucide SVG as a data URL, rendered once. */
 export const lucideIconUrls = (): Record<string, string> => {

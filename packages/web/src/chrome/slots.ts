@@ -20,6 +20,8 @@ export interface ChromeSlots {
   agentButton?: ComponentType;
   settingsButton?: ComponentType;
   libraryButton?: ComponentType;
+  /** The Kit button in the bottom bar, beside Library (spec 19). */
+  kitButton?: ComponentType;
   /** The end of the bottom bar, after tldraw's tools: the canvas registers the Library and Add. */
   toolbarEnd?: ComponentType;
   addToLibrary?: (editor: Editor) => void;
