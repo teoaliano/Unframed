@@ -243,5 +243,3 @@ export class ComponentTools {
     ];
   }
 }
-
-
