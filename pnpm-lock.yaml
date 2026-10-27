@@ -52,8 +52,8 @@ importers:
   packages/domain:
     dependencies:
       '@hyperframes/parsers':
-        specifier: 0.8.93
-        version: 0.8.93
+        specifier: 0.8.206
+        version: 0.8.206
       '@unframed/contracts':
         specifier: workspace:*
         version: link:../contracts
