@@ -9,13 +9,13 @@
  */
 import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
-import { artifactTitle, isArtifactKind, liveKey, livePointerFileName, livePointerKey, livePointerSource, parseLivePointer, type LivePointer } from "@unframed/domain";
+import { artifactTitle, isArtifactKind, type ArtifactKind, liveKey, livePointerFileName, livePointerKey, livePointerSource, parseLivePointer, type LivePointer } from "@unframed/domain";
 import type { TLRecord } from "@tldraw/tlschema";
 import { writeFileAtomic } from "../atomicFile.ts";
 import { errorText, logError } from "../log.ts";
 import { ensureLiveViewer } from "./artifactStore.ts";
 
-type ArtifactRecord = TLRecord & { type: "page" | "motion"; props: { file: string; title?: unknown; fileName?: unknown; dials?: Record<string, unknown> } };
+type ArtifactRecord = TLRecord & { type: ArtifactKind; props: { file: string; title?: unknown; fileName?: unknown; dials?: Record<string, unknown> } };
 
 const isArtifact = (record: TLRecord | undefined): record is ArtifactRecord =>
   record?.typeName === "shape" && isArtifactKind(record.type) && typeof (record.props as { file?: unknown }).file === "string";

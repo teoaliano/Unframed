@@ -9,7 +9,7 @@ import { mkdir, readdir, rename, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { crc32, deflateSync } from "node:zlib";
 import type { ArtifactSnapshot } from "@unframed/contracts";
-import { artifactUrl, isArtifactKind, parseSnapshotFileName, snapshotFileName, snapshotFits, snapshotSeekSeconds } from "@unframed/domain";
+import { artifactUrl, isArtifactKind, parseSnapshotFileName, type ArtifactKind, snapshotFileName, snapshotFits, snapshotSeekSeconds } from "@unframed/domain";
 import type { TLRecord } from "@tldraw/tlschema";
 import { errorText, logError } from "../log.ts";
 import { ensurePinnedComponents } from "./artifactStore.ts";
@@ -24,7 +24,7 @@ const SETTLE_MS = 500;
 
 export interface SnapshotJob {
   readonly project: string;
-  readonly kind: "page" | "motion";
+  readonly kind: ArtifactKind;
   readonly file: string;
   readonly w: number;
   readonly h: number;
@@ -106,7 +106,7 @@ interface Seen {
   readonly dials: string;
 }
 
-type ArtifactRecord = TLRecord & { type: "page" | "motion"; props: { w: number; h: number; file: string; dials?: Record<string, unknown> } };
+type ArtifactRecord = TLRecord & { type: ArtifactKind; props: { w: number; h: number; file: string; dials?: Record<string, unknown> } };
 
 const isArtifact = (record: TLRecord | undefined): record is ArtifactRecord =>
   record?.typeName === "shape" && isArtifactKind(record.type) && typeof (record.props as { file?: unknown }).file === "string";
