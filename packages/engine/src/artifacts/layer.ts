@@ -3,7 +3,7 @@
  * and the snapshot stream, over the artifact store, the renderer and the snapshot service.
  */
 import { join } from "node:path";
-import type { ArtifactSnapshot, RenderStatus } from "@unframed/contracts";
+import type { ArtifactSnapshot, ComponentPins as ComponentPinsItem, RenderStatus } from "@unframed/contracts";
 import { UnframedError, unframedError } from "@unframed/contracts";
 import { injectTags, projectSlug } from "@unframed/domain";
 import * as Context from "effect/Context";
@@ -22,6 +22,7 @@ import { findChrome } from "./chrome.ts";
 import { producerBackend, Renderer, RenderRefused, stubBackend } from "./renderer.ts";
 import { HeadlessChrome } from "./headlessChrome.ts";
 import { LivePointers } from "./livePointers.ts";
+import { ComponentPins, type PinsItem } from "./componentPins.ts";
 import { chromeSnapshotRenderer, Snapshots, stubSnapshotRenderer, type SnapshotRenderer } from "./snapshots.ts";
 import { SettingsStore } from "../settingsStore.ts";
 import { Shutdown } from "../shutdown.ts";
@@ -42,6 +43,8 @@ export class Artifacts extends Context.Service<
     }) => Effect.Effect<{ id: string; status: "queued"; placeholder: string }, UnframedError>;
     readonly renderStatus: (project: string, id: string) => Effect.Effect<RenderStatus, UnframedError>;
     readonly snapshots: (project: string) => Stream.Stream<ArtifactSnapshot, UnframedError>;
+    /** Every page and motion file's component pins, then each newly named file's (spec 20). */
+    readonly componentPins: (project: string) => Stream.Stream<ComponentPinsItem, UnframedError>;
     /** "Open in a new tab": the shape's live viewer pointer, kept current from then on. */
     readonly openLive: (project: string, shapeId: string) => Effect.Effect<{}, UnframedError>;
     /** The Chromium this machine has, for the agent's previews and snapshots. */
@@ -89,6 +92,14 @@ export const artifactsLayer = Layer.effect(
       void run(openProjects.register(project, "artifact snapshots", Effect.sync(() => snapshots.forget(project))));
     });
     yield* rooms.afterCommit((project, change) => snapshots.committed(project, [...change.records.values()]));
+
+    const pinned = yield* PubSub.unbounded<{ readonly project: string; readonly item: PinsItem }>();
+    const pins = new ComponentPins({
+      folder: (project) => media.folder(project),
+      read: (project) => run(rooms.read(project)),
+      publish: (project, item) => void run(PubSub.publish(pinned, { project, item })),
+    });
+    yield* rooms.afterCommit((project, change) => void pins.committed(project, [...change.records.values()]));
 
     const pointers = new LivePointers((project) => media.folder(project));
     yield* rooms.afterOpen((project, room) => pointers.opened(project, room.read()));
@@ -146,6 +157,21 @@ export const artifactsLayer = Layer.effect(
               Stream.fromSubscription(subscription).pipe(
                 Stream.filter((item) => item.project === slug),
                 Stream.map((item) => item.snapshot),
+              ),
+            );
+          }),
+        ),
+      componentPins: (project) =>
+        Stream.unwrap(
+          Effect.gen(function* () {
+            const slug = projectSlug(project);
+            if ((yield* Effect.promise(() => media.folder(slug))) === undefined) return yield* unframedError("not_found", `There is no project named "${slug}".`);
+            const subscription = yield* PubSub.subscribe(pinned);
+            return Stream.concat(
+              Stream.unwrap(Effect.map(Effect.promise(() => pins.initial(slug)), (items) => Stream.fromIterable(items))),
+              Stream.fromSubscription(subscription).pipe(
+                Stream.filter((entry) => entry.project === slug),
+                Stream.map((entry) => entry.item),
               ),
             );
           }),

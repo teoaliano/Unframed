@@ -182,6 +182,7 @@ export const rpcHandlersLayer = UnframedRpcs.toLayer(
       "motion.renderStart": (input) => artifacts.renderStart(input),
       "motion.renderStatus": ({ project, id }) => artifacts.renderStatus(project, id),
       "artifact.snapshots": ({ project }) => artifacts.snapshots(project),
+      "component.pins": ({ project }) => artifacts.componentPins(project),
       "artifact.openLive": ({ project, shapeId }) => artifacts.openLive(project, shapeId),
       "legacyImport.status": ({ project }) => legacy.status(project),
       "legacyImport.report": ({ project }) => legacy.report(project),

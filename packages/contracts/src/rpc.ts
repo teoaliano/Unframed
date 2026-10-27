@@ -21,7 +21,7 @@ import {
   TurnDiff,
   TurnDiffInput,
 } from "./agent.ts";
-import { ArtifactOpenLive, ArtifactSnapshots, MotionRenderStart, MotionRenderStatus, MotionUpload } from "./artifacts.ts";
+import { ArtifactOpenLive, ArtifactSnapshots, ComponentPinsSubscribe, MotionRenderStart, MotionRenderStatus, MotionUpload } from "./artifacts.ts";
 import { LegacyImportMarkSeen, LegacyImportReport, LegacyImportRetry, LegacyImportStatus } from "./legacy.ts";
 import { AgentConnectionsCreate, AgentConnectionsCreateAnswer, AgentConnectionsListAnswer, AgentConnectionsRevoke, AgentConnectionsSetSpendLimit } from "./agentConnections.ts";
 import { SelectionApply, SelectionReport, SelectionSubscribe } from "./selection.ts";
@@ -374,6 +374,7 @@ export const UnframedRpcs = RpcGroup.make(
   MotionRenderStatus,
   ArtifactSnapshots,
   ArtifactOpenLive,
+  ComponentPinsSubscribe,
   LegacyImportStatus,
   LegacyImportReport,
   LegacyImportMarkSeen,

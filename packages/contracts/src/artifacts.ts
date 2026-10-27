@@ -71,3 +71,19 @@ export const ArtifactSnapshots = Rpc.make("artifact.snapshots", {
   error: UnframedError,
   stream: true,
 });
+
+/** One pin of an artifact file: the component tag it serves and the sheet its compiled file belongs to (spec 20). */
+export const ComponentPin = Schema.Struct({ tag: Schema.String, sheet: Schema.String });
+export type ComponentPin = typeof ComponentPin.Type;
+
+/** The pins of one page or motion file the canvas names. */
+export const ComponentPins = Schema.Struct({ file: Schema.String, pins: Schema.Array(ComponentPin) });
+export type ComponentPins = typeof ComponentPins.Type;
+
+/** Every page and motion file's pins, then one item for each file a commit newly names (spec 20). */
+export const ComponentPinsSubscribe = Rpc.make("component.pins", {
+  payload: Schema.Struct({ project: Schema.String }),
+  success: ComponentPins,
+  error: UnframedError,
+  stream: true,
+});
