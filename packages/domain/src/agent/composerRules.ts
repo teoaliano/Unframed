@@ -5,6 +5,7 @@
  * follow-up queues or steers, and when the typing guard holds a request back.
  */
 import { ATTACHMENT_LIMITS } from "./attachments.ts";
+import type { Chat } from "./chatModel.ts";
 import { IMPLEMENT_PLAN_PROMPT } from "./prompts.ts";
 
 // ---------------------------------------------------------------------------------------
@@ -188,6 +189,19 @@ export const offersCompactBeforeSend = (input: {
 /** Whether this send runs `/compact` first: offered, not switched to Full, and not itself `/compact`. */
 export const compactsBeforeSend = (input: { readonly tokens: number | null; readonly keepFullHistory: boolean; readonly text: string }): boolean =>
   input.tokens !== null && !input.keepFullHistory && !COMPACT_COMMAND.test(input.text.trim());
+
+// ---------------------------------------------------------------------------------------
+// Resuming a turn (t3code's `useComposerResume`).
+
+/** What Resume thread sends, t3code's words. */
+export const RESUME_MESSAGE = "Continue where you left off.";
+
+/**
+ * Whether the composer offers Resume thread: the chat's latest turn was interrupted. An
+ * interrupt keeps the provider session, or saves its cursor after the partial turn, so the
+ * provider still has the work the next turn continues.
+ */
+export const resumableTurn = (chat: Pick<Chat, "latestTurn" | "outside">): boolean => chat.outside === undefined && chat.latestTurn?.state === "interrupted";
 
 // ---------------------------------------------------------------------------------------
 // Restoring into a draft (a stash entry, a queued message given back, Edit from here).

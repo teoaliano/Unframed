@@ -7,6 +7,8 @@ import {
   chipRefs,
   COMPACTION_SUGGESTION_MIN_TOKENS,
   compactsBeforeSend,
+  RESUME_MESSAGE,
+  resumableTurn,
   composerKeyIntent,
   composerRequiresModifier,
   continuableChat,
@@ -32,7 +34,7 @@ import {
   type PromptHistoryPosition,
   type RuntimeMode,
 } from "@unframed/domain";
-import { ArrowLeft, Check, CircleAlert, CornerUpRight, ListPlus, Minimize2, Paperclip } from "lucide-react";
+import { ArrowLeft, Check, CircleAlert, CornerUpRight, ListPlus, Minimize2, Paperclip, Play } from "lucide-react";
 import { createPortal } from "react-dom";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from "react";
 import type { AgentTrayProps as SlotProps } from "../../chrome/slots.ts";
@@ -623,6 +625,22 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
       ? lengthError === undefined && text.trim() !== ""
       : lengthError === undefined && (planFollowUp ? !sending : !noProvider && !sending && (text.trim() !== "" || attachments.staged.length > 0));
 
+  /** t3code's Resume thread: an empty composer on a chat whose turn was cut short offers to carry it on. */
+  const showResume =
+    variant === "rail" && chat !== undefined && !running && !answering && editing === null && !noProvider && resumableTurn(chat) && text.trim() === "" && attachments.staged.length === 0;
+  const resume = async () => {
+    if (!chat || sending) return;
+    setSending(true);
+    client.setUi({ error: undefined });
+    try {
+      await sendMessage(client, chat.id, { text: RESUME_MESSAGE, selection: [], attachments: [] });
+    } catch (error) {
+      client.reportError(error);
+    } finally {
+      setSending(false);
+    }
+  };
+
   /** Implement: the chat back to building, then the plan after t3code's prefix; or the same in a new chat named after it. */
   const implementPlan = async (inNewChat: boolean) => {
     if (!chat || !planFollowUp || sending) return;
@@ -1109,6 +1127,14 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
                   {questions.submitting ? "Submitting..." : !questions.lastQuestion ? "Next question" : questions.index > 0 ? "Submit answers" : "Submit answer"}
                 </MessageAction>
               </>
+            ) : showResume ? (
+              <Tip label="Resume thread" side="top">
+                <span className="inline-flex">
+                  <MessageAction tone="send" aria-label="Resume thread" disabled={sending} onClick={() => void resume()}>
+                    <Play aria-hidden className="size-4 fill-current" />
+                  </MessageAction>
+                </span>
+              </Tip>
             ) : planFollowUp && editing === null ? (
               <PlanActions refine={text.trim() !== ""} busy={sending} onSend={() => void send()} onNewChat={() => void implementPlan(true)} />
             ) : (

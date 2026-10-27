@@ -6,6 +6,8 @@ import {
   ensureChips,
   readStoredDrafts,
   removeChips,
+  RESUME_MESSAGE,
+  resumableTurn,
   stashSnippet,
   withoutChips,
   storedDraftsValue,
@@ -37,6 +39,7 @@ import {
   type PromptHistoryEntry,
   type SlashItem,
 } from "../../src/index.ts";
+import { chatOf, started } from "./chatFixtures.ts";
 
 describe("the large paste rule", () => {
   it("turns a paste of 32 KiB or more into a file, counted as characters", () => {
@@ -501,5 +504,25 @@ describe("the notices above the composer", () => {
     const notices = [{ id: "limit" }, { id: "offline", group: "environment" as const }, { id: "refused", group: "attention" as const }, { id: "session", group: "environment" as const }];
     expect(orderNotices(notices).map((notice) => notice.id)).toEqual(["offline", "session", "limit", "refused"]);
     expect(orderNotices([])).toEqual([]);
+  });
+});
+
+describe("resuming a turn (t3code's Resume thread)", () => {
+  const ended = (state: "running" | "interrupted" | "completed" | "error") => {
+    const chat = chatOf(started());
+    return { ...chat, latestTurn: { ...chat.latestTurn!, state } };
+  };
+
+  it("is offered once the latest turn was interrupted, and sends t3code's words", () => {
+    expect(resumableTurn(ended("interrupted"))).toBe(true);
+    expect(RESUME_MESSAGE).toBe("Continue where you left off.");
+  });
+
+  it("is not offered for a turn that runs, finished or failed, nor for a chat with no turn or an outside chat", () => {
+    expect(resumableTurn(ended("running"))).toBe(false);
+    expect(resumableTurn(ended("completed"))).toBe(false);
+    expect(resumableTurn(ended("error"))).toBe(false);
+    expect(resumableTurn({ ...ended("interrupted"), latestTurn: null })).toBe(false);
+    expect(resumableTurn({ ...ended("interrupted"), outside: { connectionId: "c", sessionId: "s", client: "claude-code" } })).toBe(false);
   });
 });
