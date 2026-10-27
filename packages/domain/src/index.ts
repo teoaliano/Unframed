@@ -91,3 +91,4 @@ export * from "./agent/generationSpend.ts";
 export * from "./tabs.ts";
 export * from "./motion/probe.ts";
 export * from "./motion/owners.ts";
+export * from "./motion/timeline.ts";
