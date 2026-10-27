@@ -39,6 +39,7 @@ import { refusal as refuse, type McpBinding, type McpTool, type ToolAnswer } fro
 import type { TurnChanges } from "../agent/turnChanges.ts";
 import { indexOnTop } from "../runs/placeholders.ts";
 import { shapeBoxes } from "../runs/shapeBounds.ts";
+import { lockRefusal, sourceTreeOf } from "@unframed/domain/html";
 import { byteSize, prepareArtifactHtml } from "./artifactHtml.ts";
 import { ensureBridge, ensureLibrary, readArtifact, writeAgentArtifact } from "./artifactStore.ts";
 
@@ -65,6 +66,9 @@ export interface AgentToolContext {
 }
 
 type Shape = TLRecord & { type: string; props: Record<string, unknown>; meta: Record<string, unknown> };
+
+/** The locked element ids of an artifact shape (spec 18). */
+const lockedOf = (shape: Shape): string[] => (Array.isArray(shape.props.lockedElements) ? shape.props.lockedElements.filter((id): id is string => typeof id === "string") : []);
 
 const isShape = (record: TLRecord | undefined): record is Shape => record?.typeName === "shape";
 
@@ -111,6 +115,12 @@ export class ArtifactTools {
     const title = (given ?? current).trim();
 
     const folder = await context.folder(binding.project);
+    if (target !== undefined && lockedOf(target).length > 0) {
+      const currentFile = typeof target.props.file === "string" ? target.props.file : "";
+      const current = currentFile === "" ? undefined : await readArtifact(folder, currentFile).catch(() => undefined);
+      const refusal = current === undefined ? null : lockRefusal({ current, next: html, locked: lockedOf(target), tree: sourceTreeOf(current), kind });
+      if (refusal !== null) return refuse(refusal);
+    }
     let written: { file: string; bytes: number };
     try {
       await (kind === "motion" ? ensureLibrary(folder) : ensureBridge(folder));
