@@ -95,3 +95,4 @@ export * from "./motion/timeline.ts";
 export * from "./motion/carry.ts";
 export * from "./motion/edits.ts";
 export * from "./motion/eases.ts";
+export * from "./motion/timelineMaths.ts";
