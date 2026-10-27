@@ -12,6 +12,7 @@ import type { ArtifactSnapshot } from "@unframed/contracts";
 import { artifactUrl, isArtifactKind, parseSnapshotFileName, snapshotFileName, snapshotFits, snapshotSeekSeconds } from "@unframed/domain";
 import type { TLRecord } from "@tldraw/tlschema";
 import { errorText, logError } from "../log.ts";
+import { ensurePinnedComponents } from "./artifactStore.ts";
 import type { HeadlessChrome } from "./headlessChrome.ts";
 
 export const SNAPSHOT_FOLDER = join(".cache", "snapshots");
@@ -195,6 +196,7 @@ export class Snapshots {
     const folder = await this.deps.folder(project);
     if (folder === undefined) return;
     const size = { w: shape.props.w, h: shape.props.h };
+    await ensurePinnedComponents(folder, shape.props.file);
     if (this.fresh.delete(key)) {
       const cached = (await this.list(project)).some((snapshot) => snapshot.file === shape.props.file && snapshotFits(snapshot, size));
       if (cached) return;

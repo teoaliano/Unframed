@@ -13,6 +13,8 @@ import {
   artifactFileName,
   compiledFileName,
   compileComponent,
+  pinnedCompiledFile,
+  readPins,
   componentHelperSource,
   COMPONENT_HELPER_FILE,
   dialsBridgeSource,
@@ -228,6 +230,37 @@ export const writeComponentSheet = async (
     return `${JSON.stringify(sidecar, null, 2)}\n`;
   });
   return { file, compiled, bytes: bytes.length };
+};
+
+/**
+ * Writes `<base>.component.js` from its sheet `<base>.html` when the sheet exists and is a valid
+ * component (spec 20). It writes the bytes the compiler makes and never overwrites. Returns
+ * whether a file was written.
+ */
+export const ensureCompiledComponent = async (folder: string, compiled: string): Promise<boolean> => {
+  const sheet = `${compiled.replace(/\.component\.js$/, "")}.html`;
+  const html = await readFile(join(folder, sheet), "utf8").catch(() => undefined);
+  if (html === undefined) return false;
+  let script: string;
+  try {
+    script = compileComponent(html, sheet);
+  } catch {
+    return false;
+  }
+  return writeExclusive(Buffer.from(script, "utf8"))(join(folder, compiled)).then(
+    () => true,
+    () => false,
+  );
+};
+
+/** A snapshot, a write or a render ensures the compiled files of every pin in the file it handles (spec 20). */
+export const ensurePinnedComponents = async (folder: string, file: string): Promise<void> => {
+  const html = await readFile(join(folder, basename(file)), "utf8").catch(() => undefined);
+  if (html === undefined) return;
+  for (const pin of readPins(html)) {
+    const compiled = pinnedCompiledFile(pin);
+    if (!existsSync(join(folder, compiled))) await ensureCompiledComponent(folder, compiled);
+  }
 };
 
 /** An uploaded composition, saved as an upload with spec 02's sidecar. */
