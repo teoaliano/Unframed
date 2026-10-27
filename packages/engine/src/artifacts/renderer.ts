@@ -17,7 +17,7 @@ import type { Applied, CanvasChange, ChangeOrigin } from "../canvas/rooms.ts";
 import { errorText, logError, logInfo } from "../log.ts";
 import { clearChange, fillFor, indexOnTop, isShape, PLACEHOLDER_WIDTH, videoPlaceholder, type LandedClip, type RunOutcome } from "../runs/placeholders.ts";
 import { shapePageBoxes } from "../runs/shapeBounds.ts";
-import { ensureLibrary, placeRenderOutput } from "./artifactStore.ts";
+import { ensureLibrary, ensurePinnedComponents, placeRenderOutput } from "./artifactStore.ts";
 
 const COMPOSITION_FILE = /^[A-Za-z0-9][A-Za-z0-9._-]*\.html?$/;
 
@@ -163,6 +163,7 @@ export class Renderer {
     if (!(await stat(path).then((info) => info.isFile(), () => false))) throw new RenderRefused("not_found", `No file ${input.file} in this project.`);
     try {
       await ensureLibrary(folder);
+      await ensurePinnedComponents(folder, input.file);
     } catch (error) {
       throw new RenderRefused("internal", `Could not prepare the motion library: ${errorText(error)}`);
     }
