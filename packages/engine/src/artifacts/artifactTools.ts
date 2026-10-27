@@ -13,7 +13,6 @@ import {
   artifactUrl,
   DIALS_CONTRACT,
   DIALS_TIMELINE,
-  injectTags,
   isMintedRef,
   MOTION_READ_SHAPE_ID,
   MOTION_READ_TEXT,
@@ -40,6 +39,7 @@ import { refusal as refuse, type McpBinding, type McpTool, type ToolAnswer } fro
 import type { TurnChanges } from "../agent/turnChanges.ts";
 import { indexOnTop } from "../runs/placeholders.ts";
 import { shapeBoxes } from "../runs/shapeBounds.ts";
+import { byteSize, prepareArtifactHtml } from "./artifactHtml.ts";
 import { ensureBridge, ensureLibrary, readArtifact, writeAgentArtifact } from "./artifactStore.ts";
 
 const PAGE_ID = "page:page";
@@ -92,8 +92,8 @@ export class ArtifactTools {
     const turn = context.chatTurn(binding.project, binding.chatId);
     if (turn.interactionMode === "plan") return refuse(PLAN_NO_WRITES_MESSAGE);
     if (typeof args.html !== "string" || args.html.trim() === "") return refuse("html must be a non-empty string");
-    const html = injectTags(args.html, kind);
-    const size = Buffer.byteLength(html, "utf8");
+    const html = prepareArtifactHtml(args.html, kind);
+    const size = byteSize(html);
     if (size > ARTIFACT_SIZE_LIMIT) return refuse(`the ${kind} is too large (${size} bytes; the limit is ${ARTIFACT_SIZE_LIMIT})`);
 
     const records = await context.read(binding.project);

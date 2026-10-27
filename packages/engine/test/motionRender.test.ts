@@ -52,7 +52,7 @@ describe("motion.upload", () => {
     const saved = await rpc.call("motion.upload", { project: "board", fileName: "../elsewhere/My Intro.html", html: "<head></head><div id=root></div>" });
     expect(saved).toEqual({ file: expect.stringMatching(/^\d+-my-intro\.html$/), fileName: "My Intro.html", bytes: expect.any(Number), mime: "text/html" });
     const html = await readFile(join(folder, saved.file), "utf8");
-    expect(html).toBe(`<head>${RUNTIME_TAG}\n${BRIDGE_TAG}\n</head><div id=root></div>`);
+    expect(html).toBe(`<head>${RUNTIME_TAG}\n${BRIDGE_TAG}\n</head><div data-hf-id="hf-aph5" id=root></div>`);
     expect(saved.bytes).toBe(Buffer.byteLength(html));
     expect(JSON.parse(await readFile(join(folder, saved.file.replace(/\.html$/, ".json")), "utf8"))).toEqual({
       source: "upload",

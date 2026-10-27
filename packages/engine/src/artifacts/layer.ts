@@ -5,7 +5,8 @@
 import { join } from "node:path";
 import type { ArtifactSnapshot, RenderStatus } from "@unframed/contracts";
 import { UnframedError, unframedError } from "@unframed/contracts";
-import { injectTags, projectSlug } from "@unframed/domain";
+import { projectSlug } from "@unframed/domain";
+import { byteSize, prepareArtifactHtml } from "./artifactHtml.ts";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -123,10 +124,12 @@ export const artifactsLayer = Layer.effect(
         const folder = yield* Effect.promise(() => media.folder(input.project));
         if (folder === undefined) return yield* unframedError("not_found", `There is no project named "${projectSlug(input.project)}".`);
         const fileName = input.fileName.split(/[\\/]/).pop()?.trim() || "motion.html";
+        const html = prepareArtifactHtml(input.html, "motion");
+        if (byteSize(html) > UPLOAD_LIMIT) return yield* unframedError("bad_request", `The composition is too large (${(byteSize(html) / 1_048_576).toFixed(1)}MB). The limit is 20MB.`);
         return yield* Effect.tryPromise({
           try: async () => {
             await ensureLibrary(folder);
-            const saved = await writeUploadedArtifact(folder, { html: injectTags(input.html, "motion"), fileName });
+            const saved = await writeUploadedArtifact(folder, { html, fileName });
             return { file: saved.file, fileName, bytes: saved.bytes, mime: "text/html" as const };
           },
           catch: (error) => unframedError("internal", `Could not save the composition: ${errorText(error)}`),
