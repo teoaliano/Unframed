@@ -3,10 +3,11 @@
  * and the snapshot stream, over the artifact store, the renderer and the snapshot service.
  */
 import { join } from "node:path";
-import type { ArtifactSnapshot, RenderStatus } from "@unframed/contracts";
+import type { ArtifactImage, ArtifactSnapshot, RenderStatus, SourceTreeElement } from "@unframed/contracts";
 import { UnframedError, unframedError } from "@unframed/contracts";
 import { projectSlug } from "@unframed/domain";
 import { byteSize, prepareArtifactHtml } from "./artifactHtml.ts";
+import { artifactEditService } from "./editService.ts";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -45,6 +46,10 @@ export class Artifacts extends Context.Service<
     readonly snapshots: (project: string) => Stream.Stream<ArtifactSnapshot, UnframedError>;
     /** "Open in a new tab": the shape's live viewer pointer, kept current from then on. */
     readonly openLive: (project: string, shapeId: string) => Effect.Effect<{}, UnframedError>;
+    /** The element editor's file operations (spec 18). */
+    readonly sourceTree: (project: string, file: string) => Effect.Effect<{ ready: boolean; elements: SourceTreeElement[] }, UnframedError>;
+    readonly prepareEdit: (project: string, shapeId: string) => Effect.Effect<{ file: string }, UnframedError>;
+    readonly images: (project: string) => Effect.Effect<{ images: ArtifactImage[] }, UnframedError>;
     /** The Chromium this machine has, for the agent's previews and snapshots. */
     readonly findChrome: () => Promise<string | undefined>;
     /** The engine-owned headless Chrome that snapshots and the agent's previews share. */
@@ -90,6 +95,13 @@ export const artifactsLayer = Layer.effect(
       void run(openProjects.register(project, "artifact snapshots", Effect.sync(() => snapshots.forget(project))));
     });
     yield* rooms.afterCommit((project, change) => snapshots.committed(project, [...change.records.values()]));
+
+    const edits = artifactEditService({ folder: (project) => media.folder(project), read: (project) => run(rooms.read(project)) });
+    const fromEdits = <A>(attempt: () => Promise<A>): Effect.Effect<A, UnframedError> =>
+      Effect.tryPromise({
+        try: attempt,
+        catch: (error) => (error instanceof UnframedError ? error : unframedError("internal", `Something went wrong: ${errorText(error)}`)),
+      });
 
     const pointers = new LivePointers((project) => media.folder(project));
     yield* rooms.afterOpen((project, room) => pointers.opened(project, room.read()));
@@ -154,6 +166,9 @@ export const artifactsLayer = Layer.effect(
           }),
         ),
       openLive,
+      sourceTree: (project, file) => fromEdits(() => edits.sourceTree(project, file)),
+      prepareEdit: (project, shapeId) => fromEdits(() => edits.prepareEdit(project, shapeId)),
+      images: (project) => fromEdits(() => edits.images(project)),
       findChrome: chrome,
       chrome: headless,
     });

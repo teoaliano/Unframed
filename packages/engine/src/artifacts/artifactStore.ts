@@ -168,6 +168,39 @@ export const writeUploadedArtifact = async (folder: string, input: { readonly ht
   return { file, bytes: bytes.length };
 };
 
+export interface EditSidecar {
+  readonly source: "edit";
+  readonly kind: ArtifactKind;
+  readonly of: string;
+  readonly shapeId: string;
+  readonly edits: ReadonlyArray<string>;
+  readonly title: string;
+  readonly bytes: number;
+  readonly at: string;
+}
+
+/** A new version written by the element editor (spec 18): a source edit or a prepare, with its edit sidecar. */
+export const writeEditArtifact = async (
+  folder: string,
+  input: { readonly kind: ArtifactKind; readonly html: string; readonly title: string; readonly of: string; readonly shapeId: string; readonly edits: ReadonlyArray<string> },
+): Promise<{ file: string; bytes: number }> => {
+  const bytes = Buffer.from(input.html, "utf8");
+  const file = await createNew(folder, { title: input.title, fallback: input.kind, ext: "html" }, writeExclusive(bytes), () => {
+    const sidecar: EditSidecar = {
+      source: "edit",
+      kind: input.kind,
+      of: input.of,
+      shapeId: input.shapeId,
+      edits: [...input.edits],
+      title: input.title,
+      bytes: bytes.length,
+      at: new Date().toISOString(),
+    };
+    return `${JSON.stringify(sidecar, null, 2)}\n`;
+  });
+  return { file, bytes: bytes.length };
+};
+
 /** Reads an artifact file; the name is reduced to its basename first, so it cannot leave the folder. */
 export const readArtifact = (folder: string, file: string): Promise<string> => readFile(join(folder, basename(file)), "utf8");
 
