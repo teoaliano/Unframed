@@ -189,3 +189,36 @@ describe("questions", () => {
     });
   });
 });
+
+describe("the answers an approval offers", () => {
+  it("carry the provider's reason and options on the request, and an answer it does not offer is refused", async () => {
+    const agent = await startAgentEngine();
+    const chatId = await agent.createChat({ runtimeMode: "approval-required" });
+    await agent.send(chatId, "a guarded delete please");
+    const { chat, requestId } = await parkedOn(agent, chatId);
+    expect(chat.activities.find((activity) => activity.kind === "approval.requested")?.payload).toMatchObject({
+      detail: "rm -rf ../shared/cache",
+      reason: "This deletes files outside the project folder.",
+      options: [
+        { decision: "decline", label: "Decline" },
+        { decision: "accept", label: "Approve" },
+      ],
+    });
+    await expect(agent.dispatch({ type: "thread.approval.respond", threadId: chatId, requestId, decision: "acceptForSession" })).rejects.toMatchObject({
+      code: "bad_request",
+      message: "That answer is not offered for this request.",
+    });
+    await agent.dispatch({ type: "thread.approval.respond", threadId: chatId, requestId, decision: "accept" });
+    expect(lastReply(await agent.settled(chatId, 1))).toBe("Cleared the shared cache.");
+  });
+
+  it("name nothing when the provider says nothing, so the fixed four apply", async () => {
+    const agent = await startAgentEngine();
+    const chatId = await agent.createChat({ runtimeMode: "approval-required" });
+    await agent.send(chatId, "clean the build folder");
+    const { chat } = await parkedOn(agent, chatId);
+    const payload = chat.activities.find((activity) => activity.kind === "approval.requested")?.payload as Record<string, unknown>;
+    expect(payload).not.toHaveProperty("options");
+    expect(payload).not.toHaveProperty("reason");
+  });
+});

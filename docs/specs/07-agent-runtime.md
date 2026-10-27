@@ -365,6 +365,8 @@ The pure **permission policy** module (in `domain`) answers what the Claude `can
    - `decline`: deny with the text in `assets/prompts/declined.md` ("The person declined this. Do not try it again; say what you would have done, or find another way.").
    - `cancel`: deny with "User cancelled tool execution." and interrupt the turn.
 
+**What a request offers** (t3code's `claudeApprovalPresentation`). A request may carry `reason` and `options`, both optional, so a request stored before them reads as offering the fixed four. `reason` is Claude's `canUseTool` `decisionReason` with terminal escapes stripped and trimmed, left out when empty or equal to the target; for Codex it is a command approval's `reason` when the request also names the command. `options` is a list of `{decision, label, warning?}`: when Claude sets `suppressAlwaysAllowRule` (a standing grant would allow more than this ask), it is Decline and Approve only; otherwise none is sent, and the fixed four apply (t3code's order: Cancel, Decline, Always allow this session, Approve). Codex's command and file approvals name no options, as in t3code. `thread.approval.respond` with a decision the request's `options` leave out is refused with "That answer is not offered for this request." (`bad_request`). There is no full-access override explanation: Full access allows every call that reaches the policy, so no request opens there.
+
 A pending request is chat state: it is an activity, so it survives a reload and a reconnecting rail reads it from the projection. One chat has at most one open request at a time, because the turn is blocked on it. A session that closes answers its open request as `cancel`. A request's target (the command, path, pattern or URL) is stored in full; spec 08 shows it and says how much it clipped.
 
 A runtime mode change mid-turn (`thread.runtime-mode.set`) is told to the live session at once (Claude's permission-mode switch; Codex on the next turn's parameters) and every later `canUseTool` decision reads the chat's current mode.
@@ -443,7 +445,7 @@ A chat's summary, for the rail's tabs, is `{id, title, titledBy, preview (first 
 | `thread.interaction-mode.set` | `interactionMode` | |
 | `thread.turn.start` | `message {messageId, text, attachments, context}`, `steer?: boolean`, `modelSelection?`, `sourceProposedPlan?`, `createdAt` | a turn is running and `steer` is not set: "The agent is still answering the previous message." (with `steer: true` the message joins the running turn); no text and no attachments: "Say something first."; over the text or attachment limits (the t3code messages under Attachments) |
 | `thread.turn.interrupt` | `turnId?` | |
-| `thread.approval.respond` | `requestId`, `decision` (`accept`, `acceptForSession`, `decline`, `cancel`) | no such pending request: "That request is no longer waiting for an answer." |
+| `thread.approval.respond` | `requestId`, `decision` (`accept`, `acceptForSession`, `decline`, `cancel`) | no such pending request: "That request is no longer waiting for an answer."; a decision the request's `options` leave out: "That answer is not offered for this request." |
 | `thread.user-input.respond` | `requestId`, `answers` | already answered: "This question has already been answered."; not pending: "This question is no longer pending."; an unanswered question: "Answer each question before sending." |
 | `thread.user-input.dismiss` | `requestId` | the question blocks the turn: "This question needs an answer. Answer it or stop the turn." |
 | `thread.turn.revert` | `turnCount` | a turn of this chat is running: "Wait for the turn to finish before reverting."; already reverted: "That turn is already reverted." |
@@ -601,7 +603,8 @@ The variable names a JSON file (one script) or a folder (every `*.json` in it, s
 { when?: "<regex>", turns: [ Turn, ... ] }        // a bare array means { turns }
 Turn = { text: string,
          tools?: [{name, input}],          // Unframed tools, run through the real handlers
-         provider?: [{name, input}],       // provider tools: permission decision only, never executed
+         provider?: [{name, input, permission?}],  // provider tools: permission decision only, never executed;
+                                           // permission {decisionReason?, suppressAlwaysAllowRule?, options?} is what the provider says about the ask
          retries?: [{attempt, maxRetries, delayMs, status}],
          question?: {questions: [...]},    // asks the person, waits for the answer
          tasks?: [{title, status}],        // sub-agents started and finished during the turn

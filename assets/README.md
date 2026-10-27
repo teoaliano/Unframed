@@ -33,6 +33,7 @@ Scripted-agent scripts in spec 07's format. Specs 07 and 08 use them all; `fixtu
 - `fixtures/README.md`: the seeded shape ids and the rules every fixture follows. Specs 07 and 08.
 - `fixtures/attachment.json`: a message with an attached image; checks the attachment line in the preamble. Spec 07.
 - `fixtures/bad-shape.json`: `motion_write` on a shape that no longer exists, refused. Spec 07.
+- `fixtures/approval-options.json`: a delete outside the project whose ask offers no standing grant and gives a reason, then a command whose ask offers its own answers, one with a warning. Specs 07 and 08.
 - `fixtures/bulk-edit.json`: one `canvas_write` that retitles two motions, then a second turn that expects the change note. Spec 07.
 - `fixtures/canvas-question.json`: a question about the board, answered after `canvas_read`. Specs 07 and 08.
 - `fixtures/dials.json`: `motion_write` that exposes three parameters. Specs 07 and 09.

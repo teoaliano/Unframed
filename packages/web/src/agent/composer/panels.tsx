@@ -1,9 +1,10 @@
 import type { ApprovalDecision } from "@unframed/contracts";
-import { openRequests, planTitle, type Chat, type ChatActivity, type ProposedPlan, type UserQuestion } from "@unframed/domain";
-import { Check, ChevronDown, ChevronRight, Ellipsis, ListChecks, ListTodo, MessageCircleQuestion, ShieldAlert, X } from "lucide-react";
-import { useEffect, useRef, useState, type RefObject } from "react";
+import { DEFAULT_APPROVAL_OPTIONS, openRequests, planTitle, type ApprovalOption, type Chat, type ChatActivity, type ProposedPlan, type UserQuestion } from "@unframed/domain";
+import { Check, ChevronDown, ChevronRight, Ellipsis, ListChecks, ListTodo, MessageCircleQuestion, ShieldAlert, TriangleAlert, X } from "lucide-react";
+import { useEffect, useRef, useState, type ReactElement, type RefObject } from "react";
 import { Button } from "~/components/ui/button";
 import { Menu, MenuItem, MenuPopup, MenuTrigger } from "~/components/ui/menu";
+import { Tooltip, TooltipPopup, TooltipTrigger } from "~/components/ui/tooltip";
 import { MessageAction } from "../../chrome/MessageAction.tsx";
 import type { ChatClient } from "../store.ts";
 import type { PromptEditorHandle } from "./PromptEditor.tsx";
@@ -42,11 +43,39 @@ export const BANNER_ROW = "flex min-h-6 min-w-0 items-center gap-1.5";
 /** How much of a request's target the panel shows before it says how much it held back. */
 export const TARGET_SHOWN = 300;
 
+const DECISIONS: ReadonlySet<string> = new Set(["accept", "acceptForSession", "decline", "cancel"]);
+
+/** The answers a request offers: the provider's when it named them, else the fixed four (a request stored before options existed names none). */
+export const approvalOptions = (payload: Readonly<Record<string, unknown>>): ReadonlyArray<ApprovalOption> => {
+  if (!Array.isArray(payload.options)) return DEFAULT_APPROVAL_OPTIONS;
+  const options = payload.options
+    .map(record)
+    .filter((option) => typeof option.decision === "string" && DECISIONS.has(option.decision) && typeof option.label === "string" && option.label.trim() !== "")
+    .map((option) => ({
+      decision: option.decision as ApprovalDecision,
+      label: String(option.label),
+      ...(typeof option.warning === "string" && option.warning.trim() !== "" ? { warning: option.warning } : {}),
+    }));
+  return options.length > 0 ? options : DEFAULT_APPROVAL_OPTIONS;
+};
+
+/** An answer with a warning shows it on hover and to a screen reader (t3code's). */
+const withWarning = (option: ApprovalOption, element: ReactElement) =>
+  option.warning ? (
+    <Tooltip key={option.decision}>
+      <TooltipTrigger render={element} />
+      <TooltipPopup side="top">{option.warning}</TooltipPopup>
+    </Tooltip>
+  ) : (
+    element
+  );
+
 /**
- * The pending approval (t3code's panel): the request's kind, the tool, and its target in
- * full up to 300 characters with how many more it did not show, then Decline, Approve and
- * the other answers. It clears at once on a click; a refused answer shows what is really
- * pending again. One the typing guard holds is not shown yet.
+ * The pending approval (t3code's panel): the request's kind, the tool, its target in full
+ * up to 300 characters with how many more it did not show, the provider's reason, then the
+ * answers it offers: Decline and Approve as buttons, the rest in the menu. It clears at once
+ * on a click; a refused answer shows what is really pending again. One the typing guard
+ * holds is not shown yet.
  */
 export const ApprovalPanel = ({ client, chat, held }: { readonly client: ChatClient; readonly chat: Chat; readonly held: ReadonlySet<string> }) => {
   const [answered, setAnswered] = useState<ReadonlySet<string>>(new Set());
@@ -57,9 +86,13 @@ export const ApprovalPanel = ({ client, chat, held }: { readonly client: ChatCli
   const requestId = String(payload.requestId);
   const args = record(payload.args);
   const target = typeof payload.detail === "string" ? payload.detail : "";
+  const reason = typeof payload.reason === "string" && payload.reason.trim() !== "" ? payload.reason : undefined;
   const shown = target.slice(0, TARGET_SHOWN);
   const hidden = target.length - shown.length;
   const header = APPROVAL_HEADERS[String(payload.requestType)] ?? "File change approval";
+  const options = approvalOptions(payload);
+  const primary = options.filter((option) => option.decision === "decline" || option.decision === "accept");
+  const more = options.filter((option) => option.decision !== "decline" && option.decision !== "accept");
   const respond = (decision: ApprovalDecision) => {
     setAnswered((known) => new Set([...known, requestId]));
     client.dispatch({ type: "thread.approval.respond", threadId: chat.id, requestId, decision }).catch((error: unknown) => {
@@ -92,22 +125,45 @@ export const ApprovalPanel = ({ client, chat, held }: { readonly client: ChatCli
       {hidden > 0 && (
         <p className="m-0 text-xs text-warning-foreground" data-testid="approval-warning">{`and ${hidden} more characters not shown. Decline unless you know what they are.`}</p>
       )}
+      {reason !== undefined && (
+        <p className="m-0 w-full min-w-0 text-2xs text-muted-foreground wrap-break-word" data-testid="approval-reason">
+          {reason}
+        </p>
+      )}
       <div className="flex items-center justify-end gap-1.5">
-        <Button variant="outline" size="xs" onClick={() => respond("decline")}>
-          Decline
-        </Button>
-        <Button size="xs" onClick={() => respond("accept")}>
-          Approve
-        </Button>
-        <Menu>
-          <MenuTrigger render={<Button variant="outline" size="icon-xs" aria-label="More approval options" />}>
-            <Ellipsis aria-hidden />
-          </MenuTrigger>
-          <MenuPopup side="top" align="end">
-            <MenuItem onClick={() => respond("acceptForSession")}>Always allow this session</MenuItem>
-            <MenuItem onClick={() => respond("cancel")}>Cancel</MenuItem>
-          </MenuPopup>
-        </Menu>
+        {primary.map((option) =>
+          withWarning(
+            option,
+            <Button
+              key={option.decision}
+              variant={option.decision === "accept" ? "default" : "outline"}
+              size="xs"
+              aria-description={option.warning}
+              onClick={() => respond(option.decision)}
+            >
+              {option.warning ? <TriangleAlert aria-hidden className="size-3 shrink-0" /> : null}
+              <span className="max-w-40 truncate">{option.label}</span>
+            </Button>,
+          ),
+        )}
+        {more.length > 0 && (
+          <Menu>
+            <MenuTrigger render={<Button variant="outline" size="icon-xs" aria-label="More approval options" />}>
+              <Ellipsis aria-hidden />
+            </MenuTrigger>
+            <MenuPopup side="top" align="end">
+              {more.map((option) =>
+                withWarning(
+                  option,
+                  <MenuItem key={option.decision} aria-description={option.warning} onClick={() => respond(option.decision)}>
+                    {option.warning ? <TriangleAlert aria-hidden className="size-3 text-warning" /> : null}
+                    <span className="min-w-0 whitespace-normal wrap-break-word">{option.label}</span>
+                  </MenuItem>,
+                ),
+              )}
+            </MenuPopup>
+          </Menu>
+        )}
       </div>
     </section>
   );

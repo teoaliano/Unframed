@@ -194,6 +194,32 @@ describe("requests and questions", () => {
     });
   });
 
+  it("refuses a decision the request does not offer, and takes any of the fixed four when it names none", () => {
+    const withApproval = (options?: unknown) =>
+      run(started(), {
+        type: "thread.activity.append",
+        activity: {
+          id: "a1",
+          tone: "approval",
+          kind: "approval.requested",
+          summary: "Approval requested",
+          payload: { requestId: "r1", requestType: "command_execution_approval", ...(options === undefined ? {} : { options }) },
+          turnId: "turn:m1",
+          createdAt: NOW,
+        },
+      });
+    const offered = withApproval([
+      { decision: "decline", label: "Decline" },
+      { decision: "accept", label: "Approve" },
+    ]);
+    expect(rejection(decideOn(offered, { type: "thread.approval.respond", requestId: "r1", decision: "acceptForSession" }))).toEqual({
+      code: "bad_request",
+      message: "That answer is not offered for this request.",
+    });
+    expect(rejection(decideOn(offered, { type: "thread.approval.respond", requestId: "r1", decision: "accept" }))).toBeUndefined();
+    expect(rejection(decideOn(withApproval(), { type: "thread.approval.respond", requestId: "r1", decision: "acceptForSession" }))).toBeUndefined();
+  });
+
   it("refuses incomplete, stale and repeated answers", () => {
     expect(rejection(decideOn(withQuestion(), { type: "thread.user-input.respond", requestId: "r1", answers: { "Which look?": "Warm" } }))).toEqual({
       code: "bad_request",

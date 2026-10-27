@@ -89,6 +89,54 @@ export const answerPermission = (
   }
 };
 
+/** One answer an approval offers (t3code's): the decision it sends, its label, and a warning shown beside it. */
+export interface ApprovalOption {
+  readonly decision: ApprovalDecision;
+  readonly label: string;
+  readonly warning?: string;
+}
+
+/** What an approval offers when its provider names nothing, t3code's order: the panel shows Decline and Approve, the menu the rest. */
+export const DEFAULT_APPROVAL_OPTIONS: ReadonlyArray<ApprovalOption> = [
+  { decision: "cancel", label: "Cancel" },
+  { decision: "decline", label: "Decline" },
+  { decision: "acceptForSession", label: "Always allow this session" },
+  { decision: "accept", label: "Approve" },
+];
+
+const NO_STANDING_GRANT: ReadonlyArray<ApprovalOption> = [
+  { decision: "decline", label: "Decline" },
+  { decision: "accept", label: "Approve" },
+];
+
+/** What a provider says about one ask: Claude's `canUseTool` reason and its no-standing-grant flag, or options it names. */
+export interface ApprovalSignals {
+  readonly decisionReason?: string;
+  readonly suppressAlwaysAllowRule?: boolean;
+  readonly options?: ReadonlyArray<ApprovalOption>;
+}
+
+const TERMINAL_ESCAPES = /\u001b\[[0-?]*[ -/]*[@-~]|\u001b\][^\u0007]*(?:\u0007|\u001b\\)/g;
+
+/**
+ * The reason and options an approval request carries (t3code's `claudeApprovalPresentation`).
+ * The reason is dropped when it only repeats the target. An ask that must not offer a
+ * standing grant offers only Decline and Approve: accepting for the session would write a
+ * rule broader than the ask.
+ */
+export const approvalPresentation = (signals: ApprovalSignals, target: string): { reason?: string; options?: ReadonlyArray<ApprovalOption> } => {
+  const reason = (signals.decisionReason ?? "").replace(TERMINAL_ESCAPES, "").trim();
+  const options = signals.options ?? (signals.suppressAlwaysAllowRule === true ? NO_STANDING_GRANT : undefined);
+  return {
+    ...(reason === "" || reason === target.trim() ? {} : { reason }),
+    ...(options === undefined ? {} : { options }),
+  };
+};
+
+/** Whether a request offers a decision: one that names no options offers the fixed four. */
+export const offersDecision = (options: unknown, decision: ApprovalDecision): boolean =>
+  !Array.isArray(options) || options.some((option) => typeof option === "object" && option !== null && (option as { decision?: unknown }).decision === decision);
+
 export type ClaudePermissionMode = "default" | "acceptEdits" | "bypassPermissions" | "plan" | "auto";
 
 /** Claude's permission mode for a runtime mode: none sent for Supervised (the SDK default asks). */

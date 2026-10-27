@@ -66,7 +66,7 @@ export const codexAdapter = (context: AdapterContext): ProviderAdapter => {
     switch (request.kind) {
       case "approval":
         if (!session) return codexApprovalAnswer("cancel");
-        return codexApprovalAnswer(await session.gate.request({ requestType: request.requestType, detail: request.detail, args: request.args }, session.turnId));
+        return codexApprovalAnswer(await session.gate.request({ requestType: request.requestType, detail: request.detail, ...(request.reason === undefined ? {} : { reason: request.reason }), args: request.args }, session.turnId));
       case "question":
         if (!session) return codexUserInputAnswer({});
         return codexUserInputAnswer((await session.gate.ask(request.questions, session.turnId)) ?? {});

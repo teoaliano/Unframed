@@ -45,6 +45,33 @@ test("Always allow this session answers this ask and skips the next one", async 
   await expect(approval).toHaveCount(0);
 });
 
+test("an approval offers the provider's answers: its reason under the target, no standing grant when it says so, and a warning on an answer", async ({ page, agent }) => {
+  await openCanvas(page, agent);
+  await createChat(agent, { runtimeMode: "approval-required", title: "Guarded" });
+  const panel = await openRail(page);
+  await say(panel, "a guarded delete please");
+
+  const approval = panel.getByTestId("approval-panel");
+  await expect(approval.getByTestId("approval-target")).toHaveText("rm -rf ../shared/cache");
+  await expect(approval.getByTestId("approval-reason")).toHaveText("This deletes files outside the project folder.");
+  await expect(approval.getByRole("button")).toHaveText(["Decline", "Approve"]);
+  await expect(approval.getByRole("button", { name: "More approval options" })).toHaveCount(0);
+  await approval.getByRole("button", { name: "Approve" }).click();
+  await expect(reply(panel).last()).toContainText("Cleared the shared cache.");
+
+  await say(panel, "now install it");
+  const runAnyway = approval.getByRole("button", { name: "Run anyway" });
+  await expect(runAnyway).toHaveAttribute("aria-description", "This runs a script from the internet.");
+  await expect(approval.getByTestId("approval-reason")).toHaveCount(0);
+  await runAnyway.hover();
+  await expect(page.locator("[data-slot='tooltip-popup']")).toHaveText("This runs a script from the internet.");
+  await approval.getByRole("button", { name: "More approval options" }).click();
+  await expect(page.getByRole("menuitem")).toHaveText(["Stop the turn"]);
+  await page.keyboard.press("Escape");
+  await approval.getByRole("button", { name: "Decline" }).click();
+  await expect(reply(panel).last()).toContainText("I did not install it.");
+});
+
 test("a padded command shows its first 300 characters with the padding kept, and says how many it held back", async ({ page, agent }) => {
   await openCanvas(page, agent);
   await createChat(agent, { runtimeMode: "approval-required", title: "Tidy" });
