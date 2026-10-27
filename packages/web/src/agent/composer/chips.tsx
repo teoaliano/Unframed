@@ -1,5 +1,5 @@
 import { shapeKind, shapeLabel, type ShapeKind } from "@unframed/domain";
-import { AlignLeft, AppWindow, Clapperboard, Group, Image, PenLine, SquarePlay, X, type LucideIcon } from "lucide-react";
+import { AlignLeft, AppWindow, Clapperboard, Component, Group, Image, PenLine, SquarePlay, X, type LucideIcon } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useValue, type Editor, type TLShapeId } from "tldraw";
 import { Badge } from "~/components/ui/badge";
@@ -12,6 +12,7 @@ export const KIND_ICONS: Record<ShapeKind, LucideIcon> = {
   group: Group,
   page: AppWindow,
   motion: Clapperboard,
+  component: Component,
   mark: PenLine,
 };
 
@@ -22,6 +23,7 @@ const KIND_NOUNS: Record<ShapeKind, string> = {
   group: "group",
   page: "page",
   motion: "motion",
+  component: "component",
   mark: "mark",
 };
 
