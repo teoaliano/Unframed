@@ -2,10 +2,12 @@
  * Artifacts at the Effect boundary (spec 09): the motion upload, render start and status RPCs
  * and the snapshot stream, over the artifact store, the renderer and the snapshot service.
  */
-import { join } from "node:path";
-import type { ArtifactSnapshot, RenderStatus } from "@unframed/contracts";
+import { existsSync } from "node:fs";
+import { readFile } from "node:fs/promises";
+import { basename, join } from "node:path";
+import type { ArtifactSnapshot, MotionTimelineReading, RenderStatus } from "@unframed/contracts";
 import { UnframedError, unframedError } from "@unframed/contracts";
-import { injectTags, projectSlug } from "@unframed/domain";
+import { injectTags, motionTimeline, projectSlug } from "@unframed/domain";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -42,6 +44,8 @@ export class Artifacts extends Context.Service<
     }) => Effect.Effect<{ id: string; status: "queued"; placeholder: string }, UnframedError>;
     readonly renderStatus: (project: string, id: string) => Effect.Effect<RenderStatus, UnframedError>;
     readonly snapshots: (project: string) => Stream.Stream<ArtifactSnapshot, UnframedError>;
+    /** The timeline reading of a motion file (spec 21), cached per file for the life of the engine. */
+    readonly timeline: (project: string, file: string) => Effect.Effect<MotionTimelineReading, UnframedError>;
     /** "Open in a new tab": the shape's live viewer pointer, kept current from then on. */
     readonly openLive: (project: string, shapeId: string) => Effect.Effect<{}, UnframedError>;
     /** The Chromium this machine has, for the agent's previews and snapshots. */
@@ -133,8 +137,27 @@ export const artifactsLayer = Layer.effect(
         });
       });
 
+    const readings = new Map<string, MotionTimelineReading>();
+    const timeline = (project: string, file: string) =>
+      Effect.gen(function* () {
+        if (file.trim() === "") return yield* unframedError("bad_request", "Which composition? Pass its .html file name.");
+        const folder = yield* Effect.promise(() => media.folder(project));
+        const name = basename(file);
+        if (folder === undefined || name !== file || !existsSync(join(folder, name))) {
+          return yield* unframedError("not_found", `No file ${file} in this project.`);
+        }
+        const key = `${folder}\0${name}`;
+        const cached = readings.get(key);
+        if (cached) return cached;
+        const html = yield* Effect.promise(() => readFile(join(folder, name), "utf8"));
+        const reading = motionTimeline(html, { file: name });
+        readings.set(key, reading);
+        return reading;
+      });
+
     return Artifacts.of({
       upload,
+      timeline,
       renderStart: (input) => Effect.tryPromise({ try: () => renderer.start(input), catch: refused }),
       renderStatus: (project, id) => Effect.try({ try: () => renderer.status(project, id), catch: refused }),
       snapshots: (project) =>

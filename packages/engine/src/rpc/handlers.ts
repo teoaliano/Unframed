@@ -181,6 +181,7 @@ export const rpcHandlersLayer = UnframedRpcs.toLayer(
       "motion.upload": (input) => artifacts.upload(input),
       "motion.renderStart": (input) => artifacts.renderStart(input),
       "motion.renderStatus": ({ project, id }) => artifacts.renderStatus(project, id),
+      "motion.timeline": ({ project, file }) => artifacts.timeline(project, file),
       "artifact.snapshots": ({ project }) => artifacts.snapshots(project),
       "artifact.openLive": ({ project, shapeId }) => artifacts.openLive(project, shapeId),
       "legacyImport.status": ({ project }) => legacy.status(project),

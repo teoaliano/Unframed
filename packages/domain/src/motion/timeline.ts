@@ -374,7 +374,7 @@ const compositionOf = (document: Doc, options: MotionTimelineOptions) => {
 export function motionTimeline(html: string, options: MotionTimelineOptions = {}): MotionTimeline {
   const file = options.file ?? "";
   const stamped = ensureHfIds(html);
-  const document = parseHTML(stamped).document as unknown as Doc;
+  const document = (parseHTML(stamped) as unknown as { document: Doc }).document;
   const { elements, clips: bareClips, length } = compositionOf(document, options);
   const script = findTimelineScript(inlineScripts(html));
   const parsed = script ? parseGsapScriptAcornForWrite(script.textContent) : null;
