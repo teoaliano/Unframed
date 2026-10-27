@@ -136,12 +136,14 @@ describe("the upload route", () => {
     expect(text.match(/unframed-dials\.js/g)).toHaveLength(1);
   });
 
-  it("refuses an uploaded page that is over the 2 MiB limit once its ids are in, and writes nothing", async () => {
-    const before = (await readdir(folder)).length;
-    const response = await upload("big.html", `<p>${"a".repeat(2_097_152 - 60)}</p>`, "text/html");
-    expect(response.status).toBe(400);
-    expect(response.json().error).toMatch(/^The page would be too large \(\d+ bytes; the limit is 2097152\)\.$/);
-    expect((await readdir(folder)).length).toBe(before);
+  it("accepts an uploaded page just over 2 MiB, as it accepts every upload up to 500 MB", async () => {
+    const response = await upload("big.html", `<p>${"a".repeat(2_097_152 + 1024)}</p>`, "text/html");
+    expect(response.status).toBe(200);
+    const answer = response.json();
+    const written = await readFile(join(folder, answer.file), "utf8");
+    expect(written.length).toBeGreaterThan(2_097_152);
+    expect(written).toContain('<script src="unframed-dials.js"></script>');
+    expect(answer.bytes).toBe(Buffer.byteLength(written));
   });
 
   it("answers 404 for a project that does not exist, and applies the loopback guard", async () => {

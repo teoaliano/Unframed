@@ -3,7 +3,6 @@ import { existsSync, renameSync, writeFileSync } from "node:fs";
 import { copyFile, mkdir, open, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { isBareFileName, projectFileMarker, UnframedError, unframedError } from "@unframed/contracts";
-import { ARTIFACT_SIZE_LIMIT } from "@unframed/domain";
 import {
   copyFileName,
   mediaFileName,
@@ -22,7 +21,7 @@ import * as Layer from "effect/Layer";
 import { CanvasRooms, type CommittedChange } from "../canvas/rooms.ts";
 import { errorText, logError } from "../log.ts";
 import { SettingsStore } from "../settingsStore.ts";
-import { byteSize, isHtmlFileName, kindOfArtifactHtml, prepareArtifactHtml, tooLargeMessage } from "../artifacts/artifactHtml.ts";
+import { byteSize, isHtmlFileName, kindOfArtifactHtml, prepareArtifactHtml } from "../artifacts/artifactHtml.ts";
 import { ensureBridge, ensureLibrary } from "../artifacts/artifactStore.ts";
 
 /** What the upload route answers. */
@@ -162,9 +161,9 @@ export const mediaStoreLayer = Layer.effect(
     };
 
     /**
-     * An uploaded `.html` is a page (spec 18): it is read whole, given spec 09's tags and element
-     * ids, and checked against the artifact limit before anything is written. Bytes that are empty
-     * pass through, so the empty-body refusal stays as it was.
+     * An uploaded `.html` is a page (spec 18): it is read whole, under the upload limit, and given
+     * spec 09's tags and element ids. Bytes that are empty pass through, so the empty-body refusal
+     * stays as it was. The artifact limit does not apply to uploads.
      */
     const artifactBody = async (dir: string, name: string, body: AsyncIterable<Buffer>): Promise<AsyncIterable<Buffer>> => {
       if (!isHtmlFileName(name)) return body;
@@ -172,13 +171,12 @@ export const mediaStoreLayer = Layer.effect(
       let read = 0;
       for await (const chunk of body) {
         read += chunk.length;
-        if (read > ARTIFACT_SIZE_LIMIT) throw new SaveRefused(400, tooLargeMessage("page", read));
+        if (read > UPLOAD_BODY_LIMIT) throw new SaveRefused(413, "That file is larger than the 500MB upload limit.");
         chunks.push(chunk);
       }
       const raw = Buffer.concat(chunks);
       if (raw.length === 0) return once(raw);
       const html = prepareArtifactHtml(raw.toString("utf8"), "page");
-      if (byteSize(html) > ARTIFACT_SIZE_LIMIT) throw new SaveRefused(400, tooLargeMessage("page", byteSize(html)));
       await ensureBridge(dir);
       return once(Buffer.from(html, "utf8"));
     };
@@ -269,7 +267,6 @@ export const mediaStoreLayer = Layer.effect(
             const text = await readFile(source, "utf8");
             const kind = kindOfArtifactHtml(text);
             const prepared = prepareArtifactHtml(text, kind);
-            if (byteSize(prepared) > ARTIFACT_SIZE_LIMIT) throw unframedError("bad_request", tooLargeMessage(kind, byteSize(prepared)));
             await (kind === "motion" ? ensureLibrary(targetDir) : ensureBridge(targetDir));
             await writeFile(temp, prepared, "utf8");
             bytes = byteSize(prepared);
