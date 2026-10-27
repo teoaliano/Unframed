@@ -11,7 +11,7 @@ import { classifyRequest, type RequestType } from "./runtimeEvents.ts";
 export const UNFRAMED_TOOL_PREFIX = "mcp__unframed__";
 
 /** The Unframed tools that change something, refused in plan mode. The last two are spec 09's. */
-export const UNFRAMED_WRITE_TOOLS: ReadonlySet<string> = new Set(["canvas_write", "page_write", "motion_write", "generate"]);
+export const UNFRAMED_WRITE_TOOLS: ReadonlySet<string> = new Set(["canvas_write", "page_write", "motion_write", "generate", "kit_write"]);
 
 export type PolicyAnswer =
   /** `AskUserQuestion`: open a question and wait; allow with the answers. */
