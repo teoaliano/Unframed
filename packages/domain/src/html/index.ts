@@ -3,6 +3,7 @@
  * (`@unframed/domain/html`): the web gets the rest of the domain from `@unframed/domain`, so no
  * HTML parser ships in its bundle.
  */
+export * from "./elementIds.ts";
 export * from "./sourceTree.ts";
 export * from "./sourceEdits.ts";
 export * from "./locks.ts";
