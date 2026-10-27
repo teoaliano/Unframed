@@ -19,7 +19,7 @@ export interface ViewerRect {
 export interface ViewerPlayer {
   setAttribute(name: string, value: string): void;
   pause?(): void;
-  readonly iframeElement?: { readonly contentWindow?: unknown; readonly offsetWidth?: number; getBoundingClientRect?(): ViewerRect } | null;
+  readonly iframeElement?: { readonly contentWindow?: unknown; readonly offsetWidth?: number; readonly style?: { pointerEvents: string }; getBoundingClientRect?(): ViewerRect } | null;
 }
 
 /**
@@ -99,8 +99,13 @@ export function viewerRelay(win: ViewerWindow, player: ViewerPlayer): void {
       target?.postMessage(data, own);
     } else if (type.startsWith("unframed:edit:")) {
       if (type === "unframed:edit:hello") canvas = { window: event.source as Target, origin: event.origin };
-      // Edit mode holds the motion still; Interact leaves the player as the person left it.
-      if (type === "unframed:edit:mode" && (data as Loose).mode === "edit") player.pause?.();
+      // Edit mode holds the motion still and lets the pointer reach it (the player turns it off); Interact leaves the player as the person left it.
+      if (type === "unframed:edit:mode") {
+        const editing = (data as Loose).mode === "edit";
+        if (editing) player.pause?.();
+        const style = player.iframeElement?.style;
+        if (style !== undefined) style.pointerEvents = editing ? "auto" : "";
+      }
       let message: unknown = data;
       if (type === "unframed:edit:hitTest" && typeof (data as Loose).x === "number" && typeof (data as Loose).y === "number") {
         // The editor's point is in viewer coordinates; the composition's own are the inverse.

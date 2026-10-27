@@ -23,6 +23,7 @@ const stubViewer = (options: { scale?: number; left?: number; top?: number } = {
     pause: () => pauses.push("pause"),
     iframeElement: {
       contentWindow: composition,
+      style: { pointerEvents: "" },
       offsetWidth: width,
       getBoundingClientRect: () => ({ left: options.left ?? 10, top: options.top ?? 20, width: width * (options.scale ?? 2), height: 50 }),
     },
@@ -70,6 +71,15 @@ describe("the built motion viewer relay", () => {
       [{ type: "unframed:edit:select", ids: ["hf-aaaa"] }, OWN],
       [{ type: "unframed:edit:hitTest", x: 10, y: 10 }, OWN],
     ]);
+  });
+
+  it("lets the pointer reach the composition in Edit mode, and gives it back to the player in Interact", () => {
+    const { player, canvas, from } = stubViewer();
+    const frame = player.iframeElement as { style: { pointerEvents: string } };
+    from(canvas, CANVAS, { type: "unframed:edit:mode", mode: "edit", locked: [] });
+    expect(frame.style.pointerEvents).toBe("auto");
+    from(canvas, CANVAS, { type: "unframed:edit:mode", mode: "interact", locked: [] });
+    expect(frame.style.pointerEvents).toBe("");
   });
 
   it("pauses the motion when the editor switches to Edit mode, and leaves it running for Interact", () => {
