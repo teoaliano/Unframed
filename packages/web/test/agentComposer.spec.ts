@@ -1,4 +1,4 @@
-import type { Page } from "@playwright/test";
+import type { Locator, Page } from "@playwright/test";
 import { openCanvas, shapeOnScreen, toast } from "./canvas.ts";
 import { clickShape, composer, toolbar } from "./generation.ts";
 import { pngBytes } from "./images.ts";
@@ -845,4 +845,108 @@ test("in the rail, a key or a paste outside a field goes to the composer: after 
   await page.mouse.click(700, 400);
   await page.keyboard.type("q");
   await expect(box).toHaveText("draft typed pasted!");
+});
+
+const LONG_REPLY = Array.from({ length: 60 }, (_, index) => `Line ${index + 1} of a long answer.`).join("\n\n");
+
+/** A chat whose one reply is longer than the rail, open in the rail, its box empty and focused. */
+const longChat = async (page: Page, agent: TestEngine) => {
+  await openCanvas(page, agent);
+  const panel = await openRail(page);
+  await say(panel, "long answer please");
+  await expect(panel.locator("[data-role='assistant']")).toContainText("Line 60 of a long answer.");
+  return panel;
+};
+
+/** One wheel gesture over the transcript, after the last one ended (typing during a gesture keeps it from resting the composer). */
+const wheelOverTranscript = async (page: Page, panel: Locator, deltaY: number) => {
+  await page.waitForTimeout(200);
+  const box = (await panel.getByTestId("transcript").boundingBox())!;
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  await page.mouse.wheel(0, deltaY);
+};
+
+test("the composer rests on one line with its controls in a strip once the person scrolls up a long chat, and expands on a click, typing or the end", async ({ page }) => {
+  await page.addInitScript(() => {
+    const seen: string[] = [];
+    (window as unknown as { animated: string[] }).animated = seen;
+    const animate = Element.prototype.animate;
+    Element.prototype.animate = function (this: Element, keyframes, options) {
+      seen.push(JSON.stringify(keyframes));
+      return animate.call(this, keyframes, options);
+    };
+  });
+  const agent = await startAgentEngine({ script: await scriptFolder({ long: { when: "^long answer", turns: [{ text: LONG_REPLY }] } }) });
+  try {
+    const panel = await longChat(page, agent);
+    const shell = panel.getByTestId("agent-composer");
+    const box = promptBox(panel);
+    await expect(shell).not.toHaveAttribute("data-resting");
+
+    // A wheel up the transcript rests it: one line, the controls in the strip under it, Send beside the line.
+    await wheelOverTranscript(page, panel, -300);
+    await expect(shell).toHaveAttribute("data-resting", "true");
+    await expect(shell.getByTestId("resting-controls").getByRole("button", { name: "More composer controls" })).toBeVisible();
+    await expect.poll(() => shell.evaluate((element) => element.getAnimations({ subtree: true }).length)).toBe(0);
+    expect((await box.boundingBox())!.height).toBeLessThanOrEqual(33);
+    const send = (await shell.getByRole("button", { name: "Send", exact: true }).boundingBox())!;
+    const line = (await box.boundingBox())!;
+    expect(Math.abs(send.y + send.height / 2 - (line.y + line.height / 2))).toBeLessThan(8);
+    // The shell's height moved on t3code's drawer curve, the arriving strip with a 4 px drift.
+    await expect.poll(() => page.evaluate(() => (window as unknown as { animated: string[] }).animated.join(" "))).toContain("height");
+    expect(await page.evaluate(() => (window as unknown as { animated: string[] }).animated.join(" "))).toContain("translateY(-4px)");
+
+    // A click on the line expands it.
+    await box.click();
+    await expect(shell).not.toHaveAttribute("data-resting");
+
+    // Typing expands it too, even with the box still focused.
+    await wheelOverTranscript(page, panel, -300);
+    await expect(shell).toHaveAttribute("data-resting", "true");
+    await page.keyboard.type("one line");
+    await expect(shell).not.toHaveAttribute("data-resting");
+
+    // A one-line draft still rests; scrolling back down to the end expands it.
+    await wheelOverTranscript(page, panel, -300);
+    await expect(shell).toHaveAttribute("data-resting", "true");
+    await wheelOverTranscript(page, panel, 100_000);
+    await expect(shell).not.toHaveAttribute("data-resting");
+
+    // A draft of several lines never rests.
+    await box.click();
+    await page.keyboard.press("Shift+Enter");
+    await page.keyboard.type("second line");
+    await wheelOverTranscript(page, panel, -300);
+    await page.waitForTimeout(300);
+    await expect(shell).not.toHaveAttribute("data-resting");
+  } finally {
+    await agent.dispose();
+  }
+});
+
+test("with reduced motion the composer rests and expands without moving anything", async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.addInitScript(() => {
+    const seen: string[] = [];
+    (window as unknown as { animated: string[] }).animated = seen;
+    const animate = Element.prototype.animate;
+    Element.prototype.animate = function (this: Element, keyframes, options) {
+      seen.push(JSON.stringify(keyframes));
+      return animate.call(this, keyframes, options);
+    };
+  });
+  const agent = await startAgentEngine({ script: await scriptFolder({ long: { when: "^long answer", turns: [{ text: LONG_REPLY }] } }) });
+  try {
+    const panel = await longChat(page, agent);
+    const shell = panel.getByTestId("agent-composer");
+    await wheelOverTranscript(page, panel, -300);
+    await expect(shell).toHaveAttribute("data-resting", "true");
+    await promptBox(panel).click();
+    await expect(shell).not.toHaveAttribute("data-resting");
+    const animated = await page.evaluate(() => (window as unknown as { animated: string[] }).animated.join(" "));
+    expect(animated).not.toContain("height");
+    expect(animated).not.toContain("transform");
+  } finally {
+    await agent.dispose();
+  }
 });

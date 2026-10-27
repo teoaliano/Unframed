@@ -18,6 +18,7 @@ import {
   pastedTextFileName,
   promptHistoryEntries,
   promptLengthError,
+  restingImagePreviewCounts,
   queuedEditBlockedReason,
   resolveQueuedEditExit,
   stepPromptHistory,
@@ -74,6 +75,7 @@ import { slashItems, skillMenuItems } from "./commands.tsx";
 import { CompactControlsMenu, ContextMeter, declaredTraits, latestUsage, ModelPicker, TraitsPicker } from "./pickers.tsx";
 import { chipOfToken, PromptEditor, type PromptEditorHandle, type Trigger } from "./PromptEditor.tsx";
 import { UpNext } from "./UpNext.tsx";
+import { useRestingComposer, useRestingTransition } from "./resting.ts";
 import { useMaybeEditor, useValue } from "tldraw";
 import { Input } from "~/components/ui/input";
 import { composerGlassClass } from "../../chrome/composerSurface.ts";
@@ -195,8 +197,11 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
   };
   /** The attachments the draft's chips named at its last change. */
   const chipped = useRef<ReadonlyArray<string>>(chipRefs(initialText));
+  /** Unfolds a resting composer: typing in it is using it. */
+  const expandResting = useRef(() => {});
   const onDraftChange = (value: string, typed: boolean) => {
     setText(value);
+    if (typed) expandResting.current();
     if (answeringRef.current) return;
     const refs = chipRefs(value);
     const before = chipped.current;
@@ -736,6 +741,7 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
   }, [handoffs, chatId, client]);
 
   const queue = useQueue(client, variant === "rail" ? chatId : null);
+
   const beginEdit = (item: QueuedMessage) => {
     if (chatId === null || answeringRef.current) return;
     historyPosition.current = null;
@@ -789,6 +795,30 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
     variant === "toolbar" && ui.error !== undefined
       ? [...notices, { id: "error", variant: "error", icon: <CircleAlert />, title: ui.error, dismissLabel: "Dismiss error", onDismiss: () => client.setUi({ error: undefined }) }]
       : notices;
+
+  const resting = useRestingComposer({
+    enabled: variant === "rail" && chatId !== null,
+    chatId,
+    rail: dropElement,
+    shell: boxElement,
+    text,
+    expandedChrome:
+      approvalPending ||
+      answering ||
+      planFollowUp !== undefined ||
+      menu !== undefined ||
+      stashOpen ||
+      dragging ||
+      noProvider ||
+      trayNotices.length > 0 ||
+      lengthError !== undefined ||
+      editing !== null ||
+      attachments.staged.some((item) => item.status !== "ready"),
+  });
+  expandResting.current = resting.expand;
+  useRestingTransition(boxElement, resting.resting);
+  const restingImages = resting.resting ? attachments.staged.filter((item) => item.kind === "image") : [];
+  const restingCounts = restingImagePreviewCounts(restingImages.length);
 
   const interrupt = () => {
     if (!chat?.latestTurn) return;
@@ -879,34 +909,59 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
           <StashBadge count={stash.entries.length} open={stashOpen} pulse={stashPulse} onToggle={() => (stashOpen ? closeStash() : setStashOpen(true))} />
         </div>
       )}
-      <div className={COMPOSER_SHELL} ref={boxElement} data-testid="agent-composer" data-dragging={dragging ? "" : undefined}>
-        <AttachmentShelf staged={attachments.staged} onRemove={removeAttachment} onRetry={attachments.retry} />
-        <ChipRow
-          shapes={chips.shapes}
-          onRemove={(ids) => {
-            chips.remove(ids);
-            if (mentionIds.current.some((id) => ids.includes(id))) {
-              mentionIds.current = mentionIds.current.filter((id) => !ids.includes(id));
-              saveDraft(box.current?.text() ?? "");
-            }
-            box.current?.focus();
-          }}
-        />
-        {underChips}
-        <PromptEditor
-          placeholder={placeholder}
-          label={PROMPT_LABEL}
-          onChange={onDraftChange}
-          onFocus={guard.onFocus}
-          onBlur={guard.onBlur}
-          initialText={initialText}
-          onTrigger={setTrigger}
-          onKey={onKey}
-          onPaste={onPaste}
-          handle={box}
-          disabled={answering && choiceOnly(question)}
-          autofocus={variant === "toolbar"}
-        />
+      {/* Resting (t3code's): the prompt on one line with Send beside it, the controls in a strip under it. */}
+      <div
+        className={`${COMPOSER_SHELL} ${resting.resting ? "grid! grid-cols-[minmax(0,1fr)_auto] items-center gap-x-1.5 gap-y-1 pt-1.5! pb-1!" : ""}`}
+        ref={boxElement}
+        data-testid="agent-composer"
+        data-dragging={dragging ? "" : undefined}
+        data-resting={resting.resting ? "true" : undefined}
+        {...resting.shellProps}
+      >
+        <div className={resting.resting ? "col-span-2 row-start-1 flex flex-col gap-1.5 empty:hidden" : "contents"}>
+          <AttachmentShelf staged={resting.resting ? attachments.staged.filter((item) => item.kind === "file") : attachments.staged} onRemove={removeAttachment} onRetry={attachments.retry} />
+          <ChipRow
+            shapes={chips.shapes}
+            onRemove={(ids) => {
+              chips.remove(ids);
+              if (mentionIds.current.some((id) => ids.includes(id))) {
+                mentionIds.current = mentionIds.current.filter((id) => !ids.includes(id));
+                saveDraft(box.current?.text() ?? "");
+              }
+              box.current?.focus();
+            }}
+          />
+          {underChips}
+        </div>
+        <div className={resting.resting ? "col-start-1 row-start-2 flex min-w-0 items-center gap-1" : "min-w-0"} data-composer-prompt>
+          <PromptEditor
+            resting={resting.resting}
+            placeholder={placeholder}
+            label={PROMPT_LABEL}
+            onChange={onDraftChange}
+            onFocus={guard.onFocus}
+            onBlur={guard.onBlur}
+            initialText={initialText}
+            onTrigger={setTrigger}
+            onKey={onKey}
+            onPaste={onPaste}
+            handle={box}
+            disabled={answering && choiceOnly(question)}
+            autofocus={variant === "toolbar"}
+          />
+          {restingImages.length > 0 && (
+            <div className="flex shrink-0 items-center gap-1" data-testid="resting-images">
+              {restingImages.slice(0, restingCounts.visibleCount).map((item) => (
+                <img key={item.key} src={item.preview} alt={item.name} className="size-7 rounded-md border border-border/80 object-cover" />
+              ))}
+              {restingCounts.overflowCount > 0 && (
+                <Button variant="ghost-muted" size="xs" aria-label={`Show ${restingCounts.overflowCount} more images`} onClick={() => box.current?.focus()}>
+                  {`+${restingCounts.overflowCount}`}
+                </Button>
+              )}
+            </div>
+          )}
+        </div>
         {lengthError !== undefined && (
           <p role="alert" className="m-0 px-0.5 text-xs text-destructive" data-testid="prompt-length-error">
             {lengthError}
@@ -915,8 +970,17 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
         {menu && <ComposerMenu label={menu.label} items={menu.items} highlight={highlight} empty={menu.empty} anchor={boxElement} onPick={menu.pick} onHighlight={setHighlight} />}
         {/* One line: the access and plan controls sit in the More menu, as in t3code's compact footer. */}
         {/* Nothing overlaps: the tools share the line's width, the traits and then the model label truncate first, and Send's group keeps its size. */}
-        <div className="flex items-center gap-1">
-          <div className="flex min-w-0 flex-1 items-center gap-0.5">
+        <div className={resting.resting ? "contents" : "flex items-center gap-1"}>
+          <div
+            className={
+              resting.resting
+                ? "col-span-2 row-start-3 -mx-1 flex min-w-0 items-center gap-0.5 text-muted-foreground [&_button]:text-xs!"
+                : "flex min-w-0 flex-1 items-center gap-0.5"
+            }
+            data-composer-controls
+            data-resting-controls={resting.resting ? "" : undefined}
+            data-testid={resting.resting ? "resting-controls" : undefined}
+          >
             <Tip label="Attach files" side="top">
               <Button variant="ghost-muted" size="icon-sm" aria-label="Attach files" onClick={() => files.current?.click()}>
                 <Paperclip aria-hidden />
@@ -972,7 +1036,7 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
               />
             )}
           </div>
-          <div className="ml-auto flex shrink-0 items-center gap-1.5">
+          <div className={`ml-auto flex shrink-0 items-center gap-1.5 ${resting.resting ? "col-start-2 row-start-2" : ""}`} data-composer-actions>
             {note?.(providerName(selection.provider))}
             {running && (
               <MessageAction tone="stop" aria-label="Stop generation" onClick={interrupt}>

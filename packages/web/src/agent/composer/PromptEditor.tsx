@@ -185,6 +185,8 @@ export interface PromptEditorProps {
   readonly handle: Ref<PromptEditorHandle>;
   readonly disabled?: boolean;
   readonly autofocus?: boolean;
+  /** A resting composer's prompt: one line, clipped. */
+  readonly resting?: boolean;
   /** The draft the box opens with. */
   readonly initialText?: string;
 }
@@ -194,7 +196,7 @@ export interface PromptEditorProps {
  * formatting off, so typed markdown stays literal, and one paragraph per line. Shift+Enter,
  * Option+Enter and any Enter the composer does not send with break the line.
  */
-export const PromptEditor = ({ placeholder, label, onChange, onFocus, onBlur, onTrigger, onKey, onPaste, handle, disabled, autofocus, initialText }: PromptEditorProps) => {
+export const PromptEditor = ({ placeholder, label, onChange, onFocus, onBlur, onTrigger, onKey, onPaste, handle, disabled, autofocus, initialText, resting = false }: PromptEditorProps) => {
   const latest = useRef({ onChange, onFocus, onBlur, onTrigger, onKey, onPaste });
   latest.current = { onChange, onFocus, onBlur, onTrigger, onKey, onPaste };
   const placeholderRef = useRef(placeholder);
@@ -354,7 +356,14 @@ export const PromptEditor = ({ placeholder, label, onChange, onFocus, onBlur, on
   );
 
   return (
-    <div className="relative max-h-45 overflow-y-auto text-sm" data-scrolls="true">
+    <div
+      className={
+        resting
+          ? "relative h-8 min-w-0 flex-1 overflow-hidden text-sm [&_.ProseMirror]:min-h-8 [&_.ProseMirror]:overflow-hidden [&_.ProseMirror]:leading-8 [&_.ProseMirror]:whitespace-pre"
+          : "relative max-h-45 overflow-y-auto text-sm"
+      }
+      data-scrolls={resting ? undefined : "true"}
+    >
       <EditorContent editor={editor} />
     </div>
   );

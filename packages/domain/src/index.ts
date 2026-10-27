@@ -61,6 +61,7 @@ export * from "./agent/planRules.ts";
 export * from "./agent/shapeLabel.ts";
 export * from "./agent/threadSearch.ts";
 export * from "./agent/composerRules.ts";
+export * from "./agent/restingComposer.ts";
 export * from "./agent/workLog.ts";
 export * from "./agent/timeline.ts";
 export * from "./oauthAttempt.ts";
