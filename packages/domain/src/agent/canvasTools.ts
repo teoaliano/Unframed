@@ -37,6 +37,7 @@ export const shapeKind = (type: string | undefined): ShapeKind => {
     case "video":
     case "page":
     case "motion":
+    case "component":
       return type;
     case "frame":
       return "group";
