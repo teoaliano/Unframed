@@ -3,10 +3,13 @@ import {
   actionablePlan,
   agentSelectionOf,
   appendRestoredPrompt,
+  attachmentChip,
+  chipRefs,
   composerKeyIntent,
   composerRequiresModifier,
   continuableChat,
   DEFAULT_RUNTIME_MODE,
+  ensureChips,
   followUpAction,
   implementPlanText,
   implementPlanTitle,
@@ -19,11 +22,12 @@ import {
   resolveQueuedEditExit,
   stepPromptHistory,
   tabLabel,
+  withoutChips,
   type InteractionMode,
   type PromptHistoryPosition,
   type RuntimeMode,
 } from "@unframed/domain";
-import { ArrowLeft, Check, CornerUpRight, ListPlus, Paperclip } from "lucide-react";
+import { ArrowLeft, Check, CircleAlert, CornerUpRight, ListPlus, Paperclip } from "lucide-react";
 import { createPortal } from "react-dom";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from "react";
 import type { AgentTrayProps as SlotProps } from "../../chrome/slots.ts";
@@ -34,6 +38,7 @@ import {
   EMPTY_DRAFT,
   NEW_CHAT,
   sameDraft,
+  TOOLBAR_DRAFT,
   useChatClient,
   useChats,
   useDraftVersion,
@@ -46,15 +51,16 @@ import {
   useSendShortcut,
   useWatchedThread,
   type ChatClient,
+  type ChatDraft,
   type QueuedMessage,
 } from "../store.ts";
 import { latestCompletedTool, returnQueued, sendQueued } from "../queue.tsx";
-import { Alert, AlertDescription } from "~/components/ui/alert";
 import { Button } from "~/components/ui/button";
 import { Tip } from "../../chrome/ui.tsx";
 import { MessageAction, SendArrow, StopSquare } from "../../chrome/MessageAction.tsx";
 import { formatSize, useAttachments } from "./attachments.ts";
-import { StashMenu, useStash } from "./stash.tsx";
+import { StashBadge, StashDrawer, useStash } from "./stash.tsx";
+import { NoticeStack, type ComposerNotice } from "./notices.tsx";
 import { ApprovalPanel, choiceOnly, openQuestion, PlanActions, PlanReady, requestIdOf, useQuestionAnswers, waitingRequests } from "./panels.tsx";
 import { useTypingGuard } from "./typingGuard.ts";
 import { pasteIntoComposer, pastesInline, typesIntoComposer } from "./focusRedirect.ts";
@@ -66,7 +72,7 @@ import { ComposerMenu, type MenuItem } from "./ComposerMenu.tsx";
 import { mentionItems } from "./mentions.tsx";
 import { slashItems, skillMenuItems } from "./commands.tsx";
 import { CompactControlsMenu, ContextMeter, declaredTraits, latestUsage, ModelPicker, TraitsPicker } from "./pickers.tsx";
-import { PromptEditor, type PromptEditorHandle, type Trigger } from "./PromptEditor.tsx";
+import { chipOfToken, PromptEditor, type PromptEditorHandle, type Trigger } from "./PromptEditor.tsx";
 import { UpNext } from "./UpNext.tsx";
 import { useMaybeEditor, useValue } from "tldraw";
 import { Input } from "~/components/ui/input";
@@ -109,6 +115,8 @@ export interface AgentTrayProps {
   readonly onMenuOpen?: (key: string, open: boolean) => void;
   /** The element files may be dropped on (the whole rail); the tray itself when absent. */
   readonly dropTarget?: RefObject<HTMLElement | null>;
+  /** Notices above the composer (the rail's error line). */
+  readonly notices?: ReadonlyArray<ComposerNotice>;
 }
 
 /** Whether Cmd or Ctrl, and Shift, are held: Send then shows the other follow-up action (t3code's). */
@@ -142,7 +150,7 @@ interface OpenMenu {
  * footer's pickers, Stop and Send. The rail's composer and the toolbar's are this one
  * component; only where a message goes differs.
  */
-export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, onSent, underChips, note, onMenuOpen, dropTarget }: AgentTrayProps) => {
+export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, onSent, underChips, note, onMenuOpen, dropTarget, notices = [] }: AgentTrayProps) => {
   const ui = useRailUi(client);
   const { statuses } = useProviders(client);
   const chat = useWatchedThread(client, chatId);
@@ -153,12 +161,13 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
   const box = useRef<PromptEditorHandle>(null);
   // A rail's draft lives on the client, one per chat, so the editor's rail and the canvas
   // rail show the same text whichever is mounted. The toolbar's tray keeps its own.
-  const draftKey = variant === "rail" ? (chatId ?? NEW_CHAT) : undefined;
+  const draftKey: string | undefined = variant === "rail" ? (chatId ?? NEW_CHAT) : TOOLBAR_DRAFT;
   const [initialDraft] = useState(() => (draftKey === undefined ? EMPTY_DRAFT : client.draft(draftKey)));
   // A box that opens on a question shows its answer; the draft waits on the client.
   const [initialText] = useState(() => (variant === "rail" && openQuestion(chat) !== undefined ? "" : initialDraft.text));
   const [text, setText] = useState(initialText);
   const draftKeyRef = useRef(draftKey);
+  const attachmentsRef = useRef<ReturnType<typeof useAttachments>>(null!);
   const draftVersion = useDraftVersion(client, draftKey ?? "");
   const chips = useSelectionChips(canvas, text.trim() === "");
   /** The context chips this draft's @ mentions added: they belong to the draft, not to the canvas selection. */
@@ -176,13 +185,35 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
     chatId ?? NEW_CHAT,
     variant === "rail" && chat ? [...waitingRequests(chat, "approval"), ...waitingRequests(chat, "user-input")].map(requestIdOf) : [],
   );
+  /** The draft this tray last wrote, and the key it last showed: only another writer's draft, or another key's, is put in the box. */
+  const ownDraft = useRef<ChatDraft | undefined>(undefined);
+  const shownKey = useRef<string | undefined>(undefined);
   const saveDraft = (value: string) => {
-    if (draftKeyRef.current !== undefined && !answeringRef.current && editingRef.current === null) client.setDraft(draftKeyRef.current, { text: value, mentions: mentionIds.current });
+    if (draftKeyRef.current === undefined || answeringRef.current || editingRef.current !== null) return;
+    ownDraft.current = { text: value, mentions: mentionIds.current, attachments: attachmentsRef.current.ready() };
+    client.setDraft(draftKeyRef.current, ownDraft.current);
   };
+  /** The attachments the draft's chips named at its last change. */
+  const chipped = useRef<ReadonlyArray<string>>(chipRefs(initialText));
   const onDraftChange = (value: string, typed: boolean) => {
     setText(value);
     if (answeringRef.current) return;
-    if (typed) guard.onType();
+    const refs = chipRefs(value);
+    const before = chipped.current;
+    chipped.current = refs;
+    if (typed) {
+      guard.onType();
+      // t3code's: a file's chip deleted takes the file with it (an image stays), and a chip of
+      // an attachment the draft lacks (undone, or copied from another draft) brings it back.
+      const staged = attachmentsRef.current.staged;
+      for (const item of staged) {
+        const id = item.attachment?.id;
+        if (id !== undefined && item.kind === "file" && before.includes(id) && !refs.includes(id)) attachmentsRef.current.remove(item.key);
+      }
+      const held = new Set(staged.flatMap((item) => (item.attachment ? [item.attachment.id] : [])));
+      const missing = refs.filter((ref) => !held.has(ref)).flatMap((ref) => client.knownAttachment(ref) ?? []);
+      if (missing.length > 0) attachmentsRef.current.restore(missing);
+    }
     saveDraft(value);
   };
   /** After a send or a stash the chips go back to the selection, and no mention is the draft's any more. */
@@ -196,8 +227,14 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
     if (editingRef.current !== null && editingRef.current.chatId !== chatId) setEdit(null);
     if (draftKey === undefined || editingRef.current !== null) return;
     const stored = client.draft(draftKey);
-    const shown = { text: box.current?.text() ?? "", mentions: mentionIds.current };
+    // Our own write comes back as a change; applying it could undo an upload or a keystroke since.
+    if (shownKey.current === draftKey && stored === ownDraft.current) return;
+    shownKey.current = draftKey;
+    const shown = { text: box.current?.text() ?? "", mentions: mentionIds.current, attachments: attachmentsRef.current.ready() };
     if (sameDraft(shown, stored)) return;
+    // The draft's attachments come with it; a question's answer keeps what it has staged.
+    if (!answeringRef.current && !sameDraft({ ...EMPTY_DRAFT, attachments: shown.attachments }, { ...EMPTY_DRAFT, attachments: stored.attachments }))
+      attachmentsRef.current.replace(stored.attachments);
     const kept = chips.shapes.map((shape) => shape.id).filter((id) => !mentionIds.current.includes(id));
     // Set first: the text below fires a change, which saves the draft with these mentions.
     mentionIds.current = stored.mentions;
@@ -240,7 +277,42 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
   };
   const usage = latestUsage(chat);
   const compactable = (status?.commands ?? []).some((command) => command.name === "compact");
-  const attachments = useAttachments(client.engine, showError);
+  const attachments = useAttachments(client.engine, showError, {
+    onReady: (item, attachment) => {
+      client.rememberAttachments([attachment]);
+      const chip = chipOfToken(attachmentChip(attachment));
+      if (item.chip && chip && !answeringRef.current && editingRef.current === null) box.current?.insertChip(chip);
+    },
+    // t3code's insertAttachmentReferencesForDraft: the draft switched away from gets the file, and its chip at the end.
+    onMoved: (owner, attachment, chip) => {
+      client.rememberAttachments([attachment]);
+      const draft = client.draft(owner);
+      client.setDraft(owner, { ...draft, text: chip ? ensureChips(draft.text, [attachmentChip(attachment)]) : draft.text, attachments: [...draft.attachments, attachment] });
+    },
+  });
+  attachmentsRef.current = attachments;
+  // A change to what is staged saves the draft; not at mount, nor before the box exists, which would save it empty.
+  const stagedOnce = useRef(false);
+  useEffect(() => {
+    if (!stagedOnce.current) {
+      stagedOnce.current = true;
+      return;
+    }
+    if (box.current?.element()) saveDraft(box.current.text());
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [attachments.staged]);
+  /** Where an attachment goes: a paste or a drop into a prompt the person has written in also puts its chip at the caret. */
+  const intake = (chip: boolean) => ({
+    ...(draftKeyRef.current !== undefined ? { owner: draftKeyRef.current } : {}),
+    chip: chip && withoutChips(box.current?.text() ?? "").trim() !== "",
+  });
+  const intakeRef = useRef(intake);
+  intakeRef.current = intake;
+  const removeAttachment = (key: string) => {
+    const item = attachments.staged.find((known) => known.key === key);
+    attachments.remove(key);
+    if (item?.attachment) box.current?.removeChips(item.attachment.id);
+  };
   const files = useRef<HTMLInputElement>(null);
   const root = useRef<HTMLDivElement>(null);
   const [dragging, setDragging] = useState(false);
@@ -275,7 +347,7 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
       event.stopPropagation();
       depth = 0;
       setDragging(false);
-      void attachments.add([...(event.dataTransfer?.files ?? [])]);
+      void attachments.add([...(event.dataTransfer?.files ?? [])], intakeRef.current(true));
     };
     element.addEventListener("dragenter", enter);
     element.addEventListener("dragover", over);
@@ -299,7 +371,7 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
     if (pastedText === "" || inline || !pasteBecomesFile(pastedText, text.length)) return false;
     const name = pastedTextFileName(attachments.staged.map((item) => item.name));
     const file = new File([pastedText], name, { type: "text/plain;charset=utf-8" });
-    void attachments.add([file]);
+    void attachments.add([file], intake(true));
     showNotice(`Large paste attached as ${name}`, "info", `${formatSize(file.size)} · Use ${platform() === "darwin" ? "⌘⇧V" : "Ctrl+Shift+V"} to keep a large paste inline.`);
     return true;
   };
@@ -310,7 +382,7 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
     const pasted = [...(data?.files ?? [])];
     const pastedText = data?.getData("text/plain") ?? "";
     if (pasted.length > 0) {
-      void attachments.add(pasted);
+      void attachments.add(pasted, intake(true));
       if (pastedText === "") {
         event.preventDefault();
         return true;
@@ -430,12 +502,6 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
     }
     if (command && !event.shiftKey && event.key.toLowerCase() === "s") {
       stashKey();
-      return true;
-    }
-    // The stash menu opened from the keyboard may not have the focus yet: Esc in the box still closes it.
-    if (event.key === "Escape" && stashOpen) {
-      event.stopPropagation();
-      setStashOpen(false);
       return true;
     }
     // t3code's control chords; a held Cmd+Shift+M or E does not repeat its toggle.
@@ -567,6 +633,15 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
   const sendShortcut = useSendShortcut(client);
   const stash = useStash(client.engine, client.project);
   const [stashOpen, setStashOpen] = useState(false);
+  const [stashPulse, setStashPulse] = useState(0);
+  useEffect(() => {
+    onMenuOpen?.("stash", stashOpen);
+  }, [onMenuOpen, stashOpen]);
+  useEffect(() => () => onMenuOpen?.("stash", false), [onMenuOpen]);
+  const closeStash = () => {
+    setStashOpen(false);
+    box.current?.focus();
+  };
   /**
    * A draft put back (a stash entry, queued messages given back, Edit from here) joins the
    * current one: its text after the draft's, its chips and attachments added (t3code's).
@@ -574,7 +649,7 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
    */
   const restoreDraft = (draft: { readonly text: string; readonly selection: ReadonlyArray<string>; readonly attachments: ReadonlyArray<ChatAttachment> }) => {
     const aside = answeringRef.current || editingRef.current !== null ? draftKeyRef.current : undefined;
-    if (aside !== undefined) client.setDraft(aside, { text: appendRestoredPrompt(client.draft(aside).text, draft.text), mentions: mentionIds.current });
+    if (aside !== undefined) client.setDraft(aside, { ...client.draft(aside), text: appendRestoredPrompt(client.draft(aside).text, draft.text), mentions: mentionIds.current });
     else box.current?.setText(appendRestoredPrompt(box.current.text(), draft.text));
     chips.add(draft.selection);
     attachments.restore(draft.attachments);
@@ -583,16 +658,17 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
   const stashKey = () => {
     const draft = box.current?.text() ?? "";
     if (draft.trim() !== "" || attachments.staged.length > 0) {
-      stash.push({ text: draft, selection: chips.shapes.map((shape) => shape.id), attachments: attachments.staged.flatMap((item) => (item.attachment ? [item.attachment] : [])) });
+      stash.push({ text: draft, selection: chips.shapes.map((shape) => shape.id), attachments: attachments.ready() });
+      setStashPulse((pulse) => pulse + 1);
       forgetMentions();
-      box.current?.clear();
       attachments.clear();
+      box.current?.clear();
       chips.set(canvas?.getSelectedShapeIds() ?? []);
     } else if (stash.entries.length === 1) {
       restoreDraft(stash.entries[0]!);
       stash.remove(stash.entries[0]!.id);
     } else {
-      setStashOpen(true);
+      setStashOpen((open) => !open);
     }
   };
   /** `invert` does the other follow-up action; `thenNewChat` opens the rail's new chat once the message is out. */
@@ -611,13 +687,14 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
     setSending(true);
     client.setUi({ error: undefined });
     try {
+      // Before a new chat exists: the switch to it shows its own, empty, draft.
+      const uploaded = await attachments.settle();
+      const context = contextSelection(canvas, chips.shapes);
       let target = chatId;
       if (target === null) {
         target = await createChat(client, { modelSelection: selection, runtimeMode: draftRuntime, interactionMode, tags: newChatTags }, message);
       }
       beforeSend?.(target);
-      const context = contextSelection(canvas, chips.shapes);
-      const uploaded = await attachments.settle();
       forgetMentions();
       box.current?.clear();
       // A new chat's send switches this tray to the chat it made, so the draft it came from is cleared by key.
@@ -707,6 +784,12 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [queue, chatId]);
 
+  // The rail is closed while the toolbar's tray is open: its errors show here.
+  const trayNotices: ReadonlyArray<ComposerNotice> =
+    variant === "toolbar" && ui.error !== undefined
+      ? [...notices, { id: "error", variant: "error", icon: <CircleAlert />, title: ui.error, dismissLabel: "Dismiss error", onDismiss: () => client.setUi({ error: undefined }) }]
+      : notices;
+
   const interrupt = () => {
     if (!chat?.latestTurn) return;
     // An edit in progress is kept: it goes back with the rest.
@@ -750,6 +833,7 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
 
   return (
     <div className="flex flex-col gap-1.5" data-variant={variant} data-testid="agent-tray" ref={root}>
+      <NoticeStack items={trayNotices} />
       {variant === "rail" && chatId !== null && (
         <UpNext
           client={client}
@@ -775,8 +859,28 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
           </div>,
           dropElement,
         )}
+      {(stashOpen || stash.entries.length > 0) && (
+        <div className="flex items-end gap-1.5">
+          <div className="min-w-0 flex-1">
+            {stashOpen && (
+              <StashDrawer
+                entries={stash.entries}
+                box={() => box.current?.element() ?? null}
+                onRestore={(entry) => {
+                  restoreDraft(entry);
+                  stash.remove(entry.id);
+                  closeStash();
+                }}
+                onDelete={(entry) => stash.remove(entry.id)}
+                onClose={closeStash}
+              />
+            )}
+          </div>
+          <StashBadge count={stash.entries.length} open={stashOpen} pulse={stashPulse} onToggle={() => (stashOpen ? closeStash() : setStashOpen(true))} />
+        </div>
+      )}
       <div className={COMPOSER_SHELL} ref={boxElement} data-testid="agent-composer" data-dragging={dragging ? "" : undefined}>
-        <AttachmentShelf staged={attachments.staged} onRemove={attachments.remove} onRetry={attachments.retry} />
+        <AttachmentShelf staged={attachments.staged} onRemove={removeAttachment} onRetry={attachments.retry} />
         <ChipRow
           shapes={chips.shapes}
           onRemove={(ids) => {
@@ -830,7 +934,7 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
               onChange={(event) => {
                 const chosen = [...(event.currentTarget.files ?? [])];
                 event.currentTarget.value = "";
-                if (chosen.length > 0) void attachments.add(chosen);
+                if (chosen.length > 0) void attachments.add(chosen, intake(false));
               }}
             />
             <ModelPicker
@@ -870,19 +974,6 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
           </div>
           <div className="ml-auto flex shrink-0 items-center gap-1.5">
             {note?.(providerName(selection.provider))}
-            <StashMenu
-              entries={stash.entries}
-              open={stashOpen}
-              onOpenChange={(open) => {
-                setStashOpen(open);
-                if (!open) box.current?.focus();
-              }}
-              onRestore={(entry) => {
-                restoreDraft(entry);
-                stash.remove(entry.id);
-              }}
-              onDelete={(entry) => stash.remove(entry.id)}
-            />
             {running && (
               <MessageAction tone="stop" aria-label="Stop generation" onClick={interrupt}>
                 <StopSquare />
@@ -914,12 +1005,6 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
           </div>
         </div>
       </div>
-      {/* The rail is closed while the toolbar's tray is open: its errors show here. */}
-      {variant === "toolbar" && ui.error !== undefined && (
-        <Alert variant="error">
-          <AlertDescription>{ui.error}</AlertDescription>
-        </Alert>
-      )}
     </div>
   );
 };

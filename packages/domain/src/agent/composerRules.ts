@@ -183,6 +183,122 @@ export const mergeRestored = <T>(current: ReadonlyArray<T>, restored: ReadonlyAr
 };
 
 // ---------------------------------------------------------------------------------------
+// Attachments as chips in the draft, and drafts kept across reloads.
+
+/** An uploaded attachment, as a draft holds it. */
+export interface DraftAttachment {
+  readonly id: string;
+  readonly name: string;
+  readonly type: string;
+  readonly kind: "image" | "file";
+  readonly size: number;
+}
+
+const CHIP_TOKEN = /\[([A-Z][A-Za-z]*): ([^;\]]*); ref=([^\]]+)\]/g;
+
+/** An attachment's chip as the model reads it, like a mention's: `[Image: <name>; ref=<id>]`, the id naming the file in the preamble. */
+export const attachmentChip = (attachment: Pick<DraftAttachment, "id" | "name" | "kind">): string => {
+  const name = attachment.name.replace(/[[\];]/g, "").replace(/\s+/g, " ").trim() || attachment.kind;
+  return `[${attachment.kind === "image" ? "Image" : "File"}: ${name}; ref=${attachment.id}]`;
+};
+
+/** The refs of the chips a draft holds, once each, in order. */
+export const chipRefs = (text: string): string[] => [...new Set([...text.matchAll(CHIP_TOKEN)].map((match) => match[3]!))];
+
+/** The draft with its chips taken out: what the person wrote themselves. */
+export const withoutChips = (text: string): string => text.replace(CHIP_TOKEN, "");
+
+/** The draft with each chip it lacks appended after a space (t3code's `ensureInlineContextReferences`). */
+export const ensureChips = (text: string, chips: ReadonlyArray<string>): string => {
+  let result = text;
+  for (const chip of chips) {
+    const ref = chipRefs(chip)[0];
+    if (ref === undefined || chipRefs(result).includes(ref)) continue;
+    result = result === "" || /\s$/.test(result) ? `${result}${chip}` : `${result} ${chip}`;
+  }
+  return result;
+};
+
+/** The draft without any chip of `ref`, each taking the space after it, or else the one before (t3code's `removeInlineContextReference`). */
+export const removeChips = (text: string, ref: string): string => {
+  const found = [...text.matchAll(CHIP_TOKEN)].filter((match) => match[3] === ref);
+  if (found.length === 0) return text;
+  let result = text;
+  for (const match of found.reverse()) {
+    let start = match.index;
+    let end = start + match[0].length;
+    if (result[end] === " ") end += 1;
+    else if (result[start - 1] === " ") start -= 1;
+    result = `${result.slice(0, start)}${result.slice(end)}`;
+  }
+  return result.trimEnd();
+};
+
+/** A chat's draft as the `agent.drafts.<project>` preference keeps it. */
+export interface StoredDraft {
+  readonly text: string;
+  readonly mentions: ReadonlyArray<string>;
+  readonly attachments: ReadonlyArray<DraftAttachment>;
+}
+
+const isDraftAttachment = (value: unknown): value is DraftAttachment => {
+  const item = value as Partial<DraftAttachment> | null;
+  return (
+    typeof item === "object" &&
+    item !== null &&
+    typeof item.id === "string" &&
+    typeof item.name === "string" &&
+    typeof item.type === "string" &&
+    (item.kind === "image" || item.kind === "file") &&
+    typeof item.size === "number"
+  );
+};
+
+/** The drafts the preference holds, by key; anything malformed is skipped. */
+export const readStoredDrafts = (value: unknown): Array<[string, StoredDraft]> => {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return [];
+  return Object.entries(value).flatMap(([key, draft]): Array<[string, StoredDraft]> => {
+    const item = draft as Partial<Record<keyof StoredDraft, unknown>> | null;
+    if (typeof item !== "object" || item === null || typeof item.text !== "string") return [];
+    const mentions = Array.isArray(item.mentions) ? item.mentions.filter((id): id is string => typeof id === "string") : [];
+    const attachments = Array.isArray(item.attachments) ? item.attachments.filter(isDraftAttachment) : [];
+    return [[key, { text: item.text, mentions, attachments }]];
+  });
+};
+
+/** What the preference stores: every draft that holds something and that `keep` keeps; null when none does. */
+export const storedDraftsValue = (drafts: Iterable<readonly [string, StoredDraft]>, keep: (key: string) => boolean): Record<string, StoredDraft> | null => {
+  const value: Record<string, StoredDraft> = {};
+  for (const [key, draft] of drafts) {
+    if (!keep(key) || (draft.text === "" && draft.mentions.length === 0 && draft.attachments.length === 0)) continue;
+    value[key] = { text: draft.text, mentions: [...draft.mentions], attachments: [...draft.attachments] };
+  }
+  return Object.keys(value).length === 0 ? null : value;
+};
+
+const SNIPPET_LENGTH = 90;
+
+/** A stash entry in the drawer: its text on one line, chips by their names; with no text, what it holds (t3code's). */
+export const stashSnippet = (text: string, attachments: ReadonlyArray<{ readonly kind: "image" | "file" }>): string => {
+  const flat = text.replace(CHIP_TOKEN, (_whole, _kind: string, title: string) => title).replace(/\s+/g, " ").trim();
+  if (flat !== "") return flat.length > SNIPPET_LENGTH ? `${flat.slice(0, SNIPPET_LENGTH).trimEnd()}…` : flat;
+  if (attachments.length === 0) return "(empty)";
+  const images = attachments.filter((item) => item.kind === "image").length;
+  const noun = images > 0 && images < attachments.length ? "attachment" : images > 0 ? "image" : "file";
+  return `(${attachments.length} ${noun}${attachments.length === 1 ? "" : "s"})`;
+};
+
+// ---------------------------------------------------------------------------------------
+// Notices above the composer.
+
+/** What a notice is about: the connection or the agent first, then what needs the person (t3code's ComposerBannerStack). */
+export type NoticeGroup = "environment" | "attention";
+
+/** The notices in their fixed order, by group and then as they came, so rows never trade places as notices come and go. */
+export const orderNotices = <T extends { readonly group?: NoticeGroup }>(items: ReadonlyArray<T>): T[] =>
+  (["environment", "attention"] as const).flatMap((group) => items.filter((item) => (item.group ?? "attention") === group));
+
+// ---------------------------------------------------------------------------------------
 // Prompt history (ArrowUp and ArrowDown).
 
 export interface PromptHistoryMessage {

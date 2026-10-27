@@ -166,6 +166,28 @@ test("attach by button, by drag and by paste: thumbnails and file chips, a remov
   ]);
 });
 
+test("the error line is a notice above the composer: it fades in, a clipped one shows its whole text on demand, and Dismiss clears it", async ({ page, agent }) => {
+  await openCanvas(page, agent);
+  const panel = await openRail(page);
+  const name = `${"a-very-long-file-name-".repeat(6)}.bin`;
+  await fileEvents(page, "aside[aria-label='Agent'] [data-testid='chat-tabs']", ["dragenter", "drop"], [{ name, mime: "application/octet-stream", size: 51 * 1024 * 1024 }]);
+  const sentence = `'${name}' exceeds the 50 MB attachment limit.`;
+  const notice = panel.getByTestId("composer-notices").getByRole("alert");
+  await expect(notice).toHaveText(sentence);
+  // Above the composer, in the tray, with t3code's fade in.
+  const noticeBox = (await notice.boundingBox())!;
+  const composerBox = (await panel.getByTestId("agent-composer").boundingBox())!;
+  expect(noticeBox.y + noticeBox.height).toBeLessThanOrEqual(composerBox.y);
+  await expect(notice).toHaveClass(/starting:opacity-0/);
+
+  const details = notice.getByRole("button", { name: `Show full title: ${sentence}` });
+  await details.hover();
+  await expect(page.getByRole("dialog", { name: "Notice details" })).toHaveText(sentence);
+
+  await notice.getByRole("button", { name: "Dismiss error" }).click();
+  await expect(panel.getByRole("alert")).toHaveCount(0);
+});
+
 /** A paste of text into the rail's box, as the page receives it. */
 const pasteText = (page: Page, text: string) =>
   page.evaluate((text) => {
@@ -202,42 +224,53 @@ test("a large paste becomes pasted-text.txt with a toast; Cmd+Shift+V keeps it i
   await expect.poll(async () => (await box.textContent())?.length).toBe(33 * 1024);
 });
 
-test("Cmd+S stashes the draft and clears it; the badge's menu restores and deletes; the 21st drops the oldest", async ({ page, agent }) => {
+test("Cmd+S stashes the draft and clears it; the badge's drawer restores and deletes; the 21st drops the oldest", async ({ page, agent }) => {
   await openCanvas(page, agent);
   const panel = await openRail(page);
   const box = promptBox(panel);
   const badge = panel.getByTestId("stash-badge");
-  const menu = page.getByRole("menu", { name: "Stashed prompts" });
+  const drawer = panel.getByTestId("stash-drawer");
+  const rows = drawer.getByRole("list", { name: "Stashed prompts" }).getByRole("listitem");
   const { shortcut } = await platformOf(page);
 
-  // An empty stash: Cmd+S in an empty box opens the menu with its hint.
+  // An empty stash: no badge, and Cmd+S in an empty box opens the drawer with its hint.
   await box.click();
+  await expect(badge).toHaveCount(0);
   await page.keyboard.press("ControlOrMeta+s");
-  await expect(menu.getByText(`Nothing stashed yet. Press ${shortcut("S")} with a prompt in the composer to stash it.`, { exact: true })).toBeVisible();
+  await expect(rows).toHaveText([`Nothing stashed yet. Press ${shortcut("S")} with a prompt in the composer to stash it.`]);
   await page.keyboard.press("Escape");
+  await expect(drawer).toHaveCount(0);
 
   await box.click();
   await box.pressSequentially("first idea");
   await page.keyboard.press("ControlOrMeta+s");
   await expect(box).toHaveText("");
   await expect(badge).toHaveAttribute("aria-label", "Stashed prompts: 1. Open stash.");
+  // Each stash replays the count's pulse.
+  await expect(badge.getByTestId("stash-count")).toHaveClass(/animate-stash-pulse-count/);
   // One entry: Cmd+S in the empty box brings it back.
   await page.keyboard.press("ControlOrMeta+s");
   await expect(box).toHaveText("first idea");
-  await expect(badge).toHaveAttribute("aria-label", "Stashed prompts: 0. Open stash.");
+  await expect(badge).toHaveCount(0);
   await page.keyboard.press("ControlOrMeta+s");
   await box.pressSequentially("second idea");
   await page.keyboard.press("ControlOrMeta+s");
   await expect(badge).toHaveAttribute("aria-label", "Stashed prompts: 2. Open stash.");
 
+  // The drawer docks above the composer; its keys work from the box, which keeps the focus.
   await badge.click();
-  await expect(menu.getByRole("menuitem")).toHaveText([/^second ideajust now/, /^first ideajust now/]);
-  await menu.getByRole("menuitem").first().hover();
+  await expect(rows).toHaveText([/^second ideajust now/, /^first ideajust now/]);
+  await expect(drawer.getByRole("button", { name: "Close stash" })).toBeVisible();
+  await expect(box).toBeFocused();
+  await page.keyboard.press("ArrowDown");
+  await expect(rows.nth(1)).toHaveAttribute("data-highlighted", "");
+  await page.keyboard.press("ArrowUp");
   await page.keyboard.press("ControlOrMeta+Backspace");
-  await expect(menu.getByRole("menuitem")).toHaveText([/^first idea/]);
-  await menu.getByRole("menuitem").first().click();
+  await expect(rows).toHaveText([/^first idea/]);
+  await page.keyboard.press("Enter");
   await expect(box).toHaveText("first idea");
-  await expect(badge).toHaveAttribute("aria-label", "Stashed prompts: 0. Open stash.");
+  await expect(drawer).toHaveCount(0);
+  await expect(badge).toHaveCount(0);
 
   // Twenty-one stashes: the oldest goes, with a toast.
   await page.keyboard.press("ControlOrMeta+a");
@@ -257,6 +290,44 @@ test("Cmd+S stashes the draft and clears it; the badge's menu restores and delet
       return (values["agent.stash.default"] as Array<{ text: string }> | undefined)?.map((entry) => entry.text);
     })
     .toEqual(Array.from({ length: 20 }, (_, index) => `idea ${21 - index}`));
+});
+
+test("the stash drawer takes its keys only from the box, itself or the badge; a click outside closes it", async ({ page, agent }) => {
+  await openCanvas(page, agent);
+  const panel = await openRail(page);
+  const box = promptBox(panel);
+  const drawer = panel.getByTestId("stash-drawer");
+  const rows = drawer.getByRole("list", { name: "Stashed prompts" }).getByRole("listitem");
+  await box.click();
+  for (const idea of ["first idea", "second idea"]) {
+    await box.pressSequentially(idea);
+    await page.keyboard.press("ControlOrMeta+s");
+  }
+  // Keys in another field are that field's (t3code's scoping): the badge keeps the focus where it was.
+  await panel.getByRole("button", { name: "Search chats" }).click();
+  const search = panel.getByRole("textbox", { name: "Search chats" });
+  await expect(search).toBeFocused();
+  await panel.getByTestId("stash-badge").click();
+  await expect(rows).toHaveCount(2);
+  await expect(search).toBeFocused();
+  await page.keyboard.press("ArrowDown");
+  await page.keyboard.press("Enter");
+  await page.keyboard.press("ControlOrMeta+Backspace");
+  await expect(rows).toHaveCount(2);
+  await expect(box).toHaveText("");
+
+  // An attachment-only entry reads as what it holds.
+  await page.mouse.click(5, 5);
+  await expect(drawer).toHaveCount(0);
+  const chooser = page.waitForEvent("filechooser");
+  await panel.getByRole("button", { name: "Attach files" }).click();
+  await (await chooser).setFiles([{ name: "notes.txt", mimeType: "text/plain", buffer: Buffer.from("eleven char") }]);
+  await expect(panel.getByTestId("attachments").locator("[data-chip='file'][data-status='ready']")).toHaveCount(1);
+  await box.click();
+  await page.keyboard.press("ControlOrMeta+s");
+  await panel.getByTestId("stash-badge").click();
+  await expect(rows.first()).toHaveText(/^\(1 file\)/);
+  await expect(rows.first().getByLabel("1 file", { exact: true })).toBeVisible();
 });
 
 test("ArrowUp in an empty box recalls this chat's earlier messages, newest first; ArrowDown past the newest clears", async ({ page }) => {
@@ -326,7 +397,7 @@ test("restoring a stashed prompt puts it after the draft and adds only the files
   await box.pressSequentially("now typing");
   await attach();
   await panel.getByTestId("stash-badge").click();
-  await page.getByRole("menu", { name: "Stashed prompts" }).getByRole("menuitem").first().click();
+  await panel.getByTestId("stash-drawer").getByRole("button", { name: /^Restore stashed prompt/ }).first().click();
   await expect(panel.locator(".ProseMirror p")).toHaveText(["now typing", "", "set aside"]);
   await expect(shelf.locator("[data-chip='file']")).toHaveText(["notes.txt11 B"]);
 });
@@ -408,7 +479,6 @@ test("the Agent tray is t3code's composer on the kit: the rounded shell, kit chi
     await expectSlot(tray.getByRole("button", { name: "Attach files" }), "tooltip-trigger");
     await expectSlot(tray.getByTestId("model-picker"), "popover-trigger");
     await expectSlot(tray.getByRole("button", { name: "More composer controls" }), "menu-trigger");
-    await expectSlot(tray.getByTestId("stash-badge"), "menu-trigger");
     // The mode sits in the More menu as the kit's radio items; Shift+Tab flips it from the box.
     await promptBox(tray).click();
     await page.keyboard.press("Shift+Tab");
@@ -518,6 +588,162 @@ test("a draft shown again after a tab switch is not an undo step", async ({ page
   await promptBox(panel).click();
   await page.keyboard.press("ControlOrMeta+z");
   await expect(promptBox(panel)).not.toHaveText("");
+});
+
+/** The drafts the engine keeps for the default project, by chat. */
+const storedDrafts = async (agent: TestEngine) => {
+  const { values } = await (await rpcOf(agent)).call("preferences.get", { keys: ["agent.drafts.default"] });
+  return (values["agent.drafts.default"] ?? null) as Record<string, { text: string; attachments: Array<{ name: string }> }> | null;
+};
+
+test("each chat's draft keeps its attachments, and every draft survives a reload until it is sent", async ({ page, agent }) => {
+  await openCanvas(page, agent);
+  const brief = await createChat(agent, { title: "Brief" });
+  await createChat(agent, { title: "Other" });
+  const panel = await openRail(page);
+  const box = promptBox(panel);
+  const shelf = panel.getByTestId("attachments");
+  await panel.getByRole("tab", { name: "Brief" }).click();
+  const chooser = page.waitForEvent("filechooser");
+  await panel.getByRole("button", { name: "Attach files" }).click();
+  await (await chooser).setFiles([
+    { name: "hero.png", mimeType: "image/png", buffer: pngBytes(20, 20) },
+    { name: "notes.txt", mimeType: "text/plain", buffer: Buffer.from("eleven char") },
+  ]);
+  await expect(shelf.locator("[data-chip='file'][data-status='ready']")).toHaveText(["notes.txt11 B"]);
+  await expect(shelf.locator("[data-status='ready']")).toHaveCount(2);
+  await box.click();
+  await box.pressSequentially("Keep this for later");
+
+  // Another chat has neither the text nor the file; coming back brings both.
+  await panel.getByRole("tab", { name: "Other" }).click();
+  await expect(box).toHaveText("");
+  await expect(shelf).toHaveCount(0);
+  await box.click();
+  await box.pressSequentially("Other thoughts");
+  await panel.getByRole("tab", { name: "Brief" }).click();
+  await expect(box).toHaveText("Keep this for later");
+  await expect(shelf.locator("[data-chip='file']")).toHaveText(["notes.txt11 B"]);
+  await expect(shelf.getByRole("link", { name: "Preview hero.png" })).toBeVisible();
+
+  // Written to the preferences store, then a reload: both drafts come back.
+  await expect
+    .poll(async () => {
+      const draft = (await storedDrafts(agent))?.[brief];
+      return draft && { text: draft.text, names: draft.attachments.map((item) => item.name).sort() };
+    })
+    .toEqual({ text: "Keep this for later", names: ["hero.png", "notes.txt"] });
+  await page.reload();
+  const again = await openRail(page);
+  await again.getByRole("tab", { name: "Brief" }).click();
+  await expect(promptBox(again)).toHaveText("Keep this for later");
+  await expect(again.getByTestId("attachments").locator("[data-chip='file']")).toHaveText(["notes.txt11 B"]);
+  await expect(again.getByTestId("attachments").getByLabel("Preview hero.png")).toBeVisible();
+  await again.getByRole("tab", { name: "Other" }).click();
+  await expect(promptBox(again)).toHaveText("Other thoughts");
+
+  // Sent, the draft goes, here and in the store.
+  await again.getByRole("tab", { name: "Brief" }).click();
+  await promptBox(again).click();
+  await page.keyboard.press("Enter");
+  await expect(again.locator("[data-role='user']")).toHaveCount(1);
+  await expect(promptBox(again)).toHaveText("");
+  await expect(again.getByTestId("attachments")).toHaveCount(0);
+  await expect.poll(async () => Object.keys((await storedDrafts(agent)) ?? {})).not.toContain(brief);
+});
+
+test("the toolbar's Agent tray keeps its own draft across a reload", async ({ page, agent }) => {
+  await pageAndImages(page, agent);
+  await openAgentTray(page);
+  await promptBox(composer(page)).pressSequentially("from the toolbar");
+  await expect.poll(async () => (await storedDrafts(agent))?.toolbar?.text).toBe("from the toolbar");
+  await page.reload();
+  await clickShape(page, "shape:p1");
+  await openAgentTray(page);
+  await expect(promptBox(composer(page))).toHaveText("from the toolbar");
+  const panel = await openRail(page);
+  await expect(promptBox(panel)).toHaveText("");
+});
+
+test("a file pasted or dropped into a prompt with text puts its chip at the caret; removing the file or the chip removes the other", async ({ page, agent }) => {
+  await openCanvas(page, agent);
+  const panel = await openRail(page);
+  const box = promptBox(panel);
+  const shelf = panel.getByTestId("attachments");
+  const inline = box.locator("[data-agent-chip]");
+  await box.click();
+  await box.pressSequentially("compare  with the brief");
+  for (let n = 0; n < " with the brief".length; n++) await page.keyboard.press("ArrowLeft");
+
+  // A paste into the text: the chip lands where the caret was, once the image is uploaded.
+  await fileEvents(page, "aside[aria-label='Agent'] .ProseMirror", ["paste"], [{ name: "pasted.png", mime: "image/png", bytes: pngBytes(12, 12, 3) }]);
+  await expect(shelf.getByRole("link", { name: "Preview pasted.png" })).toBeVisible();
+  await expect(inline).toHaveText(["pasted.png"]);
+  await expect(box).toHaveText(/^compare  ?pasted\.png ?with the brief$/);
+
+  // Removing the image removes its chip.
+  await shelf.getByRole("button", { name: "Remove pasted.png" }).click();
+  await expect(inline).toHaveCount(0);
+  await expect(box).toHaveText(/^compare +with the brief$/);
+
+  // A dropped file joins the text too; deleting its chip removes the file, and undo brings both back.
+  await page.keyboard.press("End");
+  await fileEvents(page, "aside[aria-label='Agent'] [data-testid='chat-tabs']", ["dragenter", "drop"], [{ name: "brief.pdf", mime: "application/pdf", bytes: Buffer.from("%PDF-1.4 brief") }]);
+  await expect(inline).toHaveText(["brief.pdf"]);
+  await expect(shelf.locator("[data-chip='file']")).toHaveText(["brief.pdf14 B"]);
+  await box.click();
+  await page.keyboard.press("ControlOrMeta+a");
+  await page.keyboard.press("ArrowRight");
+  await page.keyboard.press("Backspace");
+  await page.keyboard.press("Backspace");
+  await expect(inline).toHaveCount(0);
+  await expect(shelf).toHaveCount(0);
+  await page.keyboard.press("ControlOrMeta+z");
+  await expect(inline).toHaveText(["brief.pdf"]);
+  await expect(shelf.locator("[data-chip='file']")).toHaveText(["brief.pdf14 B"]);
+
+  // A paste into an empty prompt attaches without a chip.
+  await page.keyboard.press("ControlOrMeta+a");
+  await page.keyboard.press("Backspace");
+  await expect(box).toHaveText("");
+  await expect(shelf).toHaveCount(0);
+  await fileEvents(page, "aside[aria-label='Agent'] .ProseMirror", ["paste"], [{ name: "alone.png", mime: "image/png", bytes: pngBytes(10, 10, 1) }]);
+  await expect(panel.getByTestId("attachments").getByRole("link", { name: "Preview alone.png" })).toBeVisible();
+  await expect(inline).toHaveCount(0);
+});
+
+test("the model reads an attachment's chip by its id; a chip copied from one unsent draft brings its file into another", async ({ page, agent }) => {
+  await openCanvas(page, agent);
+  await createChat(agent, { title: "Brief" });
+  await createChat(agent, { title: "Other" });
+  const panel = await openRail(page);
+  const box = promptBox(panel);
+  const shelf = panel.getByTestId("attachments");
+  await panel.getByRole("tab", { name: "Brief" }).click();
+  await box.click();
+  await box.pressSequentially("look at");
+  await fileEvents(page, "aside[aria-label='Agent'] .ProseMirror", ["paste"], [{ name: "pasted.png", mime: "image/png", bytes: pngBytes(12, 12, 3) }]);
+  await expect(box.locator("[data-agent-chip]")).toHaveText(["pasted.png"]);
+  const chipHtml = await box.locator("[data-agent-chip]").evaluate((element) => element.outerHTML);
+
+  // Pasted into another chat's draft, the chip brings the image with it.
+  await panel.getByRole("tab", { name: "Other" }).click();
+  await expect(shelf).toHaveCount(0);
+  await box.click();
+  await box.pressSequentially("and this ");
+  await page.evaluate((html) => {
+    const transfer = new DataTransfer();
+    transfer.setData("text/html", html);
+    transfer.setData("text/plain", "pasted.png");
+    document.querySelector("aside[aria-label='Agent'] .ProseMirror")!.dispatchEvent(new ClipboardEvent("paste", { bubbles: true, cancelable: true, clipboardData: transfer }));
+  }, chipHtml);
+  await expect(box.locator("[data-agent-chip]")).toHaveText(["pasted.png"]);
+  await expect(shelf.getByLabel("Preview pasted.png")).toBeVisible();
+
+  await page.keyboard.press("Enter");
+  await expect(panel.locator("[data-role='user']")).toHaveCount(1);
+  const other = (await engineChats(agent)).find((chat) => chat.title === "Other")!;
+  await expect.poll(() => userTexts(agent, other.id)).toEqual([expect.stringMatching(/^and this \[Image: pasted\.png; ref=[0-9a-f]{32}\.png\]\s*$/)]);
 });
 
 test("the Send shortcut: Cmd+Enter for several lines sends one line on Enter and breaks a multiline one; Cmd+Enter always leaves Enter to break the line", async ({ page, agent }) => {

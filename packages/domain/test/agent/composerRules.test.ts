@@ -1,6 +1,14 @@
 import { describe, expect, it } from "vitest";
 import {
   appendRestoredPrompt,
+  attachmentChip,
+  chipRefs,
+  ensureChips,
+  readStoredDrafts,
+  removeChips,
+  stashSnippet,
+  withoutChips,
+  storedDraftsValue,
   composerKeyIntent,
   composerRequiresModifier,
   contextMeter,
@@ -10,6 +18,7 @@ import {
   implementPlanText,
   LARGE_PASTE_BYTES,
   mergeRestored,
+  orderNotices,
   moveQueued,
   pasteBecomesFile,
   pastedTextFileName,
@@ -380,5 +389,90 @@ describe("editing a queued message", () => {
   it("blocks edits only while a question holds the composer", () => {
     expect(queuedEditBlockedReason({ openQuestionCount: 0 })).toBeNull();
     expect(queuedEditBlockedReason({ openQuestionCount: 1 })).toBe("Answer the question to edit queued messages");
+  });
+});
+
+describe("attachment chips in the draft", () => {
+  const image = { id: "0123abcd.png", name: "shot.png", type: "image/png", kind: "image" as const, size: 3 };
+  const file = { id: "4567ef01.txt", name: "notes; v2].txt", type: "text/plain", kind: "file" as const, size: 9 };
+
+  it("reads as the other chips do, its name kept clear of the token's own marks", () => {
+    expect(attachmentChip(image)).toBe("[Image: shot.png; ref=0123abcd.png]");
+    expect(attachmentChip(file)).toBe("[File: notes v2.txt; ref=4567ef01.txt]");
+  });
+
+  it("finds the refs a draft names, once each", () => {
+    expect(chipRefs(`look ${attachmentChip(image)} and ${attachmentChip(file)} ${attachmentChip(image)}`)).toEqual(["0123abcd.png", "4567ef01.txt"]);
+    expect(chipRefs("no chips [not one]")).toEqual([]);
+  });
+
+  it("leaves what the person wrote once the chips are taken out", () => {
+    expect(withoutChips(`${attachmentChip(image)} `).trim()).toBe("");
+    expect(withoutChips(`see ${attachmentChip(image)}`)).toBe("see ");
+  });
+
+  it("appends a chip a draft lacks after a space, and leaves one it has (t3code's ensureInlineContextReferences)", () => {
+    expect(ensureChips("Draft A", [attachmentChip(image)])).toBe(`Draft A ${attachmentChip(image)}`);
+    expect(ensureChips("", [attachmentChip(image)])).toBe(attachmentChip(image));
+    const once = ensureChips("Draft A", [attachmentChip(image)]);
+    expect(ensureChips(once, [attachmentChip(image)])).toBe(once);
+  });
+
+  it("removes every chip of a ref with the space after it (t3code's removeInlineContextReference)", () => {
+    expect(removeChips(`a ${attachmentChip(image)} b ${attachmentChip(image)}`, image.id)).toBe("a b");
+    expect(removeChips(`only ${attachmentChip(file)}`, file.id)).toBe("only");
+    expect(removeChips("untouched", image.id)).toBe("untouched");
+  });
+});
+
+describe("drafts kept across reloads", () => {
+  const attachment = { id: "0123abcd.png", name: "shot.png", type: "image/png", kind: "image" as const, size: 3 };
+
+  it("stores the drafts that hold something, for chats that still exist", () => {
+    const drafts: Array<[string, { text: string; mentions: string[]; attachments: (typeof attachment)[] }]> = [
+      ["chat-a", { text: "hello", mentions: ["shape:x"], attachments: [] }],
+      ["chat-b", { text: "", mentions: [], attachments: [attachment] }],
+      ["chat-gone", { text: "lost", mentions: [], attachments: [] }],
+      ["chat-empty", { text: "", mentions: [], attachments: [] }],
+    ];
+    expect(storedDraftsValue(drafts, (key) => key !== "chat-gone")).toEqual({
+      "chat-a": { text: "hello", mentions: ["shape:x"], attachments: [] },
+      "chat-b": { text: "", mentions: [], attachments: [attachment] },
+    });
+    expect(storedDraftsValue([], () => true)).toBeNull();
+  });
+
+  it("reads them back, skipping anything malformed", () => {
+    const stored = {
+      "chat-a": { text: "hello", mentions: ["shape:x", 4], attachments: [attachment, { id: 1 }] },
+      "chat-b": { text: 7 },
+      "chat-c": "nope",
+    };
+    expect(readStoredDrafts(stored)).toEqual([["chat-a", { text: "hello", mentions: ["shape:x"], attachments: [attachment] }]]);
+    expect(readStoredDrafts(null)).toEqual([]);
+    expect(readStoredDrafts([1, 2])).toEqual([]);
+  });
+});
+
+describe("a stash entry's snippet", () => {
+  it("is the text on one line, its chips by their names, cut at 90 characters", () => {
+    expect(stashSnippet("  two\n lines  ", [])).toBe("two lines");
+    expect(stashSnippet("see [Image: shot.png; ref=0123abcd.png] here", [])).toBe("see shot.png here");
+    expect(stashSnippet("x".repeat(95), [])).toBe(`${"x".repeat(90)}…`);
+  });
+
+  it("counts the attachments when there is no text (t3code's)", () => {
+    expect(stashSnippet("", [{ kind: "image" }, { kind: "image" }])).toBe("(2 images)");
+    expect(stashSnippet("", [{ kind: "file" }])).toBe("(1 file)");
+    expect(stashSnippet(" ", [{ kind: "image" }, { kind: "file" }])).toBe("(2 attachments)");
+    expect(stashSnippet("", [])).toBe("(empty)");
+  });
+});
+
+describe("the notices above the composer", () => {
+  it("puts the connection's and the agent's first, whatever order they arrive in, and keeps each group's order", () => {
+    const notices = [{ id: "limit" }, { id: "offline", group: "environment" as const }, { id: "refused", group: "attention" as const }, { id: "session", group: "environment" as const }];
+    expect(orderNotices(notices).map((notice) => notice.id)).toEqual(["offline", "session", "limit", "refused"]);
+    expect(orderNotices([])).toEqual([]);
   });
 });

@@ -1,5 +1,6 @@
 import { mergeAttributes, Node, type Editor as TiptapEditor, type JSONContent } from "@tiptap/core";
 import { Placeholder } from "@tiptap/extensions";
+import { closeHistory } from "@tiptap/pm/history";
 import { Selection } from "@tiptap/pm/state";
 import { EditorContent, useEditor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
@@ -23,6 +24,12 @@ export interface DraftChip {
 export const serialiseChip = (chip: DraftChip): string => (chip.kind === "skill" ? `$${chip.ref}` : `[${chip.label}: ${chip.title}; ref=${chip.ref}]`);
 
 const CHIP_TOKEN = /\[([A-Z][A-Za-z]*): ([^;\]]*); ref=([^\]]+)\]/g;
+
+/** A serialised chip (`[<Kind>: <label>; ref=<id>]`) as a chip node's attributes. */
+export const chipOfToken = (token: string): DraftChip | undefined => {
+  const match = new RegExp(CHIP_TOKEN.source).exec(token);
+  return match ? { kind: "mention", label: match[1]!, title: match[2]!, ref: match[3]! } : undefined;
+};
 
 const ChipNode = Node.create({
   name: "agentChip",
@@ -149,6 +156,10 @@ export interface PromptEditorHandle {
   /** Replaces a trigger's text with a chip, or with plain text. */
   replaceTrigger(trigger: Trigger, insert: DraftChip | string): void;
   insertText(text: string): void;
+  /** Puts a chip at the caret, a space on either side as needed, without taking the focus (t3code's attachment reference). */
+  insertChip(chip: DraftChip): void;
+  /** Removes every chip of `ref`, each with the space after it; not an edit the person typed. */
+  removeChips(ref: string): void;
   /** Puts text at the end of the draft and focuses it; false when the box takes no typing now. */
   insertTextAtEnd(text: string): boolean;
   /** Whether the caret is on the draft's first visual line (`start`, where ArrowUp recalls) or its last (`end`), wrapped lines counted. */
@@ -286,6 +297,34 @@ export const PromptEditor = ({ placeholder, label, onChange, onFocus, onBlur, on
       },
       insertText: (text) => {
         editor?.chain().focus().insertContent(lineBreaks(text)).run();
+      },
+      insertChip: (chip) => {
+        if (!editor || editor.isDestroyed) return;
+        const { from, to, $from } = editor.state.selection;
+        const before = $from.parent.textBetween(0, $from.parentOffset, undefined, "￼");
+        const after = editor.state.doc.textBetween(to, Math.min(to + 1, editor.state.doc.content.size - 1), undefined, "￼");
+        const content: JSONContent[] = [
+          ...(before === "" || /\s$/.test(before) ? [] : [{ type: "text", text: " " }]),
+          { type: "agentChip", attrs: { ...chip } },
+          ...(after === " " ? [] : [{ type: "text", text: " " }]),
+        ];
+        // Its own undo step, so an undo just after it does not also take back what was typed before.
+        editor.view.dispatch(closeHistory(editor.state.tr));
+        editor.chain().setMeta(SET_BY_COMPOSER, true).insertContentAt({ from, to }, content).run();
+        editor.view.dispatch(closeHistory(editor.state.tr));
+      },
+      removeChips: (ref) => {
+        if (!editor || editor.isDestroyed) return;
+        const ranges: Array<{ from: number; to: number }> = [];
+        editor.state.doc.descendants((node, pos) => {
+          if (node.type.name !== "agentChip" || node.attrs.ref !== ref) return;
+          const next = editor.state.doc.textBetween(pos + 1, Math.min(pos + 2, editor.state.doc.content.size), undefined, "￼");
+          ranges.push({ from: pos, to: pos + (next === " " ? 2 : 1) });
+        });
+        if (ranges.length === 0) return;
+        const tr = editor.state.tr.setMeta(SET_BY_COMPOSER, true);
+        for (const range of ranges.reverse()) tr.delete(range.from, range.to);
+        editor.view.dispatch(tr);
       },
       caretOnVisualEdge: (edge) => {
         if (!editor || editor.isDestroyed || draftText(editor.getJSON()) === "") return true;

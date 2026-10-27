@@ -32,12 +32,12 @@ const APPROVAL_HEADERS: Record<string, string> = {
  * t3code's composer banner (ComposerBanner): the glass strip above the composer that holds
  * what waits on the person. An approval takes its warning tint.
  */
-const BANNER =
+export const BANNER =
   `${composerGlassClass} relative flex flex-col gap-1.5 rounded-2xl border px-3 py-2 text-xs/4 shadow-composer dark:shadow-composer-dark`;
-const WARNING_BANNER = `${BANNER} border-warning/28 bg-linear-to-b from-warning/8 to-warning/8`;
+export const WARNING_BANNER = `${BANNER} border-warning/28 bg-linear-to-b from-warning/8 to-warning/8`;
 
 /** The banner's first line: its icon, what it is, and anything beside it. */
-const BANNER_ROW = "flex min-h-6 min-w-0 items-center gap-1.5";
+export const BANNER_ROW = "flex min-h-6 min-w-0 items-center gap-1.5";
 
 /** How much of a request's target the panel shows before it says how much it held back. */
 export const TARGET_SHOWN = 300;

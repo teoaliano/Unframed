@@ -1,10 +1,12 @@
 import type { ChatAttachment } from "@unframed/contracts";
-import { Archive, Trash2 } from "lucide-react";
+import { stashSnippet } from "@unframed/domain";
+import { Bookmark, ChevronDown, File, FileText, Image, X } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { platform } from "../../canvas/platform.ts";
 import { Button } from "~/components/ui/button";
-import { Menu, MenuItem, MenuPopup, MenuTrigger } from "~/components/ui/menu";
 import type { EngineConnection } from "../../rpc/engine.ts";
+import { cn } from "~/lib/utils";
+import { BANNER } from "./panels.tsx";
 import { showNotice } from "../../toasts.tsx";
 import { newId } from "../store.ts";
 
@@ -77,77 +79,192 @@ export const relativeTime = (at: string, now = Date.now()): string => {
   return relative.format(Math.round(hours / 24), "day");
 };
 
-const snippet = (text: string) => {
-  const flat = text.replace(/\s+/g, " ").trim();
-  return flat.length > 90 ? `${flat.slice(0, 90).trimEnd()}…` : flat;
+/** The Stash shoulder tab above the composer (t3code's ComposerStashBadge): shown while the stash holds something; its count pulses on each stash. */
+export const StashBadge = ({ count, open, pulse, onToggle }: { readonly count: number; readonly open: boolean; readonly pulse: number; readonly onToggle: () => void }) => {
+  if (count === 0) return null;
+  const pulsed = pulse > 0;
+  return (
+    <span className={cn(BANNER, "ml-auto w-fit shrink-0 px-0.5 py-0.5")}>
+      <Button
+        variant="ghost-muted"
+        size="xs"
+        data-testid="stash-badge"
+        data-prompt-stash-badge=""
+        data-pressed={open ? "" : undefined}
+        aria-label={`Stashed prompts: ${count}. Open stash.`}
+        aria-expanded={open}
+        onPointerDown={(event) => event.preventDefault()}
+        onClick={onToggle}
+      >
+        <Bookmark aria-hidden className="size-3" />
+        {/* Swapping between two identical keyframes restarts the pulse and keeps the button's focus. */}
+        <span className={pulsed ? (pulse % 2 === 0 ? "animate-stash-pulse-row-alt motion-reduce:animate-none" : "animate-stash-pulse-row motion-reduce:animate-none") : undefined}>Stash</span>
+        {/* Remounted per stash, which restarts its pulse. */}
+        <span key={pulse} className={cn("min-w-4 text-center tabular-nums", pulsed && "animate-stash-pulse-count motion-reduce:animate-none")} data-testid="stash-count">
+          {count}
+        </span>
+      </Button>
+    </span>
+  );
 };
 
 /**
- * The Stash badge and its menu (t3code's): each stashed prompt as a snippet and when it was
- * stashed. Enter restores it, Cmd+Backspace deletes it, Escape closes.
+ * The stash drawer docked above the composer (t3code's ComposerStashMenu): each entry as a
+ * snippet, what it holds and when it was stashed. Its keys are caught first, but only while
+ * the focus is in the drawer, on the badge or in the composer's box (t3code's scoping):
+ * the arrows move the highlight, Enter restores, Cmd+Backspace deletes, Escape closes. A
+ * pointer down outside closes it.
  */
-export const StashMenu = ({
+export const StashDrawer = ({
   entries,
-  open,
-  onOpenChange,
+  box,
   onRestore,
   onDelete,
+  onClose,
 }: {
   readonly entries: ReadonlyArray<StashEntry>;
-  readonly open: boolean;
-  readonly onOpenChange: (open: boolean) => void;
+  /** The composer's box, whose keys the drawer takes while it is open. */
+  readonly box: () => HTMLElement | null;
   readonly onRestore: (entry: StashEntry) => void;
   readonly onDelete: (entry: StashEntry) => void;
+  readonly onClose: () => void;
 }) => {
   const mac = platform() === "darwin";
+  const drawer = useRef<HTMLDivElement>(null);
+  const [highlighted, setHighlighted] = useState<string | null>(entries[0]?.id ?? null);
+  const current = entries.find((entry) => entry.id === highlighted) ?? entries[0];
+  const latest = useRef({ entries, current, box, onRestore, onDelete, onClose });
+  latest.current = { entries, current, box, onRestore, onDelete, onClose };
+
+  useEffect(() => {
+    const onPointerDown = (event: PointerEvent) => {
+      const target = event.target;
+      if ((drawer.current && event.composedPath().includes(drawer.current)) || (target instanceof Element && target.closest("[data-prompt-stash-badge]"))) return;
+      latest.current.onClose();
+    };
+    const onKeyDown = (event: KeyboardEvent) => {
+      const element = drawer.current;
+      const target = event.target;
+      if (!element || !(target instanceof Node)) return;
+      const inScope =
+        target === document.body || (target instanceof Element && target.closest("[data-prompt-stash-badge]") !== null) || element.contains(target) || (latest.current.box()?.contains(target) ?? false);
+      if (!inScope) return;
+      const { entries: all, current: entry } = latest.current;
+      const take = () => {
+        event.preventDefault();
+        event.stopPropagation();
+      };
+      if (event.key === "Escape") {
+        take();
+        latest.current.onClose();
+      } else if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+        if (all.length === 0) return;
+        take();
+        const index = all.findIndex((known) => known.id === entry?.id);
+        const step = event.key === "ArrowDown" ? 1 : -1;
+        const next = ((index >= 0 ? index : step === 1 ? -1 : 0) + step + all.length) % all.length;
+        setHighlighted(all[next]?.id ?? null);
+        const button = element.querySelectorAll<HTMLButtonElement>("[data-stash-restore]")[next];
+        button?.scrollIntoView({ block: "nearest" });
+        if (element.contains(document.activeElement)) button?.focus({ preventScroll: true });
+      } else if (event.key === "Enter") {
+        // Enter on the delete button is the button's.
+        if (target instanceof HTMLElement && target.closest("[data-stash-delete]")) return;
+        if (!entry) return;
+        take();
+        latest.current.onRestore(entry);
+      } else if (event.key === "Backspace" && (mac ? event.metaKey : event.ctrlKey)) {
+        if (!entry) return;
+        take();
+        latest.current.onDelete(entry);
+      }
+    };
+    document.addEventListener("pointerdown", onPointerDown, true);
+    window.addEventListener("keydown", onKeyDown, true);
+    return () => {
+      document.removeEventListener("pointerdown", onPointerDown, true);
+      window.removeEventListener("keydown", onKeyDown, true);
+    };
+  }, [mac]);
+
   return (
-    <Menu open={open} onOpenChange={(next) => onOpenChange(next)}>
-      {/* Kept in place while empty, hidden, so the menu opened from the keyboard still has its anchor. */}
-      <span className={entries.length === 0 ? "invisible inline-flex w-0 overflow-hidden" : "inline-flex"}>
-        <MenuTrigger
-          render={<Button variant="outline" size="xs" />}
-          aria-label={`Stashed prompts: ${entries.length}. Open stash.`}
-          data-testid="stash-badge"
-          data-empty={entries.length === 0 ? "" : undefined}
-        >
-          <Archive aria-hidden />
-          Stash
-        </MenuTrigger>
-      </span>
-      <MenuPopup side="top" align="end" sideOffset={6} className="w-[300px]" aria-label="Stashed prompts">
+    <div ref={drawer} className={cn(BANNER, "gap-0.5 px-1 py-1 transition-opacity duration-150 ease-out starting:opacity-0 motion-reduce:transition-none")} data-testid="stash-drawer">
+      <Button
+        variant="ghost-muted"
+        size="xs"
+        className="w-full justify-start"
+        aria-label="Close stash"
+        aria-expanded="true"
+        onPointerDown={(event) => event.preventDefault()}
+        onClick={onClose}
+      >
+        <Bookmark aria-hidden className="size-3" />
+        <span className="flex-1">Stash</span>
+        <span className="font-medium tabular-nums">{entries.length}</span>
+        <ChevronDown aria-hidden className="size-3.5" />
+      </Button>
+      <ul role="list" aria-label="Stashed prompts" className="m-0 grid max-h-[min(24rem,40dvh)] list-none gap-px overflow-y-auto p-0">
         {entries.length === 0 ? (
-          <p className="m-0 px-2 py-1.5 text-xs text-muted-foreground">{`Nothing stashed yet. Press ${mac ? "⌘S" : "Ctrl+S"} with a prompt in the composer to stash it.`}</p>
+          <li className="px-2 py-1 text-xs text-muted-foreground">{`Nothing stashed yet. Press ${mac ? "⌘S" : "Ctrl+S"} with a prompt in the composer to stash it.`}</li>
         ) : (
-          entries.map((entry) => (
-            <MenuItem
-              key={entry.id}
-              onClick={() => onRestore(entry)}
-              onKeyDown={(event) => {
-                if (event.key === "Backspace" && (mac ? event.metaKey : event.ctrlKey)) {
-                  event.preventDefault();
-                  onDelete(entry);
-                }
-              }}
-            >
-              <span className="flex min-w-0 flex-1 flex-col py-0.5">
-                <span className="truncate text-foreground/80">{snippet(entry.text) || "(attachments only)"}</span>
-                <span className="text-2xs text-muted-foreground tabular-nums">{relativeTime(entry.at)}</span>
-              </span>
-              <Button
-                variant="ghost-muted"
-                size="icon-xs"
-                aria-label="Delete stashed prompt"
-                onClick={(event) => {
-                  event.stopPropagation();
-                  onDelete(entry);
+          entries.map((entry) => {
+            const snippet = stashSnippet(entry.text, entry.attachments);
+            const images = entry.attachments.filter((item) => item.kind === "image").length;
+            const files = entry.attachments.length - images;
+            const lit = current?.id === entry.id;
+            return (
+              <li
+                key={entry.id}
+                className={cn("flex min-h-6 items-center gap-1.5 rounded-sm ps-2 text-xs", lit && "bg-accent text-accent-foreground")}
+                data-stash-entry={entry.id}
+                data-highlighted={lit ? "" : undefined}
+                onMouseMove={() => {
+                  if (highlighted !== entry.id) setHighlighted(entry.id);
                 }}
+                onFocus={() => setHighlighted(entry.id)}
               >
-                <Trash2 aria-hidden />
-              </Button>
-            </MenuItem>
-          ))
+                <FileText aria-hidden className="size-3 shrink-0 text-muted-foreground" />
+                <Button
+                  variant="ghost"
+                  size="xs"
+                  className="min-w-0 flex-1 justify-start"
+                  data-stash-restore={entry.id}
+                  aria-label={`Restore stashed prompt: ${snippet}`}
+                  onPointerDown={(event) => event.preventDefault()}
+                  onClick={() => onRestore(entry)}
+                >
+                  <span className="min-w-0 flex-1 truncate text-start font-normal text-foreground/80">{snippet}</span>
+                </Button>
+                {images > 0 && (
+                  <span className="flex shrink-0 items-center gap-0.5 text-muted-foreground" aria-label={`${images} image${images === 1 ? "" : "s"}`}>
+                    <Image aria-hidden className="size-3" />
+                    {images}
+                  </span>
+                )}
+                {files > 0 && (
+                  <span className="flex shrink-0 items-center gap-0.5 text-muted-foreground" aria-label={`${files} file${files === 1 ? "" : "s"}`}>
+                    <File aria-hidden className="size-3" />
+                    {files}
+                  </span>
+                )}
+                <time dateTime={entry.at} className="shrink-0 text-muted-foreground tabular-nums">
+                  {relativeTime(entry.at)}
+                </time>
+                <Button
+                  variant="ghost-muted"
+                  size="icon-xs"
+                  aria-label="Delete stashed prompt"
+                  data-stash-delete=""
+                  onPointerDown={(event) => event.preventDefault()}
+                  onClick={() => onDelete(entry)}
+                >
+                  <X aria-hidden />
+                </Button>
+              </li>
+            );
+          })
         )}
-      </MenuPopup>
-    </Menu>
+      </ul>
+    </div>
   );
 };

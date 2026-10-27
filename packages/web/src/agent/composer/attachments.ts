@@ -1,6 +1,6 @@
 import type { ChatAttachment } from "@unframed/contracts";
 import { ATTACHMENT_LIMITS, attachmentLimitError, classifyAttachment, mergeRestored } from "@unframed/domain";
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { EngineConnection } from "../../rpc/engine.ts";
 
 const MIB = 1024 * 1024;
@@ -18,6 +18,22 @@ export interface Staged {
   readonly progress: number;
   readonly attachment?: ChatAttachment;
   readonly preview?: string;
+  /** The draft it was staged for: one switched away from while it uploads lands in that draft. */
+  readonly owner?: string;
+  /** Whether it goes into the text as a chip once uploaded (a paste or a drop into a prompt with text). */
+  readonly chip?: boolean;
+}
+
+export interface AttachmentEvents {
+  /** An upload finished while the item is still staged here. */
+  readonly onReady?: (item: Staged, attachment: ChatAttachment) => void;
+  /** An upload finished after a switch took its draft away: it belongs to `owner`'s draft. */
+  readonly onMoved?: (owner: string, attachment: ChatAttachment, chip: boolean) => void;
+}
+
+export interface AddOptions {
+  readonly owner?: string;
+  readonly chip?: boolean;
 }
 
 export const tooLargeAfterCompression = (name: string) => `'${name}' is too large to attach, even after compression.`;
@@ -109,24 +125,69 @@ const uploadFile = async (engine: EngineConnection, file: File, onProgress: (per
 
 let counter = 0;
 
+const stagedOf = (attachment: ChatAttachment, preview: string | undefined): Staged => ({
+  key: `staged-${++counter}`,
+  name: attachment.name,
+  kind: attachment.kind,
+  size: attachment.size,
+  file: new File([], attachment.name),
+  status: "ready",
+  progress: 100,
+  attachment,
+  ...(preview !== undefined ? { preview } : {}),
+});
+
 /**
  * The composer's staged attachments: limits checked before anything uploads (spec 07's
  * sentences, shown by `onError`), each file prepared and uploaded as it is staged, retry
  * and remove.
  */
-export const useAttachments = (engine: EngineConnection, onError: (message: string) => void) => {
+export const useAttachments = (engine: EngineConnection, onError: (message: string) => void, events: AttachmentEvents = {}) => {
   const [staged, setStaged] = useState<ReadonlyArray<Staged>>([]);
   const current = useRef(staged);
   current.current = staged;
   const uploads = useRef(new Map<string, Promise<void>>());
+  const latestEvents = useRef(events);
+  latestEvents.current = events;
+  /** Items a switch took away while they uploaded, by key, with the draft they belong to. */
+  const moved = useRef(new Map<string, Staged>());
+  /** Each uploaded image's thumbnail, by attachment id, kept while the tray is mounted so a chat switched back to still shows it. */
+  const previews = useRef(new Map<string, string>());
+  useEffect(
+    () => () => {
+      for (const url of previews.current.values()) URL.revokeObjectURL(url);
+    },
+    [],
+  );
+  const restored = useCallback((attachments: ReadonlyArray<ChatAttachment>) => attachments.map((attachment) => stagedOf(attachment, previews.current.get(attachment.id))), []);
 
-  const update = useCallback((key: string, patch: Partial<Staged>) => setStaged((all) => all.map((item) => (item.key === key ? { ...item, ...patch } : item))), []);
+  const setAll = useCallback((next: ReadonlyArray<Staged>) => {
+    current.current = next;
+    setStaged(next);
+  }, []);
+  const update = useCallback(
+    (key: string, patch: Partial<Staged>) => setAll(current.current.map((item) => (item.key === key ? { ...item, ...patch } : item))),
+    [setAll],
+  );
 
   const start = useCallback(
     (item: Staged) => {
       const run = uploadFile(engine, item.file, (progress) => update(item.key, { progress }))
-        .then((attachment) => update(item.key, { status: "ready", progress: 100, attachment }))
+        .then((attachment) => {
+          const away = moved.current.get(item.key);
+          moved.current.delete(item.key);
+          if (away?.owner !== undefined) {
+            if (away.preview !== undefined) previews.current.set(attachment.id, away.preview);
+            return latestEvents.current.onMoved?.(away.owner, attachment, away.chip === true);
+          }
+          const here = current.current.find((known) => known.key === item.key);
+          if (!here) return;
+          if (here.preview !== undefined) previews.current.set(attachment.id, here.preview);
+          update(item.key, { status: "ready", progress: 100, attachment });
+          latestEvents.current.onReady?.(here, attachment);
+        })
         .catch((error: unknown) => {
+          if (moved.current.delete(item.key)) return;
           update(item.key, { status: "failed" });
           onError(error instanceof Error ? error.message : String(error));
         })
@@ -137,7 +198,7 @@ export const useAttachments = (engine: EngineConnection, onError: (message: stri
   );
 
   const add = useCallback(
-    async (files: ReadonlyArray<File>) => {
+    async (files: ReadonlyArray<File>, options: AddOptions = {}) => {
       const prepared: File[] = [];
       for (const file of files) {
         try {
@@ -158,6 +219,8 @@ export const useAttachments = (engine: EngineConnection, onError: (message: stri
           status: "uploading",
           progress: 0,
           ...(kind === "image" ? { preview: URL.createObjectURL(file) } : {}),
+          ...(options.owner !== undefined ? { owner: options.owner } : {}),
+          ...(options.chip === true ? { chip: true } : {}),
         };
       });
       const refusal = attachmentLimitError([...current.current, ...incoming]);
@@ -166,19 +229,20 @@ export const useAttachments = (engine: EngineConnection, onError: (message: stri
         onError(refusal);
         return;
       }
-      setStaged((all) => [...all, ...incoming]);
+      setAll([...current.current, ...incoming]);
       for (const item of incoming) start(item);
     },
-    [onError, start],
+    [onError, start, setAll],
   );
 
-  const remove = useCallback((key: string) => {
-    setStaged((all) => {
-      const gone = all.find((item) => item.key === key);
-      if (gone?.preview) URL.revokeObjectURL(gone.preview);
-      return all.filter((item) => item.key !== key);
-    });
-  }, []);
+  const remove = useCallback(
+    (key: string) => {
+      const gone = current.current.find((item) => item.key === key);
+      if (gone?.preview && gone.attachment === undefined) URL.revokeObjectURL(gone.preview);
+      setAll(current.current.filter((item) => item.key !== key));
+    },
+    [setAll],
+  );
 
   const retry = useCallback(
     (key: string) => {
@@ -196,28 +260,33 @@ export const useAttachments = (engine: EngineConnection, onError: (message: stri
     return current.current.flatMap((item) => (item.attachment ? [item.attachment] : []));
   }, []);
 
-  const clear = useCallback(() => setStaged([]), []);
+  const clear = useCallback(() => setAll([]), [setAll]);
+  /** The attachments uploaded so far, read now rather than at the last render. */
+  const ready = useCallback(() => current.current.flatMap((item) => (item.attachment ? [item.attachment] : [])), []);
   /**
    * Adds attachments that were already uploaded back (Edit from here, a stash), after those
    * staged; one staged already, by name, size and kind, is not added twice.
    */
-  const restore = useCallback((attachments: ReadonlyArray<ChatAttachment>) => {
-    const restored = attachments.map(
-      (attachment): Staged => ({
-        key: `staged-${++counter}`,
-        name: attachment.name,
-        kind: attachment.kind,
-        size: attachment.size,
-        file: new File([], attachment.name),
-        status: "ready",
-        progress: 100,
-        attachment,
-      }),
-    );
-    setStaged((all) => mergeRestored(all, restored, (item) => `${item.kind}\u0000${item.size}\u0000${item.name}`));
-  }, []);
+  const restore = useCallback(
+    (attachments: ReadonlyArray<ChatAttachment>) => setAll(mergeRestored(current.current, restored(attachments), (item) => `${item.kind}\u0000${item.size}\u0000${item.name}`)),
+    [setAll, restored],
+  );
+  /**
+   * Shows another draft's attachments in place of these (a chat switch). One still uploading
+   * lands in the draft it was staged for once it is done.
+   */
+  const replace = useCallback(
+    (attachments: ReadonlyArray<ChatAttachment>) => {
+      for (const item of current.current) {
+        if (item.status === "uploading" && item.owner !== undefined) moved.current.set(item.key, item);
+        else if (item.preview && item.attachment === undefined) URL.revokeObjectURL(item.preview);
+      }
+      setAll(restored(attachments));
+    },
+    [setAll, restored],
+  );
 
-  return useMemo(() => ({ staged, add, remove, retry, settle, clear, restore }), [staged, add, remove, retry, settle, clear, restore]);
+  return useMemo(() => ({ staged, add, remove, retry, settle, clear, restore, replace, ready }), [staged, add, remove, retry, settle, clear, restore, replace, ready]);
 };
 
 export const formatSize = (bytes: number): string =>
