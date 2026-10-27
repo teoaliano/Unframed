@@ -9,7 +9,7 @@ import { Input } from "~/components/ui/input";
 import { Menu, MenuItem, MenuPopup } from "~/components/ui/menu";
 import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "~/components/ui/select";
 import { Tip } from "../chrome/ui.tsx";
-import { ValueCell } from "./KitCells.tsx";
+import { keepEscapeInField, ValueCell } from "./KitCells.tsx";
 
 /** The value a new token of each type starts with, so it is valid before the person edits it. */
 export const STARTING_VALUE: Record<TokenType, TokenValue> = {
@@ -245,7 +245,10 @@ const NameField = ({ label, initial, onCommit, onCancel }: { readonly label: str
         onChange={(event) => setText(event.currentTarget.value)}
         onKeyDown={(event) => {
           if (event.key === "Enter") setProblem(onCommit(text.trim()));
-          if (event.key === "Escape") onCancel();
+          if (event.key === "Escape") {
+            keepEscapeInField(event);
+            onCancel();
+          }
         }}
         onBlur={onCancel}
       />
@@ -299,7 +302,14 @@ const AddToken = ({ initialPath, onAdd, onCancel }: { readonly initialPath: stri
   const [type, setType] = useState<TokenType>("color");
   const items = TOKEN_TYPES.map((value) => ({ value, label: value }));
   return (
-    <div className="flex flex-wrap items-center gap-2" onKeyDown={(event) => event.key === "Escape" && onCancel()}>
+    <div
+      className="flex flex-wrap items-center gap-2"
+      onKeyDown={(event) => {
+        if (event.key !== "Escape") return;
+        keepEscapeInField(event);
+        onCancel();
+      }}
+    >
       <Input
         aria-label="Token path"
         value={path}

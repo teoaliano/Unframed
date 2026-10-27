@@ -14,6 +14,12 @@ const BEZIER_DEFAULT = "cubic-bezier(0.25, 0.1, 0.25, 1)";
 /** A value as the cell shows it: text for a literal, the alias written as `{path}`. */
 export const displayOf = (value: TokenValue | undefined): string => (value === undefined ? "" : typeof value === "object" ? JSON.stringify(value) : String(value));
 
+/** Esc abandons the field it is typed in; it does not also close the dialog around it. */
+export const keepEscapeInField = (event: { stopPropagation: () => void; nativeEvent: Event }) => {
+  event.stopPropagation();
+  event.nativeEvent.stopImmediatePropagation();
+};
+
 /** A cubic bezier written as CSS text. */
 const isBezierText = (value: string): boolean => /^cubic-bezier\(/.test(value);
 
@@ -83,6 +89,7 @@ const TextCell = ({ label, value, swatch, onCommit }: { readonly label: string; 
         onKeyDown={(event) => {
           if (event.key === "Enter") commit();
           if (event.key === "Escape") {
+            keepEscapeInField(event);
             setDraft(value);
             setProblem(undefined);
           }

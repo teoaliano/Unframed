@@ -101,6 +101,7 @@ test("a cell edits its mode's value; a refusal shows under the cell and writes n
   await expect(row(dialog, "color/brand/primary").getByRole("alert")).toHaveText("not a colour is not a colour. Use a hex value like #1a73e8, or rgb(), hsl() or oklch().");
   await expect(dark).toHaveValue("not a colour");
   await dark.press("Escape");
+  await expect(dialog).toBeVisible();
   await expect.poll(() => kitOf(engine, project)).toMatchObject({ tokens: expect.arrayContaining([expect.objectContaining({ values: { light: "#1a73e8", dark: "#000000" } })]) });
 });
 
