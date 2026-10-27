@@ -7,6 +7,8 @@ import type { SelectionApply } from "@unframed/contracts";
 import * as Queue from "effect/Queue";
 import * as Stream from "effect/Stream";
 import { errorText } from "../log.ts";
+import { exportKit, kitUsage } from "../kits/kitFiles.ts";
+import { kitOf } from "../kits/tokensFile.ts";
 import type { TLRecord } from "@tldraw/tlschema";
 import * as Effect from "effect/Effect";
 import { CanvasRooms } from "../canvas/rooms.ts";
@@ -183,6 +185,27 @@ export const rpcHandlersLayer = UnframedRpcs.toLayer(
       "motion.renderStatus": ({ project, id }) => artifacts.renderStatus(project, id),
       "artifact.snapshots": ({ project }) => artifacts.snapshots(project),
       "artifact.openLive": ({ project, shapeId }) => artifacts.openLive(project, shapeId),
+      "kit.usage": ({ project }) =>
+        Effect.gen(function* () {
+          const records = yield* rooms.read(project);
+          const folder = yield* Effect.promise(() => media.folder(project));
+          if (folder === undefined) return yield* unframedError("not_found", `There is no project named "${projectSlug(project)}".`);
+          return yield* Effect.tryPromise({
+            try: () => kitUsage(records, folder),
+            catch: (error) => unframedError("internal", `Could not read the uses of the kit: ${errorText(error)}`),
+          });
+        }),
+      "kit.exportFile": ({ project, format }) =>
+        Effect.gen(function* () {
+          const kit = kitOf(yield* rooms.read(project));
+          if (kit === null) return yield* unframedError("bad_request", "This project has no kit yet.");
+          const folder = yield* Effect.promise(() => media.folder(project));
+          if (folder === undefined) return yield* unframedError("not_found", `There is no project named "${projectSlug(project)}".`);
+          return yield* Effect.tryPromise({
+            try: () => exportKit(folder, kit, format),
+            catch: (error) => unframedError("internal", `Could not write the export: ${errorText(error)}`),
+          });
+        }),
       "legacyImport.status": ({ project }) => legacy.status(project),
       "legacyImport.report": ({ project }) => legacy.report(project),
       "legacyImport.markSeen": ({ project }) => legacy.markSeen(project),

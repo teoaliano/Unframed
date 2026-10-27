@@ -9,4 +9,5 @@ export { fromDtcg, fromCss, toDtcg, toCss, toTailwind, type ImportFile, type Imp
 export { offTokenValues, type OffTokenValue, type OffTokenPlace, type StyleRuleRef } from "./offTokens.ts";
 export { offTokenNote, OFF_TOKEN_NOTE_LIMIT, OFF_TOKEN_ADVICE, type OffTokenNote } from "./offTokenNote.ts";
 export { tokensForField } from "./tokenFields.ts";
+export { tokenUses } from "./tokenUses.ts";
 export { parseStylesheet, type CssRule, type CssDeclaration } from "./css.ts";
