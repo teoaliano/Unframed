@@ -199,3 +199,22 @@ export const readComponentSheet = (html: string): ComponentSheetRead => {
 
   return { ok: true, sheet: { declaration: declared, style, template, examples: example } };
 };
+
+/** A component shape on the canvas, as the canvas rules read it: its id and its tag. */
+export type ComponentCanvasShape = { readonly id: string; readonly tag: string };
+
+/**
+ * The canvas rules for a sheet about to be written (spec 20): the tag another component shape
+ * holds, and, for a write to a shape, a tag that differs from the shape's. Returns the first
+ * refusal sentence, or undefined. The nested-component rule is part of `readComponentSheet`.
+ */
+export const sheetRefusal = (sheet: ComponentSheet, canvas: readonly ComponentCanvasShape[], shapeId?: string): string | undefined => {
+  const tag = sheet.declaration.tag;
+  const holder = canvas.find((shape) => shape.tag === tag && shape.id !== shapeId);
+  if (holder) return `${tag} is already the component ${holder.id}; write to that shape, or choose another tag`;
+  if (shapeId !== undefined) {
+    const shape = canvas.find((candidate) => candidate.id === shapeId);
+    if (shape && shape.tag !== tag) return `component ${shapeId} is ${shape.tag}; a component keeps its tag`;
+  }
+  return undefined;
+};
