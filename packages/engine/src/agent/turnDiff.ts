@@ -12,7 +12,7 @@ export const TOO_LARGE = "This file is too large to diff.";
 const labelOf = (record: TLRecord | null, shapeId: string): string =>
   shapeLabel((record?.typeName === "shape" ? record.props : {}) as { title?: unknown; fileName?: unknown }) ?? agentShapeId(shapeId);
 
-const isArtifact = (record: TLRecord | null): boolean => record?.typeName === "shape" && (record.type === "page" || record.type === "motion");
+const isArtifact = (record: TLRecord | null): boolean => record?.typeName === "shape" && (record.type === "page" || record.type === "motion" || record.type === "component");
 
 /** A project file's text, `""` for none, `undefined` when it is over the diff limit. */
 const contents = async (folder: string, file: string | null): Promise<string | undefined> => {
@@ -24,7 +24,7 @@ const contents = async (folder: string, file: string | null): Promise<string | u
 };
 
 /**
- * The pages and motions written in turns `from + 1` to `to` of a chat, read from its turn
+ * The pages, motions and component sheets written in turns `from + 1` to `to` of a chat, read from its turn
  * changes: each one's file before the first of those turns and after the last, as a
  * unified diff with three lines of context. A new artifact diffs against empty. Every
  * write is a new file, so these checkpoints cost nothing.
