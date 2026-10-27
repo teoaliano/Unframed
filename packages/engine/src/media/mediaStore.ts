@@ -1,12 +1,14 @@
 import { randomUUID } from "node:crypto";
-import { existsSync, renameSync, writeFileSync } from "node:fs";
+import { constants, existsSync, renameSync, writeFileSync } from "node:fs";
 import { copyFile, mkdir, open, readFile, rename, rm, stat } from "node:fs/promises";
 import { join } from "node:path";
 import { isBareFileName, projectFileMarker, UnframedError, unframedError } from "@unframed/contracts";
 import {
+  compiledFileName,
   copyFileName,
   mediaFileName,
   projectSlug,
+  readPins,
   sidecarFileName,
   sidecarText,
   UPLOAD_BODY_LIMIT,
@@ -72,6 +74,22 @@ export class MediaStore extends Context.Service<
     readonly folder: (project: string) => Promise<string | undefined>;
   }
 >()("unframed/engine/MediaStore") {}
+
+/**
+ * Copies the sheets and compiled files a page pins into another project under their own names
+ * (spec 20), each only when the destination lacks it: a name holds the same file wherever it is.
+ */
+const copyPinnedComponents = async (sourceDir: string, targetDir: string, file: string): Promise<void> => {
+  if (!file.endsWith(".html")) return;
+  const html = await readFile(join(sourceDir, file), "utf8").catch(() => undefined);
+  if (html === undefined) return;
+  for (const pin of readPins(html)) {
+    for (const name of [pin.sheet, compiledFileName(pin.sheet), sidecarFileName(pin.sheet)]) {
+      if (existsSync(join(targetDir, name))) continue;
+      await copyFile(join(sourceDir, name), join(targetDir, name), constants.COPYFILE_EXCL).catch(() => undefined);
+    }
+  }
+};
 
 const isDirectory = (path: string) =>
   stat(path).then(
@@ -244,6 +262,7 @@ export const mediaStoreLayer = Layer.effect(
               join(targetDir, sidecarFileName(target)),
               sidecarText({ source: "copy", fileName, mime, bytes: info.size, at: new Date().toISOString(), of: file, ...(ofProject === undefined ? {} : { ofProject }) }),
             );
+            if (sourceDir !== targetDir) await copyPinnedComponents(sourceDir, targetDir, file);
             return target;
           } catch (error) {
             await rm(temp, { force: true });
