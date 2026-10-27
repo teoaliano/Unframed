@@ -6,6 +6,7 @@
  */
 import { isTweenConfigKey } from "@hyperframes/parsers/gsap-constants";
 import { findTimelineScript, parseGsapScriptAcornForWrite, type TweenCallInfo } from "@hyperframes/parsers/gsap-parser-acorn";
+import { ownerContextFor, ownerOf, type OwnerContext, type ScriptNode } from "./owners.ts";
 
 export type OwnerKind = "source" | "dial" | "token" | "script";
 export type OwnerCounts = Record<OwnerKind, number>;
@@ -36,19 +37,6 @@ const inlineScripts = (html: string): { textContent: string }[] =>
     .filter((match) => !/\bsrc\s*=/i.test(match[1]!))
     .map((match) => ({ textContent: match[2]! }));
 
-/** The name of the first parameter of the `unframed.dials` apply function, if it has one. */
-const dialParam = (ast: AstNode): string | null => {
-  let apply: AstNode | null = null;
-  walk(ast, (node) => {
-    if (isDialsCall(node)) apply = node.arguments[2] ?? null;
-  });
-  if (!apply) return null;
-  const fn = apply as AstNode;
-  if (!FUNCTION_NODES.has(fn.type)) return null;
-  const first = fn.params?.[0];
-  return first?.type === "Identifier" ? first.name : null;
-};
-
 const isDialsCall = (node: AstNode): boolean =>
   node.type === "CallExpression" &&
   node.callee.type === "MemberExpression" &&
@@ -68,33 +56,8 @@ const walk = (node: unknown, visit: (node: AstNode) => void): void => {
   }
 };
 
-/** First version of the owner rule: a literal, a dial path, a token call, or anything else. */
-const ownerKindOf = (node: AstNode | undefined, param: string | null, relativeIsScript: boolean): OwnerKind => {
-  if (!node) return "script";
-  if (isNumber(node)) return "source";
-  if (node.type === "Literal" && typeof node.value === "string") {
-    return relativeIsScript && /^\s*([+\-*/]=|<|>)|random\(/.test(node.value) ? "script" : "source";
-  }
-  if (node.type === "MemberExpression" && param) {
-    let root: AstNode = node;
-    while (root.type === "MemberExpression") root = root.object;
-    if (root.type === "Identifier" && root.name === param) return "dial";
-  }
-  if (
-    node.type === "CallExpression" &&
-    node.callee.type === "MemberExpression" &&
-    node.callee.object.type === "Identifier" &&
-    node.callee.object.name === "unframed" &&
-    node.callee.property.name === "token"
-  ) {
-    return "token";
-  }
-  return "script";
-};
-
-const isNumber = (node: AstNode): boolean =>
-  (node.type === "Literal" && typeof node.value === "number") ||
-  (node.type === "UnaryExpression" && node.operator === "-" && node.argument.type === "Literal" && typeof node.argument.value === "number");
+const ownerKindOf = (node: AstNode | undefined, context: OwnerContext): OwnerKind =>
+  node ? ownerOf(node as ScriptNode, context).kind : "script";
 
 const propertyEntries = (object: AstNode | undefined): AstNode[] =>
   object?.type === "ObjectExpression" ? object.properties.filter((p: AstNode) => p.type === "Property") : [];
@@ -122,7 +85,7 @@ export function probeMotion(html: string): ProbeCounts {
   if (!script) return { ...counts, readOnly: {} };
   const parsed = parseGsapScriptAcornForWrite(script.textContent);
   if (!parsed) return { ...counts, readOnly: {} };
-  const param = dialParam(parsed.ast);
+  const context = ownerContextFor(parsed.ast as ScriptNode, script.textContent);
   const dialsFn = dialsFunction(parsed.ast);
 
   for (const { call } of parsed.located) {
@@ -144,16 +107,16 @@ export function probeMotion(html: string): ProbeCounts {
 
     const startNode = call.positionArg as AstNode | undefined;
     const isLabel = !startNode || (startNode.type === "Literal" && typeof startNode.value === "string");
-    counts.start[isLabel ? "script" : ownerKindOf(startNode, param, true)] += 1;
+    counts.start[isLabel ? "script" : ownerKindOf(startNode, context)] += 1;
 
     if (call.method !== "set") {
       const durationNode = props.find((p) => keyName(p) === "duration")?.value as AstNode | undefined;
-      counts.duration[durationNode ? ownerKindOf(durationNode, param, false) : "source"] += 1;
+      counts.duration[durationNode ? ownerKindOf(durationNode, context) : "source"] += 1;
     }
 
     const staggerNode = props.find((p) => keyName(p) === "stagger")?.value as AstNode | undefined;
     if (staggerNode) {
-      const kind = staggerNode.type === "ObjectExpression" ? "source" : ownerKindOf(staggerNode, param, false);
+      const kind = staggerNode.type === "ObjectExpression" ? "source" : ownerKindOf(staggerNode, context);
       counts.stagger[kind] += 1;
     }
 
@@ -164,7 +127,7 @@ export function probeMotion(html: string): ProbeCounts {
     ].filter((p) => !isTweenConfigKey(keyName(p) ?? "") && keyName(p) !== "keyframes" && keyName(p) !== "motionPath");
     for (const value of [...valueProps, ...keyframeValues]) {
       if (!value.value || isConfigKey(keyName(value))) continue;
-      counts.values[ownerKindOf(value.value, param, true)] += 1;
+      counts.values[ownerKindOf(value.value, context)] += 1;
     }
   }
   return counts;
