@@ -190,6 +190,30 @@ describe("questions", () => {
   });
 });
 
+describe("files on an answer", () => {
+  it("reach the provider as the stored files' paths after the answer, and the response keeps them", async () => {
+    const agent = await startAgentEngine();
+    const chatId = await agent.createChat();
+    await agent.send(chatId, "ask me first about the page");
+    const parked = await (await agent.watch(chatId)).until((chat) => openRequests(chat, "user-input").length === 1, "the question");
+    const requestId = ((openRequests(parked, "user-input")[0]!.payload) as { requestId: string }).requestId;
+    const { relativeUrl } = await agent.rpc.call("attachments.createUploadUrl", { name: "mood.txt", mimeType: "text/plain", sizeBytes: 5 });
+    const uploaded = (await agent.engine.request(relativeUrl, { method: "POST", body: Buffer.from("cream"), headers: { "content-type": "application/octet-stream" } })).json().attachment;
+    await agent.dispatch({
+      type: "thread.user-input.respond",
+      threadId: chatId,
+      requestId,
+      answers: { "Which sections should it have?": ["Hero"] },
+      attachmentsByQuestionId: { "Which look should the page have?": [{ id: uploaded.id, name: "mood.txt" }] },
+    });
+    const chat = await agent.settled(chatId, 1);
+    const resolved = chat.activities.find((activity) => activity.kind === "user-input.resolved")?.payload as { answers: Record<string, unknown> };
+    expect(resolved.answers["Which sections should it have?"]).toEqual(["Hero"]);
+    expect(resolved.answers["Which look should the page have?"]).toMatch(/^Attached file "mood\.txt": \/.+\.txt$/);
+    expect(lastReply(chat)).toBe("Thanks. I will build the page with the look and sections you picked.");
+  });
+});
+
 describe("the answers an approval offers", () => {
   it("carry the provider's reason and options on the request, and an answer it does not offer is refused", async () => {
     const agent = await startAgentEngine();

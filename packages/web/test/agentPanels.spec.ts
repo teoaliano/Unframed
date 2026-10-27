@@ -210,6 +210,47 @@ test("a question that arrives over a draft sets the draft aside: the box takes t
   expect((resolved?.payload as { answers?: unknown }).answers).toEqual({ "Which look should the page have?": "Sepia", "Which sections should it have?": ["Hero"] });
 });
 
+test("files attached while a question waits go with its answer, each question keeps its own, and the draft's files come back after", async ({ page, agent }) => {
+  await openCanvas(page, agent);
+  const chatId = await createChat(agent, { title: "Asking" });
+  const panel = await openRail(page);
+  const shelf = panel.getByTestId("attachments");
+  const attach = async (name: string, body: string) => {
+    const chooser = page.waitForEvent("filechooser");
+    await panel.getByRole("button", { name: "Attach files" }).click();
+    await (await chooser).setFiles([{ name, mimeType: "text/plain", buffer: Buffer.from(body) }]);
+    await expect(shelf.locator("[data-chip='file'][data-status='ready']")).toHaveCount(1);
+  };
+  await attach("draft.txt", "kept for later");
+  await sendThrough(agent, chatId, "ask me first about the page");
+
+  const question = panel.getByTestId("question-panel");
+  await expect(question.getByTestId("panel-count")).toHaveText("1/2");
+  await expect(shelf).toHaveCount(0);
+  // A file alone answers a question that takes an answer of one's own.
+  await expect(panel.getByRole("button", { name: "Next question" })).toBeDisabled();
+  await attach("mood.txt", "cream");
+  await expect(shelf.locator("[data-chip='file']")).toHaveText(["mood.txt5 B"]);
+  await panel.getByRole("button", { name: "Next question" }).click();
+  await expect(question.getByTestId("panel-count")).toHaveText("2/2");
+  await expect(shelf).toHaveCount(0);
+  // A question that takes only its options takes no file.
+  await expect(panel.getByRole("button", { name: "Attach files" })).toBeDisabled();
+  await question.getByRole("checkbox", { name: /Hero/ }).click();
+  await panel.getByRole("button", { name: "Previous" }).click();
+  await expect(shelf.locator("[data-chip='file']")).toHaveText(["mood.txt5 B"]);
+  await panel.getByRole("button", { name: "Next question" }).click();
+  await panel.getByRole("button", { name: "Submit answers" }).click();
+  await expect(question).toHaveCount(0);
+  await expect(reply(panel).last()).toContainText("Thanks. I will build the page with the look and sections you picked.");
+  await expect(shelf.locator("[data-chip='file']")).toHaveText(["draft.txt14 B"]);
+
+  const resolved = (await engineChat(agent, chatId)).activities.find((activity) => activity.kind === "user-input.resolved");
+  const answers = (resolved?.payload as { answers: Record<string, unknown> }).answers;
+  expect(answers["Which sections should it have?"]).toEqual(["Hero"]);
+  expect(answers["Which look should the page have?"]).toMatch(/^Attached file "mood\.txt": \/.+$/);
+});
+
 test("a question's text is markdown: a link opens in a new tab and markup shows as text", async ({ page }) => {
   const asking = {
     when: "^ask",

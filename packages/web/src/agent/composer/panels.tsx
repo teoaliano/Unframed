@@ -1,4 +1,4 @@
-import type { ApprovalDecision } from "@unframed/contracts";
+import type { ApprovalDecision, ChatAttachment } from "@unframed/contracts";
 import { DEFAULT_APPROVAL_OPTIONS, openRequests, planTitle, type ApprovalOption, type Chat, type ChatActivity, type ProposedPlan, type UserQuestion } from "@unframed/domain";
 import { Check, ChevronDown, ChevronRight, Ellipsis, ListChecks, ListTodo, MessageCircleQuestion, ShieldAlert, TriangleAlert, X } from "lucide-react";
 import { useEffect, useRef, useState, type ReactElement, type RefObject } from "react";
@@ -331,23 +331,34 @@ export const PlanActions = ({ refine, busy, onSend, onNewChat }: { readonly refi
   );
 };
 
+/** The composer's staged files, as an answer takes them: each question keeps its own (t3code's per-question attachment draft). */
+export interface AnswerFiles {
+  readonly staged: ReadonlyArray<{ readonly status: "uploading" | "ready" | "failed" }>;
+  readonly ready: () => ChatAttachment[];
+  readonly settle: () => Promise<ChatAttachment[]>;
+  readonly replace: (attachments: ReadonlyArray<ChatAttachment>) => void;
+}
+
 /**
  * Answering the chat's open question from the composer (t3code's flow): an option chosen
- * in the panel or an answer typed in the box, per question; Send moves to the next and
- * sends every answer from the last. `text` is the box's current answer. A question the
+ * in the panel or an answer typed in the box, per question, and files attached to it; Send
+ * moves to the next and sends every answer from the last. `text` is the box's current
+ * answer. A file alone answers a question that takes an answer of one's own. A question the
  * typing guard holds is not asked yet.
  */
-export const useQuestionAnswers = (client: ChatClient, chat: Chat | undefined, box: RefObject<PromptEditorHandle | null>, text: string, held: ReadonlySet<string>) => {
+export const useQuestionAnswers = (client: ChatClient, chat: Chat | undefined, box: RefObject<PromptEditorHandle | null>, text: string, held: ReadonlySet<string>, files: AnswerFiles) => {
   const open = openQuestion(chat);
   const asked = open && !held.has(open.requestId) ? open : undefined;
   const [index, setIndex] = useState(0);
   const [chosen, setChosen] = useState<Record<string, ReadonlyArray<string>>>({});
   const typedAnswers = useRef<Record<string, string>>({});
+  const attachedFiles = useRef<Record<string, ReadonlyArray<ChatAttachment>>>({});
   const [submitting, setSubmitting] = useState(false);
   useEffect(() => {
     setIndex(0);
     setChosen({});
     typedAnswers.current = {};
+    attachedFiles.current = {};
   }, [asked?.requestId]);
   const question = asked?.questions[index];
 
@@ -358,21 +369,27 @@ export const useQuestionAnswers = (client: ChatClient, chat: Chat | undefined, b
     if (picked.length === 0) return undefined;
     return current.multiSelect ? [...picked] : picked[0];
   };
+  /** How many files a question holds: the box's for the one shown. */
+  const fileCount = (current: UserQuestion): number =>
+    choiceOnly(current) ? 0 : current.id === question?.id ? files.staged.filter((item) => item.status !== "failed").length : (attachedFiles.current[current.id]?.length ?? 0);
+  const answers = (current: UserQuestion, typed: string): boolean => answerOf(current, typed) !== undefined || fileCount(current) > 0;
   const lastQuestion = asked !== undefined && index === asked.questions.length - 1;
   const ready =
     asked !== undefined &&
     question !== undefined &&
     !submitting &&
     (lastQuestion
-      ? asked.questions.every((each) => answerOf(each, each.id === question.id ? text : (typedAnswers.current[each.id] ?? "")) !== undefined)
-      : answerOf(question, text) !== undefined);
+      ? asked.questions.every((each) => answers(each, each.id === question.id ? text : (typedAnswers.current[each.id] ?? "")))
+      : answers(question, text));
 
   const move = (to: number) => {
     if (!asked || !question) return;
     typedAnswers.current = { ...typedAnswers.current, [question.id]: box.current?.text() ?? "" };
+    attachedFiles.current = { ...attachedFiles.current, [question.id]: files.ready() };
     setIndex(to);
     const next = asked.questions[to];
     box.current?.setText(next ? (typedAnswers.current[next.id] ?? "") : "");
+    files.replace(next ? (attachedFiles.current[next.id] ?? []) : []);
   };
   const choose = (current: UserQuestion, label: string) => {
     setChosen((known) => {
@@ -386,15 +403,25 @@ export const useQuestionAnswers = (client: ChatClient, chat: Chat | undefined, b
     if (!asked || !question || !chat || !ready) return;
     if (!lastQuestion) return move(index + 1);
     const typed = { ...typedAnswers.current, [question.id]: box.current?.text() ?? "" };
-    const answers: Record<string, string | string[]> = {};
-    for (const each of asked.questions) {
-      const value = answerOf(each, typed[each.id] ?? "");
-      if (value !== undefined) answers[each.id] = value;
-    }
     setSubmitting(true);
     try {
+      const attached = { ...attachedFiles.current, [question.id]: await files.settle() };
+      const answers: Record<string, string | string[]> = {};
+      const attachmentsByQuestionId: Record<string, ChatAttachment[]> = {};
+      for (const each of asked.questions) {
+        const value = answerOf(each, typed[each.id] ?? "");
+        if (value !== undefined) answers[each.id] = value;
+        const eachFiles = choiceOnly(each) ? [] : (attached[each.id] ?? []);
+        if (eachFiles.length > 0) attachmentsByQuestionId[each.id] = [...eachFiles];
+      }
       // The box keeps the answer until the question goes; then the composer puts the draft back.
-      await client.dispatch({ type: "thread.user-input.respond", threadId: chat.id, requestId: asked.requestId, answers });
+      await client.dispatch({
+        type: "thread.user-input.respond",
+        threadId: chat.id,
+        requestId: asked.requestId,
+        answers,
+        ...(Object.keys(attachmentsByQuestionId).length === 0 ? {} : { attachmentsByQuestionId }),
+      });
     } catch (error) {
       client.reportError(error);
     } finally {

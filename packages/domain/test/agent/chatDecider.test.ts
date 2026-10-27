@@ -239,6 +239,42 @@ describe("requests and questions", () => {
     expect(decideOn(withQuestion(), { type: "thread.user-input.respond", requestId: "r1", answers: { "Which look?": "Warm", "Which sections?": ["Hero"] } }).ok).toBe(true);
   });
 
+  it("takes files on an answer: a question answered by a file alone counts, and an unread file or an unknown question is refused", () => {
+    const image = { id: "a1", name: "ref.png", type: "image/png", kind: "image", size: 10 } as const;
+    const decided = decideOn(withQuestion(), {
+      type: "thread.user-input.respond",
+      requestId: "r1",
+      answers: { "Which sections?": ["Hero"] },
+      attachmentsByQuestionId: { "Which look?": [image] },
+    });
+    expect(decided.ok && decided.events[0]?.payload).toEqual({
+      threadId: "chat-1",
+      requestId: "r1",
+      answers: { "Which sections?": ["Hero"] },
+      attachmentsByQuestionId: { "Which look?": [image] },
+    });
+    expect(
+      rejection(
+        decideOn(withQuestion(), {
+          type: "thread.user-input.respond",
+          requestId: "r1",
+          answers: { "Which look?": "Warm", "Which sections?": ["Hero"] },
+          attachmentsByQuestionId: { "Which look?": [{ id: "gone", name: "gone.png" }] },
+        }),
+      ),
+    ).toEqual({ code: "bad_request", message: "'gone.png' is empty or could not be read." });
+    expect(
+      rejection(
+        decideOn(withQuestion(), {
+          type: "thread.user-input.respond",
+          requestId: "r1",
+          answers: { "Which look?": "Warm", "Which sections?": ["Hero"] },
+          attachmentsByQuestionId: { "Which colour?": [image] },
+        }),
+      ),
+    ).toEqual({ code: "bad_request", message: "That question is not part of this request." });
+  });
+
   it("reads a question cleared by an interrupt or a restart as no longer pending, not as answered", () => {
     const cleared = run(withQuestion(), {
       type: "thread.activity.append",

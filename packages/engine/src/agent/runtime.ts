@@ -3,6 +3,7 @@ import { stat } from "node:fs/promises";
 import type { DatabaseSync } from "node:sqlite";
 import {
   agentShapeId,
+  answersWithFiles,
   buildPreamble,
   changeNote,
   chatSummary,
@@ -26,6 +27,7 @@ import {
   type InteractionMode,
   type MessageAttachment,
   type ModelSelection,
+  type PreambleAttachment,
   type RejectionCode,
   type RuntimeEvent,
   type RuntimeEventDraft,
@@ -449,6 +451,13 @@ export class AgentRuntime {
         attachments.push(stored ?? { id: ref.id, name: ref.name });
       }
       resolved = { ...command, message: { ...command.message, attachments } };
+    } else if (command.type === "thread.user-input.respond" && command.attachmentsByQuestionId !== undefined) {
+      const byQuestion: Record<string, Array<MessageAttachment | { id: string; name: string }>> = {};
+      for (const [question, refs] of Object.entries(command.attachmentsByQuestionId)) {
+        byQuestion[question] = [];
+        for (const ref of refs) byQuestion[question].push((await this.attachments.resolve(ref)) ?? { id: ref.id, name: ref.name });
+      }
+      resolved = { ...command, attachmentsByQuestionId: byQuestion };
     } else if (command.type === "thread.create" && command.tags !== undefined) {
       resolved = { ...command, tags: await this.artifactsAmong(agent.slug, command.tags) };
     } else if (command.type === "thread.tags.add") {
@@ -550,7 +559,7 @@ export class AgentRuntime {
           void this.providers.respond(chatId, String(p.requestId), p.decision);
           break;
         case "thread.user-input-response-requested":
-          void this.providers.answer(chatId, String(p.requestId), record(p.answers));
+          void this.providers.answer(chatId, String(p.requestId), answersWithFiles(record(p.answers), this.answerFiles(record(p.attachmentsByQuestionId))));
           break;
         case "thread.runtime-mode-set":
           void this.providers.setRuntimeMode(chatId, p.runtimeMode);
@@ -682,6 +691,18 @@ export class AgentRuntime {
         return path === undefined ? [] : [{ kind: attachment.kind, name: attachment.name, path }];
       }),
     });
+  }
+
+  /** The files attached to answers, by question, as paths the provider can open; one no longer stored is left out. */
+  private answerFiles(byQuestion: Record<string, unknown>): Record<string, PreambleAttachment[]> {
+    const files: Record<string, PreambleAttachment[]> = {};
+    for (const [question, attached] of Object.entries(byQuestion)) {
+      files[question] = (Array.isArray(attached) ? (attached as MessageAttachment[]) : []).flatMap((attachment) => {
+        const path = this.attachments.path(attachment.id);
+        return path === undefined ? [] : [{ kind: attachment.kind, name: attachment.name, path }];
+      });
+    }
+    return files;
   }
 
   private async interrupt(agent: ProjectAgent, chatId: string): Promise<void> {

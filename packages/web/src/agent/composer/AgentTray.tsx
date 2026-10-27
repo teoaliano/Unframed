@@ -311,12 +311,22 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [attachments.staged]);
   /** Where an attachment goes: a paste or a drop into a prompt the person has written in also puts its chip at the caret. */
-  const intake = (chip: boolean) => ({
-    ...(draftKeyRef.current !== undefined ? { owner: draftKeyRef.current } : {}),
-    chip: chip && withoutChips(box.current?.text() ?? "").trim() !== "",
-  });
-  const intakeRef = useRef(intake);
-  intakeRef.current = intake;
+  const intake = (chip: boolean) =>
+    // A file for an answer is the answer's: no draft to land in, no chip in the text.
+    answeringRef.current
+      ? { chip: false }
+      : {
+          ...(draftKeyRef.current !== undefined ? { owner: draftKeyRef.current } : {}),
+          chip: chip && withoutChips(box.current?.text() ?? "").trim() !== "",
+        };
+  /** A question that takes only its options takes no file either (t3code's). */
+  const refusesFiles = useRef(false);
+  const addFiles = (chosen: ReadonlyArray<File>, chip: boolean) => {
+    if (refusesFiles.current) return;
+    void attachments.add(chosen, intake(chip));
+  };
+  const addFilesRef = useRef(addFiles);
+  addFilesRef.current = addFiles;
   const removeAttachment = (key: string) => {
     const item = attachments.staged.find((known) => known.key === key);
     attachments.remove(key);
@@ -356,7 +366,7 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
       event.stopPropagation();
       depth = 0;
       setDragging(false);
-      void attachments.add([...(event.dataTransfer?.files ?? [])], intakeRef.current(true));
+      addFilesRef.current([...(event.dataTransfer?.files ?? [])], true);
     };
     element.addEventListener("dragenter", enter);
     element.addEventListener("dragover", over);
@@ -368,7 +378,7 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
       element.removeEventListener("dragleave", leave);
       element.removeEventListener("drop", drop);
     };
-  }, [dropElement, attachments]);
+  }, [dropElement]);
 
   /** Cmd+Shift+V (Ctrl+Shift+V off Mac) keeps the next large paste inline. */
   const inlineNext = useRef(0);
@@ -377,10 +387,10 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
   const attachLargePaste = (pastedText: string): boolean => {
     const inline = Date.now() - inlineNext.current < 1500;
     inlineNext.current = 0;
-    if (pastedText === "" || inline || !pasteBecomesFile(pastedText, text.length)) return false;
+    if (pastedText === "" || inline || refusesFiles.current || !pasteBecomesFile(pastedText, text.length)) return false;
     const name = pastedTextFileName(attachments.staged.map((item) => item.name));
     const file = new File([pastedText], name, { type: "text/plain;charset=utf-8" });
-    void attachments.add([file], intake(true));
+    addFiles([file], true);
     showNotice(`Large paste attached as ${name}`, "info", `${formatSize(file.size)} · Use ${platform() === "darwin" ? "⌘⇧V" : "Ctrl+Shift+V"} to keep a large paste inline.`);
     return true;
   };
@@ -391,7 +401,7 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
     const pasted = [...(data?.files ?? [])];
     const pastedText = data?.getData("text/plain") ?? "";
     if (pasted.length > 0) {
-      void attachments.add(pasted, intake(true));
+      addFiles(pasted, true);
       if (pastedText === "") {
         event.preventDefault();
         return true;
@@ -568,9 +578,10 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
 
   // What waits on the person in this chat: an approval, a question, a plan to implement.
   const approvalPending = variant === "rail" && chat !== undefined && waitingRequests(chat, "approval").some((request) => !guard.held.has(requestIdOf(request)));
-  const questions = useQuestionAnswers(client, variant === "rail" ? chat : undefined, box, text, guard.held);
+  const questions = useQuestionAnswers(client, variant === "rail" ? chat : undefined, box, text, guard.held, attachments);
   const { question, answering } = questions;
   answeringRef.current = answering;
+  refusesFiles.current = answering && choiceOnly(question);
   // A question takes the box for its answer; once it goes, the draft set aside comes back.
   const questionKey = answering ? `${chatId}:${questions.requestId}` : undefined;
   const shownQuestion = useRef<string | undefined>(undefined);
@@ -581,11 +592,14 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
     if (questionKey !== undefined) {
       setEdit(null);
       box.current?.setText("", { focus: false, undoable: false });
+      // The draft keeps its files on the client; the answer starts with none.
+      attachments.replace([]);
       return;
     }
     if (draftKeyRef.current === undefined) return;
-    const draft = client.draft(draftKeyRef.current).text;
-    if ((box.current?.text() ?? "") !== draft) box.current?.setText(draft, { focus: false, undoable: false });
+    const draft = client.draft(draftKeyRef.current);
+    if ((box.current?.text() ?? "") !== draft.text) box.current?.setText(draft.text, { focus: false, undoable: false });
+    attachments.replace(draft.attachments);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [questionKey]);
   const lengthError = answering ? undefined : promptLengthError(text);
@@ -1023,7 +1037,7 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
             data-testid={resting.resting ? "resting-controls" : undefined}
           >
             <Tip label="Attach files" side="top">
-              <Button variant="ghost-muted" size="icon-sm" aria-label="Attach files" onClick={() => files.current?.click()}>
+              <Button variant="ghost-muted" size="icon-sm" aria-label="Attach files" disabled={answering && choiceOnly(question)} onClick={() => files.current?.click()}>
                 <Paperclip aria-hidden />
               </Button>
             </Tip>
@@ -1039,7 +1053,7 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
               onChange={(event) => {
                 const chosen = [...(event.currentTarget.files ?? [])];
                 event.currentTarget.value = "";
-                if (chosen.length > 0) void attachments.add(chosen, intake(false));
+                if (chosen.length > 0) addFiles(chosen, false);
               }}
             />
             <ModelPicker
