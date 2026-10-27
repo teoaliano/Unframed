@@ -428,7 +428,7 @@ export const CompactControlsMenu = ({
 // The context window meter.
 
 /** The chat's latest token usage, from spec 07's context window activities. */
-export const latestUsage = (chat: Chat | undefined): ContextUsage | undefined => {
+export const latestUsage = (chat: Chat | undefined): (ContextUsage & { readonly updatedAt: string }) | undefined => {
   for (const activity of [...(chat?.activities ?? [])].reverse()) {
     if (activity.kind !== "context-window.updated") continue;
     const payload = record(activity.payload);
@@ -438,6 +438,7 @@ export const latestUsage = (chat: Chat | undefined): ContextUsage | undefined =>
       usedTokens: usage.usedTokens,
       ...(typeof usage.maxTokens === "number" ? { maxTokens: usage.maxTokens } : {}),
       ...(typeof usage.totalProcessedTokens === "number" ? { totalProcessedTokens: usage.totalProcessedTokens } : {}),
+      updatedAt: activity.createdAt,
     };
   }
   return undefined;

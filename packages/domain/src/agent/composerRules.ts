@@ -161,6 +161,35 @@ export const contextMeter = (usage: ContextUsage): ContextMeterView => {
 };
 
 // ---------------------------------------------------------------------------------------
+// Compacting before a send (t3code's `shouldOfferResumeCompaction` and `planComposerTurn`).
+
+export const COMPACTION_SUGGESTION_MIN_TOKENS = 200_000;
+/** Claude's one-hour prompt cache plus slack, when the provider does not say its TTL. */
+const CLAUDE_CACHE_FALLBACK_MS = 70 * 60_000;
+const COMPACT_COMMAND = /^\/compact(?:\s|$)/i;
+
+/**
+ * A Claude chat whose prompt cache has likely expired re-reads its whole history on the
+ * next message: past 200k tokens, the composer offers to compact first.
+ */
+export const offersCompactBeforeSend = (input: {
+  readonly provider: string | undefined;
+  readonly usedTokens: number | undefined;
+  readonly updatedAt: string | undefined;
+  readonly promptCacheTtlMs?: number;
+  readonly now: string;
+}): boolean => {
+  if (input.provider !== "claude" || (input.usedTokens ?? 0) < COMPACTION_SUGGESTION_MIN_TOKENS) return false;
+  const updatedAt = Date.parse(input.updatedAt ?? "");
+  const now = Date.parse(input.now);
+  return Number.isFinite(updatedAt) && Number.isFinite(now) && now - updatedAt >= (input.promptCacheTtlMs ?? CLAUDE_CACHE_FALLBACK_MS);
+};
+
+/** Whether this send runs `/compact` first: offered, not switched to Full, and not itself `/compact`. */
+export const compactsBeforeSend = (input: { readonly tokens: number | null; readonly keepFullHistory: boolean; readonly text: string }): boolean =>
+  input.tokens !== null && !input.keepFullHistory && !COMPACT_COMMAND.test(input.text.trim());
+
+// ---------------------------------------------------------------------------------------
 // Restoring into a draft (a stash entry, a queued message given back, Edit from here).
 
 /** The restored prompt after the current one, a blank line between (t3code's stash restore). */

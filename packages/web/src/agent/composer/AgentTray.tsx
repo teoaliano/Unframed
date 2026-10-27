@@ -5,15 +5,19 @@ import {
   appendRestoredPrompt,
   attachmentChip,
   chipRefs,
+  COMPACTION_SUGGESTION_MIN_TOKENS,
+  compactsBeforeSend,
   composerKeyIntent,
   composerRequiresModifier,
   continuableChat,
   DEFAULT_RUNTIME_MODE,
   ensureChips,
   followUpAction,
+  formatTokens,
   implementPlanText,
   implementPlanTitle,
   mergeRestored,
+  offersCompactBeforeSend,
   pasteBecomesFile,
   pastedTextFileName,
   promptHistoryEntries,
@@ -28,7 +32,7 @@ import {
   type PromptHistoryPosition,
   type RuntimeMode,
 } from "@unframed/domain";
-import { ArrowLeft, Check, CircleAlert, CornerUpRight, ListPlus, Paperclip } from "lucide-react";
+import { ArrowLeft, Check, CircleAlert, CornerUpRight, ListPlus, Minimize2, Paperclip } from "lucide-react";
 import { createPortal } from "react-dom";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from "react";
 import type { AgentTrayProps as SlotProps } from "../../chrome/slots.ts";
@@ -713,9 +717,14 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
         // Queue waits for the turn's next tool call or its end; Steer joins the turn now. Cmd+Enter flips it once.
         if (followUpAction(followUp, invert) === "steer") await sendMessage(client, target, outgoing, { steer: true });
         else client.enqueue(target, outgoing, latestCompletedTool(current));
+      } else if (target === chatId && compactsBeforeSend({ tokens: compactTokens, keepFullHistory: keepFull, text: message })) {
+        // t3code's: the message waits behind the /compact turn, as a queued message does.
+        await sendMessage(client, target, { text: "/compact", selection: [], attachments: [] });
+        client.enqueue(target, outgoing, latestCompletedTool(client.thread(target)));
       } else {
         await sendMessage(client, target, outgoing);
       }
+      setFullHistory(target, false);
       onSent?.();
       if (thenNewChat) client.setUi({ chosen: NEW_CHAT, pinned: null });
     } catch (error) {
@@ -742,6 +751,38 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
 
   const queue = useQueue(client, variant === "rail" ? chatId : null);
 
+  // Compact before send (t3code's): a Claude chat whose prompt cache has likely expired offers to compact first.
+  const [, setMinute] = useState(0);
+  const mayGoStale = selection.provider === "claude" && (usage?.usedTokens ?? 0) >= COMPACTION_SUGGESTION_MIN_TOKENS;
+  useEffect(() => {
+    if (!mayGoStale) return;
+    const timer = window.setInterval(() => setMinute((minute) => minute + 1), 60_000);
+    return () => window.clearInterval(timer);
+  }, [mayGoStale]);
+  const [fullHistoryChats, setFullHistoryChats] = useState<ReadonlySet<string>>(() => new Set());
+  const keepFull = chatId !== null && fullHistoryChats.has(chatId);
+  const setFullHistory = (id: string, keep: boolean) =>
+    setFullHistoryChats((current) => {
+      if (current.has(id) === keep) return current;
+      const next = new Set(current);
+      if (keep) next.add(id);
+      else next.delete(id);
+      return next;
+    });
+  const compactTokens =
+    chat !== undefined &&
+    usage !== undefined &&
+    compactable &&
+    !running &&
+    editing === null &&
+    !approvalPending &&
+    !answering &&
+    planFollowUp === undefined &&
+    client.queue(chat.id).length === 0 &&
+    chat.messages.some((message) => message.role === "user" && (message.text.trim().toLowerCase() !== "/compact" || (message.attachments?.length ?? 0) > 0)) &&
+    offersCompactBeforeSend({ provider: selection.provider, usedTokens: usage.usedTokens, updatedAt: usage.updatedAt, now: new Date().toISOString() })
+      ? usage.usedTokens
+      : null;
   const beginEdit = (item: QueuedMessage) => {
     if (chatId === null || answeringRef.current) return;
     historyPosition.current = null;
@@ -1057,14 +1098,20 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
             ) : planFollowUp && editing === null ? (
               <PlanActions refine={text.trim() !== ""} busy={sending} onSend={() => void send()} onNewChat={() => void implementPlan(true)} />
             ) : (
-              <SendButton
-                running={running}
-                editing={editing !== null}
-                followUp={followUp}
-                alternateNeedsShift={composerRequiresModifier(sendShortcut, text)}
-                disabled={!canSend}
-                onSend={(alternate) => void send(alternate)}
-              />
+              <>
+                {compactTokens !== null && chat && (
+                  <CompactChip tokens={compactTokens} keepFull={keepFull} onToggle={() => setFullHistory(chat.id, !keepFull)} />
+                )}
+                <SendButton
+                  running={running}
+                  compacts={compactsBeforeSend({ tokens: compactTokens, keepFullHistory: keepFull, text })}
+                  editing={editing !== null}
+                  followUp={followUp}
+                  alternateNeedsShift={composerRequiresModifier(sendShortcut, text)}
+                  disabled={!canSend}
+                  onSend={(alternate) => void send(alternate)}
+                />
+              </>
             )}
           </div>
         </div>
@@ -1082,6 +1129,7 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
  */
 const SendButton = ({
   running,
+  compacts,
   editing,
   followUp,
   alternateNeedsShift,
@@ -1089,6 +1137,8 @@ const SendButton = ({
   onSend,
 }: {
   readonly running: boolean;
+  /** This send runs /compact first. */
+  readonly compacts: boolean;
   readonly editing: boolean;
   readonly followUp: "queue" | "steer";
   readonly alternateNeedsShift: boolean;
@@ -1105,7 +1155,7 @@ const SendButton = ({
   }
   if (!running) {
     return (
-      <MessageAction tone="send" aria-label="Send" disabled={disabled} onClick={() => onSend(false)}>
+      <MessageAction tone="send" aria-label={compacts ? "Compact and send" : "Send"} disabled={disabled} onClick={() => onSend(false)}>
         <SendArrow />
       </MessageAction>
     );
@@ -1121,6 +1171,37 @@ const SendButton = ({
           {action === "queue" ? <ListPlus aria-hidden className="size-4" /> : <CornerUpRight aria-hidden className="size-4" />}
         </MessageAction>
       </span>
+    </Tip>
+  );
+};
+
+/**
+ * t3code's compact-before-send chip, beside Send: "Compact" with the tokens a send would
+ * compact first, or "Full" once clicked, to send with the whole history.
+ */
+const CompactChip = ({ tokens, keepFull, onToggle }: { readonly tokens: number; readonly keepFull: boolean; readonly onToggle: () => void }) => {
+  const count = formatTokens(tokens);
+  return (
+    <Tip
+      side="top"
+      label={
+        <>
+          <div>{keepFull ? `Next send keeps all ${count} tokens.` : `Next send compacts ${count} tokens first.`}</div>
+          <div>{keepFull ? "Click to compact first" : "Click to keep full history"}</div>
+        </>
+      }
+    >
+      <Button
+        variant={keepFull ? "outline" : "warning-outline"}
+        size="compact"
+        aria-pressed={!keepFull}
+        aria-label={`Compact ${count} tokens of history before sending`}
+        onClick={onToggle}
+      >
+        <Minimize2 aria-hidden />
+        {keepFull ? "Full" : "Compact"}
+        <span className="tabular-nums">{count}</span>
+      </Button>
     </Tip>
   );
 };

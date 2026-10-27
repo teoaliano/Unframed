@@ -12,6 +12,8 @@ import {
   composerKeyIntent,
   composerRequiresModifier,
   contextMeter,
+  compactsBeforeSend,
+  offersCompactBeforeSend,
   createTypingGuard,
   followUpAction,
   formatTokens,
@@ -132,6 +134,31 @@ describe("the context window meter", () => {
   it("names the total processed only when there is one", () => {
     expect(contextMeter({ usedTokens: 1, maxTokens: 10, totalProcessedTokens: 45_000 }).totalProcessedText).toBe("45k");
     expect(contextMeter({ usedTokens: 1, maxTokens: 10 }).totalProcessedText).toBeNull();
+  });
+});
+
+describe("compacting before a send", () => {
+  const stale = { provider: "claude", usedTokens: 214_000, updatedAt: "2026-10-27T10:00:00.000Z", now: "2026-10-27T11:10:00.000Z" };
+
+  it("is offered on a Claude chat of 200k tokens or more whose last usage is older than the prompt cache, 70 minutes without a TTL", () => {
+    expect(offersCompactBeforeSend(stale)).toBe(true);
+    expect(offersCompactBeforeSend({ ...stale, now: "2026-10-27T11:09:59.000Z" })).toBe(false);
+    expect(offersCompactBeforeSend({ ...stale, promptCacheTtlMs: 5 * 60_000, now: "2026-10-27T10:05:00.000Z" })).toBe(true);
+  });
+
+  it("is not offered below 200k tokens, for Codex, or without a time", () => {
+    expect(offersCompactBeforeSend({ ...stale, usedTokens: 199_999 })).toBe(false);
+    expect(offersCompactBeforeSend({ ...stale, provider: "codex" })).toBe(false);
+    expect(offersCompactBeforeSend({ ...stale, updatedAt: undefined })).toBe(false);
+  });
+
+  it("compacts first unless the person chose Full or the message is /compact itself", () => {
+    expect(compactsBeforeSend({ tokens: 214_000, keepFullHistory: false, text: "next question" })).toBe(true);
+    expect(compactsBeforeSend({ tokens: 214_000, keepFullHistory: true, text: "next question" })).toBe(false);
+    expect(compactsBeforeSend({ tokens: null, keepFullHistory: false, text: "next question" })).toBe(false);
+    expect(compactsBeforeSend({ tokens: 214_000, keepFullHistory: false, text: "/compact" })).toBe(false);
+    expect(compactsBeforeSend({ tokens: 214_000, keepFullHistory: false, text: "/Compact focus on the plan" })).toBe(false);
+    expect(compactsBeforeSend({ tokens: 214_000, keepFullHistory: false, text: "/compacted" })).toBe(true);
   });
 });
 

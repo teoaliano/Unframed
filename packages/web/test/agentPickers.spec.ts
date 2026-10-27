@@ -370,6 +370,66 @@ test("the context window meter fills to the scripted usage, turns red above 90 %
   }
 });
 
+test("a Claude chat past 200k tokens whose prompt cache has expired offers Compact beside Send; sending compacts first, Full sends as is", async ({ page }) => {
+  const scripts = await mkdtemp(join(tmpdir(), "unframed-scripts-"));
+  await writeFile(
+    join(scripts, "stale.json"),
+    JSON.stringify({
+      when: "^read everything",
+      turns: [
+        { text: "Read it all.", usage: { usedTokens: 214_000, maxTokens: 1_000_000 } },
+        { text: "Kept everything.", usage: { usedTokens: 230_000, maxTokens: 1_000_000 } },
+        { text: "Compacted.", usage: { usedTokens: 20_000, maxTokens: 1_000_000 } },
+        { text: "Answered after compacting.", usage: { usedTokens: 24_000, maxTokens: 1_000_000 } },
+      ],
+    }),
+  );
+  const agent = await startAgentEngine({ script: scripts });
+  try {
+    await openCanvas(page, agent);
+    const panel = await openRail(page);
+    const box = promptBox(panel);
+    const chip = panel.getByRole("button", { name: /^Compact .* tokens of history before sending$/ });
+    await say(panel, "read everything please");
+    await expect(panel.locator("[data-role='assistant']")).toContainText("Read it all.");
+    await box.pressSequentially("x");
+    await expect(chip).toHaveCount(0);
+
+    // Seventy minutes on, the cache has gone: the chip says what compacting saves.
+    await page.clock.setFixedTime(Date.now() + 71 * 60_000);
+    await box.pressSequentially("y");
+    await expect(chip).toHaveText("Compact214k");
+    await expect(chip).toHaveAttribute("aria-pressed", "true");
+    await expect(panel.getByRole("button", { name: "Compact and send" })).toBeVisible();
+    await chip.hover();
+    await expect(page.getByText("Next send compacts 214k tokens first.", { exact: true })).toBeVisible();
+    await expect(page.getByText("Click to keep full history", { exact: true })).toBeVisible();
+
+    // Full sends the message as it is, and the chip goes once the turn reports its usage.
+    await chip.click();
+    await expect(chip).toHaveText("Full214k");
+    await expect(chip).toHaveAttribute("aria-pressed", "false");
+    await box.press("Enter");
+    await expect(panel.locator("[data-role='assistant']").last()).toContainText("Kept everything.");
+    await page.clock.setFixedTime(Date.now());
+    await box.pressSequentially("and now?");
+    await expect(chip).toHaveCount(0);
+
+    // Later again, Compact sends /compact first and the message once it is done.
+    await page.clock.setFixedTime(Date.now() + 71 * 60_000);
+    await box.pressSequentially("!");
+    await box.press("Backspace");
+    await expect(chip).toHaveText("Compact230k");
+    await box.press("Enter");
+    await expect(panel.locator("[data-role='assistant']").last()).toContainText("Answered after compacting.");
+    await expect(panel.locator("[data-role='user'] [data-testid='message-text']")).toHaveText(["read everything please", "xy", "/compact", "and now?"]);
+    await expect(chip).toHaveCount(0);
+  } finally {
+    await agent.dispose();
+    await rm(scripts, { recursive: true, force: true });
+  }
+});
+
 test("below t3code's compact width the access mode folds into More composer controls, on one line with Send", async ({ page }) => {
   const agent = await startAgentEngine();
   try {
