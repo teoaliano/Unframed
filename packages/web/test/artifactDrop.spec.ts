@@ -83,7 +83,8 @@ test("a composition dropped on a motion goes through the motion upload and plays
   const saved = await readFile(projectPath(engine, filled.props.file), "utf8");
   expect(saved).toContain("data-hyperframes-preview-runtime");
   expect(saved).toContain('<script src="unframed-dials.js"></script>');
-  for (const name of ["hyperframes-viewer.html", "hyperframes-player.js", "hyperframes-runtime.js", "gsap.js", "unframed-dials.js"]) expect(existsSync(projectPath(engine, name)), name).toBe(true);
+  expect(saved).toContain('<script src="unframed-tokens.js"></script>');
+  for (const name of ["hyperframes-viewer.html", "hyperframes-player.js", "hyperframes-runtime.js", "gsap.js", "unframed-dials.js", "unframed-tokens.js"]) expect(existsSync(projectPath(engine, name)), name).toBe(true);
 
   await page.keyboard.press("Shift+1");
   await page.waitForTimeout(400);
