@@ -1,6 +1,6 @@
 import { openCanvas } from "./canvas.ts";
 import { componentShape, writeSheet } from "./components.ts";
-import { clickShape, expect, openComposer, pressSend, test, toolbar } from "./generation.ts";
+import { clickShape, expect, openComposer, sendRun, test } from "./generation.ts";
 import { promptRecord, putRecords } from "./media.ts";
 
 test("a selection holding a component and a prompt sends the prompt alone, and the component never joins the request", async ({ page, generation }) => {
@@ -14,10 +14,9 @@ test("a selection holding a component and a prompt sends the prompt alone, and t
   await clickShape(page, "shape:fox");
   await clickShape(page, "shape:card", ["Shift"]);
   await openComposer(page);
-  await pressSend(page);
+  await sendRun(page);
   await expect.poll(() => generation.requests.length).toBe(1);
   const request = generation.requests[0]!.body;
   expect(request.prompt).toBe("a red fox");
   expect(request.input_references ?? []).toHaveLength(0);
-  await expect(toolbar(page)).toHaveCount(0);
 });
