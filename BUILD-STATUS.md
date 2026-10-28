@@ -41,6 +41,10 @@ Spec 12's run on `build`, with the dev server stopped: `pnpm typecheck` exit 0 (
 | 13 | design-system catalogue | 11 | merged | see git log | 4/4 tasks. Written after spec 12's live review, at the person's request: a dev-only page at `/design-system/` on the web dev server |
 | 14 | external agents | 12 | not built | | 0/27 tasks. Written for issue #93 at the person's request, with every open question decided |
 | 15 | audio | 13 | not built | | 0/43 tasks. Written for issue #63 at the person's request; its questions are answered in the spec, and two facts await a paid call (Further Notes) |
+| 18 | element editing | | not built | | 0/41 tasks. Written at the person's request after the Figma-clone and HyperFrames Studio research; every open question decided |
+| 19 | kits and tokens | | not built | | 0/43 tasks (one is the person's step). Written with 18 |
+| 20 | components | | not built | | 0/47 tasks. Written with 18 |
+| 21 | motion timeline | | not built | | 0/40 tasks (two are the person's steps); task 1 upgrades HyperFrames on its own PR |
 
 ## Performance budgets
 
