@@ -159,7 +159,7 @@ function TabsTab({ className, children, status, closable = false, onClose, close
       className={cn(
         tabsTabVariants({ overflow, size, variant }),
         "peer",
-        closable && "pe-7",
+        closable && (size === "sm" ? "pe-6" : "pe-7"),
         divider && "after:pointer-events-none after:absolute after:inset-y-0 after:end-0 after:w-px after:bg-border",
         className,
       )}
@@ -184,7 +184,7 @@ function TabsTab({ className, children, status, closable = false, onClose, close
       {tab}
       <Button
         variant="ghost-muted"
-        size="icon-micro"
+        size={size === "sm" ? "icon-tiny" : "icon-micro"}
         className="absolute end-1 top-1/2 -translate-y-1/2 opacity-0 peer-not-data-active:pointer-events-none peer-data-active:opacity-100"
         aria-label={closeLabel}
         data-close=""

@@ -123,7 +123,7 @@ test("with the prompt at the top edge, the mention list is pushed under the tab 
   await page.keyboard.type("A photo of @");
   await expect(menu(page)).toBeVisible();
   const prompt = page.locator(".tl-shape[data-shape-type='text']").filter({ hasText: "A photo of" });
-  // Pan the canvas, from an empty point, until the prompt's top is under the bar's 48 px.
+  // Pan the canvas, from an empty point, until the prompt's top is under the bar's 36 px.
   const empty = await emptyCanvasPoint(page);
   await page.mouse.move(empty.x, empty.y);
   for (let step = 0; step < 60 && (await prompt.boundingBox())!.y > 0; step++) await page.mouse.wheel(0, 40);

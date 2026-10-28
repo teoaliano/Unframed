@@ -58,35 +58,47 @@ export interface TopBarProps {
    * draws nothing: the app's controls are the window's own, drawn over that space. "none" leaves it out.
    */
   readonly controls?: "stand-ins" | "space" | "none" | undefined;
+  /**
+   * The bar runs square from the window's left edge, with no end curve there: a panel docked under it (the agent
+   * rail) meets its bottom border with no gap.
+   */
+  readonly squareStart?: boolean | undefined;
 }
 
-// The measured geometry of the reference (the user's prototype, `component-mac-topbar.html`): a 48 px bar whose two ends
-// each curve out at the top and round off at the bottom with a 20 px radius, Settings 12 px past the bar's end, and the
-// window controls 14 px in from the window edge.
-const BAR_HEIGHT = 48;
-const CURVE = 20;
+const BAR_HEIGHT = 36;
 /**
- * Window edge to the bar on macOS. The shell puts the traffic lights at x 20 (main.js `trafficLightPosition`); the three
- * lights span about 60 px, so they end near x 80 and the bar starts 12 px after them. The start region's spacer and the
- * bar's left edge both use this one number.
+ * Window edge to the bar on macOS. The shell puts the traffic lights at x 12 (main.js `trafficLightPosition`), the same
+ * as the margin above and below them (the OS draws them about 13 px tall, centred on the bar's 18 px midline). The three
+ * lights span about 60 px, so they end near x 72 and the bar's end crosses the midline 9 px after them. The start region's
+ * spacer and the bar's left edge both use this one number.
  */
-const LIGHTS_ZONE = 92;
-/** The bar's end to the Settings button (the flare overlaps the button's first 8 px). */
-const SETTINGS_GAP = 12;
+const LIGHTS_ZONE = 81;
+/** The bar's end, where it crosses the midline, to the Settings button. */
+const SETTINGS_GAP = 9;
 /** The Windows caption buttons (144 px) and the 12 px to the bar. */
 const CAPTION_ZONE = 156;
 
 /**
- * The bar's outline as one path, in the bar's own coordinates. Each end is a 20 px concave flare at the top, outside the
- * bar, and a 20 px convex corner at the bottom, inside it. The top stays open against the window edge. The fill closes the
- * top; the stroke does not, so the border is the outline and nothing more.
+ * Each end of the bar is one S-curve: it leaves the window edge sloping down, steepens through the middle and lands flat on
+ * the bottom edge. The points are relative to where the curve crosses the midline, which is the bar's edge for layout (x 0
+ * and `width`): the top corner sits 11.3 px further out, the bottom one 20.1 px further in.
  */
-const barFill = (width: number) =>
-  `M${-CURVE} 0A${CURVE} ${CURVE} 0 0 1 0 ${CURVE}V${BAR_HEIGHT - CURVE}A${CURVE} ${CURVE} 0 0 0 ${CURVE} ${BAR_HEIGHT}H${width - CURVE}A${CURVE} ${CURVE} 0 0 0 ${width} ${BAR_HEIGHT - CURVE}V${CURVE}A${CURVE} ${CURVE} 0 0 1 ${width + CURVE} 0Z`;
-const barStroke = (width: number) => barFill(width).replace(/Z$/, "");
+const END_TOP = 11.3;
+const END_BOTTOM = 20.1;
+const MID = 17.78;
+const startEnd = `M${-END_TOP} 0C-3.4 4.7 -1.5 10.05 0 ${MID}C2.19 29.07 7.4 36 ${END_BOTTOM} 36`;
+const n = (value: number) => Math.round(value * 100) / 100;
+const barEnd = (width: number) =>
+  `H${n(width - END_BOTTOM)}C${n(width - 7.4)} 36 ${n(width - 2.19)} 29.07 ${width} ${MID}C${n(width + 1.5)} 10.05 ${n(width + 3.4)} 4.7 ${n(width + END_TOP)} 0`;
+
+/** The bar's outline as one path. The fill closes the top against the window edge; the stroke does not, so the border is the outline and nothing more. */
+const barFill = (width: number, squareStart: boolean) => (squareStart ? `M0 0V${BAR_HEIGHT}${barEnd(width)}Z` : `${startEnd}${barEnd(width)}Z`);
+/** A square start has no side at the window edge, so its outline starts on the bottom border. */
+const barStroke = (width: number, squareStart: boolean) =>
+  squareStart ? `M0 ${BAR_HEIGHT}${barEnd(width)}` : barFill(width, false).replace(/Z$/, "");
 
 const WindowDots = () => (
-  <span className="flex h-full items-center gap-2 ps-3.5">
+  <span className="flex h-full items-center gap-2 ps-3">
     <span className="size-3 rounded-full bg-muted-foreground/40" />
     <span className="size-3 rounded-full bg-muted-foreground/40" />
     <span className="size-3 rounded-full bg-muted-foreground/40" />
@@ -94,7 +106,7 @@ const WindowDots = () => (
 );
 
 /**
- * The project tab bar (spec 17), drawn to the reference: a 48 px bar with a 20 px flare and corner at each end, its border on
+ * The project tab bar (spec 17), drawn to the reference: a 36 px bar with an S-curve at each end, its border on
  * the outline, the window controls and Settings beside it. The tabs are the kit's underline Tabs, the buttons the kit's
  * buttons; a right-click on a tab opens Close, Close all tabs, Rename and Delete.
  */
@@ -114,6 +126,7 @@ export const TopBar = ({
   regions = {},
   layout = "flow",
   controls = "stand-ins",
+  squareStart = false,
 }: TopBarProps) => {
   const scroller = useRef<HTMLDivElement>(null);
   const rootRef = useRef<HTMLDivElement>(null);
@@ -184,10 +197,10 @@ export const TopBar = ({
       const bar = root.getBoundingClientRect();
       const square = settingsNode.getBoundingClientRect();
       if (windows) {
-        body.style.left = `${square.right + SETTINGS_GAP - bar.left}px`;
+        body.style.left = squareStart ? "0px" : `${square.right + SETTINGS_GAP - bar.left}px`;
         body.style.right = `${CAPTION_ZONE}px`;
       } else {
-        body.style.left = `${LIGHTS_ZONE}px`;
+        body.style.left = squareStart ? "0px" : `${LIGHTS_ZONE}px`;
         body.style.right = `${bar.right - (square.left - SETTINGS_GAP)}px`;
       }
       setBodyWidth(Math.round(body.getBoundingClientRect().width));
@@ -196,42 +209,43 @@ export const TopBar = ({
     const observer = new ResizeObserver(measure);
     for (const element of [root, settingsNode]) observer.observe(element);
     return () => observer.disconnect();
-  }, [windows]);
+  }, [windows, squareStart]);
 
   const positioned = layout === "flow" ? "relative " : "";
   const settingsNode = (
-    <div data-slot="top-bar-settings" className="flex size-8 shrink-0 items-center justify-center overflow-hidden rounded-full">
+    <div data-slot="top-bar-settings" className="flex size-6 shrink-0 items-center justify-center overflow-hidden rounded-full">
       {settings}
     </div>
   );
   const region = (base: string, custom: TopBarRegion | undefined): TopBarRegion => ({ ...custom, className: cn(base, custom?.className) });
   const controlsSpace = (width: string, style?: CSSProperties) =>
     controls === "none" ? null : (
-      <div data-slot="top-bar-controls" aria-hidden className={cn("h-12 shrink-0", width)} style={style}>
+      <div data-slot="top-bar-controls" aria-hidden className={cn("h-9 shrink-0", width)} style={style}>
         {controls === "stand-ins" && <WindowDots />}
       </div>
     );
 
   return (
-    <div data-slot="top-bar" data-platform={platform} ref={rootRef} {...region("relative box-border flex h-12 w-full min-w-0 items-stretch", regions.frame)}>
+    <div data-slot="top-bar" data-platform={platform} ref={rootRef} {...region("relative box-border flex h-9 w-full min-w-0 items-stretch", regions.frame)}>
       <div data-slot="top-bar-body" ref={bodyRef} aria-hidden className="absolute inset-y-0 left-0 right-0">
         <svg className="pointer-events-none absolute inset-0 overflow-visible" width={bodyWidth} height={BAR_HEIGHT}>
-          <path d={barFill(bodyWidth)} className="fill-background stroke-none" />
-          <path d={barStroke(bodyWidth)} className="fill-none stroke-border" />
+          <path d={barFill(bodyWidth, squareStart)} className="fill-background stroke-none" />
+          <path d={barStroke(bodyWidth, squareStart)} className="fill-none stroke-border" />
         </svg>
       </div>
-      <div data-slot="top-bar-start" {...region(`${positioned}flex h-12 shrink-0 items-center`, regions.start)}>
+      <div data-slot="top-bar-start" {...region(`${positioned}flex h-9 shrink-0 items-center`, regions.start)}>
         {!windows && controlsSpace("", { width: LIGHTS_ZONE })}
-        {windows && <span className="flex shrink-0 items-center ps-3.5">{settingsNode}</span>}
-        <span className={cn("flex shrink-0 items-center", windows ? "ms-3 ps-5 pe-2.5" : "ps-5 pe-2.5")}>{logo}</span>
+        {windows && <span className="flex shrink-0 items-center ps-3">{settingsNode}</span>}
+        {/* The logo sits 15 px into the bar, clear of the end curve. */}
+        <span className={cn("flex shrink-0 items-center ps-[15px] pe-2", windows && "ms-[9px]")}>{logo}</span>
       </div>
-      <div data-slot="top-bar-tabs" {...region(`${positioned}flex h-12 min-w-0 shrink items-stretch`, regions.tabs)}>
-        <Tabs className="h-12 w-fit min-w-0 shrink" value={active ?? null} onValueChange={(name) => onActivate(String(name))}>
+      <div data-slot="top-bar-tabs" {...region(`${positioned}flex h-9 min-w-0 shrink items-stretch`, regions.tabs)}>
+        <Tabs className="h-9 w-fit min-w-0 shrink" value={active ?? null} onValueChange={(name) => onActivate(String(name))}>
           <TabsList
             ref={scroller}
             aria-label="Open projects"
             variant="underline"
-            size="compact"
+            size="sm"
             overflow="truncate"
             className="h-full min-w-0 max-w-full"
             onClick={onListClick}
@@ -261,13 +275,13 @@ export const TopBar = ({
             ))}
           </TabsList>
         </Tabs>
-        <div data-slot="top-bar-new" className="flex h-12 shrink-0 items-center ps-1">
+        <div data-slot="top-bar-new" className="flex h-9 shrink-0 items-center ps-1">
           {newProject}
         </div>
       </div>
-      <div data-slot="top-bar-drag" className={`${positioned}h-12 min-w-8 flex-1`} />
-      <div data-slot="top-bar-end" {...region(`${positioned}flex h-12 shrink-0 items-center`, regions.end)}>
-        {!windows && <span className="flex h-12 items-center pe-3.5">{settingsNode}</span>}
+      <div data-slot="top-bar-drag" className={`${positioned}h-9 min-w-8 flex-1`} />
+      <div data-slot="top-bar-end" {...region(`${positioned}flex h-9 shrink-0 items-center`, regions.end)}>
+        {!windows && <span className="flex h-9 items-center pe-3">{settingsNode}</span>}
         {windows && controlsSpace("w-39")}
       </div>
       <Menu open={menu !== undefined} onOpenChange={(open) => !open && setMenu(undefined)}>

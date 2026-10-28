@@ -281,7 +281,7 @@ export const ProjectMenu = () => {
           if (open) void refresh();
         }}
       >
-        <MenuTrigger aria-label="All projects" render={<Button variant="ghost" size="icon" />}>
+        <MenuTrigger aria-label="All projects" render={<Button variant="ghost" size="icon-xs" />}>
           <Plus aria-hidden />
         </MenuTrigger>
         <MenuPopup sideOffset={8} align="end" className="min-w-[220px]">
