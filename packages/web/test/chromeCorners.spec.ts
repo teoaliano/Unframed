@@ -39,7 +39,7 @@ test("the bar's start sits at the window edge, 36 tall; the lights' zone is 81 p
   expect(right).toEqual({ top: "0px", right: "0px" });
 });
 
-test("the bar's outline is the reference's flares and corners; Settings is a circle with a kit ghost button and a kit tooltip", async ({ page, engine }) => {
+test("the bar's outline is filled with the background; Settings is a circle with a kit ghost button and a kit tooltip", async ({ page, engine }) => {
   await openCanvas(page, engine);
   const bar = page.locator("[data-slot=top-bar-body] path").first();
   const cell = page.locator("[data-slot=top-bar-settings]");

@@ -59,39 +59,40 @@ export interface TopBarProps {
    */
   readonly controls?: "stand-ins" | "space" | "none" | undefined;
   /**
-   * The bar runs square from the window's left edge, with no flare or corner there: a panel docked under it (the agent
+   * The bar runs square from the window's left edge, with no end curve there: a panel docked under it (the agent
    * rail) meets its bottom border with no gap.
    */
   readonly squareStart?: boolean | undefined;
 }
 
-// The reference's geometry (the user's prototype, `component-mac-topbar.html`) scaled from its 48 px bar to 36 px (x 0.75):
-// each end curves out at the top and rounds off at the bottom with a 15 px radius, and Settings is a 24 px circle 9 px past
-// the bar's end. Two radii take 30 of the 36 px, leaving a 6 px straight side, the reference's proportion.
 const BAR_HEIGHT = 36;
-const CURVE = 15;
 /**
  * Window edge to the bar on macOS. The shell puts the traffic lights at x 12 (main.js `trafficLightPosition`), the same
  * as the margin above and below them (the OS draws them about 13 px tall, centred on the bar's 18 px midline). The three
- * lights span about 60 px, so they end near x 72 and the bar starts 9 px after them. The start region's spacer and the
- * bar's left edge both use this one number.
+ * lights span about 60 px, so they end near x 72 and the bar's end crosses the midline 9 px after them. The start region's
+ * spacer and the bar's left edge both use this one number.
  */
 const LIGHTS_ZONE = 81;
-/** The bar's end to the Settings button (the flare overlaps the button's first 6 px). */
+/** The bar's end, where it crosses the midline, to the Settings button. */
 const SETTINGS_GAP = 9;
 /** The Windows caption buttons (144 px) and the 12 px to the bar. */
 const CAPTION_ZONE = 156;
 
 /**
- * The bar's outline as one path, in the bar's own coordinates. Each end is a concave flare at the top, outside the bar,
- * and a convex corner at the bottom, inside it, both of radius CURVE. The top stays open against the window edge. The fill closes the
- * top; the stroke does not, so the border is the outline and nothing more.
+ * Each end of the bar is one S-curve: it leaves the window edge sloping down, steepens through the middle and lands flat on
+ * the bottom edge. The points are relative to where the curve crosses the midline, which is the bar's edge for layout (x 0
+ * and `width`): the top corner sits 11.3 px further out, the bottom one 20.1 px further in.
  */
-const barEnd = (width: number) => `H${width - CURVE}A${CURVE} ${CURVE} 0 0 0 ${width} ${BAR_HEIGHT - CURVE}V${CURVE}A${CURVE} ${CURVE} 0 0 1 ${width + CURVE} 0`;
-const barFill = (width: number, squareStart: boolean) =>
-  squareStart
-    ? `M0 0V${BAR_HEIGHT}${barEnd(width)}Z`
-    : `M${-CURVE} 0A${CURVE} ${CURVE} 0 0 1 0 ${CURVE}V${BAR_HEIGHT - CURVE}A${CURVE} ${CURVE} 0 0 0 ${CURVE} ${BAR_HEIGHT}${barEnd(width)}Z`;
+const END_TOP = 11.3;
+const END_BOTTOM = 20.1;
+const MID = 17.78;
+const startEnd = `M${-END_TOP} 0C-3.4 4.7 -1.5 10.05 0 ${MID}C2.19 29.07 7.4 36 ${END_BOTTOM} 36`;
+const n = (value: number) => Math.round(value * 100) / 100;
+const barEnd = (width: number) =>
+  `H${n(width - END_BOTTOM)}C${n(width - 7.4)} 36 ${n(width - 2.19)} 29.07 ${width} ${MID}C${n(width + 1.5)} 10.05 ${n(width + 3.4)} 4.7 ${n(width + END_TOP)} 0`;
+
+/** The bar's outline as one path. The fill closes the top against the window edge; the stroke does not, so the border is the outline and nothing more. */
+const barFill = (width: number, squareStart: boolean) => (squareStart ? `M0 0V${BAR_HEIGHT}${barEnd(width)}Z` : `${startEnd}${barEnd(width)}Z`);
 /** A square start has no side at the window edge, so its outline starts on the bottom border. */
 const barStroke = (width: number, squareStart: boolean) =>
   squareStart ? `M0 ${BAR_HEIGHT}${barEnd(width)}` : barFill(width, false).replace(/Z$/, "");
@@ -105,7 +106,7 @@ const WindowDots = () => (
 );
 
 /**
- * The project tab bar (spec 17), drawn to the reference: a 36 px bar with a 15 px flare and corner at each end, its border on
+ * The project tab bar (spec 17), drawn to the reference: a 36 px bar with an S-curve at each end, its border on
  * the outline, the window controls and Settings beside it. The tabs are the kit's underline Tabs, the buttons the kit's
  * buttons; a right-click on a tab opens Close, Close all tabs, Rename and Delete.
  */
@@ -235,7 +236,7 @@ export const TopBar = ({
       <div data-slot="top-bar-start" {...region(`${positioned}flex h-9 shrink-0 items-center`, regions.start)}>
         {!windows && controlsSpace("", { width: LIGHTS_ZONE })}
         {windows && <span className="flex shrink-0 items-center ps-3">{settingsNode}</span>}
-        {/* The logo sits one curve's width into the bar, clear of the bottom corner. */}
+        {/* The logo sits 15 px into the bar, clear of the end curve. */}
         <span className={cn("flex shrink-0 items-center ps-[15px] pe-2", windows && "ms-[9px]")}>{logo}</span>
       </div>
       <div data-slot="top-bar-tabs" {...region(`${positioned}flex h-9 min-w-0 shrink items-stretch`, regions.tabs)}>
