@@ -39,6 +39,8 @@ test("an artifact that declares parameters shows them as DialKit controls; one t
   await expect(dials.getByText("Scene")).toBeVisible();
   await expect(editor(page).getByRole("textbox", { name: "Add a parameter" })).toHaveAttribute("placeholder", "Add a parameter… (e.g. the background colour, the title size)");
   // One inset down the column: the dials' title and the parameter box line up.
+  await expect(dials.locator(".dialkit-folder-title-root")).toBeVisible();
+  await expect(editor(page).getByRole("textbox", { name: "Add a parameter" })).toBeVisible();
   const lefts = await Promise.all([
     dials.locator(".dialkit-folder-title-root").boundingBox(),
     editor(page).getByRole("textbox", { name: "Add a parameter" }).boundingBox(),
@@ -64,6 +66,8 @@ test("dragging a dial moves the frame live and writes the values once it settles
   await expect.poll(() => shown(editorFrame(page))).toEqual({ size: 10 });
 
   const slider = editor(page).getByRole("slider", { name: "Size" });
+  // The kit renders after the frame reports its values: wait until the slider is on screen before measuring it.
+  await expect(slider).toBeVisible();
   const box = (await slider.boundingBox())!;
   await page.mouse.move(box.x + box.width * 0.1, box.y + box.height / 2);
   await page.mouse.down();

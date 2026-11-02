@@ -4,6 +4,7 @@ import { createChat, expect, openRail, test } from "./agent.ts";
 import { putRecords } from "./media.ts";
 import { artifactShape, filledArtifact } from "./artifacts.ts";
 import { connectTab } from "../../engine/test/syncClient.ts";
+import { preparedFile } from "./editorHarness.ts";
 import { expectSlot, expectToken, inBothSchemes, styleOf } from "./kit.ts";
 
 const editor = (page: Page) => page.getByTestId("artifact-editor");
@@ -383,6 +384,10 @@ test("the editor sizes its preview to Fill, Desktop, Tablet, Mobile or a typed s
   const region = page.getByRole("region", { name: "Editing Landing" });
   const inside = region.frameLocator("iframe[data-artifact-frame]");
   const frame = region.locator("iframe[data-artifact-frame]");
+  // Spec 18: a page with no element ids is prepared on open, and the swap then shows the prepared file in the frame.
+  // The boot number is read from that frame, so the size changes below are checked against the document the editor keeps.
+  const prepared = await preparedFile(agent);
+  await expect(frame).toHaveAttribute("src", new RegExp(prepared.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
   await expect(trigger()).toContainText("Fill");
   await expect(inside.locator("#vp")).toHaveText(/^\d+x\d+$/);
   const boot = await inside.locator("#boot").textContent();

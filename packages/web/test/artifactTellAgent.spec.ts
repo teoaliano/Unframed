@@ -70,3 +70,29 @@ test("Ask the agent to make this editable fills an empty draft with the instruct
   await expect(promptBox(rail(page))).toContainText("literal");
   await expect.poll(async () => (await engineChats(agent)).length).toBe(0);
 });
+
+test("a Layers row's menu tells the agent about that row, and holds rename, hide and lock", async ({ page, agent }) => {
+  await onBoard(page, agent, PAGE);
+  await openEditor(page);
+  await parameters(page).getByRole("tab", { name: "Layers", exact: true }).click();
+
+  // Right-clicking a row selects it and opens its menu.
+  const row = parameters(page).locator("[data-layer-row]").filter({ hasText: "Lead text" });
+  await row.locator("[data-layer]").click({ button: "right" });
+  for (const item of ["Tell the agent", "Rename", "Hide", "Lock"]) await expect(page.getByRole("menuitem", { name: item, exact: true })).toBeVisible();
+  await expect(frameOf(page).getByText("Lead text", { exact: true })).toBeVisible();
+  await page.getByRole("menuitem", { name: "Tell the agent", exact: true }).click();
+  await expect(rail(page).getByText("p · Lead text", { exact: true })).toBeVisible();
+  await expect(rail(page).getByText("h1 · Welcome", { exact: true })).toHaveCount(0);
+  await expect(promptBox(rail(page))).toBeFocused();
+
+  // Hide from the menu does what the row's eye does.
+  await row.locator("[data-layer]").click({ button: "right" });
+  await page.getByRole("menuitem", { name: "Hide", exact: true }).click();
+  await expect(parameters(page).getByRole("button", { name: "Show Lead text", exact: true })).toBeVisible();
+
+  // Lock from the menu locks the element, as the row's lock does.
+  await row.locator("[data-layer]").click({ button: "right" });
+  await page.getByRole("menuitem", { name: "Lock", exact: true }).click();
+  await expect(parameters(page).getByRole("button", { name: "Unlock Lead text", exact: true })).toBeVisible();
+});

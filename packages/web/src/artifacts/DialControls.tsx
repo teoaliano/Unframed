@@ -33,6 +33,10 @@ export const DialControls = ({ shapeId, announcement, saved, post, onWrite }: Di
   savedNow.current = saved;
   const postNow = useRef(post);
   postNow.current = post;
+  // A loading frame announces its parameters too, often the same ones: the kit is rebuilt only when the announced parameters change.
+  const announced = JSON.stringify([announcement.name, announcement.config]);
+  const latest = useRef(announcement);
+  latest.current = announcement;
   const pending = useRef<Record<string, unknown> | undefined>(undefined);
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
@@ -44,6 +48,8 @@ export const DialControls = ({ shapeId, announcement, saved, post, onWrite }: Di
     const shape = values === undefined ? undefined : editor.getShape(shapeId);
     if (!shape || values === undefined) return;
     writtenTo.current?.(values);
+    // The shape holds these values from now on, before React re-renders with them: a kit built next (the announcement after a swap) starts from them, not from the older saved set.
+    savedNow.current = values;
     editor.markHistoryStoppingPoint("tune parameters");
     editor.updateShape({ id: shapeId, type: shape.type, props: { dials: values } } as Parameters<typeof editor.updateShape>[0]);
   };
@@ -55,9 +61,10 @@ export const DialControls = ({ shapeId, announcement, saved, post, onWrite }: Di
 
   useEffect(() => {
     const target = host.current;
-    const normalised = normaliseDials(announcement.config);
+    const current = latest.current;
+    const normalised = normaliseDials(current.config);
     if (!target || !normalised.ok) return;
-    const name = announcement.name === "" ? "Parameters" : announcement.name;
+    const name = current.name === "" ? "Parameters" : current.name;
     // DialKit follows the app's scheme; its colours come from the tokens (theme/vendors.css).
     const scheme = () => (document.documentElement.getAttribute("data-unframed-theme") === "dark" ? "dark" : "light");
     const root = createDialRoot({ target, mode: "inline", theme: scheme(), productionEnabled: true, defaultOpen: true });
@@ -87,7 +94,8 @@ export const DialControls = ({ shapeId, announcement, saved, post, onWrite }: Di
       kit.destroy();
       root.destroy();
     };
-  }, [announcement]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- keyed on the announced text, which the effect reads through `latest`
+  }, [announced]);
 
   return <div ref={host} data-testid="artifact-dials" />;
 };

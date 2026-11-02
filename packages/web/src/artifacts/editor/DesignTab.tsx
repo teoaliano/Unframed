@@ -20,6 +20,7 @@ import { previewUrl } from "../../canvas/assetStore.ts";
 import { chainOf } from "./EditPanels.tsx";
 import { ImagePicker } from "./ImagePicker.tsx";
 import type { EditReport, EditSession } from "./editSession.ts";
+import { chipDataFor } from "./chipData.ts";
 import { expandShorthand } from "./expandShorthand.ts";
 import { fieldNameOf } from "./tellAgent.ts";
 
@@ -465,25 +466,10 @@ export const DesignTab = ({ session, kind, project, dials, locked, onTell, onAsk
     });
   };
 
-  /** One selected element as the chip a message carries: its id or live selector, its start tag and its text. */
+  /** One selected element as the chip a message carries (see chipData.ts). */
   const chipDataOf = (subject: Subject): ChipElement => {
     const source = elements.find((candidate) => candidate.id === subject.id);
-    const declared = source === undefined ? Object.entries(subject.report.inline).flatMap(([property, value]) => (value ? [[property, value] as const] : [])) : Object.entries(source.style);
-    const attributes = [
-      ...(source === undefined ? [] : [`data-hf-id="${source.id}"`]),
-      ...(source?.named ? [`data-uf-name="${source.name}"`] : []),
-      ...(source?.src === undefined ? [] : [`src="${source.src}"`]),
-      ...(declared.length === 0 ? [] : [`style="${declared.map(([property, value]) => `${property}: ${value}`).join("; ")}"`]),
-    ];
-    return {
-      elementId: source === undefined ? null : source.id,
-      liveSelector: subject.report.selector,
-      tag: subject.report.tag,
-      label: source?.name ?? subject.report.tag,
-      startTag: `<${[subject.report.tag, ...attributes].join(" ")}>`,
-      text: subject.report.text ?? "",
-      hasChildren: source !== undefined && elements.some((candidate) => candidate.parent === subject.id),
-    };
+    return chipDataFor(subject.id, source, subject.report, source !== undefined && elements.some((candidate) => candidate.parent === subject.id));
   };
 
   /** The field's value across the selection: the shared one, or Mixed; the owner that blocks an edit, if any. */

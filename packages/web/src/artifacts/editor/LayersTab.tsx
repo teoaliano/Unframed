@@ -4,12 +4,18 @@
  * selects its element, hovers it in the frame, renames it, hides it and locks it.
  */
 import type { SourceTreeElement } from "@unframed/contracts";
-import { Eye, EyeOff, Film, Frame, Image, Link, Lock, LockOpen, MousePointerClick, Square, Type, ChevronDown, ChevronRight } from "lucide-react";
+import type { ChipElement } from "@unframed/domain";
+import { Eye, EyeOff, Film, Frame, Image, Link, Lock, LockOpen, MessageSquarePlus, MousePointerClick, Pencil, Square, Type, ChevronDown, ChevronRight } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
+import { Menu, MenuItem, MenuPopup, MenuTrigger } from "~/components/ui/menu";
 import { cn } from "~/lib/utils";
+import { chipDataFor } from "./chipData.ts";
 import type { EditSession, LiveNode } from "./editSession.ts";
+
+/** The hidden trigger a Layers menu is opened through (the menu is controlled, anchored to the row). */
+const LAYER_MENU_TRIGGER = "layers-row-menu-trigger";
 
 const INDENT_PX = 12;
 const NAME_MAX = 60;
@@ -97,12 +103,16 @@ export interface LayersTabProps {
   readonly locked: readonly string[];
   /** Locks or unlocks an element. The editor writes the shape and its one undo step. */
   readonly onLock: (id: string, on: boolean) => void;
+  /** Tell the agent: the chips of the selected elements go into the artifact's chat (spec 18, Point and tell). */
+  readonly onTell: (elements: ChipElement[]) => void;
 }
 
-export const LayersTab = ({ session, kind, shapeId, locked, onLock }: LayersTabProps) => {
-  const { tree, preparing, selection, pending, live } = session;
+export const LayersTab = ({ session, kind, shapeId, locked, onLock, onTell }: LayersTabProps) => {
+  const { tree, preparing, selection, pending, live, reports } = session;
   const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(() => collapsedBy.get(shapeId) ?? new Set());
   const [renaming, setRenaming] = useState<string | null>(null);
+  /** The row whose context menu is open, and the row it is anchored to. */
+  const [menuFor, setMenuFor] = useState<{ readonly id: string; readonly anchor: HTMLElement }>();
   const [draft, setDraft] = useState("");
   const cancelled = useRef(false);
 
@@ -145,6 +155,9 @@ export const LayersTab = ({ session, kind, shapeId, locked, onLock }: LayersTabP
     return edit?.type === "attribute" ? edit.value : undefined;
   };
 
+  const menuElement = menuFor === undefined ? undefined : tree.elements.find((candidate) => candidate.id === menuFor.id);
+  const menuHidden = menuFor === undefined ? false : (pendingHidden(menuFor.id) ?? menuElement?.hidden === true);
+
   const toggle = (id: string) => {
     const next = new Set(collapsed);
     if (next.has(id)) next.delete(id);
@@ -156,6 +169,22 @@ export const LayersTab = ({ session, kind, shapeId, locked, onLock }: LayersTabP
   const select = (id: string, additive: boolean) => {
     if (additive) session.setSelection(selection.includes(id) ? selection.filter((other) => other !== id) : [...selection, id]);
     else session.setSelection([id]);
+  };
+
+  /** The chips of the selected elements, for Tell the agent: a selected element with no source and no report is left out. */
+  const chipsOfSelection = (): ChipElement[] =>
+    selection.flatMap((id) => {
+      const source = tree.elements.find((candidate) => candidate.id === id);
+      const report = reports[id];
+      if (source === undefined && report === undefined) return [];
+      const hasChildren = source !== undefined && tree.elements.some((candidate) => candidate.parent === id);
+      return [chipDataFor(id, source, report, hasChildren)];
+    });
+
+  const startRename = (element: SourceTreeElement) => {
+    cancelled.current = false;
+    setDraft(element.name);
+    setRenaming(element.id);
   };
 
   const finishRename = (element: SourceTreeElement, keep: boolean) => {
@@ -196,7 +225,15 @@ export const LayersTab = ({ session, kind, shapeId, locked, onLock }: LayersTabP
         const open = !collapsed.has(id);
         return (
           <li key={id} data-layer-row={id} style={{ paddingInlineStart: `${row.depth * INDENT_PX}px` }} className="group">
-            <div className="flex min-w-0 items-center gap-1" onMouseEnter={() => session.hoverLayer(id)}>
+            <div
+              className="flex min-w-0 items-center gap-1"
+              onMouseEnter={() => session.hoverLayer(id)}
+              onContextMenu={(event) => {
+                event.preventDefault();
+                if (!selection.includes(id)) session.setSelection([id]);
+                setMenuFor({ id, anchor: event.currentTarget });
+              }}
+            >
               {row.hasChildren ? (
                 <Button variant="ghost" size="icon-sm" aria-label={open ? `Collapse ${label}` : `Expand ${label}`} aria-expanded={open} onClick={() => toggle(id)}>
                   {open ? <ChevronDown aria-hidden /> : <ChevronRight aria-hidden />}
@@ -226,16 +263,10 @@ export const LayersTab = ({ session, kind, shapeId, locked, onLock }: LayersTabP
                   aria-pressed={selected}
                   className="min-w-0 flex-1 justify-start"
                   onClick={(event) => select(id, event.shiftKey)}
-                  onDoubleClick={() => {
-                    cancelled.current = false;
-                    setDraft(label);
-                    setRenaming(id);
-                  }}
+                  onDoubleClick={() => startRename(element)}
                   onKeyDown={(event) => {
                     if (event.key !== "Enter" || event.target !== event.currentTarget) return;
-                    cancelled.current = false;
-                    setDraft(label);
-                    setRenaming(id);
+                    startRename(element);
                   }}
                 >
                   <span className={cn("flex min-w-0 flex-1 items-center gap-1.5", hidden && "opacity-50", row.inLocked && "text-muted-foreground")}>
@@ -263,6 +294,61 @@ export const LayersTab = ({ session, kind, shapeId, locked, onLock }: LayersTabP
           </li>
         );
       })}
+      <Menu modal={false} triggerId={LAYER_MENU_TRIGGER} open={menuFor !== undefined} onOpenChange={(open) => !open && setMenuFor(undefined)}>
+        <MenuTrigger id={LAYER_MENU_TRIGGER} nativeButton={false} render={<span hidden />} />
+        {menuFor && menuElement !== undefined && (
+          <LayerMenu
+            anchor={menuFor.anchor}
+            label={menuElement.name}
+            hidden={menuHidden}
+            locked={locked.includes(menuFor.id)}
+            onTell={() => onTell(chipsOfSelection())}
+            onRename={() => startRename(menuElement)}
+            onHide={() => session.patch({ type: "hide", elementId: menuFor.id, hidden: !menuHidden })}
+            onLock={() => onLock(menuFor.id, !locked.includes(menuFor.id))}
+          />
+        )}
+      </Menu>
     </ul>
   );
 };
+
+/** The row menu: Tell the agent, then the same rename, hide and lock the row's controls do. */
+const LayerMenu = ({
+  anchor,
+  label,
+  hidden,
+  locked,
+  onTell,
+  onRename,
+  onHide,
+  onLock,
+}: {
+  readonly anchor: HTMLElement;
+  readonly label: string;
+  readonly hidden: boolean;
+  readonly locked: boolean;
+  readonly onTell: () => void;
+  readonly onRename: () => void;
+  readonly onHide: () => void;
+  readonly onLock: () => void;
+}) => (
+  <MenuPopup anchor={anchor} side="right" align="start" sideOffset={4} className="max-w-[260px]" finalFocus={() => false} aria-label={`${label} actions`}>
+    <MenuItem onClick={onTell}>
+      <MessageSquarePlus aria-hidden />
+      Tell the agent
+    </MenuItem>
+    <MenuItem onClick={onRename}>
+      <Pencil aria-hidden />
+      Rename
+    </MenuItem>
+    <MenuItem onClick={onHide}>
+      {hidden ? <Eye aria-hidden /> : <EyeOff aria-hidden />}
+      {hidden ? "Show" : "Hide"}
+    </MenuItem>
+    <MenuItem onClick={onLock}>
+      {locked ? <LockOpen aria-hidden /> : <Lock aria-hidden />}
+      {locked ? "Unlock" : "Lock"}
+    </MenuItem>
+  </MenuPopup>
+);

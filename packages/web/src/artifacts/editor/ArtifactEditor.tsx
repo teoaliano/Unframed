@@ -335,7 +335,16 @@ export const ArtifactEditor = ({ shapeId, onClose, onOpen }: ArtifactEditorProps
             onAsk={(field, elements) => tellAgent(chatClient, shapeId, elements, makeEditableInstruction(field))}
           />
         )}
-        {panel === "layers" && <LayersTab session={session} kind={facts.kind} shapeId={shapeId} locked={facts.locked} onLock={setLocked} />}
+        {panel === "layers" && (
+          <LayersTab
+            session={session}
+            kind={facts.kind}
+            shapeId={shapeId}
+            locked={facts.locked}
+            onLock={setLocked}
+            onTell={(elements) => tellAgent(chatClient, shapeId, elements)}
+          />
+        )}
         {panel === "parameters" && (
           <ParametersBody
             shapeId={shapeId}
