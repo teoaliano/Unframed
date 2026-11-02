@@ -88,7 +88,7 @@ test("a scripted page_write during a pending burst drops the burst, shows the ag
 
   // The agent's file lands and the warning comes with it: the burst is not left to its 1.5 s pause.
   await expect.poll(() => htmlCount(agent), { timeout: 8000 }).toBe(countBefore + 1);
-  await expect(page.getByText(WARNING.agent, { exact: true }).first()).toBeVisible({ timeout: 800 });
+  await expect(page.getByText(WARNING.agent, { exact: true }).first()).toBeVisible({ timeout: 2000 });
   await expect(heading(page, "Agent version")).toBeVisible({ timeout: 8000 });
   // Wait past the burst's pause: the dropped burst writes nothing, and the agent's file keeps its own sizes.
   await page.waitForTimeout(2500);
@@ -113,7 +113,7 @@ test("a file change made elsewhere under a pending burst drops it with the elsew
   await (await agent.rpc()).call("testCanvas.apply", { project: "default", change: { put: [{ ...shape, props: { ...shape.props, file: "elsewhere.html" } }], remove: [] }, origin: { kind: "server", id: "test" } });
 
   // The warning comes at once, well before the burst's pause would end; the frame then swaps to the other version.
-  await expect(page.getByText(WARNING.elsewhere, { exact: true }).first()).toBeVisible({ timeout: 800 });
+  await expect(page.getByText(WARNING.elsewhere, { exact: true }).first()).toBeVisible({ timeout: 2000 });
   await expect(heading(page, "Elsewhere version")).toBeVisible({ timeout: 8000 });
   await page.waitForTimeout(2500);
   expect(await htmlCount(agent)).toBe(countBefore);

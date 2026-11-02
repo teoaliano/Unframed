@@ -67,7 +67,7 @@ const watchShownFrames = (page: Page) =>
   page.evaluate(() => {
     const host = document.querySelector<HTMLElement>('[data-testid="artifact-preview"]');
     if (!host) throw new Error("the editor shows no preview");
-    const frames = () => [...host.querySelectorAll<HTMLIFrameElement>("iframe[data-artifact-frame]")];
+    const frames = () => [...host.querySelectorAll<HTMLIFrameElement>("iframe[data-artifact-frame], iframe[data-artifact-frame-incoming]")];
     const watch = (frame: HTMLIFrameElement) => {
       if (frame.dataset.watched === "1") return;
       frame.dataset.watched = "1";

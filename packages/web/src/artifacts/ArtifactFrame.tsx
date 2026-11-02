@@ -266,7 +266,7 @@ export const ArtifactFrame = ({ project, kind, file, previewPort, dials, interac
               else frames.current.delete(src);
             }}
             className={showing ? "block size-full border-0 bg-artifact-page" : "invisible absolute inset-0 block size-full border-0 bg-artifact-page"}
-            data-artifact-frame=""
+            {...(showing ? { "data-artifact-frame": "" } : { "data-artifact-frame-incoming": "" })}
             title={file}
             src={src}
             sandbox="allow-scripts allow-same-origin"
