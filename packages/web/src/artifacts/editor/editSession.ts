@@ -152,6 +152,9 @@ export const useEditSession = ({ editor, engine, project, shapeId, kind, file, l
     (next: readonly string[]) => {
       lockedRef.current = next;
       post({ type: "unframed:edit:mode", mode: modeRef.current, locked: next });
+      // A lock change is one step of the session's own undo history, as a committed edit is.
+      undoable.current += 1;
+      redoable.current = 0;
     },
     [post],
   );

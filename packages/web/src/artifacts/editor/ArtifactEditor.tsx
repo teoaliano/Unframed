@@ -98,7 +98,14 @@ export const ArtifactEditor = ({ shapeId, onClose, onOpen }: ArtifactEditorProps
       const current = (editor.getShape(shapeId)?.props as { lockedElements?: string[] } | undefined)?.lockedElements ?? [];
       const next = on ? [...current.filter((other) => other !== id), id] : current.filter((other) => other !== id);
       editor.markHistoryStoppingPoint("lock");
-      editor.updateShape({ id: shapeId, type: facts?.kind ?? "page", props: { lockedElements: next.length > 0 ? next : undefined } } as never);
+      const shape = editor.getShape(shapeId);
+      if (shape && next.length === 0) {
+        // No lock left: the key goes, so the shape holds no lockedElements at all.
+        const { lockedElements: _gone, ...rest } = shape.props as { lockedElements?: string[] };
+        editor.store.put([{ ...shape, props: rest } as never]);
+      } else {
+        editor.updateShape({ id: shapeId, type: facts?.kind ?? "page", props: { lockedElements: next } } as never);
+      }
       sessionRef.current.setLocked(next);
     },
     [editor, shapeId, facts?.kind],
