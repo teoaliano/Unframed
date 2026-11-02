@@ -1,0 +1,93 @@
+import type { Page } from "@playwright/test";
+import { centre, openCanvas, shapeOnScreen } from "./canvas.ts";
+import { expect, test } from "./agent.ts";
+import { filledArtifact, insideComposition } from "./artifacts.ts";
+import type { TestEngine } from "../../engine/test/engineProcess.ts";
+
+/** A four-second motion whose dot moves across the composition, so there is a selectable element and a clock. */
+const MOVER = `<!doctype html><html><head><style>#root{position:relative;width:640px;height:360px;background:#000;overflow:hidden}#dot{position:absolute;left:20px;top:120px;width:80px;height:80px;background:#f00}</style></head><body>
+<div id="root" data-composition-id="main" data-start="0" data-duration="4" data-width="640" data-height="360"><div id="dot" class="clip" data-start="0" data-duration="4"></div></div>
+<script src="gsap.js"></script><script>window.__timelines = { main: gsap.timeline({ paused: true }).to("#dot", { x: 400, duration: 4 }, 0) };</script></body></html>`;
+
+const SHAPE = "shape:intro";
+const editor = (page: Page) => page.getByTestId("artifact-editor");
+const region = (page: Page) => page.getByRole("region", { name: "Editing Intro" });
+const timeline = (page: Page) => page.getByRole("region", { name: "Timeline for Intro" });
+const outline = (page: Page, kind: "hover" | "selected") => page.locator(`[data-edit-outline="${kind}"]`);
+const readout = (page: Page) => timeline(page).getByTestId("timeline-readout");
+const composer = (page: Page) => editor(page).locator('[data-editor-column="rail"] [contenteditable="true"]').first();
+
+// A motion takes a while to load its player and its composition.
+test.setTimeout(150_000);
+
+/** Opens the motion in the editor and waits for its player to report the timeline. */
+const openMotion = async (page: Page, engine: TestEngine) => {
+  await openCanvas(page, engine);
+  await filledArtifact(engine, { id: SHAPE, kind: "motion", ref: "150", at: { x: -520, y: -40 }, size: { w: 480, h: 270 }, title: "Intro", html: MOVER });
+  await expect(shapeOnScreen(page, SHAPE)).toBeVisible();
+  await page.mouse.click(640, 600);
+  const at = await centre(shapeOnScreen(page, SHAPE));
+  await page.mouse.dblclick(at.x, at.y);
+  await expect(region(page)).toBeVisible();
+  await expect(readout(page)).toContainText("0:04.00", { timeout: 40_000 });
+};
+
+test("a focused tab, toggle, menu or composer keeps its own keys, and the transport does not act", async ({ page, agent }) => {
+  await openMotion(page, agent);
+  const idle = async () => {
+    await expect(timeline(page).getByRole("button", { name: "Play (Space)", exact: true })).toBeVisible();
+    await expect(readout(page)).toContainText(/0:00\.00 \/ 0:04\.00\s*0f/);
+    await expect(timeline(page).getByRole("button", { name: "Unmute (M)", exact: true })).toBeVisible();
+  };
+
+  // A tab: the arrows move between the tabs, and the transport's Right step is not taken.
+  await editor(page).getByRole("tab", { name: "Layers" }).focus();
+  await page.keyboard.press("ArrowRight");
+  await expect(editor(page).getByRole("tab", { name: "Parameters" })).toBeFocused();
+  await page.keyboard.press("ArrowLeft");
+  await page.keyboard.press("Space");
+  await idle();
+
+  // A toggle group: its own Space switches the mode, and the transport still does not act.
+  await region(page).getByRole("group", { name: "Mode" }).getByRole("button", { name: "Interact", exact: true }).focus();
+  await page.keyboard.press("Space");
+  await expect(region(page).getByRole("group", { name: "Mode" }).getByRole("button", { name: "Interact", exact: true })).toHaveAttribute("aria-pressed", "true");
+  await idle();
+  await region(page).getByRole("group", { name: "Mode" }).getByRole("button", { name: "Edit", exact: true }).focus();
+  await page.keyboard.press("Space");
+  await idle();
+
+  // A menu: open, its arrows and letters belong to it.
+  await timeline(page).getByRole("button", { name: "Playback speed" }).click();
+  await expect(page.getByRole("menu")).toBeVisible();
+  await page.keyboard.press("ArrowDown");
+  await page.keyboard.press("l");
+  await page.keyboard.press("ArrowRight");
+  await expect(page.getByRole("menu")).toBeVisible();
+  await idle();
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("menu")).toBeHidden();
+
+  // The composer: typing a space, an L, a J, a K, an M and the arrows types them, and nothing plays.
+  await composer(page).click();
+  await page.keyboard.type(" ljkm");
+  await expect(composer(page)).toContainText("ljkm");
+  await idle();
+});
+
+test("Esc in the strip clears the element selection first, and a second Esc closes the editor", async ({ page, agent }) => {
+  await openMotion(page, agent);
+  await expect(async () => {
+    await insideComposition(region(page).frameLocator("iframe[data-artifact-frame]")).locator("#dot").click();
+    await expect(outline(page, "selected")).toHaveCount(1, { timeout: 1000 });
+  }).toPass({ timeout: 40_000 });
+
+  // Focus the strip: Esc is the editor's, and the strip's transport does not take it.
+  await timeline(page).getByTestId("timeline-rows").click();
+  await page.keyboard.press("Escape");
+  await expect(outline(page, "selected")).toHaveCount(0);
+  await expect(region(page)).toBeVisible();
+
+  await page.keyboard.press("Escape");
+  await expect(region(page)).toHaveCount(0);
+});
