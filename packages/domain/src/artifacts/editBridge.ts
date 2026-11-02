@@ -76,6 +76,8 @@ export interface EditWindow {
   unframedEditPeer?: unknown;
   /** HyperFrames' GSAP timelines by name, in a motion. */
   __timelines?: unknown;
+  /** Set by this bridge; the dials bridge calls it after each apply (spec 21). */
+  unframedDialsApplied?: () => void;
 }
 
 /**
@@ -101,6 +103,8 @@ export function installEditBridge(win: EditWindow): void {
   ];
   const TRANSFORM = ["x", "y", "z", "scale", "scaleX", "scaleY", "scaleZ", "rotation", "rotationX", "rotationY", "rotationZ", "skewX", "skewY", "xPercent", "yPercent"];
   const KEYS_FORWARDED = ["v", "V", "i", "I", "Escape"];
+  // A motion's transport keys, forwarded to the editor from the frame in Edit mode (spec 21). A page keeps them.
+  const TRANSPORT_KEYS = [" ", "ArrowLeft", "ArrowRight", "j", "J", "k", "K", "l", "L", "m", "M", "o", "O"];
 
   const doc = win.document;
   let peer: string = typeof win.unframedEditPeer === "string" ? win.unframedEditPeer : win.location.origin;
@@ -450,7 +454,9 @@ export function installEditBridge(win: EditWindow): void {
     }
     event.preventDefault();
     const undo = (event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "z";
-    if (KEYS_FORWARDED.includes(event.key) || (event.key === "Enter" && event.shiftKey) || undo) {
+    // A motion also forwards its transport keys, so the editor's transport answers them from the frame.
+    const transport = win.__timelines !== undefined && TRANSPORT_KEYS.includes(event.key);
+    if (KEYS_FORWARDED.includes(event.key) || (event.key === "Enter" && event.shiftKey) || undo || transport) {
       post({ type: "unframed:edit:key", key: event.key, shift: event.shiftKey === true, meta: event.metaKey === true, ctrl: event.ctrlKey === true });
     }
   };
@@ -482,6 +488,48 @@ export function installEditBridge(win: EditWindow): void {
       post({ type: "unframed:edit:hover", element: null });
     }
   };
+
+  // The live tweens of a motion: reported after load and after each dials apply, at most once a frame (spec 21).
+  let tweenFrame: unknown = null;
+  const keyframePercents = (vars: Record<string, unknown>): number[] => {
+    const steps = vars.keyframes;
+    if (Array.isArray(steps)) return steps.map((_, index) => (steps.length > 1 ? Math.round((index / (steps.length - 1)) * 100) : 0));
+    if (typeof steps === "object" && steps !== null) return Object.keys(steps).map((key) => parseFloat(key)).filter((value) => Number.isFinite(value));
+    return [];
+  };
+  const reportTweens = () => {
+    tweenFrame = null;
+    const found: unknown[] = [];
+    const timelines = win.__timelines;
+    if (typeof timelines !== "object" || timelines === null) return;
+    for (const timeline of Object.values(timelines)) {
+      const tl = timeline as { getChildren?: (nested: boolean, tweens: boolean, timelines: boolean) => unknown[] };
+      if (typeof tl?.getChildren !== "function") continue;
+      for (const tween of tl.getChildren(true, true, false) as Array<{ targets?: () => unknown[]; startTime?: () => number; duration?: () => number; vars?: Record<string, unknown> }>) {
+        if (typeof tween.targets !== "function") continue;
+        const vars = tween.vars ?? {};
+        const targets = tween.targets().filter((target): target is EditElement => typeof target === "object" && target !== null && (target as EditElement).nodeType === 1);
+        found.push({
+          targets: targets.map((target) => keyOf(target)),
+          start: tween.startTime?.() ?? 0,
+          duration: tween.duration?.() ?? 0,
+          keyframes: keyframePercents(vars),
+          props: Object.keys(vars).filter((key) => !GSAP_KEYS.includes(key) && !/^on[A-Z]/.test(key)),
+          repeat: typeof vars.repeat === "number" ? vars.repeat : 0,
+          yoyo: vars.yoyo === true,
+        });
+      }
+    }
+    post({ type: "unframed:edit:tweens", tweens: found });
+  };
+  const scheduleTweens = () => {
+    if (tweenFrame !== null) return;
+    tweenFrame = win.requestAnimationFrame(reportTweens);
+  };
+  // The dials bridge calls this after every apply in the same document (spec 21).
+  win.unframedDialsApplied = scheduleTweens;
+  if (doc.readyState === "complete") scheduleTweens();
+  else win.addEventListener("load", scheduleTweens);
 
   // The first value of each touched property is kept once; reset puts every one back.
   const touch = (el: EditElement, key: string, capture: () => () => void) => {

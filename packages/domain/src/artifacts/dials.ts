@@ -189,6 +189,8 @@ export interface BridgeWindow {
   document?: { head: { appendChild(node: unknown): unknown }; createElement(tag: "script"): { src: string } };
   /** The origin of the edit hello, which the edit bridge answers. */
   unframedEditPeer?: unknown;
+  /** Set by the edit bridge: called after every apply, so a motion's live tweens are reported again (spec 21). */
+  unframedDialsApplied?: () => void;
 }
 
 /**
@@ -213,6 +215,7 @@ export function installDialsBridge(win: BridgeWindow, dials: DialRules): void {
     } catch (error) {
       win.console.error("[unframed] applying parameters failed", error);
     }
+    win.unframedDialsApplied?.();
   };
 
   const announce = (to?: string) => {

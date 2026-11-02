@@ -493,3 +493,63 @@ describe("the built edit bridge", () => {
     expect(messages("unframed:edit:report").length).toBe(before + 1);
   });
 });
+
+describe("the motion's live tween report and transport keys (spec 21, task 19)", () => {
+  it("reports each live tween's targets, timing, keyframes, animated properties and repeats after load, and after each dials apply once a frame", () => {
+    const tweens: unknown[] = [];
+    const { document, element, messages, fire, flush, win } = stubEditWindow({ timelines: { main: { getChildren: () => tweens } } });
+    const el = element("hf-aaaa");
+    tweens.push({
+      targets: () => [el],
+      startTime: () => 1,
+      duration: () => 0.5,
+      vars: { x: 40, opacity: 0, repeat: 2, yoyo: true, duration: 0.5, ease: "power1.out", keyframes: { "0%": { x: 0 }, "100%": { x: 40 } } },
+    });
+    fire("load");
+    flush();
+    const first = messages("unframed:edit:tweens");
+    expect(first).toHaveLength(1);
+    expect(first[0].tweens).toEqual([{ targets: ["hf-aaaa"], start: 1, duration: 0.5, keyframes: [0, 100], props: ["x", "opacity"], repeat: 2, yoyo: true }]);
+    // Two dials applies in one frame are one report.
+    win.unframedDialsApplied();
+    win.unframedDialsApplied();
+    flush();
+    expect(messages("unframed:edit:tweens")).toHaveLength(2);
+    // A tween on an element with no id is named by its selector.
+    const bare = document.body.add(new FakeElement("span"));
+    tweens.push({ targets: () => [bare], startTime: () => 0, duration: () => 1, vars: { y: 4 } });
+    win.unframedDialsApplied();
+    flush();
+    expect(messages("unframed:edit:tweens").at(-1).tweens[1].targets).toEqual(["body > span:nth-of-type(1)"]);
+  });
+
+  it("forwards the transport keys from a motion in Edit mode, and not from a page", () => {
+    const motion = stubEditWindow({ timelines: {} });
+    const page = stubEditWindow();
+    const motionEl = motion.element("hf-aaaa");
+    const pageEl = page.element("hf-aaaa");
+    motion.mode("edit");
+    page.mode("edit");
+    expect(motion.document.fire("keydown", motionEl, { key: " " })).toBe(true);
+    motion.document.fire("keydown", motionEl, { key: "L", shiftKey: true });
+    motion.document.fire("keydown", motionEl, { key: "ArrowLeft" });
+    expect(motion.messages("unframed:edit:key")).toEqual([
+      { type: "unframed:edit:key", key: " ", shift: false, meta: false, ctrl: false },
+      { type: "unframed:edit:key", key: "L", shift: true, meta: false, ctrl: false },
+      { type: "unframed:edit:key", key: "ArrowLeft", shift: false, meta: false, ctrl: false },
+    ]);
+    page.document.fire("keydown", pageEl, { key: " " });
+    expect(page.messages("unframed:edit:key")).toEqual([]);
+  });
+
+  it("forwards none of the transport keys during an in-place text edit", () => {
+    const { document, element, mode, send, messages } = stubEditWindow({ timelines: {} });
+    const el = element("hf-aaaa", { text: "Hi" });
+    mode("edit");
+    send({ type: "unframed:edit:textEdit", id: "hf-aaaa" });
+    expect(document.fire("keydown", el, { key: " " })).toBe(false);
+    expect(document.fire("keydown", el, { key: "J" })).toBe(false);
+    expect(messages("unframed:edit:key")).toEqual([]);
+  });
+});
+
