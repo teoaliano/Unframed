@@ -222,6 +222,10 @@ export const rpcHandlersLayer = UnframedRpcs.toLayer(
             catch: (error) => unframedError("internal", `Could not write the export: ${errorText(error)}`),
           });
         }),
+      "artifact.sourceTree": ({ project, file }) => artifacts.sourceTree(project, file),
+      "artifact.prepareEdit": ({ project, shapeId }) => artifacts.prepareEdit(project, shapeId),
+      "artifact.edit": ({ project, shapeId, baseFile, edits }) => artifacts.edit(project, shapeId, baseFile, [...edits]),
+      "artifact.images": ({ project }) => artifacts.images(project),
       "legacyImport.status": ({ project }) => legacy.status(project),
       "legacyImport.report": ({ project }) => legacy.report(project),
       "legacyImport.markSeen": ({ project }) => legacy.markSeen(project),

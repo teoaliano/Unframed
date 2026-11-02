@@ -1,5 +1,5 @@
 import { artifactUrl, defaultDialValues, liveViewerUrl, normaliseDials, type ArtifactKind, type DialsAnnouncement, type Kit } from "@unframed/domain";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 
 export interface ArtifactFrameProps {
   readonly project: string;
@@ -18,6 +18,23 @@ export interface ArtifactFrameProps {
   readonly onAnnounce?: (announcement: DialsAnnouncement) => void;
   /** Hands the parent a way to post `unframed:dials:set` to this frame. */
   readonly onReady?: (post: (values: unknown) => void) => void;
+  /** The editor's frame: says `unframed:edit:hello` so the edit bridge loads (spec 18). */
+  readonly editable?: boolean;
+  /** Every `unframed:edit:*` message the frame sends, after the origin and window checks. */
+  readonly onEdit?: (message: EditMessage) => void;
+  /** Hands the parent a way to post an `unframed:edit:*` message to this frame. */
+  readonly onEditReady?: (post: (message: unknown) => void) => void;
+  /** Called when a new version takes the shown frame's place without having announced its parameters. */
+  readonly onSwapped?: () => void;
+}
+
+/** A loading document that has not said ready by now is swapped in anyway (a motion's composition can load late). */
+const SWAP_WAIT_MS = 2_000;
+
+/** A message the edit bridge or a motion's viewer sends the editor (spec 18, the protocol table). */
+export interface EditMessage {
+  readonly type: string;
+  readonly [key: string]: unknown;
 }
 
 const nonEmpty = (dials: Readonly<Record<string, unknown>> | undefined) => dials !== undefined && Object.keys(dials).length > 0;
@@ -80,6 +97,14 @@ interface FrameMenu {
   readonly clientY: number;
 }
 
+const isEdit = (data: unknown): data is EditMessage =>
+  typeof data === "object" && data !== null && typeof (data as { type?: unknown }).type === "string" && (data as { type: string }).type.startsWith("unframed:edit:");
+
+const isScroll = (data: unknown): data is { readonly type: "unframed:edit:scroll"; readonly x: number; readonly y: number } =>
+  typeof data === "object" && data !== null && (data as { type?: unknown }).type === "unframed:edit:scroll" && typeof (data as { x?: unknown }).x === "number" && typeof (data as { y?: unknown }).y === "number";
+
+const isEditReady = (data: unknown): boolean => typeof data === "object" && data !== null && (data as { type?: unknown }).type === "unframed:edit:ready";
+
 const isMenu = (data: unknown): data is FrameMenu =>
   typeof data === "object" && data !== null && (data as { type?: unknown }).type === "unframed:contextmenu" && typeof (data as FrameMenu).clientX === "number" && typeof (data as FrameMenu).clientY === "number";
 
@@ -111,48 +136,104 @@ const openShapeMenu = (frame: HTMLIFrameElement, menu: FrameMenu) => {
  * An artifact document, framed from the preview origin in a sandbox. It says hello at mount
  * and on load, answers an announcement with the shape's saved values, and sends them again
  * the moment they change. It accepts `unframed:dials` only from its own frame's window.
+ *
+ * The editor's frame (`editable`) swaps (spec 18, The swap): a new file loads in a second frame,
+ * hidden, with the saved dials sent at its load. It takes the shown frame's place once its edit
+ * bridge says ready (or after SWAP_WAIT_MS), and the last scroll the shown frame reported goes in
+ * its hello first. The shown frame is the only one whose edit messages count, so a loading
+ * document's boxes never reach the editor. Other frames show `file` and remount when it changes.
  */
-export const ArtifactFrame = ({ project, kind, file, previewPort, dials, kit, mode, interactive, lazy, onAnnounce, onReady }: ArtifactFrameProps) => {
-  const frame = useRef<HTMLIFrameElement>(null);
+export const ArtifactFrame = ({ project, kind, file, previewPort, dials, kit, mode, interactive, lazy, onAnnounce, onReady, editable = false, onEdit, onEditReady, onSwapped }: ArtifactFrameProps) => {
   const url = urlOf(project, kind, file, previewPort);
+  const [shownUrl, setShownUrl] = useState(url);
+  const displayed = editable ? shownUrl : url;
+  const incoming = editable && url !== shownUrl ? url : undefined;
   const target = new URL(url).origin;
+  const frames = useRef(new Map<string, HTMLIFrameElement>());
+  const displayedRef = useRef(displayed);
+  displayedRef.current = displayed;
   const saved = useRef(dials);
   saved.current = dials;
   const announce = useRef(onAnnounce);
   announce.current = onAnnounce;
   const heard = useRef<DialsAnnouncement | undefined>(undefined);
+  const editing = useRef(editable);
+  editing.current = editable;
+  const onEditMessage = useRef(onEdit);
+  onEditMessage.current = onEdit;
+  const swapped = useRef(onSwapped);
+  swapped.current = onSwapped;
+  // The last scroll the shown frame reported, sent to the frame that takes its place.
+  const scrolled = useRef<{ x: number; y: number } | undefined>(undefined);
+  // The frame whose parameters were announced while it loaded, so the swap knows they are current.
+  const announcedBy = useRef<string | undefined>(undefined);
+  const swappingTo = useRef<string | undefined>(undefined);
 
-  const post = (message: unknown) => {
+  const post = (frame: HTMLIFrameElement | undefined, message: unknown) => {
     try {
-      frame.current?.contentWindow?.postMessage(message, target);
+      frame?.contentWindow?.postMessage(message, target);
     } catch {
       // A frame mid-navigation has no window to post to.
     }
   };
+  const shown = () => frames.current.get(displayedRef.current);
+  // Tokens messages go to the loading frame too, so a swap never changes the mode or the kit.
+  const postAll = (message: unknown) => frames.current.forEach((frame) => post(frame, message));
   // On the canvas the frame also asks for right-clicks, so a selected frame still opens its shape's menu.
-  const hello = () => {
-    post({ type: "unframed:dials:hello", ...(frame.current && canvasUnder(frame.current) ? { menus: true } : {}) });
-    post({ type: "unframed:tokens:mode", mode: mode ?? null });
+  const hello = (frame: HTMLIFrameElement) => {
+    post(frame, { type: "unframed:dials:hello", ...(canvasUnder(frame) ? { menus: true } : {}) });
+    // The edit bridge loads on this hello (spec 18). Canvas frames never say it, so they carry no edit code.
+    if (editing.current) post(frame, { type: "unframed:edit:hello" });
+    // The kit's mode reaches every frame at its hello, a loading one included, so a swapped-in frame shows the same mode.
+    post(frame, { type: "unframed:tokens:mode", mode: mode ?? null });
   };
-  const set = (values: unknown) => post({ type: "unframed:dials:set", values });
+  const set = (values: unknown) => post(shown(), { type: "unframed:dials:set", values });
 
+  // The parent's ways to post follow the shown frame, so a swap re-points them.
   useEffect(() => {
     onReady?.(set);
-    hello();
+    onEditReady?.((message) => post(shown(), message));
+    const current = shown();
+    if (current) hello(current);
+    swappingTo.current = undefined;
+    // Only the shown frame is re-pointed: the swap is the one change of frame.
+  }, [displayed]);
+
+  // The swap: the loading frame gets the shown frame's last scroll in its hello, then takes its place.
+  const swapTo = (src: string) => {
+    const frame = frames.current.get(src);
+    if (!frame || src === displayedRef.current || swappingTo.current === src) return;
+    swappingTo.current = src;
+    if (scrolled.current !== undefined) post(frame, { type: "unframed:edit:hello", scroll: scrolled.current });
+    if (announcedBy.current !== src) swapped.current?.();
+    setShownUrl(src);
+  };
+
+  useEffect(() => {
     const onMessage = (event: MessageEvent) => {
-      if (!frame.current || event.source !== frame.current.contentWindow) return;
-      if (isWheel(event.data)) return zoomCanvas(frame.current, event.data);
-      if (isMenu(event.data)) return openShapeMenu(frame.current, event.data);
+      const found = [...frames.current].find(([, frame]) => frame.contentWindow === event.source);
+      if (!found) return;
+      const [src, frame] = found;
+      const isShown = src === displayedRef.current;
+      if (isShown && isWheel(event.data)) return zoomCanvas(frame, event.data);
+      if (isShown && isMenu(event.data)) return openShapeMenu(frame, event.data);
+      if (isShown && isScroll(event.data)) {
+        scrolled.current = { x: event.data.x, y: event.data.y };
+        return;
+      }
+      if (isShown && isEdit(event.data)) return onEditMessage.current?.(event.data);
+      if (!isShown && editing.current && isEditReady(event.data)) return swapTo(src);
       const data = event.data as DialsAnnouncement | null;
       if (typeof data !== "object" || data === null || data.type !== "unframed:dials") return;
+      // A loading frame announces too, so the parameters it declares are known when it is swapped in.
+      if (!isShown) announcedBy.current = src;
       heard.current = data;
-      if (nonEmpty(saved.current)) set(saved.current);
+      if (nonEmpty(saved.current)) post(frame, { type: "unframed:dials:set", values: saved.current });
       announce.current?.(data);
     };
     window.addEventListener("message", onMessage);
     return () => window.removeEventListener("message", onMessage);
-    // A new file is a fresh document, keyed by the parent.
-  }, [url]);
+  }, []);
 
   const serialised = JSON.stringify(dials ?? null);
   const first = useRef(true);
@@ -177,7 +258,7 @@ export const ArtifactFrame = ({ project, kind, file, previewPort, dials, kit, mo
       modeFirst.current = false;
       return;
     }
-    post({ type: "unframed:tokens:mode", mode: mode ?? null });
+    postAll({ type: "unframed:tokens:mode", mode: mode ?? null });
   }, [mode]);
 
   // A kit change reaches the frame at once: the tokens script replaces its style and re-applies its mode.
@@ -188,23 +269,45 @@ export const ArtifactFrame = ({ project, kind, file, previewPort, dials, kit, mo
       kitFirst.current = false;
       return;
     }
-    if (kit) post({ type: "unframed:tokens:set", kit: { format: kit.format, name: kit.name, modes: kit.modes, tokens: kit.tokens } });
+    if (kit) postAll({ type: "unframed:tokens:set", kit: { format: kit.format, name: kit.name, modes: kit.modes, tokens: kit.tokens } });
   }, [kitText]);
 
+  // A frame's load: say hello and send the saved dials. A loading frame is swapped in once its bridge says ready.
+  const loaded = (src: string) => {
+    const frame = frames.current.get(src);
+    if (!frame) return;
+    hello(frame);
+    if (nonEmpty(saved.current)) post(frame, { type: "unframed:dials:set", values: saved.current });
+    if (src !== displayedRef.current) window.setTimeout(() => swapTo(src), SWAP_WAIT_MS);
+  };
+
+  // The shown frame comes last in the stack's order only when nothing is loading: a loading one is hidden behind it.
+  const stack = incoming === undefined ? [displayed] : [displayed, incoming];
   return (
-    <iframe
-      ref={frame}
-      className="block size-full border-0 bg-artifact-page"
-      data-artifact-frame=""
-      title={file}
-      src={url}
-      sandbox="allow-scripts allow-same-origin"
-      referrerPolicy="no-referrer"
-      allow=""
-      {...(lazy ? { loading: "lazy" as const } : {})}
-      data-interactive={interactive ? "true" : undefined}
-      style={{ pointerEvents: interactive ? "auto" : "none" }}
-      onLoad={hello}
-    />
+    <>
+      {stack.map((src) => {
+        const showing = src === displayed;
+        return (
+          <iframe
+            key={src}
+            ref={(frame) => {
+              if (frame) frames.current.set(src, frame);
+              else frames.current.delete(src);
+            }}
+            className={showing ? "block size-full border-0 bg-artifact-page" : "invisible absolute inset-0 block size-full border-0 bg-artifact-page"}
+            {...(showing ? { "data-artifact-frame": "" } : { "data-artifact-frame-incoming": "" })}
+            title={file}
+            src={src}
+            sandbox="allow-scripts allow-same-origin"
+            referrerPolicy="no-referrer"
+            allow=""
+            {...(lazy ? { loading: "lazy" as const } : {})}
+            data-interactive={interactive && showing ? "true" : undefined}
+            style={{ pointerEvents: interactive && showing ? "auto" : "none" }}
+            onLoad={() => loaded(src)}
+          />
+        );
+      })}
+    </>
   );
 };

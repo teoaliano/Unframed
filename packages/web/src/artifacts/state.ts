@@ -58,6 +58,20 @@ interface CanvasArtifacts {
   readonly problems: Atom<ReadonlyMap<string, string>>;
   /** Each motion's render in flight, by shape: starting until the engine answers, then its status. */
   readonly renders: Atom<ReadonlyMap<string, { readonly starting: boolean; readonly status?: RenderStatus }>>;
+  /** How to post an `unframed:edit:*` message to a live canvas frame, by shape (spec 18, an image drop). */
+  readonly editPosts: Map<string, (message: unknown) => void>;
+  /** The picture under an image drag's pointer on a live page, as the frame's bridge reported it. */
+  readonly dropHit: Atom<DropHit | undefined>;
+  /** Pages an image drag may drop on though the press deselected them: they stay live until the drag ends. */
+  readonly dropHolds: Atom<ReadonlySet<string>>;
+}
+
+/** A picture an image drag would replace: its page, the element, which target of it, and its box in the page. */
+export interface DropHit {
+  readonly shapeId: string;
+  readonly elementId: string;
+  readonly target: "src" | "background";
+  readonly box: { readonly x: number; readonly y: number; readonly w: number; readonly h: number };
 }
 
 const canvases = new WeakMap<Editor, CanvasArtifacts>();
@@ -73,17 +87,20 @@ export const artifactsOf = (editor: Editor): CanvasArtifacts => {
     const editing = atom<TLShapeId | undefined>("editing artifact", undefined);
     const tuning = atom<TLShapeId | undefined>("tuning artifact", undefined);
     const project = atom("artifact project", "");
+    const dropHolds = atom<ReadonlySet<string>>("image drop holds", new Set());
     const live = computed<ReadonlySet<string>>("live artifacts", () => {
       // The editor unloads the canvas's frames: at most one artifact document runs while editing.
       if (editing.get() !== undefined) return new Set();
       const selected = editor.getSelectedShapeIds().filter((id) => hasFile(editor, id));
       const centreOf = (id: TLShapeId) => editor.getShapePageBounds(id)?.center ?? { x: 0, y: 0 };
-      return liveArtifacts({
+      const found = liveArtifacts({
         selected: selected.map((id) => ({ id, centre: selected.length > LIVE_SELECTED_LIMIT ? centreOf(id) : { x: 0, y: 0 } })),
         pinned: pinnedAtom(project.get()).get().filter((id) => hasFile(editor, id as TLShapeId)),
         tuning: tuning.get(),
         viewportCentre: selected.length > LIVE_SELECTED_LIMIT ? editor.getViewportPageBounds().center : { x: 0, y: 0 },
       });
+      for (const id of dropHolds.get()) if (hasFile(editor, id as TLShapeId)) found.add(id);
+      return found;
     });
     found = {
       project,
@@ -95,6 +112,9 @@ export const artifactsOf = (editor: Editor): CanvasArtifacts => {
       live,
       problems: atom("artifact problems", new Map()),
       renders: atom("motion renders", new Map()),
+      editPosts: new Map(),
+      dropHit: atom<DropHit | undefined>("image drop hit", undefined),
+      dropHolds,
     };
     canvases.set(editor, found);
   }
@@ -151,6 +171,18 @@ export const installFrameHold = (editor: Editor): (() => void) => {
     clearTimeout(timer);
     editor.off("event", onEvent);
   };
+};
+
+/** A live canvas frame mounted: an image drag posts `unframed:edit:*` to it through this. */
+export const reachEdit = (editor: Editor, id: string, post: (message: unknown) => void): void => {
+  artifactsOf(editor).editPosts.set(id, post);
+};
+
+/** A canvas frame unmounted: it can no longer be posted to, and an answer it owed is void. */
+export const forgetEdit = (editor: Editor, id: string): void => {
+  const state = artifactsOf(editor);
+  state.editPosts.delete(id);
+  if (state.dropHit.get()?.shapeId === id) state.dropHit.set(undefined);
 };
 
 /** A live canvas frame announced its parameters. */

@@ -6,7 +6,7 @@ import { FIXTURES, scriptFolder, startAgentEngine, type AgentEngine } from "./ag
 import { geoMark, motionShape, roomRecords, roomShape, seed, toolResults } from "./agentCanvas.ts";
 import { imageShape, pageShape } from "./canvasRecords.ts";
 
-const LIBRARY = ["gsap.js", "hyperframes-player.js", "hyperframes-runtime.js", "hyperframes-viewer.html", "unframed-dials.js", "unframed-tokens.js"];
+const LIBRARY = ["gsap.js", "hyperframes-player.js", "hyperframes-runtime.js", "hyperframes-viewer.html", "unframed-dials.js", "unframed-edit.js", "unframed-tokens.js"];
 
 const script = (turns: Array<{ text?: string; tools: Array<{ name: string; input: Record<string, unknown> }> }>) =>
   scriptFolder({ artifacts: { when: "^go", turns: turns.map((turn) => ({ text: turn.text ?? "Done.", tools: turn.tools })) } });
@@ -48,7 +48,16 @@ describe("page_write", () => {
     expect((await readFile(join(agent.folder, "unframed-dials.js"), "utf8")).split("\n")[0]).toBe(dialsBridgeSource().split("\n")[0]);
     const present = new Set(await readdir(agent.folder));
     expect(present.has("unframed-tokens.js")).toBe(true);
-    for (const name of LIBRARY.filter((name) => name !== "unframed-dials.js" && name !== "unframed-tokens.js")) expect(present.has(name), name).toBe(false);
+    expect(present.has("unframed-edit.js")).toBe(true);
+    for (const name of LIBRARY.filter((name) => !["unframed-dials.js", "unframed-tokens.js", "unframed-edit.js"].includes(name))) expect(present.has(name), name).toBe(false);
+  });
+
+  it("writes a page that already has the bridge tag and every id exactly as given", async () => {
+    const ready = `${TOKENS_TAG}\n${BRIDGE_TAG}\n<h1 data-hf-id="hf-aaaa">Ready</h1>`;
+    const agent = await startAgentEngine({ script: await script([{ tools: [{ name: "page_write", input: { title: "Ready", html: ready } }] }]) });
+    await run(agent);
+    const created = (await roomRecords(agent)).find((record) => record.type === "page");
+    expect(await readFile(join(agent.folder, created.props.file), "utf8")).toBe(ready);
   });
 
   it("puts a new page at (80, 80) with nothing selected", async () => {
@@ -120,9 +129,9 @@ describe("page_write", () => {
   });
 
   it("refuses empty html, a page over 2 MiB once tagged, an unknown shape and the wrong kind, and writes nothing", async () => {
-    // The bridge tag and its newline take the page from exactly the limit to over it.
+    // The bridge tag and its newline take the page from exactly the limit to over it; the id on the paragraph takes it further.
     const nearly = `<p>${"a".repeat(2_097_152 - 7)}</p>`;
-    const tagged = Buffer.byteLength(`${TOKENS_TAG}\n${BRIDGE_TAG}\n${nearly}`);
+    const tagged = Buffer.byteLength(`${TOKENS_TAG}\n${BRIDGE_TAG}\n<p data-hf-id="hf-aaaa">${"a".repeat(2_097_152 - 7)}</p>`);
     const agent = await startAgentEngine({
       script: await script([
         {
@@ -186,7 +195,7 @@ describe("page_write", () => {
     ]);
     // The preview URL answers on the preview origin.
     const served = await agent.engine.request(new URL(first!.result.previewUrl).pathname, { port: agent.engine.previewPort, headers: { host: `127.0.0.1:${agent.engine.previewPort}` } });
-    expect(served.text).toContain("<p>new</p>");
+    expect(served.text).toMatch(/<p data-hf-id="hf-[0-9a-z]{4}">new<\/p>/);
   });
 });
 
@@ -255,7 +264,7 @@ describe("motion_write", () => {
     await run(agent);
     const created = (await roomRecords(agent)).find((record) => record.type === "motion");
     expect(created).toMatchObject({ x: 80, y: 80, props: { w: 480, h: 300, title: "Sequence", fileName: "" } });
-    expect(await readFile(join(agent.folder, created.props.file), "utf8")).toBe(`${TOKENS_TAG}\n${RUNTIME_TAG}\n${BRIDGE_TAG}\n<div id=root></div>`);
+    expect(await readFile(join(agent.folder, created.props.file), "utf8")).toBe(`${TOKENS_TAG}\n${RUNTIME_TAG}\n${BRIDGE_TAG}\n<div data-hf-id="hf-aph5" id=root></div>`);
   });
 
   it("rewrites a library file whose size differs from its source and leaves the unchanged ones alone", async () => {
@@ -317,10 +326,10 @@ describe("artifact diffs through the artifact tools", () => {
       [`shape:${motion!.result.shapeId}`, "motion", null, motion!.result.file],
     ]);
     const [pageDiff, motionDiff] = diff.files;
-    expect(pageDiff!.patch).toContain("-<p>Two</p>");
-    expect(pageDiff!.patch).toContain("+<p>Two, changed</p>");
+    expect(pageDiff!.patch).toContain('-<p>Two</p>');
+    expect(pageDiff!.patch).toMatch(/\+<p data-hf-id="hf-[0-9a-z]{4}">Two, changed<\/p>/);
     expect(motionDiff!.deletions).toBe(0);
     expect(motionDiff!.additions).toBeGreaterThan(0);
-    expect(motionDiff!.patch).toContain("+<div id=root>seq</div>");
+    expect(motionDiff!.patch).toMatch(/\+<div data-hf-id="hf-[0-9a-z]{4}" id=root>seq<\/div>/);
   });
 });

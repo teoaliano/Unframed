@@ -105,7 +105,7 @@ describe("the tokens script in a project folder (spec 19, task 10)", () => {
     expect(carries(await readFile(join(agent.folder, SCRIPT), "utf8"), null)).toBe(true);
     const created = (await roomRecords(agent)).find((record) => record.type === "page");
     expect(await readFile(join(agent.folder, created.props.file as string), "utf8")).toBe(
-      `<script src="unframed-tokens.js"></script>\n<script src="unframed-dials.js"></script>\n<p>x</p>`,
+      `<script src="unframed-tokens.js"></script>\n<script src="unframed-dials.js"></script>\n<p data-hf-id="hf-8uol">x</p>`,
     );
   });
 });

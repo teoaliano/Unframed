@@ -32,7 +32,10 @@ test("dropped .html files become pages at the drop point, 24 apart; a failed upl
   expect(two.props.title).toBe("Two");
   expect(two.x! - one.x!).toBeCloseTo(24, 5);
   expect(two.y! - one.y!).toBeCloseTo(24, 5);
-  expect(await readFile(projectPath(engine, one.props.file), "utf8")).toBe("<h1>one</h1>");
+  // Spec 18, Tags on uploads, drops and pastes and When: a dropped .html gets the dials bridge tag, then an id on each element.
+  const oneFile = await readFile(projectPath(engine, one.props.file), "utf8");
+  expect(oneFile).toContain('<script src="unframed-dials.js"></script>');
+  expect(oneFile).toMatch(/<h1 data-hf-id="hf-[a-z0-9]{4}">one<\/h1>/);
 
   await dropFiles(page, await emptyCanvasPoint(page), [{ name: "empty.html", mime: "text/html", bytes: Buffer.alloc(0) }]);
   await expect(toast(page, "Could not add empty.html: No file bytes in the request body.")).toBeVisible();
@@ -57,7 +60,10 @@ test("an .html dropped on a page replaces its file and keeps its title, and Cmd-
     return shape && shape.props.file !== first ? shape : undefined;
   });
   expect(replaced.props).toMatchObject({ title: "Landing", fileName: "Second.html" });
-  expect(await readFile(projectPath(engine, replaced.props.file), "utf8")).toBe("<h1>Second version</h1>");
+  // Spec 18, Tags on uploads, drops and pastes and When: the replacement gets the bridge tag and element ids too.
+  const secondFile = await readFile(projectPath(engine, replaced.props.file), "utf8");
+  expect(secondFile).toContain('<script src="unframed-dials.js"></script>');
+  expect(secondFile).toMatch(/<h1 data-hf-id="hf-[a-z0-9]{4}">Second version<\/h1>/);
   expect(existsSync(projectPath(engine, first))).toBe(true);
   expect((await roomRecords(engine, "default")).filter((record) => record.type === "page")).toHaveLength(2);
 

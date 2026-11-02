@@ -2,8 +2,10 @@ import { randomUUID } from "node:crypto";
 import { stat } from "node:fs/promises";
 import type { DatabaseSync } from "node:sqlite";
 import {
-  agentShapeId,
   buildPreamble,
+  agentShapeId,
+  elementContext,
+  roomShapeId,
   changeNote,
   chatSummary,
   DEFAULT_RUNTIME_MODE,
@@ -36,7 +38,7 @@ import {
   type TurnOutcome,
   type ChatProvider,
 } from "@unframed/domain";
-import type { ArtifactDiffFile } from "@unframed/contracts";
+import type { ArtifactDiffFile, ElementChip } from "@unframed/contracts";
 import type { TLRecord } from "@tldraw/tlschema";
 import type { Kit } from "@unframed/domain";
 import type { Applied, CanvasChange, ChangeLogRow, ChangeOrigin } from "../canvas/rooms.ts";
@@ -619,7 +621,7 @@ export class AgentRuntime {
     }
     try {
       const records = await this.deps.rooms.read(agent.slug);
-      const preamble = await this.preamble(agent, chat, message?.context?.selection ?? [], message?.attachments ?? [], records);
+      const preamble = await this.preamble(agent, chat, message?.context?.selection ?? [], message?.context?.elements ?? [], message?.attachments ?? [], records);
       const live = this.providers.has(chatId);
       if (!live) await this.internal(agent, chatId, { type: "thread.session.set", session: { status: "starting", activeTurnId: String(requested.turnId), lastError: null } });
       await this.providers.ensure(agent.slug, agent.engine.chat(chatId) ?? chat, agent.folder, agent.engine, selection);
@@ -665,6 +667,7 @@ export class AgentRuntime {
     agent: ProjectAgent,
     chat: Chat,
     selection: ReadonlyArray<string>,
+    elements: ReadonlyArray<ElementChip>,
     attachments: ReadonlyArray<MessageAttachment>,
     records: ReadonlyArray<TLRecord>,
   ): Promise<string> {
@@ -689,8 +692,21 @@ export class AgentRuntime {
     if (chat.lastClock !== null) {
       note = changeNote(await this.deps.rooms.changeLog(agent.slug, chat.lastClock), chat.id);
     }
+    // The artifacts the chips point into, listed once each in the order the chips name them (spec 18).
+    const listed = new Map<string, { shapeId: string; kind: "page" | "motion"; label: string }>();
+    const chips = elements.map((chip) => ({ ...chip, shapeId: agentShapeId(chip.shapeId) }));
+    for (const chip of chips) {
+      const shape = byId.get(roomShapeId(chip.shapeId));
+      if (shape === undefined || shape.typeName !== "shape" || listed.has(chip.shapeId)) continue;
+      const kind = shapeKind(shape.type);
+      if (kind !== "page" && kind !== "motion") continue;
+      const props = record(shape.props);
+      listed.set(chip.shapeId, { shapeId: chip.shapeId, kind, label: selectionLabel({ ...(typeof props.title === "string" ? { title: props.title } : {}), ...(typeof props.fileName === "string" ? { fileName: props.fileName } : {}) }) ?? "" });
+    }
+    const elementsPart = elementContext(chips, [...listed.values()]);
     return buildPreamble({
       selected,
+      elements: elementsPart,
       changeNote: note,
       attachments: attachments.flatMap((attachment) => {
         const path = this.attachments.path(attachment.id);

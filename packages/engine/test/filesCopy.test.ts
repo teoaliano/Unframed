@@ -28,9 +28,11 @@ describe("files.copy", () => {
     const { file } = await (await engine.rpc()).call("files.copy", { project: "one", file: source });
     expect(file).not.toBe(source);
     expect(file).toMatch(/^\d+-landing\.html$/);
-    expect(await readFile(join(folder("one"), file), "utf8")).toBe("<h1>hi</h1>");
+    // The copy is a page: it carries the bridge tag and element ids, as every artifact file does (spec 18).
+    const copied = await readFile(join(folder("one"), file), "utf8");
+    expect(copied).toBe(`<script src="unframed-tokens.js"></script>\n<script src="unframed-dials.js"></script>\n<h1 data-hf-id="hf-9khh">hi</h1>`);
     const sidecar = JSON.parse(await readFile(join(folder("one"), file.replace(/\.html$/, ".json")), "utf8"));
-    expect(sidecar).toMatchObject({ source: "copy", fileName: source.replace(/^\d+-/, ""), mime: "text/html", bytes: 11, of: source });
+    expect(sidecar).toMatchObject({ source: "copy", fileName: source.replace(/^\d+-/, ""), mime: "text/html", bytes: Buffer.byteLength(copied), of: source });
     expect(Object.keys(sidecar)).toEqual(["source", "fileName", "mime", "bytes", "at", "of"]);
   });
 

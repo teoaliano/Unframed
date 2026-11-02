@@ -4,6 +4,7 @@
  * schema, so a record one side accepts the other accepts too.
  */
 import {
+  createShapePropsMigrationIds,
   createShapePropsMigrationSequence,
   createTLSchema,
   defaultBindingSchemas,
@@ -103,6 +104,8 @@ export interface ArtifactShapeProps {
   dials?: Record<string, unknown>;
   /** The kit mode this artifact shows (spec 19). Absent means the kit's default mode. */
   mode?: string;
+  /** Element ids the person locked in Layers (spec 18). Absent when none. */
+  lockedElements?: string[];
 }
 
 const artifactProps = {
@@ -113,10 +116,18 @@ const artifactProps = {
   fileName: T.string,
   dials: T.dict(T.string, T.jsonValue).optional(),
   mode: T.string.optional(),
+  lockedElements: T.arrayOf(T.string).optional(),
 };
 
-/** Every later change to page and motion props is a migration here, used by the room and the web alike. A new optional prop needs none. */
-const artifactMigrations = () => createShapePropsMigrationSequence({ sequence: [] });
+/**
+ * Every later change to page and motion props is a migration here, used by the room and the web alike.
+ * The first adds `lockedElements`; a record without it has no locks, so nothing is rewritten.
+ * `mode` (spec 19) is optional and needs none.
+ */
+const artifactMigrations = (kind: ArtifactType) => {
+  const ids = createShapePropsMigrationIds(kind, { AddLockedElements: 1 });
+  return createShapePropsMigrationSequence({ sequence: [{ id: ids.AddLockedElements, up: (props) => props }] });
+};
 
 export const ARTIFACT_TYPES = ["page", "motion"] as const;
 export type ArtifactType = (typeof ARTIFACT_TYPES)[number];
@@ -187,8 +198,8 @@ const buildSchema = (refusalOf?: (kit: Kit) => string | null): TLSchema => {
       image: { ...keptShapes.image, meta: refMeta },
       video: { ...keptShapes.video, meta: refMeta },
       frame: { ...keptShapes.frame, meta: unframedMeta },
-      page: { props: artifactProps, meta: refMeta, migrations: artifactMigrations() },
-      motion: { props: artifactProps, meta: refMeta, migrations: artifactMigrations() },
+      page: { props: artifactProps, meta: refMeta, migrations: artifactMigrations("page") },
+      motion: { props: artifactProps, meta: refMeta, migrations: artifactMigrations("motion") },
     },
     bindings: defaultBindingSchemas,
     assets: {
