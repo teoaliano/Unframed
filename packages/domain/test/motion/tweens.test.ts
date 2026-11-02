@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { motionTimeline } from "../../src/index.ts";
+import { motionTimeline } from "../../src/motion/index.ts";
 
 // One motion: a body with two targets, and a script built from the given lines.
 const motion = (script: string, head = "") => `<html><head>${head}</head><body>

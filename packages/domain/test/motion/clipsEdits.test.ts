@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { applyMotionEdits, motionTimeline, type MotionEdit, type MotionEditOptions, type MotionTimeline } from "../../src/index.ts";
+import { applyMotionEdits, motionTimeline, type MotionEdit, type MotionEditOptions, type MotionTimeline } from "../../src/motion/index.ts";
 
 const SCRIPT = `window.__timelines = window.__timelines || {};
 window.__timelines.main = gsap.timeline({ paused: true });

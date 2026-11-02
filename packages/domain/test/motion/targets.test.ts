@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { motionTimeline, staggerOffsets, type Tween } from "../../src/index.ts";
+import { motionTimeline, staggerOffsets, type Tween } from "../../src/motion/index.ts";
 
 const stage = `<div id="root" data-composition-id="main" data-start="0" data-duration="4" data-width="640" data-height="360">
   <div id="c" class="clip" data-start="0" data-duration="4">

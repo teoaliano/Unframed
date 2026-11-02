@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { carryFor, motionTimeline, type MotionTimeline, type RuntimeClips } from "../../src/index.ts";
+import { carryFor } from "../../src/index.ts";
+import { motionTimeline, type MotionTimeline, type RuntimeClips } from "../../src/motion/index.ts";
 
 // Clips a, b and c sit in the root; d is a clip nested in c; the tweens say who owns what.
 const html = (script: string, root = 'data-start="0" data-duration="6"', clips = "") => `<html><body>

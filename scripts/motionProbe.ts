@@ -3,7 +3,7 @@
 //   node scripts/motionProbe.ts <folder> [<folder> ...]
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { probeMotion } from "../packages/domain/src/index.ts";
+import { probeMotion } from "../packages/domain/src/motion/index.ts";
 
 const folders = process.argv.slice(2);
 if (folders.length === 0) {

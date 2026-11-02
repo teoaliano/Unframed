@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { probeMotion, type ProbeCounts } from "../../src/index.ts";
+import { probeMotion, type ProbeCounts } from "../../src/motion/index.ts";
 
 const root = join(import.meta.dirname, "../../../../assets/fixtures");
 const sample = (name: string) => readFileSync(join(root, "motion-samples", name), "utf8");

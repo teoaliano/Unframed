@@ -4,7 +4,7 @@
  * own matcher (`clipTweenMatcher`) works on selectors; this works on the reading's data-hf-id
  * targets and nearest-clip map, so both answer the same question for the same file.
  */
-import type { Clip, ElementInfo, Tween, TweenRef } from "./timeline.ts";
+import type { Clip, ElementInfo, Tween, TweenRef } from "./types.ts";
 import type { Owner } from "./owners.ts";
 
 export type Carry = { readonly tweens: TweenRef[]; readonly dials: string[][] } | { readonly refused: string };
