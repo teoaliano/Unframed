@@ -70,7 +70,7 @@ A **kit** is a named set of tokens with **modes**, for example light and dark, o
 - **project kit**: the one kit of a project, in its canvas room.
 - **library kit**: a kit saved as a preset in the library (spec 06).
 - **kit mode**: one column of values in a kit (`light`, `dark`, `brand-b`). The first is the **default mode**. Where nothing else is meant, this spec says "mode" for short; it is never spec 18's Edit and Interact modes, and the UI always says `Kit mode`.
-- **token path**: a token's name, lower-case words joined by `/` (`color/brand/primary`).
+- **token path**: a token's name, lower-case kebab words (letters, digits and hyphens) joined by `/` (`color/brand/primary`).
 - **CSS name**: the custom property a path makes (`--color-brand-primary`).
 - **alias**: a token whose value refers to another token of the same type.
 - **off-token value**: a literal value in an artifact's source that equals or sits close to a token's value, by the thresholds below.
@@ -144,7 +144,7 @@ Exactly one of `value` and `values` is set. A per-mode token may leave out modes
 
 ### Paths, CSS names and values
 
-**Paths.** One to six segments joined by `/`, each matching `^[a-z0-9][a-z0-9-]{0,39}$`, the whole at most 120 characters. Import lowers camel case (`brandPrimary` becomes `brand-primary`) and replaces `.` and spaces with `/` and `-` before checking.
+**Paths.** Lower-case kebab words: one to six segments joined by `/`, each matching `^[a-z0-9][a-z0-9-]{0,39}$`, the whole at most 120 characters. Import lowers camel case (`brandPrimary` becomes `brand-primary`) and replaces `.` and spaces with `/` and `-` before checking.
 
 **CSS names.** `--` and the segments joined by `-`: `color/brand/primary` makes `--color-brand-primary`. A text style makes five: `--<name>-font-family`, `--<name>-font-size`, `--<name>-font-weight`, `--<name>-line-height`, `--<name>-letter-spacing`. Two tokens whose CSS names collide (`color/brand-primary` and `color/brand/primary`, or a text style's sub-name and another token) are refused. The CSS name is what artifacts depend on, so it is the token's identity on the page; the path is its identity in the kit.
 
@@ -169,7 +169,7 @@ Exactly one of `value` and `values` is set. A per-mode token may leave out modes
 
 **Refusal sentences** (from `kitRefusal` and `applyKitOps`, shown under the field in the dialog and returned to the agent):
 
-- `A token name is words joined by slashes, like color/brand/primary.`
+- `A token name is words joined by slashes, like color/brand/primary.` (the words are lower-case kebab words, as Paths above says)
 - `There is already a token {path}.`
 - `{a} and {b} both make {cssName}. Rename one.`
 - `{value} is not a colour. Use a hex value like #1a73e8, or rgb(), hsl() or oklch().`
@@ -188,6 +188,16 @@ Exactly one of `value` and `values` is set. A per-mode token may leave out modes
 - `There is already a mode {name}.`
 - `A kit keeps at least one mode.`
 - `A kit holds at most 2000 tokens.`, `A kit holds at most 12 modes.`, `The kit is too large to save.`
+- `A kit needs a name of 1 to 80 characters.`
+- `A description is at most 200 characters.`
+- `{path} needs one value, or a value for each mode.` (a token with both `value` and `values`, or neither)
+- `There is no mode {mode} in the kit.` (a `values` key, or an op, that names a mode the kit does not have)
+- `{path} has a type this app does not know.`
+- `{path} is listed twice.` (`reorder` names a path twice)
+- `There is no former name {css} on {path}.` (`forgetFormerName`)
+- `There is no token {path} in the kit.` (an op that names a token the kit does not have)
+
+Mode names: `none` is reserved. A snapshot's file name uses `none` for "no mode" and for "no kit", so a kit mode called `none` would read as no mode there. The mode rule above does not refuse the name (`none` matches the pattern), so the dialog and `applyKitOps` accept it; do not name a mode `none`.
 
 ### Kit edits
 
@@ -196,7 +206,7 @@ Every change to a kit is a list of ops through `applyKitOps`, so the dialog, imp
 - `create { name, modes? }` (refused when a kit exists: `This project already has a kit.`); `rename { name }`; `remove` (the person's Delete kit only, below).
 - `setToken { path, type, value? | values?, description? }` adds or replaces a token. Changing a used token's type is allowed; its artifacts simply see the new value.
 - `renameToken { path, to }`: the token moves, and the old CSS name is added to `formerNames` unless the new one equals it. The tokens script defines every former name as `var(--<new>)`, so an artifact that uses the old name keeps working. The dialog shows `Also answers to {formerName}` under the row; `forgetFormerName { path, cssName }` removes one.
-- `deleteToken { path }`.
+- `deleteToken { path }`. Refused while another token's alias still refers to it, with `{alias} refers to {path}, which is not in the kit.`
 - `addMode { name, copyFrom? }` (the new mode starts with no values of its own, so every token shows the default mode's value until set, or with a copy of `copyFrom`'s values); `renameMode { name, to }` (shapes whose `mode` names it are updated in the same write); `deleteMode { name }` (refused for the last mode; shapes on it fall back to the default mode); `setDefaultMode { name }` (moves it first).
 - `reorder { paths }` for the dialog's drag.
 
@@ -211,7 +221,7 @@ A helper file like `unframed-dials.js`, not an artifact file: the engine rewrite
 **What it does when it loads:**
 
 1. Inserts `<style id="unframed-tokens">` as the first child of `<head>` (or of the document element when there is none). Its text is `kitCss(kit)`: every CSS name with its default-mode value on `:root`, every former name as `var(--<new>)`, then one block per other mode, `[data-theme="<mode>"] { … }`, holding only the tokens whose value in that mode differs from the default. Being first, any rule the artifact writes after it wins, so an author's own CSS is never overridden by the kit.
-2. Chooses the mode: `window.__hfVariables.unframedMode` when a render passed one (below), else the default mode, and sets `data-theme` on the document element.
+2. Chooses the mode: `window.__hfVariables.unframedMode` when a render passed one (below), else the default mode, and sets `data-theme` on the document element. With a kit it always sets `data-theme`, the default mode included (`data-theme="light"` on a kit whose default mode is `light`).
 3. Defines `window.unframed.token(path)` beside what the bridge defines, without replacing it (the bridge already merges into an existing `window.unframed`). It returns the current mode's value with aliases followed, in the form the table above gives, or `undefined` with `console.error("[unframed] no token " + path)`. It accepts a CSS name too (`"--color-brand-primary"`), so code written either way works.
 4. Listens for messages with the dials bridge's checks (`event.source` is `window.parent`, origin its own or loopback):
    - `unframed:tokens:mode { mode }`: sets `data-theme` to the mode (the default mode when it names none of the kit's), then dispatches the window event `unframed:tokens`.
@@ -265,7 +275,7 @@ The preview origin serves it as any `.js` file. A project with no kit still gets
 - A header menu on each mode column: `Rename mode`, `Make default`, `Duplicate mode`, `Delete mode`. After the last column, a ghost Button `Add mode`.
 - A row whose token has one value for every mode shows one cell across the mode columns. The row menu (`…`) offers `A value per mode` or `One value for all modes` (which keeps the default mode's value), `Rename`, `Description`, `Forget old names` when it has former names, and `Delete`.
 - Cells: a colour cell is a swatch and its CSS text; clicking opens a popover with the browser's colour input, a text field for the CSS text, and an opacity number. A dimension cell is a number field and a unit select (`px`, `rem`, `em`, `%`). A duration cell is a number field and `ms` or `s`. A font weight cell is a select of 100 to 900 and the keywords. An easing cell is a select of the ease catalogue, each entry with its ease curve, and a `Cubic bezier` entry with four number fields. A font family, shadow or text style cell is a text field (a text style opens a popover with its five fields). Every cell also takes an alias: a `Use a token` item at the top of its popover lists tokens of the same type; an alias cell shows the target's chip.
-- `Used by` shows the number of artifact shapes whose current file refers to the token (by its CSS name, a former name, or `unframed.token` with its path), from `kit.usage`, read when the dialog opens and after each kit change. Zero shows an empty cell. Hovering shows the titles, at most 10, then `and {n} more`.
+- `Used by` shows the number of artifact shapes whose current file refers to the token (by its CSS name, a former name, or `unframed.token` with its path), from `kit.usage`, read when the dialog opens and after each kit change. A token no artifact uses shows an empty `Used by` cell. Hovering shows the titles, at most 10, then `and {n} more`.
 - A Button `Add token` at the foot of the table adds a row in edit, with a path field (prefilled with the selected group) and a type select. Enter commits.
 - Past 200 rows the table renders only the rows in view.
 
@@ -288,9 +298,9 @@ The preview origin serves it as any `.js` file. A project with no kit still gets
 
 It lives in `presets.json` under spec 06's whole write rule (re-read before every write, the whole array replaced, temp then rename, unknown entries kept). `library.save` keeps refusing content that is not one group; kits use their own two methods (RPC below). No system kit ships.
 
-**In the Library dialog.** The type toggle gains `Kits`. A kit card shows its name, summary, the line `{n} tokens · {m} modes`, the chip `Kit` (Palette icon, amber; spec 06's chip style) and the source chip, and its button reads `Apply` instead of `Add`. Delete is spec 06's, with the body `This removes “{name}” from your library. Projects that use it keep their copy. This can't be undone.`
+**In the Library dialog.** The type toggle gains `Kits`. A kit card shows its name, summary, the line `{n} tokens · {m} modes`, the chip `Kit` (Palette icon, amber; spec 06's chip style) and the source chip, and its button reads `Apply` instead of `Add`. Delete is spec 06's dialog. A kit entry's body is `This removes “{name}” from your library. Projects that use it keep their copy. This can't be undone.`; content presets keep spec 06's body.
 
-**Saving.** `Save to library` in the dialog's menu opens spec 06's "Add to library" dialog with the subtitle `{n} tokens and {m} modes, saved as you have them now.` and the same fields and messages. On success the web sets the project kit's `from` (the new preset, revision 1, and the saved tokens as `base`) in one room write, and the toast is spec 06's.
+**Saving.** `Save to library` in the dialog's menu opens spec 06's "Add to library" dialog with the subtitle `{n} tokens and {m} modes, saved as you have them now.` and the same fields and messages. The typed name becomes the preset's name; the saved kit keeps the project kit's own `name`. On success the web sets the project kit's `from` (the new preset, revision 1, and the saved tokens as `base`) in one room write, and the toast is spec 06's.
 
 **Updating the library kit.** `Update in library`, shown when the kit is linked to a user preset, replaces that preset's `kit` with the project's tokens and modes, adds 1 to its revision and sets `savedAt`; the web then sets the project's `from.revision` and `base` to match. If the library kit's revision is newer than the project's `from.revision`, it first says `The library kit changed since this project took it. Update from kit first, so you do not overwrite those changes.` and offers `Update from kit`. Toast: `Updated “{name}” in your library.`
 
@@ -322,7 +332,7 @@ The update opens a dialog, `Update from “{name}”`, listing the counts (`{a} 
 
 **Import.** `Import…` (and `Import` on the empty dialog) opens a small dialog with a drop zone and file picker (accepting `.json` and `.css`, several files at once) and a `Paste` text area. The format is read from the content: JSON is DTCG, anything else is CSS.
 
-- **DTCG JSON.** Groups and tokens as the format defines them (`$value`, `$type`, `$description`, `$type` inherited from groups, aliases as `{group.token}`), both the string and the object forms of dimension and duration. Types: `color`, `dimension`, `fontFamily`, `fontWeight`, `duration`, `cubicBezier` (an easing), `shadow`, `typography` (a text style); `number` becomes a dimension in `px` only for paths under a `space`, `size` or `radius` group, and any other type or token is skipped and counted. Modes: a file holding `$extensions["org.unframed"].modes` (what this app exports) keeps its modes; otherwise each file is one mode named after the file without its extension and a `.tokens` suffix (`dark.tokens.json` is `dark`), which is how Figma and Tokens Studio export modes. One file with no such name is the default mode. An easing exported by this app keeps its GSAP name from `$extensions["org.unframed"].ease`.
+- **DTCG JSON.** Groups and tokens as the format defines them (`$value`, `$type`, `$description`, `$type` inherited from groups, aliases as `{group.token}`), both the string and the object forms of dimension and duration. Types: `color`, `dimension`, `fontFamily`, `fontWeight`, `duration`, `cubicBezier` (an easing), `shadow`, `typography` (a text style); `number` becomes a dimension in `px` only for paths under a `space`, `size` or `radius` group, and any other type or token is skipped and counted. Modes: a file holding `$extensions["org.unframed"].modes` (what this app exports) keeps its modes; otherwise each file is one mode named after the file without its extension and a `.tokens` suffix (`dark.tokens.json` is `dark`), which is how Figma and Tokens Studio export modes. A file whose name gives no mode (none, or `tokens`, as in `tokens.json`, or a name that is not a valid mode name) is the `default` mode. An easing exported by this app keeps its GSAP name from `$extensions["org.unframed"].ease`.
 - **CSS custom properties.** Declarations of custom properties in `:root` are the default mode. `[data-theme="x"]`, `.x`, `.theme-x` and `:root.x` blocks are mode `x`; `@media (prefers-color-scheme: dark)` around `:root` is mode `dark`. Each name loses its `--` and splits at every `-` into a path. The type is read from the value: a colour, a length, a time, a `cubic-bezier()`, a weight (a number from 100 to 900 whose name has `weight`), a shadow, a font list (a value with a comma or quotes whose name has `font` or `family`); `var(--x)` is an alias. Any other value, and declarations outside those blocks, are skipped and counted.
 - **Applying.** The import becomes ops (`setToken` per token, `addMode` per new mode) merged into the project kit: a token with the same path takes the imported values for the imported modes and keeps its others; new paths and modes are added; nothing is deleted. With no kit, it creates one named after the first file (or `Kit`). Before writing, the dialog shows `Adds {a} tokens, changes {b}, adds the modes {list}. Skips {c} it could not read.` with `Import` and `Cancel`, and any refusal sentence from `applyKitOps` instead of the summary. Import is one undo step.
 
@@ -377,9 +387,9 @@ A rule inside an at-rule (`@media`) is addressed the same way, its selector as w
 // exactly one of elementId and rule
 ```
 
-With `elementId` it sets the element's inline style property to `var(--<css name>)`, as spec 18's `style` edit sets a literal, and its burst target is the element; a text style writes all five longhands, each to its sub-name. With `rule` (used here only by Off-token values) it replaces the value of that property's declaration in the rule `rule` names, keeping every other byte, and is refused with `That style changed. Pick the value again.` when the rule or its declaration of that property is gone. Both forms refuse a path the kit does not have: `There is no token {path} in the kit.` `applySourceEdits` applies it like spec 18's edits, and the commit is spec 18's (bursts, the base file, the agent wins). Its summary line is `Token · {label}` (`Token · In styles: .hero h1` for a rule).
+With `elementId` it sets the element's inline style property to `var(--<css name>)`, as spec 18's `style` edit sets a literal, and its burst target is the element; a text style writes all five longhands, each to its sub-name. With `rule` (used here only by Off-token values) it replaces the value of that property's declaration in the rule `rule` names, keeping every other byte, and is refused with `That style changed. Pick the value again.` when the rule or its declaration of that property is gone. An edit that names both an element and a rule, or neither, is refused with `A token goes to one element or one style rule.` Both forms refuse a path the kit does not have: `There is no token {path} in the kit.` `applySourceEdits` applies it like spec 18's edits, and the commit is spec 18's (bursts, the base file, the agent wins). Its summary line is `Token · {label}` (`Token · In styles: .hero h1` for a rule).
 
-**Off-token values.** A section at the foot of the Design tab, closed by default, headed `Off-token values ({n})`, shown only when the project has a kit. It lists `offTokenValues(source, kit)` for the artifact's current source (the source spec 18's editor reads), one row per place: the element's label from the Layers tab (or `In styles: {selector}`), the property, the literal and the token it is near, with `=` for exact. Clicking a row selects its element in the frame (a style row selects the elements its selector matches, through spec 18's pick). Each row has `Use token`, which adds a `token` edit for that place to the burst: with `elementId` for an inline value, with `rule` (the row's `StyleRuleRef`) for a style rule. With none: `Every value here is on the kit.` The count updates after each commit.
+**Off-token values.** A section at the foot of the Design tab, closed by default, headed `Off-token values ({n})`, shown only when the project has a kit. It lists `offTokenValues(source, kit)` for the artifact's current source (the source spec 18's editor reads), one row per place: the element's label from the Layers tab (or `In styles: {selector}`), the property, the literal and the token it is near, as `{property}: {literal} {mark} {css name}`, with `=` as the mark for an exact match and `≈` for a near one. The rows come from `artifact.sourceTree`'s `offTokens` (spec 18), which holds `offTokenValues(source, kit)` and is empty when the project has no kit. Clicking a row selects its element in the frame. A style row selects the elements its selector matches: the editor posts `unframed:edit:selectMatching { selector }` (spec 18's protocol table) and the bridge answers `unframed:edit:matched { ids }`, the ids of the matching elements that have one, which the editor selects. Each row has `Use token`, which adds a `token` edit for that place to the burst: with `elementId` for an inline value, with `rule` (the row's `StyleRuleRef`) for a style rule. With none: `Every value here is on the kit.` The count updates after each commit.
 
 **The Tokens line.** When the project has a kit, the top of the Design tab shows `Kit: {name}` and the artifact's mode, and opens the Kit dialog on click.
 
@@ -419,7 +429,7 @@ With `elementId` it sets the element's inline style property to `var(--<css name
 
 **Turn changes.** Spec 07's turn changes gain kit rows: one per token path the turn touched, keyed `kit:<path>`, plus `kit:modes` for the mode list and default and `kit:name` for the name, each with `before` and `after` as the token (or list, or name) JSON, null for absent. Several writes collapse as shape rows do. **Revert** treats each kit row as it treats a shape: when the current value equals `after`, it restores `before`; otherwise it skips that row and names it in `skipped` as `the token {path}` (by the person, another chat or a later turn, read from the change log). So a revert takes back the agent's tokens and leaves alone one the person changed since. The kit restores go into the revert's one room write. Spec 08's diffs show no kit rows.
 
-**The change note.** Spec 07's change note counts the person's kit commits since the last turn as `the kit` (for example `You changed 3 shapes and the kit since the last message.`), so the agent knows to `kit_read` again.
+**The change note.** Spec 07's change note counts the person's kit commits since the last turn as `the kit` in spec 07's sentence: `3 changes by the person and the kit` when shapes changed too (`Since your last turn the canvas changed: 3 changes by the person and the kit. Read it again before acting.`), and `the kit changed by the person` when only the kit did. A kit commit counts once, whatever it changed. The kit wording is in the code (`changeNote` in `packages/domain/src/agent/turnText.ts`) and is not part of `assets/prompts/change-note.md`, which holds only the shape wording. The note tells the agent to `kit_read` again.
 
 **Artifact tool descriptions.** `page_write` and `motion_write` gain the kit paragraph (asset below) after the dials text. The paragraph is static (the tool list is the same for every project, and the stdio shim answers it while Unframed is closed, spec 14), so it says: when `kit_read` returns a kit, use its tokens. **`canvas_read`** gains a top-level `kit: { name, tokens: n, modes } | null`.
 
@@ -434,8 +444,8 @@ All over spec 01's RPC socket, failing with spec 01's `UnframedError`. Person ed
 | Method | Input | Success | Failures |
 | --- | --- | --- | --- |
 | `kit.usage` | `{ project }` | `{ tokens: Record<path, shapeId[]>, modes: Record<mode, shapeId[]> }` | `not_found` (no such project) |
-| `kit.saveToLibrary` | `{ project, name, summary }` | `{ preset }` | `Give it a name.`; `This project has no kit yet.`; spec 06's read failures |
-| `kit.updateInLibrary` | `{ project }` | `{ preset }` | `This kit is not linked to your library.`; `That preset is not in your library.`; `conflict` with the newer-revision sentence above |
+| `kit.saveToLibrary` | `{ project, name, summary }` | `{ preset }` | `bad_request`: `Give it a name.` (an empty name) and `This project has no kit yet.`; `This kit is not valid.`; spec 06's read failures |
+| `kit.updateInLibrary` | `{ project }` | `{ preset }` | `bad_request`: `This project has no kit yet.` and `This kit is not linked to your library.`; `not_found`: `That preset is not in your library.`; `conflict` with the newer-revision sentence above (`details.reason` `newer_revision`) |
 | `kit.exportFile` | `{ project, format: "dtcg" \| "css" \| "tailwind" }` | `{ file }` | `This project has no kit yet.`; the write error |
 | `motion.renderStart` | spec 09's, plus `mode?` | spec 09's | spec 09's |
 
@@ -447,7 +457,7 @@ All over spec 01's RPC socket, failing with spec 01's `UnframedError`. Person ed
 - Page and motion props gain `mode?: string`, with a migration.
 - A `presets.json` entry with `kind: "kit"` (above). `Preset.kind` gains `"kit"` beside spec 06's kinds and spec 16's flows; a kit entry has `kit` and `revision` and no `content`.
 - `unframed-tokens.js` in each project folder that has had an artifact written since this spec (a helper file, regenerable from the room).
-- The snapshot record (spec 09) gains `mode` and `kit` (the stamp); the snapshot file name gains them.
+- The snapshot record (spec 09) gains `mode` and `kit` (the stamp); the snapshot file name gains them: `<file>-<w>x<h>-<mode|none>-<stamp|none>.png`, where `none` marks "no mode" and "no kit" (so `none` is not a usable mode name, above).
 - The render sidecar gains `mode?` and `kit?: { name, stamp }`.
 - The live pointer gains `mode` and `kit` (the stamp).
 - The export sidecar above.
