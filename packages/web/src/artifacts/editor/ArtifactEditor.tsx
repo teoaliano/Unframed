@@ -30,7 +30,7 @@ import { PreviewSizeControl, usePreviewSize } from "./PreviewSize.tsx";
 import { useEditSession, type EditMode } from "./editSession.ts";
 import { makeEditableInstruction, tellAgent } from "./tellAgent.ts";
 import { MotionTimeline } from "../timeline/MotionTimeline.tsx";
-import { MotionTransport } from "../timeline/transport.ts";
+import { MotionTransport, type TransportZone } from "../timeline/transport.ts";
 
 export interface ArtifactEditorProps {
   readonly shapeId: TLShapeId;
@@ -51,11 +51,12 @@ const typingIn = (target: EventTarget | null): boolean => {
   return element.isContentEditable || element.tagName === "INPUT" || element.tagName === "TEXTAREA" || element.closest("[contenteditable='true']") !== null;
 };
 
-/** Whether the focus is where a motion's transport keys act: the body, the frame, or the strip's time area (spec 21). */
-const transportFocus = (): boolean => {
+/** Where the focus is, for a motion's transport keys: the page body, the frame, or the strip's time area. Undefined elsewhere (spec 21). */
+const transportZone = (): TransportZone | undefined => {
   const active = document.activeElement;
-  if (active === null || active === document.body || active === document.documentElement || active instanceof HTMLIFrameElement) return true;
-  return active instanceof HTMLElement && active.closest("[data-timeline-focus]") !== null;
+  if (active === null || active === document.body || active === document.documentElement) return "body";
+  if (active instanceof HTMLIFrameElement) return "frame";
+  return active instanceof HTMLElement && active.closest("[data-timeline-focus]") !== null ? "strip" : undefined;
 };
 
 const stop = (event: { stopPropagation(): void }) => event.stopPropagation();
@@ -169,7 +170,8 @@ export const ArtifactEditor = ({ shapeId, onClose, onOpen }: ArtifactEditorProps
       if (event.defaultPrevented || editor.wasEventAlreadyHandled(event) || typingIn(event.target) || typingIn(document.activeElement)) return;
       if (isUndo(event)) return;
       // The transport takes its keys only where the focus is the frame, the strip or the page body (spec 21, the shortcuts).
-      if (motionShown.current && transportFocus() && transport.handleKey(event.key, { shift: event.shiftKey, meta: event.metaKey, ctrl: event.ctrlKey })) {
+      const zone = transportZone();
+      if (motionShown.current && zone !== undefined && transport.handleKey(event.key, { shift: event.shiftKey, meta: event.metaKey, ctrl: event.ctrlKey }, zone)) {
         event.preventDefault();
         return;
       }
@@ -197,7 +199,7 @@ export const ArtifactEditor = ({ shapeId, onClose, onOpen }: ArtifactEditorProps
       // A motion's keys from the frame (Edit mode only) reach the transport first, as the same keys typed in the editor would.
       if (message.type === "unframed:edit:key" && motionShown.current) {
         const modifiers = { shift: message.shift === true, meta: message.meta === true, ctrl: message.ctrl === true };
-        if (transport.handleKey(String(message.key ?? ""), modifiers)) return;
+        if (transport.handleKey(String(message.key ?? ""), modifiers, "frame")) return;
       }
       sessionRef.current.onFrameMessage(message);
     },

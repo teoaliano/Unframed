@@ -43,6 +43,8 @@ export const MotionTimeline = ({ title, engine, column, transport, className }: 
   const playhead = useRef<HTMLDivElement>(null);
   const area = useRef<HTMLDivElement>(null);
   const areaWidth = useRef(0);
+  // The time area's width as React draws it (the loop range's shading), and as the clock reads it (the playhead).
+  const [width, setWidth] = useState(0);
   useEffect(() => {
     transport.setPainter((time, length) => {
       const parts = readoutParts(time, length);
@@ -57,6 +59,7 @@ export const MotionTimeline = ({ title, engine, column, transport, className }: 
     if (!element) return;
     const measure = () => {
       areaWidth.current = element.clientWidth;
+      setWidth(element.clientWidth);
       transport.repaint();
     };
     measure();
@@ -87,7 +90,12 @@ export const MotionTimeline = ({ title, engine, column, transport, className }: 
     if (current.latest !== prefs.height) save({ height: current.latest, open: true });
   };
 
-  const { playing, speed, muted, loop } = transportState;
+  const { playing, speed, muted, loop, length, range } = transportState;
+  // The loop range shades the ruler between its In and Out (or the ends it does not set). Zoom comes with the ruler.
+  const perSecond = length > 0 ? width / length : 0;
+  const rangeStart = range.start ?? 0;
+  const rangeEnd = range.end ?? length;
+  const showRange = (range.start !== null || range.end !== null) && length > 0;
   return (
     <section
       aria-label={`Timeline for ${title}`}
@@ -169,7 +177,18 @@ export const MotionTimeline = ({ title, engine, column, transport, className }: 
       {open && (
         // The time area: its focus is where the transport's keys act, with the ruler and the rows (spec 21, the shortcuts).
         <div ref={area} data-timeline-focus tabIndex={-1} className="relative flex min-h-0 flex-1 flex-col outline-none">
-          <div data-testid="timeline-ruler" className="h-6 flex-none border-b" />
+          <div data-testid="timeline-ruler" className="relative h-6 flex-none border-b">
+            {showRange && (
+              <div
+                data-testid="timeline-range"
+                data-in={range.start ?? undefined}
+                data-out={range.end ?? undefined}
+                aria-hidden
+                className="pointer-events-none absolute inset-y-0 bg-primary/15"
+                style={{ left: rangeStart * perSecond, width: Math.max(0, rangeEnd - rangeStart) * perSecond }}
+              />
+            )}
+          </div>
           <div data-testid="timeline-rows" className="min-h-0 flex-1" />
           <div ref={playhead} data-testid="timeline-playhead" aria-hidden className="pointer-events-none absolute inset-y-0 left-0 w-px bg-primary" />
         </div>
