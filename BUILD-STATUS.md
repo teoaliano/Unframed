@@ -115,6 +115,7 @@ Open for the person:
 - Spec 19: token chips are missing for border colour, padding and margin sides, and shadow; those fields show the computed value.
 - Spec 19: a text style's off-token Use token writes all five longhands.
 - Spec 19: the Used by count path has no browser test.
+- CI: the `test` job runs the engine, domain and whole browser suite on one runner; with specs 18 and 19 it passed 30 minutes, so its limit is 45. Sharding the browser suite across runners would bring it back down.
 - Spec 01: the Electron 44 boot and the `dist` branch publish run only in the tag workflow. `scripts/electronSmoke.ts` ran with plain Node as the binary; `scripts/publishDist.sh` never ran.
 - Spec 04, task 21: the test moves the image through the room, not with a mouse drag, because dragging a selected shape moves the whole selection.
 - Spec 05: logic duplicated between `textRuns.ts` and spec 03's `runs.ts` (run-id minting, the `of` lookup, top-index lookup), and between the image and text catalogue functions.
