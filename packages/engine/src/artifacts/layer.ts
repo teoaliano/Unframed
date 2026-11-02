@@ -14,7 +14,7 @@ import * as Layer from "effect/Layer";
 import * as PubSub from "effect/PubSub";
 import * as Stream from "effect/Stream";
 import { CanvasRooms } from "../canvas/rooms.ts";
-import { errorText } from "../log.ts";
+import { errorText, logError } from "../log.ts";
 import { MediaStore } from "../media/mediaStore.ts";
 import { OpenProjects } from "../openProjects.ts";
 import { Runs } from "../runs/runs.ts";
@@ -22,6 +22,7 @@ import { Config } from "../services.ts";
 import { ensureLibrary, writeUploadedArtifact } from "./artifactStore.ts";
 import { findChrome } from "./chrome.ts";
 import { producerBackend, Renderer, RenderRefused, stubBackend } from "./renderer.ts";
+import { sweepChromeProfiles } from "./chromeProfiles.ts";
 import { HeadlessChrome } from "./headlessChrome.ts";
 import { LivePointers } from "./livePointers.ts";
 import { chromeSnapshotRenderer, Snapshots, stubSnapshotRenderer, type SnapshotRenderer } from "./snapshots.ts";
@@ -79,6 +80,8 @@ export const artifactsLayer = Layer.effect(
     const backend = config.testRenderer === "ok" || config.testRenderer === "fail" ? stubBackend(config.testRenderer, fixture) : producerBackend(chrome);
 
     const headless = new HeadlessChrome(chrome);
+    // What an engine that died without closing its browser left behind.
+    void sweepChromeProfiles().catch((error: unknown) => logError(`could not sweep old headless Chrome profiles: ${errorText(error)}`));
     yield* shutdown.register("headless Chrome", Effect.promise(() => headless.close()));
 
     const snapshotRenderer: SnapshotRenderer | undefined =
