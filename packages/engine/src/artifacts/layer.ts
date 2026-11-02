@@ -21,6 +21,7 @@ import { OpenProjects } from "../openProjects.ts";
 import { Runs } from "../runs/runs.ts";
 import { Config } from "../services.ts";
 import { ensureLibrary, writeUploadedArtifact } from "./artifactStore.ts";
+import { pinComponents } from "./componentRegistry.ts";
 import { ensureTokensFor, kitOf, TOKENS_FILE, ensureTokens } from "../kits/tokensFile.ts";
 import { findChrome } from "./chrome.ts";
 import { producerBackend, Renderer, RenderRefused, stubBackend } from "./renderer.ts";
@@ -171,7 +172,8 @@ export const artifactsLayer = Layer.effect(
         const folder = yield* Effect.promise(() => media.folder(input.project));
         if (folder === undefined) return yield* unframedError("not_found", `There is no project named "${projectSlug(input.project)}".`);
         const fileName = input.fileName.split(/[\\/]/).pop()?.trim() || "motion.html";
-        const html = prepareArtifactHtml(input.html, "motion");
+        const records = yield* rooms.read(input.project);
+        const html = (yield* Effect.promise(() => pinComponents(folder, records, prepareArtifactHtml(input.html, "motion")))).html;
         if (byteSize(html) > UPLOAD_LIMIT) return yield* unframedError("bad_request", `The composition is too large (${(byteSize(html) / 1_048_576).toFixed(1)}MB). The limit is 20MB.`);
         return yield* Effect.tryPromise({
           try: async () => {

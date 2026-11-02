@@ -13,6 +13,7 @@ import type { CommittedChange } from "../canvas/rooms.ts";
 import { byteSize, prepareArtifactHtml, tooLargeMessage } from "./artifactHtml.ts";
 import { kitOf } from "../kits/tokensFile.ts";
 import { ensureBridge, ensureLibrary, writeEditArtifact } from "./artifactStore.ts";
+import { pinComponents } from "./componentRegistry.ts";
 
 const BRIDGE_PRESENT = /unframed-dials\.js/i;
 const IMAGE_EXTENSIONS = new Set([".png", ".jpg", ".jpeg", ".webp", ".gif", ".svg"]);
@@ -94,8 +95,9 @@ export const artifactEditService = (deps: EditServiceDeps) => {
     const html = await readFile(join(dir, file), "utf8").catch(() => {
       throw unframedError("not_found", `No file ${file} in this project.`);
     });
-    if (isReady(html)) return { file };
-    const prepared = prepareArtifactHtml(html, kind);
+    const records = await deps.read(project);
+    const prepared = (await pinComponents(dir, records, isReady(html) ? html : prepareArtifactHtml(html, kind))).html;
+    if (prepared === html) return { file };
     if (byteSize(prepared) > ARTIFACT_SIZE_LIMIT) throw unframedError("bad_request", tooLargeMessage(kind, byteSize(prepared)));
     await (kind === "motion" ? ensureLibrary(dir) : ensureBridge(dir));
     const written = await writeEditArtifact(dir, {
@@ -136,7 +138,7 @@ export const artifactEditService = (deps: EditServiceDeps) => {
     }
     const result = applySourceEdits(html, edits, kind, kitOf(records));
     if (!result.ok) throw unframedError("bad_request", result.refusal);
-    const prepared = prepareArtifactHtml(result.html, kind);
+    const prepared = (await pinComponents(dir, records, prepareArtifactHtml(result.html, kind))).html;
     if (byteSize(prepared) > ARTIFACT_SIZE_LIMIT) throw unframedError("bad_request", tooLargeMessage(kind, byteSize(prepared)));
     await (kind === "motion" ? ensureLibrary(dir) : ensureBridge(dir));
     const written = await writeEditArtifact(dir, { kind, html: prepared, title: artifactTitle(props), of: baseFile, shapeId, edits: result.summary });
