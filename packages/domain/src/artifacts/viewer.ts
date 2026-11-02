@@ -54,6 +54,8 @@ export function viewerRelay(win: ViewerWindow, player: ViewerPlayer): void {
   let lastTimeline: Loose | undefined;
   let shuttle: { rate: number; time: number; prev: number | undefined } | undefined;
   let framing = false;
+  // Between a drag seek and the next commit, the runtime's states go to the editor as their time only (spec 21, scrub).
+  let scrubbing = false;
 
   const wanted = new URLSearchParams(win.location.search).get("c");
   if (wanted !== null && COMPOSITION.test(wanted)) player.setAttribute("src", wanted);
@@ -120,17 +122,30 @@ export function viewerRelay(win: ViewerWindow, player: ViewerPlayer): void {
   };
 
   // One player control from the editor (spec 21). `seek` lands paused; `root-duration` is the runtime's own control.
+  // A `drag` seek (the scrub while the person moves) is cheap: the runtime seeks its own timeline, and the player
+  // keeps its play state and media, which its seek would resync. Only the time goes back to the editor.
   const control = (data: Loose): void => {
     if (data.action === "play") {
       shuttle = undefined;
+      scrubbing = false;
       player.play?.();
     } else if (data.action === "pause") {
       shuttle = undefined;
+      scrubbing = false;
       player.pause?.();
     } else if (data.action === "seek" && typeof data.seconds === "number") {
+      const seconds = Math.max(0, data.seconds);
       shuttle = undefined;
+      if (data.mode === "drag") {
+        scrubbing = true;
+        (playerFrame() as Target | undefined)?.postMessage({ source: "hf-parent", type: "control", action: "seek", timeSeconds: seconds, seekMode: "drag" }, own);
+        lastState = { ...lastState, time: seconds };
+        toController({ type: "unframed:player:state", time: seconds });
+        return;
+      }
+      scrubbing = false;
       player.pause?.();
-      player.seek?.(Math.max(0, data.seconds));
+      player.seek?.(seconds);
     } else if (data.action === "rate" && typeof data.rate === "number" && Number.isFinite(data.rate)) {
       if (data.rate < 0) startShuttle(data.rate);
       else {
@@ -156,7 +171,7 @@ export function viewerRelay(win: ViewerWindow, player: ViewerPlayer): void {
     if (runtime.source === "hf-preview" && event.source !== undefined && event.source === playerFrame()) {
       if (runtime.type === "state") {
         lastState = { type: "unframed:player:state", time: runtime.currentTime, frame: runtime.frame, playing: runtime.isPlaying, rate: runtime.playbackRate, muted: runtime.muted, ended: runtime.ended };
-        toController(lastState);
+        toController(scrubbing ? { type: "unframed:player:state", time: runtime.currentTime } : lastState);
       } else if (runtime.type === "timeline") {
         lastTimeline = { type: "unframed:player:timeline", clips: runtime.clips, duration: runtime.durationSeconds, size: { width: runtime.compositionWidth, height: runtime.compositionHeight } };
         toController(lastTimeline);

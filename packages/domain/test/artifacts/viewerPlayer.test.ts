@@ -98,7 +98,7 @@ describe("the viewer's player relay (spec 21, task 18)", () => {
     from(canvas, CANVAS, { type: "unframed:player:hello" });
     from(canvas, CANVAS, control("play"));
     from(canvas, CANVAS, control("pause"));
-    from(canvas, CANVAS, control("seek", { seconds: 2.5, mode: "drag" }));
+    from(canvas, CANVAS, control("seek", { seconds: 2.5, mode: "commit" }));
     from(canvas, CANVAS, control("rate", { rate: 2 }));
     from(canvas, CANVAS, control("mute", { muted: false }));
     from(canvas, CANVAS, control("range", { start: 1, end: 3, loop: true }));
@@ -108,6 +108,28 @@ describe("the viewer's player relay (spec 21, task 18)", () => {
     expect(player.rangeStart).toBe(1);
     expect(player.rangeEnd).toBe(3);
     expect(player.loop).toBe(true);
+  });
+
+  it("scrubs with a drag seek: the runtime seeks on its own timeline, the player keeps its media and play state, and the controller hears the time only", () => {
+    const { canvas, composition, from, calls, compositionPosted, canvasPosted } = stub();
+    from(canvas, CANVAS, { type: "unframed:player:hello" });
+    from(canvas, CANVAS, control("seek", { seconds: 1.25, mode: "drag" }));
+    expect(calls).toEqual([]);
+    expect(compositionPosted).toEqual([[{ source: "hf-parent", type: "control", action: "seek", timeSeconds: 1.25, seekMode: "drag" }, OWN]]);
+    canvasPosted.length = 0;
+    from(composition, OWN, { source: "hf-preview", type: "state", currentTime: 1.3, frame: 39, isPlaying: true, playbackRate: 1, muted: true, ended: false });
+    expect(canvasPosted).toEqual([[{ type: "unframed:player:state", time: 1.3 }, CANVAS]]);
+  });
+
+  it("commits a seek by landing the player paused, and ends the scrub so runtime states go out whole again", () => {
+    const { canvas, composition, from, calls, canvasPosted } = stub();
+    from(canvas, CANVAS, { type: "unframed:player:hello" });
+    from(canvas, CANVAS, control("seek", { seconds: 1.25, mode: "drag" }));
+    from(canvas, CANVAS, control("seek", { seconds: 1.5, mode: "commit" }));
+    expect(calls).toEqual(["pause", "seek 1.5"]);
+    canvasPosted.length = 0;
+    from(composition, OWN, { source: "hf-preview", type: "state", currentTime: 1.5, frame: 45, isPlaying: false, playbackRate: 1, muted: true, ended: false });
+    expect(canvasPosted).toEqual([[{ type: "unframed:player:state", time: 1.5, frame: 45, playing: false, rate: 1, muted: true, ended: false }, CANVAS]]);
   });
 
   it("posts the runtime's set-root-duration to the composition, from the controller", () => {
