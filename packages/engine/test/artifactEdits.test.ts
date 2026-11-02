@@ -42,7 +42,7 @@ describe("artifact.sourceTree and artifact.prepareEdit (spec 18)", () => {
 
   it("answers ready false for a file without the bridge or without ids", async () => {
     const answer = await rpc.call("artifact.sourceTree", { project: "board", file: "1-plain.html" });
-    expect(answer).toEqual({ ready: false, elements: [] });
+    expect(answer).toEqual({ ready: false, elements: [], offTokens: [] });
   });
 
   it("refuses a file the project does not hold", async () => {
