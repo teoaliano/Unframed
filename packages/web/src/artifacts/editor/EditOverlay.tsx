@@ -8,6 +8,8 @@ import type { EditReport } from "./editSession.ts";
 
 export interface EditOverlayProps {
   readonly hovered: EditReport | null;
+  /** The element a Layers row hovers. It is outlined in place of the pointer's own hover. */
+  readonly layerHover?: string | null;
   readonly selection: readonly string[];
   readonly reports: Readonly<Record<string, EditReport>>;
   readonly boxes: Readonly<Record<string, EditBox>>;
@@ -17,14 +19,17 @@ export interface EditOverlayProps {
 
 const place = (box: EditBox) => ({ left: box.x, top: box.y, width: box.w, height: box.h });
 
-export const EditOverlay = ({ hovered, selection, reports, boxes, names }: EditOverlayProps) => (
+export const EditOverlay = ({ hovered, layerHover = null, selection, reports, boxes, names }: EditOverlayProps) => (
   <div aria-hidden data-testid="edit-overlay" className="pointer-events-none absolute inset-0">
-    {hovered !== null && hovered.id !== null && !selection.includes(hovered.id) && (
+    {layerHover === null && hovered !== null && hovered.id !== null && !selection.includes(hovered.id) && (
       <div
         data-edit-outline="hover"
         className="absolute"
         style={{ ...place(boxes[hovered.id] ?? hovered.box), border: "1px solid var(--ring)" }}
       />
+    )}
+    {layerHover !== null && !selection.includes(layerHover) && boxes[layerHover] !== undefined && (
+      <div data-edit-outline="hover" className="absolute" style={{ ...place(boxes[layerHover]!), border: "1px solid var(--ring)" }} />
     )}
     {selection.map((id) => {
       const box = boxes[id] ?? reports[id]?.box;

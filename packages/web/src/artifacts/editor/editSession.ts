@@ -32,6 +32,14 @@ export interface SourceTree {
   readonly elements: readonly SourceTreeElement[];
 }
 
+/** An element of the frame's live tree (spec 18, `unframed:edit:tree`): `id` is null for a runtime element. */
+export interface LiveNode {
+  readonly id: string | null;
+  readonly selector: string;
+  readonly tag: string;
+  readonly children: readonly LiveNode[];
+}
+
 /** The burst waits this long after its last edit, then commits (spec 18, Bursts). */
 export const COMMIT_DELAY_MS = 1_500;
 /**
@@ -64,6 +72,16 @@ export interface EditSession {
   readonly reports: Readonly<Record<string, EditReport>>;
   readonly boxes: Readonly<Record<string, EditBox>>;
   readonly tree: SourceTree | undefined;
+  /** The frame's live elements, for the Layers tab's runtime rows. Asked for when the frame is ready and on request. */
+  readonly live: readonly LiveNode[];
+  /** Hovers an element from Layers: the frame outlines it. Null clears it. */
+  readonly hoverLayer: (id: string | null) => void;
+  /** The element a Layers row hovers, outlined in the frame. */
+  readonly layerHover: string | null;
+  /** Asks the frame for its live tree again. */
+  readonly requestLive: () => void;
+  /** Sets the locked elements the bridge and the next writes see. The shape's own write is the editor's. */
+  readonly setLocked: (locked: readonly string[]) => void;
   readonly preparing: boolean;
   readonly prepareError: string | undefined;
   /** The source edits of the burst not yet written: they are the element's own, so the owner stays `source`. */
@@ -92,6 +110,8 @@ export const useEditSession = ({ editor, engine, project, shapeId, kind, file, l
   const [reports, setReports] = useState<Readonly<Record<string, EditReport>>>({});
   const [boxes, setBoxes] = useState<Readonly<Record<string, EditBox>>>({});
   const [tree, setTree] = useState<SourceTree | undefined>(undefined);
+  const [live, setLive] = useState<readonly LiveNode[]>([]);
+  const [layerHover, setLayerHover] = useState<string | null>(null);
   const [preparing, setPreparing] = useState(false);
   const [prepareError, setPrepareError] = useState<string | undefined>(undefined);
   const [pending, setPending] = useState<readonly SourceEdit[]>([]);
@@ -119,6 +139,22 @@ export const useEditSession = ({ editor, engine, project, shapeId, kind, file, l
   const lastSet = useRef<string | undefined>(undefined);
 
   const post = useCallback((message: unknown) => postRef.current?.(message), []);
+
+  const requestLive = useCallback(() => post({ type: "unframed:edit:tree" }), [post]);
+  const hoverLayer = useCallback(
+    (id: string | null) => {
+      setLayerHover(id);
+      post({ type: "unframed:edit:hover", id });
+    },
+    [post],
+  );
+  const setLocked = useCallback(
+    (next: readonly string[]) => {
+      lockedRef.current = next;
+      post({ type: "unframed:edit:mode", mode: modeRef.current, locked: next });
+    },
+    [post],
+  );
 
   const commit = useCallback(async () => {
     window.clearTimeout(timerRef.current);
@@ -275,6 +311,11 @@ export const useEditSession = ({ editor, engine, project, shapeId, kind, file, l
         helloTimer.current = undefined;
         post({ type: "unframed:edit:mode", mode: modeRef.current, locked: lockedRef.current });
         if (selectionRef.current.length > 0) post({ type: "unframed:edit:select", ids: selectionRef.current });
+        post({ type: "unframed:edit:tree" });
+        return;
+      }
+      case "unframed:edit:tree": {
+        setLive(Array.isArray(message.nodes) ? (message.nodes as LiveNode[]) : []);
         return;
       }
       case "unframed:edit:report": {
@@ -367,6 +408,11 @@ export const useEditSession = ({ editor, engine, project, shapeId, kind, file, l
     reports,
     boxes,
     tree,
+    live,
+    hoverLayer,
+    layerHover,
+    requestLive,
+    setLocked,
     preparing,
     prepareError,
     pending,

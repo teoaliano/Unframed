@@ -19,7 +19,8 @@ import { ArtifactFrame, outsideUrlOf, type EditMessage } from "../ArtifactFrame.
 import { previewPort } from "../state.ts";
 import { RenderButton } from "../render.tsx";
 import { EditOverlay } from "./EditOverlay.tsx";
-import { DesignTab, LayersTab } from "./EditPanels.tsx";
+import { DesignTab } from "./EditPanels.tsx";
+import { LayersTab } from "./LayersTab.tsx";
 import { COLUMN, ColumnHeader, ParametersBody } from "./Parameters.tsx";
 import { PreviewSizeControl, usePreviewSize } from "./PreviewSize.tsx";
 import { useEditSession, type EditMode } from "./editSession.ts";
@@ -90,6 +91,18 @@ export const ArtifactEditor = ({ shapeId, onClose, onOpen }: ArtifactEditorProps
   });
   const sessionRef = useRef(session);
   sessionRef.current = session;
+
+  /** Locks or unlocks an element: the shape's `lockedElements`, one undo step, and no new version (spec 18, Lock and unlock). */
+  const setLocked = useCallback(
+    (id: string, on: boolean) => {
+      const current = (editor.getShape(shapeId)?.props as { lockedElements?: string[] } | undefined)?.lockedElements ?? [];
+      const next = on ? [...current.filter((other) => other !== id), id] : current.filter((other) => other !== id);
+      editor.markHistoryStoppingPoint("lock");
+      editor.updateShape({ id: shapeId, type: facts?.kind ?? "page", props: { lockedElements: next.length > 0 ? next : undefined } } as never);
+      sessionRef.current.setLocked(next);
+    },
+    [editor, shapeId, facts?.kind],
+  );
 
   const close = useCallback(() => {
     // Closing saves a pending burst first, as switching mode or element does (spec 18, Bursts).
@@ -274,7 +287,7 @@ export const ArtifactEditor = ({ shapeId, onClose, onOpen }: ArtifactEditorProps
                   onEditReady={onEditReady}
                 />
                 {mode === "edit" && (
-                  <EditOverlay hovered={session.hovered} selection={session.selection} reports={session.reports} boxes={session.boxes} names={names} />
+                  <EditOverlay hovered={session.hovered} layerHover={session.layerHover} selection={session.selection} reports={session.reports} boxes={session.boxes} names={names} />
                 )}
               </div>
             </div>
@@ -296,7 +309,7 @@ export const ArtifactEditor = ({ shapeId, onClose, onOpen }: ArtifactEditorProps
           </Tabs>
         </ColumnHeader>
         {panel === "design" && <DesignTab session={session} kind={facts.kind} project={project} dials={facts.dials} locked={facts.locked} />}
-        {panel === "layers" && <LayersTab session={session} kind={facts.kind} />}
+        {panel === "layers" && <LayersTab session={session} kind={facts.kind} shapeId={shapeId} locked={facts.locked} onLock={setLocked} />}
         {panel === "parameters" && (
           <ParametersBody
             shapeId={shapeId}
