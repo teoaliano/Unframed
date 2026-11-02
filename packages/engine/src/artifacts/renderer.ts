@@ -78,19 +78,27 @@ const quietLogger = {
   isLevelEnabled: (level: string) => level === "error",
 };
 
+/**
+ * The producer's config for a render. Static-frame dedup is off: HyperFrames would otherwise
+ * copy one capture glitch through every static frame after it.
+ */
+export const renderConfigFor = async (chromePath: string) => {
+  const engine = await import("@hyperframes/engine");
+  return engine.resolveConfig({ chromePath, fps: 30, quality: "standard", staticFrameDedup: false });
+};
+
 /** HyperFrames' producer, imported only when a render starts: 30 fps, standard quality, MP4. */
 export const producerBackend = (findChrome: () => Promise<string | undefined>): RenderBackend => ({
   findChrome,
   produce: async (run) => {
     const producer = await import("@hyperframes/producer");
-    const engine = await import("@hyperframes/engine");
     const job = producer.createRenderJob({
       fps: 30,
       quality: "standard",
       format: "mp4",
       entryFile: run.entry,
       logger: quietLogger,
-      producerConfig: engine.resolveConfig({ chromePath: run.chromePath, fps: 30, quality: "standard" }),
+      producerConfig: await renderConfigFor(run.chromePath),
       ...(run.variables === null ? {} : { variables: run.variables }),
     });
     await producer.executeRenderJob(job, run.folder, run.outputPath, (current, message) => run.onProgress(current.progress, message));
