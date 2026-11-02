@@ -59,6 +59,7 @@ describe("the kit", () => {
 
   it("refuses a mode name that is not a short word, and a repeated one", () => {
     expect(kitRefusal(kit({ modes: ["Light"] }))).toBe("A mode name is a short word, like light or dark.");
+    expect(kitRefusal(kit({ modes: ["none"] }))).toBe("none is reserved; give the mode another name.");
     expect(kitRefusal(kit({ modes: ["light", "light"] }))).toBe("There is already a mode light.");
   });
 

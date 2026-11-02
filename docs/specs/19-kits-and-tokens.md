@@ -197,7 +197,7 @@ Exactly one of `value` and `values` is set. A per-mode token may leave out modes
 - `There is no former name {css} on {path}.` (`forgetFormerName`)
 - `There is no token {path} in the kit.` (an op that names a token the kit does not have)
 
-Mode names: `none` is reserved. A snapshot's file name uses `none` for "no mode" and for "no kit", so a kit mode called `none` would read as no mode there. The mode rule above does not refuse the name (`none` matches the pattern), so the dialog and `applyKitOps` accept it; do not name a mode `none`.
+Mode names: `none` is reserved. A snapshot's file name uses `none` for "no mode" and for "no kit", so a mode named `none` is refused with `none is reserved; give the mode another name.`
 
 ### Kit edits
 

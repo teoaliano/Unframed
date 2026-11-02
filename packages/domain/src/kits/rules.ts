@@ -23,7 +23,11 @@ export const pathRefusal = (path: string): string | null => {
   return valid ? null : NAME_SENTENCE;
 };
 
-export const modeRefusal = (name: string): string | null => (MODE.test(name) ? null : "A mode name is a short word, like light or dark.");
+/** `none` names "no mode" in a snapshot's file name (spec 19), so no kit mode may take it. */
+export const modeRefusal = (name: string): string | null => {
+  if (!MODE.test(name)) return "A mode name is a short word, like light or dark.";
+  return name === "none" ? "none is reserved; give the mode another name." : null;
+};
 
 const DIMENSION_SENTENCE = (value: unknown) => `${String(value)} is not a size. Use a number with px, rem, em or %.`;
 const WEIGHT_SENTENCE = "A font weight is a number from 1 to 1000, or normal, bold, lighter or bolder.";
