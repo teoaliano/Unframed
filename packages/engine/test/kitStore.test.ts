@@ -115,7 +115,7 @@ describe("the tokens script and a project folder that is gone", () => {
     const { ensureTokens } = await import("../src/kits/tokensFile.ts");
     const root = await makeTempDir();
     const gone = join(root, "renamed-away");
-    await ensureTokens(gone, kit());
+    await ensureTokens(gone, kit() as Parameters<typeof ensureTokens>[1]);
     await expect(stat(gone)).rejects.toThrow();
   });
 });
