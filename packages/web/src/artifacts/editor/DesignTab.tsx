@@ -643,8 +643,10 @@ export interface DesignTabProps {
   readonly onAskComponent?: () => void;
   /** The component's title, named in the variant line of a picked board copy (spec 20). */
   readonly componentTitle?: string | undefined;
-  /** The title of the component shape a tag names, or undefined when no shape holds it (spec 20). */
-  readonly titleOfTag?: ((tag: string) => string | undefined) | undefined;
+  /** The component shape a tag names, or undefined when no shape holds it (spec 20). */
+  readonly componentOf?: ((tag: string) => { readonly shapeId: string; readonly title: string } | undefined) | undefined;
+  /** Opens the editor on a component shape, after the pending burst is written (spec 20, Go to main component). */
+  readonly onGoToMain?: ((shapeId: string) => void) | undefined;
 }
 
 /** The value a dial takes for a CSS value written to its field: a number dial takes the number, anything else the text. */
@@ -661,7 +663,7 @@ const normaliserFor = (property: string) => (value: string) => {
   return probe.style.getPropertyValue(property);
 };
 
-export const DesignTab = ({ session, kind, project, dials, locked, kit, mode, onOpenKit, onTell, onAsk, component, onAskComponent, componentTitle, titleOfTag }: DesignTabProps) => {
+export const DesignTab = ({ session, kind, project, dials, locked, kit, mode, onOpenKit, onTell, onAsk, component, onAskComponent, componentTitle, componentOf, onGoToMain }: DesignTabProps) => {
   // The token chip whose popover is open. A preview of a token changes the frame, so the field's owner can change while the popover is up.
   const [openChip, setOpenChip] = useState<{ readonly field: string; readonly named: { readonly token: Token; readonly suffix?: string } } | null>(null);
   const { selection, reports, tree, preparing, prepareError, pending, families, overridden } = session;
@@ -964,7 +966,11 @@ export const DesignTab = ({ session, kind, project, dials, locked, kit, mode, on
       {subjects.some((subject) => overridden[subject.id] === true) && noteText(OVERRIDDEN)}
       {instance !== null && (
         <InstanceSection
-          title={titleOfTag?.(instance.tag) || instance.tag}
+          title={componentOf?.(instance.tag)?.title || instance.tag}
+          goToMain={(() => {
+            const main = componentOf?.(instance.tag);
+            return main === undefined || onGoToMain === undefined ? null : () => onGoToMain(main.shapeId);
+          })()}
           fields={instanceFields}
           project={project}
           onSet={(name, value) => session.patch({ type: "attribute", elementId: first!.id, name, value })}

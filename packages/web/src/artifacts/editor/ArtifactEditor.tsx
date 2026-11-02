@@ -223,10 +223,14 @@ export const ArtifactEditor = ({ shapeId, onClose, onOpen }: ArtifactEditorProps
     const chip: ChipElement = { elementId: null, liveSelector: facts.tag, tag: facts.tag, label: displayTitle || facts.tag, startTag: `<${facts.tag}>`, text: "", hasChildren: false };
     tellAgent(chatClient, shapeId, [chip]);
   };
-  // The title of the component shape a tag names: the Instance section's header (spec 20). Undefined when no shape holds it.
-  const titleOfTag = (tag: string): string | undefined => {
+  // The component shape a tag names: the Instance section's header and its Go to main component (spec 20). Undefined when no shape holds it.
+  const componentOf = (tag: string) => {
     const shape = editor.getCurrentPageShapes().find((candidate) => candidate.type === "component" && (candidate.props as { tag?: string }).tag === tag);
-    return shape === undefined ? undefined : artifactTitle(shape.props as { title?: unknown; fileName?: unknown }) || undefined;
+    return shape === undefined ? undefined : { shapeId: shape.id, title: artifactTitle(shape.props as { title?: unknown; fileName?: unknown }) };
+  };
+  // The pending burst is written first, as switching the editor does, so the page's last change is not lost.
+  const goToMain = (id: string) => {
+    void sessionRef.current.commit().then(() => onOpen(id));
   };
   const mode: EditMode = session.mode;
   // The values the frame is running: the saved ones over the artifact's declared defaults, which is what a field's owner is matched against.
@@ -382,7 +386,8 @@ export const ArtifactEditor = ({ shapeId, onClose, onOpen }: ArtifactEditorProps
             component={component ? session.declaration : null}
             componentTitle={component ? displayTitle || facts.tag : undefined}
             onAskComponent={askAboutComponent}
-            titleOfTag={titleOfTag}
+            componentOf={componentOf}
+            onGoToMain={goToMain}
           />
         )}
         {shownPanel === "layers" && (

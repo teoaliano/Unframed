@@ -8,6 +8,7 @@ import { Component } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
 import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
+import { Tip } from "../../chrome/ui.tsx";
 import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "~/components/ui/select";
 import { Switch } from "~/components/ui/switch";
 import { ImagePicker } from "./ImagePicker.tsx";
@@ -57,6 +58,8 @@ export const instanceFieldsOf = (input: {
 export interface InstanceSectionProps {
   /** The component's name: its title, or its tag when its shape is gone. */
   readonly title: string;
+  /** Opens the main component's editor, or null when no component shape holds the tag (its shape was deleted). */
+  readonly goToMain: (() => void) | null;
   readonly fields: readonly InstanceField[];
   readonly project: string;
   /** Sets a variant or property attribute; null removes it (a variant's default, a property's absence). */
@@ -92,11 +95,25 @@ const TextField = ({ label, value, disabled, onChange }: { readonly label: strin
   );
 };
 
-export const InstanceSection = ({ title, fields, project, onSet, onAsk }: InstanceSectionProps) => (
+export const InstanceSection = ({ title, goToMain, fields, project, onSet, onAsk }: InstanceSectionProps) => (
   <section aria-label="Instance" data-testid="instance-section" className="flex flex-col gap-2 border-b pb-3">
     <div className="flex min-w-0 items-center gap-2">
       <Component aria-hidden className="size-4 shrink-0 text-muted-foreground" />
       <span className="min-w-0 truncate text-sm font-semibold">{title}</span>
+      <span className="ml-auto shrink-0">
+        {goToMain === null ? (
+          // aria-disabled, not disabled: a disabled button would not show its tooltip.
+          <Tip label="The main component was deleted.">
+            <Button variant="ghost" size="xs" aria-disabled="true">
+              Go to main component
+            </Button>
+          </Tip>
+        ) : (
+          <Button variant="ghost" size="xs" onClick={goToMain}>
+            Go to main component
+          </Button>
+        )}
+      </span>
     </div>
     {fields.map((field) => (
       <div key={field.name} className="flex flex-col gap-1">
