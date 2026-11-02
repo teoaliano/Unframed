@@ -326,7 +326,7 @@ export const AgentRail = ({ project, embedded, inSheet, filterTo, onLocate, onOp
         <TabStrip client={client} chats={visible} observed={chats} active={active} selectedCount={selectedArtifacts.length} onDelete={setDeleting} />
         {ui.searchOpen && <ThreadSearch client={client} chats={chats} onClose={() => client.setUi({ searchOpen: false })} />}
       </div>
-      <div className="relative flex min-h-0 flex-1 flex-col">
+      <div className="relative flex min-h-12 flex-1 flex-col overflow-hidden">
         {none && statuses ? (
           <NoProvider client={client} />
         ) : active ? (
@@ -385,7 +385,7 @@ export const AgentRail = ({ project, embedded, inSheet, filterTo, onLocate, onOp
           <DiffPanel key={activeChat.id} client={client} chat={activeChat} diff={ui.diff} />
         </Suspense>
       )}
-      <div className="shrink-0 px-2.5 pb-2.5">
+      <div className="flex min-h-0 flex-col px-2.5 pb-2.5">
         {activeChat?.outside === undefined ? (
           <AgentTray client={client} variant="rail" chatId={active} newChatTags={selectedArtifacts} dropTarget={root} notices={notices} />
         ) : (

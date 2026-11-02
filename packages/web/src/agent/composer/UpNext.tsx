@@ -62,15 +62,16 @@ export const UpNext = ({ client, chatId, running, editingId, editBlockedReason, 
   };
 
   return (
-    <section aria-label={`Up next: ${queue.length} queued message${queue.length === 1 ? "" : "s"}`} className="flex w-full flex-col gap-2 pb-2">
-      <h3 className="m-0 flex min-h-5 items-center gap-1.5 px-1 text-xs font-normal text-muted-foreground [&_svg]:size-3.5">
+    <section aria-label={`Up next: ${queue.length} queued message${queue.length === 1 ? "" : "s"}`} className={cn("flex w-full shrink flex-col gap-2 pb-2", collapsible ? "min-h-15" : "min-h-9")}>
+      <h3 className="m-0 flex min-h-5 shrink-0 items-center gap-1.5 px-1 text-xs font-normal text-muted-foreground [&_svg]:size-3.5">
         <ListOrdered aria-hidden />
         Up next
         <span className="tabular-nums" aria-live="polite">
           · {queue.length} queued
         </span>
       </h3>
-      <ol className="m-0 flex list-none flex-col items-end gap-3 p-0" id={listId}>
+      {/* Capped, and the first thing to give up height (the heading and the toggle never do, the section's minimum holds them), so a long queue never hides an approval or pushes the composer out of a narrow rail. */}
+      <ol className="m-0 flex max-h-[min(28rem,50vh)] min-h-0 shrink list-none flex-col items-end gap-3 overflow-y-auto overscroll-contain px-0 py-1.5" id={listId}>
         {visible.map((item, index) => {
           const editing = item.id === editingId;
           return (
@@ -120,7 +121,7 @@ export const UpNext = ({ client, chatId, running, editingId, editBlockedReason, 
                   editing ? "border-primary/60 text-foreground" : "border-muted-foreground/40 text-muted-foreground",
                 )}
               >
-                <p className="m-0 whitespace-pre-wrap break-words" data-testid="queued-text">
+                <p className="m-0 line-clamp-3 whitespace-pre-wrap break-words" data-testid="queued-text" title={item.message.text}>
                   {item.message.text}
                 </p>
               </div>
@@ -205,7 +206,7 @@ export const UpNext = ({ client, chatId, running, editingId, editBlockedReason, 
         })}
       </ol>
       {collapsible && (
-        <div className="self-end pe-1 text-xs">
+        <div className="shrink-0 self-end pe-1 text-xs">
           <InlineButton
             tone="muted"
             aria-expanded={showAll}

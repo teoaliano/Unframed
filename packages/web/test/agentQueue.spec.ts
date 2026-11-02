@@ -144,6 +144,8 @@ test("while a turn runs Send says what it will do: Queue message or Steer messag
 });
 
 test("Up next numbers its rows, folds beyond three, and reorders by dragging the grip or with its arrow keys; the new head goes first", async ({ page, agent }) => {
+  // Room for all four rows: in a shorter window the list scrolls, and a synthetic drag does not autoscroll it as Chrome does.
+  await page.setViewportSize({ width: 1280, height: 900 });
   const { panel, chatId } = await parkedChat(page, agent);
   for (const text of ["one", "two", "three", "four"]) await type(panel, text);
   const queued = panel.getByTestId("queued-message");
@@ -169,6 +171,34 @@ test("Up next numbers its rows, folds beyond three, and reorders by dragging the
 
   await answerApproval(agent, chatId);
   await expect.poll(async () => (await userTexts(agent, chatId)).at(1)).toBe("four");
+});
+
+test("in a short window a long Up next scrolls and gives up height first: the approval, the composer and the Up next heading stay whole inside the rail, and a long row shows three lines", async ({ page, agent }) => {
+  await page.setViewportSize({ width: 1280, height: 520 });
+  const { panel } = await parkedChat(page, agent);
+  for (let index = 1; index <= 6; index++) await type(panel, `queued ${index} ${"with a body long enough to wrap across several lines of the rail ".repeat(4)}`);
+  await expect(panel.getByTestId("queued-message")).toHaveCount(2);
+  await panel.getByRole("button", { name: "Show all 6 queued" }).click();
+  await expect(panel.getByTestId("queued-message")).toHaveCount(6);
+
+  const rail = (await panel.boundingBox())!;
+  const inside = async (target: Locator) => {
+    const box = (await target.boundingBox())!;
+    expect(box.y).toBeGreaterThanOrEqual(rail.y - 1);
+    expect(box.y + box.height).toBeLessThanOrEqual(rail.y + rail.height + 1);
+    return box;
+  };
+  const approve = await inside(panel.getByRole("button", { name: "Approve", exact: true }));
+  await inside(panel.getByRole("button", { name: "Queue message" }));
+  await inside(promptBox(panel));
+  const heading = await inside(panel.getByRole("heading", { name: /Up next/ }));
+  // Nothing sits over the heading: the approval card starts below it.
+  expect(heading.y + heading.height).toBeLessThanOrEqual(approve.y);
+  await expect(panel.getByRole("heading", { name: /Up next/ })).toBeInViewport({ ratio: 1 });
+
+  const row = panel.getByTestId("queued-text").first();
+  const lineHeight = await row.evaluate((element) => parseFloat(getComputedStyle(element).lineHeight));
+  expect((await row.boundingBox())!.height).toBeLessThanOrEqual(lineHeight * 3 + 1);
 });
 
 test("Edit, or Alt+ArrowUp at the start of the composer, opens a queued message in the composer; Update saves it in place and the draft comes back; one sent meanwhile stays as the draft with a toast", async ({ page, agent }) => {

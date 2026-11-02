@@ -534,7 +534,8 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
       return false;
     }
     if (command && !event.shiftKey && event.key.toLowerCase() === "s") {
-      stashKey();
+      // The box holds a queued message being edited, not a draft: stashing it would leave the edit open on an empty box.
+      if (editingRef.current === null) stashKey();
       return true;
     }
     // t3code's control chords; a held Cmd+Shift+M or E does not repeat its toggle.
@@ -990,22 +991,25 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
   }, [variant, dropElement]);
 
   return (
-    <div className="flex flex-col gap-1.5" data-variant={variant} data-testid="agent-tray" ref={root}>
-      <NoticeStack items={trayNotices} />
-      {variant === "rail" && chatId !== null && (
-        <UpNext
-          client={client}
-          chatId={chatId}
-          running={running}
-          editingId={editing?.chatId === chatId ? editing.id : null}
-          editBlockedReason={queuedEditBlockedReason({ openQuestionCount: answering ? 1 : 0 })}
-          onEdit={beginEdit}
-          onCancelEdit={() => endEdit()}
-        />
-      )}
-      {approvalPending && chat && <ApprovalPanel client={client} chat={chat} held={guard.held} />}
-      {questions.panel}
-      {planFollowUp && <PlanReady plan={planFollowUp} />}
+    <div className="flex min-h-0 flex-col gap-1.5" data-variant={variant} data-testid="agent-tray" ref={root}>
+      {/* The panels give up height before the composer does, and scroll, so Send stays in the rail. */}
+      <div className="-mx-1 flex min-h-0 shrink flex-col gap-1.5 overflow-y-auto overscroll-contain px-1 empty:hidden">
+        <NoticeStack items={trayNotices} />
+        {variant === "rail" && chatId !== null && (
+          <UpNext
+            client={client}
+            chatId={chatId}
+            running={running}
+            editingId={editing?.chatId === chatId ? editing.id : null}
+            editBlockedReason={queuedEditBlockedReason({ openQuestionCount: answering ? 1 : 0 })}
+            onEdit={beginEdit}
+            onCancelEdit={() => endEdit()}
+          />
+        )}
+        {approvalPending && chat && <ApprovalPanel client={client} chat={chat} held={guard.held} />}
+        {questions.panel}
+        {planFollowUp && <PlanReady plan={planFollowUp} />}
+      </div>
       {dragging &&
         dropElement &&
         createPortal(
