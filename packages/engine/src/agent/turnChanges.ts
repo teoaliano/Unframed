@@ -86,7 +86,7 @@ export class TurnChanges {
 
   /** The recap's rows for a turn: each shape it touched, how, and a page or motion's files. */
   files(chatId: string, turn: number): TurnFile[] {
-    return this.rows(chatId, turn).map((row) => {
+    return this.rows(chatId, turn).filter((row) => !row.shapeId.startsWith("kit:")).map((row) => {
       const record = row.after ?? row.before;
       const change = row.before === null ? "created" : row.after === null ? "deleted" : "updated";
       return {
@@ -138,11 +138,14 @@ export const planRevert = (
   return { change: { put, remove }, restored, skipped };
 };
 
-const changedBy = (chatId: string, row: TurnChangeRow, log: ReadonlyArray<ChangeLogRow>): SkippedBy => {
+/** Who changed a shape or kit part after the turn left it, read from the change log. */
+export const changedBy = (chatId: string, row: TurnChangeRow, log: ReadonlyArray<ChangeLogRow>): SkippedBy => {
   let by: SkippedBy = "person";
   for (const entry of log) {
     if (entry.clock <= row.lastClock) continue;
-    if (!entry.put.includes(row.shapeId) && !entry.removed.includes(row.shapeId)) continue;
+    // A kit part is a part of the document record, which the change log names.
+    const id = row.shapeId.startsWith("kit:") ? "document:document" : row.shapeId;
+    if (!entry.put.includes(id) && !entry.removed.includes(id)) continue;
     const author = classifyOrigin(entry.origin);
     if (author.kind === "system") continue;
     by = author.kind === "chat" ? (author.chatId === chatId ? "a later turn" : "another chat") : "person";

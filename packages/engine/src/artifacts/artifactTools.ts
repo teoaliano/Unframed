@@ -19,6 +19,8 @@ import {
   MOTION_WRITE_ARGUMENTS,
   MOTION_WRITE_TEXT,
   nextRef,
+  offTokenNote,
+  offTokenValues,
   PAGE_READ_SHAPE_ID,
   PAGE_READ_TEXT,
   PAGE_WRITE_ARGUMENTS,
@@ -42,6 +44,7 @@ import { shapeBoxes } from "../runs/shapeBounds.ts";
 import { lockRefusal, sourceTreeOf } from "@unframed/domain/html";
 import { byteSize, prepareArtifactHtml } from "./artifactHtml.ts";
 import { ensureBridge, ensureLibrary, readArtifact, writeAgentArtifact } from "./artifactStore.ts";
+import { ensureTokens, kitOf } from "../kits/tokensFile.ts";
 
 const PAGE_ID = "page:page";
 
@@ -124,6 +127,7 @@ export class ArtifactTools {
     let written: { file: string; bytes: number };
     try {
       await (kind === "motion" ? ensureLibrary(folder) : ensureBridge(folder));
+      await ensureTokens(folder, kitOf(records));
       written = await writeAgentArtifact(folder, {
         kind,
         html,
@@ -184,6 +188,8 @@ export class ArtifactTools {
       turnId: turn.turnId ?? null,
       createdAt: new Date().toISOString(),
     });
+    const kit = kitOf(records);
+    const offToken = kit === null ? undefined : offTokenNote(offTokenValues(html, kit));
     return {
       value: {
         ok: true,
@@ -192,6 +198,7 @@ export class ArtifactTools {
         title,
         previewUrl: artifactUrl({ appHostname: "localhost", previewPort: this.previewPort(), project: projectSlug(binding.project), file: written.file, kind }),
         clock: applied.clock,
+        ...(offToken === undefined ? {} : { offToken }),
       },
     };
   }

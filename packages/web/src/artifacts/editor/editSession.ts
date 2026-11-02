@@ -3,7 +3,7 @@
  * reports, the burst of source edits and its commit, undo within the session, and the prepare
  * that makes an older file editable. The frame is reached only through the edit protocol.
  */
-import type { SourceEdit, SourceTreeElement } from "@unframed/contracts";
+import type { OffTokenFound, SourceEdit, SourceTreeElement } from "@unframed/contracts";
 import {
   addToBurst,
   burstDials,
@@ -11,12 +11,14 @@ import {
   dialsWith,
   emptyBurst,
   fieldOwner,
+  framePatchesOf,
   releaseDials as releaseHeldDials,
   withoutEdit,
   type ArtifactKind,
   type Burst,
   type EditBox,
   type FieldOwner,
+  type Kit,
 } from "@unframed/domain";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { Editor, TLShapeId } from "tldraw";
@@ -46,6 +48,8 @@ export interface EditReport {
 export interface SourceTree {
   readonly ready: boolean;
   readonly elements: readonly SourceTreeElement[];
+  /** The literals of the file that sit close to a kit token (spec 19); empty with no kit. */
+  readonly offTokens: readonly OffTokenFound[];
 }
 
 /** An element of the frame's live tree (spec 18, `unframed:edit:tree`): `id` is null for a runtime element. */
@@ -77,6 +81,8 @@ export interface EditSessionInput {
   readonly kind: ArtifactKind;
   readonly file: string;
   readonly locked: readonly string[];
+  /** The project kit, which a token edit's preview reads (spec 19). */
+  readonly kit: Kit | null;
 }
 
 export interface EditSession {
@@ -86,6 +92,8 @@ export interface EditSession {
   readonly showDials: (values: Readonly<Record<string, unknown>>) => void;
   readonly selection: readonly string[];
   readonly setSelection: (ids: readonly string[]) => void;
+  /** Selects the elements a style rule's selector matches in the frame (spec 19, Off-token values). */
+  readonly selectMatching: (selector: string) => void;
   readonly hovered: EditReport | null;
   readonly reports: Readonly<Record<string, EditReport>>;
   /** The font families the document's elements use, first family of each, as the bridge reports them. */
@@ -115,6 +123,11 @@ export interface EditSession {
   /** Elements a stylesheet `!important` rule wins over, as the bridge last reported them. */
   readonly overridden: Readonly<Record<string, boolean>>;
   readonly patch: (edit: SourceEdit) => void;
+  /**
+   * Shows edits in the frame without adding them to the burst (a token's hover preview). The burst's
+   * own edits are shown again over the reset frame; null shows only the burst.
+   */
+  readonly previewEdits: (edits: readonly SourceEdit[] | null) => void;
   readonly commit: () => Promise<void>;
   /** Drops the burst and puts the frame back, or with `quiet`, drops it without touching the frame (its artifact is gone). */
   readonly discard: (quiet?: boolean) => void;
@@ -131,7 +144,7 @@ const sameIds = (a: readonly string[], b: readonly string[]): boolean => a.lengt
 const conflictSentence = (kind: ArtifactKind, reason: unknown): string =>
   reason === "agent" ? "The agent rewrote this. Your last change wasn't saved." : `This ${kind} changed somewhere else. Your last change wasn't saved.`;
 
-export const useEditSession = ({ editor, engine, project, shapeId, kind, file, locked }: EditSessionInput): EditSession => {
+export const useEditSession = ({ editor, engine, project, shapeId, kind, file, locked, kit }: EditSessionInput): EditSession => {
   const [mode, setModeState] = useState<EditMode>("edit");
   const [selection, setSelectionState] = useState<readonly string[]>([]);
   const [hovered, setHovered] = useState<EditReport | null>(null);
@@ -157,6 +170,8 @@ export const useEditSession = ({ editor, engine, project, shapeId, kind, file, l
   lockedRef.current = locked;
   const fileRef = useRef(file);
   fileRef.current = file;
+  const kitRef = useRef(kit);
+  kitRef.current = kit;
   const treeRef = useRef<SourceTree | undefined>(undefined);
   treeRef.current = tree;
   // The reports as the frame last sent them, read at once by a text edit that starts in the same click.
@@ -309,10 +324,11 @@ export const useEditSession = ({ editor, engine, project, shapeId, kind, file, l
     (edit: SourceEdit, showInFrame: boolean) => {
       burstRef.current = addToBurst(burstRef.current, edit);
       // A motion edit names a tween, not an element, so only element edits are remembered per element.
-      if ("elementId" in edit) lastEdit.current[edit.elementId] = edit;
+      if ("elementId" in edit && edit.elementId !== undefined) lastEdit.current[edit.elementId] = edit;
       if (baseRef.current === undefined) baseRef.current = fileRef.current;
       setPending(burstEdits(burstRef.current));
-      if (showInFrame) post({ type: "unframed:edit:patch", patches: [edit] });
+      const patches = framePatchesOf(edit, kitRef.current);
+      if (showInFrame && patches.length > 0) post({ type: "unframed:edit:patch", patches });
       window.clearTimeout(timerRef.current);
       timerRef.current = window.setTimeout(() => void commit(), COMMIT_DELAY_MS);
     },
@@ -344,6 +360,15 @@ export const useEditSession = ({ editor, engine, project, shapeId, kind, file, l
   );
 
   const patch = useCallback((edit: SourceEdit) => collect(edit, true), [collect]);
+
+  const previewEdits = useCallback(
+    (edits: readonly SourceEdit[] | null) => {
+      post({ type: "unframed:edit:reset" });
+      const patches = [...burstEdits(burstRef.current), ...(edits ?? [])].flatMap((edit) => framePatchesOf(edit, kitRef.current));
+      if (patches.length > 0) post({ type: "unframed:edit:patch", patches });
+    },
+    [post],
+  );
 
   /** Whether an element is locked or sits inside a locked one, by the source tree's parents. */
   const lockedInside = (id: string): boolean => {
@@ -393,6 +418,8 @@ export const useEditSession = ({ editor, engine, project, shapeId, kind, file, l
     },
     [commit, post],
   );
+
+  const selectMatching = useCallback((selector: string) => post({ type: "unframed:edit:selectMatching", selector }), [post]);
 
   const setSelection = useCallback(
     (ids: readonly string[]) => {
@@ -465,6 +492,11 @@ export const useEditSession = ({ editor, engine, project, shapeId, kind, file, l
         post({ type: "unframed:edit:mode", mode: modeRef.current, locked: lockedRef.current });
         if (selectionRef.current.length > 0) post({ type: "unframed:edit:select", ids: selectionRef.current });
         post({ type: "unframed:edit:tree" });
+        return;
+      }
+      case "unframed:edit:matched": {
+        const ids = Array.isArray(message.ids) ? message.ids.filter((id): id is string => typeof id === "string") : [];
+        setSelection(ids);
         return;
       }
       case "unframed:edit:tree": {
@@ -569,7 +601,7 @@ export const useEditSession = ({ editor, engine, project, shapeId, kind, file, l
       .call("artifact.sourceTree", { project, file })
       .then(async (answer) => {
         if (!live) return;
-        setTree({ ready: answer.ready, elements: answer.elements });
+        setTree({ ready: answer.ready, elements: answer.elements, offTokens: answer.offTokens });
         if (answer.ready || preparedFor.current === file) return;
         preparedFor.current = file;
         setPreparing(true);
@@ -604,6 +636,7 @@ export const useEditSession = ({ editor, engine, project, shapeId, kind, file, l
     showDials,
     selection,
     setSelection,
+    selectMatching,
     hovered,
     reports,
     families,
@@ -622,6 +655,7 @@ export const useEditSession = ({ editor, engine, project, shapeId, kind, file, l
     releaseDials,
     overridden,
     patch,
+    previewEdits,
     commit,
     discard,
     handleKey,

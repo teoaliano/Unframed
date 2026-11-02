@@ -6,12 +6,13 @@
 import { readdir, readFile, stat } from "node:fs/promises";
 import { extname, join } from "node:path";
 import type { TLRecord } from "@tldraw/tlschema";
-import { isBareFileName, unframedError, type ArtifactImage, type SourceEdit, type SourceTreeElement } from "@unframed/contracts";
-import { ARTIFACT_SIZE_LIMIT, artifactTitle, projectSlug, shapeKind, sidecarFileName, type ArtifactKind } from "@unframed/domain";
+import { isBareFileName, unframedError, type ArtifactImage, type OffTokenFound, type SourceEdit, type SourceTreeElement } from "@unframed/contracts";
+import { ARTIFACT_SIZE_LIMIT, artifactTitle, offTokenValues, projectSlug, shapeKind, sidecarFileName, type ArtifactKind } from "@unframed/domain";
 import { applySourceEdits, sourceTreeOf, stampElementIds } from "@unframed/domain/html";
 import { isMotionEdit } from "@unframed/domain/motion";
 import type { CommittedChange } from "../canvas/rooms.ts";
 import { byteSize, prepareArtifactHtml, tooLargeMessage } from "./artifactHtml.ts";
+import { kitOf } from "../kits/tokensFile.ts";
 import { ensureBridge, ensureLibrary, writeEditArtifact } from "./artifactStore.ts";
 
 const BRIDGE_PRESENT = /unframed-dials\.js/i;
@@ -68,7 +69,7 @@ export const artifactEditService = (deps: EditServiceDeps) => {
   },
 
   /** The elements of a file that carry an id, and whether the file is ready for editing as it stands. */
-  sourceTree: async (project: string, file: string): Promise<{ ready: boolean; elements: SourceTreeElement[] }> => {
+  sourceTree: async (project: string, file: string): Promise<{ ready: boolean; elements: SourceTreeElement[]; offTokens: OffTokenFound[] }> => {
     const dir = await folderOf(deps, project);
     if (!isBareFileName(file)) throw unframedError("bad_request", "That is not a file in this project.");
     let html: string;
@@ -77,7 +78,8 @@ export const artifactEditService = (deps: EditServiceDeps) => {
     } catch {
       throw unframedError("not_found", `No file ${file} in this project.`);
     }
-    return { ready: isReady(html), elements: sourceTreeOf(html) };
+    const kit = kitOf(await deps.read(project));
+    return { ready: isReady(html), elements: sourceTreeOf(html), offTokens: kit === null ? [] : offTokenValues(html, kit) };
   },
 
   /** A page or motion's file, stamped and bridged in a new version when it is not ready; the current file when it is. */
@@ -111,7 +113,8 @@ export const artifactEditService = (deps: EditServiceDeps) => {
   /** The person's source edits to an artifact's base file, written as a new version (spec 18). */
   edit: async (project: string, shapeId: string, baseFile: string, edits: readonly SourceEdit[]): Promise<{ file: string; summary: string[] }> => {
     const dir = await folderOf(deps, project);
-    const { kind, props } = artifactShape(await deps.read(project), shapeId);
+    const records = await deps.read(project);
+    const { kind, props } = artifactShape(records, shapeId);
     if (edits.length === 0) throw unframedError("bad_request", "There is nothing to save.");
     if (props.file !== baseFile) {
       const origin = fileOrigins.get(keyOf(project, shapeId));
@@ -128,14 +131,14 @@ export const artifactEditService = (deps: EditServiceDeps) => {
       for (const edit of edits) {
         // Motion edits check their own targets against the same locks (spec 21), inside applyMotionEdits.
         if (isMotionEdit(edit)) continue;
-        // Rename and hide still work on a locked element, so a person can tidy what they protected.
-        if (edit.type === "attribute" || edit.type === "hide") continue;
+        // Rename and hide still work on a locked element, so a person can tidy what they protected. A style rule is no element, so no lock holds it.
+        if (edit.type === "attribute" || edit.type === "hide" || edit.elementId === undefined) continue;
         const holder = lockedBy(edit.elementId, locked, byId);
         if (holder !== undefined) throw unframedError("bad_request", `${byId.get(holder)?.name ?? holder} is locked. Unlock it in Layers to edit it.`);
       }
     }
-    // No project kit exists yet (spec 19), so a token in a motion edit is refused as not a token of the kit.
-    const result = applySourceEdits(html, edits, kind, { lockedElements: locked });
+    const kit = kitOf(records);
+    const result = applySourceEdits(html, edits, kind, kit, { lockedElements: locked });
     if (!result.ok) throw unframedError("bad_request", result.refusal);
     const prepared = prepareArtifactHtml(result.html, kind);
     if (byteSize(prepared) > ARTIFACT_SIZE_LIMIT) throw unframedError("bad_request", tooLargeMessage(kind, byteSize(prepared)));

@@ -7,6 +7,8 @@ import type { SelectionApply } from "@unframed/contracts";
 import * as Queue from "effect/Queue";
 import * as Stream from "effect/Stream";
 import { errorText } from "../log.ts";
+import { exportKit, kitUsage } from "../kits/kitFiles.ts";
+import { kitOf } from "../kits/tokensFile.ts";
 import type { TLRecord } from "@tldraw/tlschema";
 import * as Effect from "effect/Effect";
 import { CanvasRooms } from "../canvas/rooms.ts";
@@ -184,6 +186,43 @@ export const rpcHandlersLayer = UnframedRpcs.toLayer(
       "motion.timeline": ({ project, file }) => artifacts.timeline(project, file),
       "artifact.snapshots": ({ project }) => artifacts.snapshots(project),
       "artifact.openLive": ({ project, shapeId }) => artifacts.openLive(project, shapeId),
+      "kit.usage": ({ project }) =>
+        Effect.gen(function* () {
+          const records = yield* rooms.read(project);
+          const folder = yield* Effect.promise(() => media.folder(project));
+          if (folder === undefined) return yield* unframedError("not_found", `There is no project named "${projectSlug(project)}".`);
+          return yield* Effect.tryPromise({
+            try: () => kitUsage(records, folder),
+            catch: (error) => unframedError("internal", `Could not read the uses of the kit: ${errorText(error)}`),
+          });
+        }),
+      "kit.saveToLibrary": ({ project, name, summary }) =>
+        Effect.gen(function* () {
+          if (name.trim() === "") return yield* unframedError("bad_request", "Give it a name.");
+          const kit = kitOf(yield* rooms.read(project));
+          if (kit === null) return yield* unframedError("bad_request", "This project has no kit yet.");
+          const { from: _link, ...definition } = kit;
+          return yield* presets.saveKit({ name, summary, kit: definition });
+        }),
+      "kit.updateInLibrary": ({ project }) =>
+        Effect.gen(function* () {
+          const kit = kitOf(yield* rooms.read(project));
+          if (kit === null) return yield* unframedError("bad_request", "This project has no kit yet.");
+          if (kit.from === undefined) return yield* unframedError("bad_request", "This kit is not linked to your library.");
+          const { from, ...definition } = kit;
+          return yield* presets.updateKit({ id: from.presetId, kit: definition, knownRevision: from.revision });
+        }),
+      "kit.exportFile": ({ project, format }) =>
+        Effect.gen(function* () {
+          const kit = kitOf(yield* rooms.read(project));
+          if (kit === null) return yield* unframedError("bad_request", "This project has no kit yet.");
+          const folder = yield* Effect.promise(() => media.folder(project));
+          if (folder === undefined) return yield* unframedError("not_found", `There is no project named "${projectSlug(project)}".`);
+          return yield* Effect.tryPromise({
+            try: () => exportKit(folder, kit, format),
+            catch: (error) => unframedError("internal", `Could not write the export: ${errorText(error)}`),
+          });
+        }),
       "artifact.sourceTree": ({ project, file }) => artifacts.sourceTree(project, file),
       "artifact.prepareEdit": ({ project, shapeId }) => artifacts.prepareEdit(project, shapeId),
       "artifact.edit": ({ project, shapeId, baseFile, edits }) => artifacts.edit(project, shapeId, baseFile, [...edits]),

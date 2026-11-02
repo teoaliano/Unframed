@@ -6,6 +6,10 @@ import type { SourceEdit } from "@unframed/contracts";
 import { applyMotionEdits, isMotionEdit, type MotionEditOptions } from "../motion/edits.ts";
 import type { ArtifactKind } from "../artifacts/artifactRules.ts";
 import { DESIGN_FIELDS, styleValueRefusal } from "../designFields.ts";
+import { parseStylesheet } from "../kits/css.ts";
+import { kitCssNames } from "../kits/rules.ts";
+import { cssName } from "../kits/runtime.ts";
+import { TEXT_STYLE_SUFFIX, type Kit } from "../kits/types.ts";
 import {
   attr,
   type Element,
@@ -17,7 +21,9 @@ import {
   isTextOnly,
   parseDeclarations,
   parseSource,
+  type ChildNode,
   type Declaration,
+  type Document,
 } from "./source.ts";
 import { sourceTreeOf } from "./sourceTree.ts";
 
@@ -39,14 +45,21 @@ type Step = { readonly html: string; readonly line: string } | { readonly refusa
  * Applies `edits` and returns the new source with its summary lines, or the first refusal (and no
  * source). Element edits go in order, then the motion edits (spec 21) in one pass: the two kinds
  * touch different bytes, so their order does not change the result. `kind` only words the
- * refusals; `options` carries the artifact's locks and kit to the motion edits.
+ * refusals. `kit` is the project kit (spec 19): a token edit needs it, and a style value may use
+ * its custom properties. `options` carries the artifact's locks and token kinds to the motion edits.
  */
-export const applySourceEdits = (html: string, edits: readonly SourceEdit[], kind: ArtifactKind = "page", options: MotionEditOptions = {}): SourceEditResult => {
+export const applySourceEdits = (
+  html: string,
+  edits: readonly SourceEdit[],
+  kind: ArtifactKind = "page",
+  kit: Kit | null = null,
+  options: MotionEditOptions = {},
+): SourceEditResult => {
   let current = html;
   const lines: string[] = [];
   for (const edit of edits) {
     if (isMotionEdit(edit)) continue;
-    const step = applyEdit(current, edit, kind);
+    const step = applyEdit(current, edit, kind, kit);
     if ("refusal" in step) return { ok: false, refusal: step.refusal };
     current = step.html;
     lines.push(step.line);
@@ -70,7 +83,8 @@ export const summaryLines = (lines: readonly string[]): string[] => {
   return rest > 0 ? [...shown, `and ${rest} more`] : shown;
 };
 
-const applyEdit = (html: string, edit: Exclude<SourceEdit, { readonly type: "tween-time" | "tween-ease" | "tween-stagger" | "tween-value" | "clip-time" | "composition-duration" }>, kind: ArtifactKind): Step => {
+const applyEdit = (html: string, edit: Exclude<SourceEdit, { readonly type: "tween-time" | "tween-ease" | "tween-stagger" | "tween-value" | "clip-time" | "composition-duration" }>, kind: ArtifactKind, kit: Kit | null): Step => {
+  if (edit.type === "token") return applyToken(html, edit, kind, kit);
   const before = sourceTreeOf(html).find((entry) => entry.id === edit.elementId);
   const target = findById(parseSource(html), edit.elementId);
   if (before === undefined || target === undefined) return { refusal: `There is no element ${edit.elementId} in this ${kind} any more.` };
@@ -89,7 +103,7 @@ const applyEdit = (html: string, edit: Exclude<SourceEdit, { readonly type: "twe
       if (field === undefined) return { refusal: `${edit.property} cannot be edited here.` };
       const value = edit.value === null ? null : edit.value.trim();
       if (value !== null) {
-        const refusal = styleValueRefusal(edit.property, value);
+        const refusal = styleValueRefusal(edit.property, value, kit === null ? [] : kitCssNames(kit));
         if (refusal !== null) return { refusal };
       }
       const next = setDeclaration(html, id, edit.property, value);
@@ -119,6 +133,78 @@ const applyEdit = (html: string, edit: Exclude<SourceEdit, { readonly type: "twe
       return { html: next, line: `Image · ${after(next)}` };
     }
   }
+};
+
+/**
+ * A token edit (spec 19): sets a design property to a kit token's custom property, on an element's
+ * inline style or on the declaration of one style rule. A text style writes its five longhands.
+ */
+const applyToken = (html: string, edit: Extract<SourceEdit, { type: "token" }>, kind: ArtifactKind, kit: Kit | null): Step => {
+  if ((edit.elementId === undefined) === (edit.rule === undefined)) return { refusal: "A token goes to one element or one style rule." };
+  const token = kit?.tokens.find((candidate) => candidate.path === edit.token);
+  if (token === undefined) return { refusal: `There is no token ${edit.token} in the kit.` };
+  if (!DESIGN_FIELDS.some((candidate) => candidate.property === edit.property)) return { refusal: `${edit.property} cannot be edited here.` };
+  const name = cssName(token.path);
+
+  if (edit.elementId !== undefined) {
+    const id = edit.elementId;
+    const before = sourceTreeOf(html).find((entry) => entry.id === id);
+    if (before === undefined || findById(parseSource(html), id) === undefined) return { refusal: `There is no element ${id} in this ${kind} any more.` };
+    let next = html;
+    if (token.type === "textStyle") {
+      for (const suffix of Object.values(TEXT_STYLE_SUFFIX)) next = setDeclaration(next, id, suffix, `var(${name}-${suffix})`);
+    } else {
+      next = setDeclaration(next, id, edit.property, `var(${name})`);
+    }
+    return { html: next, line: `Token · ${sourceTreeOf(next).find((entry) => entry.id === id)?.name ?? before.name}` };
+  }
+
+  const ref = edit.rule!;
+  // A text style's field takes its own custom property (`--type-font-size`); any other property cannot take a text style.
+  const textProperty = Object.values(TEXT_STYLE_SUFFIX).find((candidate) => candidate === edit.property);
+  if (token.type === "textStyle" && textProperty === undefined) return { refusal: `${edit.property} cannot be edited here.` };
+  const value = token.type === "textStyle" ? `var(${name}-${textProperty})` : `var(${name})`;
+  const next = replaceRuleValue(html, ref, edit.property, value);
+  if (next === null) return { refusal: "That style changed. Pick the value again." };
+  return { html: next, line: `Token · In styles: ${ref.selector}` };
+};
+
+/** The `<style>` elements of a source in document order, each with the offsets of its text. A block without a location is left out. */
+const styleBlocks = (doc: Document): Array<{ start: number; end: number }> => {
+  const found: Array<{ start: number; end: number }> = [];
+  const walk = (nodes: readonly ChildNode[]) => {
+    for (const node of nodes) {
+      if (!("tagName" in node)) continue;
+      if (node.tagName.toLowerCase() === "style") {
+        const location = node.sourceCodeLocation;
+        if (location?.startTag !== undefined) found.push({ start: location.startTag.endOffset, end: location.endTag?.startOffset ?? location.endOffset });
+      }
+      walk(node.childNodes);
+    }
+  };
+  walk(doc.childNodes);
+  return found;
+};
+
+/**
+ * Replaces the value of the last `property` declaration of the rule `ref` names, keeping every
+ * other byte. Null when the rule, or its declaration of that property, is gone.
+ */
+const replaceRuleValue = (html: string, ref: { block: number; selector: string; occurrence: number }, property: string, value: string): string | null => {
+  const block = styleBlocks(parseSource(html))[ref.block];
+  if (block === undefined) return null;
+  const text = html.slice(block.start, block.end);
+  let seen = 0;
+  for (const rule of parseStylesheet(text)) {
+    if (rule.selector !== ref.selector) continue;
+    const occurrence = seen;
+    seen += 1;
+    if (occurrence !== ref.occurrence) continue;
+    const declaration = rule.declarations.filter((candidate) => candidate.property === property).at(-1);
+    if (declaration === undefined) return null;
+    return html.slice(0, block.start + declaration.start) + value + html.slice(block.start + declaration.end);
+  }
+  return null;
 };
 
 const isImageFile = (file: string): boolean =>

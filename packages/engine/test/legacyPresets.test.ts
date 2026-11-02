@@ -26,7 +26,7 @@ describe("library.list over old presets", () => {
     expect(byId.get("user-mf0a3z7d")).toMatchObject({ kind: "group", legacy: true, notes: [] });
     expect(byId.get("user-mf1b5y2e")).toMatchObject({ kind: "recipe", medium: "text", notes: [] });
     // The content carries the canvas schema it was written in, so tldraw's migrations apply on insert.
-    expect(byId.get("user-mf0a3z7d")!.content.schema).toEqual(JSON.parse(JSON.stringify(canvasSchema().serialize())));
+    expect((byId.get("user-mf0a3z7d") as { content: { schema: unknown } }).content.schema).toEqual(JSON.parse(JSON.stringify(canvasSchema().serialize())));
   });
 
   it("never writes the converted form: presets.json stays byte-identical over lists, saves and deletes", async () => {

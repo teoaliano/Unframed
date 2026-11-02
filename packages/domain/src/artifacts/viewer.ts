@@ -1,6 +1,6 @@
 /**
  * The motion viewer (spec 09), `hyperframes-viewer.html`: a page on the preview origin that
- * plays one composition in HyperFrames' player and relays dial messages between the canvas
+ * plays one composition in HyperFrames' player and relays dial and kit (spec 19) messages between the canvas
  * above it and the composition inside it. Opened outside Unframed it relays nothing. With
  * `ui=editor` (spec 21) the editor drives the player through `unframed:player:*` messages, and
  * the runtime's state and timeline come back the same way.
@@ -189,6 +189,10 @@ export function viewerRelay(win: ViewerWindow, player: ViewerPlayer): void {
       if (lastState !== undefined) controller.window.postMessage(lastState, controller.origin);
     } else if (type === "unframed:player:control") {
       if (controller !== undefined && event.source === controller.window) control(data as Loose);
+    } else if ((data.type === "unframed:tokens:mode" || data.type === "unframed:tokens:set") && event.source === canvas?.window) {
+      // Only the canvas that said hello drives the tokens: the kit and the mode come from the app.
+      const target = composition ?? (player.iframeElement?.contentWindow as Target | undefined);
+      target?.postMessage(data, own);
     } else if (type.startsWith("unframed:edit:")) {
       if (type === "unframed:edit:hello") canvas = { window: event.source as Target, origin: event.origin };
       // Edit mode holds the motion still and lets the pointer reach it (the player turns it off); Interact leaves the player as the person left it.

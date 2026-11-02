@@ -1,7 +1,8 @@
 /**
  * Field owner (spec 18): what holds a value on screen, which decides what an edit to it changes.
  * The owner rule is decided at run time by comparing the live element with its source, so no
- * script is read. Spec 19 adds `token` before the style comparison.
+ * script is read. Spec 19 adds `token` before the style comparison: a source value that is a kit
+ * token's custom property belongs to the token.
  *
  * A longhand the source sets only through a shorthand (`background: #fff` sets background-color)
  * counts as the source's own value: the browser expands the shorthand, through `expand`.
@@ -31,6 +32,7 @@ export interface OwnerLive {
 export type FieldOwner =
   | { readonly owner: "source" }
   | { readonly owner: "dial"; readonly path: string }
+  | { readonly owner: "token"; readonly name: string }
   | { readonly owner: "script" | "animated" | "locked" };
 
 export interface FieldOwnerInput {
@@ -39,6 +41,8 @@ export interface FieldOwnerInput {
   readonly live: OwnerLive;
   /** The saved dial values, nested by folder. */
   readonly dials: Readonly<Record<string, unknown>>;
+  /** The project kit's custom property names, former names included (spec 19). Empty with no kit. */
+  readonly kitNames?: readonly string[];
   /** The element or one of its ancestors is locked. */
   readonly locked: boolean;
   /** Reads a value into the form the browser compares by, for example colours to `rgb()`. */
@@ -85,6 +89,13 @@ const sourceValueOf = (inline: Readonly<Record<string, string>>, property: strin
 
 const collapse = (text: string): string => text.replace(/\s+/g, " ").trim();
 
+/** `var(--name)` or `var(--name, fallback)` with a kit name: the name, else null. */
+const kitVarName = (value: string | null, kitNames: readonly string[]): string | null => {
+  if (value === null) return null;
+  const match = /^var\((--[A-Za-z0-9_-]+)(?:\s*,[\s\S]*)?\)$/.exec(value.trim());
+  return match !== null && kitNames.includes(match[1]!) ? match[1]! : null;
+};
+
 const isPlainObject = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null && !Array.isArray(value);
 
 /** Every dial leaf whose value the predicate accepts, by its dotted path, in declaration order. */
@@ -108,6 +119,9 @@ export function fieldOwner(input: FieldOwnerInput): FieldOwner {
 
   if (field.kind === "style") {
     if (live.animated.includes(field.property)) return { owner: "animated" };
+    // Spec 19: a source value that is exactly a kit token's custom property, still in the live element, is the token's.
+    const tokenName = kitVarName(source.inline[field.property] ?? null, input.kitNames ?? []);
+    if (tokenName !== null && live.inline[field.property] === source.inline[field.property]) return { owner: "token", name: tokenName };
     const liveValue = live.inline[field.property] ?? null;
     const sourceValue = sourceValueOf(source.inline, field.property, input.expand);
     if (liveValue === sourceValue || (liveValue !== null && sourceValue !== null && normalise(liveValue) === normalise(sourceValue))) {

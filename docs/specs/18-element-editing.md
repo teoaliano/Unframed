@@ -207,6 +207,8 @@ Protocol summary (editor is the editor's frame host; a motion's viewer relays ev
 | `unframed:edit:tweens` | frame to editor | `tweens`: each live tween's `targets` (its `data-hf-id`, or its selector), `start`, `duration`, keyframe percentages, animated `props`, `repeat` and `yoyo`. Sent after load and after each dials apply, at most once a frame (spec 21) |
 | `unframed:edit:scroll` | frame to editor | `x, y`: the document's scroll, at most once a frame, when it scrolls |
 | `unframed:edit:tree` | both ways | none / `nodes` |
+| `unframed:edit:selectMatching` | editor to frame | `selector`: a CSS selector (spec 19's Off-token values, for a style rule) |
+| `unframed:edit:matched` | frame to editor | `ids`: the ids of the elements the selector matches that have one (none for a selector the document cannot match); the editor selects them |
 | `unframed:edit:hitTest`, `unframed:edit:hit` | canvas or editor to frame / back | `x, y` / `elementId, target, box` |
 
 ### The owner rule
@@ -231,7 +233,7 @@ What each owner does in the Design tab:
 | `animated` | read-only | none. The section shows `Animated by the agent's code.` (a later spec may link it) |
 | `locked` | read-only | none. The tab shows `Locked. Unlock it in Layers to edit it.` |
 
-A value set from a stylesheet, inherited or left to the browser's default is `source`: the edit writes an inline declaration, which wins over the stylesheet. When the bridge reports `overridden` (a stylesheet `!important` rule wins), the field shows `A stylesheet rule wins over this value.` and the edit leaves the burst.
+A value set from a stylesheet, inherited or left to the browser's default is `source`: the edit writes an inline declaration, which wins over the stylesheet. When the bridge reports `overridden` (in a browser, when a stylesheet `!important` rule wins over the value), the field shows `A stylesheet rule wins over this value.` and the edit leaves the burst.
 
 With several elements selected a field is editable when every element's owner is `source`, and a value the elements do not share shows `Mixed`. A dial-owned field is editable with one element selected only.
 
@@ -254,7 +256,7 @@ All over spec 01's RPC socket, failing with spec 01's `UnframedError`.
 
 | Method | Input | Success | Failures |
 | --- | --- | --- | --- |
-| `artifact.sourceTree` | `{ project, file }` | `{ ready, elements: SourceTreeElement[] }`; `ready` is true when every element has an id and the file carries the dials bridge tag | `not_found`: `No file {file} in this project.` |
+| `artifact.sourceTree` | `{ project, file }` | `{ ready, elements: SourceTreeElement[], offTokens: OffTokenFound[] }`; `ready` is true when every element has an id and the file carries the dials bridge tag; `offTokens` is spec 19's `offTokenValues(source, kit)` for the file, empty when the project has no kit | `not_found`: `No file {file} in this project.` |
 | `artifact.prepareEdit` | `{ project, shapeId }` | `{ file }`: a stamped version with the bridge tag (and a motion's runtime tag), or the current file when it is already ready | `not_found` for a shape that is not a page or motion: `There is no page or motion {shapeId} on this canvas.`, or one with no file: `This {kind} has no file yet.` |
 | `artifact.edit` | `{ project, shapeId, baseFile, edits: SourceEdit[] }` | `{ file, summary: string[] }` | `not_found` as above; `conflict` when the shape's file is no longer `baseFile`, with `details.reason` `"agent"` when the change that moved it came from a `chat:` origin, else `"elsewhere"`; `bad_request` with the refusal from `applySourceEdits`, a lock (`{label} is locked. Unlock it in Layers to edit it.`), an empty list (`There is nothing to save.`), or the size limit (`The {kind} would be too large ({n} bytes; the limit is 2097152).`) |
 | `artifact.images` | `{ project }` | `{ images: [{ file, fileName, at }] }`: the project folder's images the preview origin serves (png, jpg, jpeg, webp, gif, svg), newest first by file time, `at` that time in epoch milliseconds, `fileName` the sidecar's original name or the file name | `not_found` for an unknown project |
