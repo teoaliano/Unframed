@@ -17,6 +17,31 @@ const fileOf = async (engine: TestEngine): Promise<string | undefined> => (await
 
 const dialsOf = async (engine: TestEngine): Promise<unknown> => (await roomRecords(engine, "default")).find((record) => record.id === "shape:tuned")?.props.dials;
 
+/** The scroll position of the frame the editor shows, read from its own document. */
+const shownScroll = async (page: Page): Promise<number> => {
+  const handle = await region(page).locator("iframe[data-artifact-frame]").elementHandle();
+  const inside = await handle!.contentFrame();
+  return inside!.evaluate(() => window.scrollY);
+};
+
+/** The frame's scroll once it holds still: the wheel's momentum and scroll anchoring may still be moving it. */
+const settledScroll = async (page: Page): Promise<number> => {
+  let last = await shownScroll(page);
+  await expect
+    .poll(
+      async () => {
+        await page.waitForTimeout(150);
+        const now = await shownScroll(page);
+        const holds = now === last;
+        last = now;
+        return holds;
+      },
+      { timeout: 5000 },
+    )
+    .toBe(true);
+  return last;
+};
+
 /** Waits until the room names a prepared file (one that carries element ids), and answers it. */
 const preparedFile = async (engine: TestEngine): Promise<string> => {
   let found = "";
@@ -81,7 +106,7 @@ const selectValues = async (page: Page) => {
 test("a commit shows the new version without a blank frame, and the saved dials and the selection stay", async ({ page, agent }) => {
   await openCanvas(page, agent);
   await writeBridge(agent);
-  await filledArtifact(agent, { id: "shape:tuned", kind: "page", ref: "150", at: { x: -520, y: -40 }, size: { w: 400, h: 260 }, title: "Tuned", html: dialsPage({ size: [10, 0, 100] }) });
+  await filledArtifact(agent, { id: "shape:tuned", kind: "page", ref: "150", at: { x: -520, y: -40 }, size: { w: 400, h: 260 }, title: "Tuned", html: dialsPage({ size: [10, 0, 100] }).replace("</body>", '<div id="spacer" style="height: 1600px"></div></body>') });
   await expect(shapeOnScreen(page, "shape:tuned")).toBeVisible();
 
   const centreAt = await centre(shapeOnScreen(page, "shape:tuned"));
@@ -104,10 +129,17 @@ test("a commit shows the new version without a blank frame, and the saved dials 
   await expect.poll(() => dialsOf(agent), { timeout: 10_000 }).toEqual({ size: 13 });
   await parameters(page).getByRole("tab", { name: "Design" }).click();
 
+  // Scrolled, then edited, the frame keeps the place it has when the commit swaps it in.
+  await frameOf(page).locator("#spacer").hover();
+  await page.mouse.wheel(0, 500);
+  await expect.poll(() => shownScroll(page), { timeout: 2000 }).toBeGreaterThan(100);
+  await settledScroll(page);
   // A Design edit, then a pause: the burst commits, and the new version swaps in.
   const before = (await fileOf(agent))!;
   await sizeField(page).fill("30");
   await sizeField(page).press("Enter");
+  // The edit grows the content above the spacer, and scroll anchoring moves the view with it: read it once that settles.
+  const scrolledTo = await settledScroll(page);
   await expect.poll(() => fileOf(agent), { timeout: 8000 }).not.toBe(before);
   const after = (await fileOf(agent))!;
   expect(after).not.toBe(before);
@@ -118,6 +150,9 @@ test("a commit shows the new version without a blank frame, and the saved dials 
   expect(shown.length).toBeGreaterThanOrEqual(2);
   expect(shown.every(Boolean)).toBe(true);
   expect(await readFile(projectPath(agent, after), "utf8")).toMatch(/font-size:\s*30px/);
+
+  // The scroll position is kept across the swap.
+  await expect.poll(() => shownScroll(page), { timeout: 8000 }).toBe(scrolledTo);
 
   // The selection is kept across the swap.
   await expect(outline(page, "selected")).toHaveCount(1, { timeout: 8000 });

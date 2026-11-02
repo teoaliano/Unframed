@@ -192,7 +192,7 @@ Protocol summary (editor is the editor's frame host; a motion's viewer relays ev
 
 | Message | Direction | Body |
 | --- | --- | --- |
-| `unframed:edit:hello` | editor to frame | none; the dials bridge loads the edit bridge |
+| `unframed:edit:hello` | editor to frame | `scroll?: {x, y}`, restored once the document has loaded; the dials bridge loads the edit bridge |
 | `unframed:edit:ready` | frame to editor | none |
 | `unframed:edit:mode` | editor to frame | `mode: "edit" \| "interact"`, `locked: string[]` |
 | `unframed:edit:hover` | both ways | frame to editor: `element \| null`; editor to frame (from Layers): `id \| null` |
@@ -204,6 +204,7 @@ Protocol summary (editor is the editor's frame host; a motion's viewer relays ev
 | `unframed:edit:textStart`, `unframed:edit:text` | frame to editor | `id` / `id, text` |
 | `unframed:edit:textEdit` | editor to frame | `id` |
 | `unframed:edit:key` | frame to editor | `key, shift, meta, ctrl` |
+| `unframed:edit:scroll` | frame to editor | `x, y`: the document's scroll, at most once a frame, when it scrolls |
 | `unframed:edit:tree` | both ways | none / `nodes` |
 | `unframed:edit:hitTest`, `unframed:edit:hit` | canvas or editor to frame / back | `x, y` / `elementId, target, box` |
 
@@ -241,7 +242,7 @@ With several elements selected a field is editable when every element's owner is
 - **The room catches up.** `artifact.edit` checks the shape's file in the room, which learns of the editor's last change a sync round later. A `conflict` on the file this editor set last (not from a chat) is therefore sent again every 300 ms, up to 12 times, before it counts as a conflict. Any other writer's change still fails at once.
 - **Committing.** The burst commits 1.5 s after its last edit, and at once when the person switches mode (either way), changes the editor's selection (any change of the selected set, of elements or of anything a later spec lets the person select in the editor), or closes the editor with Back or Esc. When the editor closes because the artifact was deleted, the burst is dropped. Committing sends `artifact.edit { project, shapeId, baseFile, edits }` with the file the burst began on, when the burst holds source edits.
 - **Setting the file.** On success the web sets the shape's `file` to the answered file, with the burst's held dials, as a person edit, one tldraw history step, only if the shape's `file` still equals `baseFile`. Otherwise it shows the race sentence (below). The engine never sets `file` for a source edit, because only a person's change enters their undo history.
-- **The swap.** The new version is a new document, as every version is (spec 09, keyed by file). The editor loads it in a second frame behind the one on screen, sends it hello, the saved dials, the mode and the selection, restores the scroll position (and for a motion the playhead time), and shows it in place of the old one at its load event. So a saved edit never blanks the frame, and the patches the old document carried go with it.
+- **The swap.** The new version is a new document, as every version is (spec 09, keyed by file). The editor loads it in a second frame behind the one on screen, sends it the saved dials at its load, and shows it in place of the old one once its edit bridge answers ready (or two seconds after its load, for a document with no bridge). Its hello carries the last scroll the shown frame reported (`unframed:edit:scroll`), so the frame restores the scroll before it is shown, and the editor then sends the mode and the selection. For a motion the playhead time is kept too, from spec 21, which adds the time report and restores the playhead. So a saved edit never blanks the frame, and the patches the old document carried go with it.
 - **Undo in the editor.** Cmd-Z and Cmd-Shift-Z (Ctrl on Windows and Linux), with the focus outside a text field, run tldraw's undo and redo, stopping at a mark the editor sets when it opens, so they walk only what was changed in this editor session: committed edits, dial changes and lock changes. With a burst pending, Cmd-Z drops the burst instead: the frame is reset and gets the saved dials back, and nothing is undone.
 - **A refusal.** `bad_request` from `artifact.edit` shows its sentence in a toast, resets the patches and drops the burst.
 - **The agent wins a race.** When the shape's `file` changes while a burst is pending, or `artifact.edit` answers `conflict`, the burst is dropped with its held dials and the editor shows a warning toast: `The agent rewrote this. Your last change wasn't saved.` when the change came from a chat (`details.reason: "agent"`), else `This {kind} changed somewhere else. Your last change wasn't saved.` The frame shows the new version; the selection is kept for every id it still has. Nothing is replayed.
