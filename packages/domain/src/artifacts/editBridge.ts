@@ -283,6 +283,20 @@ export function installEditBridge(win: EditWindow): void {
     return values;
   };
 
+  // An instance's pinned component: its tag, sheet and declaration (the defined element's static fields), and the live value of each declared attribute (spec 20).
+  const componentOf = (el: EditElement) => {
+    const ctor = (el as unknown as { constructor: { declaration?: { tag: string; variants?: Record<string, string[]>; props?: Record<string, string> }; sheet?: unknown } }).constructor;
+    const declaration = ctor?.declaration;
+    if (declaration === undefined || typeof ctor.sheet !== "string") return undefined;
+    const names = [...Object.keys(declaration.variants ?? {}), ...Object.keys(declaration.props ?? {})];
+    return {
+      tag: declaration.tag,
+      sheet: ctor.sheet,
+      declaration,
+      attributes: Object.fromEntries(names.map((name) => [name, el.getAttribute(name)])),
+    };
+  };
+
   const reportOf = (el: EditElement) => {
     const style = win.getComputedStyle(el);
     const inline: Record<string, string | null> = {};
@@ -304,6 +318,7 @@ export function installEditBridge(win: EditWindow): void {
       src: tag === "img" ? el.getAttribute("src") : null,
       animated: animatedOf(el),
       variant: variantOf(el),
+      component: componentOf(el),
     };
   };
 
@@ -670,6 +685,11 @@ export function installEditBridge(win: EditWindow): void {
           originals.get(el)?.delete("style:display");
         }
       }
+      flags.set(el, flags.get(el) === true);
+    } else if (patch.type === "attribute" && typeof patch.name === "string") {
+      touchAttribute(el, patch.name);
+      if (typeof patch.value === "string") el.setAttribute(patch.name, patch.value);
+      else el.removeAttribute(patch.name);
       flags.set(el, flags.get(el) === true);
     } else if (patch.type === "image" && typeof patch.file === "string") {
       if (patch.target === "background") {

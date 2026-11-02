@@ -25,6 +25,8 @@ export type SourceTreeElement = {
   src?: string;
   /** An `<img>` inside a `<picture>` that has `<source>` children. */
   inPicture?: boolean;
+  /** A custom element's attributes as written (spec 20): an instance's variants and properties, which its Design section reads. */
+  attributes?: Record<string, string>;
 };
 
 const LABEL_TEXT_MAX = 32;
@@ -62,6 +64,9 @@ const entry = (node: ScopeNode, id: string, parent: string | null, index: number
     style,
     hidden: attr(el, "data-uf-hidden") !== undefined,
   };
+  if (el.tagName.includes("-")) {
+    result.attributes = Object.fromEntries(el.attrs.map((a) => [a.name, a.value]));
+  }
   if (el.tagName.toLowerCase() === "img") {
     const src = attr(el, "src");
     if (src !== undefined) result.src = src;

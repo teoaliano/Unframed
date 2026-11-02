@@ -19,6 +19,7 @@ import { Tip } from "../../chrome/ui.tsx";
 import { showError } from "../../toasts.tsx";
 import { previewUrl } from "../../canvas/assetStore.ts";
 import { ComponentSection } from "./ComponentSection.tsx";
+import { InstanceSection, instanceFieldsOf } from "./InstanceSection.tsx";
 import { chainOf } from "./EditPanels.tsx";
 import { ImagePicker } from "./ImagePicker.tsx";
 import type { EditReport, EditSession } from "./editSession.ts";
@@ -642,6 +643,8 @@ export interface DesignTabProps {
   readonly onAskComponent?: () => void;
   /** The component's title, named in the variant line of a picked board copy (spec 20). */
   readonly componentTitle?: string | undefined;
+  /** The title of the component shape a tag names, or undefined when no shape holds it (spec 20). */
+  readonly titleOfTag?: ((tag: string) => string | undefined) | undefined;
 }
 
 /** The value a dial takes for a CSS value written to its field: a number dial takes the number, anything else the text. */
@@ -658,7 +661,7 @@ const normaliserFor = (property: string) => (value: string) => {
   return probe.style.getPropertyValue(property);
 };
 
-export const DesignTab = ({ session, kind, project, dials, locked, kit, mode, onOpenKit, onTell, onAsk, component, onAskComponent, componentTitle }: DesignTabProps) => {
+export const DesignTab = ({ session, kind, project, dials, locked, kit, mode, onOpenKit, onTell, onAsk, component, onAskComponent, componentTitle, titleOfTag }: DesignTabProps) => {
   // The token chip whose popover is open. A preview of a token changes the frame, so the field's owner can change while the popover is up.
   const [openChip, setOpenChip] = useState<{ readonly field: string; readonly named: { readonly token: Token; readonly suffix?: string } } | null>(null);
   const { selection, reports, tree, preparing, prepareError, pending, families, overridden } = session;
@@ -689,6 +692,17 @@ export const DesignTab = ({ session, kind, project, dials, locked, kit, mode, on
   });
   const [first] = subjects;
   const single = subjects.length === 1;
+  // A selected instance (spec 20): its Instance section, and only its margin, opacity and visibility fields.
+  const instance = single && first!.report.component ? first!.report.component : null;
+  const instanceFields =
+    instance === null
+      ? []
+      : instanceFieldsOf({
+          declaration: instance.declaration,
+          attributes: instance.attributes,
+          source: elements.find((candidate) => candidate.id === first!.id)?.attributes ?? {},
+          pending: new Set(pending.flatMap((edit) => (edit.type === "attribute" && edit.elementId === first!.id ? [edit.name] : []))),
+        });
   const anyLocked = subjects.some((subject) => subject.locked);
   const name = single ? (elements.find((candidate) => candidate.id === first!.id)?.name ?? first!.report.tag) : `${subjects.length} elements`;
 
@@ -848,6 +862,10 @@ export const DesignTab = ({ session, kind, project, dials, locked, kit, mode, on
   const borderColourView = viewOf("border-color", (subject) => hexOf(subject.report.computed["border-color"]));
   const radiusView = viewOf("border-radius");
   const opacityView = viewOf("opacity");
+  const opacityField = numberField("Opacity", "opacity", {
+    format: (value) => (value === "" ? "" : String(Math.round(Number(value) * 100))),
+    write: (typed) => String(Math.min(100, Math.max(0, typed)) / 100),
+  });
   const shadowOwner = viewOf("box-shadow", (subject) => subject.report.computed["box-shadow"] ?? "");
   const several = subjects.some((subject) => shadowOf(subject.report.computed["box-shadow"]).several);
   const shadowEditable = shadowOwner.editable && !several;
@@ -944,7 +962,18 @@ export const DesignTab = ({ session, kind, project, dials, locked, kit, mode, on
       )}
       {anyLocked && noteText(LOCKED)}
       {subjects.some((subject) => overridden[subject.id] === true) && noteText(OVERRIDDEN)}
+      {instance !== null && (
+        <InstanceSection
+          title={titleOfTag?.(instance.tag) || instance.tag}
+          fields={instanceFields}
+          project={project}
+          onSet={(name, value) => session.patch({ type: "attribute", elementId: first!.id, name, value })}
+          onAsk={(name) => onAsk(name, [chipDataOf(first!)])}
+        />
+      )}
 
+      {instance === null ? (
+        <>
       <Section
         name="Text"
         note={textNote}
@@ -1030,10 +1059,7 @@ export const DesignTab = ({ session, kind, project, dials, locked, kit, mode, on
           </div>
         </Row>
         {numberField("Corner radius", "border-radius", { write: (typed) => `${typed}px` })}
-        {numberField("Opacity", "opacity", {
-          format: (value) => (value === "" ? "" : String(Math.round(Number(value) * 100))),
-          write: (typed) => String(Math.min(100, Math.max(0, typed)) / 100),
-        })}
+        {opacityField}
         <Row label="Shadow" mark={Object.values(shadowFields).map(dialPathOf).find((path) => path !== undefined)} token={tokenSlot("box-shadow", shadowEditable)}>
           <div role="group" aria-label="Shadow" className="grid grid-cols-2 gap-1.5">
             {shadowNumber("x", "Shadow x")}
@@ -1066,6 +1092,18 @@ export const DesignTab = ({ session, kind, project, dials, locked, kit, mode, on
           {keywordField("Justify", "justify-content", JUSTIFY)}
           {keywordField("Wrap", "flex-wrap", WRAPS)}
         </Section>
+      )}
+
+        </>
+      ) : (
+        <>
+          <Section name="Spacing" note={noteOf(...SIDES.map((side) => sideViews("margin")[side]))}>
+            <SidesRow label="Margin" prefix="margin" views={sideViews("margin")} onWrite={sidesWrite} token={sidesToken("margin")} />
+          </Section>
+          <Section name="Shape" note={noteOf(opacityView)}>
+            {opacityField}
+          </Section>
+        </>
       )}
 
       <Section name="Visibility" note={null}>

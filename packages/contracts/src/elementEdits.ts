@@ -49,6 +49,7 @@ export const SourceTreeElement = Schema.Struct({
   hidden: Schema.Boolean,
   src: Schema.optionalKey(Schema.String),
   inPicture: Schema.optionalKey(Schema.Boolean),
+  attributes: Schema.optionalKey(Schema.Record(Schema.String, Schema.String)),
 });
 export type SourceTreeElement = typeof SourceTreeElement.Type;
 

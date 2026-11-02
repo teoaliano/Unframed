@@ -223,6 +223,11 @@ export const ArtifactEditor = ({ shapeId, onClose, onOpen }: ArtifactEditorProps
     const chip: ChipElement = { elementId: null, liveSelector: facts.tag, tag: facts.tag, label: displayTitle || facts.tag, startTag: `<${facts.tag}>`, text: "", hasChildren: false };
     tellAgent(chatClient, shapeId, [chip]);
   };
+  // The title of the component shape a tag names: the Instance section's header (spec 20). Undefined when no shape holds it.
+  const titleOfTag = (tag: string): string | undefined => {
+    const shape = editor.getCurrentPageShapes().find((candidate) => candidate.type === "component" && (candidate.props as { tag?: string }).tag === tag);
+    return shape === undefined ? undefined : artifactTitle(shape.props as { title?: unknown; fileName?: unknown }) || undefined;
+  };
   const mode: EditMode = session.mode;
   // The values the frame is running: the saved ones over the artifact's declared defaults, which is what a field's owner is matched against.
   const normalised = announcement === undefined ? undefined : normaliseDials(announcement.config);
@@ -377,6 +382,7 @@ export const ArtifactEditor = ({ shapeId, onClose, onOpen }: ArtifactEditorProps
             component={component ? session.declaration : null}
             componentTitle={component ? displayTitle || facts.tag : undefined}
             onAskComponent={askAboutComponent}
+            titleOfTag={titleOfTag}
           />
         )}
         {shownPanel === "layers" && (

@@ -46,6 +46,13 @@ export interface EditReport {
   readonly overridden?: boolean;
   /** A board copy's variant values, in the declaration's order (spec 20); null for any other element. */
   readonly variant?: Readonly<Record<string, string>> | null;
+  /** An instance's pinned component: its declaration, and the live value of each declared attribute (spec 20). */
+  readonly component?: {
+    readonly tag: string;
+    readonly sheet: string;
+    readonly declaration: ComponentDeclaration;
+    readonly attributes: Readonly<Record<string, string | null>>;
+  };
 }
 
 export interface SourceTree {
