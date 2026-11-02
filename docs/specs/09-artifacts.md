@@ -256,10 +256,10 @@ A motion is a HyperFrames composition: one HTML file. The contract given to the 
 
 **The viewer page** (`hyperframes-viewer.html`), generated:
 - Title `motion`. `html` and `body` have no margin, full height, black background, hidden overflow. The player fills the page.
-- Loads `hyperframes-player.js` and mounts `<hyperframes-player runtime-src="hyperframes-runtime.js" controls muted autoplay>`. `runtime-src` points at the sibling because the player's default is a CDN the policy refuses. The player plays on its own only with `autoplay`, and `muted` lets the browser allow it.
+- Loads `hyperframes-player.js` and creates `<hyperframes-player runtime-src="hyperframes-runtime.js" muted>` from script. Without `ui=editor` (the canvas, the live viewer and the snapshot renderer) it also sets `controls` and `autoplay`, as the first version wrote them. With `ui=editor` (the editor's frame, spec 21) it sets neither, so nothing plays until the editor's transport says so. `runtime-src` points at the sibling because the player's default is a CDN the policy refuses. The player plays on its own only with `autoplay`, and `muted` lets the browser allow it.
 - Reads the `c` query parameter and sets it as the player's `src` only if it matches `^[A-Za-z0-9][A-Za-z0-9._-]*\.html?$`.
-- Relays dial messages (protocol below): a `unframed:dials` message from its own origin records the composition's window and the message, and forwards it to the canvas if one has said hello. From a loopback origin only: `unframed:dials:hello` records the sender and its origin as the canvas and replays the last announcement to it. `unframed:dials:set` is forwarded to the composition at the viewer's own origin. Everything else is ignored.
-- With no canvas above it, the viewer relays nothing and shows no controls.
+- Relays dial messages (protocol below): a `unframed:dials` message from its own origin records the composition's window and the message, and forwards it to the canvas if one has said hello. From a loopback origin only: `unframed:dials:hello` records the sender and its origin as the canvas and replays the last announcement to it. `unframed:dials:set` is forwarded to the composition at the viewer's own origin. The editor's player messages (spec 21) are relayed for the one editor that said `unframed:player:hello`, from a loopback origin: `unframed:player:control` with `play`, `pause`, `seek { seconds }` (which lands paused), `rate { rate }` (a negative rate is a backward shuttle, done by a seek on each animation frame), `mute { muted }`, `range { start, end, loop }` and `root-duration { seconds }` (which posts the runtime's `set-root-duration`) reaches the player. The time report goes back: each `state` message from the player's own frame becomes `unframed:player:state { time, frame, playing, rate, muted, ended }`, and each `timeline` message becomes `unframed:player:timeline { clips, duration, size }`, both sent to that editor. Each hello is answered with the last of each. Everything else is ignored.
+- With no canvas above it, the viewer relays no dials, and it shows no controls. In the editor the player messages above are its only relay.
 
 **Motion upload** (RPC `motion.upload { project, fileName, html }`): refuses empty or whitespace-only `html` with `No composition in the request body.`, and anything over 20 MB. `fileName` is reduced to its basename, default `motion.html`. The engine ensures the library, injects the runtime and bridge tags, and saves the result as an upload (naming and sidecar above). Returns `{ file, fileName, bytes, mime: "text/html" }`. Failure: `Could not save the composition: {message}`.
 
@@ -356,6 +356,9 @@ For example `dials.scene.speed: an array must be ...`.
 | `unframed:dials` | artifact to its framer (viewer relays to canvas) | `name, config, schema, values` |
 | `unframed:dials:hello` | canvas to frame | none |
 | `unframed:dials:set` | canvas to frame (viewer relays to composition) | `values` |
+| `unframed:player:hello` | editor to viewer | none: the editor's frame has loaded |
+| `unframed:player:control` | editor to viewer (viewer relays to the player) | `action` and its fields, as above |
+| `unframed:player:state`, `unframed:player:timeline` | viewer to editor | the runtime's `state` and `timeline`, as above |
 
 The canvas side addresses hello and set to the preview origin and accepts `unframed:dials` only when `event.source` is that frame's window. A page is framed directly by the canvas across origins. A motion is framed by the viewer, which is same-origin with the composition.
 
@@ -530,6 +533,7 @@ A good test drives one of the three seams from 00-index and asserts only on what
 
 **Licences** (list each in the third-party notices):
 - HyperFrames (`@hyperframes/core`, `@hyperframes/player`, `@hyperframes/producer`, `@hyperframes/engine`): Apache-2.0. The player and runtime builds are copied into project folders.
+- HyperFrames Studio (`packages/studio` in HyperFrames): Apache-2.0. The tween patcher in the edit bridge (spec 21) is ported from its `gsapRuntimePatch.ts` and changed; that part of the file carries the header that says so.
 - GSAP (`gsap`): the GSAP standard no-charge licence (Webflow), free for commercial use since 3.13. Not MIT or Apache. `gsap.min.js` is copied into project folders, the same standing as any installed dependency.
 - DialKit (`dialkit`): MIT. Bundled with the web only, never copied into a project folder.
 
