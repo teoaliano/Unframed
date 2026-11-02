@@ -56,7 +56,10 @@ test("pasting into another project copies every file in; a pasted page always ge
     return pages.length === 2 ? pages.find((record) => record.id !== "shape:landing") : undefined;
   });
   expect(samePaste.props.file).not.toBe(pageFile);
-  expect(await readFile(join(engine.dataDir, "output", "alpha", samePaste.props.file), "utf8")).toBe("<h1>alpha</h1>");
+  // Spec 18, Tags on uploads, drops and pastes: a pasted page's own copy gets the dials bridge tag, then an id on each element.
+  const pasted = await readFile(join(engine.dataDir, "output", "alpha", samePaste.props.file), "utf8");
+  expect(pasted).toContain('<script src="unframed-dials.js"></script>');
+  expect(pasted).toMatch(/<h1 data-hf-id="hf-[a-z0-9]{4}">alpha<\/h1>/);
 
   // Into another project, every file is copied in.
   await page.getByRole("button", { name: "All projects" }).click();
