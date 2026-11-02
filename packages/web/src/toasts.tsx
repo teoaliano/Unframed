@@ -21,6 +21,24 @@ export const showError = (message: string, options: { id?: string; sticky?: bool
 export const showNotice = (message: string, type: "warning" | "info", description?: string): string =>
   toastManager.add({ title: message, ...(description === undefined ? {} : { description }), type, priority: type === "warning" ? "high" : "low", timeout: ERROR_TIMEOUT_MS });
 
+/** A notice with a Reveal action, which shows the file in its folder (spec 02). */
+export const showReveal = (message: string, onReveal: () => void): string => {
+  const id: string = toastManager.add({
+    title: message,
+    type: "info",
+    priority: "low",
+    timeout: ERROR_TIMEOUT_MS,
+    actionProps: {
+      children: "Reveal",
+      onClick: () => {
+        toastManager.close(id);
+        onReveal();
+      },
+    },
+  });
+  return id;
+};
+
 /** A notice about something the person just did, with Undo; the toast closes when Undo is pressed. */
 export const showUndo = (message: string, onUndo: () => void): string => {
   const id: string = toastManager.add({

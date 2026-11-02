@@ -71,11 +71,12 @@ export const projectFileRoute =
     const size = preview === "512" ? 512 : preview === "2048" ? 2048 : undefined;
     const snapshot = url.searchParams.get("snapshot");
     const still = snapshot === null ? undefined : /^(\d{1,5})x(\d{1,5})$/.exec(snapshot);
+    const stillKit = { mode: url.searchParams.get("mode"), kit: url.searchParams.get("kit") };
     const path =
       folder === undefined || name === undefined
         ? undefined
         : still
-          ? join(folder, SNAPSHOT_FOLDER, snapshotFileName(name, { w: Number(still[1]), h: Number(still[2]) }))
+          ? join(folder, SNAPSHOT_FOLDER, snapshotFileName(name, { w: Number(still[1]), h: Number(still[2]) }, stillKit))
           : size !== undefined
             ? join(folder, PREVIEW_FOLDER, previewFileName(name, size))
             : preview === null && snapshot === null

@@ -90,6 +90,10 @@ describe("never rewriting the old files", () => {
         "legacy-snapshot/legacy-cf4b71560e735285-upload.json",
         "legacy-snapshot/legacy-cf4b71560e735285-upload.png",
         "legacy-snapshot/unframed.sqlite",
+        // The tokens script a room writes when it opens (spec 19): a helper, not an old file.
+        "broken-snapshot/unframed-tokens.js",
+        "everything/unframed-tokens.js",
+        "legacy-snapshot/unframed-tokens.js",
       ].sort(),
     );
     expect(existsSync(join(outputDir, "everything", "graph.log.stale-1789031400000"))).toBe(true);

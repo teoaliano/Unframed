@@ -20,11 +20,14 @@ import {
 } from "@unframed/domain";
 import type { TLRecord } from "@tldraw/tlschema";
 import { getIndexAbove, type IndexKey } from "@tldraw/utils";
+import { lockRefusal, sourceTreeOf } from "@unframed/domain/html";
+import { readArtifact } from "../artifacts/artifactStore.ts";
 import type { Applied, CanvasChange, ChangeOrigin } from "../canvas/rooms.ts";
 import { readResultSidecar } from "../runs/sidecars.ts";
 import { shapeBoxes } from "../runs/shapeBounds.ts";
 import type { McpBinding, McpTool, ToolAnswer } from "./mcp.ts";
 import type { TurnChanges } from "./turnChanges.ts";
+import { kitOf } from "../kits/tokensFile.ts";
 
 const PAGE_ID = "page:page";
 
@@ -94,6 +97,34 @@ const componentFacts = async (folder: string, records: ReadonlyArray<TLRecord>) 
   return { declarations, pins };
 };
 
+/** The locked element ids of a page or motion record. */
+const lockedOf = (record: TLRecord | undefined): string[] => {
+  const locked = (record as { props?: { lockedElements?: unknown } } | undefined)?.props?.lockedElements;
+  return Array.isArray(locked) ? locked.filter((id): id is string => typeof id === "string") : [];
+};
+
+/**
+ * A `file` change to a page or motion that has locks is a write to the locked elements: refused
+ * when the new file changes or removes one (spec 18, Locks and the agent).
+ */
+const fileLockRefusal = async (folder: string, put: ReadonlyArray<TLRecord>, before: ReadonlyMap<string, TLRecord | undefined>): Promise<string | undefined> => {
+  for (const record of put) {
+    const old = before.get(record.id as string);
+    const kind = (record as { type?: string }).type;
+    if (old === undefined || (kind !== "page" && kind !== "motion")) continue;
+    const from = (old as { props?: { file?: unknown } }).props?.file;
+    const to = (record as { props?: { file?: unknown } }).props?.file;
+    const locked = lockedOf(old);
+    if (typeof from !== "string" || from === "" || from === to || locked.length === 0) continue;
+    const current = await readArtifact(folder, from).catch(() => undefined);
+    if (current === undefined) continue;
+    const next = typeof to === "string" && to !== "" ? await readArtifact(folder, to).catch(() => "") : "";
+    const refusal = lockRefusal({ current, next, locked, tree: sourceTreeOf(current), kind });
+    if (refusal !== null) return refusal;
+  }
+  return undefined;
+};
+
 const collectFiles = (ops: unknown): string[] => {
   if (!Array.isArray(ops)) return [];
   const files: string[] = [];
@@ -144,7 +175,9 @@ export class CanvasTools {
       declarations,
       pins,
     });
-    return { value: live?.note === undefined ? view : { ...view, selectionNote: live.note } };
+    const kit = kitOf(records);
+    const withKit = { ...view, kit: kit === null ? null : { name: kit.name, tokens: kit.tokens.length, modes: kit.modes } };
+    return { value: live?.note === undefined ? withKit : { ...withKit, selectionNote: live.note } };
   }
 
   async write(binding: McpBinding, args: Record<string, unknown>): Promise<ToolAnswer> {
@@ -162,11 +195,14 @@ export class CanvasTools {
       indexAbove: (below) => getIndexAbove((below ?? null) as IndexKey | null),
       pageId: records.find((record) => record.typeName === "page")?.id ?? PAGE_ID,
       boxes: shapeBoxes(records),
+      modes: kitOf(records)?.modes ?? [],
     });
     if (!prepared.ok) return error(prepared.error);
     const before = new Map<string, TLRecord | undefined>();
     const byId = new Map(records.map((record) => [record.id as string, record]));
     for (const id of prepared.touched) before.set(id, byId.get(id));
+    const locked = await fileLockRefusal(folder, prepared.put as unknown as TLRecord[], before);
+    if (locked !== undefined) return error(locked);
     let applied: Applied;
     try {
       applied = await this.deps.apply(

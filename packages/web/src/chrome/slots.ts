@@ -20,6 +20,8 @@ export interface ChromeSlots {
   agentButton?: ComponentType;
   settingsButton?: ComponentType;
   libraryButton?: ComponentType;
+  /** The Kit button in the bottom bar, beside Library (spec 19). */
+  kitButton?: ComponentType;
   /** The end of the bottom bar, after tldraw's tools: the canvas registers the Library and Add. */
   toolbarEnd?: ComponentType;
   addToLibrary?: (editor: Editor) => void;
@@ -33,6 +35,8 @@ export interface ChromeSlots {
   renderButton?: ComponentType<{ shapeId: TLShapeId }>;
   /** Parameters for a selected page or motion, after Render (spec 09 registers it). */
   parametersButton?: ComponentType<{ shapeId: TLShapeId }>;
+  /** Kit mode for a selected page or motion, after Parameters (spec 19 registers it). */
+  kitModeButton?: ComponentType<{ shapeId: TLShapeId }>;
   /** Set while the chat rail (spec 08) holds the right edge: the top-right card steps aside. */
   leftCardDocked?: boolean;
   /** Set while the full-screen artifact editor (spec 09) is open: the top-left card stays under it, docked or not. */

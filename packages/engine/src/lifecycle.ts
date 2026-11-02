@@ -4,6 +4,7 @@
  * Each reads the job store strictly, touches the job records first and takes the
  * destructive step last, compensating when a later step fails. They run one at a time.
  */
+import { settleTokens } from "./kits/tokensFile.ts";
 import { lstat, mkdir, rename, rm, stat } from "node:fs/promises";
 import { join } from "node:path";
 import type { Settings, SettingsPatch } from "@unframed/contracts";
@@ -281,6 +282,8 @@ export const lifecycleLayer = Layer.effect(
                 .failPending({ project: slug, error: PROJECT_DELETED_ERROR })
                 .pipe(Effect.mapError((error) => unframedError("internal", `Could not stop the renders in progress, so the project was not deleted: ${error.reason}`)));
         yield* closeProject(slug);
+        // A tokens write a room started while it opened must end before the folder goes (spec 19).
+        yield* Effect.promise(() => settleTokens());
         const removed = yield* Effect.promise(() => rm(folder, { recursive: true, force: true }).then(() => undefined, (error: unknown) => errorText(error)));
         if (removed !== undefined) {
           // No compensation: un-failing a record would claim a render is watched when its project may be half gone.

@@ -9,9 +9,11 @@ import { useEditor, useValue, type Editor, type TLCamera, type TLShapeId } from 
 import { registerSlot } from "../chrome/slots.ts";
 import { useCanvasProject, useEngine, useSettings } from "../context.ts";
 import { closeComposer } from "../generate/state.ts";
+import { KitModePicker } from "./KitMode.tsx";
 import { ParametersButton } from "./ParametersButton.tsx";
 import { RenderButton } from "./render.tsx";
 import { artifactsOf, installFrameHold, installTuningWatch, previewPort } from "./state.ts";
+import { installImageDrop } from "./imageDrop.tsx";
 import { watchSnapshots } from "./snapshots.ts";
 
 // Loaded with the editor or the first Parameters panel only: DialKit and its stylesheet never reach a board where neither opens.
@@ -60,10 +62,12 @@ export const ArtifactsHost = () => {
     artifactsOf(editor).project.set(project);
     const stops = [
       installFrameHold(editor),
+      installImageDrop(editor, engine, project),
       watchSnapshots(engine, project),
       registerSlot("openArtifact", openArtifactEditor),
       registerSlot("renderButton", RenderButton),
       registerSlot("parametersButton", ParametersButton),
+      registerSlot("kitModeButton", ({ shapeId }: { readonly shapeId: TLShapeId }) => <KitModePicker shapeId={shapeId} variant="toolbar" />),
       installTuningWatch(editor),
     ];
     return () => {

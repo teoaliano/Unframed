@@ -1,5 +1,6 @@
+import type { ElementChip } from "@unframed/contracts";
 import { shapeKind, shapeLabel, type ShapeKind } from "@unframed/domain";
-import { AlignLeft, AppWindow, Clapperboard, Component, Group, Image, PenLine, SquarePlay, X, type LucideIcon } from "lucide-react";
+import { AlignLeft, AppWindow, Clapperboard, Component, Group, Image, PenLine, SquareMousePointer, SquarePlay, X, type LucideIcon } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useValue, type Editor, type TLShapeId } from "tldraw";
 import { Badge } from "~/components/ui/badge";
@@ -100,6 +101,29 @@ export const contextSelection = (editor: Editor | null, shapes: ReadonlyArray<Ch
     if (shape.kind === "group" && editor) for (const member of editor.getSortedChildIdsForParent(shape.id as TLShapeId)) add(member);
   }
   return ids;
+};
+
+/** The element chips of a draft (spec 18): one per pointed-at element, `{tag} · {label}`, each with a remove button. */
+export const ElementChipRow = ({ chips, onRemove }: { readonly chips: ReadonlyArray<ElementChip>; readonly onRemove: (chip: ElementChip) => void }) => {
+  if (chips.length === 0) return null;
+  return (
+    <div className="flex flex-wrap gap-1" role="list" aria-label="Pointed-at elements">
+      {chips.map((chip) => {
+        const text = `${chip.tag} · ${chip.label}`;
+        return (
+          <Badge key={`${chip.shapeId} ${chip.selector}`} variant="outline" size="lg" className="max-w-full" role="listitem" data-chip="element">
+            <SquareMousePointer aria-hidden />
+            <span className="min-w-0 truncate" data-testid="chip-label">
+              {text}
+            </span>
+            <Button variant="ghost-muted" size="icon-tiny" aria-label={`Remove ${text}`} onClick={() => onRemove(chip)}>
+              <X aria-hidden />
+            </Button>
+          </Badge>
+        );
+      })}
+    </div>
+  );
 };
 
 export const ChipRow = ({ shapes, onRemove }: { readonly shapes: ReadonlyArray<ChipShape>; readonly onRemove: (ids: ReadonlyArray<string>) => void }) => {

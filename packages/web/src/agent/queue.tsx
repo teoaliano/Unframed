@@ -48,6 +48,7 @@ export const returnQueued = (client: ChatClient, threadId: string, id?: string):
     text: taken.map((item) => item.message.text).join("\n\n"),
     selection: [...new Set(taken.flatMap((item) => item.message.selection))],
     attachments: taken.flatMap((item) => item.message.attachments),
+    elements: taken.flatMap((item) => item.message.elements ?? []),
   });
 };
 

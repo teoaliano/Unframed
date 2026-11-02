@@ -80,12 +80,14 @@ const kitStatus = (status: TabStatus): TopBarStatus | undefined => {
 export const TabStrip = ({
   platform,
   controls,
+  squareStart,
   logo,
   settings,
   regions,
 }: {
   readonly platform: "macos" | "windows";
   readonly controls?: "stand-ins" | "space" | "none" | undefined;
+  readonly squareStart?: boolean | undefined;
   readonly logo: ReactNode;
   readonly settings: ReactNode;
   readonly regions: { readonly frame?: TopBarRegion; readonly start?: TopBarRegion; readonly tabs?: TopBarRegion; readonly end?: TopBarRegion };
@@ -109,6 +111,7 @@ export const TabStrip = ({
       platform={platform}
       layout="fixed"
       controls={controls}
+      squareStart={squareStart}
       tabs={tabs}
       active={active}
       logo={logo}

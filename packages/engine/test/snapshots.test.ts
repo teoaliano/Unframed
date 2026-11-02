@@ -55,7 +55,7 @@ describe("artifact snapshots", () => {
       const files = await snapshotFiles(agent);
       return files.length > 0 ? files : undefined;
     }, "the first snapshot");
-    expect(name).toBe("1-landing.html-480x320.png");
+    expect(name).toBe("1-landing.html-480x320-none-none.png");
     expect(await snapshot(agent, name!)).toMatchObject({
       url: `http://127.0.0.1:${agent.engine.previewPort}/p/board/1-landing.html`,
       file: "1-landing.html",
@@ -64,7 +64,8 @@ describe("artifact snapshots", () => {
       dials: { accent: "#ff0000" },
     });
     await until(async () => stream.values.length === 1, "the stream to say so");
-    expect(stream.values[0]).toEqual({ file: "1-landing.html", w: 480, h: 320, at: expect.any(Number) });
+    // No kit in this project: the record names no mode and no kit stamp (spec 19).
+    expect(stream.values[0]).toEqual({ file: "1-landing.html", w: 480, h: 320, at: expect.any(Number), mode: null, kit: null });
     const served = await agent.engine.request("/api/file/board/1-landing.html?snapshot=480x320");
     expect(served.status).toBe(200);
     expect(served.headers["content-type"]).toBe("image/png");
@@ -91,7 +92,7 @@ describe("artifact snapshots", () => {
 
     await update(agent, "pg1", { dials: { size: 30 } });
     await until(async () => stream.values.length === 3, "the tuned snapshot");
-    expect(await snapshot(agent, "2-landing.html-480x320.png")).toMatchObject({ dials: { size: 30 } });
+    expect(await snapshot(agent, "2-landing.html-480x320-none-none.png")).toMatchObject({ dials: { size: 30 } });
 
     await update(agent, "pg1", { w: 520 });
     await new Promise((resolve) => setTimeout(resolve, 1800));
@@ -99,7 +100,7 @@ describe("artifact snapshots", () => {
     await update(agent, "pg1", { w: 540 });
     await until(async () => stream.values.length === 4, "the resized snapshot");
     expect(stream.values[3]).toMatchObject({ file: "2-landing.html", w: 540, h: 320 });
-    expect(await snapshotFiles(agent)).toEqual(["1-landing.html-480x320.png", "2-landing.html-480x320.png", "2-landing.html-540x320.png"]);
+    expect(await snapshotFiles(agent)).toEqual(["1-landing.html-480x320-none-none.png", "2-landing.html-480x320-none-none.png", "2-landing.html-540x320-none-none.png"]);
   });
 
   it("renders after an agent's write, with the file it wrote", async () => {
@@ -121,7 +122,7 @@ describe("artifact snapshots", () => {
     const stream = agent.rpc.subscribe("artifact.snapshots", { project: "board" });
     await seed(agent, [pageShape("pg1", "100", { file: "1-landing.html" }), pageShape("pg2", "101", { file: "2-other.html" }, { y: 500 })]);
     await until(async () => stream.values.length === 2, "both first snapshots");
-    const [first, second] = await Promise.all([snapshot(agent, "1-landing.html-480x320.png"), snapshot(agent, "2-other.html-480x320.png")]);
+    const [first, second] = await Promise.all([snapshot(agent, "1-landing.html-480x320-none-none.png"), snapshot(agent, "2-other.html-480x320-none-none.png")]);
     const [earlier, later] = [first, second].sort((a, b) => a.startedAt - b.startedAt);
     expect(later.startedAt).toBeGreaterThanOrEqual(earlier.finishedAt);
 
@@ -132,7 +133,7 @@ describe("artifact snapshots", () => {
     await until(async () => stream.values.length === 3, "the settled snapshot");
     await new Promise((resolve) => setTimeout(resolve, 1500));
     expect(stream.values).toHaveLength(3);
-    expect(await snapshot(agent, "1-landing.html-480x320.png")).toMatchObject({ dials: { size: 30 } });
+    expect(await snapshot(agent, "1-landing.html-480x320-none-none.png")).toMatchObject({ dials: { size: 30 } });
   });
 
   it("renders, on first opening a project, every artifact whose file has no snapshot that fits", async () => {
@@ -150,7 +151,7 @@ describe("artifact snapshots", () => {
     const reopened = await startAgentEngine({ dataDir: agent.engine.dataDir, env: { UNFRAMED_TEST_RENDERER: "ok" } });
     await reopened.rpc.call("testCanvas.read", { project: "board" });
     await until(async () => (await snapshotFiles(reopened)).length === 2, "both snapshots after the open");
-    expect(await snapshotFiles(reopened)).toEqual(["1-landing.html-480x320.png", "2-other.html-480x320.png"]);
+    expect(await snapshotFiles(reopened)).toEqual(["1-landing.html-480x320-none-none.png", "2-other.html-480x320-none-none.png"]);
   });
 
   it("makes no snapshot on a machine with no Chromium", async () => {

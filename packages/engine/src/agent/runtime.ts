@@ -2,8 +2,10 @@ import { randomUUID } from "node:crypto";
 import { stat } from "node:fs/promises";
 import type { DatabaseSync } from "node:sqlite";
 import {
-  agentShapeId,
   buildPreamble,
+  agentShapeId,
+  elementContext,
+  roomShapeId,
   changeNote,
   chatSummary,
   DEFAULT_RUNTIME_MODE,
@@ -36,13 +38,15 @@ import {
   type TurnOutcome,
   type ChatProvider,
 } from "@unframed/domain";
-import type { ArtifactDiffFile } from "@unframed/contracts";
+import type { ArtifactDiffFile, ElementChip } from "@unframed/contracts";
 import type { TLRecord } from "@tldraw/tlschema";
+import type { Kit } from "@unframed/domain";
 import type { Applied, CanvasChange, ChangeLogRow, ChangeOrigin } from "../canvas/rooms.ts";
 import { errorText, logError, logInfo } from "../log.ts";
 import type { AdapterContext, ProviderAdapter, TurnAttachment } from "./adapter.ts";
 import { scriptedAdapter } from "./adapters/scripted.ts";
 import { AttachmentStore } from "./attachmentStore.ts";
+import { KitTools } from "../kits/kitTools.ts";
 import { CanvasTools } from "./canvasTools.ts";
 import { OutsideChats } from "./outsideChats.ts";
 import { outsideSelectionTools } from "./selectionTools.ts";
@@ -74,6 +78,8 @@ import type { AgentToolContext } from "../artifacts/artifactTools.ts";
 import { ProviderService, SESSION_IDLE_MS } from "./providerService.ts";
 import { writeTurnSidecar } from "./sidecar.ts";
 import { planRevert, TurnChanges } from "./turnChanges.ts";
+import { planKitRevert } from "../kits/kitTurn.ts";
+import { kitOf } from "../kits/tokensFile.ts";
 import { artifactDiff } from "./turnDiff.ts";
 
 export interface AgentRuntimeDeps {
@@ -160,6 +166,16 @@ const record = (value: unknown): Record<string, any> => (typeof value === "objec
  * its side effects, the provider service, the MCP server's tools and the attachment store.
  * Reactors run after an intent is committed and report back through more commands.
  */
+/** The document record with its kit replaced (or removed, for null), the one record a kit change writes. */
+const withKit = (records: ReadonlyArray<TLRecord>, kit: Kit | null): TLRecord => {
+  const document = records.find((record) => record.typeName === "document") ?? { id: "document:document", typeName: "document", gridSize: 10, name: "", meta: {} };
+  const meta = { ...(document as { meta: Record<string, unknown> }).meta };
+  const unframed = { ...((meta.unframed as Record<string, unknown> | undefined) ?? {}) };
+  if (kit === null) delete unframed.kit;
+  else unframed.kit = kit;
+  return { ...document, meta: { ...meta, unframed } } as unknown as TLRecord;
+};
+
 export class AgentRuntime {
   readonly tokens = new McpTokens();
   readonly registry = new McpToolRegistry();
@@ -200,6 +216,7 @@ export class AgentRuntime {
         ),
     };
     for (const tool of new CanvasTools(context).tools()) this.registry.register(tool);
+    for (const tool of new KitTools(context).tools()) this.registry.register(tool);
     // Outside calls only: `canvas_select` never reaches an in-app agent (spec 07, spec 14).
     this.generation = new AgentGeneration({
       records: (project) => deps.rooms.read(project),
@@ -604,7 +621,7 @@ export class AgentRuntime {
     }
     try {
       const records = await this.deps.rooms.read(agent.slug);
-      const preamble = await this.preamble(agent, chat, message?.context?.selection ?? [], message?.attachments ?? [], records);
+      const preamble = await this.preamble(agent, chat, message?.context?.selection ?? [], message?.context?.elements ?? [], message?.attachments ?? [], records);
       const live = this.providers.has(chatId);
       if (!live) await this.internal(agent, chatId, { type: "thread.session.set", session: { status: "starting", activeTurnId: String(requested.turnId), lastError: null } });
       await this.providers.ensure(agent.slug, agent.engine.chat(chatId) ?? chat, agent.folder, agent.engine, selection);
@@ -650,6 +667,7 @@ export class AgentRuntime {
     agent: ProjectAgent,
     chat: Chat,
     selection: ReadonlyArray<string>,
+    elements: ReadonlyArray<ElementChip>,
     attachments: ReadonlyArray<MessageAttachment>,
     records: ReadonlyArray<TLRecord>,
   ): Promise<string> {
@@ -674,8 +692,21 @@ export class AgentRuntime {
     if (chat.lastClock !== null) {
       note = changeNote(await this.deps.rooms.changeLog(agent.slug, chat.lastClock), chat.id);
     }
+    // The artifacts the chips point into, listed once each in the order the chips name them (spec 18).
+    const listed = new Map<string, { shapeId: string; kind: "page" | "motion"; label: string }>();
+    const chips = elements.map((chip) => ({ ...chip, shapeId: agentShapeId(chip.shapeId) }));
+    for (const chip of chips) {
+      const shape = byId.get(roomShapeId(chip.shapeId));
+      if (shape === undefined || shape.typeName !== "shape" || listed.has(chip.shapeId)) continue;
+      const kind = shapeKind(shape.type);
+      if (kind !== "page" && kind !== "motion") continue;
+      const props = record(shape.props);
+      listed.set(chip.shapeId, { shapeId: chip.shapeId, kind, label: selectionLabel({ ...(typeof props.title === "string" ? { title: props.title } : {}), ...(typeof props.fileName === "string" ? { fileName: props.fileName } : {}) }) ?? "" });
+    }
+    const elementsPart = elementContext(chips, [...listed.values()]);
     return buildPreamble({
       selected,
+      elements: elementsPart,
       changeNote: note,
       attachments: attachments.flatMap((attachment) => {
         const path = this.attachments.path(attachment.id);
@@ -929,15 +960,20 @@ export class AgentRuntime {
 
   private async revertOne(agent: ProjectAgent, chatId: string, turn: number): Promise<{ restored: string[]; skipped: Array<{ id: string; by: SkippedBy }> }> {
     const rows = agent.turnChanges.rows(chatId, turn);
+    const shapeRows = rows.filter((row) => !row.shapeId.startsWith("kit:"));
+    const kitRows = rows.filter((row) => row.shapeId.startsWith("kit:"));
     const records = await this.deps.rooms.read(agent.slug);
     const current = new Map(records.map((item) => [item.id as string, item]));
     const earliest = rows.reduce((least, row) => Math.min(least, row.lastClock), Number.POSITIVE_INFINITY);
     const log = rows.length === 0 ? [] : await this.deps.rooms.changeLog(agent.slug, Number.isFinite(earliest) ? earliest : 0);
-    const plan = planRevert(chatId, rows, current, log);
-    if (plan.change.put.length > 0 || plan.change.remove.length > 0) {
-      await this.deps.rooms.apply(agent.slug, plan.change, { kind: "server", id: `revert:${chatId}:${turn}` });
+    const plan = planRevert(chatId, shapeRows, current, log);
+    const kitPlan = planKitRevert(chatId, kitRows, kitOf(records), log);
+    const put = [...plan.change.put];
+    if (kitPlan.changed) put.push(withKit(records, kitPlan.kit));
+    if (put.length > 0 || plan.change.remove.length > 0) {
+      await this.deps.rooms.apply(agent.slug, { put, remove: plan.change.remove }, { kind: "server", id: `revert:${chatId}:${turn}` });
     }
-    return { restored: plan.restored, skipped: plan.skipped };
+    return { restored: [...plan.restored, ...kitPlan.restored], skipped: [...plan.skipped, ...kitPlan.skipped] };
   }
 
   private async revertTurn(agent: ProjectAgent, chatId: string, turn: number): Promise<void> {

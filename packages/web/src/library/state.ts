@@ -20,6 +20,8 @@ export interface Captured {
 export interface LibraryUi {
   readonly open: boolean;
   readonly saving?: Captured | undefined;
+  /** The filter the dialog opens on: the Kit dialog's From library opens it on Kits (spec 19). */
+  readonly type?: "kit" | undefined;
 }
 
 const states = new WeakMap<Editor, Atom<LibraryUi>>();

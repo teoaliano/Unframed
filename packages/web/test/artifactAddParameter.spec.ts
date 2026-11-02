@@ -17,6 +17,8 @@ const openOnPage = async (page: Page, engine: TestEngine) => {
   const at = await centre(shapeOnScreen(page, "shape:tuned"));
   await page.mouse.dblclick(at.x, at.y);
   await expect(page.getByRole("region", { name: "Editing Tuned" })).toBeVisible();
+  // The add box lives in the Parameters tab; the editor opens on Design (spec 18).
+  await editor(page).locator('[data-editor-column="parameters"]').getByRole("tab", { name: "Parameters" }).click();
 };
 
 test("Add sends the premade instruction into a new chat tagged with the artifact, opens the rail on it and clears the box", async ({ page, agent }) => {
@@ -37,7 +39,7 @@ test("Add sends the premade instruction into a new chat tagged with the artifact
   expect(await userTexts(agent, chat!.id)).toEqual([addParameterInstruction({ wanted: "the accent colour and the intro speed", kind: "page", title: "Tuned" })]);
   const sent = (await engineChat(agent, chat!.id)).messages.find((message) => message.role === "user");
   expect(sent?.context?.selection).toEqual(["shape:tuned"]);
-  await expect(editor(page).getByRole("tab", { selected: true })).toHaveCount(1);
+  await expect(editor(page).locator('[data-editor-column="rail"]').getByRole("tab", { selected: true })).toHaveCount(1);
 });
 
 test("Add continues the artifact's own idle chat when it has one", async ({ page, agent }) => {

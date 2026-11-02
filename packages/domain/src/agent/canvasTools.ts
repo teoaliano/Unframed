@@ -225,6 +225,8 @@ export const canvasView = (input: CanvasViewInput): CanvasView => {
         // A pin whose tag has no component shape waits for nothing, so it counts as current.
         const pinned = input.pins?.get(record.id) ?? [];
         if (pinned.length > 0) entry.components = pinned.map((pin) => ({ tag: pin.tag, sheet: pin.sheet, current: currentSheets.get(pin.tag) === undefined || currentSheets.get(pin.tag) === pin.sheet }));
+        if (typeof props.mode === "string") entry.mode = props.mode;
+        if (Array.isArray(props.lockedElements) && props.lockedElements.length > 0) entry.lockedElements = props.lockedElements;
         break;
       }
       case "component": {
@@ -290,6 +292,8 @@ export interface BatchContext {
   readonly indexAbove: (below: string | undefined) => string;
   readonly pageId: string;
   readonly boxes: ReadonlyMap<string, ShapeBoxes>;
+  /** The kit's mode names; a page or motion may only name one of them (spec 19). */
+  readonly modes?: ReadonlyArray<string>;
 }
 
 export type PreparedBatch =
@@ -496,6 +500,7 @@ const precheck = (ops: ReadonlyArray<unknown>, ctx: BatchContext): void => {
       if (!numeric(record.x) || !numeric(record.y)) refuse("create: x and y must be numbers");
     }
     const props = obj(record.props);
+    if (type === "update" && "lockedElements" in props) refuse("update: lockedElements is set by the person in the editor's Layers tab");
     if (hasDataUrl(props)) refuse(`${String(type)}: bytes cannot travel in shape props; name a file in the project folder instead`);
     if (type === "create" || type === "update") fileOf(String(type), ctx, props);
   }
@@ -677,6 +682,9 @@ const update = (batch: Batch, ctx: BatchContext, op: Record<string, unknown>): v
     const { text, ...rest } = patch;
     props.richText = richTextOf(typeof text === "string" ? text : "");
     return applyPatch(batch, shape, props, rest);
+  }
+  if ((kind === "page" || kind === "motion") && typeof patch.mode === "string" && !(ctx.modes ?? []).includes(patch.mode)) {
+    refuse(`there is no mode ${patch.mode} in the kit`);
   }
   applyPatch(batch, shape, props, patch);
 };

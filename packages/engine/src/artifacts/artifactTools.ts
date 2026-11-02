@@ -13,13 +13,14 @@ import {
   artifactUrl,
   DIALS_CONTRACT,
   DIALS_TIMELINE,
-  injectTags,
   isMintedRef,
   MOTION_READ_SHAPE_ID,
   MOTION_READ_TEXT,
   MOTION_WRITE_ARGUMENTS,
   MOTION_WRITE_TEXT,
   nextRef,
+  offTokenNote,
+  offTokenValues,
   PAGE_READ_SHAPE_ID,
   PAGE_READ_TEXT,
   PAGE_WRITE_ARGUMENTS,
@@ -40,7 +41,10 @@ import { refusal as refuse, type McpBinding, type McpTool, type ToolAnswer } fro
 import type { TurnChanges } from "../agent/turnChanges.ts";
 import { indexOnTop } from "../runs/placeholders.ts";
 import { shapeBoxes } from "../runs/shapeBounds.ts";
+import { lockRefusal, sourceTreeOf } from "@unframed/domain/html";
+import { byteSize, prepareArtifactHtml } from "./artifactHtml.ts";
 import { ensureBridge, ensureLibrary, readArtifact, writeAgentArtifact } from "./artifactStore.ts";
+import { ensureTokens, kitOf } from "../kits/tokensFile.ts";
 
 const PAGE_ID = "page:page";
 
@@ -65,6 +69,9 @@ export interface AgentToolContext {
 }
 
 type Shape = TLRecord & { type: string; props: Record<string, unknown>; meta: Record<string, unknown> };
+
+/** The locked element ids of an artifact shape (spec 18). */
+const lockedOf = (shape: Shape): string[] => (Array.isArray(shape.props.lockedElements) ? shape.props.lockedElements.filter((id): id is string => typeof id === "string") : []);
 
 const isShape = (record: TLRecord | undefined): record is Shape => record?.typeName === "shape";
 
@@ -92,8 +99,8 @@ export class ArtifactTools {
     const turn = context.chatTurn(binding.project, binding.chatId);
     if (turn.interactionMode === "plan") return refuse(PLAN_NO_WRITES_MESSAGE);
     if (typeof args.html !== "string" || args.html.trim() === "") return refuse("html must be a non-empty string");
-    const html = injectTags(args.html, kind);
-    const size = Buffer.byteLength(html, "utf8");
+    const html = prepareArtifactHtml(args.html, kind);
+    const size = byteSize(html);
     if (size > ARTIFACT_SIZE_LIMIT) return refuse(`the ${kind} is too large (${size} bytes; the limit is ${ARTIFACT_SIZE_LIMIT})`);
 
     const records = await context.read(binding.project);
@@ -111,9 +118,16 @@ export class ArtifactTools {
     const title = (given ?? current).trim();
 
     const folder = await context.folder(binding.project);
+    if (target !== undefined && lockedOf(target).length > 0) {
+      const currentFile = typeof target.props.file === "string" ? target.props.file : "";
+      const current = currentFile === "" ? undefined : await readArtifact(folder, currentFile).catch(() => undefined);
+      const refusal = current === undefined ? null : lockRefusal({ current, next: html, locked: lockedOf(target), tree: sourceTreeOf(current), kind });
+      if (refusal !== null) return refuse(refusal);
+    }
     let written: { file: string; bytes: number };
     try {
       await (kind === "motion" ? ensureLibrary(folder) : ensureBridge(folder));
+      await ensureTokens(folder, kitOf(records));
       written = await writeAgentArtifact(folder, {
         kind,
         html,
@@ -174,6 +188,8 @@ export class ArtifactTools {
       turnId: turn.turnId ?? null,
       createdAt: new Date().toISOString(),
     });
+    const kit = kitOf(records);
+    const offToken = kit === null ? undefined : offTokenNote(offTokenValues(html, kit));
     return {
       value: {
         ok: true,
@@ -182,6 +198,7 @@ export class ArtifactTools {
         title,
         previewUrl: artifactUrl({ appHostname: "localhost", previewPort: this.previewPort(), project: projectSlug(binding.project), file: written.file, kind }),
         clock: applied.clock,
+        ...(offToken === undefined ? {} : { offToken }),
       },
     };
   }

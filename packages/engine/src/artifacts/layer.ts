@@ -3,21 +3,25 @@
  * and the snapshot stream, over the artifact store, the renderer and the snapshot service.
  */
 import { join } from "node:path";
-import type { ArtifactSnapshot, ComponentPins as ComponentPinsItem, RenderStatus } from "@unframed/contracts";
+import type { ArtifactImage, ArtifactSnapshot, ComponentPins as ComponentPinsItem, OffTokenFound, RenderStatus, SourceEdit, SourceTreeElement } from "@unframed/contracts";
 import { UnframedError, unframedError } from "@unframed/contracts";
-import { injectTags, projectSlug } from "@unframed/domain";
+import { projectSlug } from "@unframed/domain";
+import { byteSize, prepareArtifactHtml } from "./artifactHtml.ts";
+import { artifactEditService } from "./editService.ts";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as PubSub from "effect/PubSub";
 import * as Stream from "effect/Stream";
 import { CanvasRooms } from "../canvas/rooms.ts";
-import { errorText } from "../log.ts";
+import { errorText, logError } from "../log.ts";
+import { TLDOCUMENT_ID } from "@tldraw/tlschema";
 import { MediaStore } from "../media/mediaStore.ts";
 import { OpenProjects } from "../openProjects.ts";
 import { Runs } from "../runs/runs.ts";
 import { Config } from "../services.ts";
 import { ensureLibrary, writeUploadedArtifact } from "./artifactStore.ts";
+import { ensureTokensFor, kitOf, TOKENS_FILE, ensureTokens } from "../kits/tokensFile.ts";
 import { findChrome } from "./chrome.ts";
 import { producerBackend, Renderer, RenderRefused, stubBackend } from "./renderer.ts";
 import { HeadlessChrome } from "./headlessChrome.ts";
@@ -40,6 +44,7 @@ export class Artifacts extends Context.Service<
       file: string;
       title?: string | undefined;
       dials?: unknown;
+      mode?: string | undefined;
       shapeId: string;
     }) => Effect.Effect<{ id: string; status: "queued"; placeholder: string }, UnframedError>;
     readonly renderStatus: (project: string, id: string) => Effect.Effect<RenderStatus, UnframedError>;
@@ -50,6 +55,11 @@ export class Artifacts extends Context.Service<
     readonly componentCopy: (input: { project: string; file: string; from?: string | undefined }) => Effect.Effect<{ file: string; tag: string }, UnframedError>;
     /** "Open in a new tab": the shape's live viewer pointer, kept current from then on. */
     readonly openLive: (project: string, shapeId: string) => Effect.Effect<{}, UnframedError>;
+    /** The element editor's file operations (spec 18). */
+    readonly sourceTree: (project: string, file: string) => Effect.Effect<{ ready: boolean; elements: SourceTreeElement[]; offTokens: OffTokenFound[] }, UnframedError>;
+    readonly prepareEdit: (project: string, shapeId: string) => Effect.Effect<{ file: string }, UnframedError>;
+    readonly edit: (project: string, shapeId: string, baseFile: string, edits: SourceEdit[]) => Effect.Effect<{ file: string; summary: string[] }, UnframedError>;
+    readonly images: (project: string) => Effect.Effect<{ images: ArtifactImage[] }, UnframedError>;
     /** The Chromium this machine has, for the agent's previews and snapshots. */
     readonly findChrome: () => Promise<string | undefined>;
     /** The engine-owned headless Chrome that snapshots and the agent's previews share. */
@@ -91,10 +101,30 @@ export const artifactsLayer = Layer.effect(
       publish: (project, snapshot) => void run(PubSub.publish(written, { project, snapshot })),
     });
     yield* rooms.afterOpen((project, room) => {
-      snapshots.opened(project, room.read());
+      snapshots.opened(project, room.read(), kitOf(room.read()));
       void run(openProjects.register(project, "artifact snapshots", Effect.sync(() => snapshots.forget(project))));
     });
-    yield* rooms.afterCommit((project, change) => snapshots.committed(project, [...change.records.values()]));
+    yield* rooms.afterCommit((project, change, room) => {
+      const kit = kitOf(room.read());
+      if (change.records.has(TLDOCUMENT_ID)) snapshots.kitChanged(project, room.read(), kit);
+      snapshots.committed(project, [...change.records.values()], kit);
+    });
+
+    // The tokens script follows the kit: after every commit that touches the document record, and when a room opens.
+    const writeTokens = (project: string, kit: ReturnType<typeof kitOf>) =>
+      ensureTokensFor(() => media.folder(project), kit, (error) => logError(`${project}: could not write ${TOKENS_FILE}: ${errorText(error)}`));
+    yield* rooms.afterOpen((project, room) => writeTokens(project, kitOf(room.read())));
+    yield* rooms.afterCommit((project, change, room) => {
+      if (change.records.has(TLDOCUMENT_ID)) writeTokens(project, kitOf(room.read()));
+    });
+
+    const edits = artifactEditService({ folder: (project) => media.folder(project), read: (project) => run(rooms.read(project)) });
+    yield* rooms.afterCommit((project, change) => edits.committed(project, change));
+    const fromEdits = <A>(attempt: () => Promise<A>): Effect.Effect<A, UnframedError> =>
+      Effect.tryPromise({
+        try: attempt,
+        catch: (error) => (error instanceof UnframedError ? error : unframedError("internal", `Something went wrong: ${errorText(error)}`)),
+      });
 
     const pinned = yield* PubSub.unbounded<{ readonly project: string; readonly item: PinsItem }>();
     const pins = new ComponentPins({
@@ -105,14 +135,18 @@ export const artifactsLayer = Layer.effect(
     yield* rooms.afterCommit((project, change) => void pins.committed(project, [...change.records.values()]));
 
     const pointers = new LivePointers((project) => media.folder(project));
-    yield* rooms.afterOpen((project, room) => pointers.opened(project, room.read()));
-    yield* rooms.afterCommit((project, change) => pointers.committed(project, change.records.values(), change.removed));
+    yield* rooms.afterOpen((project, room) => pointers.opened(project, room.read(), kitOf(room.read())));
+    yield* rooms.afterCommit((project, change, room) => {
+      const kit = kitOf(room.read());
+      if (change.records.has(TLDOCUMENT_ID)) pointers.kitChanged(project, room.read(), kit);
+      pointers.committed(project, change.records.values(), change.removed, kit);
+    });
 
     const openLive = (project: string, shapeId: string) =>
       Effect.gen(function* () {
         const records = yield* rooms.read(project);
         const opened = yield* Effect.tryPromise({
-          try: () => pointers.open(projectSlug(project), records.find((record) => record.id === shapeId)),
+          try: () => pointers.open(projectSlug(project), records.find((record) => record.id === shapeId), kitOf(records)),
           catch: (error) => unframedError("internal", `Could not open the live viewer: ${errorText(error)}`),
         });
         if (opened === false) return yield* unframedError("not_found", `There is no page or motion ${shapeId} on this canvas.`);
@@ -137,10 +171,13 @@ export const artifactsLayer = Layer.effect(
         const folder = yield* Effect.promise(() => media.folder(input.project));
         if (folder === undefined) return yield* unframedError("not_found", `There is no project named "${projectSlug(input.project)}".`);
         const fileName = input.fileName.split(/[\\/]/).pop()?.trim() || "motion.html";
+        const html = prepareArtifactHtml(input.html, "motion");
+        if (byteSize(html) > UPLOAD_LIMIT) return yield* unframedError("bad_request", `The composition is too large (${(byteSize(html) / 1_048_576).toFixed(1)}MB). The limit is 20MB.`);
         return yield* Effect.tryPromise({
           try: async () => {
             await ensureLibrary(folder);
-            const saved = await writeUploadedArtifact(folder, { html: injectTags(input.html, "motion"), fileName });
+            await ensureTokens(folder, kitOf(await run(rooms.read(input.project))));
+            const saved = await writeUploadedArtifact(folder, { html, fileName });
             return { file: saved.file, fileName, bytes: saved.bytes, mime: "text/html" as const };
           },
           catch: (error) => unframedError("internal", `Could not save the composition: ${errorText(error)}`),
@@ -206,6 +243,10 @@ export const artifactsLayer = Layer.effect(
           });
         }),
       openLive,
+      sourceTree: (project, file) => fromEdits(() => edits.sourceTree(project, file)),
+      prepareEdit: (project, shapeId) => fromEdits(() => edits.prepareEdit(project, shapeId)),
+      edit: (project, shapeId, baseFile, list) => fromEdits(() => edits.edit(project, shapeId, baseFile, list)),
+      images: (project) => fromEdits(() => edits.images(project)),
       findChrome: chrome,
       chrome: headless,
     });

@@ -182,9 +182,15 @@ export interface BridgeWindow {
   addEventListener(type: "message", listener: (event: { source: unknown; origin: string; data: unknown }) => void): void;
   addEventListener(type: "wheel", listener: (event: BridgeWheel) => void, options: { passive: boolean }): void;
   addEventListener(type: "contextmenu", listener: (event: BridgeMenuEvent) => void): void;
+  /** The tokens script's event: a kit or a mode changed, so the declaration is applied again. */
+  addEventListener(type: "unframed:tokens", listener: () => void): void;
   __hfVariables?: { unframedDials?: unknown };
   unframed?: unknown;
   console: { error(...args: unknown[]): void };
+  /** Loads `unframed-edit.js` on the first edit hello (spec 18). */
+  document?: { head: { appendChild(node: unknown): unknown }; createElement(tag: "script"): { src: string } };
+  /** The origin of the edit hello, which the edit bridge answers. */
+  unframedEditPeer?: unknown;
 }
 
 /**
@@ -200,6 +206,8 @@ export function installDialsBridge(win: BridgeWindow, dials: DialRules): void {
   let asker: string | undefined;
   // The canvas that asked for right-clicks, so a selected frame's shape menu still opens.
   let menuAsker: string | undefined;
+  // The edit bridge is loaded once; later edit hellos reach it as messages.
+  let editLoaded = false;
 
   const run = (current: State) => {
     try {
@@ -265,7 +273,21 @@ export function installDialsBridge(win: BridgeWindow, dials: DialRules): void {
       announce(event.origin);
     } else if (data.type === "unframed:dials:set") {
       set(data.values);
+    } else if (data.type === "unframed:edit:hello") {
+      win.unframedEditPeer = event.origin;
+      if (!editLoaded && win.document !== undefined) {
+        editLoaded = true;
+        const script = win.document.createElement("script");
+        script.src = "unframed-edit.js";
+        win.document.head.appendChild(script);
+      }
     }
+  });
+
+  // A kit or mode change (spec 19): the last declaration is applied again with its current values,
+  // so a motion that reads its tokens while it builds rebuilds with them.
+  win.addEventListener("unframed:tokens", () => {
+    if (state !== undefined) run(state);
   });
 
   // A pinch (Ctrl or Cmd with the wheel) over a framed artifact would zoom the whole app:

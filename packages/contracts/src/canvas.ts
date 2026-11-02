@@ -4,6 +4,7 @@
  * schema, so a record one side accepts the other accepts too.
  */
 import {
+  createShapePropsMigrationIds,
   createShapePropsMigrationSequence,
   createTLSchema,
   defaultBindingSchemas,
@@ -15,6 +16,7 @@ import {
   type TLSchema,
 } from "@tldraw/tlschema";
 import { T } from "@tldraw/validate";
+import type { Kit } from "./kits.ts";
 
 // ---------------------------------------------------------------------------------------
 // Asset markers: the one definition.
@@ -100,6 +102,10 @@ export interface ArtifactShapeProps {
   title: string;
   fileName: string;
   dials?: Record<string, unknown>;
+  /** The kit mode this artifact shows (spec 19). Absent means the kit's default mode. */
+  mode?: string;
+  /** Element ids the person locked in Layers (spec 18). Absent when none. */
+  lockedElements?: string[];
 }
 
 const artifactProps = {
@@ -109,10 +115,19 @@ const artifactProps = {
   title: T.string,
   fileName: T.string,
   dials: T.dict(T.string, T.jsonValue).optional(),
+  mode: T.string.optional(),
+  lockedElements: T.arrayOf(T.string).optional(),
 };
 
-/** Every later change to page and motion props is a migration here, used by the room and the web alike. */
-const artifactMigrations = () => createShapePropsMigrationSequence({ sequence: [] });
+/**
+ * Every later change to page and motion props is a migration here, used by the room and the web alike.
+ * The first adds `lockedElements`; a record without it has no locks, so nothing is rewritten.
+ * `mode` (spec 19) is optional and needs none.
+ */
+const artifactMigrations = (kind: ArtifactType) => {
+  const ids = createShapePropsMigrationIds(kind, { AddLockedElements: 1 });
+  return createShapePropsMigrationSequence({ sequence: [{ id: ids.AddLockedElements, up: (props) => props }] });
+};
 
 export const ARTIFACT_TYPES = ["page", "motion"] as const;
 export type ArtifactType = (typeof ARTIFACT_TYPES)[number];
@@ -170,19 +185,46 @@ export const kindOfShapeType = (type: string): UnframedKind | "mark" => {
 
 const { embed: _embed, bookmark: _bookmark, ...keptShapes } = defaultShapeSchemas;
 
+/**
+ * The kit's shape, before a rule reads it: the fields every rule assumes. A kit that lacks one
+ * is refused here, so the rules never meet a broken record (spec 19).
+ */
+const kitShape = T.object({
+  format: T.literal(1),
+  name: T.string,
+  modes: T.arrayOf(T.string),
+  tokens: T.arrayOf(T.jsonValue),
+}).allowUnknownProperties();
+
+/**
+ * The document record's kit must have the right shape and pass `refusalOf`, the domain's kit
+ * rules, which the engine supplies. Contracts depends on no other workspace package, so the
+ * rules come in as a function and the room keeps them.
+ */
+const checkKit = (document: unknown, refusalOf: (kit: Kit) => string | null): void => {
+  const kit = (document as { meta?: { unframed?: { kit?: unknown } } } | null)?.meta?.unframed?.kit;
+  if (kit === undefined) return;
+  try {
+    kitShape.validate(kit);
+  } catch {
+    throw new T.ValidationError("That kit is not in the form the app writes.");
+  }
+  const refusal = refusalOf(kit as Kit);
+  if (refusal !== null) throw new T.ValidationError(refusal);
+};
+
 let schema: TLSchema | undefined;
 
-/** The one canvas schema, made once. */
-export const canvasSchema = (): TLSchema => {
-  schema ??= createTLSchema({
+const buildSchema = (refusalOf?: (kit: Kit) => string | null): TLSchema => {
+  const built = createTLSchema({
     shapes: {
       ...keptShapes,
       text: { ...keptShapes.text, meta: { ...refMeta, sized: T.boolean.optional() } },
       image: { ...keptShapes.image, meta: refMeta },
       video: { ...keptShapes.video, meta: refMeta },
       frame: { ...keptShapes.frame, meta: unframedMeta },
-      page: { props: artifactProps, meta: refMeta, migrations: artifactMigrations() },
-      motion: { props: artifactProps, meta: refMeta, migrations: artifactMigrations() },
+      page: { props: artifactProps, meta: refMeta, migrations: artifactMigrations("page") },
+      motion: { props: artifactProps, meta: refMeta, migrations: artifactMigrations("motion") },
       component: {
         props: { ...artifactProps, tag: componentTag },
         meta: refMeta,
@@ -195,5 +237,23 @@ export const canvasSchema = (): TLSchema => {
       video: { migrations: videoAssetMigrations, props: { ...videoAssetProps, src: assetSource(true) } },
     },
   });
+  if (refusalOf !== undefined) {
+    const document = built.types.document as unknown as { validate: (record: unknown, before?: unknown) => unknown };
+    const validate = document.validate.bind(document);
+    document.validate = (record, before) => {
+      const checked = validate(record, before);
+      checkKit(checked, refusalOf);
+      return checked;
+    };
+  }
+  return built;
+};
+
+/** The one canvas schema, made once, without the kit rules (the web store reads it this way). */
+export const canvasSchema = (): TLSchema => {
+  schema ??= buildSchema();
   return schema;
 };
+
+/** The canvas schema the engine's room uses: the same records, plus the kit rules it is given (spec 19). */
+export const roomSchema = (refusalOf: (kit: Kit) => string | null): TLSchema => buildSchema(refusalOf);

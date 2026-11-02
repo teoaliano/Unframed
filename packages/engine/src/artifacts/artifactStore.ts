@@ -18,6 +18,7 @@ import {
   componentHelperSource,
   COMPONENT_HELPER_FILE,
   dialsBridgeSource,
+  editBridgeSource,
   LIVE_CHECK_FILE,
   LIVE_VIEWER_FILE,
   liveCheckSource,
@@ -31,6 +32,8 @@ import {
 const require = createRequire(import.meta.url);
 
 export const BRIDGE_FILE = "unframed-dials.js";
+/** The edit bridge (spec 18): loaded by the dials bridge on the first edit hello, and written beside it. */
+export const EDIT_BRIDGE_FILE = "unframed-edit.js";
 
 /** One file of the motion library: its fixed name and where its bytes come from. */
 interface LibraryFile {
@@ -49,11 +52,13 @@ const installed = (resolve: () => string) => {
 };
 
 const BRIDGE: LibraryFile = { name: BRIDGE_FILE, bytes: async () => Buffer.from(dialsBridgeSource(), "utf8") };
+const EDIT: LibraryFile = { name: EDIT_BRIDGE_FILE, bytes: async () => Buffer.from(editBridgeSource(), "utf8") };
 
 /** The five files, under fixed names. Nothing is vendored and nothing loads from a CDN. */
 const LIBRARY: ReadonlyArray<LibraryFile> = [
   { name: "hyperframes-viewer.html", bytes: async () => Buffer.from(viewerPageSource(), "utf8") },
   BRIDGE,
+  EDIT,
   // The player's global build sits beside its package entry.
   { name: "hyperframes-player.js", bytes: installed(() => join(dirname(require.resolve("@hyperframes/player")), "hyperframes-player.global.js")) },
   { name: "hyperframes-runtime.js", bytes: installed(() => require.resolve("@hyperframes/core/runtime")) },
@@ -76,7 +81,7 @@ const ensure = async (folder: string, files: ReadonlyArray<LibraryFile>): Promis
 };
 
 /** A page write ensures only the bridge; a page never gets the player, runtime or GSAP. */
-export const ensureBridge = (folder: string): Promise<void> => ensure(folder, [BRIDGE]);
+export const ensureBridge = (folder: string): Promise<void> => ensure(folder, [BRIDGE, EDIT]);
 
 const COMPONENT_HELPER: LibraryFile = { name: COMPONENT_HELPER_FILE, bytes: async () => Buffer.from(componentHelperSource(), "utf8") };
 
@@ -303,6 +308,39 @@ export const writeUploadedArtifact = async (folder: string, input: { readonly ht
   return { file, bytes: bytes.length };
 };
 
+export interface EditSidecar {
+  readonly source: "edit";
+  readonly kind: ArtifactKind;
+  readonly of: string;
+  readonly shapeId: string;
+  readonly edits: ReadonlyArray<string>;
+  readonly title: string;
+  readonly bytes: number;
+  readonly at: string;
+}
+
+/** A new version written by the element editor (spec 18): a source edit or a prepare, with its edit sidecar. */
+export const writeEditArtifact = async (
+  folder: string,
+  input: { readonly kind: ArtifactKind; readonly html: string; readonly title: string; readonly of: string; readonly shapeId: string; readonly edits: ReadonlyArray<string> },
+): Promise<{ file: string; bytes: number }> => {
+  const bytes = Buffer.from(input.html, "utf8");
+  const file = await createNew(folder, { title: input.title, fallback: input.kind, ext: "html" }, writeExclusive(bytes), () => {
+    const sidecar: EditSidecar = {
+      source: "edit",
+      kind: input.kind,
+      of: input.of,
+      shapeId: input.shapeId,
+      edits: [...input.edits],
+      title: input.title,
+      bytes: bytes.length,
+      at: new Date().toISOString(),
+    };
+    return `${JSON.stringify(sidecar, null, 2)}\n`;
+  });
+  return { file, bytes: bytes.length };
+};
+
 /** Reads an artifact file; the name is reduced to its basename first, so it cannot leave the folder. */
 export const readArtifact = (folder: string, file: string): Promise<string> => readFile(join(folder, basename(file)), "utf8");
 
@@ -315,6 +353,10 @@ export interface RenderSidecar {
   readonly quality: "standard";
   readonly bytes: number;
   readonly dials?: Readonly<Record<string, unknown>>;
+  /** The kit mode the render used, when it is not the default (spec 19). */
+  readonly mode?: string;
+  /** The kit the render used, when the project had one (spec 19). */
+  readonly kit?: { readonly name: string; readonly stamp: string };
   readonly at: string;
 }
 
@@ -325,7 +367,7 @@ export interface RenderSidecar {
  */
 export const placeRenderOutput = async (
   folder: string,
-  input: { readonly from: string; readonly of: string; readonly title: string; readonly dials: Readonly<Record<string, unknown>> | null },
+  input: { readonly from: string; readonly of: string; readonly title: string; readonly dials: Readonly<Record<string, unknown>> | null; readonly mode?: string | undefined; readonly kit?: { readonly name: string; readonly stamp: string } | undefined },
 ): Promise<{ file: string; bytes: number }> => {
   const bytes = (await stat(input.from)).size;
   const place = (path: string) => copyFile(input.from, path, constants.COPYFILE_EXCL);
@@ -339,6 +381,8 @@ export const placeRenderOutput = async (
       quality: "standard",
       bytes,
       ...(input.dials !== null && Object.keys(input.dials).length > 0 ? { dials: input.dials } : {}),
+      ...(input.mode === undefined ? {} : { mode: input.mode }),
+      ...(input.kit === undefined ? {} : { kit: input.kit }),
       at: new Date().toISOString(),
     };
     return `${JSON.stringify(sidecar, null, 2)}\n`;

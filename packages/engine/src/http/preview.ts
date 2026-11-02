@@ -4,7 +4,7 @@ import http from "node:http";
 import { basename, dirname, join } from "node:path";
 import { pipeline } from "node:stream/promises";
 import { COMPONENT_HELPER_FILE, LIVE_CHECK_FILE, LIVE_VIEWER_FILE, loopbackGuard, projectSlug } from "@unframed/domain";
-import { BRIDGE_FILE, ensureBridge, ensureComponentHelper, ensureCompiledComponent, ensureLiveViewer } from "../artifacts/artifactStore.ts";
+import { BRIDGE_FILE, EDIT_BRIDGE_FILE, ensureBridge, ensureComponentHelper, ensureCompiledComponent, ensureLiveViewer } from "../artifacts/artifactStore.ts";
 import { NOT_FOUND } from "./respond.ts";
 import { guardUpgrade, refuseUpgrade } from "./guard.ts";
 
@@ -112,7 +112,7 @@ const handler =
     // request never makes a folder.
     const name = basename(path);
     const refresh =
-      name === BRIDGE_FILE ? ensureBridge : name === COMPONENT_HELPER_FILE ? ensureComponentHelper : name === LIVE_VIEWER_FILE || name === LIVE_CHECK_FILE ? ensureLiveViewer : undefined;
+      name === BRIDGE_FILE || name === EDIT_BRIDGE_FILE ? ensureBridge : name === COMPONENT_HELPER_FILE ? ensureComponentHelper : name === LIVE_VIEWER_FILE || name === LIVE_CHECK_FILE ? ensureLiveViewer : undefined;
     const folderExists = (await stat(dirname(path)).catch(() => undefined))?.isDirectory() ?? false;
     if (refresh !== undefined && folderExists) await refresh(dirname(path)).catch(() => undefined);
     // A missing compiled component is built from its sheet, the same bytes the compiler makes (spec 20).

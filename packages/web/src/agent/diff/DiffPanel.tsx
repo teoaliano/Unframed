@@ -100,10 +100,11 @@ export const DiffPanel = ({ client, chat, diff }: { readonly client: ChatClient;
   const wrapLabel = wrap ? "Disable line wrapping" : "Enable line wrapping";
   const whitespaceLabel = ignoreWhitespace ? "Show whitespace changes" : "Hide whitespace changes";
   return (
-    // t3code's diff panel shell, beside the rail on its left and as tall as it.
+    // t3code's diff panel shell, beside the rail on its canvas side: 8 px under the top bar, which the rail starts at, and
+    // clear of the canvas's bottom row, which the full-height rail no longer stops above.
     <section
       ref={root}
-      className="absolute top-14 left-[calc(100%+8px)] bottom-0 flex w-[min(760px,calc(100vw-540px))] min-w-0 flex-col overflow-hidden rounded-xl border bg-background text-sm shadow-lg/5 outline-none"
+      className="absolute top-2 left-[calc(100%+8px)] bottom-[52px] flex w-[min(760px,calc(100vw-540px))] min-w-0 flex-col overflow-hidden rounded-xl border bg-background text-sm shadow-lg/5 outline-none"
       role="dialog"
       aria-label="Changes"
       tabIndex={-1}

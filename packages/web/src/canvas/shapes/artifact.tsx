@@ -3,10 +3,12 @@ import { artifactTitle, readRef, type ArtifactKind, type DialsAnnouncement } fro
 import { AppWindow, Clapperboard, Component } from "lucide-react";
 import { useCallback, useEffect } from "react";
 import { BaseBoxShapeUtil, HTMLContainer, resizeBox, T, useEditor, useValue, type RecordProps, type TLResizeInfo, type TLShape } from "tldraw";
-import { ArtifactFrame, type ArtifactFrameProps } from "../../artifacts/ArtifactFrame.tsx";
+import { ArtifactFrame, type ArtifactFrameProps, type EditMessage } from "../../artifacts/ArtifactFrame.tsx";
+import { DropOutline, onFrameEdit } from "../../artifacts/imageDrop.tsx";
 import { ProblemLine, RenderRow } from "../../artifacts/RenderRow.tsx";
 import { snapshotsOf, snapshotUrl, stillOf } from "../../artifacts/snapshots.ts";
-import { forgetFrame, hearFrame, isInteractive, isLive, previewPort, reachFrame } from "../../artifacts/state.ts";
+import { kitOf } from "../../artifacts/kit.ts";
+import { forgetEdit, forgetFrame, hearFrame, isInteractive, isLive, previewPort, reachEdit, reachFrame } from "../../artifacts/state.ts";
 import { currentSlots } from "../../chrome/slots.ts";
 import { useCanvasProject } from "../../context.ts";
 import { artifactCardClass } from "./looks.ts";
@@ -26,6 +28,7 @@ const artifactProps: RecordProps<TLShape<"page"> | TLShape<"motion">> = {
   title: T.string,
   fileName: T.string,
   dials: T.dict(T.string, T.jsonValue).optional(),
+  mode: T.string.optional(),
 };
 
 /** A component has no dials; its tag is set when it is made and never changes (spec 20). */
@@ -83,7 +86,11 @@ const CanvasFrame = ({ shapeId, ...props }: Omit<ArtifactFrameProps, "onAnnounce
   useEffect(() => () => forgetFrame(editor, shapeId), [editor, shapeId]);
   const onAnnounce = useCallback((announcement: DialsAnnouncement) => hearFrame(editor, shapeId, announcement), [editor, shapeId]);
   const onReady = useCallback((post: (values: unknown) => void) => reachFrame(editor, shapeId, post), [editor, shapeId]);
-  return <ArtifactFrame {...props} onAnnounce={onAnnounce} onReady={onReady} />;
+  // The edit bridge is loaded into a canvas frame only for an image drop (spec 18); its answers come back here.
+  useEffect(() => () => forgetEdit(editor, shapeId), [editor, shapeId]);
+  const onEdit = useCallback((message: EditMessage) => onFrameEdit(editor, shapeId, message), [editor, shapeId]);
+  const onEditReady = useCallback((post: (message: unknown) => void) => reachEdit(editor, shapeId, post), [editor, shapeId]);
+  return <ArtifactFrame {...props} onAnnounce={onAnnounce} onReady={onReady} onEdit={onEdit} onEditReady={onEditReady} />;
 };
 
 /** A filled artifact: no card, the title above its corner, and its frame while live, else its still. */
@@ -95,6 +102,7 @@ const FilledArtifact = ({ shape, kind }: { readonly shape: ArtifactShape; readon
   const live = useValue("artifact live", () => isLive(editor, shape.id), [editor, shape.id]);
   const interactive = useValue("artifact interactive", () => live && isInteractive(editor, shape.id), [editor, shape.id, live]);
   const port = useValue("preview port", () => previewPort.get(), []);
+  const kit = useValue("project kit", () => kitOf(editor), [editor]);
   const title = artifactTitle(props);
   const name = nameOf(shape);
   return (
@@ -102,10 +110,11 @@ const FilledArtifact = ({ shape, kind }: { readonly shape: ArtifactShape; readon
       <HTMLContainer id={shape.id} data-testid="artifact-card" data-artifact-kind={kind} data-live={live ? "true" : undefined} style={{ width: props.w, height: props.h }}>
         <ShapeLabel shapeId={shape.id} kind={kind} name={readRef(shape)} width={props.w} text={name !== undefined ? `@${name}` : title} />
         {live && port !== undefined ? (
-          <CanvasFrame key={props.file} shapeId={shape.id} project={project} kind={kind} file={props.file} previewPort={port} dials={props.dials} interactive={interactive} lazy />
+          <CanvasFrame key={props.file} shapeId={shape.id} project={project} kind={kind} file={props.file} previewPort={port} dials={props.dials} kit={kit} mode={props.mode} interactive={interactive} lazy />
         ) : (
           <Still shape={shape} title={title} />
         )}
+        {live && <DropOutline shapeId={shape.id} />}
       </HTMLContainer>
       {kind === "motion" && <RenderRow shape={shape} />}
       <ProblemLine shapeId={shape.id} offset={props.h + (kind === "motion" ? RENDER_ROW_HEIGHT : 0)} width={props.w} />

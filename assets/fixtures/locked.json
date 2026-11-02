@@ -1,0 +1,52 @@
+{
+  "when": "^locked",
+  "turns": [
+    {
+      "title": "Change the locked heading",
+      "text": "I tried to rewrite the heading you locked.",
+      "tools": [
+        {
+          "name": "page_write",
+          "input": { "shapeId": "pg1", "html": "<h1 data-hf-id=\"hf-aaaa\">Changed</h1>" }
+        }
+      ]
+    },
+    {
+      "title": "Keep the locked heading",
+      "text": "I kept the locked heading and added a line under it.",
+      "tools": [
+        {
+          "name": "page_write",
+          "input": { "shapeId": "pg1", "html": "<h1 data-hf-id=\"hf-aaaa\">Hi</h1><p>More</p>" }
+        }
+      ]
+    },
+    {
+      "title": "Read the locks",
+      "text": "The heading is locked, so I will leave it alone.",
+      "tools": [
+        { "name": "canvas_read", "input": {} }
+      ]
+    },
+    {
+      "title": "Try to set the locks",
+      "text": "I tried to set the locks myself.",
+      "tools": [
+        {
+          "name": "canvas_write",
+          "input": { "ops": [{ "type": "update", "id": "pg1", "props": { "lockedElements": [] } }] }
+        }
+      ]
+    },
+    {
+      "title": "Try to move the file",
+      "text": "I tried to point the page at another file.",
+      "tools": [
+        {
+          "name": "canvas_write",
+          "input": { "ops": [{ "type": "update", "id": "pg1", "props": { "file": "2-other.html" } }] }
+        }
+      ]
+    }
+  ]
+}
