@@ -63,6 +63,10 @@ importers:
       parse5:
         specifier: 8.0.1
         version: 8.0.1
+    devDependencies:
+      gsap:
+        specifier: 3.15.0
+        version: 3.15.0
 
   packages/engine:
     dependencies:

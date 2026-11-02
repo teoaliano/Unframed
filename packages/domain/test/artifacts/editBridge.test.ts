@@ -1,4 +1,5 @@
-import { describe, expect, it } from "vitest";
+import { afterAll, describe, expect, it, vi } from "vitest";
+import { gsap } from "gsap";
 import { editBridgeSource } from "../../src/index.ts";
 
 type Listener = (event: any) => void;
@@ -553,3 +554,155 @@ describe("the motion's live tween report and transport keys (spec 21, task 19)",
   });
 });
 
+describe("the tween patcher, against real GSAP (spec 21, task 20)", () => {
+  afterAll(() => gsap.ticker.sleep());
+  const setup = () => {
+    const tl = gsap.timeline({ paused: true });
+    const stub = stubEditWindow({ timelines: { main: tl } });
+    return { tl, ...stub };
+  };
+  // The GSAP property values on a stub element, read without a type.
+  // GSAP writes plain-object values as strings, so they are read as numbers.
+  const at = (el: object) => ({ get x() { return Number((el as { x?: unknown }).x); }, get opacity() { return Number((el as { opacity?: unknown }).opacity); } });
+  const tweenOn = (tl: ReturnType<typeof gsap.timeline>, property: string) =>
+    tl.getChildren(false, true, false).find((tween) => property in (tween as { vars: object }).vars) as any;
+  const patch = (selector: string, channels: string[], change: Record<string, unknown>) => ({ kind: "tween", selector, channels, change });
+
+  it("sets a value on the one tween its channels name, and invalidates that tween alone", () => {
+    const { tl, element, send } = setup();
+    const el = element("hf-aaaa");
+    const other = element("hf-bbbb");
+    tl.to(el, { x: 40, duration: 1 }, 1);
+    tl.to(other, { x: 10, duration: 1 }, 1);
+    send({ type: "unframed:edit:patch", patches: [patch("hf-aaaa", ["x"], { values: { at: 1, props: { x: 80 } } })] });
+    tl.seek(2, false);
+    expect(at(el).x).toBe(80);
+    expect(at(other).x).toBe(10);
+    expect(tl.getChildren(false, true, false)).toHaveLength(2);
+  });
+
+  it("recreates an object-keyframe tween with the step changed, at the same start", () => {
+    const { tl, element, send } = setup();
+    const el = element("hf-aaaa");
+    tl.to(el, { keyframes: { "0%": { x: 0 }, "100%": { x: 40 } }, duration: 1 }, 1);
+    send({ type: "unframed:edit:patch", patches: [patch("hf-aaaa", ["x"], { values: { at: 0.5, props: { x: 20 } } })] });
+    const [tween] = tl.getChildren(false, true, false) as any[];
+    expect(tl.getChildren(false, true, false)).toHaveLength(1);
+    expect(tween.startTime()).toBe(1);
+    expect(tween.vars.keyframes["50%"]).toEqual({ x: 20 });
+    tl.seek(1.5, false);
+    expect(at(el).x).toBeCloseTo(20, 6);
+  });
+
+  it("recreates a tween with a new ease, the playback following the curve", () => {
+    const { tl, element, send } = setup();
+    const el = element("hf-aaaa");
+    tl.to(el, { x: 40, duration: 1, ease: "none" }, 1);
+    send({ type: "unframed:edit:patch", patches: [patch("hf-aaaa", ["x"], { ease: "power1.in" })] });
+    const [tween] = tl.getChildren(false, true, false) as any[];
+    expect(tween.vars.ease).toBe("power1.in");
+    expect(tween.startTime()).toBe(1);
+    tl.seek(1.5, false);
+    expect(at(el).x).toBeCloseTo(10, 6);
+  });
+
+  it("recreates a staggered tween with the new spacing", () => {
+    const { tl, element, send } = setup();
+    const a = element("hf-aaaa");
+    const b = element("hf-bbbb");
+    tl.to([a, b], { x: 10, duration: 1, ease: "none", stagger: 0.1 }, 1);
+    send({ type: "unframed:edit:patch", patches: [patch("hf-aaaa", ["x"], { stagger: 0.5 })] });
+    const [tween] = tl.getChildren(false, true, false) as any[];
+    expect(tween.vars.stagger).toBe(0.5);
+    // With a spacing of 0.5 s, b has not started at 1.4 s, and a is 0.4 s into its 1 s move.
+    tl.seek(1.4, false);
+    expect(at(b).x || 0).toBe(0);
+    expect(at(a).x).toBeCloseTo(4, 6);
+  });
+
+  it("moves a tween to a new start and sets its duration, keeping it in its timeline", () => {
+    const { tl, element, send } = setup();
+    const el = element("hf-aaaa");
+    tl.to(el, { x: 40, duration: 1, ease: "none" }, 1);
+    send({ type: "unframed:edit:patch", patches: [patch("hf-aaaa", ["x"], { start: 2, duration: 0.5 })] });
+    const [tween] = tl.getChildren(false, true, false) as any[];
+    expect(tl.getChildren(false, true, false)).toHaveLength(1);
+    expect(tween.startTime()).toBe(2);
+    expect(tween.duration()).toBe(0.5);
+    tl.seek(2.25, false);
+    expect(at(el).x).toBeCloseTo(20, 6);
+  });
+
+  it("declines, silently and with nothing written, a relative or random value, a motion path, a tween it cannot find, two that match, and a move past another tween", () => {
+    const { tl, element, send } = setup();
+    const el = element("hf-aaaa");
+    tl.to(el, { x: 40, duration: 1, ease: "none" }, 1);
+    send({ type: "unframed:edit:patch", patches: [patch("hf-aaaa", ["x"], { values: { at: 1, props: { x: "+=10" } } })] });
+    send({ type: "unframed:edit:patch", patches: [patch("hf-aaaa", ["x"], { values: { at: 1, props: { x: "random(0, 9)" } } })] });
+    send({ type: "unframed:edit:patch", patches: [patch("hf-aaaa", ["x"], { values: { at: 1, props: { x: NaN } } })] });
+    send({ type: "unframed:edit:patch", patches: [patch("hf-aaaa", ["opacity"], { values: { at: 1, props: { opacity: 0 } } })] });
+    expect((tl.getChildren(false, true, false)[0] as any).vars.x).toBe(40);
+    const motion = setup();
+    const mel = motion.element("hf-aaaa");
+    motion.tl.to(mel, { x: 40, motionPath: { path: [] }, duration: 1 }, 1);
+    motion.send({ type: "unframed:edit:patch", patches: [patch("hf-aaaa", ["motionPath", "x"], { values: { at: 1, props: { x: 5 } } })] });
+    expect((motion.tl.getChildren(false, true, false)[0] as any).vars.x).toBe(40);
+    // Two tweens with the same channels on one element: which one is the edit is not known, so none is patched.
+    const twin = setup();
+    const tel = twin.element("hf-aaaa");
+    twin.tl.to(tel, { x: 40, duration: 1 }, 1);
+    twin.tl.to(tel, { x: 60, duration: 1 }, 3);
+    twin.send({ type: "unframed:edit:patch", patches: [patch("hf-aaaa", ["x"], { values: { at: 1, props: { x: 0 } } })] });
+    expect(twin.tl.getChildren(false, true, false).map((t: any) => t.vars.x)).toEqual([40, 60]);
+    // A move that passes the tween on the same element and channel is declined.
+    const order = setup();
+    const oel = order.element("hf-aaaa");
+    order.tl.to(oel, { x: 40, duration: 1 }, 1);
+    order.tl.to(oel, { x: 60, duration: 1 }, 3);
+    order.send({ type: "unframed:edit:patch", patches: [patch("hf-aaaa", ["x"], { start: 4 })] });
+    const starts = order.tl.getChildren(false, true, false).map((t: any) => t.startTime());
+    expect(starts).toEqual([1, 3]);
+  });
+
+  it("seeks once for all the patches of one message", () => {
+    const { tl, element, send } = setup();
+    const el = element("hf-aaaa");
+    tl.to(el, { x: 40, duration: 1 }, 1);
+    tl.to(el, { opacity: 1, duration: 1 }, 1);
+    const seek = vi.spyOn(tl, "seek");
+    send({
+      type: "unframed:edit:patch",
+      patches: [patch("hf-aaaa", ["x"], { values: { at: 1, props: { x: 80 } } }), patch("hf-aaaa", ["opacity"], { values: { at: 1, props: { opacity: 0.5 } } })],
+    });
+    expect(seek).toHaveBeenCalledTimes(1);
+  });
+
+  it("applies the held patches again after a dials apply rebuilds the timeline", () => {
+    const { tl, element, send, win } = setup();
+    const el = element("hf-aaaa");
+    tl.to(el, { x: 40, duration: 1 }, 1);
+    send({ type: "unframed:edit:patch", patches: [patch("hf-aaaa", ["x"], { values: { at: 1, props: { x: 80 } } })] });
+    // The dials callback clears the timeline and builds it again with the parameter's value.
+    tl.clear();
+    tl.to(el, { x: 40, duration: 1 }, 1);
+    win.unframedDialsApplied();
+    tl.seek(2, false);
+    expect(at(el).x).toBe(80);
+  });
+
+  it("puts every touched tween back on a reset, and drops the held patches", () => {
+    const { tl, element, send, win } = setup();
+    const el = element("hf-aaaa");
+    tl.to(el, { x: 40, duration: 1, ease: "none" }, 1);
+    send({ type: "unframed:edit:patch", patches: [patch("hf-aaaa", ["x"], { ease: "power2.in" }), patch("hf-aaaa", ["x"], { values: { at: 1, props: { x: 80 } } })] });
+    send({ type: "unframed:edit:reset" });
+    const [tween] = tl.getChildren(false, true, false) as any[];
+    expect(tween.vars.ease).toBe("none");
+    expect(tween.vars.x).toBe(40);
+    tl.clear();
+    tl.to(el, { x: 40, duration: 1, ease: "none" }, 1);
+    win.unframedDialsApplied();
+    tl.seek(2, false);
+    expect(at(el).x).toBe(40);
+  });
+});
