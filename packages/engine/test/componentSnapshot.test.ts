@@ -35,7 +35,7 @@ describe("snapshots and the compiled components they pin", () => {
     expect(existsSync(join(agent.folder, COMPILED))).toBe(false);
     await seed(agent, [pageShape("pg1", "100", { file: "1-landing.html", title: "Landing" })]);
     const snapshots = join(agent.folder, ".cache", "snapshots");
-    await until(() => existsSync(join(snapshots, "1-landing.html-480x320.png")), "the snapshot");
+    await until(() => existsSync(join(snapshots, "1-landing.html-480x320-none-none.png")), "the snapshot");
     expect(await readFile(join(agent.folder, COMPILED), "utf8")).toBe(compileComponent(SHEET, SHEET_FILE));
   });
 
@@ -45,7 +45,7 @@ describe("snapshots and the compiled components they pin", () => {
     await writeFile(join(agent.folder, COMPILED), "/* kept */");
     await writeFile(join(agent.folder, "1-landing.html"), PAGE);
     await seed(agent, [pageShape("pg1", "100", { file: "1-landing.html", title: "Landing" })]);
-    await until(() => existsSync(join(agent.folder, ".cache", "snapshots", "1-landing.html-480x320.png")), "the snapshot");
+    await until(() => existsSync(join(agent.folder, ".cache", "snapshots", "1-landing.html-480x320-none-none.png")), "the snapshot");
     expect(await readFile(join(agent.folder, COMPILED), "utf8")).toBe("/* kept */");
     await rm(join(agent.folder, COMPILED), { force: true });
   });

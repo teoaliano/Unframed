@@ -14,6 +14,12 @@ const BUTTON = `<!doctype html><html><head>
 
 const PAGE = `<!doctype html><html><head><script src="1-button.component.js" data-uf-component="uf-button"></script></head><body><uf-button kind="secondary"></uf-button></body></html>`;
 
+/** A copy is written like any artifact: tokens and dials tags and element ids are stamped on (specs 18 and 19). The rest must match. */
+const unstamped = (html: string): string =>
+  html
+    .replace(/<script src="unframed-(?:tokens|dials)\.js"><\/script>\n?/g, "")
+    .replace(/ data-hf-id="[^"]*"/g, "");
+
 describe("files.copy brings a page's pinned components", () => {
   let engine: TestEngine;
   const folder = (project: string) => join(engine.dataDir, "output", project);
@@ -34,7 +40,7 @@ describe("files.copy brings a page's pinned components", () => {
   it("copies the sheet, its compiled file and its sidecar under the same names, and the page beside them", async () => {
     const { file } = await (await engine.rpc()).call("files.copy", { project: "two", file: "2-landing.html", from: "one" });
     expect(file).toMatch(/^\d+-landing\.html$/);
-    expect(await readFile(join(folder("two"), file), "utf8")).toBe(PAGE);
+    expect(unstamped(await readFile(join(folder("two"), file), "utf8"))).toBe(PAGE);
     expect(await readFile(join(folder("two"), "1-button.html"), "utf8")).toBe(BUTTON);
     expect(await readFile(join(folder("two"), compiledFileName("1-button.html")), "utf8")).toBe(compileComponent(BUTTON, "1-button.html"));
     expect(await readFile(join(folder("two"), "1-button.json"), "utf8")).toBe('{"source":"agent","kind":"component"}\n');
@@ -52,7 +58,7 @@ describe("files.copy brings a page's pinned components", () => {
 
   it("copies a page with no pins as it did before", async () => {
     const { file } = await (await engine.rpc()).call("files.copy", { project: "two", file: "3-plain.html", from: "one" });
-    expect(await readFile(join(folder("two"), file), "utf8")).toBe("<h1>no pins</h1>");
+    expect(unstamped(await readFile(join(folder("two"), file), "utf8"))).toBe("<h1>no pins</h1>");
     expect(existsSync(join(folder("two"), "1-button.component.js"))).toBe(true);
   });
 });
