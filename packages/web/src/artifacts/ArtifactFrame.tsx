@@ -1,5 +1,5 @@
 import { artifactUrl, defaultDialValues, liveViewerUrl, normaliseDials, type ArtifactKind, type DialsAnnouncement } from "@unframed/domain";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 
 export interface ArtifactFrameProps {
   readonly project: string;
@@ -122,11 +122,21 @@ const openShapeMenu = (frame: HTMLIFrameElement, menu: FrameMenu) => {
  * An artifact document, framed from the preview origin in a sandbox. It says hello at mount
  * and on load, answers an announcement with the shape's saved values, and sends them again
  * the moment they change. It accepts `unframed:dials` only from its own frame's window.
+ *
+ * The editor's frame (`editable`) swaps (spec 18, The swap): a new file loads in a second frame,
+ * hidden, and takes the shown frame's place at its load event, with the saved dials sent first.
+ * The shown frame is the only one whose edit messages count, so a loading document's boxes never
+ * reach the editor. Other frames show `file` and remount when it changes.
  */
 export const ArtifactFrame = ({ project, kind, file, previewPort, dials, interactive, lazy, onAnnounce, onReady, editable = false, onEdit, onEditReady }: ArtifactFrameProps) => {
-  const frame = useRef<HTMLIFrameElement>(null);
   const url = urlOf(project, kind, file, previewPort);
+  const [shownUrl, setShownUrl] = useState(url);
+  const displayed = editable ? shownUrl : url;
+  const incoming = editable && url !== shownUrl ? url : undefined;
   const target = new URL(url).origin;
+  const frames = useRef(new Map<string, HTMLIFrameElement>());
+  const displayedRef = useRef(displayed);
+  displayedRef.current = displayed;
   const saved = useRef(dials);
   saved.current = dials;
   const announce = useRef(onAnnounce);
@@ -137,40 +147,50 @@ export const ArtifactFrame = ({ project, kind, file, previewPort, dials, interac
   const onEditMessage = useRef(onEdit);
   onEditMessage.current = onEdit;
 
-  const post = (message: unknown) => {
+  const post = (frame: HTMLIFrameElement | undefined, message: unknown) => {
     try {
-      frame.current?.contentWindow?.postMessage(message, target);
+      frame?.contentWindow?.postMessage(message, target);
     } catch {
       // A frame mid-navigation has no window to post to.
     }
   };
+  const shown = () => frames.current.get(displayedRef.current);
   // On the canvas the frame also asks for right-clicks, so a selected frame still opens its shape's menu.
-  const hello = () => {
-    post({ type: "unframed:dials:hello", ...(frame.current && canvasUnder(frame.current) ? { menus: true } : {}) });
+  const hello = (frame: HTMLIFrameElement) => {
+    post(frame, { type: "unframed:dials:hello", ...(canvasUnder(frame) ? { menus: true } : {}) });
     // The edit bridge loads on this hello (spec 18). Canvas frames never say it, so they carry no edit code.
-    if (editing.current) post({ type: "unframed:edit:hello" });
+    if (editing.current) post(frame, { type: "unframed:edit:hello" });
   };
-  const set = (values: unknown) => post({ type: "unframed:dials:set", values });
+  const set = (values: unknown) => post(shown(), { type: "unframed:dials:set", values });
 
+  // The parent's ways to post follow the shown frame, so a swap re-points them.
   useEffect(() => {
     onReady?.(set);
-    onEditReady?.((message) => post(message));
-    hello();
+    onEditReady?.((message) => post(shown(), message));
+    const current = shown();
+    if (current) hello(current);
+    // Only the shown frame is re-pointed: the swap is the one change of frame.
+  }, [displayed]);
+
+  useEffect(() => {
     const onMessage = (event: MessageEvent) => {
-      if (!frame.current || event.source !== frame.current.contentWindow) return;
-      if (isWheel(event.data)) return zoomCanvas(frame.current, event.data);
-      if (isMenu(event.data)) return openShapeMenu(frame.current, event.data);
-      if (isEdit(event.data)) return onEditMessage.current?.(event.data);
+      const found = [...frames.current].find(([, frame]) => frame.contentWindow === event.source);
+      if (!found) return;
+      const [src, frame] = found;
+      const isShown = src === displayedRef.current;
+      if (isShown && isWheel(event.data)) return zoomCanvas(frame, event.data);
+      if (isShown && isMenu(event.data)) return openShapeMenu(frame, event.data);
+      if (isShown && isEdit(event.data)) return onEditMessage.current?.(event.data);
       const data = event.data as DialsAnnouncement | null;
       if (typeof data !== "object" || data === null || data.type !== "unframed:dials") return;
+      // A loading frame announces too, so the parameters it declares are known when it is swapped in.
       heard.current = data;
-      if (nonEmpty(saved.current)) set(saved.current);
+      if (nonEmpty(saved.current)) post(frame, { type: "unframed:dials:set", values: saved.current });
       announce.current?.(data);
     };
     window.addEventListener("message", onMessage);
     return () => window.removeEventListener("message", onMessage);
-    // A new file is a fresh document, keyed by the parent.
-  }, [url]);
+  }, []);
 
   const serialised = JSON.stringify(dials ?? null);
   const first = useRef(true);
@@ -188,20 +208,42 @@ export const ArtifactFrame = ({ project, kind, file, previewPort, dials, interac
     if (declared?.ok) set(defaultDialValues(declared.schema));
   }, [serialised]);
 
+  // A frame's load: say hello, send the saved dials, and for a loading frame, take the shown one's place.
+  const loaded = (src: string) => {
+    const frame = frames.current.get(src);
+    if (!frame) return;
+    hello(frame);
+    if (nonEmpty(saved.current)) post(frame, { type: "unframed:dials:set", values: saved.current });
+    if (src !== displayedRef.current) setShownUrl(src);
+  };
+
+  // The shown frame comes last in the stack's order only when nothing is loading: a loading one is hidden behind it.
+  const stack = incoming === undefined ? [displayed] : [displayed, incoming];
   return (
-    <iframe
-      ref={frame}
-      className="block size-full border-0 bg-artifact-page"
-      data-artifact-frame=""
-      title={file}
-      src={url}
-      sandbox="allow-scripts allow-same-origin"
-      referrerPolicy="no-referrer"
-      allow=""
-      {...(lazy ? { loading: "lazy" as const } : {})}
-      data-interactive={interactive ? "true" : undefined}
-      style={{ pointerEvents: interactive ? "auto" : "none" }}
-      onLoad={hello}
-    />
+    <>
+      {stack.map((src) => {
+        const showing = src === displayed;
+        return (
+          <iframe
+            key={src}
+            ref={(frame) => {
+              if (frame) frames.current.set(src, frame);
+              else frames.current.delete(src);
+            }}
+            className={showing ? "block size-full border-0 bg-artifact-page" : "invisible absolute inset-0 block size-full border-0 bg-artifact-page"}
+            data-artifact-frame=""
+            title={file}
+            src={src}
+            sandbox="allow-scripts allow-same-origin"
+            referrerPolicy="no-referrer"
+            allow=""
+            {...(lazy ? { loading: "lazy" as const } : {})}
+            data-interactive={interactive && showing ? "true" : undefined}
+            style={{ pointerEvents: interactive && showing ? "auto" : "none" }}
+            onLoad={() => loaded(src)}
+          />
+        );
+      })}
+    </>
   );
 };

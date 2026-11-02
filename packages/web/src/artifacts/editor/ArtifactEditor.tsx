@@ -260,7 +260,6 @@ export const ArtifactEditor = ({ shapeId, onClose, onOpen }: ArtifactEditorProps
                 style={viewport === undefined ? undefined : { width: viewport.width, height: viewport.height, transform: `scale(${scale})`, transformOrigin: "0 0" }}
               >
                 <ArtifactFrame
-                  key={facts.file}
                   project={project}
                   kind={facts.kind}
                   file={facts.file}
