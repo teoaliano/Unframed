@@ -11,8 +11,13 @@ const stubWindow = (options: { origin?: string; framed?: boolean; variables?: un
   const wheels: Array<(event: unknown) => void> = [];
   const menus: Array<(event: unknown) => void> = [];
   const parent = { postMessage: (message: unknown, targetOrigin: string) => posted.push({ message, targetOrigin }) };
+  const loaded: Array<{ tag: string; src?: string }> = [];
   const win: any = {
     location: { origin: options.origin ?? "http://127.0.0.1:5001" },
+    document: {
+      createElement: (tag: string) => ({ tag, src: undefined as string | undefined }),
+      head: { appendChild: (node: { tag: string; src?: string }) => loaded.push(node) },
+    },
     addEventListener: (type: string, listener: Listener) =>
       type === "wheel" ? wheels.push(listener as (event: unknown) => void) : type === "contextmenu" ? menus.push(listener as (event: unknown) => void) : listeners.push(listener),
     console: { error: (...args: unknown[]) => errors.push(args) },
@@ -38,7 +43,7 @@ const stubWindow = (options: { origin?: string; framed?: boolean; variables?: un
     for (const listener of menus) listener(event);
     return prevented;
   };
-  return { win, parent, posted, errors, send, wheel, rightClick };
+  return { win, parent, posted, errors, send, wheel, rightClick, loaded };
 };
 
 describe("the built bridge", () => {
@@ -168,5 +173,23 @@ describe("the built bridge", () => {
       ["unframed:wheel", -10, true, 40, "http://localhost:8787"],
       ["unframed:wheel", 4, false, 40, "http://localhost:8787"],
     ]);
+  });
+
+  it("loads unframed-edit.js once, on the first edit hello from its parent, and remembers who said it", () => {
+    const { win, loaded, send, errors } = stubWindow();
+    send({ type: "unframed:edit:hello" }, { source: {}, origin: "http://localhost:8787" });
+    send({ type: "unframed:edit:hello" }, { origin: "https://evil.example" });
+    expect(loaded).toEqual([]);
+    send({ type: "unframed:edit:hello" }, { origin: "http://localhost:8787" });
+    send({ type: "unframed:edit:hello" }, { origin: "http://localhost:8787" });
+    expect(loaded).toEqual([{ tag: "script", src: "unframed-edit.js" }]);
+    expect(win.unframedEditPeer).toBe("http://localhost:8787");
+    expect(errors).toEqual([]);
+  });
+
+  it("does not load the edit bridge on a dials hello", () => {
+    const { loaded, send } = stubWindow();
+    send({ type: "unframed:dials:hello" }, { origin: "http://localhost:8787" });
+    expect(loaded).toEqual([]);
   });
 });

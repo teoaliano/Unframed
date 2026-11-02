@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { existsSync, renameSync, writeFileSync } from "node:fs";
-import { copyFile, mkdir, open, readFile, rename, rm, stat } from "node:fs/promises";
+import { copyFile, mkdir, open, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { isBareFileName, projectFileMarker, UnframedError, unframedError } from "@unframed/contracts";
 import {
@@ -21,6 +21,8 @@ import * as Layer from "effect/Layer";
 import { CanvasRooms, type CommittedChange } from "../canvas/rooms.ts";
 import { errorText, logError } from "../log.ts";
 import { SettingsStore } from "../settingsStore.ts";
+import { byteSize, isHtmlFileName, kindOfArtifactHtml, prepareArtifactHtml } from "../artifacts/artifactHtml.ts";
+import { ensureBridge, ensureLibrary } from "../artifacts/artifactStore.ts";
 
 /** What the upload route answers. */
 export interface SavedFile {
@@ -158,6 +160,27 @@ export const mediaStoreLayer = Layer.effect(
       }
     };
 
+    /**
+     * An uploaded `.html` is a page (spec 18): it is read whole, under the upload limit, and given
+     * spec 09's tags and element ids. Bytes that are empty pass through, so the empty-body refusal
+     * stays as it was. The artifact limit does not apply to uploads.
+     */
+    const artifactBody = async (dir: string, name: string, body: AsyncIterable<Buffer>): Promise<AsyncIterable<Buffer>> => {
+      if (!isHtmlFileName(name)) return body;
+      const chunks: Buffer[] = [];
+      let read = 0;
+      for await (const chunk of body) {
+        read += chunk.length;
+        if (read > UPLOAD_BODY_LIMIT) throw new SaveRefused(413, "That file is larger than the 500MB upload limit.");
+        chunks.push(chunk);
+      }
+      const raw = Buffer.concat(chunks);
+      if (raw.length === 0) return once(raw);
+      const html = prepareArtifactHtml(raw.toString("utf8"), "page");
+      await ensureBridge(dir);
+      return once(Buffer.from(html, "utf8"));
+    };
+
     const save = async (
       project: string,
       input: { originalName: string; mime: string; body: AsyncIterable<Buffer>; rendered?: RenderedSidecar | undefined; source?: MediaSidecar["source"] },
@@ -166,7 +189,8 @@ export const mediaStoreLayer = Layer.effect(
       if (dir === undefined) throw new SaveRefused(404, `There is no project named "${projectSlug(project)}".`);
       const mime = input.mime || "application/octet-stream";
       try {
-        const { file, bytes } = await writeNew(dir, input.originalName, mime, input.body, (bytes) => ({
+        const body = await artifactBody(dir, input.originalName, input.body);
+        const { file, bytes } = await writeNew(dir, input.originalName, mime, body, (bytes) => ({
           source: input.source ?? "upload",
           fileName: input.originalName,
           mime,
@@ -221,12 +245,14 @@ export const mediaStoreLayer = Layer.effect(
           if (targetDir === undefined) throw unframedError("not_found", `There is no project named "${projectSlug(project)}".`);
           const source = join(sourceDir, file);
           let info;
+          let bytes: number;
           try {
             info = await stat(source);
           } catch (error) {
             throw unframedError("not_found", `Could not copy the file: ${errorText(error)}`);
           }
           if (!info.isFile()) throw unframedError("bad_request", "That is not a file in this project.");
+          bytes = info.size;
           let mime = "application/octet-stream";
           try {
             const sidecar = JSON.parse(await readFile(join(sourceDir, sidecarFileName(file)), "utf8")) as { mime?: unknown };
@@ -236,13 +262,23 @@ export const mediaStoreLayer = Layer.effect(
           }
           const fileName = copyFileName(file);
           const temp = join(targetDir, `.copy-${randomUUID()}.tmp`);
-          await copyFile(source, temp);
+          if (isHtmlFileName(file)) {
+            // A pasted page or motion is a new file of its kind: tags and ids, as every artifact write gets (spec 18).
+            const text = await readFile(source, "utf8");
+            const kind = kindOfArtifactHtml(text);
+            const prepared = prepareArtifactHtml(text, kind);
+            await (kind === "motion" ? ensureLibrary(targetDir) : ensureBridge(targetDir));
+            await writeFile(temp, prepared, "utf8");
+            bytes = byteSize(prepared);
+          } else {
+            await copyFile(source, temp);
+          }
           try {
             const target = mediaFileName({ originalName: fileName, mime, now: Date.now(), exists: taken(targetDir) });
             renameSync(temp, join(targetDir, target));
             writeFileSync(
               join(targetDir, sidecarFileName(target)),
-              sidecarText({ source: "copy", fileName, mime, bytes: info.size, at: new Date().toISOString(), of: file, ...(ofProject === undefined ? {} : { ofProject }) }),
+              sidecarText({ source: "copy", fileName, mime, bytes, at: new Date().toISOString(), of: file, ...(ofProject === undefined ? {} : { ofProject }) }),
             );
             return target;
           } catch (error) {

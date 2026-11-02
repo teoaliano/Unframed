@@ -1,3 +1,4 @@
+import type { ElementChip } from "@unframed/contracts";
 import { rememberDrafts, takeDrafts } from "../project/tabMemory.ts";
 import { UnframedError, type ChatAttachment, type ChatSummary, type ClientChatCommand, type ProviderStatuses, type ShellStreamItem, type ThreadStreamItem } from "@unframed/contracts";
 import { projectChat, type Chat, type ChatEvent, type ChatMessage } from "@unframed/domain";
@@ -43,7 +44,7 @@ type Key = "shell" | "providers" | "ui" | "queues" | "handoff" | `thread:${strin
 /** A message waiting for the running turn: sent after its next tool call, or when it ends. */
 export interface QueuedMessage {
   readonly id: string;
-  readonly message: { readonly text: string; readonly selection: ReadonlyArray<string>; readonly attachments: ReadonlyArray<ChatAttachment> };
+  readonly message: { readonly text: string; readonly selection: ReadonlyArray<string>; readonly attachments: ReadonlyArray<ChatAttachment>; readonly elements?: ReadonlyArray<ElementChip> };
   /** The latest completed tool call when it was queued: the next one is its boundary. */
   readonly after: string | null;
   readonly state: "waiting" | "sending";
@@ -54,17 +55,23 @@ export interface QueuedMessage {
 export interface ChatDraft {
   readonly text: string;
   readonly mentions: ReadonlyArray<string>;
+  /** The element chips the person pointed at (spec 18, Point and tell). */
+  readonly elements?: ReadonlyArray<ElementChip>;
 }
 
 export const EMPTY_DRAFT: ChatDraft = { text: "", mentions: [] };
 
 export const sameDraft = (a: ChatDraft, b: ChatDraft): boolean =>
-  a.text === b.text && a.mentions.length === b.mentions.length && a.mentions.every((id, index) => b.mentions[index] === id);
+  a.text === b.text &&
+  a.mentions.length === b.mentions.length &&
+  a.mentions.every((id, index) => b.mentions[index] === id) &&
+  JSON.stringify(a.elements ?? []) === JSON.stringify(b.elements ?? []);
 
 export interface Handoff {
   readonly text: string;
   readonly selection: ReadonlyArray<string>;
   readonly attachments: ReadonlyArray<ChatAttachment>;
+  readonly elements?: ReadonlyArray<ElementChip>;
 }
 
 const EMPTY_QUEUE: ReadonlyArray<QueuedMessage> = [];
@@ -396,7 +403,7 @@ export class ChatClient {
 
   setDraft(key: string, draft: ChatDraft): void {
     if (sameDraft(this.draft(key), draft)) return;
-    if (draft.text === "" && draft.mentions.length === 0) this.drafts_.delete(key);
+    if (draft.text === "" && draft.mentions.length === 0 && (draft.elements ?? []).length === 0) this.drafts_.delete(key);
     else this.drafts_.set(key, draft);
     this.changed(`draft:${key}`);
   }

@@ -9,7 +9,7 @@ import { makeTempDir, startEngine, type TestEngine } from "./harness.ts";
 import type { TestRpcClient } from "./rpcClient.ts";
 
 const COMPOSITION = '<html><body><div id="root" data-composition-id="main" data-start="0" data-duration="2" data-width="640" data-height="360"></div></body></html>';
-const LIBRARY = ["gsap.js", "hyperframes-player.js", "hyperframes-runtime.js", "hyperframes-viewer.html", "unframed-dials.js"];
+const LIBRARY = ["gsap.js", "hyperframes-player.js", "hyperframes-runtime.js", "hyperframes-viewer.html", "unframed-dials.js", "unframed-edit.js"];
 
 interface Rendering {
   readonly engine: TestEngine;
@@ -53,7 +53,7 @@ describe("motion.upload", () => {
     const saved = await rpc.call("motion.upload", { project: "board", fileName: "../elsewhere/My Intro.html", html: "<head></head><div id=root></div>" });
     expect(saved).toEqual({ file: expect.stringMatching(/^\d+-my-intro\.html$/), fileName: "My Intro.html", bytes: expect.any(Number), mime: "text/html" });
     const html = await readFile(join(folder, saved.file), "utf8");
-    expect(html).toBe(`<head>${RUNTIME_TAG}\n${BRIDGE_TAG}\n</head><div id=root></div>`);
+    expect(html).toBe(`<head>${RUNTIME_TAG}\n${BRIDGE_TAG}\n</head><div data-hf-id="hf-aph5" id=root></div>`);
     expect(saved.bytes).toBe(Buffer.byteLength(html));
     expect(JSON.parse(await readFile(join(folder, saved.file.replace(/\.html$/, ".json")), "utf8"))).toEqual({
       source: "upload",

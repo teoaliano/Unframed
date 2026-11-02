@@ -25,6 +25,7 @@ import { ArtifactOpenLive, ArtifactSnapshots, MotionRenderStart, MotionRenderSta
 import { LegacyImportMarkSeen, LegacyImportReport, LegacyImportRetry, LegacyImportStatus } from "./legacy.ts";
 import { AgentConnectionsCreate, AgentConnectionsCreateAnswer, AgentConnectionsListAnswer, AgentConnectionsRevoke, AgentConnectionsSetSpendLimit } from "./agentConnections.ts";
 import { SelectionApply, SelectionReport, SelectionSubscribe } from "./selection.ts";
+import { ArtifactEdit, ArtifactImages, ArtifactPrepareEdit, ArtifactSourceTree } from "./elementEdits.ts";
 
 const Empty = Schema.Struct({});
 
@@ -385,5 +386,9 @@ export const UnframedRpcs = RpcGroup.make(
   AgentConnectionsSetSpendLimitRpc,
   SelectionReportRpc,
   SelectionSubscribeRpc,
+  ArtifactSourceTree,
+  ArtifactPrepareEdit,
+  ArtifactEdit,
+  ArtifactImages,
 );
 export type UnframedRpcs = typeof UnframedRpcs;

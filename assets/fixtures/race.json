@@ -1,0 +1,15 @@
+{
+  "when": "^race",
+  "turns": [
+    {
+      "title": "Rewrite the landing page",
+      "text": "I rewrote the landing page while you were editing it.",
+      "tools": [
+        {
+          "name": "page_write",
+          "input": { "shapeId": "landing", "html": "<!doctype html><html><head><style>body{margin:0;font:16px sans-serif}main{padding:16px}</style></head><body><main><h1 style=\"font-size: 32px\">Agent version</h1><p style=\"font-size: 16px\">Lead text</p></main></body></html>" }
+        }
+      ]
+    }
+  ]
+}

@@ -4,9 +4,12 @@ import { createChat, expect, openRail, test } from "./agent.ts";
 import { putRecords } from "./media.ts";
 import { artifactShape, filledArtifact } from "./artifacts.ts";
 import { connectTab } from "../../engine/test/syncClient.ts";
+import { preparedFile } from "./editorHarness.ts";
 import { expectSlot, expectToken, inBothSchemes, styleOf } from "./kit.ts";
 
 const editor = (page: Page) => page.getByTestId("artifact-editor");
+/** The Parameters tab is one of the editor's panels; the Design tab is shown on open (spec 18). */
+const openParameters = (page: Page) => editor(page).locator('[data-editor-column="parameters"]').getByRole("tab", { name: "Parameters" }).click();
 const column = (page: Page, name: "rail" | "centre" | "parameters") => editor(page).locator(`[data-editor-column="${name}"]`);
 
 /** Whether the element at the watermark's centre is the watermark itself, not something laid over it. */
@@ -107,6 +110,7 @@ test("the three columns run to the window's bottom edge at the margin they keep 
   }, { x: watermark.x, y: watermark.y, w: watermark.width, h: watermark.height });
   expect(strays).toEqual([]);
   // Every control in the parameters column ends above the watermark's top edge.
+  await openParameters(page);
   for (const control of [column(page, "parameters").getByRole("button", { name: "Add" }), column(page, "parameters").getByPlaceholder(/Describe a parameter/)]) {
     const box = (await control.boundingBox())!;
     expect(box.y + box.height).toBeLessThanOrEqual(watermark.y);
@@ -237,6 +241,7 @@ test("Escape typed in the composer or the parameter box stays in the editor, and
   await editor(page).getByRole("textbox", { name: "Message the agent" }).click();
   await page.keyboard.press("Escape");
   await expect(region).toBeVisible();
+  await openParameters(page);
   await editor(page).getByRole("textbox", { name: "Add a parameter" }).click();
   await page.keyboard.press("Escape");
   await expect(region).toBeVisible();
@@ -271,7 +276,15 @@ test("an artifact with no file says so and offers no new tab; Open in a new tab 
   const at = await centre(shapeOnScreen(page, "shape:landing"));
   await page.mouse.dblclick(at.x, at.y);
   const landing = page.getByRole("region", { name: "Editing Landing" });
-  const file = (await roomRecords(agent, "default")).find((record) => record.id === "shape:landing")!.props.file as string;
+  // The editor prepares a page written before element editing and swaps its file: wait for the room and the frame to agree.
+  let file = "";
+  await expect
+    .poll(async () => {
+      file = (await roomRecords(agent, "default")).find((record) => record.id === "shape:landing")!.props.file as string;
+      const src = (await landing.locator("iframe[data-artifact-frame]").getAttribute("src")) ?? "";
+      return file !== "" && src.endsWith(`/${file}`);
+    })
+    .toBe(true);
   const opened = page.context().waitForEvent("page");
   await landing.getByRole("button", { name: "Open in a new tab" }).click();
   const tab = await opened;
@@ -279,7 +292,8 @@ test("an artifact with no file says so and offers no new tab; Open in a new tab 
   // The app is on localhost, so the artifact is on the other loopback name.
   expect(tab.url()).toBe(`http://127.0.0.1:${agent.previewPort}/p/default/unframed-live.html?s=landing`);
   await expect(tab.frameLocator("iframe").getByRole("heading", { name: "Welcome" })).toBeVisible({ timeout: 10_000 });
-  await expect(tab.locator("iframe")).toHaveAttribute("src", file);
+  // The live viewer follows the newest file, which the editor's prepare may have just moved to.
+  await expect(tab.locator("iframe")).toHaveAttribute("src", file, { timeout: 15_000 });
   await expect(tab).toHaveTitle("Landing");
   await tab.close();
 });
@@ -318,6 +332,7 @@ test("the editor's columns, header actions and parameter box are the kit's, in b
 
   const back = region.getByRole("button", { name: "Back to canvas" });
   const newTab = region.getByRole("button", { name: "Open in a new tab" });
+  await openParameters(page);
   const box = editor(page).getByRole("textbox", { name: "Add a parameter" });
   const add = editor(page).getByRole("button", { name: "Add", exact: true });
   await expectSlot(back, "tooltip-trigger");
@@ -369,6 +384,10 @@ test("the editor sizes its preview to Fill, Desktop, Tablet, Mobile or a typed s
   const region = page.getByRole("region", { name: "Editing Landing" });
   const inside = region.frameLocator("iframe[data-artifact-frame]");
   const frame = region.locator("iframe[data-artifact-frame]");
+  // Spec 18: a page with no element ids is prepared on open, and the swap then shows the prepared file in the frame.
+  // The boot number is read from that frame, so the size changes below are checked against the document the editor keeps.
+  const prepared = await preparedFile(agent);
+  await expect(frame).toHaveAttribute("src", new RegExp(prepared.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
   await expect(trigger()).toContainText("Fill");
   await expect(inside.locator("#vp")).toHaveText(/^\d+x\d+$/);
   const boot = await inside.locator("#boot").textContent();

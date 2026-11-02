@@ -1,0 +1,1 @@
+The {field} of this element is set by the agent's code, so the person cannot change it in the editor. Change the code so the value is a literal in the source, or a parameter assigned straight to it, and the person can edit it by hand. Keep the rest of the element as it is.

@@ -1,4 +1,4 @@
-import type { ChatAttachment } from "@unframed/contracts";
+import type { ChatAttachment, ElementChip } from "@unframed/contracts";
 import { Archive, Trash2 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { platform } from "../../canvas/platform.ts";
@@ -16,6 +16,7 @@ export interface StashEntry {
   readonly text: string;
   readonly selection: ReadonlyArray<string>;
   readonly attachments: ReadonlyArray<ChatAttachment>;
+  readonly elements?: ReadonlyArray<ElementChip>;
   readonly at: string;
 }
 

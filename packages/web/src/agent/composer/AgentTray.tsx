@@ -1,4 +1,4 @@
-import type { ChatAttachment, ModelSelection } from "@unframed/contracts";
+import type { ChatAttachment, ElementChip, ModelSelection } from "@unframed/contracts";
 import {
   actionablePlan,
   agentSelectionOf,
@@ -31,7 +31,7 @@ import { ApprovalPanel, choiceOnly, PlanActions, PlanReady, useQuestionAnswers, 
 import { platform } from "../../canvas/platform.ts";
 import { showNotice } from "../../toasts.tsx";
 import { AttachmentShelf } from "./AttachmentShelf.tsx";
-import { ChipRow, contextSelection, useSelectionChips } from "./chips.tsx";
+import { ChipRow, ElementChipRow, contextSelection, useSelectionChips } from "./chips.tsx";
 import { ComposerMenu, type MenuItem } from "./ComposerMenu.tsx";
 import { mentionItems } from "./mentions.tsx";
 import { slashItems, skillMenuItems } from "./commands.tsx";
@@ -112,8 +112,15 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
   const chips = useSelectionChips(canvas, text.trim() === "");
   /** The context chips this draft's @ mentions added: they belong to the draft, not to the canvas selection. */
   const mentionIds = useRef<ReadonlyArray<string>>([]);
+  /** The element chips (spec 18, Point and tell): they belong to the draft and go with its message. */
+  const [elements, setElementsState] = useState<ReadonlyArray<ElementChip>>(initialDraft.elements ?? []);
+  const elementsRef = useRef(elements);
+  const setElements = (next: ReadonlyArray<ElementChip>) => {
+    elementsRef.current = next;
+    setElementsState(next);
+  };
   const saveDraft = (value: string) => {
-    if (draftKeyRef.current !== undefined) client.setDraft(draftKeyRef.current, { text: value, mentions: mentionIds.current });
+    if (draftKeyRef.current !== undefined) client.setDraft(draftKeyRef.current, { text: value, mentions: mentionIds.current, elements: elementsRef.current });
   };
   const onDraftChange = (value: string) => {
     setText(value);
@@ -125,16 +132,22 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
   };
   // Declared before the handoff effect: on a chat switch the chat's draft lands first, then any handoff joins it.
   useEffect(() => {
+    const sameChat = draftKeyRef.current === draftKey;
     draftKeyRef.current = draftKey;
     if (draftKey === undefined) return;
     const stored = client.draft(draftKey);
-    const shown = { text: box.current?.text() ?? "", mentions: mentionIds.current };
+    const shown = { text: box.current?.text() ?? "", mentions: mentionIds.current, elements: elementsRef.current };
     if (sameDraft(shown, stored)) return;
     const kept = chips.shapes.map((shape) => shape.id).filter((id) => !mentionIds.current.includes(id));
     // Set first: the text below fires a change, which saves the draft with these mentions.
     mentionIds.current = stored.mentions;
     chips.set([...kept, ...stored.mentions.filter((id) => !kept.includes(id))]);
+    const incoming = stored.elements ?? [];
+    const added = incoming.some((chip) => !shown.elements.some((shownChip) => shownChip.shapeId === chip.shapeId && shownChip.selector === chip.selector));
+    setElements(incoming);
     if (shown.text !== stored.text) box.current?.setText(stored.text, { focus: false, undoable: false });
+    // Pointed-at elements that arrive from outside (Tell the agent) take the focus; a chat switch does not.
+    if (added && sameChat) box.current?.focus();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [client, draftKey, draftVersion]);
   const [trigger, setTrigger] = useState<Trigger>();
@@ -468,17 +481,19 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
   const followUp = useFollowUp(client);
   const stash = useStash(client.engine, client.project);
   const [stashOpen, setStashOpen] = useState(false);
-  const restoreDraft = (draft: { readonly text: string; readonly selection: ReadonlyArray<string>; readonly attachments: ReadonlyArray<ChatAttachment> }) => {
+  const restoreDraft = (draft: { readonly text: string; readonly selection: ReadonlyArray<string>; readonly attachments: ReadonlyArray<ChatAttachment>; readonly elements?: ReadonlyArray<ElementChip> }) => {
     box.current?.setText(draft.text);
     chips.set(draft.selection);
+    setElements(draft.elements ?? []);
     attachments.restore(draft.attachments);
   };
   /** Cmd+S: a draft goes to the stash; with an empty box the only entry comes back, or the menu opens. */
   const stashKey = () => {
     const draft = box.current?.text() ?? "";
-    if (draft.trim() !== "" || attachments.staged.length > 0) {
-      stash.push({ text: draft, selection: chips.shapes.map((shape) => shape.id), attachments: attachments.staged.flatMap((item) => (item.attachment ? [item.attachment] : [])) });
+    if (draft.trim() !== "" || attachments.staged.length > 0 || elementsRef.current.length > 0) {
+      stash.push({ text: draft, selection: chips.shapes.map((shape) => shape.id), attachments: attachments.staged.flatMap((item) => (item.attachment ? [item.attachment] : [])), elements: elementsRef.current });
       forgetMentions();
+      setElements([]);
       box.current?.clear();
       attachments.clear();
       chips.set(canvas?.getSelectedShapeIds() ?? []);
@@ -494,7 +509,8 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
     const message = box.current?.text() ?? "";
     const sentFrom = draftKeyRef.current;
     if (planFollowUp && message.trim() === "") return implementPlan(false);
-    if (noProvider || (message.trim() === "" && attachments.staged.length === 0) || sending) return;
+    const pointed = elementsRef.current;
+    if (noProvider || (message.trim() === "" && attachments.staged.length === 0 && pointed.length === 0) || sending) return;
     setSending(true);
     client.setUi({ error: undefined });
     try {
@@ -503,15 +519,17 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
         target = await createChat(client, { modelSelection: selection, runtimeMode: draftRuntime, interactionMode, tags: newChatTags }, message);
       }
       beforeSend?.(target);
-      const context = contextSelection(canvas, chips.shapes);
+      // The artifacts the pointed-at elements belong to join the context, as a selected artifact does.
+      const context = [...new Set([...contextSelection(canvas, chips.shapes), ...pointed.map((chip) => chip.shapeId)])];
       const uploaded = await attachments.settle();
       forgetMentions();
+      setElements([]);
       box.current?.clear();
       // A new chat's send switches this tray to the chat it made, so the draft it came from is cleared by key.
       if (sentFrom !== undefined) client.setDraft(sentFrom, EMPTY_DRAFT);
       attachments.clear();
       chips.set(canvas?.getSelectedShapeIds() ?? []);
-      const outgoing = { text: message, selection: context, attachments: uploaded };
+      const outgoing = { text: message, selection: context, attachments: uploaded, ...(pointed.length > 0 ? { elements: pointed } : {}) };
       const current = client.thread(target);
       if (!planMode && current?.interactionMode === "plan") await client.dispatch({ type: "thread.interaction-mode.set", threadId: target, interactionMode: "default" });
       if (current?.latestTurn?.state === "running") {
@@ -526,6 +544,7 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
     } catch (error) {
       client.reportError(error);
       if ((box.current?.text() ?? "") === "") box.current?.setText(message);
+      if (elementsRef.current.length === 0) setElements(pointed);
     } finally {
       setSending(false);
     }
@@ -541,6 +560,7 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
     const returned = drafts.map((draft) => draft.text).join("\n\n");
     box.current?.setText(current.trim() === "" ? returned : `${current}\n\n${returned}`);
     chips.set([...new Set(drafts.flatMap((draft) => draft.selection))]);
+    setElements([...elementsRef.current, ...drafts.flatMap((draft) => draft.elements ?? [])]);
     attachments.restore(drafts.flatMap((draft) => draft.attachments));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [handoffs, chatId, client]);
@@ -571,6 +591,14 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
         )}
       <div className={COMPOSER_SHELL} ref={boxElement} data-testid="agent-composer" data-dragging={dragging ? "" : undefined}>
         <AttachmentShelf staged={attachments.staged} onRemove={attachments.remove} onRetry={attachments.retry} />
+        <ElementChipRow
+          chips={elements}
+          onRemove={(removed) => {
+            setElements(elementsRef.current.filter((chip) => !(chip.shapeId === removed.shapeId && chip.selector === removed.selector)));
+            saveDraft(box.current?.text() ?? "");
+            box.current?.focus();
+          }}
+        />
         <ChipRow
           shapes={chips.shapes}
           onRemove={(ids) => {

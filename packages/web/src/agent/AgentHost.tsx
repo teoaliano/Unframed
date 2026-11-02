@@ -17,8 +17,11 @@ import { providerMessage } from "./providers.ts";
 import { QueueSender } from "./queue.tsx";
 import { useChatClient, useProviders, useRailUi, type ChatClient } from "./store.ts";
 
-/** t3code's width at and below which its right panel stops docking and opens as a Sheet. */
-const SHEET_QUERY = "(max-width: 980px)";
+/**
+ * Below 1280 px the rail opens as a Sheet. The docked rail runs the window's full height, and narrower windows leave too
+ * little canvas beside it for the zoom controls, the bottom toolbar and the tldraw watermark, which must stay visible.
+ */
+const SHEET_QUERY = "(max-width: 1279px)";
 
 const useNarrowWindow = (): boolean =>
   useSyncExternalStore(
