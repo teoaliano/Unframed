@@ -126,6 +126,8 @@ const stubEditWindow = (options: { peer?: string; timelines?: unknown } = {}) =>
   const errors: unknown[][] = [];
   const listeners: Listener[] = [];
   const frames: Array<() => void> = [];
+  const timers = new Map<number, { callback: () => void }>();
+  let nextTimer = 1;
   const document = new FakeDocument();
   const parent = { postMessage: (message: unknown, targetOrigin: string) => posted.push({ message, targetOrigin }) };
   const win: any = {
@@ -140,6 +142,11 @@ const stubEditWindow = (options: { peer?: string; timelines?: unknown } = {}) =>
       getPropertyValue: (name: string) => (name in el.computed ? el.computed[name] : el.style.getPropertyValue(name)),
     }),
     requestAnimationFrame: (callback: () => void) => frames.push(callback),
+    setTimeout: (callback: () => void) => {
+      timers.set(nextTimer, { callback });
+      return nextTimer++;
+    },
+    clearTimeout: (timer: number) => timers.delete(timer),
     ...(options.peer === undefined ? {} : { unframedEditPeer: options.peer }),
     ...(options.timelines === undefined ? {} : { __timelines: options.timelines }),
   };
@@ -156,7 +163,14 @@ const stubEditWindow = (options: { peer?: string; timelines?: unknown } = {}) =>
   const messages = (type: string) => posted.filter((entry) => entry.message.type === type).map((entry) => entry.message);
   const element = (id: string, options: { tag?: string; text?: string; attrs?: Record<string, string>; parent?: FakeElement } = {}) =>
     (options.parent ?? document.body).add(new FakeElement(options.tag ?? "div", { ...(options.text === undefined ? {} : { text: options.text }), attrs: { "data-hf-id": id, ...options.attrs } }));
-  return { win, document, posted, errors, send, flush, mode, messages, element, parent };
+  /** Fires every timer still waiting, as the time passing would. */
+  const runTimers = () => {
+    for (const [timer, entry] of [...timers]) {
+      timers.delete(timer);
+      entry.callback();
+    }
+  };
+  return { win, document, posted, errors, send, flush, mode, messages, element, parent, runTimers };
 };
 
 describe("the built edit bridge", () => {
@@ -302,6 +316,52 @@ describe("the built edit bridge", () => {
     send({ type: "unframed:edit:textEdit", id: "hf-aaaa" });
     expect(document.fire("keydown", el, { key: "v" })).toBe(false);
     expect(document.fire("keydown", el, { key: " " })).toBe(false);
+  });
+
+  it("holds the keys typed during a pending text edit, and applies them in order once the editor answers", () => {
+    const { document, element, mode, send, messages } = stubEditWindow();
+    const el = element("hf-aaaa", { text: "Welcome" });
+    mode("edit");
+    document.fire("dblclick", el);
+    // Typed before the answer: nothing is forwarded to the editor, and the page takes none of it.
+    expect(document.fire("keydown", el, { key: "H" })).toBe(true);
+    document.fire("keydown", el, { key: "i" });
+    document.fire("keydown", el, { key: " " });
+    document.fire("keydown", el, { key: "V" });
+    document.fire("keydown", el, { key: " " });
+    document.fire("keydown", el, { key: "I" });
+    expect(messages("unframed:edit:key")).toEqual([]);
+    expect(el.textContent).toBe("Welcome");
+    send({ type: "unframed:edit:textEdit", id: "hf-aaaa" });
+    expect(el.textContent).toBe("Hi V I");
+    expect(el.getAttribute("contenteditable")).toBe("plaintext-only");
+    // Enter after the held keys writes the text as typed.
+    document.fire("keydown", el, { key: "Enter" });
+    expect(messages("unframed:edit:text")).toEqual([{ type: "unframed:edit:text", id: "hf-aaaa", text: "Hi V I" }]);
+  });
+
+  it("applies Backspace and Enter among held keys, and ends the edit on Enter", () => {
+    const { document, element, mode, send, messages } = stubEditWindow();
+    const el = element("hf-aaaa", { text: "Welcome" });
+    mode("edit");
+    document.fire("dblclick", el);
+    for (const key of ["A", "B", "Backspace", "C", "Enter"]) document.fire("keydown", el, { key });
+    send({ type: "unframed:edit:textEdit", id: "hf-aaaa" });
+    expect(messages("unframed:edit:text")).toEqual([{ type: "unframed:edit:text", id: "hf-aaaa", text: "AC" }]);
+    expect(el.getAttribute("contenteditable")).toBeNull();
+  });
+
+  it("drops the held keys when the editor does not answer within a second, and forwards the keys after that", () => {
+    const { document, element, mode, runTimers, messages } = stubEditWindow();
+    const el = element("hf-aaaa", { text: "Welcome" });
+    mode("edit");
+    document.fire("dblclick", el);
+    document.fire("keydown", el, { key: "x" });
+    runTimers();
+    expect(messages("unframed:edit:key")).toEqual([]);
+    expect(el.textContent).toBe("Welcome");
+    document.fire("keydown", null, { key: "v" });
+    expect(messages("unframed:edit:key")).toEqual([{ type: "unframed:edit:key", key: "v", shift: false, meta: false, ctrl: false }]);
   });
 
   it("forwards V, I, Esc, Shift+Enter and the undo keys, and keeps every other key from the page", () => {

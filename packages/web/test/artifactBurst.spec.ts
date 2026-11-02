@@ -197,8 +197,7 @@ test("in-place text: double-click literal text, type over it (letters, V, I and 
 
   // Typing: the letters, V, I and Space go into the text, and the mode stays Edit.
   await frameOf(page).locator("h1").dblclick();
-  // The text is editable once the frame reports the edit (the keys before that are the editor's).
-  await expect(frameOf(page).locator('h1[contenteditable="plaintext-only"]')).toHaveCount(1);
+  // Typed at once, with no wait for the edit to start: the keys are held and applied in order.
   await page.keyboard.type("Hi V I");
   await expect(frameOf(page).locator("h1")).toHaveText("Hi V I");
   await expect(modeButton(page, "Edit")).toHaveAttribute("aria-pressed", "true");
@@ -215,7 +214,6 @@ test("in-place text: double-click literal text, type over it (letters, V, I and 
 
   // Esc during an edit puts the text back and writes nothing.
   await frameOf(page).locator("h1").dblclick();
-  await expect(frameOf(page).locator('h1[contenteditable="plaintext-only"]')).toHaveCount(1);
   await page.keyboard.type("Nope");
   await expect(frameOf(page).locator("h1")).toHaveText("Nope");
   await page.keyboard.press("Escape");
