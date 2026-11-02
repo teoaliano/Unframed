@@ -13,6 +13,10 @@ import { isMotionEdit } from "@unframed/domain/motion";
 import type { CommittedChange } from "../canvas/rooms.ts";
 import { byteSize, prepareArtifactHtml, tooLargeMessage } from "./artifactHtml.ts";
 import { kitOf } from "../kits/tokensFile.ts";
+
+/** The kind a motion edit checks a token against: the kit's token type, named as spec 21 names it. */
+const motionKindOf = (type: string | undefined): string | undefined =>
+  type === "color" ? "colour" : type === "dimension" ? "number" : type === "easing" || type === "duration" ? type : undefined;
 import { ensureBridge, ensureLibrary, writeEditArtifact } from "./artifactStore.ts";
 
 const BRIDGE_PRESENT = /unframed-dials\.js/i;
@@ -138,7 +142,7 @@ export const artifactEditService = (deps: EditServiceDeps) => {
       }
     }
     const kit = kitOf(records);
-    const result = applySourceEdits(html, edits, kind, kit, { lockedElements: locked });
+    const result = applySourceEdits(html, edits, kind, kit, { lockedElements: locked, tokenKind: (name) => motionKindOf(kit?.tokens.find((token) => token.path === name)?.type) });
     if (!result.ok) throw unframedError("bad_request", result.refusal);
     const prepared = prepareArtifactHtml(result.html, kind);
     if (byteSize(prepared) > ARTIFACT_SIZE_LIMIT) throw unframedError("bad_request", tooLargeMessage(kind, byteSize(prepared)));

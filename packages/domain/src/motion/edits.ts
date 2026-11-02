@@ -10,7 +10,7 @@ import { stampElementIds } from "../html/elementIds.ts";
 import { linkedomDocument } from "./dom.ts";
 import { carryOf } from "./carry.ts";
 import { resizeKeyframedTweenInScript, updateAnimationInScript, updateKeyframeInScript } from "@hyperframes/parsers/gsap-writer-acorn";
-import { EASE_CATALOGUE } from "./eases.ts";
+import { EASE_NAMES } from "../kits/easings.ts";
 import type { ScriptNode } from "./owners.ts";
 import { motionTimeline, type MotionTimeline, type Tween, type TweenRef } from "./timeline.ts";
 import { NAMED_COLOURS } from "./colours.ts";
@@ -334,7 +334,7 @@ const applyTweenEase = (session: Session, edit: Extract<MotionEdit, { type: "twe
 
   if (token !== null) {
     if (options.tokenKind?.(token) !== "easing") return refuse(`${token} is not an easing token of this project's kit.`);
-  } else if (typeof edit.ease === "string" && !EASE_CATALOGUE.includes(edit.ease)) {
+  } else if (typeof edit.ease === "string" && !EASE_NAMES.includes(edit.ease)) {
     const alreadyWritten = written?.kind === "source" && written.value === edit.ease;
     if (!alreadyWritten) return refuse(`${edit.ease} is not an ease the timeline offers.`);
   }

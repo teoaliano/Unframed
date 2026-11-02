@@ -96,7 +96,6 @@ export * from "./agent/agentRun.ts";
 export * from "./outside/spendRules.ts";
 export * from "./agent/generationSpend.ts";
 export * from "./tabs.ts";
-export * from "./motion/eases.ts";
 export * from "./motion/types.ts";
 export * from "./motion/owners.ts";
 export * from "./motion/carry.ts";

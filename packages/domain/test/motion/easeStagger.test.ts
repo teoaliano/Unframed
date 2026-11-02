@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { EASE_CATALOGUE } from "../../src/index.ts";
+import { EASE_NAMES } from "../../src/index.ts";
 import { applyMotionEdits, motionTimeline, type MotionEdit, type MotionEditOptions, type Tween } from "../../src/motion/index.ts";
 
 const stage = `<div id="root" data-composition-id="main" data-start="0" data-duration="6" data-width="640" data-height="360">
@@ -30,13 +30,13 @@ const ok = (edits: MotionEdit[], source = html(), extra: Partial<MotionEditOptio
   return result;
 };
 
-describe("EASE_CATALOGUE", () => {
+describe("EASE_NAMES", () => {
   it("holds the 31 eases: linear, then three forms of each of ten families", () => {
-    expect(EASE_CATALOGUE).toHaveLength(31);
-    expect(EASE_CATALOGUE[0]).toBe("none");
-    expect(EASE_CATALOGUE).toContain("power1.inOut");
-    expect(EASE_CATALOGUE).toContain("bounce.out");
-    expect(EASE_CATALOGUE).not.toContain("quad.out");
+    expect(EASE_NAMES).toHaveLength(31);
+    expect(EASE_NAMES[0]).toBe("none");
+    expect(EASE_NAMES).toContain("power1.inOut");
+    expect(EASE_NAMES).toContain("bounce.out");
+    expect(EASE_NAMES).not.toContain("quad.out");
   });
 });
 

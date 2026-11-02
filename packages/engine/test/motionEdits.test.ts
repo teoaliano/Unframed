@@ -78,7 +78,7 @@ describe("artifact.edit with motion edits", () => {
     expect((await readdir(folder)).length).toBe(before);
   });
 
-  it("refuses a token the project's kit does not hold, since no kit is read yet", async () => {
+  it("refuses a token when the project has no kit", async () => {
     await put(motion("m4", "304"));
     await expect(
       rpc.call("artifact.edit", {
@@ -88,6 +88,36 @@ describe("artifact.edit with motion edits", () => {
         edits: [{ type: "tween-ease", tween: tweenRef, ease: { token: "ease/fast" } }],
       }),
     ).rejects.toMatchObject({ code: "bad_request", message: "ease/fast is not an easing token of this project's kit." });
+  });
+
+  it("takes a tween-ease to a kit easing token, and refuses a token of another type", async () => {
+    const kit = {
+      format: 1,
+      name: "Brand",
+      modes: ["light"],
+      tokens: [
+        { path: "ease/fast", type: "easing", value: "power2.out" },
+        { path: "color/brand", type: "color", value: "#1a73e8" },
+      ],
+    };
+    await put({ id: "document:document", typeName: "document", gridSize: 10, name: "", meta: { unframed: { kit } } });
+    await put(motion("m6", "306"));
+    const answer = await rpc.call("artifact.edit", {
+      project: "board",
+      shapeId: "shape:m6",
+      baseFile: prepared,
+      edits: [{ type: "tween-ease", tween: tweenRef, ease: { token: "ease/fast" } }],
+    });
+    expect(answer.summary).toEqual([expect.stringContaining("ease/fast")]);
+    expect(await readFile(join(folder, answer.file), "utf8")).toContain('unframed.token("ease/fast")');
+    await expect(
+      rpc.call("artifact.edit", {
+        project: "board",
+        shapeId: "shape:m6",
+        baseFile: prepared,
+        edits: [{ type: "tween-ease", tween: tweenRef, ease: { token: "color/brand" } }],
+      }),
+    ).rejects.toMatchObject({ code: "bad_request", message: "color/brand is not an easing token of this project's kit." });
   });
 
   it("refuses a motion edit on a page, which has no timeline", async () => {
