@@ -7,12 +7,12 @@ import { readdir, readFile, stat } from "node:fs/promises";
 import { extname, join } from "node:path";
 import type { TLRecord } from "@tldraw/tlschema";
 import { isBareFileName, unframedError, type ArtifactImage, type OffTokenFound, type SourceEdit, type SourceTreeElement } from "@unframed/contracts";
-import { ARTIFACT_SIZE_LIMIT, artifactTitle, offTokenValues, projectSlug, readComponentSheet, shapeKind, sidecarFileName, type ArtifactKind } from "@unframed/domain";
+import { ARTIFACT_SIZE_LIMIT, artifactTitle, compiledFileName, offTokenValues, projectSlug, readComponentSheet, shapeKind, sidecarFileName, type ArtifactKind } from "@unframed/domain";
 import { applySourceEdits, ruleLockHit, sourceTreeOf, stampElementIds } from "@unframed/domain/html";
 import type { CommittedChange } from "../canvas/rooms.ts";
 import { byteSize, prepareArtifactHtml, tooLargeMessage } from "./artifactHtml.ts";
 import { kitOf } from "../kits/tokensFile.ts";
-import { ensureBridge, ensureComponentLibrary, ensureLibrary, writeEditArtifact } from "./artifactStore.ts";
+import { ensureBridge, ensureComponentLibrary, ensureCompiledComponent, ensureLibrary, writeEditArtifact } from "./artifactStore.ts";
 import { instanceDeclarations, pinComponents } from "./componentRegistry.ts";
 
 const BRIDGE_PRESENT = /unframed-dials\.js/i;
@@ -137,10 +137,18 @@ export const artifactEditService = (deps: EditServiceDeps) => {
           continue;
         }
         // Rename and hide still work on a locked element, so a person can tidy what they protected. A style rule is no element, so no lock holds it.
-        if (edit.type === "attribute" || edit.type === "hide" || edit.elementId === undefined) continue;
+        if (edit.type === "attribute" || edit.type === "hide" || edit.type === "componentUpdate" || edit.elementId === undefined) continue;
         const holder = lockedBy(edit.elementId, locked, byId);
         if (holder !== undefined) throw unframedError("bad_request", `${byId.get(holder)?.name ?? holder} is locked. Unlock it in Layers to edit it.`);
       }
+    }
+    for (const edit of edits) {
+      if (edit.type !== "componentUpdate") continue;
+      // The version a person accepts must be a sheet of its tag in this project (spec 20).
+      const sheet = isBareFileName(edit.to) ? await readFile(join(dir, edit.to), "utf8").catch(() => undefined) : undefined;
+      const read = sheet === undefined ? undefined : readComponentSheet(sheet);
+      if (read === undefined || !read.ok || read.sheet.declaration.tag !== edit.tag) throw unframedError("bad_request", "That component version is not in this project.");
+      await ensureCompiledComponent(dir, compiledFileName(edit.to));
     }
     const result = applySourceEdits(html, edits, kind, kitOf(records), await instanceDeclarations(dir, records, html));
     if (!result.ok) throw unframedError("bad_request", result.refusal);

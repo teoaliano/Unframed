@@ -3,9 +3,9 @@
  * and the snapshot stream, over the artifact store, the renderer and the snapshot service.
  */
 import { join } from "node:path";
-import type { ArtifactImage, ArtifactSnapshot, ComponentPins as ComponentPinsItem, OffTokenFound, RenderStatus, SourceEdit, SourceTreeElement } from "@unframed/contracts";
+import type { ArtifactImage, ArtifactSnapshot, ComponentPins as ComponentPinsItem, ComponentUpdate, OffTokenFound, RenderStatus, SourceEdit, SourceTreeElement } from "@unframed/contracts";
 import { UnframedError, unframedError } from "@unframed/contracts";
-import { projectSlug } from "@unframed/domain";
+import { projectSlug, shapeKind } from "@unframed/domain";
 import { byteSize, prepareArtifactHtml } from "./artifactHtml.ts";
 import { artifactEditService } from "./editService.ts";
 import * as Context from "effect/Context";
@@ -29,6 +29,7 @@ import { HeadlessChrome } from "./headlessChrome.ts";
 import { LivePointers } from "./livePointers.ts";
 import { ComponentPins, type PinsItem } from "./componentPins.ts";
 import { copyComponentSheet, ComponentCopyRefused } from "./componentCopy.ts";
+import { componentUpdatesOf } from "./componentUpdates.ts";
 import { chromeSnapshotRenderer, Snapshots, stubSnapshotRenderer, type SnapshotRenderer } from "./snapshots.ts";
 import { SettingsStore } from "../settingsStore.ts";
 import { Shutdown } from "../shutdown.ts";
@@ -54,6 +55,8 @@ export class Artifacts extends Context.Service<
     readonly componentPins: (project: string) => Stream.Stream<ComponentPinsItem, UnframedError>;
     /** `component.copy` (spec 20): a sheet copied under its fresh tag. */
     readonly componentCopy: (input: { project: string; file: string; from?: string | undefined }) => Effect.Effect<{ file: string; tag: string }, UnframedError>;
+    /** `component.updates` (spec 20): the components a page or motion has an older version of. */
+    readonly componentUpdates: (project: string, shapeId: string) => Effect.Effect<ComponentUpdate[], UnframedError>;
     /** "Open in a new tab": the shape's live viewer pointer, kept current from then on. */
     readonly openLive: (project: string, shapeId: string) => Effect.Effect<{}, UnframedError>;
     /** The element editor's file operations (spec 18). */
@@ -218,6 +221,17 @@ export const artifactsLayer = Layer.effect(
             );
           }),
         ),
+      componentUpdates: (project, shapeId) =>
+        Effect.gen(function* () {
+          const records = yield* rooms.read(project);
+          const shape = records.find((record) => record.id === shapeId && record.typeName === "shape");
+          const kind = shape === undefined ? undefined : shapeKind((shape as { type: string }).type);
+          if (kind !== "page" && kind !== "motion") return yield* unframedError("not_found", `There is no page or motion ${shapeId} on this canvas.`);
+          const file = (shape as unknown as { props: { file?: unknown } }).props.file;
+          const folder = yield* Effect.promise(() => media.folder(project));
+          if (folder === undefined || typeof file !== "string" || file === "") return [];
+          return yield* Effect.promise(() => componentUpdatesOf(folder, records, file));
+        }),
       componentCopy: (input) =>
         Effect.gen(function* () {
           const project = projectSlug(input.project);

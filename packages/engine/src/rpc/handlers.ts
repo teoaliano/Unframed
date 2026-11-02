@@ -186,6 +186,7 @@ export const rpcHandlersLayer = UnframedRpcs.toLayer(
       "artifact.snapshots": ({ project }) => artifacts.snapshots(project),
       "component.pins": ({ project }) => artifacts.componentPins(project),
       "component.copy": (input) => artifacts.componentCopy(input),
+      "component.updates": ({ project, shapeId }) => artifacts.componentUpdates(project, shapeId),
       "artifact.openLive": ({ project, shapeId }) => artifacts.openLive(project, shapeId),
       "kit.usage": ({ project }) =>
         Effect.gen(function* () {

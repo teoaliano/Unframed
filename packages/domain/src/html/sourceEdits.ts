@@ -5,6 +5,7 @@
 import type { SourceEdit } from "@unframed/contracts";
 import type { ArtifactKind } from "../artifacts/artifactRules.ts";
 import type { ComponentDeclaration } from "../components/sheet.ts";
+import { setPin } from "../components/pins.ts";
 import { DESIGN_FIELDS, styleValueRefusal } from "../designFields.ts";
 import { parseStylesheet, type CssRule } from "../kits/css.ts";
 import { kitCssNames } from "../kits/rules.ts";
@@ -67,6 +68,18 @@ export const applySourceEdits = (
     current = step.html;
     lines.push(step.line);
   }
+  // Accepting several component updates at once is one line, not one for each (spec 20).
+  const updates = edits.filter((edit) => edit.type === "componentUpdate").length;
+  if (updates > 1) {
+    let merged = false;
+    const folded = lines.flatMap((line, index) => {
+      if (edits[index]?.type !== "componentUpdate") return [line];
+      if (merged) return [];
+      merged = true;
+      return [`Updated ${updates} components`];
+    });
+    return { ok: true, html: current, summary: summaryLines(folded) };
+  }
   return { ok: true, html: current, summary: summaryLines(lines) };
 };
 
@@ -81,6 +94,7 @@ export const summaryLines = (lines: readonly string[]): string[] => {
 const applyEdit = (html: string, edit: SourceEdit, kind: ArtifactKind, kit: Kit | null, instances: InstanceDeclarations): Step => {
   if (edit.type === "token") return applyToken(html, edit, kind, kit);
   if (edit.type === "componentRule") return applyComponentRule(html, edit, kit);
+  if (edit.type === "componentUpdate") return { html: setPin(html, edit.tag, edit.to), line: `Updated ${instances.get(edit.tag)?.title ?? edit.tag}` };
   const before = sourceTreeOf(html).find((entry) => entry.id === edit.elementId);
   const target = findById(parseSource(html), edit.elementId);
   if (before === undefined || target === undefined) return { refusal: `There is no element ${edit.elementId} in this ${kind} any more.` };
