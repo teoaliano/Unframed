@@ -20,7 +20,6 @@ import {
   MOTION_WRITE_TEXT,
   nextRef,
   offTokenNote,
-  offTokenValues,
   PAGE_READ_SHAPE_ID,
   PAGE_READ_TEXT,
   PAGE_WRITE_ARGUMENTS,
@@ -35,6 +34,7 @@ import {
   type ArtifactKind,
   type InteractionMode,
 } from "@unframed/domain";
+import { offTokenValues } from "@unframed/domain/html";
 import type { TLRecord } from "@tldraw/tlschema";
 import type { Applied, CanvasChange, ChangeOrigin } from "../canvas/rooms.ts";
 import { refusal as refuse, type McpBinding, type McpTool, type ToolAnswer } from "../agent/mcp.ts";
