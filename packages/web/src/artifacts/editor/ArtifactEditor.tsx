@@ -30,6 +30,7 @@ import { PreviewSizeControl, usePreviewSize } from "./PreviewSize.tsx";
 import { useEditSession, type EditMode } from "./editSession.ts";
 import { makeEditableInstruction, tellAgent } from "./tellAgent.ts";
 import { MotionTimeline } from "../timeline/MotionTimeline.tsx";
+import { MotionTransport } from "../timeline/transport.ts";
 
 export interface ArtifactEditorProps {
   readonly shapeId: TLShapeId;
@@ -48,6 +49,13 @@ const typingIn = (target: EventTarget | null): boolean => {
   const element = target instanceof HTMLElement ? target : null;
   if (!element) return false;
   return element.isContentEditable || element.tagName === "INPUT" || element.tagName === "TEXTAREA" || element.closest("[contenteditable='true']") !== null;
+};
+
+/** Whether the focus is where a motion's transport keys act: the body, the frame, or the strip's time area (spec 21). */
+const transportFocus = (): boolean => {
+  const active = document.activeElement;
+  if (active === null || active === document.body || active === document.documentElement || active instanceof HTMLIFrameElement) return true;
+  return active instanceof HTMLElement && active.closest("[data-timeline-focus]") !== null;
 };
 
 const stop = (event: { stopPropagation(): void }) => event.stopPropagation();
@@ -100,6 +108,13 @@ export const ArtifactEditor = ({ shapeId, onClose, onOpen }: ArtifactEditorProps
   });
   const sessionRef = useRef(session);
   sessionRef.current = session;
+  // A motion's transport (spec 21): the strip's buttons and keys drive the player through its viewer.
+  const [transport] = useState(() => new MotionTransport());
+  useEffect(() => () => transport.dispose(), [transport]);
+  const onPlayerReady = useCallback((send: (message: unknown) => void) => transport.connect(send), [transport]);
+  // Whether the shown artifact is a motion with a file: only then do the transport's keys act.
+  const motionShown = useRef(false);
+  motionShown.current = facts !== undefined && facts.kind === "motion" && facts.file !== "";
   // The saved dials with the burst's held values over them: the frame and the Parameters tab show what the person set.
   const dials = dialsWith(facts?.dials, session.held);
 
@@ -153,6 +168,11 @@ export const ArtifactEditor = ({ shapeId, onClose, onOpen }: ArtifactEditorProps
     const onKey = (event: KeyboardEvent) => {
       if (event.defaultPrevented || editor.wasEventAlreadyHandled(event) || typingIn(event.target) || typingIn(document.activeElement)) return;
       if (isUndo(event)) return;
+      // The transport takes its keys only where the focus is the frame, the strip or the page body (spec 21, the shortcuts).
+      if (motionShown.current && transportFocus() && transport.handleKey(event.key, { shift: event.shiftKey, meta: event.metaKey, ctrl: event.ctrlKey })) {
+        event.preventDefault();
+        return;
+      }
       if (sessionRef.current.handleKey(event.key, { shift: event.shiftKey, meta: event.metaKey, ctrl: event.ctrlKey })) {
         event.preventDefault();
         return;
@@ -172,7 +192,17 @@ export const ArtifactEditor = ({ shapeId, onClose, onOpen }: ArtifactEditorProps
   const onReady = useCallback((send: (values: unknown) => void) => {
     post.current = send;
   }, []);
-  const onEdit = useCallback((message: EditMessage) => sessionRef.current.onFrameMessage(message), []);
+  const onEdit = useCallback(
+    (message: EditMessage) => {
+      // A motion's keys from the frame (Edit mode only) reach the transport first, as the same keys typed in the editor would.
+      if (message.type === "unframed:edit:key" && motionShown.current) {
+        const modifiers = { shift: message.shift === true, meta: message.meta === true, ctrl: message.ctrl === true };
+        if (transport.handleKey(String(message.key ?? ""), modifiers)) return;
+      }
+      sessionRef.current.onFrameMessage(message);
+    },
+    [transport],
+  );
   const onEditReady = useCallback((send: (message: unknown) => void) => sessionRef.current.onFrameReady(send), []);
 
   const [panel, setPanelState] = useState<Panel>(() => (panelRemembered.get(shapeId) ?? "design") as Panel);
@@ -333,6 +363,8 @@ export const ArtifactEditor = ({ shapeId, onClose, onOpen }: ArtifactEditorProps
                   onEdit={onEdit}
                   onEditReady={onEditReady}
                   onSwapped={clearAnnouncement}
+                  onPlayer={transport.onPlayerMessage}
+                  onPlayerReady={onPlayerReady}
                 />
                 {mode === "edit" && (
                   <EditOverlay hovered={session.hovered} layerHover={session.layerHover} selection={session.selection} reports={session.reports} boxes={session.boxes} names={names} />
@@ -392,7 +424,7 @@ export const ArtifactEditor = ({ shapeId, onClose, onOpen }: ArtifactEditorProps
           />
         )}
       </section>
-      {timeline && <MotionTimeline title={title} engine={engine} column={columnHeight} className="col-start-2 row-start-2 max-[1279px]:col-span-2" />}
+      {timeline && <MotionTimeline title={title} engine={engine} column={columnHeight} transport={transport} className="col-start-2 row-start-2 max-[1279px]:col-span-2" />}
     </div>
   );
 };
