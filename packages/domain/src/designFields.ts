@@ -80,13 +80,24 @@ const valueFits = (field: DesignField, value: string): boolean => {
   return pattern !== undefined && pattern.test(value);
 };
 
+/** `var(--name)` or `var(--name, fallback)`: a kit custom property with an optional fallback (spec 19). */
+const KIT_VAR = /^var\((--[A-Za-z0-9_-]+)(?:\s*,\s*(.*))?\)$/s;
+
 /**
  * Why a style value cannot be written to `property`, as the sentence the person sees, or null
- * when it can. A property that is not a design field is refused too.
+ * when it can. A property that is not a design field is refused too. `kitNames` are the project
+ * kit's custom property names, former names included: `var()` of one of them passes, and its
+ * fallback (when it has one) must pass the field's own rule. Every other `var(` is refused.
  */
-export const styleValueRefusal = (property: string, value: string): string | null => {
+export const styleValueRefusal = (property: string, value: string, kitNames: readonly string[] = []): string | null => {
   const field = DESIGN_FIELDS.find((candidate) => candidate.property === property);
   if (field === undefined) return `${property} cannot be edited here.`;
   const trimmed = value.trim();
+  const kitVar = KIT_VAR.exec(trimmed);
+  if (kitVar !== null && kitNames.includes(kitVar[1]!)) {
+    const fallback = kitVar[2]?.trim();
+    if (fallback === undefined || valueFits(field, fallback)) return null;
+    return `${field.label} cannot be "${trimmed}".`;
+  }
   return valueFits(field, trimmed) ? null : `${field.label} cannot be "${trimmed}".`;
 };

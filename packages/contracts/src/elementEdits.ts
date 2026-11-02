@@ -3,13 +3,25 @@ import * as Schema from "effect/Schema";
 import * as Rpc from "effect/unstable/rpc/Rpc";
 import { UnframedError } from "./errors.ts";
 
-/** One typed change to an artifact's HTML. Specs 19 to 21 add members. */
+/** The address of one rule in an artifact's `<style>` elements (spec 19): the block, the selector as written and the occurrence. */
+export const StyleRuleRef = Schema.Struct({ block: Schema.Number, selector: Schema.String, occurrence: Schema.Number });
+export type StyleRuleRef = typeof StyleRuleRef.Type;
+
+/** One typed change to an artifact's HTML. Specs 20 and 21 add members. */
 export const SourceEdit = Schema.Union([
   Schema.Struct({ type: Schema.Literal("text"), elementId: Schema.String, text: Schema.String }),
   Schema.Struct({ type: Schema.Literal("style"), elementId: Schema.String, property: Schema.String, value: Schema.NullOr(Schema.String) }),
   Schema.Struct({ type: Schema.Literal("attribute"), elementId: Schema.String, name: Schema.String, value: Schema.NullOr(Schema.String) }),
   Schema.Struct({ type: Schema.Literal("hide"), elementId: Schema.String, hidden: Schema.Boolean }),
   Schema.Struct({ type: Schema.Literal("image"), elementId: Schema.String, target: Schema.Literals(["src", "background"]), file: Schema.String }),
+  // Exactly one of elementId and rule is set; the source edit refuses a token edit with both or neither (spec 19).
+  Schema.Struct({
+    type: Schema.Literal("token"),
+    elementId: Schema.optionalKey(Schema.String),
+    rule: Schema.optionalKey(StyleRuleRef),
+    property: Schema.String,
+    token: Schema.String,
+  }),
 ]);
 export type SourceEdit = typeof SourceEdit.Type;
 

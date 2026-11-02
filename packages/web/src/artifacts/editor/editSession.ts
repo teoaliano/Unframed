@@ -308,7 +308,7 @@ export const useEditSession = ({ editor, engine, project, shapeId, kind, file, l
   const collect = useCallback(
     (edit: SourceEdit, showInFrame: boolean) => {
       burstRef.current = addToBurst(burstRef.current, edit);
-      lastEdit.current[edit.elementId] = edit;
+      if (edit.elementId !== undefined) lastEdit.current[edit.elementId] = edit;
       if (baseRef.current === undefined) baseRef.current = fileRef.current;
       setPending(burstEdits(burstRef.current));
       if (showInFrame) post({ type: "unframed:edit:patch", patches: [edit] });
