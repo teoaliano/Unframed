@@ -4,6 +4,7 @@
  * schema, so a record one side accepts the other accepts too.
  */
 import {
+  createShapePropsMigrationIds,
   createShapePropsMigrationSequence,
   createTLSchema,
   defaultBindingSchemas,
@@ -100,6 +101,8 @@ export interface ArtifactShapeProps {
   title: string;
   fileName: string;
   dials?: Record<string, unknown>;
+  /** Element ids the person locked in Layers (spec 18). Absent when none. */
+  lockedElements?: string[];
 }
 
 const artifactProps = {
@@ -109,10 +112,17 @@ const artifactProps = {
   title: T.string,
   fileName: T.string,
   dials: T.dict(T.string, T.jsonValue).optional(),
+  lockedElements: T.arrayOf(T.string).optional(),
 };
 
-/** Every later change to page and motion props is a migration here, used by the room and the web alike. */
-const artifactMigrations = () => createShapePropsMigrationSequence({ sequence: [] });
+/**
+ * Every later change to page and motion props is a migration here, used by the room and the web alike.
+ * The first adds `lockedElements`; a record without it has no locks, so nothing is rewritten.
+ */
+const artifactMigrations = (kind: ArtifactType) => {
+  const ids = createShapePropsMigrationIds(kind, { AddLockedElements: 1 });
+  return createShapePropsMigrationSequence({ sequence: [{ id: ids.AddLockedElements, up: (props) => props }] });
+};
 
 export const ARTIFACT_TYPES = ["page", "motion"] as const;
 export type ArtifactType = (typeof ARTIFACT_TYPES)[number];
@@ -156,8 +166,8 @@ export const canvasSchema = (): TLSchema => {
       image: { ...keptShapes.image, meta: refMeta },
       video: { ...keptShapes.video, meta: refMeta },
       frame: { ...keptShapes.frame, meta: unframedMeta },
-      page: { props: artifactProps, meta: refMeta, migrations: artifactMigrations() },
-      motion: { props: artifactProps, meta: refMeta, migrations: artifactMigrations() },
+      page: { props: artifactProps, meta: refMeta, migrations: artifactMigrations("page") },
+      motion: { props: artifactProps, meta: refMeta, migrations: artifactMigrations("motion") },
     },
     bindings: defaultBindingSchemas,
     assets: {

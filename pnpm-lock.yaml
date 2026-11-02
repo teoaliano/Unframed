@@ -49,7 +49,17 @@ importers:
         specifier: 4.0.0-rc.115
         version: 4.0.0-rc.115
 
-  packages/domain: {}
+  packages/domain:
+    dependencies:
+      '@hyperframes/parsers':
+        specifier: 0.8.206
+        version: 0.8.206
+      '@unframed/contracts':
+        specifier: workspace:*
+        version: link:../contracts
+      parse5:
+        specifier: 8.0.1
+        version: 8.0.1
 
   packages/engine:
     dependencies:
@@ -3317,6 +3327,9 @@ packages:
 
   parse-entities@4.0.2:
     resolution: {integrity: sha512-GG2AQYWoLgL877gQIKeRPGO1xF9+eG1ujIb5soS5gPvLQ1y2o8FL90w2QWNdf9I361Mpp7726c+lj3U0qK1uGw==}
+
+  parse5@8.0.1:
+    resolution: {integrity: sha512-z1e/HMG90obSGeidlli3hj7cbocou0/wa5HacvI3ASx34PecNjNQeaHNo5WIZpWofN9kgkqV1q5YvXe3F0FoPw==}
 
   parseurl@1.3.3:
     resolution: {integrity: sha512-CiyeOxFT/JZyN5m0z9PfXw4SCBJ6Sygz1Dpl0wqjlhDEGGBP1GnsUVEL0p63hoG1fcj3fHynXi9NYO4nWOL+qQ==}
@@ -7000,6 +7013,10 @@ snapshots:
       is-alphanumerical: 2.0.1
       is-decimal: 2.0.1
       is-hexadecimal: 2.0.1
+
+  parse5@8.0.1:
+    dependencies:
+      entities: 8.1.0
 
   parseurl@1.3.3: {}
 

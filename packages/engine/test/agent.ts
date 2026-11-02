@@ -3,6 +3,7 @@
  * scripts, and a chat driven the way the web drives one, by dispatching commands and
  * folding a `subscribeThread` stream with the domain projector.
  */
+import type { ElementChip } from "@unframed/contracts";
 import { randomUUID } from "node:crypto";
 import { readdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -47,7 +48,11 @@ export interface AgentEngine {
   dispatch(command: CommandInput): Promise<{ sequence: number }>;
   /** Creates a chat on Claude, in the modes a new chat gets unless overridden. */
   createChat(overrides?: Partial<Extract<CommandInput, { type: "thread.create" }>>): Promise<string>;
-  send(chatId: string, text: string, options?: { selection?: string[]; attachments?: Array<{ id: string; name: string }>; steer?: boolean }): Promise<{ sequence: number }>;
+  send(
+    chatId: string,
+    text: string,
+    options?: { selection?: string[]; elements?: ElementChip[]; attachments?: Array<{ id: string; name: string }>; steer?: boolean },
+  ): Promise<{ sequence: number }>;
   watch(chatId: string): Promise<ChatWatch>;
   /** Waits for the chat's latest turn to leave running, and answers the chat. */
   settled(chatId: string, turnCount?: number, timeoutMs?: number): Promise<Chat>;
@@ -144,7 +149,9 @@ export const startAgentEngine = async (options: EngineOptions & { script?: strin
           messageId: `msg-${randomUUID()}`,
           text,
           attachments: sendOptions.attachments ?? [],
-          ...(sendOptions.selection ? { context: { selection: sendOptions.selection } } : {}),
+          ...(sendOptions.selection || sendOptions.elements
+            ? { context: { selection: sendOptions.selection ?? [], ...(sendOptions.elements ? { elements: sendOptions.elements } : {}) } }
+            : {}),
         },
         ...(sendOptions.steer ? { steer: true } : {}),
         createdAt: new Date().toISOString(),

@@ -117,6 +117,35 @@ describe("the upload route", () => {
     }
   });
 
+  it("gives an uploaded page the bridge tag and element ids, and writes a tagged, stamped one as given", async () => {
+    const answer = (await upload("Pitch.html", "<body><h1>Hi</h1></body>", "text/html")).json();
+    const written = await readFile(join(folder, answer.file), "utf8");
+    expect(written).toMatch(/^<body>\n<script src="unframed-dials\.js"><\/script><h1 data-hf-id="hf-[0-9a-z]{4}">Hi<\/h1><\/body>$/);
+    expect(answer.bytes).toBe(Buffer.byteLength(written));
+    expect(await readFile(join(folder, "unframed-dials.js"), "utf8")).toContain("unframed-dials.js");
+
+    const ready = '<script src="unframed-dials.js"></script>\n<h1 data-hf-id="hf-aaaa">Ready</h1>';
+    const kept = (await upload("ready.html", ready, "text/html")).json();
+    expect(await readFile(join(folder, kept.file), "utf8")).toBe(ready);
+  });
+
+  it("gives a second copy of a tagged page no second bridge tag", async () => {
+    const first = (await upload("twice.html", "<p>once</p>", "text/html")).json();
+    const copied = await (await engine.rpc()).call("files.copy", { project: "board", file: first.file });
+    const text = await readFile(join(folder, copied.file), "utf8");
+    expect(text.match(/unframed-dials\.js/g)).toHaveLength(1);
+  });
+
+  it("accepts an uploaded page just over 2 MiB, as it accepts every upload up to 500 MB", async () => {
+    const response = await upload("big.html", `<p>${"a".repeat(2_097_152 + 1024)}</p>`, "text/html");
+    expect(response.status).toBe(200);
+    const answer = response.json();
+    const written = await readFile(join(folder, answer.file), "utf8");
+    expect(written.length).toBeGreaterThan(2_097_152);
+    expect(written).toContain('<script src="unframed-dials.js"></script>');
+    expect(answer.bytes).toBe(Buffer.byteLength(written));
+  });
+
   it("answers 404 for a project that does not exist, and applies the loopback guard", async () => {
     expect((await upload("x.png", png, "image/png", "nowhere")).status).toBe(404);
     const refused = await engine.request("/api/projects/board/files?name=x.png", {

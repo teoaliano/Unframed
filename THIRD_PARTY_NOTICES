@@ -53,6 +53,10 @@ Motions are HyperFrames compositions. HyperFrames (@hyperframes/core, @hyperfram
 @hyperframes/producer, @hyperframes/engine) is used under the Apache License 2.0; the
 player's global build and the runtime build are copied into project folders, beside the
 compositions that load them, as hyperframes-player.js and hyperframes-runtime.js.
+@hyperframes/parsers (Apache License 2.0) is pinned for the element id scheme of spec 18.
+
+parse5 (MIT) reads an artifact's HTML in the engine, for element editing (spec 18). It is
+never bundled with the web client.
 
 GSAP (gsap) is used under the GSAP Standard "no charge" license
 (https://gsap.com/standard-license), free for commercial use since version 3.13. It is not

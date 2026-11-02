@@ -3,7 +3,7 @@
  * box that asks the agent to add one.
  */
 import { addParameterInstruction, continuableChat, DEFAULT_RUNTIME_MODE, type ArtifactKind, type DialsAnnouncement } from "@unframed/domain";
-import { SlidersHorizontal, Sparkles } from "lucide-react";
+import { Sparkles } from "lucide-react";
 import { useState, type ReactNode } from "react";
 import type { TLShapeId } from "tldraw";
 import { Button } from "~/components/ui/button";
@@ -33,6 +33,8 @@ export interface ParametersProps {
   readonly saved: Readonly<Record<string, unknown>> | undefined;
   /** Posts `unframed:dials:set` to the artifact's frame. */
   readonly post: (values: unknown) => void;
+  /** Called with the dial values as a change is written to the shape (spec 18: the Parameters value wins over a held one). */
+  readonly onWrite?: (values: Readonly<Record<string, unknown>>) => void;
 }
 
 /**
@@ -114,19 +116,16 @@ export const AddParameter = ({
   );
 };
 
-export const Parameters = ({ shapeId, kind, title, announcement, saved, post }: ParametersProps) => {
+/** The Parameters tab's body (spec 09's column, under the editor's tab list): the dials, then the add box. */
+export const ParametersBody = ({ shapeId, kind, title, announcement, saved, post, onWrite }: ParametersProps) => {
   const hasParameters = announcement !== undefined && Object.keys(announcement.schema ?? {}).length > 0;
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <ColumnHeader>
-        <SlidersHorizontal aria-hidden className="size-4 shrink-0 text-muted-foreground" />
-        <span className="truncate text-sm font-semibold">Parameters</span>
-      </ColumnHeader>
       <div className="min-h-0 flex-1 overflow-auto">
         {announcement === undefined ? (
           <p className="mx-2.5 my-4 text-sm text-muted-foreground">No parameters yet.</p>
         ) : (
-          <DialControls shapeId={shapeId} announcement={announcement} saved={saved} post={post} />
+          <DialControls shapeId={shapeId} announcement={announcement} saved={saved} post={post} {...(onWrite ? { onWrite } : {})} />
         )}
       </div>
       <AddParameter shapeId={shapeId} kind={kind} title={title} hasParameters={hasParameters} />
