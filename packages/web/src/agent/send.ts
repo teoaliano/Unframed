@@ -1,4 +1,4 @@
-import type { ChatAttachment, ModelSelection } from "@unframed/contracts";
+import type { ChatAttachment, ElementChip, ModelSelection } from "@unframed/contracts";
 import type { InteractionMode, RuntimeMode } from "@unframed/domain";
 import { newId, type ChatClient } from "./store.ts";
 
@@ -7,6 +7,8 @@ export interface Outgoing {
   readonly text: string;
   readonly selection: ReadonlyArray<string>;
   readonly attachments: ReadonlyArray<ChatAttachment>;
+  /** The element chips the person pointed at (spec 18). */
+  readonly elements?: ReadonlyArray<ElementChip>;
 }
 
 export interface NewChat {
@@ -69,6 +71,7 @@ export const sendMessage = async (
 ): Promise<void> => {
   const messageId = newId("message");
   const now = new Date().toISOString();
+  const elements = message.elements ?? [];
   client.addOptimistic(threadId, {
     id: messageId,
     role: "user",
@@ -78,7 +81,7 @@ export const sendMessage = async (
     createdAt: now,
     updatedAt: now,
     ...(message.attachments.length > 0 ? { attachments: message.attachments } : {}),
-    ...(message.selection.length > 0 ? { context: { selection: message.selection } } : {}),
+    ...(message.selection.length > 0 || elements.length > 0 ? { context: { selection: message.selection, ...(elements.length > 0 ? { elements } : {}) } } : {}),
   });
   try {
     await client.dispatch({
@@ -88,7 +91,7 @@ export const sendMessage = async (
         messageId,
         text: message.text,
         attachments: message.attachments.map((attachment) => ({ id: attachment.id, name: attachment.name })),
-        ...(message.selection.length > 0 ? { context: { selection: [...message.selection] } } : {}),
+        ...(message.selection.length > 0 || elements.length > 0 ? { context: { selection: [...message.selection], ...(elements.length > 0 ? { elements: [...elements] } : {}) } } : {}),
       },
       ...(options.steer ? { steer: true } : {}),
       ...(options.sourceProposedPlan ? { sourceProposedPlan: options.sourceProposedPlan } : {}),

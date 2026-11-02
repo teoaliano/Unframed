@@ -111,13 +111,13 @@ test("moving the dial in Parameters moves the field in Design", async ({ page, a
   await expect(parameters(page).getByRole("button", { name: "Colour", exact: true })).toContainText("#ff8800");
 });
 
-test("an arithmetic value is read-only with the agent's line and a disabled ask button", async ({ page, agent }) => {
+test("an arithmetic value is read-only with the agent's line and an ask button", async ({ page, agent }) => {
   await onBoard(page, agent);
   await openEditor(page);
   await select(page, "sum");
   await expect(parameters(page).getByRole("spinbutton", { name: "Size", exact: true })).toBeDisabled();
   await expect(parameters(page).getByText("Set by the agent's code.")).toBeVisible();
-  await expect(parameters(page).getByRole("button", { name: "Ask the agent to make this editable" })).toBeDisabled();
+  await expect(parameters(page).getByRole("button", { name: "Ask the agent to make this editable" })).toBeEnabled();
 });
 
 test("a stylesheet !important shows its sentence and writes nothing", async ({ page, agent }) => {

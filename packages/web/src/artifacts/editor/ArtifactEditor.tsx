@@ -13,6 +13,7 @@ import { Tabs, TabsList, TabsTab } from "~/components/ui/tabs";
 import { Toggle, ToggleGroup } from "~/components/ui/toggle-group";
 import { cn } from "~/lib/utils";
 import { AgentRail } from "../../agent/rail/AgentRail.tsx";
+import { useChatClient } from "../../agent/store.ts";
 import { Tip } from "../../chrome/ui.tsx";
 import { useCanvasProject, useEngine } from "../../context.ts";
 import { ArtifactFrame, outsideUrlOf, type EditMessage } from "../ArtifactFrame.tsx";
@@ -24,6 +25,7 @@ import { LayersTab } from "./LayersTab.tsx";
 import { COLUMN, ColumnHeader, ParametersBody } from "./Parameters.tsx";
 import { PreviewSizeControl, usePreviewSize } from "./PreviewSize.tsx";
 import { useEditSession, type EditMode } from "./editSession.ts";
+import { makeEditableInstruction, tellAgent } from "./tellAgent.ts";
 
 export interface ArtifactEditorProps {
   readonly shapeId: TLShapeId;
@@ -67,6 +69,7 @@ export const ArtifactEditor = ({ shapeId, onClose, onOpen }: ArtifactEditorProps
   const editor = useEditor();
   const project = useCanvasProject();
   const engine = useEngine();
+  const chatClient = useChatClient(engine, project);
   const facts = useValue(
     "edited artifact",
     () => {
@@ -320,7 +323,17 @@ export const ArtifactEditor = ({ shapeId, onClose, onOpen }: ArtifactEditorProps
             </TabsList>
           </Tabs>
         </ColumnHeader>
-        {panel === "design" && <DesignTab session={session} kind={facts.kind} project={project} dials={current ?? {}} locked={facts.locked} />}
+        {panel === "design" && (
+          <DesignTab
+            session={session}
+            kind={facts.kind}
+            project={project}
+            dials={current ?? {}}
+            locked={facts.locked}
+            onTell={(elements) => tellAgent(chatClient, shapeId, elements)}
+            onAsk={(field, elements) => tellAgent(chatClient, shapeId, elements, makeEditableInstruction(field))}
+          />
+        )}
         {panel === "layers" && <LayersTab session={session} kind={facts.kind} shapeId={shapeId} locked={facts.locked} onLock={setLocked} />}
         {panel === "parameters" && (
           <ParametersBody

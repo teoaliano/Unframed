@@ -4,8 +4,8 @@
  * edit in the burst, and a read-only value says why. With several elements selected a value they
  * share shows, a value they differ on shows Mixed, and an edit reaches each of them.
  */
-import { dialAt, DESIGN_FIELDS, fieldOwner, styleValueRefusal, type FieldOwner } from "@unframed/domain";
-import { AlignCenter, AlignJustify, AlignLeft, AlignRight, Link, SlidersHorizontal, Unlink } from "lucide-react";
+import { dialAt, DESIGN_FIELDS, fieldOwner, styleValueRefusal, type ChipElement, type FieldOwner } from "@unframed/domain";
+import { AlignCenter, AlignJustify, AlignLeft, AlignRight, Link, MessageSquarePlus, SlidersHorizontal, Unlink } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
 import { Autocomplete, AutocompleteInput, AutocompleteItem, AutocompleteList, AutocompletePopup } from "~/components/ui/autocomplete";
 import { Button } from "~/components/ui/button";
@@ -20,6 +20,7 @@ import { previewUrl } from "../../canvas/assetStore.ts";
 import { chainOf } from "./EditPanels.tsx";
 import { ImagePicker } from "./ImagePicker.tsx";
 import type { EditReport, EditSession } from "./editSession.ts";
+import { fieldNameOf } from "./tellAgent.ts";
 
 const WEIGHTS = ["100", "200", "300", "400", "500", "600", "700", "800", "900"];
 const ALIGNS = [
@@ -119,6 +120,8 @@ interface View {
   readonly mixed: boolean;
   readonly owner: FieldOwner;
   readonly editable: boolean;
+  /** Asks the agent to make the field editable, with the read-only elements' chips. */
+  readonly ask: () => void;
 }
 
 /** The parameter a view's field is driven by, when it is editable as a dial. */
@@ -138,14 +141,13 @@ const noteText = (text: string) => <p className="m-0 text-xs text-muted-foregrou
  * The line a read-only owner shows under its section, or null when the value is the source's own or locked (the tab says that once).
  * A dial's value is editable with one element selected, so it shows no line then; with several it names its parameter.
  */
-const ownerLine = (owner: FieldOwner, single: boolean): ReactNode => {
+const ownerLine = (owner: FieldOwner, single: boolean, ask: () => void): ReactNode => {
   if (owner.owner === "source" || owner.owner === "locked") return null;
   if (owner.owner === "script") {
     return (
       <>
         {noteText("Set by the agent's code.")}
-        {/* Asking the agent to make it editable fills the composer's draft (spec 18 task 41); until that exists the button waits. */}
-        <Button variant="ghost" size="xs" className="justify-self-start" disabled>
+        <Button variant="ghost" size="xs" className="justify-self-start" onClick={ask}>
           Ask the agent to make this editable
         </Button>
       </>
@@ -399,6 +401,10 @@ export interface DesignTabProps {
   readonly project: string;
   readonly dials: Readonly<Record<string, unknown>> | undefined;
   readonly locked: readonly string[];
+  /** Tell the agent: the selected elements' chips go into the artifact's chat (spec 18, Point and tell). */
+  readonly onTell: (elements: ChipElement[]) => void;
+  /** Ask the agent to make a read-only field editable, with the read-only elements' chips. */
+  readonly onAsk: (field: string, elements: ChipElement[]) => void;
 }
 
 /** The value a dial takes for a CSS value written to its field: a number dial takes the number, anything else the text. */
@@ -415,7 +421,7 @@ const normaliserFor = (property: string) => (value: string) => {
   return probe.style.getPropertyValue(property);
 };
 
-export const DesignTab = ({ session, kind, project, dials, locked }: DesignTabProps) => {
+export const DesignTab = ({ session, kind, project, dials, locked, onTell, onAsk }: DesignTabProps) => {
   const { selection, reports, tree, preparing, prepareError, pending, families, overridden } = session;
   if (preparing) return <p className="m-0 p-2.5 text-sm text-muted-foreground">{`Getting this ${kind} ready for editing…`}</p>;
   if (prepareError !== undefined) return <p className="m-0 p-2.5 text-sm text-destructive-foreground">{prepareError}</p>;
@@ -457,6 +463,27 @@ export const DesignTab = ({ session, kind, project, dials, locked }: DesignTabPr
     });
   };
 
+  /** One selected element as the chip a message carries: its id or live selector, its start tag and its text. */
+  const chipDataOf = (subject: Subject): ChipElement => {
+    const source = elements.find((candidate) => candidate.id === subject.id);
+    const declared = source === undefined ? Object.entries(subject.report.inline).flatMap(([property, value]) => (value ? [[property, value] as const] : [])) : Object.entries(source.style);
+    const attributes = [
+      ...(source === undefined ? [] : [`data-hf-id="${source.id}"`]),
+      ...(source?.named ? [`data-uf-name="${source.name}"`] : []),
+      ...(source?.src === undefined ? [] : [`src="${source.src}"`]),
+      ...(declared.length === 0 ? [] : [`style="${declared.map(([property, value]) => `${property}: ${value}`).join("; ")}"`]),
+    ];
+    return {
+      elementId: source === undefined ? null : source.id,
+      liveSelector: subject.report.selector,
+      tag: subject.report.tag,
+      label: source?.name ?? subject.report.tag,
+      startTag: `<${[subject.report.tag, ...attributes].join(" ")}>`,
+      text: subject.report.text ?? "",
+      hasChildren: source !== undefined && elements.some((candidate) => candidate.parent === subject.id),
+    };
+  };
+
   /** The field's value across the selection: the shared one, or Mixed; the owner that blocks an edit, if any. */
   const viewOf = (property: string, pick: (subject: Subject) => string = (subject) => subject.report.computed[property] ?? ""): View => {
     const owners = subjects.map((subject) => ownerOf(subject, property));
@@ -464,7 +491,8 @@ export const DesignTab = ({ session, kind, project, dials, locked }: DesignTabPr
     const mixed = values.some((value) => value !== values[0]);
     const owner = owners.find((candidate) => candidate.owner !== "source") ?? { owner: "source" as const };
     // A dial's value moves its parameter, so it is editable with one element only.
-    return { value: mixed ? "" : (values[0] ?? ""), mixed, owner, editable: owner.owner === "source" || (owner.owner === "dial" && single) };
+    const ask = () => onAsk(fieldNameOf(property), subjects.filter((_, index) => owners[index]!.owner !== "source").map(chipDataOf));
+    return { value: mixed ? "" : (values[0] ?? ""), mixed, owner, editable: owner.owner === "source" || (owner.owner === "dial" && single), ask };
   };
 
   /** Writes a value to a property of every selected element, refusing the whole write when one value cannot be written. A dial-owned value moves its dial. */
@@ -519,7 +547,7 @@ export const DesignTab = ({ session, kind, project, dials, locked }: DesignTabPr
 
   const noteOf = (...views: View[]): ReactNode => {
     for (const view of views) {
-      const line = ownerLine(view.owner, single);
+      const line = ownerLine(view.owner, single, view.ask);
       if (line !== null) return line;
     }
     return null;
@@ -585,13 +613,17 @@ export const DesignTab = ({ session, kind, project, dials, locked }: DesignTabPr
           normalise: (value) => value,
         })
     : ownerOf(first!, "background-image");
-  const pictureLine = picture === null ? null : ownerLine(pictureOwner, true);
+  const pictureLine = picture === null ? null : ownerLine(pictureOwner, true, () => onAsk("Picture", [chipDataOf(first!)]));
 
   return (
     <div className="flex min-h-0 flex-col gap-3 overflow-auto p-2.5" data-testid="design-tab">
       <div className="flex min-w-0 items-baseline gap-2">
         <span className="truncate text-sm font-semibold">{name}</span>
         {single && <span className="shrink-0 text-xs text-muted-foreground">{first!.report.tag}</span>}
+        <Button variant="outline" size="sm" className="ml-auto shrink-0" onClick={() => onTell(subjects.map(chipDataOf))}>
+          <MessageSquarePlus aria-hidden />
+          Tell the agent
+        </Button>
       </div>
       {anyLocked && noteText(LOCKED)}
       {subjects.some((subject) => overridden[subject.id] === true) && noteText(OVERRIDDEN)}

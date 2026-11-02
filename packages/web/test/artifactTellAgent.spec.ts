@@ -21,11 +21,11 @@ test("Tell the agent puts a chip per selected element into a new chat tagged wit
 
   await tellButton(page).click();
 
-  // The chips show in the rail's composer, which has the focus, in a chat the engine made for this artifact.
+  // The chips show in the rail's composer, which has the focus. The new chat is made when the message is sent.
   await expect(rail(page).getByText("h1 · Welcome", { exact: true })).toBeVisible();
   await expect(rail(page).getByText("p · Lead text", { exact: true })).toBeVisible();
   await expect(promptBox(rail(page))).toBeFocused();
-  await expect.poll(async () => (await engineChats(agent)).map((chat) => chat.tags)).toEqual([[SHAPE]]);
+  await expect.poll(async () => (await engineChats(agent)).length).toBe(0);
 
   // A chip can be removed; the other stays.
   await rail(page).getByRole("button", { name: "Remove h1 · Welcome", exact: true }).click();
@@ -37,6 +37,7 @@ test("Tell the agent puts a chip per selected element into a new chat tagged wit
   await expect(rail(page).getByText("· 2 selected", { exact: true })).toBeVisible();
   await expect.poll(async () => (await engineChats(agent)).length).toBe(1);
   const [chat] = await engineChats(agent);
+  expect(chat!.tags).toEqual([SHAPE]);
   const sent = await engineChat(agent, chat!.id);
   const user = sent.messages.find((message) => message.role === "user");
   expect(user?.context?.selection).toEqual([SHAPE]);
