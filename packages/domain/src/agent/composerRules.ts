@@ -197,11 +197,25 @@ export const compactsBeforeSend = (input: { readonly tokens: number | null; read
 export const RESUME_MESSAGE = "Continue where you left off.";
 
 /**
- * Whether the composer offers Resume thread: the chat's latest turn was interrupted. An
- * interrupt keeps the provider session, or saves its cursor after the partial turn, so the
- * provider still has the work the next turn continues.
+ * The usage limit the chat's latest turn failed on (t3code's usage-limit run): the latest
+ * rate-limit notice of that turn says `rejected`. Its reset time, when the provider gave one.
  */
-export const resumableTurn = (chat: Pick<Chat, "latestTurn" | "outside">): boolean => chat.outside === undefined && chat.latestTurn?.state === "interrupted";
+export const usageLimitHit = (chat: Pick<Chat, "latestTurn" | "activities">): { readonly resetsAt?: string } | undefined => {
+  const turn = chat.latestTurn;
+  if (turn?.state !== "error") return undefined;
+  const notice = [...chat.activities].reverse().find((activity) => activity.kind === "rate-limit" && activity.turnId === turn.turnId);
+  const payload = (notice?.payload ?? {}) as { status?: unknown; resetsAt?: unknown };
+  if (payload.status !== "rejected") return undefined;
+  return typeof payload.resetsAt === "string" && !Number.isNaN(Date.parse(payload.resetsAt)) ? { resetsAt: payload.resetsAt } : {};
+};
+
+/**
+ * Whether the composer offers Resume thread (t3code's resumable run): the chat's latest turn
+ * was interrupted, or failed on a usage limit. Either keeps the provider session, or saves
+ * its cursor after the turn, so the provider still has the work the next turn continues.
+ */
+export const resumableTurn = (chat: Pick<Chat, "latestTurn" | "outside" | "activities">): boolean =>
+  chat.outside === undefined && (chat.latestTurn?.state === "interrupted" || usageLimitHit(chat) !== undefined);
 
 // ---------------------------------------------------------------------------------------
 // Restoring into a draft (a stash entry, a queued message given back, Edit from here).

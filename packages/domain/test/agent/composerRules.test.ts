@@ -8,6 +8,7 @@ import {
   removeChips,
   RESUME_MESSAGE,
   resumableTurn,
+  usageLimitHit,
   stashSnippet,
   withoutChips,
   storedDraftsValue,
@@ -524,5 +525,42 @@ describe("resuming a turn (t3code's Resume thread)", () => {
     expect(resumableTurn(ended("error"))).toBe(false);
     expect(resumableTurn({ ...ended("interrupted"), latestTurn: null })).toBe(false);
     expect(resumableTurn({ ...ended("interrupted"), outside: { connectionId: "c", sessionId: "s", client: "claude-code" } })).toBe(false);
+  });
+});
+
+describe("a usage limit hit (t3code's usage-limit run)", () => {
+  const limited = (state: "running" | "error" | "completed", status: string, turnId?: string, resetsAt?: string) => {
+    const chat = chatOf(started());
+    const turn = chat.latestTurn!;
+    return {
+      ...chat,
+      latestTurn: { ...turn, state },
+      activities: [
+        {
+          id: "l1",
+          tone: status === "rejected" ? ("error" as const) : ("info" as const),
+          kind: "rate-limit",
+          summary: "Usage limit",
+          payload: { status, ...(resetsAt === undefined ? {} : { resetsAt }) },
+          turnId: turnId ?? turn.turnId,
+          sequence: 1,
+          createdAt: "2026-10-01T12:00:00.000Z",
+        },
+      ],
+    };
+  };
+
+  it("is the latest turn failing on a rejected limit, with the reset time when the provider gave one, and it can be resumed", () => {
+    expect(usageLimitHit(limited("error", "rejected", undefined, "2026-10-01T15:00:00.000Z"))).toEqual({ resetsAt: "2026-10-01T15:00:00.000Z" });
+    expect(usageLimitHit(limited("error", "rejected"))).toEqual({});
+    expect(resumableTurn(limited("error", "rejected"))).toBe(true);
+  });
+
+  it("is not a warning, a limit on an earlier turn, a turn that went through or one still running", () => {
+    expect(usageLimitHit(limited("error", "allowed_warning"))).toBeUndefined();
+    expect(usageLimitHit(limited("error", "rejected", "turn:old"))).toBeUndefined();
+    expect(usageLimitHit(limited("completed", "rejected"))).toBeUndefined();
+    expect(usageLimitHit(limited("running", "rejected"))).toBeUndefined();
+    expect(resumableTurn(limited("error", "allowed_warning"))).toBe(false);
   });
 });

@@ -42,7 +42,7 @@ test("a turn that was stopped offers Resume thread in place of Send while the bo
 test.describe(() => {
   test.use({ locale: "en-GB" });
 
-  test("being close to a usage limit shows nothing; a hit limit says when it resets, with the weekday and am or pm in a 24-hour locale, and clears when a turn goes through", async ({ page, agent }) => {
+  test("being close to a usage limit shows nothing; a hit limit says when it resets, in the transcript and in t3code's banner, with the weekday and am or pm in a 24-hour locale, and clears when a turn goes through", async ({ page, agent }) => {
     // Three days before the scripted reset (Thursday 1 October, 15:00 UTC): the line names the day.
     const now = new Date("2026-09-28T12:00:00.000Z");
     await page.clock.setFixedTime(now);
@@ -58,11 +58,20 @@ test.describe(() => {
     await expect(panel.locator("[data-role='assistant']").last()).toContainText("Done, but you are close to your usage limit.");
     await expect(line).toHaveCount(0);
 
+    const banner = panel.locator("[data-notice='usage-limit']");
+    await expect(banner).toHaveCount(0);
     await say(panel, "one more");
     await expect(line).toHaveText(`You have hit a usage limit. It resets ${when}.`);
+    // t3code's banner above the composer, and its Resume thread in place of Send.
+    await expect(banner.getByTestId("notice-title")).toHaveText("Usage limit reached");
+    await expect(banner.getByTestId("notice-description")).toHaveText(`Resets ${when}`);
+    await expect(banner).toHaveAttribute("data-variant", "warning");
+    await expect(panel.getByRole("button", { name: "Resume thread" })).toBeVisible();
 
     await say(panel, "and again");
     await expect(panel.locator("[data-role='assistant']").last()).toContainText("Back under the limit.");
     await expect(line).toHaveCount(0);
+    await expect(banner).toHaveCount(0);
+    await expect(panel.getByRole("button", { name: "Resume thread" })).toHaveCount(0);
   });
 });

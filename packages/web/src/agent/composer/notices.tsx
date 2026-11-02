@@ -12,6 +12,8 @@ export interface ComposerNotice {
   readonly group?: NoticeGroup;
   readonly icon: ReactNode;
   readonly title: string;
+  /** A second, muted line under the title (t3code's banner description). */
+  readonly description?: string;
   readonly actions?: ReactNode;
   readonly dismissLabel?: string;
   readonly onDismiss?: () => void;
@@ -59,6 +61,11 @@ const NoticeCard = ({ item }: { readonly item: ComposerNotice }) => (
         </span>
       )}
     </div>
+    {item.description !== undefined && (
+      <p className="m-0 ps-5 text-2xs text-muted-foreground" data-testid="notice-description">
+        {item.description}
+      </p>
+    )}
   </section>
 );
 

@@ -1,5 +1,5 @@
-import { clearAllChats, clearedNotice, visibleChats, nextActive } from "@unframed/domain";
-import { BrushCleaning, CircleAlert, Plus, Search, Sparkles, Trash2, X } from "lucide-react";
+import { clearAllChats, clearedNotice, resetMoment, usageLimitHit, visibleChats, nextActive } from "@unframed/domain";
+import { BrushCleaning, CircleAlert, Gauge, Plus, Search, Sparkles, Trash2, X } from "lucide-react";
 import { lazy, Suspense, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useMaybeEditor, useValue } from "tldraw";
 import { Button } from "~/components/ui/button";
@@ -175,6 +175,7 @@ export const AgentRail = ({ project, embedded, inSheet, filterTo, onLocate, onOp
   const lastText = activeChat?.messages.at(-1)?.text ?? "";
   const sessionError = lastError !== null && lastError.trim() !== "" && !lastText.includes(lastError.trim()) && active !== null ? lastError : undefined;
   const [, setDismissals] = useState(0);
+  const limit = activeChat ? usageLimitHit(activeChat) : undefined;
   // The error line is notices above the composer: the session's failure (dismissed for as
   // long as the app runs, t3code's), then what failed here (dismissed by clearing it).
   const notices: ComposerNotice[] = [
@@ -191,6 +192,18 @@ export const AgentRail = ({ project, embedded, inSheet, filterTo, onLocate, onOp
               dismissedSessionErrors.add(`${active}\u0000${sessionError}`);
               setDismissals((count) => count + 1);
             },
+          },
+        ]
+      : []),
+    // t3code's usage-limit banner. Resume at reset and Snooze need t3code's server-side recovery worker and thread snooze, which spec 07 does not have.
+    ...(limit !== undefined
+      ? [
+          {
+            id: "usage-limit",
+            variant: "warning" as const,
+            icon: <Gauge />,
+            title: "Usage limit reached",
+            description: limit.resetsAt === undefined ? "Reset time unavailable; retry manually" : `Resets ${resetMoment(new Date(limit.resetsAt), new Date())}`,
           },
         ]
       : []),
