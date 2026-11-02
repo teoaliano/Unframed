@@ -112,9 +112,9 @@ describe("component diffs", () => {
     const diff = await agent.rpc.call("orchestration.getTurnDiff", { projectId: PROJECT, threadId: chatId, fromTurnCount: 0, toTurnCount: 1 });
     expect(diff.files).toHaveLength(1);
     const [file] = diff.files;
-    // The written sheet gains the bridge and helper tags in its head, so three lines are added: two tags and the label.
-    expect(file).toMatchObject({ shapeId: "shape:c1", label: "Button", kind: "component", before: "1-button.html", additions: 3, deletions: 1 });
+    // The written sheet gains the tokens, bridge and helper tags in its head, and its template gets element ids (spec 20).
+    expect(file).toMatchObject({ shapeId: "shape:c1", label: "Button", kind: "component", before: "1-button.html", additions: 5, deletions: 2 });
     expect(file!.after).toMatch(/^\d+-button\.html$/);
-    expect(file!.patch).toContain("+</head><body><div data-uf-template hidden><button data-uf-prop=\"label\">Buy now</button>");
+    expect(file!.patch).toMatch(/<button data-hf-id="hf-[a-z0-9]+" data-uf-prop="label">Buy now<\/button>/);
   });
 });

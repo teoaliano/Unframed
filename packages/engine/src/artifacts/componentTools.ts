@@ -11,8 +11,6 @@ import {
   ARTIFACT_SIZE_LIMIT,
   ARTIFACT_TITLE_MAX,
   artifactUrl,
-  BRIDGE_TAG,
-  COMPONENT_HELPER_TAG,
   COMPONENT_READ_SHAPE_ID,
   COMPONENT_READ_TEXT,
   COMPONENT_WRITE_ARGUMENTS,
@@ -34,6 +32,7 @@ import {
 import type { TLRecord } from "@tldraw/tlschema";
 import type { Applied } from "../canvas/rooms.ts";
 import { lockRefusal, sourceTreeOf, stampElementIds } from "@unframed/domain/html";
+import { prepareComponentHtml } from "./artifactHtml.ts";
 import { refusal as refuse, type McpBinding, type McpTool, type ToolAnswer } from "../agent/mcp.ts";
 import { indexOnTop } from "../runs/placeholders.ts";
 import { shapeBoxes } from "../runs/shapeBounds.ts";
@@ -46,14 +45,6 @@ type Shape = TLRecord & { type: string; props: Record<string, unknown>; meta: Re
 const isShape = (record: TLRecord | undefined): record is Shape => record?.typeName === "shape";
 
 const PAGE_ID = "page:page";
-
-/** The bridge and the sheet helper go in a sheet's head, after the head's own open tag (spec 20). */
-const injectSheetTags = (html: string): string => {
-  const tags = [BRIDGE_TAG, COMPONENT_HELPER_TAG].filter((tag) => !html.includes(tag));
-  if (tags.length === 0) return html;
-  const block = tags.join("\n");
-  return /<head\b[^>]*>/i.test(html) ? html.replace(/<head\b[^>]*>/i, (open) => `${open}\n${block}`) : `${block}\n${html}`;
-};
 
 /** Finds the component shape an argument names, refusing another kind. */
 const findComponent = (records: ReadonlyArray<TLRecord>, shapeId: string): { shape: Shape } | { error: string } => {
@@ -88,7 +79,7 @@ export class ComponentTools {
       target = found.shape;
     }
 
-    const html = stampElementIds(injectSheetTags(args.html));
+    const html = prepareComponentHtml(args.html);
     const read = readComponentSheet(html);
     if (!read.ok) return refuse(read.refusal);
     const { tag } = read.sheet.declaration;

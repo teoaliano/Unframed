@@ -10,7 +10,7 @@ import { isBareFileName, unframedError, type ArtifactImage, type OffTokenFound, 
 import { ARTIFACT_SIZE_LIMIT, artifactTitle, compiledFileName, offTokenValues, projectSlug, readComponentSheet, shapeKind, sidecarFileName, type ArtifactKind } from "@unframed/domain";
 import { applySourceEdits, ruleLockHit, sourceTreeOf, stampElementIds } from "@unframed/domain/html";
 import type { CommittedChange } from "../canvas/rooms.ts";
-import { byteSize, prepareArtifactHtml, tooLargeMessage } from "./artifactHtml.ts";
+import { byteSize, prepareArtifactHtml, prepareComponentHtml, tooLargeMessage } from "./artifactHtml.ts";
 import { kitOf } from "../kits/tokensFile.ts";
 import { ensureBridge, ensureComponentLibrary, ensureCompiledComponent, ensureLibrary, writeEditArtifact } from "./artifactStore.ts";
 import { instanceDeclarations, pinComponents } from "./componentRegistry.ts";
@@ -88,7 +88,7 @@ export const artifactEditService = (deps: EditServiceDeps) => {
     const record = (await deps.read(project)).find((candidate) => candidate.id === shapeId);
     const shape = record?.typeName === "shape" ? record : undefined;
     const kind = shape === undefined ? undefined : shapeKind(shape.type);
-    if (shape === undefined || (kind !== "page" && kind !== "motion")) throw unframedError("not_found", `There is no page or motion ${shapeId} on this canvas.`);
+    if (shape === undefined || (kind !== "page" && kind !== "motion" && kind !== "component")) throw unframedError("not_found", `There is no page or motion ${shapeId} on this canvas.`);
     const props = shape.props as { file?: unknown; title?: unknown; fileName?: unknown };
     const file = typeof props.file === "string" ? props.file : "";
     if (file === "") throw unframedError("not_found", `This ${kind} has no file yet.`);
@@ -96,6 +96,17 @@ export const artifactEditService = (deps: EditServiceDeps) => {
       throw unframedError("not_found", `No file ${file} in this project.`);
     });
     const records = await deps.read(project);
+    if (kind === "component") {
+      // A sheet keeps its markers and its pins are none: it is prepared as a sheet, and written with its compiled file (spec 20).
+      const prepared = prepareComponentHtml(html);
+      if (prepared === html) return { file };
+      const sheet = readComponentSheet(prepared);
+      if (!sheet.ok) throw unframedError("bad_request", sheet.refusal);
+      if (byteSize(prepared) > ARTIFACT_SIZE_LIMIT) throw unframedError("bad_request", tooLargeMessage(kind, byteSize(prepared)));
+      await ensureComponentLibrary(dir);
+      const written = await writeEditArtifact(dir, { kind, html: prepared, title: artifactTitle(props), of: file, shapeId, edits: [PREPARE_EDIT], tag: sheet.sheet.declaration.tag });
+      return { file: written.file };
+    }
     const prepared = (await pinComponents(dir, records, isReady(html) ? html : prepareArtifactHtml(html, kind))).html;
     if (prepared === html) return { file };
     if (byteSize(prepared) > ARTIFACT_SIZE_LIMIT) throw unframedError("bad_request", tooLargeMessage(kind, byteSize(prepared)));
@@ -152,7 +163,7 @@ export const artifactEditService = (deps: EditServiceDeps) => {
     }
     const result = applySourceEdits(html, edits, kind, kitOf(records), await instanceDeclarations(dir, records, html));
     if (!result.ok) throw unframedError("bad_request", result.refusal);
-    const ready = prepareArtifactHtml(result.html, kind);
+    const ready = kind === "component" ? prepareComponentHtml(result.html) : prepareArtifactHtml(result.html, kind);
     let tag: string | undefined;
     if (kind === "component") {
       const sheet = readComponentSheet(ready);
