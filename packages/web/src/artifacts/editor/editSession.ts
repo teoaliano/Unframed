@@ -308,7 +308,8 @@ export const useEditSession = ({ editor, engine, project, shapeId, kind, file, l
   const collect = useCallback(
     (edit: SourceEdit, showInFrame: boolean) => {
       burstRef.current = addToBurst(burstRef.current, edit);
-      lastEdit.current[edit.elementId] = edit;
+      // A motion edit names a tween, not an element, so only element edits are remembered per element.
+      if ("elementId" in edit) lastEdit.current[edit.elementId] = edit;
       if (baseRef.current === undefined) baseRef.current = fileRef.current;
       setPending(burstEdits(burstRef.current));
       if (showInFrame) post({ type: "unframed:edit:patch", patches: [edit] });

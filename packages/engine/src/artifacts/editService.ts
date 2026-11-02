@@ -9,6 +9,7 @@ import type { TLRecord } from "@tldraw/tlschema";
 import { isBareFileName, unframedError, type ArtifactImage, type SourceEdit, type SourceTreeElement } from "@unframed/contracts";
 import { ARTIFACT_SIZE_LIMIT, artifactTitle, projectSlug, shapeKind, sidecarFileName, type ArtifactKind } from "@unframed/domain";
 import { applySourceEdits, sourceTreeOf, stampElementIds } from "@unframed/domain/html";
+import { isMotionEdit } from "@unframed/domain/motion";
 import type { CommittedChange } from "../canvas/rooms.ts";
 import { byteSize, prepareArtifactHtml, tooLargeMessage } from "./artifactHtml.ts";
 import { ensureBridge, ensureLibrary, writeEditArtifact } from "./artifactStore.ts";
@@ -125,13 +126,16 @@ export const artifactEditService = (deps: EditServiceDeps) => {
     const locked = new Set(Array.isArray(props.lockedElements) ? (props.lockedElements as string[]) : []);
     if (locked.size > 0) {
       for (const edit of edits) {
+        // Motion edits check their own targets against the same locks (spec 21), inside applyMotionEdits.
+        if (isMotionEdit(edit)) continue;
         // Rename and hide still work on a locked element, so a person can tidy what they protected.
         if (edit.type === "attribute" || edit.type === "hide") continue;
         const holder = lockedBy(edit.elementId, locked, byId);
         if (holder !== undefined) throw unframedError("bad_request", `${byId.get(holder)?.name ?? holder} is locked. Unlock it in Layers to edit it.`);
       }
     }
-    const result = applySourceEdits(html, edits, kind);
+    // No project kit exists yet (spec 19), so a token in a motion edit is refused as not a token of the kit.
+    const result = applySourceEdits(html, edits, kind, { lockedElements: locked });
     if (!result.ok) throw unframedError("bad_request", result.refusal);
     const prepared = prepareArtifactHtml(result.html, kind);
     if (byteSize(prepared) > ARTIFACT_SIZE_LIMIT) throw unframedError("bad_request", tooLargeMessage(kind, byteSize(prepared)));

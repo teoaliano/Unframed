@@ -3,6 +3,7 @@
  * that only the bytes it changes move. All or nothing: the first refusal stops the list.
  */
 import type { SourceEdit } from "@unframed/contracts";
+import { applyMotionEdits, isMotionEdit, type MotionEditOptions } from "../motion/edits.ts";
 import type { ArtifactKind } from "../artifacts/artifactRules.ts";
 import { DESIGN_FIELDS, styleValueRefusal } from "../designFields.ts";
 import {
@@ -35,17 +36,28 @@ const IMAGE_FILE = /\.(png|jpe?g|webp|gif|svg)$/i;
 type Step = { readonly html: string; readonly line: string } | { readonly refusal: string };
 
 /**
- * Applies `edits` in order and returns the new source with its summary lines, or the first
- * refusal (and no source). `kind` only words the refusals.
+ * Applies `edits` and returns the new source with its summary lines, or the first refusal (and no
+ * source). Element edits go in order, then the motion edits (spec 21) in one pass: the two kinds
+ * touch different bytes, so their order does not change the result. `kind` only words the
+ * refusals; `options` carries the artifact's locks and kit to the motion edits.
  */
-export const applySourceEdits = (html: string, edits: readonly SourceEdit[], kind: ArtifactKind = "page"): SourceEditResult => {
+export const applySourceEdits = (html: string, edits: readonly SourceEdit[], kind: ArtifactKind = "page", options: MotionEditOptions = {}): SourceEditResult => {
   let current = html;
   const lines: string[] = [];
   for (const edit of edits) {
+    if (isMotionEdit(edit)) continue;
     const step = applyEdit(current, edit, kind);
     if ("refusal" in step) return { ok: false, refusal: step.refusal };
     current = step.html;
     lines.push(step.line);
+  }
+  const motion = edits.filter(isMotionEdit);
+  if (motion.length > 0) {
+    if (kind !== "motion") return { ok: false, refusal: `This ${kind} has no timeline.` };
+    const result = applyMotionEdits(current, motion, options);
+    if (!result.ok) return { ok: false, refusal: result.refusal };
+    current = result.html;
+    lines.push(...result.summary);
   }
   return { ok: true, html: current, summary: summaryLines(lines) };
 };
@@ -58,7 +70,7 @@ export const summaryLines = (lines: readonly string[]): string[] => {
   return rest > 0 ? [...shown, `and ${rest} more`] : shown;
 };
 
-const applyEdit = (html: string, edit: SourceEdit, kind: ArtifactKind): Step => {
+const applyEdit = (html: string, edit: Exclude<SourceEdit, { readonly type: "tween-time" | "tween-ease" | "tween-stagger" | "tween-value" | "clip-time" | "composition-duration" }>, kind: ArtifactKind): Step => {
   const before = sourceTreeOf(html).find((entry) => entry.id === edit.elementId);
   const target = findById(parseSource(html), edit.elementId);
   if (before === undefined || target === undefined) return { refusal: `There is no element ${edit.elementId} in this ${kind} any more.` };

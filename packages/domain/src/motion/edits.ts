@@ -6,7 +6,7 @@
  */
 import { findTimelineScript, parseGsapScriptAcornForWrite, type TweenCallInfo } from "@hyperframes/parsers/gsap-parser-acorn";
 import { retimeClipTweensInScript, type ClipTweenRetime } from "@hyperframes/parsers/gsap-writer-acorn";
-import { stampHfIdsInPlace } from "@hyperframes/parsers/hf-ids";
+import { stampElementIds } from "../html/elementIds.ts";
 import { linkedomDocument } from "./dom.ts";
 import { carryOf } from "./carry.ts";
 import { resizeKeyframedTweenInScript, updateAnimationInScript, updateKeyframeInScript } from "@hyperframes/parsers/gsap-writer-acorn";
@@ -29,6 +29,12 @@ export interface MotionEditOptions {
   /** The kind of a token in the project's kit (`easing`, `colour`, `number`, `duration`), or undefined. */
   readonly tokenKind?: (name: string) => string | undefined;
 }
+
+/** The type names of the six motion edits: what `isMotionEdit` tells apart from spec 18's element edits. */
+export const MOTION_EDIT_TYPES: ReadonlySet<string> = new Set(["tween-time", "tween-ease", "tween-stagger", "tween-value", "clip-time", "composition-duration"]);
+
+/** True for the six motion edits. Anything else is one of spec 18's element edits. */
+export const isMotionEdit = (edit: { readonly type: string }): edit is MotionEdit => MOTION_EDIT_TYPES.has(edit.type);
 
 export type MotionEditResult = { readonly ok: true; readonly html: string; readonly summary: string[] } | { readonly ok: false; readonly refusal: string };
 
@@ -334,7 +340,7 @@ const applyTweenEase = (session: Session, edit: Extract<MotionEdit, { type: "twe
   }
   const label = token !== null ? `the ${token} token` : (edit.ease as string);
   const value = token !== null ? tokenPlaceholder(0) : (edit.ease as string);
-  if (token === null && written?.kind === "source" && written.value === value) return { ok: true, html: session.html, summary: [] };
+  if (token === null && written?.kind === "source" && written.value === value) return null;
 
   let next = updateAnimationInScript(text, entry.id, { ease: value });
   if (token !== null) next = next.replace(`"${tokenPlaceholder(0)}"`, `unframed.token(${JSON.stringify(token)})`);
@@ -373,7 +379,7 @@ const applyTweenStagger = (session: Session, edit: Extract<MotionEdit, { type: "
 
 /** Applies edits in order to one motion file. Nothing is written unless every edit applies. */
 export function applyMotionEdits(html: string, edits: readonly MotionEdit[], options: MotionEditOptions = {}): MotionEditResult {
-  const stamped = stampHfIdsInPlace(html);
+  const stamped = stampElementIds(html);
   const base = motionTimeline(stamped);
   const session: Session = { html: stamped, ids: base.tweens.map((tween) => tween.ref.id), summary: [] };
   for (const edit of edits) {

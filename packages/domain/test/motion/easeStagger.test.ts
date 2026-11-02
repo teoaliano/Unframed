@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { applyMotionEdits, EASE_CATALOGUE, motionTimeline, type MotionEdit, type MotionEditOptions, type Tween } from "../../src/index.ts";
+import { EASE_CATALOGUE } from "../../src/index.ts";
+import { applyMotionEdits, motionTimeline, type MotionEdit, type MotionEditOptions, type Tween } from "../../src/motion/index.ts";
 
 const stage = `<div id="root" data-composition-id="main" data-start="0" data-duration="6" data-width="640" data-height="360">
   <div id="c" class="clip" data-start="0" data-duration="6">
@@ -65,6 +66,16 @@ describe("tween-ease", () => {
     const result = ok([{ type: "tween-ease", tween: title.ref, ease: "power2.out" }]);
     expect(tween(result.html, 0).ease).toEqual({ kind: "source", value: "power2.out" });
     expect(result.summary).toEqual([]);
+  });
+
+  it("keeps applying the edits after an ease no-op", () => {
+    const title = tween(html(), 0);
+    const result = ok([
+      { type: "tween-ease", tween: title.ref, ease: "power2.out" },
+      { type: "tween-stagger", tween: tween(html(), 1).ref, each: 0.2 },
+    ]);
+    expect(tween(result.html, 1).stagger).toEqual({ kind: "source", value: 0.2 });
+    expect(result.summary).toEqual(["Spaced the t1 stagger 0.2 s apart"]);
   });
 
   it("writes easeEach on a keyframed tween, as the writer does", () => {
