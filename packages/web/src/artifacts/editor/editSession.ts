@@ -4,7 +4,7 @@
  * that makes an older file editable. The frame is reached only through the edit protocol.
  */
 import type { SourceEdit, SourceTreeElement } from "@unframed/contracts";
-import { addToBurst, burstEdits, emptyBurst, type ArtifactKind, type Burst, type EditBox } from "@unframed/domain";
+import { addToBurst, burstEdits, emptyBurst, fieldOwner, type ArtifactKind, type Burst, type EditBox } from "@unframed/domain";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { Editor, TLShapeId } from "tldraw";
 import type { EngineConnection } from "../../rpc/engine.ts";
@@ -107,6 +107,8 @@ export const useEditSession = ({ editor, engine, project, shapeId, kind, file, l
   fileRef.current = file;
   const treeRef = useRef<SourceTree | undefined>(undefined);
   treeRef.current = tree;
+  // The reports as the frame last sent them, read at once by a text edit that starts in the same click.
+  const reportsRef = useRef<Readonly<Record<string, EditReport>>>({});
   const postRef = useRef<((message: unknown) => void) | undefined>(undefined);
   const burstRef = useRef<Burst>(emptyBurst());
   // The file the burst began on; undefined while no burst is collecting.
@@ -184,17 +186,50 @@ export const useEditSession = ({ editor, engine, project, shapeId, kind, file, l
     [post],
   );
 
-  const patch = useCallback(
-    (edit: SourceEdit) => {
+  // Adds an edit to the burst and restarts the pause. A text edit typed in the frame is already on the page, so it is not posted back.
+  const collect = useCallback(
+    (edit: SourceEdit, showInFrame: boolean) => {
       burstRef.current = addToBurst(burstRef.current, edit);
       if (baseRef.current === undefined) baseRef.current = fileRef.current;
       setPending(burstEdits(burstRef.current));
-      post({ type: "unframed:edit:patch", patches: [edit] });
+      if (showInFrame) post({ type: "unframed:edit:patch", patches: [edit] });
       window.clearTimeout(timerRef.current);
       timerRef.current = window.setTimeout(() => void commit(), COMMIT_DELAY_MS);
     },
     [commit, post],
   );
+
+  const patch = useCallback((edit: SourceEdit) => collect(edit, true), [collect]);
+
+  /** Whether an element is locked or sits inside a locked one, by the source tree's parents. */
+  const lockedInside = (id: string): boolean => {
+    for (let current: string | null = id; current !== null; ) {
+      if (lockedRef.current.includes(current)) return true;
+      current = treeRef.current?.elements.find((element) => element.id === current)?.parent ?? null;
+    }
+    return false;
+  };
+
+  /**
+   * Whether a double-click may edit an element's text in place: the owner rule says the source holds it.
+   * A text a script sets, or a text a dial sets, is read-only here (a dial's text waits for the dial write).
+   */
+  const textEditable = (id: string): boolean => {
+    if (lockedInside(id)) return false;
+    if (burstEdits(burstRef.current).some((edit) => edit.type === "text" && edit.elementId === id)) return true;
+    const element = treeRef.current?.elements.find((candidate) => candidate.id === id);
+    const report = reportsRef.current[id];
+    if (element === undefined || report === undefined) return false;
+    const owner = fieldOwner({
+      field: { kind: "text" },
+      source: { inline: element.style, text: element.text, src: element.src ?? null },
+      live: { inline: report.inline, text: report.text, src: report.src, animated: report.animated },
+      dials: {},
+      locked: false,
+      normalise: (value) => value,
+    });
+    return owner.owner === "source";
+  };
 
   const setMode = useCallback(
     (next: EditMode) => {
@@ -282,6 +317,7 @@ export const useEditSession = ({ editor, engine, project, shapeId, kind, file, l
       }
       case "unframed:edit:report": {
         const elements = Array.isArray(message.elements) ? (message.elements as EditReport[]) : [];
+        for (const element of elements) if (element.id !== null) reportsRef.current = { ...reportsRef.current, [element.id]: element };
         if (Array.isArray(message.families)) setFamilies(message.families.filter((family): family is string => typeof family === "string"));
         setReports((previous) => {
           const next = { ...previous };
@@ -307,6 +343,7 @@ export const useEditSession = ({ editor, engine, project, shapeId, kind, file, l
           return;
         }
         const id = element.id;
+        reportsRef.current = { ...reportsRef.current, [id]: element };
         setReports((previous) => ({ ...previous, [id]: element }));
         if (additive) {
           const current = selectionRef.current;
@@ -314,6 +351,21 @@ export const useEditSession = ({ editor, engine, project, shapeId, kind, file, l
         } else {
           setSelection([id]);
         }
+        return;
+      }
+      case "unframed:edit:textStart": {
+        const id = typeof message.id === "string" ? message.id : null;
+        if (id !== null && modeRef.current === "edit" && textEditable(id)) post({ type: "unframed:edit:textEdit", id });
+        return;
+      }
+      case "unframed:edit:text": {
+        const id = typeof message.id === "string" ? message.id : null;
+        const text = typeof message.text === "string" ? message.text : null;
+        if (id === null || text === null) return;
+        const burstText = burstEdits(burstRef.current).find((edit) => edit.type === "text" && edit.elementId === id);
+        const shown = burstText?.type === "text" ? burstText.text : (reportsRef.current[id]?.text ?? null);
+        // Leaving a text unchanged is not an edit, so it writes no version.
+        if (text !== shown) collect({ type: "text", elementId: id, text }, false);
         return;
       }
       case "unframed:edit:key": {

@@ -331,6 +331,13 @@ export function installEditBridge(win: EditWindow): void {
   const beginEdit = (id: string) => {
     const el = doc.querySelector('[data-hf-id="' + id + '"]');
     if (el === null || validId(el) !== id || !textOnly(el) || isLocked(el)) return;
+    // The text as the source gave it, so a reset puts it back even after a saved edit.
+    touch(el, "text", () => {
+      const value = el.textContent;
+      return () => {
+        el.textContent = value;
+      };
+    });
     editing = { el, id, original: el.textContent };
     el.setAttribute("contenteditable", "plaintext-only");
     if (el.addEventListener) el.addEventListener("blur", onBlur);
@@ -356,6 +363,8 @@ export function installEditBridge(win: EditWindow): void {
         endEdit(false);
       } else if (event.key === "Enter") {
         event.preventDefault();
+        // A text edit holds one run of text, so Shift+Enter inserts nothing and ends nothing.
+        if (event.shiftKey) return;
         const el = editing.el;
         endEdit(true);
         if (el.blur) el.blur();
