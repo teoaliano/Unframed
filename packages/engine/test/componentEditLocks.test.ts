@@ -2,7 +2,7 @@ import { readdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { compileComponent, compiledFileName } from "@unframed/domain";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { componentShape } from "./canvasRecords.ts";
+import { componentShape, pageShape } from "./canvasRecords.ts";
 import { startEngine, type TestEngine } from "./harness.ts";
 import { connectTab } from "./syncClient.ts";
 
@@ -31,7 +31,8 @@ describe("artifact.edit on a component: componentRule and locks (spec 20)", () =
     await writeFile(join(folder, compiledFileName("1-button.html")), compileComponent(SHEET, "1-button.html"));
     const tab = await connectTab(engine.port, "board");
     await tab.loaded;
-    await tab.pushRaw([componentShape("c1", "uf-button", { file: "1-button.html", title: "Button", lockedElements: ["hf-bbbb"] })]);
+    await writeFile(join(folder, "2-page.html"), `<!doctype html><html><head><script src="unframed-dials.js"></script><script src="1-button.component.js" data-uf-component="uf-button"></script></head><body><uf-button data-hf-id="hf-dddd" kind="primary"></uf-button></body></html>`);
+    await tab.pushRaw([componentShape("c1", "uf-button", { file: "1-button.html", title: "Button", lockedElements: ["hf-bbbb"] }), pageShape("pg1", "101", { file: "2-page.html", title: "Page" }, { y: 400 })]);
     await tab.close();
   });
   afterAll(() => engine.dispose());
@@ -71,5 +72,16 @@ describe("artifact.edit on a component: componentRule and locks (spec 20)", () =
       of: "1-button.html",
     });
     expect(await readFile(join(folder, "1-button.html"), "utf8")).toBe(SHEET);
+  });
+
+  it("sets an instance's declared variant in a page, from the version the page pins", async () => {
+    const answer = await rpc.call("artifact.edit", {
+      project: "board",
+      shapeId: "shape:pg1",
+      baseFile: "2-page.html",
+      edits: [{ type: "attribute", elementId: "hf-dddd", name: "kind", value: "secondary" }],
+    });
+    expect(answer.summary[0]).toMatch(/^Kind · /);
+    expect(await readFile(join(folder, answer.file), "utf8")).toContain('kind="secondary"');
   });
 });

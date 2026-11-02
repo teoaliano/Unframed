@@ -13,7 +13,7 @@ import type { CommittedChange } from "../canvas/rooms.ts";
 import { byteSize, prepareArtifactHtml, tooLargeMessage } from "./artifactHtml.ts";
 import { kitOf } from "../kits/tokensFile.ts";
 import { ensureBridge, ensureComponentLibrary, ensureLibrary, writeEditArtifact } from "./artifactStore.ts";
-import { pinComponents } from "./componentRegistry.ts";
+import { instanceDeclarations, pinComponents } from "./componentRegistry.ts";
 
 const BRIDGE_PRESENT = /unframed-dials\.js/i;
 const IMAGE_EXTENSIONS = new Set([".png", ".jpg", ".jpeg", ".webp", ".gif", ".svg"]);
@@ -142,7 +142,7 @@ export const artifactEditService = (deps: EditServiceDeps) => {
         if (holder !== undefined) throw unframedError("bad_request", `${byId.get(holder)?.name ?? holder} is locked. Unlock it in Layers to edit it.`);
       }
     }
-    const result = applySourceEdits(html, edits, kind, kitOf(records));
+    const result = applySourceEdits(html, edits, kind, kitOf(records), await instanceDeclarations(dir, records, html));
     if (!result.ok) throw unframedError("bad_request", result.refusal);
     const ready = prepareArtifactHtml(result.html, kind);
     let tag: string | undefined;

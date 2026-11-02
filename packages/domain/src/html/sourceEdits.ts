@@ -4,6 +4,7 @@
  */
 import type { SourceEdit } from "@unframed/contracts";
 import type { ArtifactKind } from "../artifacts/artifactRules.ts";
+import type { ComponentDeclaration } from "../components/sheet.ts";
 import { DESIGN_FIELDS, styleValueRefusal } from "../designFields.ts";
 import { parseStylesheet, type CssRule } from "../kits/css.ts";
 import { kitCssNames } from "../kits/rules.ts";
@@ -26,6 +27,12 @@ import {
 } from "./source.ts";
 import { sourceTreeOf } from "./sourceTree.ts";
 
+/** An instance's pinned component, by tag: its title and the declaration of the version it pins (spec 20). */
+export type InstanceDeclarations = ReadonlyMap<string, { readonly title: string; readonly declaration: ComponentDeclaration }>;
+
+/** The longest text a text property takes (spec 20). */
+const TEXT_PROPERTY_MAX = 500;
+
 export type SourceEditResult =
   | { readonly ok: true; readonly html: string; readonly summary: string[] }
   | { readonly ok: false; readonly refusal: string };
@@ -45,11 +52,17 @@ type Step = { readonly html: string; readonly line: string } | { readonly refusa
  * refusal (and no source). `kind` only words the refusals. `kit` is the project kit (spec 19):
  * a token edit needs it, and a style value may use its custom properties.
  */
-export const applySourceEdits = (html: string, edits: readonly SourceEdit[], kind: ArtifactKind = "page", kit: Kit | null = null): SourceEditResult => {
+export const applySourceEdits = (
+  html: string,
+  edits: readonly SourceEdit[],
+  kind: ArtifactKind = "page",
+  kit: Kit | null = null,
+  instances: InstanceDeclarations = new Map(),
+): SourceEditResult => {
   let current = html;
   const lines: string[] = [];
   for (const edit of edits) {
-    const step = applyEdit(current, edit, kind, kit);
+    const step = applyEdit(current, edit, kind, kit, instances);
     if ("refusal" in step) return { ok: false, refusal: step.refusal };
     current = step.html;
     lines.push(step.line);
@@ -65,7 +78,7 @@ export const summaryLines = (lines: readonly string[]): string[] => {
   return rest > 0 ? [...shown, `and ${rest} more`] : shown;
 };
 
-const applyEdit = (html: string, edit: SourceEdit, kind: ArtifactKind, kit: Kit | null): Step => {
+const applyEdit = (html: string, edit: SourceEdit, kind: ArtifactKind, kit: Kit | null, instances: InstanceDeclarations): Step => {
   if (edit.type === "token") return applyToken(html, edit, kind, kit);
   if (edit.type === "componentRule") return applyComponentRule(html, edit, kit);
   const before = sourceTreeOf(html).find((entry) => entry.id === edit.elementId);
@@ -93,7 +106,11 @@ const applyEdit = (html: string, edit: SourceEdit, kind: ArtifactKind, kit: Kit 
       return { html: next, line: `${field.label} · ${after(next)}` };
     }
     case "attribute": {
-      if (edit.name !== "data-uf-name") return { refusal: `The attribute ${edit.name} cannot be edited here.` };
+      const instance = instances.get(el.tagName.toLowerCase());
+      if (edit.name !== "data-uf-name") {
+        if (instance === undefined) return { refusal: `The attribute ${edit.name} cannot be edited here.` };
+        return instanceAttribute(html, id, instance, edit.name, edit.value, after);
+      }
       const value = edit.value === null ? "" : edit.value.trim().slice(0, NAME_MAX);
       const next = setAttribute(html, id, "data-uf-name", value === "" ? null : renderAttribute("data-uf-name", value));
       return { html: next, line: `Name · ${after(next)}` };
@@ -116,6 +133,43 @@ const applyEdit = (html: string, edit: SourceEdit, kind: ArtifactKind, kit: Kit 
       return { html: next, line: `Image · ${after(next)}` };
     }
   }
+};
+
+/**
+ * An instance's own variant or property (spec 20): its attribute, set or removed. A variant's value
+ * must be one it lists, and the default value removes the attribute. Each property kind has its value rule.
+ */
+const instanceAttribute = (
+  html: string,
+  id: string,
+  instance: { readonly title: string; readonly declaration: ComponentDeclaration },
+  name: string,
+  value: string | null,
+  after: (next: string) => string,
+): Step => {
+  const { declaration, title } = instance;
+  const label = name.charAt(0).toUpperCase() + name.slice(1);
+  if (Object.hasOwn(declaration.variants, name)) {
+    const values = declaration.variants[name]!;
+    if (value !== null && !values.includes(value)) return { refusal: `${value} is not a ${name} of ${title}.` };
+    if (value === null || value === values[0]) {
+      const next = setAttribute(html, id, name, null);
+      return { html: next, line: `${label} · ${after(next)}` };
+    }
+    const next = setAttribute(html, id, name, renderAttribute(name, value));
+    return { html: next, line: `${label} · ${after(next)}` };
+  }
+  if (!Object.hasOwn(declaration.props, name)) return { refusal: `The attribute ${name} cannot be edited here.` };
+  const type = declaration.props[name]!;
+  if (value === null) {
+    const next = setAttribute(html, id, name, null);
+    return { html: next, line: `${label} · ${after(next)}` };
+  }
+  if (type === "boolean" && value !== "") return { refusal: `${name} is on or off, so it takes no value.` };
+  if (type === "text" && value.length > TEXT_PROPERTY_MAX) return { refusal: `${name} is at most ${TEXT_PROPERTY_MAX} characters.` };
+  if (type === "image" && !isImageFile(value)) return { refusal: `${value} is not an image this component can show.` };
+  const next = setAttribute(html, id, name, renderAttribute(name, value));
+  return { html: next, line: `${label} · ${after(next)}` };
 };
 
 /**
