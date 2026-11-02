@@ -1,5 +1,6 @@
 /** Browser-seam helpers for components (spec 20): sheets in the project folder and the component shapes that name them. */
-import { COMPONENT_HELPER_TAG } from "@unframed/domain";
+import { BRIDGE_TAG, COMPONENT_HELPER_TAG } from "@unframed/domain";
+import { stampElementIds } from "@unframed/domain/html";
 import type { TestEngine } from "../../engine/test/engineProcess.ts";
 import { writeProjectFile } from "./artifacts.ts";
 import { testIndex } from "./media.ts";
@@ -17,12 +18,13 @@ export interface SheetOptions {
 
 /**
  * A component sheet with a declaration, a style and a template holding one text property. Its
- * head carries the sheet helper's tag, as the engine writes it, so the sheet builds its board.
+ * head carries the bridge and the sheet helper's tags, as the engine writes it, so the sheet builds its board and takes edits.
  */
 export const sheetHtml = (options: SheetOptions): string => {
   const declaration = { tag: options.tag, variants: options.variants ?? {}, props: { label: "text" }, slots: [] };
   const example = options.example ?? "";
-  return `<!doctype html><html><head><meta charset="utf-8">${COMPONENT_HELPER_TAG}</head><body style="margin:0">
+  // Stamped with element ids, as the engine writes a sheet, so the editor opens it without preparing a new version.
+  return stampElementIds(`<!doctype html><html><head><meta charset="utf-8">${BRIDGE_TAG}${COMPONENT_HELPER_TAG}</head><body style="margin:0">
 <script type="application/json" data-uf-component>${JSON.stringify(declaration)}</script>
 <style type="text/x-uf-component" data-uf-component-style>
 :host { display: inline-block; }
@@ -31,7 +33,7 @@ button { background: #111111; color: #ffffff; padding: 8px 12px; }
 </style>
 <div data-uf-template hidden><button data-uf-prop="label">Buy</button></div>
 <div data-uf-example hidden>${example}</div>
-</body></html>`;
+</body></html>`);
 };
 
 /** Writes a sheet into a project's folder, as the agent's component write would leave it. */

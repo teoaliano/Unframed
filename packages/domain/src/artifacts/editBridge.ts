@@ -621,6 +621,17 @@ export function installEditBridge(win: EditWindow): void {
     }
   };
 
+  // A component sheet's declaration, as its own document carries it (spec 20). Null in a page or a motion.
+  const declarationOf = (): unknown => {
+    const script = doc.querySelector('script[data-uf-component]');
+    if (script === null || script.textContent === null) return null;
+    try {
+      return JSON.parse(script.textContent);
+    } catch {
+      return null;
+    }
+  };
+
   const treeOf = (el: EditElement): { id: string | null; selector: string; tag: string; children: unknown[] } => ({
     id: validId(el),
     selector: selectorOf(el),
@@ -696,7 +707,7 @@ export function installEditBridge(win: EditWindow): void {
       beginEdit(data.id);
       if (held !== null) replay(held.keys);
     } else if (type === "unframed:edit:tree") {
-      post({ type: "unframed:edit:tree", nodes: Array.from(doc.body.children).filter(pickable).map(treeOf) });
+      post({ type: "unframed:edit:tree", nodes: Array.from(doc.body.children).filter(pickable).map(treeOf), declaration: declarationOf() });
     } else if (type === "unframed:edit:hitTest" && typeof data.x === "number" && typeof data.y === "number") {
       post({ type: "unframed:edit:hit", ...hitAt(data.x, data.y) });
     }

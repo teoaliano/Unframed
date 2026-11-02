@@ -5,7 +5,7 @@
  * share shows, a value they differ on shows Mixed, and an edit reaches each of them.
  */
 import type { OffTokenFound, SourceEdit } from "@unframed/contracts";
-import { cssName, dialAt, DESIGN_FIELDS, fieldOwner, kitCssNames, resolve, styleValueRefusal, TEXT_STYLE_SUFFIX, tokensForField, type ArtifactKind, type ChipElement, type FieldOwner, type Kit, type TextStyleField, type Token } from "@unframed/domain";
+import { cssName, dialAt, DESIGN_FIELDS, fieldOwner, kitCssNames, resolve, styleValueRefusal, TEXT_STYLE_SUFFIX, tokensForField, type ArtifactKind, type ChipElement, type ComponentDeclaration, type FieldOwner, type Kit, type TextStyleField, type Token } from "@unframed/domain";
 import { AlignCenter, AlignJustify, AlignLeft, AlignRight, Diamond, Link, MessageSquarePlus, SlidersHorizontal, Unlink } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
 import { Autocomplete, AutocompleteInput, AutocompleteItem, AutocompleteList, AutocompletePopup } from "~/components/ui/autocomplete";
@@ -18,6 +18,7 @@ import { Toggle, ToggleGroup } from "~/components/ui/toggle-group";
 import { Tip } from "../../chrome/ui.tsx";
 import { showError } from "../../toasts.tsx";
 import { previewUrl } from "../../canvas/assetStore.ts";
+import { ComponentSection } from "./ComponentSection.tsx";
 import { chainOf } from "./EditPanels.tsx";
 import { ImagePicker } from "./ImagePicker.tsx";
 import type { EditReport, EditSession } from "./editSession.ts";
@@ -635,6 +636,10 @@ export interface DesignTabProps {
   readonly onTell: (elements: ChipElement[]) => void;
   /** Ask the agent to make a read-only field editable, with the read-only elements' chips. */
   readonly onAsk: (field: string, elements: ChipElement[]) => void;
+  /** A component sheet's declaration (spec 20), shown read-only when nothing is selected. */
+  readonly component?: ComponentDeclaration | null;
+  /** Asks the agent to change the component. */
+  readonly onAskComponent?: () => void;
 }
 
 /** The value a dial takes for a CSS value written to its field: a number dial takes the number, anything else the text. */
@@ -651,7 +656,7 @@ const normaliserFor = (property: string) => (value: string) => {
   return probe.style.getPropertyValue(property);
 };
 
-export const DesignTab = ({ session, kind, project, dials, locked, kit, mode, onOpenKit, onTell, onAsk }: DesignTabProps) => {
+export const DesignTab = ({ session, kind, project, dials, locked, kit, mode, onOpenKit, onTell, onAsk, component, onAskComponent }: DesignTabProps) => {
   // The token chip whose popover is open. A preview of a token changes the frame, so the field's owner can change while the popover is up.
   const [openChip, setOpenChip] = useState<{ readonly field: string; readonly named: { readonly token: Token; readonly suffix?: string } } | null>(null);
   const { selection, reports, tree, preparing, prepareError, pending, families, overridden } = session;
@@ -659,9 +664,12 @@ export const DesignTab = ({ session, kind, project, dials, locked, kit, mode, on
   if (prepareError !== undefined) return <p className="m-0 p-2.5 text-sm text-destructive-foreground">{prepareError}</p>;
   if (selection.length === 0) {
     return (
-      <div className="flex flex-col gap-1 p-2.5 text-sm text-muted-foreground" data-testid="design-empty">
-        <p className="m-0">Select an element to edit it.</p>
-        {session.mode === "interact" && <p className="m-0">{`Switch to Edit (V) to select in the ${kind}.`}</p>}
+      <div className="flex min-h-0 flex-col gap-3 overflow-auto p-2.5">
+        {component && onAskComponent && <ComponentSection declaration={component} onAsk={onAskComponent} />}
+        <div className="flex flex-col gap-1 text-sm text-muted-foreground" data-testid="design-empty">
+          <p className="m-0">Select an element to edit it.</p>
+          {session.mode === "interact" && <p className="m-0">{`Switch to Edit (V) to select in the ${kind}.`}</p>}
+        </div>
       </div>
     );
   }

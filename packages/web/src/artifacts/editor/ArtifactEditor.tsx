@@ -4,8 +4,8 @@
  * Parameters tabs. Spec 18 adds the Edit and Interact modes and the edit session behind them.
  */
 import type { ArtifactShapeProps } from "@unframed/contracts";
-import { artifactTitle, dialsWith, editorPreviewViewport, isArtifactKind, mergeDialValues, normaliseDials, previewScale, type ArtifactKind, type DialsAnnouncement } from "@unframed/domain";
-import { AppWindow, ArrowLeft, Clapperboard, ExternalLink, Hand, MousePointer2, SlidersHorizontal } from "lucide-react";
+import { artifactTitle, dialsWith, editorPreviewViewport, isArtifactKind, mergeDialValues, normaliseDials, previewScale, type ArtifactKind, type ChipElement, type DialsAnnouncement } from "@unframed/domain";
+import { AppWindow, ArrowLeft, Clapperboard, Component, ExternalLink, Hand, MousePointer2, SlidersHorizontal } from "lucide-react";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useEditor, useValue, type TLShapeId } from "tldraw";
 import { Button } from "~/components/ui/button";
@@ -20,8 +20,10 @@ import { ArtifactFrame, outsideUrlOf, type EditMessage } from "../ArtifactFrame.
 import { kitOf } from "../kit.ts";
 import { kitUi } from "../../kits/state.ts";
 import { KitModePicker } from "../KitMode.tsx";
+import { countUsing } from "../componentPins.ts";
 import { previewPort } from "../state.ts";
 import { RenderButton } from "../render.tsx";
+import { ComponentSection } from "./ComponentSection.tsx";
 import { EditOverlay } from "./EditOverlay.tsx";
 import { DesignTab } from "./DesignTab.tsx";
 import { LayersTab } from "./LayersTab.tsx";
@@ -80,9 +82,22 @@ export const ArtifactEditor = ({ shapeId, onClose, onOpen }: ArtifactEditorProps
       const shape = editor.getShape(shapeId);
       if (!shape || !isArtifactKind(shape.type)) return undefined;
       const props = shape.props as ArtifactShapeProps;
-      return { kind: shape.type as ArtifactKind, file: props.file, title: props.title, fileName: props.fileName, dials: props.dials, mode: props.mode, locked: props.lockedElements ?? [] };
+      return { kind: shape.type as ArtifactKind, file: props.file, title: props.title, fileName: props.fileName, dials: props.dials, mode: props.mode, locked: props.lockedElements ?? [], tag: (props as { tag?: string }).tag ?? "" };
     },
     [editor, shapeId],
+  );
+  // How many page and motion shapes on this canvas pin the component's tag (spec 20, the editor's header).
+  const uses = useValue(
+    "component uses",
+    () => {
+      if (facts?.kind !== "component") return 0;
+      const files = editor
+        .getCurrentPageShapes()
+        .filter((shape) => shape.type === "page" || shape.type === "motion")
+        .map((shape) => (shape.props as { file?: string }).file ?? "");
+      return countUsing(project, facts.tag, files);
+    },
+    [editor, project, facts?.kind, facts?.tag],
   );
   const port = useValue("preview port", () => previewPort.get(), []);
   const gone = facts === undefined;
@@ -199,7 +214,15 @@ export const ArtifactEditor = ({ shapeId, onClose, onOpen }: ArtifactEditorProps
   if (!facts) return null;
   const displayTitle = artifactTitle(facts);
   const title = displayTitle === "" ? shapeId.replace(/^shape:/, "") : displayTitle;
-  const Icon = facts.kind === "page" ? AppWindow : Clapperboard;
+  const component = facts.kind === "component";
+  const Icon = facts.kind === "page" ? AppWindow : component ? Component : Clapperboard;
+  // A component has no Parameters tab: its values are the sheet's own, and a motion's dials do not apply.
+  const shownPanel: Panel = component && panel === "parameters" ? "design" : panel;
+  const askAboutComponent = () => {
+    // The component's chip names its tag, so the agent can find every instance of it.
+    const chip: ChipElement = { elementId: null, liveSelector: facts.tag, tag: facts.tag, label: displayTitle || facts.tag, startTag: `<${facts.tag}>`, text: "", hasChildren: false };
+    tellAgent(chatClient, shapeId, [chip]);
+  };
   const mode: EditMode = session.mode;
   // The values the frame is running: the saved ones over the artifact's declared defaults, which is what a field's owner is matched against.
   const normalised = announcement === undefined ? undefined : normaliseDials(announcement.config);
@@ -234,6 +257,11 @@ export const ArtifactEditor = ({ shapeId, onClose, onOpen }: ArtifactEditorProps
             <span data-testid="artifact-editor-kind" className="shrink-0 text-sm text-muted-foreground @max-[520px]/editor-header:hidden">
               {facts.kind}
             </span>
+            {component && uses > 0 && (
+              <span data-testid="artifact-editor-uses" className="shrink-0 text-sm text-muted-foreground @max-[520px]/editor-header:hidden">
+                {uses === 1 ? "Used in 1 artifact" : `Used in ${uses} artifacts`}
+              </span>
+            )}
           </span>
           {facts.file !== "" && (
             <ToggleGroup
@@ -325,14 +353,16 @@ export const ArtifactEditor = ({ shapeId, onClose, onOpen }: ArtifactEditorProps
             <TabsList variant="underline" aria-label="Editor panels">
               <TabsTab value="design">Design</TabsTab>
               <TabsTab value="layers">Layers</TabsTab>
-              <TabsTab value="parameters">
-                <SlidersHorizontal aria-hidden />
-                Parameters
-              </TabsTab>
+              {!component && (
+                <TabsTab value="parameters">
+                  <SlidersHorizontal aria-hidden />
+                  Parameters
+                </TabsTab>
+              )}
             </TabsList>
           </Tabs>
         </ColumnHeader>
-        {panel === "design" && (
+        {shownPanel === "design" && (
           <DesignTab
             session={session}
             kind={facts.kind}
@@ -344,9 +374,11 @@ export const ArtifactEditor = ({ shapeId, onClose, onOpen }: ArtifactEditorProps
             onOpenKit={() => kitUi(editor).update((state) => ({ ...state, open: true }))}
             onTell={(elements) => tellAgent(chatClient, shapeId, elements)}
             onAsk={(field, elements) => tellAgent(chatClient, shapeId, elements, makeEditableInstruction(field))}
+            component={component ? session.declaration : null}
+            onAskComponent={askAboutComponent}
           />
         )}
-        {panel === "layers" && (
+        {shownPanel === "layers" && (
           <LayersTab
             session={session}
             kind={facts.kind}
@@ -356,7 +388,7 @@ export const ArtifactEditor = ({ shapeId, onClose, onOpen }: ArtifactEditorProps
             onTell={(elements) => tellAgent(chatClient, shapeId, elements)}
           />
         )}
-        {panel === "parameters" && (
+        {shownPanel === "parameters" && (
           <ParametersBody
             shapeId={shapeId}
             kind={facts.kind}

@@ -16,6 +16,7 @@ import {
   withoutEdit,
   type ArtifactKind,
   type Burst,
+  type ComponentDeclaration,
   type EditBox,
   type FieldOwner,
   type Kit,
@@ -102,6 +103,8 @@ export interface EditSession {
   readonly tree: SourceTree | undefined;
   /** The frame's live elements, for the Layers tab's runtime rows. Asked for when the frame is ready and on request. */
   readonly live: readonly LiveNode[];
+  /** The declaration of a component sheet, as its frame reports it; null in a page or a motion (spec 20). */
+  readonly declaration: ComponentDeclaration | null;
   /** Hovers an element from Layers: the frame outlines it. Null clears it. */
   readonly hoverLayer: (id: string | null) => void;
   /** The element a Layers row hovers, outlined in the frame. */
@@ -153,6 +156,7 @@ export const useEditSession = ({ editor, engine, project, shapeId, kind, file, l
   const [boxes, setBoxes] = useState<Readonly<Record<string, EditBox>>>({});
   const [tree, setTree] = useState<SourceTree | undefined>(undefined);
   const [live, setLive] = useState<readonly LiveNode[]>([]);
+  const [declaration, setDeclaration] = useState<ComponentDeclaration | null>(null);
   const [layerHover, setLayerHover] = useState<string | null>(null);
   const [preparing, setPreparing] = useState(false);
   const [prepareError, setPrepareError] = useState<string | undefined>(undefined);
@@ -500,6 +504,7 @@ export const useEditSession = ({ editor, engine, project, shapeId, kind, file, l
       }
       case "unframed:edit:tree": {
         setLive(Array.isArray(message.nodes) ? (message.nodes as LiveNode[]) : []);
+        setDeclaration(typeof message.declaration === "object" && message.declaration !== null ? (message.declaration as ComponentDeclaration) : null);
         return;
       }
       case "unframed:edit:report": {
@@ -642,6 +647,7 @@ export const useEditSession = ({ editor, engine, project, shapeId, kind, file, l
     boxes,
     tree,
     live,
+    declaration,
     hoverLayer,
     layerHover,
     requestLive,
