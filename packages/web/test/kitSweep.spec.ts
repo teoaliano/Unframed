@@ -128,7 +128,7 @@ test("the Agent tray's pickers, menus and model dialog render every control thro
     await box.pressSequentially("keep this for later");
     await page.keyboard.press("ControlOrMeta+s");
     await panel.getByTestId("stash-badge").click();
-    await expect(page.getByRole("menu", { name: "Stashed prompts" })).toBeVisible();
+    await expect(panel.getByTestId("stash-drawer").getByRole("list", { name: "Stashed prompts" })).toBeVisible();
     await sweep(page);
     await box.click();
     await box.pressSequentially("/");
