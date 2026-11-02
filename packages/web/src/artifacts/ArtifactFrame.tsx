@@ -36,8 +36,8 @@ export interface EditMessage {
 const nonEmpty = (dials: Readonly<Record<string, unknown>> | undefined) => dials !== undefined && Object.keys(dials).length > 0;
 
 /** An artifact's URL on the preview origin, under the loopback name the app is not using. */
-export const urlOf = (project: string, kind: ArtifactKind, file: string, port: number): string =>
-  artifactUrl({ appHostname: window.location.hostname, previewPort: port, project, file, kind });
+export const urlOf = (project: string, kind: ArtifactKind, file: string, port: number, editor = false): string =>
+  artifactUrl({ appHostname: window.location.hostname, previewPort: port, project, file, kind, editor });
 
 /**
  * What "Open in a new tab" opens: the shape's live viewer, which follows its newest file and
@@ -140,7 +140,7 @@ const openShapeMenu = (frame: HTMLIFrameElement, menu: FrameMenu) => {
  * document's boxes never reach the editor. Other frames show `file` and remount when it changes.
  */
 export const ArtifactFrame = ({ project, kind, file, previewPort, dials, interactive, lazy, onAnnounce, onReady, editable = false, onEdit, onEditReady, onSwapped }: ArtifactFrameProps) => {
-  const url = urlOf(project, kind, file, previewPort);
+  const url = urlOf(project, kind, file, previewPort, editable);
   const [shownUrl, setShownUrl] = useState(url);
   const displayed = editable ? shownUrl : url;
   const incoming = editable && url !== shownUrl ? url : undefined;
@@ -164,6 +164,8 @@ export const ArtifactFrame = ({ project, kind, file, previewPort, dials, interac
   // The frame whose parameters were announced while it loaded, so the swap knows they are current.
   const announcedBy = useRef<string | undefined>(undefined);
   const swappingTo = useRef<string | undefined>(undefined);
+  // The shown motion's playhead, from its player's state (spec 21): a swap seeks the incoming motion to it.
+  const playhead = useRef<{ time: number; playing: boolean } | undefined>(undefined);
 
   const post = (frame: HTMLIFrameElement | undefined, message: unknown) => {
     try {
@@ -178,6 +180,8 @@ export const ArtifactFrame = ({ project, kind, file, previewPort, dials, interac
     post(frame, { type: "unframed:dials:hello", ...(canvasUnder(frame) ? { menus: true } : {}) });
     // The edit bridge loads on this hello (spec 18). Canvas frames never say it, so they carry no edit code.
     if (editing.current) post(frame, { type: "unframed:edit:hello" });
+    // A motion's editor frame also takes the player's transport (spec 21).
+    if (editing.current && kind === "motion") post(frame, { type: "unframed:player:hello" });
   };
   const set = (values: unknown) => post(shown(), { type: "unframed:dials:set", values });
 
@@ -211,6 +215,17 @@ export const ArtifactFrame = ({ project, kind, file, previewPort, dials, interac
       if (isShown && isMenu(event.data)) return openShapeMenu(frame, event.data);
       if (isShown && isScroll(event.data)) {
         scrolled.current = { x: event.data.x, y: event.data.y };
+        return;
+      }
+      const player = event.data as { type?: unknown; time?: unknown; playing?: unknown } | null;
+      if (isShown && player?.type === "unframed:player:state" && typeof player.time === "number") {
+        playhead.current = { time: player.time, playing: player.playing === true };
+        return;
+      }
+      if (!isShown && editing.current && player?.type === "unframed:player:timeline" && playhead.current !== undefined) {
+        // The swap keeps the playhead: the incoming motion goes to the time the shown one was at (spec 21).
+        post(frame, { type: "unframed:player:control", action: "seek", seconds: playhead.current.time });
+        if (playhead.current.playing) post(frame, { type: "unframed:player:control", action: "play" });
         return;
       }
       if (isShown && isEdit(event.data)) return onEditMessage.current?.(event.data);

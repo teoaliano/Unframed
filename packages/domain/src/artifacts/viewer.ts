@@ -1,12 +1,16 @@
 /**
  * The motion viewer (spec 09), `hyperframes-viewer.html`: a page on the preview origin that
  * plays one composition in HyperFrames' player and relays dial messages between the canvas
- * above it and the composition inside it. Opened outside Unframed it relays nothing.
+ * above it and the composition inside it. Opened outside Unframed it relays nothing. With
+ * `ui=editor` (spec 21) the editor drives the player through `unframed:player:*` messages, and
+ * the runtime's state and timeline come back the same way.
  */
 
 export interface ViewerWindow {
   readonly location: { readonly origin: string; readonly search: string };
   addEventListener(type: "message", listener: (event: { source: unknown; origin: string; data: unknown }) => void): void;
+  /** The frame clock the backward shuttle seeks on. */
+  requestAnimationFrame?(callback: (now: number) => void): unknown;
 }
 
 export interface ViewerRect {
@@ -18,7 +22,14 @@ export interface ViewerRect {
 
 export interface ViewerPlayer {
   setAttribute(name: string, value: string): void;
+  play?(): void;
   pause?(): void;
+  seek?(seconds: number): void;
+  playbackRate?: number;
+  muted?: boolean;
+  rangeStart?: number | null;
+  rangeEnd?: number | null;
+  loop?: boolean;
   readonly iframeElement?: { readonly contentWindow?: unknown; readonly offsetWidth?: number; readonly style?: { pointerEvents: string }; getBoundingClientRect?(): ViewerRect } | null;
 }
 
@@ -37,6 +48,12 @@ export function viewerRelay(win: ViewerWindow, player: ViewerPlayer): void {
   let composition: Target | undefined;
   let announcement: unknown;
   let canvas: { window: Target; origin: string } | undefined;
+  // The editor's transport (spec 21): the editor that said player hello controls the player and gets the runtime's last state and timeline.
+  let controller: { window: Target; origin: string } | undefined;
+  let lastState: Loose | undefined;
+  let lastTimeline: Loose | undefined;
+  let shuttle: { rate: number; time: number; prev: number | undefined } | undefined;
+  let framing = false;
 
   const wanted = new URLSearchParams(win.location.search).get("c");
   if (wanted !== null && COMPOSITION.test(wanted)) player.setAttribute("src", wanted);
@@ -75,9 +92,77 @@ export function viewerRelay(win: ViewerWindow, player: ViewerPlayer): void {
     return copy;
   };
 
+  const playerFrame = (): unknown => player.iframeElement?.contentWindow;
+  const toController = (message: Loose): void => {
+    if (controller !== undefined) controller.window.postMessage(message, controller.origin);
+  };
+
+  // The backward shuttle seeks the player on each animation frame, since the player plays forward only.
+  const schedule = (): void => {
+    if (framing || shuttle === undefined || win.requestAnimationFrame === undefined) return;
+    framing = true;
+    win.requestAnimationFrame(step);
+  };
+  const step = (now: number): void => {
+    framing = false;
+    if (shuttle === undefined) return;
+    const previous = shuttle.prev ?? now;
+    shuttle.time = Math.max(0, shuttle.time + shuttle.rate * ((now - previous) / 1000));
+    shuttle.prev = now;
+    player.seek?.(shuttle.time);
+    schedule();
+  };
+  const startShuttle = (rate: number): void => {
+    player.pause?.();
+    const base = typeof lastState?.time === "number" ? lastState.time : 0;
+    shuttle = { rate, time: shuttle?.time ?? base, prev: undefined };
+    schedule();
+  };
+
+  // One player control from the editor (spec 21). `seek` lands paused; `root-duration` is the runtime's own control.
+  const control = (data: Loose): void => {
+    if (data.action === "play") {
+      shuttle = undefined;
+      player.play?.();
+    } else if (data.action === "pause") {
+      shuttle = undefined;
+      player.pause?.();
+    } else if (data.action === "seek" && typeof data.seconds === "number") {
+      shuttle = undefined;
+      player.pause?.();
+      player.seek?.(Math.max(0, data.seconds));
+    } else if (data.action === "rate" && typeof data.rate === "number" && Number.isFinite(data.rate)) {
+      if (data.rate < 0) startShuttle(data.rate);
+      else {
+        shuttle = undefined;
+        player.playbackRate = data.rate;
+      }
+    } else if (data.action === "mute") {
+      player.muted = data.muted === true;
+    } else if (data.action === "range") {
+      player.rangeStart = typeof data.start === "number" ? data.start : null;
+      player.rangeEnd = typeof data.end === "number" ? data.end : null;
+      player.loop = data.loop === true;
+    } else if (data.action === "root-duration" && typeof data.seconds === "number") {
+      (playerFrame() as Target | undefined)?.postMessage({ source: "hf-parent", type: "control", action: "set-root-duration", durationSeconds: data.seconds }, own);
+    }
+  };
+
   win.addEventListener("message", (event) => {
     const data = event.data as { type?: unknown } | null;
     if (typeof data !== "object" || data === null) return;
+    // The runtime's state and timeline come from the player's own frame only, and go to the editor.
+    const runtime = data as Loose;
+    if (runtime.source === "hf-preview" && event.source !== undefined && event.source === playerFrame()) {
+      if (runtime.type === "state") {
+        lastState = { type: "unframed:player:state", time: runtime.currentTime, frame: runtime.frame, playing: runtime.isPlaying, rate: runtime.playbackRate, muted: runtime.muted, ended: runtime.ended };
+        toController(lastState);
+      } else if (runtime.type === "timeline") {
+        lastTimeline = { type: "unframed:player:timeline", clips: runtime.clips, duration: runtime.durationSeconds, size: { width: runtime.compositionWidth, height: runtime.compositionHeight } };
+        toController(lastTimeline);
+      }
+      return;
+    }
     if (data.type === "unframed:dials" && event.origin === own) {
       composition = event.source as Target;
       announcement = data;
@@ -90,13 +175,20 @@ export function viewerRelay(win: ViewerWindow, player: ViewerPlayer): void {
       if (canvas !== undefined) canvas.window.postMessage(outward(data as Loose, frameNow()), canvas.origin);
       return;
     }
-    if (!LOOPBACK.test(event.origin) || event.source === composition) return;
+    // The composition is never a controller or a peer, whether or not it has announced its dials yet.
+    if (!LOOPBACK.test(event.origin) || event.source === composition || event.source === playerFrame()) return;
     if (data.type === "unframed:dials:hello") {
       canvas = { window: event.source as Target, origin: event.origin };
       if (announcement !== undefined) canvas.window.postMessage(announcement, canvas.origin);
     } else if (data.type === "unframed:dials:set") {
       const target = composition ?? (player.iframeElement?.contentWindow as Target | undefined);
       target?.postMessage(data, own);
+    } else if (type === "unframed:player:hello") {
+      controller = { window: event.source as Target, origin: event.origin };
+      if (lastTimeline !== undefined) controller.window.postMessage(lastTimeline, controller.origin);
+      if (lastState !== undefined) controller.window.postMessage(lastState, controller.origin);
+    } else if (type === "unframed:player:control") {
+      if (controller !== undefined && event.source === controller.window) control(data as Loose);
     } else if (type.startsWith("unframed:edit:")) {
       if (type === "unframed:edit:hello") canvas = { window: event.source as Target, origin: event.origin };
       // Edit mode holds the motion still and lets the pointer reach it (the player turns it off); Interact leaves the player as the person left it.
@@ -119,7 +211,7 @@ export function viewerRelay(win: ViewerWindow, player: ViewerPlayer): void {
   });
 }
 
-/** The viewer page's HTML, as the engine writes it into the motion library. */
+/** The viewer page's HTML, as the engine writes it into the motion library. The player is made from script: with `ui=editor` it has no controls and no autoplay, so the editor's transport starts it. */
 export const viewerPageSource = (): string =>
   [
     "<!doctype html>",
@@ -131,9 +223,16 @@ export const viewerPageSource = (): string =>
     '<script src="hyperframes-player.js"></script>',
     "</head>",
     "<body>",
-    '<hyperframes-player runtime-src="hyperframes-runtime.js" controls muted autoplay></hyperframes-player>',
     "<script>",
-    `(${viewerRelay.toString()})(window, document.querySelector("hyperframes-player"));`,
+    "(function (win) {",
+    '  var editor = new URLSearchParams(win.location.search).get("ui") === "editor";',
+    '  var player = document.createElement("hyperframes-player");',
+    '  player.setAttribute("runtime-src", "hyperframes-runtime.js");',
+    '  player.setAttribute("muted", "");',
+    '  if (!editor) { player.setAttribute("controls", ""); player.setAttribute("autoplay", ""); }',
+    "  document.body.appendChild(player);",
+    `  (${viewerRelay.toString()})(win, player);`,
+    "})(window);",
     "</script>",
     "</body>",
     "</html>",
