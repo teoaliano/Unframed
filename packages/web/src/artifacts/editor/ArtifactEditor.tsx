@@ -19,7 +19,8 @@ import { ArtifactFrame, outsideUrlOf, type EditMessage } from "../ArtifactFrame.
 import { previewPort } from "../state.ts";
 import { RenderButton } from "../render.tsx";
 import { EditOverlay } from "./EditOverlay.tsx";
-import { DesignTab, LayersTab } from "./EditPanels.tsx";
+import { DesignTab } from "./DesignTab.tsx";
+import { LayersTab } from "./EditPanels.tsx";
 import { COLUMN, ColumnHeader, ParametersBody } from "./Parameters.tsx";
 import { PreviewSizeControl, usePreviewSize } from "./PreviewSize.tsx";
 import { useEditSession, type EditMode } from "./editSession.ts";

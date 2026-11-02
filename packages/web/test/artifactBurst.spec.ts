@@ -74,8 +74,10 @@ test("the Text section patches the frame at once and writes one version after th
 
   await sizeField(page).fill("48");
   await sizeField(page).press("Enter");
-  await parameters(page).getByRole("textbox", { name: "Colour", exact: true }).fill("#ff0000");
-  await parameters(page).getByRole("textbox", { name: "Colour", exact: true }).press("Enter");
+  await parameters(page).getByRole("button", { name: "Colour", exact: true }).click();
+  await page.getByRole("textbox", { name: "Hex", exact: true }).fill("#ff0000");
+  await page.getByRole("textbox", { name: "Hex", exact: true }).press("Enter");
+  await page.keyboard.press("Escape");
   await parameters(page).getByRole("combobox", { name: "Weight" }).click();
   await page.getByRole("option", { name: "700", exact: true }).click();
   // The frame shows the change before anything is saved.

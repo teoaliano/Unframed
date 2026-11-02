@@ -261,13 +261,25 @@ export function installEditBridge(win: EditWindow): void {
     schedule();
   };
 
+  // The first family of each element's computed font, unquoted: the families the Font field offers.
+  const familiesOf = (): string[] => {
+    const found: string[] = [];
+    const walk = (el: EditElement) => {
+      const first = win.getComputedStyle(el).getPropertyValue("font-family").split(",")[0]!.trim().replace(/^["']|["']$/g, "");
+      if (first !== "" && !found.includes(first)) found.push(first);
+      for (const child of Array.from(el.children)) if (pickable(child)) walk(child);
+    };
+    walk(doc.body);
+    return found;
+  };
+
   const reportSelection = () => {
     const elements: Array<ReturnType<typeof reportOf>> = [];
     for (const key of selection) {
       const el = resolveKey(key);
       if (el !== null) elements.push(reportOf(el));
     }
-    post({ type: "unframed:edit:report", elements });
+    post({ type: "unframed:edit:report", elements, families: familiesOf() });
     last = {};
     schedule();
   };
@@ -525,7 +537,7 @@ export function installEditBridge(win: EditWindow): void {
         if (typeof patch === "object" && patch !== null) applyPatch(patch as Record<string, unknown>, flags);
       }
       const elements = Array.from(flags.keys()).map((el) => ({ ...reportOf(el), overridden: flags.get(el) === true }));
-      post({ type: "unframed:edit:report", elements });
+      post({ type: "unframed:edit:report", elements, families: familiesOf() });
       last = {};
       schedule();
     } else if (type === "unframed:edit:reset") {

@@ -62,6 +62,8 @@ export interface EditSession {
   readonly setSelection: (ids: readonly string[]) => void;
   readonly hovered: EditReport | null;
   readonly reports: Readonly<Record<string, EditReport>>;
+  /** The font families the document's elements use, first family of each, as the bridge reports them. */
+  readonly families: readonly string[];
   readonly boxes: Readonly<Record<string, EditBox>>;
   readonly tree: SourceTree | undefined;
   readonly preparing: boolean;
@@ -90,6 +92,7 @@ export const useEditSession = ({ editor, engine, project, shapeId, kind, file, l
   const [selection, setSelectionState] = useState<readonly string[]>([]);
   const [hovered, setHovered] = useState<EditReport | null>(null);
   const [reports, setReports] = useState<Readonly<Record<string, EditReport>>>({});
+  const [families, setFamilies] = useState<readonly string[]>([]);
   const [boxes, setBoxes] = useState<Readonly<Record<string, EditBox>>>({});
   const [tree, setTree] = useState<SourceTree | undefined>(undefined);
   const [preparing, setPreparing] = useState(false);
@@ -279,6 +282,7 @@ export const useEditSession = ({ editor, engine, project, shapeId, kind, file, l
       }
       case "unframed:edit:report": {
         const elements = Array.isArray(message.elements) ? (message.elements as EditReport[]) : [];
+        if (Array.isArray(message.families)) setFamilies(message.families.filter((family): family is string => typeof family === "string"));
         setReports((previous) => {
           const next = { ...previous };
           for (const element of elements) if (element.id !== null) next[element.id] = element;
@@ -365,6 +369,7 @@ export const useEditSession = ({ editor, engine, project, shapeId, kind, file, l
     setSelection,
     hovered,
     reports,
+    families,
     boxes,
     tree,
     preparing,
