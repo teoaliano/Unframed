@@ -29,6 +29,7 @@ import { COLUMN, ColumnHeader, ParametersBody } from "./Parameters.tsx";
 import { PreviewSizeControl, usePreviewSize } from "./PreviewSize.tsx";
 import { useEditSession, type EditMode } from "./editSession.ts";
 import { makeEditableInstruction, tellAgent } from "./tellAgent.ts";
+import { MotionTimeline } from "../timeline/MotionTimeline.tsx";
 
 export interface ArtifactEditorProps {
   readonly shapeId: TLShapeId;
@@ -195,6 +196,22 @@ export const ArtifactEditor = ({ shapeId, onClose, onOpen }: ArtifactEditorProps
   }, [facts === undefined]);
   const viewport = editorPreviewViewport(size);
   const scale = viewport === undefined ? 1 : previewScale(viewport, area);
+  // The editor's column height, which caps the motion timeline at 60 % of it (spec 21). It is the grid's height less its padding,
+  // not the centre column's, which shrinks as the timeline grows.
+  const grid = useRef<HTMLDivElement>(null);
+  const [columnHeight, setColumnHeight] = useState(0);
+  useLayoutEffect(() => {
+    const element = grid.current;
+    if (!element) return;
+    const measure = () => {
+      const padding = getComputedStyle(element);
+      setColumnHeight(element.clientHeight - parseFloat(padding.paddingTop) - parseFloat(padding.paddingBottom));
+    };
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [facts === undefined]);
 
   if (!facts) return null;
   const displayTitle = artifactTitle(facts);
@@ -208,17 +225,24 @@ export const ArtifactEditor = ({ shapeId, onClose, onOpen }: ArtifactEditorProps
   const names: Record<string, string> = {};
   for (const element of session.tree?.elements ?? []) names[element.id] = element.name;
 
+  // A motion with a file has its timeline in a second row under the centre column (spec 21). Below a 1280 px window
+  // the timeline spans the centre and right columns, and the right column stops above it.
+  const timeline = facts.kind === "motion" && facts.file !== "";
   return (
     // Full height. tldraw's watermark stays over its bottom-right corner: tldraw.css lifts the tldraw container above this layer.
     <div
+      ref={grid}
       data-testid="artifact-editor"
-      className="pointer-events-auto absolute inset-0 z-[700] box-border grid grid-cols-[360px_minmax(0,1fr)_320px] gap-3 bg-background p-3 font-sans text-foreground"
+      className={cn(
+        "pointer-events-auto absolute inset-0 z-[700] box-border grid grid-cols-[360px_minmax(0,1fr)_320px] gap-3 bg-background p-3 font-sans text-foreground",
+        timeline ? "grid-rows-[minmax(0,1fr)_auto]" : "grid-rows-[minmax(0,1fr)]",
+      )}
       {...KEEP_FROM_CANVAS}
     >
-      <section data-editor-column="rail" className={COLUMN}>
+      <section data-editor-column="rail" className={cn(COLUMN, "col-start-1 row-span-full")}>
         <AgentRail project={project} embedded filterTo={[shapeId]} onOpenEditor={onOpen} onClose={close} />
       </section>
-      <section data-editor-column="centre" className={COLUMN} aria-label={`Editing ${title}`}>
+      <section data-editor-column="centre" className={cn(COLUMN, "col-start-2 row-start-1")} aria-label={`Editing ${title}`}>
         {/* A container, so a narrow column folds its labels into icons rather than overflow. */}
         <ColumnHeader className="@container/editor-header gap-1">
           <Tip label="Back to canvas (Esc)">
@@ -319,7 +343,7 @@ export const ArtifactEditor = ({ shapeId, onClose, onOpen }: ArtifactEditorProps
         </div>
       </section>
       {/* The bottom 40 px hold tldraw's watermark, which sits over this corner, so the controls end above it. */}
-      <section data-editor-column="parameters" className={cn(COLUMN, "pb-10")}>
+      <section data-editor-column="parameters" className={cn(COLUMN, "col-start-3 row-span-full pb-10 max-[1279px]:row-span-1 max-[1279px]:row-start-1")}>
         <ColumnHeader>
           <Tabs value={panel} onValueChange={(next) => setPanel(String(next) as Panel)} className="h-12 min-w-0">
             <TabsList variant="underline" aria-label="Editor panels">
@@ -368,6 +392,7 @@ export const ArtifactEditor = ({ shapeId, onClose, onOpen }: ArtifactEditorProps
           />
         )}
       </section>
+      {timeline && <MotionTimeline title={title} engine={engine} column={columnHeight} className="col-start-2 row-start-2 max-[1279px]:col-span-2" />}
     </div>
   );
 };
