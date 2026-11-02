@@ -1,7 +1,9 @@
 import type { Locator, Page } from "@playwright/test";
 import type { TestEngine } from "../../engine/test/engineProcess.ts";
 import { openCanvas } from "./canvas.ts";
-import { answerApproval, createChat, engineChat, expect, openRail, pendingRequest, promptBox, rpcOf, scriptFolder, sendThrough, startAgentEngine, userTexts } from "./agent.ts";
+import { clickShape } from "./generation.ts";
+import { putRecords } from "./media.ts";
+import { answerApproval, artifactColumn, createChat, engineChat, expect, openRail, pendingRequest, promptBox, rpcOf, scriptFolder, sendThrough, startAgentEngine, userTexts } from "./agent.ts";
 import { test as base } from "./fixtures.ts";
 import { platformOf } from "./platform.ts";
 
@@ -256,4 +258,93 @@ test("with the Send shortcut on Cmd+Enter always, Enter breaks the line while a 
   await box.press("ControlOrMeta+Enter");
   await expect.poll(() => rowTexts(panel)).toEqual(["queue me\nand more"]);
   await expect(panel.getByRole("button", { name: "Update queued message" })).toHaveCount(0);
+});
+
+/** A parked chat tagged with two artifacts, both selected, so the composer carries them as chips. */
+const parkedWithArtifacts = async (page: Page, agent: TestEngine) => {
+  await openCanvas(page, agent);
+  await putRecords(agent, artifactColumn([{ id: "shape:p1", title: "Alpha" }, { id: "shape:p2", title: "Beta" }]));
+  const chatId = await createChat(agent, { runtimeMode: "approval-required", title: "Parked", tags: ["shape:p1", "shape:p2"] });
+  await sendThrough(agent, chatId, "park here");
+  await openCanvas(page, agent);
+  const panel = await openRail(page);
+  await expect(panel.getByTestId("chat-status")).toHaveAttribute("data-status", "running");
+  await clickShape(page, "shape:p1");
+  await clickShape(page, "shape:p2", ["Shift"]);
+  const composerChips = panel.getByTestId("agent-composer").getByRole("list", { name: "Context" }).getByRole("listitem");
+  await expect(composerChips).toHaveText(["Alpha", "Beta"]);
+  const files = panel.getByTestId("agent-composer").locator("[data-chip='file'] [data-testid='chip-label']");
+  const attach = (name: string) => panel.getByTestId("attach-input").setInputFiles({ name, mimeType: "text/plain", buffer: Buffer.from(`${name} body`) });
+  return { panel, chatId, composerChips, files, attach };
+};
+
+/** The person's message with this text, as the engine holds it: its context and its files. */
+const sentMessage = async (agent: TestEngine, chatId: string, text: string) => {
+  const message = (await engineChat(agent, chatId)).messages.find((known) => known.role === "user" && known.text === text);
+  return message && { selection: message.context?.selection ?? [], files: (message.attachments ?? []).map((attachment) => attachment.name) };
+};
+
+test("an edit opens a queued message with its chips and files, the draft set aside with its own; Update saves chips and files too, and they go with the message", async ({ page, agent }) => {
+  const { panel, chatId, composerChips, files, attach } = await parkedWithArtifacts(page, agent);
+  await type(panel, "with context");
+  const queued = panel.getByTestId("queued-message");
+  await expect(queued).toHaveCount(1);
+
+  // The draft: its own text, one chip, one file.
+  await promptBox(panel).pressSequentially("my draft");
+  await panel.getByTestId("agent-composer").getByRole("button", { name: "Remove Beta" }).click();
+  await attach("draft.txt");
+  await expect(files).toHaveText(["draft.txt"]);
+  await expect(composerChips).toHaveText(["Alpha"]);
+
+  await queued.getByRole("button", { name: "Edit queued message" }).click();
+  await expect(panel.locator(".ProseMirror p")).toHaveText(["with context"]);
+  await expect(composerChips).toHaveText(["Alpha", "Beta"]);
+  await expect(files).toHaveCount(0);
+
+  await panel.getByTestId("agent-composer").getByRole("button", { name: "Remove Alpha" }).click();
+  await attach("added.txt");
+  await expect(files).toHaveText(["added.txt"]);
+  await panel.getByRole("button", { name: "Update queued message" }).click();
+
+  // The draft comes back whole.
+  await expect(panel.locator(".ProseMirror p")).toHaveText(["my draft"]);
+  await expect(composerChips).toHaveText(["Alpha"]);
+  await expect(files).toHaveText(["draft.txt"]);
+  await expect(queued).not.toContainText("Editing in the composer");
+
+  await answerApproval(agent, chatId);
+  await expect.poll(() => sentMessage(agent, chatId, "with context")).toEqual({ selection: ["shape:p2"], files: ["added.txt"] });
+});
+
+test("Cancel leaves a queued message with its chips and files as they were and gives the draft back with its files", async ({ page, agent }) => {
+  const { panel, chatId, composerChips, files, attach } = await parkedWithArtifacts(page, agent);
+  await promptBox(panel).click();
+  await promptBox(panel).pressSequentially("keep me");
+  await attach("queued.txt");
+  await expect(files).toHaveText(["queued.txt"]);
+  await promptBox(panel).press("Enter");
+  const queued = panel.getByTestId("queued-message");
+  await expect(queued).toHaveCount(1);
+  await expect(files).toHaveCount(0);
+
+  await promptBox(panel).pressSequentially("my draft");
+  await attach("draft.txt");
+  await expect(files).toHaveText(["draft.txt"]);
+
+  await queued.getByRole("button", { name: "Edit queued message" }).click();
+  await expect(panel.locator(".ProseMirror p")).toHaveText(["keep me"]);
+  await expect(files).toHaveText(["queued.txt"]);
+  await panel.getByTestId("agent-composer").getByRole("button", { name: "Remove Beta" }).click();
+  await panel.getByTestId("agent-composer").getByRole("button", { name: "Remove queued.txt" }).click();
+  await attach("other.txt");
+  await expect(files).toHaveText(["other.txt"]);
+  await queued.getByRole("button", { name: "Cancel editing queued message" }).click();
+
+  await expect(panel.locator(".ProseMirror p")).toHaveText(["my draft"]);
+  await expect(files).toHaveText(["draft.txt"]);
+  await expect(composerChips).toHaveText(["Alpha", "Beta"]);
+
+  await answerApproval(agent, chatId);
+  await expect.poll(() => sentMessage(agent, chatId, "keep me")).toEqual({ selection: ["shape:p1", "shape:p2"], files: ["queued.txt"] });
 });

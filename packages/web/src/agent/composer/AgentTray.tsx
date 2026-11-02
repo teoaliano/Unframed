@@ -26,7 +26,9 @@ import {
   promptLengthError,
   restingImagePreviewCounts,
   queuedEditBlockedReason,
+  queuedEditChanged,
   resolveQueuedEditExit,
+  type QueuedEditContent,
   stepPromptHistory,
   tabLabel,
   withoutChips,
@@ -182,9 +184,13 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
   const mentionIds = useRef<ReadonlyArray<string>>([]);
   /** A question holds the box for its answer: the draft is set aside on the client until it goes. */
   const answeringRef = useRef(false);
-  /** A queued message open in the box (t3code's queued edit): the chat's draft waits on the client meanwhile. */
-  const [editing, setEditing] = useState<{ readonly id: string; readonly chatId: string; readonly originalText: string } | null>(null);
+  /**
+   * A queued message open in the composer (t3code's queued edit), with what it held when
+   * opened. The chat's draft waits on the client meanwhile, and its chips and mentions in `aside`.
+   */
+  const [editing, setEditing] = useState<{ readonly id: string; readonly chatId: string; readonly original: QueuedEditContent } | null>(null);
   const editingRef = useRef(editing);
+  const aside = useRef<{ readonly chips: ReadonlyArray<string>; readonly mentions: ReadonlyArray<string> }>({ chips: [], mentions: [] });
   const setEdit = (next: typeof editing) => {
     editingRef.current = next;
     setEditing(next);
@@ -234,8 +240,13 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
   // Declared before the handoff effect: on a chat switch the chat's draft lands first, then any handoff joins it.
   useEffect(() => {
     draftKeyRef.current = draftKey;
-    // Another chat's draft ends an edit as Cancel would.
-    if (editingRef.current !== null && editingRef.current.chatId !== chatId) setEdit(null);
+    // Another chat's draft ends an edit as Cancel would: the chips set aside come back first.
+    let chipIds = chips.shapes.map((shape) => shape.id);
+    if (editingRef.current !== null && editingRef.current.chatId !== chatId) {
+      setEdit(null);
+      chipIds = [...aside.current.chips];
+      mentionIds.current = aside.current.mentions;
+    }
     if (draftKey === undefined || editingRef.current !== null) return;
     const stored = client.draft(draftKey);
     // Our own write comes back as a change; applying it could undo an upload or a keystroke since.
@@ -246,7 +257,7 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
     // The draft's attachments come with it; a question's answer keeps what it has staged.
     if (!answeringRef.current && !sameDraft({ ...EMPTY_DRAFT, attachments: shown.attachments }, { ...EMPTY_DRAFT, attachments: stored.attachments }))
       attachmentsRef.current.replace(stored.attachments);
-    const kept = chips.shapes.map((shape) => shape.id).filter((id) => !mentionIds.current.includes(id));
+    const kept = chipIds.filter((id) => !mentionIds.current.includes(id));
     // Set first: the text below fires a change, which saves the draft with these mentions.
     mentionIds.current = stored.mentions;
     chips.set([...kept, ...stored.mentions.filter((id) => !kept.includes(id))]);
@@ -292,7 +303,7 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
     onReady: (item, attachment) => {
       client.rememberAttachments([attachment]);
       const chip = chipOfToken(attachmentChip(attachment));
-      if (item.chip && chip && !answeringRef.current && editingRef.current === null) box.current?.insertChip(chip);
+      if (item.chip && chip && !answeringRef.current) box.current?.insertChip(chip);
     },
     // t3code's insertAttachmentReferencesForDraft: the draft switched away from gets the file, and its chip at the end.
     onMoved: (owner, attachment, chip) => {
@@ -318,7 +329,8 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
     answeringRef.current
       ? { chip: false }
       : {
-          ...(draftKeyRef.current !== undefined ? { owner: draftKeyRef.current } : {}),
+          // A file for an edit is the edit's: one still uploading when the edit ends goes with it.
+          ...(draftKeyRef.current !== undefined && editingRef.current === null ? { owner: draftKeyRef.current } : {}),
           chip: chip && withoutChips(box.current?.text() ?? "").trim() !== "",
         };
   /** A question that takes only its options takes no file either (t3code's). */
@@ -592,6 +604,10 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
     shownQuestion.current = questionKey;
     if (questionKey === was) return;
     if (questionKey !== undefined) {
+      if (editingRef.current !== null) {
+        chips.set(aside.current.chips);
+        mentionIds.current = aside.current.mentions;
+      }
       setEdit(null);
       box.current?.setText("", { focus: false, undoable: false });
       // The draft keeps its files on the client; the answer starts with none.
@@ -622,7 +638,7 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
   const canSend = answering
     ? questions.ready
     : editing !== null
-      ? lengthError === undefined && text.trim() !== ""
+      ? lengthError === undefined && !sending && (text.trim() !== "" || attachments.staged.length > 0)
       : lengthError === undefined && (planFollowUp ? !sending : !noProvider && !sending && (text.trim() !== "" || attachments.staged.length > 0));
 
   /** t3code's Resume thread: an empty composer on a chat whose turn was cut short offers to carry it on. */
@@ -689,8 +705,20 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
    * While a question holds the box it joins the draft set aside.
    */
   const restoreDraft = (draft: { readonly text: string; readonly selection: ReadonlyArray<string>; readonly attachments: ReadonlyArray<ChatAttachment> }) => {
-    const aside = answeringRef.current || editingRef.current !== null ? draftKeyRef.current : undefined;
-    if (aside !== undefined) client.setDraft(aside, { ...client.draft(aside), text: appendRestoredPrompt(client.draft(aside).text, draft.text), mentions: mentionIds.current });
+    const key = draftKeyRef.current;
+    // While a queued message is open the whole draft is set aside: what is put back joins it there.
+    if (editingRef.current !== null && key !== undefined) {
+      const current = client.draft(key);
+      client.setDraft(key, {
+        ...current,
+        text: appendRestoredPrompt(current.text, draft.text),
+        attachments: mergeRestored(current.attachments, draft.attachments, (item) => `${item.kind}\u0000${item.size}\u0000${item.name}`),
+      });
+      aside.current = { ...aside.current, chips: mergeRestored(aside.current.chips, draft.selection, (id) => id) };
+      return;
+    }
+    const setAside = answeringRef.current ? key : undefined;
+    if (setAside !== undefined) client.setDraft(setAside, { ...client.draft(setAside), text: appendRestoredPrompt(client.draft(setAside).text, draft.text), mentions: mentionIds.current });
     else box.current?.setText(appendRestoredPrompt(box.current.text(), draft.text));
     chips.add(draft.selection);
     attachments.restore(draft.attachments);
@@ -731,6 +759,7 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
       // Before a new chat exists: the switch to it shows its own, empty, draft.
       const uploaded = await attachments.settle();
       const context = contextSelection(canvas, chips.shapes);
+      const chipIds = chips.shapes.map((shape) => shape.id);
       let target = chatId;
       if (target === null) {
         target = await createChat(client, { modelSelection: selection, runtimeMode: draftRuntime, interactionMode, tags: newChatTags }, message);
@@ -748,11 +777,11 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
       if (current?.latestTurn?.state === "running") {
         // Queue waits for the turn's next tool call or its end; Steer joins the turn now. Cmd+Enter flips it once.
         if (followUpAction(followUp, invert) === "steer") await sendMessage(client, target, outgoing, { steer: true });
-        else client.enqueue(target, outgoing, latestCompletedTool(current));
+        else client.enqueue(target, outgoing, latestCompletedTool(current), chipIds);
       } else if (target === chatId && compactsBeforeSend({ tokens: compactTokens, keepFullHistory: keepFull, text: message })) {
         // t3code's: the message waits behind the /compact turn, as a queued message does.
         await sendMessage(client, target, { text: "/compact", selection: [], attachments: [] });
-        client.enqueue(target, outgoing, latestCompletedTool(client.thread(target)));
+        client.enqueue(target, outgoing, latestCompletedTool(client.thread(target)), chipIds);
       } else {
         await sendMessage(client, target, outgoing);
       }
@@ -815,42 +844,67 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
     offersCompactBeforeSend({ provider: selection.provider, usedTokens: usage.usedTokens, updatedAt: usage.updatedAt, now: new Date().toISOString() })
       ? usage.usedTokens
       : null;
+  /** What the composer holds as an edit: its text, its chips and its uploaded files. */
+  const editContent = (): QueuedEditContent => ({
+    text: box.current?.text() ?? "",
+    chips: chips.shapes.map((shape) => shape.id),
+    attachments: attachments.ready().map((attachment) => attachment.id),
+  });
+  /** Opens a queued message in the composer: its text, chips and files in place of the draft's, which wait. */
   const beginEdit = (item: QueuedMessage) => {
     if (chatId === null || answeringRef.current) return;
     historyPosition.current = null;
-    setEdit({ id: item.id, chatId, originalText: item.message.text });
+    if (editingRef.current === null) aside.current = { chips: chips.shapes.map((shape) => shape.id), mentions: mentionIds.current };
+    const itemChips = item.chips ?? item.message.selection;
+    setEdit({ id: item.id, chatId, original: { text: item.message.text, chips: itemChips, attachments: item.message.attachments.map((attachment) => attachment.id) } });
+    mentionIds.current = [];
+    attachments.replace(item.message.attachments);
+    chips.set(itemChips);
     box.current?.setText(item.message.text);
   };
-  /** Ends the edit and puts the chat's draft back in the box. */
+  /** Ends the edit and puts the chat's draft back: its text, chips, mentions and files. */
   const endEdit = (options?: { readonly focus?: boolean }) => {
     setEdit(null);
-    box.current?.setText(draftKeyRef.current === undefined ? "" : client.draft(draftKeyRef.current).text, options);
+    const draft = draftKeyRef.current === undefined ? EMPTY_DRAFT : client.draft(draftKeyRef.current);
+    mentionIds.current = draft.mentions;
+    attachments.replace(draft.attachments);
+    chips.set(aside.current.chips);
+    box.current?.setText(draft.text, options);
   };
-  const updateQueued = (edit: { readonly id: string; readonly chatId: string }, text: string) =>
-    client.updateQueue(edit.chatId, (current) => current.map((item) => (item.id === edit.id ? { ...item, message: { ...item.message, text } } : item)));
-  /** Update queued message: the new text replaces the queued one in place, while it is still waiting. */
-  const saveEdit = () => {
+  const stillQueued = (edit: { readonly id: string; readonly chatId: string }) => client.queue(edit.chatId).some((item) => item.id === edit.id && item.state === "waiting");
+  const updateQueued = (edit: { readonly id: string; readonly chatId: string }, message: QueuedMessage["message"], chipIds: ReadonlyArray<string>) =>
+    client.updateQueue(edit.chatId, (current) => current.map((item) => (item.id === edit.id ? { ...item, message, chips: chipIds } : item)));
+  /** Update queued message: the text, chips and files replace the queued ones in place, while it is still waiting. Uploads are waited for, as Send does; a failed one blocks it. */
+  const saveEdit = async () => {
     const edit = editingRef.current;
     const message = box.current?.text() ?? "";
-    if (!edit || message.trim() === "" || promptLengthError(message) !== undefined) return;
+    if (!edit || sending || promptLengthError(message) !== undefined || (message.trim() === "" && attachments.staged.length === 0)) return;
     // One that left the queue meanwhile is the watcher's below.
-    if (!client.queue(edit.chatId).some((item) => item.id === edit.id && item.state === "waiting")) return;
-    updateQueued(edit, message);
-    endEdit();
+    if (!stillQueued(edit)) return;
+    setSending(true);
+    try {
+      const uploaded = await attachments.settle();
+      if (editingRef.current !== edit || !stillQueued(edit)) return;
+      // t3code's: a save never drops a file that did not upload.
+      if (attachmentsRef.current.staged.some((item) => item.status === "failed")) return showError("Retry or remove failed uploads before saving.");
+      updateQueued(edit, { text: message, selection: contextSelection(canvas, chips.shapes), attachments: uploaded }, chips.shapes.map((shape) => shape.id));
+      endEdit();
+    } finally {
+      setSending(false);
+    }
   };
-  // The edited message went out (or came back) before it was saved: t3code's reconciliation.
+  // The edited message went out (or came back) before it was saved: t3code's reconciliation, over the whole edit.
   useEffect(() => {
     const edit = editingRef.current;
     if (!edit || edit.chatId !== chatId || queue.some((item) => item.id === edit.id && item.state === "waiting")) return;
-    const current = box.current?.text() ?? "";
     const draft = draftKeyRef.current === undefined ? EMPTY_DRAFT : client.draft(draftKeyRef.current);
     const recovery = resolveQueuedEditExit({
-      editChanged: current !== edit.originalText,
-      threadDraftEmpty: draft.text.trim() === "" && draft.mentions.length === 0 && attachments.staged.length === 0,
+      editChanged: queuedEditChanged(edit.original, editContent()) || attachments.staged.some((item) => item.status !== "ready"),
+      threadDraftEmpty: draft.text.trim() === "" && draft.mentions.length === 0 && draft.attachments.length === 0,
     });
     if (recovery === "kept") {
       setEdit(null);
-      saveDraft(current);
+      saveDraft(box.current?.text() ?? "");
     } else {
       endEdit({ focus: false });
     }
@@ -899,7 +953,8 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
     const edit = editingRef.current;
     if (edit !== null) {
       const message = box.current?.text() ?? "";
-      if (message.trim() !== "") updateQueued(edit, message);
+      if (message.trim() !== "" || attachments.ready().length > 0)
+        updateQueued(edit, { text: message, selection: contextSelection(canvas, chips.shapes), attachments: attachments.ready() }, chips.shapes.map((shape) => shape.id));
       endEdit();
     }
     // Stop gives every queued message back to the composer.

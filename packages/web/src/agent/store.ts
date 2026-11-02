@@ -47,6 +47,8 @@ export interface QueuedMessage {
   /** The latest completed tool call when it was queued: the next one is its boundary. */
   readonly after: string | null;
   readonly state: "waiting" | "sending";
+  /** The context chips the composer showed, before groups were expanded into `selection`: an edit shows these. */
+  readonly chips?: ReadonlyArray<string>;
 }
 
 /** A chat's unsent text, the shapes its @ mentions put among the context chips, and its uploaded attachments. */
@@ -384,8 +386,8 @@ export class ChatClient {
     return [...this.queues.keys()];
   }
 
-  enqueue(threadId: string, message: QueuedMessage["message"], after: string | null): void {
-    this.queues.set(threadId, [...this.queue(threadId), { id: newId("queued"), message, after, state: "waiting" }]);
+  enqueue(threadId: string, message: QueuedMessage["message"], after: string | null, chips?: ReadonlyArray<string>): void {
+    this.queues.set(threadId, [...this.queue(threadId), { id: newId("queued"), message, after, state: "waiting", ...(chips !== undefined ? { chips } : {}) }]);
     this.changed(`queue:${threadId}`);
     this.changed("queues");
   }

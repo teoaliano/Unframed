@@ -31,6 +31,7 @@ import {
   queuedEditBlockedReason,
   promptHistoryEntries,
   recallablePrompt,
+  queuedEditChanged,
   resolveQueuedEditExit,
   searchSlashCommands,
   sendShortcutOf,
@@ -407,6 +408,22 @@ describe("the queue's order", () => {
 });
 
 describe("editing a queued message", () => {
+  const queued = { text: "look at this", chips: ["shape:a", "shape:b"], attachments: ["att-1"] };
+
+  it("counts an edit as changed when its text, its chips or its attachments differ", () => {
+    expect(queuedEditChanged(queued, { ...queued })).toBe(false);
+    expect(queuedEditChanged(queued, { ...queued, text: "look at that" })).toBe(true);
+    expect(queuedEditChanged(queued, { ...queued, chips: ["shape:a"] })).toBe(true);
+    expect(queuedEditChanged(queued, { ...queued, chips: ["shape:a", "shape:c"] })).toBe(true);
+    expect(queuedEditChanged(queued, { ...queued, attachments: [] })).toBe(true);
+    expect(queuedEditChanged(queued, { ...queued, attachments: ["att-1", "att-2"] })).toBe(true);
+  });
+
+  it("ignores the order of chips and attachments, and the same id twice", () => {
+    expect(queuedEditChanged(queued, { ...queued, chips: ["shape:b", "shape:a"] })).toBe(false);
+    expect(queuedEditChanged({ ...queued, attachments: ["att-1", "att-2"] }, { ...queued, attachments: ["att-2", "att-1", "att-1"] })).toBe(false);
+  });
+
   it("closes an unchanged edit without touching the draft", () => {
     expect(resolveQueuedEditExit({ editChanged: false, threadDraftEmpty: true })).toBe("clean");
     expect(resolveQueuedEditExit({ editChanged: false, threadDraftEmpty: false })).toBe("clean");

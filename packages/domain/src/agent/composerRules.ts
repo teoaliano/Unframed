@@ -525,6 +525,23 @@ export const queuedDropTarget = (ids: ReadonlyArray<string>, draggedId: string, 
   return ids[insertIndex] ?? null;
 };
 
+/** What a queued edit compares: the text, the context chips' shape ids and the attachments' ids. */
+export interface QueuedEditContent {
+  readonly text: string;
+  readonly chips: ReadonlyArray<string>;
+  readonly attachments: ReadonlyArray<string>;
+}
+
+const sameSet = (a: ReadonlyArray<string>, b: ReadonlyArray<string>): boolean => {
+  const left = new Set(a);
+  const right = new Set(b);
+  return left.size === right.size && [...left].every((id) => right.has(id));
+};
+
+/** Whether the composer holds something other than the queued message it opened: chips and attachments compared as sets. */
+export const queuedEditChanged = (queued: QueuedEditContent, current: QueuedEditContent): boolean =>
+  queued.text !== current.text || !sameSet(queued.chips, current.chips) || !sameSet(queued.attachments, current.attachments);
+
 /**
  * What happens to an open edit when its message leaves the queue: an unchanged edit just
  * closes; a changed one stays in the composer as the chat's draft when that draft is empty,
