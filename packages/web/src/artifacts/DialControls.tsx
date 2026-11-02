@@ -19,11 +19,15 @@ export interface DialControlsProps {
   readonly saved: Readonly<Record<string, unknown>> | undefined;
   /** Posts `unframed:dials:set` to the artifact's frame. */
   readonly post: (values: unknown) => void;
+  /** Told the values before they are written to the shape. */
+  readonly onWrite?: (values: Readonly<Record<string, unknown>>) => void;
 }
 
 /** DialKit, inline, on the announced config. Rebuilt only when a new announcement arrives. */
-export const DialControls = ({ shapeId, announcement, saved, post }: DialControlsProps) => {
+export const DialControls = ({ shapeId, announcement, saved, post, onWrite }: DialControlsProps) => {
   const editor = useEditor();
+  const writtenTo = useRef(onWrite);
+  writtenTo.current = onWrite;
   const host = useRef<HTMLDivElement>(null);
   const savedNow = useRef(saved);
   savedNow.current = saved;
@@ -39,6 +43,7 @@ export const DialControls = ({ shapeId, announcement, saved, post }: DialControl
     pending.current = undefined;
     const shape = values === undefined ? undefined : editor.getShape(shapeId);
     if (!shape || values === undefined) return;
+    writtenTo.current?.(values);
     editor.markHistoryStoppingPoint("tune parameters");
     editor.updateShape({ id: shapeId, type: shape.type, props: { dials: values } } as Parameters<typeof editor.updateShape>[0]);
   };

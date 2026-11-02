@@ -4,8 +4,8 @@
  * edit in the burst, and a read-only value says why. With several elements selected a value they
  * share shows, a value they differ on shows Mixed, and an edit reaches each of them.
  */
-import { DESIGN_FIELDS, fieldOwner, styleValueRefusal, type FieldOwner } from "@unframed/domain";
-import { AlignCenter, AlignJustify, AlignLeft, AlignRight, Link, Unlink } from "lucide-react";
+import { dialAt, DESIGN_FIELDS, fieldOwner, styleValueRefusal, type FieldOwner } from "@unframed/domain";
+import { AlignCenter, AlignJustify, AlignLeft, AlignRight, Link, SlidersHorizontal, Unlink } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
 import { Autocomplete, AutocompleteInput, AutocompleteItem, AutocompleteList, AutocompletePopup } from "~/components/ui/autocomplete";
 import { Button } from "~/components/ui/button";
@@ -14,6 +14,7 @@ import { Popover, PopoverPopup, PopoverTrigger } from "~/components/ui/popover";
 import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "~/components/ui/select";
 import { Switch } from "~/components/ui/switch";
 import { Toggle, ToggleGroup } from "~/components/ui/toggle-group";
+import { Tip } from "../../chrome/ui.tsx";
 import { showError } from "../../toasts.tsx";
 import { chainOf } from "./EditPanels.tsx";
 import type { EditReport, EditSession } from "./editSession.ts";
@@ -37,6 +38,7 @@ const GAP_DISPLAYS = ["flex", "inline-flex", "grid", "inline-grid"];
 const SIDES = ["top", "right", "bottom", "left"] as const;
 const MIXED = "Mixed";
 const LOCKED = "Locked. Unlock it in Layers to edit it.";
+const OVERRIDDEN = "A stylesheet rule wins over this value.";
 const SEVERAL_SHADOWS = "Several shadows. Ask the agent to change them.";
 
 /** A computed colour as `#rrggbb`, with two more digits below full opacity. */
@@ -117,6 +119,9 @@ interface View {
   readonly editable: boolean;
 }
 
+/** The parameter a view's field is driven by, when it is editable as a dial. */
+const dialPathOf = (view: View): string | undefined => (view.owner.owner === "dial" && view.editable ? view.owner.path : undefined);
+
 interface Subject {
   readonly id: string;
   readonly report: EditReport;
@@ -125,14 +130,38 @@ interface Subject {
   readonly locked: boolean;
 }
 
-/** The sentence a read-only owner shows under its section, or null when the value is the source's own or locked (the tab says that once). */
-const ownerLine = (owner: FieldOwner): string | null => {
+const noteText = (text: string) => <p className="m-0 text-xs text-muted-foreground">{text}</p>;
+
+/**
+ * The line a read-only owner shows under its section, or null when the value is the source's own or locked (the tab says that once).
+ * A dial's value is editable with one element selected, so it shows no line then; with several it names its parameter.
+ */
+const ownerLine = (owner: FieldOwner, single: boolean): ReactNode => {
   if (owner.owner === "source" || owner.owner === "locked") return null;
-  if (owner.owner === "script") return "Set by the agent's code.";
-  if (owner.owner === "animated") return "Animated by the agent's code.";
-  if (owner.owner !== "dial") return null;
-  return `Set by parameter ${owner.path}.`;
+  if (owner.owner === "script") {
+    return (
+      <>
+        {noteText("Set by the agent's code.")}
+        {/* Asking the agent to make it editable fills the composer's draft (spec 18 task 41); until that exists the button waits. */}
+        <Button variant="ghost" size="xs" className="justify-self-start" disabled>
+          Ask the agent to make this editable
+        </Button>
+      </>
+    );
+  }
+  if (owner.owner === "animated") return noteText("Animated by the agent's code.");
+  if (owner.owner !== "dial" || single) return null;
+  return noteText(`Set by parameter ${owner.path}.`);
 };
+
+/** The parameter mark a dial-owned field carries, its tooltip naming the parameter. */
+const ParameterMark = ({ path }: { readonly path: string }) => (
+  <Tip label={`Parameter ${path}`}>
+    <span role="img" aria-label={`Parameter ${path}`} className="inline-flex shrink-0 text-muted-foreground">
+      <SlidersHorizontal aria-hidden className="size-3.5" />
+    </span>
+  </Tip>
+);
 
 const NumberControl = ({
   label,
@@ -285,18 +314,21 @@ const ColourControl = ({ label, hex, mixed, disabled, onCommit }: { readonly lab
   );
 };
 
-const Row = ({ label, children }: { readonly label: string; readonly children: ReactNode }) => (
+const Row = ({ label, mark, children }: { readonly label: string; readonly mark?: string | undefined; readonly children: ReactNode }) => (
   <div className="grid grid-cols-[7.5rem_minmax(0,1fr)] items-center gap-2">
-    <span className="truncate text-sm text-muted-foreground">{label}</span>
+    <span className="flex min-w-0 items-center gap-1.5 text-sm text-muted-foreground">
+      <span className="truncate">{label}</span>
+      {mark !== undefined && <ParameterMark path={mark} />}
+    </span>
     <div className="min-w-0">{children}</div>
   </div>
 );
 
-const Section = ({ name, note, children }: { readonly name: string; readonly note: string | null; readonly children: ReactNode }) => (
+const Section = ({ name, note, children }: { readonly name: string; readonly note: ReactNode; readonly children: ReactNode }) => (
   <fieldset aria-label={name} className="m-0 flex flex-col gap-2 border-0 p-0">
     <legend className="mb-1 text-xs font-medium text-muted-foreground">{name}</legend>
     {children}
-    {note !== null && <p className="m-0 text-xs text-muted-foreground">{note}</p>}
+    {note}
   </fieldset>
 );
 
@@ -349,6 +381,13 @@ export interface DesignTabProps {
   readonly locked: readonly string[];
 }
 
+/** The value a dial takes for a CSS value written to its field: a number dial takes the number, anything else the text. */
+const dialValueFor = (current: unknown, css: string): unknown => {
+  if (typeof current !== "number") return css;
+  const parsed = Number.parseFloat(css);
+  return Number.isFinite(parsed) ? parsed : current;
+};
+
 /** The computed value of a property normalised by the browser, so two spellings of one value compare equal. */
 const normaliserFor = (property: string) => (value: string) => {
   const probe = document.createElement("i");
@@ -357,7 +396,7 @@ const normaliserFor = (property: string) => (value: string) => {
 };
 
 export const DesignTab = ({ session, kind, dials, locked }: DesignTabProps) => {
-  const { selection, reports, tree, preparing, prepareError, pending, families } = session;
+  const { selection, reports, tree, preparing, prepareError, pending, families, overridden } = session;
   if (preparing) return <p className="m-0 p-2.5 text-sm text-muted-foreground">{`Getting this ${kind} ready for editing…`}</p>;
   if (prepareError !== undefined) return <p className="m-0 p-2.5 text-sm text-destructive-foreground">{prepareError}</p>;
   if (selection.length === 0) {
@@ -404,12 +443,13 @@ export const DesignTab = ({ session, kind, dials, locked }: DesignTabProps) => {
     const values = subjects.map(pick);
     const mixed = values.some((value) => value !== values[0]);
     const owner = owners.find((candidate) => candidate.owner !== "source") ?? { owner: "source" as const };
-    return { value: mixed ? "" : (values[0] ?? ""), mixed, owner, editable: owner.owner === "source" };
+    // A dial's value moves its parameter, so it is editable with one element only.
+    return { value: mixed ? "" : (values[0] ?? ""), mixed, owner, editable: owner.owner === "source" || (owner.owner === "dial" && single) };
   };
 
-  /** Writes a value to a property of every selected element, refusing the whole write when one value cannot be written. */
+  /** Writes a value to a property of every selected element, refusing the whole write when one value cannot be written. A dial-owned value moves its dial. */
   const write = (property: string, valueOf: (subject: Subject) => string) => {
-    const writes = subjects.map((subject) => ({ id: subject.id, value: valueOf(subject) }));
+    const writes = subjects.map((subject) => ({ subject, value: valueOf(subject) }));
     for (const { value } of writes) {
       const refusal = styleValueRefusal(property, value);
       if (refusal !== null) {
@@ -417,13 +457,17 @@ export const DesignTab = ({ session, kind, dials, locked }: DesignTabProps) => {
         return;
       }
     }
-    for (const { id, value } of writes) session.patch({ type: "style", elementId: id, property, value });
+    for (const { subject, value } of writes) {
+      const owner = ownerOf(subject, property);
+      if (owner.owner === "dial") session.patchDial(owner.path, dialValueFor(dialAt(dials ?? {}, owner.path), value));
+      else session.patch({ type: "style", elementId: subject.id, property, value });
+    }
   };
 
   const numberField = (label: string, property: string, options: { readonly format?: (value: string) => string; readonly write?: (typed: number, subject: Subject) => string } = {}) => {
     const view = viewOf(property);
     return (
-      <Row label={label}>
+      <Row label={label} mark={dialPathOf(view)}>
         <NumberControl
           label={label}
           value={view.mixed ? "" : (options.format ?? numberOf)(view.value)}
@@ -438,7 +482,7 @@ export const DesignTab = ({ session, kind, dials, locked }: DesignTabProps) => {
   const keywordField = (label: string, property: string, options: readonly string[]) => {
     const view = viewOf(property);
     return (
-      <Row label={label}>
+      <Row label={label} mark={dialPathOf(view)}>
         <KeywordControl label={label} value={view.value} mixed={view.mixed} options={options} disabled={!view.editable} onPick={(next) => write(property, () => next)} />
       </Row>
     );
@@ -447,15 +491,15 @@ export const DesignTab = ({ session, kind, dials, locked }: DesignTabProps) => {
   const colourField = (label: string, property: string) => {
     const view = viewOf(property, (subject) => hexOf(subject.report.computed[property]));
     return (
-      <Row label={label}>
+      <Row label={label} mark={dialPathOf(view)}>
         <ColourControl label={label} hex={view.value} mixed={view.mixed} disabled={!view.editable} onCommit={(next) => write(property, () => next)} />
       </Row>
     );
   };
 
-  const noteOf = (...views: View[]): string | null => {
+  const noteOf = (...views: View[]): ReactNode => {
     for (const view of views) {
-      const line = ownerLine(view.owner);
+      const line = ownerLine(view.owner, single);
       if (line !== null) return line;
     }
     return null;
@@ -478,7 +522,7 @@ export const DesignTab = ({ session, kind, dials, locked }: DesignTabProps) => {
   const shadowEditable = shadowOwner.editable && !several;
   const shadowPart = (part: ShadowPart) => viewOf("box-shadow", (subject) => shadowOf(subject.report.computed["box-shadow"])[part]);
   const shadowFields: Record<ShadowPart, View> = { x: shadowPart("x"), y: shadowPart("y"), blur: shadowPart("blur"), spread: shadowPart("spread"), colour: shadowPart("colour") };
-  const shapeNote = noteOf(borderWidthView, borderStyleView, borderColourView, radiusView, opacityView, shadowOwner) ?? (several ? SEVERAL_SHADOWS : null);
+  const shapeNote = noteOf(borderWidthView, borderStyleView, borderColourView, radiusView, opacityView, shadowOwner) ?? (several ? noteText(SEVERAL_SHADOWS) : null);
 
   const shadowNumber = (part: Exclude<ShadowPart, "colour">, label: string) => {
     const view = shadowFields[part];
@@ -511,7 +555,8 @@ export const DesignTab = ({ session, kind, dials, locked }: DesignTabProps) => {
         <span className="truncate text-sm font-semibold">{name}</span>
         {single && <span className="shrink-0 text-xs text-muted-foreground">{first!.report.tag}</span>}
       </div>
-      {anyLocked && <p className="m-0 text-xs text-muted-foreground">{LOCKED}</p>}
+      {anyLocked && noteText(LOCKED)}
+      {subjects.some((subject) => overridden[subject.id] === true) && noteText(OVERRIDDEN)}
 
       <Section name="Text" note={textNote}>
         <Row label="Font">
@@ -523,7 +568,7 @@ export const DesignTab = ({ session, kind, dials, locked }: DesignTabProps) => {
           />
         </Row>
         {numberField("Size", "font-size")}
-        <Row label="Weight">
+        <Row label="Weight" mark={dialPathOf(weightView)}>
           <KeywordControl label="Weight" value={weightView.value} mixed={weightView.mixed} options={WEIGHTS} disabled={!weightView.editable} onPick={(next) => write("font-weight", () => next)} />
         </Row>
         {numberField("Line height", "line-height")}

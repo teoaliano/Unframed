@@ -33,6 +33,8 @@ export interface ParametersProps {
   readonly saved: Readonly<Record<string, unknown>> | undefined;
   /** Posts `unframed:dials:set` to the artifact's frame. */
   readonly post: (values: unknown) => void;
+  /** Called with the dial values as a change is written to the shape (spec 18: the Parameters value wins over a held one). */
+  readonly onWrite?: (values: Readonly<Record<string, unknown>>) => void;
 }
 
 /**
@@ -115,7 +117,7 @@ export const AddParameter = ({
 };
 
 /** The Parameters tab's body (spec 09's column, under the editor's tab list): the dials, then the add box. */
-export const ParametersBody = ({ shapeId, kind, title, announcement, saved, post }: ParametersProps) => {
+export const ParametersBody = ({ shapeId, kind, title, announcement, saved, post, onWrite }: ParametersProps) => {
   const hasParameters = announcement !== undefined && Object.keys(announcement.schema ?? {}).length > 0;
   return (
     <div className="flex min-h-0 flex-1 flex-col">
@@ -123,7 +125,7 @@ export const ParametersBody = ({ shapeId, kind, title, announcement, saved, post
         {announcement === undefined ? (
           <p className="mx-2.5 my-4 text-sm text-muted-foreground">No parameters yet.</p>
         ) : (
-          <DialControls shapeId={shapeId} announcement={announcement} saved={saved} post={post} />
+          <DialControls shapeId={shapeId} announcement={announcement} saved={saved} post={post} {...(onWrite ? { onWrite } : {})} />
         )}
       </div>
       <AddParameter shapeId={shapeId} kind={kind} title={title} hasParameters={hasParameters} />

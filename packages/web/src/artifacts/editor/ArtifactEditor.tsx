@@ -4,7 +4,7 @@
  * Parameters tabs. Spec 18 adds the Edit and Interact modes and the edit session behind them.
  */
 import type { ArtifactShapeProps } from "@unframed/contracts";
-import { artifactTitle, editorPreviewViewport, isArtifactKind, previewScale, type ArtifactKind, type DialsAnnouncement } from "@unframed/domain";
+import { artifactTitle, dialsWith, editorPreviewViewport, isArtifactKind, mergeDialValues, normaliseDials, previewScale, type ArtifactKind, type DialsAnnouncement } from "@unframed/domain";
 import { AppWindow, ArrowLeft, Clapperboard, ExternalLink, Hand, MousePointer2, SlidersHorizontal } from "lucide-react";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useEditor, useValue, type TLShapeId } from "tldraw";
@@ -91,6 +91,8 @@ export const ArtifactEditor = ({ shapeId, onClose, onOpen }: ArtifactEditorProps
   });
   const sessionRef = useRef(session);
   sessionRef.current = session;
+  // The saved dials with the burst's held values over them: the frame and the Parameters tab show what the person set.
+  const dials = dialsWith(facts?.dials, session.held);
 
   const close = useCallback(() => {
     // Closing saves a pending burst first, as switching mode or element does (spec 18, Bursts).
@@ -172,6 +174,9 @@ export const ArtifactEditor = ({ shapeId, onClose, onOpen }: ArtifactEditorProps
   const title = displayTitle === "" ? shapeId.replace(/^shape:/, "") : displayTitle;
   const Icon = facts.kind === "page" ? AppWindow : Clapperboard;
   const mode: EditMode = session.mode;
+  // The values the frame is running: the saved ones over the artifact's declared defaults, which is what a field's owner is matched against.
+  const normalised = announcement === undefined ? undefined : normaliseDials(announcement.config);
+  const current = normalised?.ok ? mergeDialValues(normalised.schema, dials ?? null) : dials;
   const names: Record<string, string> = {};
   for (const element of session.tree?.elements ?? []) names[element.id] = element.name;
 
@@ -265,7 +270,7 @@ export const ArtifactEditor = ({ shapeId, onClose, onOpen }: ArtifactEditorProps
                   kind={facts.kind}
                   file={facts.file}
                   previewPort={port}
-                  dials={facts.dials}
+                  dials={dials}
                   interactive
                   lazy={false}
                   onAnnounce={setAnnouncement}
@@ -296,7 +301,7 @@ export const ArtifactEditor = ({ shapeId, onClose, onOpen }: ArtifactEditorProps
             </TabsList>
           </Tabs>
         </ColumnHeader>
-        {panel === "design" && <DesignTab session={session} kind={facts.kind} dials={facts.dials} locked={facts.locked} />}
+        {panel === "design" && <DesignTab session={session} kind={facts.kind} dials={current ?? {}} locked={facts.locked} />}
         {panel === "layers" && <LayersTab session={session} kind={facts.kind} />}
         {panel === "parameters" && (
           <ParametersBody
@@ -304,7 +309,8 @@ export const ArtifactEditor = ({ shapeId, onClose, onOpen }: ArtifactEditorProps
             kind={facts.kind}
             title={title}
             announcement={announcement}
-            saved={facts.dials}
+            saved={dials}
+            onWrite={(values) => session.releaseDials(values as Record<string, unknown>)}
             post={(values) => post.current?.(values)}
           />
         )}

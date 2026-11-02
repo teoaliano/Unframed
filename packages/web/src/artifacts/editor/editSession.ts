@@ -4,7 +4,18 @@
  * that makes an older file editable. The frame is reached only through the edit protocol.
  */
 import type { SourceEdit, SourceTreeElement } from "@unframed/contracts";
-import { addToBurst, burstEdits, emptyBurst, type ArtifactKind, type Burst, type EditBox } from "@unframed/domain";
+import {
+  addToBurst,
+  burstDials,
+  burstEdits,
+  dialsWith,
+  emptyBurst,
+  releaseDials as releaseHeldDials,
+  withoutEdit,
+  type ArtifactKind,
+  type Burst,
+  type EditBox,
+} from "@unframed/domain";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { Editor, TLShapeId } from "tldraw";
 import type { EngineConnection } from "../../rpc/engine.ts";
@@ -25,6 +36,8 @@ export interface EditReport {
   readonly computed: Readonly<Record<string, string>>;
   readonly src: string | null;
   readonly animated: readonly string[];
+  /** Set on a report after a patch: a stylesheet `!important` rule wins over the edited value. */
+  readonly overridden?: boolean;
 }
 
 export interface SourceTree {
@@ -70,6 +83,14 @@ export interface EditSession {
   readonly prepareError: string | undefined;
   /** The source edits of the burst not yet written: they are the element's own, so the owner stays `source`. */
   readonly pending: readonly SourceEdit[];
+  /** The dial values the burst holds, by path. The frame shows them and they are written at commit. */
+  readonly held: Readonly<Record<string, unknown>>;
+  /** Holds a dial value from the Design tab: the burst writes it at commit, and no version is written for it alone. */
+  readonly patchDial: (path: string, value: unknown) => void;
+  /** The Parameters tab moved dials: a held value it changed is released, so the Parameters value wins. */
+  readonly releaseDials: (values: Readonly<Record<string, unknown>>) => void;
+  /** Elements a stylesheet `!important` rule wins over, as the bridge last reported them. */
+  readonly overridden: Readonly<Record<string, boolean>>;
   readonly patch: (edit: SourceEdit) => void;
   readonly commit: () => Promise<void>;
   /** Drops the burst and puts the frame back, or with `quiet`, drops it without touching the frame (its artifact is gone). */
@@ -98,6 +119,12 @@ export const useEditSession = ({ editor, engine, project, shapeId, kind, file, l
   const [preparing, setPreparing] = useState(false);
   const [prepareError, setPrepareError] = useState<string | undefined>(undefined);
   const [pending, setPending] = useState<readonly SourceEdit[]>([]);
+  const [held, setHeld] = useState<Readonly<Record<string, unknown>>>({});
+  const [overridden, setOverridden] = useState<Readonly<Record<string, boolean>>>({});
+  // The dial values a commit is writing now: shown until the commit has answered.
+  const inFlight = useRef<Readonly<Record<string, unknown>>>({});
+  // The last source edit of each element, so a stylesheet that wins over it can take it back out of the burst.
+  const lastEdit = useRef<Record<string, SourceEdit>>({});
 
   const modeRef = useRef<EditMode>("edit");
   const selectionRef = useRef<readonly string[]>([]);
@@ -123,28 +150,64 @@ export const useEditSession = ({ editor, engine, project, shapeId, kind, file, l
 
   const post = useCallback((message: unknown) => postRef.current?.(message), []);
 
+  /** The held dial values: those a commit is writing, then those the burst still holds. */
+  const heldNow = (): Readonly<Record<string, unknown>> => ({ ...inFlight.current, ...Object.fromEntries(burstRef.current.dials) });
+  /** The shape's saved dial values, as the room has them. */
+  const shapeDials = (): Readonly<Record<string, unknown>> | undefined => (editor.getShape(shapeId as TLShapeId)?.props as { dials?: Record<string, unknown> } | undefined)?.dials;
+  /** Once a burst holds nothing, it has no base file either, so the next edit starts a new one. */
+  const settle = () => {
+    if (burstRef.current.edits.size > 0 || burstRef.current.dials.size > 0) return;
+    window.clearTimeout(timerRef.current);
+    timerRef.current = undefined;
+    baseRef.current = undefined;
+  };
+
   const commit = useCallback(async () => {
     window.clearTimeout(timerRef.current);
     timerRef.current = undefined;
     const base = baseRef.current;
     const edits = burstEdits(burstRef.current);
-    if (base === undefined || edits.length === 0) return;
+    const dials = burstDials(burstRef.current);
+    if (base === undefined || (edits.length === 0 && dials.length === 0)) return;
     burstRef.current = emptyBurst();
     baseRef.current = undefined;
     setPending([]);
-    try {
-      const answer = await send(base, edits);
+    inFlight.current = Object.fromEntries(dials.map(({ path, value }) => [path, value]));
+    const finish = () => {
+      inFlight.current = {};
+      setHeld(heldNow());
+    };
+    // Each commit is its own undo step, so Cmd-Z takes back one save at a time.
+    if (edits.length === 0) {
+      // Held dials alone write as one step, with no version.
       if (fileRef.current !== base) {
+        finish();
         showNotice(conflictSentence(kind, "elsewhere"), "warning");
         return;
       }
-      // Each commit is its own undo step, so Cmd-Z takes back one save at a time.
       editor.markHistoryStoppingPoint("element edit");
-      editor.updateShape({ id: shapeId as TLShapeId, type: kind, props: { file: answer.file } } as never);
+      editor.updateShape({ id: shapeId as TLShapeId, type: kind, props: { dials: dialsWith(shapeDials(), inFlight.current) } } as never);
+      finish();
+      undoable.current += 1;
+      redoable.current = 0;
+      return;
+    }
+    try {
+      const answer = await send(base, edits);
+      if (fileRef.current !== base) {
+        finish();
+        showNotice(conflictSentence(kind, "elsewhere"), "warning");
+        return;
+      }
+      editor.markHistoryStoppingPoint("element edit");
+      const props = dials.length > 0 ? { file: answer.file, dials: dialsWith(shapeDials(), inFlight.current) } : { file: answer.file };
+      editor.updateShape({ id: shapeId as TLShapeId, type: kind, props } as never);
       lastSet.current = answer.file;
+      finish();
       undoable.current += 1;
       redoable.current = 0;
     } catch (error) {
+      finish();
       post({ type: "unframed:edit:reset" });
       const code = (error as { code?: unknown }).code;
       const details = (error as { details?: { reason?: unknown } }).details;
@@ -175,10 +238,12 @@ export const useEditSession = ({ editor, engine, project, shapeId, kind, file, l
     (quiet = false) => {
       window.clearTimeout(timerRef.current);
       timerRef.current = undefined;
-      if (baseRef.current === undefined && burstRef.current.edits.size === 0) return;
+      if (baseRef.current === undefined && burstRef.current.edits.size === 0 && burstRef.current.dials.size === 0) return;
       burstRef.current = emptyBurst();
       baseRef.current = undefined;
       setPending([]);
+      inFlight.current = {};
+      setHeld({});
       if (!quiet) post({ type: "unframed:edit:reset" });
     },
     [post],
@@ -187,6 +252,7 @@ export const useEditSession = ({ editor, engine, project, shapeId, kind, file, l
   const patch = useCallback(
     (edit: SourceEdit) => {
       burstRef.current = addToBurst(burstRef.current, edit);
+      lastEdit.current[edit.elementId] = edit;
       if (baseRef.current === undefined) baseRef.current = fileRef.current;
       setPending(burstEdits(burstRef.current));
       post({ type: "unframed:edit:patch", patches: [edit] });
@@ -194,6 +260,30 @@ export const useEditSession = ({ editor, engine, project, shapeId, kind, file, l
       timerRef.current = window.setTimeout(() => void commit(), COMMIT_DELAY_MS);
     },
     [commit, post],
+  );
+
+  const patchDial = useCallback(
+    (path: string, value: unknown) => {
+      burstRef.current = addToBurst(burstRef.current, { type: "dial", path, value });
+      if (baseRef.current === undefined) baseRef.current = fileRef.current;
+      setHeld(heldNow());
+      window.clearTimeout(timerRef.current);
+      timerRef.current = window.setTimeout(() => void commit(), COMMIT_DELAY_MS);
+    },
+    [commit],
+  );
+
+  const releaseDials = useCallback(
+    (values: Readonly<Record<string, unknown>>) => {
+      const before = burstRef.current.dials.size;
+      burstRef.current = releaseHeldDials(burstRef.current, values);
+      if (burstRef.current.dials.size === before) return;
+      settle();
+      setHeld(heldNow());
+    },
+    // heldNow and settle read only refs.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [],
   );
 
   const setMode = useCallback(
@@ -288,6 +378,17 @@ export const useEditSession = ({ editor, engine, project, shapeId, kind, file, l
           for (const element of elements) if (element.id !== null) next[element.id] = element;
           return next;
         });
+        // A patch report says, per element, whether a stylesheet rule wins over the value. That edit leaves the burst.
+        const judged = elements.filter((element) => element.id !== null && typeof element.overridden === "boolean");
+        if (judged.length === 0) return;
+        setOverridden((previous) => ({ ...previous, ...Object.fromEntries(judged.map((element) => [element.id!, element.overridden === true])) }));
+        for (const element of judged) {
+          const edit = element.overridden === true ? lastEdit.current[element.id!] : undefined;
+          if (edit !== undefined) burstRef.current = withoutEdit(burstRef.current, edit);
+        }
+        settle();
+        setPending(burstEdits(burstRef.current));
+        setHeld(heldNow());
         return;
       }
       case "unframed:edit:boxes": {
@@ -375,6 +476,10 @@ export const useEditSession = ({ editor, engine, project, shapeId, kind, file, l
     preparing,
     prepareError,
     pending,
+    held,
+    patchDial,
+    releaseDials,
+    overridden,
     patch,
     commit,
     discard,
