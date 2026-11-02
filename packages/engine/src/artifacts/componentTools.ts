@@ -33,11 +33,13 @@ import {
 } from "@unframed/domain";
 import type { TLRecord } from "@tldraw/tlschema";
 import type { Applied } from "../canvas/rooms.ts";
+import { lockRefusal, sourceTreeOf, stampElementIds } from "@unframed/domain/html";
 import { refusal as refuse, type McpBinding, type McpTool, type ToolAnswer } from "../agent/mcp.ts";
 import { indexOnTop } from "../runs/placeholders.ts";
 import { shapeBoxes } from "../runs/shapeBounds.ts";
 import type { AgentToolContext } from "./artifactTools.ts";
 import { ensureComponentLibrary, readArtifact, writeComponentSheet } from "./artifactStore.ts";
+import { lockedOf } from "./artifactTools.ts";
 
 type Shape = TLRecord & { type: string; props: Record<string, unknown>; meta: Record<string, unknown> };
 
@@ -86,7 +88,7 @@ export class ComponentTools {
       target = found.shape;
     }
 
-    const html = injectSheetTags(args.html);
+    const html = stampElementIds(injectSheetTags(args.html));
     const read = readComponentSheet(html);
     if (!read.ok) return refuse(read.refusal);
     const { tag } = read.sheet.declaration;
@@ -98,13 +100,20 @@ export class ComponentTools {
     const size = Buffer.byteLength(html, "utf8");
     if (size > ARTIFACT_SIZE_LIMIT) return refuse(`the component is too large (${size} bytes; the limit is ${ARTIFACT_SIZE_LIMIT})`);
 
+    const folder = await context.folder(binding.project);
+    if (target !== undefined && lockedOf(target).length > 0) {
+      const currentFile = typeof target.props.file === "string" ? target.props.file : "";
+      const current = currentFile === "" ? undefined : await readArtifact(folder, currentFile).catch(() => undefined);
+      const refusal = current === undefined ? null : lockRefusal({ current, next: html, locked: lockedOf(target), tree: sourceTreeOf(current), kind: "component" });
+      if (refusal !== null) return refuse(refusal);
+    }
+
     // A component the person named keeps its name, as a page does (spec 09).
     const current = typeof target?.props.title === "string" ? target.props.title : "";
     const named = target !== undefined && !isMintedRef(readRef(target) ?? "0");
     const given = typeof args.title === "string" && !named ? args.title.slice(0, ARTIFACT_TITLE_MAX) : undefined;
     const title = (given ?? (target === undefined ? componentTitleFromTag(tag) : current)).trim();
 
-    const folder = await context.folder(binding.project);
     let written: { file: string; compiled: string; bytes: number };
     try {
       await ensureComponentLibrary(folder);

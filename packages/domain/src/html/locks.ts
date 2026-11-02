@@ -76,7 +76,7 @@ export const lockRefusal = (check: LockCheck): string | null => {
   const first = hits[0];
   if (first === undefined) return null;
   const name = check.tree.find((entry) => entry.id === first.id)?.name ?? first.id;
-  const readTool = kind === "motion" ? "motion_read" : "page_read";
+  const readTool = kind === "motion" ? "motion_read" : kind === "component" ? "component_read" : "page_read";
   const more = hits.length > 1 ? ` ${hits.length - 1} more locked elements are changed too.` : "";
   return `The element data-hf-id="${first.id}" ("${name}") is locked by the person, and this write ${first.verb} it. Keep that element exactly as it is in the current file (${readTool} shows it), or ask the person to unlock it in the editor's Layers tab.${more}`;
 };

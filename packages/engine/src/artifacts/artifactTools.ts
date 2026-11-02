@@ -71,7 +71,7 @@ export interface AgentToolContext {
 type Shape = TLRecord & { type: string; props: Record<string, unknown>; meta: Record<string, unknown> };
 
 /** The locked element ids of an artifact shape (spec 18). */
-const lockedOf = (shape: Shape): string[] => (Array.isArray(shape.props.lockedElements) ? shape.props.lockedElements.filter((id): id is string => typeof id === "string") : []);
+export const lockedOf = (shape: Shape): string[] => (Array.isArray(shape.props.lockedElements) ? shape.props.lockedElements.filter((id): id is string => typeof id === "string") : []);
 
 const isShape = (record: TLRecord | undefined): record is Shape => record?.typeName === "shape";
 
