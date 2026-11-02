@@ -51,7 +51,7 @@ export interface EditDocument {
   querySelector(selector: string): EditElement | null;
   elementFromPoint(x: number, y: number): EditElement | null;
   createElement(tag: string): EditElement;
-  createRange?(): { selectNodeContents(node: EditElement): void };
+  createRange?(): { selectNodeContents(node: EditElement): void; collapse?(toEnd: boolean): void };
 }
 
 /** The window the edit bridge runs against: a browser's, or a test's stub. */
@@ -63,6 +63,9 @@ export interface EditWindow {
   addEventListener(type: "message", listener: (event: { source: unknown; origin: string; data: unknown }) => void): void;
   getComputedStyle(element: EditElement): { getPropertyValue(name: string): string };
   requestAnimationFrame(callback: () => void): unknown;
+  focus?(): void;
+  setTimeout(callback: () => void, ms: number): unknown;
+  clearTimeout(timer: unknown): void;
   getSelection?(): { removeAllRanges(): void; addRange(range: unknown): void } | null;
   /** Set by the dials bridge before it loads this file: the origin that said hello. */
   unframedEditPeer?: unknown;
@@ -105,6 +108,10 @@ export function installEditBridge(win: EditWindow): void {
   let frame: unknown = null;
   let last: Record<string, EditBox> = {};
   let editing: { el: EditElement; id: string; original: string | null } | null = null;
+  // The keys typed while a double-click's text edit waits for the editor's answer. They are held, not forwarded.
+  type HeldKey = { key: string; shiftKey: boolean; metaKey: boolean; ctrlKey: boolean };
+  let pendingText: { id: string; keys: HeldKey[]; timer: unknown } | null = null;
+  const TEXT_ANSWER_MS = 1000;
   // The first value of every property a patch touched, per element, as a function that puts it back.
   const originals = new Map<EditElement, Map<string, () => void>>();
 
@@ -313,6 +320,15 @@ export function installEditBridge(win: EditWindow): void {
     const id = el === null ? null : validId(el);
     if (el === null || id === null || !textOnly(el)) return;
     event.preventDefault();
+    // The press did not move keyboard focus (the bridge prevents it), so the frame takes the focus here: keys typed now reach the frame.
+    if (win.focus) win.focus();
+    if (pendingText !== null) win.clearTimeout(pendingText.timer);
+    const pending: { id: string; keys: HeldKey[]; timer: unknown } = { id, keys: [], timer: null };
+    pending.timer = win.setTimeout(() => {
+      // No answer in time counts as a refusal: the held keys are dropped, never sent late.
+      if (pendingText === pending) pendingText = null;
+    }, TEXT_ANSWER_MS);
+    pendingText = pending;
     post({ type: "unframed:edit:textStart", id });
   };
 
@@ -331,23 +347,68 @@ export function installEditBridge(win: EditWindow): void {
   const beginEdit = (id: string) => {
     const el = doc.querySelector('[data-hf-id="' + id + '"]');
     if (el === null || validId(el) !== id || !textOnly(el) || isLocked(el)) return;
+    // The text as the source gave it, so a reset puts it back even after a saved edit.
+    touch(el, "text", () => {
+      const value = el.textContent;
+      return () => {
+        el.textContent = value;
+      };
+    });
     editing = { el, id, original: el.textContent };
     el.setAttribute("contenteditable", "plaintext-only");
     if (el.addEventListener) el.addEventListener("blur", onBlur);
-    if (doc.createRange && win.getSelection) {
-      const range = doc.createRange();
-      range.selectNodeContents(el);
-      const selected = win.getSelection();
-      if (selected) {
-        selected.removeAllRanges();
-        selected.addRange(range);
-      }
-    }
+    selectText(el, false);
     if (el.focus) el.focus();
+  };
+
+  /** Selects an element's whole text, or puts the caret at its end. */
+  const selectText = (el: EditElement, atEnd: boolean) => {
+    if (!doc.createRange || !win.getSelection) return;
+    const range = doc.createRange();
+    range.selectNodeContents(el);
+    if (atEnd && range.collapse) range.collapse(false);
+    const selected = win.getSelection();
+    if (selected) {
+      selected.removeAllRanges();
+      selected.addRange(range);
+    }
+  };
+
+  /** Applies the keys held during a pending edit to its text, in order, as typing would: a letter replaces the selection, Backspace removes it, Enter ends the edit, Escape puts the original back. */
+  const replay = (keys: HeldKey[]) => {
+    const active = editing;
+    if (active === null || keys.length === 0) return;
+    const el = active.el;
+    let text = el.textContent ?? "";
+    let whole = true; // the selection still covers all the text
+    for (const held of keys) {
+      if (held.key === "Escape") {
+        el.textContent = active.original;
+        endEdit(false);
+        return;
+      }
+      if (held.key === "Enter" && !held.shiftKey) {
+        el.textContent = text;
+        endEdit(true);
+        return;
+      }
+      if (held.metaKey || held.ctrlKey) continue;
+      if (held.key === "Backspace") text = whole ? "" : text.slice(0, -1);
+      else if (held.key.length === 1) text = (whole ? "" : text) + held.key;
+      else continue;
+      whole = false;
+    }
+    el.textContent = text;
+    selectText(el, true);
   };
 
   const onKey = (event: EditEvent) => {
     if (!listening) return;
+    if (editing === null && pendingText !== null) {
+      event.preventDefault();
+      pendingText.keys.push({ key: event.key, shiftKey: event.shiftKey === true, metaKey: event.metaKey === true, ctrlKey: event.ctrlKey === true });
+      return;
+    }
     if (editing !== null) {
       // While a text edit runs only Esc and Enter are the bridge's; every other key is the text's.
       if (event.key === "Escape") {
@@ -356,6 +417,8 @@ export function installEditBridge(win: EditWindow): void {
         endEdit(false);
       } else if (event.key === "Enter") {
         event.preventDefault();
+        // A text edit holds one run of text, so Shift+Enter inserts nothing and ends nothing.
+        if (event.shiftKey) return;
         const el = editing.el;
         endEdit(true);
         if (el.blur) el.blur();
@@ -383,6 +446,10 @@ export function installEditBridge(win: EditWindow): void {
   const listen = (on: boolean) => {
     if (on === listening) return;
     listening = on;
+    if (!on && pendingText !== null) {
+      win.clearTimeout(pendingText.timer);
+      pendingText = null;
+    }
     for (const [type, handler] of LISTENERS) {
       if (on) doc.addEventListener(type, handler, true);
       else doc.removeEventListener(type, handler, true);
@@ -544,7 +611,13 @@ export function installEditBridge(win: EditWindow): void {
       for (const slots of originals.values()) for (const restore of slots.values()) restore();
       originals.clear();
     } else if (type === "unframed:edit:textEdit" && typeof data.id === "string") {
+      const held = pendingText !== null && pendingText.id === data.id ? pendingText : null;
+      if (held !== null) {
+        win.clearTimeout(held.timer);
+        pendingText = null;
+      }
       beginEdit(data.id);
+      if (held !== null) replay(held.keys);
     } else if (type === "unframed:edit:tree") {
       post({ type: "unframed:edit:tree", nodes: Array.from(doc.body.children).filter(pickable).map(treeOf) });
     } else if (type === "unframed:edit:hitTest" && typeof data.x === "number" && typeof data.y === "number") {
