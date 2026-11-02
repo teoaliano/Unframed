@@ -138,9 +138,9 @@ export const ArtifactEditor = ({ shapeId, onClose, onOpen }: ArtifactEditorProps
   }, [editor]);
 
   const [announcement, setAnnouncement] = useState<DialsAnnouncement>();
+  // The old parameters stay until the new version announces its own, or until it has none (spec 09, the editor).
+  const clearAnnouncement = useCallback(() => setAnnouncement(undefined), []);
   const post = useRef<((values: unknown) => void) | undefined>(undefined);
-  const file = facts?.file ?? "";
-  useEffect(() => setAnnouncement(undefined), [file]);
   const onReady = useCallback((send: (values: unknown) => void) => {
     post.current = send;
   }, []);
@@ -265,7 +265,6 @@ export const ArtifactEditor = ({ shapeId, onClose, onOpen }: ArtifactEditorProps
                 style={viewport === undefined ? undefined : { width: viewport.width, height: viewport.height, transform: `scale(${scale})`, transformOrigin: "0 0" }}
               >
                 <ArtifactFrame
-                  key={facts.file}
                   project={project}
                   kind={facts.kind}
                   file={facts.file}
@@ -278,6 +277,7 @@ export const ArtifactEditor = ({ shapeId, onClose, onOpen }: ArtifactEditorProps
                   editable
                   onEdit={onEdit}
                   onEditReady={onEditReady}
+                  onSwapped={clearAnnouncement}
                 />
                 {mode === "edit" && (
                   <EditOverlay hovered={session.hovered} selection={session.selection} reports={session.reports} boxes={session.boxes} names={names} />

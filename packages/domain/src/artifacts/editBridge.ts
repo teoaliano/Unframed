@@ -46,6 +46,7 @@ export interface EditEvent {
 export interface EditDocument {
   readonly body: EditElement;
   readonly visibilityState: string;
+  readonly readyState: string;
   addEventListener(type: string, listener: (event: EditEvent) => void, capture: boolean): void;
   removeEventListener(type: string, listener: (event: EditEvent) => void, capture: boolean): void;
   querySelector(selector: string): EditElement | null;
@@ -61,6 +62,10 @@ export interface EditWindow {
   readonly document: EditDocument;
   readonly console: { error(...args: unknown[]): void };
   addEventListener(type: "message", listener: (event: { source: unknown; origin: string; data: unknown }) => void): void;
+  addEventListener(type: "load" | "scroll", listener: () => void): void;
+  readonly scrollX: number;
+  readonly scrollY: number;
+  scrollTo(x: number, y: number): void;
   getComputedStyle(element: EditElement): { getPropertyValue(name: string): string };
   requestAnimationFrame(callback: () => void): unknown;
   focus?(): void;
@@ -121,6 +126,24 @@ export function installEditBridge(win: EditWindow): void {
     } catch (error) {
       win.console.error("[unframed] could not reach the editor", error);
     }
+  };
+
+  // The document's scroll, reported at most once a frame, so the editor keeps it for the swap (spec 18, The swap).
+  let scrolling: unknown = null;
+  win.addEventListener("scroll", () => {
+    if (scrolling !== null) return;
+    scrolling = win.requestAnimationFrame(() => {
+      scrolling = null;
+      post({ type: "unframed:edit:scroll", x: win.scrollX, y: win.scrollY });
+    });
+  });
+
+  // A swapped-in document restores the scroll its predecessor had, once it has loaded.
+  const restoreScroll = (x: unknown, y: unknown) => {
+    if (typeof x !== "number" || typeof y !== "number") return;
+    const restore = () => win.scrollTo(x, y);
+    if (doc.readyState === "complete") restore();
+    else win.addEventListener("load", restore);
   };
 
   const validId = (el: EditElement): string | null => {
@@ -588,6 +611,10 @@ export function installEditBridge(win: EditWindow): void {
     if (!type.startsWith("unframed:edit:")) return;
     peer = event.origin;
     if (type === "unframed:edit:hello") {
+      if (typeof data.scroll === "object" && data.scroll !== null) {
+        const at = data.scroll as { x?: unknown; y?: unknown };
+        restoreScroll(at.x, at.y);
+      }
       post({ type: "unframed:edit:ready" });
     } else if (type === "unframed:edit:mode") {
       locked = Array.isArray(data.locked) ? data.locked.filter((id): id is string => typeof id === "string") : [];

@@ -82,6 +82,7 @@ class FakeElement {
 class FakeDocument {
   readonly body = new FakeElement("body");
   visibilityState = "visible";
+  readyState = "complete";
   hit: FakeElement | null = null;
   private readonly listeners: Array<{ type: string; listener: Listener }> = [];
 
@@ -121,22 +122,33 @@ class FakeDocument {
 const ORIGIN = "http://localhost:18787";
 
 /** The shipped edit bridge, run against a stub window whose parent records what it is sent. */
-const stubEditWindow = (options: { peer?: string; timelines?: unknown } = {}) => {
+const stubEditWindow = (options: { peer?: string; timelines?: unknown; loading?: boolean } = {}) => {
   const posted: Array<{ message: any; targetOrigin: string }> = [];
   const errors: unknown[][] = [];
   const listeners: Listener[] = [];
+  const others = new Map<string, Array<() => void>>();
+  const scrolls: Array<[number, number]> = [];
   const frames: Array<() => void> = [];
   const timers = new Map<number, { callback: () => void }>();
   let nextTimer = 1;
   const document = new FakeDocument();
+  if (options.loading) document.readyState = "loading";
   const parent = { postMessage: (message: unknown, targetOrigin: string) => posted.push({ message, targetOrigin }) };
   const win: any = {
     parent,
     location: { origin: ORIGIN },
     document,
     console: { error: (...args: unknown[]) => errors.push(args) },
-    addEventListener: (type: string, listener: Listener) => {
-      if (type === "message") listeners.push(listener);
+    scrollX: 0,
+    scrollY: 0,
+    scrollTo: (x: number, y: number) => {
+      scrolls.push([x, y]);
+      win.scrollX = x;
+      win.scrollY = y;
+    },
+    addEventListener: (type: string, listener: Listener | (() => void)) => {
+      if (type === "message") listeners.push(listener as Listener);
+      else others.set(type, [...(others.get(type) ?? []), listener as () => void]);
     },
     getComputedStyle: (el: FakeElement) => ({
       getPropertyValue: (name: string) => (name in el.computed ? el.computed[name] : el.style.getPropertyValue(name)),
@@ -170,7 +182,11 @@ const stubEditWindow = (options: { peer?: string; timelines?: unknown } = {}) =>
       entry.callback();
     }
   };
-  return { win, document, posted, errors, send, flush, mode, messages, element, parent, runTimers };
+  /** Fires a window event (`load`, `scroll`) at the listeners the bridge added. */
+  const fire = (type: string) => {
+    for (const listener of others.get(type) ?? []) listener();
+  };
+  return { win, document, posted, errors, send, flush, fire, scrolls, mode, messages, element, parent, runTimers };
 };
 
 describe("the built edit bridge", () => {
@@ -434,6 +450,38 @@ describe("the built edit bridge", () => {
     document.hit = card;
     send({ type: "unframed:edit:hitTest", x: 3, y: 4 });
     expect(messages("unframed:edit:hit").at(-1)).toEqual({ type: "unframed:edit:hit", elementId: null, target: null, box: null });
+  });
+
+  it("reports the scroll position once a frame, however many scroll events came before it", () => {
+    const { win, fire, flush, messages } = stubEditWindow();
+    win.scrollY = 120;
+    fire("scroll");
+    win.scrollY = 240;
+    fire("scroll");
+    fire("scroll");
+    expect(messages("unframed:edit:scroll")).toEqual([]);
+    flush();
+    expect(messages("unframed:edit:scroll")).toEqual([{ type: "unframed:edit:scroll", x: 0, y: 240 }]);
+    // A later scroll is reported in its own frame.
+    win.scrollY = 300;
+    fire("scroll");
+    flush();
+    expect(messages("unframed:edit:scroll").at(-1)).toEqual({ type: "unframed:edit:scroll", x: 0, y: 300 });
+  });
+
+  it("restores the scroll a hello carries at once when the document has loaded, and after the load otherwise", () => {
+    const loaded = stubEditWindow();
+    loaded.send({ type: "unframed:edit:hello", scroll: { x: 0, y: 512 } });
+    expect(loaded.scrolls).toEqual([[0, 512]]);
+
+    const loading = stubEditWindow({ loading: true });
+    loading.send({ type: "unframed:edit:hello", scroll: { x: 0, y: 512 } });
+    expect(loading.scrolls).toEqual([]);
+    loading.fire("load");
+    expect(loading.scrolls).toEqual([[0, 512]]);
+    // A hello without a scroll leaves the position alone.
+    loading.send({ type: "unframed:edit:hello" });
+    expect(loading.scrolls).toEqual([[0, 512]]);
   });
 
   it("reports the selection again after a dial is set, so the field follows the dial", () => {
