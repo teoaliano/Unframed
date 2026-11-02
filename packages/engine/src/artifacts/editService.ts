@@ -7,12 +7,12 @@ import { readdir, readFile, stat } from "node:fs/promises";
 import { extname, join } from "node:path";
 import type { TLRecord } from "@tldraw/tlschema";
 import { isBareFileName, unframedError, type ArtifactImage, type OffTokenFound, type SourceEdit, type SourceTreeElement } from "@unframed/contracts";
-import { ARTIFACT_SIZE_LIMIT, artifactTitle, offTokenValues, projectSlug, shapeKind, sidecarFileName, type ArtifactKind } from "@unframed/domain";
-import { applySourceEdits, sourceTreeOf, stampElementIds } from "@unframed/domain/html";
+import { ARTIFACT_SIZE_LIMIT, artifactTitle, offTokenValues, projectSlug, readComponentSheet, shapeKind, sidecarFileName, type ArtifactKind } from "@unframed/domain";
+import { applySourceEdits, ruleLockHit, sourceTreeOf, stampElementIds } from "@unframed/domain/html";
 import type { CommittedChange } from "../canvas/rooms.ts";
 import { byteSize, prepareArtifactHtml, tooLargeMessage } from "./artifactHtml.ts";
 import { kitOf } from "../kits/tokensFile.ts";
-import { ensureBridge, ensureLibrary, writeEditArtifact } from "./artifactStore.ts";
+import { ensureBridge, ensureComponentLibrary, ensureLibrary, writeEditArtifact } from "./artifactStore.ts";
 import { pinComponents } from "./componentRegistry.ts";
 
 const BRIDGE_PRESENT = /unframed-dials\.js/i;
@@ -33,7 +33,7 @@ const artifactShape = (records: ReadonlyArray<TLRecord>, shapeId: string) => {
   const record = records.find((candidate) => candidate.id === shapeId);
   const shape = record?.typeName === "shape" ? record : undefined;
   const kind = shape === undefined ? undefined : shapeKind(shape.type);
-  if (shape === undefined || (kind !== "page" && kind !== "motion")) throw unframedError("not_found", `There is no page or motion ${shapeId} on this canvas.`);
+  if (shape === undefined || (kind !== "page" && kind !== "motion" && kind !== "component")) throw unframedError("not_found", `There is no page or motion ${shapeId} on this canvas.`);
   return { kind, props: shape.props as { file?: unknown; title?: unknown; fileName?: unknown; lockedElements?: unknown } };
 };
 
@@ -130,18 +130,31 @@ export const artifactEditService = (deps: EditServiceDeps) => {
     const locked = new Set(Array.isArray(props.lockedElements) ? (props.lockedElements as string[]) : []);
     if (locked.size > 0) {
       for (const edit of edits) {
+        // A component rule is held by a lock when its selector reaches a locked template element (spec 20).
+        if (edit.type === "componentRule") {
+          const hit = ruleLockHit(html, edit.rule.selector, [...locked]);
+          if (hit !== null) throw unframedError("bad_request", `${byId.get(hit)?.name ?? hit} is locked. Unlock it in Layers to edit it.`);
+          continue;
+        }
         // Rename and hide still work on a locked element, so a person can tidy what they protected. A style rule is no element, so no lock holds it.
-        if (edit.type === "attribute" || edit.type === "hide" || edit.type === "componentRule" || edit.elementId === undefined) continue;
+        if (edit.type === "attribute" || edit.type === "hide" || edit.elementId === undefined) continue;
         const holder = lockedBy(edit.elementId, locked, byId);
         if (holder !== undefined) throw unframedError("bad_request", `${byId.get(holder)?.name ?? holder} is locked. Unlock it in Layers to edit it.`);
       }
     }
     const result = applySourceEdits(html, edits, kind, kitOf(records));
     if (!result.ok) throw unframedError("bad_request", result.refusal);
-    const prepared = (await pinComponents(dir, records, prepareArtifactHtml(result.html, kind))).html;
+    const ready = prepareArtifactHtml(result.html, kind);
+    let tag: string | undefined;
+    if (kind === "component") {
+      const sheet = readComponentSheet(ready);
+      if (!sheet.ok) throw unframedError("bad_request", sheet.refusal);
+      tag = sheet.sheet.declaration.tag;
+    }
+    const prepared = kind === "component" ? ready : (await pinComponents(dir, records, ready)).html;
     if (byteSize(prepared) > ARTIFACT_SIZE_LIMIT) throw unframedError("bad_request", tooLargeMessage(kind, byteSize(prepared)));
-    await (kind === "motion" ? ensureLibrary(dir) : ensureBridge(dir));
-    const written = await writeEditArtifact(dir, { kind, html: prepared, title: artifactTitle(props), of: baseFile, shapeId, edits: result.summary });
+    await (kind === "motion" ? ensureLibrary(dir) : kind === "component" ? ensureComponentLibrary(dir) : ensureBridge(dir));
+    const written = await writeEditArtifact(dir, { kind, html: prepared, title: artifactTitle(props), of: baseFile, shapeId, edits: result.summary, tag });
     return { file: written.file, summary: result.summary };
   },
 

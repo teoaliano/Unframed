@@ -5,6 +5,7 @@
 import type { ArtifactKind } from "../artifacts/artifactRules.ts";
 import { attr, type ChildNode, type Element, flatten, isComment, isElement, isText, parseSource, scopeRoots } from "./source.ts";
 import type { SourceTreeElement } from "./sourceTree.ts";
+import { parseHTML } from "linkedom";
 
 /** Elements whose text is kept exactly as written. */
 const EXACT_TEXT = new Set(["pre", "textarea", "script", "style"]);
@@ -47,6 +48,36 @@ const firstById = (html: string): Map<string, Element> => {
     if (id !== undefined && !found.has(id)) found.set(id, node.el);
   }
   return found;
+};
+
+/**
+ * The locked element a style rule's selector reaches in a component sheet's template (spec 20), or
+ * null. `:host` and its conditions are set aside, so `:host([kind="secondary"]) button` reaches the
+ * template's buttons. A selector the scanner cannot test counts as reaching the first locked element,
+ * so a lock is never bypassed by a selector this check does not understand.
+ */
+export const ruleLockHit = (html: string, selector: string, locked: readonly string[]): string | null => {
+  if (locked.length === 0) return null;
+  let reach = selector.replace(/:host(?:\([^()]*\))?/g, "").trim();
+  if (reach === "") return null;
+  if (/^[>+~]/.test(reach)) reach = `* ${reach}`;
+  type DomElement = { getAttribute(name: string): string | null; parentElement: DomElement | null; querySelectorAll(selector: string): ArrayLike<DomElement> };
+  const { document } = parseHTML(html) as unknown as { document: { querySelector(selector: string): DomElement | null; querySelectorAll(selector: string): ArrayLike<DomElement> } };
+  const root = document.querySelector("[data-uf-template]");
+  if (root === null) return null;
+  let matches: ArrayLike<DomElement>;
+  try {
+    matches = root.querySelectorAll(reach);
+  } catch {
+    return locked[0] ?? null;
+  }
+  for (const match of Array.from(matches)) {
+    for (let node: DomElement | null = match; node !== null && node !== root; node = node.parentElement) {
+      const id = node.getAttribute("data-hf-id");
+      if (id !== null && locked.includes(id)) return id;
+    }
+  }
+  return null;
 };
 
 export interface LockCheck {
