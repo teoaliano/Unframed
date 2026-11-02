@@ -339,7 +339,7 @@ export const ArtifactEditor = ({ shapeId, onClose, onOpen }: ArtifactEditorProps
                   onSwapped={clearAnnouncement}
                 />
                 {mode === "edit" && (
-                  <EditOverlay hovered={session.hovered} layerHover={session.layerHover} selection={session.selection} reports={session.reports} boxes={session.boxes} names={names} />
+                  <EditOverlay hovered={session.hovered} layerHover={session.layerHover} selection={session.selection} reports={session.reports} boxes={session.boxes} copies={session.copies} names={names} />
                 )}
               </div>
             </div>
@@ -375,6 +375,7 @@ export const ArtifactEditor = ({ shapeId, onClose, onOpen }: ArtifactEditorProps
             onTell={(elements) => tellAgent(chatClient, shapeId, elements)}
             onAsk={(field, elements) => tellAgent(chatClient, shapeId, elements, makeEditableInstruction(field))}
             component={component ? session.declaration : null}
+            componentTitle={component ? displayTitle || facts.tag : undefined}
             onAskComponent={askAboutComponent}
           />
         )}

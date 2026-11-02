@@ -31,11 +31,16 @@ export interface EditElement {
   removeEventListener?(type: string, listener: () => void): void;
   focus?(): void;
   blur?(): void;
+  /** The element's open shadow root, where a component instance keeps its markup (spec 20). */
+  readonly shadowRoot?: { querySelector(selector: string): EditElement | null } | null;
+  getRootNode?(): unknown;
 }
 
 export interface EditEvent {
   readonly type: string;
   readonly target: EditElement | null;
+  /** The path from the target out through shadow roots, innermost first (spec 20: board copies). */
+  composedPath?(): ReadonlyArray<unknown>;
   readonly key: string;
   readonly shiftKey: boolean;
   readonly metaKey: boolean;
@@ -104,6 +109,41 @@ export function installEditBridge(win: EditWindow): void {
   const KEYS_FORWARDED = ["v", "V", "i", "I", "Escape"];
 
   const doc = win.document;
+  // A board cell's host carries this attribute (the sheet helper sets it). Its shadow root holds one copy of the template.
+  const CELL = "data-uf-cell";
+  const cellOf = (el: EditElement): EditElement | null => {
+    const root = el.getRootNode?.() as { host?: EditElement } | undefined;
+    const host = root?.host;
+    return host !== undefined && host.getAttribute(CELL) !== null ? host : null;
+  };
+  const isCopy = (el: EditElement): boolean => el.getAttribute("data-hf-id") !== null && cellOf(el) !== null;
+  // The copy the person picked for each template id, kept while the copy is on the board.
+  const picked = new Map<string, EditElement>();
+  const copiesOf = (id: string): EditElement[] => {
+    if (typeof doc.querySelectorAll !== "function") return [];
+    const found: EditElement[] = [];
+    for (const host of Array.from(doc.querySelectorAll("[" + CELL + "]"))) {
+      const copy = host.shadowRoot?.querySelector('[data-hf-id="' + id + '"]');
+      if (copy) found.push(copy);
+    }
+    return found;
+  };
+  // The copy an id shows in the frame: the one picked, else the first. Null when the id has no copies.
+  const primaryOf = (id: string): EditElement | null => {
+    const all = copiesOf(id);
+    const kept = picked.get(id);
+    if (kept !== undefined && all.includes(kept)) return kept;
+    return all[0] ?? null;
+  };
+  // The innermost copy an event passed through, if it came from a board cell.
+  const copyAt = (event: EditEvent): EditElement | null => {
+    for (const node of event.composedPath?.() ?? []) {
+      const el = node as EditElement;
+      if (el.nodeType === 1 && isCopy(el)) return el;
+    }
+    return null;
+  };
+  const targetOf = (event: EditEvent): EditElement | null => copyAt(event) ?? event.target;
   let peer: string = typeof win.unframedEditPeer === "string" ? win.unframedEditPeer : win.location.origin;
   let listening = false;
   let locked: string[] = [];
@@ -113,6 +153,8 @@ export function installEditBridge(win: EditWindow): void {
   let selection: string[] = [];
   let frame: unknown = null;
   let last: Record<string, EditBox> = {};
+  // The boxes of the copies of each targeted board element, as last sent.
+  let lastCopies = "";
   let editing: { el: EditElement; id: string; original: string | null } | null = null;
   // The keys typed while a double-click's text edit waits for the editor's answer. They are held, not forwarded.
   type HeldKey = { key: string; shiftKey: boolean; metaKey: boolean; ctrlKey: boolean };
@@ -150,6 +192,7 @@ export function installEditBridge(win: EditWindow): void {
   const validId = (el: EditElement): string | null => {
     const id = el.getAttribute("data-hf-id");
     if (id === null || !ID.test(id)) return null;
+    if (cellOf(el) !== null) return id;
     return doc.querySelector('[data-hf-id="' + id + '"]') === el ? id : null;
   };
 
@@ -159,7 +202,7 @@ export function installEditBridge(win: EditWindow): void {
   };
 
   const pickable = (el: EditElement | null): boolean =>
-    el !== null && el.nodeType === 1 && el !== doc.body && isInBody(el) && !EXCLUDED.includes(el.tagName.toLowerCase());
+    el !== null && el.nodeType === 1 && (isCopy(el) || (el !== doc.body && isInBody(el) && !EXCLUDED.includes(el.tagName.toLowerCase())));
 
   const isLocked = (el: EditElement): boolean => {
     for (let e: EditElement | null = el; e; e = e.parentElement) {
@@ -192,7 +235,10 @@ export function installEditBridge(win: EditWindow): void {
   // A selection key is an element id, or a live selector for a runtime element.
   const resolveKey = (key: string): EditElement | null => {
     try {
-      return doc.querySelector(ID.test(key) ? '[data-hf-id="' + key + '"]' : key);
+      const el = doc.querySelector(ID.test(key) ? '[data-hf-id="' + key + '"]' : key);
+      // A board's template id shows as its copy, so the outline sits on the copy the person picked.
+      if (el !== null && ID.test(key)) return primaryOf(key) ?? el;
+      return el;
     } catch {
       return null;
     }
@@ -226,6 +272,17 @@ export function installEditBridge(win: EditWindow): void {
     return found;
   };
 
+  // A copy's variant values, by variant name in the declaration's order (its cell's attributes). Null for anything else.
+  const variantOf = (el: EditElement): Record<string, string> | null => {
+    const host = cellOf(el);
+    if (host === null) return null;
+    const declaration = (host as unknown as { constructor: { declaration?: { variants?: Record<string, string[]> } } }).constructor.declaration;
+    if (declaration?.variants === undefined) return null;
+    const values: Record<string, string> = {};
+    for (const name of Object.keys(declaration.variants)) values[name] = host.getAttribute(name) ?? "";
+    return values;
+  };
+
   const reportOf = (el: EditElement) => {
     const style = win.getComputedStyle(el);
     const inline: Record<string, string | null> = {};
@@ -246,6 +303,7 @@ export function installEditBridge(win: EditWindow): void {
       computed,
       src: tag === "img" ? el.getAttribute("src") : null,
       animated: animatedOf(el),
+      variant: variantOf(el),
     };
   };
 
@@ -280,14 +338,21 @@ export function installEditBridge(win: EditWindow): void {
     if (doc.visibilityState !== "hidden") {
       const boxes: Record<string, EditBox> = {};
       let moved = false;
+      const copies: Record<string, EditBox[]> = {};
       for (const [key, el] of targets) {
         const box = boxOf(el);
         boxes[key] = box;
         const before = last[key];
         if (before === undefined || before.x !== box.x || before.y !== box.y || before.w !== box.w || before.h !== box.h) moved = true;
+        if (isCopy(el)) copies[key] = copiesOf(key).map(boxOf);
       }
       if (moved) post({ type: "unframed:edit:boxes", boxes });
       last = boxes;
+      const serialised = JSON.stringify(copies);
+      if (serialised !== lastCopies) {
+        lastCopies = serialised;
+        post({ type: "unframed:edit:copies", copies });
+      }
     }
     schedule();
   };
@@ -330,7 +395,7 @@ export function installEditBridge(win: EditWindow): void {
 
   const onMove = (event: EditEvent) => {
     if (!listening || editing !== null) return;
-    const el = hoverTarget(event.target);
+    const el = hoverTarget(targetOf(event));
     if (el === hovered) return;
     hovered = el;
     post({ type: "unframed:edit:hover", element: el === null ? null : reportOf(el) });
@@ -347,7 +412,8 @@ export function installEditBridge(win: EditWindow): void {
     if (!listening) return;
     if (editing !== null && event.target === editing.el) return;
     event.preventDefault();
-    const el = hoverTarget(event.target);
+    const el = hoverTarget(targetOf(event));
+    if (el !== null && isCopy(el)) picked.set(validId(el)!, el);
     post({ type: "unframed:edit:pick", element: el === null ? null : reportOf(el), additive: event.shiftKey === true });
   };
 
@@ -691,7 +757,11 @@ export function installEditBridge(win: EditWindow): void {
       for (const patch of Array.isArray(data.patches) ? data.patches : []) {
         if (typeof patch === "object" && patch !== null) applyPatch(patch as Record<string, unknown>, flags);
       }
-      const elements = Array.from(flags.keys()).map((el) => ({ ...reportOf(el), overridden: flags.get(el) === true }));
+      const elements = Array.from(flags.keys()).map((el) => {
+        const id = validId(el);
+        const shown = id === null || cellOf(el) !== null ? el : (primaryOf(id) ?? el);
+        return { ...reportOf(shown), overridden: flags.get(el) === true };
+      });
       post({ type: "unframed:edit:report", elements, families: familiesOf() });
       last = {};
       schedule();

@@ -59,6 +59,7 @@ const installComponentHelper = (
       const item = doc.createElement("div");
       item.style.cssText = "display:flex;flex-direction:column;gap:8px;";
       const host = doc.createElement(decl.tag);
+      host.setAttribute("data-uf-cell", "");
       for (const name of Object.keys(cell.values)) host.setAttribute(name, cell.values[name] ?? "");
       if (example) host.innerHTML = example.innerHTML;
       const label = doc.createElement("div");

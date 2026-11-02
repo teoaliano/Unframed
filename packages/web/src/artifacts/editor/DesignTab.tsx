@@ -640,6 +640,8 @@ export interface DesignTabProps {
   readonly component?: ComponentDeclaration | null;
   /** Asks the agent to change the component. */
   readonly onAskComponent?: () => void;
+  /** The component's title, named in the variant line of a picked board copy (spec 20). */
+  readonly componentTitle?: string | undefined;
 }
 
 /** The value a dial takes for a CSS value written to its field: a number dial takes the number, anything else the text. */
@@ -656,7 +658,7 @@ const normaliserFor = (property: string) => (value: string) => {
   return probe.style.getPropertyValue(property);
 };
 
-export const DesignTab = ({ session, kind, project, dials, locked, kit, mode, onOpenKit, onTell, onAsk, component, onAskComponent }: DesignTabProps) => {
+export const DesignTab = ({ session, kind, project, dials, locked, kit, mode, onOpenKit, onTell, onAsk, component, onAskComponent, componentTitle }: DesignTabProps) => {
   // The token chip whose popover is open. A preview of a token changes the frame, so the field's owner can change while the popover is up.
   const [openChip, setOpenChip] = useState<{ readonly field: string; readonly named: { readonly token: Token; readonly suffix?: string } } | null>(null);
   const { selection, reports, tree, preparing, prepareError, pending, families, overridden } = session;
@@ -919,8 +921,13 @@ export const DesignTab = ({ session, kind, project, dials, locked, kit, mode, on
     : ownerOf(first!, "background-image");
   const pictureLine = picture === null ? null : ownerLine(pictureOwner, true, () => onAsk("Picture", [chipDataOf(first!)]));
 
+  // A picked board copy names the variant it shows: `Editing Button · secondary · md`.
+  const variant = single && first!.report.variant ? Object.values(first!.report.variant) : null;
   return (
     <div className="flex min-h-0 flex-col gap-3 overflow-auto p-2.5" data-testid="design-tab">
+      {variant !== null && componentTitle !== undefined && (
+        <p className="m-0 min-w-0 truncate text-xs text-muted-foreground" data-testid="variant-line">{`Editing ${[componentTitle, ...variant].join(" · ")}`}</p>
+      )}
       <div className="flex min-w-0 items-baseline gap-2">
         <span className="truncate text-sm font-semibold">{name}</span>
         {single && <span className="shrink-0 text-xs text-muted-foreground">{first!.report.tag}</span>}

@@ -3,6 +3,7 @@
  * a 2 px primary outline on each selected element with its name above. The frame is never drawn
  * on; the boxes come from the edit bridge, and the layer takes no pointer.
  */
+import { Fragment } from "react";
 import type { EditBox } from "@unframed/domain";
 import type { EditReport } from "./editSession.ts";
 
@@ -13,13 +14,17 @@ export interface EditOverlayProps {
   readonly selection: readonly string[];
   readonly reports: Readonly<Record<string, EditReport>>;
   readonly boxes: Readonly<Record<string, EditBox>>;
+  /** The boxes of every copy of a board element, by its template id: the copies other than the picked one outline faintly. */
+  readonly copies?: Readonly<Record<string, readonly EditBox[]>>;
   /** The name each element shows: its layer name or derived label, by element id. */
   readonly names: Readonly<Record<string, string>>;
 }
 
 const place = (box: EditBox) => ({ left: box.x, top: box.y, width: box.w, height: box.h });
 
-export const EditOverlay = ({ hovered, layerHover = null, selection, reports, boxes, names }: EditOverlayProps) => (
+const sameBox = (a: EditBox, b: EditBox): boolean => a.x === b.x && a.y === b.y && a.w === b.w && a.h === b.h;
+
+export const EditOverlay = ({ hovered, layerHover = null, selection, reports, boxes, copies = {}, names }: EditOverlayProps) => (
   <div aria-hidden data-testid="edit-overlay" className="pointer-events-none absolute inset-0">
     {layerHover === null && hovered !== null && hovered.id !== null && !selection.includes(hovered.id) && (
       <div
@@ -35,8 +40,13 @@ export const EditOverlay = ({ hovered, layerHover = null, selection, reports, bo
       const box = boxes[id] ?? reports[id]?.box;
       if (box === undefined) return null;
       const label = names[id] ?? reports[id]?.tag ?? id;
+      const others = (copies[id] ?? []).filter((copy) => !sameBox(copy, box));
       return (
-        <div key={id} data-edit-outline="selected" className="absolute" style={{ ...place(box), border: "2px solid var(--primary)" }}>
+        <Fragment key={id}>
+          {others.map((copy, index) => (
+            <div key={index} data-edit-outline="copy" className="absolute" style={{ ...place(copy), border: "1px solid var(--primary)", opacity: 0.5 }} />
+          ))}
+        <div data-edit-outline="selected" className="absolute" style={{ ...place(box), border: "2px solid var(--primary)" }}>
           <span
             className="absolute bottom-full left-0 mb-0.5 max-w-60 truncate rounded-sm px-1 text-xs leading-4 text-primary-foreground"
             style={{ background: "var(--primary)" }}
@@ -45,6 +55,7 @@ export const EditOverlay = ({ hovered, layerHover = null, selection, reports, bo
             {reports[id] !== undefined && <span className="ms-1 opacity-75">{reports[id]!.tag}</span>}
           </span>
         </div>
+        </Fragment>
       );
     })}
   </div>
